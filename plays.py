@@ -243,7 +243,12 @@ def _compression(room):
     # scoring from the two down to 16.1% of plays against a real 51.6%: the
     # cap said "you cannot gain more than two yards" and this said "and only
     # 18% of that", which is nobody scoring from anywhere.
-    return float(min(1.0, max(0.55, 0.45 + room / 36.0)))
+    # Trimmed from 0.45 + room/36 to 0.34 + room/40. Yards after catch ran
+    # 6.12 against a real 5.19, and that surplus is what keeps drives short:
+    # a drive that gains the same yards in fewer plays ends sooner, which is
+    # why plays per drive sat at 5.20 against 5.96 and drives per game at
+    # 23.85 against 21.73. Those three rows are one number.
+    return float(min(1.0, max(0.42, 0.34 + room / 40.0)))
 
 
 def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
@@ -273,8 +278,16 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
         # A receiver catching the ball in space is not a back hitting a pile:
         # he has room to make the first man miss. Using the run chain's
         # difficulty for both left YAC at 2.96 against a real 5.19.
-        base = 0.13 if not in_space else 0.145
-        ramp = 0.10 if not in_space else 0.105
+        # Raised from 0.145/0.105 in space to put yards after catch on its
+        # real 5.19.
+        #
+        # I expected this to fix drives per game too, on the theory that a
+        # drive gaining the same ground in fewer plays ends sooner. It does
+        # not: cutting yards after catch by a FULL 1.4 yards moved plays per
+        # drive by 0.08. Drive length is not set by how far a play goes, and
+        # that is worth knowing before anyone tunes yardage to chase it again.
+        base = 0.13 if not in_space else 0.166
+        ramp = 0.10 if not in_space else 0.113
         p_break = logistic(edge(atk, wrap) - base - ramp * i, k=7.0)
         if rng.random() > p_break:
             gained += max(0.0, rng.normal(0.9, 0.8))          # brought down
