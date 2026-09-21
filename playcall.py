@@ -240,3 +240,81 @@ if __name__ == '__main__':
                                 for _ in range(400))
         print('   %-4s %s' % (t, ', '.join(
             f'{k} {100*v/400:.0f}%' for k, v in c.most_common(3))))
+
+
+# ============================================================ THE AUDIBLE
+# He MODIFIES the call, he does not make a new one. That is the whole design:
+# an audible swaps the run for a pass, or a deep concept for a quick one, or
+# the protection - it does not go back to the call sheet and start again. A
+# quarterback who could re-call the play from scratch would beat every defence
+# every time, which is not the game.
+#
+# AND HE CAN BE WRONG. He reads the look the defence is SHOWING, not the one
+# it is playing, so a disguised coverage sells him a picture that is not there
+# and he checks into something worse. That is what disguise is FOR, and it is
+# why the engine already carries a shown shell and an actual one.
+
+# What a quarterback is allowed to change, in order of how common it is.
+AUDIBLE_KINDS = ('run_to_pass', 'pass_to_run', 'depth', 'protect')
+
+
+def read_the_look(def_call):
+    """
+    What the quarterback SEES. The shown shell and the box, not the truth.
+
+    A defence that disguises well shows him one thing and plays another; his
+    audible is only as good as the picture he was sold.
+    """
+    shown = def_call.get('shown_shell') or def_call.get('shell')
+    box = def_call.get('box', 6)
+    return dict(shell=shown, box=box,
+                looks_light=box <= 5, looks_heavy=box >= 7,
+                looks_man=shown in ('cover_0', 'cover_1'),
+                lying=bool(def_call.get('fooled')))
+
+
+def audible(off_call, def_call, off, rate_fn, rng, latitude=None):
+    """
+    Change the call at the line, or leave it alone.
+
+    Returns (call, what_he_did). `what_he_did` is None when he ran the play as
+    given, which is most of the time even for a good passer.
+    """
+    if latitude is None:
+        import identity as ID
+        latitude = ID.qb_latitude(off, rate_fn)
+    if latitude <= 0.01 or rng.random() > latitude * AUDIBLE_RATE:
+        return off_call, None
+
+    look = read_the_look(def_call)
+    call = dict(off_call)
+
+    # ---- the reads, in the order a quarterback actually makes them ----
+    if not call.get('is_pass') and look['looks_heavy']:
+        # they have loaded the box against a run - get out of it
+        call['is_pass'] = True
+        call['concept'] = call_pass(off, 'chains', rate_fn, rng)
+        call.pop('scheme', None)
+        return call, 'run_to_pass'
+    if call.get('is_pass') and look['looks_light']:
+        # light box against a pass - take the run they are giving
+        call['is_pass'] = False
+        call['scheme'] = call_run(off, 'chains', rate_fn, rng,
+                                  box=look['box'])
+        call.pop('concept', None)
+        return call, 'pass_to_run'
+    if call.get('is_pass') and look['looks_man']:
+        # man coverage: he wants something that beats it one on one
+        call['concept'] = call_pass(off, 'explosive', rate_fn, rng)
+        return call, 'depth'
+    if call.get('is_pass') and look['looks_heavy']:
+        # pressure showing - get the ball out
+        call['concept'] = call_pass(off, 'protect', rate_fn, rng)
+        return call, 'protect'
+    return off_call, None
+
+
+# How often a quarterback with full latitude changes the call. Real audible
+# rates are not published per play, but a quarterback does not check out of
+# most snaps - the call sheet is usually right.
+AUDIBLE_RATE = 0.38

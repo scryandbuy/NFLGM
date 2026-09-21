@@ -752,6 +752,23 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                       secs_left=dr.clock,
                       recent=(def_state.cov_memory if def_state else None))
 
+        # THE AUDIBLE. He reads the look they are SHOWING and modifies the
+        # call - he does not go back to the sheet and pick again, which would
+        # let a good quarterback beat every defence every time. And the look
+        # can be a lie: a disguised coverage sells him a picture that is not
+        # there and he checks into something worse. That is what disguise is
+        # for, and the engine already carried a shown shell and an actual one
+        # with nothing reading the difference.
+        try:
+            import playcall as PC
+            oc, checked = PC.audible(oc, dc, offense, rate_fn, rng)
+            if checked:
+                dr.log.append(dict(type='audible', kind=checked,
+                                   off_a_lie=bool(dc.get('shown_shell')
+                                                  != dc.get('shell'))))
+        except Exception:
+            pass
+
         # The opener. A situation - usually third down - forces him off it.
         script_mod = 1.0
         if off_state is not None:
