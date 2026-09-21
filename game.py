@@ -616,7 +616,7 @@ def field_units(roster, state, rng, is_offense, package=None):
 def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
               rng, resolve_fn, call_off, call_def, rate_fn, aggression=0.5,
               book=None, off_state=None, def_state=None, week=1,
-              timeouts=None, pos='home'):
+              timeouts=None, pos='home', half_end=None):
     """
     Play a full possession. resolve_fn is plays.resolve_play; call_off/call_def
     are the scheme-layer callers.
@@ -637,6 +637,13 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
 
     while dr.result is None:
         if dr.clock <= 0:
+            dr.result = 'End of half'; break
+        # THE HALF IS A WALL TOO. Without this the game ran as one continuous
+        # 3600 seconds and only ONE drive a game was ever killed by a clock -
+        # the last one. Real games kill two, one per half, and end-of-half
+        # drives are 7.1% of all drives against the 4.0% this produced.
+        if half_end is not None and dr.clock <= half_end:
+            dr.clock = half_end
             dr.result = 'End of half'; break
         if dr.plays > 25:
             dr.result = 'End of half'; break
@@ -941,11 +948,10 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         d_st = away_state if pos == 'home' else home_state
         # the unit that just came off recovers while the other side plays
         if d_st is not None: d_st.sideline_recovery(dr_snaps if 'dr_snaps' in dir() else 30)
-        if not half_done and clock <= GAME / 2:
-            tos.halftime(); half_done = True          # three fresh ones each
         dr = run_drive(off, deff, start, clock, quarter, sd, rng,
                        resolve_fn, call_off, call_def, rate_fn, aggr, book,
-                       o_st, d_st, week, timeouts=tos, pos=pos)
+                       o_st, d_st, week, timeouts=tos, pos=pos,
+                       half_end=(GAME / 2 if not half_done else None))
         dr_snaps = dr.plays
         if o_st is not None: o_st.sideline_recovery(dr.plays)
         drives.append((pos, dr))
@@ -956,6 +962,18 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             score[pos] += dr.points
         elif dr.points < 0:
             score['away' if pos == 'home' else 'home'] += 2
+
+        # ---- HALFTIME ----
+        # The side that KICKED OFF to open the game receives the second half,
+        # which is why a club can go into the break with the ball and come out
+        # of it with the ball again. The engine had no concept of a half, so
+        # that swing did not exist at all.
+        if not half_done and clock <= GAME / 2:
+            tos.halftime()
+            half_done = True
+            pos = 'home'                            # away received the opener
+            start = kickoff((away.get('kr') or {}), rng, rate_fn)['new_yardline']
+            continue
 
         # where the next possession starts
         if dr.result in ('Touchdown', 'Field goal'):
