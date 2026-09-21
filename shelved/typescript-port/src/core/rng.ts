@@ -82,6 +82,11 @@ export class RNG {
     return mean + sd * (u * m);
   }
 
+  /** Lognormal. numpy's lognormal(mean, sigma) is exp(normal(mean, sigma)). */
+  lognormal(mean = 0, sigma = 1): number {
+    return Math.exp(this.normal(mean, sigma));
+  }
+
   /**
    * Gamma(shape, scale) by Marsaglia-Tsang. This is the workhorse for every
    * yardage distribution - yards after contact, punt returns, kick returns -

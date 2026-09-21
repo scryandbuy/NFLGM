@@ -17,6 +17,10 @@ function canon(v: any): any {
 }
 const eq = (a: unknown, b: unknown) =>
   JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+/** Python emits snake_case call keys; the port uses camelCase. */
+const KEYMAP: Record<string, string> = { is_pass: 'isPass', keep_in: 'keepIn' };
+const reKey = (o: any) => Object.fromEntries(
+  Object.entries(o).map(([k, v]) => [KEYMAP[k] ?? k, v]));
 const r12 = (x: number) => +x.toFixed(12);
 
 /**
@@ -39,8 +43,8 @@ for (const [n, need, sk, want] of ref.conf as number[][]) {
 console.log(`conf: ${ref.conf.length} cases`);
 
 // ---- memories, built the same way ----
-const P = (d: string): A.PlayCall => ({ is_pass: true, depth: d, personnel: '11' });
-const R = (s = 'inside_zone'): A.PlayCall => ({ is_pass: false, scheme: s, personnel: '12' });
+const P = (d: string): A.PlayCall => ({ isPass: true, depth: d, personnel: '11' });
+const R = (s = 'inside_zone'): A.PlayCall => ({ isPass: false, scheme: s, personnel: '12' });
 const D = (k: Partial<A.DefCallLike> = {}): A.DefCallLike =>
   ({ rushers: 4, shell: 'cover_3', front: '4-3 over', box: 6, ...k });
 const O = (ty: string, y: number, k: Partial<A.Outcome> = {}): A.Outcome =>
@@ -126,21 +130,21 @@ for (const trig of Object.keys(A.COUNTERS).sort()) {
                  target: 'wr1', confidence: 0.5 } as A.Adjustment;
   for (const r0 of [0.0, 0.6, 0.99]) {
     const d = A.applyDefensive(D(), base, fixed([r0]));
-    const o = A.applyOffensive({ is_pass: true, depth: 'medium' } as A.PlayCall,
+    const o = A.applyOffensive({ isPass: true, depth: 'medium' } as A.PlayCall,
                                base, fixed([r0]));
     const [wt, wr0, wd, wo] = ref.apply[ai++];
     if (wt !== trig || wr0 !== r0) bad(`apply order ${ai}`);
     if (!eq(d, wd)) bad(`applyDefensive ${trig} ${r0}\n  got  ${JSON.stringify(canon(d))}\n  want ${JSON.stringify(canon(wd))}`);
-    if (!eq(o, wo)) bad(`applyOffensive ${trig} ${r0}\n  got  ${JSON.stringify(canon(o))}\n  want ${JSON.stringify(canon(wo))}`);
+    if (!eq(o, reKey(wo))) bad(`applyOffensive ${trig} ${r0}\n  got  ${JSON.stringify(canon(o))}\n  want ${JSON.stringify(canon(wo))}`);
   }
   const fail = { ...base, works: false } as A.Adjustment;
   const [wt2, , wd2, wo2] = ref.apply[ai++];
   if (wt2 !== trig + '|fails') bad(`apply fail order ${ai}`);
   const d2 = A.applyDefensive(D(), fail, fixed([0.0]));
-  const o2 = A.applyOffensive({ is_pass: true, depth: 'medium' } as A.PlayCall,
+  const o2 = A.applyOffensive({ isPass: true, depth: 'medium' } as A.PlayCall,
                               fail, fixed([0.0]));
   if (!eq(d2, wd2)) bad(`applyDefensive fails ${trig}`);
-  if (!eq(o2, wo2)) bad(`applyOffensive fails ${trig}`);
+  if (!eq(o2, reKey(wo2))) bad(`applyOffensive fails ${trig}`);
 }
 console.log(`apply: ${ref.apply.length} cases`);
 

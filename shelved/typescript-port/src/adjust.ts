@@ -66,8 +66,8 @@ export const MIN_SERIES = 2;   // nothing fires off one drive
 export const MIN_EVENTS = 5;   // nor off a tiny sample
 
 export interface PlayCall {
-  is_pass: boolean; depth?: string; scheme?: string; personnel?: string;
-  keep_in?: number; [k: string]: unknown;
+  isPass: boolean; depth?: string; scheme?: string; personnel?: string;
+  keepIn?: number; [k: string]: unknown;
 }
 export interface DefCallLike {
   rushers?: number; shell?: string; front?: string; box?: number;
@@ -106,7 +106,7 @@ export class GameMemory {
     // that carry no such key, and the success means below then tried to sum
     // undefined values.
     const ok = Boolean(gained >= 4.0 || outcome.touchdown);
-    if (playCall.is_pass) {
+    if (playCall.isPass) {
       this.bucket(s, 'pass_depth').push([playCall.depth ?? 'short', gained, ok]);
       const t = outcome.target;
       if (t) this.bucket(s, 'targets').push([t, gained, ok]);
@@ -118,7 +118,7 @@ export class GameMemory {
                                     defCall.box ?? 6, gained, ok]);
     }
     this.bucket(s, 'personnel').push(playCall.personnel ?? '11');
-    this.bucket(s, 'calls').push(playCall.is_pass ? 'pass' : 'run');
+    this.bucket(s, 'calls').push(playCall.isPass ? 'pass' : 'run');
   }
 
   /** Everything in the rolling window. */
@@ -274,6 +274,7 @@ export const COUNTERS: Record<string, CounterDef> = {
 
 export interface Adjustment extends CounterDef {
   works: boolean; trigger: string; target: string | null; confidence: number;
+  [k: string]: unknown;
 }
 
 /**
@@ -349,8 +350,8 @@ export function applyOffensive<T extends PlayCall>(
   if (!adj || !adj.offense || !adj.works) return offCall;
   const o = { ...offCall } as PlayCall;
   if (adj.depth_to) o.depth = adj.depth_to;
-  if (adj.keep_in) o.keep_in = adj.keep_in;
-  if (adj.force_mix) o.is_pass = !o.is_pass;   // break the tendency
+  if (adj.keep_in) o.keepIn = adj.keep_in;
+  if (adj.force_mix) o.isPass = !o.isPass;     // break the tendency
   return o as T;
 }
 

@@ -192,8 +192,8 @@ export function passRate(
 ): number {
   const table = (PASS_RATE as any)[String(Math.trunc(down))] ?? (PASS_RATE as any)['1'];
   let base = table[distBand(ydstogo)];
-  // Touchdowns are worth 6.94, so score differentials are not integers and a
-  // band lookup on the raw value can fall between bands.
+  // Scores are whole numbers again now that the try is resolved as its own
+  // play. The round stays as a guard on any caller passing a float.
   const sd = Math.round(scoreDiff);
   let script = NEUTRAL_SCRIPT as number;
   for (const row of SCRIPT as readonly any[]) {

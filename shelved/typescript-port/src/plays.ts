@@ -320,7 +320,7 @@ export interface PlayOutcome {
   air?: number;
   yac?: number;
   ybc?: number;
-  broken_tackles?: number;
+  brokenTackles?: number;
 }
 
 export interface OffField {
@@ -342,7 +342,7 @@ export function resolvePlay(
   off: OffField, deff: DefField, offCall: any, defCall: any,
   yardsToEndzone: number, rng: RNG,
 ): PlayOutcome {
-  return offCall.is_pass
+  return offCall.isPass
     ? passPlay(off, deff, offCall, defCall, yardsToEndzone, rng)
     : runPlay(off, deff, offCall, defCall, yardsToEndzone, rng);
 }
@@ -376,14 +376,14 @@ export function runPlay(
   ybc = Math.max(-4.0, ybc);
 
   if (ybc < 0) {
-    return { type: 'run', yards: r1(ybc), scheme, broken_tackles: 0,
+    return { type: 'run', yards: r1(ybc), scheme, brokenTackles: 0,
              touchdown: false, ybc: r1(ybc) };
   }
 
   const chasers = [...defenders.slice(front.length), ...defenders.slice(0, front.length)];
   const out = resolveYardsAfter(off.rb, chasers, ytg, rng, { contactAt: ybc });
   return { type: 'run', scheme, ybc: r1(ybc), yards: out.yards,
-           broken_tackles: out.brokenTackles, touchdown: out.touchdown };
+           brokenTackles: out.brokenTackles, touchdown: out.touchdown };
 }
 
 export function passPlay(
@@ -436,9 +436,9 @@ export function passPlay(
 
   // the concept, against the coverage it actually faces
   let cmult = S.conceptMultiplier(concept, defCall.shell);
-  if (offCall.play_action && !offCall.shotgun) {
+  if (offCall.playAction && !offCall.shotgun) {
     cmult *= 1.18;                    // real: 6.91 ypp vs 3.63 without
-  } else if (offCall.play_action) {
+  } else if (offCall.playAction) {
     cmult *= 1.10;
   }
   const dis = S.disguisePenalty(off.qb, Boolean(defCall.fooled));
@@ -463,7 +463,7 @@ export function passPlay(
   // secondary, so a TE could be covered by a corner and a WR1 by a safety.
   const aligned = CV.receiverAlignment(receivers);
   const { pairs } = CV.assignCoverage(aligned, deff, defCall, rng,
-                                      offCall.travel_willingness ?? 0.5,
+                                      offCall.travelWillingness ?? 0.5,
                                       defCall.travel);
 
   // every man in the pattern gets his own separation from his own matchup
@@ -494,7 +494,7 @@ export function passPlay(
     // and dragged league completion to 58.5%.
     const sep = clip(sepRaw, .02, .98);
     const thr = resolveThrow(off.qb, depth, sep, pressure, rng, {
-      playAction: Boolean(offCall.play_action),
+      playAction: Boolean(offCall.playAction),
       outcomeMult: cmult * (1.0 - dis) * rmod.comp,
     });
     complete = thr.result === 'complete';

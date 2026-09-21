@@ -19,7 +19,7 @@ for (const isPass of [true, false])
             for (const box of [5, 6, 7])
               for (const ytg of [3, 8, 17, 45, 80])
                 CALLS.push({
-                  is_pass: isPass, personnel: pers, depth,
+                  isPass, personnel: pers, depth,
                   scheme: isPass ? 'inside_zone' : (box < 7 ? 'inside_zone' : 'power'),
                   concept: 'curl_flat', shotgun: true, motion: false,
                   play_action: false,
@@ -33,9 +33,9 @@ const yards: Record<string, number[]> = {};
 const air: number[] = [], yac: number[] = [], sep: number[] = [], ybc: number[] = [];
 for (let i = 0; i < N; i++) {
   const c = CALLS[i % CALLS.length];
-  const oc = { is_pass: c.is_pass, personnel: c.personnel, depth: c.depth,
+  const oc = { isPass: c.isPass, personnel: c.personnel, depth: c.depth,
                scheme: c.scheme, concept: c.concept, shotgun: c.shotgun,
-               motion: c.motion, play_action: c.play_action };
+               motion: c.motion, playAction: c.playAction };
   const dc = { shell: c.shell, man: c.man, rushers: c.rushers, box: c.box,
                front: c.front, fooled: c.fooled };
   const o = resolvePlay(off, deff, oc, dc, c.ytg, rng);

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NFL GM Sim</title>
+<style>
+  :root { color-scheme: light dark; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  body { margin: 0; padding: 1.25rem; max-width: 60rem; }
+  h1 { font-size: 1.1rem; margin: 0 0 .75rem; }
+  button { font: inherit; padding: .4rem .9rem; margin-right: .5rem; }
+  #log { white-space: pre; overflow-x: auto; font-size: .8rem; line-height: 1.35;
+         border: 1px solid currentColor; padding: .75rem; margin-top: .9rem; min-height: 12rem; }
+  .dim { opacity: .65; }
+</style>
+</head>
+<body>
+<h1>NFL GM Sim</h1>
+<p class="dim">Python engine running in the browser via Pyodide. No server.</p>
+<button id="game" disabled>Sim one game</button>
+<button id="season" disabled>Sim a season (272 games)</button>
+<div id="log">loading…</div>
+<script type="module">
+const log = document.getElementById('log');
+const say = t => { log.textContent += t + '\n'; log.scrollTop = log.scrollHeight; };
+log.textContent = '';
+
+const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.29.5/full/pyodide.mjs');
+say('booting pyodide…');
+const py = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.5/full/' });
+await py.loadPackage(['numpy', 'pandas']);
+
+say('loading engine…');
+const MODULES = ['matchups', 'plays', 'schemes', 'health', 'coverage', 'events',
+                 'targets', 'gameplan', 'adjust', 'game', 'rosters', 'calibrate'];
+for (const m of MODULES) {
+  const src = await (await fetch(`engine/${m}.py`)).text();
+  py.FS.writeFile(`/${m}.py`, src);
+}
+const seed = await (await fetch('engine/league_seed_2026.csv')).arrayBuffer();
+py.FS.writeFile('/league_seed_2026.csv', new Uint8Array(seed));
+py.runPython(`import sys, os; sys.path.insert(0, '/'); os.chdir('/')`);
+
+py.runPython(`
+import numpy as np, rosters as R, game as G, plays as P, schemes as S
+L = R.load_league(); TEAMS = sorted(L)
+CO = lambda d, di, sd, ytg, r: S.call_offense(d, di, sd, ytg, r)
+CD = lambda oc, d, di, r, ytg=50: S.call_defense(oc, d, di, r, yards_to_endzone=ytg)
+COACH = dict(adjust_skill=.55, adjust_willingness=.55, man_rate=.35,
+             blitz_rate=.133, travel_willingness=.5, off_script_skill=.5)
+RNG = np.random.default_rng()
+
+def one_game():
+    h, a = RNG.choice(TEAMS, 2, replace=False)
+    ST = {t: G.TeamState(L[t], coach=COACH) for t in (h, a)}
+    r = G.play_game(L[h], L[a], RNG, P.resolve_play, CO, CD, P.rate,
+                    home_state=ST[h], away_state=ST[a], week=1)
+    return f"{h} {r['home']} - {r['away']} {a}   ({len(r['drives'])} drives, {len(r['injuries'])} injuries)"
+
+def season():
+    ST = {t: G.TeamState(L[t], coach=COACH) for t in TEAMS}
+    w = {t: 0 for t in TEAMS}
+    for wk in range(17):
+        o = list(TEAMS); RNG.shuffle(o)
+        for i in range(0, 32, 2):
+            h, a = o[i], o[i+1]
+            r = G.play_game(L[h], L[a], RNG, P.resolve_play, CO, CD, P.rate,
+                            home_state=ST[h], away_state=ST[a], week=wk+1)
+            if r['home'] > r['away']: w[h] += 1
+            elif r['away'] > r['home']: w[a] += 1
+    return '\\n'.join(f'{t:>4}  {n:2d}-{17-n:<2d}' for t, n in
+                      sorted(w.items(), key=lambda kv: -kv[1]))
+`);
+
+say('ready.\n');
+const g = document.getElementById('game'), s = document.getElementById('season');
+g.disabled = s.disabled = false;
+g.onclick = () => { const t = performance.now();
+  say(py.runPython('one_game()') + `   [${((performance.now()-t)/1000).toFixed(2)}s]`); };
+s.onclick = async () => { s.disabled = true; say('simulating 272 games…');
+  const t = performance.now();
+  say(py.runPython('season()') + `\n[${((performance.now()-t)/1000).toFixed(1)}s]`);
+  s.disabled = false; };
+</script>
+</body>
+</html>
