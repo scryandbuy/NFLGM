@@ -149,6 +149,10 @@ GRP = {'LT': 'OL', 'LG': 'OL', 'C': 'OL', 'RG': 'OL', 'RT': 'OL',
 # as a hole worth trading for.
 NEED_GAP = 4.0
 
+# How much better than what he already has a man must be before it is worth a
+# trade at all. A lateral move costs assets and changes nothing.
+UPGRADE_GAP = 2.0
+
 _BAR_CACHE = {}
 
 
@@ -163,12 +167,9 @@ def starter_bar(league):
         return _BAR_CACHE[key]
     tops = {}
     for t in league.teams.values():
-        by = {}
         for pos, men in t.depth.items():
-            by.setdefault(GRP.get(pos, pos), []).extend(men)
-        for grp, men in by.items():
             if men:
-                tops.setdefault(grp, []).append(max(p.ovr for p in men))
+                tops.setdefault(pos, []).append(max(p.ovr for p in men))
     bar = {g: float(np.median(v)) for g, v in tops.items()}
     _BAR_CACHE.clear()
     _BAR_CACHE[key] = bar
@@ -180,31 +181,46 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     Who a club can spare and where it is thin. Surplus is depth behind a
     starter who is clearly better; need is a spot with nobody.
     """
-    surplus, needs = [], set()
+    surplus, needs = [], {}
     league_bar = starter_bar(league)
     depth = team.depth
     by_group = {}
     for pos, men in depth.items():
-        by_group.setdefault(GRP.get(pos, pos), []).extend(men)
+        # WHO IS ACTUALLY AVAILABLE. Depth counts everyone on the roster, hurt
+        # or not, so a club whose starter is out for the season registered no
+        # hole at all - which is the one case where trading for a lesser
+        # player is plainly right.
+        fit = [p for p in men if p.out_until is None]
+        by_group.setdefault(GRP.get(pos, pos), []).extend(fit)
+    # SURPLUS is a GROUP question: a fourth healthy lineman is spare whatever
+    # slot he is listed at.
     for grp, men in by_group.items():
         men = sorted(men, key=lambda p: -p.ovr)
-        # A man behind two better ones at his own group is expendable, and a
-        # group with nobody spare is a hole.
         if len(men) >= 3:
             for p in men[2:4]:
                 if men[0].ovr - p.ovr > 3:
-                    a = player_asset(league, team, p, pool, rng,
-                                     viewer=team)
+                    a = player_asset(league, team, p, pool, rng, viewer=team)
                     if a:
                         a['grp'] = grp
                         surplus.append(a)
-        # NEED IS QUALITY, NOT HEADCOUNT. Asking whether a group had one man
-        # or fewer meant an offensive line of nine was never a need however
-        # bad it was, and needs fired only at kicker and quarterback. A club
-        # needs a tackle when its best tackle is a 72 and the league starts
-        # 82s, which is also the only definition a trade can act on.
-        if not men or men[0].ovr < league_bar.get(grp, 75.0) - NEED_GAP:
-            needs.add(grp)
+
+    # NEED is a SLOT question, and a SIZE rather than a flag.
+    #
+    # By slot because a group hides exactly the hole worth trading for: lose
+    # your right tackle for the season and the line still contains a
+    # 90-overall left tackle, so the group looks fine while the spot is empty.
+    #
+    # A size because a club with a 74 where the league starts 82s and a club
+    # with a 60 are not the same, and treating them alike meant both chased
+    # the same 71 when only one of them is improved by him.
+    for pos, men in depth.items():
+        fit = [p for p in men if p.out_until is None]
+        have = max((p.ovr for p in fit), default=0.0)
+        if have < league_bar.get(pos, 75.0) - NEED_GAP:
+            grp = GRP.get(pos, pos)
+            if grp not in needs or have < needs[grp]:
+                needs[grp] = have
+
     surplus.sort(key=lambda a: -a['trade_value'])
     return surplus[:n], needs
 
@@ -349,6 +365,7 @@ def run(league, rng, rounds=2, verbose=False):
     pool = VAL.pool_from_league(league)
     cap_space = {a: t.cap_space for a, t in league.teams.items()}
     made = []
+    moved = set()          # nobody changes hands twice in one window
     teams = list(league.teams)
 
     for _r in range(rounds):
@@ -373,9 +390,16 @@ def run(league, rng, rounds=2, verbose=False):
                 # Requiring each club to want exactly what the other spares
                 # produced four matched pairs in the whole league and no deals.
                 # A pick is the currency that makes an uneven trade even.
-                want_a = [x for x in sb if x.get('grp') in na]
+                # He only wants a man who IMPROVES the hole, not merely one
+                # who plays the position. Otherwise a club trades for a 71 to
+                # sit behind its own 74, which nobody does.
+                want_a = [x for x in sb
+                          if x['pid'] not in moved
+                          and x.get('grp') in na
+                          and x.get('seen_ovr', 0) > na[x['grp']] + UPGRADE_GAP]
                 if not want_a:
                     continue
+                want_a.sort(key=lambda x: -x.get('seen_ovr', 0))
                 target = want_a[0]
                 target['need'] = True
                 # SWEETEN UNTIL HE TAKES IT. A single cheapest-pick offer came
@@ -398,6 +422,13 @@ def run(league, rng, rounds=2, verbose=False):
                                         cap_space[b], sa, rng)
                 if offer is None:
                     continue
+                # A man just acquired is not surplus the following round.
+                # Without this the same player went to Washington and straight
+                # back to Las Vegas inside one window.
+                moved.add(offer['a_gets'][0]['pid'])
+                for x in offer['a_sends']:
+                    if x['kind'] != 'pick':
+                        moved.add(x['pid'])
                 out = [x['obj'] if x['kind'] == 'pick' else x['pid']
                        for x in offer['a_sends']]
                 league.trade(a, b, out, [offer['a_gets'][0]['pid']])
