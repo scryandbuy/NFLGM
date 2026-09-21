@@ -49,6 +49,18 @@ BASE_TTT = 2.72          # the league mean the clock must land on
 # and the one every published number is measured against, so it is used here
 # rather than a threshold of our own.
 PBW_THRESHOLD = 2.5
+
+# Share of SHORT throws that are really behind the line of scrimmage. The real
+# split says 18.4/(18.4+49.5) of the short bucket, but this engine's depth mix
+# is not the real one - solved instead against the OUTCOME, the 22.3% of
+# completions that travel backwards.
+SCREEN_SHARE = 0.285
+# Behind-the-line throws complete 78.4% against 71.0% for a short throw, and
+# the difference is that nobody is covering the flat the way they cover a
+# route downfield. It has to stay small: at 0.14 with a 36% share, league
+# completion went to 69.0% against a real 65.0% and mean air yards fell to
+# 4.22 against 5.72 - the screen game was swallowing the passing game.
+SCREEN_RESCUE = 0.07
 # A second blocker buys the pocket roughly this much more time. Used only to
 # decide who is CHARGED with a rep, never to change the play.
 DOUBLE_TEAM_HELP = 1.45
@@ -422,6 +434,18 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     depth = off_call.get('depth', 'short')
     ok = available_depths(ytg)
     if depth not in ok: depth = ok[-1]
+    # THE SCREEN GAME, which did not exist at all. Real clubs throw 18.4% of
+    # their attempts BEHIND the line of scrimmage - screens, swings, flares,
+    # checkdowns to the flat - and those throws complete 78.4% of the time and
+    # gain 9.13 yards after the catch because the receiver has blockers in
+    # front of him rather than defenders. Our engine clamped air yards at zero,
+    # so none of it existed and every short throw piled into the 0-9 band at
+    # 80.6% of completions against a real 54.1%.
+    #
+    # Behind the line is 18.4% of all attempts and short is 49.5%, so a little
+    # over a quarter of what this engine calls a short throw is really a screen.
+    screen = (depth == 'short' and not off_call.get('play_action')
+              and rng.random() < SCREEN_SHARE)
     concept = off_call.get('concept', 'curl_flat')
     # The offence does NOT know the rush count before the snap. Choosing max
     # protect because six are coming let the defence's blitz cancel itself, so
@@ -522,6 +546,9 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                             play_action=off_call.get('play_action', False),
                             outcome_mult=cmult * (1.0 - dis) * rmod['comp'])
         complete = thr['result'] == 'complete'
+        if screen and not complete and rng.random() < SCREEN_RESCUE:
+            complete = True        # a ball thrown at his numbers three yards
+                                   # behind the line is rarely missed
         picked = thr['result'] == 'interception'
         contested = thr['contested']
     else:
@@ -539,6 +566,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         cover_relief = 1.0 + 0.085 * max(0, def_call['rushers'] - 4)
         adj = float(np.clip(z['p_complete'] * cmult * cover_relief * (1.0 - dis)
                             * rmod['comp'], 0.02, 0.97))
+        if screen:
+            adj = min(0.97, adj + SCREEN_RESCUE)
         complete = rng.random() < adj
         # 2.1% is the rate per ATTEMPT, not per incompletion. Applying it to
         # incompletions only produced ~1.1% league-wide.
@@ -568,13 +597,27 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # Real air yards ON COMPLETIONS: 5.72 overall, with the bands running
     # -2.76 behind the line, 4.03 short, 11.93 medium, 25.29 deep. The short
     # band includes throws behind the line, which pulled the real mean down.
-    base_air = {'short': 2.6, 'medium': 9.8, 'deep': 22.0}[depth]
-    air = 0.55 * base_air + 0.45 * max(0.0, rmod['air'])
-    air = max(0.0, air + rng.normal(0, 3.0))
+    if screen:
+        # Real behind-the-line throws average -3.55 air yards on attempts and
+        # -2.76 on completions.
+        air = float(np.clip(rng.normal(-3.4, 2.2), -9.0, -0.5))
+    else:
+        # THE DEEP BALL BARELY EXISTED. Blending the depth base half-and-half
+        # with the read modifier pulled a deep throw down to 13-16 air yards,
+        # so it landed in the 10-19 band and only 0.5% of completions
+        # travelled 20+ against a real 6.3%. Real deep completions average
+        # 27.6 air yards. The read modifier should colour a throw, not decide
+        # how far it goes - the play call already did that.
+        base_air = {'short': 2.6, 'medium': 9.8, 'deep': 26.5}[depth]
+        w = 0.80 if depth == 'deep' else 0.55
+        air = w * base_air + (1.0 - w) * max(0.0, rmod['air'])
+        air = max(0.0, air + rng.normal(0, 3.0 if depth != 'deep' else 4.5))
     # A throw to the back of the end zone travels the full remaining distance -
     # it is not clipped short. Clipping it left the YAC chain no room and made
     # scoring from the 15-20 nearly impossible: 1.9% per play against a real 7.0%.
-    if air >= ytg * 0.68 and ytg <= 25:
+    if screen:
+        pass                                   # it already travelled backwards
+    elif air >= ytg * 0.68 and ytg <= 25:
         air = float(ytg)
     else:
         air = min(air, float(ytg))
