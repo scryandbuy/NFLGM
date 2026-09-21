@@ -107,6 +107,84 @@ def replacement_level(team, pos):
     return grp[1].ovr
 
 
+def enforce(league, rng, verbose=False, target=0.5):
+    """
+    THE BACKSTOP. No club ends a phase over the cap.
+
+    An AI general manager never makes a decision without the cap in it, but
+    decisions still compound - a team signs three men it could each afford and
+    cannot afford all three. So compliance is enforced afterwards by the same
+    three levers a real front office has, in the order a real one uses them:
+    rework the deals of men worth keeping, release the ones you can replace,
+    and take the June 1 route on what is left.
+
+    It does not give up quietly any more. A club that cannot get under by any
+    of those means is REPORTED, because that is a modelling failure and it
+    should be visible rather than silently carried into the next season.
+    """
+    stuck = []
+    for abbr, team in league.teams.items():
+        team.sync_cap()
+        if team.cap_space >= target:
+            continue
+        before = team.cap_space
+        _fix_one(league, team, rng, target)
+        team.sync_cap()
+        if team.cap_space < 0:
+            stuck.append((abbr, before, team.cap_space, team.cap.dead,
+                          len(team.active())))
+    if stuck and verbose:
+        for a, b, aft, dead, n in stuck:
+            print(f'  STUCK OVER THE CAP: {a} {b:.1f} -> {aft:.1f} '
+                  f'(dead {dead:.1f}, {n} players - nothing left to move)')
+    return stuck
+
+
+def _fix_one(league, team, rng, target):
+    cap = CAP.get(league.year, 301.2)
+    for _pass in range(3):
+        if team.cap_space >= target:
+            return
+        # 1. rework whoever frees the most, keeping the player
+        best = None
+        for p in team.active():
+            if not p.contract:
+                continue
+            freed = restructure_room(p, cap)
+            if freed > 0.4 and (best is None or freed > best[0]):
+                best = (freed, p)
+        if best is not None:
+            p = best[1]
+            floor = MS.minimum_salary(p.accrued, cap)
+            p.contract.restructure(0, min_base=floor)
+            team.sync_cap()
+            continue
+        # 2. release the most expensive man the roster can absorb losing
+        cands = []
+        for p in team.active():
+            if not p.contract:
+                continue
+            saved, dead, _n = savings_if_cut(p)
+            if saved <= 0:
+                continue
+            rep = replacement_level(team, p.pos)
+            cands.append((saved - max(0.0, p.ovr - rep) * 1.5, p))
+        if cands:
+            cands.sort(key=lambda x: -x[0])
+            league.release(cands[0][1].pid)
+            team.sync_cap()
+            continue
+        # 3. June 1, which splits the dead money across two years
+        j = [p for p in team.active() if p.contract
+             and savings_if_cut(p, june1=True)[0] > 0]
+        if j:
+            j.sort(key=lambda p: -savings_if_cut(p, june1=True)[0])
+            league.release(j[0].pid, june1=True)
+            team.sync_cap()
+            continue
+        return
+
+
 def run(league, rng, verbose=False):
     """
     Get every club under the cap. Cuts first, then restructures, then June 1

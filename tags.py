@@ -135,6 +135,13 @@ def _one_year(value, year):
     return Contract(years=1, base=[value], signing_bonus=0.0, signed=year)
 
 
+def power(league, team, cap):
+    """Space minus what the club still owes the bodies it has not signed. A
+    tag or a tender is a real commitment and has to clear the same bar as any
+    other signing."""
+    return team.spending_power(cap, MS.minimum_salary(2, cap))
+
+
 def run(league, rng, verbose=False):
     """
     Tag, tender, and let everyone else reach the market. Called after cuts and
@@ -160,7 +167,7 @@ def run(league, rng, verbose=False):
             cand = max(mine, key=worth)
             price = tag_price(cand, cap)
             if (cand.tag_count < MAX_TAGS and worth(cand) >= 5.0
-                    and price <= team.cap_space):
+                    and price <= power(league, team, cap)):
                 cand.contract = _one_year(price, league.year)
                 cand.tag_count += 1
                 cand.tagged_year = league.year
@@ -174,7 +181,7 @@ def run(league, rng, verbose=False):
         # ---- restricted men ---------------------------------------------
         for p in [x for x in groups['RFA'] if x.pid in roster]:
             price = tender_price(p, cap)
-            if price > team.cap_space:
+            if price > power(league, team, cap):
                 to_market.append((abbr, p))     # cannot afford to keep him
                 continue
             p.contract = _one_year(price, league.year)
@@ -192,7 +199,7 @@ def run(league, rng, verbose=False):
         # ---- exclusive rights: not really free agents --------------------
         for p in [x for x in groups['ERFA'] if x.pid in roster]:
             price = MS.minimum_salary(p_accrued(p), cap)
-            if price > team.cap_space:
+            if price > team.cap_space:          # a minimum body needs no reserve
                 to_market.append((abbr, p))
                 continue
             p.contract = _one_year(price, league.year)

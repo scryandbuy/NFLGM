@@ -139,6 +139,13 @@ def meter(u, best_u):
 
 
 # ============================================================ THE AI's BIDS
+def power(league, team, cap):
+    """Effective spending power: space minus the floor cost of the bodies the
+    club still owes. Every AI decision prices against this, never raw space."""
+    import min_salary as MS
+    return team.spending_power(cap, MS.minimum_salary(2, cap), ROSTER_TARGET)
+
+
 def ai_bids(league, pool, phase, rng, skip_teams=()):
     """
     Every club looks at the market and commits one bid per player it wants.
@@ -151,7 +158,9 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
     for abbr, team in league.teams.items():
         if abbr in skip_teams:
             continue
-        room = team.cap_space
+        # NOT cap_space. A club with twenty holes cannot spend its whole
+        # room on one man - it still owes nineteen minimum salaries.
+        room = power(league, team, cap)
         if room <= 2.0:
             continue
         cand = []
@@ -263,9 +272,10 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
 
         # Cap room is checked AGAIN here. A club bids on several men at once
         # and cannot sign them all; without this, teams finished 48m over.
-        if league.teams[best.team].cap_space < best.apy * 1.05:
+        if power(league, league.teams[best.team], cap) < best.apy * 1.05:
             alt = next((o for _u, o in scored
-                        if league.teams[o.team].cap_space >= o.apy * 1.05), None)
+                        if power(league, league.teams[o.team], cap)
+                        >= o.apy * 1.05), None)
             if alt is None:
                 waiting.append(p)
                 continue
@@ -323,14 +333,16 @@ def resolve_offer_sheets(league, rng, verbose=False):
         # incumbents lost 33 of 45, where the sources are blunt that the vast
         # majority of offer sheets are matched.
         gap = max(0.0, price - (p.apy if p.contract else 0.0))
-        can = holder is not None and holder.cap_space + (p.apy if p.contract else 0.0) >= price * 1.02
+        can = (holder is not None
+               and power(league, holder, cap) + (p.apy if p.contract else 0.0)
+               >= price * 1.02)
         if can and worth >= price * 0.72:
             o = Offer(msg['team'], p.pid, price, years, phase=3)
             _unlist(league, p)
             sign(league, p, o, cap)
             holder.sync_cap()
             kept.append((msg['team'], p, price))
-        elif suitor and suitor.cap_space >= price * 1.05:
+        elif suitor and power(league, suitor, cap) >= price * 1.05:
             o = Offer(msg['suitor'], p.pid, price, years, phase=3)
             _unlist(league, p)
             sign(league, p, o, cap)
@@ -404,7 +416,8 @@ def fill_out_rosters(league, pool, rng, verbose=False):
             if need <= 0:
                 break
             floor = MS.minimum_salary(p.accrued, cap)
-            if team.cap_space < floor * 1.2:
+            # filling a slot RELEASES reserve, so the test is plain space
+            if team.cap_space < floor * 1.05:
                 break
             grp = team.by_pos(p.pos)
             if len(grp) >= 4:
@@ -452,6 +465,11 @@ def run(league, rng, user_team=None, verbose=False):
     fill_out_rosters(league, pool, rng, verbose)
 
     resolve_offer_sheets(league, rng, verbose)
+
+    # Nobody leaves the market over the cap. Decisions compound even when each
+    # one was affordable on its own.
+    import contracts as CT
+    CT.enforce(league, rng, verbose)
 
     # the pool does not empty - it stays open and reopens at camp
     league.free_agents = [p.pid for p in pool]

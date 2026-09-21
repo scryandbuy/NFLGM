@@ -327,6 +327,30 @@ class Team:
     def cap_space(self):
         return self.cap.space(self.phase)
 
+    # How many bodies a club still has to find. 53 is the working number until
+    # cut-down exists.
+    ROSTER_TARGET = 53
+
+    def slots_to_fill(self, target=None):
+        return max(0, (target or self.ROSTER_TARGET) - len(self.active()))
+
+    def spending_power(self, cap=301.2, min_salary=1.0, target=None):
+        """
+        What a club can actually commit to ONE player.
+
+        Raw cap space is a lie when a roster is half empty. A team with $20M
+        and twenty holes to fill cannot spend $15M on anybody - it still has
+        to pay nineteen more men, and the league minimum is not optional. The
+        same team with $20M and two holes can spend nearly all of it.
+
+        So every AI decision prices against space MINUS the floor cost of the
+        bodies still owed. That single number is why a rebuilding club shops
+        in the bargain bin and a finished contender does not.
+        """
+        slots = self.slots_to_fill(target)
+        reserve = max(0, slots - 1) * min_salary
+        return self.cap_space - reserve
+
     phase = 'season'          # set by the League each time the calendar moves
 
     def sync_cap(self, year_index=0):
