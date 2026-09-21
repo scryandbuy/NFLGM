@@ -156,6 +156,9 @@ def finalize(league, rng, verbose=False, passes=3):
         cuts, short = run(league, rng)
         total_cut += cuts
         total_signed += fill_short(league, rng)
+        # Filling out costs money too, and nothing was re-checking after it -
+        # two clubs a year finished over the cap on the last signing.
+        CT.enforce(league, rng)
         sizes = [len(t.active()) for t in league.teams.values()]
         if min(sizes) >= ROSTER_LIMIT and max(sizes) <= ROSTER_LIMIT:
             break

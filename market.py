@@ -60,6 +60,11 @@ CONTENDER_DISCOUNT = 0.06
 # is not a market, it is a queue.
 MAX_TARGETS = {1: 8, 2: 7, 3: 8}
 
+# How much of next year's obligation a club actually holds back. Not all of
+# it: some of those men will be let go, and some will be cheaper than their
+# current deal. Half is the working figure.
+FORWARD_WEIGHT = 0.5
+
 MATCH_REQUEST_CHANCE = 0.30
 MATCH_GAP_MAX = 0.18          # he only asks if the gap is closeable
 
@@ -139,11 +144,26 @@ def meter(u, best_u):
 
 
 # ============================================================ THE AI's BIDS
-def power(league, team, cap):
-    """Effective spending power: space minus the floor cost of the bodies the
-    club still owes. Every AI decision prices against this, never raw space."""
+def power(league, team, cap, years=1):
+    """
+    Effective spending power: space minus the floor cost of the bodies the
+    club still owes, and now minus what it has already promised NEXT year.
+
+    A club with four expiring starters has spent most of next year's room in
+    its head before free agency opens. Raw cap space cannot see that, so a
+    rebuilding team and a team about to lose its own core looked identical.
+
+    The forward charge scales with CONTRACT LENGTH, because that is what
+    actually conflicts: a one-year deal blocks nothing and a five-year deal
+    blocks everything. A one-year signing therefore stays cheap for exactly
+    the club that cannot commit, which is also what happens in reality.
+    """
     import min_salary as MS
-    return team.spending_power(cap, MS.minimum_salary(2, cap), ROSTER_TARGET)
+    base = team.spending_power(cap, MS.minimum_salary(2, cap), ROSTER_TARGET)
+    if years <= 1:
+        return base
+    owed = team.future_obligation()
+    return base - owed * min(1.0, (years - 1) / 3.0) * FORWARD_WEIGHT
 
 
 def ai_bids(league, pool, phase, rng, skip_teams=()):
@@ -177,14 +197,23 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
             v = VAL.value_player(league, p, side='team', pool=comps, rng=rng)
             if not v:
                 continue
+            years_want = int(np.clip(v['years'], 1, 5))
+            # COMMITTING LONG TO HIM MEANS LOSING ONE OF YOUR OWN. A multi-year
+            # deal is paid for out of the same room that would have re-signed a
+            # pending free agent, so he has to be better than the man who walks
+            # - not merely better than the backup currently behind him.
+            if years_want > 2:
+                keeper = team.worst_keeper()
+                if keeper is not None and p.ovr <= keeper.ovr + 1.0:
+                    years_want = 1        # worth having now, not worth a future
             bid = v['apy'] * PHASE_LEVEL[phase]
             # a club that wants him badly pays over its own number
             bid *= 1.0 + 0.22 * max(0.0, want - 0.5)
-            bid = min(bid, room * 0.65)
+            bid = min(bid, power(league, team, cap, years_want) * 0.65)
             floor = 0.9
             if bid < floor:
                 continue
-            years = int(np.clip(v['years'], 1, 5))
+            years = years_want
             if phase == 3:
                 years = min(years, 2)     # late money is short money
             cand.append((want, p, round(bid, 2), years))

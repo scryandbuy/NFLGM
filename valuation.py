@@ -362,7 +362,7 @@ def pool_from_league(league, season=None):
         rows.append(dict(
             full_name=p.name, grp=GRP.get(p.pos, 'LB'), madden_position=p.pos,
             ovr=p.ovr, age=p.age, apy=apy, cappct=apy / cap,
-            yrs=p.contract.years,
+            yrs=getattr(p.contract, 'orig_years', p.contract.years),
             contract_age=max(0, (season or league.year) - p.contract.signed),
             pick=p.draft_overall,
             pedigree=(0.0 if not p.draft_overall

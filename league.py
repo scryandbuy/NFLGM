@@ -334,6 +334,47 @@ class Team:
     def slots_to_fill(self, target=None):
         return max(0, (target or self.ROSTER_TARGET) - len(self.active()))
 
+    def expiring_next(self, horizon=1):
+        """
+        The men whose deals run out within `horizon` years - the club's own
+        pending free agents, who are a claim on NEXT year's cap before anyone
+        else gets a look at it.
+        """
+        return [p for p in self.active()
+                if p.contract and p.contract.years <= horizon]
+
+    def future_obligation(self, keep_gap=3.0, horizon=1):
+        """
+        What it will cost to keep the ones worth keeping.
+
+        A general manager who knows four starters are expiring has already
+        spent most of next year's room in his head. He will not hand a free
+        agent a five-year deal unless that man is better than whichever of his
+        own he would have to let walk to afford it - which is the whole
+        decision, and raw cap space cannot see it.
+
+        Only men clearly above their replacement count: a club does not budget
+        to re-sign a body it can replace off the street.
+        """
+        owed = 0.0
+        for p in self.expiring_next(horizon):
+            grp = self.by_pos(p.pos)
+            rep = grp[1].ovr if len(grp) > 1 else 0.0
+            if p.ovr - rep < keep_gap:
+                continue
+            owed += max(p.apy, 1.0)
+        return owed
+
+    def worst_keeper(self, keep_gap=3.0, horizon=1):
+        """
+        The least valuable man he is budgeting to retain - the one a free agent
+        has to beat to be worth committing to instead.
+        """
+        cands = [p for p in self.expiring_next(horizon)
+                 if p.ovr - (self.by_pos(p.pos)[1].ovr
+                             if len(self.by_pos(p.pos)) > 1 else 0.0) >= keep_gap]
+        return min(cands, key=lambda p: p.ovr) if cands else None
+
     def spending_power(self, cap=301.2, min_salary=1.0, target=None):
         """
         What a club can actually commit to ONE player.
@@ -655,12 +696,18 @@ def _json_default(o):
 def contract_to_dict(c):
     if c is None: return None
     return dict(years=c.years, base=list(c.base), signing_bonus=c.sb,
-                roster_bonus=list(c.rb),
+                roster_bonus=list(c.rb), orig_years=getattr(c, 'orig_years', c.years),
                 void_years=c.void, signed=c.signed)
 
 
 def contract_from_dict(d):
-    return Contract(**d) if d else None
+    if not d:
+        return None
+    o = d.pop('orig_years', None)
+    c = Contract(**d)
+    if o is not None:
+        c.orig_years = int(o)
+    return c
 
 
 def morale_to_dict(m):
@@ -750,6 +797,13 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
             contract = Contract(years=yrs, base=st['base'],
                                 signing_bonus=st['signing_bonus'],
                                 signed=int(r.year_signed) if pd.notna(r.get('year_signed')) else year)
+            # The seed carries BOTH the deal's full length and what is left of
+            # it. Contract.years has to be what remains, but comps are drawn
+            # against what he SIGNED for - otherwise a man three years into a
+            # five-year deal teaches the market that five-year deals are
+            # two-year deals, and the league can never write a long contract.
+            if pd.notna(r.get('years')) and int(r.years) >= yrs:
+                contract.orig_years = int(r.years)
         p = Player(r.pid, r.full_name, r.madden_position, age, ratings,
                    dev=_dev_from_seed(r, rng), potential=pot,
                    potential_range=prange,
