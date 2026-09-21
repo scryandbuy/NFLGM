@@ -186,6 +186,16 @@ ZONE_WINDOW = {
 ZONE_DEFENDERS_NEAR = {'cover_2': 1.3, 'cover_3': 1.5, 'cover_4': 1.7,
                        'cover_6': 1.5, 'tampa_2': 1.6}
 
+# The scalar that turns a window into a completion probability. 1.26 was
+# solved for an average QB against an average defender on the bench; it is
+# now solved inside games, per depth, against the defence as it actually
+# calls coverage (see plays.PASS_TRACE and refit_passing.py).
+# Per depth because real defenders sit well above the 0.70 centre and the
+# squeeze compounds with depth: the mean window after squeeze runs 0.56 short,
+# 0.42 medium, 0.28 deep inside games, so one scalar left deep zone at 35%
+# against a real ~42 and zone overall 8 points BELOW man.
+ZONE_SCALE = {'short': 1.452, 'medium': 1.521, 'deep': 1.701}
+
 def zone_window(shell, depth):
     """Base window for this shell at this route depth. Bigger = easier throw."""
     i = {'short': 0, 'medium': 1, 'deep': 2}[depth]
@@ -242,10 +252,11 @@ def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate):
     # 1.26 is solved, not chosen: with the depth-anchored windows above it puts
     # an average QB against an average defender on the real per-depth
     # completion rates (74.4 / 56.0 / 39.4).
-    p_complete = min(0.97, w * 1.26 * (1.0 + 1.15 * (acc - AVG)))
+    raw = w * (1.0 + 1.15 * (acc - AVG))
+    p_complete = min(0.97, raw * ZONE_SCALE[depth])
     roll = rng.random()
     complete = roll < p_complete
     contested = (not complete) and (roll < p_complete + (1.0 - w) * 0.45)
     return dict(complete=complete, contested=contested, window=round(w, 3),
-                p_complete=round(p_complete, 3),
+                p_complete=round(p_complete, 3), raw=raw,
                 defender=near.get('pid') if near else None)

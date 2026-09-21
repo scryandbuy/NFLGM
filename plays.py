@@ -19,6 +19,12 @@ from matchups import (PASS_RUSH, ROUTE, THROW, CATCH, YAC, RUN_BLOCK,
 
 AVG = 0.70
 
+# Diagnostic trace. When a list is bound here, every pass attempt appends the
+# quantities the completion roll was built from, so the depth scalars can be
+# SOLVED against what the engine actually produces inside games rather than
+# tuned by hand. None in normal play; costs nothing.
+PASS_TRACE = None
+
 def rate(p, weights):
     """Weighted attribute score on 0-1. Missing attributes default to average."""
     return sum(p.get(k, 70) * v for k, v in weights.items()) / 100.0
@@ -205,19 +211,24 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # 5.93/5.63/5.94 by down against a real 5.60/5.38/5.37, plays per drive at
     # 5.32 against 5.96, and first downs at 1.56 against 1.84. Pulling the
     # multiplier down lengthens drives as well as fixing completion.
-    DEPTH_MULT = {'short': 1.63, 'medium': 1.16, 'deep': 0.84}
-    p = separation * DEPTH_MULT[depth] * (1.0 + 1.15 * (acc - AVG)) * outcome_mult
-    p = float(np.clip(p, 0.02, 0.97))
+    # RE-SOLVED INSIDE GAMES against the defence as it now calls coverage
+    # (refit_passing.py, 96 games, seed 2026). The old values were fitted when
+    # man meant cover 0 or cover 1 on a fifth of snaps; with the full call
+    # book man is a third of targets and was completing 66% against a real
+    # ~60, ABOVE zone, which is backwards.
+    DEPTH_MULT = {'short': 1.380, 'medium': 1.113, 'deep': 0.776}
+    base = separation * (1.0 + 1.15 * (acc - AVG)) * outcome_mult
+    p = float(np.clip(base * DEPTH_MULT[depth], 0.02, 0.97))
 
     roll = rng.random()
     if roll < p:
-        return dict(result='complete', contested=separation < 0.35)
+        return dict(result='complete', contested=separation < 0.35, p=p, base=base)
     # a bad throw into tight coverage is where picks come from
     # calibrated to the real 2.1% league interception rate
     p_int = (1.0 - separation) * 0.112 * (1.0 + 2.2 * (AVG - acc))
     if rng.random() < max(0.0, p_int):
-        return dict(result='interception', contested=True)
-    return dict(result='incomplete', contested=separation < 0.45)
+        return dict(result='interception', contested=True, p=p, base=base)
+    return dict(result='incomplete', contested=separation < 0.45, p=p, base=base)
 
 # ============================================================ THE CATCH
 def resolve_catch(receiver, defender, contested, rng):
@@ -601,6 +612,12 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                             play_action=off_call.get('play_action', False),
                             outcome_mult=cmult * (1.0 - dis) * rmod['comp'])
         complete = thr['result'] == 'complete'
+        if PASS_TRACE is not None:
+            PASS_TRACE.append(dict(path='man', depth=depth, screen=screen,
+                                   base=thr['base'], p=thr['p'],
+                                   acc=rate(off['qb'], THROW[depth]),
+                                   sep=sep, cmult=cmult, rmod=rmod['comp'],
+                                   dis=dis, pressure=p['pressure']))
         if screen and not complete and rng.random() < SCREEN_RESCUE:
             complete = True        # a ball thrown at his numbers three yards
                                    # behind the line is rarely missed
@@ -623,6 +640,15 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                             * rmod['comp'], 0.02, 0.97))
         if screen:
             adj = min(0.97, adj + SCREEN_RESCUE)
+        if PASS_TRACE is not None:
+            PASS_TRACE.append(dict(path='zone', depth=depth, screen=screen,
+                                   base=z['raw'] * cmult * cover_relief
+                                        * (1.0 - dis) * rmod['comp'],
+                                   p=adj, acc=rate(off['qb'], THROW[depth]),
+                                   window=z['window'], cmult=cmult,
+                                   rmod=rmod['comp'], dis=dis,
+                                   pressure=p['pressure'],
+                                   relief=cover_relief))
         complete = rng.random() < adj
         # 2.1% is the rate per ATTEMPT, not per incompletion. Applying it to
         # incompletions only produced ~1.1% league-wide.
