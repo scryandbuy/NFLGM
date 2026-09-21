@@ -309,6 +309,10 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         ident = ID.read_identity(offense, rate_fn)
         base = ID.personnel_weights(ident, base)
         bias += ID.run_lean(ident)
+    # the situation moves what the roster set, it does not replace it
+    import identity as ID2
+    base = ID2.situational_weights(base, down, ydstogo, yards_to_endzone,
+                                   score_diff, secs_left)
     keys = list(base)
     w = np.array([base[k] for k in keys], float)
     pers = keys[int(rng.choice(len(keys), p=w / w.sum()))]

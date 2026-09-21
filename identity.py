@@ -130,6 +130,49 @@ def personnel_weights(ident, base):
     return w
 
 
+def situational_weights(base, down, ydstogo, yards_to_endzone, score_diff,
+                        secs_left):
+    """
+    Identity says who you ARE; the situation says what this snap needs.
+
+    A club does not stop being a run team on third and twelve, it just cannot
+    line up heavy and expect to convert. So the roster sets the base and this
+    moves it - never replaces it, which is why a run-first side still shows
+    more heavy personnel in two minutes than a spread side does.
+
+    No real data for this: the public play-by-play carries no personnel
+    column, so the shifts below are reasoned rather than fitted, and they are
+    the kind of thing that should be checked against tape rather than tuned.
+    """
+    w = dict(base)
+    two_min = secs_left is not None and secs_left <= 120
+    late_behind = (secs_left is not None and secs_left <= 300
+                   and score_diff < 0)
+    late_ahead = (secs_left is not None and secs_left <= 300
+                  and score_diff > 0)
+    short = ydstogo <= 2
+    goal = yards_to_endzone <= 5
+    long_ = ydstogo >= 8
+
+    for k in list(w):
+        n_rb = int(k[0]) if k and k[0].isdigit() else 1
+        n_te = int(k[1]) if len(k) >= 2 and k[1].isdigit() else 1
+        heavy = n_rb + n_te >= 3
+        light = n_rb + n_te <= 1
+
+        if short or goal:
+            # bodies at the point of attack; an empty set cannot get one yard
+            w[k] *= 2.4 if heavy else (0.35 if light else 1.0)
+        if long_ and down >= 2:
+            w[k] *= 0.45 if heavy else (1.5 if light else 1.15)
+        if two_min or late_behind:
+            # no time to huddle and no reason to keep a fullback out there
+            w[k] *= 0.25 if heavy else (1.9 if light else 1.3)
+        if late_ahead:
+            w[k] *= 1.8 if heavy else (0.5 if light else 1.0)
+    return w
+
+
 def qb_latitude(off, rate_fn):
     """
     How much the quarterback is allowed to change at the line.
