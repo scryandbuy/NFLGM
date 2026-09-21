@@ -747,8 +747,14 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                 oc = dict(oc, is_pass=False, scheme='inside_zone')
             else:
                 oc = dict(oc, depth='short', backed_up=True)
+        # THE COVERAGE CALL NEVER FIRED IN A GAME. call_defense only consults
+        # coverage_call when it is handed both the defence AND rate_fn, and this
+        # passed the defence alone - so every real game fell back to the shell
+        # draw, man only under cover 0 and cover 1, and the eleven-call system
+        # ran nowhere but its own demo. Every register row measured since it
+        # was built was measured against a defence that did not use it.
         dc = call_def(oc, dr.down, max(1, int(np.ceil(dr.togo))), rng, ytg_i,
-                      defense=defense, score_diff=dr.score_diff,
+                      defense=defense, rate_fn=rate_fn, score_diff=dr.score_diff,
                       secs_left=dr.clock,
                       recent=(def_state.cov_memory if def_state else None))
 

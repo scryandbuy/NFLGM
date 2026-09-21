@@ -462,6 +462,9 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
         rushers += cov['rush_bonus']
         if cov['rush_bonus']:
             blitzers = max(blitzers, cov['rush_bonus'])
+        # the shell is the call's deep structure, not a second independent draw
+        shell = CC.SHELL_OF.get(cov['coverage'], shell)
+        shown, actual, fooled = disguise(shell, decep, rng)
 
     under = cov['under'] if cov else ('man' if actual in ('cover_0', 'cover_1')
                                       else 'zone')

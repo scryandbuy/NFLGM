@@ -66,6 +66,18 @@ COVERAGES = {
                       needs=dict()),                  # three under, three deep
 }
 
+# The deep structure each call is played out of. The zone windows and the
+# disguise are keyed on a SHELL, and the shell used to be drawn separately from
+# the call - so the resolver could squeeze a window as cover 2 while the
+# concept was scored against cover 3 and the men underneath played man. Two
+# truths about one snap. The call is the truth; the shell is read off it.
+SHELL_OF = {
+    'cover_0': 'cover_0', 'cover_1': 'cover_1', 'cover_1_robber': 'cover_1',
+    'cover_2': 'cover_2', 'two_man': 'cover_2', 'tampa_2': 'tampa_2',
+    'cover_3': 'cover_3', 'cover_3_mable': 'cover_3', 'fire_zone': 'cover_3',
+    'cover_4': 'cover_4', 'cover_6': 'cover_6',
+}
+
 # ============================================================ THE JOBS
 # What the call is for. A coordinator names the job first and the call second.
 JOBS = {

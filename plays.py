@@ -632,6 +632,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
 
     if picked:
         return dict(type='interception', yards=0.0, touchdown=False,
+                    depth=depth, in_man=bool(in_man), screen=bool(screen), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
     if not complete:
@@ -645,6 +646,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         if contested:
             broken = rng.random() < PD_CONTESTED
         return dict(type='incomplete', yards=0.0, touchdown=False,
+                    depth=depth, in_man=bool(in_man), screen=bool(screen), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     read=read_kind, pb_reps=p['pb_reps'],
                     pass_def=(cb.get('pid') if broken and cb else None),
@@ -653,6 +655,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # contested-catch gate again; drops were running at 8.7% against a real ~5%.
     if not resolve_catch(tgt, cb, contested and rng.random() < 0.45, rng):
         return dict(type='drop', yards=0.0, touchdown=False,
+                    depth=depth, in_man=bool(in_man), screen=bool(screen), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     read=read_kind, pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
 
@@ -693,6 +696,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     if air >= ytg:
         return dict(type='complete', yards=round(float(ytg), 1),
                     air=round(float(air), 1), yac=0.0, touchdown=True,
+                    in_man=bool(in_man), screen=bool(screen),
+                    coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, depth=depth,
                     target=tgt.get('pid'), read=read_kind,
                     separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
@@ -719,5 +724,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
                 yac=yac['yards'], touchdown=total >= ytg, concept=concept,
+                in_man=bool(in_man), screen=bool(screen),
+                coverage=def_call.get('coverage') or def_call['shell'],
                 protection=prot_name, depth=depth, target=tgt.get('pid'),
                 read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
