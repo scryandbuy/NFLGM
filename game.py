@@ -889,12 +889,40 @@ class StatBook:
                 rush_att=0, rush_yds=0.0, rush_td=0,
                 tgt=0, rec=0, rec_yds=0.0, rec_td=0, drops=0,
                 tackles=0, sacks=0.0, int_def=0, pressures=0, ff=0,
-                fum=0, fum_lost=0)
+                fum=0, fum_lost=0,
+                # ---- offensive line ----
+                # There are no traditional stats for a lineman, which is why
+                # his page on any real site is blank. The industry settled on
+                # win rates: ESPN counts a pass block win as sustaining the
+                # block 2.5 seconds or longer, and a run block win as beating
+                # the man across from you. Football GM, which hit exactly this
+                # problem, landed on the same three - PBWR, RBWR and sacks
+                # allowed. Pancakes are deliberately NOT here: no credible
+                # source tracks them and there is no standard definition, and
+                # run block win rate is the real version of that idea.
+                pb_snaps=0, pb_wins=0, sacks_allowed=0, pressures_allowed=0,
+                rb_snaps=0, rb_wins=0)
         return self.p[pid]
 
     def record(self, out, off, deff, rng):
         t = out.get('type')
         qb = off['qb'].get('pid', 'QB')
+
+        # ---- the line. Every rep, on every snap, both phases ----
+        for pid, won in out.get('pb_reps') or ():
+            l = self._get(pid)
+            l['pb_snaps'] += 1
+            l['pb_wins'] += 1 if won else 0
+            if not won and out.get('pressured'):
+                l['pressures_allowed'] += 1
+        for pid, won in out.get('rb_reps') or ():
+            l = self._get(pid)
+            l['rb_snaps'] += 1
+            l['rb_wins'] += 1 if won else 0
+        # A sack is charged to the man who was actually beaten, which the
+        # protection resolver already names.
+        if t == 'sack' and out.get('beaten'):
+            self._get(out['beaten'])['sacks_allowed'] += 1
         if t in ('complete', 'incomplete', 'drop', 'interception'):
             s = self._get(qb); s['pass_att'] += 1
             wr = out.get('target', off['wr'][0].get('pid', 'WR1'))

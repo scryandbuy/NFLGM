@@ -44,6 +44,11 @@ def logistic(x, k=6.0):
 # pinning sacks at 3.5% against a real 6.6%.
 RUSHER_BASE = 3.16
 BASE_TTT = 2.72          # the league mean the clock must land on
+# ESPN's pass block win rate is whether a lineman sustains his block for 2.5
+# seconds or longer. Arbitrary on its face, but it is the industry definition
+# and the one every published number is measured against, so it is used here
+# rather than a threshold of our own.
+PBW_THRESHOLD = 2.5
 
 def resolve_protection(blockers, rushers, rng, qb=None):
     """
@@ -70,6 +75,13 @@ def resolve_protection(blockers, rushers, rng, qb=None):
 
     t_arrive, move, winner, loser = min(wins, key=lambda x: x[0])
 
+    # EVERY rep, not just the one that ended the play. The resolver already
+    # races each rusher against his own blocker and then discards all but the
+    # fastest, so the per-man result was being computed and thrown away.
+    # A pass block win is ESPN's definition: the blocker sustains for 2.5
+    # seconds or longer.
+    reps = [(b.get('pid'), t >= PBW_THRESHOLD) for t, _m, _r, b in wins if b]
+
     # the QB's own escapability buys time once someone arrives
     if qb is not None:
         t_arrive *= 1.0 + 0.55 * (rate(qb, {'break_sack_rating': .6,
@@ -92,7 +104,8 @@ def resolve_protection(blockers, rushers, rng, qb=None):
     sack = rng.random() < float(np.clip(p_sack, 0.0, 0.85))
     return dict(time=round(float(t_arrive), 2), pressure=round(pressure, 3),
                 sack=bool(sack), beaten_by=winner.get('pid'),
-                beaten=loser.get('pid') if loser else None, move=move)
+                beaten=loser.get('pid') if loser else None, move=move,
+                pb_reps=reps)
 
 # ============================================================ MAN COVERAGE
 # The defender watches the RECEIVER, head often turned from the ball. The
@@ -313,6 +326,10 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
                  rate(d, RUN_BLOCK['defender']['shed']))
             for b, d in zip(blockers, front)]
     push = float(np.mean(wins)) if wins else 0.0
+    # Same as protection: the per-blocker result already exists and was only
+    # ever averaged away. A run block win is beating the man across from you,
+    # which is a positive edge.
+    rb_reps = [(b.get('pid'), w > 0.0) for b, w in zip(blockers, wins)]
     fill = np.mean([rate(d, RUN_BLOCK['defender']['fill']) for d in defenders[:7]])
 
     ybc = 2.32 + 9.0 * push - 3.2 * (fill - AVG) + rng.normal(0, 1.42)
@@ -324,11 +341,13 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
 
     if ybc < 0:
         return dict(type='run', yards=round(float(ybc), 1), scheme=scheme,
-                    broken_tackles=0, touchdown=False, ybc=round(float(ybc), 1))
+                    broken_tackles=0, touchdown=False, ybc=round(float(ybc), 1),
+                    rb_reps=rb_reps)
 
     chasers = defenders[len(front):] + defenders[:len(front)]
     out = resolve_yards_after(off['rb'], chasers, ytg, rng, contact_at=ybc)
-    out.update(type='run', scheme=scheme, ybc=round(float(ybc), 1))
+    out.update(type='run', scheme=scheme, ybc=round(float(ybc), 1),
+               rb_reps=rb_reps)
     return out
 
 def _pass_play(off, deff, off_call, def_call, ytg, rng):
@@ -373,7 +392,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     if p['sack'] and not hot:
         return dict(type='sack', yards=round(-rng.gamma(2.0, 3.4), 1),
                     touchdown=False, by=p['beaten_by'], concept=concept,
-                    protection=prot_name)
+                    protection=prot_name, pb_reps=p['pb_reps'],
+                    beaten=p.get('beaten'), pressured=True)
 
     # the concept, against the coverage it actually faces
     cmult = S.concept_multiplier(concept, def_call['shell'])
@@ -461,17 +481,17 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     if picked:
         return dict(type='interception', yards=0.0, touchdown=False,
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    by=cb.get('pid'), read=read_kind)
+                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
     if not complete:
         return dict(type='incomplete', yards=0.0, touchdown=False,
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    read=read_kind)
+                    read=read_kind, pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
     # A contested ball that already survived the throw should not face the full
     # contested-catch gate again; drops were running at 8.7% against a real ~5%.
     if not resolve_catch(tgt, cb, contested and rng.random() < 0.45, rng):
         return dict(type='drop', yards=0.0, touchdown=False,
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    read=read_kind)
+                    read=read_kind, pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
 
     # Real air yards average 7.8 with 5.2 after the catch. Short throws were
     # landing at 4.0 and dragging yards per dropback to 4.2 against a real 6.18.
@@ -498,7 +518,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     air=round(float(air), 1), yac=0.0, touchdown=True,
                     concept=concept, protection=prot_name, depth=depth,
                     target=tgt.get('pid'), read=read_kind,
-                    separation=round(float(sep_raw), 3))
+                    separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
     # Real YAC by throw depth: behind the line 8.63, short 3.97, medium 3.48,
     # deep 5.31 - a U-shape, because a screen has blockers in front and a deep
     # ball is caught past everyone, while an intermediate throw is caught in
@@ -512,4 +532,4 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
                 yac=yac['yards'], touchdown=total >= ytg, concept=concept,
                 protection=prot_name, depth=depth, target=tgt.get('pid'),
-                read=read_kind, separation=round(float(sep_raw), 3))
+                read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
