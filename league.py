@@ -42,6 +42,7 @@ import targets as TG
 from cap_engine import Contract, TeamCap, CAP
 from gm_engine import GM, make_gm
 import contract_structure as CS
+import otc_2026 as OTC
 
 # Attributes that describe how AVAILABLE a man is, not how good he is. Kept out
 # of any future ability budget for the reason in the docstring.
@@ -353,7 +354,7 @@ class Team:
                     ir=[p.pid for p in self.ir],
                     picks=[asdict(k) for k in self.picks],
                     cap_year=self.cap.year, cap_rollover=self.cap.rollover,
-                    cap_dead=self.cap.dead)
+                    cap_dead=self.cap.dead, cap_base=self.cap.cap)
 
     def __repr__(self):
         w, l, t = self.record
@@ -521,6 +522,11 @@ class League:
             t.picks = [DraftPick(**k) for k in td['picks']]
             t.cap = TeamCap(td['cap_year'], td['cap_rollover'])
             t.cap.dead = td['cap_dead']
+            # the solved base has to survive too: cap_engine's table carries
+            # 301.0 for 2026 and the real figure is 301.2, and without this a
+            # reloaded save drifts 0.2m per team away from its real position
+            if td.get('cap_base') is not None:
+                t.cap.cap = td['cap_base']
             t.sync_cap()
             L.teams[abbr] = t
         L.free_agents = d['free_agents']
@@ -660,6 +666,38 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         L.players[p.pid] = p
         if r.team in L.teams:
             L.teams[r.team].roster.append(p)
+
+    # ---- solve every team onto its REAL cap position -------------------
+    # The seed has no per-year cap hit and no signing bonus, and neither does
+    # any public dataset - so the per-player number is reconstructed. But the
+    # TEAM total is published, and that is enough to pin the aggregate down.
+    #
+    # Two corrections come from the real data and could not have been reasoned
+    # to. Dead money: the build carried none, and Miami alone is 182.6m, about
+    # 60% of its cap, owed to men who are not on the roster. And every real
+    # team is cap compliant on day one - the tightest is the Rams at 3.27m -
+    # so a seed producing 17 teams over the cap was simply wrong.
+    for abbr, t in L.teams.items():
+        row = OTC.team_cap(abbr)
+        if not row:
+            continue
+        space, active, dead, _n = row
+        t.cap.cap = OTC.BASE_CAP_2026
+        # carryover is not published directly, but space + spending + dead
+        # pins the team's real limit exactly, and the base cap is known
+        t.cap.rollover = round(OTC.team_limit(abbr) - OTC.BASE_CAP_2026, 3)
+        t.cap.dead = dead
+        t.sync_cap()
+        current = sum(c.cap_hit(i) for _, c, i in t.cap.contracts)
+        if current > 0:
+            # hold each deal's SHAPE - proration, backloading, guarantee share
+            # all survive - and move only the level, so the team lands on its
+            # real year-one spending
+            k = active / current
+            for _, c, _i in t.cap.contracts:
+                c.base = [b * k for b in c.base]
+                c.rb = [r * k for r in c.rb]
+                c.sb *= k
 
     # seven rounds, four years out, every pick owned by the team that earned it
     for abbr, t in L.teams.items():
