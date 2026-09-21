@@ -675,6 +675,17 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         ytg_i = max(1, int(np.ceil(dr.yardline)))
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
                       dr.score_diff, ytg_i, rng)
+        # BACKED UP AGAINST YOUR OWN GOAL you play differently, and the engine
+        # did not. Real pass rate falls from 57.6% to 52.2% inside the own 10
+        # and 46.6% inside the own 4, and the sack rate on those dropbacks
+        # falls from 7.2% to 3.9% because the drops are short and the ball
+        # comes out. Ignoring both gave safeties on 1.4% of drives against a
+        # real 0.28%.
+        if dr.yardline >= 91 and oc.get('is_pass'):
+            if rng.random() < (0.19 if dr.yardline >= 96 else 0.10):
+                oc = dict(oc, is_pass=False, scheme='inside_zone')
+            else:
+                oc = dict(oc, depth='short', backed_up=True)
         dc = call_def(oc, dr.down, max(1, int(np.ceil(dr.togo))), rng, ytg_i)
 
         # The opener. A situation - usually third down - forces him off it.
