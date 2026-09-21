@@ -139,7 +139,14 @@ def chance(player, games, ovr=None, league_avg_ovr=72.0, snaps=None):
     """
     h = base_hazard(player.pos, player.age) * ROLE_MULT[role_of(games, snaps)]
     if ovr is not None:
-        h *= float(np.clip(1.0 - 0.030 * (ovr - league_avg_ovr), 0.25, 2.4))
+        # Quality has to bite harder than a linear nudge. At 0.030 with a
+        # floor of 0.25, a 92-overall starter still walked away at about 3% a
+        # year - which across two thousand players retired twenty-eight men
+        # rated 85 or better in a single offseason. Elite players do not
+        # quietly retire at 27; they are the ones who play until their body
+        # stops them.
+        gap = ovr - league_avg_ovr
+        h *= float(np.clip(1.0 - 0.055 * gap, 0.06, 2.4))
     # nobody is legally required to keep playing, and nobody retires at 22
     # off a single good year
     if player.age < 24:
@@ -180,6 +187,15 @@ def run(league, rng, verbose=False):
         line = stats.get(p.pid, {})
         games = float(line.get('games', 0) or 0)
         snaps = float(line.get('snaps', 0) or 0)
+        # SPECIALISTS. StatBook records nothing for a kicker or punter and
+        # field_units never puts him on the field, so every one of them read
+        # as a man who had not played - and a 23-year-old kicker rated 90 was
+        # retiring at the fringe rate. He is his club's only kicker; he played
+        # every week. Until kicking stats exist this stands in for them.
+        if p.pos in ('K', 'P', 'LS'):
+            t = league.teams.get(p.team)
+            if t is not None and t.starter(p.pos) is p:
+                snaps, games = STARTER_SNAPS, 17.0
         if rng.random() < chance(p, games, p.ovr, avg, snaps):
             p.retired = True
             t = league.teams.get(p.team)
