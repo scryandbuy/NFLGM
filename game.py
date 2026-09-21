@@ -31,11 +31,49 @@ QUARTER = 900
 HALF = 1800
 GAME = 3600
 
-def play_seconds(result, clock_stopped=False, hurry=False):
+def play_seconds(result, clock_stopped=False, hurry=False, timeout=False):
     s = SEC.get(result, 25.0)
     if clock_stopped: s = min(s, 8.0)
     if hurry: s *= 0.55
+    if timeout: s = min(s, 6.0)     # the clock stops the moment it is called
     return float(s)
+
+
+# ============================================================ TIMEOUTS
+# Three a half, each. Every published win-probability model uses them and this
+# engine tracked none, so both sides were assumed to hold all three forever -
+# which makes a two-minute drill far too easy and a defensive stop far too
+# cheap.
+#
+# Who spends them, and why: the DEFENCE burns them when it is behind and needs
+# the ball back, which is the only reason a defence ever calls one late. The
+# OFFENCE spends them driving at the end of a half, to stop a clock that the
+# play itself did not stop. Nobody spends one in the first quarter.
+TIMEOUTS_PER_HALF = 3
+
+
+class Timeouts:
+    """Three a half each. Who has them left is real state, not an assumption."""
+
+    def __init__(self):
+        self.left = {'home': TIMEOUTS_PER_HALF, 'away': TIMEOUTS_PER_HALF}
+
+    def halftime(self):
+        self.left = {'home': TIMEOUTS_PER_HALF, 'away': TIMEOUTS_PER_HALF}
+
+    def use(self, side):
+        if self.left.get(side, 0) <= 0:
+            return False
+        self.left[side] -= 1
+        return True
+
+    def edge(self, side):
+        """Timeout advantage for this side - the feature the model wants."""
+        other = 'away' if side == 'home' else 'home'
+        return self.left.get(side, 0) - self.left.get(other, 0)
+
+    def __repr__(self):
+        return f"<TO home {self.left['home']} away {self.left['away']}>"
 
 # ============================================================ FOURTH DOWN
 # Real go-for-it rate by distance and field zone.
@@ -525,7 +563,8 @@ def field_units(roster, state, rng, is_offense, package=None):
 
 def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
               rng, resolve_fn, call_off, call_def, rate_fn, aggression=0.5,
-              book=None, off_state=None, def_state=None, week=1):
+              book=None, off_state=None, def_state=None, week=1,
+              timeouts=None, pos='home'):
     """
     Play a full possession. resolve_fn is plays.resolve_play; call_off/call_def
     are the scheme-layer callers.
@@ -715,7 +754,18 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             if fum and fum['lost']:
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 
-        dr.clock -= play_seconds(t, hurry=(dr.clock < 120 and dr.score_diff < 0))
+        # ---- timeouts ----
+        # The trailing side spends them to get the ball back; the driving side
+        # to keep the clock alive. Neither wastes one early.
+        used = False
+        if timeouts is not None and dr.clock < 300:
+            other = 'away' if pos == 'home' else 'home'
+            if dr.score_diff > 0 and dr.clock < 180 and timeouts.left.get(other, 0) > 0:
+                used = timeouts.use(other)
+            elif dr.score_diff <= 0 and dr.clock < 120 and timeouts.left.get(pos, 0) > 0:
+                used = timeouts.use(pos)
+        dr.clock -= play_seconds(t, hurry=(dr.clock < 120 and dr.score_diff < 0),
+                                 timeout=used)
         scored = _advance(dr, out.get('yards', 0.0))
         if scored: break
         if dr.down > 4:
@@ -827,6 +877,8 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     pos = 'away'                                   # away receives first
     start = kickoff((home.get('kr') or {}), rng, rate_fn)['new_yardline']
 
+    tos = Timeouts()
+    half_done = False
     while clock > 0:
         off = home if pos == 'home' else away
         deff = away if pos == 'home' else home
@@ -837,9 +889,11 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         d_st = away_state if pos == 'home' else home_state
         # the unit that just came off recovers while the other side plays
         if d_st is not None: d_st.sideline_recovery(dr_snaps if 'dr_snaps' in dir() else 30)
+        if not half_done and clock <= GAME / 2:
+            tos.halftime(); half_done = True          # three fresh ones each
         dr = run_drive(off, deff, start, clock, quarter, sd, rng,
                        resolve_fn, call_off, call_def, rate_fn, aggr, book,
-                       o_st, d_st, week)
+                       o_st, d_st, week, timeouts=tos, pos=pos)
         dr_snaps = dr.plays
         if o_st is not None: o_st.sideline_recovery(dr.plays)
         drives.append((pos, dr))

@@ -1,0 +1,169 @@
+"""
+THE FRANCHISE.
+
+One object that runs a complete year end to end, so the whole thing can be
+looked at instead of tested a piece at a time.
+
+THE CALENDAR, and what actually exists behind each step:
+
+    1  REGULAR SEASON      272 real games, real standings, real tiebreakers
+    2  PLAYOFFS            wild card, divisional with reseeding, SB
+    3  AWARDS              ten of them, each rule fitted to 15 real years
+    4  DRAFT ORDER         set from the bracket, all 32 slots
+    5  FIRINGS             pressure model, no quota
+    6  RETIREMENTS         per-player hazard, measured
+    7  REGRESSION          real delta-method aging curves
+    8  ROLL THE YEAR       cap projects forward, contracts tick down
+    9  CAP COMPLIANCE      cuts and simple restructures
+   10  RE-SIGN PHASE       one tag, tenders, exclusive rights
+   11  FREE AGENCY         three phases, bids, inbox, offer sheets
+   12  DRAFT               NOT BUILT
+   13  CAMP AND CUT-DOWN   NOT BUILT
+
+Everything from 1 to 11 runs. 12 and 13 do not exist, and that is why rosters
+finish a year at about 47 men instead of 53: a draft class of 224 never
+arrives and nobody is ever cut to a limit. The league is playable and it is
+not yet whole.
+
+WHAT THE REPORT IS FOR. run(report=True) prints what each step did AND what it
+could not do, so a gap shows up as a line rather than as a number that looks
+slightly wrong three seasons later.
+"""
+import numpy as np
+
+import league as LG
+import season as SN
+import postseason as PS
+import awards as AW
+import retirement as RT
+import regression as RG
+import contracts as CT
+import tags as TG
+import market as MK
+
+
+class Franchise:
+    """A league, plus the calendar that moves it."""
+
+    def __init__(self, seed=None, user_team=None, rng=None):
+        self.rng = rng or np.random.default_rng(seed)
+        self.L = LG.build_league(rng=self.rng)
+        self.user_team = user_team
+        self.history = []
+
+    # ---- one year ------------------------------------------------------
+    def play_year(self, report=True):
+        L, rng = self.L, self.rng
+        year = L.year
+        log = dict(year=year)
+
+        runner = SN.run_season(L, rng)
+        log['standings'] = runner.standings()
+
+        post, order, fired = PS.close_season(L, runner, rng)
+        log['champion'] = post.champion
+        log['top_pick'] = order[0]
+        log['fired'] = len(fired)
+
+        votes = AW.vote(L, post)
+        log['awards'] = {k: (v.name if hasattr(v, 'name') else v)
+                         for k, v in votes.items() if not isinstance(v, list)}
+
+        log['retired'] = len(RT.run(L, rng))
+        RG.run(L, rng)
+
+        L.roll_year(rng)
+        log['expired'] = len(L.advance_contracts())
+
+        cuts, res = CT.run(L, rng)
+        CT.enforce(L, rng)
+        log['cuts'], log['restructures'] = len(cuts), len(res)
+
+        t = TG.run(L, rng)
+        CT.enforce(L, rng)
+        log['tagged'], log['tendered'] = len(t['tagged']), len(t['tendered'])
+
+        signed, left = MK.run(L, rng, user_team=self.user_team)
+        log['signed'] = len(signed)
+        log['unsigned'] = len(left)
+        log['offer_sheets'] = len([m for m in getattr(L, 'inbox', [])
+                                   if m.get('kind') == 'offer_sheet'])
+
+        rosters = np.array([len(x.active()) for x in L.teams.values()])
+        space = np.array([x.cap_space for x in L.teams.values()])
+        log['roster_min'] = int(rosters.min())
+        log['roster_mean'] = float(rosters.mean())
+        log['over_cap'] = int((space < 0).sum())
+        self.history.append(log)
+        if report:
+            self._report(log)
+        return log
+
+    def _report(self, g):
+        a = g['awards']
+        print(f"\n=== {g['year']} ===")
+        print(f"  champion {g['champion']}   first pick {g['top_pick']}"
+              f"   {g['fired']} front offices changed")
+        print(f"  MVP {a.get('mvp','-')}   OPOY {a.get('opoy','-')}"
+              f"   DPOY {a.get('dpoy','-')}")
+        print(f"  offseason: {g['retired']} retired, {g['expired']} contracts "
+              f"expired, {g['cuts']} cut, {g['restructures']} restructured")
+        print(f"  market: {g['tagged']} tagged, {g['tendered']} tendered, "
+              f"{g['signed']} signed, {g['offer_sheets']} offer sheets, "
+              f"{g['unsigned']} left unsigned")
+        print(f"  rosters {g['roster_mean']:.0f} mean / {g['roster_min']} min"
+              f"   clubs over the cap: {g['over_cap']}")
+        if g['roster_mean'] < 50:
+            print('    ^ NO DRAFT AND NO CUT-DOWN: 224 rookies never arrive '
+                  'and nobody is cut to a limit')
+
+    def run(self, years=1, report=True):
+        for _ in range(years):
+            self.play_year(report)
+        return self.history
+
+
+def whats_left():
+    """An honest inventory. Printed rather than remembered."""
+    built = [
+        ('play engine', '25/34 calibration targets, real 2026 rosters'),
+        ('season', '272-game real schedule, standings, full tiebreakers'),
+        ('playoffs', 'reseeding, no ties, draft order'),
+        ('awards', '10, each fitted to 15 years of real winners'),
+        ('firings', 'pressure model, no quota'),
+        ('retirement', 'per-player hazard from 15 seasons of careers'),
+        ('regression', 'real delta-method aging curves'),
+        ('cap', 'real 2026 positions, dead money, carryover, rollforward'),
+        ('contracts', 'cuts, simple restructures, compliance backstop'),
+        ('re-sign phase', 'franchise tag with escalator, tenders'),
+        ('free agency', '3 phases, bids, interest meter, inbox, offer sheets'),
+        ('valuation', 'weighted comps, two-sided, own-league pool'),
+        ('decisions', 'win probability model, 4th down, 2pt, late tempo'),
+        ('timeouts', '3 a half, spent by the side that needs the clock'),
+    ]
+    missing = [
+        ('THE DRAFT', 'scouting with fog of war, board, AI behaviour, '
+                      'rookie contracts on the slotted scale'),
+        ('CUT-DOWN TO 53', 'and the practice squad - why rosters sit at 47'),
+        ('decisions not wired', 'decisions.py is built and game.py still uses '
+                                'the old GO_RATE table'),
+        ('progression', 'XP earned per game, weekly practice, minicamp'),
+        ('newgens', 'no players are ever created, so the league shrinks'),
+        ('trades', 'trade_engine imports now but nothing calls it'),
+        ('UI', 'everything above is a python API with no screens'),
+    ]
+    print('BUILT AND RUNNING')
+    for n, d in built:
+        print(f'  {n:<18} {d}')
+    print('\nNOT BUILT')
+    for n, d in missing:
+        print(f'  {n:<20} {d}')
+
+
+if __name__ == '__main__':
+    import sys
+    yrs = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+    f = Franchise(seed=2026)
+    f.run(yrs)
+    print()
+    whats_left()
