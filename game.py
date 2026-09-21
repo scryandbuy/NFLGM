@@ -102,8 +102,40 @@ def fourth_zone(yardline_100):
     return 'backed'
 
 def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
-                         aggression=0.5):
-    """go, field_goal or punt. Desperation overrides the table late."""
+                         aggression=0.5, timeout_edge=0, use_wp=True):
+    """
+    go, field_goal or punt.
+
+    NOW DECIDED ON WIN PROBABILITY. The GO_RATE table below is what real
+    clubs DO; decisions.fourth_down is what maximises the chance of winning,
+    and the literature is unanimous that those are not the same thing - Yam
+    and Lopez put the gap at about 0.4 wins a season, Baldwin at clubs going
+    roughly half as often as they should.
+
+    The table cannot express that gap, because it only knows down, distance
+    and field zone. It has no idea what the score is, how much clock is left
+    or who has timeouts, so it cannot tell a coach that trailing by ten with
+    four minutes left changes everything. The model can.
+
+    The table is kept and still reachable with use_wp=False, because it is a
+    faithful record of observed behaviour and worth comparing against.
+    """
+    if use_wp:
+        import decisions as DEC
+        r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100,
+                            ydstogo, aggression=aggression,
+                            is_home=1)
+        if r['call'] == 'go':
+            return 'go'
+        if r['call'] == 'field_goal':
+            # 45 out is a 62-yard attempt. Beyond the real range, punt.
+            return 'field_goal' if yardline_100 <= 45 else 'punt'
+        # TRUST THE MODEL WHEN IT SAYS PUNT. Bolting the old table's rule on
+        # top - kick anything inside the 38 - overrode a decision the model
+        # had already weighed, and field goals jumped to 18.3% of drives
+        # against a real 15.4% while punts fell to 28.7% against 35.2%.
+        return 'punt'
+
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_go = GO_RATE[band][zone] * (0.70 + 0.60 * aggression)
     # trailing late, you have no choice
@@ -167,10 +199,27 @@ def attempt_field_goal(yardline_100, kicker, rng, rate_fn):
 # the chart has no opinion and teams kick.
 TWO_POINT_GO = (-18, -16, -10, -5, -2, 1, 4, 5)
 
-def two_point_decision(lead_after_td, quarter):
-    """Kick or go. The coach's call, not the engine's."""
-    if quarter < 4: return False
-    return int(round(lead_after_td)) in TWO_POINT_GO
+def two_point_decision(lead_after_td, quarter, secs_left=None,
+                       conv_prob=None, aggression=0.5):
+    """
+    Kick or go, on win probability rather than a chart.
+
+    The chart below gated on the fourth quarter and produced tries on 2.5% of
+    touchdowns against a real 6.4%, because a chart cannot price the thing
+    that actually decides it: the two options are worth 0.957 points and 0.950
+    points, so it is an active choice every time and what tips it is score AND
+    clock together.
+
+    TWO_POINT_GO is kept as the fallback when no clock is available.
+    """
+    if secs_left is None:
+        if quarter < 4: return False
+        return int(round(lead_after_td)) in TWO_POINT_GO
+    import decisions as DEC
+    r = DEC.two_point(lead_after_td, max(1.0, secs_left),
+                      conv_prob=conv_prob if conv_prob else DEC.TWO_RATE,
+                      aggression=aggression)
+    return r['call'] == 'two'
 
 def attempt_extra_point(kicker, rng, rate_fn):
     made = rng.random() < fg_probability(33, kicker, rate_fn)
@@ -775,7 +824,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
 
     # ---- the try, once the touchdown is on the board ----
     if dr.result == 'Touchdown':
-        if two_point_decision(dr.score_diff + 6, dr.quarter):
+        if two_point_decision(dr.score_diff + 6, dr.quarter, dr.clock):
             t = attempt_two_point(offense, defense, rng, resolve_fn, call_off,
                                   call_def, rate_fn, off_state, def_state)
         else:
