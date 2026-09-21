@@ -537,8 +537,24 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # secondary, so a TE could be covered by a corner and a WR1 by a safety.
     import coverage as CV, targets as TG
     aligned = CV.receiver_alignment(receivers, off_call.get('personnel', '11'), rng)
+    # ONLY THE MEN WHO ACTUALLY DROPPED CAN COVER. Coverage was assigned from
+    # the whole depth chart regardless of the rush, so a linebacker could be
+    # blitzing in the protection math and covering the back in the same snap -
+    # and because the pools never changed, the same corner drew the same
+    # receiver on every play of every game.
+    #
+    # The rush decision already exists and is already calibrated: call_defense
+    # picks blitzers at the real rates and separates a five-man rush from a
+    # blitz. It was simply never read here. Now the rushers come off the top
+    # and whoever is left is the coverage - so rushing three leaves eight to
+    # drop and blitzing a slot corner forces somebody else onto that receiver.
+    rusher_ids = {id(x) for x in rushers}
+    in_coverage = dict(deff)
+    in_coverage['lb'] = [x for x in deff['lb'] if id(x) not in rusher_ids]
+    in_coverage['dl'] = [x for x in deff['dl'] if id(x) not in rusher_ids]
+    in_coverage['db'] = list(deff['db'])
     pairs, travelled = CV.assign_coverage(
-        aligned, deff, def_call, rng, rate,
+        aligned, in_coverage, def_call, rng, rate,
         coach_willingness=off_call.get('travel_willingness', 0.5),
         travel=def_call.get('travel'))
 
