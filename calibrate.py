@@ -101,7 +101,13 @@ def run(seasons=1, seed=2026, verbose=True):
                 if r['home'] == r['away']: ties += 1
                 for _, d in r['drives']:
                     drives_total += 1
-                    res[d.result] += 1; fd.append(d.first_downs)
+                    res[d.result] += 1
+                    # nflverse counts a touchdown AS a first down - first_down_pass
+                    # and first_down_rush are set on a scoring play - and this did
+                    # not, so a metric built from their 1.84 was being compared
+                    # against a number computed a different way. 1.31 by our
+                    # definition against 1.57 by theirs.
+                    fd.append(d.first_downs + (1 if d.result == 'Touchdown' else 0))
                     plays_pd.append(d.plays)
                     for l in d.log:
                         if not isinstance(l, dict): continue
