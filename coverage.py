@@ -131,7 +131,12 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
     safs = [d for d in defense.get('db', []) if d.get('pos') in ('FS', 'SS')] \
            or defense.get('db', [])[3:5] or defense.get('db', [])[-2:]
     lbs = defense.get('lb', [])
-    is_man = def_call.get('man', False)
+    # MAN OR ZONE IS NOT ONE ANSWER FOR THE WHOLE DEFENCE. A split-field call
+    # plays one principle to each side, which is what cover 6 and mable ARE,
+    # so every pairing carries its own.
+    import coverage_call as CC
+    under = def_call.get('under', 'man' if def_call.get('man') else 'zone')
+    is_man = (under == 'man') if not isinstance(under, tuple) else True
 
     # does the top corner travel with their best man
     if travel is None and cbs and aligned:
@@ -167,14 +172,18 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
                     used.add(id(d))
                 trav = False
             pairs.append(dict(receiver=a['player'], defender=d, spot=spot,
-                              travelled=trav, kind='cb'))
+                              travelled=trav, kind='cb',
+                              man=(CC.under_for_side(
+                                  {'under': under}, a.get('side')) == 'man')))
         elif spot == 'slot':
             # the slot draws the NICKEL - a different player with different
             # attributes, not whichever corner happened to be picked
             pool = [c for c in cbs if id(c) not in used] or safs or cbs
             d = take(pool)
             pairs.append(dict(receiver=a['player'], defender=d, spot=spot,
-                              travelled=False, kind='nickel'))
+                              travelled=False, kind='nickel',
+                              man=(CC.under_for_side(
+                                  {'under': under}, a.get('side')) == 'man')))
         elif spot == 'te':
             # safety or linebacker by personnel. THIS is where the real
             # TE-vs-LB mismatch lives; no special rule needed.
@@ -182,12 +191,16 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
             d = take(pool)
             kind = 'safety' if d in safs else 'lb'
             pairs.append(dict(receiver=a['player'], defender=d, spot=spot,
-                              travelled=False, kind=kind))
+                              travelled=False, kind=kind,
+                              man=(CC.under_for_side(
+                                  {'under': under}, a.get('side')) == 'man')))
         else:                                   # back out of the backfield
             pool = [l for l in lbs if id(l) not in used] or lbs or safs
             d = take(pool)
             pairs.append(dict(receiver=a['player'], defender=d, spot=spot,
-                              travelled=False, kind='lb'))
+                              travelled=False, kind='lb',
+                              man=(CC.under_for_side(
+                                  {'under': under}, a.get('side')) == 'man')))
     return pairs, bool(travel)
 
 

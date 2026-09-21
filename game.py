@@ -352,6 +352,7 @@ class TeamState:
         self.cond = H.Condition(policy)
         self.jaded = {}          # pid -> 0-1, carries across a season
         self.injuries = []       # this game's injuries
+        self.cov_memory = {}     # what his coverage calls have produced
         self.out = set()         # unavailable right now
         self.snaps = {}
 
@@ -436,6 +437,26 @@ class TeamState:
     def observe(self, off_call, def_call, outcome):
         self.mem.record(off_call, def_call, outcome)
 
+    def remember_coverage(self, call, yards, sack=False, turnover=False):
+        """
+        What has been WORKING. A coordinator leans on a call that is getting
+        stops and drops one that is not, and he does it inside the game rather
+        than waiting for the film.
+
+        Kept as a running score per call, decayed so an early stop does not
+        justify the same call all afternoon.
+        """
+        if not call:
+            return
+        good = -0.55 if turnover or sack else (0.28 if yards >= 7 else
+                                               (-0.30 if yards <= 2 else 0.0))
+        for k in list(self.cov_memory):
+            self.cov_memory[k] *= 0.93
+        # a NEGATIVE outcome for the offence is a positive for this call, so
+        # the sign flips: the memory is the defence's, not the offence's
+        self.cov_memory[call] = float(np.clip(
+            self.cov_memory.get(call, 0.0) - good, -1.2, 1.2))
+
     def adjust(self, quarter=1, rng=None):
         """Read the trends and modify THE PLAN. Returns what changed."""
         if rng is None:
@@ -464,6 +485,7 @@ class TeamState:
         self.cond.reset_game()
         self.snaps = {}
         self.injuries = []
+        self.cov_memory = {}
         # THE OUT LIST WAS NEVER CLEARED. hurt() refuses to roll for a man
         # already on it, so once a player was hurt he stopped being able to be
         # hurt again FOR THE REST OF THE SEASON - and so did everyone else, one
@@ -724,7 +746,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                 oc = dict(oc, is_pass=False, scheme='inside_zone')
             else:
                 oc = dict(oc, depth='short', backed_up=True)
-        dc = call_def(oc, dr.down, max(1, int(np.ceil(dr.togo))), rng, ytg_i)
+        dc = call_def(oc, dr.down, max(1, int(np.ceil(dr.togo))), rng, ytg_i,
+                      defense=defense, score_diff=dr.score_diff,
+                      secs_left=dr.clock,
+                      recent=(def_state.cov_memory if def_state else None))
 
         # The opener. A situation - usually third down - forces him off it.
         script_mod = 1.0
@@ -820,6 +845,14 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if script_mod != 1.0 and out.get('yards'):
             out['yards'] = round(float(out['yards']) * script_mod, 1)
         dr.plays += 1
+        # WHAT HAS BEEN WORKING. The coordinator's own record of his calls,
+        # decayed so an early stop does not justify the same call all
+        # afternoon. Nothing fed this before, so `recent` was always empty.
+        if def_state is not None and dc.get('coverage'):
+            def_state.remember_coverage(
+                dc['coverage'], float(out.get('yards') or 0.0),
+                sack=(out.get('type') == 'sack'),
+                turnover=(out.get('type') in ('interception', 'fumble')))
         dr.log.append(out)
         if book is not None: book.record(out, off_f, def_f, rng)
         for st in (off_state, def_state):

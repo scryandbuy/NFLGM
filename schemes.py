@@ -344,7 +344,9 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     call['no_huddle'] = rng.random() < 0.085
     return call
 
-def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50):
+def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
+                 defense=None, rate_fn=None, score_diff=0, secs_left=None,
+                 recent=None):
     """Front, personnel, rushers and coverage."""
     aggr = gm.aggression if gm is not None else 0.5
     decep = (gm.board_trust if gm is not None else 0.5)
@@ -389,7 +391,27 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50):
     # rushers tick up near the goal line too: 4.68 inside the 5 vs 4.30 at 21-50
     if yards_to_endzone <= 5 and blitzers == 0 and rng.random() < 0.28:
         rushers += 1; blitzers = 1
+    # THE COVERAGE CALL. The shell above is the deep structure; this decides
+    # what happens underneath it, which can differ by side of the field. It is
+    # chosen by JOB - what the call has to do in this situation - and then by
+    # whether the personnel can actually run it.
+    cov = None
+    if defense is not None and rate_fn is not None:
+        import coverage_call as CC
+        cov = CC.call_coverage(down, ydstogo, score_diff, secs_left,
+                               off_call['personnel'], defense, rate_fn, rng,
+                               aggression=aggr, recent=recent)
+        rushers += cov['rush_bonus']
+        if cov['rush_bonus']:
+            blitzers = max(blitzers, cov['rush_bonus'])
+
+    under = cov['under'] if cov else ('man' if actual in ('cover_0', 'cover_1')
+                                      else 'zone')
     return dict(personnel=pers, front=front, rushers=rushers, blitzers=blitzers,
                 shell=actual, shown_shell=shown, fooled=fooled, box=box,
                 sim_pressure=sim['sim'], protection_error=sim['protection_error'],
-                man=actual in ('cover_0', 'cover_1'))
+                coverage=(cov['coverage'] if cov else actual),
+                job=(cov['job'] if cov else None),
+                under=under,
+                # kept so anything still reading the old flag keeps working
+                man=(under == 'man'))

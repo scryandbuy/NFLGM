@@ -79,8 +79,8 @@ def run(seasons=1, seed=2026, verbose=True):
     teams = sorted(L)
     co = lambda d, di, sd, ytg, r, secs_left=None: S.call_offense(
         d, di, sd, ytg, r, secs_left=secs_left)
-    cd = lambda oc, d, di, r, ytg=50: S.call_defense(oc, d, di, r,
-                                                     yards_to_endzone=ytg)
+    cd = lambda oc, d, di, r, ytg=50, **kw: S.call_defense(
+        oc, d, di, r, yards_to_endzone=ytg, rate_fn=P.rate, **kw)
     coaches = {t: dict(
         adjust_skill=float(np.clip(rng.normal(.55, .18), .1, .95)),
         adjust_willingness=float(np.clip(rng.normal(.55, .2), .1, .95)),

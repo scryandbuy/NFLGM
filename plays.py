@@ -574,7 +574,12 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
 
     rmod = TG.READ_MODIFIER.get(read_kind, TG.READ_MODIFIER['first'])
 
-    if def_call['man']:
+    # PER-PAIRING, not per-defence. The man who ends up targeted may be in man
+    # while the receiver on the other side is in zone - that is a split-field
+    # call, and it could not be expressed at all before.
+    tgt_pair = next((x for x in pairs if x['receiver'] is tgt), None)
+    in_man = tgt_pair.get('man') if tgt_pair else def_call.get('man', False)
+    if in_man:
         cb = cov
         # Apply the concept and read modifiers to the COMPLETION PROBABILITY,
         # not to separation. Separation runs through a steep depth multiplier,
