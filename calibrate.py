@@ -77,10 +77,10 @@ def run(seasons=1, seed=2026, verbose=True):
     rng = np.random.default_rng(seed)
     L = R.load_league()
     teams = sorted(L)
-    co = lambda d, di, sd, ytg, r, secs_left=None: S.call_offense(
-        d, di, sd, ytg, r, secs_left=secs_left)
+    co = lambda d, di, sd, ytg, r, secs_left=None, **kw: S.call_offense(
+        d, di, sd, ytg, r, secs_left=secs_left, **kw)
     cd = lambda oc, d, di, r, ytg=50, **kw: S.call_defense(
-        oc, d, di, r, yards_to_endzone=ytg, rate_fn=P.rate, **kw)
+        oc, d, di, r, yards_to_endzone=ytg, **kw)
     coaches = {t: dict(
         adjust_skill=float(np.clip(rng.normal(.55, .18), .1, .95)),
         adjust_willingness=float(np.clip(rng.normal(.55, .2), .1, .95)),

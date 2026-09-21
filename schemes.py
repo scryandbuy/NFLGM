@@ -294,12 +294,24 @@ def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers,
     return float(np.clip(base + gm_pass_bias, 0.03, 0.98))
 
 def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
-                 secs_left=None):
+                 secs_left=None, offense=None, rate_fn=None):
     """Full offensive call: personnel, formation, pass or run, and the concept."""
     bias = (gm.aggression - 0.5) * 0.10 if gm is not None else 0.0
-    pers = rng.choice(list(PERSONNEL_OFF),
-                      p=np.array([v['rate'] for v in PERSONNEL_OFF.values()]) /
-                        sum(v['rate'] for v in PERSONNEL_OFF.values()))
+    # WHO YOU HAVE DECIDES WHAT YOU CALL. Personnel used to be a flat random
+    # draw, so a club with two excellent tight ends went 12 personnel exactly
+    # as often as one with none, and a line that could maul people had no
+    # effect on anything outside the play it was already in. Run and pass
+    # blocking were rated and nothing read them.
+    ident = None
+    base = {k: v['rate'] for k, v in PERSONNEL_OFF.items()}
+    if offense is not None and rate_fn is not None:
+        import identity as ID
+        ident = ID.read_identity(offense, rate_fn)
+        base = ID.personnel_weights(ident, base)
+        bias += ID.run_lean(ident)
+    keys = list(base)
+    w = np.array([base[k] for k in keys], float)
+    pers = keys[int(rng.choice(len(keys), p=w / w.sum()))]
     is_pass = rng.random() < pass_rate(down, ydstogo, score_diff,
                                        yards_to_endzone, pers, bias, secs_left)
     shotgun = rng.random() < (0.82 if is_pass else 0.52)
