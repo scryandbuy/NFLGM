@@ -52,7 +52,7 @@ DEFAULT_USAGE = {'QB': .06, 'HB': .35, 'FB': .04, 'WR': .60, 'TE': .30,
 # The market's willingness to refill a spot. High = the waiver wire will bail
 # you out, so carry fewer. OL and TE are the positions personnel men say keep
 # them awake, because they are hard to find on the street.
-from gm import REPLACEABILITY  # one source of truth
+from gm_engine import REPLACEABILITY  # one source of truth  (module was renamed)
 
 # Injury exposure by position: you cannot win with your fourth corner but you
 # can certainly lose with him.

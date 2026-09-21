@@ -22,7 +22,12 @@ and the regression chance tiny; by 27 they roughly cancel; by 32 decline wins.
 """
 import numpy as np, json
 
-CURVES = json.load(open('aging_v3.json'))
+import os
+_D = os.path.dirname(os.path.abspath(__file__))
+# The curves file was renamed; nothing updated the reference, so this module
+# could not be imported at all. Same class of fault as the stale `from gm
+# import` in roster_construction and the parquet read in the minimum scales.
+CURVES = json.load(open(os.path.join(_D, 'aging_curves.json')))
 
 # ---------------------------------------------------------------- age gates
 # Madden uses hard cutoffs at 25 and 28. Ours are smooth but land in the same

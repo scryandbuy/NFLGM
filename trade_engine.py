@@ -15,26 +15,29 @@ from sklearn.isotonic import IsotonicRegression
 CAP = 301.0
 
 # ---------------------------------------------------------------- pick value
-def build_pick_curve():
-    d = pd.read_csv('draft_picks.csv', low_memory=False)
-    d = d[(d.season.between(2000, 2019)) & (d.pick.between(1, 262))].copy()
-    d['dr_av'] = pd.to_numeric(d.dr_av, errors='coerce').fillna(0)
-    g = d.groupby('pick').dr_av.mean()
-    x = g.index.values.astype(float)
-    iso = IsotonicRegression(increasing=False, out_of_bounds='clip').fit(x, g.values)
-    sm = iso.predict(np.arange(1, 263).astype(float))
-    sm = np.maximum(sm, 0.4)
-    return {p: float(v) for p, v in zip(range(1, 263), sm)}, d
+# BOTH CURVES ARE FROZEN. This module used to derive them at import, reading a
+# draft-picks CSV and a numpy file solved from 316 trades, so it could not be
+# imported at all without research artefacts sitting in the directory - the
+# same fault that kept standings_and_seeding, the minimum scales and
+# progression_engine uncallable.
+#
+# outcome: mean career approximate value by slot, 2000-2019 drafts, isotonic
+#   so it never rises with a later pick. What a pick is actually WORTH.
+# market:  a published chart built from real pick-for-pick trades. What clubs
+#   actually PAY.
+#
+# Keeping both is the point. Pick 32 trades at 16.9% of pick 1 and returns
+# 55.3% of it. That gap is the edge a smart front office exploits, and
+# collapsing to one curve would delete the whole reason to have a trade model.
+import json as _json
+import os as _os
+_PV = _json.load(open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                    'pick_values.json')))
+PICK_AV = {int(k): v for k, v in _PV['outcome'].items()}
+PICK_VALUE = {p: v / PICK_AV[1] for p, v in PICK_AV.items()}   # TRUE value
+MARKET_VALUE = {int(k): v for k, v in _PV['market'].items()}   # what clubs pay
+DRAFT = None                                                   # was the raw CSV
 
-PICK_AV, DRAFT = build_pick_curve()
-PICK_VALUE = {p: v / PICK_AV[1] for p, v in PICK_AV.items()}      # TRUE value, from outcomes
-
-# MARKET value: what clubs actually pay, solved from 316 pure pick-for-pick trades
-# 2016-2026. Far steeper than the outcome curve: pick 32 trades at 13.5% of pick 1
-# but returns 55%. That gap is the edge a smart front office exploits, so we keep
-# BOTH curves rather than picking one.
-MARKET_VALUE = {p: float(v) for p, v in
-                zip(range(1, 263), np.load('market_pick_values.npy'))}
 
 # The two charts must share a scale or the comparison is meaningless. Anchoring
 # both at "pick 1 = 1.0" made every other pick look underpriced to an analytics
@@ -51,9 +54,10 @@ FUTURE_SLOT = {1: 18, 2: 53, 3: 86, 4: 123, 5: 155, 6: 188, 7: 220}
 
 # hit rates by round, straight from the data. the AI needs these to know that a
 # 6th-rounder is mostly a lottery ticket.
-DRAFT['bust'] = DRAFT.dr_av < 5
-DRAFT['star'] = DRAFT.dr_av >= 40
-ROUND_ODDS = DRAFT.groupby('round')[['bust','star']].mean().to_dict('index')
+# Bust and star rates by round, from the same twenty drafts. A bust returns
+# under 5 career approximate value, a star 40 or more. Frozen alongside the
+# curves rather than recomputed from a CSV at import.
+ROUND_ODDS = {int(k): v for k, v in _PV['round_odds'].items()}
 
 # PRICE AND BELIEF ARE DIFFERENT OBJECTS.
 #

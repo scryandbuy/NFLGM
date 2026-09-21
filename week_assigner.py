@@ -3,7 +3,14 @@ from collections import defaultdict, Counter
 import os
 _D = os.path.dirname(os.path.abspath(__file__))
 def _p(n): return os.path.join(_D, n)
-from ortools.sat.python import cp_model
+# ortools is a constraint solver used ONLY to lay out a brand-new schedule.
+# The game ships the real 2026 schedule, so this is not on any runtime path -
+# but importing it used to fail outright, which is how modules quietly became
+# uncallable. Import lazily and say so plainly if it is genuinely needed.
+try:
+    from ortools.sat.python import cp_model
+except ImportError:                                   # pragma: no cover
+    cp_model = None
 
 BYE_WEEKS    = list(range(5, 15))
 FULL_WEEKS   = [1, 2, 3, 4, 15, 16, 17, 18]
@@ -12,6 +19,8 @@ MIN_REMATCH  = 2
 W = list(range(1, 19))
 
 def schedule(games, DIV, seed=0, time_limit=180):
+    if cp_model is None:
+        raise ImportError('week_assigner needs ortools: pip install ortools')
     teams = sorted({t for h, a, _ in games for t in (h, a)})
     n = len(games)
     m = cp_model.CpModel()
