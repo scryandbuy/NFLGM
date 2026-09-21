@@ -239,7 +239,6 @@ class TeamState:
         self.last_adjustment = None      # what the OTHER side just did to us
         self.chart = None
         self.cond = H.Condition(policy)
-        self.sharp = {}          # pid -> 0-100, carries between games
         self.jaded = {}          # pid -> 0-1, carries across a season
         self.injuries = []       # this game's injuries
         self.out = set()         # unavailable right now
@@ -274,11 +273,10 @@ class TeamState:
             self.cond.rest(pid, position)
 
     def state(self, player, position):
-        """The player as he actually is: condition and sharpness applied."""
+        """The player as he actually is, condition applied."""
         import health as H
         pid = player.get('pid', position)
-        return H.apply_state(player, self.cond.get(pid),
-                             self.sharp.get(pid, 100.0))
+        return H.apply_state(player, self.cond.get(pid))
 
     def hurt(self, player, position, contact, rng, rate_fn, week=1):
         import health as H
@@ -343,12 +341,10 @@ class TeamState:
         return applied
 
     def end_game(self, rng, expected_snaps=45.0, bye=False):
-        """Recovery, sharpness and jadedness roll forward between games."""
+        """Recovery and jadedness roll forward between games."""
         import health as H
         self.last_snaps = dict(self.snaps)     # keep the game log readable
         for pid, n in self.snaps.items():
-            self.sharp[pid] = H.update_sharpness(self.sharp.get(pid, 100.0), n,
-                                                 expected_snaps)
             self.jaded[pid] = H.update_jadedness(self.jaded.get(pid, 0.0), n,
                                                  70.0, expected_snaps, bye)
         self.cond.reset_game()

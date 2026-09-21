@@ -1,5 +1,5 @@
 """
-Condition, sharpness, jadedness and injuries.
+Condition, jadedness and injuries.
 
 Architecture follows Football Manager, which models this properly and whose
 mechanics are documented and tested by its community. NFL data supplies the
@@ -7,12 +7,17 @@ targets.
 
 WHAT FM DOES, AND WHY IT IS RIGHT:
 
-  THREE SEPARATE STATE VARIABLES, not one "fatigue" number:
+  SEPARATE STATE VARIABLES, not one "fatigue" number:
     condition   - physical freshness right now. Depletes during a game,
                   refills between them.
-    sharpness   - match readiness. Decays with inactivity, built by playing.
     jadedness   - hidden, season-long accumulated tiredness. Slow to build,
                   slow to shed.
+
+  FM also carries SHARPNESS - match readiness, built by playing and decayed
+  by not playing, which degrades performance rather than injury risk. It was
+  built here and REMOVED BY DECISION. A backup who has not played since week
+  2 steps in at his normal level, and a man returning from injury plays at
+  full ability immediately. There is no rust in this game.
 
   TWO ATTRIBUTES WITH DIFFERENT JOBS:
     stamina         governs condition LOSS during a match. It does NOT affect
@@ -21,11 +26,12 @@ WHAT FM DOES, AND WHY IT IS RIGHT:
                     jadedness. A low-fitness player cannot play every three
                     days even with good stamina.
 
-  THE KEY INSIGHT, which I had backwards:
-    Condition mostly drives INJURY RISK. Sharpness drives PERFORMANCE.
-    FM players found low-sharpness men play badly while low-condition men
-    mostly just get hurt: "low match sharp players suck in terms of
-    performance, low condition not so much (injury risk is bigger downside)".
+  WHAT CONDITION IS FOR:
+    Condition mostly drives INJURY RISK, not performance. FM's community found
+    low-condition men mostly just get hurt rather than play badly - the
+    performance half of that split was sharpness, which is removed here. So
+    condition barely moves a player's ability until it gets dire, and what it
+    really governs is rotation and who breaks down.
 
   THE INJURY-CONDITION CURVE IS VIOLENTLY NONLINEAR. Community testing found:
     100% condition ->  8 in-match injuries
@@ -127,24 +133,6 @@ def recover_between_games(condition, natural_fitness=70.0, days_rest=7,
     return float(np.clip(condition + gain, 0.0, 100.0))
 
 # ============================================================ SHARPNESS
-def update_sharpness(sharp, snaps_played, expected_snaps=45.0):
-    if snaps_played >= expected_snaps * 0.5:
-        return float(np.clip(sharp + 9.0 * (snaps_played / expected_snaps), 0, 100))
-    return float(np.clip(sharp - 7.5 * (1.0 - snaps_played / expected_snaps), 0, 100))
-
-# Sharpness moves PERFORMANCE; condition barely does until it gets dire.
-SHARPNESS_DECAY = {
-    'speed_rating': .20, 'accel_rating': .35, 'agility_rating': .30,
-    'change_of_direction_rating': .35, 'awareness_rating': .55,
-    'catch_rating': .45, 'route_run_short_rating': .45,
-    'route_run_med_rating': .50, 'route_run_deep_rating': .50,
-    'man_cover_rating': .50, 'zone_cover_rating': .55, 'play_rec_rating': .60,
-    'throw_acc_short_rating': .50, 'throw_acc_mid_rating': .55,
-    'throw_acc_deep_rating': .60, 'tackle_rating': .40, 'pursuit_rating': .35,
-    'pass_block_rating': .45, 'run_block_rating': .45,
-    'block_shed_rating': .40, 'power_moves_rating': .35,
-    'finesse_moves_rating': .45, 'bcv_rating': .50, 'carry_rating': .40,
-}
 CONDITION_DECAY = {
     'speed_rating': .55, 'accel_rating': .70, 'agility_rating': .60,
     'change_of_direction_rating': .60, 'jump_rating': .55,
@@ -152,13 +140,9 @@ CONDITION_DECAY = {
     'pursuit_rating': .55, 'strength_rating': .30,
 }
 
-def apply_state(player, condition=100.0, sharpness=100.0):
+def apply_state(player, condition=100.0):
     """The player as he actually is right now."""
     p = dict(player)
-    if sharpness < 99.0:
-        s = (100.0 - sharpness) / 100.0
-        for k, w in SHARPNESS_DECAY.items():
-            if k in p: p[k] = max(20.0, p[k] * (1.0 - 0.30 * w * s))
     if condition < 85.0:
         c = (85.0 - condition) / 85.0
         for k, w in CONDITION_DECAY.items():
