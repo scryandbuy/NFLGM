@@ -83,26 +83,89 @@ print(f'production score computed for {S.prod_score.notna().sum():,} of {len(S):
 UNI = S[(S.cappct > 0) & (S.ovr.notna()) & (S.age.notna()) & (S.grp.notna())].copy()
 UNI = UNI[UNI.pick.notna() | (UNI.yrs >= 1)]
 
-BW_OVR, BW_AGE = 4.0, 2.0
+BW_OVR, BW_AGE, BW_PROD = 4.0, 2.0, 0.30
 FACTORS = ['prod_f', 'contract_age', 'pedigree']
+
+# COMPARABILITY IS FOUR THINGS: position, overall, age and production. Rating
+# alone pays a great player on a bad team; production alone overpays a man in
+# a good system. Both are in, and both are weights on the comp set rather than
+# only corrections applied afterwards.
+
+# How thin a comp set has to get before it is not a comp set at all. Puka
+# Nacua at 98 overall and 25 years old drew six comps and a range of $10.6M to
+# $44M, which is not a valuation, it is a shrug. An outlier has no peers his
+# own age, so age is dropped for him and he is priced against everyone at his
+# position near his rating - which is what an agent would do anyway.
+THIN_COMPS = 20
+
+# The comp WINDOW is the years of signings that count. The agent wants only
+# the last two, when the market was hottest; the team wants five, which drags
+# in cheaper deals. Neither gets his way: the window is rolled between them,
+# and that roll is most of where the bargaining range comes from.
+WINDOW_AGENT, WINDOW_TEAM = 2, 5
 UNI['contract_age'] = (2026 - UNI.signed).clip(0, 10).fillna(0)
 UNI['pedigree'] = np.where(UNI.pick.notna(), 1 - np.log(UNI.pick.fillna(260)+5)/np.log(265), 0.0)
 
 UNI['prod_f'] = UNI['prod_score'].fillna(0.5)
 
-def comp_set(row, pool):
-    c = pool[pool.grp == row['grp']]
-    if len(c) < 25: c = pool
-    w = np.exp(-0.5*((c.ovr - row['ovr'])/BW_OVR)**2) * np.exp(-0.5*((c.age - row['age'])/BW_AGE)**2)
+def _weights(c, row, use_age=True, use_prod=True):
+    w = np.exp(-0.5 * ((c.ovr - row['ovr']) / BW_OVR) ** 2)
+    if use_age:
+        w = w * np.exp(-0.5 * ((c.age - row['age']) / BW_AGE) ** 2)
+    if use_prod and 'prod_f' in c:
+        pr = float(row.get('prod_f', 0.5))
+        w = w * np.exp(-0.5 * ((c.prod_f.fillna(0.5) - pr) / BW_PROD) ** 2)
     # rookie deals are slotted by rule, not negotiated: never use them as comps
-    w = w * np.where(c.pick.notna() & (c.contract_age < 4) & (c.yrs == 4) & (c.age < 25), 0.15, 1.0)
-    s = w.sum()
-    if s < 1e-9: return None
-    w = w / s
-    return c, w
+    return w * np.where(c.pick.notna() & (c.contract_age < 4) & (c.yrs == 4)
+                        & (c.age < 25), 0.15, 1.0)
 
-def raw_value(row, pool):
-    r = comp_set(row, pool)
+
+def comp_set(row, pool, window=None):
+    """
+    Who this man gets priced against.
+
+    Position first, then overall, age and production as smooth weights rather
+    than hard bands - so a comp fades out instead of falling off a cliff.
+
+    `window` is how many years back a signing still counts. Narrow flatters
+    the player, wide flatters the club.
+    """
+    c = pool[pool.grp == row['grp']]
+    if len(c) < 25:
+        c = pool
+    if window is not None and 'contract_age' in c:
+        recent = c[c.contract_age <= window]
+        if len(recent) >= 20:
+            c = recent
+
+    w = _weights(c, row)
+    s = w.sum()
+    if s < 1e-9:
+        return None
+    n_eff = float(s ** 2 / (w ** 2).sum())
+
+    # AN OUTLIER HAS NO PEERS HIS OWN AGE. Widen rather than hand back a
+    # meaningless range: drop age first, then production, and price him
+    # against everyone at his position near his rating.
+    # Drop AGE first, then production. The rating band is never loosened:
+    # widening it pulled mediocre players into an elite man's comp set and
+    # took Myles Garrett from $44.8M to $24M against a real $40M. An outlier
+    # is priced against everyone at his position NEAR HIS RATING, whatever
+    # their age - which is exactly what an agent would argue.
+    for use_age, use_prod in ((False, True), (False, False)):
+        if n_eff >= THIN_COMPS:
+            break
+        w2 = _weights(c, row, use_age=use_age, use_prod=use_prod)
+        s2 = w2.sum()
+        if s2 <= 1e-9:
+            continue
+        n2 = float(s2 ** 2 / (w2 ** 2).sum())
+        if n2 > n_eff:
+            w, n_eff = w2, n2
+    return c, w / w.sum()
+
+def raw_value(row, pool, window=None):
+    r = comp_set(row, pool, window)
     if r is None: return None
     c, w = r
     centre = {k: float((w * c[k].fillna(c[k].median())).sum())
@@ -124,8 +187,18 @@ M = np.column_stack([F[f] for f in FACTORS] + [np.ones(len(F))])
 coef, *_ = np.linalg.lstsq(M, (F.truth - F.centre).values, rcond=None)
 COEF = dict(zip(FACTORS + ['const'], coef))
 
-def value(row, cap=CAP_2026, pool=UNI):
-    r = raw_value(row, pool)
+def value(row, cap=CAP_2026, pool=UNI, window=None, rng=None):
+    """
+    What a deal for this man is worth.
+
+    The comp window is ROLLED between what each side wants - the agent argues
+    two years of signings, the club argues five - so the same player does not
+    price identically every time he is valued. Pass `window` to pin it.
+    """
+    if window is None:
+        r_ = rng or np.random
+        window = int(round(r_.uniform(WINDOW_AGENT, WINDOW_TEAM)))
+    r = raw_value(row, pool, window)
     if r is None: return None
     centre, spread, deltas, n_eff = r
     adj = sum(COEF[f]*deltas[f] for f in FACTORS) + COEF['const']
@@ -137,6 +210,7 @@ def value(row, cap=CAP_2026, pool=UNI):
         'years':      int(round(np.clip(centre['yrs'], 1, 6))),
         'cap_pct':    round(pct*100, 3),
         'n_comps':    round(n_eff, 1),
+        'window':     window,
     }
 
 # ---------------------------------------------------------------- validation
@@ -186,3 +260,128 @@ if __name__ == '__main__':
     print('  top-of-market annual value by position group:')
     for g, v in top.items(): print(f'    {g:5s} ${v:6.2f}M')
     UNI2.to_csv(_p('player_valuations_2026.csv'), index=False)
+
+
+# ============================================================ THE LIVE LEAGUE
+# Everything above derives the DAY-ONE market from real 2026 contracts. From
+# the first offseason on, the comp pool is the league's OWN signings - so
+# prices drift with this league rather than with the real one.
+#
+# It cannot spiral, and the reason is structural rather than a cap I imposed:
+# comps are stored as a SHARE OF THE CAP, and the sum of those shares is
+# bounded by the cap itself. If prices rise, clubs cannot afford them, fewer
+# big deals get signed, and the comp set pulls itself back down. The cap
+# growing about 7.5% a year gives the whole market room to move without any
+# single deal having to.
+
+# Blocking is what a lineman does, and until the win rates existed his
+# production score was snap counts - which says he played, not that he played
+# well. PBWR, RBWR and the sacks he gave up are now the measure.
+OL_POS = ('LT', 'LG', 'C', 'RG', 'RT')
+
+
+def live_production(league, player, season=None):
+    """
+    Production on 0-1 for a man in THIS league, as a percentile inside his own
+    position group. Returns None when he has no meaningful playing time, which
+    is the honest answer rather than a made-up 0.5.
+    """
+    year = season or league.year
+    book = league.stats.get(year, {})
+    line = book.get(player.pid)
+    if not line:
+        return None
+
+    def score(pid):
+        s = book.get(pid) or {}
+        if player.pos in OL_POS:
+            pb = float(s.get('pb_snaps', 0) or 0)
+            if pb < 150:
+                return None
+            pbwr = float(s.get('pb_wins', 0) or 0) / pb
+            rb = float(s.get('rb_snaps', 0) or 0)
+            rbwr = (float(s.get('rb_wins', 0) or 0) / rb) if rb else 0.0
+            given = (3.0 * float(s.get('sacks_allowed', 0) or 0)
+                     + float(s.get('pressures_allowed', 0) or 0)) / pb
+            return 100.0 * pbwr + 45.0 * rbwr - 260.0 * given
+        snaps = float(s.get('snaps', 0) or 0)
+        if snaps < 120:
+            return None
+        return (float(s.get('pass_yds', 0) or 0) * 0.25
+                + float(s.get('pass_td', 0) or 0) * 14
+                - float(s.get('ints', 0) or 0) * 10
+                + float(s.get('rush_yds', 0) or 0) * 0.5
+                + float(s.get('rec_yds', 0) or 0) * 0.5
+                + (float(s.get('rush_td', 0) or 0)
+                   + float(s.get('rec_td', 0) or 0)) * 14
+                + float(s.get('sacks', 0) or 0) * 12
+                + float(s.get('int_def', 0) or 0) * 16
+                + float(s.get('tackles', 0) or 0) * 1.2)
+
+    mine = score(player.pid)
+    if mine is None:
+        return None
+    peers = []
+    for p in league.players.values():
+        if p.retired or p.pos != player.pos:
+            continue
+        v = score(p.pid)
+        if v is not None:
+            peers.append(v)
+    if len(peers) < 5:
+        return 0.5
+    return float(np.clip(np.mean([mine > v for v in peers]), 0.0, 1.0))
+
+
+def pool_from_league(league, season=None):
+    """
+    The comp pool, built from THIS league's signed contracts. Everyone under
+    contract counts; the market is whatever this league has actually paid.
+    """
+    cap = 301.2
+    try:
+        from cap_engine import CAP as _C
+        cap = _C.get(season or league.year, cap)
+    except Exception:
+        pass
+    rows = []
+    for p in league.players.values():
+        if p.retired or not p.contract or not p.team:
+            continue
+        apy = p.apy
+        if apy <= 0:
+            continue
+        prod = live_production(league, p, season)
+        rows.append(dict(
+            full_name=p.name, grp=GRP.get(p.pos, 'LB'), madden_position=p.pos,
+            ovr=p.ovr, age=p.age, apy=apy, cappct=apy / cap,
+            yrs=p.contract.years,
+            contract_age=max(0, (season or league.year) - p.contract.signed),
+            pick=p.draft_overall,
+            pedigree=(0.0 if not p.draft_overall
+                      else 1 - np.log(p.draft_overall + 5) / np.log(265)),
+            prod_f=(0.5 if prod is None else prod)))
+    return pd.DataFrame(rows)
+
+
+def value_player(league, player, side=None, rng=None, pool=None, season=None):
+    """
+    Value a live Player. `side` pins the comp window: 'agent' argues two years
+    of signings, 'team' argues five, and None rolls between them.
+    """
+    cap = 301.2
+    try:
+        from cap_engine import CAP as _C
+        cap = _C.get(season or league.year, cap)
+    except Exception:
+        pass
+    pool = pool if pool is not None else pool_from_league(league, season)
+    if not len(pool):
+        return None
+    prod = live_production(league, player, season)
+    row = dict(grp=GRP.get(player.pos, 'LB'), ovr=player.ovr, age=player.age,
+               contract_age=0.0, prod_f=(0.5 if prod is None else prod),
+               pedigree=(0.0 if not player.draft_overall
+                         else 1 - np.log(player.draft_overall + 5) / np.log(265)))
+    window = {'agent': WINDOW_AGENT, 'team': WINDOW_TEAM}.get(side)
+    return value(row, cap=cap, pool=pool, window=window, rng=rng)
