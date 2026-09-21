@@ -49,6 +49,9 @@ BASE_TTT = 2.72          # the league mean the clock must land on
 # and the one every published number is measured against, so it is used here
 # rather than a threshold of our own.
 PBW_THRESHOLD = 2.5
+# A second blocker buys the pocket roughly this much more time. Used only to
+# decide who is CHARGED with a rep, never to change the play.
+DOUBLE_TEAM_HELP = 1.45
 
 def resolve_protection(blockers, rushers, rng, qb=None):
     """
@@ -80,7 +83,36 @@ def resolve_protection(blockers, rushers, rng, qb=None):
     # fastest, so the per-man result was being computed and thrown away.
     # A pass block win is ESPN's definition: the blocker sustains for 2.5
     # seconds or longer.
+    # EVERY BLOCKER ON THE FIELD HAS A REP, not just the ones a rusher was
+    # assigned to. The loop above pairs rusher i with blocker i, so against a
+    # four-man rush only linemen 0-3 were ever recorded - and the line is
+    # ordered LT, LG, C, RG, RT, which meant the RIGHT TACKLE never got a
+    # pass-block rep in his life. Lane Johnson finished a 17-game season with
+    # 1,076 snaps and 67 recorded reps; 205 of 365 linemen had none at all.
+    #
+    # A lineman nobody rushed still blocked: he wins by default, because
+    # nobody beat him. That is what five blockers against four rushers means.
+    #
+    # A surplus blocker DOUBLES rather than standing free. Crediting him with
+    # an automatic win put the right tackle at a 98.4% win rate against a real
+    # best-in-league 95.6%, because he was handed a free rep on every four-man
+    # rush. He now shares the rep of the man being doubled: they both win it or
+    # they both lose it, which is what a double team actually is.
+    engaged = {id(b) for _t, _m, _r, b in wins if b}
     reps = [(b.get('pid'), t >= PBW_THRESHOLD) for t, _m, _r, b in wins if b]
+    spare = [b for b in blockers if id(b) not in engaged]
+    if spare and wins:
+        # He helps on the man getting there quickest, and a DOUBLED rusher is
+        # beaten less often - so the pair are credited against a longer clock,
+        # not against the raw loss. Tying him to the unaided result was as
+        # wrong in the other direction: it put the right tackle at 53.9%.
+        #
+        # CREDIT ONLY. The double does not feed back into t_arrive, because
+        # that would move a sack rate calibrated to a real 6.6%. It changes
+        # who gets charged for the rep, not what happened on the play.
+        worst = min(wins, key=lambda x: x[0])
+        held = worst[0] * DOUBLE_TEAM_HELP >= PBW_THRESHOLD
+        reps += [(b.get('pid'), held) for b in spare]
 
     # the QB's own escapability buys time once someone arrives
     if qb is not None:
@@ -329,7 +361,17 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # Same as protection: the per-blocker result already exists and was only
     # ever averaged away. A run block win is beating the man across from you,
     # which is a positive edge.
+    # Same fault in the run game: zip() stops at the shorter list, so against a
+    # four-man front the fifth lineman was never recorded either. An unblocked
+    # man is still blocking somebody - he wins his rep.
     rb_reps = [(b.get('pid'), w > 0.0) for b, w in zip(blockers, wins)]
+    # Same in the run game: a surplus blocker is doubling or pulling, not
+    # standing free, so he shares the result of the block that mattered most
+    # rather than banking an automatic win.
+    if len(blockers) > len(wins) and wins:
+        # An extra man at the point of attack usually means that block holds.
+        shared = max(wins) > -0.04
+        rb_reps += [(b.get('pid'), shared) for b in blockers[len(wins):]]
     fill = np.mean([rate(d, RUN_BLOCK['defender']['fill']) for d in defenders[:7]])
 
     ybc = 2.32 + 9.0 * push - 3.2 * (fill - AVG) + rng.normal(0, 1.42)
