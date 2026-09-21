@@ -73,6 +73,26 @@ class Contract:
         left = max(0, self.proration_years - i)
         return self.annual_proration * left
 
+    def advance(self):
+        """
+        One year older. Drops the year just played and leaves the deal on its
+        remaining years.
+
+        NOTHING CALLED THIS, and the consequence was that no contract in the
+        league ever expired. Every club kept every player forever, twenty-seven
+        men reached free agency across the whole league against a real four to
+        six hundred, and the market had nothing in it.
+
+        Returns True when the deal is done and he is a free agent.
+        """
+        self.years -= 1
+        if self.base:
+            self.base.pop(0)
+        if self.rb:
+            self.rb.pop(0)
+        self.gtd_yrs = max(0, self.gtd_yrs - 1)
+        return self.years <= 0
+
     # ---- transactions ----
     def release(self, i, june1=False):
         """

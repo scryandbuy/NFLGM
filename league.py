@@ -39,7 +39,7 @@ from dataclasses import dataclass, field, asdict
 import numpy as np
 
 import targets as TG
-from cap_engine import Contract, TeamCap, CAP
+from cap_engine import Contract, TeamCap, CAP, project_cap
 from gm_engine import GM, make_gm
 import contract_structure as CS
 import otc_2026 as OTC
@@ -67,7 +67,8 @@ class Player:
                  'potential_range', 'longevity', 'team', 'contract',
                  'accrued', 'draft_year', 'draft_round', 'draft_overall',
                  'entry_year', 'xp', 'xp_spent', 'morale', 'out_until',
-                 'injury_history', 'career', 'seasons', 'retired')
+                 'injury_history', 'career', 'seasons', 'retired',
+                 'tag_count', 'tagged_year', 'fa_class')
 
     def __init__(self, pid, name, pos, age, ratings, *, dev='normal',
                  potential=None, potential_range=None, longevity=1.0,
@@ -103,6 +104,9 @@ class Player:
         self.career = {}                     # season -> stat line
         self.seasons = []                    # season -> (team, games, ovr)
         self.retired = False
+        self.tag_count = 0            # a club may tag the same man three times
+        self.tagged_year = None
+        self.fa_class = None          # UFA / RFA / ERFA, set each offseason
 
     # ---- derived ability -------------------------------------------------
     @property
@@ -478,6 +482,57 @@ class League:
                  b_sends=[str(x) for x in b_sends])
 
     # ---- calendar --------------------------------------------------------
+    def roll_year(self, rng=None):
+        """
+        Move the league into the next year and roll every cap forward.
+
+        THIS WAS MISSING AND IT BROKE THE OFFSEASON. Contracts advance to
+        their next year, and real deals are backloaded - year two costs more
+        than year one. The cap grows about 7.5% a year to absorb that. With
+        the year frozen, every club's salaries escalated against a cap that
+        never moved, and teams finished ninety million over with nothing left
+        to cut.
+        """
+        prev_cap = CAP.get(self.year, 301.2)
+        self.year += 1
+        new_cap = project_cap(self.year, self.year - 1, prev_cap, rng)
+        CAP[self.year] = new_cap
+        for t in self.teams.values():
+            # unused space carries over, which is real and is why a club can
+            # spend more than the base cap
+            t.cap = t.cap.roll_forward(new_cap)
+            t.cap.cap = new_cap
+            t.sync_cap()
+        return new_cap
+
+    def advance_contracts(self):
+        """
+        Tick every deal forward a year and free anyone whose has run out.
+        Runs once per offseason, before anything reads a contract - accrued
+        seasons, free agent class and the whole market depend on it.
+        """
+        expired = []
+        for p in self.players.values():
+            if p.retired or not p.contract:
+                continue
+            p.accrued += 1
+            if p.contract.advance():
+                # A deal that simply RUNS OUT leaves no dead money: the bonus
+                # was fully prorated across the years he played. That is the
+                # difference between a contract ending and a player being cut.
+                #
+                # He STAYS with his club here. A pending free agent still
+                # belongs to his team until the league year opens - that is
+                # the window in which he can be tagged, tendered or re-signed.
+                # Moving him to the pool now stripped every club of the right
+                # to keep its own expiring players, and nobody got tagged.
+                p.contract = None
+                expired.append(p)
+        for t in self.teams.values():
+            t.sync_cap()
+        return expired
+
+
     def set_phase(self, phase):
         """Cap accounting differs by phase - only the top 51 contracts count
         until week 1 - so every team has to know where the calendar is."""
