@@ -334,6 +334,11 @@ def simple_restructure_room(base, yrs_left, min_salary=1.2):
     Convert base salary into signing bonus, spread over the years ALREADY on the
     deal. A team can do this unilaterally - the player's consent is not needed -
     but the years remaining cap how much room it buys.
+
+    Available to EVERY general manager by decision. It is a mechanic the rules
+    allow any club to use, not a personality trait, so nothing here reads a GM
+    rating. What separates one front office from another is how often need
+    drives them to it, and the dead money they are left holding afterwards.
     """
     if yrs_left <= 1: return 0.0, 0.0
     conv = max(0.0, base - min_salary)

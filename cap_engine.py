@@ -88,12 +88,20 @@ class Contract:
         saved = self.cap_hit(i) - dead_now
         return round(dead_now, 3), round(dead_next, 3), round(saved, 3)
 
-    def restructure(self, i, amount=None):
+    def restructure(self, i, amount=None, min_base=None):
         """
         Convert base salary into signing bonus, prorated over the remaining years
         (max 5). Lowers this year's hit and raises every later year's.
+
+        The only limit the rules impose is that the team must leave at least the
+        player's MINIMUM BASE SALARY for the year, and that minimum scales with
+        his accrued seasons - 0.795 for a rookie against 1.210 for a ten-year
+        veteran in 2024. This used to leave a flat 1.2 regardless, which
+        overcharged young players and undercharged old ones. Callers pass the
+        real floor; 1.2 remains only as a fallback.
         """
-        conv = amount if amount is not None else max(0.0, self.base[i] - 1.2)
+        floor = 1.2 if min_base is None else float(min_base)
+        conv = amount if amount is not None else max(0.0, self.base[i] - floor)
         conv = min(conv, self.base[i])
         spread = min(self.years - i + self.void, MAX_PRORATION_YEARS)
         self.base[i] -= conv
