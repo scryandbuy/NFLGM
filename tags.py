@@ -1,8 +1,22 @@
 """
-TAGS AND TENDERS.
+THE RE-SIGN PHASE.
 
-This runs before the market opens, because tagging a man is what keeps him off
-it. Every club sorts its expiring contracts into classes, decides whether to
+Runs before the market opens, and it is where every club decides what to do
+about its OWN pending free agents.
+
+  Tag one man, if he is worth it.
+  Tender the restricted ones you want to keep.
+  Offer the minimum to your exclusive-rights men.
+  Everyone you pass on becomes an unrestricted free agent.
+
+A TENDER IS NOT A SIGNING. This used to take a tendered player off the market
+entirely, which is wrong: a tendered restricted free agent negotiates with
+whoever he likes, and his own club holds a right to match. So a tendered man
+goes into the free agent list alongside everybody else and can be bid on. The
+difference between tendering and not is who gets the last word, not whether
+the player is available.
+
+Tagging is the exception, and that IS what keeps a man off the market. Every club sorts its expiring contracts into classes, decides whether to
 spend its one tag, and tenders the restricted men it wants to keep.
 
 WHAT IS MODELLED, AND WHAT IS NOT:
@@ -165,9 +179,15 @@ def run(league, rng, verbose=False):
                 continue
             p.contract = _one_year(price, league.year)
             p.fa_class = 'tendered'
+            p.tender_team = abbr
             tendered.append((abbr, p, price))
             league.log('tender', pid=p.pid, team=abbr, price=price)
             team.sync_cap()
+            # He is tendered, not signed away. He appears in the free agent
+            # list like anyone else and clubs may bid; his own team simply
+            # gets the right to match whatever he agrees to.
+            if p.pid not in league.free_agents:
+                league.free_agents.append(p.pid)
 
         # ---- exclusive rights: not really free agents --------------------
         for p in [x for x in groups['ERFA'] if x.pid in roster]:
@@ -200,7 +220,7 @@ def run(league, rng, verbose=False):
         t.sync_cap()
 
     if verbose:
-        print(f'  {len(tagged)} tagged, {len(tendered)} tendered, '
+        print(f'  {len(tagged)} tagged, {len(tendered)} tendered (biddable), '
               f'{len(reserved)} on exclusive rights, '
               f'{len(to_market)} reached the market')
     return dict(tagged=tagged, tendered=tendered, reserved=reserved,

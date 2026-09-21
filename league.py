@@ -68,7 +68,7 @@ class Player:
                  'accrued', 'draft_year', 'draft_round', 'draft_overall',
                  'entry_year', 'xp', 'xp_spent', 'morale', 'out_until',
                  'injury_history', 'career', 'seasons', 'retired',
-                 'tag_count', 'tagged_year', 'fa_class')
+                 'tag_count', 'tagged_year', 'fa_class', 'tender_team')
 
     def __init__(self, pid, name, pos, age, ratings, *, dev='normal',
                  potential=None, potential_range=None, longevity=1.0,
@@ -107,6 +107,7 @@ class Player:
         self.tag_count = 0            # a club may tag the same man three times
         self.tagged_year = None
         self.fa_class = None          # UFA / RFA / ERFA, set each offseason
+        self.tender_team = None       # who holds the right to match him
 
     # ---- derived ability -------------------------------------------------
     @property

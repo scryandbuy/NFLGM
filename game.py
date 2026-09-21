@@ -81,6 +81,12 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     if secs_left < 10 and yardline_100 <= 45: return 'field_goal'
     return 'punt'
 
+# A club can finish an offseason with no kicker, no punter or no return man.
+# dict.get(key, {}) hands back None when the key EXISTS holding None - which
+# is exactly what build_roster writes for an empty slot - so every one of
+# these used `or {}` instead. An empty dict rates as an average man, which is
+# the right stand-in for a body the club will sign before Sunday.
+
 # ============================================================ FIELD GOALS
 # Real made% by distance.
 # Re-solved on real kickers, whose ratings sit above the flat-70 clones the
@@ -549,13 +555,13 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             dec = fourth_down_decision(dr.yardline, dr.togo, dr.score_diff,
                                        dr.clock, rng, aggression)
             if dec == 'field_goal':
-                fg = attempt_field_goal(dr.yardline, offense.get('k', {}), rng, rate_fn)
+                fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
                 dr.clock -= play_seconds('field_goal')
                 dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
                 dr.points = fg['points']; dr.log.append(fg); break
             if dec == 'punt':
-                p = punt(dr.yardline, offense.get('p', {}),
-                         defense.get('kr', {}), rng, rate_fn)
+                p = punt(dr.yardline, (offense.get('p') or {}),
+                         (defense.get('kr') or {}), rng, rate_fn)
                 dr.clock -= play_seconds('punt')
                 dr.result = 'Punt'; dr.log.append(p)
                 dr.next_yardline = p['new_yardline']; break
@@ -723,7 +729,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             t = attempt_two_point(offense, defense, rng, resolve_fn, call_off,
                                   call_def, rate_fn, off_state, def_state)
         else:
-            t = attempt_extra_point(offense.get('k'), rng, rate_fn)
+            t = attempt_extra_point(offense.get('k') or {}, rng, rate_fn)
         dr.points += t['points']
         dr.try_result = t
         dr.log.append(t)
@@ -759,7 +765,7 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
     pos = first
     had = {'home': False, 'away': False}
     drives = []
-    start = kickoff((home if pos == 'away' else away).get('kr', {}),
+    start = kickoff(((home if pos == 'away' else away).get('kr') or {}),
                     rng, rate_fn)['new_yardline']
 
     while clock > 0:
@@ -796,7 +802,7 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
                 return score, drives, 'decided'
 
         if dr.result in ('Touchdown', 'Field goal'):
-            start = kickoff(deff.get('kr', {}), rng, rate_fn)['new_yardline']
+            start = kickoff((deff.get('kr') or {}), rng, rate_fn)['new_yardline']
         elif dr.result == 'Punt':
             start = getattr(dr, 'next_yardline', 75)
         elif dr.result in ('Turnover', 'Turnover on downs'):
@@ -819,7 +825,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
     pos = 'away'                                   # away receives first
-    start = kickoff(home.get('kr', {}), rng, rate_fn)['new_yardline']
+    start = kickoff((home.get('kr') or {}), rng, rate_fn)['new_yardline']
 
     while clock > 0:
         off = home if pos == 'home' else away
@@ -847,7 +853,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
 
         # where the next possession starts
         if dr.result in ('Touchdown', 'Field goal'):
-            start = kickoff(deff.get('kr', {}), rng, rate_fn)['new_yardline']
+            start = kickoff((deff.get('kr') or {}), rng, rate_fn)['new_yardline']
         elif dr.result == 'Punt':
             start = getattr(dr, 'next_yardline', 75)
         elif dr.result in ('Turnover', 'Turnover on downs'):

@@ -247,6 +247,20 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
                     waiting.append(p)
                     continue
 
+        # A TENDERED MAN CANNOT JUST BE SIGNED. His own club holds a right to
+        # match, so agreeing terms elsewhere produces an OFFER SHEET and the
+        # incumbent gets five days. That is the entire difference between
+        # tendering a restricted player and letting him walk: not whether he
+        # is available, but who gets the last word.
+        holder = getattr(p, 'tender_team', None)
+        if holder and holder != best.team:
+            messages.append(dict(
+                kind='offer_sheet', pid=p.pid, name=p.name, team=holder,
+                suitor=best.team, offer=round(best.apy, 2),
+                years=best.years, days=RFA_MATCH_DAYS, phase=phase))
+            waiting.append(p)
+            continue
+
         # Cap room is checked AGAIN here. A club bids on several men at once
         # and cannot sign them all; without this, teams finished 48m over.
         if league.teams[best.team].cap_space < best.apy * 1.05:
@@ -281,6 +295,62 @@ def sign(league, player, offer, cap):
 def inbox_add(league, msg):
     league.__dict__.setdefault('inbox', [])
     league.inbox.append(dict(msg, year=league.year))
+
+
+def resolve_offer_sheets(league, rng, verbose=False):
+    """
+    The incumbent matches or lets him go. No draft compensation either way, by
+    decision - the tender buys the right to match and nothing else.
+    """
+    kept, lost = [], []
+    for msg in [m for m in league.inbox if m.get('kind') == 'offer_sheet'
+                and not m.get('resolved')]:
+        p = league.player(msg['pid'])
+        if p is None or p.retired:
+            msg['resolved'] = True
+            continue
+        holder = league.teams.get(msg['team'])
+        suitor = league.teams.get(msg['suitor'])
+        cap = CAP.get(league.year, 301.2)
+        price, years = msg['offer'], msg.get('years', 2)
+        # he matches if the man is worth the new number to him and he can
+        # carry it
+        v = VAL.value_player(league, p, side='team', rng=rng)
+        worth = v['apy'] if v else price
+        # HE MATCHES UNLESS THE PRICE IS GENUINELY BAD. A tendered man is one
+        # the club already decided it wanted and already has on its cap at the
+        # tender, so the real question is only the difference. At a 0.92 bar
+        # incumbents lost 33 of 45, where the sources are blunt that the vast
+        # majority of offer sheets are matched.
+        gap = max(0.0, price - (p.apy if p.contract else 0.0))
+        can = holder is not None and holder.cap_space + (p.apy if p.contract else 0.0) >= price * 1.02
+        if can and worth >= price * 0.72:
+            o = Offer(msg['team'], p.pid, price, years, phase=3)
+            _unlist(league, p)
+            sign(league, p, o, cap)
+            holder.sync_cap()
+            kept.append((msg['team'], p, price))
+        elif suitor and suitor.cap_space >= price * 1.05:
+            o = Offer(msg['suitor'], p.pid, price, years, phase=3)
+            _unlist(league, p)
+            sign(league, p, o, cap)
+            suitor.sync_cap()
+            lost.append((msg['suitor'], p, price))
+        msg['resolved'] = True
+        p.tender_team = None
+    if verbose:
+        print(f'  offer sheets: {len(kept)} matched, {len(lost)} lost')
+    return kept, lost
+
+
+def _unlist(league, player):
+    """Clear a tendered man's placeholder deal before he signs a real one."""
+    t = league.teams.get(player.team)
+    if t and player in t.roster:
+        t.roster.remove(player)
+    player.team, player.contract = None, None
+    if player.pid not in league.free_agents:
+        league.free_agents.append(player.pid)
 
 
 def rfa_offer_sheets(league, rng):
@@ -381,8 +451,7 @@ def run(league, rng, user_team=None, verbose=False):
 
     fill_out_rosters(league, pool, rng, verbose)
 
-    for m in rfa_offer_sheets(league, rng):
-        inbox_add(league, m)
+    resolve_offer_sheets(league, rng, verbose)
 
     # the pool does not empty - it stays open and reopens at camp
     league.free_agents = [p.pid for p in pool]
