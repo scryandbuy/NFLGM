@@ -266,6 +266,39 @@ def _pick_to_offer(league, team, target, gm, ctx, space):
 MAX_PACKAGE = 4
 
 
+def _can_absorb(league, team, target, space):
+    """
+    Can this club carry what he is owed, on top of what it already owes its
+    own people?
+
+    Two separate questions, and a front office asks both. THIS year: is there
+    room for his cap hit at all. AFTER this year: a multi-year deal is paid
+    out of the same money that would keep the men already on the roster, so
+    the longer he is signed for the more of his own future a general manager
+    is spending - and he only spends it on somebody better than whoever walks
+    as a result.
+
+    A one-year rental passes freely. That is the point: a cap-strapped club
+    can still buy help for a run without mortgaging anything.
+    """
+    p = target.get('obj')
+    if p is None or not getattr(p, 'contract', None):
+        return True
+    if p.apy > space:
+        return False                       # cannot fit him this season at all
+    yrs = p.contract_years_left
+    if yrs <= 1:
+        return True                        # a rental commits nothing
+    owed = team.future_obligation()
+    forward = space - owed * min(1.0, (yrs - 1) / 3.0) * 0.5
+    if p.apy <= forward:
+        return True
+    # He costs more than the club has left once its own are paid for, so he
+    # has to be better than the man it would give up to keep him.
+    keeper = team.worst_keeper()
+    return keeper is not None and target.get('seen_ovr', p.ovr) > keeper.ovr + 1.0
+
+
 def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
                rng):
     """
@@ -352,6 +385,14 @@ def run(league, rng, rounds=2, verbose=False):
                 # offer; he does not shrug and walk. He stops when the deal
                 # stops being worth it to him, which is what makes the price
                 # real rather than arbitrary.
+                # WHAT HE INHERITS HAS TO FIT. A trade is not only a price,
+                # it is a commitment: taking on four years of big money is the
+                # same room that would have re-signed his own expiring men,
+                # and a club that cannot see that trades itself into a corner
+                # it only discovers next March. Free agency already refuses
+                # those deals; trades were taking them blind.
+                if not _can_absorb(league, ta, target, cap_space[a]):
+                    continue
                 offer, res = _negotiate(league, ta, tb, target, ga, gb,
                                         ctx_a, ctx_b, cap_space[a],
                                         cap_space[b], sa, rng)
