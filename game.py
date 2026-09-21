@@ -104,6 +104,56 @@ def attempt_field_goal(yardline_100, kicker, rng, rate_fn):
     return dict(type='field_goal', distance=dist, made=made,
                 points=3 if made else 0)
 
+# ============================================================ THE TRY
+# A touchdown is six. What follows is a separate decision and a separate
+# play, so the extra point can be missed and the two-point try can fail.
+#
+# The kick is a 33-yard field goal - ball on the 15, seven yards back to the
+# hold, ten yards of end zone - so it runs through the same distance curve and
+# the same kicker ratings as every other kick rather than a flat league rate.
+#
+# The two-point try is ONE REAL SNAP from the two, resolved by the same play
+# engine as any other goal-line play. The conversion rate is therefore an
+# output of the rosters and the red zone physics, not a constant. It is not
+# calibrated to the real 47.9% and should not be until the red zone
+# touchdown rate is fixed, since both come from the same per-play numbers.
+
+# Leads (from the scoring team's view, counting the six just scored) where the
+# accepted chart says go for two. Late game only: before the fourth quarter
+# the chart has no opinion and teams kick.
+TWO_POINT_GO = (-18, -16, -10, -5, -2, 1, 4, 5)
+
+def two_point_decision(lead_after_td, quarter):
+    """Kick or go. The coach's call, not the engine's."""
+    if quarter < 4: return False
+    return int(round(lead_after_td)) in TWO_POINT_GO
+
+def attempt_extra_point(kicker, rng, rate_fn):
+    made = rng.random() < fg_probability(33, kicker, rate_fn)
+    return dict(type='extra_point', distance=33, made=bool(made),
+                points=1 if made else 0)
+
+def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
+                      rate_fn, off_state=None, def_state=None):
+    """
+    One snap from the two. Deliberately NOT fed to state.observe: the
+    adjustment engine reads a rolling four-series window of normal downs, and
+    a goal-line try is not one of those.
+    """
+    oc = call_off(1, 2, 0, 2, rng)
+    dc = call_def(oc, 1, 2, rng, 2)
+    off_f, _ = field_units(offense, off_state, rng, True, oc.get('personnel'))
+    def_f, _ = field_units(defense, def_state, rng, False, dc.get('personnel'))
+    if not oc.get('is_pass'):
+        backs = offense.get('backs') or [offense.get('rb')]
+        rb, _rk = pick_runner([b for b in backs if b], off_state, rng)
+        if rb is not None: off_f = dict(off_f, rb=rb)
+    out = resolve_fn(off_f, def_f, oc, dc, 2, rng)
+    good = out.get('type') in ('run', 'complete', 'scramble') and \
+           float(out.get('yards', 0.0)) >= 2.0
+    return dict(type='two_point', play=out.get('type'), made=bool(good),
+                points=2 if good else 0)
+
 # ============================================================ PUNTS
 # Real: returned on 35% of punts, mean 11.5 yards WHEN returned (the 4.23
 # figure counted all punts including fair catches), p90 19, max 97, and 0.36%
@@ -318,6 +368,7 @@ class Drive:
         self.rng = rng
         self.plays, self.first_downs = 0, 0
         self.result, self.points = None, 0
+        self.try_result = None
         self.log = []
 
 def _advance(dr, gained):
@@ -326,8 +377,9 @@ def _advance(dr, gained):
     dr.yardline -= gained
     dr.togo -= gained
     if dr.yardline <= 0:
-        # Real value of a touchdown including the try is 6.94, not 7.
-        dr.result, dr.points = 'Touchdown', 6.94
+        # Six. The try is resolved at the end of run_drive, where the kicker
+        # and the play engine are both in scope.
+        dr.result, dr.points = 'Touchdown', 6
         return True
     if dr.yardline >= 100:
         dr.result, dr.points = 'Safety', -2
@@ -668,6 +720,17 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             dr.result = 'Turnover on downs'; break
 
     if dr.result is None: dr.result = 'End of half'
+
+    # ---- the try, once the touchdown is on the board ----
+    if dr.result == 'Touchdown':
+        if two_point_decision(dr.score_diff + 6, dr.quarter):
+            t = attempt_two_point(offense, defense, rng, resolve_fn, call_off,
+                                  call_def, rate_fn, off_state, def_state)
+        else:
+            t = attempt_extra_point(offense.get('k'), rng, rate_fn)
+        dr.points += t['points']
+        dr.try_result = t
+        dr.log.append(t)
     return dr
 
 OT_LENGTH = 600          # one 10-minute period in the regular season

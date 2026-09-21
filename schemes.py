@@ -260,8 +260,8 @@ def dist_band(ydstogo):
 
 def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers, gm_pass_bias=0.0):
     base = PASS_RATE.get(int(down), PASS_RATE[1])[dist_band(ydstogo)]
-    # Touchdowns are worth 6.94, so score differentials are no longer integers
-    # and a band lookup on the raw value can fall between bands.
+    # Scores are whole numbers again now that the try is resolved as its own
+    # play. The round stays as a guard on any caller passing a float.
     sd = int(round(score_diff))
     script = next((v for lo, hi, v in SCRIPT if lo <= sd <= hi), NEUTRAL_SCRIPT)
     base *= script / NEUTRAL_SCRIPT
