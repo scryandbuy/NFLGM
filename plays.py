@@ -193,7 +193,13 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # modifier and pressure, all of which come off the top. Calibrating them to
     # the FINAL number meant the chain ended ~11 points low and man coverage
     # ran 62.8% at short depth against a real 74.4%.
-    DEPTH_MULT = {'short': 1.74, 'medium': 1.24, 'deep': 0.88}
+    # Completion ran 67.6% against a real 65.0%, and that surplus does more
+    # than move one row: an extra completion is an extra 5-6 yards, so drives
+    # covered the field faster and needed fewer plays. Yards per play sat at
+    # 5.93/5.63/5.94 by down against a real 5.60/5.38/5.37, plays per drive at
+    # 5.32 against 5.96, and first downs at 1.56 against 1.84. Pulling the
+    # multiplier down lengthens drives as well as fixing completion.
+    DEPTH_MULT = {'short': 1.63, 'medium': 1.16, 'deep': 0.84}
     p = separation * DEPTH_MULT[depth] * (1.0 + 1.15 * (acc - AVG)) * outcome_mult
     p = float(np.clip(p, 0.02, 0.97))
 
