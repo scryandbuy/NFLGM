@@ -303,10 +303,15 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     # effect on anything outside the play it was already in. Run and pass
     # blocking were rated and nothing read them.
     ident = None
+    ident_run = ident_pass = None
     base = {k: v['rate'] for k, v in PERSONNEL_OFF.items()}
     if offense is not None and rate_fn is not None:
         import identity as ID
         ident = ID.read_identity(offense, rate_fn)
+        import playcall as PC
+        if not PC.SCHEME_BASE:
+            PC.calibrate_baselines({'_': offense}, rate_fn)
+        ident_run, ident_pass = PC.identity_plays(offense, rate_fn)
         base = ID.personnel_weights(ident, base)
         bias += ID.run_lean(ident)
     # the situation moves what the roster set, it does not replace it
@@ -335,8 +340,22 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         call['play_action'] = rng.random() < (0.30 if not shotgun else 0.14)
         call['screen'] = rng.random() < 0.075
         call['rpo'] = rng.random() < 0.057
+        # THE CONCEPT IS A CALL, NOT A DRAW. It used to come off a flat
+        # rng.choice inside a distance bucket, so a quarterback who could not
+        # throw deep called four verticals as often as one who could. The job
+        # comes from the situation; which concept does that job comes from
+        # whether THIS passer can throw it.
         if call['screen']:
             call['concept'] = 'screen'
+        elif offense is not None and rate_fn is not None:
+            import playcall as PC
+            job = PC.pick_job(down, ydstogo, yards_to_endzone, score_diff,
+                              secs_left, rng)
+            call['job'] = job
+            call['concept'] = PC.call_pass(
+                offense, job, rate_fn, rng,
+                identity=(ident_pass if ident_pass else None),
+                pressure_risk=(1.0 - (ident['pass_block'] if ident else 0.8)))
         elif ydstogo >= 12 or (down >= 3 and ydstogo >= 8):
             call['concept'] = rng.choice(['four_verts', 'dagger', 'flood', 'levels', 'scissors'])
         elif ydstogo <= 4:
@@ -355,7 +374,17 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         else:                  call['depth'] = 'short' if r < .86 else ('medium' if r < .98 else 'deep')
     else:
         heavy = PERSONNEL_OFF[pers]['te'] >= 2 or PERSONNEL_OFF[pers]['rb'] >= 2
-        if yards_to_endzone <= 5 or (ydstogo <= 2 and down >= 3):
+        if offense is not None and rate_fn is not None:
+            # A POWER SCHEME IN FRONT OF A FINESSE LINE IS A BAD CALL however
+            # good the scheme is. It used to be a flat draw from a distance
+            # bucket, so every club ran the same things.
+            import playcall as PC
+            job = PC.pick_job(down, ydstogo, yards_to_endzone, score_diff,
+                              secs_left, rng)
+            call['job'] = job
+            call['scheme'] = PC.call_run(offense, job, rate_fn, rng,
+                                         identity=ident_run)
+        elif yards_to_endzone <= 5 or (ydstogo <= 2 and down >= 3):
             call['scheme'] = rng.choice(['power', 'counter', 'duo', 'trap'])
         elif heavy:
             call['scheme'] = rng.choice(['power', 'counter', 'duo', 'inside_zone'])
