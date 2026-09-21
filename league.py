@@ -396,9 +396,9 @@ class League:
         immediately instead of being frozen at load."""
         import rosters as R
         t = self.teams[abbr]
-        return R.build_roster([p.ratings | {'pid': p.pid, 'pos': p.pos}
-                               for p in t.active() if p.out_until is None],
-                              t.scheme)
+        return R.build_roster_rows([dict(p.ratings, pid=p.pid, pos=p.pos)
+                                    for p in t.active()
+                                    if p.out_until is None], t.scheme)
 
     # ---- stats: on the player AND in a league book ----------------------
     def record_stats(self, season, pid, line):

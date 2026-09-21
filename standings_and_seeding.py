@@ -1,11 +1,47 @@
 import pandas as pd, itertools
 from collections import defaultdict, Counter
 
-G  = pd.read_csv('sched.csv', low_memory=False)
-ST = pd.read_csv('standings.csv', low_memory=False)
+# Historical validation data. Optional: the live game never needs it, and the
+# module used to fail at import without it, which is why nothing could call
+# the tiebreaker chain.
+try:
+    G  = pd.read_csv('sched.csv', low_memory=False)
+    ST = pd.read_csv('standings.csv', low_memory=False)
+except Exception:
+    G = ST = None
 
 # ---------------------------------------------------------------- records
 class Season:
+    @classmethod
+    def live(cls, div, conf, games, season=None):
+        """
+        A season in progress.
+
+        The original constructor reads a FINISHED season out of a dataframe,
+        which is right for validating the tiebreaker chain against real NFL
+        history and useless for a franchise. This builds the same state from
+        results as they happen, so the identical tiebreakers run on a live
+        league.
+
+        div/conf: {team: division}, {team: conference}
+        games:    [(home, away, home_pts, away_pts)] - completed games only
+        """
+        S = cls.__new__(cls)
+        S.season = season
+        S.DIV, S.CONF = dict(div), dict(conf)
+        S.teams = sorted(S.DIV)
+        S.games = list(games)
+        S.rec = defaultdict(lambda: [0, 0, 0])
+        S.h2h = defaultdict(lambda: [0, 0, 0])
+        S.opps = defaultdict(list)
+        S.pf, S.pa = Counter(), Counter()
+        for h, a, hs, as_ in S.games:
+            res = 0 if hs == as_ else (1 if hs > as_ else -1)
+            S._add(h, a, res); S._add(a, h, -res)
+            S.pf[h] += hs; S.pa[h] += as_
+            S.pf[a] += as_; S.pa[a] += hs
+        return S
+
     def __init__(self, season):
         self.season = season
         s = ST[ST.season == season].set_index('team')
@@ -194,71 +230,75 @@ def seed_conference(S, conf, n_wc=None):
     return seeds + wc
 
 # ---------------------------------------------------------------- validate
-print('=== VALIDATION vs real final standings and real playoff fields ===\n')
-tot_rank = hit_rank = tot_seed = hit_seed = 0
-bad_years = []
-for season in range(2002, 2026):
-    real = ST[ST.season == season]
-    if len(real) != 32: continue
-    S = Season(season)
-    if len(S.games) < 200: continue
-    dr = division_ranks(S)
-    rr = real.set_index('team').div_rank.to_dict()
-    ok = sum(1 for t in dr if dr[t] == rr[t])
-    tot_rank += 32; hit_rank += ok
+# Only ever run by hand. This used to execute AT IMPORT, so the module
+# could not be imported at all without the historical CSVs present -
+# which is why the full tiebreaker chain sat unused.
+if __name__ == '__main__':
+    print('=== VALIDATION vs real final standings and real playoff fields ===\n')
+    tot_rank = hit_rank = tot_seed = hit_seed = 0
+    bad_years = []
+    for season in range(2002, 2026):
+        real = ST[ST.season == season]
+        if len(real) != 32: continue
+        S = Season(season)
+        if len(S.games) < 200: continue
+        dr = division_ranks(S)
+        rr = real.set_index('team').div_rank.to_dict()
+        ok = sum(1 for t in dr if dr[t] == rr[t])
+        tot_rank += 32; hit_rank += ok
 
-    pl = G[(G.season == season) & (G.game_type != 'REG')]
-    field = set(pl.home_team) | set(pl.away_team)
-    mine = set(seed_conference(S, 'AFC') + seed_conference(S, 'NFC'))
-    fok = len(mine & field)
-    tot_seed += len(field); hit_seed += fok
-    if ok < 32 or fok < len(field): bad_years.append((season, ok, fok, len(field)))
-    print(f'  {season}: division ranks {ok}/32   playoff field {fok}/{len(field)}')
+        pl = G[(G.season == season) & (G.game_type != 'REG')]
+        field = set(pl.home_team) | set(pl.away_team)
+        mine = set(seed_conference(S, 'AFC') + seed_conference(S, 'NFC'))
+        fok = len(mine & field)
+        tot_seed += len(field); hit_seed += fok
+        if ok < 32 or fok < len(field): bad_years.append((season, ok, fok, len(field)))
+        print(f'  {season}: division ranks {ok}/32   playoff field {fok}/{len(field)}')
 
-print(f'\n  TOTAL division ranks: {hit_rank}/{tot_rank} ({hit_rank/tot_rank:.1%})')
-print(f'  TOTAL playoff field:  {hit_seed}/{tot_seed} ({hit_seed/tot_seed:.1%})')
-if bad_years: print(f'  seasons with any miss: {[b[0] for b in bad_years]}')
+    print(f'\n  TOTAL division ranks: {hit_rank}/{tot_rank} ({hit_rank/tot_rank:.1%})')
+    print(f'  TOTAL playoff field:  {hit_seed}/{tot_seed} ({hit_seed/tot_seed:.1%})')
+    if bad_years: print(f'  seasons with any miss: {[b[0] for b in bad_years]}')
 
-# ---------------------------------------------------------------- bracket
-def bracket(seeds):
-    """seeds: list of 7 (or 6) teams, best first. Returns the round-by-round matchups."""
-    n = len(seeds)
-    alive = list(range(1, n + 1))                     # seed numbers
-    rounds = []
-    byes = 1 if n == 7 else 2
-    # wild card: lowest remaining seeds play, top `byes` sit out
-    wc = [(alive[i], alive[-(i - byes + 1)]) for i in range(byes, (n + byes) // 2)]
-    rounds.append(('WC', wc))
-    return rounds
+    # ---------------------------------------------------------------- bracket
+    def bracket(seeds):
+        """seeds: list of 7 (or 6) teams, best first. Returns the round-by-round matchups."""
+        n = len(seeds)
+        alive = list(range(1, n + 1))                     # seed numbers
+        rounds = []
+        byes = 1 if n == 7 else 2
+        # wild card: lowest remaining seeds play, top `byes` sit out
+        wc = [(alive[i], alive[-(i - byes + 1)]) for i in range(byes, (n + byes) // 2)]
+        rounds.append(('WC', wc))
+        return rounds
 
-def wc_matchups(seeds):
-    n = len(seeds)
-    if n == 7:  return [(2,7),(3,6),(4,5)]     # 2020 onward: one bye
-    return [(3,6),(4,5)]                       # before 2020: two byes
+    def wc_matchups(seeds):
+        n = len(seeds)
+        if n == 7:  return [(2,7),(3,6),(4,5)]     # 2020 onward: one bye
+        return [(3,6),(4,5)]                       # before 2020: two byes
 
-print('\n=== SEED ORDER: do our seeds predict the real wild-card matchups? ===')
-tot = hit = 0
-for season in range(2002, 2026):
-    if len(ST[ST.season == season]) != 32: continue
-    S = Season(season)
-    if len(S.games) < 200: continue
-    pl = G[(G.season == season) & (G.game_type == 'WC')]
-    if not len(pl): continue
-    for conf in ['AFC','NFC']:
-        sd = seed_conference(S, conf)
-        pairs = {tuple(sorted([a, b])) for a, b in wc_matchups(sd)}
-        mine = {tuple(sorted([sd[a-1], sd[b-1]])) for a, b in wc_matchups(sd)}
-        realp = {tuple(sorted([r.home_team, r.away_team])) for _, r in pl.iterrows()
-                 if S.CONF[r.home_team] == conf}
-        tot += len(realp); hit += len(mine & realp)
-        # home team must be the better seed
-    print(f'  {season}: ', end='')
-    ok = 0; n = 0
-    for conf in ['AFC','NFC']:
-        sd = seed_conference(S, conf)
-        mine = {tuple(sorted([sd[a-1], sd[b-1]])) for a, b in wc_matchups(sd)}
-        realp = {tuple(sorted([r.home_team, r.away_team])) for _, r in pl.iterrows()
-                 if S.CONF[r.home_team] == conf}
-        ok += len(mine & realp); n += len(realp)
-    print(f'wild-card matchups {ok}/{n}')
-print(f'\n  TOTAL wild-card matchups reproduced: {hit}/{tot} ({hit/tot:.1%})')
+    print('\n=== SEED ORDER: do our seeds predict the real wild-card matchups? ===')
+    tot = hit = 0
+    for season in range(2002, 2026):
+        if len(ST[ST.season == season]) != 32: continue
+        S = Season(season)
+        if len(S.games) < 200: continue
+        pl = G[(G.season == season) & (G.game_type == 'WC')]
+        if not len(pl): continue
+        for conf in ['AFC','NFC']:
+            sd = seed_conference(S, conf)
+            pairs = {tuple(sorted([a, b])) for a, b in wc_matchups(sd)}
+            mine = {tuple(sorted([sd[a-1], sd[b-1]])) for a, b in wc_matchups(sd)}
+            realp = {tuple(sorted([r.home_team, r.away_team])) for _, r in pl.iterrows()
+                     if S.CONF[r.home_team] == conf}
+            tot += len(realp); hit += len(mine & realp)
+            # home team must be the better seed
+        print(f'  {season}: ', end='')
+        ok = 0; n = 0
+        for conf in ['AFC','NFC']:
+            sd = seed_conference(S, conf)
+            mine = {tuple(sorted([sd[a-1], sd[b-1]])) for a, b in wc_matchups(sd)}
+            realp = {tuple(sorted([r.home_team, r.away_team])) for _, r in pl.iterrows()
+                     if S.CONF[r.home_team] == conf}
+            ok += len(mine & realp); n += len(realp)
+        print(f'wild-card matchups {ok}/{n}')
+    print(f'\n  TOTAL wild-card matchups reproduced: {hit}/{tot} ({hit/tot:.1%})')
