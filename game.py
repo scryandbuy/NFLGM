@@ -128,8 +128,26 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         if r['call'] == 'go':
             return 'go'
         if r['call'] == 'field_goal':
-            # 45 out is a 62-yard attempt. Beyond the real range, punt.
-            return 'field_goal' if yardline_100 <= 45 else 'punt'
+            # HOW FAR CLUBS ACTUALLY KICK FROM. Field goal accuracy read 80.5%
+            # against a real 85.0%, and the per-distance curve was already
+            # right - 93.1% from 30-39 against 94.3%, 76.7% from 40-49 against
+            # 77.9%. The kicker was fine; the ATTEMPTS were wrong. Mean attempt
+            # distance ran 45.7 yards against a real 39.5, with a third of them
+            # from 50-59 against a real 22%.
+            #
+            # Real clubs kick 60+ on 1% of attempts. Allowing anything inside
+            # the 45 is a 62-yarder, and they simply do not take those unless
+            # the half is ending or they are chasing the game.
+            limit = 41 if secs_left > 300 or score_diff >= 0 else 44
+            if secs_left < 20:
+                limit = 45                 # the last play of a half
+            if yardline_100 <= limit:
+                return 'field_goal'
+            # Out of range. Vetoing the kick does NOT make it a punt - the
+            # model already weighed going against punting, and forcing the punt
+            # put them at 40.7% of drives against a real 35.2%. Fall back to
+            # whichever of the two it preferred.
+            return 'go' if r['wp_go'] > r['wp_punt'] else 'punt'
         # TRUST THE MODEL WHEN IT SAYS PUNT. Bolting the old table's rule on
         # top - kick anything inside the 38 - overrode a decision the model
         # had already weighed, and field goals jumped to 18.3% of drives
