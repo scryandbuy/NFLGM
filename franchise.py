@@ -40,6 +40,7 @@ import regression as RG
 import contracts as CT
 import tags as TG
 import market as MK
+import cutdown as CD
 
 
 class Franchise:
@@ -89,6 +90,12 @@ class Franchise:
         log['offer_sheets'] = len([m for m in getattr(L, 'inbox', [])
                                    if m.get('kind') == 'offer_sheet'])
 
+        # CUT-DOWN TO 53, which roster_construction could always do and
+        # nothing ever asked it to.
+        cut, filled = CD.finalize(L, rng)
+        log['cut_to_53'] = len(cut)
+        log['filled'] = filled
+
         rosters = np.array([len(x.active()) for x in L.teams.values()])
         space = np.array([x.cap_space for x in L.teams.values()])
         log['roster_min'] = int(rosters.min())
@@ -111,11 +118,12 @@ class Franchise:
         print(f"  market: {g['tagged']} tagged, {g['tendered']} tendered, "
               f"{g['signed']} signed, {g['offer_sheets']} offer sheets, "
               f"{g['unsigned']} left unsigned")
+        print(f"  cut-down: {g.get('cut_to_53',0)} cut, {g.get('filled',0)} signed")
         print(f"  rosters {g['roster_mean']:.0f} mean / {g['roster_min']} min"
               f"   clubs over the cap: {g['over_cap']}")
         if g['roster_mean'] < 50:
-            print('    ^ NO DRAFT AND NO CUT-DOWN: 224 rookies never arrive '
-                  'and nobody is cut to a limit')
+            print('    ^ NO DRAFT: 224 rookies never arrive, so the league '
+                  'shrinks and clubs cannot always reach 53')
 
     def run(self, years=1, report=True):
         for _ in range(years):
@@ -140,11 +148,14 @@ def whats_left():
         ('valuation', 'weighted comps, two-sided, own-league pool'),
         ('decisions', 'win probability model, 4th down, 2pt, late tempo'),
         ('timeouts', '3 a half, spent by the side that needs the clock'),
+        ('cut-down to 53', 'roster_construction wired: minimums, group floors, '
+                           'marginal slot value'),
     ]
     missing = [
         ('THE DRAFT', 'scouting with fog of war, board, AI behaviour, '
                       'rookie contracts on the slotted scale'),
-        ('CUT-DOWN TO 53', 'and the practice squad - why rosters sit at 47'),
+        ('practice squad', '16 men, elevations, poaching - nowhere for a cut '
+                           'player to land'),
         ('decisions not wired', 'decisions.py is built and game.py still uses '
                                 'the old GO_RATE table'),
         ('progression', 'XP earned per game, weekly practice, minicamp'),

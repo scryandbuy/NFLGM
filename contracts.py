@@ -107,7 +107,14 @@ def replacement_level(team, pos):
     return grp[1].ovr
 
 
-def enforce(league, rng, verbose=False, target=0.5):
+def enforce(league, rng, verbose=False, target=0.5, roster_target=None):
+    """
+    roster_target: when given, a club must end with enough room to sign every
+    body it still owes, not merely with a non-negative number. Compliance at
+    zero is not enough - Baltimore finished an offseason with twenty players,
+    $1.2M of space and a $1.29M minimum salary, unable to afford a
+    twenty-first man and with nothing forcing it to free up the room.
+    """
     """
     THE BACKSTOP. No club ends a phase over the cap.
 
@@ -122,15 +129,23 @@ def enforce(league, rng, verbose=False, target=0.5):
     of those means is REPORTED, because that is a modelling failure and it
     should be visible rather than silently carried into the next season.
     """
+    import min_salary as MS
+    cap = CAP.get(league.year, 301.2)
+    floor = MS.minimum_salary(2, cap)
     stuck = []
     for abbr, team in league.teams.items():
         team.sync_cap()
-        if team.cap_space >= target:
+        need = target
+        if roster_target:
+            # the bodies he still owes have to be payable
+            need = max(target,
+                       (roster_target - len(team.active())) * floor * 1.05)
+        if team.cap_space >= need:
             continue
         before = team.cap_space
-        _fix_one(league, team, rng, target)
+        _fix_one(league, team, rng, need)
         team.sync_cap()
-        if team.cap_space < 0:
+        if team.cap_space < min(0.0, need):
             stuck.append((abbr, before, team.cap_space, team.cap.dead,
                           len(team.active())))
     if stuck and verbose:
