@@ -119,8 +119,10 @@ class SeasonRunner:
         else:
             H.record[2] += 1; A.record[2] += 1
 
+        key = f'{self.L.year}-{week}-{home}-{away}'
         for pid, line in book.p.items():
-            self.L.record_stats(self.L.year, pid, line)
+            self.L.record_stats(self.L.year, pid, line,
+                                postseason=playoffs, game=key)
 
         # Injuries come off the RESULT, not off TeamState. play_game calls
         # end_game() on both states before returning, which clears

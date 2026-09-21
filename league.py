@@ -376,7 +376,9 @@ class League:
         self.teams = {}                   # abbr -> Team
         self.free_agents = []             # pid
         self.schedule = []                # (week, away, home, away_pts, home_pts)
-        self.stats = {}                   # season -> pid -> line
+        self.stats = {}                   # season -> pid -> line (REGULAR only)
+        self.post_stats = {}              # season -> pid -> line (playoffs)
+        self.game_stats = {}              # game key -> pid -> line
         self.standings_history = {}       # season -> abbr -> record
         self.transactions = []            # every move, ever
         self.awards = {}                  # season -> award -> pid
@@ -401,15 +403,28 @@ class League:
                                     if p.out_until is None], t.scheme)
 
     # ---- stats: on the player AND in a league book ----------------------
-    def record_stats(self, season, pid, line):
-        self.stats.setdefault(season, {}).setdefault(pid, {})
-        book = self.stats[season][pid]
+    def record_stats(self, season, pid, line, postseason=False, game=None):
+        """
+        Regular and postseason are kept APART. Awards are voted on the regular
+        season - the ballots are cast before the playoffs - so folding a
+        playoff run into a season line would hand the award to whoever went
+        deepest. Per-game lines are kept too, because Super Bowl MVP is a
+        one-game award.
+        """
+        if game is not None:
+            g = self.game_stats.setdefault(game, {}).setdefault(pid, {})
+            for k, v in line.items():
+                if isinstance(v, (int, float)): g[k] = g.get(k, 0) + v
+        store = self.post_stats if postseason else self.stats
+        store.setdefault(season, {}).setdefault(pid, {})
+        book = store[season][pid]
         for k, v in line.items():
             if isinstance(v, (int, float)):
                 book[k] = book.get(k, 0) + v
-        p = self.player(pid)
-        if p is not None:
-            p.record_season(season, book)
+        if not postseason:
+            p = self.player(pid)
+            if p is not None:
+                p.record_season(season, book)
 
     def leaders(self, season, stat, n=10):
         book = self.stats.get(season, {})
@@ -485,7 +500,9 @@ class League:
             players={pid: p.to_dict() for pid, p in self.players.items()},
             teams={a: t.to_dict() for a, t in self.teams.items()},
             free_agents=self.free_agents, schedule=self.schedule,
-            stats=self.stats, standings_history=self.standings_history,
+            stats=self.stats, post_stats=self.post_stats,
+            game_stats=self.game_stats,
+            standings_history=self.standings_history,
             transactions=self.transactions, awards=self.awards,
             rng_state=self.rng_state)
 
@@ -532,6 +549,8 @@ class League:
         L.free_agents = d['free_agents']
         L.schedule = [tuple(g) for g in d['schedule']]
         L.stats = {int(k): v for k, v in d['stats'].items()}
+        L.post_stats = {int(k): v for k, v in (d.get('post_stats') or {}).items()}
+        L.game_stats = d.get('game_stats') or {}
         L.standings_history = {int(k): v for k, v
                                in d['standings_history'].items()}
         L.transactions = d['transactions']
