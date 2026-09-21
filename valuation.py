@@ -131,11 +131,18 @@ def comp_set(row, pool, window=None):
     the player, wide flatters the club.
     """
     c = pool[pool.grp == row['grp']]
-    if len(c) < 25:
+    # NEVER fall back across positions. This used to widen to the whole league
+    # when a group had under 25 men, and there are only 32 kickers - so a
+    # kicker got priced against quarterbacks and signed for $31.9M against a
+    # positional market of $6.4M. A thin group is thin; the age and production
+    # widening below handles it, and a punter with eleven comps is still being
+    # compared to punters.
+    if not len(c):
         c = pool
     if window is not None and 'contract_age' in c:
         recent = c[c.contract_age <= window]
-        if len(recent) >= 20:
+        # only narrow to recent signings if enough of THIS POSITION remain
+        if len(recent) >= max(12, len(c) // 3):
             c = recent
 
     w = _weights(c, row)
