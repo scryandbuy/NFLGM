@@ -123,6 +123,20 @@ class SeasonRunner:
         for pid, line in book.p.items():
             self.L.record_stats(self.L.year, pid, line,
                                 postseason=playoffs, game=key)
+        # SNAPS AND GAMES. TeamState counts every snap and nothing kept them, so a
+        # lineman or a backup finished a season with no record of playing at
+        # all - and playing time is the strongest predictor of whether a
+        # career continues. Read from last_snaps: play_game calls end_game on
+        # both states before returning, which CLEARS state.snaps. Exactly the
+        # bug that was silently losing every injury in the league.
+        # them, so a lineman or a backup finished a season with no record of
+        # having played at all - and playing time is the single strongest
+        # predictor of whether a career continues.
+        for side in (home, away):
+            st = self.states[side]
+            for pid, n in (st.last_snaps or st.snaps).items():
+                self.L.record_stats(self.L.year, pid, {'snaps': n, 'games': 1},
+                                    postseason=playoffs)
 
         # Injuries come off the RESULT, not off TeamState. play_game calls
         # end_game() on both states before returning, which clears
