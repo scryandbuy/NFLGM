@@ -195,9 +195,16 @@ CONCEPTS = {
     'screen':      dict(depth='short',  man=1.20, cover_2=0.94, cover_3=0.92, cover_4=0.90, n=1),
     'go':          dict(depth='deep',   man=1.16, cover_2=1.04, cover_3=0.92, cover_4=0.84, n=2),
 }
+# THE CONCEPT IS SCORED AGAINST WHAT IS ACTUALLY PLAYED. This used to be keyed
+# off the SHELL, and once the defence started making real coverage calls the
+# two came apart: a concept built to beat man was being scored against a zone
+# shell while the defence played two-man underneath it. The whole mechanism by
+# which a play call beats a defensive call was pointing at the wrong thing.
 SHELL_KEY = {'cover_0': 'man', 'cover_1': 'man', 'man': 'man',
+             'cover_1_robber': 'man', 'two_man': 'man',
              'cover_2': 'cover_2', 'tampa_2': 'cover_2',
              'cover_3': 'cover_3', 'cover_6': 'cover_3',
+             'cover_3_mable': 'man', 'fire_zone': 'cover_3',
              'cover_4': 'cover_4'}
 
 def concept_multiplier(concept, shell):

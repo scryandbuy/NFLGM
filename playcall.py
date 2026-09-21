@@ -46,12 +46,19 @@ RUN_FOR = {
     # defence is expecting a throw, which is third and long.
     'explosive':     ['outside_zone', 'stretch', 'counter'],
 }
+# THE INTERMEDIATE THROW HAS TO LIVE SOMEWHERE. The first build put every
+# medium concept in the explosive pool only, so 'chains' - by far the most
+# common job - was entirely short routes. The depth mix came out 85% short
+# against a real 61.9%, which dragged air yards to 4.55 against 5.72 and took
+# the whole passing game down with it. On second and seven a real offence
+# throws an intermediate route; it does not check the ball down or take a shot.
 PASS_FOR = {
     'short_yardage': ['slant_flat', 'stick', 'mesh', 'smash'],
-    'chains':        ['curl_flat', 'stick', 'levels', 'mesh', 'slant_flat'],
+    'chains':        ['curl_flat', 'stick', 'levels', 'mesh', 'slant_flat',
+                      'flood', 'dagger', 'smash'],
     'explosive':     ['four_verts', 'go', 'dagger', 'scissors', 'flood'],
     'protect':       ['screen', 'slant_flat', 'stick'],   # get it out fast
-    'clock':         ['curl_flat', 'stick'],
+    'clock':         ['curl_flat', 'stick', 'flood'],
 }
 
 # what each run scheme asks of the men blocking it
@@ -116,8 +123,10 @@ def pick_job(down, ydstogo, yards_to_endzone, score_diff, secs_left, rng):
         return 'explosive' if rng.random() < 0.42 else 'chains'
     if down >= 3:
         return 'chains'
-    if rng.random() < 0.18:
-        return 'explosive'          # first and ten is where shots come from
+    # Shots come on early downs, when the defence is not expecting one. At an
+    # 18% rate the deep concepts came out at 9% of throws against a real 14%.
+    if rng.random() < 0.28:
+        return 'explosive'
     return 'chains'
 
 
@@ -190,7 +199,10 @@ def call_pass(off, job, rate_fn, rng, identity=None, pressure_risk=0.5):
         return pool[0]
     fit = np.array([rate_fn(qb, CONCEPT_WANTS[S.CONCEPTS[c]['depth']])
                     - DEPTH_BASE[S.CONCEPTS[c]['depth']] for c in pool])
-    w = np.exp((fit - fit.max()) / 0.05)
+    # A gentler temperature here on purpose: a quarterback's short accuracy is
+    # nearly always his best number, so a sharp weighting made every passer in
+    # the league throw short whatever the call was for.
+    w = np.exp((fit - fit.max()) / 0.10)
     if identity and identity in pool:
         w[pool.index(identity)] *= 1.7
     return pool[int(rng.choice(len(pool), p=w / w.sum()))]

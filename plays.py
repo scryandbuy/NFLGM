@@ -513,7 +513,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     beaten=p.get('beaten'), pressured=True)
 
     # the concept, against the coverage it actually faces
-    cmult = S.concept_multiplier(concept, def_call['shell'])
+    cmult = S.concept_multiplier(
+        concept, def_call.get('coverage') or def_call['shell'])
     if off_call.get('play_action') and not off_call.get('shotgun'):
         cmult *= 1.18                      # real: 6.91 ypp vs 3.63 without
     elif off_call.get('play_action'):
