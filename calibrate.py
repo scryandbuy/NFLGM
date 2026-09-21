@@ -30,7 +30,7 @@ TARGETS = [
     # filter (scrimmage plays, which is what this engine counts): 123.95 plays
     # a game, 21.00 drives, 5.90 a drive. Those multiply to 123.92.
     ('drives_per_game',        21.00, 1.00, 'emergent'),
-    ('plays_per_drive',         5.96, 0.60, 'emergent'),
+    ('plays_per_drive',         5.90, 0.60, 'emergent'),
     ('first_downs_per_drive',   1.84, 0.20, 'emergent'),
     ('offensive_plays_per_gm', 123.95, 6.00, 'emergent'),
     # ---- drive outcomes ----
