@@ -34,10 +34,10 @@ say('loading engine…');
 const MODULES = ['matchups', 'plays', 'schemes', 'health', 'coverage', 'events',
                  'targets', 'gameplan', 'adjust', 'game', 'rosters', 'calibrate'];
 for (const m of MODULES) {
-  const src = await (await fetch(`engine/${m}.py`)).text();
+  const src = await (await fetch(`${m}.py`)).text();
   py.FS.writeFile(`/${m}.py`, src);
 }
-const seed = await (await fetch('engine/league_seed_2026.csv')).arrayBuffer();
+const seed = await (await fetch('league_seed_2026.csv')).arrayBuffer();
 py.FS.writeFile('/league_seed_2026.csv', new Uint8Array(seed));
 py.runPython(`import sys, os; sys.path.insert(0, '/'); os.chdir('/')`);
 
