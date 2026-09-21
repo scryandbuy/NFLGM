@@ -303,7 +303,13 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     is_pass = rng.random() < pass_rate(down, ydstogo, score_diff,
                                        yards_to_endzone, pers, bias, secs_left)
     shotgun = rng.random() < (0.82 if is_pass else 0.52)
-    call = dict(personnel=pers, shotgun=bool(shotgun), is_pass=bool(is_pass))
+    # The formation is a separate decision from the package: the same eleven
+    # men produce a dozen looks, and that is where the variety comes from.
+    import formations as FM
+    form = FM.choose_formation(pers, rng, down=down, ydstogo=ydstogo,
+                               score_diff=score_diff, secs_left=secs_left)
+    call = dict(personnel=pers, shotgun=bool(shotgun), is_pass=bool(is_pass),
+                formation=form, down=down, ydstogo=ydstogo)
 
     if is_pass:
         # real rates: play action 10.2%, screen 4.4%, RPO 3.3%

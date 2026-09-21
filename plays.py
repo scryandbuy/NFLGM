@@ -536,7 +536,15 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # uniform draw from the receivers and the defender a uniform draw from the
     # secondary, so a TE could be covered by a corner and a WR1 by a safety.
     import coverage as CV, targets as TG
-    aligned = CV.receiver_alignment(receivers, off_call.get('personnel', '11'), rng)
+    # FORMATION, not list order. receiver_alignment assigned spot and side by
+    # index, so the first receiver was X and always on the left - six hundred
+    # snaps out of six hundred. The same two corners split him forever and
+    # whichever drew him took nearly every pass break-up in the league.
+    import formations as FM
+    aligned = FM.align(receivers, off_call.get('personnel', '11'), rng, rate,
+                       formation=off_call.get('formation'),
+                       down=off_call.get('down', 1),
+                       ydstogo=off_call.get('ydstogo', 10))
     # ONLY THE MEN WHO ACTUALLY DROPPED CAN COVER. Coverage was assigned from
     # the whole depth chart regardless of the rush, so a linebacker could be
     # blitzing in the protection math and covering the back in the same snap -
