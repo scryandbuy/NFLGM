@@ -14,8 +14,12 @@
 import { RNG } from './core/rng.js';
 import { AVG, rate, edge, logistic, clip, mean, Player, Weights } from './core/math.js';
 import {
-  PASS_RUSH, ROUTE, THROW, CATCH, YAC, RUN_BLOCK, BALL_SECURITY,
+  PASS_RUSH, ROUTE, THROW, CATCH, YAC, RUN_BLOCK, BALL_SECURITY, resolveZone,
 } from './matchups.js';
+import * as S from './schemes.js';
+import { RUN_SCHEMES, FRONTS, CONCEPTS } from './schemeTables.js';
+import * as CV from './coverage.js';
+import * as TG from './targets.js';
 
 /** Per-rusher base time to arrive. */
 export const RUSHER_BASE = 3.16;
@@ -282,3 +286,284 @@ export function availableDepths(ytg: number): Depth[] {
 const round1 = (x: number) => Math.round(x * 10) / 10;
 const round2 = (x: number) => Math.round(x * 100) / 100;
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
+
+// ============================================================ THE PLAY
+/**
+ * Red-zone compression is an OUTCOME, not an input. An earlier build
+ * multiplied yardage by 0.52 inside the 5 to pull touchdowns down from 28.5%
+ * of drives to the real 22.6% - a fudge factor, and exactly the thing the
+ * whole resolve-don't-sample approach exists to avoid. It also suppressed the
+ * scoring play itself, which is why QB touchdowns came out at 12 against a
+ * real 43.
+ *
+ * What REALLY happens near the goal line, from the data:
+ *   - air yards collapse because the field runs out: mean 8.09 between the 21
+ *     and 50, 4.47 from the 6-10, 2.18 inside the 5. Inside the 10 the maximum
+ *     air yards ever recorded is 10 and ZERO throws travel more than 20.
+ *   - the box gets heavier: 6.55 defenders inside the 5 against 4.40 at 21-50
+ *   - rushers increase: 4.68 inside the 5 against 4.30
+ *   - completion falls out of all that: 42% inside the 5 against 61% at 21-50
+ * So the compression is produced, not imposed.
+ */
+export interface PlayOutcome {
+  type: string;
+  yards: number;
+  touchdown: boolean;
+  scheme?: string;
+  concept?: string;
+  protection?: string;
+  depth?: string;
+  target?: string;
+  read?: string;
+  by?: string | null;
+  separation?: number;
+  air?: number;
+  yac?: number;
+  ybc?: number;
+  broken_tackles?: number;
+}
+
+export interface OffField {
+  qb: Player; rb: Player; ol: Player[]; wr: Player[];
+  extra_blockers?: Player[]; [k: string]: unknown;
+}
+export interface DefField {
+  dl: Player[]; lb: Player[]; db: Player[]; [k: string]: unknown;
+}
+
+const r1 = (x: number) => +x.toFixed(1);
+const r3 = (x: number) => +x.toFixed(3);
+
+/**
+ * off/deff: position -> player (or list for OL/DL/WR).
+ * Returns the play outcome with every contributor named.
+ */
+export function resolvePlay(
+  off: OffField, deff: DefField, offCall: any, defCall: any,
+  yardsToEndzone: number, rng: RNG,
+): PlayOutcome {
+  return offCall.is_pass
+    ? passPlay(off, deff, offCall, defCall, yardsToEndzone, rng)
+    : runPlay(off, deff, offCall, defCall, yardsToEndzone, rng);
+}
+
+export function runPlay(
+  off: OffField, deff: DefField, offCall: any, defCall: any,
+  ytg: number, rng: RNG,
+): PlayOutcome {
+  const scheme = offCall.scheme ?? 'inside_zone';
+  const fam = (RUN_SCHEMES as any)[scheme].family;
+  // Zone rewards agility and finesse blocking; gap rewards power and leverage.
+  // Taking the max of both erased the whole distinction between them.
+  const key: 'finesse' | 'power' = fam === 'zone' ? 'finesse' : 'power';
+  const blockers = off.ol.slice(0, 5);
+  const front = deff.dl.slice(0, (FRONTS as any)[defCall.front].dl);
+  const defenders = [...front, ...deff.lb, ...deff.db];
+
+  const wins: number[] = [];
+  for (let i = 0; i < Math.min(blockers.length, front.length); i++) {
+    wins.push(edge(rate(blockers[i], (RUN_BLOCK.blocker as any)[key]),
+                   rate(front[i], RUN_BLOCK.defender.shed)));
+  }
+  const push = wins.length ? mean(wins) : 0.0;
+  const fill = mean(defenders.slice(0, 7).map(d => rate(d, RUN_BLOCK.defender.fill)));
+
+  let ybc = 2.32 + 9.0 * push - 3.2 * (fill - AVG) + rng.normal(0, 1.42);
+  ybc *= S.boxRunMultiplier(defCall.box);
+  ybc *= S.runSchemeMultiplier(scheme, defCall.front, ytg, defCall.box);
+  ybc *= Math.pow((FRONTS as any)[defCall.front].run_fit, -1);
+  if (offCall.motion) ybc *= 1.04;
+  ybc = Math.max(-4.0, ybc);
+
+  if (ybc < 0) {
+    return { type: 'run', yards: r1(ybc), scheme, broken_tackles: 0,
+             touchdown: false, ybc: r1(ybc) };
+  }
+
+  const chasers = [...defenders.slice(front.length), ...defenders.slice(0, front.length)];
+  const out = resolveYardsAfter(off.rb, chasers, ytg, rng, { contactAt: ybc });
+  return { type: 'run', scheme, ybc: r1(ybc), yards: out.yards,
+           broken_tackles: out.brokenTackles, touchdown: out.touchdown };
+}
+
+export function passPlay(
+  off: OffField, deff: DefField, offCall: any, defCall: any,
+  ytg: number, rng: RNG,
+): PlayOutcome {
+  let depth: Depth = offCall.depth ?? 'short';
+  const ok = availableDepths(ytg);
+  if (!ok.includes(depth)) depth = ok[ok.length - 1];
+  const concept = offCall.concept ?? 'curl_flat';
+  // The offence does NOT know the rush count before the snap. Choosing max
+  // protect because six are coming let the defence's blitz cancel itself, so
+  // the sack rate barely moved from four to six rushers.
+  const protName = S.chooseProtection(offCall.personnel, 4, depth, rng);
+  const prot = S.protectionMath(protName, defCall.rushers);
+
+  const blockers = [...off.ol.slice(0, 5),
+                    ...(off.extra_blockers ?? []).slice(0, Math.max(0, prot.blockers - 5))];
+  const rushers = [...deff.dl, ...deff.lb].slice(0, defCall.rushers);
+
+  const p = resolveProtection(blockers, rushers, rng, off.qb);
+  let time = p.time;
+  // A protection scheme is worth real time against a blitz, and a simulated
+  // pressure makes the line set for a front that never comes.
+  if (defCall.rushers >= 5) {
+    // Real: 4-man 6.61% sack / 61.9% comp, blitz 8.35% / 56.1%. The blitz
+    // penalty has to be SMALL - 8.5% per extra rusher put a six-man rush at an
+    // 18% sack rate against a real ~10%.
+    time *= prot.vsBlitz * (1.0 - 0.030 * (defCall.rushers - 4));
+  }
+  if (defCall.protectionError) time *= 1.0 - defCall.protectionError;
+  let pressure = clip((2.72 - time) / 2.72, 0.0, 1.0);
+  // 25.0/2.40 was solved for a bare four-man rush in isolation. Once blitzes,
+  // deep drops and protection schemes are in the mix the BLEND has to land on
+  // 6.6%, so the constant comes down.
+  let sack = rng.next() < clip(16.0 * Math.exp(-2.40 * time), 0, .85);
+
+  // Free rushers force the ball out. That is what a hot route IS, and it is
+  // the real answer to a blitz - not simply eating the sack.
+  const hot = prot.hot;
+  if (hot) {
+    depth = 'short';
+    pressure = Math.min(1.0, pressure + 0.20);
+    sack = sack && rng.next() < 0.35;
+  }
+  if (sack && !hot) {
+    return { type: 'sack', yards: r1(-rng.gamma(2.0, 3.4)), touchdown: false,
+             by: p.beatenBy, concept, protection: protName };
+  }
+
+  // the concept, against the coverage it actually faces
+  let cmult = S.conceptMultiplier(concept, defCall.shell);
+  if (offCall.play_action && !offCall.shotgun) {
+    cmult *= 1.18;                    // real: 6.91 ypp vs 3.63 without
+  } else if (offCall.play_action) {
+    cmult *= 1.10;
+  }
+  const dis = S.disguisePenalty(off.qb, Boolean(defCall.fooled));
+
+  // The pattern is the concept's receivers, but the BACK is always an outlet
+  // and a tight end is usually in it. Slicing purely by the concept's route
+  // count cut the TE and the RB out of the pattern entirely, so they never saw
+  // a target - against a real 22.5% for tight ends and 18.1% for backs.
+  const nRoutes = Math.max(1, (CONCEPTS as any)[concept].n - prot.routesLost);
+  const pool = [...off.wr];
+  const receivers = pool.slice(0, nRoutes);
+  for (const extra of pool.slice(nRoutes)) {
+    const ep = extra.pos ?? '';
+    if ((ep === 'TE' || ep === 'HB' || ep === 'RB' || ep === 'FB') && receivers.length < 5) {
+      receivers.push(extra);
+    }
+  }
+  if (!receivers.length) receivers.push(...pool.slice(0, 1));
+
+  // Coverage assignment and target selection. Before this the target was a
+  // uniform draw from the receivers and the defender a uniform draw from the
+  // secondary, so a TE could be covered by a corner and a WR1 by a safety.
+  const aligned = CV.receiverAlignment(receivers);
+  const { pairs } = CV.assignCoverage(aligned, deff, defCall, rng,
+                                      offCall.travel_willingness ?? 0.5,
+                                      defCall.travel);
+
+  // every man in the pattern gets his own separation from his own matchup
+  for (const pr of pairs) {
+    pr.separation = resolveMan(pr.receiver, pr.defender, depth, time, rng);
+    // a bracketed man is squeezed, not erased - an elite receiver doubled
+    // still beats an average one singled
+    if (defCall.bracket === pr.receiver.pid) pr.separation *= 0.72;
+  }
+
+  const sel = TG.selectTarget(pairs, off.qb, rng, offCall.plan);
+  let tgt = sel.receiver, cov = sel.defender;
+  let readKind = sel.kind as string, sepRaw = sel.separation;
+  if (tgt === null || cov === null) {
+    tgt = receivers[0]; cov = deff.db[0]; readKind = 'first'; sepRaw = 0.42;
+  }
+
+  const rmod = (TG.READ_MODIFIER as any)[readKind] ?? (TG.READ_MODIFIER as any)['first'];
+
+  let complete: boolean, picked: boolean, contested: boolean;
+  const cb = cov;
+  if (defCall.man) {
+    // Apply the concept and read modifiers to the COMPLETION PROBABILITY, not
+    // to separation. Separation runs through a steep depth multiplier, so
+    // folding a 0.94 concept factor into it cost far more than the same factor
+    // applied at the end - which is what the zone path does. The mismatch left
+    // man coverage 12 points below zone at short depth (61.6% against 75.7%)
+    // and dragged league completion to 58.5%.
+    const sep = clip(sepRaw, .02, .98);
+    const thr = resolveThrow(off.qb, depth, sep, pressure, rng, {
+      playAction: Boolean(offCall.play_action),
+      outcomeMult: cmult * (1.0 - dis) * rmod.comp,
+    });
+    complete = thr.result === 'complete';
+    picked = thr.result === 'interception';
+    contested = thr.contested;
+  } else {
+    // Only the NEAREST defender contests - handing the resolver the whole
+    // secondary made every window contested by the best of six and dropped
+    // league completion to 51.6% against a real 65.0%.
+    const dbs = [{ ...cb, dist_to_window: 0 }];
+    const z = resolveZone(tgt, dbs, off.qb, defCall.shell, depth, pressure, rng);
+    // Apply the concept to the WINDOW, not as a second independent gate.
+    // Gating twice dropped four-man-rush completion to 51.8% against a real
+    // 61.9%. Coverage bodies matter: a blitz leaves fewer men to cover, which
+    // is exactly why blitzing costs completion percentage and gains sacks.
+    const coverRelief = 1.0 + 0.085 * Math.max(0, defCall.rushers - 4);
+    const adj = clip(z.p_complete * cmult * coverRelief * (1.0 - dis) * rmod.comp,
+                     0.02, 0.97);
+    complete = rng.next() < adj;
+    // 2.1% is the rate per ATTEMPT, not per incompletion. Applying it to
+    // incompletions only produced ~1.1% league-wide.
+    picked = !complete && rng.next() < 0.080;
+    contested = z.contested;
+  }
+
+  if (picked) {
+    return { type: 'interception', yards: 0.0, touchdown: false, concept,
+             protection: protName, target: tgt.pid, by: cb.pid, read: readKind };
+  }
+  if (!complete) {
+    return { type: 'incomplete', yards: 0.0, touchdown: false, concept,
+             protection: protName, target: tgt.pid, read: readKind };
+  }
+  // A contested ball that already survived the throw should not face the full
+  // contested-catch gate again; drops were running at 8.7% against a real ~5%.
+  if (!resolveCatch(tgt, cb, contested && rng.next() < 0.45, rng)) {
+    return { type: 'drop', yards: 0.0, touchdown: false, concept,
+             protection: protName, target: tgt.pid, read: readKind };
+  }
+
+  // Real air yards ON COMPLETIONS: 5.72 overall, with the bands running -2.76
+  // behind the line, 4.03 short, 11.93 medium, 25.29 deep. The short band
+  // includes throws behind the line, which pulled the real mean down.
+  const baseAir = ({ short: 2.6, medium: 9.8, deep: 22.0 } as any)[depth];
+  let air = 0.55 * baseAir + 0.45 * Math.max(0.0, rmod.air);
+  air = Math.max(0.0, air + rng.normal(0, 3.0));
+  // A throw to the back of the end zone travels the full remaining distance -
+  // it is not clipped short. Clipping it left the YAC chain no room and made
+  // scoring from the 15-20 nearly impossible: 1.9% per play against a real 7.0%.
+  if (air >= ytg * 0.68 && ytg <= 25) air = ytg;
+  else air = Math.min(air, ytg);
+
+  if (air >= ytg) {
+    return { type: 'complete', yards: r1(ytg), air: r1(air), yac: 0.0,
+             touchdown: true, concept, protection: protName, depth,
+             target: tgt.pid, read: readKind, separation: r3(sepRaw) };
+  }
+  // Real YAC by throw depth: behind the line 8.63, short 3.97, medium 3.48,
+  // deep 5.31 - a U-shape, because a screen has blockers in front and a deep
+  // ball is caught past everyone, while an intermediate throw is caught in
+  // traffic. Flat pursuit produced 3.06 overall against a real 5.19.
+  const tpool = [...deff.db, ...deff.lb];
+  let nNear = ({ short: 3, medium: 4, deep: 2 } as any)[depth];
+  if (air <= 0) nNear = 2;                     // screen: blockers ahead
+  const tacklers: Player[] = [];
+  for (let i = 0; i < nNear; i++) tacklers.push(tpool[rng.integers(0, tpool.length)]);
+  const yac = resolveYardsAfter(tgt, tacklers, ytg - air, rng, { inSpace: true });
+  const total = Math.min(air + yac.yards, ytg);
+  return { type: 'complete', yards: r1(total), air: r1(air), yac: yac.yards,
+           touchdown: total >= ytg, concept, protection: protName, depth,
+           target: tgt.pid, read: readKind, separation: r3(sepRaw) };
+}

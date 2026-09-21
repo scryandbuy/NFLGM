@@ -9,6 +9,9 @@
  * These weights are the reason a player's rating sheet matters at all. Ported
  * verbatim from the Python; changing one silently rebalances the whole engine.
  */
+import { RNG } from './core/rng.js';
+import { AVG, rate, Player } from './core/math.js';
+
 export type Weights = Record<string, number>;
 
 export const PASS_RUSH = {
@@ -237,3 +240,117 @@ export const BALL_SECURITY: Weights = {
   awareness_rating: 0.3,
 };
 
+
+// ============================================================ ZONE COVERAGE
+/**
+ * Larger = easier throw. Derived from where each shell is structurally soft:
+ * Cover 2 has a seam between the two deep safeties and is beaten by corner
+ * routes and four verticals; Cover 3 has one fewer deep defender's worth of
+ * width underneath; Cover 0 has no zone at all.
+ * Windows are anchored to the REAL completion rate at each throw depth
+ * (74.4% short / 56.0% medium / 39.4% deep, over six seasons), then modulated
+ * by where each shell is structurally soft. The first build let shell dominate
+ * and produced deep completions ABOVE short, which is backwards.
+ */
+export const ZONE_WINDOW: Record<string, [number, number, number]> = {
+  //          short  medium  deep
+  cover_2: [0.56, 0.49, 0.39],   // soft in the deep seam
+  cover_3: [0.61, 0.44, 0.29],   // three deep, soft underneath
+  cover_4: [0.65, 0.46, 0.23],   // takes away deep, gives up short
+  cover_6: [0.60, 0.45, 0.31],   // quarter-quarter-half
+  tampa_2: [0.54, 0.40, 0.33],   // MIKE carries the seam
+};
+
+/**
+ * How many defenders are close enough to contest. A route landing between two
+ * zones - the seam - is where zone gets beaten, so fewer contesting defenders.
+ */
+export const ZONE_DEFENDERS_NEAR: Record<string, number> = {
+  cover_2: 1.3, cover_3: 1.5, cover_4: 1.7, cover_6: 1.5, tampa_2: 1.6,
+};
+
+const DEPTH_INDEX: Record<string, 0 | 1 | 2> = { short: 0, medium: 1, deep: 2 };
+
+/** Base window for this shell at this route depth. Bigger = easier throw. */
+export function zoneWindow(shell: string, depth: string): number {
+  const i = DEPTH_INDEX[depth];
+  return (ZONE_WINDOW[shell] ?? [0.58, 0.39, 0.27])[i];
+}
+
+export interface ZoneDefender extends Player { dist_to_window?: number; }
+
+export interface ZoneResult {
+  complete: boolean; contested: boolean; window: number;
+  p_complete: number; defender: string | null;
+}
+
+/**
+ * Zone pass resolution. Two steps, as the football describes it:
+ *
+ *   1. the shell and the route produce a WINDOW. The receiver's job is only to
+ *      FIND it - route IQ, not separation athleticism.
+ *   2. the NEAREST defender contests the THROW. He must read it (break), cover
+ *      ground (close), then contest at the catch point.
+ *
+ * The QB is the load-bearing party, which is the whole point of zone: it
+ * forces him to be perfect, and a great one shreds it.
+ */
+export function resolveZone(
+  receiver: Player, defenders: ZoneDefender[], qb: Player, shell: string,
+  depth: string, pressure: number, rng: RNG,
+): ZoneResult {
+  let w = zoneWindow(shell, depth);
+
+  // Contests are resolved RELATIVE TO AVERAGE (0.70 on the 0-1 rating scale),
+  // not on the absolute rating. An average defender should leave an average
+  // window, not eat 40% of it - the first build squeezed every window by the
+  // defender's raw rating and collapsed league completion to the 30s.
+
+  // 1. does the receiver find the soft spot at all
+  const find = rate(receiver, ROUTE.receiver_zone.find_window);
+  w *= 1.0 + 0.45 * (find - AVG);
+
+  // 2. the nearest defender squeezes it. Others are too far to matter, which
+  //    is why the seam beats zone.
+  let near: ZoneDefender | null = null;
+  if (defenders.length) {
+    near = defenders[0];
+    // Python's min() keeps the FIRST on a tie, so this uses a strict <.
+    for (const d of defenders) {
+      if ((d.dist_to_window ?? 99) < (near.dist_to_window ?? 99)) near = d;
+    }
+  }
+  if (near !== null) {
+    const brk = rate(near, ROUTE.defender_zone.break);
+    const cls = rate(near, ROUTE.defender_zone.close);
+    const n = ZONE_DEFENDERS_NEAR[shell] ?? 1.5;
+    const squeeze = (0.85 * (brk - AVG) + 0.75 * (cls - AVG)) * (n / 1.5);
+    w *= 1.0 - squeeze;
+  }
+
+  w = Math.max(0.04, Math.min(0.97, w));
+
+  // 3. the throw. Accuracy at this depth, degraded by pressure.
+  let acc = rate(qb, (THROW as any)[depth]);
+  if (pressure > 0) {
+    // a QB with elite under-pressure ability barely degrades; a poor one falls
+    // apart. The first build scaled by (1 - ability), which made even heavy
+    // pressure worth ~3 points of completion.
+    const up = rate(qb, THROW.under_pressure);
+    acc *= 1.0 - pressure * (0.42 - 0.34 * (up - AVG));
+  }
+
+  // a good enough throw beats the window; a poor one gets contested.
+  // 1.26 is solved, not chosen: with the depth-anchored windows above it puts
+  // an average QB against an average defender on the real per-depth completion
+  // rates (74.4 / 56.0 / 39.4).
+  const pComplete = Math.min(0.97, w * 1.26 * (1.0 + 1.15 * (acc - AVG)));
+  const roll = rng.next();
+  const complete = roll < pComplete;
+  const contested = !complete && roll < pComplete + (1.0 - w) * 0.45;
+  return {
+    complete, contested, window: +w.toFixed(3),
+    p_complete: +pComplete.toFixed(3),
+    defender: near ? near.pid : null,
+  };
+}
