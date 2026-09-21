@@ -18,11 +18,11 @@ who quietly gains sixty yards a week earns steadily; one who goes for a
 hundred and scores twice earns in jumps. That gap is what makes a good season
 feel different from an adequate one.
 
-THE MODIFIERS ARE ON WHAT IS EARNED, not on what a point costs. Madden does
-the opposite - everyone earns the same and a young star upgrades cheaper -
-and the two are close to equivalent, but this way the number on the page is
-the number that matters, and a 23-year-old with a superstar trait visibly
-outgrains a 33-year-old having the same afternoon.
+EARNING IS AGE-BLIND. A thirty-four-year-old who goes for a hundred and fifty
+yards earned exactly what a rookie would have. What differs is what he can DO
+with it: the cost of an attribute point is priced off the real aging curve, so
+the same XP buys a young man five overall and an old one barely one. Age
+belongs in one place, not two.
 
 THE EVENT VALUES ARE SET SO THE POSITIONS LAND TOGETHER. A quarterback throws
 for four thousand yards and a corner never touches the ball, so paying per
@@ -143,23 +143,60 @@ AWARDS = {
 }
 
 # ============================================================ MODIFIERS
-# Applied to what is EARNED. A trait is how fast a man turns work into
-# ability; age is how much of that is still ahead of him.
+# Only the DEVELOPMENT TRAIT touches what a man earns. Age used to sit here
+# too and it does not any more, because age now sets what a point COSTS - and
+# carrying it in both places counted it twice.
 DEV_MULT = {'normal': 1.00, 'star': 1.25, 'superstar': 1.55, 'xfactor': 1.90}
-
-AGE_MULT = [(23, 1.40), (26, 1.20), (29, 1.00), (32, 0.70), (99, 0.45)]
-
-
-def age_mult(age):
-    for cap, m in AGE_MULT:
-        if age <= cap:
-            return m
-    return AGE_MULT[-1][1]
 
 
 def modifier(player):
     dev = getattr(player, 'dev', None) or 'normal'
-    return DEV_MULT.get(dev, 1.0) * age_mult(float(getattr(player, 'age', 27)))
+    return DEV_MULT.get(dev, 1.0)
+
+
+# ============================================================ WHAT IT COSTS
+# THE COST CURVE IS THE REGRESSION CURVE. Rather than invent age brackets,
+# improvement is priced off the same real delta-method aging data that already
+# drives decline: while a man is on his plateau a point is at its cheapest,
+# and as his curve falls the same point costs more. That makes it
+# position-specific for free - a running back's costs climb from 26 because
+# that is when backs actually start going, and a quarterback's barely move at
+# all because quarterbacks do not.
+#
+# Solved against the growth budget: a good young player should be able to add
+# around five overall in a season on stats alone, a man in his late twenties
+# around three, and a thirty-something around one. None of those are ceilings,
+# they are what a strong year buys.
+#
+# One overall point costs 4 to 6 ATTRIBUTE points, measured: a position score
+# is a weighted mean, so a point into a left tackle's pass-block finesse (30%
+# of his weight) moves his overall by 0.30 while spreading evenly costs the
+# full six. Spending well is about twice as efficient as spending badly, which
+# is a decision worth having.
+BASE_COST = 1150.0          # XP for one attribute point, at the cheapest
+
+# A ninety improving is harder than a seventy improving, and this is also what
+# keeps the league from inflating: everyone runs into a wall eventually.
+OVR_PIVOT, OVR_SLOPE = 70.0, 0.030
+
+
+# The regression curve alone is not enough, and a quarterback shows why: his
+# curve is flat until 36, so pricing off it let a 31-year-old add nearly five
+# overall in a season. Production and LEARNING are different things - a man
+# can keep playing at his level long after he has stopped adding to it. So a
+# flat age term sits alongside the curve, and the curve makes it
+# position-specific rather than uniform.
+AGE_FROM, AGE_SLOPE = 24.0, 0.155
+
+
+def cost_per_point(player):
+    """XP for one attribute point, for this man right now."""
+    import regression as RG
+    f = RG.curve_factor(player.pos, player.age)
+    curve = 1.0 if f >= 1.0 else (1.0 / max(f, 0.30)) ** 1.5
+    years = max(0.0, float(player.age) - AGE_FROM)
+    ovr_scale = 1.0 + OVR_SLOPE * max(0.0, float(player.ovr) - OVR_PIVOT)
+    return BASE_COST * curve * (1.0 + AGE_SLOPE * years) * ovr_scale
 
 
 # ============================================================ EARNING

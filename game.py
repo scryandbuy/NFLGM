@@ -1068,6 +1068,7 @@ class StatBook:
                 rush_att=0, rush_yds=0.0, rush_td=0,
                 tgt=0, rec=0, rec_yds=0.0, rec_td=0, drops=0,
                 tackles=0, sacks=0.0, int_def=0, pressures=0, ff=0,
+                pass_def=0,
                 fum=0, fum_lost=0,
                 # ---- offensive line ----
                 # There are no traditional stats for a lineman, which is why
@@ -1100,6 +1101,8 @@ class StatBook:
             l['rb_wins'] += 1 if won else 0
         # A sack is charged to the man who was actually beaten, which the
         # protection resolver already names.
+        if out.get('pass_def'):
+            self._get(out['pass_def'])['pass_def'] += 1
         if t == 'sack' and out.get('beaten'):
             self._get(out['beaten'])['sacks_allowed'] += 1
         if t in ('complete', 'incomplete', 'drop', 'interception'):

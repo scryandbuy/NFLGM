@@ -50,6 +50,12 @@ BASE_TTT = 2.72          # the league mean the clock must land on
 # rather than a threshold of our own.
 PBW_THRESHOLD = 2.5
 
+# Share of incompletions a defender gets credit for breaking up. Solved to the
+# real 37.5% overall: a contested throw is usually somebody's doing, a clean
+# miss usually nobody's.
+PD_CONTESTED = 0.72
+PD_LOOSE = 0.22
+
 # Share of SHORT throws that are really behind the line of scrimmage. The real
 # split says 18.4/(18.4+49.5) of the short bucket, but this engine's depth mix
 # is not the real one - solved instead against the OUTCOME, the 22.3% of
@@ -599,9 +605,20 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
     if not complete:
+        # A PASS DEFENDED is a defender breaking the ball up, not simply an
+        # incompletion - a throw into the dirt is nobody's credit. Real rate:
+        # 37.5% of incompletions, 11.4% of attempts, with a league leader
+        # around 24 in a season. It is the main counting stat a corner has and
+        # this engine resolved the event without recording it, so a defensive
+        # back had almost no box score at all.
+        broken = (not contested) and rng.random() < PD_LOOSE
+        if contested:
+            broken = rng.random() < PD_CONTESTED
         return dict(type='incomplete', yards=0.0, touchdown=False,
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    read=read_kind, pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
+                    read=read_kind, pb_reps=p['pb_reps'],
+                    pass_def=(cb.get('pid') if broken and cb else None),
+                    pressured=bool(p['pressure'] >= 0.35))
     # A contested ball that already survived the throw should not face the full
     # contested-catch gate again; drops were running at 8.7% against a real ~5%.
     if not resolve_catch(tgt, cb, contested and rng.random() < 0.45, rng):
