@@ -258,7 +258,20 @@ def dist_band(ydstogo):
     if ydstogo <= 10: return '8-10'
     return '11+'
 
-def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers, gm_pass_bias=0.0):
+def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers,
+              gm_pass_bias=0.0, secs_left=None):
+    """
+    Share of snaps thrown.
+
+    THE SCORE TABLE BELOW HAS NO CLOCK IN IT, and the clock is most of the
+    effect. Real pass rate barely moves before halftime whatever the score -
+    everything sits in a 55-69% band - and then goes nearly binary at the end:
+    90% throwing down 9-16 in the last four minutes against 13% running it out
+    up 9-16. Without that, a trailing team never accelerates and a leading one
+    never bleeds clock, so games never close up and never run away in the way
+    real ones do. Close games (1-7 points) were 31% of ours against a real
+    46.8%.
+    """
     base = PASS_RATE.get(int(down), PASS_RATE[1])[dist_band(ydstogo)]
     # Scores are whole numbers again now that the try is resolved as its own
     # play. The round stays as a guard on any caller passing a float.
@@ -270,16 +283,25 @@ def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers, gm_pass_bia
     elif yards_to_endzone <= 10: base *= 0.88
     elif yards_to_endzone <= 20: base *= 0.90
     base += PERSONNEL_OFF.get(off_pers, PERSONNEL_OFF['11'])['run_bias'] * -0.30
+    if secs_left is not None:
+        # Blend toward the measured late-game rate, hard at the very end.
+        import decisions as DEC
+        target = DEC.pass_rate(score_diff, secs_left)
+        w = 0.0 if secs_left > 1800 else (0.25 if secs_left > 900 else
+                                          (0.55 if secs_left > 240 else 0.85))
+        base = (1.0 - w) * base + w * target * (base / max(NEUTRAL_SCRIPT, .01)
+                                                if False else 1.0)
     return float(np.clip(base + gm_pass_bias, 0.03, 0.98))
 
-def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None):
+def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
+                 secs_left=None):
     """Full offensive call: personnel, formation, pass or run, and the concept."""
     bias = (gm.aggression - 0.5) * 0.10 if gm is not None else 0.0
     pers = rng.choice(list(PERSONNEL_OFF),
                       p=np.array([v['rate'] for v in PERSONNEL_OFF.values()]) /
                         sum(v['rate'] for v in PERSONNEL_OFF.values()))
     is_pass = rng.random() < pass_rate(down, ydstogo, score_diff,
-                                       yards_to_endzone, pers, bias)
+                                       yards_to_endzone, pers, bias, secs_left)
     shotgun = rng.random() < (0.82 if is_pass else 0.52)
     call = dict(personnel=pers, shotgun=bool(shotgun), is_pass=bool(is_pass))
 

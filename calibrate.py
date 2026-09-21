@@ -77,7 +77,8 @@ def run(seasons=1, seed=2026, verbose=True):
     rng = np.random.default_rng(seed)
     L = R.load_league()
     teams = sorted(L)
-    co = lambda d, di, sd, ytg, r: S.call_offense(d, di, sd, ytg, r)
+    co = lambda d, di, sd, ytg, r, secs_left=None: S.call_offense(
+        d, di, sd, ytg, r, secs_left=secs_left)
     cd = lambda oc, d, di, r, ytg=50: S.call_defense(oc, d, di, r,
                                                      yards_to_endzone=ytg)
     coaches = {t: dict(

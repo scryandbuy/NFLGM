@@ -712,7 +712,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # touchdowns came out at 2.1% against a real 22.6%.
         ytg_i = max(1, int(np.ceil(dr.yardline)))
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
-                      dr.score_diff, ytg_i, rng)
+                      dr.score_diff, ytg_i, rng, secs_left=dr.clock)
         # BACKED UP AGAINST YOUR OWN GOAL you play differently, and the engine
         # did not. Real pass rate falls from 57.6% to 52.2% inside the own 10
         # and 46.6% inside the own 4, and the sack rate on those dropbacks

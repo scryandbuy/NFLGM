@@ -38,7 +38,8 @@ WEEKS = 18                      # 17 games, one bye apiece
 
 def _deps():
     """The scheme-layer callers the drive loop takes."""
-    co = lambda d, di, sd, ytg, r: S.call_offense(d, di, sd, ytg, r)
+    co = lambda d, di, sd, ytg, r, secs_left=None: S.call_offense(
+        d, di, sd, ytg, r, secs_left=secs_left)
     cd = lambda oc, d, di, r, ytg=50: S.call_defense(oc, d, di, r,
                                                      yards_to_endzone=ytg)
     return co, cd
