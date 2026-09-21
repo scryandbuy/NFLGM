@@ -94,6 +94,12 @@ def _assemble(by_pos):
 
     if not qbs or not ol or not db:
         return None
+    # A team can run out of healthy backs in December. Real clubs dress an
+    # emergency ball carrier rather than forfeiting, and leaving this None
+    # made field_units snap a null player the moment a roster ran thin - which
+    # never showed up until rosters went live.
+    if not hbs:
+        hbs = (take('WR')[-1:] or take('TE')[-1:] or qbs[-1:])
     return dict(
         qb=qbs[0], qbs=qbs[1:],
         rb=(hbs[0] if hbs else None), backs=hbs,

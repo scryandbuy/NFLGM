@@ -98,18 +98,21 @@ class SeasonRunner:
         return self.states[abbr].roster
 
     # ---- one game -------------------------------------------------------
-    def play(self, home, away, week):
+    def play(self, home, away, week, playoffs=False):
         hr, ar = self.refresh(home), self.refresh(away)
         if hr is None or ar is None:          # a roster too thin to field
             return None
         book = G.StatBook()
         res = G.play_game(hr, ar, self.rng, P.resolve_play, self.co, self.cd,
                           P.rate, home_state=self.states[home],
-                          away_state=self.states[away], week=week, book=book)
+                          away_state=self.states[away], week=week, book=book,
+                          playoffs=playoffs)
 
         # ---- record ------------------------------------------------------
         H, A = self.L.teams[home], self.L.teams[away]
-        if res['home'] > res['away']:
+        if playoffs:
+            pass                      # postseason does not touch the record
+        elif res['home'] > res['away']:
             H.record[0] += 1; A.record[1] += 1
         elif res['away'] > res['home']:
             A.record[0] += 1; H.record[1] += 1

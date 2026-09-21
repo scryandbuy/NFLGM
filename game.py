@@ -472,7 +472,7 @@ def field_units(roster, state, rng, is_offense, package=None):
     slots = OFF_SLOTS if is_offense else DEF_SLOTS
     if is_offense:
         for key in ('qb', 'rb'):
-            if key in roster:
+            if roster.get(key) is not None:
                 pos = 'QB' if key == 'qb' else 'HB'
                 p = roster[key]
                 # an injured starter yields to the backup - real leagues carry

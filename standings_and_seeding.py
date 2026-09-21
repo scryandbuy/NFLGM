@@ -260,22 +260,27 @@ if __name__ == '__main__':
     if bad_years: print(f'  seasons with any miss: {[b[0] for b in bad_years]}')
 
     # ---------------------------------------------------------------- bracket
-    def bracket(seeds):
-        """seeds: list of 7 (or 6) teams, best first. Returns the round-by-round matchups."""
-        n = len(seeds)
-        alive = list(range(1, n + 1))                     # seed numbers
-        rounds = []
-        byes = 1 if n == 7 else 2
-        # wild card: lowest remaining seeds play, top `byes` sit out
-        wc = [(alive[i], alive[-(i - byes + 1)]) for i in range(byes, (n + byes) // 2)]
-        rounds.append(('WC', wc))
-        return rounds
 
-    def wc_matchups(seeds):
-        n = len(seeds)
-        if n == 7:  return [(2,7),(3,6),(4,5)]     # 2020 onward: one bye
-        return [(3,6),(4,5)]                       # before 2020: two byes
 
+def bracket(seeds):
+    """seeds: list of 7 (or 6) teams, best first. Returns the round-by-round matchups."""
+    n = len(seeds)
+    alive = list(range(1, n + 1))                     # seed numbers
+    rounds = []
+    byes = 1 if n == 7 else 2
+    # wild card: lowest remaining seeds play, top `byes` sit out
+    wc = [(alive[i], alive[-(i - byes + 1)]) for i in range(byes, (n + byes) // 2)]
+    rounds.append(('WC', wc))
+    return rounds
+
+def wc_matchups(seeds):
+    n = len(seeds)
+    if n == 7:  return [(2,7),(3,6),(4,5)]     # 2020 onward: one bye
+    return [(3,6),(4,5)]                       # before 2020: two byes
+
+# A second validation pass, historical data only. Same reason as above:
+# this used to run at import.
+if __name__ == '__main__':
     print('\n=== SEED ORDER: do our seeds predict the real wild-card matchups? ===')
     tot = hit = 0
     for season in range(2002, 2026):
