@@ -17,16 +17,20 @@ WHAT THE DATA SAID, AND WHY THE OBVIOUS APPROACH IS WRONG:
   number is useless on its own, because it is dominated by fringe players
   washing out rather than starters retiring.
 
-  PLAYING TIME IS THE STRONGEST PREDICTOR, far stronger than age. Measured
-  hazard, P(this is his last season):
+  PLAYING TIME IS THE STRONGEST PREDICTOR IN THE REAL WORLD, and it is
+  deliberately NOT used here. Measured hazard:
 
                   22-25    26-29    30-32     33+
       starter      1.9%     4.5%    12.7%   18.5%
       rotation    10.3%    18.9%    31.4%   47.7%
       fringe      28.2%    34.8%    42.9%   46.4%
 
-  A 15x spread between a young starter and an old fringe player. A man who
-  plays is a man who keeps his job, at every single age.
+  That is a real 15x spread, and it is real because snaps predict getting
+  CUT - which is a different event here. A buried 23-year-old goes to free
+  agency and signs somewhere; he does not stop playing football. Using the
+  table directly retired three hundred men an offseason, most of them young
+  and most of them merely stuck behind someone better. So snaps are out and
+  almost nobody under 27 goes, by design.
 
   POSITION MATTERS TOO, and in the direction you would expect. Running backs
   fall off a cliff: hazard 0.32 at 29 and 0.52 at 32, against 0.21 and 0.29
@@ -88,44 +92,49 @@ POS_GROUP = {
     'K': 'SPEC', 'P': 'SPEC', 'LS': 'SPEC',
 }
 
-# THE MEASURED CROSS-TAB. This is the primary table, not a multiplier.
+# AGE DECIDES. BY DESIGN, NOT BY THE DATA.
 #
-# An earlier version multiplied the age curve by a role factor, and that
-# double-counts: the age curve is already an average over all roles, and at 33
-# it is dominated by fringe players. Multiplying again put a 33-year-old
-# fringe defensive back at 95% against a measured 46.4%. So the cross-tab is
-# used directly and position adjusts it, rather than the other way round.
+# The measurement says a 22-25 fringe player ends his career 28.2% of the
+# time, and that is true of the real NFL - but it is not RETIREMENT. It is a
+# man getting cut who never catches on anywhere. In this league he goes to
+# free agency and someone signs him, so applying that number retired three
+# hundred men an offseason and most of them were 23-year-olds who had simply
+# been buried on a depth chart.
 #
-# P(final season | role, age band), 2011-2024 completed careers:
-ROLE_AGE = {
-    'starter':  {'22-25': .019, '26-29': .045, '30-32': .127, '33+': .185},
-    'rotation': {'22-25': .103, '26-29': .189, '30-32': .314, '33+': .477},
-    'fringe':   {'22-25': .282, '26-29': .348, '30-32': .429, '33+': .464},
+# So two deliberate departures from the measured data:
+#
+#   SNAPS DO NOT COUNT. Playing time was the strongest predictor in the real
+#   world precisely because it predicts getting cut, and getting cut is not
+#   the same event here. A good player stuck behind a better one asks for a
+#   trade; he does not quit at 26.
+#
+#   ALMOST NOBODY UNDER 27 GOES, whatever his role. Careers end young in the
+#   real league because rosters churn, not because men that age stop wanting
+#   to play.
+#
+# What is kept from the data is the SHAPE - the climb through the thirties,
+# and the fact that a back ages faster than a lineman.
+AGE_HAZARD = {
+    21: .004, 22: .004, 23: .005, 24: .005, 25: .006, 26: .008,
+    27: .030, 28: .055, 29: .090,
+    30: .140, 31: .175, 32: .215,
+    33: .300, 34: .380, 35: .460,
+    36: .540, 37: .600, 38: .660, 39: .720, 40: .780,
 }
 
-# Games played is what separated them in the measurement. Snaps are the better
-# signal where we have them - a lineman plays every down of a game he dresses
-# for, and a backup dresses for all seventeen and plays none of it, so games
-# alone would call them the same man.
-STARTER_GAMES = 13
-ROTATION_GAMES = 6
-STARTER_SNAPS = 600
-ROTATION_SNAPS = 220
 
-
-def band_of(age):
-    a = float(age)
-    if a <= 25: return '22-25'
-    if a <= 29: return '26-29'
-    if a <= 32: return '30-32'
-    return '33+'
+def age_hazard(age):
+    a = int(round(age))
+    if a < min(AGE_HAZARD): return AGE_HAZARD[min(AGE_HAZARD)]
+    if a > max(AGE_HAZARD): return 0.85
+    return AGE_HAZARD[a]
 
 
 def pos_factor(pos, age):
     """
-    How this position differs from the league at this age. A back at 29 sits
-    at .32 against a league mean near .21, so he carries a factor above one;
-    a specialist at 33 sits at .16 and carries one well below.
+    How this position ages against the league. Kept from the real curves: a
+    back at 29 sits at .32 where the league mean is near .21, so he carries a
+    factor above one; a specialist sits well below.
     """
     a = int(round(age))
     mine = base_hazard(pos, a)
@@ -137,7 +146,7 @@ def pos_factor(pos, age):
         k = min(max(a, min(tbl)), max(tbl))
         vals.append(tbl[k])
     mean = float(np.mean(vals)) if vals else mine
-    return float(np.clip(mine / max(mean, 1e-6), 0.35, 2.2))
+    return float(np.clip(mine / max(mean, 1e-6), 0.45, 1.9))
 
 
 def base_hazard(pos, age):
@@ -150,61 +159,30 @@ def base_hazard(pos, age):
     return tbl[lo] if a < lo else tbl[hi]
 
 
-def role_of(games, snaps=None):
-    if snaps is not None and snaps > 0:
-        if snaps >= STARTER_SNAPS:
-            return 'starter'
-        if snaps >= ROTATION_SNAPS:
-            return 'rotation'
-        return 'fringe'
-    if games >= STARTER_GAMES:
-        return 'starter'
-    if games >= ROTATION_GAMES:
-        return 'rotation'
-    return 'fringe'
-
-
-def chance(player, games, ovr=None, league_avg_ovr=72.0, snaps=None):
+def chance(player, games=0, ovr=None, league_avg_ovr=72.0, snaps=None):
     """
     Probability this man retires after the season just played.
 
-    Age and position set the base; the role he actually held moves it by up to
-    15x, because that is what the data shows. Quality is a second, gentler
-    nudge on top - a man well above replacement finds another job, and a man
-    well below does not, independent of how many games he happened to play on
-    a thin roster.
+    Age and position set it; quality moves it. Playing time deliberately does
+    NOT enter - see the note on AGE_HAZARD above. games and snaps are kept in
+    the signature so callers do not have to change, and so injury history can
+    be added here later without another signature churn.
     """
-    h = (ROLE_AGE[role_of(games, snaps)][band_of(player.age)]
-         * pos_factor(player.pos, player.age))
+    h = age_hazard(player.age) * pos_factor(player.pos, player.age)
     if ovr is not None:
-        # QUALITY, AND IT MATTERS MORE WHEN HE IS YOUNG.
-        #
-        # The measured hazard for a 26-29 starter is 4.5%, but that number is
-        # an average over every starter - and it is carried almost entirely by
-        # men who just lost their job, not by the best players in the league.
-        # A 28-year-old rated 92 does not walk away. Applying the flat 4.5%
-        # retired CeeDee Lamb at 28 and Nick Bosa at 29 in the first
-        # simulated offseason, which is not a thing that happens.
-        #
-        # So the quality term is steeper below thirty and shallower above it.
-        # Before thirty a good player has no reason to stop - he is still
-        # being paid and his body still works. After thirty the reasons
-        # accumulate regardless of how good he is, which is why an aging star
-        # CAN go while a young one effectively cannot.
+        # A good player keeps getting paid, and the reasons to stop arrive
+        # later for him. Steeper before thirty, shallower after, so an aging
+        # star can still go while a young one effectively cannot.
         gap = ovr - league_avg_ovr
         if player.age < 30:
-            h *= float(np.clip(1.0 - 0.090 * gap, 0.015, 2.4))
+            h *= float(np.clip(1.0 - 0.090 * gap, 0.015, 2.2))
         else:
-            h *= float(np.clip(1.0 - 0.045 * gap, 0.15, 2.4))
-    # A young man does not quit off one bad year. He gets cut, he signs
-    # somewhere else, and he tries again - which is a free agency outcome
-    # rather than a retirement, and will move there once the market exists.
-    if player.age < 24:
-        h *= 0.45
-    elif player.age < 27:
-        h *= 0.70
-    if player.age >= 38:
-        h = max(h, 0.35)
+            h *= float(np.clip(1.0 - 0.045 * gap, 0.15, 2.2))
+    # hidden, drawn at creation: some men are finished at 28 and some play to
+    # 38, and nothing on their rating sheet says which
+    h /= max(0.45, player.longevity)
+    if player.age >= 39:
+        h = max(h, 0.45)
     return float(np.clip(h, 0.0, 0.95))
 
 
@@ -239,15 +217,9 @@ def run(league, rng, verbose=False):
         line = stats.get(p.pid, {})
         games = float(line.get('games', 0) or 0)
         snaps = float(line.get('snaps', 0) or 0)
-        # SPECIALISTS. StatBook records nothing for a kicker or punter and
-        # field_units never puts him on the field, so every one of them read
-        # as a man who had not played - and a 23-year-old kicker rated 90 was
-        # retiring at the fringe rate. He is his club's only kicker; he played
-        # every week. Until kicking stats exist this stands in for them.
-        if p.pos in ('K', 'P', 'LS'):
-            t = league.teams.get(p.team)
-            if t is not None and t.starter(p.pos) is p:
-                snaps, games = STARTER_SNAPS, 17.0
+        # Both are passed through unused - see the note on AGE_HAZARD. They
+        # stay on the call so injury history can join them here later without
+        # another signature change.
         if rng.random() < chance(p, games, p.ovr, avg, snaps):
             p.retired = True
             t = league.teams.get(p.team)
