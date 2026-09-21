@@ -209,6 +209,25 @@ def resolve_catch(receiver, defender, contested, rng):
 # ============================================================ YARDS AFTER
 # Shared by yards after catch and by a run that clears the line. Nothing caps
 # the yardage: he runs until someone catches him, and the FIELD is the limit.
+def _compression(room):
+    """
+    How much of the open field is actually there.
+
+    A binary switch was too sharp - cutting yards after the catch off at
+    eighteen yards took scoring from the 16-20 down to 3.5% of plays against a
+    real 7.1%. The real squeeze is gradual and it is steep only close in: real
+    yards after catch run 5.64 beyond the opponent 41, 5.05 from 21-40, 4.41
+    from 11-20, 2.68 from 6-10 and 0.94 inside the 5. The end zone is a wall
+    and there is simply less grass to find.
+    """
+    # It must stay GENTLE, because the total is already capped at the distance
+    # to the goal - the wall is modelled twice otherwise. A hard squeeze took
+    # scoring from the two down to 16.1% of plays against a real 51.6%: the
+    # cap said "you cannot gain more than two yards" and this said "and only
+    # 18% of that", which is nobody scoring from anywhere.
+    return float(min(1.0, max(0.55, 0.45 + room / 36.0)))
+
+
 def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
                         already=0.0, contact_at=0.0, in_space=False):
     """
@@ -387,7 +406,14 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
                     rb_reps=rb_reps)
 
     chasers = defenders[len(front):] + defenders[:len(front)]
+    # The same wall applies to a run: yards after contact collapse near the
+    # goal because there is nowhere to break to.
     out = resolve_yards_after(off['rb'], chasers, ytg, rng, contact_at=ybc)
+    if not out['touchdown']:
+        # never turn a score into a non-score: the resolver already decided he
+        # reached the end zone, and compression is about the grass in between
+        after = max(0.0, out['yards'] - ybc)
+        out['yards'] = round(ybc + after * _compression(ytg), 1)
     out.update(type='run', scheme=scheme, ybc=round(float(ybc), 1),
                rb_reps=rb_reps)
     return out
@@ -569,7 +595,18 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     n_near = {'short': 3, 'medium': 4, 'deep': 2}[depth]
     if air <= 0: n_near = 2                       # screen: blockers ahead
     tacklers = [pool[rng.integers(0, len(pool))] for _ in range(n_near)]
-    yac = resolve_yards_after(tgt, tacklers, ytg - air, rng, in_space=True)
+    # IN SPACE ONLY WHERE THERE IS SPACE. Every catch used to be resolved as
+    # if the receiver had open field, and near the goal line he does not: the
+    # end zone is a wall and eleven defenders are standing in twenty yards.
+    # Real yards after catch collapse from 5.64 beyond the opponent 41 to 2.68
+    # from the 6-10 and 0.94 inside the 5.
+    #
+    # This was the whole red zone problem. Scoring from 6-10 out ran at 28.7%
+    # of plays against a real 19.5%, and drives reaching the twenty scored
+    # 76.4% of the time against a real 61.0%.
+    room = max(0.0, ytg - air)
+    yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=True)
+    yac['yards'] = round(yac['yards'] * _compression(room), 1)
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
                 yac=yac['yards'], touchdown=total >= ytg, concept=concept,

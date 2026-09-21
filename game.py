@@ -456,6 +456,8 @@ class Drive:
         self.score_diff = score_diff
         self.rng = rng
         self.plays, self.first_downs = 0, 0
+        self.start = float(start_yardline)        # where it began, for analysis
+        self.best = float(start_yardline)         # closest it ever got
         self.result, self.points = None, 0
         self.try_result = None
         self.log = []
@@ -465,6 +467,7 @@ def _advance(dr, gained):
     gained = float(np.round(gained))
     dr.yardline -= gained
     dr.togo -= gained
+    dr.best = min(dr.best, max(0.0, dr.yardline))
     if dr.yardline <= 0:
         # Six. The try is resolved at the end of run_drive, where the kicker
         # and the play engine are both in scope.
