@@ -189,7 +189,11 @@ INJURIES_PER_TEAM_WEEK = 2.51
 # fires on BOTH sides of every contact play. Then again once ROTATION went
 # live: rotating men means fewer contact events for the starters and the rate
 # fell to 1.17 per team per game against a real 2.51.
-_RULED_OUT_SHARE = 0.165
+# Deliberately BELOW the real 2.51 a team a game. Once the out-list bug was
+# fixed the rate came out at 3.10, and by decision this game would rather have
+# a squad you can field than one that is medically accurate: injuries are here
+# to make depth matter, not to take your players away.
+_RULED_OUT_SHARE = 0.115
 
 def condition_injury_multiplier(condition):
     """

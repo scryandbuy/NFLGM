@@ -31,6 +31,7 @@ import plays as P
 import schemes as S
 import rosters as R
 import standings_and_seeding as SS
+import injury_status as IS
 
 WEEKS = 18                      # 17 games, one bye apiece
 
@@ -75,6 +76,10 @@ class SeasonRunner:
         self.co, self.cd = _deps()
         self.states = {}
         self.books = {}
+        # one injury desk a club, for the season: designations, the IR list
+        # and how many returns it has left
+        self.desks = {a: IS.InjuryDesk() for a in league.teams}
+        self.week = 0
         for abbr, t in league.teams.items():
             coach = make_coach(t.gm)
             self.states[abbr] = G.TeamState(self._units(abbr), coach=coach,
@@ -82,6 +87,17 @@ class SeasonRunner:
         self.week = 0
 
     # ---- the field ------------------------------------------------------
+    def injury_week(self, week):
+        """
+        Wednesday. Every club re-lists its hurt, puts the long-term cases on
+        IR, brings back whoever has served his four games, and decides who is
+        playing through something.
+        """
+        for abbr, team in self.L.teams.items():
+            desk = self.desks[abbr]
+            desk.activate_from_ir(self.L, team, week)
+            desk.set_week(self.L, team, week, self.rng)
+
     def _units(self, abbr):
         """
         Rebuild the roster dicts the engine wants from the LIVE roster, so a
@@ -89,8 +105,11 @@ class SeasonRunner:
         being frozen at load.
         """
         t = self.L.teams[abbr]
+        desk = self.desks.get(abbr)
         rows = [dict(p.ratings, pid=p.pid, pos=p.pos)
-                for p in t.active() if p.out_until is None]
+                for p in t.active()
+                if (desk.available(p, self.week) if desk
+                    else p.out_until is None)]
         return R.build_roster_rows(rows, t.scheme)
 
     def refresh(self, abbr):
@@ -102,6 +121,19 @@ class SeasonRunner:
         hr, ar = self.refresh(home), self.refresh(away)
         if hr is None or ar is None:          # a roster too thin to field
             return None
+        # A man playing hurt does not start the game fresh. Condition drives
+        # injury risk on a violently nonlinear curve, so this is also what
+        # makes him likelier to break down again - the cost of playing him is
+        # real and it is a choice, not a penalty.
+        for side in (home, away):
+            desk = self.desks.get(side)
+            st = self.states.get(side)
+            if desk is None or st is None:
+                continue
+            for pid in desk.playing_hurt:
+                hit, _mult = desk.condition_hit(pid)
+                if hit:
+                    st.cond.cond[pid] = max(35.0, st.cond.get(pid) - hit)
         book = G.StatBook()
         res = G.play_game(hr, ar, self.rng, P.resolve_play, self.co, self.cd,
                           P.rate, home_state=self.states[home],
@@ -157,6 +189,8 @@ class SeasonRunner:
     # ---- one week -------------------------------------------------------
     def play_week(self, week):
         """Play every scheduled game in this week and write the scores back."""
+        self.week = week
+        self.injury_week(week)
         played = []
         for i, (wk, away, home, ap, hp) in enumerate(self.L.schedule):
             if wk != week or hp is not None:

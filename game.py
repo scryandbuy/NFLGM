@@ -418,14 +418,17 @@ class TeamState:
     def observe(self, off_call, def_call, outcome):
         self.mem.record(off_call, def_call, outcome)
 
-    def adjust(self, quarter=1):
+    def adjust(self, quarter=1, rng=None):
         """Read the trends and modify THE PLAN. Returns what changed."""
+        if rng is None:
+            import numpy as _np
+            rng = _np.random.default_rng()
         import adjust as AD, gameplan as GP
         skill = float(self.coach.get('adjust_skill', 0.5))
         aggr = float(self.coach.get('adjust_willingness', 0.5))
         trends = AD.detect(self.mem, skill=skill)
         ctr = AD.respond(trends, skill=skill, aggressiveness=aggr,
-                         rng=np.random.default_rng())
+                         rng=rng)
         if not ctr:
             return []
         self.plan, applied = GP.adjust_plan(self.plan, ctr, skill, 0.55, quarter)
@@ -443,6 +446,18 @@ class TeamState:
         self.cond.reset_game()
         self.snaps = {}
         self.injuries = []
+        # THE OUT LIST WAS NEVER CLEARED. hurt() refuses to roll for a man
+        # already on it, so once a player was hurt he stopped being able to be
+        # hurt again FOR THE REST OF THE SEASON - and so did everyone else, one
+        # by one, until almost nobody on the roster could get injured at all.
+        # Week one produced about six injuries a team and the season averaged
+        # 0.96 against a real 2.51; the rate was never the problem.
+        #
+        # Who is ACTUALLY unavailable is the League's business - it holds
+        # out_until on the player and the season rebuilds the units from men
+        # who are fit. This list only exists to stop the same man being hurt
+        # twice inside one game, so it belongs to the game and dies with it.
+        self.out = set()
 
 # ============================================================ DRIVE
 class Drive:
@@ -632,8 +647,13 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             # series. Calling it unconditionally on ~11 drives produced 5.56
             # plan changes per team per game against the ~3 the standalone
             # calibration targeted.
-            if np.random.default_rng().random() < 0.55:
-                st.adjust(quarter)
+            # Use the GAME's generator. A fresh unseeded one here made the
+            # whole engine non-reproducible: the same seed produced a
+            # different season every time, so no calibration run could be
+            # compared to another and a real regression was indistinguishable
+            # from noise. The register swung four rows between identical runs.
+            if rng.random() < 0.55:
+                st.adjust(quarter, rng)
 
     while dr.result is None:
         if dr.clock <= 0:
