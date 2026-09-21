@@ -630,7 +630,7 @@ def _json_default(o):
 def contract_to_dict(c):
     if c is None: return None
     return dict(years=c.years, base=list(c.base), signing_bonus=c.sb,
-                roster_bonus=list(c.rb), guaranteed_years=c.gtd_yrs,
+                roster_bonus=list(c.rb),
                 void_years=c.void, signed=c.signed)
 
 
@@ -712,7 +712,6 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
             pot = None                       # resolved the first time he plays
         yrs = int(r.contract_years_left) if pd.notna(r.get('contract_years_left')) else 1
         apy = float(r.apy) if pd.notna(r.get('apy')) else 1.0
-        gtd = float(r.guaranteed) if pd.notna(r.get('guaranteed')) else 0.0
         contract = None
         if yrs > 0:
             # Run it through the real structure builder. A flat apy-per-year
@@ -725,7 +724,6 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
                               else make_gm(rng))
             contract = Contract(years=yrs, base=st['base'],
                                 signing_bonus=st['signing_bonus'],
-                                guaranteed_years=1 if gtd > 0 else 0,
                                 signed=int(r.year_signed) if pd.notna(r.get('year_signed')) else year)
         p = Player(r.pid, r.full_name, r.madden_position, age, ratings,
                    dev=_dev_from_seed(r, rng), potential=pot,
@@ -764,7 +762,7 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         t.sync_cap()
         current = sum(c.cap_hit(i) for _, c, i in t.cap.contracts)
         if current > 0:
-            # hold each deal's SHAPE - proration, backloading, guarantee share
+            # hold each deal's SHAPE - proration and backloading
             # all survive - and move only the level, so the team lands on its
             # real year-one spending
             k = active / current

@@ -13,7 +13,7 @@ The franchise tag is the only tag. RFA tenders remain - a tender is not a tag.
 
 The market itself is the negotiation engine run against several bidders at once.
 A player does not take the biggest number, he takes the highest utility, so
-money, guarantees, role, winning and promises all compete.
+money, years, role, winning and promises all compete.
 """
 import numpy as np, pandas as pd
 import os
@@ -166,7 +166,7 @@ if __name__ == '__main__':
         d = res['deal']
         pr = ', '.join(N.PROMISES[p]['label'] for p in d['promises']) or 'none'
         print(f'    SIGNS WITH {res["signed_with"]}  ${d["apy"]:.2f}M x{d["years"]}yr '
-              f'{d["gtd_share"]*100:.0f}% gtd   promises: {pr}')
+              f'promises: {pr}')
         print(f'    {res["n_bidders"]} bidders, leverage {res["leverage"]}')
         print(f'    all offers (team, $M, his utility): '
               + '  '.join(f'{t} ${a:.1f}/{u:.2f}' for t, a, u in res['all_offers']))

@@ -117,9 +117,8 @@ def p_accrued(player):
 
 
 def _one_year(value, year):
-    """A tag or tender is a fully guaranteed one-year deal, no proration."""
-    return Contract(years=1, base=[value], signing_bonus=0.0,
-                    guaranteed_years=1, signed=year)
+    """A tag or tender is a one-year deal with no proration."""
+    return Contract(years=1, base=[value], signing_bonus=0.0, signed=year)
 
 
 def run(league, rng, verbose=False):

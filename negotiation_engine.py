@@ -20,13 +20,17 @@ CAP = 301.0
 # Hidden per-player weights. They sum to 1 and are drawn from archetypes so the
 # league contains recognisably different personalities.
 ARCHETYPES = {
-    'max_money':      dict(total=.52, gtd=.20, years=.05, winning=.08, role=.08, home=.04, tax=.03),
-    'security':       dict(total=.18, gtd=.44, years=.18, winning=.06, role=.09, home=.04, tax=.01),
-    'ring_chaser':    dict(total=.22, gtd=.16, years=.06, winning=.38, role=.13, home=.03, tax=.02),
-    'wants_the_ball': dict(total=.26, gtd=.16, years=.06, winning=.10, role=.38, home=.03, tax=.01),
-    'homebody':       dict(total=.28, gtd=.18, years=.08, winning=.10, role=.10, home=.24, tax=.02),
-    'balanced':       dict(total=.32, gtd=.24, years=.10, winning=.14, role=.14, home=.04, tax=.02),
+    'max_money':      dict(total=.65, years=.06, winning=.10, role=.10, home=.05, tax=.04),
+    'security':       dict(total=.32, years=.32, winning=.11, role=.16, home=.07, tax=.02),
+    'ring_chaser':    dict(total=.26, years=.07, winning=.45, role=.16, home=.04, tax=.02),
+    'wants_the_ball': dict(total=.31, years=.07, winning=.12, role=.45, home=.04, tax=.01),
+    'homebody':       dict(total=.34, years=.10, winning=.12, role=.12, home=.30, tax=.02),
+    'balanced':       dict(total=.42, years=.13, winning=.18, role=.19, home=.05, tax=.03),
 }
+# Guaranteed money is cut from the game, so the gtd weight each archetype
+# carried is redistributed across what is left rather than simply dropped -
+# the weights still sum to one, and a man who wanted security now expresses
+# it through YEARS, which is the honest substitute.
 ARCH_P = [0.20, 0.18, 0.14, 0.12, 0.10, 0.26]
 
 # tax deliberately tiny: it breaks ties, it never decides a deal
@@ -77,9 +81,9 @@ def promise_value(kind, player_row, prof, team_ctx):
     elif kind == 'no_trade':
         base *= (0.5 + 2.2*w['home']) * (1.3 if age >= 29 else 1.0)
     elif kind == 'extension_by':
-        base *= (0.6 + 1.8*w['gtd']) * (1.4 if age <= 26 else 0.8)
+        base *= (0.6 + 1.8*w['years']) * (1.4 if age <= 26 else 0.8)
     elif kind == 'no_franchise':
-        base *= (0.5 + 2.0*w['gtd'])
+        base *= (0.5 + 2.0*w['years'])
     return base * prof['trust']      # a player who has been lied to discounts your word
 
 def promise_cost(kind, team_ctx):
@@ -102,11 +106,10 @@ MAX_PROMISES = 2       # a team that needs three is overpaying in the wrong curr
 def utility(offer, player_row, prof, team_ctx, market_apy):
     """One number the player uses to compare offers. Everything converts here."""
     w = prof['w']
-    apy, yrs, gpct = offer['apy'], offer['years'], offer['gtd_share']
+    apy, yrs = offer['apy'], offer['years']
     age = float(player_row.get('age', 27) or 27)
 
     u  = w['total'] * (apy / max(market_apy, 0.1))
-    u += w['gtd']   * gpct
     # older players want years, younger ones want to get back to market
     want_long = 1.0 if age >= 29 else (0.35 if age >= 26 else 0.0)
     u += w['years'] * (1 - abs(yrs - (2 + 3*want_long)) / 4)
@@ -148,12 +151,12 @@ def negotiate(row, pool, valuation_fn, team_ctx, prof, rng, max_rounds=10,
 
     lev = team_ctx.get('leverage', 0.5)        # 0 = team holds all of it, 1 = player does
     player_pos = dict(apy=ask['apy_high'], years=ask['years'],
-                      gtd_share=min(0.95, ask['gtd_share'] + .12), promises=[])
+                      promises=[])
     team_pos   = dict(apy=off['apy_low'],  years=off['years'],
-                      gtd_share=max(0.05, off['gtd_share'] - .12), promises=[])
+                      promises=[])
 
     # what he'd need from a neutral deal at market to say yes
-    neutral = dict(apy=market, years=off['years'], gtd_share=off['gtd_share'], promises=[])
+    neutral = dict(apy=market, years=off['years'], promises=[])
     reserve = utility(neutral, row, prof, team_ctx, market) * (0.92 + 0.16*lev)
 
     log = []
@@ -161,7 +164,7 @@ def negotiate(row, pool, valuation_fn, team_ctx, prof, rng, max_rounds=10,
         u = utility(team_pos, row, prof, team_ctx, market)
         log.append(dict(round=rnd, team_apy=round(team_pos['apy'],2),
                         ask_apy=round(player_pos['apy'],2),
-                        gtd=round(team_pos['gtd_share'],2), yrs=team_pos['years'],
+                        yrs=team_pos['years'],
                         promises=list(team_pos['promises']),
                         utility=round(u,3), reserve=round(reserve,3)))
         if u >= reserve:
@@ -175,8 +178,7 @@ def negotiate(row, pool, valuation_fn, team_ctx, prof, rng, max_rounds=10,
         step = max(0.4, (player_pos['apy'] - team_pos['apy']) * aggression)
         cand = dict(team_pos); cand['apy'] = min(player_pos['apy'], team_pos['apy'] + step)
         options.append(('money', cand, (step / max(market,1)) * 0.55))
-        cand = dict(team_pos); cand['gtd_share'] = min(player_pos['gtd_share'], team_pos['gtd_share'] + .10)
-        options.append(('guarantees', cand, 0.10 * 0.55))
+    
         cand = dict(team_pos); cand['years'] = int(np.clip(team_pos['years'] + rng.choice([-1,1]), 1, 6))
         options.append(('years', cand, 0.05))
         # promises are a closer, not an opener: only once real money is on the table
@@ -234,6 +236,6 @@ if __name__ == '__main__':
             status = 'AGREED' if r['agreed'] else 'NO DEAL'
             pr = ', '.join(PROMISES[p]['label'] for p in d['promises']) or 'none'
             print(f'  {cname:26s} {status:8s} ${d["apy"]:6.2f}M x{d["years"]}yr '
-                  f'{d["gtd_share"]*100:3.0f}% gtd  in {r["rounds"]} rounds')
+                  f'in {r["rounds"]} rounds')
             print(f'      agent opened ${r["ask"]["apy_high"]:.1f}M, team opened ${r["opening"]["apy_low"]:.1f}M, '
                   f'market ${r["market"]:.1f}M | promises: {pr}')

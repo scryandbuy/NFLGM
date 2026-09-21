@@ -91,15 +91,11 @@ def structure(apy, years, pos, cap, gm, void_years=0, front_load=None):
     shape = TIER_SHAPE[t]
     pshape = POS_SHAPE.get(POSMAP.get(pos, 'LB'), dict(years=3, gtd=0.47))
 
-    # guarantee share: tier sets the centre, position nudges it, the GM's
-    # conviction moves it inside the observed IQR
-    gtd = 0.5 * shape['gtd'] + 0.5 * pshape['gtd']
-    gtd += (g.aggression - 0.5) * (shape['gtd_hi'] - shape['gtd_lo']) * 0.6
-    gtd = float(np.clip(gtd, shape['gtd_lo'], max(shape['gtd_hi'], shape['gtd_lo'])))
-
-    # how much goes into signing bonus rather than base
-    bonus_share = float(np.clip(0.22 + 0.45 * g.restructure_depth
-                                + 0.20 * max(0.0, gtd - 0.45), 0.05, 0.78))
+    # Guaranteed money is cut from the game, so the tier and position
+    # guarantee shares below are unused and kept only as a record of what the
+    # real contracts looked like. How much goes into signing bonus is now a
+    # question of the GM alone.
+    bonus_share = float(np.clip(0.22 + 0.45 * g.restructure_depth, 0.05, 0.78))
     signing = total * bonus_share
     spread = min(years + void_years, MAX_PRORATION_YEARS)
     proration = signing / spread
@@ -122,8 +118,7 @@ def structure(apy, years, pos, cap, gm, void_years=0, front_load=None):
 
     return dict(apy=round(apy, 3), years=years, total=round(total, 3),
                 signing_bonus=round(signing, 3), proration=round(proration, 3),
-                proration_years=spread, guarantee_share=round(gtd, 3),
-                guaranteed=round(total * gtd, 3),
+                proration_years=spread,
                 base=[round(float(b), 3) for b in base],
                 cap_hits=hits, dead_if_cut=dead, tier=t,
                 bonus_share=round(bonus_share, 3))

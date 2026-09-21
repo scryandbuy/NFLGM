@@ -7,7 +7,7 @@ Same machinery as the rating engine, pointed the other way. There we asked
 
 No regression, no invented numbers: every valuation resolves to a weighted set
 of real players on real contracts, plus adjustments fitted from those same
-contracts. Output is a structure (years / annual value / guarantee share) with
+contracts. Output is a structure (years / annual value) with
 a spread, because that spread is the range a negotiation argues inside.
 """
 import pandas as pd, numpy as np
@@ -24,8 +24,7 @@ S['age'] = pd.to_numeric(S.age, errors='coerce')
 S['apy'] = pd.to_numeric(S.apy, errors='coerce')
 S['cappct'] = pd.to_numeric(S.apy_cap_pct, errors='coerce')
 S['yrs'] = pd.to_numeric(S.years, errors='coerce')
-S['gpct'] = (pd.to_numeric(S.guaranteed, errors='coerce') /
-             pd.to_numeric(S.value, errors='coerce').replace(0, np.nan)).clip(0, 1)
+# guaranteed money is cut from the game; the column is no longer read
 S['signed'] = pd.to_numeric(S.year_signed, errors='coerce')
 S['pick'] = pd.to_numeric(S.draft_overall, errors='coerce')
 
@@ -107,7 +106,7 @@ def raw_value(row, pool):
     if r is None: return None
     c, w = r
     centre = {k: float((w * c[k].fillna(c[k].median())).sum())
-              for k in ['cappct', 'yrs', 'gpct']}
+              for k in ['cappct', 'yrs']}
     var = float((w * (c.cappct - centre['cappct'])**2).sum())
     n_eff = float(1.0/ (w**2).sum())
     deltas = {f: float(row[f] -
@@ -136,7 +135,6 @@ def value(row, cap=CAP_2026, pool=UNI):
         'apy_low':    round(max(0.0015, pct - spread) * cap, 2),
         'apy_high':   round((pct + spread) * cap, 2),
         'years':      int(round(np.clip(centre['yrs'], 1, 6))),
-        'gtd_share':  round(float(np.clip(centre['gpct'], 0, 1)), 2),
         'cap_pct':    round(pct*100, 3),
         'n_comps':    round(n_eff, 1),
     }
@@ -167,7 +165,7 @@ if __name__ == '__main__':
         v = value(row)
         prod = f'{row.prod_f:.2f}' if not np.isnan(row.prod_score) else ' n/a'
         print(f'  {name:18s} {row.madden_position:4s} ovr {row.ovr:.0f} age {row.age:.0f} prod {prod}')
-        print(f'     valued  ${v["apy"]:6.2f}M/yr over {v["years"]}yr, {v["gtd_share"]*100:.0f}% gtd'
+        print(f'     valued  ${v["apy"]:6.2f}M/yr over {v["years"]}yr'
               f'   range ${v["apy_low"]:.1f}-{v["apy_high"]:.1f}M  ({v["n_comps"]:.0f} comps)')
         print(f'     actual  ${row.apy:6.2f}M/yr over {int(row.yrs) if not np.isnan(row.yrs) else 0}yr')
 

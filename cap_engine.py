@@ -45,13 +45,19 @@ MAX_PRORATION_YEARS = 5
 
 class Contract:
     def __init__(self, years, base, signing_bonus=0.0, roster_bonus=None,
-                 guaranteed_years=0, void_years=0, signed=2026):
+                 void_years=0, signed=2026, **_ignored):
+        # GUARANTEED MONEY IS CUT FROM THE GAME by decision - too complex for
+        # what it adds. **_ignored swallows guaranteed_years from any older
+        # save or caller rather than exploding on it.
+        #
+        # Nothing about the cap depends on it: dead money comes from SIGNING
+        # BONUS proration, which is untouched. A cut still accelerates the
+        # remaining bonus exactly as before.
         self.signed  = signed
         self.years   = years
         self.base    = list(base)                    # base salary per year
         self.sb      = signing_bonus
         self.rb      = list(roster_bonus or [0.0]*years)
-        self.gtd_yrs = guaranteed_years
         self.void    = void_years
 
     @property
@@ -90,7 +96,6 @@ class Contract:
             self.base.pop(0)
         if self.rb:
             self.rb.pop(0)
-        self.gtd_yrs = max(0, self.gtd_yrs - 1)
         return self.years <= 0
 
     # ---- transactions ----
