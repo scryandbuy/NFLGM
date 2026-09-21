@@ -1,0 +1,16 @@
+{
+  "name": "nfl-gm-sim",
+  "version": "0.1.0",
+  "description": "NFL GM franchise simulator - browser, no server",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test dist-test/**/*.test.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^5.2.0"
+  }
+}
