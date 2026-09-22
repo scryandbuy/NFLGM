@@ -197,7 +197,7 @@ ZONE_DEFENDERS_NEAR = {'cover_2': 1.3, 'cover_3': 1.5, 'cover_4': 1.7,
 # squeeze compounds with depth: the mean window after squeeze runs 0.56 short,
 # 0.42 medium, 0.28 deep inside games, so one scalar left deep zone at 35%
 # against a real ~42 and zone overall 8 points BELOW man.
-ZONE_SCALE = {'short': 1.13, 'medium': 1.20, 'deep': 1.46}   # re-solved for zones as space (refit_passing), then tilted to hold air yards
+ZONE_SCALE = {'short': 1.13, 'medium': 1.20, 'deep': 1.50}   # re-solved for zones as space (refit_passing), then tilted to hold air yards
 
 # HOW STEEPLY RATINGS MOVE THE WINDOW. Measured inside games by club: the
 # defending club's mean window ran sd 0.028 on a mean of 0.42 and completion

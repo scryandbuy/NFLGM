@@ -227,7 +227,7 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # man meant cover 0 or cover 1 on a fifth of snaps; with the full call
     # book man is a third of targets and was completing 66% against a real
     # ~60, ABOVE zone, which is backwards.
-    DEPTH_MULT = {'short': 1.494, 'medium': 1.171, 'deep': 0.802}
+    DEPTH_MULT = {'short': 1.494, 'medium': 1.171, 'deep': 0.85}
     import matchups as M
     base = separation * (1.0 + M.ZONE_SLOPE['acc'] * (acc - AVG)) * outcome_mult
     p = float(np.clip(base * DEPTH_MULT[depth], 0.02, 0.97))
@@ -718,6 +718,10 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         picked = (not complete) and rng.random() < 0.092   # re-anchored with the man path
         contested = z['contested']
         cb = cov
+        # the man who arrives second breaks up his share of the throws he
+        # converges on: that is where a safety's box score comes from
+        if zone_second is not None and rng.random() < 0.45:
+            cb = zone_second
 
     if picked:
         return dict(type='interception', yards=0.0, touchdown=False,
