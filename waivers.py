@@ -69,9 +69,12 @@ def priority(league, week, standings=None):
 
 
 # ------------------------------------------------------------ the AI's claim
-def wants(league, abbr, p, week):
+def wants(league, abbr, p, week, market=None):
     """Does this club claim him? Need at the spot, value over the inherited
-    cost, and room or a man it would drop for him."""
+    cost, and room or a man it would drop for him. `market` is his valuation,
+    computed once per man on the wire and shared by every club: the price
+    does not depend on who is asking, and asking 32 times was most of the
+    cost of a season."""
     import gm_surfaces as GS, valuation as VAL, min_salary as MS
     from cap_engine import CAP
     team = league.teams[abbr]
@@ -82,7 +85,7 @@ def wants(league, abbr, p, week):
     incumbent = depth[k - 1].ovr if len(depth) >= k else 40.0
     if p.ovr < incumbent + 1.5:
         return False
-    v = VAL.value_player(league, p, side='team', rng=None)
+    v = market if market is not None else VAL.value_player(league, p, side='team', rng=None)
     if not v:
         return False
     cost = float(p.contract.cap_hit(0) - p.contract.annual_proration) if p.contract else MS.minimum_salary(p.accrued or 0, CAP.get(league.year, 301.2))
@@ -188,16 +191,22 @@ def process(league, rng, week, verbose=False):
     order = priority(league, week)
     user = getattr(league, 'user_team', None)
     awarded = []
+    import valuation as VAL
+    pool = VAL.pool_from_league(league) if ents else None
     for e in list(ents):
         p = league.player(e['pid'])
         if p is None or p.retired or p.team is not None:
+            ents.remove(e); continue
+        # his price, once
+        market = VAL.value_player(league, p, side='team', rng=None, pool=pool)
+        if not market:
             ents.remove(e); continue
         for abbr in order:
             if abbr == user:
                 if user in e['claims'] and make_room(league, user, p):
                     award(league, e, user); awarded.append((p.pid, user)); break
                 continue
-            if wants(league, abbr, p, week) and make_room(league, abbr, p):
+            if wants(league, abbr, p, week, market=market) and make_room(league, abbr, p):
                 award(league, e, abbr); awarded.append((p.pid, abbr)); break
         ents.remove(e)
     # close the notices
