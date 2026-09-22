@@ -30,11 +30,16 @@ FAST = {
     'good_game':          +1.5,
     'bad_game':           -1.0,
 }
+# per week, on a clock that keeps 96.5% a week: the equilibrium of a
+# constant weekly push is about 29x the push, so -1.3 a week for a losing
+# season would settle a whole roster at -37. First wired, half the league
+# sat Unsettled after nine weeks; these are re-set so a losing season costs
+# a man about a band and being buried costs a starter-grade man two.
 SLOW = {
-    'losing_season':      -1.30,   # per week while under .500
-    'underused':          -1.80,   # per week below his expected usage
-    'well_used':          +0.60,
-    'buried_on_depth':    -1.60,
+    'losing_season':      -0.40,   # per week while under .500
+    'underused':          -0.80,   # per week below his expected usage
+    'well_used':          +0.35,
+    'buried_on_depth':    -0.70,
 }
 SHOCK = {
     'benched':            -12.0,

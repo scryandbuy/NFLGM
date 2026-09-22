@@ -328,6 +328,15 @@ def sign(league, player, offer, cap):
     st = CS.structure(offer.apy, offer.years, player.pos, cap, team.gm)
     c = Contract(years=offer.years, base=st['base'],
                  signing_bonus=st['signing_bonus'], signed=league.year)
+    # the incumbent at his spot who is now behind a man the club just paid
+    try:
+        import morale as MO
+        team = league.teams[offer.team]
+        for q in team.depth.get(player.pos, [])[:2]:
+            if q is not player and q.ovr <= player.ovr + 1.0:
+                MO.shock(league, q.pid, 'team_signed_over_him')
+    except Exception:
+        pass
     league.sign(player.pid, offer.team, c)
     player.fa_class = 'signed'
     for k in offer.promises:

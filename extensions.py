@@ -84,6 +84,11 @@ def extend(league, pid, apy, years, rng=None, by_ai=False):
     if tm is None:
         return dict(result='refused', why='no market read on him')
     floor = tm['ask'] * (1.0 - tm['discount'])
+    if getattr(p, 'morale', None) is not None:
+        import morale_system as MS
+        ne = MS.negotiation_effect(p.morale)
+        floor *= 1.0 + ne['demand_premium']
+        if not ne['will_discount']: floor = max(floor, tm['ask'] * (1.0 + ne['demand_premium']) * (1.0 - 0.02))
     team = league.teams[p.team]
     if apy + 1e-9 < floor * 0.97:
         counter = round(floor, 2)
@@ -94,6 +99,8 @@ def extend(league, pid, apy, years, rng=None, by_ai=False):
     c = build(p, years, apy, cap, team.gm, league)
     p.contract = c
     team.sync_cap()
+    import morale as MO
+    MO.shock(league, pid, 'extension_signed')
     league.log('extension', pid=pid, team=p.team, apy=round(apy, 2), years=years, ai=by_ai)
     return dict(result='accepted', apy=round(apy, 2), years=years, contract=c)
 

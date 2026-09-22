@@ -46,6 +46,7 @@ import waivers as WV
 import coaching_pool as CP
 import position_change as PC
 import extensions as EXT
+import morale as MO
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -76,6 +77,7 @@ class Franchise:
         log['standings'] = runner.standings()
 
         post, order, fired = PS.close_season(L, runner, rng)
+        MO.postseason(L, post)
         CP.top_up(L, rng)                    # retirements out of the pool, new men in
         PC.offseason(L)                      # camp: four games of learning for every man mid-move
         log['champion'] = post.champion
@@ -117,6 +119,7 @@ class Franchise:
 
         # EXTENSIONS. A club keeps who it can before the market opens; the
         # user's expiring men are flagged in the inbox
+        MO.offseason_contracts(L, rng)       # the drag of a cheap deal against the market
         log['extensions'] = len(EXT.ai_round(L, rng))
         EXT.notify_user(L)
         t = TG.run(L, rng)

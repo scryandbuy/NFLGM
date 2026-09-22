@@ -141,8 +141,8 @@ class SeasonRunner:
         """
         t = self.L.teams[abbr]
         desk = self.desks.get(abbr)
-        import position_change as PC
-        rows = [dict(PC.effective_ratings(p), pid=p.pid, pos=p.pos)
+        import position_change as PC, morale as MO
+        rows = [dict(MO.effective_ratings_from(PC.effective_ratings(p), p), pid=p.pid, pos=p.pos)
                 for p in t.active()
                 if (desk.available(p, self.week) if desk
                     else p.out_until is None)]
@@ -266,7 +266,18 @@ class SeasonRunner:
         # keep their XP until he spends it from the player tab.
         XS.spend_week(self.L, week, self.rng,
                       user_team=getattr(self.L, 'user_team', None))
-        import inbox as IB, practice_squad as PSQ, waivers as WV
+        import inbox as IB, practice_squad as PSQ, waivers as WV, morale as MO
+        # MORALE moves with the week: results, usage against what each man
+        # believes he is owed, the room, benchings
+        results = {}
+        for home, away, hs, as_ in played:
+            results[home] = ('W' if hs > as_ else 'L' if hs < as_ else 'T', hs - as_)
+            results[away] = ('W' if as_ > hs else 'L' if as_ < hs else 'T', as_ - hs)
+        snaps = {}
+        for abbr, st in self.states.items():
+            for pid, n in (st.last_snaps or st.snaps or {}).items(): snaps[pid] = n
+        MO.weekly(self.L, week, results, snaps)
+        MO.trade_requests(self.L)
         IB.expire(self.L, week)
         # THE WIRE: award last week's claims first (the user had the week to
         # claim from the inbox), then notify the user of this week's waivers
