@@ -32,10 +32,15 @@ def ensure(p):
     return p.morale
 
 
-def entitlement_of(team, p):
-    depth = team.depth.get(p.pos, [])
+def entitlement_of(team, p, cache=None):
+    """cache: a per-club dict for one tick, so the depth chart and the pay
+    order at each spot are built once a week rather than once per man."""
+    if cache is None: cache = {}
+    if p.pos not in cache:
+        depth = team.depth.get(p.pos, [])
+        cache[p.pos] = (depth, sorted((q.apy for q in depth), reverse=True))
+    depth, pays = cache[p.pos]
     rank = next((i + 1 for i, q in enumerate(depth) if q is p), len(depth) or 1)
-    pays = sorted((q.apy for q in team.active() if q.pos == p.pos), reverse=True)
     pay_rank = next((i + 1 for i, a in enumerate(pays) if a <= p.apy), len(pays) or 1)
     return MS.entitlement(p.ovr, pos_rank=rank, pay_rank=pay_rank)
 
@@ -50,14 +55,15 @@ def weekly(league, week, results, snaps_by_pid, game_lines=None):
     for abbr, team in league.teams.items():
         res, margin = results.get(abbr, (None, 0))
         losing = team.win_pct < 0.5 and (team.record[0] + team.record[1]) >= 4
-        depth = team.depth
+        depth = team.depth                      # built once per club per week
+        cache = {pos: (ps, sorted((q.apy for q in ps), reverse=True)) for pos, ps in depth.items()}
         for p in team.active():
             m = ensure(p)
             m.tick()
             if res == 'W': m.apply('win')
             elif res == 'L': m.apply('blowout_loss' if margin <= -17 else 'loss')
             if losing: m.apply('losing_season')
-            e = entitlement_of(team, p)
+            e = entitlement_of(team, p, cache)
             sn = snaps_by_pid.get(p.pid, 0)
             want = STARTER_SNAPS.get(GROUP.get(p.pos, p.pos), 45) * (0.55 + 0.45 * e)
             if p.out_until is None and res is not None:
