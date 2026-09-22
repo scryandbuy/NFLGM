@@ -845,8 +845,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
 
         # ---- fourth down is a decision, not a play ----
         if dr.down == 4:
+            # the head coach's appetite, off his identity when he has one
+            aggr4 = float(off_state.coach.get('fourth_down', aggression)) if off_state is not None and off_state.coach else aggression
             dec = fourth_down_decision(dr.yardline, dr.togo, dr.score_diff,
-                                       dr.clock, rng, aggression)
+                                       dr.clock, rng, aggr4)
             if dec == 'field_goal':
                 fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
                 dr.clock -= play_seconds('field_goal')
@@ -868,9 +870,16 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # every gain capped at 0.0, and the offence physically could not score -
         # touchdowns came out at 2.1% against a real 22.6%.
         ytg_i = max(1, int(np.ceil(dr.yardline)))
+        # THE PLAY CALLER'S IDENTITY: pass lean, play-action rate, motion
+        # and deep-ball appetite from the plan go into the call
+        olean = None
+        if off_state is not None and off_state.plan is not None:
+            pl0 = off_state.plan
+            olean = dict(pass_bias=pl0.pass_bias, play_action=pl0.play_action_rate,
+                         motion=getattr(pl0, 'motion_rate', 0.365))
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
                       dr.score_diff, ytg_i, rng, secs_left=dr.clock,
-                      offense=offense, rate_fn=rate_fn)
+                      offense=offense, rate_fn=rate_fn, lean=olean)
         # Backed up against the own goal the offence plays differently. That
         # used to be an OVERRIDE here that rewrote a called pass as a run or
         # forced its depth short. The coach now reads the field position
@@ -884,9 +893,17 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # draw, man only under cover 0 and cover 1, and the eleven-call system
         # ran nowhere but its own demo. Every register row measured since it
         # was built was measured against a defence that did not use it.
+        # THE COORDINATOR'S IDENTITY GOES INTO THE CALL, not over it: the
+        # plan's coverage lean, shell lean, blitz lean and front family are
+        # read by the coverage call itself, so one truth per snap
+        dlean = None
+        if def_state is not None and def_state.plan is not None:
+            dp0 = def_state.plan
+            dlean = dict(coverage=dp0.man_rate, shell=getattr(dp0, 'shell_lean', 0.5),
+                         blitz=getattr(dp0, 'blitz_lean', 0.35), front_pref=dp0.front_pref)
         dc = call_def(oc, dr.down, max(1, int(np.ceil(dr.togo))), rng, ytg_i,
                       defense=defense, rate_fn=rate_fn, score_diff=dr.score_diff,
-                      secs_left=dr.clock,
+                      secs_left=dr.clock, lean=dlean,
                       recent=(def_state.cov_memory if def_state else None))
 
         # THE AUDIBLE. He reads the look they are SHOWING and modifies the
@@ -954,15 +971,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                 if def_state is not None:
                     def_state.last_adjustment = None      # the reset
         if def_state is not None and def_state.plan is not None:
-            import gameplan as GP
             dp = def_state.plan
-            dc['shell'] = GP.shell(dp, rng)
-            dc['man'] = GP.is_man(dp, rng)
-            dc['blitzers'] = GP.blitzers(dp, rng, dr.down, int(dr.togo))
-            dc['rushers'] = 4 + dc['blitzers']
+            # the in-game adjustments that are not part of the call itself
             dc['box'] = int(np.clip(dc.get('box', 6) +
                                     round(dp.box_bias * 4), 4, 10))
-            if dp.front_pref: dc['front'] = dp.front_pref[0]
             dc['bracket'] = dp.bracket
             dc['travel'] = dp.travel
 

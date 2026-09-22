@@ -44,7 +44,7 @@ import numpy as np
 COVERAGES = {
     'cover_0':   dict(deep=0, under='man',  rush_bonus=2, risk=1.00,
                       needs=dict(corners=0.78)),
-    'cover_1':   dict(deep=1, under='man',  rush_bonus=1, risk=0.72,
+    'cover_1':   dict(deep=1, under='man',  rush_bonus=0, risk=0.72,   # a shell, not a pressure: the blitz is its own roll
                       needs=dict(corners=0.70)),
     'cover_1_robber': dict(deep=1, under='man', rush_bonus=0, risk=0.58,
                            needs=dict(corners=0.70)),
@@ -164,8 +164,16 @@ def available(job, quality, rng):
     return out
 
 
+# how a coordinator's identity tilts the call. Weights, not rules: the
+# situation still picks the job, the personnel still decide what is
+# available, then his leans move the odds among the answers.
+TWO_HIGH = {'cover_2', 'two_man', 'tampa_2', 'cover_4', 'cover_6'}
+MAN_CALLS = {'cover_0', 'cover_1', 'cover_1_robber', 'two_man', 'cover_3_mable'}
+BLITZ_CALLS = {'cover_0', 'fire_zone'}
+
+
 def call_coverage(down, ydstogo, score_diff, secs_left, off_personnel,
-                  defense, rate_fn, rng, aggression=0.5, recent=None):
+                  defense, rate_fn, rng, aggression=0.5, recent=None, lean=None):
     """
     The whole decision: job from the situation, call from the personnel.
 
@@ -184,6 +192,16 @@ def call_coverage(down, ydstogo, score_diff, secs_left, off_personnel,
                    for n in names])
     if recent:
         w *= np.array([1.0 + 0.5 * float(recent.get(n, 0.0)) for n in names])
+    # THE MAN'S LEANS. coverage 0..1 zone..man (league 0.25), shell 0..1
+    # single..two-high (0.5), blitz 0..1 (0.35). Each moves its family's
+    # weight up to about 3x either way at the extremes, which is the gap
+    # between Anarumo's 47% man and Macdonald's 6%.
+    if lean:
+        cov = float(lean.get('coverage', 0.25)); sh = float(lean.get('shell', 0.5)); bl = float(lean.get('blitz', 0.35))
+        f_man = np.exp(2.2 * (cov - 0.25)); f_two = np.exp(1.6 * (sh - 0.5)); f_bl = np.exp(1.6 * (bl - 0.35))
+        w *= np.array([(f_man if n in MAN_CALLS else 1.0 / np.sqrt(f_man))
+                       * (f_two if n in TWO_HIGH else 1.0 / np.sqrt(f_two))
+                       * (f_bl if n in BLITZ_CALLS else 1.0) for n in names])
     w = np.clip(w, 1e-6, None)
 
     name = names[int(rng.choice(len(names), p=w / w.sum()))]

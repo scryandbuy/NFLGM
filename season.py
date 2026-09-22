@@ -63,10 +63,36 @@ def make_coach(gm):
     if gm is None:
         return dict(adjust_skill=.5, adjust_willingness=.5, man_rate=.35,
                     blitz_rate=.133, travel_willingness=.5, off_script_skill=.5)
+    # WHAT HE RUNS, from the identity on the GM object. These are the leans
+    # the play caller and the coverage call read; the situation still
+    # decides the call and the lean moves the odds.
+    fronts = {'4-3': ['4-3 over', '4-3 under', 'wide 9'], '3-4': ['3-4 one', '3-4 two', 'tite', 'mint'],
+              'multiple': ['4-3 over', '3-4 one', 'tite', 'bear']}.get(getattr(gm, 'def_front', '4-3'), ['4-3 over', '4-3 under'])
+    blocking = getattr(gm, 'off_blocking', 'zone')
+    run_mix = {'zone': {'zone': .80, 'gap': .20}, 'gap': {'zone': .25, 'gap': .75}}.get(blocking, {'zone': .55, 'gap': .45})
+    base = getattr(gm, 'off_personnel', '11')
+    pers = {'11': .595, '12': .195, '21': .070, '13': .030, '10': .075, '22': .025, '00': .010}
+    if base in pers:
+        pers[base] += 0.20                    # his base grouping, a fifth more often
+        pers = {k: v / sum(pers.values()) for k, v in pers.items()}
+    deep = float(getattr(gm, 'deep', 0.5))
+    depth_mix = (0.62 - 0.12 * (deep - 0.5), 0.24, 0.14 + 0.12 * (deep - 0.5))
     return dict(
         adjust_skill=float(np.clip(0.35 + 0.5 * gm.board_trust, .1, .95)),
         adjust_willingness=float(np.clip(gm.aggression, .1, .95)),
-        man_rate=0.35, blitz_rate=0.133,
+        man_rate=float(np.clip(getattr(gm, 'coverage', 0.25), 0.0, 1.0)),
+        shell_lean=float(getattr(gm, 'shell', 0.5)),
+        blitz_lean=float(getattr(gm, 'blitz', 0.35)),
+        blitz_rate=0.133,
+        front_pref=fronts,
+        run_scheme_mix=run_mix,
+        personnel_mix=pers,
+        depth_mix=depth_mix,
+        pass_bias=float(getattr(gm, 'pass_lean', 0.5) - 0.5) * 0.25,   # x4 in log-odds inside pass_rate
+        play_action_rate=float(getattr(gm, 'play_action', 0.5)),
+        motion_rate=float(getattr(gm, 'motion', 0.5)),
+        tempo=float(getattr(gm, 'tempo', 0.5)),
+        fourth_down=float(getattr(gm, 'fourth_down', 0.5)),
         travel_willingness=float(np.clip(gm.aggression, .05, .95)),
         off_script_skill=float(np.clip(gm.patience, .1, .9)))
 

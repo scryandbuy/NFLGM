@@ -60,7 +60,10 @@ class Gameplan:
     protection: str = 'half_slide'
     tempo: float = 0.5                # 0 = grind clock, 1 = no huddle
     target_priority: dict = field(default_factory=dict)   # pid -> weight
-    play_action_rate: float = 0.102
+    play_action_rate: float = 0.5           # the caller's lean, 0.5 neutral
+    motion_rate: float = 0.5
+    shell_lean: float = 0.5
+    blitz_lean: float = 0.35
     # ---- defence ----
     man_rate: float = 0.35
     shell_weights: dict = field(default_factory=lambda: {
@@ -101,6 +104,12 @@ def base_plan(coach=None, opponent=None, rng=None):
     g.blitz_rate = float(coach.get('blitz_rate', g.blitz_rate))
     g.tempo = float(coach.get('tempo', g.tempo))
     g.pass_bias = float(coach.get('pass_bias', 0.0))
+    g.play_action_rate = float(coach.get('play_action_rate', g.play_action_rate))
+    g.motion_rate = float(coach.get('motion_rate', 0.5))
+    g.shell_lean = float(coach.get('shell_lean', 0.5))
+    g.blitz_lean = float(coach.get('blitz_lean', 0.35))
+    if 'personnel_mix' in coach: g.personnel_mix = dict(coach['personnel_mix'])
+    if 'depth_mix' in coach: g.depth_mix = tuple(coach['depth_mix'])
 
     # planning quality: how much of the opponent he has already solved
     if opponent is not None:

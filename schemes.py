@@ -327,9 +327,13 @@ def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers,
     return float(np.clip(_sigmoid(L), 0.03, 0.98))
 
 def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
-                 secs_left=None, offense=None, rate_fn=None):
-    """Full offensive call: personnel, formation, pass or run, and the concept."""
+                 secs_left=None, offense=None, rate_fn=None, lean=None):
+    """Full offensive call: personnel, formation, pass or run, and the concept.
+    `lean` is the caller's identity from the plan: pass_bias (log-odds shift),
+    play_action (share of dropbacks), motion (share of snaps)."""
+    lean = lean or {}
     bias = (gm.aggression - 0.5) * 0.10 if gm is not None else 0.0
+    bias += float(lean.get('pass_bias', 0.0))
     # WHO YOU HAVE DECIDES WHAT YOU CALL. Personnel used to be a flat random
     # draw, so a club with two excellent tight ends went 12 personnel exactly
     # as often as one with none, and a line that could maul people had no
@@ -370,7 +374,10 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         # Real rate is 10.2% of ALL plays (~17% of pass plays). The first build
         # gated it behind a shotgun check that eliminated 82% of chances and
         # produced 4%.
-        call['play_action'] = rng.random() < (0.30 if not shotgun else 0.14)
+        # the caller's play-action lean scales the league rate (0.5 neutral):
+        # a Shanahan-tree offence at 0.75 uses it about half again as often
+        pa_scale = float(np.exp(1.2 * (float(lean.get('play_action', 0.5)) - 0.5)))
+        call['play_action'] = rng.random() < min(0.6, (0.30 if not shotgun else 0.14) * pa_scale)
         call['screen'] = rng.random() < 0.075
         call['rpo'] = rng.random() < 0.057
         # THE CONCEPT IS A CALL, NOT A DRAW. It used to come off a flat
@@ -425,25 +432,47 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         else:
             call['scheme'] = rng.choice(['inside_zone', 'outside_zone', 'stretch',
                                          'inside_zone', 'draw'])
-    call['motion'] = rng.random() < 0.365
+    mo_scale = float(np.exp(1.0 * (float(lean.get('motion', 0.5)) - 0.5)))
+    call['motion'] = rng.random() < min(0.75, 0.365 * mo_scale)
     call['no_huddle'] = rng.random() < 0.085
     return call
 
 def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
                  defense=None, rate_fn=None, score_diff=0, secs_left=None,
-                 recent=None):
-    """Front, personnel, rushers and coverage."""
+                 recent=None, lean=None):
+    """
+    Front, personnel, rushers and coverage.
+
+    `lean` is the coordinator's identity from the game plan: coverage
+    (zone..man), shell (single..two-high), blitz (0..1) and front_pref. It
+    used to be applied AFTER this call by overwriting the shell, the man
+    flag and the blitzers the call had chosen, which put the coverage call
+    and the plan in disagreement on the same snap. Now it enters here and
+    the call is made with it.
+    """
     aggr = gm.aggression if gm is not None else 0.5
     decep = (gm.board_trust if gm is not None else 0.5)
+    lean = lean or {}
     pers = defensive_personnel(off_call['personnel'], down, ydstogo, rng, aggr)
     dl = PERSONNEL_DEF[pers]['dl']
-    front = rng.choice(['4-3 over', '4-3 under', 'nickel_even'] if dl == 4 else
-                       ['3-4 one', '3-4 two', 'tite', 'mint'])
+    fp = lean.get('front_pref')
+    if fp:
+        cands = [f for f in fp if f in FRONTS and FRONTS[f]['dl'] == dl] or None
+    else:
+        cands = None
+    if cands:
+        front = str(rng.choice(cands))
+    else:
+        front = rng.choice(['4-3 over', '4-3 under', 'nickel_even'] if dl == 4 else
+                           ['3-4 one', '3-4 two', 'tite', 'mint'])
     if front == 'nickel_even': front = '4-3 over'
 
     # real: 0 blitzers 86.7%, 1 on 9.7%, 2 on 3.1%, 3 on 0.47%
     r = rng.random()
-    p_blitz = 0.133 * (0.6 + 0.9 * aggr)
+    # the coordinator's blitz lean scales the league rate: 0.35 is neutral,
+    # Flores at 1.0 blitzes about two and a half times the league
+    bl = float(lean.get('blitz', 0.35))
+    p_blitz = 0.085 * (0.6 + 0.9 * aggr) * float(np.exp(1.6 * (bl - 0.35)))   # plus the fire zones and cover 0 the coverage call brings, lands at the real 13.3
     if down == 3 and ydstogo >= 6: p_blitz *= 1.35
     if r < p_blitz * 0.73:   blitzers = 1
     elif r < p_blitz * 0.96: blitzers = 2
@@ -485,7 +514,7 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
         import coverage_call as CC
         cov = CC.call_coverage(down, ydstogo, score_diff, secs_left,
                                off_call['personnel'], defense, rate_fn, rng,
-                               aggression=aggr, recent=recent)
+                               aggression=aggr, recent=recent, lean=lean)
         rushers += cov['rush_bonus']
         if cov['rush_bonus']:
             blitzers = max(blitzers, cov['rush_bonus'])
