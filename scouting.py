@@ -33,7 +33,7 @@ def scout(league, rng):
     league.scouting = {team: {pid: dict(ovr, pot_lo, pot_hi)}} for the class on
     league.draft_pool, plus league.consensus = {pid: dict(ovr, pot, rank)}.
     """
-    pool = league.draft_pool
+    pool = league.draft_pool or getattr(league, 'next_class', [])
     views = {}
     for abbr, team in league.teams.items():
         sd = error_sd(team.gm)

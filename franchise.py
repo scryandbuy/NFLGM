@@ -40,6 +40,7 @@ import trades as TRD
 import draft_class as DC
 import scouting as SC
 import draft as DFT
+import newgens as NG
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -114,18 +115,22 @@ class Franchise:
                        exclude=(self.user_team,) if self.user_team else ())
         log['trades'] = len(made)
         # THE DRAFT. The first class is the real College Football 27 seniors
-        # and juniors mapped onto a rookie scale; later years need newgens,
-        # which do not exist yet, so the draft runs once until they do.
-        if not getattr(L, 'cfb_class_used', False):
+        # and juniors mapped onto a rookie scale; every class after it is
+        # generated the offseason before (newgens.build) and scouted then,
+        # so it sits on the scouting tab through the year before its draft.
+        if getattr(L, 'next_class', None):
+            L.draft_pool = L.next_class; L.next_class = []
+        else:
             DC.build(L, rng, draft_year=L.year)
             SC.scout(L, rng)
-            # the picks carry the SEASON year they were earned in; the year
-            # has already rolled by the time the draft is held
-            drafted = DFT.run(L, rng, year=L.year - 1)
-            L.cfb_class_used = True
-            log['drafted'] = len(drafted)
-        else:
-            log['drafted'] = 0
+        # the picks carry the SEASON year they were earned in; the year has
+        # already rolled by the time the draft is held
+        drafted = DFT.run(L, rng, year=L.year - 1)
+        log['drafted'] = len(drafted)
+        # and the class for NEXT year's draft is born now
+        NG.build(L, rng, draft_year=L.year + 1)
+        SC.scout(L, rng)
+        log['next_class'] = len(L.next_class)
         log['signed'] = len(signed)
         log['unsigned'] = len(left)
         log['offer_sheets'] = len([m for m in getattr(L, 'inbox', [])
