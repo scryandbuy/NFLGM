@@ -141,6 +141,47 @@ def fill_short(league, rng, verbose=False):
     return signed
 
 
+def emergency_fill(league, rng, verbose=False):
+    """
+    THE LAST GASP. A club that has restructured and released everything it
+    sensibly can and still cannot pay a minimum salary does not forfeit: it
+    signs league-minimum bodies until it can field a roster, cap or no cap,
+    and the overage is logged. The real league would never let a game go
+    unplayed for this; the club pays for it in the years that follow.
+    """
+    import min_salary as MS
+    from cap_engine import CAP, Contract
+    import contract_structure as CS
+    cap = CAP.get(league.year, 301.2)
+    pool = [league.player(pid) for pid in list(league.free_agents)]
+    pool = [p for p in pool if p and not p.retired]
+    pool.sort(key=lambda p: -p.ovr)
+    signed = 0
+    for abbr, team in league.teams.items():
+        need = ROSTER_LIMIT - len(team.active())
+        if need <= 0:
+            continue
+        before = team.cap_space
+        while need > 0 and pool:
+            # the holes first, then the best man left
+            pick = next((p for p in pool
+                         if len(team.by_pos(p.pos)) < POS_CAP.get(p.pos, 4)), pool[0])
+            floor = MS.minimum_salary(pick.accrued, cap)
+            st = CS.structure(floor, 1, pick.pos, cap, team.gm)
+            league.sign(pick.pid, abbr, Contract(years=1, base=st['base'],
+                                                 signing_bonus=st['signing_bonus'],
+                                                 signed=league.year))
+            pool.remove(pick); team.sync_cap()
+            need -= 1; signed += 1
+        team.sync_cap()
+        league.log('emergency_fill', team=abbr, signed=ROSTER_LIMIT - len(team.active()) + signed,
+                   space_before=round(before, 2), space_after=round(team.cap_space, 2))
+        if verbose:
+            print(f'  EMERGENCY: {abbr} filled to {len(team.active())} at the minimum, '
+                  f'cap space {before:.1f} -> {team.cap_space:.1f}')
+    return signed
+
+
 def finalize(league, rng, verbose=False, passes=3):
     """
     Cut, free up room, fill, repeat.
@@ -152,9 +193,12 @@ def finalize(league, rng, verbose=False, passes=3):
     """
     total_cut, total_signed = [], 0
     for i in range(passes):
-        CT.enforce(league, rng, roster_target=ROSTER_LIMIT)
+        # Cut down to 53 FIRST: the bottom of the roster is cheap to release
+        # and the room it frees is room compliance does not have to find by
+        # reworking or releasing men who matter.
         cuts, short = run(league, rng)
         total_cut += cuts
+        CT.enforce(league, rng, roster_target=ROSTER_LIMIT)
         total_signed += fill_short(league, rng)
         # Filling out costs money too, and nothing was re-checking after it -
         # two clubs a year finished over the cap on the last signing.
@@ -162,6 +206,7 @@ def finalize(league, rng, verbose=False, passes=3):
         sizes = [len(t.active()) for t in league.teams.values()]
         if min(sizes) >= ROSTER_LIMIT and max(sizes) <= ROSTER_LIMIT:
             break
+    total_signed += emergency_fill(league, rng, verbose)
     if verbose:
         import numpy as _np
         sizes = _np.array([len(t.active()) for t in league.teams.values()])

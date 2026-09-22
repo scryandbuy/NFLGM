@@ -424,7 +424,8 @@ class Team:
                     ir=[p.pid for p in self.ir],
                     picks=[asdict(k) for k in self.picks],
                     cap_year=self.cap.year, cap_rollover=self.cap.rollover,
-                    cap_dead=self.cap.dead, cap_base=self.cap.cap)
+                    cap_dead=self.cap.dead, cap_dead_next=self.cap.dead_next,
+                   cap_base=self.cap.cap)
 
     def __repr__(self):
         w, l, t = self.record
@@ -523,6 +524,7 @@ class League:
         dead_now, dead_next, saved = (p.contract.release(0, june1)
                                       if p.contract else (0.0, 0.0, 0.0))
         t.cap.dead += dead_now
+        t.cap.dead_next += dead_next
         if p in t.roster: t.roster.remove(p)
         p.team, p.contract = None, None
         if pid not in self.free_agents: self.free_agents.append(pid)
@@ -660,6 +662,7 @@ class League:
             t.picks = [DraftPick(**k) for k in td['picks']]
             t.cap = TeamCap(td['cap_year'], td['cap_rollover'])
             t.cap.dead = td['cap_dead']
+            t.cap.dead_next = td.get('cap_dead_next', 0.0)
             # the solved base has to survive too: cap_engine's table carries
             # 301.0 for 2026 and the real figure is 301.2, and without this a
             # reloaded save drifts 0.2m per team away from its real position

@@ -228,8 +228,13 @@ def run(league, rng, verbose=False):
                 if p.contract:
                     # A retirement is not a release. The signing bonus still
                     # accelerates, but the club keeps no salary obligation.
-                    dead, _n, _s = p.contract.release(0)
-                    t.cap.dead += dead
+                    # He retires after the season and before the year rolls,
+                    # so the year just played is already charged; what is
+                    # left of his bonus accelerates onto NEXT year's books.
+                    # Charging release(0) here put it on the finished year,
+                    # where the roll then erased it.
+                    dead = p.contract.remaining_proration(1)
+                    t.cap.dead_next += dead
             if p.pid in league.free_agents:
                 league.free_agents.remove(p.pid)
             p.team, p.contract = None, None

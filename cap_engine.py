@@ -90,7 +90,17 @@ class Contract:
         six hundred, and the market had nothing in it.
 
         Returns True when the deal is done and he is a free agent.
+
+        THE BONUS HAS TO COME OFF AS IT IS CHARGED. annual_proration is the
+        remaining bonus over the remaining years, and this used to shorten
+        the years without reducing the bonus - so a $100m bonus over five
+        years charged 20, then 25, then 33, then 50, then 100: $228m of cap
+        for $100m of bonus, and every contract in the league inflated as it
+        aged. That is where the year-two cliffs, the $80m final-year hits
+        and the offseason cap spirals were coming from.
         """
+        if self.sb and self.proration_years > 0:
+            self.sb = max(0.0, self.sb - self.annual_proration)
         self.years -= 1
         if self.base:
             self.base.pop(0)
@@ -143,6 +153,7 @@ class TeamCap:
         self.rollover = rollover
         self.contracts = []        # (player_id, Contract, year_index)
         self.dead = 0.0
+        self.dead_next = 0.0       # June 1 splits and retirements land here, for next year
 
     @property
     def limit(self): return self.cap + self.rollover
@@ -157,9 +168,14 @@ class TeamCap:
         return round(self.limit - self.charges(phase), 3)
 
     def roll_forward(self, next_year_cap):
-        """Unused space carries over (2011 CBA onward)."""
+        """Unused space carries over (2011 CBA onward), and so does the dead
+        money already assigned to next year. This used to start the new
+        ledger at zero dead, which erased every June 1 split and every
+        retirement's acceleration."""
         unused = max(0.0, self.space('season'))
-        return TeamCap(self.year + 1, rollover=unused)
+        nxt = TeamCap(self.year + 1, rollover=unused)
+        nxt.dead = self.dead_next
+        return nxt
 
 # ---------------------------------------------------------------- checks
 if __name__ == '__main__':

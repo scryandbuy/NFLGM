@@ -59,6 +59,21 @@ def savings_if_cut(player, june1=False):
     return saved, dead_now, dead_next
 
 
+def sensible_release(player, june1=False):
+    """
+    Would a front office actually make this cut to save money? The release
+    has to save at least as much this year as it eats in acceleration, and
+    the whole bill (this year and next) cannot dwarf the saving. Without
+    this the backstop released a man to save $1m at $26m dead, Seattle went
+    from zero to $162m of dead money in one offseason and finished with 25
+    men and no quarterback. Returns (ok, saved, dead_now, dead_next).
+    """
+    saved, dead_now, dead_next = savings_if_cut(player, june1)
+    ok = (saved > 0 and saved >= dead_now
+          and saved * 2.0 >= dead_now + dead_next)
+    return ok, saved, dead_now, dead_next
+
+
 def restructure_room(player, cap):
     """
     What a simple conversion would free this year, leaving the real minimum.
@@ -155,47 +170,88 @@ def enforce(league, rng, verbose=False, target=0.5, roster_target=None):
     return stuck
 
 
+def _declining(player):
+    """Is he on the down side of his position's curve? A restructure on a
+    declining man pushes money into years he will not earn."""
+    import regression as RG
+    return RG.curve_factor(player.pos, player.age + 1) < 0.97
+
+
 def _fix_one(league, team, rng, target):
+    """
+    Get one club under. Each round the GM weighs the two real moves:
+
+    RESTRUCTURE a man worth keeping. Frees this year's room by pushing money
+    into later years. The GM's restructure_depth is how far he will kick the
+    can; a declining player is never restructured, because the money lands
+    in years he will not earn.
+
+    RELEASE a man whose contract wants to go, under the sensible-release rule
+    (never a cut that costs more than it saves). The penalty for cutting a
+    good player shrinks as the shortfall grows: a club $60m over will move a
+    star it would never touch at $5m over, and sometimes one big cut of a
+    great player is the better answer than a sixth restructure.
+
+    The old version reworked one deal per pass for three passes and then
+    started cutting, which is how Seattle went from $73m over to 25 men.
+    """
+    import min_salary as MS
     cap = CAP.get(league.year, 301.2)
-    for _pass in range(3):
-        if team.cap_space >= target:
+    depth = getattr(team.gm, 'restructure_depth', 0.5) if team.gm else 0.5
+    restructures_left = int(round(2 + 8 * depth))       # 2 to 10 deals an offseason
+    # A club short of bodies that cannot pay a minimum salary keeps
+    # restructuring past its own appetite: the alternative is not fielding
+    # a team, and no front office chooses that over kicking the can.
+    short_of_bodies = len(team.active()) < 53
+    for _round in range(40):
+        team.sync_cap()
+        need = target - team.cap_space
+        if need <= 0:
             return
-        # 1. rework whoever frees the most, keeping the player
-        best = None
+        # --- the restructure on the table
+        rs = None
+        if restructures_left > 0 or short_of_bodies:
+            for p in team.active():
+                if not p.contract or _declining(p):
+                    continue
+                rep = replacement_level(team, p.pos)
+                if p.ovr - rep <= CUTTABLE_SURPLUS and need < 30:
+                    continue                 # replaceable: a cut, not a rework
+                freed = restructure_room(p, cap)
+                if freed > 0.4 and (rs is None or freed > rs[0]):
+                    rs = (freed, p)
+        # --- the release on the table
+        rel = None
+        squeeze = float(np.clip(1.0 - need / 60.0, 0.3, 1.0))   # far over: stars come into play
         for p in team.active():
             if not p.contract:
                 continue
-            freed = restructure_room(p, cap)
-            if freed > 0.4 and (best is None or freed > best[0]):
-                best = (freed, p)
-        if best is not None:
-            p = best[1]
-            floor = MS.minimum_salary(p.accrued, cap)
-            p.contract.restructure(0, min_base=floor)
-            team.sync_cap()
-            continue
-        # 2. release the most expensive man the roster can absorb losing
-        cands = []
-        for p in team.active():
-            if not p.contract:
-                continue
-            saved, dead, _n = savings_if_cut(p)
-            if saved <= 0:
+            ok, saved, dead, _n = sensible_release(p)
+            if not ok:
                 continue
             rep = replacement_level(team, p.pos)
-            cands.append((saved - max(0.0, p.ovr - rep) * 1.5, p))
-        if cands:
-            cands.sort(key=lambda x: -x[0])
-            league.release(cands[0][1].pid)
-            team.sync_cap()
+            if rep <= 0:
+                continue
+            value = saved - max(0.0, p.ovr - rep) * 3.0 * squeeze - dead * 0.35
+            if rel is None or value > rel[0]:
+                rel = (value, p, saved)
+        # --- choose. A restructure that covers the need wins; otherwise the
+        # move that closes more of the gap per point of quality given up.
+        if rs is not None and (rel is None or rs[0] >= need or rs[0] >= rel[0]):
+            freed, p = rs
+            p.contract.restructure(0, min_base=MS.minimum_salary(p.accrued, cap))
+            restructures_left -= 1
+            league.log('restructure', pid=p.pid, team=team.abbr, freed=round(freed, 2),
+                       enforcement=True)
             continue
-        # 3. June 1, which splits the dead money across two years
-        j = [p for p in team.active() if p.contract
-             and savings_if_cut(p, june1=True)[0] > 0]
+        if rel is not None and rel[0] > -1e8:
+            league.release(rel[1].pid)
+            continue
+        # --- June 1 on what is left
+        j = [p for p in team.active() if p.contract and sensible_release(p, june1=True)[0]]
         if j:
             j.sort(key=lambda p: -savings_if_cut(p, june1=True)[0])
             league.release(j[0].pid, june1=True)
-            team.sync_cap()
             continue
         return
 
@@ -251,15 +307,13 @@ def run(league, rng, verbose=False):
         for p in team.active():
             if not p.contract:
                 continue
-            saved, dead, _n = savings_if_cut(p)
-            if saved <= 0:
-                continue
+            ok, saved, dead, _n = sensible_release(p)
+            if not ok:
+                continue                 # costs more to release than it saves
             # a man the club cannot replace does not get cut to save money
             rep = replacement_level(team, p.pos)
             if rep <= 0:
                 continue
-            if GM.is_uncuttable(p.cap_hit(0), dead):
-                continue                 # costs more to release than to keep
             cands.append((cut_score(p, team, rep), p, saved))
         cands.sort(key=lambda x: -x[0])
 
@@ -280,8 +334,8 @@ def run(league, rng, verbose=False):
                     break
                 if not p.contract:
                     continue
-                saved, dead, dead_next = savings_if_cut(p, june1=True)
-                if saved <= 0:
+                ok, saved, dead, dead_next = sensible_release(p, june1=True)
+                if not ok:
                     continue
                 rep = replacement_level(team, p.pos)
                 if rep <= 0 or p.ovr - rep > 6:

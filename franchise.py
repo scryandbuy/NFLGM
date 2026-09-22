@@ -35,6 +35,7 @@ import league as LG
 import season as SN
 import xp as XP
 import dev_roll as DR
+import schedule as SCH
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -84,6 +85,14 @@ class Franchise:
         RG.run(L, rng)
 
         L.roll_year(rng)
+        # NEXT YEAR'S SLATE. The real 2026 schedule was loaded once and never
+        # replaced, so every later season found all 272 games already scored
+        # and played none of them.
+        ranks = SCH.division_ranks(L, log['standings'])
+        SCH.new_season(L, ranks, rng)
+        for t in L.teams.values():
+            t.record = [0, 0, 0]
+        log['schedule_ok'] = not SCH.validate(L)
         log['expired'] = len(L.advance_contracts())
 
         cuts, res = CT.run(L, rng)
