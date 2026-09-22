@@ -48,7 +48,10 @@ def logistic(x, k=6.0):
 # flat-70 clones this was first fitted against: at 3.50 they produced a 2.99s
 # league mean instead of 2.72, and the exponential sack curve collapses at 3s,
 # pinning sacks at 3.5% against a real 6.6%.
-RUSHER_BASE = 3.16
+# Re-solved INSIDE GAMES (refit_clock.py). 3.16 was the bare four-man answer;
+# with the blitz multiplier, simulated-pressure protection error and hot routes
+# all taking time off the clock, attempts were leaving the hand at 2.55s.
+RUSHER_BASE = 3.36
 BASE_TTT = 2.72          # the league mean the clock must land on
 # ESPN's pass block win rate is whether a lineman sustains his block for 2.5
 # seconds or longer. Arbitrary on its face, but it is the industry definition
@@ -166,6 +169,8 @@ def resolve_protection(blockers, rushers, rng, qb=None):
 # ============================================================ MAN COVERAGE
 # The defender watches the RECEIVER, head often turned from the ball. The
 # contest is separation, and separation is what the throw is aimed into.
+MAN_SLOPE = 0.80
+
 def resolve_man(receiver, defender, depth, time_available, rng):
     """Returns separation 0-1. Higher = more open."""
     rel = edge(rate(receiver, ROUTE['receiver']['release']),
@@ -174,7 +179,11 @@ def resolve_man(receiver, defender, depth, time_available, rng):
               rate(defender, ROUTE['defender_man'][depth]))
     # a release win compounds the longer the route runs
     w = {'short': 0.55, 'medium': 0.40, 'deep': 0.28}[depth]
-    sep = 0.42 + 1.30 * (w * rel + (1 - w) * rt)
+    # slope cut from 1.30 (see matchups.ZONE_SLOPE): the man edge between a
+    # club's corners and the opponent's receivers was worth sd 0.038 of
+    # separation across defences, three times what the real completion
+    # spread allows
+    sep = 0.42 + MAN_SLOPE * (w * rel + (1 - w) * rt)
     # more time on the route means more chance to work open
     sep *= 1.0 + 0.10 * (time_available - BASE_TTT) / BASE_TTT
     return float(np.clip(sep + rng.normal(0, 0.11), 0.02, 0.98))
@@ -216,8 +225,9 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # man meant cover 0 or cover 1 on a fifth of snaps; with the full call
     # book man is a third of targets and was completing 66% against a real
     # ~60, ABOVE zone, which is backwards.
-    DEPTH_MULT = {'short': 1.380, 'medium': 1.113, 'deep': 0.776}
-    base = separation * (1.0 + 1.15 * (acc - AVG)) * outcome_mult
+    DEPTH_MULT = {'short': 1.494, 'medium': 1.171, 'deep': 0.802}
+    import matchups as M
+    base = separation * (1.0 + M.ZONE_SLOPE['acc'] * (acc - AVG)) * outcome_mult
     p = float(np.clip(base * DEPTH_MULT[depth], 0.02, 0.97))
 
     roll = rng.random()
@@ -225,7 +235,10 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
         return dict(result='complete', contested=separation < 0.35, p=p, base=base)
     # a bad throw into tight coverage is where picks come from
     # calibrated to the real 2.1% league interception rate
-    p_int = (1.0 - separation) * 0.112 * (1.0 + 2.2 * (AVG - acc))
+    # Picks are modelled on the ball that did NOT complete, so the rate per
+    # attempt moves with completion. Re-anchored after the completion refit
+    # (66% completion left the league at 1.82% against a real 2.10).
+    p_int = (1.0 - separation) * 0.129 * (1.0 + 2.2 * (AVG - acc))
     if rng.random() < max(0.0, p_int):
         return dict(result='interception', contested=True, p=p, base=base)
     return dict(result='incomplete', contested=separation < 0.45, p=p, base=base)
@@ -330,6 +343,11 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
     return dict(yards=round(float(gained), 1), broken_tackles=broken,
                 touchdown=gained >= yards_to_endzone)
 
+RUN_BASE = 1.90
+# sd of yards before contact around the blocking result; with RUN_BASE
+# re-anchored lower, 1.42 put 11.7% of carries in the backfield against 8.5
+RUN_NOISE = 1.33
+
 # ============================================================ RUN PLAY
 def resolve_run(carrier, blockers, defenders, yards_to_endzone, rng):
     """
@@ -348,7 +366,11 @@ def resolve_run(carrier, blockers, defenders, yards_to_endzone, rng):
 
     fill = np.mean([rate(d, RUN_BLOCK['defender']['fill']) for d in defenders]) if defenders else AVG
     # yards before contact: average line vs average front ~ 2.1 yards
-    ybc = 2.32 + 9.0 * push - 3.2 * (fill - AVG) + rng.normal(0, 1.42)
+    # Slopes cut from 9.0 and 3.2: yards per carry ALLOWED varied across
+    # clubs with sd 0.66 against a real 0.35, most of which is sampling noise
+    # on 430 carries, so the true real spread is small. RUN_BASE is re-anchored
+    # so the league lands on 4.52.
+    ybc = RUN_BASE + 5.5 * push - 2.0 * (fill - AVG) + rng.normal(0, RUN_NOISE)
     ybc = max(-4.0, ybc)
 
     if ybc < 0:                                  # stuffed behind the line
@@ -441,7 +463,11 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
         rb_reps += [(b.get('pid'), shared) for b in blockers[len(wins):]]
     fill = np.mean([rate(d, RUN_BLOCK['defender']['fill']) for d in defenders[:7]])
 
-    ybc = 2.32 + 9.0 * push - 3.2 * (fill - AVG) + rng.normal(0, 1.42)
+    # Slopes cut from 9.0 and 3.2: yards per carry ALLOWED varied across
+    # clubs with sd 0.66 against a real 0.35, most of which is sampling noise
+    # on 430 carries, so the true real spread is small. RUN_BASE is re-anchored
+    # so the league lands on 4.52.
+    ybc = RUN_BASE + 5.5 * push - 2.0 * (fill - AVG) + rng.normal(0, RUN_NOISE)
     ybc *= S.box_run_multiplier(def_call['box'])
     ybc *= S.run_scheme_multiplier(scheme, def_call['front'], ytg, def_call['box'])
     ybc *= S.FRONTS[def_call['front']]['run_fit'] ** -1
@@ -506,7 +532,10 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # 25.0/2.40 was solved for a bare four-man rush in isolation. Once blitzes,
     # deep drops and protection schemes are in the mix the BLEND has to land on
     # 6.6%, so the constant comes down.
-    p['sack'] = rng.random() < float(np.clip(16.0 * np.exp(-2.40 * p['time']), 0, .85))
+    # Solved together with RUSHER_BASE: a longer clock alone would have taken
+    # sacks to ~4.7%. Sacks are measured after a mobile QB has turned some of
+    # them into scrambles (game.py), which is what the register counts.
+    p['sack'] = rng.random() < float(np.clip(20.8 * np.exp(-2.40 * p['time']), 0, .85))
 
     # Free rushers force the ball out. That is what a hot route IS, and it is
     # the real answer to a blitz - not simply eating the sack.
@@ -517,10 +546,13 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
 
     if hot:
         p['sack'] = p['sack'] and rng.random() < 0.35
+    if PASS_TRACE is not None:
+        PASS_TRACE.append(dict(path='clock', time=p['time'], hot=bool(hot),
+                               sack=bool(p['sack']), rushers=def_call['rushers']))
     if p['sack'] and not hot:
         return dict(type='sack', yards=round(-rng.gamma(2.0, 3.4), 1),
                     touchdown=False, by=p['beaten_by'], concept=concept,
-                    protection=prot_name, pb_reps=p['pb_reps'],
+                    protection=prot_name, pb_reps=p['pb_reps'], ttt=round(float(p['time']), 3),
                     beaten=p.get('beaten'), pressured=True)
 
     # the concept, against the coverage it actually faces
@@ -652,7 +684,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         complete = rng.random() < adj
         # 2.1% is the rate per ATTEMPT, not per incompletion. Applying it to
         # incompletions only produced ~1.1% league-wide.
-        picked = (not complete) and rng.random() < 0.080
+        picked = (not complete) and rng.random() < 0.092   # re-anchored with the man path
         contested = z['contested']
         cb = cov
 
@@ -660,7 +692,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         return dict(type='interception', yards=0.0, touchdown=False,
                     depth=depth, in_man=bool(in_man), screen=bool(screen), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
+                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
     if not complete:
         # A PASS DEFENDED is a defender breaking the ball up, not simply an
         # incompletion - a throw into the dirt is nobody's credit. Real rate:
@@ -674,7 +706,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         return dict(type='incomplete', yards=0.0, touchdown=False,
                     depth=depth, in_man=bool(in_man), screen=bool(screen), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    read=read_kind, pb_reps=p['pb_reps'],
+                    read=read_kind, pb_reps=p['pb_reps'], ttt=round(float(p['time']), 3),
                     pass_def=(cb.get('pid') if broken and cb else None),
                     pressured=bool(p['pressure'] >= 0.35))
     # A contested ball that already survived the throw should not face the full
@@ -683,7 +715,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         return dict(type='drop', yards=0.0, touchdown=False,
                     depth=depth, in_man=bool(in_man), screen=bool(screen), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    read=read_kind, pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
+                    read=read_kind, pb_reps=p['pb_reps'], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
 
     # Real air yards average 7.8 with 5.2 after the catch. Short throws were
     # landing at 4.0 and dragging yards per dropback to 4.2 against a real 6.18.
@@ -726,7 +758,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, depth=depth,
                     target=tgt.get('pid'), read=read_kind,
-                    separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
+                    separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
     # Real YAC by throw depth: behind the line 8.63, short 3.97, medium 3.48,
     # deep 5.31 - a U-shape, because a screen has blockers in front and a deep
     # ball is caught past everyone, while an intermediate throw is caught in
@@ -753,4 +785,4 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                 in_man=bool(in_man), screen=bool(screen),
                 coverage=def_call.get('coverage') or def_call['shell'],
                 protection=prot_name, depth=depth, target=tgt.get('pid'),
-                read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pressured=bool(p['pressure'] >= 0.35))
+                read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))

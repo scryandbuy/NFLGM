@@ -32,16 +32,23 @@ import schemes as S
 import rosters as R
 import standings_and_seeding as SS
 import injury_status as IS
+import xp as XP
+import xp_spend as XS
 
 WEEKS = 18                      # 17 games, one bye apiece
 
 
 def _deps():
     """The scheme-layer callers the drive loop takes."""
-    co = lambda d, di, sd, ytg, r, secs_left=None: S.call_offense(
-        d, di, sd, ytg, r, secs_left=secs_left)
-    cd = lambda oc, d, di, r, ytg=50: S.call_defense(oc, d, di, r,
-                                                     yards_to_endzone=ytg)
+    # The drive loop hands the callers the offence, the defence and rate_fn
+    # so the identity layer and the coverage call can read the rosters. These
+    # lambdas swallowed none of that and the season runner crashed on the
+    # first snap - the register's own callers forward it, which is why the
+    # register ran and the franchise calendar did not.
+    co = lambda d, di, sd, ytg, r, secs_left=None, **kw: S.call_offense(
+        d, di, sd, ytg, r, secs_left=secs_left, **kw)
+    cd = lambda oc, d, di, r, ytg=50, **kw: S.call_defense(
+        oc, d, di, r, yards_to_endzone=ytg, **kw)
     return co, cd
 
 
@@ -156,6 +163,13 @@ class SeasonRunner:
         for pid, line in book.p.items():
             self.L.record_stats(self.L.year, pid, line,
                                 postseason=playoffs, game=key)
+            # XP EARNED, game by game: the events plus every weekly line he
+            # crossed. The ledger existed and nothing paid into it. Postseason
+            # games pay like any other; the season and milestone lines are
+            # settled at the end of the year (xp.close_season).
+            p = self.L.player(pid)
+            if p is not None:
+                p.xp += XP.credit(p, XP.game_xp(p, line, self.L.year), 'game')
         # SNAPS AND GAMES. TeamState counts every snap and nothing kept them, so a
         # lineman or a backup finished a season with no record of playing at
         # all - and playing time is the strongest predictor of whether a
@@ -170,6 +184,11 @@ class SeasonRunner:
             for pid, n in (st.last_snaps or st.snaps).items():
                 self.L.record_stats(self.L.year, pid, {'snaps': n, 'games': 1},
                                     postseason=playoffs)
+                # a snap is worth something on its own: it is why a backup
+                # who gets on the field develops and one who does not, does not
+                p = self.L.player(pid)
+                if p is not None:
+                    p.xp += XP.credit(p, XP.event_xp({'snaps': n}) * XP.modifier(p), 'snaps')
 
         # Injuries come off the RESULT, not off TeamState. play_game calls
         # end_game() on both states before returning, which clears
@@ -209,6 +228,11 @@ class SeasonRunner:
 
         self.week = week
         self.L.week = week
+        # THE WEEKLY ADVANCE: every AI club spends what its men earned, and
+        # the user's auto-spend men go with them. The user's other players
+        # keep their XP until he spends it from the player tab.
+        XS.spend_week(self.L, week, self.rng,
+                      user_team=getattr(self.L, 'user_team', None))
         return played
 
     def run(self, weeks=WEEKS, verbose=False):

@@ -51,13 +51,25 @@ DEV_P = [0.65, 0.22, 0.10, 0.03]
 # Traits themselves move, on the same logic as attributes: a scale of odds, not
 # a set rule. Production, age and awards all shift the probability of climbing
 # or falling a tier, and nothing is ever certain.
-AWARD_WEIGHT = {'mvp': 0.40, 'opoy': 0.30, 'dpoy': 0.30, 'all_pro_1': 0.22,
-                'all_pro_2': 0.12, 'pro_bowl': 0.07, 'oroy': 0.20, 'droy': 0.20}
+# Protector is one lineman out of 160 starters, rarer than a first-team slot
+# at a position, so it sits above All-Pro 1st and under the player-of-the-year
+# awards. Super Bowl MVP is one game and usually lands on a man who already
+# holds an All-Pro or a major for the same season, so it is a small stack on
+# top. There is no Pro Bowl in this game; its entry was dead.
+AWARD_WEIGHT = {'mvp': 0.40, 'opoy': 0.30, 'dpoy': 0.30, 'protector': 0.25,
+                'all_pro_1': 0.22, 'all_pro_2': 0.12, 'oroy': 0.20, 'droy': 0.20,
+                'sb_mvp': 0.08}
 
 # The major individual honours are not a nudge to the odds, they are a certainty.
 # Win one of these and the trait goes up a tier, full stop - unless you are
 # already at the top, where it instead locks the trait against demotion.
 GUARANTEED_UPGRADE = {'mvp', 'oroy', 'droy', 'opoy', 'dpoy'}
+
+# Traits should not churn. One scalar on both the up and the down odds (the
+# guaranteed awards ignore it); solved so roughly 40 men a year move each
+# way out of the 750 who play, with the great and the terrible seasons still
+# carrying real odds.
+TRAIT_SCALE = 0.6
 
 def trait_move_chances(dev, age, production, expected, awards=()):
     """
@@ -73,22 +85,32 @@ def trait_move_chances(dev, age, production, expected, awards=()):
     if GUARANTEED_UPGRADE & set(awards):
         return (1.0, 0.0) if tier < len(DEV_ORDER)-1 else (0.0, 0.0)
 
-    # UP: harder the higher you already are, and much harder with age
-    up = (max(0.0, over) * 1.5 + award) * (0.85 ** tier)
+    # UP: harder the higher you already are, and much harder with age. A
+    # tenth of a percentile over expectation is a normal year, not a rise;
+    # the odds start once he is clearly above it, so a great season still
+    # carries real weight while an ordinary one barely moves the trait.
+    up = (max(0.0, over - 0.10) * 1.8 + award) * (0.85 ** tier)
     if age >= 27: up *= 0.55
     if age >= 30: up *= 0.35
-    up = float(np.clip(up, 0.0, 0.55))
+    up = float(np.clip(up * TRAIT_SCALE, 0.0, 0.55))
 
     # DOWN: only possible if you are above normal. Underperforming the tier you
     # hold is the main driver; age adds to it; honours suppress it.
     if tier == 0:
         down = 0.0
     else:
-        shortfall = max(0.0, -over)
-        down = 0.05 + shortfall * 1.6 + max(0.0, (age - 28)) * 0.045
+        # A shortfall inside a tenth of a percentile is noise, not a decline.
+        shortfall = max(0.0, -over - 0.10)
+        # The age term used to sit on every man over 28 whatever he did, so a
+        # 32-year-old who out-produced his rating rank was demoted on a 29%
+        # roll, and half the men above normal churned every year. Beating
+        # expectation now buys the age term off: clear it by a tenth and
+        # age costs nothing this year; fall short and it counts in full.
+        beat = float(np.clip(over / 0.25, 0.0, 1.0))
+        down = 0.02 + shortfall * 1.6 + max(0.0, (age - 28)) * 0.045 * (1.0 - beat)
         down *= (1.0 + 0.25 * tier)          # higher tiers have further to fall
         down *= max(0.25, 1.0 - award * 1.8)  # a big year protects the trait
-        down = float(np.clip(down, 0.01, 0.70))
+        down = float(np.clip(down * TRAIT_SCALE, 0.005, 0.70))
     return up, down
 
 # ---------------------------------------------------------------- regression odds

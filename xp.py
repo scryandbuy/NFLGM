@@ -30,6 +30,7 @@ yard alone would make every skill position outgrow every defender. The per-
 unit numbers below are solved backwards from what a full season should be
 worth at each spot, not chosen for how they read.
 """
+import numpy as np
 
 # ============================================================ PER EVENT
 # XP per single unit of each stat. Negative for the things that lose games.
@@ -64,10 +65,11 @@ PER_EVENT = {
     # this engine records at all. Until it does, his few countable events have
     # to carry more weight or every defensive back grows at half the rate of
     # everyone else. That is a stand-in and it is marked as one.
-    'tackles':    55.0,
+    'tackles':    75.0,         # up from 55: linebackers and safeties record little else
     'sacks':      500.0,
     'pressures':  90.0,
     'int_def':    950.0,
+    'pass_def':   150.0,        # recorded all along and paid nothing; most of a corner's box score
     'ff':         450.0,
 
     # ---- offensive line ----
@@ -104,15 +106,18 @@ WEEKLY = [
 ]
 
 # ============================================================ SEASON
+# Second tiers pay half the first: the first tier is the big year, the second
+# was the same season being paid again, and the stack was a third of what
+# carried a star receiver to four times the ledger line.
 SEASON = [
-    ('pass_yds', 4000, 6000), ('pass_yds', 5000, 5000), ('pass_td', 30, 5500),
-    ('pass_td', 40, 5000),
-    ('rush_yds', 1000, 6000), ('rush_yds', 1500, 5500), ('rush_td', 10, 4500),
-    ('rec_yds', 1000, 6000), ('rec_yds', 1400, 5500), ('rec_td', 10, 4500),
-    ('rec', 80, 4000), ('rec', 100, 4000),
-    ('sacks', 10, 6000), ('sacks', 15, 5500),
-    ('tackles', 100, 6000), ('tackles', 140, 4500),
-    ('int_def', 4, 6500), ('int_def', 7, 5500),
+    ('pass_yds', 4000, 6000), ('pass_yds', 5000, 2500), ('pass_td', 30, 5500),
+    ('pass_td', 40, 2500),
+    ('rush_yds', 1000, 6000), ('rush_yds', 1500, 2750), ('rush_td', 10, 4500),
+    ('rec_yds', 1000, 6000), ('rec_yds', 1400, 2750), ('rec_td', 10, 4500),
+    ('rec', 80, 4000), ('rec', 100, 2000),
+    ('sacks', 10, 6000), ('sacks', 15, 2750),
+    ('tackles', 100, 6000), ('tackles', 140, 2250),
+    ('int_def', 4, 6500), ('int_def', 7, 2750),
     ('pb_wins', 500, 5000),
 ]
 
@@ -134,11 +139,14 @@ MILESTONE = [
 # ============================================================ AWARDS
 # The five that carry a guaranteed development tier are also the five that pay
 # most - they are the season a career is built on.
+# Halved. The five major awards already carry a guaranteed development tier,
+# which is the real prize; 31k of XP on top is what turned a 93 into a 99 in
+# one year.
 AWARDS = {
-    'mvp': 25000, 'opoy': 18000, 'dpoy': 18000,
-    'oroy': 15000, 'droy': 15000,
-    'protector': 12000, 'sb_mvp': 12000,
-    'all_pro_1': 9000, 'all_pro_2': 5000,
+    'mvp': 12000, 'opoy': 9000, 'dpoy': 9000,
+    'oroy': 7500, 'droy': 7500,
+    'protector': 6000, 'sb_mvp': 6000,
+    'all_pro_1': 4500, 'all_pro_2': 2500,
     'coty': 0,                      # a coach award, not a player one
 }
 
@@ -146,7 +154,10 @@ AWARDS = {
 # Only the DEVELOPMENT TRAIT touches what a man earns. Age used to sit here
 # too and it does not any more, because age now sets what a point COSTS - and
 # carrying it in both places counted it twice.
-DEV_MULT = {'normal': 1.00, 'star': 1.25, 'superstar': 1.55, 'xfactor': 1.90}
+# Cut from 1.00 / 1.25 / 1.55 / 1.90. A star already out-earns everyone by
+# producing more, so a large multiplier counted him twice: an xfactor
+# receiver's season came to six times the ledger's own big-year line.
+DEV_MULT = {'normal': 1.00, 'star': 1.05, 'superstar': 1.10, 'xfactor': 1.15}
 
 
 def modifier(player):
@@ -155,48 +166,136 @@ def modifier(player):
 
 
 # ============================================================ WHAT IT COSTS
-# THE COST CURVE IS THE REGRESSION CURVE. Rather than invent age brackets,
-# improvement is priced off the same real delta-method aging data that already
-# drives decline: while a man is on his plateau a point is at its cheapest,
-# and as his curve falls the same point costs more. That makes it
-# position-specific for free - a running back's costs climb from 26 because
-# that is when backs actually start going, and a quarterback's barely move at
-# all because quarterbacks do not.
+# THREE THINGS SET THE PRICE OF A POINT, and all three compound.
 #
-# Solved against the growth budget: a good young player should be able to add
-# around five overall in a season on stats alone, a man in his late twenties
-# around three, and a thirty-something around one. None of those are ceilings,
-# they are what a strong year buys.
+# 1. EVERY POINT BOUGHT RAISES THE PRICE OF THE NEXT ONE, whatever it goes
+#    into. Buying catching makes speed dearer too. This is what stops a league
+#    filling with 99s: the first points of a career are cheap and the fortieth
+#    is not, and a man who has already been built up pays for having been.
+# 2. AGE, every year of it. Not a step at 25: each year of age adds to the
+#    price, and the position's real aging curve steepens it once his curve is
+#    falling (a back's from 26, a quarterback's barely at all). The §5 growth
+#    table is the guardrail this is solved against - what a big year should buy
+#    at 22, 25, 28, 31 and 34.
+# 3. THE ATTRIBUTE. Speed, acceleration, agility, strength, change of
+#    direction and jumping help every man on the field whatever his position,
+#    so they cost a multiple of what a position skill costs. Catching, block
+#    shed and the like help one kind of player and are priced at the base.
 #
-# One overall point costs 4 to 6 ATTRIBUTE points, measured: a position score
-# is a weighted mean, so a point into a left tackle's pass-block finesse (30%
-# of his weight) moves his overall by 0.30 while spreading evenly costs the
-# full six. Spending well is about twice as efficient as spending badly, which
-# is a decision worth having.
-BASE_COST = 1150.0          # XP for one attribute point, at the cheapest
+# The overall wall stays alongside these (a 90 improving is harder than a 70
+# improving), so a man who arrived at 95 pays more than one who was built up.
+BASE_COST = 600.0            # a rookie's first point into a position skill
 
-# A ninety improving is harder than a seventy improving, and this is also what
-# keeps the league from inflating: everyone runs into a wall eventually.
+PHYSICAL = {'speed_rating', 'accel_rating', 'agility_rating', 'strength_rating',
+            'change_of_direction_rating', 'jump_rating'}
+PHYSICAL_MULT = 2.5
+# Awareness carries the biggest weight for a quarterback, a centre and a
+# safety and is not a physical; it is buyable by anyone at a premium.
+AWARENESS_MULT = 1.75
+
+ESCALATOR = 1.030            # per point ever bought, into anything
+
+AGE_FROM, AGE_SLOPE = 21.0, 0.15     # per year of age past a rookie's
+# A quarterback's production curve is flat into his late thirties, so the
+# curve term never bites for him and a 38-year-old off a big year was adding
+# two overall. Learning still slows: an extra 12% a year past 30, QB only.
+LATE_SLOPE = {'QB': (30.0, 0.12)}
 OVR_PIVOT, OVR_SLOPE = 70.0, 0.030
 
 
-# The regression curve alone is not enough, and a quarterback shows why: his
-# curve is flat until 36, so pricing off it let a 31-year-old add nearly five
-# overall in a season. Production and LEARNING are different things - a man
-# can keep playing at his level long after he has stopped adding to it. So a
-# flat age term sits alongside the curve, and the curve makes it
-# position-specific rather than uniform.
-AGE_FROM, AGE_SLOPE = 24.0, 0.155
+def points_bought(player):
+    """Every attribute point this man has ever bought."""
+    return sum(v for k, v in player.xp_spent.items()
+               if not k.startswith('_') and isinstance(v, (int, float)))
 
 
-def cost_per_point(player):
-    """XP for one attribute point, for this man right now."""
+def cost_per_point(player, attr=None):
+    """XP for one more attribute point, for this man right now."""
     import regression as RG
     f = RG.curve_factor(player.pos, player.age)
     curve = 1.0 if f >= 1.0 else (1.0 / max(f, 0.30)) ** 1.5
     years = max(0.0, float(player.age) - AGE_FROM)
     ovr_scale = 1.0 + OVR_SLOPE * max(0.0, float(player.ovr) - OVR_PIVOT)
-    return BASE_COST * curve * (1.0 + AGE_SLOPE * years) * ovr_scale
+    phys = (PHYSICAL_MULT if attr in PHYSICAL else
+            AWARENESS_MULT if attr == 'awareness_rating' else 1.0)
+    late_from, late_slope = LATE_SLOPE.get(player.pos, (99.0, 0.0))
+    late = 1.0 + late_slope * max(0.0, float(player.age) - late_from)
+    return (BASE_COST * curve * (1.0 + AGE_SLOPE * years) * ovr_scale * late
+            * ESCALATOR ** points_bought(player) * phys)
+
+
+# ============================================================ THE CEILING
+# Potential is a hard ceiling on overall, set on day one. At the ceiling a
+# man keeps earning and can BUY the ceiling up, one overall at a time, then
+# goes back to buying attributes. Under-23s arrive with a range rather than a
+# point; the point is drawn from it the first time it matters, so the same
+# prospect turns out differently in different saves.
+UNLOCK_BASE, UNLOCK_FROM, UNLOCK_GROWTH = 5000.0, 80.0, 1.10
+
+
+def ceiling(player, rng=None):
+    """His hard ceiling, resolving a range on first use. None means uncapped."""
+    if player.potential is None and player.potential_range:
+        lo, hi = player.potential_range
+        r = rng or np.random.default_rng()
+        player.potential = float(round(r.uniform(lo, hi), 1))
+    return player.potential
+
+
+def unlock_cost(player):
+    """XP to raise the ceiling by one overall, for this man right now."""
+    pot = ceiling(player)
+    if pot is None:
+        return None
+    years = max(0.0, float(player.age) - AGE_FROM)
+    return (UNLOCK_BASE * UNLOCK_GROWTH ** max(0.0, pot - UNLOCK_FROM)
+            * (1.0 + AGE_SLOPE * years))
+
+
+def unlock(player):
+    """Raise the ceiling one point. Returns the cost, or None."""
+    pot = ceiling(player)
+    if pot is None or pot >= 99.0:
+        return None
+    cost = unlock_cost(player)
+    if player.xp < cost:
+        return None
+    player.xp -= cost
+    player.potential = min(99.0, pot + 1.0)
+    player.xp_spent['_unlocks'] = player.xp_spent.get('_unlocks', 0) + 1
+    return cost
+
+
+def at_ceiling(player, attr=None):
+    """Would one more point (into attr, or the heaviest skill) breach it?"""
+    import targets as TG
+    pot = ceiling(player)
+    if pot is None:
+        return False
+    if attr is None:
+        w = TG.DEPTH_WEIGHTS.get(player.pos, {})
+        attr = max(w, key=w.get) if w else 'awareness_rating'
+    trial = dict(player.ratings); trial[attr] = trial.get(attr, 70.0) + 1.0
+    return TG.position_score(trial, player.pos) > pot + 1e-6
+
+
+def buy(player, attr):
+    """
+    Spend: one point into one attribute. Returns the cost paid, or None if he
+    cannot afford it, the attribute is at 99, or the point would take him
+    past his ceiling. This is the only way a rating goes up through XP, so
+    the ledger of purchases is always exact.
+    """
+    cur = player.ratings.get(attr, 70.0)
+    if cur >= 99.0 or at_ceiling(player, attr):
+        return None
+    cost = cost_per_point(player, attr)
+    if player.xp < cost:
+        return None
+    player.xp -= cost
+    player.ratings[attr] = cur + 1.0
+    player.xp_spent[attr] = player.xp_spent.get(attr, 0) + 1
+    return cost
 
 
 # ============================================================ EARNING
@@ -212,9 +311,29 @@ def goal_xp(line, table):
                if float(line.get(stat, 0) or 0) >= need)
 
 
-def game_xp(player, line):
+# A weekly line hit again in the same season pays this share of the last
+# time. Eleven 100-yard games were paying eleven full bonuses; a fourth
+# 100-yard afternoon is a good day, not a milestone.
+WEEKLY_REPEAT = 0.80
+
+
+def weekly_xp(player, line, season=None):
+    """The weekly lines crossed in this game, each paid less every time he has
+    already crossed it this season."""
+    hits = player.xp_spent.setdefault('_weekly', {})
+    total = 0.0
+    for stat, need, xp in WEEKLY:
+        if float(line.get(stat, 0) or 0) >= need:
+            key = f'{season}:{stat}:{need}'
+            n = hits.get(key, 0)
+            total += xp * WEEKLY_REPEAT ** n
+            hits[key] = n + 1
+    return total
+
+
+def game_xp(player, line, season=None):
     """One game: the events plus whatever weekly lines he crossed."""
-    return (event_xp(line) + goal_xp(line, WEEKLY)) * modifier(player)
+    return (event_xp(line) + weekly_xp(player, line, season)) * modifier(player)
 
 
 def season_xp(player, line):
@@ -236,6 +355,50 @@ def milestone_xp(player, career_before, career_after):
 
 def award_xp(player, awards):
     return sum(AWARDS.get(a, 0) for a in awards) * modifier(player)
+
+
+# ============================================================ THE BOOK
+# Where each man's XP came from, kept beside the balance so the earning can
+# be audited by source: game events, snaps, season lines, milestones, awards.
+def credit(player, amount, source):
+    """Record the source and return the amount, so `p.xp += credit(...)`."""
+    if amount:
+        led = player.xp_spent.setdefault('_earned', {})
+        led[source] = led.get(source, 0.0) + float(amount)
+    return float(amount)
+
+
+def close_season(league, votes, season=None):
+    """
+    End of the regular season: the season lines, the career milestones
+    crossed this year, and the awards. Events and weekly lines were paid week
+    by week. Returns {pid: xp paid here}.
+    """
+    year = season or league.year
+    lines = league.stats.get(year, {})
+    paid = {}
+    for pid, line in lines.items():
+        p = league.player(pid)
+        if p is None: continue
+        got = credit(p, season_xp(p, line), 'season')
+        before, after = {}, {}
+        for yr, sl in p.career.items():
+            for k, v in sl.items():
+                if not isinstance(v, (int, float)): continue
+                after[k] = after.get(k, 0) + v
+                if yr != year: before[k] = before.get(k, 0) + v
+        got += credit(p, milestone_xp(p, before, after), 'milestone')
+        p.xp += got; paid[pid] = got
+    # awards: a pid, or a list of pids for the All-Pro teams
+    for award, who in (votes or {}).items():
+        if award not in AWARDS or not AWARDS[award]: continue
+        for w in (who if isinstance(who, list) else [who]):
+            pid = getattr(w, 'pid', w)
+            p = league.player(pid) if isinstance(pid, str) else None
+            if p is None: continue
+            got = credit(p, award_xp(p, [award]), 'award')
+            p.xp += got; paid[pid] = paid.get(pid, 0.0) + got
+    return paid
 
 
 if __name__ == '__main__':

@@ -194,7 +194,16 @@ ZONE_DEFENDERS_NEAR = {'cover_2': 1.3, 'cover_3': 1.5, 'cover_4': 1.7,
 # squeeze compounds with depth: the mean window after squeeze runs 0.56 short,
 # 0.42 medium, 0.28 deep inside games, so one scalar left deep zone at 35%
 # against a real ~42 and zone overall 8 points BELOW man.
-ZONE_SCALE = {'short': 1.452, 'medium': 1.521, 'deep': 1.701}
+ZONE_SCALE = {'short': 1.279, 'medium': 1.371, 'deep': 1.397}
+
+# HOW STEEPLY RATINGS MOVE THE WINDOW. Measured inside games by club: the
+# defending club's mean window ran sd 0.028 on a mean of 0.42 and completion
+# allowed spread 3.5x the real club-to-club figure; the offence's QB accuracy
+# slope put completion thrown at 2.2x. Blowouts between a strong roster and a
+# weak one are right; a 25-point spread in completion allowed across the
+# league is not. Slopes cut to leave the spread a little wider than real,
+# not on it: the defence's by ~0.45, the offence's by ~0.6.
+ZONE_SLOPE = dict(find=0.30, **{'break': 0.38, 'close': 0.34}, acc=0.70)
 
 def zone_window(shell, depth):
     """Base window for this shell at this route depth. Bigger = easier throw."""
@@ -225,7 +234,7 @@ def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate):
 
     # 1. does the receiver find the soft spot at all
     find = rate(receiver, ROUTE['receiver_zone']['find_window'])
-    w *= 1.0 + 0.45 * (find - AVG)
+    w *= 1.0 + ZONE_SLOPE['find'] * (find - AVG)
 
     # 2. the nearest defender squeezes it. Others are too far to matter, which
     #    is why the seam beats zone.
@@ -234,7 +243,8 @@ def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate):
         brk = rate(near, ROUTE['defender_zone']['break'])
         cls = rate(near, ROUTE['defender_zone']['close'])
         n = ZONE_DEFENDERS_NEAR.get(shell, 1.5)
-        squeeze = (0.85 * (brk - AVG) + 0.75 * (cls - AVG)) * (n / 1.5)
+        squeeze = (ZONE_SLOPE['break'] * (brk - AVG)
+                   + ZONE_SLOPE['close'] * (cls - AVG)) * (n / 1.5)
         w *= 1.0 - squeeze
 
     w = max(0.04, min(0.97, w))
@@ -252,7 +262,7 @@ def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate):
     # 1.26 is solved, not chosen: with the depth-anchored windows above it puts
     # an average QB against an average defender on the real per-depth
     # completion rates (74.4 / 56.0 / 39.4).
-    raw = w * (1.0 + 1.15 * (acc - AVG))
+    raw = w * (1.0 + ZONE_SLOPE['acc'] * (acc - AVG))
     p_complete = min(0.97, raw * ZONE_SCALE[depth])
     roll = rng.random()
     complete = roll < p_complete

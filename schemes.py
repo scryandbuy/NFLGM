@@ -265,40 +265,66 @@ def dist_band(ydstogo):
     if ydstogo <= 10: return '8-10'
     return '11+'
 
+def _logit(p):
+    p = float(np.clip(p, 1e-4, 1 - 1e-4)); return float(np.log(p / (1 - p)))
+
+def _sigmoid(x):
+    return float(1.0 / (1.0 + np.exp(-x)))
+
 def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers,
               gm_pass_bias=0.0, secs_left=None):
     """
-    Share of snaps thrown.
+    Share of snaps thrown. THE COACH READS EVERYTHING AT ONCE.
 
-    THE SCORE TABLE BELOW HAS NO CLOCK IN IT, and the clock is most of the
-    effect. Real pass rate barely moves before halftime whatever the score -
-    everything sits in a 55-69% band - and then goes nearly binary at the end:
-    90% throwing down 9-16 in the last four minutes against 13% running it out
-    up 9-16. Without that, a trailing team never accelerates and a leading one
-    never bleeds clock, so games never close up and never run away in the way
-    real ones do. Close games (1-7 points) were 31% of ours against a real
-    46.8%.
+    Down and distance set the base; score, clock, field position and
+    personnel each move it. They used to move it by MULTIPLYING the rate, and
+    every one of those multipliers was measured on the whole-game pass rate
+    (about 55%) with no down in it. Multiplying a third-and-long rate of 87%
+    by a "up 16, run it" factor of 0.72 gives 63%, when real clubs up 16 on
+    third and six still throw ~75%; stacking the personnel lean and the
+    late-game blend on top had offences running third and long a quarter of
+    the time and converting 14 to 32% of those.
+
+    So the leans now add in LOG-ODDS. A shift that takes a 55% down to 45%
+    takes an 87% down to 82%, which is how the real tables behave: the ends
+    of the distribution stay at the ends. Near 50% (first down) the two forms
+    agree, so first-down calling is unchanged.
+
+    The clock is the biggest of the leans and it is nearly binary at the end
+    of a game: 90% throwing down 9-16 in the last four minutes, 13% running it
+    out up 9-16. decisions.pass_rate carries that table.
     """
     base = PASS_RATE.get(int(down), PASS_RATE[1])[dist_band(ydstogo)]
-    # Scores are whole numbers again now that the try is resolved as its own
-    # play. The round stays as a guard on any caller passing a float.
+    L = _logit(base)
+    neutral = _logit(NEUTRAL_SCRIPT)
+    # score
     sd = int(round(score_diff))
     script = next((v for lo, hi, v in SCRIPT if lo <= sd <= hi), NEUTRAL_SCRIPT)
-    base *= script / NEUTRAL_SCRIPT
-    # the red zone compresses: inside the 5 it is 44.5% pass against 59.7% backed up
-    if yards_to_endzone <= 5:  base *= 0.75
-    elif yards_to_endzone <= 10: base *= 0.88
-    elif yards_to_endzone <= 20: base *= 0.90
-    base += PERSONNEL_OFF.get(off_pers, PERSONNEL_OFF['11'])['run_bias'] * -0.30
+    L += _logit(script) - neutral
+    # field position: the red zone compresses (44.5% pass inside the 5), and
+    # backed up against the own goal it compresses the other way (52.2%
+    # inside the own 10, 46.6% inside the own 4, against 57.6% open field)
+    mult = 1.0
+    if yards_to_endzone <= 5:    mult = 0.75
+    elif yards_to_endzone <= 10: mult = 0.88
+    elif yards_to_endzone <= 20: mult = 0.90
+    elif yards_to_endzone >= 96: mult = 46.6 / 57.6
+    elif yards_to_endzone >= 91: mult = 52.2 / 57.6
+    if mult != 1.0:
+        L += _logit(NEUTRAL_SCRIPT * mult) - neutral
+    # personnel: heavy groups lean to the run (the old form was -0.30 x bias
+    # on the rate; the slope of the logistic at 55% is about 4)
+    L += -1.2 * PERSONNEL_OFF.get(off_pers, PERSONNEL_OFF['11'])['run_bias']
+    # the plan's own lean
+    L += 4.0 * gm_pass_bias
+    # clock
     if secs_left is not None:
-        # Blend toward the measured late-game rate, hard at the very end.
         import decisions as DEC
         target = DEC.pass_rate(score_diff, secs_left)
         w = 0.0 if secs_left > 1800 else (0.25 if secs_left > 900 else
                                           (0.55 if secs_left > 240 else 0.85))
-        base = (1.0 - w) * base + w * target * (base / max(NEUTRAL_SCRIPT, .01)
-                                                if False else 1.0)
-    return float(np.clip(base + gm_pass_bias, 0.03, 0.98))
+        L += w * (_logit(target) - neutral)
+    return float(np.clip(_sigmoid(L), 0.03, 0.98))
 
 def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
                  secs_left=None, offense=None, rate_fn=None):
@@ -375,10 +401,11 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         # short, 23.7% medium, 14.4% deep; keying depth straight off the concept
         # gave 35/48/17 and cost ~10 points of league completion.
         base = CONCEPTS[call['concept']]['depth']
-        r = rng.random()
-        if base == 'deep':     call['depth'] = 'deep' if r < .46 else ('medium' if r < .74 else 'short')
-        elif base == 'medium': call['depth'] = 'medium' if r < .42 else ('short' if r < .93 else 'deep')
-        else:                  call['depth'] = 'short' if r < .86 else ('medium' if r < .98 else 'deep')
+        mix = {'deep': (.26, .28, .46), 'medium': (.51, .42, .07),
+               'short': (.86, .12, .02)}[base]
+        import identity as ID3
+        mix = ID3.situational_depth(mix, yards_to_endzone, down, ydstogo)
+        call['depth'] = str(rng.choice(['short', 'medium', 'deep'], p=mix))
     else:
         heavy = PERSONNEL_OFF[pers]['te'] >= 2 or PERSONNEL_OFF[pers]['rb'] >= 2
         if offense is not None and rate_fn is not None:

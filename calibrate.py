@@ -46,16 +46,16 @@ TARGETS = [
     ('air_yards',               5.72, 1.00, 'plays base_air'),
     ('yac',                     5.19, 0.80, 'plays.resolve_yards_after in_space'),
     ('yards_per_dropback',      6.18, 0.60, 'emergent'),
-    ('time_to_throw',           2.72, 0.15, 'plays.RUSHER_BASE'),
+    ('time_to_throw',           2.72, 0.15, 'plays.RUSHER_BASE'),         # seconds, on attempts
     # ---- running ----
     ('run_ypc',                 4.52, 0.35, 'plays._run_play'),
     ('run_explosive_pct',       2.46, 0.80, 'plays.resolve_yards_after'),
     ('run_negative_pct',        8.54, 1.50, 'plays._run_play ybc'),
     # ---- play calling ----
     ('pass_play_share',        57.80, 3.00, 'schemes.PASS_RATE'),
-    ('play_action_pct',        10.20, 2.50, 'schemes.call_offense'),
+    ('play_action_pct',        10.20, 2.50, 'schemes.call_offense'),    # of all offensive plays
     ('motion_pct',             36.50, 3.00, 'schemes.call_offense'),
-    ('blitz_pct',              13.30, 3.00, 'gameplan.blitzers'),
+    ('blitz_pct',              13.30, 3.00, 'schemes.call_defense'),     # pass plays with a charted blitzer
     # ---- health ----
     ('injuries_per_team_game',  2.51, 0.50, 'health._RULED_OUT_SHARE'),
     # ---- game shape ----
@@ -93,6 +93,7 @@ def run(seasons=1, seed=2026, verbose=True):
     ypp = collections.defaultdict(list); fd = []; plays_pd = []
     ot = ties = 0; ngames = 0; calls = collections.Counter()
     ttt = []; fg = []; punts = []; kos = []; drives_total = 0
+    pa = mo = bl = 0; n_off = n_pass = 0
 
     for s in range(seasons):
         ST = {t: G.TeamState(L[t], coach=coaches[t]) for t in teams}
@@ -122,6 +123,17 @@ def run(seasons=1, seed=2026, verbose=True):
                         if t in ('run', 'complete', 'incomplete', 'sack',
                                  'scramble', 'drop', 'interception'):
                             ypp[t].append(l.get('yards', 0) or 0)
+                            n_off += 1
+                            if l.get('motion'): mo += 1
+                            if l.get('play_action'): pa += 1
+                            if l.get('is_pass'):
+                                n_pass += 1
+                                if l.get('blitzers', 0) > 0: bl += 1
+                        # Next Gen time to throw is measured on ATTEMPTS; a
+                        # sack has its own clock and is not in the 2.72
+                        if t in ('complete', 'incomplete', 'drop',
+                                 'interception') and l.get('ttt'):
+                            ttt.append(l['ttt'])
                         if t == 'complete':
                             yac.append(l.get('yac', 0)); air.append(l.get('air', 0))
                         if t == 'field_goal': fg.append(l.get('made', False))
@@ -155,14 +167,14 @@ def run(seasons=1, seed=2026, verbose=True):
         'air_yards': np.mean(air) if air else 0,
         'yac': np.mean(yac) if yac else 0,
         'yards_per_dropback': (sum(ypp['complete']) + sum(ypp['sack'])) / max(db, 1),
-        'time_to_throw': 2.72,
+        'time_to_throw': np.mean(ttt) if ttt else 0,
         'run_ypc': runs.mean(),
         'run_explosive_pct': (runs >= 20).mean() * 100,
         'run_negative_pct': (runs < 0).mean() * 100,
         'pass_play_share': passes / max(passes + rush, 1) * 100,
-        'play_action_pct': 10.2,
-        'motion_pct': 36.5,
-        'blitz_pct': 13.3,
+        'play_action_pct': pa / max(n_off, 1) * 100,
+        'motion_pct': mo / max(n_off, 1) * 100,
+        'blitz_pct': bl / max(n_pass, 1) * 100,
         'injuries_per_team_game': np.mean(inj),
         'mean_margin': m.mean(),
         'margin_10plus_pct': (m >= 10).mean() * 100,

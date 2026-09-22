@@ -212,3 +212,42 @@ if __name__ == '__main__':
         tot = sum(w.values())
         print('  %-4s %s' % (t, ', '.join(
             f'{k} {100*v/tot:.0f}%' for k, v in sorted(w.items()))))
+
+
+def situational_depth(mix, yards_to_endzone, down=1, ydstogo=10):
+    """
+    The play caller's depth lean, moved by where the ball is.
+
+    The plan (or the concept) sets a short / medium / deep mix; this reads the
+    field position and moves it. Backed up against his own goal line a
+    quarterback does not take a seven-step drop - the drops shorten and the
+    ball comes out, which is why real sacks inside the own 10 run 3.9%
+    against 7.2% elsewhere. And with the end zone close the deep ball is not
+    on the menu because there is no grass for it.
+
+    This REPLACES a hard override in game.py that rewrote a called pass as a
+    run or forced its depth short when backed up. The coach now sees the field
+    position and leans; nothing is decided for him.
+    """
+    short, medium, deep = [float(x) for x in mix]
+    # THE STICKS. On third and fourth down the throw goes where the first
+    # down is: real air yards on completions run ~8 on third and 5 to 7 and
+    # ~10 past that, against a plan mix that put 70% of those throws short and
+    # landed them at 5. Second and long leans the same way, less.
+    if down >= 3:
+        if ydstogo >= 11:   short, medium, deep = short * 0.50, medium * 1.70, deep * 2.20
+        elif ydstogo >= 8:  short, medium, deep = short * 0.55, medium * 1.75, deep * 1.80
+        elif ydstogo >= 5:  short, medium, deep = short * 0.72, medium * 1.60, deep * 1.10
+        elif ydstogo >= 3:  short, medium, deep = short * 0.90, medium * 1.30, deep * 0.80
+    elif down == 2 and ydstogo >= 11:
+        short, medium, deep = short * 0.85, medium * 1.30, deep * 1.10
+    if yards_to_endzone >= 96:          # inside the own 4
+        short, medium, deep = short * 1.55, medium * 0.80, deep * 0.30
+    elif yards_to_endzone >= 91:        # inside the own 10
+        short, medium, deep = short * 1.30, medium * 0.90, deep * 0.55
+    if yards_to_endzone <= 10:
+        deep = 0.0                      # cannot throw 20 yards into a 10-yard field
+    elif yards_to_endzone <= 20:
+        deep *= 0.35
+    t = short + medium + deep
+    return (short / t, medium / t, deep / t)

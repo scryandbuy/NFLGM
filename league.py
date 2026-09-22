@@ -772,9 +772,19 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
     for _, r in S.iterrows():
         ratings = {c: float(r[c]) for c in rating_cols if pd.notna(r[c])}
         age = float(r.age) if pd.notna(r.age) else 25.0
-        ovr = float(r.overall) if pd.notna(r.get('overall')) else 70.0
-        # a hard, hidden ceiling, fixed for life
-        headroom = max(0.0, (28.0 - age)) * rng.uniform(0.35, 1.15)
+        # THE CEILING IS SET ON THE GAME'S OWN OVERALL. It was seeded off the
+        # snapshot's Madden overall, which runs well below the position score
+        # this engine uses, so two thirds of the league arrived already above
+        # their own ceiling - a cap that would have frozen 1,400 men on day
+        # one the moment anything enforced it.
+        ovr = TG.position_score(ratings, r.madden_position)
+        # a hard, hidden ceiling, fixed for life. EVERY man arrives with room
+        # above him - two to four and a half points - and the young get more
+        # on top. The old draw gave anyone 28 or older exactly nothing, so
+        # every veteran started at his ceiling and his first purchase of any
+        # year was an unlock.
+        headroom = (rng.uniform(2.0, 4.5)
+                    + max(0.0, (28.0 - age)) * rng.uniform(0.35, 1.15))
         pot = float(np.clip(ovr + headroom, ovr, 99.0))
         prange = None
         if age <= 23:

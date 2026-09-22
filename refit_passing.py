@@ -26,7 +26,7 @@ def trace(weeks=6, seed=2026):
     import passing_diag as D
     P.PASS_TRACE = []
     out = D.run(weeks=weeks, seed=seed, verbose=False)
-    tr = P.PASS_TRACE; P.PASS_TRACE = None
+    tr = [t for t in P.PASS_TRACE if t['path'] in ('man', 'zone')]; P.PASS_TRACE = None
     return tr, out
 
 
@@ -61,7 +61,7 @@ if __name__ == '__main__':
             gate = bd[d]['drop'] / max(bd[d]['comp'] + bd[d]['drop'], 1e-9)
             tgt = (REAL[d] + (MAN_OFF if path == 'man' else ZONE_OFF)) / 100 / (1 - gate)
             k = solve(base, tgt)
-            cur_k = {'short': 1.380, 'medium': 1.113, 'deep': 0.776}[d] \
+            cur_k = {'short': 1.494, 'medium': 1.171, 'deep': 0.802}[d] \
                 if path == 'man' else M.ZONE_SCALE[d]
             (new_man if path == 'man' else new_zone)[d] = round(k, 3)
             print(f"  {path:5s} {d:7s} {len(rows):5d} {np.mean(base):10.3f} {cur_k:6.2f} "

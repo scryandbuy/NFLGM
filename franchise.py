@@ -33,6 +33,8 @@ import numpy as np
 
 import league as LG
 import season as SN
+import xp as XP
+import dev_roll as DR
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -50,6 +52,7 @@ class Franchise:
         self.rng = rng or np.random.default_rng(seed)
         self.L = LG.build_league(rng=self.rng)
         self.user_team = user_team
+        self.L.user_team = user_team          # the season runner reads it at the weekly spend
         self.history = []
 
     # ---- one year ------------------------------------------------------
@@ -69,6 +72,13 @@ class Franchise:
         votes = AW.vote(L, post)
         log['awards'] = {k: (v.name if hasattr(v, 'name') else v)
                          for k, v in votes.items() if not isinstance(v, list)}
+        # season lines, milestones and award XP land once the vote is in
+        log['xp_paid'] = len(XP.close_season(L, votes))
+        # and the development trait moves: the majors are a guaranteed tier,
+        # the rest of the honours and the season itself shift the odds
+        moved = DR.run(L, votes, rng)
+        log['dev_up'] = sum(1 for m in moved if m[1] == 'up')
+        log['dev_down'] = sum(1 for m in moved if m[1] == 'down')
 
         log['retired'] = len(RT.run(L, rng))
         RG.run(L, rng)

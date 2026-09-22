@@ -156,9 +156,11 @@ def shell(plan, rng):
 def is_man(plan, rng):
     return rng.random() < plan.man_rate
 
-def depth(plan, rng):
-    return str(rng.choice(['short', 'medium', 'deep'],
-                          p=np.array(plan.depth_mix) / sum(plan.depth_mix)))
+def depth(plan, rng, yards_to_endzone=50, down=1, ydstogo=10):
+    import identity as ID
+    mix = ID.situational_depth(np.array(plan.depth_mix) / sum(plan.depth_mix),
+                               yards_to_endzone, down, ydstogo)
+    return str(rng.choice(['short', 'medium', 'deep'], p=mix))
 
 def personnel(plan, rng):
     ks = list(plan.personnel_mix)

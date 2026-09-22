@@ -269,29 +269,93 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
 # Real: returned on 35% of punts, mean 11.5 yards WHEN returned (the 4.23
 # figure counted all punts including fair catches), p90 19, max 97, and 0.36%
 # go for a touchdown.
-PUNT = dict(gross=47.2, sd=9.8, touchback=.075, blocked=.0043,
-            return_rate=.35, return_mean=11.5, return_p90=19, td_rate=.0036)
+PUNT = dict(gross=47.2, sd=8.5, blocked=.0043,
+            # real: 45% returned, mean return 10.4; the rest fair caught,
+            # downed, out of bounds or a touchback
+            return_rate=.45, return_mean=10.4, return_p90=19, td_rate=.0036,
+            # A FULL swing from a league-average leg. The 47.2 league gross
+            # includes every kick shortened from midfield, so the leg is
+            # longer than the mean. Real punters rate well above 0.70 on power,
+            # which the multiplier below turns into their extra distance.
+            full=49.0,
+            # where he tries to drop it when a full swing would carry through
+            # the end zone, and how far an average leg misses that spot
+            aim=12.0, aim_sd=7.0,
+            # a ball that comes down inside the 10 and is not caught bounces
+            # toward the goal; gunners down it unless it gets there first
+            roll_mean=6.0, roll_sd=4.0)
 
 def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70):
+    """
+    The punter READS THE FIELD, and so does the returner.
+
+    This used to kick a full gross from wherever the punter stood and touched
+    back only if the ball crossed the goal, so a punt from midfield landed at
+    the 3 every time: 9.8% of drives started inside the own 10 (real is a few
+    percent) and safeties ran three times the real rate off the sacks and
+    losses that followed. From midfield a real punter shortens the kick and
+    drops it around the 10; the distance is a decision made from field
+    position and his own leg, not a constant. At the other end the returner
+    decides what to do with a ball coming down near his goal line: fair catch
+    it, return it, or let it bounce and hope for the touchback. Every real
+    touchback is one of those decisions going the kicking team's way.
+    """
     if rng.random() < PUNT['blocked']:
-        return dict(type='punt', blocked=True, net=0,
+        return dict(type='punt', blocked=True, net=0, origin=yardline_100,
                     new_yardline=100 - yardline_100)
     pwr = rate_fn(punter, {'kick_power_rating': .70, 'kick_acc_rating': .30})
-    gross = rng.normal(PUNT['gross'] * (1.0 + 0.30 * (pwr - AVG)), PUNT['sd'])
+    acc = rate_fn(punter, {'kick_acc_rating': 1.0})
+    full = rng.normal(PUNT['full'] * (1.0 + 0.30 * (pwr - AVG)), PUNT['sd'])
+    pooch = False
+    if yardline_100 - full < PUNT['aim']:
+        # a full swing goes into or through the end zone: drop it short.
+        # Accuracy decides how close to the spot he actually lands it.
+        pooch = True
+        miss = rng.normal(0.0, PUNT['aim_sd'] * (1.0 - 0.6 * (acc - AVG)))
+        gross = max(15.0, yardline_100 - PUNT['aim'] + miss)
+    else:
+        gross = full
     land = yardline_100 - gross
-    if land <= 0 or rng.random() < PUNT['touchback']:
-        return dict(type='punt', blocked=False, touchback=True, net=None,
-                    new_yardline=80)       # opponent's own 20
+    touchback = land <= 0
     ret = 0.0
-    if rng.random() < PUNT['return_rate']:
-        skill = rate_fn(returner, {'kick_ret_rating': .45, 'speed_rating': .30,
-                                   'juke_move_rating': .25})
-        # shape/scale solved against mean 11.5 and p90 19, with a long right
-        # tail so 0.36% reach the end zone
-        ret = max(0.0, rng.gamma(1.9, 6.05) * (1.0 + 0.9 * (skill - AVG)))
-    new = float(np.clip(100 - land + ret, 1, 99))
-    return dict(type='punt', blocked=False, touchback=False,
+    how = 'touchback'
+    if not touchback:
+        if land < 10:
+            # THE RETURNER'S CALL. Deep in his own end he rarely runs it
+            # back; the closer to the goal the more he lets it go, because a
+            # bounce into the end zone is worth twenty yards to him.
+            let_go = rng.random() < (0.85 if land < 5 else 0.35)
+            if let_go:
+                roll = max(0.0, rng.normal(PUNT['roll_mean'], PUNT['roll_sd']))
+                if land - roll <= 0:
+                    touchback = True
+                else:
+                    land -= roll; how = 'downed'
+            else:
+                how = 'fair_catch'
+        elif rng.random() < PUNT['return_rate']:
+            how = 'return'
+            skill = rate_fn(returner, {'kick_ret_rating': .45, 'speed_rating': .30,
+                                       'juke_move_rating': .25})
+            # shape/scale solved against mean 10.4 and p90 19, with a long
+            # right tail so 0.36% reach the end zone
+            ret = max(0.0, rng.gamma(1.9, 5.5) * (1.0 + 0.9 * (skill - AVG)))
+        else:
+            how = 'fair_catch'
+    if touchback:
+        return dict(type='punt', blocked=False, touchback=True, how='touchback',
+                    gross=round(float(gross), 1), pooch=pooch,
+                    origin=yardline_100, net=round(float(yardline_100 - 20), 1),
+                    new_yardline=80)       # opponent's own 20
+    # A return brings the ball OUT, toward the kicking team's goal, so it
+    # SHORTENS the receiving team's field. This was + ret: every punt return
+    # in the engine's history pushed the returner backwards by the length of
+    # his own return, and the punt net came out longer than the gross.
+    new = float(np.clip(100 - land - ret, 1, 99))
+    return dict(type='punt', blocked=False, touchback=False, pooch=pooch, how=how,
                 gross=round(float(gross), 1), ret=round(float(ret), 1),
+                land=round(float(land), 1), origin=yardline_100,
+                net=round(float(yardline_100 - (100 - new)), 1),
                 new_yardline=round(new, 0))
 
 # ============================================================ KICKOFFS
@@ -500,6 +564,62 @@ class TeamState:
         self.out = set()
 
 # ============================================================ DRIVE
+def _resolve_live_penalty(dr, pen, out, oc):
+    """
+    A foul during or after the play. Returns 'replaced' if the penalty is
+    taken instead of the play, 'added' if it is tacked on after it, None if
+    declined.
+
+    THE OFFENCE CHOOSES. A defensive foul during the play is an option: take
+    the yards and the automatic first down, or keep a play that did better.
+    A touchdown stands. A dead-ball foul after the whistle is not a choice -
+    it is added to whatever the play produced.
+    """
+    import events as E
+    yards = float(pen['yards'])
+    gained = float(out.get('yards') or 0.0)
+    play_first = gained >= dr.togo or bool(out.get('touchdown'))
+    turnover = out.get('type') == 'interception'
+    if pen['on_offense']:
+        if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
+            # after the whistle: the result stands and they walk back
+            dr.log_pen_after = yards
+            return 'added'
+        # during the play (grounding, a face mask by a blocker): the play is
+        # wiped and the offence is set back from the previous spot
+        dr.yardline = min(99.0, dr.yardline + yards)
+        dr.togo += yards
+        if pen['penalty'] == 'Intentional Grounding':
+            dr.down += 1                          # loss of down
+        return 'replaced'
+    # defensive foul
+    if out.get('touchdown'):
+        return None                               # six beats fifteen
+    if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
+        # dead ball: added to the play result from where it ended
+        dr.log_pen_after = -yards
+        dr.log_pen_first = bool(pen['auto_first'])
+        return 'added'
+    # live-ball defensive foul: the better of the two, and a turnover is
+    # always wiped by an accepted flag. Interference and illegal contact are
+    # the exception: they are called BECAUSE the ball did not arrive, so the
+    # flag is the play. Drawing them independently of the outcome and then
+    # letting the offence decline them on completions produced 0.34 a game
+    # against a real 1.05.
+    pen_first = pen['auto_first'] or yards >= dr.togo
+    take = turnover or (pen_first and not play_first) or \
+        (pen_first == play_first and yards > gained) or \
+        pen['penalty'] in ('Defensive Pass Interference', 'Illegal Contact')
+    if not take:
+        return None
+    gained_p = min(yards, dr.yardline - 1)
+    dr.yardline -= gained_p
+    if pen_first:
+        dr.down, dr.togo = 1, min(10.0, dr.yardline); dr.first_downs += 1
+    else:
+        dr.togo -= gained_p
+    return 'replaced'
+
 class Drive:
     """One possession: downs, field position and the plays that move them."""
     def __init__(self, offense, defense, start_yardline, clock, quarter,
@@ -520,6 +640,21 @@ class Drive:
 def _advance(dr, gained):
     """Apply yardage, update downs and field position. Whole yards only."""
     gained = float(np.round(gained))
+    # a dead-ball foul tacked on after the play (see _resolve_live_penalty)
+    after = getattr(dr, 'log_pen_after', 0.0)
+    if after:
+        gained += after
+        dr.log_pen_after = 0.0
+        if getattr(dr, 'log_pen_first', False):
+            dr.log_pen_first = False
+            dr.yardline -= gained
+            dr.best = min(dr.best, max(0.0, dr.yardline))
+            if dr.yardline <= 0:
+                dr.result, dr.points = 'Touchdown', 6
+                return True
+            dr.down, dr.togo = 1, min(10, dr.yardline)
+            dr.first_downs += 1
+            return False
     dr.yardline -= gained
     dr.togo -= gained
     dr.best = min(dr.best, max(0.0, dr.yardline))
@@ -736,17 +871,13 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
                       dr.score_diff, ytg_i, rng, secs_left=dr.clock,
                       offense=offense, rate_fn=rate_fn)
-        # BACKED UP AGAINST YOUR OWN GOAL you play differently, and the engine
-        # did not. Real pass rate falls from 57.6% to 52.2% inside the own 10
-        # and 46.6% inside the own 4, and the sack rate on those dropbacks
-        # falls from 7.2% to 3.9% because the drops are short and the ball
-        # comes out. Ignoring both gave safeties on 1.4% of drives against a
-        # real 0.28%.
+        # Backed up against the own goal the offence plays differently. That
+        # used to be an OVERRIDE here that rewrote a called pass as a run or
+        # forced its depth short. The coach now reads the field position
+        # himself: schemes.pass_rate and identity.situational_depth carry the
+        # real backed-up rates and nothing is decided for him after the call.
         if dr.yardline >= 91 and oc.get('is_pass'):
-            if rng.random() < (0.19 if dr.yardline >= 96 else 0.10):
-                oc = dict(oc, is_pass=False, scheme='inside_zone')
-            else:
-                oc = dict(oc, depth='short', backed_up=True)
+            oc = dict(oc, backed_up=True)
         # THE COVERAGE CALL NEVER FIRED IN A GAME. call_defense only consults
         # coverage_call when it is handed both the defence AND rate_fn, and this
         # passed the defence alone - so every real game fell back to the shell
@@ -791,7 +922,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             oc['travel_willingness'] = float(
                 off_state.coach.get('travel_willingness', 0.5))
             if oc.get('is_pass'):
-                oc['depth'] = GP.depth(pl, rng)
+                oc['depth'] = GP.depth(pl, rng, yards_to_endzone=ytg_i,
+                                       down=dr.down, ydstogo=int(dr.togo))
             else:
                 fam = GP.run_family(pl, rng)
                 oc['scheme'] = ('inside_zone' if fam == 'zone' else 'power')
@@ -834,8 +966,18 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             dc['bracket'] = dp.bracket
             dc['travel'] = dp.travel
 
-        # penalties resolve before the snap can count
+        # Penalties. A pre-snap foul or a nullifying one (holding, OPI) wipes
+        # the snap. EVERYTHING ELSE WAS BEING THROWN AWAY: the draw below
+        # returned pass interference, defensive holding, roughing the passer,
+        # unnecessary roughness, face masks and illegal contact, and the loop
+        # dropped them on the floor because they do not nullify. So the engine
+        # applied every foul that sets an offence back and none of the ones
+        # that extend a drive - 0.17 automatic first downs a game against a
+        # real ~3.4 - and drives died four yards and a third of a first down
+        # short of real. The non-nullifying fouls are held here and resolved
+        # after the play, where the offence decides whether to take them.
         pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'])
+        live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
             dr.clock -= play_seconds('penalty')
             if pen['on_offense']:
@@ -877,6 +1019,14 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                 dc['coverage'], float(out.get('yards') or 0.0),
                 sack=(out.get('type') == 'sack'),
                 turnover=(out.get('type') in ('interception', 'fumble')))
+        # THE CALL, ON THE RECORD. Play action, motion and the blitz were
+        # decided on every snap and then discarded, so the register carried
+        # their real values as constants and reported ok whatever the engine
+        # did. Now the log says what was called and the register measures it.
+        out['is_pass'] = bool(oc.get('is_pass'))
+        out['play_action'] = bool(oc.get('play_action'))
+        out['motion'] = bool(oc.get('motion'))
+        out['blitzers'] = int(dc.get('blitzers', 0))
         dr.log.append(out)
         if book is not None: book.record(out, off_f, def_f, rng)
         for st in (off_state, def_state):
@@ -900,6 +1050,18 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                            rate_fn, week)
 
         t = out['type']
+        if live_pen is not None:
+            taken = _resolve_live_penalty(dr, live_pen, out, oc)
+            if taken == 'replaced':
+                # accepted in place of the play: the down is replayed, the
+                # snap is wiped from the drive the same way a holding call is
+                dr.plays -= 1; dr.log.pop()
+                dr.log.append(dict(type='penalty', **live_pen))
+                dr.clock -= play_seconds('penalty')
+                continue
+            if taken == 'added':
+                dr.log.append(dict(type='penalty', **live_pen))
+
         # a collapsed pocket is not automatically a sack - a mobile QB runs
         if t == 'sack':
             if rng.random() < E.scramble_chance(offense['qb'], 1.0, 1.4, rate_fn):

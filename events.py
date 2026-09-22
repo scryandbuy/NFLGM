@@ -102,7 +102,9 @@ PENALTIES = [
 ]
 PENALTIES_PER_GAME = 11.88
 PLAYS_PER_GAME = 169.0           # all plays including ST, from the same data
-PENALTY_RATE = 0.0703            # of plays
+PENALTY_RATE = 0.0703            # of plays, kept for reference; see penalty_check
+SCRIMMAGE_PLAYS_PER_GAME = 123.95   # what this engine counts (the register's own figure)
+PASS_PLAYS_PER_GAME = 123.95 * 0.578
 
 _names = [p[0] for p in PENALTIES]
 _rates = np.array([p[1] for p in PENALTIES], float)
@@ -128,15 +130,14 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
     Returns a penalty or None. discipline is the offending unit's rating on
     0-1; the league rate of 7.03% of plays sits at average discipline.
     """
-    p = PENALTY_RATE * (1.0 + 1.6 * (AVG - discipline))
-    if rng.random() >= max(0.0, p):
-        return None
-    # Draw a type. phase='any' means every type is eligible - the first build
-    # read it as a filter value, which excluded every PRE-SNAP penalty and so
-    # dropped False Start (2.23/gm, the second most common foul in football)
-    # entirely. The lost probability mass redistributed onto the rest, putting
-    # offensive holding at 4.15/gm against a real 2.24, mean yardage at 10.3
-    # against 8.3, and automatic first downs at 46% against 30%.
+    # EACH FOUL AT ITS OWN PER-PLAY RATE. The old draw rolled one flat 7.03%
+    # (a rate quoted per play INCLUDING special teams, applied to scrimmage
+    # snaps only) and then picked a type by its share of all penalties. A
+    # pass-only foul was spread over every snap and then filtered off the
+    # runs, so interference came out at 0.48 a game against a real 1.05 and
+    # the whole book ran 9 a game against 11.9. Now a foul that can only
+    # happen on a pass is rated per pass play, the rest per scrimmage play,
+    # and the chance of ANY flag is the sum of what is eligible on this snap.
     if phase == 'any':
         ok = [i for i, n in enumerate(_names)
               if PEN_INFO[n]['phase'] != 'pass' or is_pass]
@@ -145,8 +146,13 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
               if PEN_INFO[n]['phase'] in ('any', 'post', phase)
               or (PEN_INFO[n]['phase'] == 'pass' and is_pass)]
     if not ok: return None
-    w = _p[ok] / _p[ok].sum()
-    name = _names[int(rng.choice(ok, p=w))]
+    per_play = np.array([_rates[i] / (PASS_PLAYS_PER_GAME
+                                      if PEN_INFO[_names[i]]['phase'] == 'pass'
+                                      else SCRIMMAGE_PLAYS_PER_GAME) for i in ok])
+    p = per_play.sum() * (1.0 + 1.6 * (AVG - discipline))
+    if rng.random() >= max(0.0, p):
+        return None
+    name = _names[int(rng.choice(ok, p=per_play / per_play.sum()))]
     info = PEN_INFO[name]
 
     if name == 'Defensive Pass Interference':
