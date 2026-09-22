@@ -226,7 +226,7 @@ def _fix_one(league, team, rng, target):
         for p in team.active():
             if not p.contract:
                 continue
-            ok, saved, dead, _n = sensible_release(p)
+            ok, saved, dead, _n = sensible_release(p, june1=league.post_june1())
             if not ok:
                 continue
             rep = replacement_level(team, p.pos)
@@ -307,7 +307,7 @@ def run(league, rng, verbose=False):
         for p in team.active():
             if not p.contract:
                 continue
-            ok, saved, dead, _n = sensible_release(p)
+            ok, saved, dead, _n = sensible_release(p, june1=league.post_june1())
             if not ok:
                 continue                 # costs more to release than it saves
             # a man the club cannot replace does not get cut to save money

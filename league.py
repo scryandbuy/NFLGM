@@ -523,10 +523,20 @@ class League:
         if pid in self.free_agents: self.free_agents.remove(pid)
         self.log('sign', pid=pid, team=abbr, apy=p.apy, years=contract.years)
 
-    def release(self, pid, june1=False, log=True):
+    def post_june1(self):
+        """The simple rule: once the season is over and the league is in its
+        offseason, every cut and every trade is treated as post-June 1 -
+        this year's proration stays on this year's books and the rest lands
+        next year. In season, everything accelerates now. (Madden's rule;
+        cleaner than the calendar date and the two designations.)"""
+        return self.phase in ('offseason', 'free_agency')
+
+    def release(self, pid, june1=None, log=True):
         p = self.player(pid)
         t = self.teams.get(p.team)
         if t is None: return
+        if june1 is None:
+            june1 = self.post_june1()
         dead_now, dead_next, saved = (p.contract.release(0, june1)
                                       if p.contract else (0.0, 0.0, 0.0))
         t.cap.dead += dead_now
@@ -554,9 +564,25 @@ class League:
                 self.teams[dst].picks.append(item)
             else:
                 p = self.player(item)
+                # THE BONUS STAYS WITH THE CLUB THAT PAID IT. A trade is a
+                # release for the seller's cap: the remaining proration
+                # accelerates onto its books (split post-June 1 in the
+                # offseason), and the buyer inherits base and roster bonus
+                # only. The contract used to travel intact, so the buyer was
+                # carrying bonus money it never paid and the seller walked
+                # away clean.
+                c = p.contract
+                if c is not None:
+                    dead_now, dead_next, _s = c.release(0, self.post_june1())
+                    self.teams[src].cap.dead += dead_now
+                    self.teams[src].cap.dead_next += dead_next
+                    c.sb = 0.0
+                    self.log('trade_dead', team=src, pid=p.pid, dead=dead_now, dead_next=dead_next)
                 self.teams[src].roster.remove(p)
                 p.team = dst
                 self.teams[dst].roster.append(p)
+        for abbr in (a, b):
+            self.teams[abbr].sync_cap()
         self.log('trade', a=a, b=b,
                  a_sends=[str(x) for x in a_sends],
                  b_sends=[str(x) for x in b_sends])
@@ -809,6 +835,14 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
             pot = None                       # resolved the first time he plays
         yrs = int(r.contract_years_left) if pd.notna(r.get('contract_years_left')) else 1
         apy = float(r.apy) if pd.notna(r.get('apy')) else 1.0
+        # A man on an active roster with an APY is under contract for THIS
+        # season at least. The snapshot's "years left" counts the years after
+        # this one, so 35 starters - Lane Johnson, Quenton Nelson, McCaffrey,
+        # Humphrey - arrived with no contract at all: nothing on the cap, and
+        # priced in trades as if they were free, which is how Johnson fetched
+        # two first-round picks at 36.
+        if r.roster == 'active':
+            yrs = max(1, yrs)
         contract = None
         if yrs > 0:
             # Run it through the real structure builder. A flat apy-per-year

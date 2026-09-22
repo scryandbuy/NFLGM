@@ -107,7 +107,15 @@ def future_pick(round_, years_out=1):
     """A future pick with no known slot: price it where such picks really land."""
     return FUTURE_SLOT.get(int(round_), 220), years_out
 
-PICK_DOLLAR_ANCHOR = 0.115 / max(MARKET_VALUE.values())   # scales pick 1 to ~11.5% of cap
+# THE DOLLAR ANCHOR sits on the MIDDLE of the first round, not on pick 1.
+# The market chart is steep (pick 32 trades at 17% of pick 1) while what
+# picks return is flat (55%). Anchoring pick 1 to its ~11.5%-of-cap surplus
+# priced a late first at $6m and a future first at $7m, and 21 of 43 deals in
+# one window sent a first-round pick for a 74-to-80 on a rookie contract.
+# Pick 16 is worth about 7.5% of the cap in surplus over its rookie deal
+# (Massey-Thaler, Baldwin); anchoring there puts pick 1 at ~$80m, pick 32 at
+# ~$14m, a second at ~$7m, which is what those picks actually buy.
+PICK_DOLLAR_ANCHOR = 0.075 / MARKET_VALUE[16]
 
 def pick_price_dollars(pick, years_out=0, cap=CAP):
     """The transaction price in $M, so picks and players compare on one scale."""
@@ -121,6 +129,12 @@ def pick_value_dollars(pick, years_out=0, cap=CAP, lens='blend', blend=0.5):
     return pick_price_dollars(pick, years_out, cap)
 
 # ---------------------------------------------------------------- player value
+STAR_PREMIUM = 0.50     # share of a proven player's market salary his certainty is worth, per year, at the elite tier
+# specialists do not fetch premium picks whatever their overall: kickers and
+# punters go for late-round picks in the real market, full stop
+POSITION_TRADE_MULT = {'K': 0.30, 'P': 0.30, 'LS': 0.20, 'FB': 0.60}
+
+
 def trade_value(player, val, cap=CAP, contract=None):
     """
     What a player is worth in a trade = surplus (value minus cost) over the years
@@ -133,13 +147,46 @@ def trade_value(player, val, cap=CAP, contract=None):
     apy = float(player.get('apy', 0) or 0)
     worth = float(val['apy'])
 
+    # A PROVEN PLAYER IS WORTH MORE THAN HIS CAP SURPLUS. Surplus alone said a
+    # 90 paid at market was worth nothing in a trade, so any first-round pick
+    # ($6m to $9m of surplus) outbid nearly every player in the league and a
+    # 36-year-old tackle fetched two of them. Real clubs pay firsts for stars
+    # on full contracts (Hill, Adams, Ramsey) because a proven 90 cannot be
+    # bought reliably in free agency at any price: certainty and scarcity
+    # are worth a share of his salary on top. Nothing for a replacement-
+    # level man, rising through the 80s to a full share for the elite.
+    ovr = float(player.get('ovr', 75) or 75)
+    tier = float(np.clip((ovr - 80.0) / 10.0, 0.0, 1.7))
+    # certainty is what the premium buys, and a 36-year-old offers little of
+    # it: Lane Johnson at 93 was worth 19 on this alone. Fades from 30.
+    tier *= float(np.clip(1.0 - max(0.0, age - 30.0) * 0.12, 0.25, 1.0))
+    # and a quarterback's certainty is worth more than a guard's: the same
+    # positional table the draft board uses
+    try:
+        from draft import PREMIUM as _POSP
+        tier *= float(_POSP.get(player.get('madden_position'), 1.0))
+    except Exception:
+        pass
+    # THE SHORTFALL ON A MAX CONTRACT IS NOT A LIABILITY AT THE TOP. The
+    # comps put Chase's market under the $38m he is paid, and surplus alone
+    # priced a 97 at 27 like a second-round pick. Below 90 a bad deal still
+    # costs you; from 90 up the shortfall is capped at a slice of his salary,
+    # because to the club that wants him the contract is the price of having
+    # him, not a debt.
+    elite = float(np.clip((ovr - 88.0) / 4.0, 0.0, 1.0))
+    floor = -worth * (0.35 * (1.0 - elite) + 0.08 * elite)
     total = 0.0
     for k in range(yrs):
         # The valuation already prices his CURRENT age (comps are age-matched),
         # so applying a decline in year 0 double-counts it. Decline only applies
         # to the years ahead, and gently.
         decline = 1.0 if k == 0 else float(np.clip(1.0 - max(0.0, age + k - 28) * 0.032, 0.45, 1.0))
-        total += (worth * decline - apy) * (0.90 ** k)      # future years discounted
+        surplus = worth * decline - apy
+        if elite > 0:
+            surplus = max(surplus, floor)
+        total += surplus * (0.90 ** k)                      # future years discounted
+        total += STAR_PREMIUM * worth * decline * tier * (0.90 ** k)
+    total *= POSITION_TRADE_MULT.get(player.get('madden_position'), 1.0)
     return round(total, 2)
 
 def dead_money_on_trade(contract, year_index):
@@ -219,7 +266,9 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
                                 lens=g['pick_lens'])
         v *= WINDOW_PICK_BIAS[wdw] * (1.25 - 0.45*g['aggression'])
         return v
-    v = asset['trade_value']
+    # the owner values him on the full contract he is paying; a buyer on the
+    # base and roster bonus he would inherit, the bonus having been paid
+    v = asset['trade_value'] if owns else asset.get('trade_value_buyer', asset['trade_value'])
     if asset['age'] >= 30: v *= WINDOW_AGE_BIAS[wdw]
     if asset['need']: v *= 1.18
     v *= g['own_bias'] if owns else g['target_bias']
@@ -253,8 +302,10 @@ def cap_blocks(offer, space_a, space_b, gm_a=None, gm_b=None):
         if isinstance(gm, dict): f = float(gm.get('contract_focus', 0.5))
         else: f = float(getattr(gm, 'contract_focus', 0.5)) if gm is not None else 0.5
         return 0.9 - 0.5 * f                    # a cap hawk tolerates 40% of his room, a spender 90%
-    dead_a = sum(float(x.get('dead', 0) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
-    dead_b = sum(float(x.get('dead', 0) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
+    # the cap block is about THIS year's books, so post-June 1 only this
+    # year's proration counts against the room
+    dead_a = sum(float(x.get('dead_now', x.get('dead', 0)) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
+    dead_b = sum(float(x.get('dead_now', x.get('dead', 0)) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
     in_a = sum(float(x.get('inherit', 0) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
     in_b = sum(float(x.get('inherit', 0) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
     out_a = sum(float(x.get('inherit', 0) or 0) for x in offer['a_sends'] if x['kind'] == 'player')

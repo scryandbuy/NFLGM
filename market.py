@@ -332,8 +332,14 @@ def sign(league, player, offer, cap):
 
 # ============================================================ THE INBOX
 def inbox_add(league, msg):
+    """Free-agency messages go through the same inbox as everything else,
+    keeping their own fields on the top level for resolve_offer_sheets."""
+    import inbox as IB
     league.__dict__.setdefault('inbox', [])
-    league.inbox.append(dict(msg, year=league.year))
+    m = IB.post(league, msg.get('kind', 'note'), msg.get('subject') or msg.get('kind', 'note'),
+                msg.get('body', ''), sender=msg.get('team'), payload=msg)
+    m.update({k: v for k, v in msg.items() if k not in ('id', 'status')})
+    return m
 
 
 def resolve_offer_sheets(league, rng, verbose=False):

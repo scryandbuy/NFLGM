@@ -29,15 +29,15 @@ def post(league, kind, subject, body, sender=None, payload=None, expires_week=No
 
 
 def pending(league, kind=None):
-    return [m for m in _box(league) if m['status'] in ('unread', 'open')
-            and (kind is None or m['kind'] == kind)]
+    return [m for m in _box(league) if m.get('status', 'unread') in ('unread', 'open')
+            and (kind is None or m.get('kind') == kind)]
 
 
 def expire(league, week):
     """Close anything past its expiry. Called at every advance."""
     n = 0
     for m in _box(league):
-        if m['status'] in ('unread', 'open') and m.get('expires_week') is not None \
+        if m.get('status', 'unread') in ('unread', 'open') and m.get('expires_week') is not None \
                 and (week > m['expires_week'] or m['year'] < league.year):
             m['status'] = 'expired'; n += 1
     return n

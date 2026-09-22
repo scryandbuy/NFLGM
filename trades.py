@@ -122,18 +122,35 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
         seed = (hash((getattr(viewer, 'abbr', ''), p.pid)) % 10000) / 10000.0
         seen = p.ovr + (seed - 0.5) * 2.0 * PERCEPTION_SPREAD
         v = dict(v, apy=v['apy'] * (1.0 + 0.045 * (seen - p.ovr)))
-    row = dict(age=p.age, apy=p.apy,
-               contract_years_left=p.contract_years_left,
-               madden_position=p.pos)
     # THE CAP FACTS OF MOVING HIM. The seller eats every dollar of bonus
     # still prorated (dead money, this year); the buyer inherits only the
     # base and roster bonus. Both used to be ignored in favour of the APY.
     c = getattr(p, 'contract', None)
-    dead = TE.dead_money_on_trade(c, 0) if c else 0.0
+    if c:
+        dead_now, dead_next, _s = c.release(0, league.post_june1())
+        # what the seller feels: this year's charge in full, next year's at a
+        # discount because it is a year away and a growing cap absorbs it
+        dead = round(dead_now + 0.6 * dead_next, 2)
+    else:
+        dead_now, dead = 0.0, 0.0
     inherit = round(c.cap_hit(0) - c.annual_proration, 2) if c else 0.0
+    # WHAT THE BUYER WOULD ACTUALLY PAY. The bonus was paid by the club that
+    # signed him and stays on its books; the buyer carries base and roster
+    # bonus for the years left. So the same man is worth MORE to acquire the
+    # more of his money has already been paid: a $36m-a-year player with a
+    # $20m base is, to the buyer, a $20m-a-year player. His own club keeps
+    # valuing him on the full contract, which is what it is paying.
+    yrs = max(1, int(p.contract_years_left or 1))
+    inherited_apy = (round(sum(c.cap_hit(i) - c.annual_proration for i in range(yrs)) / yrs, 2)
+                     if c else p.apy)
+    row = dict(age=p.age, apy=p.apy, ovr=float(seen),
+               contract_years_left=p.contract_years_left, madden_position=p.pos)
+    row_buyer = dict(row, apy=inherited_apy)
     return dict(kind='player', pid=p.pid, pos=p.pos, age=p.age, apy=p.apy,
                 need=need, trade_value=TE.trade_value(row, v),
-                seen_ovr=round(float(seen), 1), obj=p, dead=dead, inherit=inherit)
+                trade_value_buyer=TE.trade_value(row_buyer, v),
+                seen_ovr=round(float(seen), 1), obj=p, dead=dead, dead_now=dead_now,
+                inherit=inherit, inherited_apy=inherited_apy)
 
 
 def pick_asset(league, pk, need=False):
@@ -249,6 +266,8 @@ def stars_at(league, team, pool, rng, grp, viewer=None):
     for p in men:
         if p.pos == 'QB' and wdw in ('contending', 'win_now'):
             continue                                  # the one man not for sale
+        if p.ovr >= 95 and p.age < 30 and wdw in ('contending', 'win_now'):
+            continue                                  # nor is a 95 in his prime
         a = player_asset(league, team, p, pool, rng, viewer=viewer or team)
         if a:
             a['grp'] = grp; a['star'] = True; a['ask'] = STAR_ASK[wdw]
