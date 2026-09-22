@@ -66,12 +66,19 @@ def owners(call, unit, rushers, rate):
         Z['deep_L'] = _pick([cbL], used); Z['deep_R'] = _pick([cbR], used)
         Z['deep_M'] = _pick(safs, used, space)
     def under(areas):
+        # the free safety who is not deep takes the hook over the ball first:
+        # that is the robber, the quarters safety driving on the dig, the
+        # strong safety in the low hole, and it is where a safety's passes
+        # defended come from
+        spare_safs = [s for s in safs if id(s) not in used]
+        if spare_safs and 'hook_M' in areas:
+            Z['hook_M'] = _pick(spare_safs, used, space); areas = [a for a in areas if a != 'hook_M']
         pool = nick + [s for s in safs if id(s) not in used] + lbs
         for a in areas:
             Z[a] = _pick(pool, used, space)
     if call in ('cover_3', 'cover_3_mable', 'fire_zone'):
         deep_thirds()
-        under(['flat_L', 'flat_R', 'hook_L', 'hook_R'] if call != 'fire_zone' else ['hook_L', 'hook_R', 'flat_L'])
+        under(['hook_M', 'flat_L', 'flat_R', 'hook_L', 'hook_R'] if call != 'fire_zone' else ['hook_M', 'hook_L', 'hook_R'])
         Z.setdefault('hook_M', Z.get('hook_L') or Z.get('hook_R')); Z.setdefault('flat_R', None)
     elif call in ('cover_2', 'tampa_2'):
         Z['deep_L'] = _pick(safs, used, space); Z['deep_R'] = _pick(safs, used, space)
