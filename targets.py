@@ -248,10 +248,13 @@ SCHEME_SHIFT = {
                  'finesse_moves_rating': -.14, 'accel_rating': -.10},
     'one_gap':  {'accel_rating': +.18, 'finesse_moves_rating': +.24,
                  'strength_rating': -.14},
-    'man':      {'man_cover_rating': +.24, 'press_rating': +.18,
-                 'zone_cover_rating': -.14},
-    'zone_cov': {'zone_cover_rating': +.26, 'play_rec_rating': +.20,
-                 'man_cover_rating': -.16},
+    # coverage shifts run twice the size of the line's because a back's
+    # weights carry both man and zone and the two nearly cancelled: the
+    # secondary moved half a point under a scheme while a guard moved five
+    'man':      {'man_cover_rating': +.48, 'press_rating': +.36,
+                 'zone_cover_rating': -.28},
+    'zone_cov': {'zone_cover_rating': +.52, 'play_rec_rating': +.40,
+                 'man_cover_rating': -.32},
 }
 
 # WHO A SCHEME SHIFT APPLIES TO. A run-blocking scheme grades linemen and

@@ -73,9 +73,16 @@ def owners(call, unit, rushers, rate):
         spare_safs = [s for s in safs if id(s) not in used]
         if spare_safs and 'hook_M' in areas:
             Z['hook_M'] = _pick(spare_safs, used, space); areas = [a for a in areas if a != 'hook_M']
-        pool = nick + [s for s in safs if id(s) not in used] + lbs
+        # hooks are linebacker areas first (the curl/hook is where a MIKE or
+        # WILL lives), flats belong to the nickel and the spare safety;
+        # sorting one pool by speed had the nickel taking every hook and the
+        # corners at 70% of passes defended against a real 55-60
+        spare = [s for s in safs if id(s) not in used]
         for a in areas:
-            Z[a] = _pick(pool, used, space)
+            if a.startswith('hook'):
+                Z[a] = _pick(lbs + spare + nick, used, space)
+            else:
+                Z[a] = _pick(nick + spare + lbs, used, space)
     if call in ('cover_3', 'cover_3_mable', 'fire_zone'):
         deep_thirds()
         under(['hook_M', 'flat_L', 'flat_R', 'hook_L', 'hook_R'] if call != 'fire_zone' else ['hook_M', 'hook_L', 'hook_R'])

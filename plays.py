@@ -53,6 +53,9 @@ def logistic(x, k=6.0):
 # all taking time off the clock, attempts were leaving the hand at 2.55s.
 RUSHER_BASE = 3.36
 BASE_TTT = 2.72          # the league mean the clock must land on
+# how much longer than the average dropback the ball is held, by the route's depth
+HOLD_BY_DEPTH = {'screen': -0.55, 'short': -0.22, 'medium': 0.08, 'deep': 0.40}   # deep sacks ran 24% against a real ~10 at 0.50
+SACK_K = 22.6            # solved with the hold so the blend lands on the real 6.6%
 # ESPN's pass block win rate is whether a lineman sustains his block for 2.5
 # seconds or longer. Arbitrary on its face, but it is the industry definition
 # and the one every published number is measured against, so it is used here
@@ -545,7 +548,12 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # Solved together with RUSHER_BASE: a longer clock alone would have taken
     # sacks to ~4.7%. Sacks are measured after a mobile QB has turned some of
     # them into scrambles (game.py), which is what the register counts.
-    p['sack'] = rng.random() < float(np.clip(20.8 * np.exp(-2.40 * p['time']), 0, .85))
+    # THE DROP DEPTH SETS HOW LONG HE HOLDS IT. A three-step throw is out
+    # before the rush matters; a seven-step shot waits for the route. The
+    # sack roll used to read only the rush's arrival, so a quick game and a
+    # deep game were sacked at the same rate against a real ~3% and ~10%.
+    hold = HOLD_BY_DEPTH.get('screen' if screen else depth, 0.0)
+    p['sack'] = rng.random() < float(np.clip(SACK_K * np.exp(-2.40 * (p['time'] - hold)), 0, .85))
 
     # Free rushers force the ball out. That is what a hot route IS, and it is
     # the real answer to a blitz - not simply eating the sack.
@@ -560,7 +568,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         PASS_TRACE.append(dict(path='clock', time=p['time'], hot=bool(hot),
                                sack=bool(p['sack']), rushers=def_call['rushers']))
     if p['sack'] and not hot:
-        return dict(type='sack', yards=round(-rng.gamma(2.0, 3.4), 1),
+        return dict(type='sack', yards=round(-rng.gamma(2.0, 3.4), 1), depth=depth, screen=bool(screen),
                     touchdown=False, by=p['beaten_by'], concept=concept,
                     protection=prot_name, pb_reps=p['pb_reps'], ttt=round(float(p['time']), 3),
                     beaten=p.get('beaten'), pressured=True)
