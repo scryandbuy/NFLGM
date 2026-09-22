@@ -81,6 +81,21 @@ class GM:
     scheme_rigidity:float = 0.50   # how hard a scheme misfit is penalised
     scouting:       float = 0.50   # how close his read of a prospect sits to the
                                    # truth: 1 = the best room in the league, 0 = the worst
+    # --- what he runs (identity_catalog axes; the coach and the GM are one man) ---
+    off_blocking:   str = 'zone'    # 'zone' | 'gap' | 'mixed'
+    off_personnel:  str = '11'      # base grouping: '11' | '12' | '13' | '21' | 'multiple'
+    pass_lean:      float = 0.50    # run-heavy .. pass-heavy
+    play_action:    float = 0.50
+    motion:         float = 0.50
+    tempo:          float = 0.50
+    deep:           float = 0.50
+    fourth_down:    float = 0.50
+    def_front:      str = '4-3'     # '4-3' one-gap | '3-4' two-gap | 'multiple'
+    coverage:       float = 0.25    # zone .. man
+    shell:          float = 0.50    # single-high .. two-high
+    blitz:          float = 0.35
+    box:            float = 0.45    # light .. heavy
+    tree:           str = ''        # the coaching family, for the record
     # --- state, not personality ---
     job_security:   float = 0.60   # low security collapses the time horizon
     tenure:         int   = 0      # years in the chair; 0 = brand new regime
@@ -108,6 +123,74 @@ class GM:
             g.patience = max(0.0, g.patience - .40)
             g.aggression = min(1.0, g.aggression + .30)
         return g
+
+IDENTITY_KEYS = ('off_blocking', 'off_personnel', 'pass_lean', 'play_action', 'motion', 'tempo',
+                 'deep', 'fourth_down', 'def_front', 'coverage', 'shell', 'blitz', 'box')
+ROSTER_KEYS = ('youth', 'pick_lens', 'contract_focus', 'risk', 'patience', 'aggression', 'dev_belief',
+               'board_trust', 'need_inflation', 'restructure_depth', 'scouting')
+
+
+def scheme_of(gm):
+    """
+    The engine's scheme keys (targets.SCHEME_SHIFT) that this man's identity
+    implies: blocking, front, coverage. A 'mixed' blocking scheme or a
+    'multiple' front adds no shift at that spot; a coverage lean that is not
+    clearly man or zone adds none either.
+    """
+    keys = []
+    if gm.off_blocking in ('zone', 'gap'):
+        keys.append(gm.off_blocking)
+    if gm.def_front == '4-3': keys.append('one_gap')
+    elif gm.def_front == '3-4': keys.append('two_gap')
+    if gm.coverage >= 0.5: keys.append('man')
+    elif gm.coverage <= 0.3: keys.append('zone_cov')
+    return keys or None
+
+
+def apply_identity(gm, entry, name=None):
+    """Write a catalog entry onto a GM: offence and defence axes, the
+    roster dials, the name and the tree."""
+    if name: gm.name = name
+    gm.tree = entry.get('tree', '')
+    for k, v in entry.get('offence', {}).items():
+        setattr(gm, {'blocking': 'off_blocking', 'personnel': 'off_personnel'}.get(k, k), v)
+    for k, v in entry.get('defence', {}).items():
+        setattr(gm, {'front': 'def_front'}.get(k, k), v)
+    for k, v in entry.get('roster', {}).items():
+        if k in ROSTER_KEYS: setattr(gm, k, float(v))
+    gm.scouting = float(np.clip(gm.scouting, 0.05, 0.98))
+    return gm
+
+
+def blend_identity(rng, offence=None, defence=None, roster=None, noise=0.08):
+    """
+    A man from the archetypes in identity_catalog: a weighted mix of one or
+    two offensive trees, one defensive family and one front-office type,
+    plus noise, which is how coaching trees actually propagate. Returns the
+    dict apply_identity takes.
+    """
+    import identity_catalog as IC
+    A = IC.ARCHETYPES
+    def pick(kind, given):
+        names = [k for k, v in A.items() if kind in v]
+        if given: return given
+        w = np.ones(len(names))
+        if kind == 'offence':      # the league is a Shanahan/McVay league
+            w = np.array([3.0 if n in ('shanahan_tree', 'mcvay_tree') else 1.0 for n in names])
+        return str(rng.choice(names, p=w / w.sum()))
+    def mix(kind, a, b=None, wa=1.0):
+        out = dict(A[a][kind])
+        if b:
+            for k, v in A[b][kind].items():
+                if isinstance(v, (int, float)): out[k] = wa * out[k] + (1 - wa) * v
+        for k, v in list(out.items()):
+            if isinstance(v, (int, float)): out[k] = float(np.clip(v + rng.normal(0, noise), 0, 1))
+        return out
+    o1 = pick('offence', offence); o2 = pick('offence', None) if rng.random() < 0.5 else None
+    d1 = pick('defence', defence); r1 = pick('roster', roster)
+    return dict(offence=mix('offence', o1, o2, rng.uniform(0.6, 0.85)), defence=mix('defence', d1),
+                roster=mix('roster', r1), tree=f"{o1}{'+' + o2 if o2 else ''} / {d1} / {r1}")
+
 
 def make_gm(rng, archetype=None):
     A = {
@@ -150,6 +233,13 @@ def make_gm(rng, archetype=None):
     g = GM(name=k, **p)
     g.job_security = float(np.clip(rng.normal(.60, .18), .05, .98))
     g.tenure = int(rng.integers(0, 8))
+    # what he runs: drawn from the trees unless a catalog entry replaces it
+    ident = blend_identity(rng)
+    for kk, v in ident['offence'].items():
+        setattr(g, {'blocking': 'off_blocking', 'personnel': 'off_personnel'}.get(kk, kk), v)
+    for kk, v in ident['defence'].items():
+        setattr(g, {'front': 'def_front'}.get(kk, kk), v)
+    g.tree = ident['tree']
     return g
 
 # ---------------------------------------------------------------- replaceability

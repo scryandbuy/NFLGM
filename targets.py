@@ -254,13 +254,40 @@ SCHEME_SHIFT = {
                  'man_cover_rating': -.16},
 }
 
+# WHO A SCHEME SHIFT APPLIES TO. A run-blocking scheme grades linemen and
+# the men who block for the run, a front grades the men in it, a coverage
+# grades the men who cover. Applied to everyone, a zone-blocking shift put
+# run-block weights on quarterbacks and receivers (defaulting to 70) and
+# graded every starter in the league fifteen points below his rating.
+SCHEME_DOMAIN = {
+    'gap':      {'LT', 'LG', 'C', 'RG', 'RT', 'TE', 'FB', 'HB'},
+    'zone':     {'LT', 'LG', 'C', 'RG', 'RT', 'TE', 'FB', 'HB'},
+    'one_gap':  {'LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM'},
+    'two_gap':  {'LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM'},
+    'man':      {'CB', 'FS', 'SS', 'MIKE', 'WILL', 'SAM'},
+    'zone_cov': {'CB', 'FS', 'SS', 'MIKE', 'WILL', 'SAM'},
+}
+
+
+# How hard fit bites on the field. At full strength a 380-pound mauler graded
+# ten points under his rating in a zone scheme; real but bounded is a few
+# points either way, so a misfit starter still starts and simply plays a
+# little under his card.
+SCHEME_BITE = 0.5
+
+
 def position_score(player, position, scheme=None):
     """How good is he AT THIS SPOT, not overall."""
     w = dict(DEPTH_WEIGHTS.get(position, {'awareness_rating': 1.0}))
     if scheme:
         for s in ([scheme] if isinstance(scheme, str) else scheme):
+            if position not in SCHEME_DOMAIN.get(s, ()):
+                continue
             for k, v in SCHEME_SHIFT.get(s, {}).items():
-                w[k] = max(0.0, w.get(k, 0.0) + v)
+                # only shift what the spot already weighs; a shift is a
+                # lean within his job, not a new job
+                if k in w:
+                    w[k] = max(0.0, w[k] + v * SCHEME_BITE)
     tot = sum(w.values()) or 1.0
     return sum(player.get(k, 70.0) * v for k, v in w.items()) / tot
 

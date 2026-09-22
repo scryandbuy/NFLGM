@@ -822,10 +822,19 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         div[r.away_team] = r.away_div
 
     L = League(year)
+    import identity_catalog as IC
+    from gm_engine import apply_identity, scheme_of
     for abbr in sorted(S.team.dropna().unique()):
         d = div.get(abbr, 'AFC East')
-        L.teams[abbr] = Team(abbr, d, d.split()[0], year,
-                             gm=make_gm(rng))
+        t = Team(abbr, d, d.split()[0], year, gm=make_gm(rng))
+        # THE MAN IN CHARGE, from the 2026 catalog: what he runs and how he
+        # builds. His scheme becomes the club's scheme for the depth chart,
+        # the play caller, the draft board and the trade valuation.
+        entry = IC.CATALOG.get(abbr)
+        if entry:
+            apply_identity(t.gm, entry, name=entry['coach'])
+        t.scheme = scheme_of(t.gm)
+        L.teams[abbr] = t
 
     for _, r in S.iterrows():
         ratings = {c: float(r[c]) for c in rating_cols if pd.notna(r[c])}
