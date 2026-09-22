@@ -127,7 +127,7 @@ CATALOG = {
    defence=dict(front='3-4', coverage=.15, shell=.7, blitz=.3, box=.45),
    roster=dict(youth=.55, pick_lens=.45, contract_focus=.7, risk=.35, patience=.7, aggression=.3, dev_belief=.6, board_trust=.75, need_inflation=.3, restructure_depth=.3, scouting=.7),
    tags=['methodical', 'trenches', 'the 53rd man matters', 'cheap free agency', 'coach\'s people in the building'], confidence='known'),
- 'LAR': dict(coach='Sean McVay', gm='Les Snead', tree='McVay',
+ 'LA': dict(coach='Sean McVay', gm='Les Snead', tree='McVay',
    offence=dict(blocking='zone', personnel='13', pass_lean=.55, play_action=.7, motion=.7, tempo=.5, deep=.55, fourth_down=.55),   # 13 personnel 38%
    defence=dict(front='3-4', coverage=.1, shell=.6, blitz=.15, box=.15),          # Shula: two-high, blitz 11%, light box
    roster=dict(youth=.5, pick_lens=.2, contract_focus=.5, risk=.7, patience=.5, aggression=.75, dev_belief=.6, board_trust=.6, need_inflation=.35, restructure_depth=.6, scouting=.7),
