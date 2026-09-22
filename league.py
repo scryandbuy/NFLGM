@@ -548,10 +548,21 @@ class League:
         t.cap.dead += dead_now
         t.cap.dead_next += dead_next
         if p in t.roster: t.roster.remove(p)
-        p.team, p.contract = None, None
+        # THE WIRE. A man with fewer than four accrued seasons does not walk
+        # straight to the pool: he sits on waivers until the next advance,
+        # and the club with the highest priority that claims him inherits
+        # his deal. His contract stays on him for that purpose; the club
+        # that released him has already eaten the bonus above.
+        import waivers as WV
+        on_wire = WV.subject(self, p, self.week)
+        p.team = None
+        if on_wire:
+            WV.waive(self, p, t.abbr, self.week)
+        else:
+            p.contract = None
         if pid not in self.free_agents: self.free_agents.append(pid)
         if log:
-            self.log('release', pid=pid, team=t.abbr, dead=dead_now, saved=saved)
+            self.log('release', pid=pid, team=t.abbr, dead=dead_now, saved=saved, waived=on_wire)
         return dead_now, dead_next, saved
 
     def trade(self, a, b, a_sends, b_sends):

@@ -42,6 +42,7 @@ import scouting as SC
 import draft as DFT
 import newgens as NG
 import practice_squad as PSQ
+import waivers as WV
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -104,6 +105,9 @@ class Franchise:
         cuts, res = CT.run(L, rng)
         CT.enforce(L, rng)
         log['cuts'], log['restructures'] = len(cuts), len(res)
+        # the offseason releases go through the wire before free agency opens
+        WV.notify_user(L, WV.pending(L), 0, digest=True)
+        log['waiver_claims'] = len(WV.process(L, rng, 0))
 
         t = TG.run(L, rng)
         CT.enforce(L, rng)
@@ -149,6 +153,9 @@ class Franchise:
                 PSQ.release_from_squad(L, t.abbr, p.pid)
         PSQ.reset_season(L)
         cut, filled = CD.finalize(L, rng)
+        # cut-down men go through the wire before the squads fill
+        WV.notify_user(L, WV.pending(L), 0, digest=True)
+        log['waiver_claims'] += len(WV.process(L, rng, 0))
         log['practice_squad'] = PSQ.fill_squads(L, rng)
         log['cut_to_53'] = len(cut)
         log['filled'] = filled

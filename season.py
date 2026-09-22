@@ -236,13 +236,17 @@ class SeasonRunner:
         # keep their XP until he spends it from the player tab.
         XS.spend_week(self.L, week, self.rng,
                       user_team=getattr(self.L, 'user_team', None))
+        import inbox as IB, practice_squad as PSQ, waivers as WV
+        IB.expire(self.L, week)
+        # THE WIRE: award last week's claims first (the user had the week to
+        # claim from the inbox), then notify the user of this week's waivers
+        WV.process(self.L, self.rng, week)
+        WV.notify_user(self.L, WV.pending(self.L), week)
+        # the squads: elevations for clubs short of healthy men, the odd poach
+        PSQ.weekly(self.L, self.rng, week, user_team=getattr(self.L, 'user_team', None))
         # THE TRADE WINDOW. A trickle through the early weeks, the phones
         # busy in the two weeks before the deadline, nothing after it. The
         # user's club is never traded with on its own account.
-        import inbox as IB, practice_squad as PSQ
-        IB.expire(self.L, week)
-        # the squads: elevations for clubs short of healthy men, the odd poach
-        PSQ.weekly(self.L, self.rng, week, user_team=getattr(self.L, 'user_team', None))
         if week <= TR.TRADE_DEADLINE_WEEK:
             user = getattr(self.L, 'user_team', None)
             made = TR.run(self.L, self.rng, rounds=1,

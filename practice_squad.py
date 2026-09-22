@@ -65,12 +65,12 @@ def can_add(team, p):
     # one specialist at most: the engine rates kickers and punters in the
     # high 80s, and a squad picked on raw overall carried two punters
     if p.pos in ('K', 'P') and any(q.pos in ('K', 'P') for q in sq): return False
+    # the real rule is a CAP of six veterans, which leaves ten slots that
+    # only young men can fill; a minimum of ten young men is the same thing
+    # when the pool is deep and a squad of seven when it is not
     vets = sum(1 for q in sq if not is_young(q))
     if not is_young(p) and vets >= VET_MAX: return False
-    # after this addition there must still be room for ten young men
-    young_after = sum(1 for q in sq if is_young(q)) + (1 if is_young(p) else 0)
-    slots_left = SIZE - len(sq) - 1
-    return young_after + slots_left >= YOUNG_MIN
+    return True
 
 
 # ------------------------------------------------------------ moves
@@ -103,9 +103,23 @@ def call_up(league, abbr, pid, years=1):
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
     squad(team).remove(p); p.xp_spent.pop('_ps', None); p.team = None
+    _make_room(league, abbr, p)
     league.sign(pid, abbr, Contract(years=years, base=[mn] * years, signing_bonus=0.0, signed=league.year))
     league.log('ps_callup', pid=pid, team=abbr)
     return True
+
+
+def _make_room(league, abbr, p):
+    """The 53 is the 53: a call-up or a poach in season releases the worst
+    man at his spot, who goes through waivers like anyone else. That is
+    where the in-season wire comes from."""
+    team = league.teams[abbr]
+    if league.phase != 'regular' or len(team.active()) < 53:
+        return
+    cands = [q for q in team.active() if q.pos == p.pos and not locked(q, league.week)] or \
+            [q for q in team.active() if not locked(q, league.week)]
+    if cands:
+        league.release(min(cands, key=lambda q: q.ovr).pid)
 
 
 def poach(league, abbr, pid, week):
@@ -116,6 +130,7 @@ def poach(league, abbr, pid, week):
     squad(league.teams[src]).remove(p); p.xp_spent.pop('_ps', None); p.team = None
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
+    _make_room(league, abbr, p)
     league.sign(pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
     p.xp_spent['_poach_lock'] = (week or 0) + POACH_LOCK_GAMES
     league.log('ps_poach', pid=pid, team=abbr, source=src, locked_until=(week or 0) + POACH_LOCK_GAMES)

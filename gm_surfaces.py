@@ -130,7 +130,8 @@ def claim_value(player, val, gm, team):
     control. You inherit the salary, so a bad contract is a real deterrent.
     """
     g = gm.shift(team)
-    v = val['apy'] - player['cost'] * (0.6 + 0.9 * g.contract_focus)
+    cost = float(player.get('cost', player.get('apy', 0.0)) or 0.0)
+    v = val['apy'] - cost * (0.6 + 0.9 * g.contract_focus)
     return round(float(v), 2)
 
 def protect_young_player_by_cutting_veteran(young, veteran):
