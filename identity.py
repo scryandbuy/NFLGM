@@ -237,7 +237,7 @@ def situational_depth(mix, yards_to_endzone, down=1, ydstogo=10):
     if down >= 3:
         if ydstogo >= 11:   short, medium, deep = short * 0.50, medium * 1.70, deep * 2.20
         elif ydstogo >= 8:  short, medium, deep = short * 0.55, medium * 1.75, deep * 1.80
-        elif ydstogo >= 5:  short, medium, deep = short * 0.72, medium * 1.60, deep * 1.10
+        elif ydstogo >= 5:  short, medium, deep = short * 0.52, medium * 2.10, deep * 1.15   # 3rd-and-medium converted 36% vs a real 42: too many throws short of the sticks
         elif ydstogo >= 3:  short, medium, deep = short * 0.90, medium * 1.30, deep * 0.80
     elif down == 2 and ydstogo >= 11:
         short, medium, deep = short * 0.85, medium * 1.30, deep * 1.10
