@@ -735,7 +735,15 @@ def package_units(roster, state, rng, is_offense, package):
         db = list(roster.get('db', []))
         cbs = [d for d in db if d.get('pos') == 'CB']
         saf = [d for d in db if d.get('pos') in ('FS', 'SS')]
-        out['db'] = cbs[:spec.get('CB', 3)] + saf[:spec.get('FS', 1) + spec.get('SS', 1)]
+        n_cb = spec.get('CB', 3)
+        # BIG NICKEL. The fifth defensive back is a third safety about a
+        # third of the time in the real league, which is most of why the
+        # third corner plays 57% of snaps and not 80%. The dime stays corners.
+        if n_cb == 3 and len(saf) >= 3 and rng.random() < 0.34:
+            n_cb = 2
+            out['db'] = cbs[:2] + saf[:3]
+        else:
+            out['db'] = cbs[:n_cb] + saf[:spec.get('FS', 1) + spec.get('SS', 1)]
         out['lb'] = list(roster.get('lb', []))[:spec.get('LB', 2)]
         out['dl'] = list(roster.get('dl', []))[:spec.get('DL', 4)]
     return out
@@ -1218,6 +1226,24 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
 
     tos = Timeouts()
     half_done = False
+    # SHADOWING IS A GAME-WEEK DECISION. A coordinator decides on Tuesday
+    # whether his best corner follows their best receiver, and then he does
+    # it all game. Decided per snap it ran at 4% of pass plays; the real rate
+    # for clubs that shadow is 15-25% of all snaps, near 50% of games for a
+    # premier corner against a premier receiver.
+    import coverage as CV
+    for st, ros, opp in ((home_state, home, away), (away_state, away, home)):
+        if st is None or st.plan is None: continue
+        cbs = sorted([d for d in ros.get('db', []) if d.get('pos') == 'CB'],
+                     key=lambda d: -rate_fn(d, {'man_cover_rating': .55, 'speed_rating': .25, 'press_rating': .20}))
+        wrs = [w for w in opp.get('wr', []) if w.get('pos') == 'WR']
+        if len(cbs) >= 2 and wrs:
+            wr1 = max(wrs, key=lambda w: rate_fn(w, {'route_run_short_rating': .20, 'route_run_med_rating': .25,
+                                                     'route_run_deep_rating': .25, 'speed_rating': .30}))
+            st.plan.travel = CV.should_travel(cbs[0], cbs[1], wr1, rate_fn, True, rng,
+                                              coach_willingness=float(st.coach.get('travel_willingness', 0.5)),
+                                              scale=1.6)          # a game-week call has a lower bar than a snap
+            st.plan.travel_target = wr1.get('pid') if st.plan.travel else None
     while clock > 0:
         off = home if pos == 'home' else away
         deff = away if pos == 'home' else home

@@ -58,12 +58,14 @@ BASE_TTT = 2.72          # the league mean the clock must land on
 # and the one every published number is measured against, so it is used here
 # rather than a threshold of our own.
 PBW_THRESHOLD = 2.5
+RBW_THRESHOLD = -0.035   # solved to the real 71% run-block win rate
 
 # Share of incompletions a defender gets credit for breaking up. Solved to the
 # real 37.5% overall: a contested throw is usually somebody's doing, a clean
 # miss usually nobody's.
-PD_CONTESTED = 0.72
-PD_LOOSE = 0.22
+LAST_TRAVEL = False
+PD_CONTESTED = 0.44   # 4.9 a team-game against a real 2.9 at 0.72/0.22
+PD_LOOSE = 0.13
 
 # Share of SHORT throws that are really behind the line of scrimmage. The real
 # split says 18.4/(18.4+49.5) of the short bucket, but this engine's depth mix
@@ -403,7 +405,9 @@ def resolve_play(off, deff, off_call, def_call, yards_to_endzone, rng):
     Returns the play outcome with every contributor named.
     """
     if off_call['is_pass']:
-        return _pass_play(off, deff, off_call, def_call, yards_to_endzone, rng)
+        out = _pass_play(off, deff, off_call, def_call, yards_to_endzone, rng)
+        if isinstance(out, dict): out['travelled'] = LAST_TRAVEL
+        return out
     return _run_play(off, deff, off_call, def_call, yards_to_endzone, rng)
 
 # Red-zone compression is an OUTCOME, not an input. An earlier build multiplied
@@ -453,7 +457,10 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # Same fault in the run game: zip() stops at the shorter list, so against a
     # four-man front the fifth lineman was never recorded either. An unblocked
     # man is still blocking somebody - he wins his rep.
-    rb_reps = [(b.get('pid'), w > 0.0) for b, w in zip(blockers, wins)]
+    # A win is beating your man, and the line wins about 71% of them (ESPN
+    # RBWR): the deterministic edge is the mean, and the rep itself is a
+    # draw around it, so a slightly out-rated blocker still wins his share
+    rb_reps = [(b.get('pid'), (w + rng.normal(0.0, 0.10)) > RBW_THRESHOLD) for b, w in zip(blockers, wins)]
     # Same in the run game: a surplus blocker is doubling or pulling, not
     # standing free, so he shares the result of the block that mattered most
     # rather than banking an automatic win.
@@ -574,6 +581,14 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     for extra in pool[n_routes:]:
         if extra.get('pos') in ('TE', 'HB', 'RB', 'FB') and len(receivers) < 5:
             receivers.append(extra)
+    # THE BACK. off['wr'] holds receivers and tight ends; the back lives in
+    # off['rb'] and never entered the pattern at all, so backs drew 0% of
+    # targets against a real 18%. He is the outlet on every dropback where
+    # the protection does not keep him in.
+    back = (off.get('backs') or [off.get('rb')])[0] if (off.get('backs') or off.get('rb')) else None
+    if back is not None and not any(r is back for r in receivers) and len(receivers) < 6 \
+            and rng.random() < (0.25 if prot_name in ('seven', 'max') else 0.62):
+        receivers.append(back)
     if not receivers: receivers = pool[:1]
 
     # Coverage assignment and target selection. Before this the target was a
@@ -605,11 +620,13 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     in_coverage['lb'] = [x for x in deff['lb'] if id(x) not in rusher_ids]
     in_coverage['dl'] = [x for x in deff['dl'] if id(x) not in rusher_ids]
     in_coverage['db'] = list(deff['db'])
+    global LAST_TRAVEL
     pairs, travelled = CV.assign_coverage(
         aligned, in_coverage, def_call, rng, rate,
         coach_willingness=off_call.get('travel_willingness', 0.5),
         travel=def_call.get('travel'))
 
+    LAST_TRAVEL = bool(travelled)
     # every man in the pattern gets his own separation from his own matchup
     for pr in pairs:
         pr['separation'] = resolve_man(pr['receiver'], pr['defender'], depth,

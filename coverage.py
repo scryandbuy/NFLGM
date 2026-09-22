@@ -64,7 +64,7 @@ def receiver_alignment(receivers, personnel='11', rng=None):
 
 
 def should_travel(cb1, cb2, wr1, rate_fn, is_man, rng, coach_willingness=0.5,
-                  AVG=0.70):
+                  AVG=0.70, scale=1.0):
     """
     Does CB1 follow the offence's best receiver?
 
@@ -98,8 +98,8 @@ def should_travel(cb1, cb2, wr1, rate_fn, is_man, rng, coach_willingness=0.5,
     # data describes, and that is the ceiling, not the norm. The first build
     # peaked at 85% and travelled 54% of the time on a negligible corner gap.
     p = (1.35 * (gap - 0.06) + 0.75 * (threat - 0.04)) * \
-        (0.45 + 1.05 * coach_willingness)
-    return rng.random() < float(np.clip(p, 0.0, 0.62))
+        (0.45 + 1.05 * coach_willingness) * scale
+    return rng.random() < float(np.clip(p, 0.0, 0.62 * scale))
 
 
 def corner_sides(cbs, rng, left_pref=None):
@@ -139,8 +139,18 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
     is_man = (under == 'man') if not isinstance(under, tuple) else True
 
     # does the top corner travel with their best man
+    wr1 = None
+    if cbs and aligned:
+        wide = [a for a in aligned if a['spot'] in ('X', 'Z', 'slot')] or aligned
+        wr1 = max((a['player'] for a in wide),
+                  key=lambda w: rate_fn(w, {'route_run_short_rating': .20, 'route_run_med_rating': .25,
+                                            'route_run_deep_rating': .25, 'speed_rating': .30}), default=None)
+    if travel is True and not is_man:
+        travel = rng.random() < 0.75            # a zone-match: he still aligns over him most of the time
     if travel is None and cbs and aligned:
-        wr1 = next((a['player'] for a in aligned if a['spot'] == 'X'), None)
+        # THEIR BEST RECEIVER, wherever he lines up. Reading only the X meant
+        # a star in the slot or at Z was never shadowed, which is a third of
+        # the reason travel ran at 8% against a real 15-25%.
         travel = should_travel(cbs[0], cbs[1] if len(cbs) > 1 else None, wr1,
                                rate_fn, is_man, rng, coach_willingness) \
                  if wr1 is not None else False
@@ -159,7 +169,7 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
     for a in aligned:
         spot = a['spot']
         if spot in ('X', 'Z'):
-            if spot == 'X' and travel and cbs:
+            if travel and cbs and a['player'] is wr1:
                 d = cbs[0]                      # my best man follows him
                 used.add(id(d))
                 trav = True
@@ -177,11 +187,15 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
                                   {'under': under}, a.get('side')) == 'man')))
         elif spot == 'slot':
             # the slot draws the NICKEL - a different player with different
-            # attributes, not whichever corner happened to be picked
-            pool = [c for c in cbs if id(c) not in used] or safs or cbs
-            d = take(pool)
+            # attributes, not whichever corner happened to be picked; unless
+            # the star is in the slot and my best man is following him
+            if travel and cbs and a['player'] is wr1 and id(cbs[0]) not in used:
+                d = cbs[0]; used.add(id(d)); trav = True
+            else:
+                pool = [c for c in cbs if id(c) not in used] or safs or cbs
+                d = take(pool); trav = False
             pairs.append(dict(receiver=a['player'], defender=d, spot=spot,
-                              travelled=False, kind='nickel',
+                              travelled=trav, kind='nickel',
                               man=(CC.under_for_side(
                                   {'under': under}, a.get('side')) == 'man')))
         elif spot == 'te':

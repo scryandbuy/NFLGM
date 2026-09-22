@@ -35,7 +35,7 @@ def defensive_personnel(off_pers, down, ydstogo, rng, gm_aggr=0.5):
     wr = PERSONNEL_OFF.get(off_pers, PERSONNEL_OFF['11'])['wr']
     if wr >= 4:  base = 'dime' if (down == 3 and ydstogo >= 7) else 'nickel'
     elif wr == 3: base = 'nickel'
-    elif wr == 2: base = 'base' if rng.random() < 0.55 else 'nickel'
+    elif wr == 2: base = 'base' if rng.random() < 0.70 else 'nickel'
     else:         base = 'heavy' if rng.random() < 0.50 else 'base'
     if down == 3 and ydstogo >= 8 and base in ('base', 'nickel'):
         base = 'nickel' if base == 'base' else 'dime'
