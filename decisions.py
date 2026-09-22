@@ -111,7 +111,17 @@ def win_prob(score_diff, seconds_left, yardline_100, down=1, ydstogo=10,
         float(timeout_edge), float(timeout_edge) / np.sqrt(s / 60.0 + 1.0),
         float(is_home),
     ])
-    return float(1.0 / (1.0 + np.exp(-(x @ COEF + INTERCEPT))))
+    wp = float(1.0 / (1.0 + np.exp(-(x @ COEF + INTERCEPT))))
+    # A TIE AT THE GUN IS A COIN FLIP. The fitted model had no late tied
+    # states to learn from and extrapolated the possession's value: tied with
+    # the ball and no time left it said 0.82, so a team down three late read
+    # the tying field goal as worth 0.18 and went for the touchdown instead.
+    # Real teams tie and take overtime; real overtime is near 6% of games.
+    # Inside two minutes a tied state blends to 0.5 as the clock runs out.
+    if abs(sd) < 0.5 and s < 120.0:
+        w = 1.0 - s / 120.0
+        wp = (1.0 - w) * wp + w * 0.5
+    return wp
 
 
 def _flip(score_diff, seconds_left, yardline_100, is_home=1, **kw):

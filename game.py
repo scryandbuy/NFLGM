@@ -888,6 +888,20 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if dr.plays > 25:
             dr.result = 'End of half'; break
 
+        # ---- THE CLOCK KICK. Down three or tied with the clock about to
+        # expire and the ball in range, the field goal unit comes on
+        # whatever the down: a team down three with eight seconds left at
+        # the 30 does not run another play. The drive loop only ever kicked
+        # on fourth down, so the tying kick was rarely attempted and
+        # overtime ran at 3% against a real 6.2%. ----
+        if quarter >= 4 and -3 <= dr.score_diff <= 0 and dr.yardline <= 37 \
+                and dr.down < 4 and (dr.clock <= 8 or (dr.clock <= 22 and timeouts is not None
+                                                        and timeouts.left.get(pos, 0) == 0)):
+            fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
+            if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
+            dr.clock -= min(dr.clock, play_seconds('field_goal'))
+            dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
+            dr.points = fg['points']; dr.log.append(fg); break
         # ---- fourth down is a decision, not a play ----
         if dr.down == 4:
             # the head coach's appetite, off his identity when he has one
