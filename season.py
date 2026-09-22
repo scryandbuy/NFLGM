@@ -237,6 +237,8 @@ class SeasonRunner:
         # THE TRADE WINDOW. A trickle through the early weeks, the phones
         # busy in the two weeks before the deadline, nothing after it. The
         # user's club is never traded with on its own account.
+        import inbox as IB
+        IB.expire(self.L, week)
         if week <= TR.TRADE_DEADLINE_WEEK:
             user = getattr(self.L, 'user_team', None)
             made = TR.run(self.L, self.rng, rounds=1,

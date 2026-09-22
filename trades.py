@@ -232,6 +232,30 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     return surplus[:n], needs
 
 
+STAR_ASK = {'contending': 1.60, 'win_now': 1.45, 'middling': 1.30, 'retooling': 1.15, 'rebuilding': 1.05}
+
+
+def stars_at(league, team, pool, rng, grp, viewer=None):
+    """
+    The men a club is NOT trying to move: its best one or two at a group.
+    They are available the way anyone is available - at a price. A
+    contending club asks 60% over what it thinks he is worth and will not
+    move its quarterback; a rebuilding one asks a little over and listens.
+    """
+    out = []
+    men = sorted((p for pos, ps in team.depth.items() if GRP.get(pos, pos) == grp for p in ps
+                  if p.out_until is None), key=lambda p: -p.ovr)[:2]
+    wdw = TE.window(team.ctx())
+    for p in men:
+        if p.pos == 'QB' and wdw in ('contending', 'win_now'):
+            continue                                  # the one man not for sale
+        a = player_asset(league, team, p, pool, rng, viewer=viewer or team)
+        if a:
+            a['grp'] = grp; a['star'] = True; a['ask'] = STAR_ASK[wdw]
+            out.append(a)
+    return out
+
+
 def _picks_by_price(league, team, gm, ctx, space):
     """
     Every pick this club holds, cheapest first, as it prices them itself.
@@ -286,7 +310,7 @@ def _pick_to_offer(league, team, target, gm, ctx, space):
 #     picks on average, a sixth-rounder with 1.03
 #
 # So a package is the normal shape and a single pick is the cheap end of it.
-MAX_PACKAGE = 4
+MAX_PACKAGE = 5
 
 
 def _can_absorb(league, team, target, space):
@@ -372,7 +396,7 @@ IN_SEASON_ACTIVITY = {w: 0.04 for w in range(1, 7)}
 IN_SEASON_ACTIVITY.update({7: 0.15, 8: 0.35, 9: 0.60})
 
 
-def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=()):
+def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_to_user=True):
     """
     Clubs shop their surplus. A deal goes through only when both sides price
     it as a gain through their own window.
@@ -424,6 +448,19 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=()):
                           if x['pid'] not in moved
                           and x.get('grp') in na
                           and x.get('seen_ovr', 0) > na[x['grp']] + UPGRADE_GAP]
+                # NOT ONLY SURPLUS. A club that is good everywhere but one
+                # spot goes and gets someone's starter there and pays for
+                # him. Contenders do it most, aggressive GMs do it most, and
+                # it is rare enough that a window is still mostly depth
+                # deals: the seller's asking price on a star (stars_at) is
+                # what keeps it rare, not a rule.
+                wdw_a = TE.window(ctx_a)
+                chase = (0.35 if wdw_a in ('contending', 'win_now') else 0.10) * (0.5 + ga['aggression'])
+                if na and rng.random() < chase:
+                    hole = min(na, key=na.get)                  # his thinnest group
+                    for x in stars_at(league, tb, pool, rng, hole, viewer=ta):
+                        if x['pid'] not in moved and x.get('seen_ovr', 0) > na[hole] + UPGRADE_GAP + 3:
+                            want_a.append(x)
                 if not want_a:
                     continue
                 want_a.sort(key=lambda x: -x.get('seen_ovr', 0))
@@ -481,6 +518,53 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=()):
             print(f'    {a} sends {lbl} '
                   f'for {b} {inn.name} ({inn.pos} {inn.ovr:.0f})  '
                   f'gains {res["a_gain"]:+.1f}/{res["b_gain"]:+.1f}')
+    # OFFERS TO THE USER. Clubs come to the user unprompted with the same
+    # logic they use on each other: a man in the user's surplus who improves
+    # a real hole, priced up until a balanced front office would take it.
+    # The offer goes to the inbox and waits; nothing moves until the user
+    # says so. Not during the draft (draft_day handles that) and never more
+    # than one live offer per club at a time.
+    user = [t for t in exclude if t and t in league.teams]
+    if user and offers_to_user:
+        u = user[0]; tu = league.teams[u]
+        import inbox as IB
+        live = {m['sender'] for m in IB.pending(league, 'trade_offer')}
+        su, nu = surplus_and_needs(league, tu, pool, rng)
+        gu, ctx_u = TE.GM_ARCHETYPES['balanced'], tu.ctx()
+        active_now = [a for a in teams if activity >= 1.0 or rng.random() <= activity * 0.6]
+        for a in active_now:
+            if a in live or not su:
+                continue
+            ta = league.teams[a]
+            sa, na = surplus_and_needs(league, ta, pool, rng)
+            ga, ctx_a = persona(ta.gm), ta.ctx()
+            want = [x for x in su if x.get('grp') in na
+                    and x.get('seen_ovr', 0) > na[x['grp']] + UPGRADE_GAP]
+            wdw_a = TE.window(ctx_a)
+            chase = (0.35 if wdw_a in ('contending', 'win_now') else 0.10) * (0.5 + ga['aggression'])
+            if na and rng.random() < chase:
+                hole = min(na, key=na.get)
+                for x in stars_at(league, tu, pool, rng, hole, viewer=ta):
+                    if x.get('seen_ovr', 0) > na[hole] + UPGRADE_GAP + 3:
+                        want.append(x)
+            if not want:
+                continue
+            want.sort(key=lambda x: -x.get('seen_ovr', 0))
+            target = dict(want[0]); target['need'] = True
+            if not _can_absorb(league, ta, target, cap_space[a]):
+                continue
+            offer, res = _negotiate(league, ta, tu, target, ga, gu, ctx_a, ctx_u,
+                                    cap_space[a], cap_space[u], sa, rng)
+            if offer is None:
+                continue
+            sends = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
+            why = (('They want him as their starter at ' if target.get('star') else 'They see him as an upgrade at ') + str(target.get('grp')) +
+                   ' and are offering ' + ', '.join(
+                       (f"their {x['obj'].year} round {x['obj'].round} pick" if x['kind'] == 'pick'
+                        else x['obj'].name) for x in offer['a_sends']) + '.')
+            IB.post_trade_offer(league, a, u, sends, [target['pid']], why,
+                                expires_week=(league.week or 0) + 1)
+            live.add(a)
     return made
 
 

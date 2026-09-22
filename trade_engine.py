@@ -223,6 +223,8 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
     if asset['age'] >= 30: v *= WINDOW_AGE_BIAS[wdw]
     if asset['need']: v *= 1.18
     v *= g['own_bias'] if owns else g['target_bias']
+    if owns and asset.get('star'):
+        v *= float(asset.get('ask', 1.3))            # a starter is not for sale at his value
     if owns:
         # THE SELLER'S DEAD MONEY. Moving him accelerates what is left of his
         # bonus onto this year's cap. That is a real cost of the deal and it
