@@ -181,7 +181,7 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
                 elif d is not None:
                     used.add(id(d))
                 trav = False
-            pairs.append(dict(receiver=a['player'], defender=d, spot=spot,
+            pairs.append(dict(receiver=a['player'], defender=d, spot=spot, side=a.get('side', 'C'),
                               travelled=trav, kind='cb',
                               man=(CC.under_for_side(
                                   {'under': under}, a.get('side')) == 'man')))
@@ -194,7 +194,7 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
             else:
                 pool = [c for c in cbs if id(c) not in used] or safs or cbs
                 d = take(pool); trav = False
-            pairs.append(dict(receiver=a['player'], defender=d, spot=spot,
+            pairs.append(dict(receiver=a['player'], defender=d, spot=spot, side=a.get('side', 'C'),
                               travelled=trav, kind='nickel',
                               man=(CC.under_for_side(
                                   {'under': under}, a.get('side')) == 'man')))
@@ -204,17 +204,20 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
             pool = (safs if rng.random() < 0.58 else lbs) or safs or lbs or cbs
             d = take(pool)
             kind = 'safety' if d in safs else 'lb'
-            pairs.append(dict(receiver=a['player'], defender=d, spot=spot,
+            pairs.append(dict(receiver=a['player'], defender=d, spot=spot, side=a.get('side', 'C'),
                               travelled=False, kind=kind,
                               man=(CC.under_for_side(
                                   {'under': under}, a.get('side')) == 'man')))
         else:                                   # back out of the backfield
             pool = [l for l in lbs if id(l) not in used] or lbs or safs
             d = take(pool)
-            pairs.append(dict(receiver=a['player'], defender=d, spot=spot,
+            pairs.append(dict(receiver=a['player'], defender=d, spot=spot, side=a.get('side', 'C'),
                               travelled=False, kind='lb',
                               man=(CC.under_for_side(
                                   {'under': under}, a.get('side')) == 'man')))
+    # the zone layer needs the whole coverage unit, not only the pairings
+    for pr in pairs:
+        pr['_unit'] = dict(cbs=cbs, safs=safs, lbs=lbs, sides=sides)
     return pairs, bool(travel)
 
 

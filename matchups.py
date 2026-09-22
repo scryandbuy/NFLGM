@@ -183,6 +183,9 @@ ZONE_WINDOW = {
 }
 # How many defenders are close enough to contest. A route landing between two
 # zones - the seam - is where zone gets beaten, so fewer contesting defenders.
+HOLE_WINDOW = 1.30        # the window when nobody owns the area (zones.py)
+CONVERGE_WEIGHT = 0.45    # the second defender's squeeze relative to the owner's
+CONVERGE_SLICE = 0.88     # and the slice he takes by arriving
 ZONE_DEFENDERS_NEAR = {'cover_2': 1.3, 'cover_3': 1.5, 'cover_4': 1.7,
                        'cover_6': 1.5, 'tampa_2': 1.6}
 
@@ -194,7 +197,7 @@ ZONE_DEFENDERS_NEAR = {'cover_2': 1.3, 'cover_3': 1.5, 'cover_4': 1.7,
 # squeeze compounds with depth: the mean window after squeeze runs 0.56 short,
 # 0.42 medium, 0.28 deep inside games, so one scalar left deep zone at 35%
 # against a real ~42 and zone overall 8 points BELOW man.
-ZONE_SCALE = {'short': 1.279, 'medium': 1.371, 'deep': 1.397}
+ZONE_SCALE = {'short': 1.13, 'medium': 1.20, 'deep': 1.46}   # re-solved for zones as space (refit_passing), then tilted to hold air yards
 
 # HOW STEEPLY RATINGS MOVE THE WINDOW. Measured inside games by club: the
 # defending club's mean window ran sd 0.028 on a mean of 0.42 and completion
@@ -210,7 +213,7 @@ def zone_window(shell, depth):
     i = {'short': 0, 'medium': 1, 'deep': 2}[depth]
     return ZONE_WINDOW.get(shell, (0.58, 0.39, 0.27))[i]
 
-def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate):
+def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate, hole=False):
     """
     Zone pass resolution. Two steps, as the football describes it:
 
@@ -239,6 +242,9 @@ def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate):
     # 2. the nearest defender squeezes it. Others are too far to matter, which
     #    is why the seam beats zone.
     near = min(defenders, key=lambda d: d.get('dist_to_window', 99)) if defenders else None
+    if hole:
+        # nobody owns the area: the blitz took him or the call leaves it
+        w *= HOLE_WINDOW
     if near is not None:
         brk = rate(near, ROUTE['defender_zone']['break'])
         cls = rate(near, ROUTE['defender_zone']['close'])
@@ -246,6 +252,14 @@ def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate):
         squeeze = (ZONE_SLOPE['break'] * (brk - AVG)
                    + ZONE_SLOPE['close'] * (cls - AVG)) * (n / 1.5)
         w *= 1.0 - squeeze
+        # a second man converging from the next area squeezes it again, at
+        # less than the owner's weight, and takes a slice of the window
+        # simply by being there
+        for d in defenders:
+            if d is not near and d.get('dist_to_window', 99) <= 1:
+                brk2 = rate(d, ROUTE['defender_zone']['break']); cls2 = rate(d, ROUTE['defender_zone']['close'])
+                w *= 1.0 - CONVERGE_WEIGHT * (ZONE_SLOPE['break'] * (brk2 - AVG) + ZONE_SLOPE['close'] * (cls2 - AVG))
+                w *= CONVERGE_SLICE
 
     w = max(0.04, min(0.97, w))
 

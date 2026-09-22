@@ -648,6 +648,19 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # call, and it could not be expressed at all before.
     tgt_pair = next((x for x in pairs if x['receiver'] is tgt), None)
     in_man = tgt_pair.get('man') if tgt_pair else def_call.get('man', False)
+    # ZONE AS SPACE (zones.py): in a zone call the man who contests is the
+    # owner of the area the route lands in, a second man may converge, the
+    # area may be a hole, and quarters plays a vertical by an outside man
+    # as man. The pairing's defender only stands in a man call.
+    zone_owner, zone_second, zone_hole = None, None, False
+    if not in_man and tgt_pair is not None:
+        import zones as ZN
+        zone_owner, zone_second, zone_hole, match_man = ZN.contest(
+            def_call.get('coverage') or def_call['shell'], tgt_pair, rushers, depth, rng, rate)
+        if match_man:
+            in_man = True; cov = zone_owner
+        elif zone_owner is not None:
+            cov = zone_owner
     if in_man:
         cb = cov
         # Apply the concept and read modifiers to the COMPLETION PROBABILITY,
@@ -676,9 +689,10 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         # Only the NEAREST defender contests - handing the resolver the whole
         # secondary made every window contested by the best of six and dropped
         # league completion to 51.6% against a real 65.0%.
-        dbs = [dict(cov, dist_to_window=0)]
+        dbs = ([dict(cov, dist_to_window=0)] if not zone_hole else []) + \
+              ([dict(zone_second, dist_to_window=1)] if zone_second is not None else [])
         z = resolve_zone(tgt, dbs, off['qb'], def_call['shell'], depth,
-                         p['pressure'], rng, rate)
+                         p['pressure'], rng, rate, hole=zone_hole)
         # Apply the concept to the WINDOW, not as a second independent gate.
         # Gating twice dropped four-man-rush completion to 51.8% against a
         # real 61.9%.
