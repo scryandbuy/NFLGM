@@ -52,6 +52,7 @@ SHOCK = {
     'won_title':          +20.0,
 }
 DECAY = {'fast': 0.55, 'slow': 0.965, 'shock': 0.975}   # per week retention
+BASE_RECOVERY = 0.02                                     # weekly pull of the baseline toward neutral
 
 # ---------------------------------------------------------------- entitlement
 # What a player thinks he is owed. A 62-overall fourth-stringer who never plays
@@ -104,6 +105,17 @@ class Morale:
         self.shock *= DECAY['shock']
         # the shock bleeds into the baseline: lasting damage, not just a dip
         self.base = float(np.clip(self.base + 0.055*self.shock + 0.035*self.slow, 10, 90))
+        # and the baseline recovers: a man who has had a bad stretch comes
+        # back over a season if nothing new goes wrong. Without this the
+        # league drifted a point or two a year and never came back
+        self.base += BASE_RECOVERY * (NEUTRAL - self.base)
+
+    def offseason(self):
+        """A new season is a new season. The grudges that survive it are the
+        big ones (a broken promise, a benching); the weight of a 6-11 year
+        does not."""
+        self.fast = 0.0; self.slow = 0.0; self.shock *= 0.5
+        self.base = float(np.clip(self.base + 0.33 * (NEUTRAL - self.base), 10, 90))
 
     def apply(self, kind, note='', entitle=None):
         """

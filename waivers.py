@@ -29,6 +29,7 @@ import numpy as np
 
 VESTED = 4
 DEADLINE_WEEK = 9
+CLAIMS_PER_SEASON = 8    # in-season claims a club, about the real pace
 
 
 def pending(league):
@@ -83,8 +84,16 @@ def wants(league, abbr, p, week, market=None):
     depth = team.depth.get(p.pos, [])
     k = {'QB': 1, 'HB': 2, 'WR': 4, 'TE': 2, 'CB': 4, 'DT': 3, 'FS': 1, 'SS': 1}.get(p.pos, 2)
     incumbent = depth[k - 1].ovr if len(depth) >= k else 40.0
-    if p.ovr < incumbent + 1.5:
+    # A REAL UPGRADE, or nothing: claims at +1.5 over the k-th man, with the
+    # released man going back on the wire, fed a loop that ran 689 claims a
+    # season against a real ~150 in season
+    if p.ovr < incumbent + 3.0:
         return False
+    if week and week > 0:
+        claims_this_season = sum(1 for x in league.transactions if x.get('kind') == 'waiver_claim' and x.get('team') == abbr and x.get('year') == league.year and (x.get('week') or 0) > 0)
+        if claims_this_season >= CLAIMS_PER_SEASON: return False
+        if any(x.get('kind') == 'waiver_claim' and x.get('team') == abbr and x.get('year') == league.year and x.get('week') == week for x in league.transactions[-400:]):
+            return False
     v = market if market is not None else VAL.value_player(league, p, side='team', rng=None)
     if not v:
         return False

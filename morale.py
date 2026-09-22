@@ -102,6 +102,14 @@ def shock(league, pid, kind, note=''):
     ensure(p).apply(kind, note=note, entitle=e)
 
 
+def offseason_reset(league):
+    for p in league.players.values():
+        if getattr(p, 'morale', None) is not None:
+            p.morale.offseason()
+        if isinstance(p.xp_spent, dict):
+            p.xp_spent.pop('_request_streak', None)
+
+
 def postseason(league, post):
     seeds = post.r.seeds() if hasattr(post, 'r') else {}
     in_playoffs = {t for sd in seeds.values() for t in sd}
@@ -149,14 +157,27 @@ def status(p, team=None):
     return MS.status(m, p.ovr, bool(p.xp_spent.get('_captain', False)))
 
 
-def trade_requests(league):
-    """Men who want out. AI clubs put them on the block; the user hears from the agent."""
+REQUEST_WEEKS = 3        # the status has to hold this long before he asks
+REQUESTS_PER_CLUB = 1    # a season
+
+
+def trade_requests(league, week=None):
+    """Men who want out. The status has to persist for three weeks, one man
+    a club a season, none in the last two weeks; the AI puts him on the
+    block and the user hears from the agent."""
     import inbox as IB
     user = getattr(league, 'user_team', None)
     out = []
+    if week is not None and week >= 16:
+        return out
     for abbr, team in league.teams.items():
+        if sum(1 for q in team.active() if q.xp_spent.get('_asked_out') == league.year) >= REQUESTS_PER_CLUB:
+            continue
         for p in team.active():
-            if status(p, team) == 'trade request' and not p.xp_spent.get('_asked_out'):
+            st = status(p, team)
+            streak = p.xp_spent.get('_request_streak', 0) + 1 if st == 'trade request' else 0
+            p.xp_spent['_request_streak'] = streak
+            if streak >= REQUEST_WEEKS and not p.xp_spent.get('_asked_out'):
                 p.xp_spent['_asked_out'] = league.year
                 out.append((abbr, p))
                 league.log('trade_request', pid=p.pid, team=abbr, morale=round(p.morale.value))

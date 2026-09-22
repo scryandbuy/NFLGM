@@ -277,7 +277,7 @@ class SeasonRunner:
         for abbr, st in self.states.items():
             for pid, n in (getattr(st, 'last_snaps', None) or st.snaps or {}).items(): snaps[pid] = n
         MO.weekly(self.L, week, results, snaps)
-        MO.trade_requests(self.L)
+        MO.trade_requests(self.L, week)
         IB.expire(self.L, week)
         # THE WIRE: award last week's claims first (the user had the week to
         # claim from the inbox), then notify the user of this week's waivers
