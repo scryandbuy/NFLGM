@@ -45,6 +45,7 @@ import practice_squad as PSQ
 import waivers as WV
 import coaching_pool as CP
 import position_change as PC
+import extensions as EXT
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -114,6 +115,10 @@ class Franchise:
         WV.notify_user(L, WV.pending(L), 0, digest=True)
         log['waiver_claims'] = len(WV.process(L, rng, 0))
 
+        # EXTENSIONS. A club keeps who it can before the market opens; the
+        # user's expiring men are flagged in the inbox
+        log['extensions'] = len(EXT.ai_round(L, rng))
+        EXT.notify_user(L)
         t = TG.run(L, rng)
         CT.enforce(L, rng)
         log['tagged'], log['tendered'] = len(t['tagged']), len(t['tendered'])
