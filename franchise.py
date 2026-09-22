@@ -80,6 +80,7 @@ class Franchise:
         log['fired'] = len(fired)
 
         votes = AW.vote(L, post)
+        CP.season_prestige(L, post, coty_team=votes.get('coty'))
         log['awards'] = {k: (v.name if hasattr(v, 'name') else v)
                          for k, v in votes.items() if not isinstance(v, list)}
         # season lines, milestones and award XP land once the vote is in

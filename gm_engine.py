@@ -102,6 +102,7 @@ class GM:
     experience:     int = 15
     reputation:     float = 0.5     # what the league thinks of him; the dials are the truth
     hc_record:      dict = None     # seasons, win_pct, playoffs, when he has been a head coach
+    prestige:       float = 20.0    # how big a name he is, 0..100; public, moves with his career
     # --- state, not personality ---
     job_security:   float = 0.60   # low security collapses the time horizon
     tenure:         int   = 0      # years in the chair; 0 = brand new regime
@@ -177,6 +178,7 @@ def apply_identity(gm, entry, name=None):
     roster dials, the name and the tree."""
     if name: gm.name = name
     gm.tree = entry.get('tree', '')
+    gm.prestige = float(entry.get('prestige', 20.0))
     for k, v in entry.get('offence', {}).items():
         setattr(gm, {'blocking': 'off_blocking', 'personnel': 'off_personnel'}.get(k, k), v)
     for k, v in entry.get('defence', {}).items():

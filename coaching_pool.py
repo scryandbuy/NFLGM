@@ -67,8 +67,37 @@ def make_candidate(rng, taken=(), background=None):
     # what the league thinks of him: the real quality with the owner's noise
     # added at hire time, not here
     g.reputation = round(float(np.clip(_quality(g) + rng.normal(0, 0.10), 0.05, 0.95)), 2)
+    # a name nobody knows yet; a former head coach carries his record
+    base = {'former head coach': 34, 'offensive coordinator': 22, 'defensive coordinator': 20,
+            'assistant GM': 18, 'college head coach': 26, 'position coach': 12}.get(bg, 20)
+    g.prestige = float(np.clip(rng.normal(base, 7), 5, 60))
     g.tenure = 0
     return g
+
+
+# ------------------------------------------------------------ prestige
+# How a name grows and fades. Per season, on the man in charge.
+PRESTIGE = dict(win=0.9, loss=-0.7, playoffs=6.0, missed=-3.0, conf_title=8.0,
+                sb_berth=10.0, sb_win=14.0, coty=8.0, fired=-10.0, decay=0.04)
+
+
+def season_prestige(league, post, coty_team=None):
+    """Called once the season is closed: every sitting man's name moves with
+    what his club did; every man in the pool fades a little toward the middle."""
+    seeds = post.r.seeds() if hasattr(post, 'r') else {}
+    in_playoffs = {t for sd in seeds.values() for t in sd}
+    for abbr, t in league.teams.items():
+        g = t.gm
+        if g is None: continue
+        w, l, _ = t.record
+        d = PRESTIGE['win'] * w + PRESTIGE['loss'] * l
+        d += PRESTIGE['playoffs'] if abbr in in_playoffs else PRESTIGE['missed']
+        if abbr in getattr(post, 'finalists', {}).values(): d += PRESTIGE['conf_title'] + PRESTIGE['sb_berth']
+        if abbr == getattr(post, 'champion', None): d += PRESTIGE['sb_win']
+        if abbr == coty_team: d += PRESTIGE['coty']
+        g.prestige = float(np.clip(g.prestige + d, 0, 100))
+    for g in pool(league):
+        g.prestige = float(np.clip(g.prestige - PRESTIGE['decay'] * (g.prestige - 30.0), 0, 100))
 
 
 def _quality(g):
@@ -183,14 +212,21 @@ def owner_hire(league, team, rng, verbose=False):
         if st['drought'] >= 6:
             fit_term -= 0.15 * (sim - 0.5)
         cost_term = (cost / max(20.0, team.cap_space + 40.0)) * continuity * (1.0 - 0.5 * st['patience'])
-        score = seen_q + fit_term - cost_term
+        # THE NAME. Owners hire established men; how much the name sways
+        # this one is his star pull. On the quality scale a 90-prestige
+        # man is worth up to +0.45 to a star-struck owner and +0.05 to a
+        # sober one, which is enough to be passed over for a better fit.
+        star = float(getattr(team, 'owner_star_pull', 0.5))
+        name_term = (0.10 + 0.70 * star) * (getattr(c, 'prestige', 20.0) / 100.0) * 0.8
+        score = seen_q + fit_term - cost_term + name_term
         scored.append((score, c, fit, len(misfits), cost, seen_q, sim))
     scored.sort(key=lambda x: -x[0])
     score, hired, fit, n_mis, cost, seen_q, sim = scored[0]
     p.remove(hired)
     reasons = dict(continuity=round(continuity, 2), fit=round(fit, 2), old_fit=round(old_fit, 2), misfits=n_mis,
                    conversion_cost=round(cost, 1), seen_quality=round(seen_q, 2), similarity=round(sim, 2),
-                   same_scheme=sim >= 0.75)
+                   same_scheme=sim >= 0.75, prestige=round(getattr(hired, 'prestige', 20.0)),
+                   biggest_name_available=round(max(getattr(x, 'prestige', 20.0) for x in p + [hired])))
     if verbose:
         print(f"  {team.abbr} hires {hired.name} ({hired.background}, {hired.tree[:30]}): continuity {continuity:.2f}, fit {fit:+.2f} vs {old_fit:+.2f}, {n_mis} misfits costing ${cost:.0f}m, seen quality {seen_q:.2f}")
     return hired, reasons
@@ -206,6 +242,7 @@ def fire_and_hire(league, team, rng, verbose=False):
             league.log('coach_retire', name=old.name)
         else:
             old.background = 'former head coach'
+            old.prestige = float(np.clip(old.prestige + PRESTIGE['fired'], 0, 100))
             pool(league).append(old)
     hired, reasons = owner_hire(league, team, rng, verbose)
     hired.tenure = 0
