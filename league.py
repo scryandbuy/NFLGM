@@ -512,7 +512,8 @@ class League:
         book = store[season][pid]
         for k, v in line.items():
             if isinstance(v, (int, float)):
-                book[k] = book.get(k, 0) + v
+                # a long is a maximum, not a sum
+                book[k] = max(book.get(k, 0), v) if k == 'fg_long' else book.get(k, 0) + v
         if not postseason:
             p = self.player(pid)
             if p is not None:

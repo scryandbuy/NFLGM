@@ -111,9 +111,11 @@ class Ballot:
 
     def skill_score(self, line):
         """Total offensive production for a non-quarterback."""
+        # yards and touchdowns carry it; receptions count a little. At 4 a
+        # catch a 115-catch receiver out-scored a 1,400-yard back every year
         return (_g(line, 'rush_yds') + _g(line, 'rec_yds')
                 + 20.0 * (_g(line, 'rush_td') + _g(line, 'rec_td'))
-                + 4.0 * _g(line, 'rec'))
+                + 2.5 * _g(line, 'rec'))
 
     def rush_score(self, line):
         """The DPOY marker: sacks first, TFL and hits alongside."""
@@ -182,7 +184,8 @@ class Ballot:
         """
         best, who = -1e9, None
         for p, line in self.players():
-            s = max(self.skill_score(line), self.passer_score(line) * 14.0)
+            # a quarterback wins this about one year in eight, not most years
+            s = max(self.skill_score(line), self.passer_score(line) * 11.0)
             if s > best:
                 best, who = s, p
         return who

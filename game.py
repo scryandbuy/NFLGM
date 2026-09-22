@@ -696,7 +696,7 @@ def _advance(dr, gained):
 # Real carry share by rank within a team-season: 48.9 / 22.9 / 11.4 / 6.9 / 3.7
 # (the third-ranked ball carrier on a typical team is the QUARTERBACK, at 52
 # carries, which scrambles already supply).
-CARRY_SHARE = [0.489, 0.229, 0.114, 0.069, 0.037]
+CARRY_SHARE = [0.56, 0.24, 0.13, 0.07]
 
 def pick_runner(backs, state, rng, gameplan=None):
     """
@@ -709,9 +709,13 @@ def pick_runner(backs, state, rng, gameplan=None):
              if state is None or b.get('pid') not in state.out] or backs
     n = min(len(avail), len(CARRY_SHARE))
     w = np.array(CARRY_SHARE[:n], float)
-    # a worn-down back gets fewer
+    # a worn-down back gets fewer. The lead back is on the field every snap
+    # (the 'rb' slot never rotates) so his condition always sits under the
+    # bench's; at 0.35 + 0.65 x condition that handed the backups most of
+    # the carries and the league's leading rusher was a third-stringer with
+    # 298 carries and 188 snaps. Real lead backs take 55-60% of carries.
     if state is not None:
-        w = w * np.array([0.35 + 0.65 * (state.cond.get(b.get('pid')) / 100.0)
+        w = w * np.array([0.80 + 0.20 * (state.cond.get(b.get('pid')) / 100.0)
                           for b in avail[:n]])
     w = w / w.sum()
     i = int(rng.choice(n, p=w))
@@ -785,6 +789,23 @@ def field_units(roster, state, rng, is_offense, package=None):
             if roster.get(key) is not None:
                 pos = 'QB' if key == 'qb' else 'HB'
                 p = roster[key]
+                # THE BACK ROTATES LIKE EVERYONE ELSE. The rb slot was fixed
+                # to the lead back every snap, so his condition hit zero by
+                # the second quarter and the carry draw, which reads
+                # condition, handed most carries to fresh backups who were
+                # never on the field. Walk the backfield by condition the way
+                # every other slot is walked; real lead backs play ~65% of
+                # snaps and take 55-60% of carries.
+                if key == 'rb':
+                    backs = [b for b in (roster.get('backs') or [p]) if b and b.get('pid') not in state.out] or [p]
+                    pick = None
+                    for rank, b in enumerate(backs):
+                        gap = 0.6 if rank == 0 and len(backs) > 1 else 0.0
+                        if not state.cond.needs_rest(b.get('pid'), 'HB', rng, b.get('stamina_rating', 70.0), gap):
+                            pick = b; break
+                    p = pick or backs[0]
+                    for b in backs:
+                        if b is not p: state.snap(b, 'HB', False)
                 # an injured starter yields to the backup - real leagues carry
                 # ~2.4 QBs taking meaningful snaps, which is most of why the
                 # real QB15-to-QB25 distribution falls off a cliff
@@ -875,12 +896,17 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                                        dr.clock, rng, aggr4)
             if dec == 'field_goal':
                 fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
+                if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
                 dr.clock -= play_seconds('field_goal')
                 dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
                 dr.points = fg['points']; dr.log.append(fg); break
             if dec == 'punt':
                 p = punt(dr.yardline, (offense.get('p') or {}),
                          (defense.get('kr') or {}), rng, rate_fn)
+                if book is not None:
+                    book.special('punt', (offense.get('p') or {}).get('pid'), **p)
+                    if p.get('how') == 'return' or (p.get('ret') and not p.get('touchback')):
+                        book.special('pr', (defense.get('kr') or {}).get('pid'), ret=p.get('ret', 0.0))
                 dr.clock -= play_seconds('punt')
                 dr.result = 'Punt'; dr.log.append(p)
                 dr.next_yardline = p['new_yardline']; break
@@ -1038,11 +1064,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                                      dc.get('personnel'))
 
         # the back who actually carries it
-        if not oc.get('is_pass'):
-            backs = offense.get('backs') or [offense.get('rb')]
-            rb, _rk = pick_runner([b for b in backs if b], off_state, rng)
-            if rb is not None: off_f = dict(off_f, rb=rb)
-
+        # the back who carries it is the back on the field: the rotation in
+        # field_units decides who that is
         out = resolve_fn(off_f, def_f, oc, dc, ytg_i, rng)
         if script_mod != 1.0 and out.get('yards'):
             out['yards'] = round(float(out['yards']) * script_mod, 1)
@@ -1143,6 +1166,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                                   call_def, rate_fn, off_state, def_state)
         else:
             t = attempt_extra_point(offense.get('k') or {}, rng, rate_fn)
+            if book is not None: book.special('xp', (offense.get('k') or {}).get('pid'), **t)
         dr.points += t['points']
         dr.try_result = t
         dr.log.append(t)
@@ -1334,6 +1358,25 @@ class StatBook:
     def __init__(self):
         self.p = {}
 
+    def special(self, kind, pid, **kw):
+        """A kick, a punt or a return: the kicking game's box score."""
+        if not pid: return
+        d = self._get(pid)
+        if kind == 'fg':
+            d['fg_att'] += 1
+            if kw.get('made'):
+                d['fg_made'] += 1; d['fg_long'] = max(d['fg_long'], int(kw.get('distance', 0)))
+        elif kind == 'xp':
+            d['xp_att'] += 1; d['xp_made'] += 1 if kw.get('made') else 0
+        elif kind == 'punt':
+            d['punts'] += 1; d['punt_yds'] += float(kw.get('gross', 0.0)); d['punt_net_yds'] += float(kw.get('net', 0.0))
+            if kw.get('touchback'): d['punt_tb'] += 1
+            elif kw.get('new_yardline', 50) >= 80: d['punt_in20'] += 1
+        elif kind == 'kr':
+            d['kr'] += 1; d['kr_yds'] += float(kw.get('ret', 0.0))
+        elif kind == 'pr':
+            d['pr'] += 1; d['pr_yds'] += float(kw.get('ret', 0.0))
+
     def _get(self, pid):
         if pid not in self.p:
             self.p[pid] = dict(
@@ -1343,6 +1386,10 @@ class StatBook:
                 tackles=0, sacks=0.0, int_def=0, pressures=0, ff=0,
                 pass_def=0,
                 fum=0, fum_lost=0,
+                # ---- specialists ----
+                fg_att=0, fg_made=0, fg_long=0, xp_att=0, xp_made=0,
+                punts=0, punt_yds=0.0, punt_net_yds=0.0, punt_in20=0, punt_tb=0,
+                kr=0, kr_yds=0.0, pr=0, pr_yds=0.0,
                 # ---- offensive line ----
                 # There are no traditional stats for a lineman, which is why
                 # his page on any real site is blank. The industry settled on
