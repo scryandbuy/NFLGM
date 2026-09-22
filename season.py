@@ -275,7 +275,7 @@ class SeasonRunner:
             results[away] = ('W' if as_ > hs else 'L' if as_ < hs else 'T', as_ - hs)
         snaps = {}
         for abbr, st in self.states.items():
-            for pid, n in (st.last_snaps or st.snaps or {}).items(): snaps[pid] = n
+            for pid, n in (getattr(st, 'last_snaps', None) or st.snaps or {}).items(): snaps[pid] = n
         MO.weekly(self.L, week, results, snaps)
         MO.trade_requests(self.L)
         IB.expire(self.L, week)

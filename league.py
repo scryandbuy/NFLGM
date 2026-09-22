@@ -693,6 +693,17 @@ class League:
             standings_history=self.standings_history,
             transactions=self.transactions, awards=self.awards,
             coach_pool=[asdict(g) for g in getattr(self, 'coach_pool', [])],
+            # the draft: which players are this year's class and next year's,
+            # every club's read of them and the room's board
+            draft_pool=[p.pid for p in getattr(self, 'draft_pool', []) or []],
+            next_class=[p.pid for p in getattr(self, 'next_class', []) or []],
+            class_strength=getattr(self, 'class_strength', {}),
+            scouting=getattr(self, 'scouting', {}) or {},
+            consensus=getattr(self, 'consensus', {}) or {},
+            # the wire and the inbox, with any live objects reduced to ids
+            waivers=getattr(self, 'waivers', []) or [],
+            inbox=[_inbox_to_dict(m) for m in (getattr(self, 'inbox', []) or [])],
+            inbox_next_id=_inbox_next_id(),
             rng_state=self.rng_state)
 
     def save(self, path=None):
@@ -739,6 +750,16 @@ class League:
             L.teams[abbr] = t
         L.free_agents = d['free_agents']
         L.coach_pool = [GM(**g) for g in d.get('coach_pool', [])]
+        L.draft_pool = [L.players[p] for p in d.get('draft_pool', []) if p in L.players]
+        L.next_class = [L.players[p] for p in d.get('next_class', []) if p in L.players]
+        L.class_strength = d.get('class_strength', {})
+        L.scouting = d.get('scouting', {}) or {}
+        L.consensus = d.get('consensus', {}) or {}
+        L.waivers = d.get('waivers', []) or []
+        L.inbox = [_inbox_from_dict(L, m) for m in d.get('inbox', [])]
+        if d.get('inbox_next_id'):
+            import inbox as IB, itertools
+            IB._ids = itertools.count(int(d['inbox_next_id']))
         L.schedule = [tuple(g) for g in d['schedule']]
         L.stats = {int(k): v for k, v in d['stats'].items()}
         L.post_stats = {int(k): v for k, v in (d.get('post_stats') or {}).items()}
@@ -756,6 +777,74 @@ class League:
 
 
 # ================================================================== SEEDING
+def _asset_ref(x):
+    """A trade asset or a pick, as ids the save can hold."""
+    if isinstance(x, DraftPick):
+        return dict(_pick=True, year=x.year, round=x.round, original=x.original)
+    if isinstance(x, dict):
+        if x.get('kind') == 'pick' and isinstance(x.get('obj'), DraftPick):
+            pk = x['obj']; return dict(_pick=True, year=pk.year, round=pk.round, original=pk.original)
+        if x.get('kind') == 'player' or 'pid' in x:
+            return dict(_player=True, pid=x.get('pid'))
+        return {k: v for k, v in x.items() if not hasattr(v, '__dict__')}
+    if hasattr(x, 'pid'):
+        return dict(_player=True, pid=x.pid)
+    return x
+
+
+def _inbox_to_dict(m):
+    out = {}
+    for k, v in m.items():
+        if k == 'payload' and isinstance(v, dict):
+            pl = {}
+            for pk, pv in v.items():
+                if isinstance(pv, list):
+                    pl[pk] = [_asset_ref(x) for x in pv]
+                elif isinstance(pv, (DraftPick,)) or hasattr(pv, 'pid'):
+                    pl[pk] = _asset_ref(pv)
+                elif isinstance(pv, dict):
+                    pl[pk] = _asset_ref(pv) if ('kind' in pv or 'pid' in pv) else pv
+                else:
+                    pl[pk] = pv
+            out[k] = pl
+        elif hasattr(v, '__dict__') and not isinstance(v, dict):
+            out[k] = _asset_ref(v)
+        else:
+            out[k] = v
+    return out
+
+
+def _find_pick(league, ref):
+    for t in league.teams.values():
+        for pk in t.picks:
+            if pk.year == ref['year'] and pk.round == ref['round'] and pk.original == ref['original']:
+                return pk
+    return None
+
+
+def _inbox_from_dict(league, m):
+    def back(x):
+        if isinstance(x, dict) and x.get('_pick'):
+            return _find_pick(league, x) or x
+        if isinstance(x, dict) and x.get('_player'):
+            return x.get('pid')
+        return x
+    out = dict(m)
+    pl = m.get('payload')
+    if isinstance(pl, dict):
+        out['payload'] = {k: ([back(x) for x in v] if isinstance(v, list) else back(v)) for k, v in pl.items()}
+    return out
+
+
+def _inbox_next_id():
+    try:
+        import inbox as IB, itertools
+        n = next(IB._ids); IB._ids = itertools.count(n)   # peek without consuming
+        return n
+    except Exception:
+        return 1
+
+
 def _json_default(o):
     if isinstance(o, (np.integer,)): return int(o)
     if isinstance(o, (np.floating,)): return float(o)
