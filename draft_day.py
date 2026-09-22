@@ -194,6 +194,13 @@ class Draft:
         pairs = [[x, y] for i, x in enumerate(bank) for y in bank[i + 1:]]
         for pkg in singles + pairs[:400]:
             if pkg[0]['kind'] == 'pick' and pkg[0]['obj'] is pk: continue
+            # NEXT YEAR'S PICK BUYS THE SAME ROUND OR BETTER, this year. A
+            # future first goes for a first, a future second for a first or
+            # a second. Price alone let a club with nothing left this year
+            # send a 2028 first for pick 54, which no room does.
+            if any(x['kind'] == 'pick' and x.get('years_out', 0) > 0 and pk.round > x['obj'].round
+                   for x in pkg):
+                continue
             t = total(pkg)
             if t >= want * slack and (best is None or t * handicap(pkg) < best[0]):
                 best = (t * handicap(pkg), pkg)
