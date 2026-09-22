@@ -44,6 +44,7 @@ import newgens as NG
 import practice_squad as PSQ
 import waivers as WV
 import coaching_pool as CP
+import position_change as PC
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -75,6 +76,7 @@ class Franchise:
 
         post, order, fired = PS.close_season(L, runner, rng)
         CP.top_up(L, rng)                    # retirements out of the pool, new men in
+        PC.offseason(L)                      # camp: four games of learning for every man mid-move
         log['champion'] = post.champion
         log['top_pick'] = order[0]
         log['fired'] = len(fired)

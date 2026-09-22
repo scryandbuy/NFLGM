@@ -141,7 +141,8 @@ class SeasonRunner:
         """
         t = self.L.teams[abbr]
         desk = self.desks.get(abbr)
-        rows = [dict(p.ratings, pid=p.pid, pos=p.pos)
+        import position_change as PC
+        rows = [dict(PC.effective_ratings(p), pid=p.pid, pos=p.pos)
                 for p in t.active()
                 if (desk.available(p, self.week) if desk
                     else p.out_until is None)]
@@ -210,7 +211,10 @@ class SeasonRunner:
         # predictor of whether a career continues.
         for side in (home, away):
             st = self.states[side]
+            import position_change as PC
             for pid, n in (st.last_snaps or st.snaps).items():
+                _pp = self.L.player(pid)
+                if _pp is not None: PC.played(_pp, n)
                 self.L.record_stats(self.L.year, pid, {'snaps': n, 'games': 1},
                                     postseason=playoffs)
                 # a snap is worth something on its own: it is why a backup

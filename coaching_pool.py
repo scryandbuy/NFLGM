@@ -256,6 +256,9 @@ def fire_and_hire(league, team, rng, verbose=False):
     team.gm = hired
     team.scheme = GE.scheme_of(hired)
     team.tenure = 0
+    import position_change as PC
+    moves = PC.convert_misfits(league, team, rng, verbose=verbose)
+    reasons['conversions'] = len(moves)
     league.log('gm_change', team=team.abbr, hired=hired.name, background=hired.background,
                win_pct=round(team.win_pct, 3), **reasons)
     return hired, reasons

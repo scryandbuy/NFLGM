@@ -70,7 +70,9 @@ class Player:
                  'injury_history', 'career', 'seasons', 'retired',
                  'tag_count', 'tagged_year', 'fa_class', 'tender_team',
                  # the draft: where he came from and how the college game rated him
-                 'college', 'college_ovr', 'height', 'weight')
+                 'college', 'college_ovr', 'height', 'weight',
+                 # a position change he is still learning: frm, to, penalty, games_left, games_total
+                 'transition')
 
     def __init__(self, pid, name, pos, age, ratings, *, dev='normal',
                  potential=None, potential_range=None, longevity=1.0,
@@ -114,6 +116,7 @@ class Player:
         self.college_ovr = None
         self.height = None
         self.weight = None
+        self.transition = None
 
     # ---- derived ability -------------------------------------------------
     @property
@@ -122,7 +125,8 @@ class Player:
         How good he is AT HIS POSITION, from the same weights the depth chart
         and the play engine use. Never stored; see the module docstring.
         """
-        return TG.position_score(self.ratings, self.pos)
+        import position_change as PC
+        return TG.position_score(PC.effective_ratings(self), self.pos)
 
     def score_at(self, position, scheme=None):
         """What he would be worth at a DIFFERENT spot. Position changes and
