@@ -402,6 +402,8 @@ class TeamState:
         import health as H, gameplan as GP, adjust as AD, targets as TG
         self.roster = roster
         self.plan = plan if plan is not None else GP.base_plan(coach)
+        # the plan he walks in with, kept so every game starts from it
+        self.base_plan = self.plan.copy()
         self.coach = coach or {}
         self.scheme = scheme
         self.mem = AD.GameMemory()
@@ -550,6 +552,20 @@ class TeamState:
         self.snaps = {}
         self.injuries = []
         self.cov_memory = {}
+        # A GAME PLAN IS FOR A GAME. Adjustments made in one game (a max
+        # protect with an 80/16/4 depth mix after a pressure read, a man
+        # lean, a shell shift) were carried into the next and the next, so a
+        # club that got pressured in September was throwing screens in
+        # December: the shallow drift across a season. Each game now starts
+        # from the plan the coach walks in with; what carries between games
+        # is what he learned, not what he did about it.
+        import gameplan as GP, adjust as AD
+        if getattr(self, 'base_plan', None) is not None:
+            travel, target = self.plan.travel, self.plan.travel_target
+            self.plan = self.base_plan.copy()
+            self.plan.travel, self.plan.travel_target = travel, target
+        self.mem = AD.GameMemory()
+        self.last_adjustment = None
         # THE OUT LIST WAS NEVER CLEARED. hurt() refuses to roll for a man
         # already on it, so once a player was hurt he stopped being able to be
         # hurt again FOR THE REST OF THE SEASON - and so did everyone else, one

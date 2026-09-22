@@ -227,7 +227,7 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # man meant cover 0 or cover 1 on a fifth of snaps; with the full call
     # book man is a third of targets and was completing 66% against a real
     # ~60, ABOVE zone, which is backwards.
-    DEPTH_MULT = {'short': 1.494, 'medium': 1.171, 'deep': 0.85}
+    DEPTH_MULT = {'short': 1.57, 'medium': 1.18, 'deep': 0.85}
     import matchups as M
     base = separation * (1.0 + M.ZONE_SLOPE['acc'] * (acc - AVG)) * outcome_mult
     p = float(np.clip(base * DEPTH_MULT[depth], 0.02, 0.97))
@@ -318,8 +318,11 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
         # not: cutting yards after catch by a FULL 1.4 yards moved plays per
         # drive by 0.08. Drive length is not set by how far a play goes, and
         # that is worth knowing before anyone tunes yardage to chase it again.
-        base = 0.13 if not in_space else 0.166
-        ramp = 0.10 if not in_space else 0.113
+        # Re-set for runs once defences stopped carrying box adjustments
+        # from game to game: with the ratchet gone, explosive runs ran 3.6%
+        # against 2.46 and ypc 4.9 against 4.52, all of it after contact
+        base = 0.165 if not in_space else 0.166
+        ramp = 0.115 if not in_space else 0.113
         p_break = logistic(edge(atk, wrap) - base - ramp * i, k=7.0)
         if rng.random() > p_break:
             gained += max(0.0, rng.normal(0.9, 0.8))          # brought down

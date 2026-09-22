@@ -52,7 +52,7 @@ class Gameplan:
     """What a team intends to do. Every play call reads this."""
     # ---- offence ----
     pass_bias: float = 0.0            # added to the situational pass rate
-    depth_mix: tuple = (0.62, 0.24, 0.14)   # short / medium / deep
+    depth_mix: tuple = (0.67, 0.22, 0.11)   # short / medium / deep; re-set once plans stopped drifting shallow across a season
     personnel_mix: dict = field(default_factory=lambda: {
         '11': .595, '12': .195, '21': .070, '13': .030,
         '10': .075, '22': .025, '00': .010})
