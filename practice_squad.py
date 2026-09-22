@@ -235,6 +235,41 @@ def fill_squads(league, rng, verbose=False):
     return total
 
 
+GROUP_MIN = {'QB': 2, 'HB': 2, 'WR': 4, 'TE': 2, 'OL': 7, 'DL': 6, 'LB': 4, 'DB': 7, 'K': 1, 'P': 1}
+GROUP_OF = {'LT': 'OL', 'LG': 'OL', 'C': 'OL', 'RG': 'OL', 'RT': 'OL', 'LEDG': 'DL', 'REDG': 'DL', 'DT': 'DL',
+            'MIKE': 'LB', 'WILL': 'LB', 'SAM': 'LB', 'CB': 'DB', 'FS': 'DB', 'SS': 'DB', 'FB': 'HB'}
+
+
+def keep_groups_whole(league, rng, week):
+    """No club dresses without a line. A group below its floor of healthy men
+    calls up from the squad, then signs from the pool, at that group."""
+    import min_salary as MS
+    from cap_engine import CAP, Contract
+    moves = []
+    for abbr, team in league.teams.items():
+        healthy = collections.Counter(GROUP_OF.get(p.pos, p.pos) for p in team.active() if p.out_until is None)
+        for grp, floor in GROUP_MIN.items():
+            short = floor - healthy.get(grp, 0)
+            while short > 0:
+                cands = [p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp]
+                if cands:
+                    best = max(cands, key=lambda p: p.ovr); call_up(league, abbr, best.pid); moves.append((abbr, 'callup', best.pid))
+                else:
+                    fa = [league.player(pid) for pid in league.free_agents]
+                    fa = [p for p in fa if p and GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired]
+                    if not fa: break
+                    best = max(fa, key=lambda p: p.ovr)
+                    _make_room(league, abbr, best)
+                    mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
+                    if best.pid in league.free_agents: league.free_agents.remove(best.pid)
+                    best.contract = None
+                    league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
+                    league.log('emergency_sign', pid=best.pid, team=abbr, group=grp)
+                    moves.append((abbr, 'emergency', best.pid))
+                short -= 1
+    return moves
+
+
 def weekly(league, rng, week, user_team=None):
     """
     In season, every week: clubs short of healthy men at a group elevate two
@@ -242,7 +277,7 @@ def weekly(league, rng, week, user_team=None):
     squad man to its 53 when nothing on its own squad fits. Rare.
     """
     import contracts as CT
-    moves = []
+    moves = keep_groups_whole(league, rng, week)
     for abbr, team in league.teams.items():
         clear_elevations(team)
         healthy = [p for p in team.active() if p.out_until is None]

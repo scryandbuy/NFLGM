@@ -1352,7 +1352,7 @@ class StatBook:
                 d['int_def'] += 1
         elif t == 'sack':
             s = self._get(qb); s['sacked'] += 1
-            d = self._get(out.get('by', deff['dl'][0].get('pid', 'DL1')))
+            d = self._get(out.get('by', (deff.get('dl') or [{}])[0].get('pid', 'DL1')))
             d['sacks'] += 1.0; d['tackles'] += 1
         elif t == 'scramble':
             s = self._get(qb); s['rush_att'] += 1; s['rush_yds'] += out['yards']

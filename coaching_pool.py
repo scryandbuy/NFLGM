@@ -77,8 +77,8 @@ def make_candidate(rng, taken=(), background=None):
 
 # ------------------------------------------------------------ prestige
 # How a name grows and fades. Per season, on the man in charge.
-PRESTIGE = dict(win=0.9, loss=-0.7, playoffs=6.0, missed=-3.0, conf_title=8.0,
-                sb_berth=10.0, sb_win=14.0, coty=8.0, fired=-10.0, decay=0.04)
+PRESTIGE = dict(win=0.45, loss=-0.35, playoffs=3.0, missed=-2.0, conf_title=4.0,
+                sb_berth=5.0, sb_win=8.0, coty=5.0, fired=-8.0, decay=0.04)
 
 
 def season_prestige(league, post, coty_team=None):
@@ -95,6 +95,7 @@ def season_prestige(league, post, coty_team=None):
         if abbr in getattr(post, 'finalists', {}).values(): d += PRESTIGE['conf_title'] + PRESTIGE['sb_berth']
         if abbr == getattr(post, 'champion', None): d += PRESTIGE['sb_win']
         if abbr == coty_team: d += PRESTIGE['coty']
+        if d > 0: d *= max(0.15, 1.0 - g.prestige / 110.0)       # a name near the top grows slowly
         g.prestige = float(np.clip(g.prestige + d, 0, 100))
     for g in pool(league):
         g.prestige = float(np.clip(g.prestige - PRESTIGE['decay'] * (g.prestige - 30.0), 0, 100))
@@ -187,6 +188,9 @@ def owner_hire(league, team, rng, verbose=False):
     p = pool(league)
     if not p:
         top_up(league, rng)
+    # not the man he just fired
+    just_fired = getattr(team, '_just_fired', None)
+    p_cands = [c for c in p if c is not just_fired] or p
     st = owner_state(team)
     # how much the owner wants continuity, 0 = tear it down, 1 = keep the roster
     decent = float(np.clip((st['win_pct'] - 0.30) / 0.30, 0, 1))
@@ -196,7 +200,7 @@ def owner_hire(league, team, rng, verbose=False):
     continuity = float(np.clip(continuity, 0.05, 0.95))
     old_fit, _ = roster_fit(team, team.gm) if team.gm else (0.0, [])
     scored = []
-    for c in p:
+    for c in p_cands:
         fit, misfits = roster_fit(team, c)
         cost = sum(owed for _p, _f, owed in misfits)                     # dead money to move the misfits
         seen_q = float(np.clip(c.reputation + rng.normal(0, 0.18 * (1 - st['acumen'])), 0, 1))
@@ -244,7 +248,9 @@ def fire_and_hire(league, team, rng, verbose=False):
             old.background = 'former head coach'
             old.prestige = float(np.clip(old.prestige + PRESTIGE['fired'], 0, 100))
             pool(league).append(old)
+    team._just_fired = old
     hired, reasons = owner_hire(league, team, rng, verbose)
+    team._just_fired = None
     hired.tenure = 0
     hired.job_security = float(np.clip(rng.normal(.78, .10), .45, .97))
     team.gm = hired

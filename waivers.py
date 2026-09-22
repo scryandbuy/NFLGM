@@ -151,6 +151,11 @@ def notify_user(league, entries, week, digest=False):
                                            link=f'player:{e["pid"]}') for e in top],
                              priority=mine), expires_week=(week or 0) + 1)
         return
+    # the eight best of the week by common-scale grade; the rest are on the
+    # wire but not in the inbox
+    import draft as DFT
+    scale = DFT.position_scale(league)
+    ents = sorted(ents, key=lambda e: -DFT.common_scale(league.player(e['pid']).ovr, league.player(e['pid']).pos, scale))[:8]
     for e in ents:
         p = league.player(e['pid'])
         hit = round(p.contract.cap_hit(0) - p.contract.annual_proration, 2) if p.contract else None
