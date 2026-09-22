@@ -125,7 +125,9 @@ class Franchise:
             SC.scout(L, rng)
         # the picks carry the SEASON year they were earned in; the year has
         # already rolled by the time the draft is held
-        drafted = DFT.run(L, rng, year=L.year - 1)
+        # when the calendar sims the draft with nobody at the buttons, the
+        # user's club picks off the consensus board and its needs
+        drafted = DFT.run(L, rng, year=L.year - 1, user_team=self.user_team)
         log['drafted'] = len(drafted)
         # and the class for NEXT year's draft is born now
         NG.build(L, rng, draft_year=L.year + 1)

@@ -180,7 +180,7 @@ def _chart():
     return f
 
 
-def board(league, abbr, selection, level, taken, scale=None):
+def board(league, abbr, selection, level, taken, scale=None, gm=None):
     """
     This club's board right now: [(value, player)], best first.
 
@@ -194,7 +194,7 @@ def board(league, abbr, selection, level, taken, scale=None):
     his private ranking toward the consensus one; a hot seat wants the
     older, readier man; a quarterback goes early only to a real hole.
     """
-    team = league.teams[abbr]; gm = team.gm
+    team = league.teams[abbr]; gm = gm if gm is not None else team.gm
     trust = float(getattr(gm, 'board_trust', 0.5)); belief = float(getattr(gm, 'dev_belief', 0.5))
     inflate = float(getattr(gm, 'need_inflation', 0.5)); heat = 1.0 - float(getattr(gm, 'job_security', 0.6))
     need = needs(team, level)
@@ -250,37 +250,15 @@ def board(league, abbr, selection, level, taken, scale=None):
     return rows
 
 
-def run(league, rng, year=None, verbose=False):
-    """The whole draft. Returns [(selection, team, player)]."""
+def run(league, rng, year=None, verbose=False, user_team=None):
+    """The whole draft with no one at the buttons: every club on auto."""
+    import draft_day as DD
     year = year or league.year
-    if not getattr(league, 'scouting', None):
-        SC.scout(league, rng)
-    cap = CAP.get(year, 301.2)
-    picks = sorted((pk for t in league.teams.values() for pk in t.picks
-                    if pk.year == year and pk.selection and not pk.used_on),
-                   key=lambda pk: pk.selection)
-    level = league_starter_level(league); scale = position_scale(league)
-    taken = set(); results = []
-    for pk in picks:
-        owner = pk.owner
-        rows = board(league, owner, pk.selection, level, taken, scale)
-        if not rows: break
-        val, p = rows[0]
-        taken.add(p.pid)
-        pk.used_on = p.pid
-        p.draft_round, p.draft_overall = pk.round, pk.selection
-        p.potential = None                     # resolved when the ceiling first matters
-        league.sign(p.pid, owner, rookie_contract(pk.selection, cap))
-        league.log('draft', pid=p.pid, team=owner, round=pk.round, selection=pk.selection,
-                   pos=p.pos, consensus_rank=league.consensus[p.pid]['rank'])
-        results.append((pk.selection, owner, p))
-        if verbose and pk.round == 1:
-            print(f"  {pk.selection:3d} {owner} {p.name:22s} {p.pos:4s} true {p.ovr:.1f}  seen {league.scouting[owner][p.pid]['ovr']}  consensus #{league.consensus[p.pid]['rank']}")
-    # the rest are undrafted free agents
-    for p in league.draft_pool:
-        if p.pid not in taken:
-            p.draft_round, p.draft_overall = None, None
-            if p.pid not in league.free_agents:
-                league.free_agents.append(p.pid)
-    league.draft_pool = []
-    return results
+    D = DD.Draft(league, rng, year, user_team=user_team, auto_pick=True)
+    D.sim_all()
+    if verbose:
+        for s, t, p in D.results:
+            if s <= 32:
+                print(f"  {s:3d} {t} {p.name:22s} {p.pos:4s} true {p.ovr:.1f} consensus #{league.consensus[p.pid]['rank']}")
+        if D.trades: print(f'  {len(D.trades)} pick trades')
+    return D.results
