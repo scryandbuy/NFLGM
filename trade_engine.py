@@ -223,8 +223,50 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
     if asset['age'] >= 30: v *= WINDOW_AGE_BIAS[wdw]
     if asset['need']: v *= 1.18
     v *= g['own_bias'] if owns else g['target_bias']
-    if asset['apy'] > cap_space: v -= (asset['apy'] - cap_space) * 1.4
+    if owns:
+        # THE SELLER'S DEAD MONEY. Moving him accelerates what is left of his
+        # bonus onto this year's cap. That is a real cost of the deal and it
+        # goes into what the seller wants back: at par when he has the room,
+        # above par as it eats into his space. So the other side pays more
+        # to make it worth his while - or, past the point where it kills the
+        # cap (see evaluate), he will not do it at any price.
+        dead = float(asset.get('dead', 0.0) or 0.0)
+        if dead > 0:
+            squeeze = float(np.clip(dead / max(cap_space, 1.0), 0.0, 2.0))
+            v += dead * (1.0 + 0.75 * squeeze)
+    else:
+        hit = float(asset.get('inherit', asset['apy']) or 0.0)
+        if hit > cap_space: v -= (hit - cap_space) * 1.4
     return v
+
+
+def cap_blocks(offer, space_a, space_b, gm_a=None, gm_b=None):
+    """
+    The two ways a trade dies before the assets are weighed. The seller's
+    dead money would put him over the cap, or past the share of his room his
+    contract_focus will stomach. Or the buyer cannot fit the inherited hits.
+    Returns the reason, or None.
+    """
+    def tol(gm):
+        if isinstance(gm, dict): f = float(gm.get('contract_focus', 0.5))
+        else: f = float(getattr(gm, 'contract_focus', 0.5)) if gm is not None else 0.5
+        return 0.9 - 0.5 * f                    # a cap hawk tolerates 40% of his room, a spender 90%
+    dead_a = sum(float(x.get('dead', 0) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
+    dead_b = sum(float(x.get('dead', 0) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
+    in_a = sum(float(x.get('inherit', 0) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
+    in_b = sum(float(x.get('inherit', 0) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
+    out_a = sum(float(x.get('inherit', 0) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
+    out_b = sum(float(x.get('inherit', 0) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
+    # after the deal: space + hits shed - hits taken on - dead eaten
+    after_a = space_a + out_a - in_a - dead_a
+    after_b = space_b + out_b - in_b - dead_b
+    if dead_a > 0 and (after_a < 0 or dead_a > space_a * tol(gm_a)):
+        return 'a_dead_money'
+    if dead_b > 0 and (after_b < 0 or dead_b > space_b * tol(gm_b)):
+        return 'b_dead_money'
+    if after_a < 0: return 'a_cannot_fit'
+    if after_b < 0: return 'b_cannot_fit'
+    return None
 
 def evaluate(offer, team_a, team_b, space_a, space_b, gm_a=None, gm_b=None):
     """
@@ -232,6 +274,9 @@ def evaluate(offer, team_a, team_b, space_a, space_b, gm_a=None, gm_b=None):
     window, its own GM, and its own season, so a deal can be genuinely positive for
     both. That disagreement is the mechanism, not a rounding error.
     """
+    block = cap_blocks(offer, space_a, space_b, gm_a, gm_b)
+    if block:
+        return dict(a_gain=-999.0, b_gain=-999.0, accepted=False, blocked=block)
     a_out = sum(team_price(x, team_a, space_a, gm_a, owns=True)  for x in offer['a_sends'])
     a_in  = sum(team_price(x, team_a, space_a, gm_a, owns=False) for x in offer['a_gets'])
     b_out = sum(team_price(x, team_b, space_b, gm_b, owns=True)  for x in offer['a_gets'])

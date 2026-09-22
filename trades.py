@@ -87,6 +87,7 @@ def persona(gm):
         own_bias=1.02 + 0.22 * (1.0 - float(getattr(gm, 'aggression', 0.5))),
         target_bias=0.95 + 0.35 * float(getattr(gm, 'aggression', 0.5)),
         patience=float(np.clip(getattr(gm, 'patience', 0.6), .05, .98)),
+        contract_focus=float(np.clip(getattr(gm, 'contract_focus', 0.5), 0, 1)),
         archetype='derived')
 
 
@@ -124,9 +125,15 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     row = dict(age=p.age, apy=p.apy,
                contract_years_left=p.contract_years_left,
                madden_position=p.pos)
+    # THE CAP FACTS OF MOVING HIM. The seller eats every dollar of bonus
+    # still prorated (dead money, this year); the buyer inherits only the
+    # base and roster bonus. Both used to be ignored in favour of the APY.
+    c = getattr(p, 'contract', None)
+    dead = TE.dead_money_on_trade(c, 0) if c else 0.0
+    inherit = round(c.cap_hit(0) - c.annual_proration, 2) if c else 0.0
     return dict(kind='player', pid=p.pid, pos=p.pos, age=p.age, apy=p.apy,
                 need=need, trade_value=TE.trade_value(row, v),
-                seen_ovr=round(float(seen), 1), obj=p)
+                seen_ovr=round(float(seen), 1), obj=p, dead=dead, inherit=inherit)
 
 
 def pick_asset(league, pk, need=False):
@@ -300,8 +307,8 @@ def _can_absorb(league, team, target, space):
     p = target.get('obj')
     if p is None or not getattr(p, 'contract', None):
         return True
-    if p.apy > space:
-        return False                       # cannot fit him this season at all
+    if target.get('inherit', p.apy) > space:
+        return False                       # cannot fit his inherited hit this season
     yrs = p.contract_years_left
     if yrs <= 1:
         return True                        # a rental commits nothing
