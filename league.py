@@ -636,6 +636,18 @@ class League:
             t.cap = t.cap.roll_forward(new_cap)
             t.cap.cap = new_cap
             t.sync_cap()
+        # A NEW YEAR OF PICKS. The seed created picks four years out and
+        # nothing ever added more, so the fifth draft found no picks to
+        # select with and a whole class went undrafted. Every club now owns
+        # its picks in the year that just came into view, and used picks
+        # from past drafts are cleared off the drawer.
+        horizon = self.year + 3
+        for abbr, t in self.teams.items():
+            have = {(pk.year, pk.round) for pk in t.picks if pk.original == abbr}
+            for rd in range(1, 8):
+                if (horizon, rd) not in have:
+                    t.picks.append(DraftPick(horizon, rd, abbr, abbr))
+            t.picks = [pk for pk in t.picks if not (pk.used_on and pk.year < self.year - 1)]
         return new_cap
 
     def advance_contracts(self):
