@@ -381,3 +381,54 @@ if __name__ == '__main__':
     for a, p, got, conv in sorted(res, key=lambda x: -x[2])[:6]:
         print('  %-4s %-22s %-5s freed %.1f (converted %.1f), dead if cut now %.1f'
               % (a, p.name, p.pos, got, conv, p.dead_if_cut(0)))
+
+
+# ============================================================ THE USER'S RESTRUCTURE
+def restructure_preview(league, pid, amount=None, void_years=0):
+    """
+    What converting base salary into signing bonus does to the books, before
+    it is done: this year's saving, the added hit in every later year, and
+    the dead money if he is cut or the deal voids afterwards. Up to two void
+    years may be added to spread it further. No consent step: the player
+    gets his money sooner and always says yes.
+    """
+    import copy, min_salary as MS
+    from cap_engine import CAP, MAX_PRORATION_YEARS
+    p = league.player(pid)
+    c = p.contract
+    if c is None:
+        return dict(ok=False, why='no contract')
+    cap = CAP.get(league.year, 301.2)
+    floor = MS.minimum_salary(p.accrued or 0, cap)
+    max_conv = max(0.0, c.base[0] - floor)
+    conv = max_conv if amount is None else float(min(max(0.0, amount), max_conv))
+    if conv <= 0:
+        return dict(ok=False, why='nothing above the minimum to convert')
+    void_years = int(max(0, min(2, void_years)))
+    before = [round(c.cap_hit(i), 2) for i in range(c.years)]
+    trial = copy.deepcopy(c)
+    trial.void = max(trial.void, void_years)
+    trial.restructure(0, amount=conv, min_base=floor)
+    after = [round(trial.cap_hit(i), 2) for i in range(trial.years)]
+    return dict(ok=True, convert=round(conv, 2), max_convert=round(max_conv, 2), void_years=trial.void,
+                saves_now=round(before[0] - after[0], 2),
+                added_later=[round(after[i] - before[i], 2) for i in range(1, c.years)],
+                proration_years=trial.proration_years,
+                dead_if_cut_next_year=round(trial.remaining_proration(1), 2),
+                dead_at_void=round(trial.annual_proration * max(0, trial.proration_years - trial.years), 2),
+                hits_before=before, hits_after=after)
+
+
+def restructure_user(league, pid, amount=None, void_years=0):
+    """Do it, as previewed."""
+    import min_salary as MS
+    from cap_engine import CAP
+    pv = restructure_preview(league, pid, amount, void_years)
+    if not pv['ok']:
+        return pv
+    p = league.player(pid); c = p.contract
+    c.void = max(c.void, pv['void_years'])
+    c.restructure(0, amount=pv['convert'], min_base=MS.minimum_salary(p.accrued or 0, CAP.get(league.year, 301.2)))
+    league.teams[p.team].sync_cap()
+    league.log('restructure', pid=pid, team=p.team, converted=pv['convert'], void_years=c.void, user=True)
+    return dict(pv, done=True)
