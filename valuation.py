@@ -391,4 +391,40 @@ def value_player(league, player, side=None, rng=None, pool=None, season=None):
                pedigree=(0.0 if not player.draft_overall
                          else 1 - np.log(player.draft_overall + 5) / np.log(265)))
     window = {'agent': WINDOW_AGENT, 'team': WINDOW_TEAM}.get(side)
-    return value(row, cap=cap, pool=pool, window=window, rng=rng)
+    out = value(row, cap=cap, pool=pool, window=window, rng=rng)
+    if out is None:
+        return None
+    # THE TOP OF THE MARKET. Comps regress the elite toward the pack: a 97
+    # receiver's comps are 88-to-92 receivers, so Chase valued at $24m on a
+    # $40m deal, Gardner at $16m on $26m. The market at the top is set by the
+    # top: from the position's 95th percentile up, the number blends toward
+    # the mean of the three biggest deals at his position in this league.
+    top = _market_top(league, player.pos)
+    if top is not None:
+        p95, pmax, top3 = top
+        if pmax > p95 and player.ovr > p95:
+            w = 0.8 * float(np.clip((player.ovr - p95) / (pmax - p95), 0.0, 1.0))
+            for k in ('apy', 'apy_low', 'apy_high'):
+                out[k] = round((1 - w) * out[k] + w * top3 * (1.0 if k == 'apy' else (0.9 if k == 'apy_low' else 1.1)), 2)
+            out['cap_pct'] = round(out['apy'] / cap * 100, 3)
+    return out
+
+
+_MT_CACHE = {}
+
+
+def _market_top(league, pos):
+    """(95th-percentile overall at the spot, the max, mean of the three biggest APYs), cached per league-year."""
+    key = (id(league), league.year, pos)
+    if key in _MT_CACHE:
+        return _MT_CACHE[key]
+    men = [p for t in league.teams.values() for p in t.active() if p.pos == pos]
+    if len(men) < 12:
+        _MT_CACHE[key] = None; return None
+    ovrs = np.array([p.ovr for p in men])
+    apys = sorted((p.apy for p in men if p.apy), reverse=True)[:3]
+    if len(apys) < 3:
+        _MT_CACHE[key] = None; return None
+    out = (float(np.percentile(ovrs, 95)), float(ovrs.max()), float(np.mean(apys)))
+    _MT_CACHE[key] = out
+    return out

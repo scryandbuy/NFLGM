@@ -392,8 +392,11 @@ def _can_absorb(league, team, target, space):
     return keeper is not None and target.get('seen_ovr', p.ovr) > keeper.ovr + 1.0
 
 
+PLAYER_IN_PACKAGE = 0.55     # real: 55% of deals send a player with the picks
+
+
 def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
-               rng):
+               rng, needs_b=None):
     """
     Build up an offer until the other club takes it.
 
@@ -412,6 +415,15 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         return None, None
 
     pkg = []
+    # A PLAYER GOES IN MOST PACKAGES. Building up from the cheapest asset
+    # made 85% of deals picks-only against a real 45%: picks are finer
+    # currency, so they always closed the gap first. Real clubs send a body
+    # the other side can use, at the spot it is thin, and top up with picks.
+    if rng.random() < PLAYER_IN_PACKAGE:
+        cands = [x for x in surplus if x['pid'] != target.get('pid')]
+        fits = [x for x in cands if needs_b and x.get('grp') in needs_b] or cands
+        if fits:
+            pkg.append(max(fits, key=lambda x: x.get('seen_ovr', 0)))
     for _step in range(MAX_PACKAGE):
         best = None
         for cand in bank:
@@ -535,7 +547,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                            and getattr(x.get('obj'), 'team', a) == a]
                 offer, res = _negotiate(league, ta, tb, target, ga, gb,
                                         ctx_a, ctx_b, cap_space[a],
-                                        cap_space[b], sa_live, rng)
+                                        cap_space[b], sa_live, rng, needs_b=nb)
                 if offer is None:
                     continue
                 # A man just acquired is not surplus the following round.
