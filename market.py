@@ -184,12 +184,16 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
         if room <= 2.0:
             continue
         cand = []
+        from gm_engine import scheme_fit
         for p in pool:
             grp = team.by_pos(p.pos)
             best = grp[0].ovr if grp else 0.0
             depth = len(grp)
+            # HIM IN OUR SCHEME. A club shops for the men who fit what it
+            # runs, and pays them as it sees them.
+            fit = scheme_fit(p.ratings, p.pos, team)
             # need: thin at the spot, or he is an upgrade on what is there
-            upgrade = (p.ovr - best) / 12.0
+            upgrade = (p.ovr + fit - best) / 12.0
             need = (1.0 if depth == 0 else np.clip(0.9 - 0.25 * depth, 0, 1))
             want = 0.55 * need + 0.45 * np.clip(upgrade, -1, 1)
             if want <= 0.12:
@@ -206,7 +210,7 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
                 keeper = team.worst_keeper()
                 if keeper is not None and p.ovr <= keeper.ovr + 1.0:
                     years_want = 1        # worth having now, not worth a future
-            bid = v['apy'] * PHASE_LEVEL[phase]
+            bid = v['apy'] * PHASE_LEVEL[phase] * (1.0 + 0.045 * fit)
             # a club that wants him badly pays over its own number
             bid *= 1.0 + 0.22 * max(0.0, want - 0.5)
             bid = min(bid, power(league, team, cap, years_want) * 0.65)

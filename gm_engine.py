@@ -147,6 +147,25 @@ def scheme_of(gm):
     return keys or None
 
 
+def scheme_fit(player_ratings, pos, team):
+    """
+    How many overall points this club's scheme adds to or takes from him at
+    his spot, scaled by how hard the man in charge holds to his scheme.
+    Zero when the club has no scheme lean at his spot. This is the REASON
+    two clubs disagree about a player, and it replaces the placeholder
+    perception noise in trades.
+    """
+    import targets as TG
+    scheme = getattr(team, 'scheme', None)
+    if not scheme:
+        return 0.0
+    gm = getattr(team, 'gm', None)
+    rigidity = float(getattr(gm, 'scheme_rigidity', 0.5)) if gm is not None else 0.5
+    raw = TG.position_score(player_ratings, pos)
+    sch = TG.position_score(player_ratings, pos, scheme)
+    return float((sch - raw) * (0.6 + 0.8 * rigidity))
+
+
 def apply_identity(gm, entry, name=None):
     """Write a catalog entry onto a GM: offence and defence axes, the
     roster dials, the name and the tree."""

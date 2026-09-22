@@ -205,7 +205,9 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None):
     left = [p for p in league.draft_pool if p.pid not in taken]
     def grade(p, v):
         return (1 - w_pot) * v['ovr'] + w_pot * (v['pot_lo'] + v['pot_hi']) / 2
-    my_grade = {p.pid: grade(p, mine[p.pid]) for p in left}
+    # the club grades him for what it runs; the room's board stays raw
+    from gm_engine import scheme_fit
+    my_grade = {p.pid: grade(p, mine[p.pid]) + scheme_fit(p.ratings, p.pos, team) for p in left}
     cons_grade = {p.pid: 0.6 * cons[p.pid]['ovr'] + 0.4 * cons[p.pid]['pot'] for p in left}
     # rank within position group, mine and the room's, then blend the ranks
     groups = collections.defaultdict(list)

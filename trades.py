@@ -38,7 +38,7 @@ import valuation as VAL
 
 # How far apart two clubs can see the same man, in overall points. Real
 # disagreement is scheme fit and it is not built yet; this stands in for it.
-PERCEPTION_SPREAD = 3.5
+PERCEPTION_SPREAD = 1.2      # residual disagreement; scheme fit carries the rest
 
 # A TRADE IS NOT AN EQUATION. Requiring both sides to clear a hard line meant
 # deals died a tenth of a point apart - the seller at 5.97 against an offer of
@@ -117,10 +117,17 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     # which is the part that matters - you think he is a 90, they think he is
     # a 95, and neither of you is wrong. The offset is noise standing in for a
     # reason, and it should be replaced rather than tuned.
+    # SCHEME FIT IS THE REASON. A club sees a man through what it runs: a
+    # 380-pound guard is worth more to a gap club than to a zone one, a
+    # rangy free safety more to a two-high shell. That structural read plus
+    # a small residual disagreement about the man replaces the manufactured
+    # perception offset that stood in for it.
     seen = p.ovr
     if viewer is not None:
+        from gm_engine import scheme_fit
+        fit = scheme_fit(p.ratings, p.pos, viewer)
         seed = (hash((getattr(viewer, 'abbr', ''), p.pid)) % 10000) / 10000.0
-        seen = p.ovr + (seed - 0.5) * 2.0 * PERCEPTION_SPREAD
+        seen = p.ovr + fit + (seed - 0.5) * 2.0 * PERCEPTION_SPREAD
         v = dict(v, apy=v['apy'] * (1.0 + 0.045 * (seen - p.ovr)))
     # THE CAP FACTS OF MOVING HIM. The seller eats every dollar of bonus
     # still prorated (dead money, this year); the buyer inherits only the
@@ -151,6 +158,26 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
                 trade_value_buyer=TE.trade_value(row_buyer, v),
                 seen_ovr=round(float(seen), 1), obj=p, dead=dead, dead_now=dead_now,
                 inherit=inherit, inherited_apy=inherited_apy)
+
+
+def through_buyer_eyes(asset, buyer, seller):
+    """
+    A surplus list is built once, through the SELLER's scheme. A buyer has
+    to look at the same man through his own: the fit difference moves what
+    he sees and what he would pay. Cheap, no re-valuation.
+    """
+    from gm_engine import scheme_fit
+    p = asset.get('obj')
+    if p is None or asset.get('kind') != 'player':
+        return asset
+    delta = scheme_fit(p.ratings, p.pos, buyer) - scheme_fit(p.ratings, p.pos, seller)
+    if abs(delta) < 1e-9:
+        return asset
+    a = dict(asset)
+    a['seen_ovr'] = round(float(asset['seen_ovr']) + delta, 1)
+    scale = 1.0 + 0.045 * delta
+    a['trade_value_buyer'] = round(float(asset.get('trade_value_buyer', asset['trade_value'])) * max(0.3, scale), 2)
+    return a
 
 
 def pick_asset(league, pk, need=False):
@@ -463,7 +490,9 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 # He only wants a man who IMPROVES the hole, not merely one
                 # who plays the position. Otherwise a club trades for a 71 to
                 # sit behind its own 74, which nobody does.
-                want_a = [x for x in sb
+                # the seller's surplus, seen through the BUYER's scheme
+                sb_seen = [through_buyer_eyes(x, ta, tb) for x in sb]
+                want_a = [x for x in sb_seen
                           if x['pid'] not in moved
                           and x.get('grp') in na
                           and x.get('seen_ovr', 0) > na[x['grp']] + UPGRADE_GAP]
@@ -557,7 +586,8 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             ta = league.teams[a]
             sa, na = surplus_and_needs(league, ta, pool, rng)
             ga, ctx_a = persona(ta.gm), ta.ctx()
-            want = [x for x in su if x.get('grp') in na
+            su_seen = [through_buyer_eyes(x, ta, tu) for x in su]
+            want = [x for x in su_seen if x.get('grp') in na
                     and x.get('seen_ovr', 0) > na[x['grp']] + UPGRADE_GAP]
             wdw_a = TE.window(ctx_a)
             chase = (0.35 if wdw_a in ('contending', 'win_now') else 0.10) * (0.5 + ga['aggression'])
