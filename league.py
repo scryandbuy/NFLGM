@@ -68,7 +68,9 @@ class Player:
                  'accrued', 'draft_year', 'draft_round', 'draft_overall',
                  'entry_year', 'xp', 'xp_spent', 'morale', 'out_until',
                  'injury_history', 'career', 'seasons', 'retired',
-                 'tag_count', 'tagged_year', 'fa_class', 'tender_team')
+                 'tag_count', 'tagged_year', 'fa_class', 'tender_team',
+                 # the draft: where he came from and how the college game rated him
+                 'college', 'college_ovr', 'height', 'weight')
 
     def __init__(self, pid, name, pos, age, ratings, *, dev='normal',
                  potential=None, potential_range=None, longevity=1.0,
@@ -108,6 +110,10 @@ class Player:
         self.tagged_year = None
         self.fa_class = None          # UFA / RFA / ERFA, set each offseason
         self.tender_team = None       # who holds the right to match him
+        self.college = None
+        self.college_ovr = None
+        self.height = None
+        self.weight = None
 
     # ---- derived ability -------------------------------------------------
     @property

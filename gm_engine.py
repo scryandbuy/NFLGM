@@ -79,6 +79,8 @@ class GM:
                                    # position" - and separately you overvalue the
                                    # premium positions and try to create someone
     scheme_rigidity:float = 0.50   # how hard a scheme misfit is penalised
+    scouting:       float = 0.50   # how close his read of a prospect sits to the
+                                   # truth: 1 = the best room in the league, 0 = the worst
     # --- state, not personality ---
     job_security:   float = 0.60   # low security collapses the time horizon
     tenure:         int   = 0      # years in the chair; 0 = brand new regime
@@ -112,31 +114,31 @@ def make_gm(rng, archetype=None):
       'analytics':   dict(pick_lens=.12, youth=.72, contract_focus=.85, risk=.40,
                           own_bias=1.02, sunk_cost=.18, loyalty=.25, patience=.85,
                           restructure_depth=.20, aggression=.35, dev_belief=.65, board_trust=.85,
-                          need_inflation=.20, scheme_rigidity=.35),
+                          need_inflation=.20, scheme_rigidity=.35, scouting=.70),
       'traditional': dict(pick_lens=.88, youth=.35, contract_focus=.40, risk=.45,
                           own_bias=1.16, sunk_cost=.75, loyalty=.75, patience=.50,
                           restructure_depth=.62, aggression=.50, dev_belief=.45, board_trust=.40,
-                          need_inflation=.72, scheme_rigidity=.70),
+                          need_inflation=.72, scheme_rigidity=.70, scouting=.55),
       'gunslinger':  dict(pick_lens=.72, youth=.40, contract_focus=.25, risk=.85,
                           own_bias=1.06, sunk_cost=.50, loyalty=.35, patience=.20,
                           restructure_depth=.88, aggression=.92, dev_belief=.40, board_trust=.30,
-                          need_inflation=.85, scheme_rigidity=.30),
+                          need_inflation=.85, scheme_rigidity=.30, scouting=.40),
       'hoarder':     dict(pick_lens=.40, youth=.80, contract_focus=.75, risk=.30,
                           own_bias=1.25, sunk_cost=.60, loyalty=.70, patience=.92,
                           restructure_depth=.25, aggression=.18, dev_belief=.70, board_trust=.78,
-                          need_inflation=.30, scheme_rigidity=.45),
+                          need_inflation=.30, scheme_rigidity=.45, scouting=.65),
       'win_now':     dict(pick_lens=.82, youth=.20, contract_focus=.30, risk=.70,
                           own_bias=1.10, sunk_cost=.55, loyalty=.45, patience=.22,
                           restructure_depth=.92, aggression=.85, dev_belief=.30, board_trust=.25,
-                          need_inflation=.88, scheme_rigidity=.55),
+                          need_inflation=.88, scheme_rigidity=.55, scouting=.45),
       'developer':   dict(pick_lens=.45, youth=.85, contract_focus=.60, risk=.50,
                           own_bias=1.14, sunk_cost=.45, loyalty=.65, patience=.88,
                           restructure_depth=.35, aggression=.40, dev_belief=.92, board_trust=.70,
-                          need_inflation=.35, scheme_rigidity=.80),
+                          need_inflation=.35, scheme_rigidity=.80, scouting=.70),
       'balanced':    dict(pick_lens=.50, youth=.50, contract_focus=.55, risk=.50,
                           own_bias=1.10, sunk_cost=.45, loyalty=.50, patience=.55,
                           restructure_depth=.50, aggression=.50, dev_belief=.55, board_trust=.55,
-                          need_inflation=.50, scheme_rigidity=.50),
+                          need_inflation=.50, scheme_rigidity=.50, scouting=.55),
     }
     k = archetype or rng.choice(list(A))
     p = {a: float(np.clip(v * rng.normal(1.0, .13), 0.0, 2.0)) for a, v in A[k].items()}
@@ -144,6 +146,7 @@ def make_gm(rng, archetype=None):
     # was letting own_bias fall below 1.0, which had GMs undervaluing their own
     # players - the opposite of the documented behaviour.
     p['own_bias'] = max(1.0, p['own_bias'])
+    p['scouting'] = float(np.clip(p['scouting'], 0.05, 0.98))
     g = GM(name=k, **p)
     g.job_security = float(np.clip(rng.normal(.60, .18), .05, .98))
     g.tenure = int(rng.integers(0, 8))

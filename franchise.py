@@ -37,6 +37,9 @@ import xp as XP
 import dev_roll as DR
 import schedule as SCH
 import trades as TRD
+import draft_class as DC
+import scouting as SC
+import draft as DFT
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -110,6 +113,19 @@ class Franchise:
         made = TRD.run(L, rng, rounds=2,
                        exclude=(self.user_team,) if self.user_team else ())
         log['trades'] = len(made)
+        # THE DRAFT. The first class is the real College Football 27 seniors
+        # and juniors mapped onto a rookie scale; later years need newgens,
+        # which do not exist yet, so the draft runs once until they do.
+        if not getattr(L, 'cfb_class_used', False):
+            DC.build(L, rng, draft_year=L.year)
+            SC.scout(L, rng)
+            # the picks carry the SEASON year they were earned in; the year
+            # has already rolled by the time the draft is held
+            drafted = DFT.run(L, rng, year=L.year - 1)
+            L.cfb_class_used = True
+            log['drafted'] = len(drafted)
+        else:
+            log['drafted'] = 0
         log['signed'] = len(signed)
         log['unsigned'] = len(left)
         log['offer_sheets'] = len([m for m in getattr(L, 'inbox', [])
