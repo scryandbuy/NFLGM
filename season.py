@@ -119,6 +119,8 @@ class SeasonRunner:
                 for p in t.active()
                 if (desk.available(p, self.week) if desk
                     else p.out_until is None)]
+        # game-day elevations from the practice squad dress this week
+        rows += [dict(p.ratings, pid=p.pid, pos=p.pos) for p in getattr(t, '_elevated', [])]
         return R.build_roster_rows(rows, t.scheme)
 
     def refresh(self, abbr):
@@ -237,8 +239,10 @@ class SeasonRunner:
         # THE TRADE WINDOW. A trickle through the early weeks, the phones
         # busy in the two weeks before the deadline, nothing after it. The
         # user's club is never traded with on its own account.
-        import inbox as IB
+        import inbox as IB, practice_squad as PSQ
         IB.expire(self.L, week)
+        # the squads: elevations for clubs short of healthy men, the odd poach
+        PSQ.weekly(self.L, self.rng, week, user_team=getattr(self.L, 'user_team', None))
         if week <= TR.TRADE_DEADLINE_WEEK:
             user = getattr(self.L, 'user_team', None)
             made = TR.run(self.L, self.rng, rounds=1,

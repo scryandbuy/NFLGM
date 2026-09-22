@@ -235,6 +235,7 @@ class Team:
         self.roster = []                  # Player
         self.practice_squad = []
         self.ir = []
+        self.practice_squad = []          # up to 16, paid weekly, not tradeable
         self.picks = []                   # DraftPick
         self.cap = TeamCap(year)
         self.record = [0, 0, 0]           # W L T, this season
@@ -404,6 +405,11 @@ class Team:
         """Rebuild the cap ledger from who is actually under contract."""
         self.cap.contracts = [(p.pid, p.contract, year_index)
                               for p in self.roster if p.contract]
+        try:
+            import practice_squad as PSQ
+            self.cap.practice_squad = PSQ.ps_charge(self)
+        except Exception:
+            pass
 
     # ---- the dict shape the older engines take ---------------------------
     def ctx(self):

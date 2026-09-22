@@ -154,6 +154,7 @@ class TeamCap:
         self.contracts = []        # (player_id, Contract, year_index)
         self.dead = 0.0
         self.dead_next = 0.0       # June 1 splits and retirements land here, for next year
+        self.practice_squad = 0.0  # the squad's weekly pay for the season, while he is on it
 
     @property
     def limit(self): return self.cap + self.rollover
@@ -162,7 +163,7 @@ class TeamCap:
         hits = sorted((c.cap_hit(i) for _, c, i in self.contracts), reverse=True)
         if phase in TOP_51_PHASES:
             hits = hits[:51]                      # only the top 51 count until week 1
-        return sum(hits) + self.dead
+        return sum(hits) + self.dead + (self.practice_squad if phase not in TOP_51_PHASES else 0.0)
 
     def space(self, phase='season'):
         return round(self.limit - self.charges(phase), 3)

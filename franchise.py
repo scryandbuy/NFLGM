@@ -41,6 +41,7 @@ import draft_class as DC
 import scouting as SC
 import draft as DFT
 import newgens as NG
+import practice_squad as PSQ
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -129,6 +130,8 @@ class Franchise:
         # user's club picks off the consensus board and its needs
         drafted = DFT.run(L, rng, year=L.year - 1, user_team=self.user_team)
         log['drafted'] = len(drafted)
+        # every undrafted man is in the pool; clubs bring a handful to camp
+        log['udfa_camp'] = PSQ.udfa_camp(L, rng)
         # and the class for NEXT year's draft is born now
         NG.build(L, rng, draft_year=L.year + 1)
         SC.scout(L, rng)
@@ -140,7 +143,13 @@ class Franchise:
 
         # CUT-DOWN TO 53, which roster_construction could always do and
         # nothing ever asked it to.
+        # last year's squads are released back to the pool before cut-down
+        for t in L.teams.values():
+            for p in list(PSQ.squad(t)):
+                PSQ.release_from_squad(L, t.abbr, p.pid)
+        PSQ.reset_season(L)
         cut, filled = CD.finalize(L, rng)
+        log['practice_squad'] = PSQ.fill_squads(L, rng)
         log['cut_to_53'] = len(cut)
         log['filled'] = filled
 
