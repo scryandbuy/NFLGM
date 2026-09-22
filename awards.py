@@ -274,6 +274,10 @@ class Ballot:
             own = self.line_score(p, line)
             if own is None:
                 continue
+            # a man cut in November has stats and no club; the wire made
+            # that a real case
+            if p.team not in self.teams:
+                continue
             s_, r_, p_ = team_ctx.get(p.team, (0, 0, 0))
             # fewer sacks allowed is better, so this one inverts
             ctx = (25.0 * (1.0 - (s_ - lo_s) / max(1e-9, hi_s - lo_s))

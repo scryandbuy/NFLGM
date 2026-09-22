@@ -96,6 +96,12 @@ class GM:
     blitz:          float = 0.35
     box:            float = 0.45    # light .. heavy
     tree:           str = ''        # the coaching family, for the record
+    # --- the resume the owner reads ---
+    age:            int = 48
+    background:     str = 'offensive coordinator'
+    experience:     int = 15
+    reputation:     float = 0.5     # what the league thinks of him; the dials are the truth
+    hc_record:      dict = None     # seasons, win_pct, playoffs, when he has been a head coach
     # --- state, not personality ---
     job_security:   float = 0.60   # low security collapses the time horizon
     tenure:         int   = 0      # years in the chair; 0 = brand new regime

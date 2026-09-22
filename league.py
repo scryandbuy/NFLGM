@@ -236,6 +236,8 @@ class Team:
         self.practice_squad = []
         self.ir = []
         self.practice_squad = []          # up to 16, paid weekly, not tradeable
+        self.owner_patience = 0.5         # how long the owner waits on a plan
+        self.owner_acumen = 0.5           # how well the owner reads a coach
         self.picks = []                   # DraftPick
         self.cap = TeamCap(year)
         self.record = [0, 0, 0]           # W L T, this season
@@ -433,6 +435,7 @@ class Team:
                     gm=(asdict(self.gm) if self.gm else None),
                     roster=[p.pid for p in self.roster],
                     practice_squad=[p.pid for p in self.practice_squad],
+                    owner_patience=self.owner_patience, owner_acumen=self.owner_acumen,
                     ir=[p.pid for p in self.ir],
                     picks=[asdict(k) for k in self.picks],
                     cap_year=self.cap.year, cap_rollover=self.cap.rollover,
@@ -682,6 +685,7 @@ class League:
             game_stats=self.game_stats,
             standings_history=self.standings_history,
             transactions=self.transactions, awards=self.awards,
+            coach_pool=[asdict(g) for g in getattr(self, 'coach_pool', [])],
             rng_state=self.rng_state)
 
     def save(self, path=None):
@@ -714,6 +718,7 @@ class League:
             t.practice_squad = [L.players[p] for p in td['practice_squad']
                                 if p in L.players]
             t.ir = [L.players[p] for p in td['ir'] if p in L.players]
+            t.owner_patience = td.get('owner_patience', 0.5); t.owner_acumen = td.get('owner_acumen', 0.5)
             t.picks = [DraftPick(**k) for k in td['picks']]
             t.cap = TeamCap(td['cap_year'], td['cap_rollover'])
             t.cap.dead = td['cap_dead']
@@ -726,6 +731,7 @@ class League:
             t.sync_cap()
             L.teams[abbr] = t
         L.free_agents = d['free_agents']
+        L.coach_pool = [GM(**g) for g in d.get('coach_pool', [])]
         L.schedule = [tuple(g) for g in d['schedule']]
         L.stats = {int(k): v for k, v in d['stats'].items()}
         L.post_stats = {int(k): v for k, v in (d.get('post_stats') or {}).items()}
@@ -833,8 +839,15 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         entry = IC.CATALOG.get(abbr)
         if entry:
             apply_identity(t.gm, entry, name=entry['coach'])
+            t.gm.background = 'head coach'
+            t.gm.age = int(entry.get('age', rng.integers(40, 62)))
         t.scheme = scheme_of(t.gm)
+        t.owner_patience = float(np.clip(rng.normal(0.5, 0.18), 0.05, 0.95))
+        t.owner_acumen = float(np.clip(rng.normal(0.5, 0.18), 0.05, 0.95))
         L.teams[abbr] = t
+    # the thirty men waiting for a job
+    import coaching_pool as CP
+    CP.build_pool(L, rng)
 
     for _, r in S.iterrows():
         ratings = {c: float(r[c]) for c in rating_cols if pd.notna(r[c])}

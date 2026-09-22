@@ -178,13 +178,11 @@ def run_firings(league, rng, pool=None, verbose=False):
         qb_dev = bool(qb and qb.age <= 25 and qb.ovr >= 78)
         chance = FM.fire_chance_offseason(t.hist(), rp, qb_dev)
         if rng.random() < chance:
-            old = t.gm
-            pool.append(old)
-            t.gm, source = IH.hire_gm(t.ctx(), pool, rng, make_gm)
-            t.tenure = 0
-            fired.append((abbr, source))
-            league.log('gm_change', team=abbr, source=source,
-                       win_pct=round(t.win_pct, 3))
+            if abbr == getattr(league, 'user_team', None):
+                continue                      # the user is the man; his seat is his own story
+            import coaching_pool as CP
+            hired, reasons = CP.fire_and_hire(league, t, rng, verbose)
+            fired.append((abbr, hired.background))
         else:
             t.tenure += 1
             t.gm.tenure = t.tenure
