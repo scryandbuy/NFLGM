@@ -364,22 +364,42 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     return None, None
 
 
-def run(league, rng, rounds=2, verbose=False):
+# THE CALENDAR. Real player trades run roughly 40 to 60 across the
+# offseason and 20 to 25 in season, most of those in the two weeks before
+# the deadline. Nothing after the deadline until the season is over.
+TRADE_DEADLINE_WEEK = 9
+IN_SEASON_ACTIVITY = {w: 0.04 for w in range(1, 7)}
+IN_SEASON_ACTIVITY.update({7: 0.15, 8: 0.35, 9: 0.60})
+
+
+def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=()):
     """
     Clubs shop their surplus. A deal goes through only when both sides price
     it as a gain through their own window.
+
+    activity: the share of clubs that pick up the phone this window (1.0 in
+    the offseason, a trickle early in the season, most of the league in
+    deadline week). exclude: clubs that do not trade on their own, which is
+    the user's team.
     """
     pool = VAL.pool_from_league(league)
     cap_space = {a: t.cap_space for a, t in league.teams.items()}
     made = []
     moved = set()          # nobody changes hands twice in one window
-    teams = list(league.teams)
+    teams = [a for a in league.teams if a not in set(exclude)]
 
     for _r in range(rounds):
         rng.shuffle(teams)
-        for a in teams:
+        # every club's surplus and needs once a round, not once per pairing:
+        # the old loop re-valued the whole league 32 times over and a weekly
+        # in-season window took minutes
+        active = [a for a in teams if activity >= 1.0 or rng.random() <= activity]
+        if not active:
+            continue
+        sn = {b: surplus_and_needs(league, league.teams[b], pool, rng) for b in teams}
+        for a in active:
             ta = league.teams[a]
-            sa, na = surplus_and_needs(league, ta, pool, rng)
+            sa, na = sn[a]
             if not sa:
                 continue
             ga = persona(ta.gm)
@@ -388,7 +408,7 @@ def run(league, rng, rounds=2, verbose=False):
                 if b == a:
                     continue
                 tb = league.teams[b]
-                sb, nb = surplus_and_needs(league, tb, pool, rng)
+                sb, nb = sn[b]
                 if not sb:
                     continue
                 gb = persona(tb.gm)
@@ -424,9 +444,13 @@ def run(league, rng, rounds=2, verbose=False):
                 # those deals; trades were taking them blind.
                 if not _can_absorb(league, ta, target, cap_space[a]):
                     continue
+                # a man already sent away in an earlier deal this window is
+                # not in the bank any more (the surplus list was built once)
+                sa_live = [x for x in sa if x['pid'] not in moved
+                           and getattr(x.get('obj'), 'team', a) == a]
                 offer, res = _negotiate(league, ta, tb, target, ga, gb,
                                         ctx_a, ctx_b, cap_space[a],
-                                        cap_space[b], sa, rng)
+                                        cap_space[b], sa_live, rng)
                 if offer is None:
                     continue
                 # A man just acquired is not surplus the following round.

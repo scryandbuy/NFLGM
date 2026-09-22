@@ -36,6 +36,7 @@ import season as SN
 import xp as XP
 import dev_roll as DR
 import schedule as SCH
+import trades as TRD
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -104,6 +105,11 @@ class Franchise:
         log['tagged'], log['tendered'] = len(t['tagged']), len(t['tendered'])
 
         signed, left = MK.run(L, rng, user_team=self.user_team)
+        # THE OFFSEASON TRADE WINDOW, once the market has settled: clubs know
+        # what they could not buy and shop for it
+        made = TRD.run(L, rng, rounds=2,
+                       exclude=(self.user_team,) if self.user_team else ())
+        log['trades'] = len(made)
         log['signed'] = len(signed)
         log['unsigned'] = len(left)
         log['offer_sheets'] = len([m for m in getattr(L, 'inbox', [])

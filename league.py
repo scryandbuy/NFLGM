@@ -533,7 +533,13 @@ class League:
         return dead_now, dead_next, saved
 
     def trade(self, a, b, a_sends, b_sends):
-        """a_sends / b_sends: lists of pid or DraftPick."""
+        """a_sends / b_sends: lists of pid or DraftPick. Refuses, rather than
+        half-executes, if any man is not where the deal says he is."""
+        for item, src in [(x, a) for x in a_sends] + [(x, b) for x in b_sends]:
+            if not isinstance(item, DraftPick):
+                p = self.player(item)
+                if p is None or p.team != src or p not in self.teams[src].roster:
+                    raise ValueError(f'trade: {item} is not on {src}')
         for item, src, dst in [(x, a, b) for x in a_sends] + \
                               [(x, b, a) for x in b_sends]:
             if isinstance(item, DraftPick):
