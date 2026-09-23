@@ -539,7 +539,7 @@ def run(league, rng, user_team=None, verbose=False):
                 if p is not None and p.team and p.team != t['team']:
                     t['state'] = 'declined'; NG._post(league, t, f"{p.name} signs with {p.team}", "He took another offer.")
         NG.resolve(league, fa_step=phase)
-        pool = [p for p in pool if p.team is None]          # a man who signed through his thread is off the market
+        waiting = [p for p in waiting if p.team is None]    # a man who signed through his thread is off the market
         for m in msgs:
             inbox_add(league, m)
         all_signed += signed
