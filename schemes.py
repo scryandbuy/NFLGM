@@ -372,7 +372,8 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     form = FM.choose_formation(pers, rng, down=down, ydstogo=ydstogo,
                                score_diff=score_diff, secs_left=secs_left)
     call = dict(personnel=pers, shotgun=bool(shotgun), is_pass=bool(is_pass),
-                formation=form, down=down, ydstogo=ydstogo)
+                formation=form, down=down, ydstogo=ydstogo,
+                protection_pref=lean.get('protection'))
     # SHORT YARDAGE IS ITS OWN PACKAGE. On third and fourth and one, and on
     # second and one some of the time, the quarterback sneak is the call on
     # about 38% of runs league-wide (converting ~81% against ~68% for a
@@ -395,7 +396,7 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         # a Shanahan-tree offence at 0.75 uses it about half again as often
         pa_scale = float(np.exp(1.2 * (float(lean.get('play_action', 0.5)) - 0.5)))
         call['play_action'] = rng.random() < min(0.6, (0.30 if not shotgun else 0.14) * pa_scale)
-        call['screen'] = rng.random() < 0.075
+        call['screen'] = rng.random() < 0.075 + float(lean.get('screen_boost', 0.0) or 0.0)
         call['rpo'] = rng.random() < 0.057
         # THE CONCEPT IS A CALL, NOT A DRAW. It used to come off a flat
         # rng.choice inside a distance bucket, so a quarterback who could not

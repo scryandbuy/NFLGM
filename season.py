@@ -175,6 +175,19 @@ class SeasonRunner:
                 hit, _mult = desk.condition_hit(pid)
                 if hit:
                     st.cond.cond[pid] = max(35.0, st.cond.get(pid) - hit)
+        # THE WEEK'S PLAN. Each coordinator reads the assistants' report on
+        # the other side and takes what he takes; the user's saved changes
+        # apply to his club. The state's plan resets when the game ends.
+        import gameplan_week as GW
+        user = getattr(self.L, 'user_team', None)
+        for me, opp in ((home, away), (away, home)):
+            st = self.states.get(me)
+            if st is None or st.plan is None: continue
+            try:
+                if me == user: GW.user_plan(self.L, st, week)
+                else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
+            except Exception:
+                pass
         book = G.StatBook()
         res = G.play_game(hr, ar, self.rng, P.resolve_play, self.co, self.cd,
                           P.rate, home_state=self.states[home],
@@ -182,6 +195,7 @@ class SeasonRunner:
                           playoffs=playoffs)
 
         # ---- record ------------------------------------------------------
+        GW.record_game(self.L, home, away, res)
         H, A = self.L.teams[home], self.L.teams[away]
         if playoffs:
             pass                      # postseason does not touch the record
@@ -282,6 +296,11 @@ class SeasonRunner:
         MO.weekly(self.L, week, results, snaps)
         MO.check_resolutions(self.L, week)
         MO.unresolved_weekly(self.L)
+        # the assistants' report on next week's opponent, into the inbox now
+        if week < 18:
+            import gameplan_week as GW
+            try: GW.post_report(self.L, week + 1)
+            except Exception: pass
         IB.expire(self.L, week)
         # THE WIRE: award last week's claims first (the user had the week to
         # claim from the inbox), then notify the user of this week's waivers
@@ -356,6 +375,9 @@ class SeasonRunner:
 
 def run_season(league, rng=None, weeks=WEEKS, verbose=False):
     r = SeasonRunner(league, rng)
+    import gameplan_week as GW
+    try: GW.post_report(league, 1)          # week one's report before the season opens
+    except Exception: pass
     r.run(weeks, verbose)
     return r
 

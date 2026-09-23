@@ -579,6 +579,10 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # protect because six are coming let the defence's blitz cancel itself, so
     # the sack rate barely moved from four to six rushers.
     prot_name = S.choose_protection(off_call['personnel'], 4, depth, rng)
+    # the week's plan can ask for six-man protection: it replaces about half
+    # the five-man calls, which is what "protect more" means in practice
+    if off_call.get('protection_pref') == 'six' and prot_name == 'five' and rng.random() < 0.5:
+        prot_name = 'half_slide'
     prot = S.protection_math(prot_name, def_call['rushers'])
 
     # WHO STAYS IN. The extra blockers used to be the second tight end and

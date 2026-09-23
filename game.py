@@ -950,7 +950,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             seq = getattr(off_state, 'seq', None) or {'run_hot': 0.0}
             pa_boost = float(np.clip(1.0 + 0.55 * min(seq['run_hot'], 3.0) / 3.0, 0.85, 1.55))
             olean = dict(pass_bias=pl0.pass_bias, play_action=min(0.95, pl0.play_action_rate * pa_boost),
-                         motion=getattr(pl0, 'motion_rate', 0.365))
+                         motion=getattr(pl0, 'motion_rate', 0.365), protection=getattr(pl0, 'protection', None),
+                         screen_boost=getattr(pl0, 'screen_boost', 0.0))
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
                       dr.score_diff, ytg_i, rng, secs_left=dr.clock,
                       offense=offense, rate_fn=rate_fn, lean=olean)
@@ -1133,6 +1134,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         out['play_action'] = bool(oc.get('play_action'))
         out['motion'] = bool(oc.get('motion'))
         out['blitzers'] = int(dc.get('blitzers', 0))
+        out['shell'] = dc.get('shell'); out['box'] = dc.get('box'); out['personnel'] = oc.get('personnel')
+        out['blitz'] = bool(dc.get('blitz')) or int(dc.get('rushers', 4)) >= 5
         dr.log.append(out)
         if book is not None: book.record(out, off_f, def_f, rng)
         for st in (off_state, def_state):
