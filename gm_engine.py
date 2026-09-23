@@ -151,6 +151,9 @@ def scheme_of(gm):
     elif gm.def_front == '3-4': keys.append('two_gap')
     if gm.coverage >= 0.5: keys.append('man')
     elif gm.coverage <= 0.3: keys.append('zone_cov')
+    # a two-tight-end club wants a tight end who blocks; a spread club wants one who runs routes
+    if gm.off_personnel in ('12', '13', '21'): keys.append('heavy_te')
+    elif gm.off_personnel == '11': keys.append('spread_te')
     return keys or None
 
 

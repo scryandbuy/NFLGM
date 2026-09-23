@@ -540,7 +540,11 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     extras = []
     n_extra = max(0, prot['blockers'] - 5)
     if n_extra >= 1:
-        first = back if (back is not None and (te1 is None or rng.random() < 0.55)) else te1
+        # a two-tight-end grouping keeps the tight end more often than the
+        # back; a spread grouping keeps the back (PFF: tight ends block on
+        # ~16% of pass plays league-wide, from near nothing to 30%-plus)
+        te_keeps = {'12': 0.75, '13': 0.82, '21': 0.58, '22': 0.68}.get(str(off_call.get('personnel', '11')), 0.42)
+        first = te1 if (te1 is not None and (back is None or rng.random() < te_keeps)) else back
         if first is not None: extras.append(first)
     if n_extra >= 2:
         second = te1 if (te1 is not None and te1 not in extras) else back
@@ -830,6 +834,15 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     n_near = {'short': 3, 'medium': 4, 'deep': 2}[depth]
     if air <= 0: n_near = 2                       # screen: blockers ahead
     tacklers = [pool[rng.integers(0, len(pool))] for _ in range(n_near)]
+    if tgt.get('pos') in ('HB', 'FB') and not screen:
+        # A BACK'S CATCH is at the line with the underneath defence in front
+        # of him: the man who had him is the first tackler and the box
+        # linebackers arrive next. Drawing his tacklers from the whole
+        # secondary put corners forty yards away on the list and left backs
+        # at 8-9 yards a target against a real 6.
+        first = [cov] if cov is not None else []
+        lbs = list(deff['lb']) or pool
+        tacklers = first + [lbs[rng.integers(0, len(lbs))] for _ in range(2)] + [pool[rng.integers(0, len(pool))]]
     # IN SPACE ONLY WHERE THERE IS SPACE. Every catch used to be resolved as
     # if the receiver had open field, and near the goal line he does not: the
     # end zone is a wall and eleven defenders are standing in twenty yards.

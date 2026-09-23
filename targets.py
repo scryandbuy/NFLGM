@@ -240,6 +240,12 @@ DEPTH_WEIGHTS['LS'] = {'awareness_rating': 1.0}
 # lineman over the mauler; the first build's weights left the mauler on top
 # under both schemes, which defeated the point.
 SCHEME_SHIFT = {
+    # the blocking tight end as a type: a 12-personnel club grades him on
+    # the blocks, a spread club on the routes
+    'heavy_te':  {'run_block_rating': +.20, 'pass_block_rating': +.15, 'lead_block_rating': +.10,
+                  'route_run_med_rating': -.15, 'speed_rating': -.10},
+    'spread_te': {'route_run_med_rating': +.15, 'catch_rating': +.10, 'speed_rating': +.10,
+                  'run_block_rating': -.18, 'pass_block_rating': -.12},
     'gap':      {'run_block_power_rating': +.26, 'strength_rating': +.16,
                  'run_block_finesse_rating': -.14, 'agility_rating': -.10},
     'zone':     {'run_block_finesse_rating': +.28, 'agility_rating': +.20,
@@ -263,6 +269,8 @@ SCHEME_SHIFT = {
 # run-block weights on quarterbacks and receivers (defaulting to 70) and
 # graded every starter in the league fifteen points below his rating.
 SCHEME_DOMAIN = {
+    'heavy_te':  {'TE'},
+    'spread_te': {'TE'},
     'gap':      {'LT', 'LG', 'C', 'RG', 'RT', 'TE', 'FB', 'HB'},
     'zone':     {'LT', 'LG', 'C', 'RG', 'RT', 'TE', 'FB', 'HB'},
     'one_gap':  {'LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM'},
