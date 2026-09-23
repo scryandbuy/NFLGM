@@ -416,7 +416,9 @@ def resolve_play(off, deff, off_call, def_call, yards_to_endzone, rng):
     """
     if off_call['is_pass']:
         out = _pass_play(off, deff, off_call, def_call, yards_to_endzone, rng)
-        if isinstance(out, dict): out['travelled'] = LAST_TRAVEL
+        if isinstance(out, dict):
+            out['travelled'] = LAST_TRAVEL
+            out['bracketed'] = bool(def_call.get('bracket')) and out.get('target') == def_call.get('bracket')
         return out
     if off_call.get('sneak'):
         return _sneak(off, deff, off_call, def_call, yards_to_endzone, rng)
@@ -768,8 +770,13 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         # league completion to 51.6% against a real 65.0%.
         dbs = ([dict(cov, dist_to_window=0)] if not zone_hole else []) + \
               ([dict(zone_second, dist_to_window=1)] if zone_second is not None else [])
+        # ZONE AGGRESSION: underneath men who sit on the quick game shrink
+        # the short windows and open the seams behind them; men who sink do
+        # the reverse. The lean is the coordinator's, from the plan.
+        za = float(def_call.get('zone_aggression', 0.5)) - 0.5
+        z_bias = (1.0 - 0.28 * za) if depth == 'short' else (1.0 + 0.20 * za) if depth == 'medium' else (1.0 + 0.24 * za)
         z = resolve_zone(tgt, dbs, off['qb'], def_call['shell'], depth,
-                         p['pressure'], rng, rate, hole=zone_hole)
+                         p['pressure'], rng, rate, hole=zone_hole, bias=z_bias)
         # Apply the concept to the WINDOW, not as a second independent gate.
         # Gating twice dropped four-man-rush completion to 51.8% against a
         # real 61.9%.

@@ -63,6 +63,7 @@ class Gameplan:
     play_action_rate: float = 0.5           # the caller's lean, 0.5 neutral
     motion_rate: float = 0.5
     shell_lean: float = 0.5
+    zone_aggression: float = 0.5      # underneath zones sit on the quick game (1) or sink (0)
     blitz_lean: float = 0.35
     # ---- defence ----
     man_rate: float = 0.35
@@ -107,6 +108,7 @@ def base_plan(coach=None, opponent=None, rng=None):
     g.play_action_rate = float(coach.get('play_action_rate', g.play_action_rate))
     g.motion_rate = float(coach.get('motion_rate', 0.5))
     g.shell_lean = float(coach.get('shell_lean', 0.5))
+    g.zone_aggression = float(coach.get('zone_aggression', 0.5))
     g.blitz_lean = float(coach.get('blitz_lean', 0.35))
     if 'personnel_mix' in coach: g.personnel_mix = dict(coach['personnel_mix'])
     if 'depth_mix' in coach: g.depth_mix = tuple(coach['depth_mix'])

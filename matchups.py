@@ -213,7 +213,7 @@ def zone_window(shell, depth):
     i = {'short': 0, 'medium': 1, 'deep': 2}[depth]
     return ZONE_WINDOW.get(shell, (0.58, 0.39, 0.27))[i]
 
-def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate, hole=False):
+def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate, hole=False, bias=1.0):
     """
     Zone pass resolution. Two steps, as the football describes it:
 
@@ -242,6 +242,7 @@ def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate, hol
     # 2. the nearest defender squeezes it. Others are too far to matter, which
     #    is why the seam beats zone.
     near = min(defenders, key=lambda d: d.get('dist_to_window', 99)) if defenders else None
+    w *= bias                     # the coordinator's zone aggression (plays.py)
     if hole:
         # nobody owns the area: the blitz took him or the call leaves it
         w *= HOLE_WINDOW

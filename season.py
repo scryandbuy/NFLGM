@@ -82,6 +82,8 @@ def make_coach(gm):
         adjust_willingness=float(np.clip(gm.aggression, .1, .95)),
         man_rate=float(np.clip(getattr(gm, 'coverage', 0.25), 0.0, 1.0)),
         shell_lean=float(getattr(gm, 'shell', 0.5)),
+        zone_aggression=float(getattr(gm, 'zone_aggression', 0.5)),
+        bracket_willingness=float(np.clip(0.3 + 0.5 * getattr(gm, 'aggression', 0.5), 0.1, 0.9)),
         blitz_lean=float(getattr(gm, 'blitz', 0.35)),
         blitz_rate=0.133,
         front_pref=fronts,

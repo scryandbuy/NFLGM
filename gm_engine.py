@@ -92,6 +92,7 @@ class GM:
     fourth_down:    float = 0.50
     def_front:      str = '4-3'     # '4-3' one-gap | '3-4' two-gap | 'multiple'
     coverage:       float = 0.25    # zone .. man
+    zone_aggression: float = 0.5    # underneath zone defenders sit on the quick game (1) or sink and carry (0)
     shell:          float = 0.50    # single-high .. two-high
     blitz:          float = 0.35
     box:            float = 0.45    # light .. heavy
@@ -131,7 +132,7 @@ class GM:
             g.aggression = min(1.0, g.aggression + .30)
         return g
 
-IDENTITY_KEYS = ('off_blocking', 'off_personnel', 'pass_lean', 'play_action', 'motion', 'tempo',
+IDENTITY_KEYS = ('zone_aggression', 'off_blocking', 'off_personnel', 'pass_lean', 'play_action', 'motion', 'tempo',
                  'deep', 'fourth_down', 'def_front', 'coverage', 'shell', 'blitz', 'box')
 ROSTER_KEYS = ('youth', 'pick_lens', 'contract_focus', 'risk', 'patience', 'aggression', 'dev_belief',
                'board_trust', 'need_inflation', 'restructure_depth', 'scouting')
@@ -181,6 +182,11 @@ def apply_identity(gm, entry, name=None):
     roster dials, the name and the tree."""
     if name: gm.name = name
     gm.tree = entry.get('tree', '')
+    # a coordinator's zone aggression follows his pressure and shell habits
+    # unless the catalog says otherwise: a single-high pressure man jumps the
+    # quick game, a two-high man sinks and carries
+    if 'zone_aggression' in entry: gm.zone_aggression = float(entry['zone_aggression'])
+    else: gm.zone_aggression = float(np.clip(0.5 + 0.5 * (gm.blitz - 0.4) - 0.4 * (gm.shell - 0.5), 0.15, 0.85))
     gm.prestige = float(entry.get('prestige', 20.0))
     for k, v in entry.get('offence', {}).items():
         setattr(gm, {'blocking': 'off_blocking', 'personnel': 'off_personnel'}.get(k, k), v)

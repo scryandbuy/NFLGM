@@ -563,9 +563,9 @@ class TeamState:
         # is what he learned, not what he did about it.
         import gameplan as GP, adjust as AD
         if getattr(self, 'base_plan', None) is not None:
-            travel, target = self.plan.travel, self.plan.travel_target
+            travel, target, bracket = self.plan.travel, self.plan.travel_target, self.plan.bracket
             self.plan = self.base_plan.copy()
-            self.plan.travel, self.plan.travel_target = travel, target
+            self.plan.travel, self.plan.travel_target, self.plan.bracket = travel, target, bracket
         self.mem = AD.GameMemory()
         self.last_adjustment = None
         # THE OUT LIST WAS NEVER CLEARED. hurt() refuses to roll for a man
@@ -1043,6 +1043,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                                     round(dp.box_bias * 4), 4, 10))
             dc['bracket'] = dp.bracket
             dc['travel'] = dp.travel
+            dc['zone_aggression'] = dp.zone_aggression
 
         # Penalties. A pre-snap foul or a nullifying one (holding, OPI) wipes
         # the snap. EVERYTHING ELSE WAS BEING THROWN AWAY: the draw below
@@ -1316,6 +1317,19 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
                                               coach_willingness=float(st.coach.get('travel_willingness', 0.5)),
                                               scale=1.6)          # a game-week call has a lower bar than a snap
             st.plan.travel_target = wr1.get('pid') if st.plan.travel else None
+            # BRACKETING IS A GAME-WEEK DECISION TOO. A coordinator doubles
+            # their star when the second receiver is not one and the plan can
+            # afford the safety: real clubs bracket the top man on about a
+            # third of his snaps, more against the true elite.
+            st.plan.bracket = None
+            if len(wrs) >= 2:
+                srt = sorted(wrs, key=lambda w: -rate_fn(w, {'route_run_short_rating': .20, 'route_run_med_rating': .25,
+                                                              'route_run_deep_rating': .25, 'speed_rating': .30}))
+                gap = rate_fn(srt[0], {'route_run_med_rating': .5, 'speed_rating': .5}) - rate_fn(srt[1], {'route_run_med_rating': .5, 'speed_rating': .5})
+                star = rate_fn(srt[0], {'route_run_med_rating': .5, 'speed_rating': .5}) >= 0.86
+                p_br = (0.55 if star else 0.25) * float(np.clip(gap / 0.08, 0.3, 1.5)) * float(st.coach.get('bracket_willingness', 0.5)) / 0.5
+                if rng.random() < min(0.8, p_br):
+                    st.plan.bracket = srt[0].get('pid')
     while clock > 0:
         off = home if pos == 'home' else away
         deff = away if pos == 'home' else home
