@@ -132,7 +132,11 @@ PROTECTIONS = {
 def choose_protection(off_pers, expected_rush, depth, rng, gm_aggr=0.5):
     """Longer-developing concepts need more bodies; quick game needs fewer."""
     avail = PERSONNEL_OFF.get(off_pers, PERSONNEL_OFF['11'])['protect']
-    if depth == 'short' and rng.random() < 0.55:
+    # five men out is the base of the modern game: with the starters the
+    # ones who stay in, six-man protection on 65% of dropbacks kept the back
+    # in on 48% against a real 26 (PFF) and the tight end near 16
+    five_rate = {'short': 0.75, 'medium': 0.55, 'deep': 0.35}.get(depth, 0.6)
+    if rng.random() < five_rate:
         return 'five'
     if depth == 'deep' and avail >= 7 and rng.random() < 0.30:
         return 'seven'

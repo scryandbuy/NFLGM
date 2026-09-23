@@ -230,7 +230,7 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # man meant cover 0 or cover 1 on a fifth of snaps; with the full call
     # book man is a third of targets and was completing 66% against a real
     # ~60, ABOVE zone, which is backwards.
-    DEPTH_MULT = {'short': 1.57, 'medium': 1.18, 'deep': 0.85}
+    DEPTH_MULT = {'short': 1.50, 'medium': 1.13, 'deep': 0.82}   # re-solved with the starters staying in to block
     import matchups as M
     base = separation * (1.0 + M.ZONE_SLOPE['acc'] * (acc - AVG)) * outcome_mult
     p = float(np.clip(base * DEPTH_MULT[depth], 0.02, 0.97))
@@ -528,7 +528,27 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     prot_name = S.choose_protection(off_call['personnel'], 4, depth, rng)
     prot = S.protection_math(prot_name, def_call['rushers'])
 
-    blockers = off['ol'][:5] + off.get('extra_blockers', [])[:max(0, prot['blockers'] - 5)]
+    # WHO STAYS IN. The extra blockers used to be the second tight end and
+    # the second back, while the starters ran a route on every dropback.
+    # Real (PFF): the back stays in on about 26% of pass plays and the
+    # tight end on about 16%, and the man who blocks is not in the pattern.
+    # So the men the protection keeps are drawn from the starters: on a
+    # six-man protection the back most often, the tight end otherwise; on
+    # seven both; on max the second tight end too.
+    back = (off.get('backs') or [off.get('rb')])[0] if (off.get('backs') or off.get('rb')) else None
+    te1 = next((x for x in off['wr'] if x.get('pos') == 'TE'), None)
+    extras = []
+    n_extra = max(0, prot['blockers'] - 5)
+    if n_extra >= 1:
+        first = back if (back is not None and (te1 is None or rng.random() < 0.55)) else te1
+        if first is not None: extras.append(first)
+    if n_extra >= 2:
+        second = te1 if (te1 is not None and te1 not in extras) else back
+        if second is not None and second not in extras: extras.append(second)
+    if n_extra >= 3:
+        extras += [x for x in off.get('extra_blockers', []) if x not in extras][:n_extra - len(extras)]
+    blockers = off['ol'][:5] + extras
+    kept_in = {id(x) for x in extras}
     rushers = (deff['dl'] + deff['lb'])[:def_call['rushers']]
 
     p = resolve_protection(blockers, rushers, rng, qb=off['qb'])
@@ -586,26 +606,15 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # and a tight end is usually in it. Slicing purely by the concept's route
     # count cut the TE and the RB out of the pattern entirely, so they never
     # saw a target - against a real 22.5% for tight ends and 18.1% for backs.
-    n_routes = max(1, S.CONCEPTS[concept]['n'] - prot['routes_lost'])
-    pool = list(off['wr'])
-    receivers = pool[:n_routes]
-    for extra in pool[n_routes:]:
-        if extra.get('pos') in ('TE', 'HB', 'RB', 'FB') and len(receivers) < 5:
-            receivers.append(extra)
-    # THE BACK. off['wr'] holds receivers and tight ends; the back lives in
-    # off['rb'] and never entered the pattern at all, so backs drew 0% of
-    # targets against a real 18%. He is the outlet on every dropback where
-    # the protection does not keep him in.
-    back = (off.get('backs') or [off.get('rb')])[0] if (off.get('backs') or off.get('rb')) else None
-    # and he is an outlet on the quick game, not a target on a shot: a back
-    # drew 14% of his targets deep and 29% medium, at 9 yards a target
-    # against a real 6, because the pattern put him in every progression
-    back_in = {'short': 0.62, 'medium': 0.30, 'deep': 0.08}.get(depth, 0.5)
-    if prot_name in ('seven', 'max'): back_in *= 0.4
-    if back is not None and not any(r is back for r in receivers) and len(receivers) < 6 \
-            and rng.random() < back_in:
+    # THE PATTERN is everyone who is not blocking: the receivers, the tight
+    # end unless he stayed in, and the back unless he stayed in. The man kept
+    # in by the protection is out of the pattern, which is the whole point of
+    # keeping him in.
+    pool = [x for x in off['wr'] if id(x) not in kept_in]
+    receivers = pool[:5]
+    if back is not None and id(back) not in kept_in and not any(r is back for r in receivers) and len(receivers) < 6:
         receivers.append(back)
-    if not receivers: receivers = pool[:1]
+    if not receivers: receivers = list(off['wr'])[:1]
 
     # Coverage assignment and target selection. Before this the target was a
     # uniform draw from the receivers and the defender a uniform draw from the
@@ -645,7 +654,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     LAST_TRAVEL = bool(travelled)
     # every man in the pattern gets his own separation from his own matchup
     for pr in pairs:
-        pr['separation'] = resolve_man(pr['receiver'], pr['defender'], depth,
+        pr_depth = 'short' if pr['receiver'].get('pos') in ('HB', 'FB') and depth != 'short' else depth
+        pr['separation'] = resolve_man(pr['receiver'], pr['defender'], pr_depth,
                                        p['time'], rng)
         # a bracketed man is squeezed, not erased - an elite receiver doubled
         # still beats an average one singled
@@ -657,6 +667,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     if tgt is None:
         tgt, cov, read_kind, sep_raw = receivers[0], deff['db'][0], 'first', 0.42
 
+    if tgt.get('pos') in ('HB', 'FB') and depth != 'short' and not screen:
+        depth = 'short'                          # the back's route is a check, a flat, a swing
     rmod = TG.READ_MODIFIER.get(read_kind, TG.READ_MODIFIER['first'])
 
     # PER-PAIRING, not per-defence. The man who ends up targeted may be in man
