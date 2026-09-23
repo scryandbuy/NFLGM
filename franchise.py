@@ -119,7 +119,9 @@ class Franchise:
 
         # EXTENSIONS. A club keeps who it can before the market opens; the
         # user's expiring men are flagged in the inbox
-        MO.offseason_reset(L)                # a new season is a new season
+        MO.check_resolutions(L, week=None)   # a winning season settles the man who wanted a winner
+        log['trade_requests'] = len(MO.offseason_requests(L, rng))
+        MO.offseason_reset(L)                # a new season is a new season (not for the man who asked out)
         MO.offseason_contracts(L, rng)       # the drag of a cheap deal against the market
         log['extensions'] = len(EXT.ai_round(L, rng))
         EXT.notify_user(L)

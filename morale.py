@@ -104,7 +104,7 @@ def shock(league, pid, kind, note=''):
 
 def offseason_reset(league):
     for p in league.players.values():
-        if getattr(p, 'morale', None) is not None:
+        if getattr(p, 'morale', None) is not None and not wants_out(p):
             p.morale.offseason()
         if isinstance(p.xp_spent, dict):
             p.xp_spent.pop('_request_streak', None)
@@ -133,7 +133,8 @@ def offseason_contracts(league, rng):
             drag = MS.contract_pressure(surplus, v['apy'], on_rookie_deal=(p.draft_round is not None and (league.year - (p.draft_year or league.year)) < 4),
                                         yrs_left=p.contract.years)
             m = ensure(p)
-            m.slow += float(drag) if isinstance(drag, (int, float)) else float(drag.get('drag', 0.0))
+            d = float(drag) if isinstance(drag, (int, float)) else float(drag.get('drag', 0.0))
+            m.slow += d; m._contract_drag = d
 
 
 # ------------------------------------------------------------ effects
@@ -143,6 +144,8 @@ def effective_ratings_from(ratings, p):
     m = getattr(p, 'morale', None)
     if m is None: return ratings
     mods = MS.attribute_modifiers(m.value)
+    if wants_out(p):
+        mods = {k: v * UNRESOLVED_PENALTY for k, v in mods.items()} if mods else {k: -1 for k in MS.AFFECTED}
     if not mods: return ratings
     return {k: (v + mods.get(k, 0)) for k, v in ratings.items()}
 
@@ -157,19 +160,97 @@ def status(p, team=None):
     return MS.status(m, p.ovr, bool(p.xp_spent.get('_captain', False)))
 
 
-REQUEST_WEEKS = 3        # the status has to hold this long before he asks
-REQUESTS_PER_CLUB = 1    # a season
+REQUEST_FLOOR = 28.0       # under this at season's end he rolls
+UNRESOLVED_DRAG = -0.6     # a week on the slow clock while his club ignores him
+UNRESOLVED_PENALTY = 2.0   # his on-field penalty doubles while he waits
 
 
-def trade_requests(league, week=None):
-    """Men who want out. The status has to persist for three weeks, one man
-    a club a season, none in the last two weeks; the AI puts him on the
-    block and the user hears from the agent."""
+def request_reason(p):
+    """Why he wants out, from what his season did to him."""
+    ev = collections.Counter(k for k, _ in (p.morale.events if p.morale else []))
+    role = ev.get('underused', 0) + ev.get('buried_on_depth', 0) + 3 * ev.get('benched', 0)
+    lose = ev.get('losing_season', 0)
+    contract = 1 if getattr(p.morale, '_contract_drag', 0) < -4 else 0
+    if contract and role < 6: return 'contract'
+    if role >= 6: return 'role'
+    if lose >= 6: return 'losing'
+    return 'role'
+
+
+def offseason_requests(league, rng):
+    """
+    THE ROLL, ONCE A YEAR. After the season, every man with real entitlement
+    whose morale finished under 28 rolls against how far under he is:
+    about 20% at 28, 80% at 10. A fail means he asks out. A man already
+    asking does not roll; he asks again. The request travels with its
+    reason, which decides what fixes it.
+    """
     import inbox as IB
-    user = getattr(league, 'user_team', None)
-    out = []
-    if week is not None and week >= 16:
-        return out
+    user = getattr(league, 'user_team', None); out = []
+    for abbr, team in league.teams.items():
+        cache = {pos: (ps, sorted((q.apy for q in ps), reverse=True)) for pos, ps in team.depth.items()}
+        for p in team.active():
+            if p.morale is None: continue
+            req = p.xp_spent.get('_request')
+            if req:
+                req['years'] = req.get('years', 1) + 1
+                out.append((abbr, p, req['reason'], 'again')); continue
+            v = p.morale.value
+            if v >= REQUEST_FLOOR: continue
+            if entitlement_of(team, p, cache) < 0.55: continue
+            pr = float(np.clip(0.2 + 0.6 * (REQUEST_FLOOR - v) / (REQUEST_FLOOR - 10.0), 0.2, 0.85))
+            if rng.random() < pr:
+                reason = request_reason(p)
+                p.xp_spent['_request'] = dict(year=league.year, reason=reason, years=1)
+                league.log('trade_request', pid=p.pid, team=abbr, morale=round(v), reason=reason)
+                out.append((abbr, p, reason, 'new'))
+    for abbr, p, reason, how in out:
+        if abbr == user:
+            why = {'role': 'he wants to start and does not see it here', 'contract': 'he believes he is underpaid',
+                   'losing': 'he wants to play for a winner'}[reason]
+            IB.post(league, 'trade_request', f"{p.name} {'still ' if how == 'again' else ''}wants out",
+                    f"{p.name} ({p.pos}, {p.ovr:.0f}, age {p.age:.0f}) has asked to be traded: {why}. Morale {p.morale.value:.0f}. "
+                    f"Trade him, {'make him the starter' if reason == 'role' else 'extend him' if reason == 'contract' else 'win'}, or he plays on unhappy and it shows.",
+                    sender=abbr, payload=dict(pid=p.pid, reason=reason, link=f'player:{p.pid}'))
+    return out
+
+
+def wants_out(p):
+    return bool(isinstance(p.xp_spent, dict) and p.xp_spent.get('_request'))
+
+
+def resolve_request(league, pid, how):
+    """Cleared by a trade, a starting job or an extension; a fresh start lifts him."""
+    p = league.player(pid)
+    if p is None or not wants_out(p): return False
+    p.xp_spent.pop('_request', None)
+    if p.morale is not None:
+        p.morale.shock += {'traded': 10.0, 'starter': 8.0, 'extension': 6.0, 'winning': 8.0}.get(how, 6.0)
+        p.morale.events.append(('request_resolved', how))
+    league.log('trade_request_resolved', pid=pid, team=p.team, how=how)
+    return True
+
+
+def check_resolutions(league, week=None):
+    """Week one: the role man who starts is settled; a winning season settles the losing man at its end."""
+    for abbr, team in league.teams.items():
+        for p in team.active():
+            if not wants_out(p): continue
+            reason = p.xp_spent['_request']['reason']
+            if reason == 'role' and week == 1:
+                ps = team.depth.get(p.pos, [])
+                if ps and ps[0] is p: resolve_request(league, p.pid, 'starter')
+            if reason == 'losing' and week is None and team.win_pct >= 0.5:
+                resolve_request(league, p.pid, 'winning')
+
+
+def unresolved_weekly(league):
+    """His club ignored him: the slow clock drags and the baseline does not recover."""
+    for team in league.teams.values():
+        for p in team.active():
+            if wants_out(p) and p.morale is not None:
+                p.morale.slow += UNRESOLVED_DRAG
+                p.morale.base = float(np.clip(p.morale.base - MS.BASE_RECOVERY * (MS.NEUTRAL - p.morale.base), 10, 90))
     for abbr, team in league.teams.items():
         if sum(1 for q in team.active() if q.xp_spent.get('_asked_out') == league.year) >= REQUESTS_PER_CLUB:
             continue

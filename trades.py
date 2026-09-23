@@ -273,7 +273,18 @@ def surplus_and_needs(league, team, pool, rng, n=3):
                 needs[grp] = have
 
     surplus.sort(key=lambda a: -a['trade_value'])
-    return surplus[:n], needs
+    # A MAN WHO ASKED OUT is shopped like surplus, at his market value: his
+    # club is willing where it was not, and buyers see him in the flow
+    import morale as MO
+    have = {x['pid'] for x in surplus}
+    for pos, men in depth.items():
+        for p in men:
+            if MO.wants_out(p) and p.pid not in have and p.out_until is None:
+                a = player_asset(league, team, p, pool, rng)
+                if a:
+                    a['grp'] = GRP.get(pos, pos); a['wants_out'] = True
+                    surplus.insert(0, a)
+    return surplus[:n + sum(1 for x in surplus if x.get('wants_out'))], needs
 
 
 STAR_ASK = {'contending': 1.60, 'win_now': 1.45, 'middling': 1.30, 'retooling': 1.15, 'rebuilding': 1.05}
@@ -290,14 +301,21 @@ def stars_at(league, team, pool, rng, grp, viewer=None):
     men = sorted((p for pos, ps in team.depth.items() if GRP.get(pos, pos) == grp for p in ps
                   if p.out_until is None), key=lambda p: -p.ovr)[:2]
     wdw = TE.window(team.ctx())
+    import morale as MO
     for p in men:
-        if p.pos == 'QB' and wdw in ('contending', 'win_now'):
-            continue                                  # the one man not for sale
-        if p.ovr >= 95 and p.age < 30 and wdw in ('contending', 'win_now'):
-            continue                                  # nor is a 95 in his prime
+        wants_out = MO.wants_out(p)
+        # A MAN WHO ASKED OUT is available where he was untouchable, and his
+        # club takes a fair offer where it wanted a premium. The price does
+        # not move: buyers pay what he is worth, they just get to buy him.
+        if not wants_out:
+            if p.pos == 'QB' and wdw in ('contending', 'win_now'):
+                continue                              # the one man not for sale
+            if p.ovr >= 95 and p.age < 30 and wdw in ('contending', 'win_now'):
+                continue                              # nor is a 95 in his prime
         a = player_asset(league, team, p, pool, rng, viewer=viewer or team)
         if a:
-            a['grp'] = grp; a['star'] = True; a['ask'] = STAR_ASK[wdw]
+            a['grp'] = grp; a['star'] = True; a['ask'] = 1.0 if wants_out else STAR_ASK[wdw]
+            if wants_out: a['wants_out'] = True
             out.append(a)
     return out
 

@@ -101,6 +101,8 @@ def extend(league, pid, apy, years, rng=None, by_ai=False):
     team.sync_cap()
     import morale as MO
     MO.shock(league, pid, 'extension_signed')
+    if MO.wants_out(p) and p.xp_spent['_request'].get('reason') == 'contract':
+        MO.resolve_request(league, pid, 'extension')
     league.log('extension', pid=pid, team=p.team, apy=round(apy, 2), years=years, ai=by_ai)
     return dict(result='accepted', apy=round(apy, 2), years=years, contract=c)
 

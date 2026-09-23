@@ -610,6 +610,11 @@ class League:
                 self.teams[dst].roster.append(p)
         for abbr in (a, b):
             self.teams[abbr].sync_cap()
+        # a man who asked out has his trade
+        import morale as _MO
+        for x in list(a_sends) + list(b_sends):
+            if isinstance(x, str) and x in self.players and _MO.wants_out(self.players[x]):
+                _MO.resolve_request(self, x, 'traded')
         self.log('trade', a=a, b=b,
                  a_sends=[str(x) for x in a_sends],
                  b_sends=[str(x) for x in b_sends])
