@@ -754,6 +754,7 @@ class League:
         for abbr, td in d['teams'].items():
             t = Team(abbr, td['division'], td['conf'], d['year'],
                      scheme=td.get('scheme'))
+            t.league = L
             t.record = td['record']; t.history = td['history']
             t.tenure = td['tenure']
             t.gm = GM(**td['gm']) if td.get('gm') else None
@@ -1093,6 +1094,7 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
                   for _, r in SCH.iterrows()]
     import personality as PT
     PT.assign_all(L, rng)
+    for _t in L.teams.values(): _t.league = L
     return L
 
 

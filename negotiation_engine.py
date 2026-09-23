@@ -120,6 +120,15 @@ def utility(offer, player_row, prof, team_ctx, market_apy):
 
     for k in offer.get('promises', []):
         u += promise_value(k, player_row, prof, team_ctx)
+    # THE SHAPE. Agents want the money early: base sitting in year four of a
+    # deal the club can cut after year two is a promise, not a payment. A
+    # steep back-load costs the club up to about 6% of the offer's value in
+    # the player's eyes; a front-loaded deal earns a little. A man who wants
+    # to be paid (financial_priority) feels it more.
+    fl = offer.get('front_load')
+    if fl is not None:
+        fp = float(player_row.get('financial_priority', 50) or 50) / 100.0
+        u -= w['total'] * (0.5 - float(fl)) * 0.12 * (0.7 + 0.6 * fp)
     return float(u)
 
 # ---------------------------------------------------------------- two-sided comps

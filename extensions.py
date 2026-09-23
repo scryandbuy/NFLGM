@@ -60,11 +60,11 @@ def terms(league, p, rng):
     return dict(ask=ask, offer=t['apy'], years=years, discount=disc)
 
 
-def build(p, add_years, apy, cap, gm, league):
+def build(p, add_years, apy, cap, gm, league, front_load=None):
     """The extended contract: old years kept, new years appended, new bonus prorated from now."""
     old = p.contract
     left = old.years
-    st = CS.structure(apy, add_years, p.pos, cap, gm)
+    st = CS.structure(apy, add_years, p.pos, cap, gm, front_load=front_load)
     # the old bonus still owed keeps its proration; the new bonus spreads over
     # everything left, up to five years
     old_prorated_left = old.annual_proration * min(left, old.proration_years) if old.sb else 0.0
@@ -76,7 +76,7 @@ def build(p, add_years, apy, cap, gm, league):
     return c
 
 
-def extend(league, pid, apy, years, rng=None, by_ai=False):
+def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None):
     """The offer to the man. Returns dict(result, ...)."""
     rng = rng or np.random.default_rng()
     p = league.player(pid)
@@ -88,6 +88,12 @@ def extend(league, pid, apy, years, rng=None, by_ai=False):
     if tm is None:
         return dict(result='refused', why='no market read on him')
     floor = tm['ask'] * (1.0 - tm['discount'])
+    # the shape: a steep back-load raises what he will take by up to ~6%, a
+    # front-loaded deal lowers it a little (negotiation_engine has the same view)
+    if front_load is not None:
+        import personality as PT
+        fp = (getattr(p, 'traits', None) or {}).get('financial_priority', 50) / 100.0
+        floor *= 1.0 + (0.5 - float(front_load)) * 0.12 * (0.7 + 0.6 * fp)
     if getattr(p, 'morale', None) is not None:
         import morale_system as MS
         ne = MS.negotiation_effect(p.morale)
@@ -100,15 +106,17 @@ def extend(league, pid, apy, years, rng=None, by_ai=False):
     if years < 1:
         return dict(result='refused', why='at least one new year')
     cap = CAP.get(league.year, 301.2)
-    c = build(p, years, apy, cap, team.gm, league)
+    if front_load is None and by_ai:
+        front_load = CS.choose_shape(team, years)
+    c = build(p, years, apy, cap, team.gm, league, front_load=front_load)
     p.contract = c
     team.sync_cap()
     import morale as MO
     MO.shock(league, pid, 'extension_signed')
     if MO.wants_out(p) and p.xp_spent['_request'].get('reason') == 'contract':
         MO.resolve_request(league, pid, 'extension')
-    league.log('extension', pid=pid, team=p.team, apy=round(apy, 2), years=years, ai=by_ai)
-    return dict(result='accepted', apy=round(apy, 2), years=years, contract=c)
+    league.log('extension', pid=pid, team=p.team, apy=round(apy, 2), years=years, ai=by_ai, front_load=front_load)
+    return dict(result='accepted', apy=round(apy, 2), years=years, contract=c, front_load=front_load)
 
 
 def next_year_room(team, cap_next):

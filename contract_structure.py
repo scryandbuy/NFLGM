@@ -77,6 +77,35 @@ def tier_of(apy, cap):
     return 'elite'
 
 # ---------------------------------------------------------------- construction
+def choose_shape(team, years, cap_by_year=None):
+    """
+    THE CLUB'S SHAPE. A club reads its own next years: tight now and open
+    later means back-load it (front_load near 0); open now and committed
+    later means pay it now (near 1). The GM's restructure habit is the
+    default when the books do not say.
+    """
+    from cap_engine import CAP
+    yr = team.league.year if hasattr(team, 'league') else None
+    caps = cap_by_year or {}
+    def room(i):
+        c = caps.get(i) or CAP.get((yr or 2026) + i, 301.2 * 1.07 ** i)
+        committed = sum(p.contract.cap_hit(i) for p in team.active() if p.contract and p.contract.years > i)
+        return (c - committed) / c
+    # every club has more room in the future than now, because later years
+    # carry fewer contracts; the shape reads how a club's books differ from
+    # that ordinary profile (about 6% room now, 25% next year, 45% and 60%
+    # after), not the raw difference
+    TYPICAL = [0.06, 0.25, 0.45, 0.60]
+    try:
+        dev = [room(i) - TYPICAL[i] for i in range(min(4, max(2, years)))]
+        near = np.mean(dev[:2]); far = np.mean(dev[2:]) if len(dev) > 2 else near
+    except Exception:
+        return None
+    tilt = float(np.clip((far - near) * 3.0, -0.45, 0.45))         # 15 points of relative room moves it fully
+    base = 1.0 - float(getattr(team.gm, 'restructure_depth', 0.5))
+    return float(np.clip(base - tilt, 0.05, 0.95))
+
+
 def structure(apy, years, pos, cap, gm, void_years=0, front_load=None):
     """
     Lay out a deal. Returns per-year base, bonus proration and cap hit.
@@ -105,7 +134,12 @@ def structure(apy, years, pos, cap, gm, void_years=0, front_load=None):
     curve = np.array(BASE_CURVE[:years], float)
     if years > len(BASE_CURVE):
         curve = np.concatenate([curve, np.full(years - len(BASE_CURVE), BASE_CURVE[-1])])
-    curve = curve * (1.0 + (fl - 0.5) * 0.5 * np.linspace(1, -1, years))
+    # THE SHAPE. front_load runs 0 (steep back-load: the money sits in the
+    # years the club can still walk away from) to 1 (front-loaded: paid
+    # early, cheap to cut later), 0.5 the observed league shape. It tilts the
+    # base curve hard enough to matter: at 0 a five-year deal puts about a
+    # third more in year five than the league shape does, at 1 a third less
+    curve = curve * (1.0 + (fl - 0.5) * 1.3 * np.linspace(1, -1, years))
     base_total = total - signing
     base = np.maximum(MIN_BASE, curve / curve.sum() * base_total)
 
@@ -116,7 +150,12 @@ def structure(apy, years, pos, cap, gm, void_years=0, front_load=None):
         remaining = proration * max(0, spread - i)
         dead.append(round(float(remaining), 3))
 
-    return dict(apy=round(apy, 3), years=years, total=round(total, 3),
+    # how back-loaded the deal is, 0 (flat) to 1 (steep): the agent reads this
+    if years > 1:
+        w = np.linspace(-1, 1, years); backload = float(np.clip((w @ base) / max(1e-9, base.sum()) / (0.5 * (years - 1) / max(1, years - 1)) * 0.5 + 0.5, 0, 1))
+    else:
+        backload = 0.5
+    return dict(apy=round(apy, 3), years=years, total=round(total, 3), front_load=round(float(fl), 3), backload=round(backload, 3),
                 signing_bonus=round(signing, 3), proration=round(proration, 3),
                 proration_years=spread,
                 base=[round(float(b), 3) for b in base],

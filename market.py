@@ -74,14 +74,15 @@ RFA_MATCH_DAYS = 5            # the real window
 class Offer:
     __slots__ = ('team', 'pid', 'apy', 'years', 'promises', 'phase')
 
-    def __init__(self, team, pid, apy, years=3, promises=(), phase=1):
+    def __init__(self, team, pid, apy, years=3, promises=(), phase=1, front_load=None):
         self.team, self.pid = team, pid
         self.apy, self.years = float(apy), int(years)
         self.promises = list(promises)
         self.phase = phase
+        self.front_load = front_load          # 0 back-loaded .. 1 front-loaded; None = the club's habit
 
     def as_dict(self):
-        return dict(apy=self.apy, years=self.years, promises=self.promises)
+        return dict(apy=self.apy, years=self.years, promises=self.promises, front_load=self.front_load)
 
     def total(self):
         return self.apy * self.years
@@ -125,7 +126,8 @@ def profile_for(league, player, rng):
 def utility_of(league, player, offer, prof, market_apy):
     team = league.teams[offer.team]
     ctx = team_context(league, team, player)
-    row = dict(age=player.age, ovr=player.ovr, madden_position=player.pos)
+    row = dict(age=player.age, ovr=player.ovr, madden_position=player.pos,
+               financial_priority=(getattr(player, 'traits', None) or {}).get('financial_priority', 50))
     u = NE.utility(offer.as_dict(), row, prof, ctx, market_apy)
     # the contender thumb: small, and only sometimes
     u += CONTENDER_DISCOUNT * ctx['contender'] * prof['w'].get('winning', 0.1) * 3.0
@@ -232,8 +234,10 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
             if spend + bid > room * 0.80:
                 continue
             spend += bid
+            # the club shapes the deal to its own books: tight now and open
+            # later means back-load it, and the reverse means pay it now
             out.setdefault(p.pid, []).append(
-                Offer(abbr, p.pid, bid, years, phase=phase))
+                Offer(abbr, p.pid, bid, years, phase=phase, front_load=CS.choose_shape(team, years)))
             if spend >= room * 0.80:
                 break
     return out
@@ -329,7 +333,7 @@ def sign(league, player, offer, cap):
     of the game uses, so a free agent deal looks like any other."""
     import contract_structure as CS
     team = league.teams[offer.team]
-    st = CS.structure(offer.apy, offer.years, player.pos, cap, team.gm)
+    st = CS.structure(offer.apy, offer.years, player.pos, cap, team.gm, front_load=offer.front_load)
     c = Contract(years=offer.years, base=st['base'],
                  signing_bonus=st['signing_bonus'], signed=league.year)
     # the incumbent at his spot who is now behind a man the club just paid
