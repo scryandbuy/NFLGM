@@ -144,7 +144,9 @@ def effective_ratings_from(ratings, p):
     m = getattr(p, 'morale', None)
     if m is None: return ratings
     mods = MS.attribute_modifiers(m.value)
-    if wants_out(p):
+    if wants_out(p) and p.xp_spent['_request'].get('years', 1) <= 1:
+        # the doubled penalty runs one season; a professional does not play
+        # worse every year forever
         mods = {k: v * UNRESOLVED_PENALTY for k, v in mods.items()} if mods else {k: -1 for k in MS.AFFECTED}
     if not mods: return ratings
     return {k: (v + mods.get(k, 0)) for k, v in ratings.items()}
@@ -175,6 +177,14 @@ def request_reason(p):
     if role >= 6: return 'role'
     if lose >= 6: return 'losing'
     return 'role'
+
+
+def clear_free_agents(league):
+    """A man who walked took his grievance with him."""
+    for pid in list(getattr(league, 'free_agents', [])):
+        p = league.player(pid)
+        if p is not None and wants_out(p):
+            p.xp_spent.pop('_request', None)
 
 
 def offseason_requests(league, rng):
@@ -232,10 +242,14 @@ def resolve_request(league, pid, how):
 
 
 def check_resolutions(league, week=None):
-    """Week one: the role man who starts is settled; a winning season settles the losing man at its end."""
+    """Week one: the role man who starts is settled; a winning season settles
+    the losing man at its end; and a request is withdrawn when it stops being
+    true: his morale is back over 40, or he is out of contract and walking."""
     for abbr, team in league.teams.items():
         for p in team.active():
             if not wants_out(p): continue
+            if p.morale is not None and p.morale.value >= 40.0:
+                resolve_request(league, p.pid, 'settled'); continue
             reason = p.xp_spent['_request']['reason']
             if reason == 'role' and week == 1:
                 ps = team.depth.get(p.pos, [])

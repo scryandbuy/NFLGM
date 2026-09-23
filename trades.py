@@ -539,6 +539,13 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                     for x in stars_at(league, tb, pool, rng, hole, viewer=ta):
                         if x['pid'] not in moved and x.get('seen_ovr', 0) > na[hole] + UPGRADE_GAP + 3:
                             want_a.append(x)
+                # A MAN WHO ASKED OUT is known to be available: every buyer
+                # with a hole at his group sees him, no roll
+                import morale as MO
+                for x in sb_seen:
+                    if x.get('wants_out') and x['pid'] not in moved and x.get('grp') in na \
+                            and x.get('seen_ovr', 0) > na[x['grp']] + UPGRADE_GAP and not any(y['pid'] == x['pid'] for y in want_a):
+                        want_a.append(x)
                 if not want_a:
                     continue
                 want_a.sort(key=lambda x: -x.get('seen_ovr', 0))
