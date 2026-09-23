@@ -22,6 +22,8 @@ alone for kickoffs because the rules changed).
   KICKOFFS      2025 rules: 20.7% touchback, returned on 73.9%, 26.1 avg
 """
 import numpy as np
+import weather as W
+ENV = W.CLEAR
 
 # ============================================================ CLOCK
 SEC = {'complete': 31.4, 'incomplete': 10.2, 'run': 34.7, 'sack': 30.0,
@@ -194,7 +196,7 @@ def fg_probability(distance, kicker=None, rate_fn=None, AVG=0.70):
 
 def attempt_field_goal(yardline_100, kicker, rng, rate_fn):
     dist = yardline_100 + 17               # 10 end zone + 7 snap
-    made = rng.random() < fg_probability(dist, kicker, rate_fn)
+    made = rng.random() < fg_probability(dist, kicker, rate_fn) * (ENV.kick_mult if dist >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult))
     return dict(type='field_goal', distance=dist, made=made,
                 points=3 if made else 0)
 
@@ -305,7 +307,7 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70):
                     new_yardline=100 - yardline_100)
     pwr = rate_fn(punter, {'kick_power_rating': .70, 'kick_acc_rating': .30})
     acc = rate_fn(punter, {'kick_acc_rating': 1.0})
-    full = rng.normal(PUNT['full'] * (1.0 + 0.30 * (pwr - AVG)), PUNT['sd'])
+    full = rng.normal(PUNT['full'] * (1.0 + 0.30 * (pwr - AVG)) * ENV.punt_mult, PUNT['sd'])
     pooch = False
     if yardline_100 - full < PUNT['aim']:
         # a full swing goes into or through the end zone: drop it short.
@@ -445,7 +447,7 @@ class TeamState:
         import health as H
         pid = player.get('pid', position)
         if on_field:
-            self.cond.play(pid, position, player.get('stamina_rating', 70.0))
+            self.cond.play(pid, position, player.get('stamina_rating', 70.0), effort=getattr(self, 'road_stamina', 1.0))
             self.snaps[pid] = self.snaps.get(pid, 0) + 1
         else:
             self.cond.rest(pid, position)
@@ -1052,7 +1054,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # real ~3.4 - and drives died four yards and a third of a first down
         # short of real. The non-nullifying fouls are held here and resolved
         # after the play, where the offence decides whether to take them.
-        pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'])
+        pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'],
+                              noise=getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0)
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
             dr.clock -= play_seconds('penalty')
@@ -1150,7 +1153,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if ev:
             carrier = offense['qb'] if ev in ('sack', 'scramble') else \
                       (offense['rb'] if ev == 'run' else offense['wr'][0])
-            fum = E.fumble_check(carrier, ev, rng, rate_fn)
+            fum = E.fumble_check(carrier, ev, rng, rate_fn, env_mult=ENV.fumble_mult)
             if fum and fum['lost']:
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 
@@ -1280,6 +1283,18 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
 
     tos = Timeouts()
     half_done = False
+    # THE BUILDING AND THE SKY. Conditions are drawn for this home city in
+    # this week and set on the two modules that read them; they can turn at
+    # the half. The road team pays the crowd and the altitude.
+    global ENV
+    import plays as _P
+    home_abbr = (home_state.abbr if home_state is not None and getattr(home_state, 'abbr', None) else home.get('abbr', ''))
+    ENV = W.draw(home_abbr, week, rng, neutral=playoffs and week >= 22)
+    _P.ENV = ENV
+    if away_state is not None:
+        away_state.road_noise = ENV.road_false_start; away_state.road_stamina = ENV.road_stamina
+    if home_state is not None:
+        home_state.road_noise = 1.0; home_state.road_stamina = 1.0
     # SHADOWING IS A GAME-WEEK DECISION. A coordinator decides on Tuesday
     # whether his best corner follows their best receiver, and then he does
     # it all game. Decided per snap it ran at 4% of pass plays; the real rate
@@ -1331,6 +1346,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         if not half_done and clock <= GAME / 2:
             tos.halftime()
             half_done = True
+            ENV.turn(rng, home_abbr); _P.ENV = ENV
             pos = 'home'                            # away received the opener
             start = kickoff((away.get('kr') or {}), rng, rate_fn)['new_yardline']
             continue
@@ -1363,7 +1379,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             inj += st.injuries
             st.end_game(rng)
     return dict(home=score['home'], away=score['away'], drives=drives,
-                injuries=inj, overtime=ot)
+                injuries=inj, overtime=ot, env=ENV.to_dict())
 
 # ============================================================ STAT ATTRIBUTION
 # Every play already names its contributors, so accumulation is nearly free.

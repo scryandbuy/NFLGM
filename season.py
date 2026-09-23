@@ -119,6 +119,7 @@ class SeasonRunner:
             coach = make_coach(t.gm)
             self.states[abbr] = G.TeamState(self._units(abbr), coach=coach,
                                             scheme=t.scheme)
+            self.states[abbr].abbr = abbr
         self.week = 0
 
     # ---- the field ------------------------------------------------------

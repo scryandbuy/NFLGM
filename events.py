@@ -60,7 +60,7 @@ FUMBLE_LOST = {'run': 0.420, 'complete_pass': 0.483, 'sack': 0.483,
                'scramble': 0.420, 'punt_return': 0.358, 'kick_return': 0.487}
 FORCED_SHARE = 0.676             # 67.6% of fumbles are forced, not muffed
 
-def fumble_check(carrier, event, rng, rate_fn, hit_power=0.70, AVG=0.70):
+def fumble_check(carrier, event, rng, rate_fn, hit_power=0.70, AVG=0.70, env_mult=1.0):
     """
     Ball security against the hit. A sack fumbles at 12.5% - eight times the
     rate of a run - which is what makes a strip sack its own event.
@@ -70,7 +70,7 @@ def fumble_check(carrier, event, rng, rate_fn, hit_power=0.70, AVG=0.70):
     p = base * (1.0 + 2.4 * (AVG - sec)) * (1.0 + 1.3 * (hit_power - AVG))
     if rng.random() >= max(0.0, p):
         return None
-    lost = rng.random() < FUMBLE_LOST.get(event, 0.45)
+    lost = rng.random() * (1.0 / env_mult) < FUMBLE_LOST.get(event, 0.45)
     return dict(fumble=True, lost=bool(lost),
                 forced=rng.random() < FORCED_SHARE, by=carrier.get('pid'))
 
@@ -125,7 +125,7 @@ def dpi_yards(rng, air_yards=None):
     return float(np.clip(rng.lognormal(np.log(13.0), 0.62), 1, DPI['max']))
 
 def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
-                  air_yards=None):
+                  air_yards=None, noise=1.0):
     """
     Returns a penalty or None. discipline is the offending unit's rating on
     0-1; the league rate of 7.03% of plays sits at average discipline.
@@ -149,6 +149,12 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
     per_play = np.array([_rates[i] / (PASS_PLAYS_PER_GAME
                                       if PEN_INFO[_names[i]]['phase'] == 'pass'
                                       else SCRIMMAGE_PLAYS_PER_GAME) for i in ok])
+    # the crowd: the road offence's false starts and delays run at the
+    # building's noise multiplier (Kansas City, Seattle and New Orleans ~1.35)
+    if noise != 1.0:
+        for k, i in enumerate(ok):
+            if _names[i] in ('False Start', 'Delay of Game'):
+                per_play[k] *= noise
     p = per_play.sum() * (1.0 + 1.6 * (AVG - discipline))
     if rng.random() >= max(0.0, p):
         return None

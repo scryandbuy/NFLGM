@@ -362,8 +362,9 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     keys = list(base)
     w = np.array([base[k] for k in keys], float)
     pers = keys[int(rng.choice(len(keys), p=w / w.sum()))]
+    import plays as _P
     is_pass = rng.random() < pass_rate(down, ydstogo, score_diff,
-                                       yards_to_endzone, pers, bias, secs_left)
+                                       yards_to_endzone, pers, bias, secs_left) - _P.ENV.run_lean
     shotgun = rng.random() < (0.82 if is_pass else 0.52)
     # The formation is a separate decision from the package: the same eleven
     # men produce a dozen looks, and that is where the variety comes from.

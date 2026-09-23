@@ -67,6 +67,8 @@ RBW_THRESHOLD = -0.035   # solved to the real 71% run-block win rate
 # real 37.5% overall: a contested throw is usually somebody's doing, a clean
 # miss usually nobody's.
 LAST_TRAVEL = False
+import weather as _W
+ENV = _W.CLEAR        # the game's conditions, set at kickoff by game.play_game
 PD_CONTESTED = 0.44   # 4.9 a team-game against a real 2.9 at 0.72/0.22
 PD_LOOSE = 0.13
 
@@ -233,7 +235,7 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     DEPTH_MULT = {'short': 1.50, 'medium': 1.13, 'deep': 0.82}   # re-solved with the starters staying in to block
     import matchups as M
     base = separation * (1.0 + M.ZONE_SLOPE['acc'] * (acc - AVG)) * outcome_mult
-    p = float(np.clip(base * DEPTH_MULT[depth], 0.02, 0.97))
+    p = float(np.clip(base * DEPTH_MULT[depth] * (ENV.deep_mult if depth == 'deep' else (1.0 - 0.3 * (1.0 - ENV.deep_mult)) if depth == 'medium' else 1.0), 0.02, 0.97))
 
     roll = rng.random()
     if roll < p:
@@ -257,6 +259,8 @@ def resolve_catch(receiver, defender, contested, rng):
     else:
         e = edge(rate(receiver, CATCH['contested']), rate(defender, CATCH['defender']))
         p = 0.50 + 1.10 * e
+    # rain and snow: the drop rate runs 1.4x and 1.7x
+    p = 1.0 - (1.0 - p) * ENV.drop_mult
     return rng.random() < float(np.clip(p, 0.05, 0.995))
 
 # ============================================================ YARDS AFTER
