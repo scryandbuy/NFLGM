@@ -221,7 +221,7 @@ def run(league, rng, verbose=False):
         # stay on the call so injury history can join them here later without
         # another signature change.
         if rng.random() < chance(p, games, p.ovr, avg, snaps):
-            p.retired = True
+            p.retired = True; p.retired_year = league.year
             t = league.teams.get(p.team)
             if t and p in t.roster:
                 t.roster.remove(p)

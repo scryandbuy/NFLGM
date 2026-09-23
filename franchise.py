@@ -47,6 +47,7 @@ import coaching_pool as CP
 import position_change as PC
 import extensions as EXT
 import morale as MO
+import almanac as AL
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -75,7 +76,7 @@ def prune_pool(league, rng):
         if pid in league.stats.get(league.year - 1, {}): continue
         pr = 0.85 if p.age >= 30 else 0.55 if p.age >= 26 else 0.35
         if rng.random() < pr:
-            p.retired = True; p.team = None
+            p.retired = True; p.retired_year = league.year; p.team = None
             league.free_agents.remove(pid); gone += 1
     if gone: league.log('pool_pruned', n=gone)
     return gone
@@ -110,6 +111,7 @@ class Franchise:
 
         votes = AW.vote(L, post)
         CP.season_prestige(L, post, coty_team=votes.get('coty'))
+        AL.close_season(L, L.year, post, votes)      # the almanac: leaders, records, the coaching ledger
         log['awards'] = {k: (v.name if hasattr(v, 'name') else v)
                          for k, v in votes.items() if not isinstance(v, list)}
         # season lines, milestones and award XP land once the vote is in
@@ -121,6 +123,7 @@ class Franchise:
         log['dev_down'] = sum(1 for m in moved if m[1] == 'down')
 
         log['retired'] = len(RT.run(L, rng))
+        log['hall'] = [p.name for p, _ in AL.hall_vote(L, L.year)]
         RG.run(L, rng)
 
         L.roll_year(rng)

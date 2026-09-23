@@ -74,7 +74,7 @@ class Player:
                  # a position change he is still learning: frm, to, penalty, games_left, games_total
                  'transition',
                  # personality: work_ethic, financial_priority, loyalty, ambition (hidden)
-                 'traits', 'last_team')
+                 'traits', 'last_team', 'retired_year')
 
     def __init__(self, pid, name, pos, age, ratings, *, dev='normal',
                  potential=None, potential_range=None, longevity=1.0,
@@ -121,6 +121,7 @@ class Player:
         self.transition = None
         self.traits = None
         self.last_team = None
+        self.retired_year = None
 
     # ---- derived ability -------------------------------------------------
     @property
@@ -174,7 +175,7 @@ class Player:
     # ---- stats -----------------------------------------------------------
     def record_season(self, season, line):
         """His own copy. The league keeps a second copy for leaderboards."""
-        self.career[season] = dict(line)
+        self.career[season] = dict(line, team=self.team)
 
     def career_totals(self):
         tot = {}
@@ -725,6 +726,8 @@ class League:
             waivers=getattr(self, 'waivers', []) or [],
             inbox=[_inbox_to_dict(m) for m in (getattr(self, 'inbox', []) or [])],
             inbox_next_id=_inbox_next_id(),
+            almanac=getattr(self, 'almanac', None),
+            tendencies={str(y): {a: dict(c) for a, c in T.items()} for y, T in getattr(self, 'tendencies', {}).items()},
             rng_state=self.rng_state)
 
     def save(self, path=None):
@@ -778,6 +781,13 @@ class League:
         L.consensus = d.get('consensus', {}) or {}
         L.waivers = d.get('waivers', []) or []
         L.inbox = [_inbox_from_dict(L, m) for m in d.get('inbox', [])]
+        L.almanac = d.get('almanac')
+        if L.almanac:
+            # json turns int keys into strings and tuples into lists; put the years back
+            L.almanac['seasons'] = {int(k): v for k, v in L.almanac.get('seasons', {}).items()}
+            L.almanac['ballots'] = {int(k): v for k, v in L.almanac.get('ballots', {}).items()}
+        import collections as _c
+        L.tendencies = {int(y): {a: _c.Counter(c) for a, c in T.items()} for y, T in d.get('tendencies', {}).items()}
         if d.get('inbox_next_id'):
             import inbox as IB, itertools
             IB._ids = itertools.count(int(d['inbox_next_id']))

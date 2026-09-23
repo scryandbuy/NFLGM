@@ -249,6 +249,8 @@ def fire_and_hire(league, team, rng, verbose=False):
             old.prestige = float(np.clip(old.prestige + PRESTIGE['fired'], 0, 100))
             pool(league).append(old)
     team._just_fired = old
+    import almanac as AL
+    AL.coach_fired(league, team.abbr, league.year)
     hired, reasons = owner_hire(league, team, rng, verbose)
     team._just_fired = None
     hired.tenure = 0
