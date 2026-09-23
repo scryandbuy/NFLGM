@@ -74,7 +74,7 @@ class Player:
                  # a position change he is still learning: frm, to, penalty, games_left, games_total
                  'transition',
                  # personality: work_ethic, financial_priority, loyalty, ambition (hidden)
-                 'traits', 'last_team', 'retired_year')
+                 'traits', 'last_team', 'retired_year', 'conference', 'combine', 'medical')
 
     def __init__(self, pid, name, pos, age, ratings, *, dev='normal',
                  potential=None, potential_range=None, longevity=1.0,
@@ -122,6 +122,7 @@ class Player:
         self.traits = None
         self.last_team = None
         self.retired_year = None
+        self.conference = None; self.combine = None; self.medical = None
 
     # ---- derived ability -------------------------------------------------
     @property

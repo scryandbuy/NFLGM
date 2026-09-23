@@ -48,6 +48,7 @@ import position_change as PC
 import extensions as EXT
 import morale as MO
 import almanac as AL
+import spring as SP
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -175,6 +176,10 @@ class Franchise:
             SC.scout(L, rng)
         # the picks carry the SEASON year they were earned in; the year has
         # already rolled by the time the draft is held
+        # THE SPRING: the combine, the Senior Bowl, pro days, the thirty
+        # visits, medicals and character reads. Nothing changes a prospect;
+        # every room's read of him does, differently
+        log['spring'] = SP.run_spring(L, rng)
         # when the calendar sims the draft with nobody at the buttons, the
         # user's club picks off the consensus board and its needs
         drafted = DFT.run(L, rng, year=L.year - 1, user_team=self.user_team)

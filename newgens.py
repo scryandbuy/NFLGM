@@ -105,7 +105,7 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
             pot = float(np.clip(p.ovr + headroom, p.ovr, 99.0)); spread = rng.uniform(3.0, 11.0)
             p.potential = None
             p.potential_range = (round(max(p.ovr, pot - spread), 1), round(min(99.0, pot + spread), 1))
-            p.college = str(row.team); p.college_ovr = None
+            p.college = str(row.team); p.college_ovr = None; p.conference = str(row.get('conference', '') or '')
             p.height, p.weight = float(row.height), float(row.weight)
             out.append(p)
     out.sort(key=lambda p: -p.ovr)

@@ -169,7 +169,7 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
             spread = rng.uniform(3.0, 11.0)
             p.potential = None
             p.potential_range = (round(max(p.ovr, pot - spread), 1), round(min(99.0, pot + spread), 1))
-            p.college = row.team
+            p.college = row.team; p.conference = str(row.get('conference', '') or '')
             p.college_ovr = int(row.overall_rating)
             p.height, p.weight = float(row.height), float(row.weight)
             out.append(p)
