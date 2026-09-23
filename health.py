@@ -62,7 +62,7 @@ SNAP_INTENSITY = {
     'SS': 0.422, 'FS': 0.484, 'CB': 0.536,
     'MIKE': 0.742, 'WILL': 0.742, 'SAM': 1.000,
     'WR': 0.942, 'DT': 1.105, 'LEDG': 1.169, 'REDG': 1.169,
-    'TE': 1.257, 'HB': 1.660, 'FB': 2.333,
+    'TE': 1.257, 'HB': 1.32, 'FB': 2.333,     # HB re-solved once the back rotated by condition: 1.66 left the lead at 52% of snaps against a real 65
     'K': 0.02, 'P': 0.02, 'LS': 0.02,
 }
 # Solved so the emergent shares land ON the real league values rather than

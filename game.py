@@ -800,7 +800,7 @@ def field_units(roster, state, rng, is_offense, package=None):
                     backs = [b for b in (roster.get('backs') or [p]) if b and b.get('pid') not in state.out] or [p]
                     pick = None
                     for rank, b in enumerate(backs):
-                        gap = 0.6 if rank == 0 and len(backs) > 1 else 0.0
+                        gap = 1.0 if rank == 0 and len(backs) > 1 else (0.3 if rank == 1 else 0.0)   # a coach commits to his lead back; the third man is an emergency
                         if not state.cond.needs_rest(b.get('pid'), 'HB', rng, b.get('stamina_rating', 70.0), gap):
                             pick = b; break
                     p = pick or backs[0]
