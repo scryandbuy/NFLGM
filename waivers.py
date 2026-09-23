@@ -30,6 +30,7 @@ import numpy as np
 VESTED = 4
 DEADLINE_WEEK = 9
 CLAIMS_PER_SEASON = 8    # in-season claims a club, about the real pace
+CUTDOWN_CLAIMS = 3       # at the cut-down, a club
 
 
 def pending(league):
@@ -89,6 +90,11 @@ def wants(league, abbr, p, week, market=None):
     # season against a real ~150 in season
     if p.ovr < incumbent + 3.0:
         return False
+    if not week:
+        # the cut-down wave: a club makes one or two claims, not a dozen
+        if sum(1 for x in league.transactions[-3000:] if x.get('kind') == 'waiver_claim' and x.get('team') == abbr
+               and x.get('year') == league.year and not x.get('week')) >= CUTDOWN_CLAIMS:
+            return False
     if week and week > 0:
         claims_this_season = sum(1 for x in league.transactions if x.get('kind') == 'waiver_claim' and x.get('team') == abbr and x.get('year') == league.year and (x.get('week') or 0) > 0)
         if claims_this_season >= CLAIMS_PER_SEASON: return False

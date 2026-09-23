@@ -57,6 +57,30 @@ import market as MK
 import cutdown as CD
 
 
+def prune_pool(league, rng):
+    """
+    THE POOL EMPTIES. A man unsigned through a whole season retires or
+    goes elsewhere: nearly all the old, most in their late twenties, a third
+    of the young. Without this the pool held 1,985 men by year six, 1,757 of
+    them unsigned for a year, and the cut-down wire had ever more bodies to
+    claim (400 cut-down claims against a real ~60).
+    """
+    gone = 0
+    for pid in list(league.free_agents):
+        p = league.player(pid)
+        if p is None or p.retired: continue
+        if p.entry_year is not None and p.entry_year >= league.year - 1: continue   # last year's rookies get a second summer
+        # the year has rolled: the season just played is league.year - 1, and a
+        # man with no stat line in it, and no club now, sat out the whole year
+        if pid in league.stats.get(league.year - 1, {}): continue
+        pr = 0.85 if p.age >= 30 else 0.55 if p.age >= 26 else 0.35
+        if rng.random() < pr:
+            p.retired = True; p.team = None
+            league.free_agents.remove(pid); gone += 1
+    if gone: league.log('pool_pruned', n=gone)
+    return gone
+
+
 class Franchise:
     """A league, plus the calendar that moves it."""
 
@@ -121,6 +145,7 @@ class Franchise:
         # user's expiring men are flagged in the inbox
         MO.check_resolutions(L, week=None)   # a winning season settles the man who wanted a winner
         MO.clear_free_agents(L)              # a man who walked took his grievance with him
+        log['pool_pruned'] = prune_pool(L, rng)   # men nobody signed all year move on
         log['trade_requests'] = len(MO.offseason_requests(L, rng))
         MO.offseason_reset(L)                # a new season is a new season (not for the man who asked out)
         MO.offseason_contracts(L, rng)       # the drag of a cheap deal against the market
