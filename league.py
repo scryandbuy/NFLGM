@@ -728,6 +728,8 @@ class League:
             inbox=[_inbox_to_dict(m) for m in (getattr(self, 'inbox', []) or [])],
             inbox_next_id=_inbox_next_id(),
             almanac=getattr(self, 'almanac', None),
+            negotiations=getattr(self, 'negotiations', None) or [],
+            promises=getattr(self, 'promises', None) or [],
             tendencies={str(y): {a: dict(c) for a, c in T.items()} for y, T in getattr(self, 'tendencies', {}).items()},
             rng_state=self.rng_state)
 
@@ -784,6 +786,10 @@ class League:
         L.waivers = d.get('waivers', []) or []
         L.inbox = [_inbox_from_dict(L, m) for m in d.get('inbox', [])]
         L.almanac = d.get('almanac')
+        L.negotiations = d.get('negotiations', []) or []; L.promises = d.get('promises', []) or []
+        if L.negotiations:
+            import negotiations as _NG, itertools as _it
+            _NG._ids = _it.count(max(t['id'] for t in L.negotiations) + 1)
         if L.almanac:
             # json turns int keys into strings and tuples into lists; put the years back
             L.almanac['seasons'] = {int(k): v for k, v in L.almanac.get('seasons', {}).items()}

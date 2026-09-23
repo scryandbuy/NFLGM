@@ -296,6 +296,9 @@ class SeasonRunner:
         MO.weekly(self.L, week, results, snaps)
         MO.check_resolutions(self.L, week)
         MO.unresolved_weekly(self.L)
+        import negotiations as NG
+        NG.resolve(self.L, week=week)          # agents get back to you
+        NG.check_promises(self.L, week)        # promises not kept are broken
         # the assistants' report on next week's opponent, into the inbox now
         if week < 18:
             import gameplan_week as GW

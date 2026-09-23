@@ -72,7 +72,7 @@ RFA_MATCH_DAYS = 5            # the real window
 
 
 class Offer:
-    __slots__ = ('team', 'pid', 'apy', 'years', 'promises', 'phase')
+    __slots__ = ('team', 'pid', 'apy', 'years', 'promises', 'phase', 'front_load')
 
     def __init__(self, team, pid, apy, years=3, promises=(), phase=1, front_load=None):
         self.team, self.pid = team, pid
@@ -173,6 +173,7 @@ def power(league, team, cap, years=1):
 
 
 def ai_bids(league, pool, phase, rng, skip_teams=()):
+    import contract_structure as CS
     """
     Every club looks at the market and commits one bid per player it wants.
     The number comes from its own valuation of him, not from a league price -
@@ -506,10 +507,38 @@ def run(league, rng, user_team=None, verbose=False):
     pool = [p for p in pool if p and not p.retired]
 
     all_signed = []
+    import negotiations as NG
     for phase in range(1, PHASES + 1):
+        league.fa_step = phase
         bids = ai_bids(league, pool, phase, rng, skip_teams=(user_team,) if user_team else ())
-        signed, waiting, msgs = resolve_phase(league, pool, bids, phase, rng,
+        # the user's live offers do not sign inside the market: the man mulls
+        # and answers through his thread (yes, no, counter, or match). The
+        # best rival bid is told to the thread, and a man whose best offer is
+        # the user's holds out of this step's signings so he can answer
+        held = []
+        for t in NG._threads(league):
+            if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered') and t['offers']:
+                p = league.player(t['pid'])
+                if p is None or p not in pool: continue
+                o = t['offers'][-1]
+                others = bids.get(p.pid, [])
+                if others:
+                    best = max(others, key=lambda b: b.apy); NG.set_rival(league, p.pid, best.team, best.apy, best.years)
+                    if o['apy'] >= best.apy * 0.97:
+                        held.append(p)
+                else:
+                    held.append(p)
+        pool_now = [p for p in pool if p not in held]
+        signed, waiting, msgs = resolve_phase(league, pool_now, bids, phase, rng,
                                               user_team)
+        waiting = waiting + held
+        # threads whose man signed elsewhere close; the rest get their answer
+        for t in NG._threads(league):
+            if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered', 'match_requested'):
+                p = league.player(t['pid'])
+                if p is not None and p.team and p.team != t['team']:
+                    t['state'] = 'declined'; NG._post(league, t, f"{p.name} signs with {p.team}", "He took another offer.")
+        NG.resolve(league, fa_step=phase)
         for m in msgs:
             inbox_add(league, m)
         all_signed += signed
@@ -518,6 +547,12 @@ def run(league, rng, user_team=None, verbose=False):
             print(f'  phase {phase}: {len(signed)} signed, {len(pool)} left, '
                   f'{len(msgs)} messages')
 
+    # the market closes: every open thread gets its final answer before the pool is filled at the minimum
+    league.fa_step = PHASES + 1
+    NG.resolve(league, fa_step=PHASES + 1)
+    for t in NG._threads(league):
+        if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered', 'match_requested'):
+            t['state'] = 'declined'; NG._post(league, t, f"{league.player(t['pid']).name} moves on", "The market has closed without a deal.")
     fill_out_rosters(league, pool, rng, verbose)
 
     resolve_offer_sheets(league, rng, verbose)
