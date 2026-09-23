@@ -251,19 +251,3 @@ def unresolved_weekly(league):
             if wants_out(p) and p.morale is not None:
                 p.morale.slow += UNRESOLVED_DRAG
                 p.morale.base = float(np.clip(p.morale.base - MS.BASE_RECOVERY * (MS.NEUTRAL - p.morale.base), 10, 90))
-    for abbr, team in league.teams.items():
-        if sum(1 for q in team.active() if q.xp_spent.get('_asked_out') == league.year) >= REQUESTS_PER_CLUB:
-            continue
-        for p in team.active():
-            st = status(p, team)
-            streak = p.xp_spent.get('_request_streak', 0) + 1 if st == 'trade request' else 0
-            p.xp_spent['_request_streak'] = streak
-            if streak >= REQUEST_WEEKS and not p.xp_spent.get('_asked_out'):
-                p.xp_spent['_asked_out'] = league.year
-                out.append((abbr, p))
-                league.log('trade_request', pid=p.pid, team=abbr, morale=round(p.morale.value))
-                if abbr == user:
-                    IB.post(league, 'trade_request', f'{p.name} has asked for a trade',
-                            f"{p.name} ({p.pos}, {p.ovr:.0f}) is {status(p, team)}. His agent says he wants out. "
-                            f"Morale {p.morale.value:.0f}.", sender=abbr, payload=dict(pid=p.pid, link=f'player:{p.pid}'))
-    return out
