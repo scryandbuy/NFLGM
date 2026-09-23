@@ -418,7 +418,48 @@ def resolve_play(off, deff, off_call, def_call, yards_to_endzone, rng):
         out = _pass_play(off, deff, off_call, def_call, yards_to_endzone, rng)
         if isinstance(out, dict): out['travelled'] = LAST_TRAVEL
         return out
+    if off_call.get('sneak'):
+        return _sneak(off, deff, off_call, def_call, yards_to_endzone, rng)
     return _run_play(off, deff, off_call, def_call, yards_to_endzone, rng)
+
+
+def push_capable(off):
+    """The push wants a heavy interior and a strong quarterback: the mean
+    strength of the centre and guards over 80 and the quarterback's over 72."""
+    ol = off['ol'][:5]
+    interior = [ol[i] for i in (1, 2, 3) if i < len(ol)]
+    if not interior: return False
+    return np.mean([x.get('strength_rating', 70) for x in interior]) >= 80 and off['qb'].get('strength_rating', 60) >= 72
+
+
+def _sneak(off, deff, off_call, def_call, ytg, rng):
+    """
+    The quarterback sneak, and the push where the club has the men for it.
+    The battle is the interior three plus the quarterback against the men
+    closest to the ball: strength, weight and leverage on one side, strength
+    and block shedding on the other. Real: sneaks convert ~81%, the push
+    ~87%, and the spread is about 10 points either way for a big edge.
+    """
+    ol = off['ol'][:5]; qb = off['qb']
+    interior = [ol[i] for i in (1, 2, 3) if i < len(ol)] or ol
+    front = deff['dl'][:S.FRONTS[def_call['front']]['dl']] or deff['dl']
+    inside = sorted(front, key=lambda d: -d.get('strength_rating', 70))[:3] + deff['lb'][:1]
+    push = push_capable(off)
+    o_str = np.mean([x.get('strength_rating', 70) for x in interior]) * 0.7 + qb.get('strength_rating', 60) * 0.3
+    d_str = np.mean([x.get('strength_rating', 70) * 0.6 + x.get('block_shed_rating', 70) * 0.4 for x in inside])
+    e = (o_str - d_str) / 100.0
+    base = 0.87 if push else 0.81
+    p = float(np.clip(base + 1.0 * e, 0.55, 0.96))
+    if def_call.get('box', 7) >= 8: p -= 0.03           # they loaded up for it
+    made = rng.random() < p
+    if made:
+        yds = float(ytg if ytg <= 1 else 1.0) + float(rng.exponential(0.6))
+        yds = min(yds, float(ytg) if ytg <= 3 else yds)
+    else:
+        yds = float(rng.choice([0.0, 0.0, 0.0, -1.0]))
+    td = yds >= ytg
+    return dict(type='run', yards=round(yds, 1), touchdown=bool(td), sneak=True, push=push,
+                carrier_pid=qb.get('pid'), scheme='sneak', by=None)
 
 # Red-zone compression is an OUTCOME, not an input. An earlier build multiplied
 # yardage by 0.52 inside the 5 to pull touchdowns down from 28.5% of drives to

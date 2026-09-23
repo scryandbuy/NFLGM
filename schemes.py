@@ -373,6 +373,18 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
                                score_diff=score_diff, secs_left=secs_left)
     call = dict(personnel=pers, shotgun=bool(shotgun), is_pass=bool(is_pass),
                 formation=form, down=down, ydstogo=ydstogo)
+    # SHORT YARDAGE IS ITS OWN PACKAGE. On third and fourth and one, and on
+    # second and one some of the time, the quarterback sneak is the call on
+    # about 38% of runs league-wide (converting ~81% against ~68% for a
+    # handoff); a club with the interior line and the quarterback for it
+    # runs the push, which converts ~87%. The caller's heavy-personnel lean
+    # nudges it; a spread club sneaks less.
+    if not is_pass and ydstogo <= 1 and yards_to_endzone >= 1 and (down >= 3 or (down == 2 and rng.random() < 0.25)):
+        p_sneak = 0.38 * (1.15 if str(lean.get('off_personnel', '11')) in ('12', '13', '21', '22') else 0.9)
+        if rng.random() < p_sneak:
+            call['sneak'] = True
+            call['shotgun'] = False
+            call['personnel'] = pers if pers in ('12', '13', '21', '22') else '13'
 
     if is_pass:
         # real rates: play action 10.2%, screen 4.4%, RPO 3.3%

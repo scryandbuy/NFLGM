@@ -1084,6 +1084,9 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # the back who carries it is the back on the field: the rotation in
         # field_units decides who that is
         out = resolve_fn(off_f, def_f, oc, dc, ytg_i, rng)
+        # the situation rides with the play, for the ticker and the probes
+        if isinstance(out, dict):
+            out['down'] = dr.down; out['ydstogo'] = dr.togo; out['yardline'] = dr.yardline; out['clock'] = dr.clock
         if script_mod != 1.0 and out.get('yards'):
             out['yards'] = round(float(out['yards']) * script_mod, 1)
         dr.plays += 1
@@ -1114,7 +1117,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             contact = 0.9 if out['type'] in ('run', 'sack') else 0.7
             # the man who actually took the snap, not the depth-chart starter
             carrier = (off_f['qb'] if out['type'] in ('sack', 'scramble')
-                       else off_f['rb'] if out['type'] == 'run'
+                       else (off_f['qb'] if out.get('sneak') else off_f['rb']) if out['type'] == 'run'
                        else off_f['wr'][0])
             cpos = ('QB' if out['type'] in ('sack', 'scramble')
                     else 'HB' if out['type'] == 'run' else 'WR')
@@ -1477,7 +1480,7 @@ class StatBook:
             s = self._get(qb); s['rush_att'] += 1; s['rush_yds'] += out['yards']
             if out.get('touchdown'): s['rush_td'] += 1
         elif t == 'run':
-            rb = off['rb'].get('pid', 'RB1')
+            rb = out.get('carrier_pid') or off['rb'].get('pid', 'RB1')
             s = self._get(rb); s['rush_att'] += 1; s['rush_yds'] += out['yards']
             if out.get('touchdown'): s['rush_td'] += 1
         # a tackle is credited on any play that ends in the field of play
