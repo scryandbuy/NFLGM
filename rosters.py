@@ -79,7 +79,7 @@ def _assemble(by_pos):
         return v[:n] if n else v
 
     qbs = take('QB')
-    hbs = take('HB') + take('FB')
+    hbs = take('HB') or take('FB')      # the fullback blocks; he carries only when there is no back left (FBs took 1,680 carries in a season once they sat in the rotation)
     wrs = take('WR')
     tes = take('TE')
     # the line in real order: LT LG C RG RT, then everyone else as depth
