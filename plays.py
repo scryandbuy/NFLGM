@@ -613,13 +613,13 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # edge is elite. The chipped rusher slows; the chipper's route is late.
     chip = None
     if n_extra == 0 and rushers and len(off['ol']) >= 5:
-        cands = [x for x in (te1, back) if x is not None and x.get('pass_block_rating', 60) >= 62]
+        cands = [x for x in (te1, back) if x is not None and x.get('pass_block_rating', 60) >= 55]
         if cands:
             edge_i = [i for i, r in enumerate(rushers[:4]) if r.get('pos') in ('LEDG', 'REDG')]
             if edge_i:
                 worst = max(edge_i, key=lambda i: rate(rushers[i], PASS_RUSH['rusher']['finesse']) - rate(off['ol'][min(i, 4)], PASS_RUSH['blocker']['finesse']))
                 threat = rate(rushers[worst], PASS_RUSH['rusher']['finesse']) - rate(off['ol'][min(worst, 4)], PASS_RUSH['blocker']['finesse'])
-                if rng.random() < float(np.clip(0.18 + 2.0 * threat, 0.05, 0.6)):
+                if rng.random() < float(np.clip(0.30 + 2.5 * threat, 0.08, 0.7)):
                     chip = (max(cands, key=lambda x: x.get('pass_block_rating', 60)), worst)
 
     p = resolve_protection(blockers, rushers, rng, qb=off['qb'], chip=chip)
