@@ -55,6 +55,34 @@ PHYSICAL = {'speed_rating', 'accel_rating', 'agility_rating', 'strength_rating',
             'change_of_direction_rating', 'jump_rating', 'stamina_rating', 'injury_rating',
             'tough_rating'}
 NOT_RATINGS = {'overall_rating', 'running_style_rating'}
+
+# THE SHAPE OF A CLASS. The rookie distribution both classes were built on
+# is the men who MADE rosters, so its bottom was truncated: the 150th man in
+# a class rated 77 with seven points of headroom against starter bars of
+# 77-81, and picks 151 and later became starters at 19-24% against a real
+# ~10. The real class falls away faster: the 150th man is a fringe roster
+# player, the 250th a camp body. Ranks 1-100 are left alone; from there the
+# curve is pulled down to this target by rank, on the skill attributes.
+SHAPE = [(1, 91.0), (32, 82.0), (64, 79.0), (100, 76.0), (150, 71.0), (250, 65.0), (400, 59.0), (504, 50.0)]
+
+
+def shape_class(cls):
+    import numpy as np
+    men = sorted([p for p in cls if p.pos not in ('K', 'P')], key=lambda p: -p.ovr)
+    xs = np.array([r for r, _ in SHAPE], float); ys = np.array([v for _, v in SHAPE], float)
+    for i, p in enumerate(men):
+        rank = i + 1
+        if rank <= 100: continue
+        target = float(np.interp(rank, xs, ys))
+        delta = target - p.ovr
+        if delta >= 0: continue
+        for k in list(p.ratings):
+            if k in PHYSICAL or k in NOT_RATINGS: continue
+            p.ratings[k] = float(np.clip(p.ratings[k] + delta, 20, 99))
+        if p.potential_range:
+            lo, hi = p.potential_range
+            p.potential_range = (round(max(p.ovr, lo + delta), 1), round(max(p.ovr + 1, hi + delta), 1))
+    return cls
 CLASS_AGE = {'Senior': 22.0, 'Junior': 21.0}
 DEV_ORDER = ['normal', 'star', 'superstar', 'xfactor']
 DEV_TOP, DEV_BOTTOM = [0.40, 0.32, 0.18, 0.10], [0.85, 0.12, 0.03, 0.00]
@@ -174,6 +202,7 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
             p.height, p.weight = float(row.height), float(row.weight)
             out.append(p)
     out.sort(key=lambda p: -p.ovr)
+    shape_class(out)
     league.draft_pool = out
     for p in out:
         league.players[p.pid] = p

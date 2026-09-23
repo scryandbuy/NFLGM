@@ -109,6 +109,7 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
             p.height, p.weight = float(row.height), float(row.weight)
             out.append(p)
     out.sort(key=lambda p: -p.ovr)
+    DC.shape_class(out)
     league.next_class = out
     league.class_strength = strength
     for p in out:
