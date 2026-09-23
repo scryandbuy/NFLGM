@@ -597,8 +597,13 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # targets against a real 18%. He is the outlet on every dropback where
     # the protection does not keep him in.
     back = (off.get('backs') or [off.get('rb')])[0] if (off.get('backs') or off.get('rb')) else None
+    # and he is an outlet on the quick game, not a target on a shot: a back
+    # drew 14% of his targets deep and 29% medium, at 9 yards a target
+    # against a real 6, because the pattern put him in every progression
+    back_in = {'short': 0.62, 'medium': 0.30, 'deep': 0.08}.get(depth, 0.5)
+    if prot_name in ('seven', 'max'): back_in *= 0.4
     if back is not None and not any(r is back for r in receivers) and len(receivers) < 6 \
-            and rng.random() < (0.25 if prot_name in ('seven', 'max') else 0.62):
+            and rng.random() < back_in:
         receivers.append(back)
     if not receivers: receivers = pool[:1]
 
@@ -823,7 +828,11 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # of plays against a real 19.5%, and drives reaching the twenty scored
     # 76.4% of the time against a real 61.0%.
     room = max(0.0, ytg - air)
-    yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=True)
+    # a back's catch in the flat or behind the line is a run against a set
+    # defence, not a receiver in space: at in_space the backs averaged
+    # 9-10 yards a target against a real 6
+    in_space = tgt.get('pos') not in ('HB', 'FB')
+    yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space)
     yac['yards'] = round(yac['yards'] * _compression(room), 1)
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
