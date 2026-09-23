@@ -878,7 +878,13 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             if rng.random() < 0.55:
                 st.adjust(quarter, rng)
 
+    import advanced_stats as AS
+    pending = None                        # the last scrimmage play, waiting for its after-state
     while dr.result is None:
+        if pending is not None:
+            _o, _off, _def, _st = pending
+            _v = AS.epa(_o, _st[0], _st[1], _st[2], dr.down, dr.togo, dr.yardline)
+            _o['epa'] = round(_v, 3); AS.book_play(book, _o, _off, _def, _v); pending = None
         if dr.clock <= 0:
             dr.result = 'End of half'; break
         # THE HALF IS A WALL TOO. Without this the game ran as one continuous
@@ -1097,6 +1103,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # the situation rides with the play, for the ticker and the probes
         if isinstance(out, dict):
             out['down'] = dr.down; out['ydstogo'] = dr.togo; out['yardline'] = dr.yardline; out['clock'] = dr.clock
+            out['passer'] = off_f['qb'].get('pid') if out.get('is_pass') or out.get('type') in ('sack', 'scramble') else None
+            _snap_state = (dr.down, dr.togo, dr.yardline)
         if script_mod != 1.0 and out.get('yards'):
             out['yards'] = round(float(out['yards']) * script_mod, 1)
         dr.plays += 1
@@ -1138,6 +1146,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         out['blitz'] = bool(dc.get('blitz')) or int(dc.get('rushers', 4)) >= 5
         dr.log.append(out)
         if book is not None: book.record(out, off_f, def_f, rng)
+        pending = (out, off_f, def_f, _snap_state)
         for st in (off_state, def_state):
             if st is not None: st.observe(oc, dc, out)
 
@@ -1220,6 +1229,15 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         dr.points += t['points']
         dr.try_result = t
         dr.log.append(t)
+    if pending is not None:
+        _o, _off, _def, _st = pending
+        _v = AS.epa(_o, _st[0], _st[1], _st[2], dr.down, dr.togo, dr.yardline, result=dr.result)
+        _o['epa'] = round(_v, 3); AS.book_play(book, _o, _off, _def, _v)
+    # the kick or the punt that ended it has an EPA of its own, so the ledger
+    # balances: what the offence had on fourth down against what it left
+    if dr.result in ('Punt', 'Field goal', 'Missed field goal') and dr.log and isinstance(dr.log[-1], dict):
+        last = dr.log[-1]
+        AS.book_special(book, dr, last, offense)
     return dr
 
 OT_LENGTH = 600          # one 10-minute period in the regular season
@@ -1477,6 +1495,9 @@ class StatBook:
                 # source tracks them and there is no standard definition, and
                 # run block win rate is the real version of that idea.
                 pb_snaps=0, pb_wins=0, sacks_allowed=0, pressures_allowed=0,
+                # ---- advanced ----
+                pass_epa=0.0, pass_plays=0, rush_epa=0.0, rush_plays=0, rec_epa=0.0, def_epa=0.0, def_plays=0,
+                xcomp=0.0, cpoe_att=0, pr_reps=0, pr_wins=0, sep_total=0.0, sep_n=0, st_epa=0.0,
                 rb_snaps=0, rb_wins=0)
         return self.p[pid]
 
