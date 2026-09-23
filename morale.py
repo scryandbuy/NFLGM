@@ -42,7 +42,8 @@ def entitlement_of(team, p, cache=None):
     depth, pays = cache[p.pos]
     rank = next((i + 1 for i, q in enumerate(depth) if q is p), len(depth) or 1)
     pay_rank = next((i + 1 for i, a in enumerate(pays) if a <= p.apy), len(pays) or 1)
-    return MS.entitlement(p.ovr, pos_rank=rank, pay_rank=pay_rank)
+    import personality as PT
+    return float(np.clip(MS.entitlement(p.ovr, pos_rank=rank, pay_rank=pay_rank) * PT.entitlement_mult(p), 0.0, 1.0))
 
 
 # ------------------------------------------------------------ weekly
@@ -208,7 +209,8 @@ def offseason_requests(league, rng):
             v = p.morale.value
             if v >= REQUEST_FLOOR: continue
             if entitlement_of(team, p, cache) < 0.55: continue
-            pr = float(np.clip(0.2 + 0.6 * (REQUEST_FLOOR - v) / (REQUEST_FLOOR - 10.0), 0.2, 0.85))
+            import personality as PT
+            pr = float(np.clip(0.2 + 0.6 * (REQUEST_FLOOR - v) / (REQUEST_FLOOR - 10.0), 0.2, 0.85)) * PT.request_mult(p)
             if rng.random() < pr:
                 reason = request_reason(p)
                 p.xp_spent['_request'] = dict(year=league.year, reason=reason, years=1)

@@ -361,7 +361,10 @@ def award_xp(player, awards):
 # Where each man's XP came from, kept beside the balance so the earning can
 # be audited by source: game events, snaps, season lines, milestones, awards.
 def credit(player, amount, source):
-    """Record the source and return the amount, so `p.xp += credit(...)`."""
+    """Record the source and return the amount, so `p.xp += credit(...)`.
+    Work ethic scales everything a man earns, 0.8x to 1.2x (personality.py)."""
+    import personality as PT
+    amount = float(amount or 0.0) * PT.xp_mult(player)
     if amount:
         led = player.xp_spent.setdefault('_earned', {})
         led[source] = led.get(source, 0.0) + float(amount)

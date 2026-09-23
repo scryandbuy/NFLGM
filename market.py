@@ -129,6 +129,10 @@ def utility_of(league, player, offer, prof, market_apy):
     u = NE.utility(offer.as_dict(), row, prof, ctx, market_apy)
     # the contender thumb: small, and only sometimes
     u += CONTENDER_DISCOUNT * ctx['contender'] * prof['w'].get('winning', 0.1) * 3.0
+    # loyalty: his own club's offer gets a thumb on the scale; a mercenary's does not
+    import personality as PT
+    if getattr(player, 'last_team', None) == offer.team:
+        u *= 1.0 + PT.own_club_bonus(player)
     return u
 
 

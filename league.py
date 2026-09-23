@@ -72,7 +72,9 @@ class Player:
                  # the draft: where he came from and how the college game rated him
                  'college', 'college_ovr', 'height', 'weight',
                  # a position change he is still learning: frm, to, penalty, games_left, games_total
-                 'transition')
+                 'transition',
+                 # personality: work_ethic, financial_priority, loyalty, ambition (hidden)
+                 'traits', 'last_team')
 
     def __init__(self, pid, name, pos, age, ratings, *, dev='normal',
                  potential=None, potential_range=None, longevity=1.0,
@@ -117,6 +119,8 @@ class Player:
         self.height = None
         self.weight = None
         self.transition = None
+        self.traits = None
+        self.last_team = None
 
     # ---- derived ability -------------------------------------------------
     @property
@@ -1076,6 +1080,8 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
     L.set_phase('preseason')
     L.schedule = [(int(r.week), r.away_team, r.home_team, None, None)
                   for _, r in SCH.iterrows()]
+    import personality as PT
+    PT.assign_all(L, rng)
     return L
 
 

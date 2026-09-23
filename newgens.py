@@ -116,4 +116,7 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
     if verbose:
         strong = sorted(strength.items(), key=lambda kv: -kv[1])
         print(f'{len(out)} newgens for {draft_year}; class shift {class_shift:+.1f}; strongest {strong[:3]}, weakest {strong[-3:]}')
+    import personality as PT
+    for _p in out:
+        PT.ensure(_p, rng)
     return out

@@ -180,4 +180,7 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
     if verbose:
         print(f'{len(out)} in the class; pro overall mean {np.mean([p.ovr for p in out]):.1f}, '
               f'top {out[0].name} {out[0].pos} {out[0].ovr:.1f} (college {out[0].college_ovr})')
+    import personality as PT
+    for _p in out:
+        PT.ensure(_p, rng)
     return out

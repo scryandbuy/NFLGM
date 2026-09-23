@@ -49,11 +49,15 @@ def terms(league, p, rng):
     t = VAL.value_player(league, p, side='team', rng=rng)
     if not a or not t:
         return None
+    import personality as PT
     star = p.ovr >= 88 and p.contract.years <= 1
     disc = 0.0 if star else CERTAINTY_DISCOUNT * (1.0 if p.contract.years <= 1 else 1.4)
+    disc = disc * PT.certainty_discount_mult(p) + PT.extension_discount(p)    # money and loyalty
+    disc = float(np.clip(disc, -0.05, 0.25))
+    ask = a['apy'] * PT.ask_mult(p)
     years = int(np.clip(a['years'], 1, 5))
     if p.age >= 30: years = min(years, 3)
-    return dict(ask=a['apy'], offer=t['apy'], years=years, discount=disc)
+    return dict(ask=ask, offer=t['apy'], years=years, discount=disc)
 
 
 def build(p, add_years, apy, cap, gm, league):

@@ -219,6 +219,7 @@ def run(league, rng, verbose=False):
         t = league.teams.get(abbr)
         if t and p in t.roster:
             t.roster.remove(p)
+        p.last_team = p.team                    # loyalty reads it in the market
         p.team, p.contract = None, None
         p.fa_class = p.fa_class if p.fa_class in ('RFA', 'ERFA') else 'UFA'
         if p.pid not in league.free_agents:
