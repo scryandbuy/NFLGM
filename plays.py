@@ -87,10 +87,13 @@ SCREEN_RESCUE = 0.07
 # decide who is CHARGED with a rep, never to change the play.
 DOUBLE_TEAM_HELP = 1.45
 
-def resolve_protection(blockers, rushers, rng, qb=None):
+def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
     """
     Returns time available, whether a sack happened, and pressure 0-1.
     Each rusher races his blocker; the FASTEST win sets the clock.
+    chip: (chipper, rusher_index) when a tight end or back chips the best
+    rusher on his way into the route: the rusher's clock slows by the
+    chipper's block, and the chipper's route arrives late.
     """
     wins = []
     for i, r in enumerate(rushers):
@@ -102,6 +105,9 @@ def resolve_protection(blockers, rushers, rng, qb=None):
         if b is None:                      # unblocked - a free runner
             wins.append((0.6, move, r, None)); continue
         dfn = rate(b, PASS_RUSH['blocker'][move])
+        if chip is not None and chip[1] == i:
+            # THE CHIP: a second man gets a piece of him on the way out
+            dfn = dfn + 0.35 * (rate(chip[0], PASS_RUSH['blocker'][move]) - 0.55)
         e = edge(atk, dfn)
         # time for THIS rusher to arrive: average matchup ~ BASE_TTT
         # Sensitivity is 0.35, solved. At 1.15 the rating gap swung the clock
@@ -601,8 +607,22 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     blockers = off['ol'][:5] + extras
     kept_in = {id(x) for x in extras}
     rushers = (deff['dl'] + deff['lb'])[:def_call['rushers']]
+    # THE CHIP. On a five-man protection with a good blocking tight end or
+    # back releasing, he chips the edge rusher who most out-rates his tackle
+    # on the way into his route, about a fifth of the time and more when that
+    # edge is elite. The chipped rusher slows; the chipper's route is late.
+    chip = None
+    if n_extra == 0 and rushers and len(off['ol']) >= 5:
+        cands = [x for x in (te1, back) if x is not None and x.get('pass_block_rating', 60) >= 62]
+        if cands:
+            edge_i = [i for i, r in enumerate(rushers[:4]) if r.get('pos') in ('LEDG', 'REDG')]
+            if edge_i:
+                worst = max(edge_i, key=lambda i: rate(rushers[i], PASS_RUSH['rusher']['finesse']) - rate(off['ol'][min(i, 4)], PASS_RUSH['blocker']['finesse']))
+                threat = rate(rushers[worst], PASS_RUSH['rusher']['finesse']) - rate(off['ol'][min(worst, 4)], PASS_RUSH['blocker']['finesse'])
+                if rng.random() < float(np.clip(0.18 + 2.0 * threat, 0.05, 0.6)):
+                    chip = (max(cands, key=lambda x: x.get('pass_block_rating', 60)), worst)
 
-    p = resolve_protection(blockers, rushers, rng, qb=off['qb'])
+    p = resolve_protection(blockers, rushers, rng, qb=off['qb'], chip=chip)
     # A protection scheme is worth real time against a blitz, and a simulated
     # pressure makes the line set for a front that never comes.
     if def_call['rushers'] >= 5:
@@ -706,6 +726,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # every man in the pattern gets his own separation from his own matchup
     for pr in pairs:
         pr_depth = 'short' if pr['receiver'].get('pos') in ('HB', 'FB') and depth != 'short' else depth
+        if chip is not None and pr['receiver'] is chip[0]:
+            pr['late'] = True                       # he chipped on the way out
         pr['separation'] = resolve_man(pr['receiver'], pr['defender'], pr_depth,
                                        p['time'], rng)
         # a bracketed man is squeezed, not erased - an elite receiver doubled

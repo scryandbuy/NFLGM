@@ -123,6 +123,8 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70):
     w = np.array([1.0 + 0.55 * (plan.target_priority.get(
         p['receiver'].get('pid'), 0.0) if plan is not None and
         plan.target_priority else 0.0) for p in pairs], float)
+    # a man who chipped on the way out is late into his route and last in the read
+    w = w * np.array([0.35 if p.get('late') else 1.0 for p in pairs])
     # depth-chart position carries a mild designed bias: a coordinator does
     # build for his best player, but it breaks ties rather than setting a share
     # Real target share by rank: 23.6 / 17.5 / 13.3 / 10.5 / 8.5 - a ratio of

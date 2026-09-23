@@ -568,6 +568,7 @@ class TeamState:
             self.plan.travel, self.plan.travel_target, self.plan.bracket = travel, target, bracket
         self.mem = AD.GameMemory()
         self.last_adjustment = None
+        self.seq = {'run_hot': 0.0}
         # THE OUT LIST WAS NEVER CLEARED. hurt() refuses to roll for a man
         # already on it, so once a player was hurt he stopped being able to be
         # hurt again FOR THE REST OF THE SEASON - and so did everyone else, one
@@ -941,7 +942,14 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         olean = None
         if off_state is not None and off_state.plan is not None:
             pl0 = off_state.plan
-            olean = dict(pass_bias=pl0.pass_bias, play_action=pl0.play_action_rate,
+            # SEQUENCING. A coordinator sets plays up: play action comes off a
+            # run game that is working (a decayed count of runs of four or
+            # more), and the ball finds the receiver who is winning his
+            # matchups (target_priority, read by select_target). Both decay
+            # within the game so an early stretch does not run the afternoon.
+            seq = getattr(off_state, 'seq', None) or {'run_hot': 0.0}
+            pa_boost = float(np.clip(1.0 + 0.55 * min(seq['run_hot'], 3.0) / 3.0, 0.85, 1.55))
+            olean = dict(pass_bias=pl0.pass_bias, play_action=min(0.95, pl0.play_action_rate * pa_boost),
                          motion=getattr(pl0, 'motion_rate', 0.365))
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
                       dr.score_diff, ytg_i, rng, secs_left=dr.clock,
@@ -1091,6 +1099,24 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if script_mod != 1.0 and out.get('yards'):
             out['yards'] = round(float(out['yards']) * script_mod, 1)
         dr.plays += 1
+        if off_state is not None:
+            seq = getattr(off_state, 'seq', None)
+            if seq is None: seq = off_state.seq = {'run_hot': 0.0}
+            if out.get('type') == 'run' and not out.get('sneak'):
+                seq['run_hot'] = seq['run_hot'] * 0.85 + (1.0 if float(out.get('yards') or 0) >= 4.0 else -0.4)
+                seq['run_hot'] = max(0.0, seq['run_hot'])
+            elif out.get('type') in ('complete', 'incomplete', 'interception', 'drop'):
+                seq['run_hot'] *= 0.92
+            # the hot hand: a receiver who beat his man (a completion of 12+
+            # or good separation) climbs the read order for the rest of the
+            # game; a drop or a smothered target slips
+            tgt = out.get('target')
+            if tgt and off_state.plan is not None:
+                tp = off_state.plan.target_priority
+                if tp is None: tp = off_state.plan.target_priority = {}
+                won = out.get('type') == 'complete' and (float(out.get('yards') or 0) >= 12 or float(out.get('separation') or 0) > 1.5)
+                lost = out.get('type') in ('drop', 'interception')
+                tp[tgt] = float(np.clip(tp.get(tgt, 0.0) * 0.9 + (0.35 if won else -0.25 if lost else 0.0), -0.6, 1.0))
         # WHAT HAS BEEN WORKING. The coordinator's own record of his calls,
         # decayed so an early stop does not justify the same call all
         # afternoon. Nothing fed this before, so `recent` was always empty.
