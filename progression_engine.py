@@ -122,7 +122,6 @@ POSMAP = {'QB':'QB','HB':'RB','FB':'RB','WR':'WR','TE':'TE','LT':'OL','RT':'OL',
 # Reading the odds off raw year-over-year drops gave a jagged, non-monotonic
 # curve (quarterbacks at 14% at 24 and 4% at 30). The chance a player declines
 # must never fall as he ages, so build it once per position and force it up.
-from sklearn.isotonic import IsotonicRegression
 _CHANCE = {}
 def _build_chance(grp):
     c = CURVES.get(grp, {}).get('curve', {})
@@ -136,6 +135,7 @@ def _build_chance(grp):
         level = max(0.0, 1.0 - here)
         raw.append(0.035 + drop*3.0 + level*0.60)
     ages = np.array(range(min(ks), max(ks)+1), float)
+    from sklearn.isotonic import IsotonicRegression     # a fitting tool, not a runtime dependency: imported only when the curve is refit
     fit = IsotonicRegression(increasing=True, out_of_bounds='clip').fit_transform(ages, raw)
     fit = np.clip(fit, 0.02, 0.90)
     out = {int(a): float(v) for a, v in zip(ages, fit)}

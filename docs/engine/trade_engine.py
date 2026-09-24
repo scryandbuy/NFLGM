@@ -10,7 +10,6 @@ Player trade value is surplus value, not rating: what he is worth minus what he
 costs, adjusted for contract length, age and the dead money the selling team eats.
 """
 import numpy as np, pandas as pd
-from sklearn.isotonic import IsotonicRegression
 
 CAP = 301.0
 
