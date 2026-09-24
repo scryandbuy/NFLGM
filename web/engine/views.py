@@ -274,7 +274,7 @@ def _season(league, abbr):
     for wk in range(1, 19):
         if wk not in weeks: games.append(dict(week=wk, bye=True))
     games.sort(key=lambda g: g['week'])
-    return dict(games=games, playoff_odds=None)
+    return dict(games=games)
 
 
 # ============================================================ GAME DAY

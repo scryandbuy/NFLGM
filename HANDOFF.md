@@ -362,6 +362,30 @@ loops, how the AI spends it, XP for awards feeding the dev tier.
 - UI: everything is a Python API with no screens
 - Morale display: own column plus per-attribute breakout
 
+## 8a. TABLED — UI (current, as of the browser-app wiring)
+
+The list in §8 predates the draft, practice squad, newgens, schemes, morale
+and staff builds; several of its lines are done. These are the items tabled
+during the page wiring, in the order they came up:
+
+- Playoff odds as percentages on the Standings picture. Needs a season
+  simulation from the current standings (an engine piece); the picture shows
+  seeds and in-the-hunt instead.
+- Box Score as its own page from a Schedule click-through (finished games
+  open Game Day for now).
+- Cap ledger as its own full page (the ledger sits inside the Cap tab).
+- Identity: the five roster-philosophy archetypes (draft and develop, win-now
+  trader, analytics room, scouts' gut, owner meddler) as a third row that
+  sets the GM's roster traits. Only the nine on-field archetypes are on the page.
+- Prospect Card (a board row opens nothing yet).
+- Trade Tree link from a transaction.
+- Season Reviews written by the owner (the Owner tab lists them; nothing
+  writes one yet).
+- Halftime Adjustments on Game Day.
+- Named Saved Plans on Game Plan (needs a small engine addition).
+- Personnel: an Add-to-Trade picker from a player card (Trade Block links to
+  the Trades page for now).
+
 ## 9. THE ONE THING TO DO FIRST
 
 **Finish the register refit.** It sits at 19/34, down from 25 before the
