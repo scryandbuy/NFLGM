@@ -321,13 +321,20 @@ def depth(session, league, abbr, package='Nickel'):
     pk = PACKAGES.get(package, PACKAGES['Nickel'])
     desk = (session.runner.desks.get(abbr) if getattr(session, 'runner', None) is not None else None)
     status = getattr(desk, 'status', {}) if desk is not None else {}
+    # the linebackers this package fields, and why
+    import targets as TG
+    lbs = [p for pos_ in ('MIKE', 'WILL', 'SAM') for p in d.get(pos_, []) if p.out_until is None]
+    pkg_key = package.lower().replace(' ', '_')
+    lb_choice = {p.pid: why for p, why in TG.package_linebackers(lbs, pkg_key, scheme=getattr(t, 'scheme', None), key=lambda q: q.ratings)}
     sides = {}
     for side, cols_ in SIDES.items():
         cols = []
         for pos, label, group in cols_:
             men = d.get(pos, []); n_start = _starters(pos, pk); slots = []
             for i, p in enumerate(men):
-                pl = player_plate(p); pl['cond'] = _cond(session, p); pl['start'] = i < n_start
+                pl = player_plate(p); pl['cond'] = _cond(session, p)
+                if pos in ('MIKE', 'WILL', 'SAM'): pl['start'] = p.pid in lb_choice; pl['why'] = lb_choice.get(p.pid, '')
+                else: pl['start'] = i < n_start; pl['why'] = ''
                 pl['slot'] = _slot_label(pos, i)
                 desig = status.get(p.pid)
                 pl['flag'] = 'out' if p.out_until is not None else (desig if desig in ('questionable', 'doubtful') else None)

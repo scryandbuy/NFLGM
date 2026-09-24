@@ -793,7 +793,10 @@ def package_units(roster, state, rng, is_offense, package):
             out['db'] = cbs[:2] + saf[:3]
         else:
             out['db'] = cbs[:n_cb] + saf[:spec.get('FS', 1) + spec.get('SS', 1)]
-        out['lb'] = list(roster.get('lb', []))[:spec.get('LB', 2)]
+        # the linebackers are the coordinator's call by the package's job, not the first N in the list
+        lbs = [m for m in roster.get('lb', []) if m.get('pid') not in (state.out if state is not None else set())]
+        chosen = TG.package_linebackers(lbs, package, scheme=None, key=lambda m: m)
+        out['lb'] = [m for m, why in chosen][:spec.get('LB', 2)] or list(roster.get('lb', []))[:spec.get('LB', 2)]
         # THE FRONT ROTATES. Fatigue alone left the starting four at 92-94% of snaps;
         # real edges play 65-80% and interior linemen 55-70%, with the third edge at
         # 30-45% and the third and fourth tackles at 30-45 and 15-30. Each slot rotates

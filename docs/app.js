@@ -692,7 +692,7 @@ function renderDepth(v) {
           el('div', { class: 'top' }, el('span', { class: 'slot' }, x.slot), el('span', { class: 'ov' }, x.ovr)),
           el('div', { class: 'face' }, el('span', { class: 'no' }, x.no || c.pos)),
           el('div', { class: 'nm', title: x.name }, `${x.name.split(' ')[0][0]}.${x.name.split(' ').slice(1).join(' ').toUpperCase()}`),
-          el('div', { class: 'sub' }, x.flag_word || (x.fit ? `Fit ${x.fit > 0 ? '+' : ''}${x.fit}` : ' ')),
+          el('div', { class: 'sub' }, x.flag_word || (x.why ? `${v.package} · ${x.why}` : (x.fit ? `Fit ${x.fit > 0 ? '+' : ''}${x.fit}` : ' '))),
           el('div', { class: 'cbar' }, el('i', { class: x.cond < 80 ? 'mid' : '', style: `width:${x.cond}%` })),
           el('div', { class: 'arrows' }, el('button', { disabled: i === 0 ? '' : null, onclick: () => move(i, -1) }, '▲'), el('button', { disabled: i === men.length - 1 ? '' : null, onclick: () => move(i, 1) }, '▼')));
         wire(card, x, i); stack.append(card);

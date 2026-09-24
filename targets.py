@@ -353,6 +353,52 @@ DEF_PACKAGES = {
     'heavy':  dict(CB=2, FS=1, SS=0, LB=4, DL=5),
 }
 
+# ------------------------------------------------------------ the linebackers a package fields
+# The coordinator's call, not the depth chart's labels. Base plays three off-ball
+# linebackers; nickel plays two and dime one, and which two or one is a decision about
+# the job the sub package asks for: coverage on third down and in two-minute, run
+# stopping at the goal line. A SAM who runs and covers beats a second MIKE in nickel;
+# a thumper beats him at the goal line. The MIKE (the best off-ball linebacker at the
+# spot) plays every package but dime, where the best cover man does.
+LB_ROLE = {
+    'coverage': {'zone_cover_rating': .26, 'man_cover_rating': .22, 'speed_rating': .20, 'play_rec_rating': .16, 'pursuit_rating': .10, 'accel_rating': .06},
+    'run':      {'tackle_rating': .26, 'block_shed_rating': .22, 'hit_power_rating': .18, 'strength_rating': .14, 'pursuit_rating': .12, 'play_rec_rating': .08},
+}
+PACKAGE_LB = {'base': ('every_down', 3), 'nickel': ('coverage', 2), 'dime': ('coverage', 1), 'heavy': ('run', 4), 'goal_line': ('run', 3), 'third_down': ('coverage', 2), 'two_minute': ('coverage', 1)}
+
+
+def _role_score(r, role):
+    w = LB_ROLE[role]; return sum(float(r.get(k, 60.0)) * v for k, v in w.items()) / sum(w.values())
+
+
+def package_linebackers(men, package, scheme=None, key=lambda m: m):
+    """men: the club's off-ball linebackers in depth order (dicts with ratings, or objects; key()
+    returns the ratings dict). Returns [(man, reason)] for the men who play this package."""
+    role, n = PACKAGE_LB.get(str(package).lower().replace(' ', '_'), ('every_down', 2))
+    if not men: return []
+    def own(m):
+        r = key(m); pos = m.get('pos') if isinstance(m, dict) else getattr(m, 'pos', 'MIKE')
+        return float(position_score(r, pos if pos in ('MIKE', 'WILL', 'SAM') else 'MIKE', scheme))
+    mikes = [m for m in men if (m.get('pos') if isinstance(m, dict) else getattr(m, 'pos', None)) == 'MIKE']
+    mike = max(mikes, key=own) if mikes else max(men, key=own)
+    out = []
+    if role == 'every_down':
+        # base: the three best at their own spots, the MIKE first
+        rest = sorted([m for m in men if m is not mike], key=own, reverse=True)
+        out = [(mike, 'the MIKE')] + [(m, 'every down') for m in rest[:n - 1]]
+    elif role == 'coverage':
+        if n == 1:
+            best = max(men, key=lambda m: _role_score(key(m), 'coverage') + (1.0 if m is mike else 0.0))
+            out = [(best, 'the cover man' if best is not mike else 'the MIKE, covers')]
+        else:
+            rest = sorted([m for m in men if m is not mike], key=lambda m: 0.65 * _role_score(key(m), 'coverage') + 0.35 * own(m), reverse=True)
+            out = [(mike, 'the MIKE')] + [(m, 'runs and covers') for m in rest[:n - 1]]
+    else:   # run
+        rest = sorted([m for m in men if m is not mike], key=lambda m: 0.7 * _role_score(key(m), 'run') + 0.3 * own(m), reverse=True)
+        out = [(mike, 'the MIKE')] + [(m, 'stops the run') for m in rest[:n - 1]]
+    return out
+
+
 def field_package(chart, package, side='off'):
     """The eleven men this package puts on the field, in depth order."""
     spec = (OFF_PACKAGES if side == 'off' else DEF_PACKAGES).get(package, {})
