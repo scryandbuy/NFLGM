@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NFL GM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;900&family=Big+Shoulders+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="boot">
+  <div class="box">
+    <h1>NFL GM</h1>
+    <div class="muted" style="font-size:13px">A franchise, run from the front office. Pick your club.</div>
+    <div class="pick" id="pick"></div>
+    <div class="go">
+      <button class="btn go" id="start" disabled>Start a Franchise</button>
+      <button class="btn quiet" id="resume" hidden>Resume Saved Game</button>
+    </div>
+    <div class="bar"><i id="bootbar"></i></div>
+    <div class="line" id="bootline">loading…</div>
+  </div>
+</div>
+
+<header class="rail" id="rail" hidden>
+  <div class="in">
+    <div class="hist"><button aria-label="Back" id="back">‹</button><button aria-label="Forward" disabled>›</button></div>
+    <div class="club"><div class="crest" id="crest">KC</div><div><div class="name" id="clubname">—</div><div class="who" id="coach">—</div></div></div>
+    <nav id="nav">
+      <a href="#portal" data-page="portal" aria-current="page">Portal <span class="badge" id="badge" hidden>0</span></a><a href="#club" data-page="club">Club</a><a href="#personnel" data-page="personnel">Personnel</a><a href="#draft" data-page="draft">Draft</a><a href="#league" data-page="league">League</a><a href="#gameplan" data-page="gameplan">Game Plan</a><a href="#gameday" data-page="gameday">Game Day</a><a href="#frontoffice" data-page="frontoffice">Front Office</a>
+    </nav>
+    <div class="status">
+      <div class="stat"><b id="st-record">0–0</b><span id="st-place">—</span></div>
+      <div class="stat"><b id="st-cap">—</b><span>Cap Space</span></div>
+      <div class="stat"><b id="st-prestige">—</b><span>Prestige</span></div>
+      <div class="stat"><b id="st-week">—</b><span id="st-year">—</span></div>
+    </div>
+    <button class="advance" id="advance"><div class="txt"><span id="adv-title">Advance</span><small id="adv-sub"></small></div><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 5l10 7-10 7z"/></svg></button>
+  </div>
+  <div class="sub">
+    <div class="in">
+      <div class="crumb" id="crumb">Portal</div>
+      <div class="second" id="second"></div>
+      <div class="quick"><span>Quick</span><a href="#club">Roster</a><a href="#club/depth">Depth Chart</a><a href="#frontoffice/cap">Cap</a><a href="#personnel/wire">Wire</a><a href="#league">Standings</a><button class="kbd" id="save" data-tip="Save to this browser">⇩</button></div>
+    </div>
+  </div>
+</header>
+
+<main id="page" hidden></main>
+<div class="busy" id="busy" hidden>Working…</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
