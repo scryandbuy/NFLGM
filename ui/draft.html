@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kansas City — Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;900&family=Big+Shoulders+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#0f1114; --board:#15181c; --sheet:#1b1f25; --sheet-2:#23282f; --sheet-3:#2b313a; --rule:#2e353e; --rule-2:#3a424c; --rule-hi:#8791a0;
+  --ink:#eef1f5; --ink-2:#b6bec9; --ink-3:#7b8593;
+  --club:#c8102e; --club-2:#ffb612; --opp:#fb4f14;
+  --danger:#e5484d; --decide:#e0b400; --live:#4cc9f0; --ok:#3fb37f; --mid:#5aa9d6;
+  --display:'Big Shoulders Display',sans-serif; --text:'Big Shoulders Text',sans-serif; --mono:'JetBrains Mono',monospace;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--text);font-size:14px;color:var(--ink);background:var(--bg);min-height:100%;line-height:1.35}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--club-2);outline-offset:2px}
+main[hidden]{display:none}
+
+/* rail (same as Portal) */
+.rail{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--board);border-top:4px solid var(--club);border-bottom:1px solid var(--rule)}
+.rail .in{max-width:1600px;margin:0 auto;padding:0 18px;display:flex;align-items:stretch;height:56px}
+.hist{display:flex;align-items:center;gap:2px;padding-right:12px;border-right:1px solid var(--rule);margin-right:12px}
+.hist button{width:28px;height:28px;font-family:var(--display);font-weight:900;font-size:20px;line-height:1;color:var(--ink-2);border:1px solid var(--rule-2)}
+.hist button:hover{background:rgba(255,255,255,.06);color:var(--ink)}
+.crest{width:38px;height:38px;background:var(--club);color:#fff;font-family:var(--display);font-weight:900;font-size:15px;display:grid;place-items:center;align-self:center;margin-right:12px;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.club{display:flex;align-items:center;padding-right:18px;border-right:1px solid var(--rule)}
+.club .name{font-family:var(--display);font-weight:900;font-size:24px;line-height:1}
+.club .who{color:var(--ink-3);font-size:12.5px}
+nav{display:flex}
+nav a{display:flex;align-items:center;padding:0 13px;font-family:var(--display);font-weight:700;font-size:16.5px;letter-spacing:.02em;color:var(--ink-3);text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-1px}
+nav a:hover{color:var(--ink-2);background:rgba(255,255,255,.03)}
+nav a[aria-current]{color:var(--ink);border-bottom-color:var(--club-2)}
+nav a .badge{margin-left:7px;font-family:var(--text);font-weight:700;font-size:11px;background:var(--decide);color:#111;padding:1px 6px;border-radius:2px}
+.status{margin-left:auto;display:flex;align-items:center}
+.stat{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:0 12px;border-left:1px solid var(--rule);min-width:64px}
+.stat b{font-family:var(--display);font-weight:900;font-size:20px;line-height:1}
+.stat span{font-size:11px;color:var(--ink-3);margin-top:2px}
+.clock{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border-left:1px solid var(--rule);font-family:var(--mono)}
+.clock b{font-size:13px;font-weight:500}.clock span{font-size:11px;color:var(--ink-3)}
+.advance{display:flex;align-items:center;gap:10px;padding:0 18px;margin-left:10px;background:var(--club-2);color:#111}
+.advance .txt{display:flex;flex-direction:column;align-items:flex-start;line-height:1;font-family:var(--display);font-weight:900;font-size:19px;letter-spacing:.02em}
+.advance small{font-family:var(--text);font-weight:600;font-size:11px;margin-top:3px}
+.sub{background:var(--board);border-bottom:1px solid var(--rule)}
+.sub .in{height:36px;align-items:center;gap:14px}
+.crumb{font-family:var(--display);font-weight:900;font-size:14px;color:var(--club-2);letter-spacing:.02em;padding-right:12px;border-right:1px solid var(--rule)}
+.second{display:flex;gap:2px}
+.second a,.quick a{font-size:13.5px;color:var(--ink-3);text-decoration:none;padding:6px 10px;border-radius:2px;cursor:pointer}
+.second a:hover,.quick a:hover{color:var(--ink);background:rgba(255,255,255,.04)}
+.second a[aria-current]{color:var(--ink);background:var(--sheet-2)}
+.quick{margin-left:auto;display:flex;align-items:center;gap:2px}
+.quick span{font-size:11px;color:var(--ink-3);padding-right:6px}
+
+/* sheets */
+main{max-width:1600px;margin:12px auto 40px;padding:0 18px;display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:start}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c9{grid-column:span 9}.c12{grid-column:span 12}
+@media (max-width:1300px){.c3,.c4,.c5,.c6,.c7,.c8,.c9{grid-column:span 12}}
+.sheet{background:var(--sheet);border:1px solid var(--rule);display:flex;flex-direction:column}
+.sheet h2{font-family:var(--display);font-weight:900;font-size:18px;line-height:1;padding:10px 12px 8px;border-bottom:1px solid var(--rule-2);display:flex;align-items:center;gap:10px}
+.sheet h2 small{font-family:var(--text);font-weight:500;font-size:12px;color:var(--ink-3);margin-left:auto}
+.pad{padding:10px 12px}
+.foot{margin-top:auto;display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--rule);flex-wrap:wrap}
+.btn{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;padding:7px 12px;border:1px solid var(--rule-hi);color:var(--ink);display:inline-flex;align-items:center;gap:7px}
+.btn:hover{background:rgba(255,255,255,.06)}.btn:active{background:rgba(255,255,255,.12)}
+.btn.go{background:var(--club-2);color:#111;border-color:var(--club-2)}
+.btn.quiet{border-color:var(--rule-2);color:var(--ink-2)}
+.btn.warn{border-color:var(--danger);color:var(--danger)}
+.mono{font-family:var(--mono);font-size:12.5px}
+.muted{color:var(--ink-3)}
+
+/* toolbar: tabs, views, filters, search */
+.tools{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.tabs{display:flex}
+.tabs button{padding:6px 12px;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;color:var(--ink-3);border:1px solid var(--rule-2);border-right:0}
+.tabs button:last-child{border-right:1px solid var(--rule-2)}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:#111;border-color:var(--ink)}
+.tabs button em{font-style:normal;font-family:var(--text);font-weight:700;font-size:11px;margin-left:6px;opacity:.7}
+.chips{display:flex;gap:4px;margin-left:10px}
+.chip{padding:4px 9px;font-size:12.5px;color:var(--ink-2);border:1px solid var(--rule-2);border-radius:2px}
+.chip[aria-pressed="true"]{background:var(--sheet-3);color:var(--ink);border-color:var(--rule-hi)}
+.search{margin-left:auto;background:var(--sheet-2);border:1px solid var(--rule-2);color:var(--ink-3);padding:5px 10px;font-size:13px;min-width:220px}
+.count{font-size:12px;color:var(--ink-3);margin-left:8px}
+
+/* header tooltips (the th is already positioned by sticky, so no relative here) */
+.tbl th[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:4px;background:var(--ink);color:#111;font-family:var(--text);font-weight:500;font-size:12px;letter-spacing:0;padding:6px 9px;white-space:nowrap;z-index:20;border:1px solid var(--rule-hi);pointer-events:none}
+.tbl th:hover{z-index:21}
+
+/* the roster table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{position:sticky;top:93px;background:var(--sheet);z-index:1;font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.02em;text-align:center;padding:7px 8px;border-bottom:1px solid var(--rule-2);color:var(--ink-3);white-space:nowrap;cursor:pointer}
+.tbl th:hover{color:var(--ink)}
+.tbl th.sorted{color:var(--ink);box-shadow:inset 0 -2px 0 var(--club-2)}
+.tbl th.n{text-align:center}
+.tbl td.n{text-align:center;font-family:var(--mono);font-size:12.5px}
+.tbl td{padding:0 8px;height:40px;border-bottom:1px solid var(--rule);white-space:nowrap;text-align:center}
+.tbl td:hover{position:relative;z-index:6}
+.tbl{table-layout:auto}
+.tbl td:nth-child(2){text-align:left}
+#board .tbl td:first-child,#picks .tbl td:first-child{text-align:left;padding-left:12px}
+#board .tbl td:first-child .who{justify-content:flex-start}
+#board .tbl td:nth-child(2){text-align:center}
+.tbl tr:hover td{background:rgba(255,255,255,.03)}
+.tbl tr.sel td{background:var(--sheet-2)}
+.tbl .grp td{height:26px;background:var(--board);font-family:var(--display);font-weight:700;font-size:13px;color:var(--ink-3);letter-spacing:.02em}
+.who{display:flex;align-items:center;gap:8px}
+.who .no{width:30px;height:30px;font-family:var(--display);font-weight:900;font-size:16px;background:var(--ink);color:#111;display:grid;place-items:center;flex:none}
+.who .nm{font-family:var(--display);font-weight:700;font-size:16px;line-height:1}
+.who .nm small{display:block;font-family:var(--text);font-weight:500;font-size:11px;color:var(--ink-3);margin-top:2px}
+.pill{display:block;margin:0 auto;font-size:11px;font-weight:700;padding:1px 0;border:1px solid var(--pc,var(--rule-hi));color:var(--pc,var(--ink-2));border-radius:2px;width:84px;text-align:center}
+.pill.happy{--pc:var(--ok)}.pill.content{--pc:var(--ink-3)}.pill.unsettled{--pc:var(--decide)}.pill.unhappy{--pc:var(--danger)}
+.ovr{font-family:var(--display);font-weight:900;font-size:19px}
+.ovr.t1{color:var(--ok)}.ovr.t2{color:var(--ink)}.ovr.t3{color:var(--ink-3)}
+.fit{font-family:var(--mono);font-size:12px}
+.fit.p{color:var(--ok)}.fit.m{color:var(--danger)}.fit.z{color:var(--ink-3)}
+.cond{display:block;margin:0 auto;width:56px;height:7px;background:var(--sheet-3);border:1px solid var(--rule);vertical-align:middle}
+.cond i{display:block;height:100%;background:var(--ok)}
+.cond i.mid{background:var(--decide)}.cond i.low{background:var(--danger)}
+.inj{color:var(--danger);font-weight:700;font-size:11px}
+.dev{font-size:11px;color:var(--ink-3)}
+.dev.star{color:var(--club-2)}
+.row-act{opacity:0;display:flex;gap:4px}
+.tbl tr:hover .row-act{opacity:1}
+.row-act button{width:26px;height:26px;border:1px solid var(--rule-2);color:var(--ink-2);font-family:var(--mono);font-size:12px}
+.row-act button:hover{border-color:var(--rule-hi);color:var(--ink)}
+
+/* depth chart */
+.pkg{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--rule);align-items:center}
+.pkg span{font-size:12px;color:var(--ink-3);margin-right:6px}
+.pkg button{padding:5px 12px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.02em;color:var(--ink-3);border:1px solid var(--rule-2)}
+.pkg button[aria-pressed="true"]{background:var(--ink);color:#111;border-color:var(--ink)}
+.pkg .snaps{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.chart{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:12px}
+@media (max-width:1100px){.chart{grid-template-columns:repeat(3,1fr)}}
+.col{background:var(--board);border:1px solid var(--rule)}
+.col h4{font-family:var(--display);font-weight:900;font-size:16px;letter-spacing:.02em;padding:8px 10px 6px;border-bottom:1px solid var(--rule-2);display:flex;justify-content:space-between;align-items:baseline}
+.col h4 small{font-family:var(--text);font-weight:500;font-size:11px;color:var(--ink-3)}
+.col .slot{display:grid;grid-template-columns:18px 1fr;gap:6px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--rule);cursor:grab}
+.col .slot:last-child{border-bottom:0}
+.col .slot .rk{font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:center}
+.col .slot.start{background:var(--sheet)}
+.plate{display:grid;grid-template-columns:32px 1fr auto;align-items:center;background:var(--sheet-2);border:1px solid var(--rule);height:40px;position:relative}
+.plate:hover{border-color:var(--rule-hi)}
+.plate .no{font-family:var(--display);font-weight:900;font-size:17px;text-align:center;background:var(--ink);color:#111;height:100%;display:grid;place-items:center}
+.plate .nm{font-family:var(--display);font-weight:700;font-size:15px;padding:0 8px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plate .nm small{display:block;font-family:var(--text);font-weight:500;font-size:10.5px;color:var(--ink-3);margin-top:3px}
+.plate .ov{font-family:var(--display);font-weight:900;font-size:17px;padding:0 8px;color:var(--ink-2)}
+.plate.out{opacity:.5}.plate.out .no{background:var(--danger);color:#fff}
+.plate .cbar{position:absolute;left:32px;right:0;bottom:0;height:2px;background:var(--rule)}
+.plate .cbar i{display:block;height:100%;background:var(--ok)}
+.plate .cbar i.mid{background:var(--decide)}
+.plate .pin{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;border:2px solid var(--sheet);background:var(--ok)}
+.plate .pin.bad{background:var(--danger)}.plate .pin.warn{background:var(--decide)}
+.field-note{display:flex;gap:14px;padding:0 12px 10px;font-size:12px;color:var(--ink-3);flex-wrap:wrap}
+.field-note i{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px}
+
+/* the player card */
+.head{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--rule-2)}
+.jersey{width:84px;height:84px;background:var(--club);color:#fff;font-family:var(--display);font-weight:900;font-size:40px;display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.hname{font-family:var(--display);font-weight:900;font-size:40px;line-height:.9}
+.hline{color:var(--ink-2);font-size:14px;margin-top:6px}
+.hline b{color:var(--ink);font-weight:600}
+.hfacts{display:grid;grid-template-columns:repeat(5,auto);gap:0 26px;margin-top:10px}
+.hfacts div span{display:block;font-size:11px;color:var(--ink-3)}
+.hfacts div b{font-family:var(--display);font-weight:900;font-size:22px;line-height:1}
+.hfacts div b small{font-family:var(--text);font-weight:500;font-size:12px;color:var(--ink-3);margin-left:3px}
+.ovrbig{text-align:center;padding:0 10px}
+.ovrbig b{display:block;font-family:var(--display);font-weight:900;font-size:64px;line-height:.9}
+.ovrbig span{font-size:11px;color:var(--ink-3)}
+.ovrbig .pot{font-family:var(--mono);font-size:12px;color:var(--ink-2);margin-top:4px}
+.ctabs{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--rule)}
+.ctabs button{padding:9px 14px;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;color:var(--ink-3);border-bottom:3px solid transparent;margin-bottom:-1px}
+.ctabs button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--club-2)}
+.ctabs .acts{margin-left:auto;display:flex;gap:6px;align-items:center}
+.ctabs .acts .btn{padding:5px 10px;font-size:14px}
+.body{display:grid;grid-template-columns:260px 1fr 280px;gap:0}
+@media (max-width:1100px){.body{grid-template-columns:1fr 1fr}.body > div:nth-child(2){grid-column:1/-1;order:-1;border-left:0;border-bottom:1px solid var(--rule)}}
+.body > div{padding:12px 14px}
+.body > div + div{border-left:1px solid var(--rule)}
+.h5{font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.02em;color:var(--ink-3);margin-bottom:8px;display:flex;justify-content:space-between}
+.h5 span{font-family:var(--text);font-weight:500;font-size:11px}
+/* attribute rows with bars behind, FM style */
+.attrs{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media (max-width:1100px){.attrs{grid-template-columns:1fr}}
+.attrs{display:grid;grid-template-columns:repeat(3,1fr) !important;gap:14px}
+.arow{display:grid;grid-template-columns:1fr 30px 30px;align-items:center;height:24px;position:relative;font-size:12.5px;color:var(--ink);margin-bottom:3px;background:var(--sheet-2);border-left:3px solid transparent}
+.arow i{display:none}
+.arow:has(i.hi){background:rgba(63,179,127,.16);border-left-color:var(--ok)}
+.arow:has(i.md){background:rgba(90,169,214,.14);border-left-color:var(--mid)}
+.arow:has(i.lo){background:var(--sheet-2);border-left-color:transparent;color:var(--ink-2)}
+.arow span{padding-left:7px}
+.arow b{font-family:var(--mono);font-size:12.5px;font-weight:500;text-align:right;color:var(--ink);padding:0 6px;grid-column:3}
+.arow:has(i.hi) b{color:var(--ok)}.arow:has(i.md) b{color:var(--decide)}.arow:has(i.lo) b{color:var(--ink-2)}
+.arow .fitd{grid-column:2;font-family:var(--mono);font-size:10.5px;text-align:right}
+.arow .fitd.p{color:var(--ok)}.arow .fitd.m{color:var(--danger)}
+.attrs .h5{border-bottom:1px solid var(--rule-2);padding-bottom:4px}
+.posmap{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px}
+.posmap div{height:34px;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:13px;border:1px solid var(--rule);color:var(--ink-3);background:var(--board)}
+.posmap div.nat{background:var(--club);color:#fff;border-color:var(--club)}
+.posmap div.fam{border-color:var(--rule-hi);color:var(--ink)}
+.grades{font-size:13px}
+.grades div{display:grid;grid-template-columns:70px 1fr 58px;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)}
+.grades div:last-child{border-bottom:0}
+.grades .bar{height:8px;background:var(--sheet-3);border:1px solid var(--rule)}
+.grades .bar i{display:block;height:100%;background:var(--mid)}
+.grades .g{font-family:var(--mono);font-size:12px;text-align:right}
+.grades em{font-style:normal;font-size:10.5px;color:var(--ink-3);display:block}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+.kv span:nth-child(odd){color:var(--ink-3)}
+.traits{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.traits span{font-size:12.5px;padding:3px 9px;border:1px solid var(--rule-2);color:var(--ink-2);border-radius:2px}
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:12px 14px;border-top:1px solid var(--rule)}
+@media (max-width:1100px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--board);border:1px solid var(--rule);padding:10px 12px;min-height:110px}
+.tile .h5{margin-bottom:6px}
+.tile .word{font-family:var(--display);font-weight:900;font-size:22px;line-height:1}
+.tile .sub{font-size:12px;color:var(--ink-3);margin-top:4px}
+.tile.wide{grid-column:span 2}
+.form5{display:flex;gap:3px;align-items:flex-end;height:44px;margin:6px 0 4px}
+.form5 i{flex:1;background:var(--ok);display:block}
+.form5 i.l{background:var(--danger)}
+.stab{width:100%;border-collapse:collapse;font-size:12px}
+.stab th{color:var(--ink-3);font-weight:500;text-align:right;padding:2px 4px;font-size:11px}
+.stab th:first-child,.stab td:first-child{text-align:left}
+.stab td{padding:3px 4px;border-top:1px solid var(--rule);text-align:right;font-family:var(--mono);font-size:11.5px}
+.contract{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+.contract th{font-family:var(--display);font-weight:700;font-size:12.5px;color:var(--ink-3);padding:5px 6px;border-bottom:1px solid var(--rule-2);text-align:right}
+.contract th:first-child,.contract td:first-child{text-align:left}
+.contract td{padding:5px 6px;border-bottom:1px solid var(--rule);text-align:right;font-family:var(--mono);font-size:12px}
+.contract tr.now td{background:var(--sheet-2)}
+.mline{height:46px;position:relative;margin:8px 0 4px;border-bottom:1px solid var(--rule-2)}
+.mline svg{position:absolute;inset:0;width:100%;height:100%}
+footer{max-width:1600px;margin:0 auto 36px;padding:0 18px;color:var(--ink-3);font-size:12.5px;line-height:1.6;max-width:84ch}
+
+/* personnel */
+.clubs{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.cl{width:44px;height:44px;display:grid;place-items:center;font-family:var(--display);font-weight:900;font-size:13px;color:#fff;border:2px solid transparent;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%);opacity:.85}
+.cl:hover{opacity:1}.cl[aria-pressed="true"]{opacity:1;outline:2px solid var(--club-2);outline-offset:1px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media (max-width:1100px){.two{grid-template-columns:1fr}}
+.two > div{padding:12px}
+.two > div + div{border-left:1px solid var(--rule)}
+.side-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.side-h .cr{width:30px;height:30px;font-family:var(--display);font-weight:900;font-size:12px;color:#fff;display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.side-h b{font-family:var(--display);font-weight:900;font-size:20px}
+.side-h span{margin-left:auto;font-size:12px;color:var(--ink-3)}
+.pkgbox .plate{grid-template-columns:32px 1fr auto 30px}
+.pkgbox{min-height:132px;border:1px dashed var(--rule-hi);background:var(--board);padding:8px;display:flex;flex-direction:column;gap:6px}
+.pkgbox .empty{color:var(--ink-3);font-size:13px;text-align:center;padding:26px 0}
+.pick{display:grid;grid-template-columns:32px 1fr 30px;align-items:center;background:var(--sheet-2);border:1px solid var(--rule);height:40px}
+.pick .rd{font-family:var(--display);font-weight:900;font-size:16px;text-align:center;background:var(--club-2);color:#111;height:100%;display:grid;place-items:center}
+.pick .nm{font-family:var(--display);font-weight:700;font-size:15px;padding:0 8px;line-height:1}
+.pick .nm small{display:block;font-family:var(--text);font-weight:500;font-size:10.5px;color:var(--ink-3);margin-top:3px}
+.pick .x,.plate .x{font-family:var(--mono);font-size:12px;color:var(--ink-3);padding:0 10px;cursor:pointer}
+.pick .x:hover,.plate .x:hover{color:var(--danger)}
+.read{background:var(--sheet-2);border:1px solid var(--rule);padding:10px 12px;font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+.read b{color:var(--ink);font-weight:600}
+.meter{display:flex;gap:3px}
+.meter i{width:14px;height:8px;background:var(--sheet-3);border:1px solid var(--rule)}
+.meter i.on{background:var(--ok);border-color:var(--ok)}
+.phase{display:flex;gap:0;padding:0 12px;border-bottom:1px solid var(--rule)}
+.phase div{padding:9px 14px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.02em;color:var(--ink-3);border-bottom:3px solid transparent;margin-bottom:-1px}
+.phase div.now{color:var(--ink);border-bottom-color:var(--club-2)}
+.phase div.done{color:var(--ink-2)}
+.feed{font-size:13px}
+.feed div{display:grid;grid-template-columns:minmax(90px,auto) 1fr auto;gap:12px;padding:7px 12px;border-bottom:1px solid var(--rule);align-items:center}
+.feed div > *{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed div:last-child{border-bottom:0}
+.feed time{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.prio{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:6px;padding:4px 0}
+.prio .p{font-family:var(--mono);font-size:12px;color:var(--ink-3);text-align:center}
+.offer{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:8px 0}
+.offer label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--ink-3)}
+.offer input{font:inherit;font-family:var(--mono);font-size:13px;color:var(--ink);background:var(--board);border:1px solid var(--rule-2);padding:7px 9px;width:100%;min-width:0}
+.hits{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:12px 0 4px;align-items:end}
+.hit{display:grid;grid-template-rows:14px 72px 14px;align-items:end;justify-items:center;gap:3px;font-size:11px;color:var(--ink-3)}
+.hit b{font-family:var(--mono);font-size:11px;color:var(--ink);grid-row:1;align-self:end}
+.hit i{display:block;width:100%;background:var(--mid);height:calc(var(--h) * 1px);grid-row:2;align-self:end;min-height:2px}
+.hit i.new{background:var(--club-2)}
+.hit span{grid-row:3}
+.hbar{width:100%}
+
+/* negotiation threads */
+.thread{display:flex;flex-direction:column;gap:8px;padding:12px}
+.msg{border:1px solid var(--rule);background:var(--sheet-2);padding:9px 12px;max-width:92%}
+.msg.you{align-self:flex-end;background:var(--board);border-color:var(--rule-2)}
+.msg.match{border-color:var(--live);background:rgba(76,201,240,.08)}
+.msg.note{background:transparent;border:0;padding:2px 4px;color:var(--ink-3);font-size:12.5px;max-width:100%}
+.msg .from{font-size:11px;color:var(--ink-3);margin-bottom:4px}
+.msg .txt{font-size:13.5px;line-height:1.45;color:var(--ink-2)}
+.msg .txt b{color:var(--ink);font-weight:600}
+.msg .terms-line{font-family:var(--text);font-size:12.5px;color:var(--ink-2);margin-top:6px}
+.msg .terms-line b{font-family:var(--display);font-weight:900;font-size:17px;color:var(--ink)}
+.msg .acts{display:flex;gap:6px;margin-top:10px}
+.msg .acts .btn{padding:5px 10px;font-size:14px}
+.shape{display:grid;grid-template-columns:52px 1fr;gap:8px;align-items:center;margin:10px 0 2px;font-size:11px;color:var(--ink-3)}
+.shape input[type=range]{width:100%;accent-color:var(--club-2)}
+.shape-lbl{grid-column:2;display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-3)}
+.shape-lbl em{font-style:normal}
+.promise{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11px;color:var(--ink-3);flex-wrap:wrap}
+.promise span{margin-right:4px}
+
+/* draft */
+.gap{font-family:var(--mono);font-size:12.5px}
+.gap.up{color:var(--ok)}.gap.dn{color:var(--danger)}
+.meas{font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+.flag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:2px;border:1px solid var(--fc,var(--rule-hi));color:var(--fc,var(--ink-2));margin-left:4px}
+.flag.med{--fc:var(--danger)}.flag.chr{--fc:var(--decide)}.flag.vis{--fc:var(--live)}.flag.sr{--fc:var(--ok)}.flag.pd{--fc:var(--ok)}.flag.up{--fc:var(--ok)}.flag.dn{--fc:var(--danger)}.flag.ss{--fc:var(--rule-hi)}.flag.uc{--fc:var(--rule-hi)}
+.flag[data-tip]{position:relative}
+.flag[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:6px;background:var(--ink);color:#111;font-family:var(--text);font-weight:500;font-size:12px;padding:6px 9px;white-space:nowrap;z-index:20;border:1px solid var(--rule-hi);pointer-events:none}
+.board{display:flex;flex-direction:column;gap:4px;padding:10px 12px}
+.brow{display:grid;grid-template-columns:32px 1fr;align-items:center;gap:0;cursor:grab}
+.brow .r{font-family:var(--display);font-weight:900;font-size:17px;color:#111;background:var(--club-2);height:38px;display:grid;place-items:center}
+.brow .r.dnd{background:var(--danger);color:#fff}
+.brow .plate{height:38px;grid-template-columns:1fr 92px 48px}
+.brow .plate .pj{font-family:var(--mono);font-size:12px;color:var(--ink-2);text-align:center;padding:0 4px}
+.brow .plate .pj small{display:block;font-size:10px;color:var(--ink-3)}
+.brow .plate .ov{text-align:center;padding:0}
+.bhead{display:grid;grid-template-columns:32px 1fr 92px 48px;font-family:var(--display);font-weight:700;font-size:12.5px;letter-spacing:.02em;color:var(--ink-3);padding:0 0 4px;border-bottom:1px solid var(--rule-2)}
+.bhead span{text-align:center}
+.bhead span:nth-child(2){text-align:left;padding-left:8px}
+.brow .plate .nm{font-size:14.5px}
+.tier{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.03em;color:var(--ink-3);padding:8px 0 2px;margin-top:2px}
+.news{font-size:13px}
+.news div{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:7px 12px;border-bottom:1px solid var(--rule)}
+.news div:last-child{border-bottom:0}
+.news .k{font-family:var(--display);font-weight:700;font-size:12.5px;letter-spacing:.02em;width:74px}
+.news .k.up{color:var(--ok)}.news .k.dn{color:var(--danger)}.news .k.med{color:var(--danger)}.news .k.chr{color:var(--decide)}
+/* draft day */
+.clockbar{display:grid;grid-template-columns:auto 1fr auto auto;gap:16px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--rule-2);background:var(--board)}
+.onclock{display:flex;align-items:center;gap:12px}
+.onclock .cr{width:44px;height:44px;font-family:var(--display);font-weight:900;font-size:15px;color:#fff;display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.onclock b{font-family:var(--display);font-weight:900;font-size:24px;line-height:1;display:block}
+.onclock span{font-size:12px;color:var(--ink-3);margin-top:3px;display:block}
+.timer{display:flex;flex-direction:column;justify-content:center}
+.timer b{font-family:var(--display);font-weight:900;font-size:24px;line-height:1;color:var(--club-2);display:block}
+.timer span{font-size:12px;color:var(--ink-3);margin-top:3px}
+.picksmade{display:flex;flex-direction:column}
+.pk{display:grid;grid-template-columns:48px 44px 1fr auto;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid var(--rule);font-size:13px}
+.pk .n{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.pk .cr{width:30px;height:30px;font-family:var(--display);font-weight:900;font-size:11px;color:#fff;display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.pk .who .nm{font-family:var(--display);font-weight:700;font-size:15px;line-height:1}
+.pk .who small{display:block;font-size:11px;color:var(--ink-3);margin-top:2px}
+.pk.next{background:rgba(255,182,18,.08);border-left:3px solid var(--club-2)}
+.pk.now{background:var(--sheet-2)}
+.pk .cons{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);text-align:right}
+.pk .cons.steal{color:var(--ok)}.pk .cons.reach{color:var(--danger)}
+.bigpick{font-family:var(--display);font-weight:900;font-size:22px;letter-spacing:.02em;padding:14px 18px;background:var(--club-2);color:#111;width:100%;text-align:center}
+.bigpick small{display:block;font-family:var(--text);font-weight:600;font-size:12px;margin-top:3px}
+.bigpick:hover{filter:brightness(1.06)}
+.offercard{border:1px solid var(--live);background:rgba(76,201,240,.08);padding:10px 12px;margin:0 12px 8px}
+.offercard .from{font-size:11px;color:var(--ink-3)}
+.offercard .s{font-family:var(--display);font-weight:900;font-size:17px;line-height:1.05;margin:3px 0 6px}
+.offercard .acts{display:flex;gap:6px}
+.offercard .acts .btn{padding:4px 10px;font-size:13px}
+/* picks */
+.years{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:12px}
+@media (max-width:1100px){.years{grid-template-columns:1fr}}
+.yr{background:var(--board);border:1px solid var(--rule)}
+.yr h4{font-family:var(--display);font-weight:900;font-size:16px;padding:8px 10px 6px;border-bottom:1px solid var(--rule-2);display:flex;justify-content:space-between}
+.yr h4 small{font-family:var(--text);font-weight:500;font-size:11px;color:var(--ink-3)}
+.yr .pick{margin:6px 8px}
+.yr .pick.used{opacity:.55}
+.yr .pick.used .rd{background:var(--rule-hi)}
+.yr .pick.gone{opacity:.45}.yr .pick.gone .rd{background:var(--danger);color:#fff}
+.ctrl{display:flex;gap:6px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--rule)}
+.ctrl .sep{width:1px;height:24px;background:var(--rule-2);margin:0 6px}
+</style>
+</head>
+<body>
+
+<header class="rail">
+  <div class="in">
+    <div class="hist"><button aria-label="Back">‹</button><button aria-label="Forward" disabled>›</button></div>
+    <div class="club"><div class="crest">KC</div><div><div class="name">KANSAS CITY</div><div class="who">Aden Ballenger · Head Coach and GM</div></div></div>
+    <nav>
+      <a href="#">Portal <span class="badge">3</span></a><a href="#">Club</a><a href="#">Personnel</a><a href="#" aria-current="page">Draft</a><a href="#">League</a><a href="#">Game Plan</a><a href="#">Game Day</a><a href="#">Front Office</a>
+    </nav>
+    <div class="status">
+      <div class="stat"><b>R1 · 24th</b><span>Your First Pick</span></div>
+      <div class="stat"><b>$10.1m</b><span>Cap Space</span></div>
+      <div class="stat"><b>6</b><span>Picks Held</span></div>
+      <div class="clock"><b>Thu 27 Apr</b><span>2028 · Draft Week</span></div>
+    </div>
+    <button class="advance"><div class="txt">Start the Draft<small>Round 1 · Thursday</small></div><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 5l10 7-10 7z"/></svg></button>
+  </div>
+  <div class="sub">
+    <div class="in">
+      <div class="crumb">Draft</div>
+      <div class="second"><a data-go="board" aria-current="page">Scouting Board</a><a data-go="day">Draft Day</a><a data-go="picks">Picks</a></div>
+      <div class="quick"><span>Quick</span><a>Roster</a><a>Depth Chart</a><a>Cap</a><a>Draft Board</a></div>
+    </div>
+  </div>
+</header>
+
+
+
+<!-- ============================== SCOUTING BOARD ============================== -->
+<main id="board">
+  <div class="c8" style="display:flex;flex-direction:column;gap:12px">
+  <section class="sheet">
+    <div class="tools">
+      <div class="tabs"><button aria-pressed="true">Class of 2028 <em>504</em></button><button aria-pressed="false">Your Board <em>75</em></button><button aria-pressed="false">Visited <em>22</em></button></div>
+      <div class="chips"><button class="chip" aria-pressed="true">All</button><button class="chip">QB</button><button class="chip">OL</button><button class="chip">WR</button><button class="chip">EDGE</button><button class="chip">CB</button><button class="chip">Needs</button></div>
+      <div class="chips"><button class="chip" aria-pressed="true">Rounds 1–3</button><button class="chip">4–7</button><button class="chip">Small School</button></div>
+      <div class="search">Find a Prospect</div>
+    </div>
+    <table class="tbl">
+      <tr><th style="text-align:left;padding-left:12px">Prospect</th><th data-tip="Position">Pos</th><th>School</th><th class="n" data-tip="Your team's read of the player's overall">Estimated Overall</th><th class="n" data-tip="The player's estimated potential">Ceiling</th><th class="n" data-tip="The league's average read">Consensus</th><th class="n" data-tip="Your read minus the consensus">Gap</th><th class="n" data-tip="Consensus draft position">Proj.</th><th data-tip="Flags from scouting">Flags</th><th></th></tr>
+      <tr><td><div class="who"><div class="no" style="background:var(--rule-hi)">1</div><div class="nm">Marcus Bellamy<small>EDGE · Senior · 6'4" 258</small></div></div></td><td>EDGE</td><td>Georgia</td><td class="n"><span class="ovr t1">88</span></td><td class="n mono">90–93</td><td class="n mono">84</td><td class="n"><span class="gap up">+4</span></td><td class="n mono">11–15</td><td><span class="flag vis" data-tip="You met with this player.">Visited</span><span class="flag sr" data-tip="Your scouts saw him at the Senior Bowl.">Sr. Bowl</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Add</button></td></tr>
+      <tr><td><div class="who"><div class="no" style="background:var(--rule-hi)">2</div><div class="nm">Zabien Brown<small>CB · Junior · 6'0" 188</small></div></div></td><td>CB</td><td>Alabama</td><td class="n"><span class="ovr t2">83</span></td><td class="n mono">88–92</td><td class="n mono">82</td><td class="n"><span class="gap up">+1</span></td><td class="n mono">18–24</td><td><span class="flag vis" data-tip="You met with this player.">Visited</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Add</button></td></tr>
+      <tr class="sel"><td><div class="who"><div class="no" style="background:var(--rule-hi)">3</div><div class="nm">Dante Moore<small>QB · Junior · 6'3" 206</small></div></div></td><td>QB</td><td>Oregon</td><td class="n"><span class="ovr t2">81</span></td><td class="n mono">86–92</td><td class="n mono">85</td><td class="n"><span class="gap dn">−4</span></td><td class="n mono">3–7</td><td><span class="flag chr" data-tip="Work ethic concerns.">Character</span><span class="flag uc" data-tip="More room to grow.">Underclassman</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Add</button></td></tr>
+      <tr><td><div class="who"><div class="no" style="background:var(--rule-hi)">4</div><div class="nm">Jacarrius Peak<small>P · Senior</small></div></div></td><td>P</td><td>Ole Miss</td><td class="n"><span class="ovr t2">80</span></td><td class="n mono">83–86</td><td class="n mono">88</td><td class="n"><span class="gap dn">−8</span></td><td class="n mono">130–160</td><td><span class="flag med" data-tip="Durability concerns.">Medical</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Add</button></td></tr>
+      <tr><td><div class="who"><div class="no" style="background:var(--rule-hi)">5</div><div class="nm">Terrell Okonkwo<small>WR · Senior · 6'1" 195</small></div></div></td><td>WR</td><td>Toledo</td><td class="n"><span class="ovr t2">79</span></td><td class="n mono">84–90</td><td class="n mono">72</td><td class="n"><span class="gap up">+7</span></td><td class="n mono">95–130</td><td><span class="flag vis" data-tip="You met with this player.">Visited</span><span class="flag ss" data-tip="Less tape on this player">Small School</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Add</button></td></tr>
+      <tr><td><div class="who"><div class="no" style="background:var(--rule-hi)">6</div><div class="nm">Cade Whitaker<small>LT · Senior · 6'6" 315</small></div></div></td><td>LT</td><td>Iowa</td><td class="n"><span class="ovr t3">77</span></td><td class="n mono">81–86</td><td class="n mono">79</td><td class="n"><span class="gap dn">−2</span></td><td class="n mono">28–40</td><td><span class="flag sr" data-tip="Your scouts saw him at the Senior Bowl.">Sr. Bowl</span><span class="flag dn" data-tip="Down fifteen or more spots on the consensus board this Spring.">Faller</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Add</button></td></tr>
+    </table>
+    <div class="foot"><button class="btn go">Add to Your Board</button><button class="btn">Prospect Card</button><button class="btn">Compare</button></div>
+  </section>
+  <section class="sheet">
+    <h2>The Spring <small>Stock Moves and Flags</small></h2>
+    <div class="news">
+      <div><span class="k up">Rises</span><span><b>Zabien Brown</b> (CB, Alabama) 37 to 20 after the combine · 4.41 forty</span></div>
+      <div><span class="k up">Rises</span><span><b>Terrell Okonkwo</b> (WR, Toledo) 141 to 112 after the Senior Bowl</span></div>
+      <div><span class="k dn">Falls</span><span><b>Cade Whitaker</b> (LT, Iowa) 22 to 34 after the combine · 5.11 forty</span></div>
+      <div><span class="k med">Medical</span><span><b>Jacarrius Peak</b> (P, Ole Miss) flagged out of the combine</span></div>
+      <div><span class="k chr">Character</span><span>Your room came away from the Moore visit with a concern about his work ethic. Two other rooms did not.</span></div>
+    </div>
+  </section>
+  </div>
+  <section class="sheet c4">
+    <h2>Your Board <small>Drag to Order</small></h2>
+    <div class="board">
+      <div class="bhead"><span></span><span>Player</span><span>Proj.</span><span>Est. Ovr</span></div>
+      <div class="tier">Tier 1 · Worth Your Pick at 1.24</div>
+      <div class="brow"><span class="r">1</span><div class="plate"><div class="nm">Bellamy<small>EDGE · Georgia</small></div><div class="pj">1.11–1.15</div><div class="ov">88</div></div></div>
+      <div class="brow"><span class="r">2</span><div class="plate"><div class="nm">Brown<small>CB · Alabama</small></div><div class="pj">1.18–1.24</div><div class="ov">83</div></div></div>
+      <div class="tier">Tier 2 · Second-Round Grades</div>
+      <div class="brow"><span class="r">3</span><div class="plate"><div class="nm">Whitaker<small>LT · Iowa · Your Grade R2</small></div><div class="pj">1.28–2.8</div><div class="ov">77</div></div></div>
+      <div class="brow"><span class="r">4</span><div class="plate"><div class="nm">Okonkwo<small>WR · Toledo · Your Grade R2</small></div><div class="pj">3.31–4.30</div><div class="ov">79</div></div></div>
+      <div class="brow"><span class="r">5</span><div class="plate"><div class="nm">Moore<small>QB · Oregon · Your Grade R2</small></div><div class="pj">1.3–1.7</div><div class="ov">81</div></div></div>
+      <div class="tier">Do Not Draft</div>
+      <div class="brow"><span class="r dnd">✕</span><div class="plate" style="opacity:.6"><div class="nm">Peak<small>P · Ole Miss · Medical</small></div><div class="pj">—</div><div class="ov">80</div></div></div>
+    </div>
+    <div class="read" style="margin:0 12px 12px"><b>Assistants:</b> Edge is the need with Uche and Danna expiring, and Bellamy is the one player in our range we grade above the league. Okonkwo is the value: the consensus has him in the fourth round and our read is a second-round player. If both Tier 1 players are gone at 24, trading back to the early second and taking Whitaker is the play.</div>
+    <div class="foot"><button class="btn go">Save Board</button><button class="btn">Auto-Fill by Read</button><button class="btn quiet">Reset</button></div>
+  </section>
+</main>
+
+<!-- ============================== DRAFT DAY ============================== -->
+<main id="day" hidden>
+  <section class="sheet c8">
+    <div class="clockbar">
+      <div class="onclock"><div class="cr" style="background:#003594">DAL</div><div><b>Dallas Is On the Clock</b><span>Round 1 · Pick 22 · Needs WR, CB</span></div></div>
+      <div></div>
+      <div class="timer"><b>6:42</b><span>Pick Clock</span></div>
+      <div class="onclock"><div><b style="color:var(--club-2)">You Pick 24th</b><span>Two Picks Away</span></div></div>
+    </div>
+    <div class="ctrl">
+      <button class="btn go">Next Pick</button><button class="btn">Sim to Your Pick</button><button class="btn">Sim Round</button><button class="btn quiet">Sim Draft</button>
+      <span class="sep"></span>
+      <button class="btn">Trade Up</button><button class="btn">Trade Down</button>
+    </div>
+    <div class="picksmade">
+      <div class="pk"><span class="n">1.19</span><div class="cr" style="background:#0080c6">LAC</div><div class="who"><div class="nm">Tyrese Fenwick</div><small>OT · Penn State</small></div><span class="cons"></span></div>
+      <div class="pk"><span class="n">1.20</span><div class="cr" style="background:#125740">NYJ</div><div class="who"><div class="nm">Dante Moore</div><small>QB · Oregon</small></div><span class="cons"></span></div>
+      <div class="pk now"><span class="n">1.21</span><div class="cr" style="background:#4f2683">MIN</div><div class="who"><div class="nm">Kwame Asante</div><small>EDGE · Michigan</small></div><span class="cons"></span></div>
+      <div class="pk" style="opacity:.7"><span class="n">1.22</span><div class="cr" style="background:#003594">DAL</div><div class="who"><div class="nm">On the Clock</div><small>Dallas · 6:42</small></div><span class="cons"></span></div>
+      <div class="pk" style="opacity:.5"><span class="n">1.23</span><div class="cr" style="background:#0b2265">NYG</div><div class="who"><div class="nm">—</div><small>New York Giants</small></div><span class="cons"></span></div>
+      <div class="pk next"><span class="n">1.24</span><div class="cr" style="background:#c8102e">KC</div><div class="who"><div class="nm">Your Pick</div><small>Kansas City</small></div><span class="cons"></span></div>
+      <div class="pk" style="opacity:.5"><span class="n">1.25</span><div class="cr" style="background:#aa0000">SF</div><div class="who"><div class="nm">—</div><small>San Francisco</small></div><span class="cons"></span></div>
+    </div>
+    <div class="offercard"><div class="from">Trade Offer · Detroit · Expires When You Are On the Clock</div><div class="s">Detroit offers 1.29 and 2.28 for 1.24</div><div style="font-size:13px;color:var(--ink-2);margin-bottom:6px">They want Bellamy. Moving back five spots costs you him and nets a second-round pick. Whitaker and Okonkwo should still be there at 29.</div><div class="acts"><button class="btn go">Accept</button><button class="btn">Counter</button><button class="btn quiet">Decline</button></div></div>
+  </section>
+  <section class="sheet c4">
+    <h2>Best Available <small>By Your Board</small></h2>
+    <div class="board">
+      <div class="bhead"><span></span><span>Player</span><span>Proj.</span><span>Est. Ovr</span></div>
+      <div class="brow"><span class="r">1</span><div class="plate"><div class="nm">Bellamy<small>EDGE · Georgia</small></div><div class="pj">1.11–1.15</div><div class="ov">88</div></div></div>
+      <div class="brow"><span class="r">2</span><div class="plate"><div class="nm">Brown<small>CB · Alabama</small></div><div class="pj">1.18–1.24</div><div class="ov">83</div></div></div>
+      <div class="brow"><span class="r">3</span><div class="plate"><div class="nm">Whitaker<small>LT · Iowa · Your Grade R2</small></div><div class="pj">1.28–2.8</div><div class="ov">77</div></div></div>
+      <div class="brow"><span class="r">4</span><div class="plate"><div class="nm">Okonkwo<small>WR · Toledo · Your Grade R2</small></div><div class="pj">3.31–4.30</div><div class="ov">79</div></div></div>
+    </div>
+    <div class="read" style="margin:0 12px 10px"><b>Assistants:</b> Dallas needs a corner and Brown is the best one left, so expect him to go at 22. Bellamy should reach you. If Dallas takes Bellamy instead, Detroit's offer is worth taking.</div>
+    <div class="pad" style="padding-top:0"><button class="bigpick">Draft Marcus Bellamy<small>EDGE · Georgia · Your Board #1</small></button></div>
+    <div class="foot"><button class="btn quiet">Your Board</button><button class="btn quiet">Needs</button><button class="btn quiet">Prospect Card</button></div>
+  </section>
+</main>
+
+<!-- ============================== PICKS ============================== -->
+<main id="picks" hidden>
+  <section class="sheet c12">
+    <h2>Your Picks</h2>
+    <div class="years">
+      <div class="yr"><h4>2028 <small>This Draft</small></h4>
+        <div class="pick"><div class="rd">R1</div><div class="nm">1.24 · Own<small>Projected From a 12–5 Season</small></div></div>
+        <div class="pick"><div class="rd">R2</div><div class="nm">2.24 · Own<small>56th Overall</small></div></div>
+        <div class="pick"><div class="rd">R3</div><div class="nm">3.8 · From Denver<small>McDuffie Trade · Nov 2027</small></div></div>
+        <div class="pick gone"><div class="rd">R4</div><div class="nm">4th · To Houston<small>Okafor Claim Compensation</small></div></div>
+        <div class="pick"><div class="rd">R5</div><div class="nm">5.24 · Own</div></div>
+        <div class="pick"><div class="rd">R7</div><div class="nm">7.29 · Own</div></div>
+      </div>
+      <div class="yr"><h4>2029</h4>
+        <div class="pick"><div class="rd">R1</div><div class="nm">1st · Own<small>Projected 26th–30th</small></div></div>
+        <div class="pick"><div class="rd">R1</div><div class="nm">1st · From Denver<small>McDuffie Trade · Conditional on Playoffs</small></div></div>
+        <div class="pick"><div class="rd">R2</div><div class="nm">2nd · Own</div></div>
+        <div class="pick"><div class="rd">R3</div><div class="nm">3rd · Own</div></div>
+        <div class="pick"><div class="rd">R6</div><div class="nm">6th · Own</div></div>
+      </div>
+      <div class="yr"><h4>2030</h4>
+        <div class="pick"><div class="rd">R1</div><div class="nm">1st · Own</div></div>
+        <div class="pick"><div class="rd">R2</div><div class="nm">2nd · Own</div></div>
+        <div class="pick"><div class="rd">R3</div><div class="nm">3rd · Own</div></div>
+        <div class="pick"><div class="rd">R4</div><div class="nm">4th · Own</div></div>
+      </div>
+    </div>
+  </section>
+  <section class="sheet c12">
+    <h2>Draft Results</h2>
+    <div class="tools"><div class="chips" style="margin-left:0"><button class="chip" aria-pressed="true">Kansas City</button><button class="chip">All Clubs</button><button class="chip">AFC West</button></div><div class="chips"><button class="chip" aria-pressed="true">2025</button><button class="chip">2026</button><button class="chip">2027</button></div><div class="search">Find a Player</div></div>
+    <table class="tbl">
+      <tr><th style="text-align:left">Player</th><th>Year</th><th>Pick</th><th>Pos</th><th class="n" data-tip="Overall Rating">Ovr</th><th class="n" data-tip="Overall on draft day">Drafted At</th><th class="n" data-tip="Where the consensus had him">Consensus Was</th><th>Status</th></tr>
+      <tr><td><div class="who"><div class="no">77</div><div class="nm">Josh Simmons<small>LT · Ohio State</small></div></div></td><td class="mono">2025</td><td class="mono">1.32</td><td>LT</td><td class="n"><span class="ovr t2">84</span></td><td class="n mono">74</td><td class="n mono">28</td><td><span class="pill happy">Starter</span></td></tr>
+      <tr><td><div class="who"><div class="no">33</div><div class="nm">Brashard Smith<small>HB · SMU</small></div></div></td><td class="mono">2025</td><td class="mono">7.30</td><td>HB</td><td class="n"><span class="ovr t3">74</span></td><td class="n mono">66</td><td class="n mono">240</td><td><span class="pill content">Rotation</span></td></tr>
+      <tr><td><div class="who"><div class="no">19</div><div class="nm">Jalen Royals<small>WR · Utah State</small></div></div></td><td class="mono">2025</td><td class="mono">4.5</td><td>WR</td><td class="n"><span class="ovr t3">77</span></td><td class="n mono">70</td><td class="n mono">120</td><td><span class="pill content">Depth</span></td></tr>
+    </table>
+  </section>
+</main>
+
+<footer>Draft group. Scouting Board: the class as the roster table with your read, the ceiling, the consensus, and the gap as its own column; combine measurables and the spring's flags on each row; visits scheduled from the board against a budget of thirty; the spring's stock moves and flags as a feed; your board in tiers on the right with the assistants' read. Draft Day: the clock bar with the club on the clock and your distance from it, picks scrolling in with a steal or reach note against the consensus, a trade offer as a card that expires when you are up, best available by your board beside it, and the pick as one button. Picks: three years out with projections and provenance, and what you drafted against where the consensus had him.</footer>
+
+<script>
+function go(v){['board','day','picks'].forEach(k=>document.getElementById(k).hidden=k!==v);document.querySelectorAll('.second a').forEach(a=>{a.toggleAttribute('aria-current',a.dataset.go===v)});window.scrollTo(0,0);}
+document.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();go(a.dataset.go);}));
+document.querySelectorAll('.tabs button, .chip[aria-pressed]').forEach(b=>b.addEventListener('click',()=>{b.parentElement.querySelectorAll('[aria-pressed]').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');}));
+</script>
+</body>
+</html>

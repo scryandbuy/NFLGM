@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kansas City — Personnel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;900&family=Big+Shoulders+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#0f1114; --board:#15181c; --sheet:#1b1f25; --sheet-2:#23282f; --sheet-3:#2b313a; --rule:#2e353e; --rule-2:#3a424c; --rule-hi:#8791a0;
+  --ink:#eef1f5; --ink-2:#b6bec9; --ink-3:#7b8593;
+  --club:#c8102e; --club-2:#ffb612; --opp:#fb4f14;
+  --danger:#e5484d; --decide:#e0b400; --live:#4cc9f0; --ok:#3fb37f; --mid:#5aa9d6;
+  --display:'Big Shoulders Display',sans-serif; --text:'Big Shoulders Text',sans-serif; --mono:'JetBrains Mono',monospace;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--text);font-size:14px;color:var(--ink);background:var(--bg);min-height:100%;line-height:1.35}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--club-2);outline-offset:2px}
+main[hidden]{display:none}
+
+/* rail (same as Portal) */
+.rail{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--board);border-top:4px solid var(--club);border-bottom:1px solid var(--rule)}
+.rail .in{max-width:1600px;margin:0 auto;padding:0 18px;display:flex;align-items:stretch;height:56px}
+.hist{display:flex;align-items:center;gap:2px;padding-right:12px;border-right:1px solid var(--rule);margin-right:12px}
+.hist button{width:28px;height:28px;font-family:var(--display);font-weight:900;font-size:20px;line-height:1;color:var(--ink-2);border:1px solid var(--rule-2)}
+.hist button:hover{background:rgba(255,255,255,.06);color:var(--ink)}
+.crest{width:38px;height:38px;background:var(--club);color:#fff;font-family:var(--display);font-weight:900;font-size:15px;display:grid;place-items:center;align-self:center;margin-right:12px;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.club{display:flex;align-items:center;padding-right:18px;border-right:1px solid var(--rule)}
+.club .name{font-family:var(--display);font-weight:900;font-size:24px;line-height:1}
+.club .who{color:var(--ink-3);font-size:12.5px}
+nav{display:flex}
+nav a{display:flex;align-items:center;padding:0 13px;font-family:var(--display);font-weight:700;font-size:16.5px;letter-spacing:.02em;color:var(--ink-3);text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-1px}
+nav a:hover{color:var(--ink-2);background:rgba(255,255,255,.03)}
+nav a[aria-current]{color:var(--ink);border-bottom-color:var(--club-2)}
+nav a .badge{margin-left:7px;font-family:var(--text);font-weight:700;font-size:11px;background:var(--decide);color:#111;padding:1px 6px;border-radius:2px}
+.status{margin-left:auto;display:flex;align-items:center}
+.stat{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:0 12px;border-left:1px solid var(--rule);min-width:64px}
+.stat b{font-family:var(--display);font-weight:900;font-size:20px;line-height:1}
+.stat span{font-size:11px;color:var(--ink-3);margin-top:2px}
+.clock{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border-left:1px solid var(--rule);font-family:var(--mono)}
+.clock b{font-size:13px;font-weight:500}.clock span{font-size:11px;color:var(--ink-3)}
+.advance{display:flex;align-items:center;gap:10px;padding:0 18px;margin-left:10px;background:var(--club-2);color:#111}
+.advance .txt{display:flex;flex-direction:column;align-items:flex-start;line-height:1;font-family:var(--display);font-weight:900;font-size:19px;letter-spacing:.02em}
+.advance small{font-family:var(--text);font-weight:600;font-size:11px;margin-top:3px}
+.sub{background:var(--board);border-bottom:1px solid var(--rule)}
+.sub .in{height:36px;align-items:center;gap:14px}
+.crumb{font-family:var(--display);font-weight:900;font-size:14px;color:var(--club-2);letter-spacing:.02em;padding-right:12px;border-right:1px solid var(--rule)}
+.second{display:flex;gap:2px}
+.second a,.quick a{font-size:13.5px;color:var(--ink-3);text-decoration:none;padding:6px 10px;border-radius:2px;cursor:pointer}
+.second a:hover,.quick a:hover{color:var(--ink);background:rgba(255,255,255,.04)}
+.second a[aria-current]{color:var(--ink);background:var(--sheet-2)}
+.quick{margin-left:auto;display:flex;align-items:center;gap:2px}
+.quick span{font-size:11px;color:var(--ink-3);padding-right:6px}
+
+/* sheets */
+main{max-width:1600px;margin:12px auto 40px;padding:0 18px;display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:start}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c9{grid-column:span 9}.c12{grid-column:span 12}
+@media (max-width:1300px){.c3,.c4,.c5,.c6,.c7,.c8,.c9{grid-column:span 12}}
+.sheet{background:var(--sheet);border:1px solid var(--rule);display:flex;flex-direction:column}
+.sheet h2{font-family:var(--display);font-weight:900;font-size:18px;line-height:1;padding:10px 12px 8px;border-bottom:1px solid var(--rule-2);display:flex;align-items:center;gap:10px}
+.sheet h2 small{font-family:var(--text);font-weight:500;font-size:12px;color:var(--ink-3);margin-left:auto}
+.pad{padding:10px 12px}
+.foot{margin-top:auto;display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--rule);flex-wrap:wrap}
+.btn{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;padding:7px 12px;border:1px solid var(--rule-hi);color:var(--ink);display:inline-flex;align-items:center;gap:7px}
+.btn:hover{background:rgba(255,255,255,.06)}.btn:active{background:rgba(255,255,255,.12)}
+.btn.go{background:var(--club-2);color:#111;border-color:var(--club-2)}
+.btn.quiet{border-color:var(--rule-2);color:var(--ink-2)}
+.btn.warn{border-color:var(--danger);color:var(--danger)}
+.mono{font-family:var(--mono);font-size:12.5px}
+.muted{color:var(--ink-3)}
+
+/* toolbar: tabs, views, filters, search */
+.tools{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.tabs{display:flex}
+.tabs button{padding:6px 12px;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;color:var(--ink-3);border:1px solid var(--rule-2);border-right:0}
+.tabs button:last-child{border-right:1px solid var(--rule-2)}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:#111;border-color:var(--ink)}
+.tabs button em{font-style:normal;font-family:var(--text);font-weight:700;font-size:11px;margin-left:6px;opacity:.7}
+.chips{display:flex;gap:4px;margin-left:10px}
+.chip{padding:4px 9px;font-size:12.5px;color:var(--ink-2);border:1px solid var(--rule-2);border-radius:2px}
+.chip[aria-pressed="true"]{background:var(--sheet-3);color:var(--ink);border-color:var(--rule-hi)}
+.search{margin-left:auto;background:var(--sheet-2);border:1px solid var(--rule-2);color:var(--ink-3);padding:5px 10px;font-size:13px;min-width:220px}
+.count{font-size:12px;color:var(--ink-3);margin-left:8px}
+
+/* header tooltips (the th is already positioned by sticky, so no relative here) */
+.tbl th[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:4px;background:var(--ink);color:#111;font-family:var(--text);font-weight:500;font-size:12px;letter-spacing:0;padding:6px 9px;white-space:nowrap;z-index:20;border:1px solid var(--rule-hi);pointer-events:none}
+.tbl th:hover{z-index:21}
+
+/* the roster table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{position:sticky;top:93px;background:var(--sheet);z-index:1;font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.02em;text-align:center;padding:7px 8px;border-bottom:1px solid var(--rule-2);color:var(--ink-3);white-space:nowrap;cursor:pointer}
+.tbl th:hover{color:var(--ink)}
+.tbl th.sorted{color:var(--ink);box-shadow:inset 0 -2px 0 var(--club-2)}
+.tbl th.n{text-align:center}
+.tbl td.n{text-align:center;font-family:var(--mono);font-size:12.5px}
+.tbl td{padding:0 8px;height:40px;border-bottom:1px solid var(--rule);white-space:nowrap;text-align:center}
+.tbl td:hover{position:relative;z-index:6}
+.tbl{table-layout:auto}
+.tbl td:nth-child(2){text-align:left}
+.tbl tr:hover td{background:rgba(255,255,255,.03)}
+.tbl tr.sel td{background:var(--sheet-2)}
+.tbl .grp td{height:26px;background:var(--board);font-family:var(--display);font-weight:700;font-size:13px;color:var(--ink-3);letter-spacing:.02em}
+.who{display:flex;align-items:center;gap:8px}
+.who .no{width:30px;height:30px;font-family:var(--display);font-weight:900;font-size:16px;background:var(--ink);color:#111;display:grid;place-items:center;flex:none}
+.who .nm{font-family:var(--display);font-weight:700;font-size:16px;line-height:1}
+.who .nm small{display:block;font-family:var(--text);font-weight:500;font-size:11px;color:var(--ink-3);margin-top:2px}
+.pill{display:block;margin:0 auto;font-size:11px;font-weight:700;padding:1px 0;border:1px solid var(--pc,var(--rule-hi));color:var(--pc,var(--ink-2));border-radius:2px;width:84px;text-align:center}
+.pill.happy{--pc:var(--ok)}.pill.content{--pc:var(--ink-3)}.pill.unsettled{--pc:var(--decide)}.pill.unhappy{--pc:var(--danger)}
+.ovr{font-family:var(--display);font-weight:900;font-size:19px}
+.ovr.t1{color:var(--ok)}.ovr.t2{color:var(--ink)}.ovr.t3{color:var(--ink-3)}
+.fit{font-family:var(--mono);font-size:12px}
+.fit.p{color:var(--ok)}.fit.m{color:var(--danger)}.fit.z{color:var(--ink-3)}
+.cond{display:block;margin:0 auto;width:56px;height:7px;background:var(--sheet-3);border:1px solid var(--rule);vertical-align:middle}
+.cond i{display:block;height:100%;background:var(--ok)}
+.cond i.mid{background:var(--decide)}.cond i.low{background:var(--danger)}
+.inj{color:var(--danger);font-weight:700;font-size:11px}
+.dev{font-size:11px;color:var(--ink-3)}
+.dev.star{color:var(--club-2)}
+.row-act{opacity:0;display:flex;gap:4px}
+.tbl tr:hover .row-act{opacity:1}
+.row-act button{width:26px;height:26px;border:1px solid var(--rule-2);color:var(--ink-2);font-family:var(--mono);font-size:12px}
+.row-act button:hover{border-color:var(--rule-hi);color:var(--ink)}
+
+/* depth chart */
+.pkg{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--rule);align-items:center}
+.pkg span{font-size:12px;color:var(--ink-3);margin-right:6px}
+.pkg button{padding:5px 12px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.02em;color:var(--ink-3);border:1px solid var(--rule-2)}
+.pkg button[aria-pressed="true"]{background:var(--ink);color:#111;border-color:var(--ink)}
+.pkg .snaps{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.chart{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:12px}
+@media (max-width:1100px){.chart{grid-template-columns:repeat(3,1fr)}}
+.col{background:var(--board);border:1px solid var(--rule)}
+.col h4{font-family:var(--display);font-weight:900;font-size:16px;letter-spacing:.02em;padding:8px 10px 6px;border-bottom:1px solid var(--rule-2);display:flex;justify-content:space-between;align-items:baseline}
+.col h4 small{font-family:var(--text);font-weight:500;font-size:11px;color:var(--ink-3)}
+.col .slot{display:grid;grid-template-columns:18px 1fr;gap:6px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--rule);cursor:grab}
+.col .slot:last-child{border-bottom:0}
+.col .slot .rk{font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:center}
+.col .slot.start{background:var(--sheet)}
+.plate{display:grid;grid-template-columns:32px 1fr auto;align-items:center;background:var(--sheet-2);border:1px solid var(--rule);height:40px;position:relative}
+.plate:hover{border-color:var(--rule-hi)}
+.plate .no{font-family:var(--display);font-weight:900;font-size:17px;text-align:center;background:var(--ink);color:#111;height:100%;display:grid;place-items:center}
+.plate .nm{font-family:var(--display);font-weight:700;font-size:15px;padding:0 8px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plate .nm small{display:block;font-family:var(--text);font-weight:500;font-size:10.5px;color:var(--ink-3);margin-top:3px}
+.plate .ov{font-family:var(--display);font-weight:900;font-size:17px;padding:0 8px;color:var(--ink-2)}
+.plate.out{opacity:.5}.plate.out .no{background:var(--danger);color:#fff}
+.plate .cbar{position:absolute;left:32px;right:0;bottom:0;height:2px;background:var(--rule)}
+.plate .cbar i{display:block;height:100%;background:var(--ok)}
+.plate .cbar i.mid{background:var(--decide)}
+.plate .pin{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;border:2px solid var(--sheet);background:var(--ok)}
+.plate .pin.bad{background:var(--danger)}.plate .pin.warn{background:var(--decide)}
+.field-note{display:flex;gap:14px;padding:0 12px 10px;font-size:12px;color:var(--ink-3);flex-wrap:wrap}
+.field-note i{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px}
+
+/* the player card */
+.head{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--rule-2)}
+.jersey{width:84px;height:84px;background:var(--club);color:#fff;font-family:var(--display);font-weight:900;font-size:40px;display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.hname{font-family:var(--display);font-weight:900;font-size:40px;line-height:.9}
+.hline{color:var(--ink-2);font-size:14px;margin-top:6px}
+.hline b{color:var(--ink);font-weight:600}
+.hfacts{display:grid;grid-template-columns:repeat(5,auto);gap:0 26px;margin-top:10px}
+.hfacts div span{display:block;font-size:11px;color:var(--ink-3)}
+.hfacts div b{font-family:var(--display);font-weight:900;font-size:22px;line-height:1}
+.hfacts div b small{font-family:var(--text);font-weight:500;font-size:12px;color:var(--ink-3);margin-left:3px}
+.ovrbig{text-align:center;padding:0 10px}
+.ovrbig b{display:block;font-family:var(--display);font-weight:900;font-size:64px;line-height:.9}
+.ovrbig span{font-size:11px;color:var(--ink-3)}
+.ovrbig .pot{font-family:var(--mono);font-size:12px;color:var(--ink-2);margin-top:4px}
+.ctabs{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--rule)}
+.ctabs button{padding:9px 14px;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;color:var(--ink-3);border-bottom:3px solid transparent;margin-bottom:-1px}
+.ctabs button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--club-2)}
+.ctabs .acts{margin-left:auto;display:flex;gap:6px;align-items:center}
+.ctabs .acts .btn{padding:5px 10px;font-size:14px}
+.body{display:grid;grid-template-columns:260px 1fr 280px;gap:0}
+@media (max-width:1100px){.body{grid-template-columns:1fr 1fr}.body > div:nth-child(2){grid-column:1/-1;order:-1;border-left:0;border-bottom:1px solid var(--rule)}}
+.body > div{padding:12px 14px}
+.body > div + div{border-left:1px solid var(--rule)}
+.h5{font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.02em;color:var(--ink-3);margin-bottom:8px;display:flex;justify-content:space-between}
+.h5 span{font-family:var(--text);font-weight:500;font-size:11px}
+/* attribute rows with bars behind, FM style */
+.attrs{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media (max-width:1100px){.attrs{grid-template-columns:1fr}}
+.attrs{display:grid;grid-template-columns:repeat(3,1fr) !important;gap:14px}
+.arow{display:grid;grid-template-columns:1fr 30px 30px;align-items:center;height:24px;position:relative;font-size:12.5px;color:var(--ink);margin-bottom:3px;background:var(--sheet-2);border-left:3px solid transparent}
+.arow i{display:none}
+.arow:has(i.hi){background:rgba(63,179,127,.16);border-left-color:var(--ok)}
+.arow:has(i.md){background:rgba(90,169,214,.14);border-left-color:var(--mid)}
+.arow:has(i.lo){background:var(--sheet-2);border-left-color:transparent;color:var(--ink-2)}
+.arow span{padding-left:7px}
+.arow b{font-family:var(--mono);font-size:12.5px;font-weight:500;text-align:right;color:var(--ink);padding:0 6px;grid-column:3}
+.arow:has(i.hi) b{color:var(--ok)}.arow:has(i.md) b{color:var(--decide)}.arow:has(i.lo) b{color:var(--ink-2)}
+.arow .fitd{grid-column:2;font-family:var(--mono);font-size:10.5px;text-align:right}
+.arow .fitd.p{color:var(--ok)}.arow .fitd.m{color:var(--danger)}
+.attrs .h5{border-bottom:1px solid var(--rule-2);padding-bottom:4px}
+.posmap{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px}
+.posmap div{height:34px;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:13px;border:1px solid var(--rule);color:var(--ink-3);background:var(--board)}
+.posmap div.nat{background:var(--club);color:#fff;border-color:var(--club)}
+.posmap div.fam{border-color:var(--rule-hi);color:var(--ink)}
+.grades{font-size:13px}
+.grades div{display:grid;grid-template-columns:70px 1fr 58px;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)}
+.grades div:last-child{border-bottom:0}
+.grades .bar{height:8px;background:var(--sheet-3);border:1px solid var(--rule)}
+.grades .bar i{display:block;height:100%;background:var(--mid)}
+.grades .g{font-family:var(--mono);font-size:12px;text-align:right}
+.grades em{font-style:normal;font-size:10.5px;color:var(--ink-3);display:block}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+.kv span:nth-child(odd){color:var(--ink-3)}
+.traits{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.traits span{font-size:12.5px;padding:3px 9px;border:1px solid var(--rule-2);color:var(--ink-2);border-radius:2px}
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:12px 14px;border-top:1px solid var(--rule)}
+@media (max-width:1100px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--board);border:1px solid var(--rule);padding:10px 12px;min-height:110px}
+.tile .h5{margin-bottom:6px}
+.tile .word{font-family:var(--display);font-weight:900;font-size:22px;line-height:1}
+.tile .sub{font-size:12px;color:var(--ink-3);margin-top:4px}
+.tile.wide{grid-column:span 2}
+.form5{display:flex;gap:3px;align-items:flex-end;height:44px;margin:6px 0 4px}
+.form5 i{flex:1;background:var(--ok);display:block}
+.form5 i.l{background:var(--danger)}
+.stab{width:100%;border-collapse:collapse;font-size:12px}
+.stab th{color:var(--ink-3);font-weight:500;text-align:right;padding:2px 4px;font-size:11px}
+.stab th:first-child,.stab td:first-child{text-align:left}
+.stab td{padding:3px 4px;border-top:1px solid var(--rule);text-align:right;font-family:var(--mono);font-size:11.5px}
+.contract{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+.contract th{font-family:var(--display);font-weight:700;font-size:12.5px;color:var(--ink-3);padding:5px 6px;border-bottom:1px solid var(--rule-2);text-align:right}
+.contract th:first-child,.contract td:first-child{text-align:left}
+.contract td{padding:5px 6px;border-bottom:1px solid var(--rule);text-align:right;font-family:var(--mono);font-size:12px}
+.contract tr.now td{background:var(--sheet-2)}
+.mline{height:46px;position:relative;margin:8px 0 4px;border-bottom:1px solid var(--rule-2)}
+.mline svg{position:absolute;inset:0;width:100%;height:100%}
+footer{max-width:1600px;margin:0 auto 36px;padding:0 18px;color:var(--ink-3);font-size:12.5px;line-height:1.6;max-width:84ch}
+
+/* personnel */
+.clubs{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.cl{width:44px;height:44px;display:grid;place-items:center;font-family:var(--display);font-weight:900;font-size:13px;color:#fff;border:2px solid transparent;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%);opacity:.85}
+.cl:hover{opacity:1}.cl[aria-pressed="true"]{opacity:1;outline:2px solid var(--club-2);outline-offset:1px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media (max-width:1100px){.two{grid-template-columns:1fr}}
+.two > div{padding:12px}
+.two > div + div{border-left:1px solid var(--rule)}
+.side-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.side-h .cr{width:30px;height:30px;font-family:var(--display);font-weight:900;font-size:12px;color:#fff;display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.side-h b{font-family:var(--display);font-weight:900;font-size:20px}
+.side-h span{margin-left:auto;font-size:12px;color:var(--ink-3)}
+.pkgbox .plate{grid-template-columns:32px 1fr auto 30px}
+.pkgbox{min-height:132px;border:1px dashed var(--rule-hi);background:var(--board);padding:8px;display:flex;flex-direction:column;gap:6px}
+.pkgbox .empty{color:var(--ink-3);font-size:13px;text-align:center;padding:26px 0}
+.pick{display:grid;grid-template-columns:32px 1fr 30px;align-items:center;background:var(--sheet-2);border:1px solid var(--rule);height:40px}
+.pick .rd{font-family:var(--display);font-weight:900;font-size:16px;text-align:center;background:var(--club-2);color:#111;height:100%;display:grid;place-items:center}
+.pick .nm{font-family:var(--display);font-weight:700;font-size:15px;padding:0 8px;line-height:1}
+.pick .nm small{display:block;font-family:var(--text);font-weight:500;font-size:10.5px;color:var(--ink-3);margin-top:3px}
+.pick .x,.plate .x{font-family:var(--mono);font-size:12px;color:var(--ink-3);padding:0 10px;cursor:pointer}
+.pick .x:hover,.plate .x:hover{color:var(--danger)}
+.read{background:var(--sheet-2);border:1px solid var(--rule);padding:10px 12px;font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+.read b{color:var(--ink);font-weight:600}
+.meter{display:flex;gap:3px}
+.meter i{width:14px;height:8px;background:var(--sheet-3);border:1px solid var(--rule)}
+.meter i.on{background:var(--ok);border-color:var(--ok)}
+.phase{display:flex;gap:0;padding:0 12px;border-bottom:1px solid var(--rule)}
+.phase div{padding:9px 14px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.02em;color:var(--ink-3);border-bottom:3px solid transparent;margin-bottom:-1px}
+.phase div.now{color:var(--ink);border-bottom-color:var(--club-2)}
+.phase div.done{color:var(--ink-2)}
+.feed{font-size:13px}
+.feed div{display:grid;grid-template-columns:minmax(90px,auto) 1fr auto;gap:12px;padding:7px 12px;border-bottom:1px solid var(--rule);align-items:center}
+.feed div > *{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed div:last-child{border-bottom:0}
+.feed time{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.prio{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:6px;padding:4px 0}
+.prio .p{font-family:var(--mono);font-size:12px;color:var(--ink-3);text-align:center}
+.offer{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:8px 0}
+.offer label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--ink-3)}
+.offer input{font:inherit;font-family:var(--mono);font-size:13px;color:var(--ink);background:var(--board);border:1px solid var(--rule-2);padding:7px 9px;width:100%;min-width:0}
+.hits{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:12px 0 4px;align-items:end}
+.hit{display:grid;grid-template-rows:14px 72px 14px;align-items:end;justify-items:center;gap:3px;font-size:11px;color:var(--ink-3)}
+.hit b{font-family:var(--mono);font-size:11px;color:var(--ink);grid-row:1;align-self:end}
+.hit i{display:block;width:100%;background:var(--mid);height:calc(var(--h) * 1px);grid-row:2;align-self:end;min-height:2px}
+.hit i.new{background:var(--club-2)}
+.hit span{grid-row:3}
+.hbar{width:100%}
+
+/* negotiation threads */
+.thread{display:flex;flex-direction:column;gap:8px;padding:12px}
+.msg{border:1px solid var(--rule);background:var(--sheet-2);padding:9px 12px;max-width:92%}
+.msg.you{align-self:flex-end;background:var(--board);border-color:var(--rule-2)}
+.msg.match{border-color:var(--live);background:rgba(76,201,240,.08)}
+.msg.note{background:transparent;border:0;padding:2px 4px;color:var(--ink-3);font-size:12.5px;max-width:100%}
+.msg .from{font-size:11px;color:var(--ink-3);margin-bottom:4px}
+.msg .txt{font-size:13.5px;line-height:1.45;color:var(--ink-2)}
+.msg .txt b{color:var(--ink);font-weight:600}
+.msg .terms-line{font-family:var(--text);font-size:12.5px;color:var(--ink-2);margin-top:6px}
+.msg .terms-line b{font-family:var(--display);font-weight:900;font-size:17px;color:var(--ink)}
+.msg .acts{display:flex;gap:6px;margin-top:10px}
+.msg .acts .btn{padding:5px 10px;font-size:14px}
+.shape{display:grid;grid-template-columns:52px 1fr;gap:8px;align-items:center;margin:10px 0 2px;font-size:11px;color:var(--ink-3)}
+.shape input[type=range]{width:100%;accent-color:var(--club-2)}
+.shape-lbl{grid-column:2;display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-3)}
+.shape-lbl em{font-style:normal}
+.promise{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11px;color:var(--ink-3);flex-wrap:wrap}
+.promise span{margin-right:4px}
+</style>
+</head>
+<body>
+
+<header class="rail">
+  <div class="in">
+    <div class="hist"><button aria-label="Back">‹</button><button aria-label="Forward" disabled>›</button></div>
+    <div class="club"><div class="crest">KC</div><div><div class="name">KANSAS CITY</div><div class="who">Aden Ballenger · Head Coach and GM</div></div></div>
+    <nav>
+      <a href="#">Portal <span class="badge">3</span></a><a href="#">Club</a><a href="#" aria-current="page">Personnel</a><a href="#">Draft</a><a href="#">League</a><a href="#">Game Plan</a><a href="#">Game Day</a><a href="#">Front Office</a>
+    </nav>
+    <div class="status">
+      <div class="stat"><b>6–2</b><span>1st AFC West</span></div>
+      <div class="stat"><b>$10.1m</b><span>Cap Space</span></div>
+      <div class="stat"><b>53</b><span>Roster</span></div>
+      <div class="clock"><b>Tue 2 Nov</b><span>2027 · Week 9</span></div>
+    </div>
+    <button class="advance"><div class="txt">Play Week 9<small>Sunday at Denver</small></div><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 5l10 7-10 7z"/></svg></button>
+  </div>
+  <div class="sub">
+    <div class="in">
+      <div class="crumb">Personnel</div>
+      <div class="second"><a data-go="trades" aria-current="page">Trades</a><a data-go="fa">Free Agency</a><a data-go="wire">Waivers</a><a data-go="ext">Extensions</a></div>
+      <div class="quick"><span>Quick</span><a>Roster</a><a>Depth Chart</a><a>Cap</a><a>Draft Board</a></div>
+    </div>
+  </div>
+</header>
+
+
+<!-- ============================== TRADES ============================== -->
+<main id="trades">
+  <section class="sheet c12">
+    <div class="clubs">
+      <button class="cl" style="background:#97233f" aria-pressed="false">ARI</button><button class="cl" style="background:#a71930">ATL</button><button class="cl" style="background:#241773">BAL</button><button class="cl" style="background:#00338d">BUF</button><button class="cl" style="background:#0085ca">CAR</button><button class="cl" style="background:#0b162a">CHI</button><button class="cl" style="background:#fb4f14">CIN</button><button class="cl" style="background:#311d00">CLE</button><button class="cl" style="background:#003594">DAL</button><button class="cl" style="background:#fb4f14" aria-pressed="true">DEN</button><button class="cl" style="background:#0076b6">DET</button><button class="cl" style="background:#203731">GB</button><button class="cl" style="background:#03202f">HOU</button><button class="cl" style="background:#002c5f">IND</button><button class="cl" style="background:#006778">JAX</button><button class="cl" style="background:#000">LV</button><button class="cl" style="background:#0080c6">LAC</button><button class="cl" style="background:#003594">LA</button><button class="cl" style="background:#008e97">MIA</button><button class="cl" style="background:#4f2683">MIN</button><button class="cl" style="background:#002244">NE</button><button class="cl" style="background:#d3bc8d;color:#111">NO</button><button class="cl" style="background:#0b2265">NYG</button><button class="cl" style="background:#125740">NYJ</button><button class="cl" style="background:#004c54">PHI</button><button class="cl" style="background:#ffb612;color:#111">PIT</button><button class="cl" style="background:#aa0000">SF</button><button class="cl" style="background:#002244">SEA</button><button class="cl" style="background:#d50a0a">TB</button><button class="cl" style="background:#0c2340">TEN</button><button class="cl" style="background:#5a1414">WAS</button>
+    </div>
+    <div class="two">
+      <div>
+        <div class="side-h"><div class="cr" style="background:var(--club)">KC</div><b>You Send</b><span>Cap After: $22.4m</span></div>
+        <div class="pkgbox">
+          <div class="plate"><div class="no">22</div><div class="nm">Trent McDuffie<small>CB · 2 Yrs · $15.1m Hit · $12.4m Penalty</small></div><div class="ov">89</div><span class="x">✕</span></div>
+          <div class="empty" style="padding:10px 0">Drag a plate or a pick here</div>
+        </div>
+        <div class="h5" style="margin:12px 0 6px">Your Picks</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="chip">2028 R1</button><button class="chip">2028 R2</button><button class="chip">2028 R3 (DEN)</button><button class="chip">2028 R5</button><button class="chip">2029 R1</button><button class="chip">2029 R2</button><button class="chip">2030 R1</button>
+        </div>
+        <div class="h5" style="margin:12px 0 6px">Your Surplus <span>Players the Assistants Would Move</span></div>
+        <div class="plate"><div class="no">24</div><div class="nm">Skyy Moore<small>WR · Unhappy · Asked Out</small></div><div class="ov">78</div></div>
+        <div class="plate" style="margin-top:6px"><div class="no">33</div><div class="nm">Brashard Smith<small>HB · Fit −0.6</small></div><div class="ov">74</div></div>
+      </div>
+      <div>
+        <div class="side-h"><div class="cr" style="background:var(--opp)">DEN</div><b>Denver Sends</b><span>Their Cap: $6.8m</span></div>
+        <div class="pkgbox">
+          <div class="pick"><div class="rd">R1</div><div class="nm">2028 First Round<small>Denver's Own · Projected 18th</small></div><span class="x">✕</span></div>
+          <div class="plate"><div class="no">57</div><div class="nm">Jonah Elliss<small>EDGE · 3 Yrs · $2.1m Hit</small></div><div class="ov">78</div><span class="x">✕</span></div>
+        </div>
+        <div class="h5" style="margin:12px 0 6px">Their Needs</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip" aria-pressed="true">CB</span><span class="chip" aria-pressed="true">WR</span><span class="chip">S</span></div>
+        <div class="h5" style="margin:12px 0 6px">Their Surplus</div>
+        <div class="plate"><div class="no">57</div><div class="nm">Jonah Elliss<small>EDGE · Fourth on Their Chart</small></div><div class="ov">78</div></div>
+        <div class="plate" style="margin-top:6px"><div class="no">88</div><div class="nm">Marvin Mims Jr.<small>WR · 2 Yrs</small></div><div class="ov">80</div></div>
+        <div class="plate" style="margin-top:6px"><div class="no">30</div><div class="nm">Tyler Badie<small>HB · 1 Yr</small></div><div class="ov">72</div></div>
+      </div>
+    </div>
+    <div class="pad" style="border-top:1px solid var(--rule)">
+      <div class="read"><b>Assistants:</b> This is close to fair for a starting corner in his prime, a touch short. Denver is a two-high club and grades McDuffie a shade under our number, so they will not go much higher on the pick. If you want more, Mims would balance it and fills the spot Moore leaves. Corner is our deepest position; Watson would start Sunday.</div>
+    </div>
+    <div class="foot"><button class="btn go">Propose</button><button class="btn">Ask What They Want</button><button class="btn">Gather Offers for McDuffie</button><button class="btn quiet">Clear</button><span class="count" style="margin-left:auto">Deadline Thursday 4 pm · 2 for 2</span></div>
+  </section>
+</main>
+
+<!-- ============================== FREE AGENCY ============================== -->
+<main id="fa" hidden>
+  <div class="c8" style="display:flex;flex-direction:column;gap:12px">
+  <section class="sheet">
+    <div class="phase"><div class="done">Tags</div><div class="done">Tampering</div><div class="now">Open Market · Day 3</div><div>Post-Draft</div><div>Camp</div></div>
+    <div class="tools">
+      <div class="chips" style="margin-left:0"><button class="chip" aria-pressed="true">All</button><button class="chip">QB</button><button class="chip">OL</button><button class="chip">WR</button><button class="chip">DL</button><button class="chip">DB</button><button class="chip">LB</button></div>
+      <div class="chips"><button class="chip" aria-pressed="true">Starters</button><button class="chip">Depth</button><button class="chip">Under $5m</button></div>
+      <div class="search">Find a Player</div><span class="count">218 Available</span>
+    </div>
+    <table class="tbl">
+      <tr><th style="text-align:left">Player</th><th data-tip="Position">Pos</th><th class="n">Age</th><th class="n" data-tip="Overall Rating">Ovr</th><th class="n" data-tip="How well the player matches your coach's scheme">Fit</th><th data-tip="What his agent is asking per year">Ask</th><th data-tip="How many clubs are in on him">Interest</th><th data-tip="Your standing among his offers">Your Offer</th><th></th></tr>
+      <tr><td><div class="who"><div class="no" style="background:var(--rule-hi)">—</div><div class="nm">Tee Higgins<small>WR · from CIN</small></div></div></td><td>WR</td><td class="n">29</td><td class="n"><span class="ovr t1">88</span></td><td class="n"><span class="fit p">+1.1</span></td><td class="mono">$28.0m × 4</td><td><div class="meter" style="justify-content:center"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></td><td><span class="pill unsettled">Match Asked</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Offer</button></td></tr>
+      <tr><td><div class="who"><div class="no" style="background:var(--rule-hi)">—</div><div class="nm">Zach Allen<small>DT · from DEN</small></div></div></td><td>DT</td><td class="n">30</td><td class="n"><span class="ovr t2">86</span></td><td class="n"><span class="fit p">+0.7</span></td><td class="mono">$19.5m × 3</td><td><div class="meter" style="justify-content:center"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></td><td><span class="pill content">Mulling</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Offer</button></td></tr>
+      <tr><td><div class="who"><div class="no" style="background:var(--rule-hi)">—</div><div class="nm">Jaire Alexander<small>CB · from BAL</small></div></div></td><td>CB</td><td class="n">30</td><td class="n"><span class="ovr t2">83</span></td><td class="n"><span class="fit p">+1.9</span></td><td class="mono">$12.0m × 2</td><td><div class="meter" style="justify-content:center"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div></td><td><span class="pill happy">Agreed</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Offer</button></td></tr>
+      <tr><td><div class="who"><div class="no" style="background:var(--rule-hi)">—</div><div class="nm">Dalton Risner<small>LG · from MIN</small></div></div></td><td>LG</td><td class="n">32</td><td class="n"><span class="ovr t3">76</span></td><td class="n"><span class="fit m">−1.2</span></td><td class="mono">$4.0m × 1</td><td><div class="meter" style="justify-content:center"><i class="on"></i><i></i><i></i><i></i><i></i></div></td><td><span class="pill content">Not Yet</span></td><td><button class="btn" style="padding:4px 10px;font-size:13px">Offer</button></td></tr>
+    </table>
+    <div class="foot"><button class="btn go">Ask the Agent</button><button class="btn">Open Talks</button><button class="btn">Compare</button><button class="btn quiet">Watchlist</button><span class="count" style="margin-left:auto">Cap Space $38.2m · Top 51</span></div>
+  </section>
+  <section class="sheet">
+    <h2>Around the League <small>Today</small></h2>
+    <div class="feed">
+      <div><span class="stripe" style="--c:#0076b6">Detroit</span><span>Signed <b>Trey Hendrickson</b>, EDGE, 3 years at $24.0m a year</span><time>11:40</time></div>
+      <div><span class="stripe" style="--c:#4f2683">Minnesota</span><span>Signed <b>Justin Simmons</b>, FS, 1 year at $6.5m</span><time>10:15</time></div>
+      <div><span class="stripe" style="--c:#002244">New England</span><span>Matched Denver's offer sheet on <b>Christian Barmore</b>, DT</span><time>09:02</time></div>
+      <div><span class="stripe" style="--c:#c8102e">Kansas City</span><span>Your offer to <b>Tee Higgins</b> is 2nd of 4</span><time>08:30</time></div>
+    </div>
+  </section>
+  </div>
+  <section class="sheet c4">
+    <h2>Negotiation <small>Tee Higgins · Agent: David Mulugheta</small></h2>
+    <div class="thread">
+      <div class="msg agent"><div class="from">Agent · Tampering</div><div class="txt">Tee is looking for a contender with a quarterback and he will listen. The market for a receiver of his standing starts at the top ten.</div><div class="terms-line">Ask · <b>$28.0m × 4</b></div></div>
+      <div class="msg you"><div class="from">You · Open Market, Day 1</div><div class="terms-line"><b>$26.5m × 4</b> · $30.0m Bonus · League Shape</div></div>
+      <div class="msg match"><div class="from">Agent · Day 3</div><div class="txt">Cincinnati has offered $28.5m over four years. He would rather be in Kansas City. Match it and he signs today.</div><div class="terms-line">To Match · <b>$28.5m × 4</b></div><div class="acts"><button class="btn go">Match and Sign</button><button class="btn quiet">Let Him Go</button></div></div>
+      <div class="msg note"><div class="txt">Two clubs are in. This is the first of two match requests he will make.</div></div>
+    </div>
+    <div class="pad" style="border-top:1px solid var(--rule)">
+      <div class="h5">Or Counter</div>
+      <div class="offer">
+        <label>Years<input value="4"></label><label>Per Year<input value="$27.5m"></label><label>Bonus<input value="$34.0m"></label><label>Year 1 Hit<input value="$15.0m" disabled></label>
+      </div>
+      <div class="shape"><span>Shape</span><input type="range" min="0" max="100" value="65" aria-label="Contract shape"><div class="shape-lbl"><em>Pay It Now</em><em>League Shape</em><em>Back-Load</em></div></div>
+      <div class="hbar hits"><div class="hit"><i class="new" style="--h:38"></i><b>$15.0m</b><span>2028</span></div><div class="hit"><i class="new" style="--h:56"></i><b>$24.8m</b><span>2029</span></div><div class="hit"><i class="new" style="--h:68"></i><b>$31.0m</b><span>2030</span></div><div class="hit"><i class="new" style="--h:74"></i><b>$33.6m</b><span>2031</span></div><div class="hit"><i style="--h:18"></i><b>$8.5m</b><span>Void</span></div></div>
+    </div>
+    <div class="foot"><button class="btn">Send Counter</button><button class="btn quiet">Withdraw</button></div>
+  </section>
+</main>
+
+<!-- ============================== WAIVERS ============================== -->
+<main id="wire" hidden>
+  <section class="sheet c8">
+    <div class="tools"><div class="tabs"><button aria-pressed="true">On the Wire <em>8</em></button><button aria-pressed="false">Your Claims <em>1</em></button><button aria-pressed="false">Awarded This Week <em>6</em></button></div><span class="count" style="margin-left:auto">You Hold 19th Priority · Awards Tuesday</span></div>
+    <table class="tbl">
+      <tr><th style="text-align:left">Player</th><th data-tip="Position">Pos</th><th class="n">Age</th><th class="n" data-tip="Overall Rating">Ovr</th><th class="n" data-tip="How well the player matches your coach's scheme">Fit</th><th data-tip="The club that released him">From</th><th data-tip="Contract you inherit if awarded">Inherited</th><th data-tip="Dead cap charged if player is cut/traded">Penalty</th><th data-tip="Accrued seasons">Accrued</th><th></th></tr>
+      <tr><td><div class="who"><div class="no">18</div><div class="nm">Isaiah Ryals<small>WR · Georgia Tech</small></div></div></td><td>WR</td><td class="n">24</td><td class="n"><span class="ovr t3">74</span></td><td class="n"><span class="fit p">+0.6</span></td><td><span class="stripe" style="--c:#125740">NYJ</span></td><td class="mono">$1.1m · 1 Yr</td><td class="mono">$0.0m</td><td class="n">2</td><td><button class="btn go" style="padding:4px 12px;font-size:13px">Claim</button></td></tr>
+      <tr><td><div class="who"><div class="no">36</div><div class="nm">Kobe Rodriguez<small>SS · Baylor</small></div></div></td><td>SS</td><td class="n">23</td><td class="n"><span class="ovr t3">73</span></td><td class="n"><span class="fit p">+1.0</span></td><td><span class="stripe" style="--c:#a71930">ATL</span></td><td class="mono">Min · 2 Yrs</td><td class="mono">$0.0m</td><td class="n">1</td><td><button class="btn go" style="padding:4px 12px;font-size:13px">Claim</button></td></tr>
+      <tr class="sel"><td><div class="who"><div class="no">61</div><div class="nm">Marcus Okafor<small>RG · Iowa</small></div></div></td><td>RG</td><td class="n">26</td><td class="n"><span class="ovr t3">72</span></td><td class="n"><span class="fit p">+1.4</span></td><td><span class="stripe" style="--c:#03202f">HOU</span></td><td class="mono">$1.4m · 1 Yr</td><td class="mono">$0.0m</td><td class="n">3</td><td><span class="pill happy">Claimed</span></td></tr>
+      <tr><td><div class="who"><div class="no">44</div><div class="nm">Devon Pruitt<small>WILL · Oregon State</small></div></div></td><td>WILL</td><td class="n">23</td><td class="n"><span class="ovr t3">71</span></td><td class="n"><span class="fit z">0.0</span></td><td><span class="stripe" style="--c:#002244">SEA</span></td><td class="mono">Min · 3 Yrs</td><td class="mono">$0.0m</td><td class="n">1</td><td><button class="btn go" style="padding:4px 12px;font-size:13px">Claim</button></td></tr>
+    </table>
+    <div class="foot"><button class="btn quiet">Full Wire · 8</button><span class="count" style="margin-left:auto">A claim needs a roster spot: you are at 53</span></div>
+  </section>
+  <section class="sheet c4">
+    <h2>Your Claim <small>Marcus Okafor</small></h2>
+    <div class="pad">
+      <div class="read"><b>Assistants:</b> Interior depth is thin behind Smith and Hunt and Okafor grades well in our zone scheme. To make room we would release Wanya Morris, which costs nothing. Eighteen clubs are ahead of you in priority; Houston cut him for cap reasons, not for play.</div>
+      <div class="h5" style="margin:12px 0 6px">If Awarded, Release</div>
+      <div class="plate"><div class="no">64</div><div class="nm">Wanya Morris<small>RT · $1.0m · Penalty $0.0m</small></div><div class="ov">70</div></div>
+      <div class="h5" style="margin:12px 0 6px">Priority Order <span>This Week</span></div>
+      <div class="prio"><span class="p">1</span><span class="stripe" style="--c:#000">Las Vegas</span></div>
+      <div class="prio"><span class="p">2</span><span class="stripe" style="--c:#0085ca">Carolina</span></div>
+      <div class="prio"><span class="p">3</span><span class="stripe" style="--c:#97233f">Arizona</span></div>
+      <div class="prio"><span class="p">…</span><span class="muted">15 more</span></div>
+      <div class="prio"><span class="p">19</span><span class="stripe" style="--c:#c8102e"><b>Kansas City</b></span></div>
+    </div>
+    <div class="foot"><button class="btn warn">Withdraw Claim</button></div>
+  </section>
+</main>
+
+<!-- ============================== EXTENSIONS ============================== -->
+<main id="ext" hidden>
+  <div class="c7" style="display:flex;flex-direction:column;gap:12px">
+  <section class="sheet">
+    <div class="tools"><div class="tabs"><button aria-pressed="true">Expiring <em>9</em></button><button aria-pressed="false">Two Years Left <em>11</em></button><button aria-pressed="false">Done This Year <em>3</em></button></div><span class="count" style="margin-left:auto">Next Year Committed: $296m of $322m</span></div>
+    <table class="tbl">
+      <tr><th style="text-align:left">Player</th><th data-tip="Position">Pos</th><th class="n">Age</th><th class="n" data-tip="Overall Rating">Ovr</th><th data-tip="Player's happiness">Morale</th><th class="n" data-tip="This year's cap hit">Cap Hit</th><th data-tip="What his agent is asking per year">Ask</th><th data-tip="Where talks stand">Talks</th></tr>
+      <tr class="sel"><td><div class="who"><div class="no">52</div><div class="nm">Creed Humphrey<small>C · Final Year</small></div></div></td><td>C</td><td class="n">28</td><td class="n"><span class="ovr t1">90</span></td><td><span class="pill content">Content</span></td><td class="n">$16.9m</td><td class="mono">$13.3m × 3</td><td><span class="pill unsettled">Countered</span></td></tr>
+      <tr><td><div class="who"><div class="no">98</div><div class="nm">Tershawn Wharton<small>DT · Final Year</small></div></div></td><td>DT</td><td class="n">29</td><td class="n"><span class="ovr t2">82</span></td><td><span class="pill content">Content</span></td><td class="n">$9.2m</td><td class="mono">$11.0m × 3</td><td><span class="pill content">Waiting · 2 Wks</span></td></tr>
+      <tr><td><div class="who"><div class="no">6</div><div class="nm">Bryan Cook<small>SS · Final Year</small></div></div></td><td>SS</td><td class="n">28</td><td class="n"><span class="ovr t2">82</span></td><td><span class="pill content">Content</span></td><td class="n">$7.5m</td><td class="mono">$9.5m × 3</td><td><span class="pill content">Not Started</span></td></tr>
+      <tr><td><div class="who"><div class="no">1</div><div class="nm">Xavier Worthy<small>WR · Rookie Deal · Eligible</small></div></div></td><td>WR</td><td class="n">24</td><td class="n"><span class="ovr t2">86</span></td><td><span class="pill happy">Happy</span></td><td class="n">$3.9m</td><td class="mono">Ask First</td><td><span class="pill content">Not Started</span></td></tr>
+      <tr><td><div class="who"><div class="no">76</div><div class="nm">Jawaan Taylor<small>RT · Final Year</small></div></div></td><td>RT</td><td class="n">30</td><td class="n"><span class="ovr t2">79</span></td><td><span class="pill content">Content</span></td><td class="n">$27.3m</td><td class="mono">—</td><td><span class="pill unhappy">After the Season</span></td></tr>
+    </table>
+    <div class="foot"><button class="btn go">Ask the Agent</button><button class="btn">Open Talks</button><button class="btn">Restructure Instead</button><button class="btn quiet">Franchise Tag · $22.1m</button></div>
+  </section>
+  <section class="sheet">
+    <h2>Promises <small>What You Have Told Your Players</small></h2>
+    <table class="tbl">
+      <tr><th style="text-align:left">Player</th><th>Promise</th><th>Made</th><th>Checked</th><th>Status</th></tr>
+      <tr><td><div class="who"><div class="no">19</div><div class="nm">Jalen Royals<small>WR</small></div></div></td><td>Named the Starter</td><td class="mono">2027 Camp</td><td class="mono">Week 4</td><td><span class="pill unhappy">Broken</span></td></tr>
+      <tr><td><div class="who"><div class="no">22</div><div class="nm">Trent McDuffie<small>CB</small></div></div></td><td>No-Trade Commitment</td><td class="mono">2026</td><td class="mono">Ongoing</td><td><span class="pill content">Open</span></td></tr>
+      <tr><td><div class="who"><div class="no">1</div><div class="nm">Xavier Worthy<small>WR</small></div></div></td><td>Extension by 2028</td><td class="mono">2027</td><td class="mono">2028 Offseason</td><td><span class="pill content">Open</span></td></tr>
+      <tr><td><div class="who"><div class="no">6</div><div class="nm">Bryan Cook<small>SS</small></div></div></td><td>Named the Starter</td><td class="mono">2026</td><td class="mono">Week 8</td><td><span class="pill happy">Kept</span></td></tr>
+    </table>
+  </section>
+  </div>
+  <section class="sheet c5">
+    <h2>Negotiation <small>Creed Humphrey · Agent: Drew Rosenhaus</small></h2>
+    <div class="thread">
+      <div class="msg agent"><div class="from">Agent · Before Any Offer</div><div class="txt">Creed wants to finish his career here, and it shows in the number. He is not going to take less than the market for centers, but he is not asking for the top of it either.</div><div class="terms-line">Ask · <b>$13.3m × 3</b></div></div>
+      <div class="msg you"><div class="from">You · Week 7</div><div class="terms-line"><b>$12.0m × 3</b> · $15.0m Bonus · League Shape</div></div>
+      <div class="msg agent"><div class="from">Agent · Week 8</div><div class="txt">We are close. Come up a little on the per-year and this is done.</div><div class="terms-line">Counter · <b>$12.8m × 3</b></div></div>
+      <div class="msg note"><div class="txt">The agent is <b>Firm</b> and <b>Patient</b>. He answers within a week.</div></div>
+    </div>
+    <div class="pad" style="border-top:1px solid var(--rule)">
+      <div class="h5">Your Offer</div>
+      <div class="offer">
+        <label>New Years<input value="3"></label><label>Per Year<input value="$12.5m"></label><label>Bonus<input value="$18.0m"></label><label>Total<input value="$37.5m" disabled></label>
+      </div>
+      <div class="shape"><span>Shape</span><input type="range" min="0" max="100" value="50" aria-label="Contract shape"><div class="shape-lbl"><em>Pay It Now</em><em>League Shape</em><em>Back-Load</em></div></div>
+      <div class="hbar hits"><div class="hit"><i style="--h:44"></i><b>$16.9m</b><span>2027</span></div><div class="hit"><i class="new" style="--h:26"></i><b>$10.8m</b><span>2028</span></div><div class="hit"><i class="new" style="--h:42"></i><b>$15.9m</b><span>2029</span></div><div class="hit"><i class="new" style="--h:46"></i><b>$17.3m</b><span>2030</span></div><div class="hit"><i style="--h:0"></i><b>—</b><span>2031</span></div></div>
+      <div class="promise"><span>Promise</span><button class="chip" aria-pressed="false">Named the Starter</button><button class="chip" aria-pressed="false">No Tag</button><button class="chip" aria-pressed="false">Captaincy</button></div>
+    </div>
+    <div class="foot"><button class="btn go">Send Offer</button><button class="btn">Match Counteroffer</button><button class="btn quiet">Walk Away</button></div>
+  </section>
+</main>
+
+<footer>Personnel group. Trades: a club strip, two package boxes with plates and picks, your surplus and theirs, their needs, the assistants' read in words, and Propose, Ask What They Want, Gather Offers. Free Agency: the phases along the top, the pool as the roster table with the ask and an interest meter, your offer builder with the cap hits by year drawn as bars and the agent's read, his other offers, the league feed. Waivers: the wire with inherited contracts and penalties, Claim per row, your pending claim with the player you would release and the priority order. Extensions: your expiring players with the ask and where talks stand, the negotiation panel with the same offer builder, the resulting hits, the agent's read, and the history of the talks.</footer>
+
+<script>
+function go(v){['trades','fa','wire','ext'].forEach(k=>document.getElementById(k).hidden=k!==v);document.querySelectorAll('.second a').forEach(a=>{a.toggleAttribute('aria-current',a.dataset.go===v)});window.scrollTo(0,0);}
+document.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();go(a.dataset.go);}));
+document.querySelectorAll('.tabs button, .chip[aria-pressed], .cl').forEach(b=>b.addEventListener('click',()=>{b.parentElement.querySelectorAll('[aria-pressed]').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');}));
+</script>
+</body>
+</html>

@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kansas City — Week 9 · v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;900&family=Big+Shoulders+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#0f1114; --board:#15181c; --sheet:#1b1f25; --sheet-2:#23282f; --sheet-3:#2b313a; --rule:#2e353e; --rule-2:#3a424c; --rule-hi:#8791a0;
+  --ink:#eef1f5; --ink-2:#b6bec9; --ink-3:#7b8593;
+  --club:#c8102e; --club-2:#ffb612; --opp:#fb4f14;
+  --danger:#e5484d; --decide:#e0b400; --live:#4cc9f0; --ok:#3fb37f;
+  --display:'Big Shoulders Display',sans-serif; --text:'Big Shoulders Text',sans-serif; --mono:'JetBrains Mono',monospace;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--text);font-size:14.5px;color:var(--ink);background:var(--bg);min-height:100%;line-height:1.35}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--club-2);outline-offset:2px}
+
+/* rail */
+.rail{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--board);border-top:4px solid var(--club);border-bottom:1px solid var(--rule)}
+.rail .in{max-width:1600px;margin:0 auto;padding:0 18px;display:flex;align-items:stretch;height:56px}
+.crest{width:38px;height:38px;background:var(--club);color:#fff;font-family:var(--display);font-weight:900;font-size:15px;display:grid;place-items:center;align-self:center;margin-right:12px;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.club{display:flex;align-items:center;padding-right:18px;border-right:1px solid var(--rule)}
+.club .name{font-family:var(--display);font-weight:900;font-size:24px;line-height:1}
+.club .who{color:var(--ink-3);font-size:12.5px}
+nav{display:flex}
+nav a{display:flex;align-items:center;padding:0 13px;font-family:var(--display);font-weight:700;font-size:16.5px;letter-spacing:.02em;color:var(--ink-3);text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-1px}
+nav a:hover{color:var(--ink-2);background:rgba(255,255,255,.03)}
+nav a[aria-current]{color:var(--ink);border-bottom-color:var(--club-2)}
+nav a .badge{margin-left:7px;font-family:var(--text);font-weight:700;font-size:11px;background:var(--decide);color:#111;padding:1px 6px;border-radius:2px}
+.status{margin-left:auto;display:flex;align-items:center;gap:14px}
+.stat{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:0 12px;border-left:1px solid var(--rule);min-width:64px}
+.stat b{font-family:var(--display);font-weight:900;font-size:20px;line-height:1}
+.stat span{font-size:11px;color:var(--ink-3);margin-top:2px}
+.advance{display:flex;align-items:center;gap:10px;padding:0 18px;margin-left:10px;background:var(--club-2);color:#111}
+.advance .txt{display:flex;flex-direction:column;align-items:flex-start;line-height:1;font-family:var(--display);font-weight:900;font-size:19px;letter-spacing:.02em}
+.advance small{font-family:var(--text);font-weight:600;font-size:11px;margin-top:3px}
+.advance svg{width:22px;height:22px}
+.advance:hover{filter:brightness(1.06)}.advance:active{filter:brightness(.94)}
+
+.hist{display:flex;align-items:center;gap:2px;padding-right:12px;border-right:1px solid var(--rule);margin-right:12px}
+.hist button{width:28px;height:28px;font-family:var(--display);font-weight:900;font-size:20px;line-height:1;color:var(--ink-2);border:1px solid var(--rule-2)}
+.hist button:hover{background:rgba(255,255,255,.06);color:var(--ink)}
+.hist button:disabled{opacity:.35;cursor:default}
+.clock{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border-left:1px solid var(--rule);font-family:var(--mono)}
+.clock b{font-size:13px;font-weight:500;color:var(--ink)}.clock span{font-size:11px;color:var(--ink-3)}
+.advance.blocked{background:var(--decide)}
+.advance.blocked .txt{color:#111}
+.sub{background:var(--board);border-bottom:1px solid var(--rule)}
+.sub .in{height:36px;align-items:center;gap:14px}
+.crumb{font-family:var(--display);font-weight:900;font-size:14px;color:var(--club-2);letter-spacing:.02em;padding-right:12px;border-right:1px solid var(--rule)}
+.second{display:flex;gap:2px}
+.second a,.quick a{font-size:13.5px;color:var(--ink-3);text-decoration:none;padding:6px 10px;border-radius:2px}
+.second a:hover,.quick a:hover{color:var(--ink);background:rgba(255,255,255,.04)}
+.second a[aria-current]{color:var(--ink);background:var(--sheet-2)}
+.second em{font-style:normal;font-family:var(--text);font-weight:700;font-size:11px;background:var(--rule-2);color:var(--ink);padding:0 5px;border-radius:2px;margin-left:5px}
+.quick{margin-left:auto;display:flex;align-items:center;gap:2px}
+.quick span{font-size:11px;color:var(--ink-3);padding-right:6px}
+.quick a{font-size:12.5px}
+.kbd{width:24px;height:24px;font-family:var(--mono);font-size:12px;color:var(--ink-3);border:1px solid var(--rule-2);margin-left:8px}
+.kbd:hover{color:var(--ink);border-color:var(--rule-hi)}
+
+/* inbox rows with word tags, grouped by day */
+.dayh{font-size:11px;color:var(--ink-3);padding:8px 12px 4px;border-bottom:1px solid var(--rule);text-transform:none}
+.row{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--rule);text-align:left;width:100%}
+.row:hover{background:rgba(255,255,255,.03)}
+.row .t{font-family:var(--display);font-weight:700;font-size:16.5px;line-height:1}
+.row .f{font-size:12px;color:var(--ink-3);margin-top:3px}
+.row time{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.tag{font-family:var(--text);font-weight:700;font-size:11px;padding:2px 0;width:96px;text-align:center;border:1px solid var(--tc,var(--rule-hi));color:var(--tc,var(--ink-2));border-radius:2px;white-space:nowrap}
+.tag.trade{--tc:#4cc9f0}.tag.contract{--tc:#e0b400}.tag.wire{--tc:#b6bec9}.tag.squad{--tc:#3fb37f}.tag.game{--tc:#3fb37f}.tag.scout{--tc:#c084fc}.tag.room{--tc:#e5484d}.tag.assist{--tc:#ffb612}.tag.owner{--tc:#f97316}
+.row.unread .t::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--club-2);margin-right:8px;vertical-align:3px}
+.filt{display:flex;border-bottom:1px solid var(--rule)}
+.filt button{padding:7px 12px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.02em;color:var(--ink-3);border-right:1px solid var(--rule)}
+.filt button em{font-style:normal;font-family:var(--text);font-weight:700;font-size:11px;background:var(--rule-2);color:var(--ink);padding:0 5px;border-radius:2px;margin-left:6px}
+.filt button[aria-pressed="true"]{color:var(--ink);background:var(--sheet-2);box-shadow:inset 0 -2px 0 var(--club-2)}
+.filt .dens{margin-left:auto;display:flex;align-items:center;gap:4px;padding:0 10px;font-size:11px;color:var(--ink-3)}
+.filt .dens button{padding:3px 8px;font-size:12px;border:1px solid var(--rule-2);border-right:1px solid var(--rule-2)}
+.filt .dens button[aria-pressed="true"]{background:var(--ink);color:#111}
+
+/* form dots and rank arrows */
+.form{display:flex;gap:3px}
+.form i{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--rule-2)}
+.form i.w{background:var(--ok)}.form i.l{background:var(--danger)}
+.arr{font-family:var(--mono);font-size:11px;margin-right:6px}
+.arr.up{color:var(--ok)}.arr.dn{color:var(--danger)}.arr.same{color:var(--ink-3)}
+
+/* the matchup sheet */
+.match{display:grid;grid-template-columns:1fr 1.1fr;gap:0}
+@media (max-width:1100px){.match{grid-template-columns:1fr}}
+.m-side{border-right:1px solid var(--rule)}
+.m-mid{border-right:1px solid var(--rule)}
+.mh{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;color:var(--ink-2);padding:10px 12px 4px;display:flex;justify-content:space-between}
+.mh span{font-family:var(--text);font-weight:500;font-size:11px;color:var(--ink-3)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 12px 12px}
+.form-row .lbl{font-size:11px;color:var(--ink-3);margin-bottom:5px}
+.big-form i{width:14px;height:14px;border-radius:2px}
+.h2h{padding:4px 12px 8px;display:flex;flex-direction:column;gap:6px}
+.h2h-row{display:grid;grid-template-columns:40px 1fr 150px 1fr 40px;align-items:center;gap:6px;font-size:12px}
+.h2h-row em{font-style:normal;color:var(--ink-3);text-align:center;font-size:11.5px}
+.h2h-row .me{font-family:var(--mono);font-size:12px;color:var(--ink)}
+.h2h-row .them{font-family:var(--mono);font-size:12px;color:var(--ink);text-align:right}
+.h2h-row .l-bar,.h2h-row .r-bar{display:block;height:10px;background:var(--sheet-3);position:relative;border:1px solid var(--rule)}
+.h2h-row .l-bar::after{content:'';position:absolute;right:0;top:0;bottom:0;width:var(--w);background:var(--club)}
+.h2h-row .r-bar::after{content:'';position:absolute;left:0;top:0;bottom:0;width:var(--w);background:var(--opp)}
+.players-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px 12px 12px;border-top:1px solid var(--rule)}
+.players-row .lbl{font-size:11px;color:var(--ink-3);margin:8px 0 6px}
+.players-row .player{height:40px}
+.say{font-size:13px;color:var(--ink-2);line-height:1.45;padding-top:2px}
+
+.facts2{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;padding:6px 12px 10px;font-size:13.5px}
+.facts2 div{display:grid;grid-template-columns:104px 1fr;gap:10px;align-items:baseline}
+.facts2 span{color:var(--ink-3)}
+.facts2 b{font-weight:500;color:var(--ink)}
+table.rank{width:100%;border-collapse:collapse;font-size:13.5px;margin-bottom:4px}
+table.rank th{font-family:var(--display);font-weight:700;font-size:14px;color:var(--ink-3);padding:4px 8px 4px;border-bottom:1px solid var(--rule-2);text-align:left;position:static;height:auto}
+table.rank td{padding:5px 8px;border-bottom:1px solid var(--rule);height:auto}
+table.rank .c{text-align:center;font-family:var(--mono);font-size:12.5px;width:64px}
+table.rank .r1{color:var(--ok)}table.rank .r2{color:var(--ink-2)}table.rank .r3{color:var(--danger)}
+table.rank .edge{font-family:var(--display);font-weight:700;font-size:13px;text-align:right;width:52px}
+table.rank .edge.me{color:var(--club-2)}table.rank .edge.them{color:var(--opp)}table.rank .edge.even{color:var(--ink-3)}
+.matrix{display:grid;grid-template-columns:130px repeat(3,1fr);gap:4px;padding:10px 12px 8px}
+.mx-head,.mx-row{font-family:var(--display);font-weight:700;font-size:14px;line-height:1.1;color:var(--ink-2)}
+.mx-head{text-align:center;padding:4px 0 6px}
+.mx-row{display:flex;flex-direction:column;justify-content:center;padding-right:8px}
+.mx-head em,.mx-row em{font-style:normal;font-family:var(--mono);font-weight:400;font-size:11px;color:var(--ink-3)}
+.cell{min-height:54px;border:1px solid var(--rule);background:var(--sheet-2);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-family:var(--display);font-weight:700;font-size:15px;line-height:1.1}
+.cell em{font-style:normal;font-family:var(--mono);font-weight:400;font-size:11px;color:var(--ink-3);margin-top:3px}
+.cell.plus{background:rgba(63,179,127,.18);border-color:var(--ok);color:var(--ok)}
+.cell.minus{background:rgba(229,72,77,.16);border-color:var(--danger);color:var(--danger)}
+.cell.even{border-color:var(--rule-2);color:var(--ink-2)}
+.cell.dim{background:transparent;border-color:var(--rule)}
+
+.sides{padding:6px 12px 12px;display:flex;flex-direction:column}
+.side-row{display:grid;grid-template-columns:1.4fr 1fr 34px 1fr;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--rule);font-size:13.5px}
+.side-row:last-child{border-bottom:0}
+.side-row.head{font-family:var(--display);font-weight:700;font-size:14px;color:var(--ink-3);border-bottom:1px solid var(--rule-2);padding:4px 0 6px}
+.side-row.head span:nth-child(2),.side-row.head span:nth-child(4){text-align:center}
+.side-row.sep{border-top:1px solid var(--rule-2);margin-top:4px;padding-top:9px}
+.side-row .lab{color:var(--ink-2)}
+.side-row .lab em{display:block;font-style:normal;font-size:11px;color:var(--ink-3);margin-top:2px}
+.side-row .rk{font-family:var(--display);font-weight:900;font-size:19px;text-align:center;color:var(--ink)}
+.side-row .rk.good{color:var(--ok)}.side-row .rk.bad{color:var(--danger)}.side-row .rk.mid-rk{color:var(--ink-2)}
+.side-row .mid{font-family:var(--text);font-size:11px;color:var(--ink-3);text-align:center}
+
+.more{margin-left:auto;font-family:var(--text);font-weight:600;font-size:12.5px;color:var(--club-2);text-decoration:none;padding:2px 6px;border:1px solid transparent}
+.more:hover{border-color:var(--club-2)}
+main[hidden]{display:none}
+
+/* grid */
+main{max-width:1600px;margin:12px auto 40px;padding:0 18px;display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:start}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c9{grid-column:span 9}.c12{grid-column:span 12}
+@media (max-width:1100px){.c3,.c4,.c5,.c6,.c7,.c8,.c9{grid-column:span 12}}
+.sheet{background:var(--sheet);border:1px solid var(--rule);display:flex;flex-direction:column}
+.sheet h2{font-family:var(--display);font-weight:900;font-size:18px;line-height:1;padding:10px 12px 8px;border-bottom:1px solid var(--rule-2);display:flex;align-items:center;gap:10px}
+.sheet h2 small{font-family:var(--text);font-weight:500;font-size:12px;color:var(--ink-3);margin-left:auto}
+.pad{padding:10px 12px}
+.foot{margin-top:auto;display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--rule);flex-wrap:wrap}
+.btn{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;padding:7px 12px;border:1px solid var(--rule-hi);color:var(--ink);display:inline-flex;align-items:center;gap:7px}
+.btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2}
+.btn:hover{background:rgba(255,255,255,.06)}.btn:active{background:rgba(255,255,255,.12)}
+.btn.go{background:var(--club-2);color:#111;border-color:var(--club-2)}.btn.go:hover{filter:brightness(1.06)}
+.btn.quiet{border-color:var(--rule-2);color:var(--ink-2)}
+.big{font-family:var(--display);font-weight:900;font-size:36px;line-height:.95}
+.mono{font-family:var(--mono);font-size:12.5px}
+.muted{color:var(--ink-3)}
+.stripe{border-left:4px solid var(--c,#555);padding-left:8px}
+
+/* score bug + field */
+.bug{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:12px 12px 6px}
+.side{display:flex;align-items:center;gap:10px}
+.side .cr{width:46px;height:46px;font-family:var(--display);font-weight:900;font-size:17px;color:#fff;display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
+.side .nm{font-family:var(--display);font-weight:900;font-size:30px;line-height:.9}
+.side .rec{font-size:12px;color:var(--ink-3)}
+.mid{text-align:center}
+.mid .wp{font-family:var(--display);font-weight:900;font-size:34px;line-height:1}
+.mid .lbl{font-size:11.5px;color:var(--ink-3)}
+.wpbar{height:10px;display:flex;border:1px solid var(--rule-2);margin:6px 0 4px}
+.wpbar i{display:block;height:100%}
+.field{display:block;width:100%;height:auto}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2);padding:6px 12px 0}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:-1px}
+
+/* season strip */
+.strip{display:grid;grid-template-columns:repeat(17,1fr);gap:4px;padding:10px 12px 4px}
+.wk{aspect-ratio:1/1.3;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--sheet-2);border:1px solid var(--rule);font-family:var(--display);font-weight:700;font-size:13px;color:var(--ink-2)}
+.wk small{font-family:var(--text);font-size:10px;color:var(--ink-3);font-weight:500}
+.wk.w{background:var(--ok);color:#0b1a12;border-color:var(--ok)}.wk.w small{color:#0b1a12}
+.wk.l{background:var(--danger);color:#fff;border-color:var(--danger)}.wk.l small{color:#fff}
+.wk.now{border:2px solid var(--club-2)}
+.wk.bye{opacity:.5}
+
+/* charts */
+.bars{display:grid;grid-template-columns:110px 1fr 42px;gap:6px 10px;align-items:center;padding:6px 12px 10px;font-size:13px}
+.bars .l{color:var(--ink-2)}
+.bars .t{height:12px;background:var(--sheet-3);position:relative;border:1px solid var(--rule)}
+.bars .t i{position:absolute;top:0;bottom:0;left:0;background:var(--live)}
+.bars .t b{position:absolute;top:-4px;width:2px;height:18px;background:var(--ink)}
+.bars .v{font-family:var(--mono);font-size:12px;text-align:right;color:var(--ink-2)}
+.stack{display:flex;height:22px;border:1px solid var(--rule-2)}
+.stack i{display:block;height:100%;position:relative}
+.stack i span{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:12px;color:#0f1114}
+.donut{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:8px 12px 10px}
+.gauge{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:8px 12px 6px}
+
+/* plates */
+.plates{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;padding:10px 12px 4px}
+.player{display:grid;grid-template-columns:40px 1fr auto;align-items:center;background:var(--sheet-2);border:1px solid var(--rule);height:44px;position:relative;text-align:left;padding:0}
+.player:hover{border-color:var(--rule-hi)}
+.player .no{font-family:var(--display);font-weight:900;font-size:22px;text-align:center;background:var(--ink);color:#111;height:100%;display:grid;place-items:center}
+.player .nm{font-family:var(--display);font-weight:700;font-size:18px;padding:0 9px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.player .nm small{display:block;font-family:var(--text);font-weight:500;font-size:11px;color:var(--ink-3);margin-top:3px}
+.player .ovr{font-family:var(--display);font-weight:900;font-size:20px;padding:0 10px;color:var(--ink-2)}
+.pin{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--ok);border:2px solid var(--sheet)}
+.pin.warn{background:var(--decide)}.pin.bad{background:var(--danger)}
+
+/* inbox as decision cards */
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:10px 12px}
+@media (max-width:1100px){.cards{grid-template-columns:1fr}}
+.card{background:var(--sheet-2);border:1px solid var(--rule);border-top:3px solid var(--k,var(--rule-hi));display:flex;flex-direction:column}
+.card .h{padding:10px 12px 6px}
+.card .h .k{font-size:11px;color:var(--ink-3)}
+.card .h .s{font-family:var(--display);font-weight:900;font-size:19px;line-height:1;margin-top:3px}
+.card .b{padding:0 12px 10px;font-size:13px;color:var(--ink-2);line-height:1.45}
+.terms{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 12px 10px}
+.term{background:var(--sheet-3);border:1px solid var(--rule);padding:8px 10px}
+.term .l{font-size:11px;color:var(--ink-3)}
+.term .v{font-family:var(--display);font-weight:900;font-size:22px;line-height:1;margin-top:3px}
+.card .a{margin-top:auto;display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--rule)}
+.card .a .btn{padding:6px 10px;font-size:14px}
+
+/* standings mini */
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.02em;text-align:left;padding:8px 8px 6px;border-bottom:1px solid var(--rule-2);color:var(--ink-3)}
+td{padding:6px 8px;border-bottom:1px solid var(--rule)}
+tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right;font-family:var(--mono);font-size:12.5px}
+tr.me td{background:var(--sheet-2)}
+.pf{display:flex;gap:1px;height:8px}
+.pf i{display:block;height:100%}
+footer{max-width:1600px;margin:0 auto 36px;padding:0 18px;color:var(--ink-3);font-size:12.5px;line-height:1.6;max-width:84ch}
+.bars .t[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);bottom:100%;margin-bottom:6px;background:var(--ink);color:#111;font-family:var(--mono);font-size:11.5px;padding:5px 8px;white-space:nowrap;z-index:20;border:1px solid var(--rule-hi);pointer-events:none}
+.mh .two-col{display:flex;gap:0}
+.mh .two-col em{font-style:normal;width:64px;text-align:center;font-family:var(--display);font-weight:700;font-size:14px;color:var(--ink-3)}
+.m-side .bars{height:100%;align-content:space-evenly}
+</style>
+</head>
+<body>
+
+<header class="rail">
+  <div class="in">
+    <div class="hist"><button aria-label="Back">‹</button><button aria-label="Forward" disabled>›</button></div>
+    <div class="club"><div class="crest">KC</div><div><div class="name">KANSAS CITY</div><div class="who">Aden Ballenger · Head Coach and GM</div></div></div>
+    <nav>
+      <a href="#" aria-current="page">Portal <span class="badge">3</span></a><a href="#">Club</a><a href="#">Personnel</a><a href="#">Draft</a><a href="#">League</a><a href="#">Game Plan</a><a href="#">Game Day</a><a href="#">Front Office</a>
+    </nav>
+    <div class="status">
+      <div class="stat"><b>6–2</b><span>1st AFC West</span></div>
+      <div class="stat"><b>$10.1m</b><span>Cap Space</span></div>
+      <div class="stat"><b>97</b><span>Prestige</span></div>
+      <div class="stat"><b>Wk 9</b><span>2027</span></div>
+    </div>
+    <div class="clock"><b>Tue 2 Nov</b><span>2027 · week 9</span></div>
+    <button class="advance blocked" title="Three decisions are waiting before Sunday"><div class="txt">3 Decisions<small>Then Play Week 9</small></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12h14M12 6l6 6-6 6"/></svg></button>
+  </div>
+  <div class="sub">
+    <div class="in">
+      <div class="crumb">Portal</div>
+      <div class="second"><a href="#" aria-current="page">Overview</a><a href="#">Inbox <em>14</em></a><a href="#">Calendar</a><a href="#">News</a><a href="#">Assistants</a><a href="#">Owner</a></div>
+      <div class="quick"><span>Quick</span><a href="#">Roster</a><a href="#">Depth Chart</a><a href="#">Cap</a><a href="#">Wire</a><a href="#">Draft Board</a><a href="#">Standings</a><button class="kbd" title="Keyboard shortcuts: 1–8 sections, U next unread, C calendar, ? all">?</button></div>
+    </div>
+  </div>
+</header>
+
+<main id="home">
+  <!-- ROW 1: the next game, everything about it -->
+  <section class="sheet c12">
+    <h2>Week 9 at Denver <small>Sunday 1:00 · Clear, 48°F · Empower Field</small></h2>
+    <div class="match">
+      <!-- left: the bug and the model -->
+      <div class="m-side">
+        <div class="bug" style="grid-template-columns:auto 1fr auto;padding:12px 12px 4px">
+          <div class="side"><div class="cr" style="background:var(--club)">KC</div><div><div class="nm">CHIEFS</div><div class="rec">6–2 · 1st AFC West</div></div></div>
+          <div class="mid">
+            <div class="lbl">Win Probability</div>
+            <div class="wp">54%</div>
+            <div class="wpbar"><i style="width:54%;background:var(--club)"></i><i style="width:46%;background:var(--opp)"></i></div>
+            <div class="lbl">Spread KC −2.5 · Total 46</div>
+          </div>
+          <div class="side" style="flex-direction:row-reverse;text-align:right"><div class="cr" style="background:var(--opp)">DEN</div><div><div class="nm">BRONCOS</div><div class="rec">5–3 · 2nd AFC West</div></div></div>
+        </div>
+        <div class="facts2">
+          <div><span>Their Coach</span><b>Ryan Vandermeer · Prestige 89</b></div>
+          <div><span>Series</span><b>KC leads 3–1 since 2025</b></div>
+          <div><span>Their Injuries</span><b>Sutton (WR) out · Bonitto questionable</b></div>
+          <div><span>Your Injuries</span><b>Uche out to week 10 · Bolton questionable</b></div>
+        </div>
+        <div class="form-row">
+          <div><div class="lbl">Chiefs Last Five</div><div class="form big-form"><i class="w"></i><i class="l"></i><i class="w"></i><i class="w"></i><i class="w"></i></div></div>
+          <div><div class="lbl">Broncos Last Five</div><div class="form big-form"><i class="w"></i><i class="w"></i><i class="l"></i><i class="w"></i><i class="w"></i></div></div>
+        </div>
+      </div>
+
+      <div class="m-right">
+        <div class="mh">Assistants Say <a class="more" href="#report" data-go="report">Full Opponent Report →</a></div>
+        <div class="say" style="padding:0 12px 10px">Denver sits in two-high on more than half their snaps, which leaves light boxes to run into, so we would lean on Hunt and the inside zone early and work the intermediate middle when they drop. Their line ranks 26th in pass protection and Mendoza is bottom-third in the league, so we can load the box against the run and bring pressure without much risk. The one thing to respect is their play action at 27%, the highest rate we have seen this year.</div>
+        <div class="players-row" style="border-top:1px solid var(--rule)">
+          <div><div class="lbl">Players to Watch</div><div class="player"><div class="no" style="background:var(--opp);color:#fff">2</div><div class="nm">P. Surtain II<small>CB · shadows your WR1</small></div><div class="ovr">94</div></div></div>
+          <div><div class="lbl">&nbsp;</div><div class="player"><div class="no" style="background:var(--opp);color:#fff">15</div><div class="nm">N. Bonitto<small>EDGE · 9 sacks · questionable</small></div><div class="ovr">89</div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><button class="btn go">Set Game Plan</button><button class="btn">Opponent Report</button><button class="btn">Depth Chart</button><button class="btn quiet">Series History</button></div>
+  </section>
+
+  <!-- ROW 2: decisions -->
+  <section class="sheet c12">
+    <h2>On Your Desk <small>2 waiting</small></h2>
+    <div class="cards">
+      <div class="card" style="--k:var(--live)">
+        <div class="h"><div class="k stripe" style="--c:var(--opp)">Trade Offer · Denver · Expires Thursday</div><div class="s">Denver offers for Trent McDuffie</div></div>
+        <div class="terms">
+          <div class="term"><div class="l">They Send</div><div class="v">2028 R1 + Elliss</div></div>
+          <div class="term"><div class="l">Value Gap</div><div class="v" style="color:var(--danger)">−$2.6m</div></div>
+        </div>
+        <div class="b">Corner is your deepest spot. Watson would start against Buffalo.</div>
+        <div class="a"><button class="btn go">Accept</button><button class="btn">Counter</button><button class="btn quiet">Decline</button></div>
+      </div>
+      <div class="card" style="--k:var(--decide)">
+        <div class="h"><div class="k">Contracts · Final Year</div><div class="s">Creed Humphrey wants a deal</div></div>
+        <div class="terms">
+          <div class="term"><div class="l">Agent Asks</div><div class="v">$13.3m</div></div>
+          <div class="term"><div class="l">Years Left</div><div class="v">1</div></div>
+        </div>
+        <div class="b">Center, 90, age 27, $14.9m a year.</div>
+        <div class="a"><button class="btn go">Negotiate</button><button class="btn quiet">Later</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROW 2b: the rest of the inbox, by day, with word tags -->
+  <section class="sheet c12">
+    <h2>Inbox <small>14 this week</small></h2>
+    <div class="filt">
+      <button aria-pressed="true">All <em>14</em></button><button aria-pressed="false">New <em>5</em></button><button aria-pressed="false">Decide <em>3</em></button><button aria-pressed="false">Unread <em>6</em></button>
+      <div class="dens">Density <button aria-pressed="false">Default</button><button aria-pressed="true">Detailed</button><button aria-pressed="false">Condensed</button></div>
+    </div>
+    <div class="dayh">Tuesday 2 November</div>
+    <button class="row unread"><div><div class="t">Denver offers for Trent McDuffie</div><div class="f">A 2028 first and Jonah Elliss · expires Thursday</div></div><span class="tag trade">Trade</span><time>08:41</time></button>
+    <button class="row unread"><div><div class="t">Creed Humphrey enters his final year</div><div class="f">Agent asks $13.3m</div></div><span class="tag contract">Contract</span><time>08:40</time></button>
+    <button class="row unread"><div><div class="t">Game plan: week 9 at Denver</div><div class="f">Three suggestions</div></div><span class="tag assist">Assistants</span><time>08:40</time></button>
+    <button class="row"><div><div class="t">Zabien Brown rises 17 spots after the combine</div><div class="f">CB, Alabama · consensus 37 to 20</div></div><span class="tag scout">Scouting</span><time>07:15</time></button>
+    <div class="dayh">Monday 1 November</div>
+    <button class="row unread"><div><div class="t">Eight players on the wire worth a look</div><div class="f">You hold 19th priority · awards Tuesday</div></div><span class="tag wire">Wire</span><time>17:02</time></button>
+    <button class="row"><div><div class="t">Moss elevated for week 8</div><div class="f">Two of three elevations used</div></div><span class="tag squad">Squad</span><time>11:30</time></button>
+    <button class="row unread"><div><div class="t">Skyy Moore is quietly unhappy</div><div class="f">Buried fourth at receiver</div></div><span class="tag room">Locker Room</span><time>09:10</time></button>
+    <div class="dayh">Sunday 31 October</div>
+    <button class="row"><div><div class="t">Chiefs 27, Raiders 17</div><div class="f">Mahomes 24/33, 288, 2 TD</div></div><span class="tag game">Game</span><time>16:12</time></button>
+    <button class="row unread"><div><div class="t">Clark Hunt: a word after the win</div><div class="f">"Keep it going."</div></div><span class="tag owner">Owner</span><time>18:40</time></button>
+    <div class="foot"><button class="btn">Open Inbox</button><button class="btn quiet">Mark all Read</button></div>
+  </section>
+
+  <!-- ROW 3: money, room, people -->
+  <section class="sheet c4">
+    <h2>Cap <small>2027 · $301m limit</small></h2>
+    <div class="pad">
+      <div class="big">$10.1m <span class="muted" style="font-size:14px;font-family:var(--text);font-weight:500">Space</span></div>
+      <div class="stack" style="margin-top:10px">
+        <i style="width:22%;background:#c8102e"><span>QB</span></i><i style="width:18%;background:#e0b400"><span>OL</span></i><i style="width:14%;background:#4cc9f0"><span>WR</span></i><i style="width:11%;background:#3fb37f"><span>DL</span></i><i style="width:9%;background:#8791a0"><span>DB</span></i><i style="width:8%;background:#b6bec9"><span>LB</span></i><i style="width:6%;background:#5a6472"><span>TE</span></i><i style="width:6%;background:#3a1216"><span>dead</span></i><i style="width:6%;background:#23282f"></i>
+      </div>
+      <div class="bars" style="padding:10px 0 0;grid-template-columns:96px 1fr 60px">
+        <div class="l">This Year</div><div class="t"><i style="width:94%;background:var(--ink-2)"></i></div><div class="v">$291m</div>
+        <div class="l">Next Year</div><div class="t"><i style="width:92%;background:var(--decide)"></i></div><div class="v">$296/322</div>
+        <div class="l">2029</div><div class="t"><i style="width:61%;background:var(--ok)"></i></div><div class="v">$210/345</div>
+      </div>
+    </div>
+    <div class="foot"><button class="btn">Restructure</button><button class="btn">Extensions</button><button class="btn quiet">Ledger</button></div>
+  </section>
+
+  <section class="sheet c4">
+    <h2>The Room <small>53 players · morale</small></h2>
+    <div class="donut">
+      <svg width="104" height="104" viewBox="0 0 42 42" aria-label="Morale">
+        <circle cx="21" cy="21" r="15.9" fill="none" stroke="#2b313a" stroke-width="7"/>
+        <circle cx="21" cy="21" r="15.9" fill="none" stroke="#3fb37f" stroke-width="7" stroke-dasharray="21 79" stroke-dashoffset="25"/>
+        <circle cx="21" cy="21" r="15.9" fill="none" stroke="#8791a0" stroke-width="7" stroke-dasharray="56 44" stroke-dashoffset="4"/>
+        <circle cx="21" cy="21" r="15.9" fill="none" stroke="#e0b400" stroke-width="7" stroke-dasharray="19 81" stroke-dashoffset="-52"/>
+        <circle cx="21" cy="21" r="15.9" fill="none" stroke="#e5484d" stroke-width="7" stroke-dasharray="4 96" stroke-dashoffset="-71"/>
+        <text x="21" y="23.5" text-anchor="middle" font-family="Big Shoulders Display" font-weight="900" font-size="11" fill="#eef1f5">51</text>
+      </svg>
+      <div class="bars" style="padding:0;grid-template-columns:70px 1fr 28px">
+        <div class="l">Happy</div><div class="t"><i style="width:21%;background:var(--ok)"></i></div><div class="v">11</div>
+        <div class="l">Content</div><div class="t"><i style="width:56%;background:var(--rule-hi)"></i></div><div class="v">30</div>
+        <div class="l">Unsettled</div><div class="t"><i style="width:19%;background:var(--decide)"></i></div><div class="v">10</div>
+        <div class="l">Unhappy</div><div class="t"><i style="width:4%;background:var(--danger)"></i></div><div class="v">2</div>
+      </div>
+    </div>
+    <div class="plates" style="grid-template-columns:1fr;padding-top:2px">
+      <button class="player"><div class="no">24</div><div class="nm">S. Moore<small>Unhappy · buried fourth at WR</small></div><div class="ovr">78</div><i class="pin bad"></i></button>
+      <button class="player"><div class="no">95</div><div class="nm">T. Moss<small>Two elevations used of three</small></div><div class="ovr">71</div><i class="pin warn"></i></button>
+    </div>
+    <div class="foot"><button class="btn">Roster</button><button class="btn">Depth Chart</button><button class="btn quiet">Practice Squad</button></div>
+  </section>
+
+  <section class="sheet c4">
+    <h2>Front Office <small>Clark Hunt · you</small></h2>
+    <div class="gauge">
+      <svg width="104" height="60" viewBox="0 0 104 60" aria-label="Owner confidence">
+        <path d="M8 56 A44 44 0 0 1 96 56" fill="none" stroke="#2b313a" stroke-width="10"/>
+        <path d="M8 56 A44 44 0 0 1 82 20" fill="none" stroke="#3fb37f" stroke-width="10"/>
+        <text x="52" y="52" text-anchor="middle" font-family="Big Shoulders Display" font-weight="900" font-size="20" fill="#eef1f5">Settled</text>
+      </svg>
+      <div style="font-size:13px;color:var(--ink-2);line-height:1.45">Wants a playoff berth. Patient with the draft.</div>
+    </div>
+    <div class="bars" style="grid-template-columns:96px 1fr 42px">
+      <div class="l">Your Prestige</div><div class="t"><i style="width:97%;background:var(--club-2)"></i><b style="left:55%"></b></div><div class="v">97</div>
+      <div class="l">Job Security</div><div class="t"><i style="width:88%;background:var(--ok)"></i></div><div class="v">High</div>
+      <div class="l">Scouting</div><div class="t"><i style="width:72%;background:var(--live)"></i><b style="left:50%"></b></div><div class="v">7th</div>
+    </div>
+    <div class="foot"><button class="btn">Coaching Identity</button><button class="btn">Scouting Board</button><button class="btn quiet">Almanac</button></div>
+  </section>
+
+  <!-- ROW 4: league -->
+  <section class="sheet c6">
+    <h2>AFC West <small>through week 8</small></h2>
+    <table>
+      <tr><th></th><th>Club</th><th class="n">W</th><th class="n">L</th><th>Form</th><th style="width:26%">Point differential</th><th class="n">PD</th></tr>
+      <tr class="me"><td><span class="arr same">–</span></td><td><span class="stripe" style="--c:#c8102e">Kansas City</span></td><td class="n">6</td><td class="n">2</td><td><div class="form"><i class="w"></i><i class="l"></i><i class="w"></i><i class="w"></i><i class="w"></i></div></td><td><div class="pf"><i style="width:68%;background:var(--ok)"></i></div></td><td class="n">+54</td></tr>
+      <tr><td><span class="arr up">▲1</span></td><td><span class="stripe" style="--c:#fb4f14">Denver</span></td><td class="n">5</td><td class="n">3</td><td><div class="form"><i class="w"></i><i class="w"></i><i class="l"></i><i class="w"></i><i class="w"></i></div></td><td><div class="pf"><i style="width:22%;background:var(--ok)"></i></div></td><td class="n">+17</td></tr>
+      <tr><td><span class="arr dn">▼1</span></td><td><span class="stripe" style="--c:#0080c6">LA Chargers</span></td><td class="n">4</td><td class="n">4</td><td><div class="form"><i class="l"></i><i class="w"></i><i class="l"></i><i class="l"></i><i class="w"></i></div></td><td><div class="pf"><i style="width:9%;background:var(--danger)"></i></div></td><td class="n">−7</td></tr>
+      <tr><td><span class="arr same">–</span></td><td><span class="stripe" style="--c:#a5acaf">Las Vegas</span></td><td class="n">2</td><td class="n">6</td><td><div class="form"><i class="l"></i><i class="l"></i><i class="w"></i><i class="l"></i><i class="l"></i></div></td><td><div class="pf"><i style="width:88%;background:var(--danger)"></i></div></td><td class="n">−71</td></tr>
+    </table>
+    <div class="foot"><button class="btn">Full Standings</button><button class="btn quiet">League</button></div>
+  </section>
+
+  <section class="sheet c6">
+    <h2>The Season <small>6–2 · Playoffs 78% Likely</small></h2>
+    <div class="strip">
+      <div class="wk w">W<small>@LAC</small></div><div class="wk w">W<small>BAL</small></div><div class="wk l">L<small>@BUF</small></div><div class="wk w">W<small>NYG</small></div>
+      <div class="wk w">W<small>@JAX</small></div><div class="wk w">W<small>DEN</small></div><div class="wk l">L<small>@DET</small></div><div class="wk w">W<small>@LV</small></div>
+      <div class="wk now">9<small>@DEN</small></div><div class="wk">10<small>BUF</small></div><div class="wk bye">—<small>bye</small></div><div class="wk">12<small>@IND</small></div>
+      <div class="wk">13<small>HOU</small></div><div class="wk">14<small>@LAC</small></div><div class="wk">15<small>LV</small></div><div class="wk">16<small>@TEN</small></div><div class="wk">17<small>DEN</small></div>
+    </div>
+    <div class="bars" style="padding-top:8px">
+      <div class="l">Points For</div><div class="t"><i style="width:78%;background:var(--ok)"></i><b style="left:64%"></b></div><div class="v">26.8</div>
+      <div class="l">Points Against</div><div class="t"><i style="width:52%;background:var(--danger)"></i><b style="left:64%"></b></div><div class="v">20.0</div>
+      <div class="l">EPA per Play</div><div class="t"><i style="width:71%;background:var(--live)"></i><b style="left:50%"></b></div><div class="v">+0.09</div>
+      <div class="l">Pass Rush Win</div><div class="t"><i style="width:44%;background:var(--live)"></i><b style="left:50%"></b></div><div class="v">14%</div>
+    </div>
+    <div class="foot"><button class="btn">Schedule</button><button class="btn">Stats</button><button class="btn quiet">Playoff Picture</button></div>
+  </section>
+</main>
+<main id="report" hidden>
+  <section class="sheet c12">
+    <h2>Opponent Report · Denver Broncos <small>Week 9 · Sunday 1:00</small></h2>
+    <div class="match" style="grid-template-columns:1fr 1.3fr;align-items:stretch">
+      <div class="m-side" style="display:flex;flex-direction:column">
+      <!-- middle: their tendencies against the league -->
+      <div class="m-mid">
+        <div class="mh">Their Tendencies</div>
+        <div class="bars" style="padding:4px 12px 6px;grid-template-columns:104px 1fr">
+          <div class="l">Pass Rate</div><div class="t" data-tip="DEN: 48% | NFL: 57%"><i style="width:48%;background:var(--opp)"></i><b style="left:57%"></b></div>
+          <div class="l">Play Action</div><div class="t" data-tip="DEN: 27% | NFL: 18%"><i style="width:27%;background:var(--opp)"></i><b style="left:18%"></b></div>
+          <div class="l">Deep Shots</div><div class="t" data-tip="DEN: 9% | NFL: 11%"><i style="width:9%;background:var(--opp)"></i><b style="left:11%"></b></div>
+          <div class="l">Two-High</div><div class="t" data-tip="DEN: 61% | NFL: 40%"><i style="width:61%;background:var(--opp)"></i><b style="left:40%"></b></div>
+          <div class="l">Blitz</div><div class="t" data-tip="DEN: 11% | NFL: 27%"><i style="width:11%;background:var(--opp)"></i><b style="left:27%"></b></div>
+          <div class="l">Man Coverage</div><div class="t" data-tip="DEN: 29% | NFL: 35%"><i style="width:29%;background:var(--opp)"></i><b style="left:35%"></b></div>
+          <div class="l">Fourth-Down Go</div><div class="t" data-tip="DEN: 22% | NFL: 30%"><i style="width:22%;background:var(--opp)"></i><b style="left:30%"></b></div>
+          <div class="l">Shadows WR1</div><div class="t" data-tip="DEN: 64% | NFL: 20%"><i style="width:64%;background:var(--opp)"></i><b style="left:20%"></b></div>
+        </div>
+      </div>
+
+      </div>
+      <div class="m-right">
+      <!-- right: the units, head to head -->
+      <div class="m-right">
+        <div class="mh">Unit Rankings <span class="two-col"><em>KC</em><em>DEN</em></span></div>
+        <table class="rank">
+          <tr><td>Pass Offense</td><td class="c r1">3rd</td><td class="c r3">25th</td></tr>
+          <tr><td>Run Offense</td><td class="c r2">12th</td><td class="c r1">6th</td></tr>
+          <tr><td>Pass Defense</td><td class="c r2">14th</td><td class="c r2">15th</td></tr>
+          <tr><td>Run Defense</td><td class="c r2">19th</td><td class="c r1">8th</td></tr>
+          <tr><td>Pass Block</td><td class="c r1">7th</td><td class="c r3">26th</td></tr>
+          <tr><td>Pass Rush</td><td class="c r2">11th</td><td class="c r1">5th</td></tr>
+          <tr><td>Receivers</td><td class="c r1">9th</td><td class="c r2">17th</td></tr>
+          <tr><td>Corners</td><td class="c r2">13th</td><td class="c r3">22nd</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+  <!-- ROW 1b: the two sides of the ball, side by side -->
+  <section class="sheet c6">
+    <h2>When Kansas City Has the Ball</h2>
+    <div class="sides">
+      <div class="side-row head"><span></span><span>KC Offense</span><span></span><span>DEN Defense</span></div>
+      <div class="side-row"><span class="lab">Passing Game</span><span class="rk good">3rd</span><span class="mid">vs</span><span class="rk mid-rk">15th</span></div>
+      <div class="side-row"><span class="lab">Running Game</span><span class="rk mid-rk">12th</span><span class="mid">vs</span><span class="rk good">8th</span></div>
+      <div class="side-row"><span class="lab">Pass Protection</span><span class="rk good">7th</span><span class="mid">vs</span><span class="rk good">5th</span></div>
+      <div class="side-row sep"><span class="lab">Deep Ball <em>KC 11% of throws</em></span><span class="rk">45% comp</span><span class="mid">vs</span><span class="rk">Two-high 61%</span></div>
+      <div class="side-row"><span class="lab">Rice vs Surtain <em>They shadow 64%</em></span><span class="rk">2.1 sep</span><span class="mid">vs</span><span class="rk good">94 CB</span></div>
+      <div class="side-row"><span class="lab">Third and Medium</span><span class="rk good">48%</span><span class="mid">vs</span><span class="rk bad">Allow 46%</span></div>
+    </div>
+  </section>
+  <section class="sheet c6">
+    <h2>When Denver Has the Ball</h2>
+    <div class="sides">
+      <div class="side-row head"><span></span><span>DEN Offense</span><span></span><span>KC Defense</span></div>
+      <div class="side-row"><span class="lab">Passing Game</span><span class="rk bad">25th</span><span class="mid">vs</span><span class="rk mid-rk">14th</span></div>
+      <div class="side-row"><span class="lab">Running Game</span><span class="rk good">6th</span><span class="mid">vs</span><span class="rk bad">19th</span></div>
+      <div class="side-row"><span class="lab">Pass Protection</span><span class="rk bad">26th</span><span class="mid">vs</span><span class="rk mid-rk">11th</span></div>
+      <div class="side-row sep"><span class="lab">Play Action <em>DEN 27% of dropbacks</em></span><span class="rk good">8.9 yds/att</span><span class="mid">vs</span><span class="rk bad">Allow 8.1</span></div>
+      <div class="side-row"><span class="lab">Under Pressure <em>Mendoza</em></span><span class="rk bad">−0.31 EPA</span><span class="mid">vs</span><span class="rk">Pressure 31%</span></div>
+      <div class="side-row"><span class="lab">Bonitto vs Your Tackles</span><span class="rk good">22% win</span><span class="mid">vs</span><span class="rk">Taylor 89%</span></div>
+    </div>
+  </section>
+
+  <section class="sheet c12">
+    <h2>What We Would Do</h2>
+    <div class="cards" style="grid-template-columns:repeat(3,1fr)">
+      <div class="card" style="--k:var(--ok)">
+        <div class="h"><div class="k">Offense</div><div class="s">Run It Against the Two-High</div></div>
+        <div class="b">They sit in two-high on 61% of snaps, which leaves six in the box. Inside zone with Hunt early, then the intermediate middle when the safeties drop.</div>
+        <div class="terms" style="grid-template-columns:1fr"><div class="term"><div class="l">Plan Change</div><div class="v" style="font-size:16px">Pass lean −5 · Depth toward medium</div></div></div>
+        <div class="a"><button class="btn go">Accept</button><button class="btn quiet">Skip</button></div>
+      </div>
+      <div class="card" style="--k:var(--ok)">
+        <div class="h"><div class="k">Defense</div><div class="s">Load the Box and Bring It</div></div>
+        <div class="b">Their line ranks 26th in pass protection and Mendoza is bottom-third under pressure. Eight in the box against the run, pressure on early downs.</div>
+        <div class="terms" style="grid-template-columns:1fr"><div class="term"><div class="l">Plan Change</div><div class="v" style="font-size:16px">Box +1 · Blitz +5%</div></div></div>
+        <div class="a"><button class="btn go">Accept</button><button class="btn quiet">Skip</button></div>
+      </div>
+      <div class="card" style="--k:var(--decide)">
+        <div class="h"><div class="k">Defense</div><div class="s">Safeties Stay Home</div></div>
+        <div class="b">Play action on 27% of their dropbacks is the highest rate you have seen. The safeties read run late and carry the verticals instead of driving on the fake.</div>
+        <div class="terms" style="grid-template-columns:1fr"><div class="term"><div class="l">Plan Change</div><div class="v" style="font-size:16px">Zone aggression −15</div></div></div>
+        <div class="a"><button class="btn go">Accept</button><button class="btn quiet">Skip</button></div>
+      </div>
+    </div>
+    <div class="foot"><button class="btn go">Accept All and Open Game Plan</button><button class="btn">Open Game Plan</button><button class="btn quiet" data-go="home">Back to Portal</button></div>
+  </section>
+</main>
+
+
+<footer>Added from the FM27 review: back and forward, a secondary row of the section's screens with a quick-links set on the right and a shortcuts key, the clock, an Advance that turns yellow and says what is blocking it, an inbox grouped by day with word tags per kind and a density switch, form dots and rank arrows in the standings, and the assistants' one-line read above the charts. Graphic first: the score bug with the win-probability split and last game's drive chart on a field; the season as a strip of seventeen blocks; charts against the league median for scoring, EPA and pass rush; the cap as a stacked bar by position and three years of room; morale as a donut; owner confidence as a gauge. Every sheet ends in its actions. Decisions are cards with the terms as numbers and the buttons on them. Same dark board, same two faces, same club stripe on every row that belongs to a club.</footer>
+<script>
+document.querySelectorAll('.filt button[aria-pressed]').forEach(b=>b.addEventListener('click',()=>{const grp=b.closest('.dens')||b.closest('.filt');grp.querySelectorAll('button[aria-pressed]').forEach(x=>{if((x.closest('.dens')?1:0)===(b.closest('.dens')?1:0))x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');
+  if(b.closest('.dens')){const d=b.textContent.trim();document.querySelectorAll('.row').forEach(r=>{r.style.padding=d==='Condensed'?'4px 12px':d==='Detailed'?'8px 12px':'6px 12px';r.querySelector('.f').style.display=d==='Condensed'?'none':'block';});}}));
+document.addEventListener('keydown',e=>{if(e.key==='?'){alert('1–8 sections · U next unread · C calendar · G game plan · Space advance');}});
+</script>
+<script>
+function go(v){document.getElementById('home').hidden=v!=='home';document.getElementById('report').hidden=v!=='report';document.querySelectorAll('.crumb')[0].textContent=v==='home'?'Portal':'Game Plan';window.scrollTo(0,0);}
+document.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();go(a.dataset.go);}));
+</script>
+</body>
+</html>
