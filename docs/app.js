@@ -352,7 +352,7 @@ function renderRoster(v) {
   const heads = { Overview: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Ovr', 'Overall Rating', 1), H('Fit', "How well the player matches your coach's scheme", 1), H('Dev', 'Rate of XP Growth'), H('Condition', 'Game-day Freshness'), H('Morale', "Player's happiness"), H('Yrs', 'Years left on his contract', 1), H('Cap Hit', "This year's cap hit", 1), H('Penalty', 'Dead cap charged if player is cut/traded', 1), H('Status')],
                   Ratings: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Ovr', 'Overall Rating', 1), H('Ceiling', "The player's estimated potential", 1), H('Dev', 'Rate of XP Growth'), H('Fit', "How well the player matches your coach's scheme", 1), H('Morale', "Player's happiness")],
                   Contract: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Yrs', 'Years left on his contract', 1), H('Cap Hit', "This year's cap hit", 1), H('Penalty', 'Dead cap charged if player is cut/traded', 1), H('Status')],
-                  Stats: [H('Player'), H('Pos', 'Position'), H('G', 'Games played', 1), H('This Season')] }[clubView];
+                  Stats: [H('Player'), H('Pos', 'Position'), H('G', 'Games played', 1), H('This Season'), H('Comp%', 'Completion pct for a quarterback, catch pct for a receiver', 1), H('EPA', 'Expected points added per dropback, rush, target or defensive play by position', 1)] }[clubView];
   if (clubTab === 'ps') heads.push(el('th', {}, ''));
   tbl.append(el('tr', {}, ...heads));
   const rowsFor = () => clubTab === 'ps' ? [{ title: 'Practice Squad', rows: v.practice }] : clubTab === 'injured' ? [{ title: 'Injured', rows: v.injured }] : v.groups;
@@ -362,7 +362,7 @@ function renderRoster(v) {
       const cells = { Overview: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, el('span', { class: 'dev' + (r.dev === 'Star' || r.dev === 'Superstar' ? ' star' : '') }, r.dev)), el('td', {}, condBar(r.cond)), el('td', {}, pill(r.morale)), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n' }, `$${r.penalty.toFixed(1)}m`), el('td', {}, el('span', { class: 'inj' }, r.status))],
                       Ratings: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.pot_range ? `${r.pot_range[0]}–${r.pot_range[1]}` : (r.pot ?? '—')), el('td', {}, el('span', { class: 'dev' + (r.dev === 'Star' || r.dev === 'Superstar' ? ' star' : '') }, r.dev)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, pill(r.morale))],
                       Contract: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n' }, `$${r.penalty.toFixed(1)}m`), el('td', {}, el('span', { class: 'inj' }, r.status))],
-                      Stats: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.stats.games), el('td', { style: 'text-align:left;font-family:var(--mono);font-size:12px' }, r.stats.line)] }[clubView]();
+                      Stats: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.stats.games), el('td', { style: 'text-align:left;font-family:var(--mono);font-size:12px' }, r.stats.line), el('td', { class: 'n' }, r.stats.comp != null ? `${r.stats.comp}%` : '—'), el('td', { class: 'n', style: r.stats.epa != null ? (r.stats.epa > 0 ? 'color:var(--ok)' : 'color:var(--danger)') : '' }, r.stats.epa != null ? (r.stats.epa > 0 ? '+' : '') + r.stats.epa.toFixed(2) : '—')] }[clubView]();
       if (clubTab === 'ps') {
         const act = (name, extra) => { const res = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, ${extra})`); busy(res.ok ? (res.moves ? res.moves.map(m => `${m.name} ${m.how}`).join(', ') : `${res.name}: done.`) : res.why); setTimeout(() => busy(null), 2200); renderRoster(pyJSON('SESSION.club_roster()')); };
         cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' },
@@ -421,7 +421,19 @@ function renderCard(v) {
   const right = el('div', {});
   right.append(el('div', { class: 'h5' }, 'Contract', el('span', {}, v.contract.years ? `${v.contract.years} yrs · $${v.contract.per_year.toFixed(1)}m per year` : 'None')));
   if (v.contract.by_year.length) { const ct = el('table', { class: 'contract' }); ct.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Base'), el('th', {}, 'Bonus'), el('th', {}, 'Cap Hit'), el('th', {}, 'Penalty'))); v.contract.by_year.forEach((y, i) => ct.append(el('tr', { class: i === 0 ? 'now' : '' }, el('td', {}, y.year), el('td', {}, y.base != null ? y.base.toFixed(1) : '—'), el('td', {}, y.bonus != null ? y.bonus.toFixed(1) : '—'), el('td', {}, y.hit.toFixed(1)), el('td', {}, y.penalty != null ? y.penalty.toFixed(1) : '—')))); right.append(ct); }
+  right.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Trade Value', el('span', {}, "the scout's read")), el('div', { class: 'kv' }, el('span', {}, 'Market'), el('span', {}, v.market), el('span', {}, 'Interest'), el('span', {}, v.interest_line)));
   s.append(el('div', { class: 'body' }, left, mid, right));
+  // the tiles: morale, condition, development, season stats
+  const tiles = el('div', { class: 'tiles' },
+    el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Morale'), el('div', { class: 'word' }, v.morale), el('div', { class: 'sub' }, v.morale_line)),
+    el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Condition'), el('div', { class: 'word' }, `${v.cond}%`), el('div', { class: 'sub' }, v.out ? `Out until week ${v.out}` : v.cond >= 85 ? 'Fresh' : v.cond >= 70 ? 'Carrying a load' : 'Worn down'), el('div', { class: 'cond', style: 'width:100%;height:8px;margin-top:8px' }, el('i', { class: v.cond < 60 ? 'low' : v.cond < 80 ? 'mid' : '', style: `width:${v.cond}%` }))),
+    el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Development'), el('div', { class: 'word' }, v.dev), el('div', { class: 'sub' }, v.dev_line)),
+    el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Ceiling'), el('div', { class: 'word' }, v.ceiling), el('div', { class: 'sub' }, "your scouts' range for where he tops out")));
+  const wide = el('div', { class: 'tile wide' }, el('div', { class: 'h5' }, 'Season Stats', el('span', {}, `${v.rail.year} · ${v.games} game${v.games === 1 ? '' : 's'}`)));
+  if (v.seasons && v.seasons.length) { const t = el('table', { class: 'stab' }); t.append(el('tr', {}, el('th', {}, 'Season'), el('th', {}, 'G'), ...v.season.cols.map(c => el('th', {}, c)))); for (const sn of v.seasons.slice().reverse()) t.append(el('tr', {}, el('td', {}, `${sn.year} ${sn.team}`), el('td', {}, sn.games), ...sn.row.map(x => el('td', {}, String(x))))); wide.append(t); }
+  else wide.append(el('div', { class: 'sub' }, 'No snaps yet this season.'));
+  tiles.append(wide); s.append(tiles);
+  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn quiet', onclick: () => { location.hash = '#club'; } }, 'Back to Roster'), el('button', { class: 'btn quiet', onclick: () => { location.hash = '#club/depth'; } }, 'Depth Chart')));
   page.append(s);
 }
 
@@ -465,7 +477,7 @@ function renderDepth(v) {
     chart.append(col);
   }
   s.append(chart);
-  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, 'Reset to Ratings Order'), el('span', { class: 'count', style: 'margin-left:auto' }, Object.keys(v.pins).length ? `Your order set at: ${Object.keys(v.pins).join(', ')}` : 'Ordered by rating')));
+  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, 'Auto-Fill by Fit'), el('span', { class: 'count', style: 'margin-left:auto' }, Object.keys(v.pins).length ? `Your order set at: ${Object.keys(v.pins).join(', ')}` : 'Ordered by rating')));
   page.append(s);
 }
 
