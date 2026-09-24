@@ -650,47 +650,60 @@ function renderProspectCard(v) {
   page.append(s);
 }
 
-let depthPkg = 'Nickel';
+let depthPkg = 'Nickel', depthSide = 'offense';
 function renderDepth(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Club'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
   secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '#club/depth');
+  const reload = () => renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`));
   const s = el('section', { class: 'sheet c12' });
-  const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
-  for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)})`)); } }, p));
-  pk.append(el('span', { class: 'snaps' }, 'Drag a plate or use the arrows; the game fields the order you set'));
-  s.append(pk);
-  const chart = el('div', { class: 'chart' });
-  for (const c of v.cols) {
-    const byPos = {}; c.slots.forEach(x => (byPos[x.pos] = byPos[x.pos] || []).push(x));
-    const pinnedHere = Object.keys(byPos).some(p => v.pins[p] && v.pins[p].length);
-    const col = el('div', { class: 'col' }, el('h4', { class: pinnedHere ? 'pinned' : '' }, c.title));
-    for (const [pos, men] of Object.entries(byPos)) {
+  // the side tabs, then the package
+  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
+  for (const [k, l] of [['offense', 'Offense'], ['defense', 'Defense'], ['specialists', 'Specialists']]) tabs.append(el('button', { 'aria-pressed': String(depthSide === k), onclick: () => { depthSide = k; renderDepth(v); } }, l));
+  s.append(tabs);
+  if (depthSide !== 'specialists') {
+    const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
+    for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)})`)); } }, p));
+    pk.append(el('span', { class: 'snaps' }, 'Drag a plate or use the arrows; the game fields the order you set'));
+    s.append(pk);
+  }
+  // one column a position, grouped under a caption
+  const cols = v.sides[depthSide];
+  const groups = []; for (const c of cols) { const g = groups.find(x => x.group === c.group); if (g) g.cols.push(c); else groups.push({ group: c.group, cols: [c] }); }
+  const chart = el('div', { class: 'chart2' });
+  for (const g of groups) {
+    const gbox = el('div', { class: 'dgroup', style: `grid-column:span ${g.cols.length}` }, el('div', { class: 'gcap' }, g.group));
+    const inner = el('div', { class: 'gcols', style: `grid-template-columns:repeat(${g.cols.length},1fr)` });
+    for (const c of g.cols) {
+      const men = c.slots; const pinned = v.pins[c.pos] && v.pins[c.pos].length;
+      const col = el('div', { class: 'col' }, el('h4', { class: pinned ? 'pinned' : '' }, c.title, el('small', {}, c.on_field ? `${c.on_field} start${c.on_field === 1 ? 's' : ''}` : 'sits')));
       men.forEach((x, i) => {
-        const plate = el('div', { class: 'plate' + (x.flag === 'out' ? ' out' : ''), draggable: 'true', 'data-pid': x.pid, 'data-pos': pos }, el('div', { class: 'no' }, x.no || pos), el('div', { class: 'nm', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.short, el('small', {}, x.flag_word || '')), el('div', { class: 'ov' }, x.ovr));
-        plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos })); plate.classList.add('dragging'); });
+        const plate = el('div', { class: 'plate' + (x.flag === 'out' ? ' out' : ''), draggable: 'true', 'data-pid': x.pid, 'data-pos': c.pos }, el('div', { class: 'no' }, x.no || c.pos), el('div', { class: 'nm', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.short, el('small', {}, x.flag_word || (x.fit ? `Fit ${x.fit > 0 ? '+' : ''}${x.fit}` : ''))), el('div', { class: 'ov' }, x.ovr));
+        plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); plate.classList.add('dragging'); });
         plate.addEventListener('dragend', () => plate.classList.remove('dragging'));
         plate.addEventListener('dragover', e => { e.preventDefault(); plate.classList.add('over'); });
         plate.addEventListener('dragleave', () => plate.classList.remove('over'));
         plate.addEventListener('drop', e => {
           e.preventDefault(); plate.classList.remove('over');
           let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; }
-          if (!d || d.pos !== pos || d.pid === x.pid) return;      // a plate only moves within its own position
+          if (!d || d.pos !== c.pos || d.pid === x.pid) return;
           const order = men.map(m => m.pid).filter(p => p !== d.pid); order.splice(order.indexOf(x.pid), 0, d.pid);
-          pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`));
+          pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload();
         });
         if (x.flag !== 'out') plate.append(el('div', { class: 'cbar' }, el('i', { class: x.cond < 80 ? 'mid' : '', style: `width:${x.cond}%` })));
         const arrows = el('div', { class: 'arrows' },
-          el('button', { disabled: i === 0 ? '' : null, onclick: () => { const order = men.map(m => m.pid); [order[i - 1], order[i]] = [order[i], order[i - 1]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, '▲'),
-          el('button', { disabled: i === men.length - 1 ? '' : null, onclick: () => { const order = men.map(m => m.pid); [order[i + 1], order[i]] = [order[i], order[i + 1]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, '▼'));
+          el('button', { disabled: i === 0 ? '' : null, onclick: () => { const order = men.map(m => m.pid); [order[i - 1], order[i]] = [order[i], order[i - 1]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); } }, '▲'),
+          el('button', { disabled: i === men.length - 1 ? '' : null, onclick: () => { const order = men.map(m => m.pid); [order[i + 1], order[i]] = [order[i], order[i + 1]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); } }, '▼'));
         col.append(el('div', { class: 'slot' + (x.start ? ' start' : '') }, el('span', { class: 'rk' }, x.slot), plate, arrows));
       });
+      if (!men.length) col.append(el('div', { class: 'empty', style: 'padding:10px' }, 'Nobody'));
+      inner.append(col);
     }
-    chart.append(col);
+    gbox.append(inner); chart.append(gbox);
   }
   s.append(chart);
-  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, 'Auto-Fill by Fit'), el('span', { class: 'count', style: 'margin-left:auto' }, Object.keys(v.pins).length ? `Your order set at: ${Object.keys(v.pins).join(', ')}` : 'Ordered by rating')));
+  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); reload(); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); reload(); } }, 'Auto-Fill by Fit'), el('span', { class: 'count', style: 'margin-left:auto' }, Object.keys(v.pins).length ? `Your order set at: ${Object.keys(v.pins).join(', ')}` : 'Ordered by rating')));
   page.append(s);
 }
 

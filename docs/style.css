@@ -989,3 +989,13 @@ button.btn{line-height:normal;box-sizing:border-box}
 .phase.marker div.now{border-bottom-color:var(--club-2)}
 .phase.marker div small{display:block;font-size:10px;color:var(--club-2);text-transform:uppercase;letter-spacing:.06em}
 .phase.marker div:not(.now):not(.done){color:var(--ink-3)}
+
+/* the depth chart: one column a position, positions grouped under a caption */
+.chart2{display:grid;grid-template-columns:repeat(10,1fr);gap:10px;padding:12px}
+.dgroup{min-width:0}
+.dgroup .gcap{font-family:var(--display);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);padding:0 2px 6px}
+.dgroup .gcols{display:grid;gap:8px}
+.chart2 .col .plate{min-width:0}
+.chart2 .col .plate .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chart2 .col .plate .nm small{display:block;font-size:10.5px;color:var(--ink-3)}
+@media (max-width:1400px){.chart2{grid-template-columns:repeat(5,1fr)}}

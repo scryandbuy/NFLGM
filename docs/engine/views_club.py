@@ -290,45 +290,60 @@ def _ext_ok(league, p):
 # ------------------------------------------------------------ the depth chart
 PACKAGES = {'Base': dict(WR=2, TE=2, HB=1, LB=3, CB=2, S=2), 'Nickel': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Dime': dict(WR=3, TE=1, HB=1, LB=1, CB=4, S=2),
             'Goal Line': dict(WR=1, TE=2, HB=1, FB=1, LB=3, CB=2, S=2), 'Third Down': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Two Minute': dict(WR=4, TE=1, HB=1, LB=1, CB=4, S=2)}
-COLS = [('QB', ['QB'], 1), ('HB', ['HB', 'FB'], 1), ('WR', ['WR'], 3), ('TE', ['TE'], 1), ('OL', ['LT', 'LG', 'C', 'RG', 'RT'], 5),
-        ('DL', ['LEDG', 'DT', 'REDG'], 4), ('LB', ['MIKE', 'WILL', 'SAM'], 2), ('CB', ['CB'], 3), ('S', ['FS', 'SS'], 2), ('Specialists', ['K', 'P', 'LS'], 3)]
+# one column a position, grouped by side; the heading is the position, the group is the caption
+SIDES = {
+    'offense': [('QB', 'QB', 'Quarterback'), ('HB', 'HB', 'Backs'), ('FB', 'FB', 'Backs'), ('WR', 'WR', 'Receivers'), ('TE', 'TE', 'Tight Ends'),
+                ('LT', 'LT', 'Line'), ('LG', 'LG', 'Line'), ('C', 'C', 'Line'), ('RG', 'RG', 'Line'), ('RT', 'RT', 'Line')],
+    'defense': [('LEDG', 'LE', 'Front'), ('DT', 'DT', 'Front'), ('REDG', 'RE', 'Front'), ('MIKE', 'MIKE', 'Linebackers'), ('WILL', 'WILL', 'Linebackers'), ('SAM', 'SAM', 'Linebackers'),
+                ('CB', 'CB', 'Secondary'), ('FS', 'FS', 'Secondary'), ('SS', 'SS', 'Secondary')],
+    'specialists': [('K', 'K', 'Specialists'), ('P', 'P', 'Specialists'), ('LS', 'LS', 'Specialists')],
+}
+# how many start at each position, by package
+def _starters(pos, pk):
+    if pos == 'QB': return 1
+    if pos == 'HB': return pk.get('HB', 1)
+    if pos == 'FB': return pk.get('FB', 0)
+    if pos == 'WR': return pk.get('WR', 3)
+    if pos == 'TE': return pk.get('TE', 1)
+    if pos in ('LT', 'LG', 'C', 'RG', 'RT'): return 1
+    if pos == 'DT': return 2
+    if pos in ('LEDG', 'REDG'): return 1
+    if pos == 'MIKE': return 1
+    if pos == 'WILL': return 1 if pk.get('LB', 2) >= 2 else 0
+    if pos == 'SAM': return 1 if pk.get('LB', 2) >= 3 else 0
+    if pos == 'CB': return pk.get('CB', 3)
+    if pos in ('FS', 'SS'): return 1
+    return 1
 
 
 def depth(session, league, abbr, package='Nickel'):
     t = league.teams[abbr]; d = t.depth
     pk = PACKAGES.get(package, PACKAGES['Nickel'])
-    cols = []
-    for title, poss, on_field in COLS:
-        slots = []
-        for pos in poss:
-            men = d.get(pos, [])
-            n_start = 1 if len(poss) > 1 and title in ('OL', 'DL', 'LB', 'S', 'Specialists') else (pk.get(title, on_field) if title in pk else on_field)
-            if title == 'DL': n_start = 2 if pos == 'DT' else 1
-            if title == 'LB': n_start = 1 if pk.get('LB', 2) >= (1 if pos == 'MIKE' else 2 if pos == 'WILL' else 3) else 0
-            if title == 'S': n_start = 1
-            if title == 'Specialists': n_start = 1
-            desk = (session.runner.desks.get(abbr) if getattr(session, 'runner', None) is not None else None)
-            status = getattr(desk, 'status', {}) if desk is not None else {}
+    desk = (session.runner.desks.get(abbr) if getattr(session, 'runner', None) is not None else None)
+    status = getattr(desk, 'status', {}) if desk is not None else {}
+    sides = {}
+    for side, cols_ in SIDES.items():
+        cols = []
+        for pos, label, group in cols_:
+            men = d.get(pos, []); n_start = _starters(pos, pk); slots = []
             for i, p in enumerate(men):
                 pl = player_plate(p); pl['cond'] = _cond(session, p); pl['start'] = i < n_start
-                pl['slot'] = _slot_label(title, pos, i, len(poss))
+                pl['slot'] = _slot_label(pos, i)
                 desig = status.get(p.pid)
                 pl['flag'] = 'out' if p.out_until is not None else (desig if desig in ('questionable', 'doubtful') else None)
                 pl['flag_word'] = ('Out' if pl['flag'] == 'out' else pl['flag'].capitalize() if pl['flag'] else '')
                 pl['fit'] = round(_fit(league, t, p), 1)
                 slots.append(pl)
-        cols.append(dict(title=title, slots=slots, on_field=pk.get(title, on_field) if title in pk else on_field))
-    return dict(rail=rail(session, league, abbr), package=package, packages=list(PACKAGES), cols=cols, pins=getattr(t, 'depth_pins', None) or {})
+            cols.append(dict(pos=pos, title=label, group=group, slots=slots, on_field=n_start))
+        sides[side] = cols
+    return dict(rail=rail(session, league, abbr), package=package, packages=list(PACKAGES), sides=sides, pins=getattr(t, 'depth_pins', None) or {})
 
 
 # ------------------------------------------------------------ actions
-def _slot_label(title, pos, i, n_pos):
-    """The real slot names: X / Z / SL for receivers, LT LG C RG RT, LE / DT / RE, MI / WI, NI for the nickel, FS / SS."""
-    if title == 'WR': return ['X', 'Z', 'SL'][i] if i < 3 else str(i + 1)
-    if title == 'CB': return ['1', '2', 'NI'][i] if i < 3 else str(i + 1)
-    if title == 'DL': return {'LEDG': 'LE', 'REDG': 'RE', 'DT': 'DT'}.get(pos, pos) if i == 0 else str(i + 1)
-    if title == 'LB': return {'MIKE': 'MI', 'WILL': 'WI', 'SAM': 'SA'}.get(pos, pos) if i == 0 else str(i + 1)
-    if n_pos > 1: return pos if i == 0 else str(i + 1)
+def _slot_label(pos, i):
+    """The real slot names: X / Z / SL for receivers, 1 / 2 / NI for corners, numbers elsewhere."""
+    if pos == 'WR': return ['X', 'Z', 'SL'][i] if i < 3 else str(i + 1)
+    if pos == 'CB': return ['1', '2', 'NI'][i] if i < 3 else str(i + 1)
     return str(i + 1)
 
 
