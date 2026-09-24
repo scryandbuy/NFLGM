@@ -302,18 +302,20 @@ function renderGameDay(v) {
   const lineScore = el('table', { class: 'linescore' }); top.append(lineScore);
   const drawBug = (shown, shownPlays) => {
     const final = shown >= g.drives.length && shownPlays == null;
-    const d = g.drives[Math.max(0, shown - 1)]; const revealed = (shownPlays != null ? d.plays.slice(0, shownPlays) : d.plays).filter(p => p.text);
+    const d = g.drives[Math.max(0, shown - 1)]; const revealed = (shownPlays != null ? vis(d).slice(0, shownPlays) : vis(d));
+    const atBreak = shownPlays == null && shown < g.drives.length && g.drives[shown].quarter > d.quarter;   // the drive shown was the quarter's last
     let hs = g.hs, as_ = g.as_;
     if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { for (const p of revealed) if (p.kind === 'score') { if (p.type === 'field_goal') { if (d.off === g.home.abbr) hs += 3; else as_ += 3; } else if (p.td) { if (d.off === g.home.abbr) hs += 7; else as_ += 7; } } } }
     const lastPlay = revealed.length ? revealed[revealed.length - 1] : null;
-    const clock = lastPlay && lastPlay.clock != null ? `${Math.floor((lastPlay.clock % 900) / 60)}:${String(Math.floor(lastPlay.clock % 60)).padStart(2, '0')}` : '';
+    const headParts = lastPlay && lastPlay.head ? lastPlay.head.split(' · ') : [];
+    const clock = atBreak ? '0:00' : (headParts.length >= 3 ? headParts[headParts.length - 1] : '');
     const wpNow = g.wp[Math.min(g.wp.length - 1, Math.max(0, shown - 1))];
     const myScore = g.me_home ? hs : as_, theirScore = g.me_home ? as_ : hs;
     const won = myScore > theirScore, tie = myScore === theirScore;
     bug.innerHTML = '';
     bug.append(
       el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${g.away.color}` }, g.away.abbr), el('div', {}, el('div', { class: 'nm' }, g.away.nick), el('div', { class: 'rec' }, rec(g.away_rec) + (!final && d.off === g.away.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-left:auto' }, as_)),
-      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : `Q${d.quarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n}`)), el('div', { class: 'q', style: 'font-size:11px;color:var(--ink-3);margin-top:4px' }, `Win Probability ${wpNow}%` + (g.env && g.env.conditions ? ` · ${g.env.conditions}` : ''))),
+      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : atBreak ? (d.quarter === 2 ? 'Halftime' : d.quarter >= 4 ? 'End of Regulation' : `End of Q${d.quarter}`) : `Q${d.quarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : atBreak ? `${d.off} ${String(d.result || '').toLowerCase()}`.trim() : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n} · ${d.off} ball`)), el('div', { class: 'q', style: 'font-size:11px;color:var(--ink-3);margin-top:4px' }, `Win Probability ${wpNow}%` + (g.env && g.env.conditions ? ` · ${g.env.conditions}` : ''))),
       el('div', { class: 'side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, g.home.abbr), el('div', {}, el('div', { class: 'nm' }, g.home.nick), el('div', { class: 'rec' }, rec(g.home_rec) + (!final && d.off === g.home.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-right:auto' }, hs)));
     lineScore.innerHTML = '';
     if (g.quarters && g.quarters[g.home.abbr]) {
@@ -341,7 +343,7 @@ function renderGameDay(v) {
   const draw = () => {
     body.innerHTML = '';
     g.drives.slice(0, shown).forEach((d, di) => {
-      const last = di === shown - 1; const plays = (last && shownPlays != null) ? d.plays.slice(0, shownPlays) : d.plays;
+      const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
       body.append(el('div', { class: 'drive' }, (last && shownPlays != null) ? `Drive ${d.n} · ${d.off} · Q${d.quarter} · ${(d.head || '').split(' · ').slice(2, 3).join('')}` : `Q${d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`));
       for (const p of plays) {
         if (!p.text) continue;
@@ -350,16 +352,21 @@ function renderGameDay(v) {
         const line = el('div', { class: 'pl ' + p.kind }); if (p.head) line.append(el('span', { class: 'dn' }, p.head), '  '); line.append(p.text); body.append(line);
       }
     });
-    tick.querySelector('h2 small').textContent = (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays}` : '');
+    tick.querySelector('h2 small').textContent = (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
     body.scrollTop = body.scrollHeight;
     drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays);
   };
-  const nextPlay = () => { const d = g.drives[shown - 1]; if (shownPlays == null) { if (shown >= g.drives.length) return; shown++; shownPlays = 1; } else if (shownPlays < d.plays.length) shownPlays++; else { if (shown >= g.drives.length) { shownPlays = null; } else { shown++; shownPlays = 1; } } draw(); };
+  const vis = d => d.plays.filter(p => p.text);
+  // the first drive opens one play at a time too
+  shown = 1; shownPlays = 0;
+  const nextPlay = () => { const d = g.drives[shown - 1]; const n = vis(d).length; if (shownPlays == null || shownPlays >= n) { if (shownPlays != null && shownPlays >= n) shownPlays = null; if (shown >= g.drives.length) { shownPlays = null; draw(); return; } shown++; shownPlays = 1; } else shownPlays++; if (shownPlays >= vis(g.drives[shown - 1]).length) shownPlays = null; draw(); };
+  const quarterEnd = q => { let i = g.drives.findIndex(d => d.quarter > q); return i < 0 ? g.drives.length : i; };   // how many drives are in through the end of quarter q
+  const nextQuarter = () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; const end = quarterEnd(q); shown = (shown >= end) ? quarterEnd(q + 1) : end; draw(); };
   const ctrl = el('div', { class: 'ctrl2' },
     el('button', { class: 'btn', 'data-tip': 'One snap at a time', onclick: nextPlay }, 'Next Play'),
-    el('button', { class: 'btn go', onclick: () => { shownPlays = null; shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
-    el('button', { class: 'btn', onclick: () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; while (shown < g.drives.length && g.drives[shown].quarter === q) shown++; shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Quarter'),
-    el('button', { class: 'btn', 'data-tip': 'Run to the break', onclick: () => { shownPlays = null; while (shown < g.drives.length && g.drives[shown].quarter <= 2) shown++; draw(); } }, 'To Halftime'),
+    el('button', { class: 'btn go', 'data-tip': 'Through the end of this drive, or the next one if this one is in', onclick: () => { if (shownPlays != null) { shownPlays = null; } else shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
+    el('button', { class: 'btn', 'data-tip': 'Through the end of the quarter', onclick: nextQuarter }, 'Next Quarter'),
+    el('button', { class: 'btn', 'data-tip': 'Through the end of the second quarter', onclick: () => { shownPlays = null; shown = Math.max(shown, quarterEnd(2)); draw(); } }, 'To Halftime'),
     el('button', { class: 'btn', onclick: () => { shownPlays = null; shown = g.drives.length; draw(); } }, 'Finish Game'),
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
@@ -401,7 +408,7 @@ function renderGameDay(v) {
     if (shown >= g.drives.length && shownPlays == null) { drawFullBox(); return; }
     boxHead.querySelector('small').textContent = 'Live'; box.innerHTML = '';
     const pass = {}, rush = {}, recv = {};
-    const revealed = []; g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; revealed.push(...((last && shownPlays != null) ? d.plays.slice(0, shownPlays) : d.plays)); });
+    const revealed = []; g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; revealed.push(...((last && shownPlays != null) ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays)); });
     for (const p of revealed) {
       if (!p.type) continue; const y = p.yards || 0;
       if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.passer) { const k = p.off + '|' + p.passer; const r = pass[k] = pass[k] || { team: p.off, name: p.passer, cmp: 0, att: 0, yds: 0, td: 0, int_: 0 }; r.att++; if (p.type === 'complete') { r.cmp++; r.yds += y; if (p.td) r.td++; } if (p.type === 'interception') r.int_++; }
@@ -643,47 +650,64 @@ function renderProspectCard(v) {
   page.append(s);
 }
 
-let depthPkg = 'Nickel';
+let depthPkg = 'Nickel', depthSide = 'offense';
 function renderDepth(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Club'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
   secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '#club/depth');
+  const reload = () => renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`));
   const s = el('section', { class: 'sheet c12' });
-  const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
-  for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)})`)); } }, p));
-  pk.append(el('span', { class: 'snaps' }, 'Drag a plate or use the arrows; the game fields the order you set'));
-  s.append(pk);
-  const chart = el('div', { class: 'chart' });
-  for (const c of v.cols) {
-    const byPos = {}; c.slots.forEach(x => (byPos[x.pos] = byPos[x.pos] || []).push(x));
-    const pinnedHere = Object.keys(byPos).some(p => v.pins[p] && v.pins[p].length);
-    const col = el('div', { class: 'col' }, el('h4', { class: pinnedHere ? 'pinned' : '' }, c.title));
-    for (const [pos, men] of Object.entries(byPos)) {
-      men.forEach((x, i) => {
-        const plate = el('div', { class: 'plate' + (x.flag === 'out' ? ' out' : ''), draggable: 'true', 'data-pid': x.pid, 'data-pos': pos }, el('div', { class: 'no' }, x.no || pos), el('div', { class: 'nm', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.short, el('small', {}, x.flag_word || '')), el('div', { class: 'ov' }, x.ovr));
-        plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos })); plate.classList.add('dragging'); });
-        plate.addEventListener('dragend', () => plate.classList.remove('dragging'));
-        plate.addEventListener('dragover', e => { e.preventDefault(); plate.classList.add('over'); });
-        plate.addEventListener('dragleave', () => plate.classList.remove('over'));
-        plate.addEventListener('drop', e => {
-          e.preventDefault(); plate.classList.remove('over');
-          let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; }
-          if (!d || d.pos !== pos || d.pid === x.pid) return;      // a plate only moves within its own position
-          const order = men.map(m => m.pid).filter(p => p !== d.pid); order.splice(order.indexOf(x.pid), 0, d.pid);
-          pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`));
-        });
-        if (x.flag !== 'out') plate.append(el('div', { class: 'cbar' }, el('i', { class: x.cond < 80 ? 'mid' : '', style: `width:${x.cond}%` })));
-        const arrows = el('div', { class: 'arrows' },
-          el('button', { disabled: i === 0 ? '' : null, onclick: () => { const order = men.map(m => m.pid); [order[i - 1], order[i]] = [order[i], order[i - 1]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, '▲'),
-          el('button', { disabled: i === men.length - 1 ? '' : null, onclick: () => { const order = men.map(m => m.pid); [order[i + 1], order[i]] = [order[i], order[i + 1]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, '▼'));
-        col.append(el('div', { class: 'slot' + (x.start ? ' start' : '') }, el('span', { class: 'rk' }, x.slot), plate, arrows));
-      });
-    }
+  // the side tabs, then the package
+  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
+  for (const [k, l] of [['offense', 'Offense'], ['defense', 'Defense'], ['specialists', 'Specialists']]) tabs.append(el('button', { 'aria-pressed': String(depthSide === k), onclick: () => { depthSide = k; renderDepth(v); } }, l));
+  s.append(tabs);
+  if (depthSide !== 'specialists') {
+    const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
+    for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)})`)); } }, p));
+    pk.append(el('span', { class: 'snaps' }, 'Drag a card or use the arrows; double-click opens the card; the game fields the order you set'));
+    s.append(pk);
+  }
+  // one column a position, the starters as big cards on top and the depth as rows beneath, the position under the column
+  const cols = v.sides[depthSide];
+  const chart = el('div', { class: 'lineup' });
+  for (const c of cols) {
+    const men = c.slots; const pinned = v.pins[c.pos] && v.pins[c.pos].length;
+    const col = el('div', { class: 'lcol' + (pinned ? ' pinned' : '') });
+    const stack = el('div', { class: 'lstack' });
+    const move = (i, dir) => { const order = men.map(m => m.pid); [order[i + dir], order[i]] = [order[i], order[i + dir]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); };
+    const wire = (elm, x, i) => {
+      elm.setAttribute('draggable', 'true');
+      elm.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); elm.classList.add('dragging'); });
+      elm.addEventListener('dragend', () => elm.classList.remove('dragging'));
+      elm.addEventListener('dragover', e => { e.preventDefault(); elm.classList.add('over'); });
+      elm.addEventListener('dragleave', () => elm.classList.remove('over'));
+      elm.addEventListener('drop', e => { e.preventDefault(); elm.classList.remove('over'); let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; } if (!d || d.pos !== c.pos || d.pid === x.pid) return; const order = men.map(m => m.pid).filter(p => p !== d.pid); order.splice(order.indexOf(x.pid), 0, d.pid); pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); });
+      elm.addEventListener('dblclick', () => { location.hash = '#club/player/' + x.pid; });
+    };
+    men.forEach((x, i) => {
+      if (x.start) {
+        // the starter's card
+        const card = el('div', { class: 'lcard' + (x.flag === 'out' ? ' out' : '') },
+          el('div', { class: 'top' }, el('span', { class: 'slot' }, x.slot), el('span', { class: 'ov' }, x.ovr)),
+          el('div', { class: 'face' }, el('span', { class: 'no' }, x.no || c.pos)),
+          el('div', { class: 'nm', title: x.name }, `${x.name.split(' ')[0][0]}.${x.name.split(' ').slice(1).join(' ').toUpperCase()}`),
+          el('div', { class: 'sub' }, x.flag_word || (x.why ? `${v.package} · ${x.why}` : (x.fit ? `Fit ${x.fit > 0 ? '+' : ''}${x.fit}` : ' '))),
+          el('div', { class: 'cbar' }, el('i', { class: x.cond < 80 ? 'mid' : '', style: `width:${x.cond}%` })),
+          el('div', { class: 'arrows' }, el('button', { disabled: i === 0 ? '' : null, onclick: () => move(i, -1) }, '▲'), el('button', { disabled: i === men.length - 1 ? '' : null, onclick: () => move(i, 1) }, '▼')));
+        wire(card, x, i); stack.append(card);
+      } else {
+        const row = el('div', { class: 'lrow2' + (x.flag === 'out' ? ' out' : '') }, el('span', { class: 'nm', title: x.name }, `${x.name.split(' ')[0][0]}.${x.name.split(' ').slice(1).join(' ').toUpperCase()}`, x.flag_word ? el('small', {}, ` ${x.flag_word}`) : ''), el('span', { class: 'ov' }, x.ovr),
+          el('span', { class: 'arrows' }, el('button', { disabled: i === 0 ? '' : null, onclick: () => move(i, -1) }, '▲'), el('button', { disabled: i === men.length - 1 ? '' : null, onclick: () => move(i, 1) }, '▼')));
+        wire(row, x, i); stack.append(row);
+      }
+    });
+    if (!men.length) stack.append(el('div', { class: 'empty', style: 'padding:10px' }, 'Nobody'));
+    col.append(stack, el('div', { class: 'lpos' }, c.title, pinned ? el('small', {}, 'yours') : ''));
     chart.append(col);
   }
   s.append(chart);
-  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, 'Auto-Fill by Fit'), el('span', { class: 'count', style: 'margin-left:auto' }, Object.keys(v.pins).length ? `Your order set at: ${Object.keys(v.pins).join(', ')}` : 'Ordered by rating')));
+  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); reload(); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); reload(); } }, 'Auto-Fill by Fit'), el('span', { class: 'count', style: 'margin-left:auto' }, Object.keys(v.pins).length ? `Your order set at: ${Object.keys(v.pins).join(', ')}` : 'Ordered by rating')));
   page.append(s);
 }
 
@@ -797,33 +821,43 @@ let faPos = '', faCheap = false, faWatch = false, faRole = 'All', faQuery = '';
 function renderFA(v) {
   renderRail(v.rail); const page = persPage(); persSecond('fa');
   const reload = () => renderFA(pyJSON(`SESSION.personnel('free_agency')`));
-  const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Free Agency', el('small', {}, `${v.count} Available · Cap Space $${v.cap}m${v.top51 ? ' · Top 51' : ''} · Roster ${v.roster}`)));
-  if (v.step_i != null) { const ph = el('div', { class: 'phase' }); v.steps.forEach((n, i) => ph.append(el('div', { class: i < v.step_i ? 'done' : i === v.step_i ? 'now' : '' }, n))); left.append(ph); }
+  const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], DL: ['LEDG', 'DT', 'REDG'], DB: ['CB', 'FS', 'SS'], LB: ['MIKE', 'WILL', 'SAM'] };
+  const inSeason = v.in_season;
+  const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Free Agency', el('small', {}, inSeason
+    ? `${v.count} Available · Cap Space $${v.cap}m · ${v.weeks_left} week${v.weeks_left === 1 ? '' : 's'} left · Roster ${v.roster} · Practice Squad ${v.ps}`
+    : `${v.count} Available · Cap Space $${v.cap}m${v.top51 ? ' · Top 51' : ''} · Next Year $${v.committed_next}m of $${v.limit_next}m committed`)));
+  // the market's calendar, offseason only: a marker, not tabs
+  if (!inSeason && v.step_i != null) { const ph = el('div', { class: 'phase marker' }); v.steps.forEach((n, i) => ph.append(el('div', { class: i < v.step_i ? 'done' : i === v.step_i ? 'now' : '' }, n, i === v.step_i ? el('small', {}, 'now') : ''))); left.append(ph); }
   const tools = el('div', { class: 'tools' });
   const posChips = el('div', { class: 'chips' }); for (const g of ['All', 'QB', 'OL', 'WR', 'DL', 'DB', 'LB']) posChips.append(el('button', { class: 'chip', 'aria-pressed': String((faPos || 'All') === g), onclick: () => { faPos = g === 'All' ? '' : g; renderFA(v); } }, g));
   const roleChips = el('div', { class: 'chips' }); for (const g of ['Starters', 'Depth']) roleChips.append(el('button', { class: 'chip', 'aria-pressed': String(faRole === g), onclick: () => { faRole = faRole === g ? 'All' : g; renderFA(v); } }, g));
   const cheap = el('button', { class: 'chip', 'aria-pressed': String(faCheap), 'data-tip': 'Players asking under $5m a year, or with no ask yet', onclick: () => { faCheap = !faCheap; renderFA(v); } }, 'Under $5m');
   const watchB = el('button', { class: 'chip', 'aria-pressed': String(faWatch), onclick: () => { faWatch = !faWatch; renderFA(v); } }, `Watchlist · ${v.rows.filter(r => r.watch).length}`);
   const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Player', value: faQuery }); search.oninput = () => { faQuery = search.value; drawRows(); };
-  tools.append(posChips, roleChips, el('div', { class: 'chips' }, cheap, watchB), search);
+  tools.append(posChips, roleChips, el('div', { class: 'chips' }, cheap, ...(inSeason ? [] : [watchB])), search);
   left.append(tools);
-  const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], DL: ['LEDG', 'DT', 'REDG'], DB: ['CB', 'FS', 'SS'], LB: ['MIKE', 'WILL', 'SAM'] };
   const tbl = el('table', { class: 'tbl' });
   const drawRows = () => {
-    tbl.innerHTML = ''; tbl.append(el('tr', {}, el('th', {}, ''), el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n', 'data-tip': 'How he grades in your scheme' }, 'Fit'), el('th', {}, 'Ask'), el('th', {}, 'Interest'), el('th', {}, 'Your Offer'), el('th', {}, '')));
+    tbl.innerHTML = '';
+    if (inSeason) tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n', 'data-tip': 'How he grades in your scheme' }, 'Fit'), el('th', { 'data-tip': 'His agent\'s number, a year' }, 'Ask'), el('th', { class: 'n', 'data-tip': 'What he costs this year, prorated to the weeks left' }, 'This Year'), el('th', {}, ''), el('th', {}, '')));
+    else tbl.append(el('tr', {}, el('th', {}, ''), el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n', 'data-tip': 'How he grades in your scheme' }, 'Fit'), el('th', {}, 'Ask'), el('th', {}, 'Interest'), el('th', {}, 'Your Offer'), el('th', {}, '')));
     const q = faQuery.trim().toLowerCase();
     const rows = v.rows.filter(r => (!faPos || (GROUP[faPos] || []).includes(r.pos)) && (faRole === 'All' || (faRole === 'Starters') === r.starter) && (!faCheap || r.ask == null || r.ask < 5) && (!faWatch || r.watch) && (!q || r.name.toLowerCase().includes(q)));
-    for (const r of rows) tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'star' + (r.watch ? ' on' : ''), 'data-tip': r.watch ? 'On your watchlist' : 'Add to your watchlist', onclick: () => { pyJSON(`SESSION.personnel_act('watch', pid=${JSON.stringify(r.pid)})`); reload(); } }, '★')),
-      el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos}${r.last ? ' · from ' + r.last : ''}`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)),
-      el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', {}, r.interest ? el('span', { class: 'pill ' + ({ 'Match Asked': 'unsettled', Agreed: 'happy', Countered: 'content', Mulling: 'content', Walked: 'unhappy' }[r.interest] || 'content') }, r.interest) : ''), el('td', {}, r.my_offer || el('span', { style: 'color:var(--ink-3)' }, '—')),
-      el('td', {}, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { document.getElementById('th-' + r.thread)?.scrollIntoView(); } }, 'Offer') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { notify(pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(v.in_season ? 'fa_inseason' : 'fa_offseason')})`)); reload(); } }, 'Ask the Agent'))));
-    if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '10' }, el('div', { class: 'empty' }, v.rows.length ? 'Nobody matches the filter.' : 'Nobody worth a call is on the market.'))));
+    for (const r of rows) {
+      const who = el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, inSeason ? (r.hole || r.pos) : `${r.pos}${r.last ? ' · from ' + r.last : ''}`))));
+      const askBtn = r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { document.getElementById('th-' + r.thread)?.scrollIntoView(); } }, inSeason ? 'Talks' : 'Offer') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { notify(pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(inSeason ? 'fa_inseason' : 'fa_offseason')})`)); reload(); } }, 'Ask the Agent');
+      if (inSeason) tbl.append(el('tr', {}, who, el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', { class: 'n' }, r.ask_now != null ? `$${r.ask_now.toFixed(2)}m` : '—'),
+        el('td', {}, r.thread && r.ask ? el('button', { class: 'btn go', style: 'width:auto;padding:3px 8px;font-size:12px', 'data-tip': 'His full ask, signed now', onclick: () => { const t = v.threads.find(x => x.id === r.thread); const res = pyJSON(`SESSION.personnel_act('offer', tid=${r.thread}, apy=${t ? t.ask : r.ask}, years=${t ? t.years : r.years}, sign_today=True)`); notify(res); reload(); } }, 'Sign') : ''), el('td', {}, askBtn)));
+      else tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'star' + (r.watch ? ' on' : ''), 'data-tip': r.watch ? 'On your watchlist' : 'Add to your watchlist', onclick: () => { pyJSON(`SESSION.personnel_act('watch', pid=${JSON.stringify(r.pid)})`); reload(); } }, '★')), who, el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)),
+        el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', {}, r.interest ? el('span', { class: 'pill ' + ({ 'Match Asked': 'unsettled', Agreed: 'happy', Countered: 'content', Mulling: 'content', Walked: 'unhappy' }[r.interest] || 'content') }, r.interest) : ''), el('td', {}, r.my_offer || el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', {}, askBtn)));
+    }
+    if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '10' }, el('div', { class: 'empty' }, v.rows.length ? 'Nobody matches the filter.' : 'Nobody is on the market.'))));
   };
   left.append(tbl); drawRows();
   page.append(left);
-  const right = el('section', { class: 'sheet c5' }, el('h2', {}, 'Negotiation', el('small', {}, `${v.threads.length} open`)));
+  const right = el('section', { class: 'sheet c5' }, el('h2', {}, inSeason ? 'Talks' : 'Negotiation', el('small', {}, `${v.threads.length} open`)));
   for (const t of v.threads) { const w = el('div', { id: 'th-' + t.id }, el('div', { class: 'h5', style: 'padding:10px 12px 0' }, `${t.name} · ${t.pos}`)); w.append(threadBox(t, reload)); right.append(w); }
-  if (!v.threads.length) right.append(el('div', { class: 'empty' }, v.in_season ? 'Ask an agent; a signing you offer decides at the next Advance, or pay his ask to sign today.' : 'Ask an agent to open talks; he mulls offers through each step of the market.'));
+  if (!v.threads.length) right.append(el('div', { class: 'empty' }, inSeason ? 'Ask an agent to hear his number. Sign at the ask today, or make a one-week offer that decides at the Advance.' : 'Ask an agent to open talks; he weighs offers through each round of the market.'));
   const feedSheet = el('section', { class: 'sheet c5', style: 'order:2' }, el('h2', {}, 'Around the League Today', el('small', {}, 'latest signings')));
   const fd = el('div', { class: 'feed' }); for (const f of v.feed) fd.append(el('div', {}, el('span', {}, stripe(f.team.abbr)), el('span', {}, `${f.team.name} ${f.kind === 'signs' ? 'signed' : 'extended'} `, el('b', {}, f.name), `, ${f.pos}${f.years ? `, ${f.years} year${f.years === 1 ? '' : 's'}` : ''}${f.apy ? ` at $${f.apy}m a year` : ''}`), el('time', {}, f.week ? `Wk ${f.week}` : ''))); if (!v.feed.length) fd.append(el('div', { class: 'empty' }, 'Quiet so far.')); feedSheet.append(fd);
   page.append(right, feedSheet);
@@ -1094,7 +1128,7 @@ function renderBoard(v) {
     const needPos = new Set(v.needs.flatMap(g => NEED_POS[g] || []));
     const rows = v.rows.filter(r => (boardTab !== 'visited' || r.visited) && (boardPos === 'All' || (GROUP[boardPos] || []).includes(r.pos)) && (!boardFilt.needs || needPos.has(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.late || (r.cons_rank != null && r.cons_rank > 96)) && (!boardFilt.small || r.small) && (!q || r.name.toLowerCase().includes(q) || (r.college || '').toLowerCase().includes(q))).slice(0, 200);
     for (const r of rows) tbl.append(el('tr', { class: (r.visited ? 'visited' : '') + (boardSel === r.pid ? ' sel' : ''), style: r.taken ? 'opacity:.4' : '', onclick: e => { if (e.target.closest('button')) return; boardSel = boardSel === r.pid ? null : r.pid; draw(); drawFoot(); } },
-      el('td', { class: 'n' }, r.my_rank), el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.cls_year}${r.size ? ' · ' + r.size : ''}`)))), el('td', {}, r.pos), el('td', {}, r.college), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons != null ? r.cons : '—'), el('td', { class: 'n' }, gapCell(r.gap)), el('td', { class: 'n' }, r.proj_range), el('td', {}, ...r.words.map(wordTag)),
+      el('td', { class: 'n' }, r.my_rank), el('td', {}, el('button', { class: 'who', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.cls_year}${r.size ? ' · ' + r.size : ''}`)))), el('td', {}, r.pos), el('td', {}, r.college), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons != null ? r.cons : '—'), el('td', { class: 'n' }, gapCell(r.gap)), el('td', { class: 'n' }, r.proj_range), el('td', {}, ...r.words.map(wordTag)),
       el('td', {}, el('div', { style: 'display:flex;gap:4px' }, v.spring_done ? '' : el('button', { class: 'btn' + (r.visited ? ' go' : ''), style: 'width:auto;padding:2px 8px;font-size:12px', 'data-tip': r.visited ? 'Cancel the visit' : 'Bring him in: the second look is the sharpest read your scouts get', onclick: () => { const res = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(r.pid)})`); if (!res.ok) notify(res); reload(); } }, r.visited ? 'Visiting' : 'Visit'),
         onBoard.has(r.pid) ? el('span', { class: 'badge-sm' }, `#${v.user_board.order.findIndex(x => x.pid === r.pid) + 1}`) : el('button', { class: 'btn', style: 'width:auto;padding:2px 8px;font-size:12px', 'data-tip': 'Add him to the bottom of your board', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(r.pid)})`); reload(); } }, 'Add')))));
     if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '11' }, el('div', { class: 'empty' }, 'Nobody matches the filter.'))));
@@ -1124,7 +1158,7 @@ function yourBoard(v, reload) {
   v.user_board.order.forEach((x, i) => {
     const r = byid[x.pid]; if (!r) return;
     if (x.tier !== lastTier) { t.append(el('tr', { class: 'grp' }, el('td', { colspan: '5' }, tiers[x.tier]))); lastTier = x.tier; }
-    t.append(el('tr', { draggable: 'true', 'data-pid': r.pid }, el('td', { class: 'n' }, i + 1), el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.college}${r.my_round && x.tier > 1 ? ' · Your Grade ' + r.my_round : ''}`)))), el('td', { class: 'n' }, r.proj_range), el('td', { class: 'n' }, ovrCell(r.mine)),
+    t.append(el('tr', { draggable: 'true', 'data-pid': r.pid }, el('td', { class: 'n' }, i + 1), el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.college}${r.my_round && x.tier > 1 ? ' · Your Grade ' + r.my_round : ''}`)))), el('td', { class: 'n' }, r.proj_range), el('td', { class: 'n' }, ovrCell(r.mine)),
       el('td', {}, el('div', { style: 'display:flex;gap:4px' }, el('button', { class: 'btn', style: 'padding:2px 6px;font-size:12px', disabled: i === 0 ? '' : null, onclick: () => { const o = order.slice(); [o[i - 1], o[i]] = [o[i], o[i - 1]]; pyJSON(`SESSION.draft_act('board', order=${JSON.stringify(o)})`); reload(); } }, '▲'), el('button', { class: 'btn', style: 'padding:2px 6px;font-size:12px', disabled: i === order.length - 1 ? '' : null, onclick: () => { const o = order.slice(); [o[i + 1], o[i]] = [o[i], o[i + 1]]; pyJSON(`SESSION.draft_act('board', order=${JSON.stringify(o)})`); reload(); } }, '▼'),
         el('button', { class: 'btn quiet', style: 'padding:2px 6px;font-size:12px', 'data-tip': 'Do Not Draft', onclick: () => { const d = v.user_board.dnd.map(z => z.pid).concat([r.pid]); pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(r.pid)})`); pyJSON(`SESSION.draft_act('board', dnd=${JSON.stringify(d)})`); reload(); } }, '✕')))));
   });
@@ -1154,7 +1188,7 @@ function renderSpring(v) {
   s.append(list);
   s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Your Visits', el('small', {}, `${v.visited.length} players · the second look`)));
   const vt = el('table', { class: 'tbl' }); vt.append(el('tr', {}, el('th', {}, 'Prospect'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Your Read'), el('th', { class: 'n' }, 'Ceiling'), el('th', { class: 'n' }, 'Consensus'), el('th', { class: 'n' }, 'Gap'), el('th', {}, 'Flags')));
-  for (const r of v.visited) vt.append(el('tr', {}, el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, r.college)))), el('td', {}, r.pos), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons_rank != null ? `#${r.cons_rank}` : '—'), el('td', { class: 'n' }, gapCell(r.gap)), el('td', {}, ...(r.words || []).filter(w => w !== 'Visited').map(wordTag))));
+  for (const r of v.visited) vt.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, r.college)))), el('td', {}, r.pos), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons_rank != null ? `#${r.cons_rank}` : '—'), el('td', { class: 'n' }, gapCell(r.gap)), el('td', {}, ...(r.words || []).filter(w => w !== 'Visited').map(wordTag))));
   if (!v.visited.length) vt.append(el('tr', {}, el('td', { colspan: '7' }, el('div', { class: 'empty' }, 'You named no visits this year.'))));
   s.append(vt); page.append(s);
 }
@@ -1198,7 +1232,7 @@ function renderDraftDay(v) {
   page.append(left);
   const right = el('section', { class: 'sheet c4' }, el('h2', {}, 'Best Available', el('small', {}, 'By Your Board')));
   const bt = el('table', { class: 'tbl' }); bt.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Player'), el('th', { class: 'n' }, 'Proj.'), el('th', { class: 'n' }, 'Est. Ovr')));
-  for (const r of v.board.slice(0, 12)) bt.append(el('tr', { style: 'cursor:pointer', onclick: () => { if (v.on_user && confirm(`Draft ${r.name}, ${r.pos}, ${r.college} at ${cur.slot}?`)) act('pick', `pid=${JSON.stringify(r.pid)}`); } }, el('td', { class: 'n' }, r.board_no), el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name.split(' ').slice(-1)[0], el('small', {}, `${r.pos} · ${r.college}${r.my_round && r.my_rank > 32 ? ' · Your Grade ' + r.my_round : ''}`)))), el('td', { class: 'n' }, r.proj_range), el('td', { class: 'n' }, ovrCell(r.mine))));
+  for (const r of v.board.slice(0, 12)) bt.append(el('tr', { style: v.on_user ? 'cursor:pointer' : '', 'data-tip': v.on_user ? 'Click the row to draft him; the name opens his card' : null, onclick: e => { if (e.target.closest('.who')) return; if (v.on_user && confirm(`Draft ${r.name}, ${r.pos}, ${r.college} at ${cur.slot}?`)) act('pick', `pid=${JSON.stringify(r.pid)}`); } }, el('td', { class: 'n' }, r.board_no), el('td', {}, el('button', { class: 'who', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name.split(' ').slice(-1)[0], el('small', {}, `${r.pos} · ${r.college}${r.my_round && r.my_rank > 32 ? ' · Your Grade ' + r.my_round : ''}`)))), el('td', { class: 'n' }, r.proj_range), el('td', { class: 'n' }, ovrCell(r.mine))));
   right.append(bt);
   right.append(el('div', { class: 'read', style: 'margin:10px 12px' }, el('b', {}, 'Assistants: '), v.read || ''));
   if (v.on_user && v.default_pick) right.append(el('div', { class: 'pad', style: 'padding-top:0' }, el('button', { class: 'btn go', style: 'width:100%;justify-content:center', onclick: () => act('pick', `pid=${JSON.stringify(v.default_pick.pid)}`) }, `Draft ${v.default_pick.name}`, el('small', { style: 'margin-left:8px;font-weight:500' }, `${v.default_pick.pos} · ${v.default_pick.college} · Your Board #1`))));
@@ -1584,6 +1618,7 @@ async function advance() {
   $('#resume').onclick = async () => { $('#resume').disabled = true; say('loading your save…', 90); await new Promise(r => setTimeout(r, 30)); py.globals.set('_SAVE', saved); py.runPython(`SESSION = S.Session.load(_SAVE)`); $('#boot').remove(); refresh(); };
   $('#advance').onclick = advance;
   $('#save').onclick = saveGame;
-  $('#back').onclick = () => refresh();
+  $('#back').onclick = () => history.back();
+  const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
   window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();

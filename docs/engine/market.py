@@ -335,7 +335,14 @@ def sign(league, player, offer, cap):
     import contract_structure as CS
     team = league.teams[offer.team]
     st = CS.structure(offer.apy, offer.years, player.pos, cap, team.gm, front_load=offer.front_load)
-    c = Contract(years=offer.years, base=st['base'],
+    base = list(st['base'])
+    # IN SEASON THE FIRST YEAR IS PRORATED. A deal signed in week 10 pays and counts
+    # for the weeks left, not the full year: real in-season signings are per-week
+    # money. The later years are whole.
+    wk = int(league.week or 0)
+    if league.phase == 'regular' and 1 <= wk <= 18 and base:
+        base[0] = round(base[0] * (19 - wk) / 18.0, 3)
+    c = Contract(years=offer.years, base=base,
                  signing_bonus=st['signing_bonus'], signed=league.year)
     # the incumbent at his spot who is now behind a man the club just paid
     try:

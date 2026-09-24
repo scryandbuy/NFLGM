@@ -226,8 +226,15 @@ def free_agency(session, league, abbr):
         interest = (None if not t else 'Match Asked' if t.get('rival') and t['state'] not in ('accepted', 'declined') else 'Agreed' if t['state'] in ('accepted', 'signed') else 'Countered' if t['state'] == 'countered' else 'Mulling' if t['state'] == 'waiting' else 'Walked' if t['state'] in ('broken_off', 'declined') else 'Talking' if mine else 'Not Yet')
         try: fit = round(float(__import__('gm_engine').scheme_fit(p.ratings, p.pos, me)), 1)
         except Exception: fit = 0.0
+        wk = int(league.week or 0); prorate = ((19 - wk) / 18.0) if (league.phase == 'regular' and 1 <= wk <= 18) else 1.0
+        ask_now = (round(float(t['ask']) * prorate, 2) if t and t.get('ask') else None)
+        hole = None
+        d = me.depth.get(p.pos, [])
+        out_men = [q for q in d[:2] if q.out_until is not None]
+        if out_men: hole = f"Fills the hole at {p.pos} with {out_men[0].name.split()[-1]} out" + (f" to week {out_men[0].out_until}" if isinstance(out_men[0].out_until, int) else '')
+        elif len(d) <= 1: hole = f"Only {len(d)} healthy {p.pos} on the roster"
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0),
-                         talks=(t['state'] if t else None), ask=(t['ask'] if t else None), years=(t['years'] if t else None), thread=(t['id'] if t else None), interest=interest, my_offer=my_offer))
+                         talks=(t['state'] if t else None), ask=(t['ask'] if t else None), ask_now=ask_now, years=(t['years'] if t else None), thread=(t['id'] if t else None), interest=interest, my_offer=my_offer, hole=hole))
     rows.sort(key=lambda r: -r['ovr'])
     phase = league.phase
     step = getattr(league, 'fa_step', None)
@@ -242,12 +249,18 @@ def free_agency(session, league, abbr):
             if p is None: continue
             feed.append(dict(team=club(x['team']), name=p.name, pos=p.pos, kind=('signs' if x['kind'] == 'sign' else 'extends'), years=x.get('years'), apy=(round(float(x['apy']), 1) if x.get('apy') else None), week=x.get('week'), year=x.get('year')))
             if len(feed) >= 14: break
-    steps = ['Tags', 'Tampering', 'Open Market', 'Post-Draft', 'Camp']
+    steps = ['Tags', 'Market Day 1', 'Market Days 2–3', 'Post-Draft', 'Camp']
     step_i = None
     if phase in ('offseason', 'free_agency'):
         step_i = 0 if step is None else 1 if step == 1 else 2 if step in (2, 3) else 3
     elif phase == 'preseason': step_i = 4
-    return dict(rail=rail(session, league, abbr), rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()), steps=steps, step_i=step_i, top51=(phase != 'regular'),
+    from cap_engine import CAP
+    committed_next = round(sum(p.contract.cap_hit(1) for p in me.roster if p.contract and p.contract.years >= 2) + float(getattr(me.cap, 'dead_next', 0.0) or 0.0), 1)
+    limit_next = round(CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.055), 1)
+    import practice_squad as PSQ
+    ps_n = len(PSQ.squad(me))
+    return dict(rail=rail(session, league, abbr), rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
+                weeks_left=(19 - int(league.week or 0) if phase == 'regular' else None),
                 in_season=(phase == 'regular'), phase=phase, step=step, threads=threads, feed=feed, positions=sorted({r['pos'] for r in rows}))
 
 

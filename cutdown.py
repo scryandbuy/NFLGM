@@ -48,7 +48,7 @@ POS_CAP = {'QB': 3, 'HB': 4, 'FB': 2, 'WR': 7, 'TE': 4,
 
 def rows_for(team):
     """The shape roster_construction wants."""
-    return [dict(pos=p.pos, ovr=p.ovr, pid=p.pid, name=p.name)
+    return [dict(pos=p.pos, ovr=p.ovr, pid=p.pid, name=p.name, dead=float(p.dead_if_cut(0)) if p.contract else 0.0, age=float(p.age))
             for p in team.active()]
 
 

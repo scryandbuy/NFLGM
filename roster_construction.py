@@ -120,7 +120,12 @@ def allocate(pool, team, gm, usage=None, waiver_priority=0.5, limit=ROSTER_LIMIT
     """
     by_pos = {}
     for p in pool: by_pos.setdefault(p['pos'], []).append(p)
-    for k in by_pos: by_pos[k].sort(key=lambda x: -x['ovr'])
+    # WHO STAYS AT A SPOT is rating first, but a release costs what it costs: the dead
+    # money accelerates onto this year's cap, and a young man on a rookie deal is the
+    # club's own investment. Arizona cut a first-round rookie back ($19.6m dead) to keep
+    # a 31-year-old rated the same. Ties and near-ties go to the man who is dearer to cut.
+    def keep_score(x): return x['ovr'] + 0.35 * min(20.0, float(x.get('dead', 0.0) or 0.0)) + 0.4 * max(0.0, 25.0 - float(x.get('age', 26.0) or 26.0))
+    for k in by_pos: by_pos[k].sort(key=lambda x: -keep_score(x))
 
     GRP = {'LT':'OL','LG':'OL','C':'OL','RG':'OL','RT':'OL',
            'LEDG':'DL','REDG':'DL','DT':'DL','MIKE':'LB','WILL':'LB','SAM':'LB',
