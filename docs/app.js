@@ -302,18 +302,20 @@ function renderGameDay(v) {
   const lineScore = el('table', { class: 'linescore' }); top.append(lineScore);
   const drawBug = (shown, shownPlays) => {
     const final = shown >= g.drives.length && shownPlays == null;
-    const d = g.drives[Math.max(0, shown - 1)]; const revealed = (shownPlays != null ? d.plays.slice(0, shownPlays) : d.plays).filter(p => p.text);
+    const d = g.drives[Math.max(0, shown - 1)]; const revealed = (shownPlays != null ? vis(d).slice(0, shownPlays) : vis(d));
+    const atBreak = shownPlays == null && shown < g.drives.length && g.drives[shown].quarter > d.quarter;   // the drive shown was the quarter's last
     let hs = g.hs, as_ = g.as_;
     if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { for (const p of revealed) if (p.kind === 'score') { if (p.type === 'field_goal') { if (d.off === g.home.abbr) hs += 3; else as_ += 3; } else if (p.td) { if (d.off === g.home.abbr) hs += 7; else as_ += 7; } } } }
     const lastPlay = revealed.length ? revealed[revealed.length - 1] : null;
-    const clock = lastPlay && lastPlay.clock != null ? `${Math.floor((lastPlay.clock % 900) / 60)}:${String(Math.floor(lastPlay.clock % 60)).padStart(2, '0')}` : '';
+    const headParts = lastPlay && lastPlay.head ? lastPlay.head.split(' · ') : [];
+    const clock = atBreak ? '0:00' : (headParts.length >= 3 ? headParts[headParts.length - 1] : '');
     const wpNow = g.wp[Math.min(g.wp.length - 1, Math.max(0, shown - 1))];
     const myScore = g.me_home ? hs : as_, theirScore = g.me_home ? as_ : hs;
     const won = myScore > theirScore, tie = myScore === theirScore;
     bug.innerHTML = '';
     bug.append(
       el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${g.away.color}` }, g.away.abbr), el('div', {}, el('div', { class: 'nm' }, g.away.nick), el('div', { class: 'rec' }, rec(g.away_rec) + (!final && d.off === g.away.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-left:auto' }, as_)),
-      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : `Q${d.quarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n}`)), el('div', { class: 'q', style: 'font-size:11px;color:var(--ink-3);margin-top:4px' }, `Win Probability ${wpNow}%` + (g.env && g.env.conditions ? ` · ${g.env.conditions}` : ''))),
+      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : atBreak ? (d.quarter === 2 ? 'Halftime' : d.quarter >= 4 ? 'End of Regulation' : `End of Q${d.quarter}`) : `Q${d.quarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : atBreak ? `${d.off} ${String(d.result || '').toLowerCase()}`.trim() : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n} · ${d.off} ball`)), el('div', { class: 'q', style: 'font-size:11px;color:var(--ink-3);margin-top:4px' }, `Win Probability ${wpNow}%` + (g.env && g.env.conditions ? ` · ${g.env.conditions}` : ''))),
       el('div', { class: 'side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, g.home.abbr), el('div', {}, el('div', { class: 'nm' }, g.home.nick), el('div', { class: 'rec' }, rec(g.home_rec) + (!final && d.off === g.home.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-right:auto' }, hs)));
     lineScore.innerHTML = '';
     if (g.quarters && g.quarters[g.home.abbr]) {
@@ -341,7 +343,7 @@ function renderGameDay(v) {
   const draw = () => {
     body.innerHTML = '';
     g.drives.slice(0, shown).forEach((d, di) => {
-      const last = di === shown - 1; const plays = (last && shownPlays != null) ? d.plays.slice(0, shownPlays) : d.plays;
+      const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
       body.append(el('div', { class: 'drive' }, (last && shownPlays != null) ? `Drive ${d.n} · ${d.off} · Q${d.quarter} · ${(d.head || '').split(' · ').slice(2, 3).join('')}` : `Q${d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`));
       for (const p of plays) {
         if (!p.text) continue;
@@ -350,16 +352,21 @@ function renderGameDay(v) {
         const line = el('div', { class: 'pl ' + p.kind }); if (p.head) line.append(el('span', { class: 'dn' }, p.head), '  '); line.append(p.text); body.append(line);
       }
     });
-    tick.querySelector('h2 small').textContent = (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays}` : '');
+    tick.querySelector('h2 small').textContent = (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
     body.scrollTop = body.scrollHeight;
     drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays);
   };
-  const nextPlay = () => { const d = g.drives[shown - 1]; if (shownPlays == null) { if (shown >= g.drives.length) return; shown++; shownPlays = 1; } else if (shownPlays < d.plays.length) shownPlays++; else { if (shown >= g.drives.length) { shownPlays = null; } else { shown++; shownPlays = 1; } } draw(); };
+  const vis = d => d.plays.filter(p => p.text);
+  // the first drive opens one play at a time too
+  shown = 1; shownPlays = 0;
+  const nextPlay = () => { const d = g.drives[shown - 1]; const n = vis(d).length; if (shownPlays == null || shownPlays >= n) { if (shownPlays != null && shownPlays >= n) shownPlays = null; if (shown >= g.drives.length) { shownPlays = null; draw(); return; } shown++; shownPlays = 1; } else shownPlays++; if (shownPlays >= vis(g.drives[shown - 1]).length) shownPlays = null; draw(); };
+  const quarterEnd = q => { let i = g.drives.findIndex(d => d.quarter > q); return i < 0 ? g.drives.length : i; };   // how many drives are in through the end of quarter q
+  const nextQuarter = () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; const end = quarterEnd(q); shown = (shown >= end) ? quarterEnd(q + 1) : end; draw(); };
   const ctrl = el('div', { class: 'ctrl2' },
     el('button', { class: 'btn', 'data-tip': 'One snap at a time', onclick: nextPlay }, 'Next Play'),
-    el('button', { class: 'btn go', onclick: () => { shownPlays = null; shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
-    el('button', { class: 'btn', onclick: () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; while (shown < g.drives.length && g.drives[shown].quarter === q) shown++; shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Quarter'),
-    el('button', { class: 'btn', 'data-tip': 'Run to the break', onclick: () => { shownPlays = null; while (shown < g.drives.length && g.drives[shown].quarter <= 2) shown++; draw(); } }, 'To Halftime'),
+    el('button', { class: 'btn go', 'data-tip': 'Through the end of this drive, or the next one if this one is in', onclick: () => { if (shownPlays != null) { shownPlays = null; } else shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
+    el('button', { class: 'btn', 'data-tip': 'Through the end of the quarter', onclick: nextQuarter }, 'Next Quarter'),
+    el('button', { class: 'btn', 'data-tip': 'Through the end of the second quarter', onclick: () => { shownPlays = null; shown = Math.max(shown, quarterEnd(2)); draw(); } }, 'To Halftime'),
     el('button', { class: 'btn', onclick: () => { shownPlays = null; shown = g.drives.length; draw(); } }, 'Finish Game'),
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
@@ -401,7 +408,7 @@ function renderGameDay(v) {
     if (shown >= g.drives.length && shownPlays == null) { drawFullBox(); return; }
     boxHead.querySelector('small').textContent = 'Live'; box.innerHTML = '';
     const pass = {}, rush = {}, recv = {};
-    const revealed = []; g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; revealed.push(...((last && shownPlays != null) ? d.plays.slice(0, shownPlays) : d.plays)); });
+    const revealed = []; g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; revealed.push(...((last && shownPlays != null) ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays)); });
     for (const p of revealed) {
       if (!p.type) continue; const y = p.yards || 0;
       if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.passer) { const k = p.off + '|' + p.passer; const r = pass[k] = pass[k] || { team: p.off, name: p.passer, cmp: 0, att: 0, yds: 0, td: 0, int_: 0 }; r.att++; if (p.type === 'complete') { r.cmp++; r.yds += y; if (p.td) r.td++; } if (p.type === 'interception') r.int_++; }
