@@ -92,8 +92,15 @@ def _assemble(by_pos):
     ol += [p for pos in ('LT', 'LG', 'C', 'RG', 'RT')
            for p in take(pos)[1:]]
     dl = take('LEDG', 1) + take('DT', 2) + take('REDG', 1)
-    dl += [p for pos in ('LEDG', 'DT', 'REDG') for p in take(pos)[1:]]
-    lb = take('MIKE') + take('WILL') + take('SAM')
+    # the depth behind the four: two tackles start, so the tackle depth begins at the third.
+    # Skipping only one put the second starting tackle in the list twice, and the front's
+    # rotation kept subbing him in for the first: 82% of snaps to the other man's 50.
+    dl += take('LEDG')[1:] + take('DT')[2:] + take('REDG')[1:]
+    # the two every-down linebackers first, the SAM third, then the depth. Concatenating
+    # every MIKE, then every WILL, put a club's second MIKE on the field in nickel and
+    # left the WILL and SAM watching, since nickel walks the first two men in the list
+    lb = take('MIKE', 1) + take('WILL', 1) + take('SAM', 1)
+    lb += [p for pos in ('MIKE', 'WILL', 'SAM') for p in take(pos)[1:]]
     db = take('CB') + take('FS') + take('SS')
 
     if not qbs or not ol or not db:
@@ -108,8 +115,9 @@ def _assemble(by_pos):
         qb=qbs[0], qbs=qbs[1:],
         rb=(hbs[0] if hbs else None), backs=hbs,
         # the pattern: three receivers, the tight end and the back
-        wr=(wrs[:3] + tes[:1] + hbs[:1]),
-        extra_blockers=(tes[1:2] + hbs[1:2]),
+        # the whole receiving corps and every tight end: the package picks who dresses for the snap
+        wr=(wrs[:6] + tes[:3] + hbs[:1]),
+        extra_blockers=(tes[1:3] + hbs[1:2]),
         ol=ol, dl=dl, lb=lb, db=db,
         k=(take('K', 1) or [None])[0],
         p=(take('P', 1) or [None])[0],
