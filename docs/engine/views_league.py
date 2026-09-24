@@ -42,7 +42,56 @@ def standings(session, league, abbr):
         hunt = [dict(club=club(t.abbr), record=f"{t.record[0]}–{t.record[1]}" + (f"–{t.record[2]}" if t.record[2] else ''), me=(t.abbr == abbr)) for t in outside[:3]]
         picture.append(dict(conf=conf, seeds=rows, hunt=hunt))
     played = sum(1 for g in league.schedule if g[3] is not None)
-    return dict(rail=rail(session, league, abbr), divisions=divs, picture=picture, games_played=played, week=league.week)
+    # the conference table, and a tiebreak note for clubs tied on pct within a division
+    conf_rows = {}
+    S_ = r.season_state() if r is not None else None
+    for conf in ('AFC', 'NFC'):
+        rows = [x for d in divs for x in d['rows'] if league.teams[x['club']['abbr']].conf == conf]
+        sd = seeds.get(conf) or []
+        rows = sorted(rows, key=lambda x: (sd.index(x['club']['abbr']) if x['club']['abbr'] in sd else 99, -x['pct'], -x['pd']))
+        for x in rows:
+            a = x['club']['abbr']
+            x['seed'] = (sd.index(a) + 1) if a in sd[:7] else None
+            if S_ is not None:
+                x['div_rec'] = _rec_str(S_.div_rec(a)) if hasattr(S_, 'div_rec') else None; x['conf_rec'] = _rec_str(S_.conf_rec(a)) if hasattr(S_, 'conf_rec') else None
+                x['sov'] = round(S_.sov(a), 3); x['sos'] = round(S_.sos(a), 3)
+        conf_rows[conf] = rows
+    notes = []
+    if S_ is not None:
+        for d in divs:
+            by_pct = {}
+            for x in d['rows']: by_pct.setdefault(x['pct'], []).append(x['club']['abbr'])
+            for pct, grp in by_pct.items():
+                if len(grp) < 2 or pct == 0: continue
+                first = next(x for x in d['rows'] if x['club']['abbr'] in grp)['club']['abbr']
+                others = [a for a in grp if a != first]
+                h2h = S_.h2h_pct(first, grp)
+                if h2h is not None and h2h > 0.5: why = 'head-to-head'
+                elif any(abs(S_.sov(first) - S_.sov(a)) > 1e-9 for a in others): why = 'strength of victory'
+                elif any(abs(S_.sos(first) - S_.sos(a)) > 1e-9 for a in others): why = 'strength of schedule'
+                else: why = 'the later tiebreakers'
+                notes.append(f"{d['name']}: {' and '.join(grp)} tied at {pct:.3f}; {first} ahead on {why}.")
+    return dict(rail=rail(session, league, abbr), divisions=divs, picture=picture, games_played=played, week=league.week, conferences=conf_rows, notes=notes)
+
+
+def _rec_str(rec):
+    try: w, l, t = rec
+    except Exception: return None
+    return f"{w}–{l}" + (f"–{t}" if t else '')
+
+
+def team_schedule(session, league, abbr, team=None):
+    team = team or abbr
+    games = []
+    for (wk, a, h, ap, hp) in sorted(league.schedule, key=lambda g: g[0]):
+        if team not in (a, h): continue
+        home = h == team; opp = a if home else h; done = ap is not None
+        mine, theirs = (hp, ap) if home else (ap, hp)
+        games.append(dict(week=wk, home=home, opp=club(opp), done=done, mine=mine, theirs=theirs, result=(None if not done else 'W' if mine > theirs else 'L' if mine < theirs else 'T'), opp_rec=_rec(league, opp)))
+    weeks = {g['week'] for g in games}
+    byes = [w for w in range(1, 19) if w not in weeks]
+    t = league.teams[team]; w, l, d = t.record
+    return dict(rail=rail(session, league, abbr), team=club(team), record=f"{w}–{l}" + (f"–{d}" if d else ''), games=games, byes=byes, clubs=[club(c) for c in sorted(league.teams)])
 
 
 def schedule(session, league, abbr, week=None):
@@ -138,7 +187,28 @@ def stats(session, league, abbr, year=None):
             out.append(dict(pid=pid, name=p.name, pos=p.pos, team=(p.team or ''), v=(round(float(val), 1) if key == 'sacks' else _num(val)), mine=(p.team == abbr)))
         if out: boxes.append(dict(title=title, unit=unit, rows=out))
     years = sorted(league.stats)
-    return dict(rail=rail(session, league, abbr), year=yr, years=years, boxes=boxes)
+    import advanced_stats as AS
+    adv = []
+    for title, metric, floor, pos, fmt in (('EPA per Dropback', 'epa_per_dropback', 150, ['QB'], 'epa'), ('Completion Over Expected', 'cpoe', 150, ['QB'], 'pct1'), ('EPA per Rush', 'epa_per_rush', 80, ['HB', 'FB'], 'epa'), ('EPA per Target', 'rec_epa_per_target', 40, ['WR', 'TE', 'HB'], 'epa'),
+                                            ('Pass Rush Win Rate', 'pass_rush_win_rate', 100, None, 'pct'), ('Pass Block Win Rate', 'pass_block_win_rate', 200, ['LT', 'LG', 'C', 'RG', 'RT'], 'pct'), ('Separation', 'separation', 40, ['WR', 'TE'], 'f1'), ('Defensive EPA per Play', 'def_epa_per_play', 200, None, 'epa_neg')):
+        scale = played_share(league, yr)
+        try: rows = AS.leaders(league, yr, metric, min_n=max(1, int(floor * scale)), top=8, pos=pos)
+        except Exception: rows = []
+        if metric == 'def_epa_per_play': rows = sorted(rows, key=lambda r: r[1])[:8]
+        out = []
+        for p, val, n in rows:
+            s = (f"{val:+.2f}" if fmt in ('epa', 'epa_neg') else f"{val:+.1f}" if fmt == 'pct1' else f"{val:.0f}%" if fmt == 'pct' else f"{val:.1f}")
+            out.append(dict(pid=p.pid, name=p.name, pos=p.pos, team=(p.team or ''), v=s, n=int(n), mine=(p.team == abbr)))
+        unit_word = {'epa_per_dropback': 'dropbacks', 'cpoe': 'attempts', 'epa_per_rush': 'carries', 'rec_epa_per_target': 'targets', 'pass_rush_win_rate': 'rushes', 'pass_block_win_rate': 'blocking snaps', 'separation': 'targets', 'def_epa_per_play': 'plays'}[metric]
+        if out: adv.append(dict(title=title, unit=f"min {max(1, int(floor * scale))} {unit_word}", rows=out))
+    return dict(rail=rail(session, league, abbr), year=yr, years=years, boxes=boxes, advanced=adv)
+
+
+def played_share(league, yr):
+    """How far into the season we are, 0 to 1, so the minimums scale with the games played."""
+    if yr != league.year: return 1.0
+    done = sum(1 for g in league.schedule if g[3] is not None)
+    return max(0.06, min(1.0, done / max(1, len(league.schedule))))
 
 
 AWARD_NAMES = [('mvp', 'Most Valuable Player'), ('opoy', 'Offensive Player of the Year'), ('dpoy', 'Defensive Player of the Year'), ('oroy', 'Offensive Rookie of the Year'), ('droy', 'Defensive Rookie of the Year'),
@@ -199,4 +269,13 @@ def almanac(session, league, abbr):
         sp = league.player(s[0]) if s else None; cp = league.player(c[0]) if c else None
         records.append(dict(stat=names.get(stat, stat), season=(dict(name=sp.name, year=s[1], v=(round(float(s[2]), 1) if stat == 'sacks' else _num(s[2]))) if sp else None), career=(dict(name=cp.name, v=(round(float(c[1]), 1) if stat == 'sacks' else _num(c[1]))) if cp else None)))
     hall = [dict(name=h.get('name'), pos=h.get('pos'), inducted=h.get('inducted'), seasons=h.get('seasons'), why=h.get('why', '')) for h in reversed(al['hall'])]
-    return dict(rail=rail(session, league, abbr), seasons=seasons, records=records, hall=hall, note=None if (seasons or hall or records) else 'The almanac fills as seasons close.')
+    careers = []
+    for title, stat in (('Passing Yards', 'pass_yds'), ('Passing TD', 'pass_td'), ('Rushing Yards', 'rush_yds'), ('Receiving Yards', 'rec_yds'), ('Receptions', 'rec'), ('Sacks', 'sacks'), ('Interceptions', 'int_def'), ('Tackles', 'tackles')):
+        rows = AL.career_leaders(league, stat, top=8)
+        careers.append(dict(title=title, rows=[dict(pid=p.pid, name=p.name, pos=p.pos, v=(round(float(x), 1) if stat == 'sacks' else int(x)), active=(not p.retired), mine=(p.team == abbr)) for p, x in rows]))
+    ledger = []
+    for a in sorted(league.teams):
+        for x in AL.coaching_history(league, a):
+            if x.get('name'): ledger.append(dict(club=club(a), name=x['name'], frm=x.get('from'), to=x.get('to'), record=x.get('record'), current=(x.get('to') is None)))
+    ledger.sort(key=lambda x: (x['frm'] or 0), reverse=True)
+    return dict(rail=rail(session, league, abbr), seasons=seasons, records=records, hall=hall, careers=careers, ledger=ledger, note=None if (seasons or hall or records) else 'The almanac fills as seasons close.')

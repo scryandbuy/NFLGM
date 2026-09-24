@@ -82,9 +82,14 @@ def this_week(session, league, abbr):
     return dict(rail=r, off=False, week=wk, opp=club(opp_abbr), away=away, leans=leans,
                 depth=dict(base=[round(float(x), 3) for x in base.depth_mix], value=[round(float(x), 3) for x in plan.depth_mix], labels=list(DEPTH_LABELS)),
                 protection=dict(base=base.protection, value=plan.protection, options=[dict(key=k, word=PROT_WORDS[k]) for k in PROTECTIONS]),
-                travel=bool(plan.travel), bracket=(dict(pid=bp.pid, name=bp.name) if bp else None), their_wrs=their_wrs,
+                travel=bool(plan.travel), travel_target=(dict(pid=tp.pid, name=tp.name) if (tp := league.player(changes.get('travel_target'))) else None), my_cb1=_cb1(league, t), bracket=(dict(pid=bp.pid, name=bp.name) if bp else None), their_wrs=their_wrs,
                 suggestions=sugg, changes={k: (list(v) if isinstance(v, tuple) else v) for k, v in changes.items()},
                 coordinators=dict(oc=_coord(t, 'oc'), dc=_coord(t, 'dc')), coach=rep['coach'], forecast=rep.get('forecast'))
+
+
+def _cb1(league, t):
+    cbs = sorted((p for p in t.active() if p.pos == 'CB' and p.out_until is None), key=lambda p: -p.ovr)
+    return dict(pid=cbs[0].pid, name=cbs[0].name.split()[-1]) if cbs else None
 
 
 def _coord(t, role):
@@ -167,6 +172,9 @@ def act_set_decision(session, league, abbr, key, value):
         if value in PROTECTIONS: changes['protection'] = value
         else: changes.pop('protection', None)
     elif key == 'travel': changes['travel'] = bool(value)
+    elif key == 'travel_target':
+        if value: changes['travel_target'] = value; changes['travel'] = True
+        else: changes.pop('travel_target', None)
     elif key == 'bracket':
         if value: changes['bracket'] = value
         else: changes.pop('bracket', None)

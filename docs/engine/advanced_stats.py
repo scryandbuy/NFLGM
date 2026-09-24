@@ -104,7 +104,8 @@ def line_metrics(line):
     if line.get('rush_plays'): m['epa_per_rush'] = line['rush_epa'] / line['rush_plays']
     if line.get('cpoe_att'): m['cpoe'] = (line.get('pass_cmp', 0) - line['xcomp']) / line['cpoe_att'] * 100.0
     if line.get('pr_reps'): m['pass_rush_win_rate'] = line['pr_wins'] / line['pr_reps'] * 100.0
-    if line.get('pb_reps'): m['pass_block_win_rate'] = line.get('pb_wins', 0) / line['pb_reps'] * 100.0
+    reps = line.get('pb_reps') or line.get('pb_snaps')             # the book records blocking snaps as pb_snaps
+    if reps: m['pass_block_win_rate'] = line.get('pb_wins', 0) / reps * 100.0
     if line.get('sep_n'): m['separation'] = line['sep_total'] / line['sep_n']
     if line.get('def_plays'): m['def_epa_per_play'] = line['def_epa'] / line['def_plays']
     if line.get('tgt'): m['rec_epa_per_target'] = line.get('rec_epa', 0.0) / line['tgt']
@@ -119,8 +120,9 @@ def leaders(league, year, metric, min_n=1, top=10, pos=None):
     rows = []
     for pid, line in league.stats.get(year, {}).items():
         p = league.player(pid)
-        if p is None or (pos and p.pos not in pos) or line.get(floor_key, 0) < min_n: continue
+        n = line.get(floor_key, 0) or (line.get('pb_snaps', 0) if floor_key == 'pb_reps' else 0)
+        if p is None or (pos and p.pos not in pos) or n < min_n: continue
         m = line_metrics(line)
-        if metric in m: rows.append((p, m[metric], line.get(floor_key, 0)))
+        if metric in m: rows.append((p, m[metric], n))
     rows.sort(key=lambda r: -r[1])
     return rows[:top]

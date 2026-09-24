@@ -227,7 +227,7 @@ def apply_changes(plan, base, changes):
             d = np.clip(d, 0.05, 0.9); plan.depth_mix = tuple(d / d.sum())
         elif k == 'protection':
             plan.protection = v
-        elif k in ('travel', 'bracket'):
+        elif k in ('travel', 'bracket', 'travel_target'):
             setattr(plan, k, v)
         elif k == 'screen_boost':
             plan.screen_boost = getattr(plan, 'screen_boost', 0.0) + v
@@ -257,8 +257,13 @@ def user_plan(league, state, week):
     """The user's saved week: changes he accepted or made, applied to the plan the game reads."""
     wp = getattr(league, 'user_week_plan', None)
     if not wp or wp.get('week') != week or wp.get('year') != league.year: return []
-    apply_changes(state.plan, state.base_plan, wp.get('changes', {}))
-    return list(wp.get('changes', {}).keys())
+    ch = wp.get('changes', {})
+    apply_changes(state.plan, state.base_plan, ch)
+    # the game-week calls the GM made himself are his: kickoff does not re-decide them
+    state.plan.travel_locked = 'travel' in ch
+    state.plan.bracket_locked = 'bracket' in ch
+    if ch.get('travel_target'): state.plan.travel_target = ch['travel_target']
+    return list(ch.keys())
 
 
 def set_user_plan(league, week, changes, taken=None):

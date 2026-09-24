@@ -88,6 +88,51 @@ def capture(league, played, user):
                                score=f"{hs}–{as_}", plays=plays))
             diff = (hs - as_) if me_home else (as_ - hs)
             wp.append(round(100 * _wp(diff, float(getattr(dr, 'clock', 0) or 0), me_home)))
+        # longest plays and the team totals, from the drive log
+        longest = {}; T = {home: dict(plays=0, yards=0, pass_yds=0, rush_yds=0, first_downs=0, third_att=0, third_conv=0, fourth_att=0, fourth_conv=0, turnovers=0, sacks_allowed=0, penalties=0, pen_yds=0, top=0.0, red_zone=0, red_zone_td=0), away: None}
+        T[away] = dict(T[home])
+        for pos, dr in res['drives']:
+            off = home if pos == 'home' else away; t_ = T[off]
+            first_clock = last_clock = None
+            for pl in dr.log:
+                if not isinstance(pl, dict): continue
+                ty = pl.get('type'); y = float(pl.get('yards', 0) or 0)
+                if ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
+                    t_['plays'] += 1
+                    if pl.get('clock') is not None:
+                        if first_clock is None: first_clock = float(pl['clock'])
+                        last_clock = float(pl['clock'])
+                if ty in ('run', 'scramble'): t_['rush_yds'] += y; t_['yards'] += y; k = ('rush', pl.get('carrier') or pl.get('passer')); longest[k] = max(longest.get(k, 0), int(round(y)))
+                elif ty == 'complete': t_['pass_yds'] += y; t_['yards'] += y; longest[('pass', pl.get('passer'))] = max(longest.get(('pass', pl.get('passer')), 0), int(round(y))); longest[('rec', pl.get('target'))] = max(longest.get(('rec', pl.get('target')), 0), int(round(y)))
+                elif ty == 'sack': t_['pass_yds'] += y; t_['yards'] += y; t_['sacks_allowed'] += 1
+                elif ty == 'interception': t_['turnovers'] += 1
+                elif ty == 'fumble' and pl.get('lost', True): t_['turnovers'] += 1
+                elif ty == 'penalty': t_['penalties'] += 1; t_['pen_yds'] += abs(int(round(y)))
+                if pl.get('down') == 3 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
+                    t_['third_att'] += 1; t_['third_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble'))
+                if pl.get('down') == 4 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
+                    t_['fourth_att'] += 1; t_['fourth_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble'))
+            t_['first_downs'] += int(getattr(dr, 'first_downs', 0) or 0)
+            if first_clock is not None and last_clock is not None: t_['top'] += max(0.0, first_clock - last_clock)
+            if float(getattr(dr, 'yardline', 99) or 99) <= 20 or (dr.result == 'Touchdown'): t_['red_zone'] += 1; t_['red_zone_td'] += int(dr.result == 'Touchdown')
+        team_stats = {}
+        for abbr_, t_ in T.items():
+            team_stats[abbr_] = dict(plays=t_['plays'], yards=int(round(t_['yards'])), pass_yds=int(round(t_['pass_yds'])), rush_yds=int(round(t_['rush_yds'])), ypp=(round(t_['yards'] / t_['plays'], 1) if t_['plays'] else 0.0), first_downs=t_['first_downs'],
+                                     third=f"{t_['third_conv']}/{t_['third_att']}", fourth=f"{t_['fourth_conv']}/{t_['fourth_att']}", turnovers=t_['turnovers'], sacks_allowed=t_['sacks_allowed'], penalties=f"{t_['penalties']} for {t_['pen_yds']}",
+                                     top=f"{int(t_['top'] // 60)}:{int(t_['top'] % 60):02d}", red_zone=f"{t_['red_zone_td']}/{t_['red_zone']}")
+        # the assistants' read of the game: what decided it
+        me_s, op_s = team_stats[user], team_stats[opp]
+        reads = []
+        if me_s['turnovers'] != op_s['turnovers']: reads.append(f"Turnovers {me_s['turnovers']} to {op_s['turnovers']}" + (', and that was the game.' if abs(me_s['turnovers'] - op_s['turnovers']) >= 2 else '.'))
+        if abs(me_s['rush_yds'] - op_s['rush_yds']) >= 60: reads.append(f"The ground game: {me_s['rush_yds']} rushing yards to {op_s['rush_yds']}.")
+        if me_s['sacks_allowed'] >= 4: reads.append(f"Protection broke down: {me_s['sacks_allowed']} sacks allowed.")
+        if op_s['sacks_allowed'] >= 4: reads.append(f"The rush got home: {op_s['sacks_allowed']} sacks.")
+        try:
+            a, b = map(int, me_s['third'].split('/')); c, d = map(int, op_s['third'].split('/'))
+            if b >= 8 and a / b >= 0.5: reads.append(f"Third downs went our way: {me_s['third']}.")
+            if d >= 8 and c / d >= 0.5: reads.append(f"We could not get off the field on third down: they went {op_s['third']}.")
+        except Exception: pass
+        if not reads: reads.append('An even game on the sheet; the score came down to the drives that finished.')
         # box score: the top lines from the book
         def line(pid):
             l = book.p.get(pid, {}); p = league.player(pid); return p, l
@@ -98,13 +143,13 @@ def capture(league, played, user):
         for abbr in (home, away):
             pids = [p.pid for p in league.teams[abbr].roster]
             for pid, l in top(pids, 'pass_att', 2):
-                p = league.player(pid); box['passing'].append(dict(team=abbr, name=p.name, ca=f"{int(l.get('pass_cmp', 0))}/{int(l.get('pass_att', 0))}", yds=int(l.get('pass_yds', 0)), td=int(l.get('pass_td', 0)), int_=int(l.get('pass_int', 0))))
+                p = league.player(pid); box['passing'].append(dict(team=abbr, name=p.name, ca=f"{int(l.get('pass_cmp', 0))}/{int(l.get('pass_att', 0))}", yds=int(l.get('pass_yds', 0)), td=int(l.get('pass_td', 0)), int_=int(l.get('ints', 0)), lng=longest.get(('pass', pid), 0)))
             for pid, l in top(pids, 'rush_att', 2):
-                p = league.player(pid); box['rushing'].append(dict(team=abbr, name=p.name, att=int(l.get('rush_att', 0)), yds=int(l.get('rush_yds', 0)), td=int(l.get('rush_td', 0))))
+                p = league.player(pid); box['rushing'].append(dict(team=abbr, name=p.name, att=int(l.get('rush_att', 0)), yds=int(l.get('rush_yds', 0)), td=int(l.get('rush_td', 0)), lng=longest.get(('rush', pid), 0)))
             for pid, l in top(pids, 'rec', 3):
-                p = league.player(pid); box['receiving'].append(dict(team=abbr, name=p.name, tgt=int(l.get('targets', 0)), rec=int(l.get('rec', 0)), yds=int(l.get('rec_yds', 0)), td=int(l.get('rec_td', 0))))
+                p = league.player(pid); box['receiving'].append(dict(team=abbr, name=p.name, tgt=int(l.get('tgt', 0)), rec=int(l.get('rec', 0)), yds=int(l.get('rec_yds', 0)), td=int(l.get('rec_td', 0)), lng=longest.get(('rec', pid), 0)))
             for pid, l in top(pids, 'tackles', 3):
-                p = league.player(pid); box['defense'].append(dict(team=abbr, name=p.name, tkl=int(l.get('tackles', 0)), sk=float(l.get('sacks', 0)), int_=int(l.get('interceptions', 0)), pd=int(l.get('pass_def', 0))))
+                p = league.player(pid); box['defense'].append(dict(team=abbr, name=p.name, tkl=int(l.get('tackles', 0)), sk=float(l.get('sacks', 0)), int_=int(l.get('int_def', 0)), pd=int(l.get('pass_def', 0))))
         out['game'] = dict(home=home, away=away, hs=res['home'], as_=res['away'], ot=bool(res.get('overtime')), me=user, opp=opp, me_home=me_home,
-                           drives=drives, wp=wp, box=box, env=res.get('env', {}))
+                           drives=drives, wp=wp, box=box, env=res.get('env', {}), team_stats=team_stats, reads=reads)
     return out

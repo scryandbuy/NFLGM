@@ -75,6 +75,8 @@ class Gameplan:
     box_bias: float = 0.0
     travel: bool = False              # CB1 follows their best receiver
     travel_target: str = None
+    travel_locked: bool = False          # set by the GM's game-week decision; kickoff does not re-decide
+    bracket_locked: bool = False
     bracket: str = None               # pid being doubled
     # ---- bookkeeping ----
     changes: list = field(default_factory=list)
