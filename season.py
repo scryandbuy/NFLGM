@@ -151,7 +151,7 @@ class SeasonRunner:
                     else p.out_until is None)]
         # game-day elevations from the practice squad dress this week
         rows += [dict(p.ratings, pid=p.pid, pos=p.pos) for p in getattr(t, '_elevated', [])]
-        return R.build_roster_rows(rows, t.scheme)
+        return R.build_roster_rows(rows, t.scheme, pins=getattr(t, 'depth_pins', None))
 
     def refresh(self, abbr):
         self.states[abbr].roster = self._units(abbr)

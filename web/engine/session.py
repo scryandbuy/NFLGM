@@ -208,6 +208,23 @@ class Session:
         import views
         return views.portal(self, self.L, self.user_team)
 
+    def club_roster(self):
+        import views_club as VC; return VC.roster(self, self.L, self.user_team)
+
+    def club_card(self, pid):
+        import views_club as VC; return VC.card(self, self.L, pid)
+
+    def club_depth(self, package='Nickel'):
+        import views_club as VC; return VC.depth(self, self.L, self.user_team, package)
+
+    def club_act(self, name, **kw):
+        """Roster and depth actions from the page; the page re-reads the view after."""
+        import views_club as VC
+        fn = getattr(VC, 'act_' + name, None)
+        if fn is None: return dict(ok=False, why='unknown action')
+        if name == 'elevate': kw['week'] = self.stop[1] if self.stop[0] == 'week' else 1
+        return fn(self.L, self.user_team, **kw)
+
     def gameday_view(self):
         import views
         return views.gameday(self, self.L, self.user_team)

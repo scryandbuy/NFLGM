@@ -304,9 +304,20 @@ class Team:
         d = {}
         for p in self.active():
             d.setdefault(p.pos, []).append(p)
+        pins = getattr(self, 'depth_pins', None) or {}
         for pos in d:
             d[pos].sort(key=lambda p: -p.ovr)
+            if pos in pins:
+                order = {pid: i for i, pid in enumerate(pins[pos])}
+                d[pos].sort(key=lambda p: (order.get(p.pid, 10**6), -p.ovr))
         return d
+
+    def set_depth_order(self, pos, pids):
+        """The user's order at a position. Players not named fall in by rating below the named ones."""
+        if not hasattr(self, 'depth_pins') or self.depth_pins is None: self.depth_pins = {}
+        mine = {p.pid for p in self.active() if p.pos == pos}
+        self.depth_pins[pos] = [pid for pid in pids if pid in mine]
+        return self.depth_pins[pos]
 
     def starter(self, pos):
         g = self.by_pos(pos)
@@ -449,7 +460,7 @@ class Team:
                     roster=[p.pid for p in self.roster],
                     practice_squad=[p.pid for p in self.practice_squad],
                     owner_patience=self.owner_patience, owner_acumen=self.owner_acumen,
-                    owner_star_pull=getattr(self, 'owner_star_pull', 0.5), owner_spend=getattr(self, 'owner_spend', 0.5),
+                    owner_star_pull=getattr(self, 'owner_star_pull', 0.5), owner_spend=getattr(self, 'owner_spend', 0.5), depth_pins=getattr(self, 'depth_pins', None) or {},
                     ir=[p.pid for p in self.ir],
                     picks=[asdict(k) for k in self.picks],
                     cap_year=self.cap.year, cap_rollover=self.cap.rollover,
@@ -768,7 +779,7 @@ class League:
             t.practice_squad = [L.players[p] for p in td['practice_squad']
                                 if p in L.players]
             t.ir = [L.players[p] for p in td['ir'] if p in L.players]
-            t.owner_patience = td.get('owner_patience', 0.5); t.owner_acumen = td.get('owner_acumen', 0.5); t.owner_star_pull = td.get('owner_star_pull', 0.5); t.owner_spend = td.get('owner_spend', 0.5)
+            t.owner_patience = td.get('owner_patience', 0.5); t.owner_acumen = td.get('owner_acumen', 0.5); t.owner_star_pull = td.get('owner_star_pull', 0.5); t.owner_spend = td.get('owner_spend', 0.5); t.depth_pins = td.get('depth_pins') or {}
             t.picks = [DraftPick(**k) for k in td['picks']]
             t.cap = TeamCap(td['cap_year'], td['cap_rollover'])
             t.cap.dead = td['cap_dead']

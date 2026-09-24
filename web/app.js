@@ -276,6 +276,133 @@ function renderGameDay(v) {
   draw();
 }
 
+// ---------------------------------------------------------------- Club: roster, card, depth chart
+let clubView = 'Overview', clubTab = 'active';
+function secondRow(items, current) {
+  const s = $('#second'); s.innerHTML = '';
+  for (const [label, hash] of items) s.append(el('a', { href: hash, 'aria-current': hash === current ? 'page' : null }, label));
+}
+function pill(word) { return el('span', { class: 'pill ' + word.toLowerCase() }, word); }
+function condBar(c) { return el('span', { class: 'cond' }, el('i', { class: c < 60 ? 'low' : c < 80 ? 'mid' : '', style: `width:${c}%` })); }
+function ovrCell(o) { return el('span', { class: 'ovr ' + (o >= 88 ? 't1' : o >= 76 ? 't2' : 't3') }, o); }
+function fitCell(f) { return el('span', { class: 'fit ' + (f > 0.05 ? 'p' : f < -0.05 ? 'm' : 'z') }, (f > 0 ? '+' : '') + f.toFixed(1)); }
+function who(r) { return el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.no || r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, [r.college, r.season_no ? `${r.season_no}${ord(r.season_no)} season` : null].filter(Boolean).join(' · ')))); }
+
+function renderRoster(v) {
+  renderRail(v.rail);
+  const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
+  $('#crumb').textContent = 'Club'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
+  secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], clubTab === 'ps' ? '#club/ps' : '#club');
+  const sheet = el('section', { class: 'sheet c12' });
+  const tabs = el('div', { class: 'tabs' });
+  for (const [k, label, n] of [['active', 'Active', v.count], ['ps', 'Practice Squad', v.practice.length], ['injured', 'Injured', v.injured.length]])
+    tabs.append(el('button', { 'aria-pressed': String(clubTab === k), onclick: () => { clubTab = k; renderRoster(v); } }, label + ' ', el('em', {}, n)));
+  const views = el('div', { class: 'tabs', style: 'margin-left:14px' });
+  for (const k of ['Overview', 'Ratings', 'Contract', 'Stats']) views.append(el('button', { 'aria-pressed': String(clubView === k), onclick: () => { clubView = k; renderRoster(v); } }, k));
+  sheet.append(el('div', { class: 'tools' }, tabs, views, el('span', { class: 'count', style: 'margin-left:auto' }, `${v.count} on the roster · Cap ${'$' + v.cap_total.toFixed(1) + 'm'}` + (v.practice.length ? ` · Practice Squad $${v.ps_charge}m` : ''))));
+  const tbl = el('table', { class: 'tbl' });
+  const H = (t, tip, n) => { const th = el('th', { 'data-tip': tip || null, class: n ? 'n' : null }, t); return th; };
+  const heads = { Overview: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Ovr', 'Overall Rating', 1), H('Fit', "How well the player matches your coach's scheme", 1), H('Dev', 'Rate of XP Growth'), H('Condition', 'Game-day Freshness'), H('Morale', "Player's happiness"), H('Yrs', 'Years left on his contract', 1), H('Cap Hit', "This year's cap hit", 1), H('Penalty', 'Dead cap charged if player is cut/traded', 1), H('Status')],
+                  Ratings: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Ovr', 'Overall Rating', 1), H('Ceiling', "The player's estimated potential", 1), H('Dev', 'Rate of XP Growth'), H('Fit', "How well the player matches your coach's scheme", 1), H('Morale', "Player's happiness")],
+                  Contract: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Yrs', 'Years left on his contract', 1), H('Cap Hit', "This year's cap hit", 1), H('Penalty', 'Dead cap charged if player is cut/traded', 1), H('Status')],
+                  Stats: [H('Player'), H('Pos', 'Position'), H('G', 'Games played', 1), H('This Season')] }[clubView];
+  tbl.append(el('tr', {}, ...heads));
+  const rowsFor = () => clubTab === 'ps' ? [{ title: 'Practice Squad', rows: v.practice }] : clubTab === 'injured' ? [{ title: 'Injured', rows: v.injured }] : v.groups;
+  for (const g of rowsFor()) {
+    tbl.append(el('tr', { class: 'grp' }, el('td', { colspan: String(heads.length) }, `${g.title} · ${g.rows.length}`)));
+    for (const r of g.rows) {
+      const cells = { Overview: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, el('span', { class: 'dev' + (r.dev === 'Star' || r.dev === 'Superstar' ? ' star' : '') }, r.dev)), el('td', {}, condBar(r.cond)), el('td', {}, pill(r.morale)), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n' }, `$${r.penalty.toFixed(1)}m`), el('td', {}, el('span', { class: 'inj' }, r.status))],
+                      Ratings: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.pot_range ? `${r.pot_range[0]}–${r.pot_range[1]}` : (r.pot ?? '—')), el('td', {}, el('span', { class: 'dev' + (r.dev === 'Star' || r.dev === 'Superstar' ? ' star' : '') }, r.dev)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, pill(r.morale))],
+                      Contract: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n' }, `$${r.penalty.toFixed(1)}m`), el('td', {}, el('span', { class: 'inj' }, r.status))],
+                      Stats: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.stats.games), el('td', { style: 'text-align:left;font-family:var(--mono);font-size:12px' }, r.stats.line)] }[clubView]();
+      tbl.append(el('tr', {}, ...cells));
+    }
+  }
+  sheet.append(tbl);
+  if (clubTab === 'ps') sheet.append(el('div', { class: 'foot' }, el('span', { class: 'count' }, 'Open a player to call him up or elevate him for Sunday.')));
+  page.append(sheet);
+}
+
+function renderCard(v) {
+  renderRail(v.rail);
+  const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
+  $('#crumb').textContent = 'Club'; secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '');
+  if (v.error) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, v.error))); return; }
+  const s = el('section', { class: 'sheet c12' });
+  const col = v.team ? v.team.color : 'var(--rule-hi)';
+  s.append(el('div', { class: 'head' },
+    el('div', { class: 'jersey', style: `background:${col}` }, v.no || v.pos),
+    el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
+      el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.age} · ${v.college || ''}${v.season_no ? ` · ${v.season_no}${ord(v.season_no)} season` : ''} · ${v.draft}` + (v.team ? ` · ${v.team.name}` : ' · Free agent')),
+      el('div', { class: 'hfacts' }, el('div', {}, el('span', {}, 'Contract'), el('b', {}, `$${v.contract.per_year.toFixed(1)}m`, el('small', {}, `per year · ${v.contract.years} yrs`))), el('div', {}, el('span', {}, `Cap Hit ${v.rail.year}`), el('b', {}, `$${v.contract.hit.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Penalty'), el('b', {}, `$${v.contract.penalty.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Trade Interest'), el('b', { style: 'color:var(--ink-2)' }, v.interest)), el('div', {}, el('span', {}, 'Morale'), el('b', { style: 'color:var(--ink-2)' }, v.morale)))),
+    el('div', { class: 'ovrbig' }, el('b', {}, v.ovr), el('span', {}, `Overall · Scheme Fit ${v.fit >= 0 ? '+' : ''}${v.fit.toFixed(1)}`), el('div', { class: 'pot' }, `Ceiling ${v.ceiling} · ${v.dev}`))));
+  const acts = el('div', { class: 'acts' });
+  if (v.actions.mine) {
+    if (v.actions.extend_eligible) acts.append(el('button', { class: 'btn go', onclick: () => { location.hash = '#personnel/extensions'; } }, 'Extend'));
+    acts.append(el('button', { class: 'btn', onclick: () => { location.hash = '#personnel/trades'; } }, 'Trade Block'));
+    const alts = v.grades.filter(g => !g.mine);
+    if (alts.length) { const sel = el('select', { class: 'btn' }); sel.append(el('option', { value: '' }, 'Position Change…')); alts.forEach(g => sel.append(el('option', { value: g.pos }, `${g.pos} · ${g.ovr} Ovr`))); sel.onchange = () => { if (!sel.value) return; const r = pyJSON(`SESSION.club_act('position_change', pid=${JSON.stringify(v.pid)}, new_pos=${JSON.stringify(sel.value)})`); busy(r.ok ? `${r.name} moves to ${r.to}: ${r.penalty} points for ${r.games} games.` : r.why); setTimeout(() => busy(null), 2200); if (r.ok) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(v.pid)})`)); }; acts.append(sel); }
+    acts.append(el('button', { class: 'btn warn', onclick: () => { if (!confirm(`Cut ${v.name}? Penalty $${v.contract.penalty.toFixed(1)}m against this year's cap.`)) return; const r = pyJSON(`SESSION.club_act('cut', pid=${JSON.stringify(v.pid)})`); busy(r.ok ? `${r.name} released. Penalty $${r.penalty}m.` : r.why); setTimeout(() => busy(null), 2200); location.hash = '#club'; } }, `Cut · Penalty $${v.contract.penalty.toFixed(1)}m`));
+  }
+  acts.append(el('button', { class: 'btn quiet', onclick: () => history.back() }, 'Back'));
+  s.append(el('div', { class: 'ctabs' }, el('button', { 'aria-pressed': 'true' }, 'Overview'), acts));
+  // body: positions, attributes, contract
+  const left = el('div', {});
+  left.append(el('div', { class: 'h5' }, 'Positions'));
+  const pm = el('div', { class: 'posmap', style: `grid-template-columns:repeat(${Math.min(5, v.grades.length)},1fr)` }); v.grades.forEach(g => pm.append(el('div', { class: g.mine ? 'nat' : 'fam' }, g.pos))); left.append(pm);
+  const gr = el('div', { class: 'grades' }); v.grades.forEach(g => gr.append(el('div', {}, el('span', {}, g.pos), el('div', { class: 'bar' }, el('i', { style: `width:${g.ovr}%` })), el('span', { class: 'g' }, `${g.ovr} Ovr`)))); left.append(gr);
+  left.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Status'));
+  left.append(el('div', { class: 'kv' }, el('span', {}, 'Condition'), el('span', {}, `${v.cond}%`), el('span', {}, 'Health'), el('span', {}, v.out ? `Out until week ${v.out}` : 'Healthy'), el('span', {}, 'Season'), el('span', {}, `${v.games} games · ${v.season.line}`), el('span', {}, 'Notes'), el('span', {}, v.status || '—')));
+  const mid = el('div', {});
+  mid.append(el('div', { class: 'h5' }, 'Attributes'));
+  const attrs = el('div', { class: 'attrs' });
+  for (const c of v.cols) {
+    const box = el('div', {}, el('div', { class: 'h5', style: 'margin-bottom:4px' }, c.title));
+    for (const r of c.rows) { const row = el('div', { class: 'arow ' + r.tier }, el('span', {}, r.label)); row.append(r.shift ? el('em', { class: 'fitd ' + (r.shift > 0 ? 'p' : 'm') }, (r.shift > 0 ? '+' : '') + r.shift) : el('em', {})); row.append(el('b', {}, r.v)); box.append(row); }
+    if (c.title === 'Mental' && v.personality) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Traits')); const tr = el('div', { class: 'traits' }); v.personality.split(',').map(x => x.trim()).filter(Boolean).forEach(w => tr.append(el('span', {}, w.replace(/\b\w/g, ch => ch.toUpperCase())))); box.append(tr); }
+    attrs.append(box);
+  }
+  mid.append(attrs);
+  const right = el('div', {});
+  right.append(el('div', { class: 'h5' }, 'Contract', el('span', {}, v.contract.years ? `${v.contract.years} yrs · $${v.contract.per_year.toFixed(1)}m per year` : 'None')));
+  if (v.contract.by_year.length) { const ct = el('table', { class: 'contract' }); ct.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Base'), el('th', {}, 'Bonus'), el('th', {}, 'Cap Hit'), el('th', {}, 'Penalty'))); v.contract.by_year.forEach((y, i) => ct.append(el('tr', { class: i === 0 ? 'now' : '' }, el('td', {}, y.year), el('td', {}, y.base != null ? y.base.toFixed(1) : '—'), el('td', {}, y.bonus != null ? y.bonus.toFixed(1) : '—'), el('td', {}, y.hit.toFixed(1)), el('td', {}, y.penalty != null ? y.penalty.toFixed(1) : '—')))); right.append(ct); }
+  s.append(el('div', { class: 'body' }, left, mid, right));
+  page.append(s);
+}
+
+let depthPkg = 'Nickel';
+function renderDepth(v) {
+  renderRail(v.rail);
+  const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
+  $('#crumb').textContent = 'Club'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
+  secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '#club/depth');
+  const s = el('section', { class: 'sheet c12' });
+  const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
+  for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)})`)); } }, p));
+  pk.append(el('span', { class: 'snaps' }, 'Use the arrows to reorder; the game fields the order you set'));
+  s.append(pk);
+  const chart = el('div', { class: 'chart' });
+  for (const c of v.cols) {
+    const col = el('div', { class: 'col' }, el('h4', {}, c.title));
+    // group by slot position for multi-position columns so arrows move within a position
+    const byPos = {}; c.slots.forEach(x => (byPos[x.pos] = byPos[x.pos] || []).push(x));
+    for (const [pos, men] of Object.entries(byPos)) {
+      men.forEach((x, i) => {
+        const plate = el('div', { class: 'plate' + (x.flag === 'out' ? ' out' : '') }, el('div', { class: 'no' }, x.no || pos), el('div', { class: 'nm', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.short, el('small', {}, x.flag === 'out' ? 'Out' : x.flag === 'questionable' ? 'Questionable' : '')), el('div', { class: 'ov' }, x.ovr));
+        if (x.flag !== 'out') plate.append(el('div', { class: 'cbar' }, el('i', { class: x.cond < 80 ? 'mid' : '', style: `width:${x.cond}%` })));
+        const arrows = el('div', { class: 'arrows' },
+          el('button', { disabled: i === 0 ? '' : null, onclick: () => { const order = men.map(m => m.pid); [order[i - 1], order[i]] = [order[i], order[i - 1]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, '▲'),
+          el('button', { disabled: i === men.length - 1 ? '' : null, onclick: () => { const order = men.map(m => m.pid); [order[i + 1], order[i]] = [order[i], order[i + 1]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, '▼'));
+        col.append(el('div', { class: 'slot' + (x.start ? ' start' : '') }, el('span', { class: 'rk' }, Object.keys(byPos).length > 1 ? pos : String(i + 1)), plate, arrows));
+      });
+    }
+    chart.append(col);
+  }
+  s.append(chart);
+  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, 'Reset to Ratings Order'), el('span', { class: 'count', style: 'margin-left:auto' }, Object.keys(v.pins).length ? `Your order set at: ${Object.keys(v.pins).join(', ')}` : 'Ordered by rating')));
+  page.append(s);
+}
+
 // ---------------------------------------------------------------- flow
 function refresh() { view = pyJSON('SESSION.portal()'); renderRail(view.rail); renderPortal(view); }
 
@@ -302,5 +429,5 @@ async function advance() {
   $('#advance').onclick = advance;
   $('#save').onclick = saveGame;
   $('#back').onclick = () => refresh();
-  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) renderGameDay(pyJSON('SESSION.gameday_view()')); else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
+  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) renderGameDay(pyJSON('SESSION.gameday_view()')); else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();

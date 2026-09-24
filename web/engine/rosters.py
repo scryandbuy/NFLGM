@@ -42,7 +42,7 @@ def _player(row):
     return p
 
 
-def build_roster_rows(rows, scheme=None):
+def build_roster_rows(rows, scheme=None, pins=None):
     """
     Same thing from a LIST OF PLAYER DICTS rather than a dataframe group.
 
@@ -56,6 +56,10 @@ def build_roster_rows(rows, scheme=None):
         by_pos.setdefault(r.get('pos') or r.get('madden_position'), []).append(r)
     for pos in list(by_pos):
         by_pos[pos] = TG.order_depth(by_pos[pos], pos, scheme)
+        if pins and pins.get(pos):
+            # the user's order at this spot: the men he named first, in his order, then the rest by the engine's grade
+            order = {pid: i for i, pid in enumerate(pins[pos])}
+            by_pos[pos] = sorted(by_pos[pos], key=lambda x: order.get(x.get('pid'), 10**6))
     return _assemble(by_pos)
 
 
