@@ -873,3 +873,6 @@ table.rank .edge.me{color:var(--club-2)}table.rank .edge.them{color:var(--opp)}t
 .unitrow .t{height:8px;background:var(--sheet-3);border:1px solid var(--rule)}
 .unitrow .t i{display:block;height:100%}
 .unitrow .v{font-family:var(--mono);font-size:12px;text-align:right}
+
+.filt .sep{width:1px;height:20px;background:var(--rule-2);margin:0 4px;align-self:center}
+.inbox-list.dense .row{padding:5px 12px}

@@ -43,6 +43,12 @@ def _saved(league, week):
     return {}
 
 
+def _taken(league, week):
+    wp = getattr(league, 'user_week_plan', None)
+    if wp and wp.get('week') == week and wp.get('year') == league.year: return list(wp.get('taken', []))
+    return []
+
+
 def _preview(base, changes):
     import gameplan_week as GW
     plan = base.copy(); GW.apply_changes(plan, base, changes); return plan
@@ -67,7 +73,7 @@ def this_week(session, league, abbr):
                           delta=round(float(changes.get(k, 0.0)), 3) if isinstance(changes.get(k, 0.0), (int, float)) else 0.0))
     sugg = []
     for i, s in enumerate(rep['suggestions']):
-        taken = all(_change_in(changes, k, v) for k, v in s['changes'].items())
+        taken = s['text'] in _taken(league, wk)
         sugg.append(dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=s['text'], why=s['why'], changes={k: (list(v) if isinstance(v, tuple) else v) for k, v in s['changes'].items()}, taken=taken))
     bracket = plan.bracket; bp = league.player(bracket) if bracket else None
     their_wrs = [dict(pid=p.pid, name=p.name, ovr=round(p.ovr)) for p in league.teams[opp_abbr].depth.get('WR', [])[:3] if p.out_until is None]
@@ -112,8 +118,9 @@ def act_take(session, league, abbr, i):
     rep = GW.opponent_report(league, abbr, opp[0], wk)
     if int(i) >= len(rep['suggestions']): return dict(ok=False, why='that suggestion is gone')
     s = rep['suggestions'][int(i)]
+    if s['text'] in _taken(league, wk): return dict(ok=True, line='Already taken.')
     changes = _merge(_saved(league, wk), s['changes'])
-    GW.set_user_plan(league, wk, changes)
+    GW.set_user_plan(league, wk, changes, taken=_taken(league, wk) + [s['text']])
     return dict(ok=True, line=f"Taken: {s['text']}.")
 
 
@@ -128,7 +135,7 @@ def act_untake(session, league, abbr, i):
         if v is None: changes.pop(k, None)
         else: changes = _merge(changes, {k: v})
     changes = {k: v for k, v in changes.items() if not (isinstance(v, float) and abs(v) < 1e-9) and not (isinstance(v, tuple) and all(abs(x) < 1e-9 for x in v))}
-    GW.set_user_plan(league, wk, changes)
+    GW.set_user_plan(league, wk, changes, taken=[t for t in _taken(league, wk) if t != s['text']])
     return dict(ok=True, line=f"Put back: {s['text']}.")
 
 
@@ -168,7 +175,7 @@ def act_set_decision(session, league, abbr, key, value):
 
 def act_reset(session, league, abbr):
     import gameplan_week as GW
-    wk = _week(session, league); GW.set_user_plan(league, wk, {}); return dict(ok=True, line="Back to the coordinators' plan.")
+    wk = _week(session, league); GW.set_user_plan(league, wk, {}, taken=[]); return dict(ok=True, line="Back to the coordinators' plan.")
 
 
 # ------------------------------------------------------------ the report
@@ -189,7 +196,7 @@ def report(session, league, abbr):
     units = [dict(unit=u, rank=v[0], of=v[1]) for u, v in (rep['units'] or {}).items()]
     mine = [dict(unit=u, rank=v[0], of=v[1]) for u, v in (rep['my_units'] or {}).items()]
     changes = _saved(league, wk)
-    sugg = [dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=s['text'], why=s['why'], taken=all(_change_in(changes, k, v) for k, v in s['changes'].items())) for i, s in enumerate(rep['suggestions'])]
+    sugg = [dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=s['text'], why=s['why'], taken=(s['text'] in _taken(league, wk))) for i, s in enumerate(rep['suggestions'])]
     return dict(rail=r, off=False, week=wk, opp=club(opp_abbr), away=away, coach=rep['coach'], tendencies=tend(rep['tendencies']), mine_tend=tend(rep['my_tendencies']), league_tend=lg,
                 units=units, my_units=mine, stars=rep['stars'], injured=rep['injured'], strengths=[s['text'] for s in rep['strengths']], weaknesses=[w['text'] for w in rep['weaknesses']],
                 suggestions=sugg, forecast=rep.get('forecast'), record=_rec(league, opp_abbr))

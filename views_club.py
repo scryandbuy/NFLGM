@@ -70,16 +70,49 @@ def _row(session, league, t, p):
                 stats=_season_line(league, p))
 
 
-def _season_line(league, p):
-    S = league.stats.get(league.year, {}).get(p.pid, {}) or {}
+def _season_line(league, p, year=None):
+    """The season line by position, with the advanced numbers the engine keeps."""
+    import advanced_stats as AS
+    S = league.stats.get(year or league.year, {}).get(p.pid, {}) or {}
+    m = AS.line_metrics(S) if S else {}
     g = int(S.get('games', 0) or 0)
-    if p.pos == 'QB': return dict(games=g, line=f"{int(S.get('pass_cmp', 0))}/{int(S.get('pass_att', 0))} · {int(S.get('pass_yds', 0))} yds · {int(S.get('pass_td', 0))} TD · {int(S.get('pass_int', 0))} INT")
-    if p.pos in ('HB', 'FB'): return dict(games=g, line=f"{int(S.get('rush_att', 0))} car · {int(S.get('rush_yds', 0))} yds · {int(S.get('rush_td', 0))} TD · {int(S.get('rec', 0))} rec")
-    if p.pos in ('WR', 'TE'): return dict(games=g, line=f"{int(S.get('rec', 0))} rec · {int(S.get('rec_yds', 0))} yds · {int(S.get('rec_td', 0))} TD")
-    if p.pos in ('LT', 'LG', 'C', 'RG', 'RT'): return dict(games=g, line=f"{int(S.get('snaps', 0))} snaps · {int(S.get('sacks_allowed', 0))} sacks allowed")
-    if p.pos in ('K',): return dict(games=g, line=f"{int(S.get('fg_made', 0))}/{int(S.get('fg_att', 0))} FG")
-    if p.pos in ('P',): return dict(games=g, line=f"{int(S.get('punts', 0))} punts · {float(S.get('punt_avg', 0) or 0):.1f} avg")
-    return dict(games=g, line=f"{int(S.get('tackles', 0))} tkl · {float(S.get('sacks', 0) or 0):.1f} sk · {int(S.get('interceptions', 0))} INT · {int(S.get('pass_def', 0))} PD")
+    def f1(x): return f"{x:+.2f}" if x is not None else '—'
+    if p.pos == 'QB':
+        att = int(S.get('pass_att', 0)); cmp_ = int(S.get('pass_cmp', 0))
+        return dict(games=g, line=f"{cmp_}/{att} · {int(S.get('pass_yds', 0))} yds · {int(S.get('pass_td', 0))} TD · {int(S.get('ints', 0))} INT",
+                    comp=(round(cmp_ / att * 100) if att else None), epa=m.get('epa_per_dropback'), cpoe=m.get('cpoe'),
+                    cols=['C/A', 'Yds', 'TD', 'INT', 'Comp%', 'CPOE', 'EPA/Dropback', 'Sacked'],
+                    row=[f"{cmp_}/{att}", int(S.get('pass_yds', 0)), int(S.get('pass_td', 0)), int(S.get('ints', 0)), (f"{cmp_ / att * 100:.0f}%" if att else '—'), (f"{m['cpoe']:+.1f}" if 'cpoe' in m else '—'), f1(m.get('epa_per_dropback')), int(S.get('sacked', 0))])
+    if p.pos in ('HB', 'FB'):
+        return dict(games=g, line=f"{int(S.get('rush_att', 0))} car · {int(S.get('rush_yds', 0))} yds · {int(S.get('rush_td', 0))} TD · {int(S.get('rec', 0))} rec",
+                    comp=None, epa=m.get('epa_per_rush'),
+                    cols=['Car', 'Yds', 'YPC', 'TD', 'Rec', 'Rec Yds', 'EPA/Rush', 'EPA/Tgt'],
+                    row=[int(S.get('rush_att', 0)), int(S.get('rush_yds', 0)), (f"{S['rush_yds'] / S['rush_att']:.1f}" if S.get('rush_att') else '—'), int(S.get('rush_td', 0)), int(S.get('rec', 0)), int(S.get('rec_yds', 0)), f1(m.get('epa_per_rush')), f1(m.get('rec_epa_per_target'))])
+    if p.pos in ('WR', 'TE'):
+        tgt = int(S.get('tgt', 0)); rec = int(S.get('rec', 0))
+        return dict(games=g, line=f"{rec} rec · {int(S.get('rec_yds', 0))} yds · {int(S.get('rec_td', 0))} TD",
+                    comp=(round(rec / tgt * 100) if tgt else None), epa=m.get('rec_epa_per_target'),
+                    cols=['Tgt', 'Rec', 'Yds', 'TD', 'Catch%', 'Drops', 'Separation', 'EPA/Tgt'],
+                    row=[tgt, rec, int(S.get('rec_yds', 0)), int(S.get('rec_td', 0)), (f"{rec / tgt * 100:.0f}%" if tgt else '—'), int(S.get('drops', 0)), (f"{m['separation']:.1f}" if 'separation' in m else '—'), f1(m.get('rec_epa_per_target'))])
+    if p.pos in ('LT', 'LG', 'C', 'RG', 'RT'):
+        return dict(games=g, line=f"{int(S.get('snaps', 0))} snaps · {int(S.get('sacks_allowed', 0))} sacks allowed · {int(S.get('pressures_allowed', 0))} pressures",
+                    comp=None, epa=None,
+                    cols=['Snaps', 'Pass Block Win%', 'Run Block Win%', 'Sacks Allowed', 'Pressures Allowed'],
+                    row=[int(S.get('snaps', 0)), (f"{m['pass_block_win_rate']:.0f}%" if 'pass_block_win_rate' in m else '—'), (f"{S['rb_wins'] / S['rb_snaps'] * 100:.0f}%" if S.get('rb_snaps') else '—'), int(S.get('sacks_allowed', 0)), int(S.get('pressures_allowed', 0))])
+    if p.pos == 'K':
+        return dict(games=g, line=f"{int(S.get('fg_made', 0))}/{int(S.get('fg_att', 0))} FG · long {int(S.get('fg_long', 0))}", comp=None, epa=None,
+                    cols=['FG', 'FG%', 'Long', 'XP'], row=[f"{int(S.get('fg_made', 0))}/{int(S.get('fg_att', 0))}", (f"{S['fg_made'] / S['fg_att'] * 100:.0f}%" if S.get('fg_att') else '—'), int(S.get('fg_long', 0)), f"{int(S.get('xp_made', 0))}/{int(S.get('xp_att', 0))}"])
+    if p.pos == 'P':
+        n = int(S.get('punts', 0))
+        return dict(games=g, line=f"{n} punts · {(S.get('punt_yds', 0) / n if n else 0):.1f} avg", comp=None, epa=None,
+                    cols=['Punts', 'Gross', 'Net', 'Inside 20', 'Touchbacks'], row=[n, (f"{S['punt_yds'] / n:.1f}" if n else '—'), (f"{S.get('punt_net_yds', 0) / n:.1f}" if n else '—'), int(S.get('punt_in20', 0)), int(S.get('punt_tb', 0))])
+    # the defense
+    front = p.pos in ('LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM')
+    return dict(games=g, line=f"{int(S.get('tackles', 0))} tkl · {float(S.get('sacks', 0) or 0):.1f} sk · {int(S.get('int_def', 0))} INT · {int(S.get('pass_def', 0))} PD",
+                comp=None, epa=m.get('def_epa_per_play'),
+                cols=(['Tkl', 'Sacks', 'Pressures', 'Pass Rush Win%', 'FF', 'EPA/Play'] if front else ['Tkl', 'INT', 'PD', 'FF', 'Sacks', 'EPA/Play']),
+                row=([int(S.get('tackles', 0)), f"{float(S.get('sacks', 0) or 0):.1f}", int(S.get('pressures', 0)), (f"{m['pass_rush_win_rate']:.0f}%" if 'pass_rush_win_rate' in m else '—'), int(S.get('ff', 0)), f1(m.get('def_epa_per_play'))] if front
+                     else [int(S.get('tackles', 0)), int(S.get('int_def', 0)), int(S.get('pass_def', 0)), int(S.get('ff', 0)), f"{float(S.get('sacks', 0) or 0):.1f}", f1(m.get('def_epa_per_play'))]))
 
 
 def roster(session, league, abbr):
@@ -153,6 +186,18 @@ def card(session, league, pid):
     except Exception: pass
     S = league.stats.get(league.year, {}).get(p.pid, {}) or {}
     m = getattr(p, 'morale', None)
+    # trade value in the scout's words: what the market would pay, and who has asked
+    market = _market_words(league, p, interest)
+    asks = [x for x in getattr(league, 'inbox', []) if x.get('kind') == 'trade_offer' and (x.get('payload') or {}).get('gets') and p.pid in [str(a) for a in (x.get('payload') or {}).get('gets', [])]]
+    interest_line = (f"{len(asks)} club{'s' if len(asks) != 1 else ''} have asked about him this season." if asks else 'No club has called about him this season.')
+    # development: the season's movement and the XP he holds
+    career = getattr(p, 'career', {}) or {}
+    xp_bank = round(float(getattr(p, 'xp', 0) or 0)); bought = sum(vv for k, vv in (p.xp_spent or {}).items() if not k.startswith('_') and isinstance(vv, (int, float)))
+    dev_line = f"{xp_bank:,} XP banked · {int(bought)} points bought in his career"
+    seasons = []
+    for yr in sorted(career)[-3:]:
+        ln = _season_line(league, p, yr); seasons.append(dict(year=yr, team=career[yr].get('team') or '', games=int((career[yr] or {}).get('games', 0) or 0), row=ln['row'], cols=ln['cols']))
+    cur = _season_line(league, p)
     return dict(rail=rail(session, league, session.user_team), pid=p.pid, no=getattr(p, 'number', None) or '', name=p.name, pos=p.pos, age=int(p.age),
                 team=club(p.team) if p.team else None, college=getattr(p, 'college', None) or '', draft=(f"drafted {p.draft_round}" if getattr(p, 'draft_round', None) else 'undrafted'),
                 season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
@@ -160,8 +205,25 @@ def card(session, league, pid):
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), morale=morale_word(p), morale_v=round(m.value) if m is not None else None,
                 contract=dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1), by_year=years),
                 interest=interest, cols=cols, grades=grades, personality=words, status=_status(league, p, t) if t else '',
-                cond=_cond(session, p), out=p.out_until, season=_season_line(league, p), games=int(S.get('games', 0) or 0),
+                cond=_cond(session, p), out=p.out_until, season=cur, games=int(S.get('games', 0) or 0), seasons=seasons,
+                market=market, interest_line=interest_line, dev_line=dev_line, morale_line=_morale_line(p),
                 actions=dict(mine=(p.team == session.user_team), extend_eligible=_ext_ok(league, p), can_cut=(p.team == session.user_team)))
+
+
+def _market_words(league, p, interest):
+    role = 'a starter' if p.ovr >= 78 else 'a rotation piece' if p.ovr >= 72 else 'a depth man'
+    age = 'in his prime' if 25 <= p.age <= 29 else 'still coming' if p.age < 25 else 'on the back half' if p.age <= 32 else 'near the end'
+    deal = 'on a fair deal' if p.contract and p.apy <= max(1.5, p.ovr / 10) else 'on a heavy deal' if p.contract else 'without a contract'
+    price = {'High': 'Clubs with a hole at the spot would pay a first-round pick and more.', 'Moderate': 'A second- or third-round pick is the range.', 'Low': 'A late pick, or a swap of depth.'}[interest]
+    return f"{role.capitalize()} {age} {deal}. {price}"
+
+
+def _morale_line(p):
+    m = getattr(p, 'morale', None)
+    if m is None: return 'Steady'
+    reasons = getattr(m, 'reasons', None) or getattr(m, 'notes', None) or []
+    if reasons: return str(reasons[-1])[:60]
+    return 'Steady since camp'
 
 
 def _ext_ok(league, p):
@@ -172,7 +234,7 @@ def _ext_ok(league, p):
 
 # ------------------------------------------------------------ the depth chart
 PACKAGES = {'Base': dict(WR=2, TE=2, HB=1, LB=3, CB=2, S=2), 'Nickel': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Dime': dict(WR=3, TE=1, HB=1, LB=1, CB=4, S=2),
-            'Goal Line': dict(WR=1, TE=2, HB=1, FB=1, LB=3, CB=2, S=2), 'Third Down': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2)}
+            'Goal Line': dict(WR=1, TE=2, HB=1, FB=1, LB=3, CB=2, S=2), 'Third Down': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Two Minute': dict(WR=4, TE=1, HB=1, LB=1, CB=4, S=2)}
 COLS = [('QB', ['QB'], 1), ('HB', ['HB', 'FB'], 1), ('WR', ['WR'], 3), ('TE', ['TE'], 1), ('OL', ['LT', 'LG', 'C', 'RG', 'RT'], 5),
         ('DL', ['LEDG', 'DT', 'REDG'], 4), ('LB', ['MIKE', 'WILL', 'SAM'], 2), ('CB', ['CB'], 3), ('S', ['FS', 'SS'], 2), ('ST', ['K', 'P', 'LS'], 3)]
 
@@ -203,6 +265,16 @@ def depth(session, league, abbr, package='Nickel'):
 def act_set_depth(league, abbr, pos, pids):
     t = league.teams[abbr]; order = t.set_depth_order(pos, list(pids))
     return dict(ok=True, pos=pos, order=order)
+
+
+def act_fill_by_fit(league, abbr):
+    """Order every position the way the engine grades men AT THAT SPOT in the club's scheme (position_score), and pin it."""
+    import targets as TG
+    t = league.teams[abbr]; t.depth_pins = {}
+    for pos, men in t.depth.items():
+        scored = sorted(men, key=lambda p: -float(TG.position_score(p.ratings, pos, t.scheme)))
+        t.depth_pins[pos] = [p.pid for p in scored]
+    return dict(ok=True, line='Ordered by fit at each spot.')
 
 
 def act_reset_depth(league, abbr, pos=None):

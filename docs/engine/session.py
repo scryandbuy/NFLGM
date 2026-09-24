@@ -337,6 +337,24 @@ class Session:
         r = fn(self, self.L, self.user_team, **kw)
         return r if isinstance(r, dict) else dict(ok=bool(r))
 
+    def plan_take_all(self):
+        import views_gameplan as VG
+        wk = self.stop[1] if self.stop[0] == 'week' else None
+        if wk is None: return dict(ok=False, why='no game this week')
+        import gameplan_week as GW
+        opp = self._opponent(wk)
+        if opp is None: return dict(ok=False, why='bye week')
+        rep = GW.opponent_report(self.L, self.user_team, opp[0], wk); n = 0
+        for i in range(len(rep['suggestions'])):
+            r = VG.act_take(self, self.L, self.user_team, i); n += int(bool(r.get('ok')))
+        return dict(ok=True, n=n, line=f"Took {n} suggestion{'s' if n != 1 else ''}.")
+
+    def inbox_mark_all(self):
+        n = 0
+        for m in getattr(self.L, 'inbox', []):
+            if m.get('status') == 'unread': m['status'] = 'read'; n += 1
+        return dict(ok=True, n=n)
+
     def gameday_view(self):
         import views
         return views.gameday(self, self.L, self.user_team)
