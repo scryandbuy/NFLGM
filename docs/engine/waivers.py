@@ -140,6 +140,10 @@ def award(league, entry, abbr):
     p.team = abbr; p.contract = c
     league.teams[abbr].roster.append(p); league.teams[abbr].sync_cap()
     league.log('waiver_claim', pid=p.pid, team=abbr, from_team=entry['from_team'])
+    # the user named the man to make room with
+    rel = entry.get('release_if_awarded')
+    if rel and abbr == getattr(league, 'user_team', None) and league.player(rel) is not None and league.player(rel).team == abbr:
+        league.release(rel)
 
 
 # ------------------------------------------------------------ the wire
@@ -185,12 +189,23 @@ def notify_user(league, entries, week, digest=False):
                              cap_hit=hit, years=yrs), expires_week=(week or 0) + 1)
 
 
-def user_claim(league, pid):
-    """The user claims from the inbox. Awarded at the next advance by priority."""
+def user_claim(league, pid, release_pid=None):
+    """The user claims from the inbox. Awarded at the next advance by priority. release_pid
+    names the man to cut if the claim is awarded and the roster is full."""
     user = getattr(league, 'user_team', None)
     for e in pending(league):
-        if e['pid'] == pid and user and user not in e['claims']:
-            e['claims'].append(user); return True
+        if e['pid'] == pid and user:
+            if user not in e['claims']: e['claims'].append(user)
+            if release_pid: e['release_if_awarded'] = release_pid
+            return True
+    return False
+
+
+def user_withdraw(league, pid):
+    user = getattr(league, 'user_team', None)
+    for e in pending(league):
+        if e['pid'] == pid and user in e['claims']:
+            e['claims'].remove(user); e.pop('release_if_awarded', None); return True
     return False
 
 

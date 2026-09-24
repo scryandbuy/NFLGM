@@ -172,14 +172,24 @@ def free_agency(session, league, abbr):
     phase = league.phase
     step = getattr(league, 'fa_step', None)
     threads = [_thread(league, t) for t in NG._threads(league) if t['kind'] in ('fa_offseason', 'fa_inseason') and t.get('team') == abbr and t['state'] not in ('expired', 'void')]
-    return dict(rail=rail(session, league, abbr), rows=rows[:150], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()),
-                in_season=(phase == 'regular'), phase=phase, step=step, threads=threads)
+    watch = getattr(league, 'watchlist', None) or set()
+    for r in rows: r['watch'] = r['pid'] in watch
+    # around the league: the latest signings by other clubs
+    feed = []
+    for x in reversed(league.transactions[-600:]):
+        if x.get('kind') in ('sign', 'extension') and x.get('team') != abbr:
+            p = league.player(x.get('pid')); 
+            if p is None: continue
+            feed.append(dict(team=club(x['team']), name=p.name, pos=p.pos, kind=('signs' if x['kind'] == 'sign' else 'extends'), years=x.get('years'), apy=(round(float(x['apy']), 1) if x.get('apy') else None), week=x.get('week'), year=x.get('year')))
+            if len(feed) >= 14: break
+    return dict(rail=rail(session, league, abbr), rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()),
+                in_season=(phase == 'regular'), phase=phase, step=step, threads=threads, feed=feed, positions=sorted({r['pos'] for r in rows}))
 
 
 def _thread(league, t):
     p = league.player(t['pid'])
     return dict(id=t['id'], pid=t['pid'], name=p.name if p else t['pid'], pos=p.pos if p else '', kind=t['kind'], state=t['state'], ask=t.get('ask'), years=t.get('years'), mood=t.get('mood'),
-                offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=t.get('patience'))
+                offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=t.get('patience'), log=t.get('log', []))
 
 
 def act_open_talks(league, abbr, pid, kind):
@@ -200,6 +210,13 @@ def act_match(league, abbr, tid):
 def act_withdraw(league, abbr, tid):
     import negotiations as NG
     return NG.withdraw(league, tid)
+
+
+def act_watch(league, abbr, pid):
+    w = getattr(league, 'watchlist', None)
+    if w is None: w = league.watchlist = set()
+    if pid in w: w.discard(pid); return dict(ok=True, on=False)
+    w.add(pid); return dict(ok=True, on=True)
 
 
 def act_match_counter(league, abbr, tid):
@@ -223,15 +240,28 @@ def waivers(session, league, abbr):
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), frm=d.get('from_team') or d.get('team') or '', hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1),
                          yrs=p.contract.years if p.contract else 0, accrued=int(p.accrued or 0), claimed=(abbr in (d.get('claims') or []))))
     rows.sort(key=lambda r: -r['ovr'])
-    mine = [r for r in rows if r['claimed']]
-    return dict(rail=rail(session, league, abbr), rows=rows, claims=mine, priority=[club(a) for a in order], my_priority=(order.index(abbr) + 1 if abbr in order else None),
-                roster=len(me.active()), cap=round(me.cap_space, 1), awards='at the next advance')
+    rel = {(e['pid'] if isinstance(e, dict) else e.pid): (e.get('release_if_awarded') if isinstance(e, dict) else None) for e in entries}
+    mine = [dict(r, release=rel.get(r['pid']), release_name=(league.player(rel[r['pid']]).name if rel.get(r['pid']) and league.player(rel[r['pid']]) else None)) for r in rows if r['claimed']]
+    awarded = []
+    for x in reversed(league.transactions[-400:]):
+        if x.get('kind') == 'waiver_claim' and x.get('year') == league.year and (x.get('week') == league.week or x.get('week') == (league.week or 0) - 1 or not league.week):
+            p = league.player(x.get('pid'))
+            if p: awarded.append(dict(team=club(x['team']), name=p.name, pos=p.pos, frm=x.get('from_team') or '', mine=(x['team'] == abbr)))
+        if len(awarded) >= 12: break
+    cut_options = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), penalty=round(p.dead_if_cut(0), 1)) for p in sorted(me.active(), key=lambda p: p.ovr)[:12]]
+    return dict(rail=rail(session, league, abbr), rows=rows, claims=mine, awarded=awarded, cut_options=cut_options, priority=[club(a) for a in order], my_priority=(order.index(abbr) + 1 if abbr in order else None),
+                roster=len(me.active()), roster_full=(len(me.active()) >= 53), cap=round(me.cap_space, 1), awards='at the next advance')
 
 
-def act_claim(league, abbr, pid):
+def act_claim(league, abbr, pid, release_pid=None):
     import waivers as WV
-    r = WV.user_claim(league, pid)
-    return r if isinstance(r, dict) else dict(ok=bool(r))
+    r = WV.user_claim(league, pid, release_pid=release_pid)
+    return dict(ok=bool(r), line=('Claim lodged. Awarded at the next advance by priority.' if r else 'He is not on the wire.'))
+
+
+def act_withdraw_claim(league, abbr, pid):
+    import waivers as WV
+    return dict(ok=bool(WV.user_withdraw(league, pid)), line='Claim withdrawn.')
 
 
 # ============================================================ EXTENSIONS
@@ -239,11 +269,35 @@ def extensions(session, league, abbr):
     import extensions as EXT, negotiations as NG
     me = league.teams[abbr]
     rows = []
+    import free_agency as FA_
     for p in sorted(me.active(), key=lambda p: (p.contract.years if p.contract else 0, -p.ovr)):
-        if not p.contract or p.contract.years > 2: continue
+        yrs = p.contract.years if p.contract else 0
+        if yrs > 2: continue
         t = NG.open_for(league, p.pid, 'extension')
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), yrs=p.contract.years, hit=round(p.cap_hit(0), 1), morale=morale_word(p),
+        cls = FA_.fa_class(p.accrued, p.contract_years_left) if yrs == 0 else None
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), yrs=yrs, fa_class=cls, hit=round(p.cap_hit(0), 1) if p.contract else 0.0, morale=morale_word(p),
                          eligible=bool(EXT.eligible(p, league)), talks=(t['state'] if t else None), thread=(t['id'] if t else None), ask=(t['ask'] if t else None), years=(t['years'] if t else None), mood=(t.get('mood') if t else None)))
     threads = [_thread(league, t) for t in NG._threads(league) if t['kind'] == 'extension' and t.get('team') == abbr and t['state'] not in ('expired', 'void')]
     promises = [dict(pid=pr['pid'], name=(league.player(pr['pid']).name if league.player(pr['pid']) else pr['pid']), kind=pr['kind'], made=pr['made'], status=pr['status']) for pr in (getattr(league, 'promises', None) or []) if pr.get('team') == abbr]
-    return dict(rail=rail(session, league, abbr), rows=rows, threads=threads, promises=promises, cap=round(me.cap_space, 1))
+    import tags as TG_, contracts as CT
+    from cap_engine import CAP
+    cap = CAP.get(league.year, 301.2)
+    done = []
+    for x in reversed(league.transactions[-600:]):
+        if x.get('kind') in ('extension', 'franchise_tag') and x.get('team') == abbr and x.get('year') == league.year:
+            p = league.player(x.get('pid'))
+            if p: done.append(dict(pid=p.pid, name=p.name, pos=p.pos, kind=('tagged' if x['kind'] == 'franchise_tag' else 'extended'), years=x.get('years'), apy=(round(float(x.get('apy') or x.get('price') or 0), 1))))
+    for r in rows:
+        p = league.player(r['pid']); r['tag_price'] = round(TG_.tag_price(p, cap), 1) if r['yrs'] <= 1 else None
+        r['restructurable'] = round(CT.restructure_room(p, cap), 1) if hasattr(CT, 'restructure_room') else 0.0
+    tag_open = TG_.user_tag_window(league); choice = getattr(league, 'user_tag_choice', None)
+    # before the New Year a man's last season shows as one year left; after it his deal is up (0) and he is a UFA, RFA or ERFA until tagged, tendered or re-signed
+    return dict(rail=rail(session, league, abbr), rows=rows, expiring=[r for r in rows if r['yrs'] <= 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1),
+                tag=dict(open=tag_open, used=(choice not in (None, 'none')), none=(choice == 'none'), tagged=(league.player(choice).name if choice not in (None, 'none') and league.player(choice) else None)),
+                promise_kinds=[dict(key=k, label=v_['label']) for k, v_ in __import__('negotiation_engine').PROMISES.items()])
+
+
+def act_tag(league, abbr, pid):
+    import tags as TG_
+    if not TG_.user_tag_window(league): return dict(ok=False, why='the tag window is the offseason, before Extensions and Tags')
+    return TG_.user_tag(league, pid)

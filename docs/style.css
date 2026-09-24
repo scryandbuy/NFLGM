@@ -876,3 +876,5 @@ table.rank .edge.me{color:var(--club-2)}table.rank .edge.them{color:var(--opp)}t
 
 .filt .sep{width:1px;height:20px;background:var(--rule-2);margin:0 4px;align-self:center}
 .inbox-list.dense .row{padding:5px 12px}
+
+.star{border:0;background:none;color:var(--ink-3);font-size:15px;cursor:pointer;padding:0 2px}.star.on{color:var(--club-2)}

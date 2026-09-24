@@ -151,6 +151,7 @@ def run(league, rng, verbose=False):
     cap = CAP.get(league.year, 301.2)
     groups = classify(league)
     tagged, tendered, reserved, to_market = [], [], [], []
+    league.tags_done_year = league.year
 
     for abbr, team in league.teams.items():
         team.sync_cap()
@@ -159,6 +160,9 @@ def run(league, rng, verbose=False):
         # ---- the one tag ------------------------------------------------
         mine = [p for p in groups['UFA'] if p.pid in roster]
         best = None
+        if abbr == getattr(league, 'user_team', None) and getattr(league, 'user_tag_choice', None) is not None:
+            # the user decided from the Extensions page: a man, or 'none'
+            mine = []          # the AI does not tag for a club whose GM has spoken
         if mine:
             # spend it on the man the club can least afford to lose: value
             # over the next man at his spot, not raw rating
@@ -265,3 +269,30 @@ if __name__ == '__main__':
     sp = np.array([t.cap_space for t in L.teams.values()])
     print('cap space after: min %.1f mean %.1f | over: %d'
           % (sp.min(), sp.mean(), (sp < 0).sum()))
+
+
+def user_tag(league, pid):
+    """The user places his one tag from the Extensions page, in the offseason before the tag step.
+    Same price, same rules as the AI's; 'none' tells the AI not to tag for him."""
+    from cap_engine import CAP
+    user = getattr(league, 'user_team', None); team = league.teams[user]; cap = CAP.get(league.year, 301.2)
+    if pid in (None, 'none'):
+        league.user_tag_choice = 'none'; return dict(ok=True, line='No tag this year. The AI will not place one for you.')
+    p = league.player(pid)
+    if p is None or p.team != user: return dict(ok=False, why='not on your roster')
+    import free_agency as FA
+    if FA.fa_class(p.accrued, p.contract_years_left) != 'UFA': return dict(ok=False, why='only a man whose deal is up, with four accrued seasons, can be tagged')
+    if p.tag_count >= MAX_TAGS: return dict(ok=False, why='he has been tagged the most a man can be')
+    if getattr(league, 'user_tag_choice', None) not in (None, 'none'): return dict(ok=False, why='you have used your tag this year')
+    price = tag_price(p, cap)
+    room = power(league, team, cap)
+    if price > room: return dict(ok=False, why=f"the tag costs ${price:.1f}m and after the minimums for the bodies you still owe you can commit ${max(0.0, room):.1f}m; clear room first")
+    p.contract = _one_year(price, league.year); p.tag_count += 1; p.tagged_year = league.year; p.fa_class = 'tagged'
+    league.user_tag_choice = p.pid; team.sync_cap()
+    league.log('franchise_tag', pid=p.pid, team=user, price=price, times=p.tag_count, user=True)
+    return dict(ok=True, line=f"{p.name} tagged at ${price:.1f}m for {league.year}.", price=round(price, 1))
+
+
+def user_tag_window(league):
+    """Whether the user can still tag: the offseason, before the Extensions and Tags step has run."""
+    return league.phase != 'regular' and not getattr(league, 'tags_done_year', None) == league.year
