@@ -163,6 +163,64 @@ def act_board_autofill(session, league, abbr):
     return dict(ok=True, line=f"{len(top)} players on your board, in your scouts' order.")
 
 
+def prospect_card(session, league, abbr, pid):
+    """A prospect's card: what your scouts see. Attributes carry the room's error (physical
+    and skill groups shifted by the read's error terms), never the true rating."""
+    import views_club as VC, scouting as SC
+    p = next((q for q in _pool(league) if q.pid == pid), None) or league.player(pid)
+    if p is None: return dict(error='no such prospect')
+    row = _prospect(league, abbr, p, (getattr(session, 'draft', None).taken if getattr(session, 'draft', None) else ()))
+    if row is None: return dict(error='your scouts have no read on him')
+    view = league.scouting[abbr][p.pid]
+    e_phys = float(view.get('e_phys', 0.0)); e_skill = float(view.get('e_skill', 0.0))
+    fam = VC.FAM.get(p.pos, 'DB')
+    def col(keys, err):
+        rows = []
+        for k, label in keys:
+            true = p.ratings.get(k)
+            if true is None: continue
+            seen = int(round(max(20, min(99, float(true) + err))))
+            rows.append(dict(key=k, label=label, v=seen, tier=('hi' if seen >= 85 else 'mid' if seen >= 72 else 'lo')))
+        return rows
+    phys = dict(title='Physical', rows=col(VC.ATTR['phys'], e_phys), extra=None)
+    if fam == 'DB': skill = dict(title='Coverage', rows=col(VC.ATTR['coverage'], e_skill), extra=dict(title='Run Defense', rows=col(VC.ATTR['rundef'], e_skill)))
+    elif fam in ('LB', 'DL'): skill = dict(title=VC.SKILL_TITLE.get(fam, 'Skill'), rows=col([k for k in VC.ATTR[fam] if k[0] not in ('tackle_rating', 'hit_power_rating', 'pursuit_rating', 'block_shed_rating')], e_skill), extra=dict(title='Run Defense', rows=col(VC.ATTR['rundef'], e_skill)))
+    else: skill = dict(title=VC.SKILL_TITLE.get(fam, 'Skill'), rows=col(VC.ATTR.get(fam, VC.ATTR['DB']), e_skill), extra=None)
+    mental = dict(title='Mental', rows=col(VC.ATTR['mental'], e_skill), extra=None)
+    comb = getattr(p, 'combine', None) or {}
+    combine = [dict(label=l, v=(f"{comb[k]:.2f}" if k in ('forty', 'shuttle') and comb.get(k) is not None else (f"{comb[k]:.1f}\"" if k == 'vertical' and comb.get(k) is not None else (str(comb[k]) if comb.get(k) is not None else '—')))) for k, l in (('forty', 'Forty'), ('vertical', 'Vertical'), ('bench', 'Bench'), ('shuttle', 'Shuttle'))]
+    med = getattr(p, 'medical', None) or {}
+    ub = getattr(league, 'user_board', None) or {}
+    on_board = (ub.get('order') or []).index(p.pid) + 1 if p.pid in (ub.get('order') or []) else None
+    reads = int(view.get('reads', 1) or 1)
+    confidence = 'Firm' if reads >= 3 else 'Fair' if reads == 2 else 'One look'
+    import personality as PT
+    words = PT.words(getattr(p, 'traits', None) or {}) if getattr(p, 'traits', None) and 'Character' in row['words'] else ''
+    return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], college=row['college'], conference=getattr(p, 'conference', None) or '',
+                small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
+                words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine, medical=(med.get('note') or ('Flagged out of the combine' if med.get('flag') else 'Clean')),
+                reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality=words, spring_done=any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or [])),
+                read=_prospect_read(league, abbr, p, row, view))
+
+
+def _prospect_read(league, abbr, p, row, view):
+    """The scouts on one man: the grade against the room, where he goes, what the flags mean."""
+    from views import sentence, surname
+    parts = []
+    gap = row.get('gap')
+    if gap is not None and gap >= 3: parts.append(f"we have {surname(p.name)} {gap} points above the league; if the room is right he is a value wherever he goes")
+    elif gap is not None and gap <= -3: parts.append(f"we have him {abs(gap)} points under the consensus; the league likes him more than we do")
+    else: parts.append(f"our read is in line with the league on {surname(p.name)}")
+    if row.get('cons_rank'): parts.append(f"the consensus puts him in the {['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'][min(6, (row['cons_rank'] - 1) // 32)]} round")
+    lo, hi = row['ceiling'].split('–') if '–' in row['ceiling'] else (None, None)
+    if lo and hi and int(hi) - int(lo) >= 8: parts.append('the ceiling is wide, which is the room saying it does not know yet')
+    if 'Medical' in row['words']: parts.append('the medical is a real concern and the later he goes the more it explains')
+    if 'Character' in row['words']: parts.append('the character flag came out of our own visit')
+    if 'Small School' in row['words']: parts.append('the small-school tape makes every number here softer')
+    if not row['visited'] and not any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or [])): parts.append('a visit would tighten this read')
+    return sentence('. '.join(parts) + '.')
+
+
 def act_visit(session, league, abbr, pid):
     import spring as SP
     cur = list(getattr(league, 'user_visits', None) or [])

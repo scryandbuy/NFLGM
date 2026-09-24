@@ -485,6 +485,7 @@ function renderRoster(v) {
 
 let cardTab = 'Overview';
 function renderCard(v) {
+  if (v.cls_year !== undefined && v.confidence !== undefined) return renderProspectCard(v);
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Club'; secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '');
@@ -562,6 +563,52 @@ function renderCard(v) {
     if (!(v.history || []).length) h.append(el('div', {}, el('time', {}, '—'), el('span', {}, 'Nothing on record yet.')));
     box.append(h); s.append(box);
   }
+  page.append(s);
+}
+
+function renderProspectCard(v) {
+  renderRail(v.rail);
+  const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
+  $('#crumb').textContent = 'Draft'; drSecond('board');
+  if (v.error) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, v.error))); return; }
+  const reload = () => renderProspectCard(pyJSON(`SESSION.club_card(${JSON.stringify(v.pid)})`));
+  const s = el('section', { class: 'sheet c12' });
+  s.append(el('div', { class: 'head' },
+    el('div', { class: 'jersey', style: 'background:var(--sheet-3);color:var(--ink)' }, v.pos),
+    el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
+      el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.cls_year} · ${v.age}${v.size ? ' · ' + v.size : ''} · ${v.college}${v.conference ? ' · ' + v.conference : ''}${v.small ? ' · Small School' : ''}${v.taken ? ' · Drafted' : ''}`),
+      el('div', { class: 'hfacts' }, el('div', {}, el('span', {}, 'Consensus'), el('b', {}, v.cons != null ? `${v.cons}${v.cons_rank ? ' · #' + v.cons_rank : ''}` : '—')), el('div', {}, el('span', {}, 'Gap'), el('b', { style: v.gap > 0 ? 'color:var(--ok)' : v.gap < 0 ? 'color:var(--danger)' : '' }, v.gap != null ? (v.gap > 0 ? '+' : '') + v.gap : '—')), el('div', {}, el('span', {}, 'Projected'), el('b', {}, v.proj_range)), el('div', {}, el('span', {}, 'Your Board'), el('b', {}, v.dnd ? 'Do Not Draft' : v.on_board ? `#${v.on_board}` : 'Not placed')), el('div', {}, el('span', {}, 'Read'), el('b', { style: 'color:var(--ink-2)' }, `${v.confidence} · ${v.reads} look${v.reads === 1 ? '' : 's'}`)))),
+    el('div', { class: 'ovrbig' }, el('b', {}, v.mine), el('span', {}, 'Estimated Overall · your scouts'), el('div', { class: 'pot' }, `Ceiling ${v.ceiling}${v.my_round ? ' · Your Grade ' + v.my_round : ''}`))));
+  const acts = el('div', { class: 'ctabs' }, el('span', { style: 'font-family:var(--display);font-weight:700;color:var(--ink-3);padding:8px 0' }, 'Prospect Card'));
+  const a = el('div', { class: 'acts' });
+  if (!v.taken) {
+    a.append(v.on_board ? el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(v.pid)})`); reload(); } }, 'Take Off Your Board') : el('button', { class: 'btn go', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(v.pid)})`); reload(); } }, 'Add to Your Board'));
+    if (!v.spring_done) a.append(el('button', { class: 'btn' + (v.visited ? ' go' : ''), 'data-tip': v.visited ? 'Cancel the visit' : 'Bring him in for the second look', onclick: () => { const r = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(v.pid)})`); if (!r.ok) notify(r); reload(); } }, v.visited ? 'Visiting' : 'Visit'));
+    a.append(el('button', { class: 'btn quiet', 'data-tip': 'Keep him off your board on draft day', onclick: () => { pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(v.pid)})`); const cur = pyJSON(`SESSION.draft_view('board')`).user_board.dnd.map(x => x.pid); pyJSON(`SESSION.draft_act('board', dnd=${JSON.stringify(cur.concat([v.pid]))})`); reload(); } }, 'Do Not Draft'));
+  }
+  a.append(el('button', { class: 'btn quiet', onclick: () => history.back() }, 'Back'));
+  acts.append(a); s.append(acts);
+  const h5 = (t, sub) => el('div', { class: 'h5' }, t, sub ? el('span', {}, sub) : '');
+  const left = el('div', {});
+  left.append(h5('Combine', v.combine.every(c => c.v === '—') ? 'comes in the Spring' : 'from the Spring'));
+  left.append(el('div', { class: 'kv' }, ...v.combine.flatMap(c => [el('span', {}, c.label), el('span', {}, c.v)])));
+  left.append(h5('Flags'), el('div', { style: 'padding:4px 0 8px' }, ...(v.words.length ? v.words.map(wordTag) : [el('span', { class: 'muted', style: 'font-size:12.5px' }, 'None')])));
+  left.append(h5('Medical'), el('div', { style: 'font-size:13px;color:var(--ink-2);padding-bottom:8px' }, v.medical));
+  if (v.personality) left.append(h5('Character', 'from your visit'), el('div', { style: 'font-size:13px;color:var(--ink-2)' }, v.personality));
+  const mid = el('div', {});
+  mid.append(h5('Attributes', "your scouts' read, not the truth"));
+  const attrs = el('div', { class: 'attrs' });
+  for (const c of v.cols) {
+    const box = el('div', {}, el('div', { class: 'h5', style: 'margin-bottom:4px' }, c.title));
+    const rowsOf = rows => { for (const r of rows) box.append(el('div', { class: 'arow ' + r.tier }, el('span', {}, r.label), el('em', {}), el('b', {}, r.v))); };
+    rowsOf(c.rows); if (c.extra && c.extra.rows && c.extra.rows.length) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
+    attrs.append(box);
+  }
+  mid.append(attrs);
+  const right = el('div', {});
+  right.append(h5('The Scouts', "the room's read"), el('div', { class: 'read' }, el('b', {}, 'Assistants: '), v.read));
+  right.append(h5('Where He Goes', 'consensus against your board'), el('div', { class: 'kv' }, el('span', {}, 'Consensus'), el('span', {}, v.cons_rank ? `#${v.cons_rank} · picks ${v.proj_range}` : '—'), el('span', {}, 'Your Read'), el('span', {}, v.my_rank ? `#${v.my_rank}${v.my_round ? ' · ' + v.my_round + ' grade' : ''}` : '—'), el('span', {}, 'Ceiling'), el('span', {}, v.ceiling)));
+  s.append(el('div', { class: 'body' }, left, mid, right));
   page.append(s);
 }
 
