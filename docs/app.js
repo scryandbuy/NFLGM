@@ -19,7 +19,7 @@ async function bootEngine() {
   const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.29.5/full/pyodide.mjs');
   py = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.5/full/' });
   say('loading numpy and pandas…', 18);
-  await py.loadPackage(['numpy', 'pandas']);
+  await py.loadPackage(['numpy', 'pandas', 'networkx']);      // networkx: the schedule builder's matching
   const manifest = await (await fetch(ENGINE + 'manifest.json')).json();
   const files = [...manifest.modules.map(m => m + '.py'), ...manifest.data];
   let n = 0;
