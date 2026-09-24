@@ -297,6 +297,11 @@ class Session:
         r = fn(self, self.L, self.user_team, **kw)
         return r if isinstance(r, dict) else dict(ok=bool(r))
 
+    # ---- league
+    def league_view(self, page, **kw):
+        import views_league as VL
+        return getattr(VL, page)(self, self.L, self.user_team, **kw)
+
     def gameday_view(self):
         import views
         return views.gameday(self, self.L, self.user_team)
