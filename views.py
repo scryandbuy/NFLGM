@@ -491,11 +491,21 @@ def _season(league, abbr):
 
 # ============================================================ GAME DAY
 def gameday(session, league, abbr, gd=None):
-    """The last week's games (or a past week's, when gd is given): the scoreboard, and the user's game in full."""
-    gd = gd if gd is not None else getattr(session, 'gameday', None)
+    """This week's game. Before Sunday: the preview (the matchup, the plan, the Sim button). After: the
+    scoreboard and the user's game in full. A past week's, when gd is given."""
     r = rail(session, league, abbr)
+    if gd is None:
+        in_week = session.stop[0] == 'week'
+        if in_week and not getattr(session, 'played', False):
+            m = _matchup(session, league, abbr)
+            wk = session.stop[1]
+            if m is None or m.get('bye'):
+                return dict(rail=r, preview=True, week=wk, bye=True, matchup=None, line=f'Week {wk} is your bye. Sim the week to play the rest of the league.')
+            plan_ok = bool((getattr(league, 'user_week_plan', None) or {}).get('changes'))
+            return dict(rail=r, preview=True, week=wk, bye=False, matchup=m, plan_set=plan_ok, line=None)
+        gd = getattr(session, 'gameday', None)
     if not gd:
-        return dict(rail=r, empty=True, line='No game has been played yet. Advance to play the week.')
+        return dict(rail=r, empty=True, line='No game has been played yet.')
     scores = []
     for s in gd['scores']:
         scores.append(dict(home=club(s['home']), away=club(s['away']), hs=s['hs'], as_=s['as_'], ot=s['ot'], mine=abbr in (s['home'], s['away'])))

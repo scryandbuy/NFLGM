@@ -36,6 +36,7 @@ class Session:
         self.stop = getattr(league, '_stop', None) or ('week', 1)
         self.gameday = None
         self.gamedays = {}
+        self.played = False
         self.draft = None
 
     # ------------------------------------------------------------ construction
@@ -59,7 +60,7 @@ class Session:
         L = LG.League.load(text)
         s = cls(L, np.random.default_rng(d.get('_seed_state', None)), d.get('_user_team'))
         s.stop = tuple(d.get('_stop', ['week', 1]))
-        s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}
+        s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
         s.standings = d.get('_standings'); s.order = d.get('_order'); s.fired = [tuple(x) if isinstance(x, list) else x for x in (d.get('_fired') or [])]
         if d.get('_post'):
             class _Post:            # the shape awards, prestige and the almanac read
@@ -82,6 +83,7 @@ class Session:
         d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
         d['_gameday'] = self.gameday
         d['_gamedays'] = getattr(self, 'gamedays', None) or {}
+        d['_played'] = bool(getattr(self, 'played', False))
         # the offseason reads what the playoffs left: standings for the new schedule, the fired
         # coaches for the carousel, and the postseason (champion, finalists, games, seeds) for
         # awards, prestige and the almanac. Without these a save between the playoffs and the
@@ -117,7 +119,9 @@ class Session:
         k = self.stop[0]
         if k == 'week':
             wk = self.stop[1]; opp = self._opponent(wk)
-            return dict(title=f"Play Week {wk}", sub=(f"{'at' if opp and opp[1] else 'vs'} {opp[0]}" if opp else 'Bye Week'))
+            if getattr(self, 'played', False):
+                return dict(title=(f"Advance to Week {wk + 1}" if wk < WEEKS else 'Advance to the Playoffs'), sub=(f"Week {wk} is in the books"), played=True)
+            return dict(title=f"Sim Week {wk}", sub=(f"{'at' if opp and opp[1] else 'vs'} {opp[0]}" if opp else 'Bye Week'), played=False)
         if k == 'playoffs':
             return dict(title='Play the Playoffs', sub='Wild Card Through the Super Bowl')
         i = self.stop[1]
@@ -142,13 +146,23 @@ class Session:
             wk = self.stop[1]
             if self.runner is None:
                 self.runner = SN.SeasonRunner(self.L, self.rng)
-            self.runner.play_week(wk)
-            IB.expire(self.L, wk + 1)          # this week's game-plan card and anything else dated to it are done
-            import gameday as GD
-            self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team)
-            if self.gameday and self.gameday.get('game'):
-                self.gamedays = getattr(self, 'gamedays', None) or {}
-                self.gamedays[f"{self.L.year}-{wk}"] = self.gameday
+            if not getattr(self, 'played', False):
+                # SUNDAY: the games are played and Game Day shows them. The week does not roll
+                # until Advance, so the GM can read the box score, work the wire and the
+                # inbox, and still be in this week.
+                self.runner.play_games(wk)
+                import gameday as GD
+                self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team)
+                if self.gameday and self.gameday.get('game'):
+                    self.gamedays = getattr(self, 'gamedays', None) or {}
+                    self.gamedays[f"{self.L.year}-{wk}"] = self.gameday
+                self.played = True
+                return dict(done=f'Week {wk} played', next=self.next_label())
+            # ADVANCE: the week rolls (XP, morale, agents, the report on next week, the wire,
+            # the squads, the trade window) and the calendar moves on
+            self.runner.roll_week(wk)
+            IB.expire(self.L, wk + 1)
+            self.played = False
             self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs',)
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':

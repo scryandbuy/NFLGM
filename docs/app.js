@@ -82,6 +82,42 @@ function formDots(f, big = false) { return el('div', { class: 'form' + (big ? ' 
 const DESK_GO = { Trade: ['Trades', '#personnel/trades'], Contract: ['Negotiate', '#personnel/extensions'], Staff: ['Staff', '#frontoffice/staff'], Assistants: ['Game Plan', '#gameplan/week'], Wire: ['Waivers', '#personnel/wire'] };
 function deskAction(kind) { const g = DESK_GO[kind]; return g ? el('a', { class: 'btn go', href: g[1] }, g[0]) : ''; }
 
+function inboxSheet(v) {
+  const inbox = el('section', { class: 'sheet c12' }, el('h2', {}, 'Inbox', el('small', {}, `${v.inbox.total} Messages · ${v.inbox.decide} Need a Decision`)));
+  const list = el('div', { class: inboxDense ? 'inbox-list dense' : 'inbox-list' });
+  const drawInbox = () => {
+    list.innerHTML = ''; let lastDay = null, n = 0;
+    for (const r of v.inbox.rows) {
+      if (inboxFilter === 'decide' && !r.decide) continue;
+      if (inboxFilter === 'unread' && !r.unread) continue;
+      n++;
+      const day = `${r.year} · Week ${r.week}`;
+      if (day !== lastDay) { list.append(el('div', { class: 'dayh' }, day)); lastDay = day; }
+      list.append(el('button', { class: 'row' + (r.unread ? ' unread' : ''), onclick: () => openMessage(r.id) }, el('div', {}, el('div', { class: 't' }, r.subject), inboxDense ? '' : el('div', { class: 'f' }, r.body)), el('span', { class: 'tag ' + tagClass(r.tag) }, r.tag)));
+    }
+    if (!n) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : 'All read.'));
+  };
+  const filt = el('div', { class: 'filt' });
+  for (const [k, label, count] of [['all', 'All', v.inbox.total], ['decide', 'Decide', v.inbox.decide], ['unread', 'Unread', v.inbox.unread]])
+    filt.append(el('button', { 'aria-pressed': String(inboxFilter === k), onclick: e => { inboxFilter = k; filt.querySelectorAll('button[data-f]').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); drawInbox(); }, 'data-f': k }, label + ' ', el('em', {}, count)));
+  filt.append(el('span', { class: 'sep' }),
+    el('button', { onclick: e => { inboxDense = !inboxDense; list.classList.toggle('dense', inboxDense); e.currentTarget.textContent = inboxDense ? 'Detailed' : 'Condensed'; drawInbox(); } }, inboxDense ? 'Detailed' : 'Condensed'),
+    el('button', { style: 'margin-left:auto', onclick: () => { pyJSON('SESSION.inbox_mark_all()'); redrawInbox(); } }, 'Mark All Read'));
+  inbox.append(filt, list); drawInbox();
+  return inbox;
+}
+
+function redrawInbox() { view = pyJSON('SESSION.portal()'); if (location.hash === '#portal/inbox') renderInbox(view); else { renderRail(view.rail); renderPortal(view); } }
+
+function renderInbox(v) {
+  renderRail(v.rail);
+  const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
+  $('#crumb').textContent = 'Portal'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'portal'));
+  document.body.classList.remove('no-second');
+  $('#second').innerHTML = `<a href="#portal">Overview</a><a aria-current="page" href="#portal/inbox">Inbox <em>${v.inbox.total}</em></a><a href="#league/schedule">Calendar</a><a href="#league/transactions">News</a><a href="#frontoffice">Owner</a>`;
+  page.append(inboxSheet(v));
+}
+
 function renderPortal(v) {
   const page = $('#page'); page.hidden = false; page.innerHTML = '';
   page.className = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
@@ -171,29 +207,7 @@ function renderPortal(v) {
   })));
   page.append(desk);
 
-  // inbox
-  const inbox = el('section', { class: 'sheet c12' }, el('h2', {}, 'Inbox', el('small', {}, `${v.inbox.total} Messages · ${v.inbox.decide} Need a Decision`)));
-  const list = el('div', { class: inboxDense ? 'inbox-list dense' : 'inbox-list' });
-  const drawInbox = () => {
-    list.innerHTML = ''; let lastDay = null, n = 0;
-    for (const r of v.inbox.rows) {
-      if (inboxFilter === 'decide' && !r.decide) continue;
-      if (inboxFilter === 'unread' && !r.unread) continue;
-      n++;
-      const day = `${r.year} · Week ${r.week}`;
-      if (day !== lastDay) { list.append(el('div', { class: 'dayh' }, day)); lastDay = day; }
-      list.append(el('button', { class: 'row' + (r.unread ? ' unread' : ''), onclick: () => openMessage(r.id) }, el('div', {}, el('div', { class: 't' }, r.subject), inboxDense ? '' : el('div', { class: 'f' }, r.body)), el('span', { class: 'tag ' + tagClass(r.tag) }, r.tag)));
-    }
-    if (!n) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : 'All read.'));
-  };
-  const filt = el('div', { class: 'filt' });
-  for (const [k, label, count] of [['all', 'All', v.inbox.total], ['decide', 'Decide', v.inbox.decide], ['unread', 'Unread', v.inbox.unread]])
-    filt.append(el('button', { 'aria-pressed': String(inboxFilter === k), onclick: e => { inboxFilter = k; filt.querySelectorAll('button[data-f]').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); drawInbox(); }, 'data-f': k }, label + ' ', el('em', {}, count)));
-  filt.append(el('span', { class: 'sep' }),
-    el('button', { onclick: e => { inboxDense = !inboxDense; list.classList.toggle('dense', inboxDense); e.currentTarget.textContent = inboxDense ? 'Detailed' : 'Condensed'; drawInbox(); } }, inboxDense ? 'Detailed' : 'Condensed'),
-    el('button', { style: 'margin-left:auto', onclick: () => { pyJSON('SESSION.inbox_mark_all()'); refresh(); } }, 'Mark All Read'));
-  inbox.append(filt, list); drawInbox();
-  page.append(inbox);
+  page.append(inboxSheet(v));
 
   // cap, room, front office
   const capG = v.cap.by_group; const total = Object.values(capG).reduce((a, b) => a + b, 0) + v.cap.dead;
@@ -226,7 +240,7 @@ function renderPortal(v) {
   const stS = sheet(st.division, '', table, el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#league' }, 'Full Standings')));
   stS.classList.add('c6'); page.append(stS);
 
-  const strip = el('div', { class: 'strip' }, ...v.season.games.map(g => g.bye ? el('div', { class: 'wk bye' }, '—', el('small', {}, 'bye')) : el('div', { class: 'wk' + (g.result ? ' ' + g.result.toLowerCase() : '') + (view.rail.advance.title === `Play Week ${g.week}` ? ' now' : ''), 'data-tip': g.score ? `${g.home ? 'vs' : 'at'} ${g.opp} · ${g.score}` : null }, g.result || g.week, el('small', {}, `${g.home ? '' : '@'}${g.opp}`))));
+  const strip = el('div', { class: 'strip' }, ...v.season.games.map(g => g.bye ? el('div', { class: 'wk bye' }, '—', el('small', {}, 'bye')) : el('div', { class: 'wk' + (g.result ? ' ' + g.result.toLowerCase() : '') + ((view.rail.advance.title.match(/Week (\d+)/) || [])[1] == g.week ? ' now' : ''), 'data-tip': g.score ? `${g.home ? 'vs' : 'at'} ${g.opp} · ${g.score}` : null }, g.result || g.week, el('small', {}, `${g.home ? '' : '@'}${g.opp}`))));
   const nums = v.season.numbers || {}; const numRow = el('div', { class: 'facts2', style: 'grid-template-columns:repeat(4,1fr);padding:8px 0 0' }, el('div', {}, el('span', {}, 'Points For'), el('b', {}, nums.pf ?? '—')), el('div', {}, el('span', {}, 'Points Against'), el('b', {}, nums.pa ?? '—')), el('div', {}, el('span', {}, 'EPA per Play'), el('b', {}, nums.epa != null ? (nums.epa >= 0 ? '+' : '') + nums.epa.toFixed(2) : '—')), el('div', {}, el('span', {}, 'Pass Rush Win'), el('b', {}, nums.prw != null ? `${nums.prw}%` : '—')));
   const seS = sheet('The Season', view.rail.record, strip, numRow, el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#league/schedule' }, 'Schedule'), el('a', { class: 'btn', href: '#league/stats' }, 'Stats'), el('a', { class: 'btn quiet', href: '#league' }, 'Playoff Picture')));
   seS.classList.add('c6'); page.append(seS);
@@ -251,6 +265,23 @@ function renderGameDay(v) {
   $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'gameday'));
   $('#second').innerHTML = ''; document.body.classList.add('no-second');
   if (v.empty) { page.append(el('section', { class: 'sheet c12' }, el('h2', {}, 'Game Day'), el('div', { class: 'empty' }, v.line))); return; }
+  if (v.preview) {
+    // the week has not been played: the preview of this week's game, and the button that plays it
+    const s = el('section', { class: 'sheet c12' }, el('h2', {}, `Week ${v.week} · Game Day`, el('small', {}, v.bye ? 'Bye week' : `${v.matchup.away ? 'at' : 'vs'} ${v.matchup.them.club.name} · ${v.matchup.header || ''}`)));
+    if (v.bye) { s.append(el('div', { class: 'empty' }, v.line)); }
+    else {
+      const m = v.matchup;
+      s.append(el('div', { class: 'bigbug' },
+        el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${m.me.club.color}` }, m.me.club.abbr), el('div', {}, el('div', { class: 'nm' }, m.me.club.nick), el('div', { class: 'rec' }, `${m.me.record} · ${m.me.place}`))),
+        el('div', { class: 'mid' }, el('div', { class: 'q' }, 'Kickoff Sunday'), el('div', { class: 'dd' }, `Win Probability ${m.wp}%`), el('div', { class: 'q', style: 'font-size:11px;color:var(--ink-3);margin-top:4px' }, m.line || '')),
+        el('div', { class: 'side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${m.them.club.color}` }, m.them.club.abbr), el('div', {}, el('div', { class: 'nm' }, m.them.club.nick), el('div', { class: 'rec' }, `${m.them.record} · ${m.them.place}`)))));
+      s.append(el('div', { class: 'facts2', style: 'grid-template-columns:1fr 1fr;padding:6px 14px' }, el('div', {}, el('span', {}, `${m.me.club.nick} Injuries`), el('b', {}, m.injuries.me.join(' · ') || 'None')), el('div', { style: 'text-align:right' }, el('span', {}, `${m.them.club.nick} Injuries`), el('b', {}, m.injuries.them.join(' · ') || 'None'))));
+      s.append(el('div', { class: 'read', style: 'margin:0 14px 10px' }, el('b', {}, 'Assistants: '), m.say));
+      s.append(el('div', { class: 'read', style: 'margin:0 14px 12px;color:var(--ink-2)' }, v.plan_set ? 'Your game plan for this week is set.' : "You have not changed the coordinators' plan this week; the game reads their plan as it stands."));
+    }
+    s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, `Sim Week ${v.week}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart'), el('span', { class: 'count', style: 'margin-left:auto' }, 'Every club plays this week when you sim; the week itself moves on when you Advance.')));
+    page.append(s); return;
+  }
   const g = v.game;
   const top = el('section', { class: 'sheet c12' });
   // the Sunday scoreboard
@@ -1531,13 +1562,14 @@ function renderReport(v) {
 function refresh() { view = pyJSON('SESSION.portal()'); renderRail(view.rail); renderPortal(view); }
 
 async function advance() {
-  const adv = $('#advance'); adv.disabled = true; busy(view.rail.advance.title + '…');
+  const adv = $('#advance'); adv.disabled = true; const wasSim = /^Sim Week/.test(view.rail.advance.title); busy(view.rail.advance.title + '…');
   await new Promise(r => setTimeout(r, 30));
   let r = null;
   try { r = pyJSON('SESSION.advance()'); busy(`${r.done} done.`); setTimeout(() => busy(null), 1200); }
   catch (e) { console.error(e); busy('Something broke: ' + String(e).slice(0, 120)); }
   adv.disabled = false;
-  if (r && /^Week \d+$/.test(r.done)) { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); } else if (r && /on the clock/.test(r.done)) { location.hash = '#draft/day'; renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); } else refresh();
+  if (r && /^Week \d+ played$/.test(r.done)) { if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#gameday'; }
+  else if (r && /^Week \d+$/.test(r.done)) { if (location.hash === '' || location.hash.startsWith('#portal')) refresh(); else if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#portal'; } else if (r && /on the clock/.test(r.done)) { location.hash = '#draft/day'; renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); } else refresh();
   saveGame();
 }
 
@@ -1553,5 +1585,5 @@ async function advance() {
   $('#advance').onclick = advance;
   $('#save').onclick = saveGame;
   $('#back').onclick = () => refresh();
-  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
+  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();
