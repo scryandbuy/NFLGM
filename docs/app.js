@@ -20,11 +20,14 @@ async function bootEngine() {
   py = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.5/full/' });
   say('loading numpy and pandas…', 18);
   await py.loadPackage(['numpy', 'pandas', 'networkx']);      // networkx: the schedule builder's matching
-  const manifest = await (await fetch(ENGINE + 'manifest.json')).json();
+  // the manifest is always re-checked with the server, and every engine file carries the
+  // build stamp in its URL, so a new push is picked up on the next load instead of after
+  // the browser's ten-minute cache expires
+  const manifest = await (await fetch(ENGINE + 'manifest.json', { cache: 'no-cache' })).json();
   const files = [...manifest.modules.map(m => m + '.py'), ...manifest.data];
   let n = 0;
   for (const f of files) {
-    const r = await fetch(ENGINE + f);
+    const r = await fetch(ENGINE + f + '?v=' + (manifest.build || '0'));
     if (!r.ok) { say('missing ' + f); continue; }
     if (f.endsWith('.py') || f.endsWith('.json')) py.FS.writeFile('/' + f, await r.text());
     else py.FS.writeFile('/' + f, new Uint8Array(await r.arrayBuffer()));

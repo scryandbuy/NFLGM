@@ -11,5 +11,7 @@ DATA = ['newgen_shape.json', 'league_seed_2026.csv', 'schedule_2026.csv', 'cfb27
 os.makedirs(OUT, exist_ok=True)
 for m in MODULES: shutil.copy(os.path.join(HERE, m + '.py'), OUT)
 for d in DATA: shutil.copy(os.path.join(HERE, d), OUT)
-json.dump(dict(modules=MODULES, data=DATA), open(os.path.join(OUT, 'manifest.json'), 'w'))
+import hashlib
+build = hashlib.sha1(b''.join(open(os.path.join(OUT, f), 'rb').read() for f in sorted(os.listdir(OUT)) if f != 'manifest.json')).hexdigest()[:10]
+json.dump(dict(modules=MODULES, data=DATA, build=build), open(os.path.join(OUT, 'manifest.json'), 'w'))
 print(f"docs/engine: {len(MODULES)} modules, {len(DATA)} data files, {sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT)) // 1024} KB")
