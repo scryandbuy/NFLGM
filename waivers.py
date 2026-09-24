@@ -116,9 +116,22 @@ def make_room(league, abbr, p):
     team = league.teams[abbr]
     if len(team.active()) < 53:
         return True
-    cands = [q for q in team.active() if q.pos == p.pos and q is not p and not PSQ.locked(q, league.week)]
+    # THE MAN WHO GOES IS WORSE THAN THE MAN WHO COMES, AND CHEAP TO CUT. It used to
+    # drop the worst man at the exact spot, and when the only other man at the spot
+    # was the starter, the starter went: San Francisco released Trent Williams (91,
+    # $18m dead) to claim a 70 off the wire. Now: same position group first, then the
+    # whole roster; never anyone better than the claim; never a release whose dead
+    # money is more than a minimum salary; nobody locked.
+    GRP = {'LT': 'OL', 'LG': 'OL', 'C': 'OL', 'RG': 'OL', 'RT': 'OL', 'LEDG': 'DL', 'REDG': 'DL', 'DT': 'DL', 'MIKE': 'LB', 'WILL': 'LB', 'SAM': 'LB',
+           'CB': 'DB', 'FS': 'DB', 'SS': 'DB', 'HB': 'RB', 'FB': 'RB', 'K': 'ST', 'P': 'ST', 'LS': 'ST'}
+    import min_salary as MS
+    from cap_engine import CAP
+    ceiling = MS.minimum_salary(3, CAP.get(league.year, 301.2))
+    def ok(q): return q is not p and not PSQ.locked(q, league.week) and q.ovr < p.ovr - 0.5 and q.dead_if_cut(0) <= ceiling
+    grp = GRP.get(p.pos, p.pos)
+    cands = [q for q in team.active() if GRP.get(q.pos, q.pos) == grp and ok(q)]
     if not cands:
-        cands = [q for q in team.active() if not PSQ.locked(q, league.week)]
+        cands = [q for q in team.active() if ok(q)]
     if not cands:
         return False
     worst = min(cands, key=lambda q: q.ovr)
