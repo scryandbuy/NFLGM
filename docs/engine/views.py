@@ -123,7 +123,28 @@ def _matchup(session, league, abbr):
         if not say:
             say = 'Nothing to report yet. The assistants read tendencies from the games played; the first report with teeth comes after week one.' if wk <= 1 else 'The assistants have no suggestion this week. The plan stays as it is unless you move it.'
         watch = rep.get('stars', [])[:2]
-    return dict(week=wk, away=away, me=dict(club=club(abbr), record=f"{me.record[0]}–{me.record[1]}", place=_division_place(league, abbr), coach=me.gm.name if me.gm else ''),
+    # the two panels: when we have the ball, when they do. Each row is our unit against theirs, by rank.
+    panels = None
+    if rep is not None:
+        U, M = rep['units'] or {}, rep['my_units'] or {}
+        T = rep['tendencies'] or {}; MT = rep['my_tendencies'] or {}
+        def rk(d, k):
+            x = d.get(k); return (x[0] if x else None)
+        def pct(d, k): return (round(d[k] * 100) if d and d.get(k) is not None else None)
+        panels = dict(
+            ours=[dict(label='Passing Game', mine=rk(M, 'QB'), theirs=rk(U, 'corners')), dict(label='Receivers vs Coverage', mine=rk(M, 'receivers'), theirs=rk(U, 'safeties')),
+                  dict(label='Running Game', mine=rk(M, 'backs') or rk(M, 'run block'), theirs=rk(U, 'run front')), dict(label='Pass Protection', mine=rk(M, 'pass block'), theirs=rk(U, 'pass rush')),
+                  dict(label='Tight End', mine=rk(M, 'tight end'), theirs=rk(U, 'linebackers'))],
+            theirs=[dict(label='Passing Game', mine=rk(U, 'QB'), theirs=rk(M, 'corners')), dict(label='Receivers vs Coverage', mine=rk(U, 'receivers'), theirs=rk(M, 'safeties')),
+                    dict(label='Running Game', mine=rk(U, 'backs') or rk(U, 'run block'), theirs=rk(M, 'run front')), dict(label='Pass Protection', mine=rk(U, 'pass block'), theirs=rk(M, 'pass rush')),
+                    dict(label='Tight End', mine=rk(U, 'tight end'), theirs=rk(M, 'linebackers'))],
+            our_tend=[dict(label='They blitz', v=pct(T, 'blitz'), unit='% of snaps'), dict(label='They play two-high', v=pct(T, 'two_high'), unit='% of snaps'), dict(label='They play man', v=pct(T, 'man'), unit='% of pass snaps'), dict(label='Eight in the box', v=pct(T, 'box8'), unit='% of snaps')],
+            their_tend=[dict(label='They throw', v=pct(T, 'pass_rate'), unit='% of plays'), dict(label='Play action', v=pct(T, 'pa_rate'), unit='% of dropbacks'), dict(label='Deep shots', v=pct(T, 'deep'), unit='% of throws'), dict(label='Go on fourth', v=pct(T, 'fourth_go'), unit='% of chances')],
+            suggestions=[dict(i=i, side=('Offense' if s['side'] == 'offence' else 'Defense'), text=s['text'], why=s['why']) for i, s in enumerate(rep['suggestions'])],
+            taken=[i for i, s in enumerate(rep['suggestions']) if s['text'] in ((getattr(league, 'user_week_plan', None) or {}).get('taken', []) if (getattr(league, 'user_week_plan', None) or {}).get('week') == wk else [])])
+    # this season's earlier meeting, if any
+    series = [dict(week=g[0], home=g[2], away=g[1], hp=g[4], ap=g[3]) for g in league.schedule if g[3] is not None and {g[1], g[2]} == {abbr, opp_abbr}]
+    return dict(week=wk, away=away, panels=panels, series=series, me=dict(club=club(abbr), record=f"{me.record[0]}–{me.record[1]}", place=_division_place(league, abbr), coach=me.gm.name if me.gm else ''),
                 them=dict(club=club(opp_abbr), record=f"{them.record[0]}–{them.record[1]}", place=_division_place(league, opp_abbr), coach=them.gm.name if them.gm else '',
                           prestige=round(getattr(them.gm, 'prestige', 0)) if them.gm else None),
                 wp=wp, forecast=(rep or {}).get('forecast', {}).get('text') if rep else None,
@@ -167,7 +188,7 @@ def _inbox(league, limit=14):
     box = getattr(league, 'inbox', []) or []
     rows = []
     for m in sorted(box, key=lambda m: -m['id'])[:limit]:
-        rows.append(dict(id=m['id'], subject=m['subject'], body=(m.get('body') or '')[:140], tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()),
+        rows.append(dict(id=m['id'], subject=m['subject'], body=(m.get('body') or '')[:140], tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), decide=(m.get('status') in ('unread', 'open') and m.get('kind') in DECIDE_KINDS),
                          kind=m.get('kind'), unread=m.get('status') == 'unread', week=m.get('week'), year=m.get('year'), sender=m.get('sender')))
     return dict(rows=rows, total=len(box), unread=sum(1 for m in box if m.get('status') == 'unread'), decide=sum(1 for m in box if m.get('status') in ('unread', 'open') and m.get('kind') in DECIDE_KINDS))
 
