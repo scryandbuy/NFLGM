@@ -78,6 +78,10 @@ function sheet(title, small, ...body) { return el('section', { class: 'sheet' },
 function stripe(abbr, text) { return el('span', { class: 'stripe', style: `--c:${COLOR[abbr] || '#555'}` }, text ?? abbr); }
 function formDots(f, big = false) { return el('div', { class: 'form' + (big ? ' big-form' : '') }, ...f.map(x => el('i', { class: x }))); }
 
+// the desk card's second button: where the decision is made
+const DESK_GO = { Trade: ['Trades', '#personnel/trades'], Contract: ['Negotiate', '#personnel/extensions'], Staff: ['Staff', '#frontoffice/staff'], Assistants: ['Game Plan', '#gameplan/week'], Wire: ['Waivers', '#personnel/wire'] };
+function deskAction(kind) { const g = DESK_GO[kind]; return g ? el('a', { class: 'btn go', href: g[1] }, g[0]) : ''; }
+
 function renderPortal(v) {
   const page = $('#page'); page.hidden = false; page.innerHTML = '';
   page.className = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
@@ -150,7 +154,7 @@ function renderPortal(v) {
   else desk.append(el('div', { class: 'cards' }, ...v.desk.map(c => el('div', { class: 'card', style: `--k:${c.kind === 'Trade' ? 'var(--live)' : 'var(--decide)'}` },
     el('div', { class: 'h' }, el('div', { class: 'k' }, c.kind), el('div', { class: 's' }, c.subject)),
     el('div', { class: 'b' }, c.body),
-    el('div', { class: 'a' }, el('button', { class: 'btn', onclick: () => location.hash = `#portal/inbox/${c.id}` }, 'Open'))))));
+    el('div', { class: 'a', style: 'display:flex;gap:6px' }, el('button', { class: 'btn', onclick: () => location.hash = `#portal/inbox/${c.id}` }, 'Open'), deskAction(c.kind))))));
   page.append(desk);
 
   // inbox
