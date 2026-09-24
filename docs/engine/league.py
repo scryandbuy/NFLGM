@@ -1103,6 +1103,42 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         if r.team in L.teams:
             L.teams[r.team].roster.append(p)
 
+    # ---- the street: the real unsigned veterans, from the roster join ------
+    # Madden men on no nflverse or Sleeper roster were set aside into
+    # free_agent_pool.csv at join time and never read. They are the league's
+    # free agents on day one: 136 real players, overalls 53-78, the shape of a
+    # street pool. Cutdown's leftovers join them; the pile rule prunes them.
+    try:
+        FA = pd.read_csv(seed_csv.replace('league_seed_2026.csv', 'free_agent_pool.csv'), low_memory=False)
+    except Exception:
+        FA = None
+    if FA is not None and len(FA):
+        fa_cols = [c for c in FA.columns if c.endswith('_rating') and c != 'src_rating']
+        n_fa = 0
+        for _, r in FA.iterrows():
+            pid = f"FA{int(r.player_id)}" if pd.notna(r.get('player_id')) else f"FA{n_fa}"
+            if pid in L.players: continue
+            ratings = {c: float(r[c]) for c in fa_cols if pd.notna(r.get(c))}
+            if len(ratings) < 20: continue
+            age = float(r.age) if pd.notna(r.get('age')) else 27.0
+            ovr_ = TG.position_score(ratings, r.madden_position)
+            headroom = rng.uniform(2.0, 4.5) + max(0.0, (28.0 - age)) * rng.uniform(0.35, 1.15)
+            pot = float(np.clip(ovr_ + headroom, ovr_, 99.0)); prange = None
+            if age <= 23:
+                spread = rng.uniform(3.0, 11.0); prange = (round(max(ovr_, pot - spread), 1), round(min(99.0, pot + spread), 1)); pot = None
+            p = Player(pid, r.full_name, r.madden_position, age, ratings,
+                       dev=_dev_from_seed(r, rng), potential=pot, potential_range=prange,
+                       longevity=float(np.clip(rng.normal(1.0, .22), .45, 1.7)),
+                       team=None, contract=None,
+                       accrued=int(r.years_pro) if pd.notna(r.get('years_pro')) else 0,
+                       entry_year=(year - int(r.years_pro)) if pd.notna(r.get('years_pro')) else None)
+            if pd.notna(r.get('height_inches')): p.height = int(r.height_inches)
+            if pd.notna(r.get('weight_lbs')): p.weight = int(r.weight_lbs)
+            if pd.notna(r.get('jersey_num')): p.number = int(r.jersey_num)
+            if pd.notna(r.get('college')): p.college = str(r.college)
+            p.last_team = None
+            L.players[pid] = p; L.free_agents.append(pid); n_fa += 1
+
     # ---- solve every team onto its REAL cap position -------------------
     # The seed has no per-year cap hit and no signing bonus, and neither does
     # any public dataset - so the per-player number is reconstructed. But the
