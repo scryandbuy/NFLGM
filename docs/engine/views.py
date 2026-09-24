@@ -18,10 +18,16 @@ NICK = {'ARI': 'Cardinals', 'ATL': 'Falcons', 'BAL': 'Ravens', 'BUF': 'Bills', '
         'DEN': 'Broncos', 'DET': 'Lions', 'GB': 'Packers', 'HOU': 'Texans', 'IND': 'Colts', 'JAX': 'Jaguars', 'KC': 'Chiefs', 'LV': 'Raiders', 'LAC': 'Chargers', 'LA': 'Rams',
         'MIA': 'Dolphins', 'MIN': 'Vikings', 'NE': 'Patriots', 'NO': 'Saints', 'NYG': 'Giants', 'NYJ': 'Jets', 'PHI': 'Eagles', 'PIT': 'Steelers', 'SF': '49ers', 'SEA': 'Seahawks',
         'TB': 'Buccaneers', 'TEN': 'Titans', 'WAS': 'Commanders'}
-INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 'contract': 'Contract', 'negotiation': 'Contract', 'waiver': 'Wire', 'waivers': 'Wire', 'wire': 'Wire',
+INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 'contract': 'Contract', 'contract_year': 'Contract', 'negotiation': 'Contract', 'waiver': 'Wire', 'waivers': 'Wire', 'wire': 'Wire',
              'squad': 'Squad', 'practice_squad': 'Squad', 'game': 'Game', 'result': 'Game', 'scouting': 'Scouting', 'spring': 'Scouting', 'morale': 'Locker Room', 'trade_request': 'Locker Room',
              'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad'}
-DECIDE_KINDS = {'trade_offer', 'match_request', 'staff', 'gameplan', 'game_plan', 'offer_sheet'}
+DECIDE_KINDS = {'trade_offer', 'match_request', 'staff', 'gameplan', 'game_plan', 'offer_sheet', 'contract_year'}
+
+
+STADIUM = {'ARI': 'State Farm Stadium', 'ATL': 'Mercedes-Benz Stadium', 'BAL': 'M&T Bank Stadium', 'BUF': 'Highmark Stadium', 'CAR': 'Bank of America Stadium', 'CHI': 'Soldier Field', 'CIN': 'Paycor Stadium', 'CLE': 'Huntington Bank Field',
+           'DAL': 'AT&T Stadium', 'DEN': 'Empower Field', 'DET': 'Ford Field', 'GB': 'Lambeau Field', 'HOU': 'NRG Stadium', 'IND': 'Lucas Oil Stadium', 'JAX': 'EverBank Stadium', 'KC': 'Arrowhead Stadium', 'LV': 'Allegiant Stadium', 'LAC': 'SoFi Stadium',
+           'LA': 'SoFi Stadium', 'MIA': 'Hard Rock Stadium', 'MIN': 'U.S. Bank Stadium', 'NE': 'Gillette Stadium', 'NO': 'Caesars Superdome', 'NYG': 'MetLife Stadium', 'NYJ': 'MetLife Stadium', 'PHI': 'Lincoln Financial Field', 'PIT': 'Acrisure Stadium',
+           'SF': "Levi's Stadium", 'SEA': 'Lumen Field', 'TB': 'Raymond James Stadium', 'TEN': 'Nissan Stadium', 'WAS': 'Northwest Stadium'}
 
 
 def sentence(text):
@@ -97,6 +103,10 @@ def portal(session, league, abbr):
     out['cap'] = _cap(league, t)
     out['room'] = _room(league, t)
     out['front_office'] = _front_office(league, t)
+    try:
+        import views_frontoffice as VF
+        out['owner_name'] = VF._owner(league, t)['name']
+    except Exception: out['owner_name'] = None
     out['standings'] = _division_standings(league, abbr)
     out['season'] = _season(league, abbr)
     return out
@@ -118,7 +128,14 @@ def _matchup(session, league, abbr):
         rep = None
     wp = _win_prob(league, abbr, opp_abbr, away)
     def inj(team):
-        return [f"{_short(p.name)} ({p.pos}) out" + (f" to week {p.out_until}" if isinstance(p.out_until, int) else '') for p in team.roster if p.out_until is not None][:3]
+        desk = (session.runner.desks.get(team.abbr) if getattr(session, 'runner', None) is not None else None)
+        status = getattr(desk, 'status', {}) if desk is not None else {}
+        out = []
+        for p in sorted(team.roster, key=lambda p: -p.ovr):
+            d = status.get(p.pid)
+            if d in ('questionable', 'doubtful'): out.append(f"{_short(p.name)} ({p.pos}) {d}")
+            elif p.out_until is not None: out.append(f"{_short(p.name)} ({p.pos}) out" + (f" to week {p.out_until}" if isinstance(p.out_until, int) else ''))
+        return out[:3]
     def form(team):
         res = [g for g in league.schedule if g[0] < wk and team.abbr in (g[1], g[2]) and g[3] is not None]
         out = []
@@ -130,10 +147,26 @@ def _matchup(session, league, abbr):
     watch = []
     if rep:
         # the assistants speak in sentences: each suggestion's reason is one
-        say = ' '.join((s.get('why') or s.get('text') or '').rstrip('.') + '.' for s in rep.get('suggestions', [])[:3]).strip()
+        say = _say_paragraph(league, abbr, opp_abbr, rep)
         if not say:
             say = 'Nothing to report yet. The assistants read tendencies from the games played; the first report with teeth comes after week one.' if wk <= 1 else 'The assistants have no suggestion this week. The plan stays as it is unless you move it.'
-        watch = rep.get('stars', [])[:2]
+        watch = _watch_notes(league, abbr, opp_abbr, rep)
+    # the header line: where, and in what
+    home_abbr = opp_abbr if away else abbr
+    env = None
+    try:
+        import weather as W
+        env = W.draw(home_abbr, wk, np.random.default_rng(league.year * 100 + wk))
+    except Exception: pass
+    where = STADIUM.get(home_abbr, '')
+    weather_line = (env.describe() if env is not None and not env.dome else 'Indoors' if env is not None else '')
+    header = ' · '.join(x for x in (weather_line, where) if x)
+    import math
+    spread = -round(2 * math.log(max(0.02, wp / 100.0) / max(0.02, 1 - wp / 100.0)) * 3.0) / 2
+    pf_me, pa_me = _points(league, abbr); pf_them, pa_them = _points(league, opp_abbr)
+    gp_me = sum(me.record); gp_them = sum(them.record)
+    total = round(((pf_me + pa_me) / gp_me + (pf_them + pa_them) / gp_them) / 2 / 0.5) * 0.5 if gp_me and gp_them else 45.5
+    line = f"Spread {abbr} {spread:+.1f} · Total {total:g}" if abs(spread) >= 0.5 else f"Pick'em · Total {total:g}"
     # the two panels: when we have the ball, when they do. Each row is our unit against theirs, by rank.
     panels = None
     if rep is not None:
@@ -142,20 +175,32 @@ def _matchup(session, league, abbr):
         def rk(d, k):
             x = d.get(k); return (x[0] if x else None)
         def pct(d, k): return (round(d[k] * 100) if d and d.get(k) is not None else None)
+        # the matchup rows under the ranks: the deep ball against their shell, our WR1 against their CB1, their play action against our safeties, their quarterback under pressure, their best rusher against our tackles
+        S = league.stats.get(league.year, {})
+        def wr1(tm): return max((p for p in tm.active() if p.pos == 'WR' and p.out_until is None), key=lambda p: p.ovr, default=None)
+        def cb1(tm): return max((p for p in tm.active() if p.pos == 'CB' and p.out_until is None), key=lambda p: p.ovr, default=None)
+        def rusher(tm): return max((p for p in tm.active() if p.pos in ('LEDG', 'REDG', 'DT') and p.out_until is None), key=lambda p: p.ovr, default=None)
+        def sep(p):
+            l = S.get(p.pid, {}) if p else {}; return (round(l['sep_total'] / l['sep_n'], 1) if l.get('sep_n') else None)
+        def prw(p):
+            l = S.get(p.pid, {}) if p else {}; return (round(l['pr_wins'] / l['pr_reps'] * 100) if l.get('pr_reps') else None)
+        mw, tc, tw, mc = wr1(me), cb1(them), wr1(them), cb1(me); tr_, mr_ = rusher(them), rusher(me)
+        def name(p): return p.name.split()[-1] if p else '—'
+        ours_extra = [dict(label='Deep Ball', sub=(f"{abbr} {pct(MT, 'deep')}% of throws" if pct(MT, 'deep') is not None else ''), left=(f"{pct(MT, 'deep')}% deep" if pct(MT, 'deep') is not None else '—'), right=(f"Two-high {pct(T, 'two_high')}%" if pct(T, 'two_high') is not None else '—')),
+                      dict(label=f"{name(mw)} vs {name(tc)}", sub=(f"They shadow {pct(T, 'shadow')}%" if pct(T, 'shadow') else 'No shadow yet'), left=(f"{sep(mw)} sep" if sep(mw) is not None else f"{round(mw.ovr) if mw else '—'} WR"), right=(f"{round(tc.ovr)} CB" if tc else '—')),
+                      dict(label='Pressure', sub=(f"They blitz {pct(T, 'blitz')}%" if pct(T, 'blitz') is not None else ''), left=(f"{rk(M, 'pass block')}{_ord(rk(M, 'pass block'))} protection" if rk(M, 'pass block') else '—'), right=(f"{rk(U, 'pass rush')}{_ord(rk(U, 'pass rush'))} rush" if rk(U, 'pass rush') else '—'))]
+        theirs_extra = [dict(label='Play Action', sub=(f"{them.abbr} {pct(T, 'pa_rate')}% of dropbacks" if pct(T, 'pa_rate') is not None else ''), left=(f"{pct(T, 'pa_rate')}% PA" if pct(T, 'pa_rate') is not None else '—'), right=(f"{rk(M, 'safeties')}{_ord(rk(M, 'safeties'))} safeties" if rk(M, 'safeties') else '—')),
+                        dict(label='Under Pressure', sub=name(next((p for p in them.active() if p.pos == 'QB'), None)), left=(f"{rk(U, 'QB')}{_ord(rk(U, 'QB'))} QB" if rk(U, 'QB') else '—'), right=(f"Pressure {pct(MT, 'blitz')}% blitz" if pct(MT, 'blitz') is not None else '—')),
+                        dict(label=f"{name(tr_)} vs Your Tackles", sub=(f"{prw(tr_)}% win rate" if prw(tr_) is not None else ''), left=(f"{round(tr_.ovr)} rusher" if tr_ else '—'), right=(f"{rk(M, 'pass block')}{_ord(rk(M, 'pass block'))} protection" if rk(M, 'pass block') else '—'))]
         panels = dict(
-            ours=[dict(label='Passing Game', mine=rk(M, 'QB'), theirs=rk(U, 'corners')), dict(label='Receivers vs Coverage', mine=rk(M, 'receivers'), theirs=rk(U, 'safeties')),
-                  dict(label='Running Game', mine=rk(M, 'backs') or rk(M, 'run block'), theirs=rk(U, 'run front')), dict(label='Pass Protection', mine=rk(M, 'pass block'), theirs=rk(U, 'pass rush')),
-                  dict(label='Tight End', mine=rk(M, 'tight end'), theirs=rk(U, 'linebackers'))],
-            theirs=[dict(label='Passing Game', mine=rk(U, 'QB'), theirs=rk(M, 'corners')), dict(label='Receivers vs Coverage', mine=rk(U, 'receivers'), theirs=rk(M, 'safeties')),
-                    dict(label='Running Game', mine=rk(U, 'backs') or rk(U, 'run block'), theirs=rk(M, 'run front')), dict(label='Pass Protection', mine=rk(U, 'pass block'), theirs=rk(M, 'pass rush')),
-                    dict(label='Tight End', mine=rk(U, 'tight end'), theirs=rk(M, 'linebackers'))],
-            our_tend=[dict(label='They blitz', v=pct(T, 'blitz'), unit='% of snaps'), dict(label='They play two-high', v=pct(T, 'two_high'), unit='% of snaps'), dict(label='They play man', v=pct(T, 'man'), unit='% of pass snaps'), dict(label='Eight in the box', v=pct(T, 'box8'), unit='% of snaps')],
-            their_tend=[dict(label='They throw', v=pct(T, 'pass_rate'), unit='% of plays'), dict(label='Play action', v=pct(T, 'pa_rate'), unit='% of dropbacks'), dict(label='Deep shots', v=pct(T, 'deep'), unit='% of throws'), dict(label='Go on fourth', v=pct(T, 'fourth_go'), unit='% of chances')],
-            suggestions=[dict(i=i, side=('Offense' if s['side'] == 'offence' else 'Defense'), text=sentence(s['text']), why=sentence(s['why'])) for i, s in enumerate(rep['suggestions'])],
+            ours=[dict(label='Passing Game', mine=rk(M, 'QB'), theirs=rk(U, 'corners')), dict(label='Running Game', mine=rk(M, 'backs') or rk(M, 'run block'), theirs=rk(U, 'run front')), dict(label='Pass Protection', mine=rk(M, 'pass block'), theirs=rk(U, 'pass rush'))],
+            theirs=[dict(label='Passing Game', mine=rk(U, 'QB'), theirs=rk(M, 'corners')), dict(label='Running Game', mine=rk(U, 'backs') or rk(U, 'run block'), theirs=rk(M, 'run front')), dict(label='Pass Protection', mine=rk(U, 'pass block'), theirs=rk(M, 'pass rush'))],
+            ours_extra=ours_extra, theirs_extra=theirs_extra,
+            suggestions=[dict(i=i, side=('Offense' if s['side'] == 'offence' else 'Defense'), text=sentence(s['text']), why=sentence(s['why']), change=_change_words(s['changes'])) for i, s in enumerate(rep['suggestions'])],
             taken=[i for i, s in enumerate(rep['suggestions']) if s['text'] in ((getattr(league, 'user_week_plan', None) or {}).get('taken', []) if (getattr(league, 'user_week_plan', None) or {}).get('week') == wk else [])])
     # this season's earlier meeting, if any
     series = [dict(week=g[0], home=g[2], away=g[1], hp=g[4], ap=g[3]) for g in league.schedule if g[3] is not None and {g[1], g[2]} == {abbr, opp_abbr}]
-    return dict(week=wk, away=away, panels=panels, series=series, me=dict(club=club(abbr), record=f"{me.record[0]}–{me.record[1]}", place=_division_place(league, abbr), coach=me.gm.name if me.gm else ''),
+    return dict(week=wk, away=away, panels=panels, series=series, header=header, line=line, me=dict(club=club(abbr), record=f"{me.record[0]}–{me.record[1]}", place=_division_place(league, abbr), coach=me.gm.name if me.gm else ''),
                 them=dict(club=club(opp_abbr), record=f"{them.record[0]}–{them.record[1]}", place=_division_place(league, opp_abbr), coach=them.gm.name if them.gm else '',
                           prestige=round(getattr(them.gm, 'prestige', 0)) if them.gm else None),
                 wp=wp, forecast=(rep or {}).get('forecast', {}).get('text') if rep else None,
@@ -174,14 +219,123 @@ def _win_prob(league, abbr, opp, away):
     return int(round(100 / (1 + np.exp(-edge))))
 
 
+CHANGE_WORDS = {'pass_bias': 'Pass lean', 'play_action_rate': 'Play action', 'motion_rate': 'Motion', 'blitz_rate': 'Blitz', 'man_rate': 'Man coverage', 'shell_lean': 'Two-high', 'zone_aggression': 'Zone aggression', 'box_bias': 'Box', 'screen_boost': 'Screens'}
+
+
+def _change_words(changes):
+    """'Pass lean −5 · Depth toward medium', from a suggestion's plan deltas."""
+    out = []
+    for k, v in (changes or {}).items():
+        if k == 'depth_mix':
+            d = list(v); i = max(range(3), key=lambda j: d[j]); out.append('Depth toward ' + ['short', 'medium', 'deep'][i])
+        elif k == 'protection': out.append(f"Protection {str(v).replace('_', ' ')}")
+        elif k == 'travel': out.append('Shadow their WR1' if v else 'No shadow')
+        elif k == 'bracket': out.append('Bracket their WR1')
+        elif k == 'box_bias' and isinstance(v, (int, float)): out.append('Box heavier' if v > 0 else 'Box lighter')
+        elif isinstance(v, (int, float)) and not isinstance(v, bool): out.append(f"{CHANGE_WORDS.get(k, k)} {'+' if v > 0 else '−'}{abs(round(v * 100))}" + ('%' if k in ('blitz_rate', 'man_rate', 'play_action_rate', 'motion_rate') else ''))
+    return ' · '.join(out)
+
+
+def _say_paragraph(league, abbr, opp_abbr, rep):
+    """The assistants in three sentences: what to lean on, what to attack, what to respect."""
+    T = rep.get('tendencies') or {}; U = rep.get('units') or {}; them = league.teams[opp_abbr].abbr
+    parts = []
+    two_high = T.get('two_high'); blitz = T.get('blitz'); pa = T.get('pa_rate')
+    if two_high is not None and two_high >= 0.5: parts.append(f"{them} sit in two-high on {round(two_high * 100)}% of their snaps, which leaves light boxes to run into, so we would lean on the run early and work the intermediate middle when they drop")
+    elif two_high is not None and two_high <= 0.3: parts.append(f"{them} play single-high on most snaps and load the box, so the outside throws and the play-action shots are where the yards are")
+    def rk(k):
+        x = U.get(k); return x[0] if x else None
+    weak = sorted([(rk(k), k) for k in ('pass block', 'QB', 'run front', 'corners', 'safeties', 'pass rush', 'linebackers') if rk(k) is not None], key=lambda x: -x[0])
+    if weak and weak[0][0] >= 22:
+        r, k = weak[0]
+        words = {'pass block': f"their line ranks {r}{_ord(r)} in pass protection, so we can bring pressure without much risk", 'QB': f"their quarterback ranks {r}{_ord(r)} of 32, so we can load the box and make him beat us",
+                 'run front': f"their front ranks {r}{_ord(r)} against the run, so we can run it until they stop it", 'corners': f"their corners rank {r}{_ord(r)}, so the outside receivers should win", 'safeties': f"their safeties rank {r}{_ord(r)}, so the seams and the deep middle are there",
+                 'pass rush': f"their rush ranks {r}{_ord(r)}, so the quarterback should have time", 'linebackers': f"their linebackers rank {r}{_ord(r)}, so the tight end and the backs should work underneath"}[k]
+        parts.append(words)
+    resp = []
+    if pa is not None and pa >= 0.25: resp.append(f"their play action at {round(pa * 100)}% of dropbacks, among the highest rates we have seen")
+    if blitz is not None and blitz >= 0.28: resp.append(f"a blitz rate of {round(blitz * 100)}%")
+    strong = sorted([(rk(k), k) for k in ('pass rush', 'corners', 'QB', 'receivers', 'backs') if rk(k) is not None], key=lambda x: x[0])
+    if strong and strong[0][0] <= 5: resp.append(f"their {strong[0][1]}, ranked {strong[0][0]}{_ord(strong[0][0])} in the league")
+    if resp: parts.append(('The one thing to respect is ' + resp[0]) if len(resp) == 1 else ('The things to respect are ' + ' and '.join(resp[:2])))
+    if not parts: parts.append("Nothing on film sets them apart yet; the plan stays the coordinators' own unless you move it")
+    return sentence('. '.join(p.rstrip('.') for p in parts) + '.')
+
+
+def _ord(n):
+    return 'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+
+
+def _watch_notes(league, abbr, opp_abbr, rep):
+    """Their two players to watch, each with the reason: the corner who shadows, the rusher's sacks, the receiver's yards."""
+    them = league.teams[opp_abbr]; T = rep.get('tendencies') or {}
+    S = league.stats.get(league.year, {})
+    def stat(p, k): return (S.get(p.pid, {}) or {}).get(k, 0)
+    cands = []
+    for p in sorted(them.active(), key=lambda p: -p.ovr)[:14]:
+        if p.out_until is not None: continue
+        note = ''
+        if p.pos == 'CB' and p.ovr >= 82: note = f"shadows your WR1 on {round(T.get('shadow', 0) * 100)}% of snaps" if T.get('shadow') else 'their top corner'
+        elif p.pos in ('LEDG', 'REDG', 'DT') and p.ovr >= 82: sk = stat(p, 'sacks'); note = f"{sk:g} sack{'s' if sk != 1 else ''} this season" if sk else 'their best rusher'
+        elif p.pos in ('WR', 'TE') and p.ovr >= 82: y = int(stat(p, 'rec_yds')); note = f"{y} receiving yards" if y else 'their top target'
+        elif p.pos == 'HB' and p.ovr >= 84: y = int(stat(p, 'rush_yds')); note = f"{y} rushing yards" if y else 'their lead back'
+        elif p.pos == 'QB' and p.ovr >= 86: note = 'their quarterback'
+        if note: cands.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), note=note, no=getattr(p, 'number', None) or ''))
+        if len(cands) >= 2: break
+    if len(cands) < 2:
+        for s in rep.get('stars', []):
+            if all(c['pid'] != s['pid'] for c in cands): cands.append(dict(s, note='', no=''))
+            if len(cands) >= 2: break
+    return cands[:2]
+
+
 def _desk(league, abbr):
     """Things on your desk: open decisions."""
     cards = []
     for m in getattr(league, 'inbox', []):
         if m.get('status') not in ('unread', 'open'): continue
         if m.get('kind') in DECIDE_KINDS:
-            cards.append(dict(id=m['id'], kind=INBOX_TAG.get(m['kind'], m['kind']), subject=m['subject'], body=m['body'][:220], payload=_payload(m.get('payload') or {})))
+            card = dict(id=m['id'], kind=INBOX_TAG.get(m['kind'], m['kind']), raw_kind=m['kind'], subject=m['subject'], body=m['body'][:220], payload=_payload(m.get('payload') or {}), expires=m.get('expires_week'))
+            card.update(_desk_detail(league, abbr, m))
+            cards.append(card)
     return cards[:4]
+
+
+def _asset_words(league, a):
+    import re
+    s = str(a)
+    if isinstance(a, dict) and a.get('pick'): return f"{a.get('year')} R{a.get('round')}"
+    m = re.match(r"DraftPick\(year=(\d+), round=(\d+)", s)
+    if m: return f"{m.group(1)} R{m.group(2)}"
+    p = league.player(s); return p.name.split()[-1] if p else s
+
+
+def _desk_detail(league, abbr, m):
+    """What the card shows by kind: a trade offer's two sides and value gap; a contract ask's price and years."""
+    pl = m.get('payload') or {}; k = m.get('kind')
+    if k == 'trade_offer':
+        buyer = pl.get('buyer'); sends = pl.get('sends') or []; gets = pl.get('gets') or []
+        gap = None
+        try:
+            import views_personnel as VP, trades as TR, trade_engine as TE, valuation as VAL
+            me, them = league.teams[abbr], league.teams[buyer]; rng = np.random.default_rng(7); pool = VAL.pool_from_league(league)
+            a_ids = [str(x) for x in gets]; b_ids = [(f"{x['year']}-{x['round']}-{x.get('original', buyer)}" if isinstance(x, dict) else str(x)) for x in sends]
+            r = TE.evaluate(dict(a_sends=VP._assets(league, abbr, a_ids, pool, rng, viewer=them), a_gets=VP._assets(league, buyer, b_ids, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, TR.persona(me.gm), TR.persona(them.gm))
+            gap = round(float(r.get('a_gain', 0.0)), 1)
+            if abs(gap) > 100: gap = None       # blocked on the cap: no number to show
+        except Exception: gap = None
+        return dict(buyer=club(buyer) if buyer in league.teams else None, they_send=' + '.join(_asset_words(league, x) for x in sends), you_send=' + '.join(_asset_words(league, x) for x in gets), gap=gap, read=(m.get('body') or '').split('. ')[0].rstrip('.') + '.')
+    if k in ('contract_year', 'negotiation', 'match_request', 'offer_sheet'):
+        pid = pl.get('pid'); p = league.player(pid) if pid else None
+        if p is None: return {}
+        ask = None; years = None
+        try:
+            import extensions as EXT
+            tm = EXT.terms(league, p, np.random.default_rng(abs(hash(pid)) % (2 ** 32)))
+            if tm: ask = round(float(tm['ask']), 1); years = int(tm['years'])
+        except Exception: pass
+        return dict(pid=pid, ask=ask, ask_years=years, years_left=(p.contract.years if p.contract else 0), line=f"{p.pos}, {round(p.ovr)}, age {int(p.age)}, ${p.apy:.1f}m a year." if p.contract else f"{p.pos}, {round(p.ovr)}, age {int(p.age)}.")
+    return {}
 
 
 def _payload(pl):
@@ -230,7 +384,7 @@ def _room(league, t):
     watch = []
     for p in t.active():
         w = morale_word(p); words[w] += 1
-        if w == 'Unhappy': watch.append(player_plate(p, note=_why_unhappy(p)))
+        if w in ('Unhappy', 'Unsettled') and len(watch) < 2: watch.append(player_plate(p, note=(w + ' · ' + _why_unhappy(p)).rstrip(' ·')))
     mean = float(np.mean([p.morale.value for p in t.active() if p.morale is not None])) if any(p.morale for p in t.active()) else 50.0
     return dict(counts=words, mean=round(mean), watch=watch[:3])
 
@@ -245,8 +399,12 @@ def _why_unhappy(p):
 def _front_office(league, t):
     import staff as ST
     gm = t.gm
-    sec = float(getattr(gm, 'job_security', 0.7)) if gm else 0.7
-    return dict(owner_mood=_owner_mood(t), job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat'),
+    import firing_model as FM
+    sec = FM.job_security(t.hist())
+    exp = float(t.hist().get('expected_pct') or 0.5); pat = float(getattr(t, 'owner_patience', 0.5))
+    wants = 'a title run' if exp >= 0.72 else 'a playoff berth' if exp >= 0.56 else 'a winning season' if exp >= 0.5 else 'progress' if exp >= 0.4 else 'patience while you rebuild'
+    draft = 'Patient with the draft.' if pat >= 0.6 else 'Wants the draft to pay off now.' if pat <= 0.35 else 'Measured on the draft.'
+    return dict(owner_mood=_owner_mood(t), job=('High' if sec >= 0.7 else 'Good' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat'), expects=f"Wants {wants}. {draft}",
                 prestige=round(getattr(gm, 'prestige', 0)) if gm else None, staff_budget=money(ST.budget(t)) if getattr(t, 'staff', None) else None,
                 scouting_rank=_scout_rank(league, t))
 
@@ -293,6 +451,13 @@ def _form(league, abbr):
 
 
 def _season(league, abbr):
+    S = league.stats.get(league.year, {}); t = league.teams[abbr]; gp = max(1, sum(t.record))
+    pf, pa = _points(league, abbr)
+    pids = {p.pid for p in t.roster}
+    import advanced_stats as AS
+    off_epa = sum((S.get(pid, {}) or {}).get('pass_epa', 0) + (S.get(pid, {}) or {}).get('rush_epa', 0) for pid in pids); off_plays = sum((S.get(pid, {}) or {}).get('pass_plays', 0) + (S.get(pid, {}) or {}).get('rush_plays', 0) for pid in pids)
+    pr_w = sum((S.get(pid, {}) or {}).get('pr_wins', 0) for pid in pids); pr_n = sum((S.get(pid, {}) or {}).get('pr_reps', 0) for pid in pids)
+    numbers = dict(pf=round(pf / gp, 1) if sum(t.record) else None, pa=round(pa / gp, 1) if sum(t.record) else None, epa=(round(off_epa / off_plays, 2) if off_plays else None), prw=(round(pr_w / pr_n * 100) if pr_n else None))
     games = []
     for (wk, a, h, ap, hp) in sorted(league.schedule, key=lambda g: g[0]):
         if abbr not in (a, h): continue
@@ -306,7 +471,7 @@ def _season(league, abbr):
     for wk in range(1, 19):
         if wk not in weeks: games.append(dict(week=wk, bye=True))
     games.sort(key=lambda g: g['week'])
-    return dict(games=games)
+    return dict(games=games, numbers=numbers)
 
 
 # ============================================================ GAME DAY
