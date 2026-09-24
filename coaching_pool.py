@@ -36,10 +36,7 @@ FIRST = ['Marcus', 'Brian', 'Kevin', 'Matt', 'Chris', 'Mike', 'Jeff', 'Sean', 'D
          'Eric', 'Adam', 'Joe', 'Aaron', 'Jason', 'Josh', 'Mark', 'David', 'Ben', 'Robert', 'Shane', 'Anthony',
          'Kellen', 'Zac', 'Brandon', 'Darren', 'Klint', 'Jesse', 'Raheem', 'DeMeco', 'Liam', 'Bobby', 'Thomas',
          'Andre', 'Derrick', 'Marcus', 'Jerod', 'Vance', 'Aden', 'Wink', 'Lou', 'Jim', 'Frank', 'Drew', 'Press']
-LAST = ['Hollins', 'Garrity', 'Whitfield', 'Okafor', 'Brandt', 'Salazar', 'Pruitt', 'Vandermeer', 'Coyle',
-        'Castellanos', 'Harmon', 'Delgado', 'Oyelaran', 'Whitaker', 'Rusnak', 'Kimbrough', 'Tafoya', 'Pettibone',
-        'Lindgren', 'Mabry', 'Sekulic', 'Antwine', 'Faulkner', 'Naquin', 'Broussard', 'Steinbach', 'Gilliam',
-        'Radke', 'Toussaint', 'Hedlund', 'Carrasco', 'Ridgeway', 'Ballenger', 'Nkemelu', 'Zimmerle', 'Stroud']
+LAST = ['Hollins', 'Garrity', 'Whitfield', 'Okafor', 'Brandt', 'Salazar', 'Pruitt', 'Vandermeer', 'Coyle', 'Castellanos', 'Harmon', 'Delgado', 'Oyelaran', 'Whitaker', 'Rusnak', 'Kimbrough', 'Tafoya', 'Pettibone', 'Lindgren', 'Mabry', 'Sekulic', 'Antwine', 'Faulkner', 'Naquin', 'Broussard', 'Steinbach', 'Gilliam', 'Radke', 'Toussaint', 'Hedlund', 'Carrasco', 'Ridgeway', 'Ballenger', 'Nkemelu', 'Zimmerle', 'Stroud', 'Abernathy', 'Beckwith', 'Calloway', 'Dunlevy', 'Escobar', 'Fairbanks', 'Galloway', 'Hargrove', 'Ibarra', 'Jankowski', 'Lindqvist', 'Marchetti', 'Nakamura', 'Oduya', 'Pemberton', 'Quinlan', 'Rasmussen', 'Sandoval', 'Thibodeaux', 'Underwood', 'Villanueva', 'Westbrook', 'Yarborough', 'Zielinski', 'Ashworth', 'Bellinger', 'Castellano', 'Eberhardt', 'Finnegan', 'Gustafson', 'Hollingsworth', 'Iverson', 'Joubert', 'Krishnan', 'Lachance', 'McAllister', 'Nwosu', 'Ostrowski', 'Pettigrew', 'Renaud', 'Stoltenberg', 'Trevino', 'Van Dyke', 'Youngblood', 'Zamora', 'Barlow', 'Cotter', 'Dorsey', 'Everly', 'Fenwick', 'Grady', 'Hutchins', 'Ingram', 'Kessler', 'Lombardi', 'Mayfield', 'Nugent', 'Paxton', 'Radford', 'Sheffield', 'Tolliver', 'Vance', 'Wilkerson', 'Zeller']
 
 
 def _name(rng, taken):

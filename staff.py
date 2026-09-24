@@ -82,16 +82,30 @@ class Coach:
 
 
 # ------------------------------------------------------------ creation
-def _name(rng):
+def _name(rng, league=None):
     import coaching_pool as CP
-    return CP._name(rng, set())
+    taken = set()
+    if league is not None:
+        taken |= {c.name for t in league.teams.values() for c in (getattr(t, 'staff', None) or {}).values() if c}
+        taken |= {c.name for c in getattr(league, 'staff_pool', []) or []}
+        taken |= {t.gm.name for t in league.teams.values() if t.gm is not None}
+        taken |= {g.name for g in (getattr(league, 'coach_pool', None) or [])}
+    return CP._name(rng, taken)
 
 
-def make(rng, role, rating=None, prestige=None, team=None):
+def make(rng, role, rating=None, prestige=None, team=None, league=None, young=False):
+    """A coach. `young` is a new entrant: a position coach or college coordinator getting his
+    first shot, 34-42, rated under the sitting men on average with a wide spread."""
     import personality as PT
-    rating = float(np.clip(rng.normal(62, 12), 35, 92)) if rating is None else rating
-    prestige = float(np.clip(rating * 0.7 + rng.normal(0, 9), 10, 90)) if prestige is None else prestige
-    c = Coach(_name(rng), role, rating, prestige, rng.choice(SPECIALTY[role]), int(rng.integers(34, 62)),
+    if young:
+        age = int(rng.integers(34, 43))
+        rating = float(np.clip(rng.normal(55, 11), 35, 84)) if rating is None else rating
+        prestige = float(np.clip(rng.normal(22, 8), 5, 50)) if prestige is None else prestige
+    else:
+        age = int(rng.integers(34, 62))
+        rating = float(np.clip(rng.normal(62, 12), 35, 92)) if rating is None else rating
+        prestige = float(np.clip(rating * 0.7 + rng.normal(0, 9), 10, 90)) if prestige is None else prestige
+    c = Coach(_name(rng, league), role, rating, prestige, rng.choice(SPECIALTY[role]), age,
               years=int(rng.choice(CONTRACT_YEARS)), team=team, traits=PT.draw(rng))
     return c
 
@@ -105,13 +119,13 @@ def seed(league, rng):
         hc_q = float(getattr(team.gm, 'prestige', 60)) / 100.0
         for role in ROLES:
             r = float(np.clip(rng.normal(58 + 14 * hc_q, 10), 38, 90))
-            c = make(rng, role, rating=r, team=abbr); c.history.append((league.year, abbr, role))
+            c = make(rng, role, rating=r, team=abbr, league=league); c.history.append((league.year, abbr, role))
             team.staff[role] = c
     league.staff_pool = getattr(league, 'staff_pool', None) or []
     for role, n in POOL_SIZE.items():
         have = sum(1 for c in league.staff_pool if c.role == role)
         for _ in range(max(0, n - have)):
-            league.staff_pool.append(make(rng, role))
+            league.staff_pool.append(make(rng, role, league=league))
     return sum(len(t.staff) for t in league.teams.values())
 
 
@@ -248,7 +262,7 @@ def carousel(league, rng, new_head_coaches=(), verbose=False):
         side_role = 'oc' if 'offens' in str(getattr(gm, 'background', 'offensive coordinator')) else 'dc'
         if abbr != user or True:
             to_pool(team, side_role, 'new head coach brought his own')
-            c = make(rng, side_role, rating=float(np.clip(rng.normal(60 + 0.2 * getattr(gm, 'prestige', 60) - 10, 8), 40, 90)), team=abbr)
+            c = make(rng, side_role, rating=float(np.clip(rng.normal(60 + 0.2 * getattr(gm, 'prestige', 60) - 10, 8), 40, 90)), team=abbr, league=league)
             c.years = int(rng.choice(CONTRACT_YEARS)); c.history.append((league.year, abbr, side_role)); team.staff[side_role] = c
             log.append(dict(team=abbr, role=side_role, hired=c.name, why='came with the head coach'))
             league.log('staff_in', team=abbr, role=side_role, name=c.name, why='came with the head coach')
@@ -287,7 +301,7 @@ def carousel(league, rng, new_head_coaches=(), verbose=False):
             if team.staff.get(role) is not None: continue
             cands = [c for c in pool if c.role == role]
             if not cands:
-                pool.append(make(rng, role)); cands = [c for c in pool if c.role == role]
+                pool.append(make(rng, role, league=league, young=True)); cands = [c for c in pool if c.role == role]
             if abbr == user:
                 _post_user(league, team, role, None, 'vacant', cands); continue
             hc_q = float(getattr(team.gm, 'prestige', 60)) / 100.0
@@ -296,12 +310,22 @@ def carousel(league, rng, new_head_coaches=(), verbose=False):
             team.staff[role] = best
             log.append(dict(team=abbr, role=role, hired=best.name, why='from the pool'))
             league.log('staff_in', team=abbr, role=role, name=best.name, why='from the pool')
-    # the pool stays stocked and does not balloon
+    # THE CLASS. Every year a handful of new entrants arrive regardless of need,
+    # young and mostly unproven: position coaches and college coordinators
+    # getting a first shot. The pool then tops up to size with them and does
+    # not balloon; the men it sheds are the weakest, which over time means the
+    # old ones nobody hired.
+    CLASS = {'oc': 3, 'dc': 3, 'st': 1, 'scout': 2}
+    for role, k in CLASS.items():
+        for _ in range(k):
+            pool.append(make(rng, role, league=league, young=True))
+            league.log('staff_entrant', role=role, name=pool[-1].name, age=pool[-1].age)
     for role, n in POOL_SIZE.items():
         have = [c for c in pool if c.role == role]
         for _ in range(max(0, n - len(have))):
-            pool.append(make(rng, role))
-        extra = sorted(have, key=lambda c: c.rating)[:max(0, len(have) - 2 * n)]
+            pool.append(make(rng, role, league=league, young=True))
+        have = [c for c in pool if c.role == role]
+        extra = sorted(have, key=lambda c: c.rating + 0.2 * c.prestige)[:max(0, len(have) - 2 * n)]
         for c in extra:
             pool.remove(c)
     if verbose: print(f"  staff carousel: {len(log)} moves")
