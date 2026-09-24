@@ -957,3 +957,10 @@ button.btn{line-height:normal;box-sizing:border-box}
 .hits .hit .hbar i{display:block;width:100%;background:var(--club-2)}
 .hits .hit b{font-family:var(--mono);font-weight:500;font-size:11px;color:var(--ink)}
 .offer label b{display:block;font-family:var(--mono);font-size:14px;padding:6px 0}
+
+.arr{font-family:var(--mono);font-size:11px;color:var(--ink-3)}.arr.up{color:var(--ok)}.arr.dn{color:var(--danger)}
+.game .note{grid-column:1 / -1;font-size:11.5px;color:var(--ink-3);padding-top:4px}
+.aw .code{font-family:var(--display);font-weight:900;font-size:22px;color:var(--club-2);letter-spacing:.02em}
+.aw .ln{font-size:12px;color:var(--ink-3);margin-top:4px}
+.trow .tag{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+.bust .meta{font-size:12px;color:var(--ink-3);margin-top:3px}.bust .why{font-size:13px;color:var(--ink-2);margin-top:6px}
