@@ -204,18 +204,61 @@ CATALOG = {
 # in the same space; a real man is a weighted mix of two or three, plus
 # noise. Names are the shorthand a commentator would use.
 ARCHETYPES = {
- 'shanahan_tree':  dict(offence=dict(blocking='zone', personnel='21', pass_lean=.47, play_action=.75, motion=.8, tempo=.5, deep=.5, fourth_down=.5)),
- 'mcvay_tree':     dict(offence=dict(blocking='zone', personnel='11', pass_lean=.55, play_action=.65, motion=.7, tempo=.5, deep=.55, fourth_down=.55)),
- 'reid_spread':    dict(offence=dict(blocking='mixed', personnel='12', pass_lean=.58, play_action=.45, motion=.7, tempo=.5, deep=.5, fourth_down=.6)),
- 'harbaugh_power': dict(offence=dict(blocking='gap', personnel='21', pass_lean=.42, play_action=.6, motion=.5, tempo=.4, deep=.5, fourth_down=.65)),
- 'air_raid_spread':dict(offence=dict(blocking='zone', personnel='11', pass_lean=.62, play_action=.35, motion=.5, tempo=.7, deep=.6, fourth_down=.55)),
- 'fangio_two_high':dict(defence=dict(front='3-4', coverage=.1, shell=.8, blitz=.25, box=.3)),
- 'seattle_cover3': dict(defence=dict(front='4-3', coverage=.15, shell=.25, blitz=.2, box=.5)),
- 'pressure_man':   dict(defence=dict(front='multiple', coverage=.7, shell=.35, blitz=.7, box=.5)),
- 'flores_blitz':   dict(defence=dict(front='3-4', coverage=.05, shell=.6, blitz=1.0, box=.55)),
+ # ---- offense, seven: the names the Front Office page uses
+ 'west_coast':      dict(name='West Coast',           side='offence', words='Timing routes, the short and intermediate game, zone runs from eleven.',
+                         offence=dict(blocking='zone', personnel='11', pass_lean=.57, play_action=.45, motion=.5, tempo=.5, deep=.35, fourth_down=.5)),
+ 'wide_zone':       dict(name='Wide Zone',            side='offence', words='Outside zone, play action off it, two backs and a moving line.',
+                         offence=dict(blocking='zone', personnel='21', pass_lean=.44, play_action=.75, motion=.6, tempo=.45, deep=.5, fourth_down=.5)),
+ 'power_gap':       dict(name='Power Gap',            side='offence', words='Gap runs from heavy sets, pulls and doubles, shots off the run.',
+                         offence=dict(blocking='gap', personnel='21', pass_lean=.40, play_action=.6, motion=.45, tempo=.4, deep=.5, fourth_down=.6)),
+ 'air_raid':        dict(name='Air Raid',             side='offence', words='Four wide, tempo, throw it sixty percent of the time.',
+                         offence=dict(blocking='zone', personnel='11', pass_lean=.64, play_action=.3, motion=.5, tempo=.75, deep=.6, fourth_down=.55)),
+ 'heavy_12':        dict(name='Heavy 12',             side='offence', words='Two tight ends as the base, run first, play action to the seams.',
+                         offence=dict(blocking='mixed', personnel='12', pass_lean=.45, play_action=.65, motion=.45, tempo=.4, deep=.45, fourth_down=.5)),
+ 'shanahan_zone':   dict(name='Shanahan Zone',        side='offence', words='Wide zone married to constant motion and bootlegs; the back sets the table.',
+                         offence=dict(blocking='zone', personnel='21', pass_lean=.47, play_action=.75, motion=.8, tempo=.5, deep=.5, fourth_down=.5)),
+ 'motion_spread':   dict(name='Motion Spread',        side='offence', words='Spread from twelve and eleven, motion on most snaps, pass first, aggressive on fourth.',
+                         offence=dict(blocking='mixed', personnel='12', pass_lean=.58, play_action=.45, motion=.75, tempo=.5, deep=.5, fourth_down=.6)),
+ # ---- defense, seven
+ 'single_high_pressure': dict(name='Single-High Pressure', side='defence', words='One safety deep, corners on islands, heat from the front and the second level.',
+                         defence=dict(front='4-3', coverage=.55, shell=.25, blitz=.5, box=.55)),
+ 'fangio_two_high': dict(name='Fangio Two-High',      side='defence', words='Two safeties deep, light box, zone behind a four-man rush that disguises.',
+                         defence=dict(front='3-4', coverage=.1, shell=.8, blitz=.25, box=.3)),
+ 'quarters_match':  dict(name='Quarters Match',       side='defence', words='Pattern-match quarters: zone rules that turn into man on the release.',
+                         defence=dict(front='4-3', coverage=.4, shell=.75, blitz=.2, box=.4)),
+ 'man_blitz':       dict(name='Man Blitz',            side='defence', words='Press man outside, blitz the rest, live with the one-on-ones.',
+                         defence=dict(front='multiple', coverage=.75, shell=.35, blitz=.7, box=.5)),
+ 'tampa_2':         dict(name='Tampa 2',              side='defence', words='Two deep with the middle linebacker running the seam; rush four, keep it in front.',
+                         defence=dict(front='4-3', coverage=.05, shell=.65, blitz=.15, box=.4)),
+ 'bear_front':      dict(name='Bear Front',           side='defence', words='Cover every lineman, load the box, dare the throw.',
+                         defence=dict(front='multiple', coverage=.3, shell=.3, blitz=.4, box=.8)),
+ 'hybrid_34':       dict(name='Hybrid 3-4',           side='defence', words='Odd front that moves, simulated pressure, coverage that changes by week.',
+                         defence=dict(front='3-4', coverage=.2, shell=.55, blitz=.4, box=.45)),
+ # ---- roster philosophies (the GM dials), not shown on the Identity page
  'draft_develop':  dict(roster=dict(youth=.75, pick_lens=.35, contract_focus=.7, risk=.35, patience=.85, aggression=.3, dev_belief=.7, board_trust=.8, need_inflation=.3, restructure_depth=.3, scouting=.7)),
  'win_now_trader': dict(roster=dict(youth=.3, pick_lens=.75, contract_focus=.3, risk=.65, patience=.25, aggression=.85, dev_belief=.35, board_trust=.4, need_inflation=.8, restructure_depth=.9, scouting=.5)),
  'analytics_room': dict(roster=dict(youth=.6, pick_lens=.2, contract_focus=.7, risk=.5, patience=.65, aggression=.55, dev_belief=.6, board_trust=.75, need_inflation=.3, restructure_depth=.55, scouting=.6)),
  'scouts_gut':     dict(roster=dict(youth=.5, pick_lens=.7, contract_focus=.45, risk=.55, patience=.5, aggression=.55, dev_belief=.5, board_trust=.35, need_inflation=.65, restructure_depth=.5, scouting=.6)),
  'owner_meddler':  dict(roster=dict(youth=.45, pick_lens=.6, contract_focus=.3, risk=.55, patience=.4, aggression=.45, dev_belief=.45, board_trust=.5, need_inflation=.55, restructure_depth=.7, scouting=.5)),
 }
+# the old keys, so anything holding one still resolves
+ARCHETYPE_ALIASES = {'shanahan_tree': 'shanahan_zone', 'mcvay_tree': 'west_coast', 'reid_spread': 'motion_spread', 'harbaugh_power': 'power_gap', 'air_raid_spread': 'air_raid', 'seattle_cover3': 'single_high_pressure', 'pressure_man': 'man_blitz', 'flores_blitz': 'man_blitz'}
+
+
+def side_archetypes(side):
+    return {k: v for k, v in ARCHETYPES.items() if v.get('side') == side}
+
+
+def nearest_archetype(gm, side):
+    """The archetype this man's leans sit closest to, on one side of the ball."""
+    best, bd = None, None
+    for k, a in side_archetypes(side).items():
+        leans = a[side]; d = 0.0; n = 0
+        for f, val in leans.items():
+            attr = {'blocking': 'off_blocking', 'personnel': 'off_personnel', 'front': 'def_front'}.get(f, f)
+            cur = getattr(gm, attr, None)
+            if isinstance(val, (int, float)) and isinstance(cur, (int, float)): d += (float(val) - float(cur)) ** 2; n += 1
+            elif cur is not None: d += (0.0 if cur == val else 0.2); n += 1
+        d = d / max(1, n)
+        if bd is None or d < bd: best, bd = k, d
+    return best

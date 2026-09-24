@@ -212,7 +212,7 @@ def blend_identity(rng, offence=None, defence=None, roster=None, noise=0.08):
         if given: return given
         w = np.ones(len(names))
         if kind == 'offence':      # the league is a Shanahan/McVay league
-            w = np.array([3.0 if n in ('shanahan_tree', 'mcvay_tree') else 1.0 for n in names])
+            w = np.array([3.0 if n in ('shanahan_zone', 'wide_zone', 'west_coast') else 1.0 for n in names])
         return str(rng.choice(names, p=w / w.sum()))
     def mix(kind, a, b=None, wa=1.0):
         out = dict(A[a][kind])
