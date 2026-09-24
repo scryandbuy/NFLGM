@@ -949,3 +949,11 @@ button.btn{line-height:normal;box-sizing:border-box}
 .tools .find::placeholder{color:var(--ink-3)}
 .tbl tr.sel td{background:var(--sheet-2)}
 .tbl tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--club)}
+
+.pkgbox.over{outline:2px dashed var(--club-2);outline-offset:-2px}
+.hits{display:flex;gap:8px;align-items:flex-end;margin:8px 0}
+.hits .hit{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--ink-3);flex:1}
+.hits .hit .hbar{width:100%;height:40px;background:var(--sheet-3);border:1px solid var(--rule);display:flex;align-items:flex-end}
+.hits .hit .hbar i{display:block;width:100%;background:var(--club-2)}
+.hits .hit b{font-family:var(--mono);font-weight:500;font-size:11px;color:var(--ink)}
+.offer label b{display:block;font-family:var(--mono);font-size:14px;padding:6px 0}
