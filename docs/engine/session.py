@@ -143,6 +143,7 @@ class Session:
             if self.runner is None:
                 self.runner = SN.SeasonRunner(self.L, self.rng)
             self.runner.play_week(wk)
+            IB.expire(self.L, wk + 1)          # this week's game-plan card and anything else dated to it are done
             import gameday as GD
             self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team)
             if self.gameday and self.gameday.get('game'):

@@ -290,6 +290,6 @@ def post_report(league, week):
     if rep['weaknesses']: body += 'Weaknesses: ' + '; '.join(s['text'] for s in rep['weaknesses'][:3]) + '. '
     body += f"Forecast: {rep['forecast']['text']}. {len(rep['suggestions'])} suggestions from the assistants."
     IB.post(league, 'game_plan', f"Game plan: week {week} at {opp}" if not _is_home(league, user, opp, week) else f"Game plan: week {week} vs {opp}",
-            body, sender='assistants', payload=dict(report=rep, link=f'gameplan:{week}'), expires_week=week + 1)
+            body, sender='assistants', payload=dict(report=rep, link=f'gameplan:{week}'), expires_week=week)   # gone once the week is played
     league.game_plan_reports = getattr(league, 'game_plan_reports', {}); league.game_plan_reports[week] = rep
     return rep
