@@ -747,6 +747,7 @@ class League:
             negotiations=getattr(self, 'negotiations', None) or [],
             staff=__import__('staff').to_dict(self),
             poaches=getattr(self, 'poaches', None) or [],
+            last_draft=getattr(self, 'last_draft', None),
             promises=getattr(self, 'promises', None) or [],
             tendencies={str(y): {a: dict(c) for a, c in T.items()} for y, T in getattr(self, 'tendencies', {}).items()},
             rng_state=self.rng_state)
@@ -808,6 +809,7 @@ class League:
         import staff as _ST
         _ST.from_dict(L, d.get('staff'))
         L.poaches = d.get('poaches', []) or []
+        L.last_draft = d.get('last_draft')
         if L.negotiations:
             import negotiations as _NG, itertools as _it
             _NG._ids = _it.count(max(t['id'] for t in L.negotiations) + 1)

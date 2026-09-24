@@ -35,6 +35,7 @@ class Session:
         # where we are: ('week', n) | ('playoffs',) | ('offseason', i)
         self.stop = getattr(league, '_stop', None) or ('week', 1)
         self.gameday = None
+        self.draft = None
 
     # ------------------------------------------------------------ construction
     @classmethod
@@ -42,6 +43,10 @@ class Session:
         rng = np.random.default_rng(seed)
         L = LG.build_league(rng=rng)
         L.user_team = team
+        # the first class sits on the scouting board all season, the way every class after it does
+        DC.build(L, rng, draft_year=L.year + 1)
+        L.next_class = list(L.draft_pool); L.draft_pool = []
+        SC.scout(L, rng)
         s = cls(L, rng, team)
         try: GW.post_report(L, 1)
         except Exception: pass
@@ -54,12 +59,19 @@ class Session:
         s = cls(L, np.random.default_rng(d.get('_seed_state', None)), d.get('_user_team'))
         s.stop = tuple(d.get('_stop', ['week', 1]))
         s.gameday = d.get('_gameday')
+        s.draft = None
+        if d.get('_draft_live'):
+            import draft_day as DD
+            s.draft = DD.Draft(s.L, s.rng, d['_draft_live']['year'], user_team=s.user_team, auto_pick=False)
+            s.draft.taken = set(pid for pid in d['_draft_live']['taken'] if pid in s.L.players)
+            s.draft.results = [(sel, t, s.L.players[pid]) for sel, t, pid in d['_draft_live']['results'] if pid in s.L.players]
         return s
 
     def save(self):
         d = json.loads(self.L.save())
         d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
         d['_gameday'] = self.gameday
+        d['_draft_live'] = dict(year=self.draft.year, taken=sorted(self.draft.taken), results=[(sel, t, p.pid) for sel, t, p in self.draft.results]) if self.draft_live() else None
         return json.dumps(d, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
 
     # ------------------------------------------------------------ the calendar
@@ -86,6 +98,9 @@ class Session:
         if k == 'playoffs':
             return dict(title='Play the Playoffs', sub='Wild Card Through the Super Bowl')
         i = self.stop[1]
+        if self.draft_live():
+            pk = self.draft.current()
+            return dict(title='Finish the Draft on Auto', sub=f"or make your pick at {pk.round}.{((pk.selection - 1) % 32) + 1} on Draft Day" if pk else '')
         title, _ = self.OFFSEASON[i]
         return dict(title=title, sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)}")
 
@@ -117,7 +132,12 @@ class Session:
             self.stop = ('offseason', 0)
             return dict(done='Playoffs', champion=self.post.champion, next=self.next_label())
         i = self.stop[1]
-        getattr(self, self.OFFSEASON[i][1])()
+        if self.draft_live():
+            self.draft.auto = True; self.draft.sim_all(); self._draft_over()
+        else:
+            getattr(self, self.OFFSEASON[i][1])()
+            if self.draft_live():
+                return dict(done='The Draft is on the clock', next=self.next_label())
         if i + 1 < len(self.OFFSEASON):
             self.stop = ('offseason', i + 1)
         else:
@@ -179,7 +199,23 @@ class Session:
         SP.run_spring(L, rng)
 
     def step_draft(self):
-        DFT.run(self.L, self.rng, year=self.L.year - 1, user_team=self.user_team)
+        """The draft with you at the buttons. Sims to your first pick and stops; Draft Day
+        takes it from there, and an Advance from the Portal finishes it on auto."""
+        import draft_day as DD
+        self.draft = DD.Draft(self.L, self.rng, self.L.year - 1, user_team=self.user_team, auto_pick=False)
+        self.draft.sim_to_user()
+        if self.draft.done:
+            self._draft_over()
+
+    def _draft_over(self):
+        D = self.draft
+        if D is None: return
+        if not D.done: D._finish()
+        self.L.last_draft = dict(year=D.year, results=[(s, t, p.pid) for s, t, p in D.results], trades=len(D.trades))
+        self.draft = None
+
+    def draft_live(self):
+        return self.draft is not None and not self.draft.done
 
     def step_camp(self):
         L, rng = self.L, self.rng
@@ -247,6 +283,18 @@ class Session:
         fn = getattr(VF, 'act_' + name, None)
         if fn is None: return dict(ok=False, why='unknown action')
         r = fn(self.L, self.user_team, **kw)
+        return r if isinstance(r, dict) else dict(ok=bool(r))
+
+    # ---- draft
+    def draft_view(self, page, **kw):
+        import views_draft as VD
+        return getattr(VD, page)(self, self.L, self.user_team, **kw)
+
+    def draft_act(self, name, **kw):
+        import views_draft as VD
+        fn = getattr(VD, 'act_' + name, None)
+        if fn is None: return dict(ok=False, why='unknown action')
+        r = fn(self, self.L, self.user_team, **kw)
         return r if isinstance(r, dict) else dict(ok=bool(r))
 
     def gameday_view(self):
