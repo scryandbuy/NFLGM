@@ -202,9 +202,11 @@ AGE_FROM, AGE_SLOPE = 21.0, 0.15     # per year of age past a rookie's
 # 30 at 12% a year; three franchise seasons showed QBs aged 25-27 gaining
 # +0.9 a year in accuracy and 28-30 gaining +1.4, and the league's QB1
 # average rose 85.7 to 88.3. Real quarterbacks plateau at 27-28. The brake now
-# starts at 27 and is steeper, so a 30-year-old pays roughly double a 26-year-old
-# for the same point and a 34-year-old about triple.
-LATE_SLOPE = {'QB': (27.0, 0.30)}
+# starts at 27 and is steeper: at 0.30 one franchise season still had 28-to-30-
+# year-olds gaining +0.6 a year in accuracy (from +1.4), so it is 0.40, which
+# puts a 30-year-old at about 2.2x a 26-year-old's price and a 34-year-old
+# at about 3.8x.
+LATE_SLOPE = {'QB': (27.0, 0.40)}
 OVR_PIVOT, OVR_SLOPE = 70.0, 0.030
 
 

@@ -82,7 +82,7 @@ def main():
             if r.get('done') == 'Cut-Down to 53':
                 log.append(dict(event='rolled', **_league_state(s)))
                 print('  league after the offseason:', log[-1])
-            if time.time() - t0 > 420: print('  stopping this stretch at seven minutes'); break
+            if time.time() - t0 > 215: print('  stopping this stretch'); break
         _save(s, C_all, C_sea, log)
         print('stop:', s.stop, '| next:', s.next_label()['title'])
         return

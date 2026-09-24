@@ -59,6 +59,15 @@ class Session:
         s = cls(L, np.random.default_rng(d.get('_seed_state', None)), d.get('_user_team'))
         s.stop = tuple(d.get('_stop', ['week', 1]))
         s.gameday = d.get('_gameday')
+        s.standings = d.get('_standings'); s.order = d.get('_order'); s.fired = [tuple(x) if isinstance(x, list) else x for x in (d.get('_fired') or [])]
+        if d.get('_post'):
+            class _Post:            # the shape awards, prestige and the almanac read
+                pass
+            class _R:
+                def __init__(self, seeds): self._s = seeds
+                def seeds(self): return self._s
+            pp = d['_post']; s.post = _Post(); s.post.champion = pp.get('champion'); s.post.finalists = pp.get('finalists') or {}
+            s.post.games = [tuple(g) for g in pp.get('games') or []]; s.post.r = _R(pp.get('seeds') or {})
         s.draft = None
         if d.get('_draft_live'):
             import draft_day as DD
@@ -71,6 +80,18 @@ class Session:
         d = json.loads(self.L.save())
         d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
         d['_gameday'] = self.gameday
+        # the offseason reads what the playoffs left: standings for the new schedule, the fired
+        # coaches for the carousel, and the postseason (champion, finalists, games, seeds) for
+        # awards, prestige and the almanac. Without these a save between the playoffs and the
+        # New Year could not be resumed.
+        d['_standings'] = self.standings
+        d['_fired'] = [list(x) if isinstance(x, (list, tuple)) else x for x in (self.fired or [])]
+        d['_order'] = self.order
+        d['_post'] = None
+        if self.post is not None:
+            p = self.post
+            d['_post'] = dict(champion=p.champion, finalists=dict(p.finalists or {}), games=[list(g) for g in (p.games or [])],
+                              seeds=(p.r.seeds() if getattr(p, 'r', None) is not None else {}))
         d['_draft_live'] = dict(year=self.draft.year, taken=sorted(self.draft.taken), results=[(sel, t, p.pid) for sel, t, p in self.draft.results]) if self.draft_live() else None
         return json.dumps(d, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
 
