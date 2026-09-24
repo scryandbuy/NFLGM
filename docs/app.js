@@ -1264,10 +1264,11 @@ function renderSchedule(v) {
   s.append(el('div', { class: 'h5', style: 'padding:8px 14px 0' }, `Week ${v.week} · ${done ? 'Results' : 'Upcoming'}`, el('span', {}, done ? 'Click your game for the box score' : '')));
   const grid = el('div', { class: 'games' });
   for (const g of v.games) {
+    const tm = (c, rec, win, at) => el('div', { class: 'tm' + (g.done ? (win ? ' w' : ' l') : '') }, at ? el('small', {}, 'at') : '', stripe(c.abbr, c.name), el('small', {}, rec));
     const card = el('div', { class: 'game' + (g.mine ? ' mine' : '') + (g.done ? ' done' : '') },
-      el('div', { class: 'line' + (g.winner === g.away.abbr ? ' win' : '') }, stripe(g.away.abbr, g.away.name), el('small', {}, g.away_rec), el('b', {}, g.done ? g.ap : '')),
-      el('div', { class: 'line' + (g.winner === g.home.abbr ? ' win' : '') }, el('span', {}, el('small', { style: 'color:var(--ink-3);margin-right:4px' }, 'at'), stripe(g.home.abbr, g.home.name)), el('small', {}, g.home_rec), el('b', {}, g.done ? g.hp : '')),
-      el('div', { class: 'note' }, (g.note || (g.done ? 'Final' : '')) + (g.box ? ' · Box Score →' : '')));
+      tm(g.away, g.away_rec, g.winner === g.away.abbr, false), el('div', { class: 'sc' }, g.done ? String(g.ap) : ''),
+      tm(g.home, g.home_rec, g.winner === g.home.abbr, true), el('div', { class: 'sc' }, g.done ? String(g.hp) : ''),
+      el('div', { class: 'note' }, (g.note || (g.done ? 'Final' : 'Upcoming')) + (g.box ? ' · Box Score →' : '')));
     if (g.box) { card.onclick = () => { location.hash = `#gameday/${v.week}`; }; card.style.cursor = 'pointer'; card.setAttribute('data-tip', 'Open the box score'); }
     grid.append(card);
   }
@@ -1279,7 +1280,7 @@ function renderTeamSchedule(v) {
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, `${v.team.name} · ${v.record}`, el('small', {}, `bye week ${v.byes.join(', ') || '—'}`)));
   const sel = el('select', { class: 'btn', style: 'width:auto' }); for (const c of v.clubs) sel.append(el('option', { value: c.abbr, selected: c.abbr === v.team.abbr ? '' : null }, c.name)); sel.onchange = () => renderTeamSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(sel.value)})`));
   s.append(el('div', { class: 'tabs', style: 'padding:8px 14px 0;gap:10px;align-items:center' }, el('button', { 'aria-pressed': 'false', onclick: () => renderSchedule(pyJSON(`SESSION.league_view('schedule')`)) }, 'League Schedule'), el('button', { 'aria-pressed': 'true' }, 'Team Schedule'), sel));
-  const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, 'Wk'), el('th', { class: 'l' }, 'Opponent'), el('th', {}, 'Record'), el('th', {}, 'Result'), el('th', { class: 'n' }, 'Score')));
+  const t = el('table', { class: 'tbl teamsched' }); t.append(el('tr', {}, el('th', { class: 'n' }, 'Wk'), el('th', { class: 'l' }, 'Opponent'), el('th', {}, 'Record'), el('th', {}, 'Result'), el('th', { class: 'n' }, 'Score')));
   const rows = [...v.games.map(g => ({ week: g.week, g })), ...v.byes.map(b => ({ week: b, bye: true }))].sort((a, b) => a.week - b.week);
   for (const r of rows) {
     if (r.bye) { t.append(el('tr', { style: 'color:var(--ink-3)' }, el('td', { class: 'n' }, r.week), el('td', { class: 'l', colspan: '4' }, 'Bye'))); continue; }
@@ -1306,7 +1307,7 @@ function renderTransactions(v) {
     for (const r of rows.slice(0, txShown)) {
       const when = r.week ? `Wk ${r.week}` : r.phase ? r.phase.charAt(0).toUpperCase() + r.phase.slice(1).replace('_', ' ') : String(r.year);
       const link = r.link === 'card' && r.pid ? el('a', { class: 'more', href: '#club/player/' + r.pid }, 'Card →') : r.link === 'trade' ? el('a', { class: 'more', href: '#personnel/trades' }, 'Trades →') : r.link === 'contract' && r.pid ? el('a', { class: 'more', href: '#club/player/' + r.pid }, 'Contract →') : r.link === 'carousel' ? el('a', { class: 'more', href: '#league/coaching' }, 'Carousel →') : el('span', {});
-      list.append(el('div', { class: 'trow' + (r.mine ? ' mine' : '') }, el('time', {}, `${r.year} · ${when}`), el('span', { class: 'tag ' + r.group.toLowerCase() }, r.tag), el('span', { class: 'txt' }, r.team ? stripe(r.team.abbr) : '', ' ', r.line), link));
+      list.append(el('div', { class: 'trow' + (r.mine ? ' mine' : '') }, el('time', {}, `${r.year} · ${when}`), el('span', { class: 'tag ' + r.group.toLowerCase() }, r.tag), el('span', { class: 'txt' }, r.team ? el('span', { class: 'stripe bar-only', style: `--c:${COLOR[r.team.abbr] || '#555'}` }, '') : '', ' ', r.line), link));
     }
     if (!rows.length) list.append(el('div', { class: 'empty' }, 'Nothing matches.'));
     if (rows.length > txShown) list.append(el('div', { class: 'foot' }, el('button', { class: 'btn quiet', onclick: () => { txShown += 60; draw(); } }, 'Older'), el('span', { class: 'count' }, `${Math.min(txShown, rows.length)} of ${rows.length}`)));
@@ -1437,10 +1438,10 @@ function renderThisWeek(v) {
   const reload = () => renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`));
   const s = el('section', { class: 'sheet c12' });
   if (v.off) { s.append(el('h2', {}, 'This Week'), el('div', { class: 'empty' }, v.note)); page.append(s); return; }
-  s.append(el('h2', {}, `Week ${v.week} ${v.away ? 'at' : 'vs'} ${v.opp.name}`, el('small', {}, "Your Leans Within the Range Your Identity Allows · Gold Marks the Assistants' Suggestion")));
+  s.append(el('h2', {}, `Week ${v.week} ${v.away ? 'at' : 'vs'} ${v.opp.name}`));
   // suggestions
   const sug = el('div', { class: 'sugs' });
-  sug.append(el('div', { class: 'h5' }, "Assistants' Suggestions", el('span', {}, 'Accept Moves the Slider · Gold Ghost Shows Where')));
+  sug.append(el('div', { class: 'h5' }, "Assistants' Suggestions"));
   for (const x of v.suggestions) sug.append(el('div', { class: 'sug-row' + (x.taken ? ' on' : '') }, el('div', { class: 't' }, x.text, el('small', {}, `${x.target ? x.target + ' · ' : ''}${x.taken ? 'Accepted · ' : ''}${x.why}`)), el('div', { class: 'a', style: 'display:flex;gap:4px' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); reload(); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); reload(); } }, 'Accept'), x.taken ? '' : el('button', { class: 'btn quiet', 'data-tip': 'Hide it for now', onclick: e => e.currentTarget.closest('.sug-row').remove() }, 'Skip'))));
   if (!v.suggestions.length) sug.append(el('div', { class: 'empty' }, 'The report has nothing to add this week; the plan is the coordinators\' own.'));
   else sug.append(el('div', { style: 'display:flex;gap:6px;padding:8px 0 0' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); reload(); } }, 'Accept All'), el('span', { class: 'count', style: 'align-self:center' }, '')));

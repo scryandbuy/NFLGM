@@ -30,7 +30,7 @@ import numpy as np
 VESTED = 4
 DEADLINE_WEEK = 9
 CLAIMS_PER_SEASON = 8    # in-season claims a club, about the real pace
-CUTDOWN_CLAIMS = 3       # at the cut-down, a club
+CUTDOWN_CLAIMS = 1       # at the cut-down, a club: the real day sees 20-30 claims across the league, not 89
 
 
 def pending(league):
