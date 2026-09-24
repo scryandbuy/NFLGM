@@ -263,6 +263,21 @@ SCHEME_SHIFT = {
                  'zone_cover_rating': -.28},
     'zone_cov': {'zone_cover_rating': +.52, 'play_rec_rating': +.40,
                  'man_cover_rating': -.32},
+    # THE PASSING GAME'S LEANS. Until these existed the offensive identity graded
+    # only linemen and tight ends: a quarterback, a back and a receiver came out
+    # the same under every archetype. Each key shifts only what the spot already
+    # weighs, sized like the coverage shifts so a receiver moves as much as a corner.
+    'deep_game':  {'throw_power_rating': +.30, 'throw_acc_deep_rating': +.36, 'throw_acc_short_rating': -.18,          # QB
+                   'speed_rating': +.28, 'route_run_deep_rating': +.32, 'route_run_short_rating': -.18, 'cit_rating': -.10},   # WR, TE, HB (speed)
+    'quick_game': {'throw_acc_short_rating': +.36, 'throw_acc_mid_rating': +.20, 'throw_acc_deep_rating': -.16, 'throw_power_rating': -.12,
+                   'route_run_short_rating': +.34, 'cit_rating': +.20, 'catch_rating': +.10, 'route_run_deep_rating': -.20, 'speed_rating': -.10},
+    'pa_heavy':   {'throw_on_run_rating': +.30, 'play_action_rating': +.30, 'throw_under_pressure_rating': +.10,
+                   'break_tackle_rating': +.24, 'truck_rating': +.16, 'bcv_rating': +.12},
+    'motion_off': {'release_rating': +.30, 'agility_rating': +.20, 'route_run_med_rating': +.14, 'speed_rating': +.10,
+                   'catch_rating': +.16, 'juke_move_rating': +.14},
+    'run_first':  {'carry_rating': +.28, 'break_tackle_rating': +.24, 'bcv_rating': +.20, 'catch_rating': -.10,
+                   'throw_acc_deep_rating': -.12, 'throw_power_rating': -.08, 'awareness_rating': +.10},
+    'tempo_off':  {'throw_acc_short_rating': +.24, 'awareness_rating': +.20, 'route_run_short_rating': +.20, 'release_rating': +.12},
 }
 
 # WHO A SCHEME SHIFT APPLIES TO. A run-blocking scheme grades linemen and
@@ -279,6 +294,12 @@ SCHEME_DOMAIN = {
     'two_gap':  {'LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM'},
     'man':      {'CB', 'FS', 'SS', 'MIKE', 'WILL', 'SAM'},
     'zone_cov': {'CB', 'FS', 'SS', 'MIKE', 'WILL', 'SAM'},
+    'deep_game':  {'QB', 'WR', 'TE', 'HB'},
+    'quick_game': {'QB', 'WR', 'TE', 'HB'},
+    'pa_heavy':   {'QB', 'HB', 'FB'},
+    'motion_off': {'WR', 'TE', 'HB'},
+    'run_first':  {'QB', 'HB', 'FB'},
+    'tempo_off':  {'QB', 'WR'},
 }
 
 

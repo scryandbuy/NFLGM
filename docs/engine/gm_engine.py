@@ -155,6 +155,14 @@ def scheme_of(gm):
     # a two-tight-end club wants a tight end who blocks; a spread club wants one who runs routes
     if gm.off_personnel in ('12', '13', '21'): keys.append('heavy_te')
     elif gm.off_personnel == '11': keys.append('spread_te')
+    # the passing game's leans grade the quarterback, the backs and the receivers
+    deep = float(getattr(gm, 'deep', 0.5)); pa = float(getattr(gm, 'play_action', 0.5)); mo = float(getattr(gm, 'motion', 0.5)); pl = float(getattr(gm, 'pass_lean', 0.5)); tp = float(getattr(gm, 'tempo', 0.5))
+    if deep >= 0.55: keys.append('deep_game')
+    elif deep <= 0.42: keys.append('quick_game')
+    if pa >= 0.62: keys.append('pa_heavy')
+    if mo >= 0.65: keys.append('motion_off')
+    if pl <= 0.45: keys.append('run_first')
+    if tp >= 0.62: keys.append('tempo_off')
     return keys or None
 
 

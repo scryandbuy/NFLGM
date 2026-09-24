@@ -164,7 +164,8 @@ def _assistants_read(league, t, rows_now, men_now, rows_alt=None, men_alt=None, 
         if top and top[0][1] <= -1.0:
             p, f, g = top[0]; alt = _best_scheme_for(p, 'offence' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defence')
             import identity_catalog as IC
-            line += f" {p.name.split()[-1]} is the worst fit; he would grade better in a {IC.ARCHETYPES[alt]['name']} {'offense' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defense'}."
+            an = 'an' if IC.ARCHETYPES[alt]['name'][0] in 'AEIOU' else 'a'
+            line += f" {p.name.split()[-1]} is the worst fit; he would grade better in {an} {IC.ARCHETYPES[alt]['name']} {'offense' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defense'}."
         return line
     d = {r['group']: r2['fit'] - r['fit'] for r, r2 in zip(rows_now, rows_alt)}
     up = [g for g, v in sorted(d.items(), key=lambda kv: -kv[1]) if v >= 0.5]; down = [g for g, v in sorted(d.items(), key=lambda kv: kv[1]) if v <= -0.5]
@@ -230,7 +231,8 @@ def _misfit_rows(league, t, men):
         if f > -0.5 or p.pid in keep: continue
         side = 'offence' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defence'
         alt = _best_scheme_for(p, side)
-        out.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), fit=round(f, 1), reason=f"{IC.ARCHETYPES[alt]['name']} {'offense' if side == 'offence' else 'defense'} player in a {IC.ARCHETYPES[club_identity(league, t)[side]]['name']}" if alt else ''))
+        cur_name = IC.ARCHETYPES[club_identity(league, t)[side]]['name']
+        out.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), fit=round(f, 1), reason=f"{IC.ARCHETYPES[alt]['name']} {'offense' if side == 'offence' else 'defense'} player in {'an' if cur_name[0] in 'AEIOU' else 'a'} {cur_name}" if alt else ''))
     return out
 
 
