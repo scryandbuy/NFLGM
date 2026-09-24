@@ -158,17 +158,44 @@ def season_end(league, unit_ranks_by_team):
     for abbr, team in league.teams.items():
         st = getattr(team, 'staff', None) or {}
         ranks = unit_ranks_by_team.get(abbr, {})
+        hc_prestige = float(getattr(team.gm, 'prestige', 50)) if team.gm is not None else 50.0
         for role, c in st.items():
             if c is None: continue                  # a hole a head-coaching hire just left; the carousel fills it
             r = ranks.get(role)
             if r is not None:
                 c.unit_ranks.append(int(r))
                 c.prestige = float(np.clip(c.prestige + (8 if r <= 4 else 4 if r <= 8 else -3 if r >= 25 else 0) + (0.25 * (16.5 - r)), 5, 95))
+            # THE RATING MOVES. A career arc: a young coordinator grows when his
+            # unit is above average, more under a head coach with a name; a man
+            # in his late forties holds; from the mid-fifties he loses a point a
+            # year. A bottom-eight unit costs even a young man; a disgruntled
+            # year teaches nothing.
+            good = (r is not None and r <= 16); bad = (r is not None and r >= 25)
+            if c.disgruntled:
+                d = 0.0
+            elif c.age < 45:
+                d = (1.5 if good else 0.5) + 0.6 * max(0.0, (hc_prestige - 70) / 30.0) - (1.5 if bad else 0.0)
+            elif c.age < 55:
+                d = (0.4 if good else 0.0) - (1.0 if bad else 0.0)
+            else:
+                d = -0.6 - (0.7 if bad else 0.0)
+            c.rating = float(np.clip(c.rating + d, 30, 95))
             c.age += 1; c.years -= 1
             if c.disgruntled and c.disgruntled < league.year: c.disgruntled = 0
             if c.role in ('oc', 'dc') and c.prestige >= 72 and c.rating >= 70:
                 c.hc_candidate = True
-    for c in getattr(league, 'staff_pool', []):
+    # retirement: from 64 the chance grows each year; a retiring coordinator leaves a hole the carousel fills
+    rng = np.random.default_rng(league.year * 31 + 7)
+    for abbr, team in league.teams.items():
+        for role, c in list((getattr(team, 'staff', None) or {}).items()):
+            if c is not None and c.age >= 64 and rng.random() < 0.15 + 0.12 * (c.age - 64):
+                team.staff[role] = None
+                league.log('staff_retire', team=abbr, role=role, name=c.name, age=c.age)
+                if abbr == getattr(league, 'user_team', None):
+                    import inbox as IB
+                    IB.post(league, 'staff', f"{c.name} is retiring", f"Your {ROLE_NAME[role].lower()} is calling it a career at {c.age}. The job is open.", sender=c.name, payload=dict(role=role, link='front_office:staff'))
+    league.staff_pool = [c for c in getattr(league, 'staff_pool', []) if c.age < 66]
+    for c in league.staff_pool:
         c.age += 1; c.prestige = float(np.clip(c.prestige * 0.96 + 2.0, 5, 95))
 
 
