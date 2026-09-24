@@ -739,6 +739,7 @@ class League:
             class_strength=getattr(self, 'class_strength', {}),
             scouting=getattr(self, 'scouting', {}) or {},
             consensus=getattr(self, 'consensus', {}) or {},
+            spring_news=getattr(self, 'spring_news', None) or [], user_visits=getattr(self, 'user_visits', None) or [],
             # the wire and the inbox, with any live objects reduced to ids
             waivers=getattr(self, 'waivers', []) or [],
             inbox=[_inbox_to_dict(m) for m in (getattr(self, 'inbox', []) or [])],
@@ -803,6 +804,7 @@ class League:
         L.class_strength = d.get('class_strength', {})
         L.scouting = d.get('scouting', {}) or {}
         L.consensus = d.get('consensus', {}) or {}
+        L.spring_news = d.get('spring_news') or []; L.user_visits = d.get('user_visits') or []
         L.waivers = d.get('waivers', []) or []
         L.inbox = [_inbox_from_dict(L, m) for m in d.get('inbox', [])]
         L.almanac = d.get('almanac')
