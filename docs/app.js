@@ -325,6 +325,7 @@ function renderGameDay(v) {
 // ---------------------------------------------------------------- Club: roster, card, depth chart
 let clubView = 'Overview', clubTab = 'active';
 let inboxFilter = 'all', inboxDense = false;
+let faPos = '', faCheap = false, faWatch = false;
 function secondRow(items, current) {
   const s = $('#second'); s.innerHTML = '';
   for (const [label, hash] of items) s.append(el('a', { href: hash, 'aria-current': hash === current ? 'page' : null }, label));
@@ -500,7 +501,11 @@ function renderTrades(v) {
   const reload = () => renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));
   const side = (own, list, picks, sel, title) => {
     const box = el('div', {});
-    box.append(el('div', { class: 'side-h' }, crest(own.club), el('b', {}, own.club.nick), el('span', {}, `Cap ${own.cap >= 0 ? '' : '−'}$${Math.abs(own.cap).toFixed(1)}m` + (own.needs && own.needs.length ? ` · Needs ${own.needs.join(', ')}` : ''))));
+    box.append(el('div', { class: 'side-h' }, crest(own.club), el('b', {}, own.club.nick), el('span', {}, `Cap ${own.cap >= 0 ? '' : '−'}$${Math.abs(own.cap).toFixed(1)}m`)));
+    const sn = el('div', { class: 'read', style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px' });
+    sn.append(el('div', {}, el('div', { class: 'h5' }, own === v.me ? 'Your Surplus' : 'Their Surplus'), ...(own.surplus.length ? own.surplus.map(x => { const p = own.roster.find(r => r.pid === x.pid); return p ? el('div', { style: 'font-size:12.5px;cursor:pointer', onclick: () => { if (!sel.includes(p.pid)) { sel.push(p.pid); reload(); } } }, `${p.short} · ${p.pos} · ${p.ovr}`, el('small', { style: 'color:var(--ink-3)' }, ` ${x.why}`)) : ''; }) : [el('div', { style: 'font-size:12.5px;color:var(--ink-3)' }, 'Nothing spare.')])));
+    sn.append(el('div', {}, el('div', { class: 'h5' }, own === v.me ? 'Your Needs' : 'Their Needs'), el('div', { style: 'font-size:12.5px' }, own.needs && own.needs.length ? own.needs.join(' · ') : 'None pressing')));
+    box.append(sn);
     box.append(el('div', { class: 'h5' }, title));
     const pk = el('div', { class: 'pkgbox' });
     if (!sel.length) pk.append(el('div', { class: 'empty' }, 'Nothing yet. Pick from the list below.'));
@@ -543,7 +548,7 @@ function offerForm(t, kind, onDone) {
   const shape = el('input', { type: 'range', min: '0', max: '100', value: '50' });
   const promises = el('div', { class: 'promise' }, el('span', {}, 'Promise:'));
   const chosen = [];
-  for (const [k, l] of [['starting_role', 'Starting role'], ['no_tag', 'No tag'], ['no_trade', 'No trade'], ['extension_by', 'Extension next year']]) promises.append(el('button', { class: 'btn quiet', style: 'padding:2px 8px;font-size:12px', 'aria-pressed': 'false', onclick: e => { const i = chosen.indexOf(k); if (i < 0) chosen.push(k); else chosen.splice(i, 1); e.currentTarget.setAttribute('aria-pressed', String(i < 0)); } }, l));
+  for (const [k, l] of [['starting_role', 'Named the starter'], ['captaincy', 'Captaincy'], ['no_trade', 'No trade'], ['extension_by', 'Extension by a set year'], ['no_franchise', 'No franchise tag']]) promises.append(el('button', { class: 'btn quiet', style: 'padding:2px 8px;font-size:12px', 'aria-pressed': 'false', onclick: e => { const i = chosen.indexOf(k); if (i < 0) chosen.push(k); else chosen.splice(i, 1); e.currentTarget.setAttribute('aria-pressed', String(i < 0)); } }, l));
   f.append(el('div', { class: 'offer' }, el('label', {}, 'Per Year ($m)', apy), el('label', {}, 'Years', yrs)),
     el('div', { class: 'shape' }, el('span', {}, 'Shape'), shape, el('div', { class: 'shape-lbl' }, el('em', {}, 'Back-loaded'), el('em', {}, 'Even'), el('em', {}, 'Front-loaded'))),
     promises);
@@ -557,10 +562,7 @@ function offerForm(t, kind, onDone) {
 function threadBox(t, onDone) {
   const box = el('div', { class: 'thread' });
   box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, `${t.name}'s agent`), el('div', { class: 'txt' }, t.ask ? el('span', {}, `He is asking `, el('b', {}, `$${t.ask}m per year over ${t.years}`), `. ${t.mood ? 'Mood: ' + t.mood + '.' : ''}`) : 'He would rather wait.')));
-  for (const o of t.offers || []) {
-    box.append(el('div', { class: 'msg you' }, el('div', { class: 'from' }, 'You'), el('div', { class: 'terms-line' }, el('b', {}, `$${o.apy.toFixed(1)}m`), ` × ${o.years}` + (o.front_load != null ? ` · ${o.front_load >= 0.66 ? 'front-loaded' : o.front_load <= 0.34 ? 'back-loaded' : 'even'}` : '') + (o.promises && o.promises.length ? ` · promised ${o.promises.join(', ').replace(/_/g, ' ')}` : ''))));
-    if (o.answer) box.append(el('div', { class: 'msg' + (o.answer.how === 'counter' ? '' : '') }, el('div', { class: 'from' }, `${t.name}'s agent`), el('div', { class: 'txt' }, o.answer.line || o.answer.how || '')));
-  }
+  for (const ln of t.log || []) box.append(el('div', { class: 'msg' + (ln.who === 'you' ? ' you' : '') }, el('div', { class: 'from' }, ln.who === 'you' ? 'You' : `${t.name}'s agent`), el('div', { class: 'txt' }, ln.text)));
   if (t.rival) box.append(el('div', { class: 'msg match' }, el('div', { class: 'from' }, 'Rival offer'), el('div', { class: 'txt' }, `${t.rival.team} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('match', tid=${t.id})`)); onDone(); } }, 'Match'))));
   if (t.counter) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, 'Counter'), el('div', { class: 'terms-line' }, el('b', {}, `$${t.counter.apy}m`), ` × ${t.counter.years}`), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('match_counter', tid=${t.id})`)); onDone(); } }, 'Accept Counter'))));
   if (t.state === 'waiting') box.append(el('div', { class: 'msg note' }, `Waiting on his answer${t.due ? ' · due ' + t.due : ''}.`));
@@ -576,15 +578,24 @@ function renderFA(v) {
   const reload = () => renderFA(pyJSON(`SESSION.personnel('free_agency')`));
   const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Free Agency', el('small', {}, `${v.count} available · Cap $${v.cap}m · Roster ${v.roster}`)));
   if (!v.in_season) { const ph = el('div', { class: 'phase' }); ['Legal Tampering', 'Day One', 'Day Two', 'Open Market', 'Camp'].forEach((n, i) => ph.append(el('div', { class: v.step == null ? '' : i + 1 < v.step ? 'done' : i + 1 === v.step ? 'now' : '' }, n))); left.append(ph); }
-  const tbl = el('table', { class: 'tbl' }); tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', {}, 'Last Club'), el('th', {}, 'Talks'), el('th', {}, '')));
-  for (const r of v.rows) tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', {}, r.last || '—'), el('td', {}, r.talks ? `${r.talks}${r.ask ? ` · asks $${r.ask}m × ${r.years}` : ''}` : ''),
+  const tools = el('div', { class: 'tools' }); const posSel = el('select', { class: 'btn' }, el('option', { value: '' }, 'All positions')); for (const p of v.positions) posSel.append(el('option', { value: p }, p));
+  const cheap = el('button', { class: 'btn' + (faCheap ? ' go' : ''), 'data-tip': 'Men asking under $5m a year, or with no ask yet', onclick: () => { faCheap = !faCheap; renderFA(v); } }, 'Under $5m');
+  const watchB = el('button', { class: 'btn' + (faWatch ? ' go' : ''), onclick: () => { faWatch = !faWatch; renderFA(v); } }, `Watchlist · ${v.rows.filter(r => r.watch).length}`);
+  posSel.value = faPos; posSel.onchange = () => { faPos = posSel.value; renderFA(v); };
+  tools.append(posSel, cheap, watchB, el('span', { class: 'count', style: 'margin-left:auto' }, 'Star a man to keep him on your watchlist across the season')); left.append(tools);
+  const tbl = el('table', { class: 'tbl' }); tbl.append(el('tr', {}, el('th', {}, ''), el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', {}, 'Last Club'), el('th', {}, 'Talks'), el('th', {}, '')));
+  const rows = v.rows.filter(r => (!faPos || r.pos === faPos) && (!faCheap || r.ask == null || r.ask < 5) && (!faWatch || r.watch));
+  for (const r of rows) tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'star' + (r.watch ? ' on' : ''), 'data-tip': r.watch ? 'On your watchlist' : 'Add to watchlist', onclick: () => { pyJSON(`SESSION.personnel_act('watch', pid=${JSON.stringify(r.pid)})`); reload(); } }, r.watch ? '★' : '☆')), el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', {}, r.last || '—'), el('td', {}, r.talks ? `${r.talks}${r.ask ? ` · asks $${r.ask}m × ${r.years}` : ''}` : ''),
     el('td', {}, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { document.getElementById('th-' + r.thread)?.scrollIntoView(); } }, 'Open Thread') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { notify(pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(v.in_season ? 'fa_inseason' : 'fa_offseason')})`)); reload(); } }, 'Ask the Agent'))));
-  left.append(tbl); if (!v.rows.length) left.append(el('div', { class: 'empty' }, 'Nobody worth a call is on the market.'));
+  left.append(tbl); if (!rows.length) left.append(el('div', { class: 'empty' }, v.rows.length ? 'Nobody matches the filter.' : 'Nobody worth a call is on the market.'));
   page.append(left);
   const right = el('section', { class: 'sheet c5' }, el('h2', {}, 'Talks', el('small', {}, `${v.threads.length} open`)));
+  const feedSheet = el('section', { class: 'sheet c5', style: 'order:2' }, el('h2', {}, 'Around the League', el('small', {}, 'latest signings')));
+  const fd = el('div', { class: 'feed' }); for (const f of v.feed) fd.append(el('div', {}, el('span', {}, stripe(f.team.abbr)), el('span', {}, `${f.team.name} ${f.kind} ${f.name} (${f.pos})` + (f.apy ? `, ${f.years} yrs at $${f.apy}m` : '')), el('time', {}, f.week ? `Wk ${f.week}` : String(f.year || '')))); if (!v.feed.length) fd.append(el('div', { class: 'empty' }, 'Quiet.'));
+  feedSheet.append(fd);
   for (const t of v.threads) { const w = el('div', { id: 'th-' + t.id }, el('div', { class: 'h5', style: 'padding:10px 12px 0' }, `${t.name} · ${t.pos}`)); w.append(threadBox(t, reload)); right.append(w); }
   if (!v.threads.length) right.append(el('div', { class: 'empty' }, v.in_season ? 'Ask an agent; a signing you offer decides at the next Advance, or pay his ask to sign today.' : 'Ask an agent to open talks; he mulls offers through each market step.'));
-  page.append(right);
+  page.append(right, feedSheet);
 }
 
 function renderWire(v) {
@@ -593,10 +604,22 @@ function renderWire(v) {
   const left = el('section', { class: 'sheet c8' }, el('h2', {}, 'Waiver Wire', el('small', {}, `${v.rows.length} on the wire · claims award ${v.awards} · your priority ${v.my_priority ?? '—'}`)));
   const tbl = el('table', { class: 'tbl' }); tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', {}, 'From'), el('th', { class: 'n' }, 'Yrs'), el('th', { class: 'n', 'data-tip': 'Cap hit you take on' }, 'Cap Hit'), el('th', {}, '')));
   for (const r of v.rows) tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', {}, r.frm), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`),
-    el('td', {}, r.claimed ? el('span', { class: 'badge-sm' }, 'Claimed') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { notify(pyJSON(`SESSION.personnel_act('claim', pid=${JSON.stringify(r.pid)})`)); reload(); } }, 'Claim'))));
+    el('td', {}, r.claimed ? el('span', { class: 'badge-sm' }, 'Claimed') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => {
+      if (!v.roster_full) { notify(pyJSON(`SESSION.personnel_act('claim', pid=${JSON.stringify(r.pid)})`)); reload(); return; }
+      // the roster is full: name the man who goes if the claim is awarded
+      const box = $('#claimbox'); box.innerHTML = ''; box.style.display = '';
+      const sel = el('select', { class: 'btn' }); for (const c of v.cut_options) sel.append(el('option', { value: c.pid }, `${c.name} (${c.pos}, ${c.ovr}) · penalty $${c.penalty}m`));
+      box.append(el('b', {}, `Claim ${r.name}. Your roster is at 53; if the claim is awarded, release:`), el('div', { style: 'display:flex;gap:6px;margin-top:8px;align-items:center' }, sel, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('claim', pid=${JSON.stringify(r.pid)}, release_pid=${JSON.stringify(sel.value)})`)); reload(); } }, 'Lodge Claim'), el('button', { class: 'btn quiet', onclick: () => { box.style.display = 'none'; } }, 'Cancel')));
+    } }, 'Claim'))));
   left.append(tbl); if (!v.rows.length) left.append(el('div', { class: 'empty' }, 'The wire is clear.'));
+  left.append(el('div', { class: 'read', id: 'claimbox', style: 'margin:0 14px 14px;display:none' }));
   page.append(left);
-  const right = el('section', { class: 'sheet c4' }, el('h2', {}, 'Priority', el('small', {}, 'worst record first')));
+  const right = el('section', { class: 'sheet c4' }, el('h2', {}, 'Your Claims', el('small', {}, `${v.claims.length} lodged · awarded ${v.awards}`)));
+  for (const c of v.claims) right.append(el('div', { class: 'pad', style: 'display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--rule)' }, el('div', { class: 'nm', style: 'flex:1' }, `${c.name} (${c.pos}, ${c.ovr})`, el('small', { style: 'display:block;color:var(--ink-3)' }, c.release_name ? `if awarded, release ${c.release_name}` : 'room on the roster')), el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { notify(pyJSON(`SESSION.personnel_act('withdraw_claim', pid=${JSON.stringify(c.pid)})`)); reload(); } }, 'Withdraw')));
+  if (!v.claims.length) right.append(el('div', { class: 'empty' }, 'No claims in.'));
+  right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Awarded This Week', el('small', {}, `${v.awarded.length}`)));
+  const aw = el('div', { class: 'feed' }); for (const a of v.awarded) aw.append(el('div', { style: a.mine ? 'background:var(--sheet-2)' : '' }, el('span', {}, stripe(a.team.abbr)), el('span', {}, `${a.team.name} claim ${a.name} (${a.pos})` + (a.frm ? ` from ${a.frm}` : '')), el('time', {}))); if (!v.awarded.length) aw.append(el('div', { class: 'empty' }, 'None yet this week.')); right.append(aw);
+  right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Priority', el('small', {}, 'worst record first')));
   const pr = el('div', { class: 'pad' }); v.priority.forEach((c, i) => pr.append(el('div', { class: 'prio' + (c.abbr === v.rail.club.abbr ? ' me' : '') }, el('span', { class: 'p' }, i + 1), stripe(c.abbr, c.name)))); right.append(pr);
   page.append(right);
 }
@@ -605,9 +628,16 @@ function renderExtensions(v) {
   renderRail(v.rail); const page = persPage(); persSecond('extensions');
   const reload = () => renderExtensions(pyJSON(`SESSION.personnel('extensions')`));
   const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Extensions', el('small', {}, `${v.rows.length} men inside two years · Cap $${v.cap}m`)));
+  if (v.tag.open) left.append(el('div', { class: 'read', style: 'margin:10px 14px 0' }, el('b', {}, 'Franchise tag: '), v.tag.used ? `used on ${v.tag.tagged}.` : v.tag.none ? 'you told the AI not to place one for you.' : 'one tag, on a man whose deal is up, at the position price; the AI places it for you at Extensions and Tags unless you choose here. ', (!v.tag.used && !v.tag.none) ? el('button', { class: 'btn quiet', style: 'width:auto;padding:2px 8px;font-size:12px;margin-left:6px', onclick: () => { notify(pyJSON(`SESSION.personnel_act('tag', pid='none')`)); reload(); } }, 'No Tag This Year') : ''));
   const tbl = el('table', { class: 'tbl' }); tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n', 'data-tip': 'Years left' }, 'Yrs'), el('th', { class: 'n' }, 'Cap Hit'), el('th', {}, 'Morale'), el('th', {}, 'Talks'), el('th', {}, '')));
-  for (const r of v.rows) tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', {}, pill(r.morale)), el('td', {}, r.talks ? `${r.talks}${r.ask ? ` · asks $${r.ask}m × ${r.years}` : ''}` : (r.eligible ? '' : 'not yet eligible')),
-    el('td', {}, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { document.getElementById('th-' + r.thread)?.scrollIntoView(); } }, 'Open Thread') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', disabled: r.eligible ? null : '', onclick: () => { notify(pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`)); reload(); } }, 'Ask the Agent'))));
+  const row = r => el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.yrs === 0 ? (r.fa_class || 'up') : r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', {}, pill(r.morale)), el('td', {}, r.talks ? `${r.talks}${r.ask ? ` · asks $${r.ask}m × ${r.years}` : ''}` : (r.eligible ? '' : 'not yet eligible')),
+    el('td', {}, el('div', { style: 'display:flex;gap:4px' },
+      r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { document.getElementById('th-' + r.thread)?.scrollIntoView(); } }, 'Open Thread') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', disabled: r.eligible ? null : '', onclick: () => { notify(pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`)); reload(); } }, 'Ask the Agent'),
+      (v.tag.open && !v.tag.used && !v.tag.none && r.tag_price != null && r.fa_class === 'UFA') ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', 'data-tip': `One year at the position price, $${r.tag_price}m`, onclick: () => { if (confirm(`Tag ${r.name} at $${r.tag_price}m for one year?`)) { notify(pyJSON(`SESSION.personnel_act('tag', pid=${JSON.stringify(r.pid)})`)); reload(); } } }, `Tag · $${r.tag_price}m`) : '',
+      r.restructurable > 0.5 ? el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 8px;font-size:12px', 'data-tip': 'Free cap room by converting base salary to bonus, on the Cap page', onclick: () => { location.hash = '#frontoffice/cap'; } }, 'Restructure Instead') : '')));
+  const group = (title, list) => { if (!list.length) return; tbl.append(el('tr', { class: 'grp' }, el('td', { colspan: '9' }, `${title} · ${list.length}`))); for (const r of list) tbl.append(row(r)); };
+  group('Expiring', v.expiring); group('Two Years Left', v.two_left);
+  if (v.done.length) { tbl.append(el('tr', { class: 'grp' }, el('td', { colspan: '9' }, `Done This Year · ${v.done.length}`))); for (const d of v.done) tbl.append(el('tr', {}, el('td', { colspan: '9', style: 'text-align:left;color:var(--ink-2)' }, `${d.name} (${d.pos}) ${d.kind}` + (d.apy ? ` at $${d.apy}m` + (d.years ? ` over ${d.years}` : '') : '')))); }
   left.append(tbl);
   page.append(left);
   const right = el('section', { class: 'sheet c5' }, el('h2', {}, 'Talks', el('small', {}, `${v.threads.length} open`)));

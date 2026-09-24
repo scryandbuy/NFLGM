@@ -67,7 +67,7 @@ class Session:
                 def __init__(self, seeds): self._s = seeds
                 def seeds(self): return self._s
             pp = d['_post']; s.post = _Post(); s.post.champion = pp.get('champion'); s.post.finalists = pp.get('finalists') or {}
-            s.post.games = [tuple(g) for g in pp.get('games') or []]; s.post.r = _R(pp.get('seeds') or {})
+            s.post.games = [tuple(g) for g in pp.get('games') or []]; s.post.r = _R(pp.get('seeds') or {}); s.post.seeds_at_close = pp.get('seeds') or {}
         s.draft = None
         if d.get('_draft_live'):
             import draft_day as DD
@@ -91,7 +91,7 @@ class Session:
         if self.post is not None:
             p = self.post
             d['_post'] = dict(champion=p.champion, finalists=dict(p.finalists or {}), games=[list(g) for g in (p.games or [])],
-                              seeds=(p.r.seeds() if getattr(p, 'r', None) is not None else {}))
+                              seeds=(getattr(p, 'seeds_at_close', None) if getattr(p, 'seeds_at_close', None) is not None else (p.r.seeds() if getattr(p, 'r', None) is not None else {})))
         d['_draft_live'] = dict(year=self.draft.year, taken=sorted(self.draft.taken), results=[(sel, t, p.pid) for sel, t, p in self.draft.results]) if self.draft_live() else None
         return json.dumps(d, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
 
@@ -149,6 +149,8 @@ class Session:
             if self.runner is None: self.runner = SN.SeasonRunner(self.L, self.rng)
             self.standings = self.runner.standings()
             self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng)
+            try: self.post.seeds_at_close = self.runner.seeds()      # kept for the save: the runner's standings reset at the New Year
+            except Exception: self.post.seeds_at_close = {}
             MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
             self.stop = ('offseason', 0)
             return dict(done='Playoffs', champion=self.post.champion, next=self.next_label())
@@ -185,6 +187,7 @@ class Session:
         RT.run(L, rng); AL.hall_vote(L, L.year); RG.run(L, rng)
 
     def step_roll(self):
+        self.L.user_tag_choice = None          # a new year, a new tag
         L, rng = self.L, self.rng
         L.roll_year(rng)
         ranks = SCH.division_ranks(L, self.standings); SCH.new_season(L, ranks, rng)
