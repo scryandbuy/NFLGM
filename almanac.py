@@ -49,8 +49,10 @@ def close_season(league, year, post=None, votes=None):
         p = league.player(v) if isinstance(v, str) else (v if hasattr(v, 'pid') else None)
         pid = p.pid if p is not None else (v if isinstance(v, str) else str(v))
         aw[k] = dict(pid=pid, name=p.name if p else str(v), pos=p.pos if p else None, team=p.team if p else None)
+    sb = next((g for g in (getattr(post, 'games', None) or []) if g[0] == 'SB'), None)
+    score = (f"{max(sb[4], sb[5])}–{min(sb[4], sb[5])}" if sb else None)
     A['seasons'][year] = dict(champion=getattr(post, 'champion', None), runner_up=_runner_up(post),
-                              awards=aw, leaders=leaders)
+                              awards=aw, leaders=leaders, score=score)
     # records
     for st in RECORD_STATS:
         rec = A['records'].setdefault(st, {})

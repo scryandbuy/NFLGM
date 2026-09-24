@@ -488,7 +488,7 @@ def gameday(session, league, abbr, gd=None):
     game = None
     if g:
         game = dict(home=club(g['home']), away=club(g['away']), hs=g['hs'], as_=g['as_'], ot=g['ot'], me=g['me'], opp=g['opp'], me_home=g['me_home'],
-                    drives=g['drives'], wp=g['wp'], box=g['box'], env=g.get('env', {}), team_stats=g.get('team_stats', {}), reads=g.get('reads', []),
+                    drives=g['drives'], wp=g['wp'], box=g['box'], env=g.get('env', {}), team_stats=g.get('team_stats', {}), reads=g.get('reads', []), quarters=g.get('quarters', {}),
                     home_rec=league.teams[g['home']].record[:2], away_rec=league.teams[g['away']].record[:2])
     return dict(rail=r, empty=False, week=gd['week'], scores=scores, game=game)
 

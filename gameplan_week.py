@@ -215,7 +215,7 @@ def _forecast(home_abbr, week):
 
 
 # ------------------------------------------------------------ applying it
-RANGE = {'pass_bias': 0.10, 'play_action_rate': 0.12, 'motion_rate': 0.15, 'blitz_rate': 0.10, 'box_bias': 0.25,
+RANGE = {'pass_bias': 0.10, 'play_action_rate': 0.12, 'motion_rate': 0.15, 'tempo': 0.15, 'blitz_rate': 0.10, 'box_bias': 0.25,
          'man_rate': 0.20, 'shell_lean': 0.25, 'zone_aggression': 0.25}
 
 
