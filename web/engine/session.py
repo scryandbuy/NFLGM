@@ -302,6 +302,18 @@ class Session:
         import views_league as VL
         return getattr(VL, page)(self, self.L, self.user_team, **kw)
 
+    # ---- game plan
+    def plan_view(self, page, **kw):
+        import views_gameplan as VG
+        return getattr(VG, page)(self, self.L, self.user_team, **kw)
+
+    def plan_act(self, name, **kw):
+        import views_gameplan as VG
+        fn = getattr(VG, 'act_' + name, None)
+        if fn is None: return dict(ok=False, why='unknown action')
+        r = fn(self, self.L, self.user_team, **kw)
+        return r if isinstance(r, dict) else dict(ok=bool(r))
+
     def gameday_view(self):
         import views
         return views.gameday(self, self.L, self.user_team)
