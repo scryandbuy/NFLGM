@@ -94,11 +94,31 @@ def identity(session, league, abbr, preview=None):
              for k, v in IC.ARCHETYPES.items() if 'offence' in v or 'defence' in v]
     losers, gainers = _misfits(league, t, after) if preview else ([], [])
     fit_by_pos, misfits = _fit_by_position(league, t)
+    # the archetype each side of the club is closest to, so the page can say what the identity is
+    def dist(a):
+        d = 0.0; n = 0
+        for k, val in a['leans'].items():
+            kk = {'blocking': 'off_blocking', 'personnel': 'off_personnel', 'front': 'def_front'}.get(k, k)
+            if kk in cur and isinstance(val, (int, float)) and isinstance(cur[kk], (int, float)): d += (float(val) - float(cur[kk])) ** 2; n += 1
+            elif kk in cur: d += (0.0 if cur[kk] == val else 0.25); n += 1
+        return d / max(1, n)
+    nearest = {}
+    for side in ('offense', 'defense'):
+        cands = [a for a in archs if a['side'] == side]
+        if cands: nearest[side] = min(cands, key=dist)['key']
+    WORDS = {'pass_lean': ('run-first', 'balanced', 'pass-first'), 'play_action': ('little play action', 'some play action', 'play-action heavy'), 'motion': ('a still offense', 'some motion', 'motion on most snaps'),
+             'tempo': ('a huddle offense', 'a normal tempo', 'up-tempo'), 'deep': ('the short game', 'a mixed depth', 'shots downfield'), 'fourth_down': ('punts on fourth', 'plays fourth by the book', 'goes for it'),
+             'coverage': ('zone coverage', 'mixed coverage', 'man coverage'), 'shell': ('single high', 'mixed shells', 'two high'), 'blitz': ('rushes four', 'blitzes some', 'sends heat'), 'box': ('a light box', 'a standard box', 'a loaded box')}
+    def word(k, val):
+        lo, mid, hi = WORDS[k]; return lo if val < 0.38 else hi if val > 0.62 else mid
+    lean_words = {k: word(k, float(cur[k])) for k in WORDS if k in cur}
+    summary = dict(offense=f"{lean_words['pass_lean'].capitalize()}, {cur['off_blocking']} runs from {cur['off_personnel']} personnel, {lean_words['play_action']}, {lean_words['motion']}, {lean_words['deep']}.",
+                   defense=f"{cur['def_front']} front, {lean_words['coverage']}, {lean_words['shell']}, {lean_words['blitz']}, {lean_words['box']}.")
     words = dict(zone='zone runs', gap='gap runs', one_gap='one-gap front', two_gap='two-gap front', man='man coverage', zone_cov='zone coverage', heavy_te='blocking tight ends', spread_te='route-running tight ends')
     return dict(rail=rail(session, league, abbr), coach=gm.name, prestige=round(getattr(gm, 'prestige', 50)), rigidity=round(float(getattr(gm, 'scheme_rigidity', 0.5)), 2),
                 leans=cur, after=_leans(after) if preview else None, keys=[words.get(k, k) for k in keys],
                 off=[dict(key=k, label=l, lo=lo, hi=hi) for k, l, lo, hi in LEANS_OFF], deff=[dict(key=k, label=l, lo=lo, hi=hi) for k, l, lo, hi in LEANS_DEF],
-                choices=[dict(key=k, label=l, options=o) for k, l, o in CHOICES], archetypes=archs, losers=losers, gainers=gainers, fit_by_pos=fit_by_pos, misfits=misfits,
+                choices=[dict(key=k, label=l, options=o) for k, l, o in CHOICES], archetypes=archs, nearest=nearest, lean_words=lean_words, summary=summary, losers=losers, gainers=gainers, fit_by_pos=fit_by_pos, misfits=misfits,
                 history=[dict(year=h.get('year'), week=h.get('week'), change=h.get('change')) for h in (getattr(t, 'identity_history', None) or [])])
 
 

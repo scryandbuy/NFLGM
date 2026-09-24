@@ -87,7 +87,8 @@ def team_schedule(session, league, abbr, team=None):
         if team not in (a, h): continue
         home = h == team; opp = a if home else h; done = ap is not None
         mine, theirs = (hp, ap) if home else (ap, hp)
-        games.append(dict(week=wk, home=home, opp=club(opp), done=done, mine=mine, theirs=theirs, result=(None if not done else 'W' if mine > theirs else 'L' if mine < theirs else 'T'), opp_rec=_rec(league, opp)))
+        games.append(dict(week=wk, home=home, opp=club(opp), done=done, mine=mine, theirs=theirs, result=(None if not done else 'W' if mine > theirs else 'L' if mine < theirs else 'T'), opp_rec=_rec(league, opp),
+                          box=(team == abbr and done and f"{league.year}-{wk}" in (getattr(session, 'gamedays', None) or {}))))
     weeks = {g['week'] for g in games}
     byes = [w for w in range(1, 19) if w not in weeks]
     t = league.teams[team]; w, l, d = t.record
@@ -103,7 +104,7 @@ def schedule(session, league, abbr, week=None):
         if wk != cur: continue
         done = ap is not None
         games.append(dict(away=club(a), home=club(h), ap=ap, hp=hp, done=done, mine=(abbr in (a, h)), winner=(h if done and hp > ap else a if done and ap > hp else None),
-                          away_rec=_rec(league, a), home_rec=_rec(league, h)))
+                          away_rec=_rec(league, a), home_rec=_rec(league, h), box=(abbr in (a, h) and done and f"{league.year}-{cur}" in (getattr(session, 'gamedays', None) or {}))))
     games.sort(key=lambda g: (not g['mine'], g['home']['abbr']))
     byes = [club(t) for t in league.teams if not any(t in (g[1], g[2]) for g in league.schedule if g[0] == cur)]
     return dict(rail=rail(session, league, abbr), weeks=weeks, week=cur, games=games, byes=byes)

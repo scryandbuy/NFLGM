@@ -921,3 +921,13 @@ a.btn{line-height:normal;box-sizing:border-box;text-decoration:none}
 button.btn{line-height:normal;box-sizing:border-box}
 /* free-text columns beside numbers keep a width */
 .tbl td.talks{max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* club columns read left; the stripe sits at the cell's edge instead of centered with the name */
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl th.l,.tbl td.l{text-align:left}
+.tbl td .stripe{justify-content:flex-start}
+.score-link{color:var(--ink);text-decoration:underline dotted var(--ink-3);text-underline-offset:3px}
+.score-link:hover{color:var(--club-2)}
+/* the archetype you are closest to */
+.arch div.now{outline:2px solid var(--club-2);outline-offset:-2px;background:var(--sheet-2)}
+.arch div.now small{color:var(--club-2)}

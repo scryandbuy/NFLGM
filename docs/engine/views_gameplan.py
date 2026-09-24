@@ -8,7 +8,7 @@ writes it. A lean can move only as far from the coach's base as RANGE allows,
 which is the same clamp the AI coordinators live under.
 """
 import numpy as np
-from views import club, rail
+from views import club, rail, sentence
 
 LEANS = [
     ('offense', 'pass_bias', 'Pass / Run', 'Run more', 'Pass more'),
@@ -74,7 +74,7 @@ def this_week(session, league, abbr):
     sugg = []
     for i, s in enumerate(rep['suggestions']):
         taken = s['text'] in _taken(league, wk)
-        sugg.append(dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=s['text'], why=s['why'], changes={k: (list(v) if isinstance(v, tuple) else v) for k, v in s['changes'].items()}, taken=taken))
+        sugg.append(dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=sentence(s['text']), why=sentence(s['why']), changes={k: (list(v) if isinstance(v, tuple) else v) for k, v in s['changes'].items()}, taken=taken))
     bracket = plan.bracket; bp = league.player(bracket) if bracket else None
     their_wrs = [dict(pid=p.pid, name=p.name, ovr=round(p.ovr)) for p in league.teams[opp_abbr].depth.get('WR', [])[:3] if p.out_until is None]
     import staff as ST
@@ -204,9 +204,9 @@ def report(session, league, abbr):
     units = [dict(unit=u, rank=v[0], of=v[1]) for u, v in (rep['units'] or {}).items()]
     mine = [dict(unit=u, rank=v[0], of=v[1]) for u, v in (rep['my_units'] or {}).items()]
     changes = _saved(league, wk)
-    sugg = [dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=s['text'], why=s['why'], taken=(s['text'] in _taken(league, wk))) for i, s in enumerate(rep['suggestions'])]
+    sugg = [dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=sentence(s['text']), why=sentence(s['why']), taken=(s['text'] in _taken(league, wk))) for i, s in enumerate(rep['suggestions'])]
     return dict(rail=r, off=False, week=wk, opp=club(opp_abbr), away=away, coach=rep['coach'], tendencies=tend(rep['tendencies']), mine_tend=tend(rep['my_tendencies']), league_tend=lg,
-                units=units, my_units=mine, stars=rep['stars'], injured=rep['injured'], strengths=[s['text'] for s in rep['strengths']], weaknesses=[w['text'] for w in rep['weaknesses']],
+                units=units, my_units=mine, stars=rep['stars'], injured=rep['injured'], strengths=[sentence(s['text']) for s in rep['strengths']], weaknesses=[sentence(w['text']) for w in rep['weaknesses']],
                 suggestions=sugg, forecast=rep.get('forecast'), record=_rec(league, opp_abbr))
 
 

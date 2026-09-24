@@ -286,8 +286,15 @@ class Team:
         return float(np.clip((self.roster_strength() - 68.0) / 18.0, .05, .95))
 
     def hist(self):
-        """firing_model.pressure() takes this shape."""
-        return dict(win_pct=self.win_pct, prev_win_pct=self.prev_win_pct,
+        """firing_model.pressure() takes this shape. Early in a season the record is a
+        few games old, so it is shrunk toward last season's (a prior worth eight
+        games): an 0-1 start does not put a coach on the hot seat by itself, and by
+        midseason the record is mostly this year's."""
+        w, l, t = self.record; n = w + l + t
+        prev = float(self.prev_win_pct) if self.prev_win_pct is not None else 0.5
+        K = 8.0
+        wp = ((w + 0.5 * t) + K * prev) / (n + K) if n else prev
+        return dict(win_pct=wp, prev_win_pct=self.prev_win_pct,
                     tenure=self.tenure, playoff_drought=self.playoff_drought,
                     expected_pct=self.expected_pct)
 
