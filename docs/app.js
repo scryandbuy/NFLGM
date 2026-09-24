@@ -859,6 +859,16 @@ const TAGCLS = { Trade: 'trade', Signing: 'sign', Release: 'cut', Draft: 'draft'
 function renderStandings(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('standings');
   const s = el('section', { class: 'sheet c8' }, el('h2', {}, 'Standings', el('small', {}, `Week ${v.week ?? '—'} · ${v.games_played} games played`)));
+  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const k of ['Division', 'Conference']) tabs.append(el('button', { 'aria-pressed': String(standingsView === k), onclick: () => { standingsView = k; renderStandings(v); } }, k)); s.append(tabs);
+  if (standingsView === 'Conference') {
+    for (const conf of ['AFC', 'NFC']) {
+      const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, conf), el('th', { class: 'n' }, 'Seed'), el('th', { class: 'n' }, 'W'), el('th', { class: 'n' }, 'L'), el('th', { class: 'n' }, 'T'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n', 'data-tip': 'Point differential' }, '+/−'), el('th', { class: 'n', 'data-tip': 'Strength of victory: the win pct of the clubs beaten' }, 'SOV'), el('th', { class: 'n', 'data-tip': 'Strength of schedule: the win pct of every opponent' }, 'SOS'), el('th', {}, 'Form')));
+      for (const r of v.conferences[conf]) t.append(el('tr', { style: r.me ? 'background:var(--sheet-2)' : '' }, el('td', {}, stripe(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.seed ? el('span', { class: 'seed ' + (r.seed === 1 ? 'bye' : 'in') }, r.seed) : ''), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', { class: 'n' }, r.t), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), el('td', { class: 'n', style: r.pd > 0 ? 'color:var(--ok)' : r.pd < 0 ? 'color:var(--danger)' : '' }, (r.pd > 0 ? '+' : '') + r.pd), el('td', { class: 'n' }, r.sov != null ? r.sov.toFixed(3).replace(/^0/, '') : '—'), el('td', { class: 'n' }, r.sos != null ? r.sos.toFixed(3).replace(/^0/, '') : '—'), el('td', {}, formDots(r.form))));
+      s.append(t);
+    }
+    if (v.notes.length) s.append(el('div', { class: 'legend-line' }, 'Ties: ' + v.notes.join(' ')));
+    page.append(s); page.append(pictureSheet(v)); return;
+  }
   const grid = el('div', { class: 'divgrid' });
   for (const d of v.divisions) {
     const box = el('div', { class: 'divbox' }, el('h4', {}, d.name)); const t = el('table', { class: 'tbl' });
@@ -866,7 +876,12 @@ function renderStandings(v) {
     for (const r of d.rows) t.append(el('tr', { style: r.me ? 'background:var(--sheet-2)' : '' }, el('td', {}, stripe(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', { class: 'n' }, r.t), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), el('td', { class: 'n', style: r.pd > 0 ? 'color:var(--ok)' : r.pd < 0 ? 'color:var(--danger)' : '' }, (r.pd > 0 ? '+' : '') + r.pd), el('td', {}, formDots(r.form))));
     box.append(t); grid.append(box);
   }
-  s.append(grid); page.append(s);
+  s.append(grid);
+  if (v.notes.length) s.append(el('div', { class: 'legend-line' }, 'Ties: ' + v.notes.join(' ')));
+  page.append(s); page.append(pictureSheet(v));
+}
+let standingsView = 'Division';
+function pictureSheet(v) {
   const r = el('section', { class: 'sheet c4' }, el('h2', {}, 'Playoff Picture', el('small', {}, 'seeds as of today')));
   for (const c of v.picture) {
     r.append(el('div', { class: 'h5', style: 'padding:10px 12px 4px' }, c.conf));
@@ -876,12 +891,13 @@ function renderStandings(v) {
     r.append(t);
   }
   r.append(el('div', { class: 'legend-line' }, 'Division winners seed one through four; the one seed has the bye. Ties break by the league rules.'));
-  page.append(r);
+  return r;
 }
 
 function renderSchedule(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('schedule');
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Schedule', el('small', {}, `Week ${v.week}`)));
+  s.append(el('div', { class: 'tabs', style: 'padding:8px 14px 0' }, el('button', { 'aria-pressed': 'true' }, 'League Schedule'), el('button', { 'aria-pressed': 'false', onclick: () => renderTeamSchedule(pyJSON(`SESSION.league_view('team_schedule')`)) }, 'Team Schedule')));
   const nav = el('div', { class: 'wknav' }, el('span', { class: 'lab' }, 'Week')); for (const w of v.weeks) nav.append(el('button', { 'aria-pressed': String(w === v.week), onclick: () => renderSchedule(pyJSON(`SESSION.league_view('schedule', week=${w})`)) }, w)); s.append(nav);
   const grid = el('div', { class: 'wkgrid' });
   for (const g of v.games) {
@@ -895,6 +911,17 @@ function renderSchedule(v) {
   s.append(grid);
   if (v.byes.length) s.append(el('div', { class: 'legend-line' }, 'Byes: ' + v.byes.map(b => b.abbr).join(', ')));
   page.append(s);
+}
+
+function renderTeamSchedule(v) {
+  renderRail(v.rail); const page = persPage(); lgSecond('schedule');
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, `${v.team.name} · ${v.record}`, el('small', {}, `bye week ${v.byes.join(', ') || '—'}`)));
+  const sel = el('select', { class: 'btn', style: 'width:auto' }); for (const c of v.clubs) sel.append(el('option', { value: c.abbr, selected: c.abbr === v.team.abbr ? '' : null }, c.name)); sel.onchange = () => renderTeamSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(sel.value)})`));
+  s.append(el('div', { class: 'tabs', style: 'padding:8px 14px 0;gap:10px;align-items:center' }, el('button', { 'aria-pressed': 'false', onclick: () => renderSchedule(pyJSON(`SESSION.league_view('schedule')`)) }, 'League Schedule'), el('button', { 'aria-pressed': 'true' }, 'Team Schedule'), sel));
+  const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, 'Wk'), el('th', {}, 'Opponent'), el('th', {}, 'Record'), el('th', {}, 'Result'), el('th', { class: 'n' }, 'Score')));
+  for (const g of v.games) t.append(el('tr', { style: g.done && g.result === 'W' ? '' : g.done ? 'color:var(--ink-2)' : 'color:var(--ink-3)' }, el('td', { class: 'n' }, g.week), el('td', {}, (g.home ? 'vs ' : 'at '), stripe(g.opp.abbr, g.opp.name)), el('td', {}, g.opp_rec), el('td', {}, g.result ? el('span', { style: `font-family:var(--display);font-weight:900;color:${g.result === 'W' ? 'var(--ok)' : g.result === 'L' ? 'var(--danger)' : 'var(--ink-2)'}` }, g.result) : 'Upcoming'), el('td', { class: 'n' }, g.done ? `${g.mine}–${g.theirs}` : '')));
+  for (const b of v.byes) { const row = el('tr', { style: 'color:var(--ink-3)' }, el('td', { class: 'n' }, b), el('td', { colspan: '4' }, 'Bye')); const rows = Array.from(t.children); const idx = rows.findIndex(r => r.children && r.children[0] && +r.children[0].textContent > b); if (idx > 0) t.insertBefore(row, rows[idx]); else t.append(row); }
+  s.append(t); page.append(s);
 }
 
 let txFilter = 'All', txMine = false;
@@ -919,7 +946,14 @@ function renderStats(v) {
   const grid = el('div', { class: 'leaders' });
   for (const b of v.boxes) { const box = el('div', { class: 'lbox' }, el('h4', {}, b.title, el('small', {}, b.unit))); b.rows.forEach((r, i) => box.append(el('div', { class: 'lrow', style: r.mine ? 'background:var(--sheet-2)' : '' }, el('span', { class: 'r' }, i + 1), el('div', { class: 'nm', style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name, el('small', {}, `${r.pos} · ${r.team}`)), el('span', { class: 'v' }, r.v)))); grid.append(box); }
   if (!v.boxes.length) grid.append(el('div', { class: 'empty' }, 'No games played this season yet.'));
-  s.append(grid); page.append(s);
+  s.append(grid);
+  if (v.advanced && v.advanced.length) {
+    s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Advanced', el('small', {}, 'minimums scale with the games played')));
+    const ag = el('div', { class: 'leaders' });
+    for (const b of v.advanced) { const box = el('div', { class: 'lbox' }, el('h4', {}, b.title, el('small', {}, b.unit))); b.rows.forEach((r, i) => box.append(el('div', { class: 'lrow', style: r.mine ? 'background:var(--sheet-2)' : '' }, el('span', { class: 'r' }, i + 1), el('div', { class: 'nm', style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name, el('small', {}, `${r.pos} · ${r.team} · n ${r.n}`)), el('span', { class: 'v' }, r.v)))); ag.append(box); }
+    s.append(ag);
+  }
+  page.append(s);
 }
 
 function renderAwards(v) {
@@ -958,6 +992,18 @@ function renderAlmanac(v) {
   const rs = el('div', { class: 'lbox' }, el('h4', {}, 'Single-Season Records')); for (const r of v.records) if (r.season) rs.append(el('div', { class: 'lrow norank' }, el('div', { class: 'nm' }, r.stat, el('small', {}, `${r.season.name} · ${r.season.year}`)), el('span', { class: 'v' }, r.season.v))); grid.append(rs);
   const rc = el('div', { class: 'lbox' }, el('h4', {}, 'Career Records')); for (const r of v.records) if (r.career) rc.append(el('div', { class: 'lrow norank' }, el('div', { class: 'nm' }, r.stat, el('small', {}, r.career.name)), el('span', { class: 'v' }, r.career.v))); grid.append(rc);
   s.append(grid);
+  if (v.careers && v.careers.some(c => c.rows.length)) {
+    s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Career Leaders', el('small', {}, 'active men in gold')));
+    const cg = el('div', { class: 'leaders' });
+    for (const c of v.careers) { if (!c.rows.length) continue; const box = el('div', { class: 'lbox' }, el('h4', {}, c.title)); c.rows.forEach((r, i) => box.append(el('div', { class: 'lrow', style: r.mine ? 'background:var(--sheet-2)' : '' }, el('span', { class: 'r' }, i + 1), el('div', { class: 'nm', style: `cursor:pointer;${r.active ? 'color:var(--club-2)' : ''}`, onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name, el('small', {}, r.pos)), el('span', { class: 'v' }, r.v)))); cg.append(box); }
+    s.append(cg);
+  }
+  if (v.ledger && v.ledger.length) {
+    s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Coaching Ledger', el('small', {}, `${v.ledger.length} stints on record`)));
+    const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Club'), el('th', {}, 'Coach'), el('th', { class: 'n' }, 'From'), el('th', { class: 'n' }, 'To'), el('th', {}, 'Record')));
+    for (const x of v.ledger) t.append(el('tr', {}, el('td', {}, stripe(x.club.abbr, x.club.name)), el('td', {}, x.name), el('td', { class: 'n' }, x.frm ?? '—'), el('td', { class: 'n' }, x.current ? 'now' : (x.to ?? '—')), el('td', {}, x.record || '')));
+    s.append(t);
+  }
   s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Hall of Fame', el('small', {}, `${v.hall.length} inducted`)));
   const hall = el('div', { class: 'hall' }); for (const h of v.hall) hall.append(el('div', { class: 'bust' }, el('div', { class: 'nm' }, h.name), el('div', { class: 'pos' }, `${h.pos} · ${h.seasons || '?'} seasons`), el('div', { class: 'why' }, h.why), el('div', { class: 'yr' }, `Class of ${h.inducted}`))); if (!v.hall.length) hall.append(el('div', { class: 'empty' }, 'A retired man is eligible five offseasons after he stops.'));
   s.append(hall); page.append(s);
