@@ -29,14 +29,14 @@ TARGETS = [
     # only moved which row failed. Recomputed from the same 570 games with one
     # filter (scrimmage plays, which is what this engine counts): 123.95 plays
     # a game, 21.00 drives, 5.90 a drive. Those multiply to 123.92.
-    ('drives_per_game',        21.00, 1.00, 'emergent'),
+    ('drives_per_game',        21.60, 1.00, 'emergent'),            # 2024: 10.8 a team a game (Goodberry, NFL drive charting since 1998)
     ('plays_per_drive',         5.90, 0.60, 'emergent'),
     ('first_downs_per_drive',   1.84, 0.20, 'emergent'),
     ('offensive_plays_per_gm', 123.95, 6.00, 'emergent'),
     # ---- drive outcomes ----
     ('drive_touchdown_pct',    22.60, 2.00, 'emergent'),
-    ('drive_fieldgoal_pct',    15.35, 2.00, 'game.fourth_down_decision'),
-    ('drive_punt_pct',         35.18, 2.50, 'emergent'),
+    ('drive_fieldgoal_pct',    16.50, 2.00, 'game.fourth_down_decision'),   # 2024: 1.78 made a team a game over 10.8 drives
+    ('drive_punt_pct',         32.40, 2.50, 'emergent'),            # 2025: 3.5 punts a team a game (AP), the lowest ever, over 10.8 drives; the sim is set in 2026 and the fall continued 4.2 -> 3.8 -> 3.5 from 2023
     ('drive_turnover_pct',     10.23, 1.50, 'emergent'),
     ('drive_downs_pct',         5.60, 1.50, 'game.GO_RATE'),
     # ---- passing ----
