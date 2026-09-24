@@ -750,7 +750,6 @@ function renderPicks(v) {
 // ---------------------------------------------------------------- League
 const LG = { standings: 'Standings', schedule: 'Schedule', transactions: 'Transactions', stats: 'Stats', awards: 'Awards', coaching: 'Coaching', almanac: 'Almanac' };
 function lgSecond(cur) { secondRow(Object.entries(LG).map(([k, l]) => [l, '#league/' + k]), '#league/' + cur); $('#crumb').textContent = 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'league')); }
-function formDots(f) { const s = el('span', { class: 'form' }); for (const x of f) s.append(el('i', { class: x })); return s; }
 const TAGCLS = { Trade: 'trade', Signing: 'sign', Release: 'cut', Draft: 'draft', Extension: 'contract', Waivers: 'wire', 'Call-Up': 'squad', 'Practice Squad': 'squad', 'Injured Reserve': 'wire', Retirement: 'retire', Fired: 'cut', Hired: 'staff', Staff: 'staff', 'Franchise Tag': 'tagg', Restructure: 'contract', 'Position Change': 'squad', 'Hall of Fame': 'hall', Season: 'season' };
 
 function renderStandings(v) {
