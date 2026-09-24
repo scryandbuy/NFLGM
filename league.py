@@ -262,7 +262,10 @@ class Team:
     def win_pct(self):
         w, l, t = self.record
         n = w + l + t
-        return (w + 0.5 * t) / n if n else 0.0
+        if n: return (w + 0.5 * t) / n
+        # no games yet: the season stands where the last one ended, so nobody is on a hot seat in August for an 0-0 record
+        prev = getattr(self, 'prev_win_pct', None)
+        return float(prev) if prev is not None else 0.5
 
     @property
     def prev_win_pct(self):
@@ -460,7 +463,7 @@ class Team:
                     roster=[p.pid for p in self.roster],
                     practice_squad=[p.pid for p in self.practice_squad],
                     owner_patience=self.owner_patience, owner_acumen=self.owner_acumen,
-                    owner_star_pull=getattr(self, 'owner_star_pull', 0.5), owner_spend=getattr(self, 'owner_spend', 0.5), depth_pins=getattr(self, 'depth_pins', None) or {},
+                    owner_star_pull=getattr(self, 'owner_star_pull', 0.5), owner_spend=getattr(self, 'owner_spend', 0.5), depth_pins=getattr(self, 'depth_pins', None) or {}, identity_history=getattr(self, 'identity_history', None) or [],
                     ir=[p.pid for p in self.ir],
                     picks=[asdict(k) for k in self.picks],
                     cap_year=self.cap.year, cap_rollover=self.cap.rollover,
@@ -779,7 +782,7 @@ class League:
             t.practice_squad = [L.players[p] for p in td['practice_squad']
                                 if p in L.players]
             t.ir = [L.players[p] for p in td['ir'] if p in L.players]
-            t.owner_patience = td.get('owner_patience', 0.5); t.owner_acumen = td.get('owner_acumen', 0.5); t.owner_star_pull = td.get('owner_star_pull', 0.5); t.owner_spend = td.get('owner_spend', 0.5); t.depth_pins = td.get('depth_pins') or {}
+            t.owner_patience = td.get('owner_patience', 0.5); t.owner_acumen = td.get('owner_acumen', 0.5); t.owner_star_pull = td.get('owner_star_pull', 0.5); t.owner_spend = td.get('owner_spend', 0.5); t.depth_pins = td.get('depth_pins') or {}; t.identity_history = td.get('identity_history') or []
             t.picks = [DraftPick(**k) for k in td['picks']]
             t.cap = TeamCap(td['cap_year'], td['cap_rollover'])
             t.cap.dead = td['cap_dead']

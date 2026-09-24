@@ -237,6 +237,18 @@ class Session:
         r = fn(self.L, self.user_team, **kw)
         return r if isinstance(r, dict) else dict(ok=bool(r))
 
+    # ---- front office
+    def frontoffice(self, page, **kw):
+        import views_frontoffice as VF
+        return getattr(VF, page)(self, self.L, self.user_team, **kw)
+
+    def frontoffice_act(self, name, **kw):
+        import views_frontoffice as VF
+        fn = getattr(VF, 'act_' + name, None)
+        if fn is None: return dict(ok=False, why='unknown action')
+        r = fn(self.L, self.user_team, **kw)
+        return r if isinstance(r, dict) else dict(ok=bool(r))
+
     def gameday_view(self):
         import views
         return views.gameday(self, self.L, self.user_team)
