@@ -264,15 +264,33 @@ function renderGameDay(v) {
   }
   top.append(sb);
   if (!g) { top.append(el('div', { class: 'empty' }, 'Your club was on its bye this week.')); page.append(top); return; }
-  // the big bug
+  // the big bug: it follows the reveal (score, quarter and clock, situation, win probability), Final once the game is played out
   const me = g.me_home ? g.home : g.away, them = g.me_home ? g.away : g.home;
-  const myScore = g.me_home ? g.hs : g.as_, theirScore = g.me_home ? g.as_ : g.hs;
-  const won = myScore > theirScore, tie = myScore === theirScore;
   const rec = r => `${r[0]}–${r[1]}`;
-  top.append(el('div', { class: 'bigbug' },
-    el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${g.away.color}` }, g.away.abbr), el('div', {}, el('div', { class: 'nm' }, g.away.nick), el('div', { class: 'rec' }, rec(g.away_rec))), el('div', { class: 'score', style: 'margin-left:auto' }, g.as_)),
-    el('div', { class: 'mid' }, el('div', { class: 'q' }, 'Final' + (g.ot ? ' · Overtime' : '')), el('div', { class: 'dd' }, tie ? 'A tie' : (won ? `${me.name} wins` : `${them.name} wins`)), el('div', { class: 'q', style: 'font-size:11px;color:var(--ink-3);margin-top:6px' }, `Week ${v.week}`)),
-    el('div', { class: 'side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, g.home.abbr), el('div', {}, el('div', { class: 'nm' }, g.home.nick), el('div', { class: 'rec' }, rec(g.home_rec))), el('div', { class: 'score', style: 'margin-right:auto' }, g.hs))));
+  const bug = el('div', { class: 'bigbug' }); top.append(bug);
+  const lineScore = el('table', { class: 'linescore' }); top.append(lineScore);
+  const drawBug = (shown, shownPlays) => {
+    const final = shown >= g.drives.length && shownPlays == null;
+    const d = g.drives[Math.max(0, shown - 1)]; const revealed = (shownPlays != null ? d.plays.slice(0, shownPlays) : d.plays).filter(p => p.text);
+    let hs = g.hs, as_ = g.as_;
+    if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { for (const p of revealed) if (p.kind === 'score') { if (p.type === 'field_goal') { if (d.off === g.home.abbr) hs += 3; else as_ += 3; } else if (p.td) { if (d.off === g.home.abbr) hs += 7; else as_ += 7; } } } }
+    const lastPlay = revealed.length ? revealed[revealed.length - 1] : null;
+    const clock = lastPlay && lastPlay.clock != null ? `${Math.floor((lastPlay.clock % 900) / 60)}:${String(Math.floor(lastPlay.clock % 60)).padStart(2, '0')}` : '';
+    const wpNow = g.wp[Math.min(g.wp.length - 1, Math.max(0, shown - 1))];
+    const myScore = g.me_home ? hs : as_, theirScore = g.me_home ? as_ : hs;
+    const won = myScore > theirScore, tie = myScore === theirScore;
+    bug.innerHTML = '';
+    bug.append(
+      el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${g.away.color}` }, g.away.abbr), el('div', {}, el('div', { class: 'nm' }, g.away.nick), el('div', { class: 'rec' }, rec(g.away_rec) + (!final && d.off === g.away.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-left:auto' }, as_)),
+      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : `Q${d.quarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n}`)), el('div', { class: 'q', style: 'font-size:11px;color:var(--ink-3);margin-top:4px' }, `Win Probability ${wpNow}%` + (g.env && g.env.conditions ? ` · ${g.env.conditions}` : ''))),
+      el('div', { class: 'side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, g.home.abbr), el('div', {}, el('div', { class: 'nm' }, g.home.nick), el('div', { class: 'rec' }, rec(g.home_rec) + (!final && d.off === g.home.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-right:auto' }, hs)));
+    lineScore.innerHTML = '';
+    if (g.quarters && g.quarters[g.home.abbr]) {
+      const Q = g.quarters; const upto = final ? 5 : d.quarter; const hasOT = Q[g.home.abbr][4] || Q[g.away.abbr][4];
+      lineScore.append(el('tr', {}, el('th', {}, ''), ...['Q1', 'Q2', 'Q3', 'Q4'].concat(hasOT ? ['OT'] : []).map(q => el('th', {}, q)), el('th', {}, 'T')));
+      for (const ab of [g.away.abbr, g.home.abbr]) lineScore.append(el('tr', {}, el('td', {}, ab), ...Q[ab].slice(0, hasOT ? 5 : 4).map((x, qi) => el('td', {}, final || qi < upto - 1 ? x : qi === upto - 1 ? (ab === g.home.abbr ? hs : as_) - Q[ab].slice(0, qi).reduce((a, b) => a + b, 0) : '')), el('td', { style: 'font-weight:700' }, ab === g.home.abbr ? hs : as_)));
+    }
+  };
   // win probability by drive
   const W = 720, H = 70; const pts = g.wp.map((p, i) => [i / Math.max(1, g.wp.length - 1) * W, H - 4 - (p / 100) * (H - 8)]);
   const svgNS = 'http://www.w3.org/2000/svg'; const svg = document.createElementNS(svgNS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio', 'none');
@@ -293,7 +311,7 @@ function renderGameDay(v) {
     body.innerHTML = '';
     g.drives.slice(0, shown).forEach((d, di) => {
       const last = di === shown - 1; const plays = (last && shownPlays != null) ? d.plays.slice(0, shownPlays) : d.plays;
-      body.append(el('div', { class: 'drive' }, `Drive ${d.n} · ${d.off} · Q${d.quarter}` + ((last && shownPlays != null) ? '' : ` · ${d.plays_n} play${d.plays_n === 1 ? '' : 's'}, ${Math.round(d.yards)} yard${Math.round(d.yards) === 1 ? '' : 's'}` + (d.result ? ` · ${String(d.result).toLowerCase()}` : '') + ` · ${d.score}`)));
+      body.append(el('div', { class: 'drive' }, (last && shownPlays != null) ? `Drive ${d.n} · ${d.off} · Q${d.quarter} · ${(d.head || '').split(' · ').slice(2, 3).join('')}` : `Q${d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`));
       for (const p of plays) {
         if (!p.text) continue;
         if (filt.mode === 'key' && !['score', 'turnover', 'loss'].includes(p.kind) && !(p.type === 'complete' && /for (\d\d) yards/.test(p.text) && +p.text.match(/for (\d\d) yards/)[1] >= 15)) continue;
@@ -303,6 +321,7 @@ function renderGameDay(v) {
     });
     tick.querySelector('h2 small').textContent = (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays}` : '');
     body.scrollTop = body.scrollHeight;
+    drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays);
   };
   const nextPlay = () => { const d = g.drives[shown - 1]; if (shownPlays == null) { if (shown >= g.drives.length) return; shown++; shownPlays = 1; } else if (shownPlays < d.plays.length) shownPlays++; else { if (shown >= g.drives.length) { shownPlays = null; } else { shown++; shownPlays = 1; } } draw(); };
   const ctrl = el('div', { class: 'ctrl2' },
@@ -335,16 +354,36 @@ function renderGameDay(v) {
   });
   right.append(el('div', { class: 'pad', style: 'padding-top:8px' }, fsvg,
     el('div', { style: 'padding:6px 0 0;display:flex;gap:12px;font-size:11.5px;color:var(--ink-2);flex-wrap:wrap' }, stripe(g.home.abbr), stripe(g.away.abbr), el('span', {}, el('i', { style: 'display:inline-block;width:9px;height:9px;background:#ffb612;border-radius:50%;margin-right:4px' }), 'TD'), el('span', {}, el('i', { style: 'display:inline-block;width:9px;height:9px;background:#4cc9f0;margin-right:4px' }), 'FG'), el('span', {}, el('i', { style: 'display:inline-block;width:9px;height:9px;background:#e5484d;border-radius:50%;margin-right:4px' }), 'Turnover'))));
-  right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Box Score'));
-  const box = el('table', { class: 'box' });
+  const boxHead = el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Box Score', el('small', {}, 'Live')); right.append(boxHead);
+  const box = el('table', { class: 'box' }); right.append(box);
   const th = (...c) => el('tr', {}, ...c.map((x, i) => el('th', {}, x)));
   const awayFirst = arr => [...arr.filter(r => r.team === g.away.abbr), ...arr.filter(r => r.team !== g.away.abbr)];
-  g.box.passing = awayFirst(g.box.passing); g.box.rushing = awayFirst(g.box.rushing); g.box.receiving = awayFirst(g.box.receiving); g.box.defense = awayFirst(g.box.defense);
-  box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT', 'Lng')); g.box.passing.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.ca), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_), el('td', {}, r.lng ?? ''))));
-  box.append(th('Rushing', 'Att', 'Yds', 'TD', '', 'Lng')); g.box.rushing.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, ''), el('td', {}, r.lng ?? ''))));
-  box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD', 'Lng')); g.box.receiving.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng ?? ''))));
-  box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD', '')); g.box.defense.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd), el('td', {}, ''))));
-  right.append(box);
+  const drawFullBox = () => {
+    box.innerHTML = ''; boxHead.querySelector('small').textContent = 'Final';
+    const P = awayFirst(g.box.passing), R = awayFirst(g.box.rushing), C = awayFirst(g.box.receiving), D = awayFirst(g.box.defense);
+    box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT', 'Lng')); P.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.ca), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_), el('td', {}, r.lng ?? ''))));
+    box.append(th('Rushing', 'Att', 'Yds', 'TD', '', 'Lng')); R.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, ''), el('td', {}, r.lng ?? ''))));
+    box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD', 'Lng')); C.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng ?? ''))));
+    box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD', '')); D.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd), el('td', {}, ''))));
+  };
+  const drawLiveBox = (shown, shownPlays) => {
+    if (shown >= g.drives.length && shownPlays == null) { drawFullBox(); return; }
+    boxHead.querySelector('small').textContent = 'Live'; box.innerHTML = '';
+    const pass = {}, rush = {}, recv = {};
+    const revealed = []; g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; revealed.push(...((last && shownPlays != null) ? d.plays.slice(0, shownPlays) : d.plays)); });
+    for (const p of revealed) {
+      if (!p.type) continue; const y = p.yards || 0;
+      if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.passer) { const k = p.off + '|' + p.passer; const r = pass[k] = pass[k] || { team: p.off, name: p.passer, cmp: 0, att: 0, yds: 0, td: 0, int_: 0 }; r.att++; if (p.type === 'complete') { r.cmp++; r.yds += y; if (p.td) r.td++; } if (p.type === 'interception') r.int_++; }
+      if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.target) { const k = p.off + '|' + p.target; const r = recv[k] = recv[k] || { team: p.off, name: p.target, tgt: 0, rec: 0, yds: 0, td: 0 }; r.tgt++; if (p.type === 'complete') { r.rec++; r.yds += y; if (p.td) r.td++; } }
+      if (['run', 'scramble'].includes(p.type) && (p.carrier || p.passer)) { const who = p.carrier || p.passer; const k = p.off + '|' + who; const r = rush[k] = rush[k] || { team: p.off, name: who, att: 0, yds: 0, td: 0, lng: 0 }; r.att++; r.yds += y; if (p.td) r.td++; r.lng = Math.max(r.lng, y); }
+    }
+    const top = (o, key, n) => awayFirst(Object.values(o).sort((a, b) => b[key] - a[key])).slice(0, n);
+    box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT')); top(pass, 'att', 2).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, `${r.cmp}/${r.att}`), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_))));
+    box.append(th('Rushing', 'Att', 'Yds', 'TD', 'Lng')); top(rush, 'att', 3).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng))));
+    box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD')); top(recv, 'tgt', 4).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td))));
+    if (!Object.keys(pass).length && !Object.keys(rush).length) box.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'Step through the game; the box fills as plays are revealed.'))));
+  };
+
   // team stats side by side, and the assistants' read of what decided it
   if (g.team_stats && g.team_stats[g.home.abbr]) {
     right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Team Stats'));
@@ -1273,11 +1312,11 @@ function renderThisWeek(v) {
   const reload = () => renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`));
   const s = el('section', { class: 'sheet c12' });
   if (v.off) { s.append(el('h2', {}, 'This Week'), el('div', { class: 'empty' }, v.note)); page.append(s); return; }
-  s.append(el('h2', {}, `Week ${v.week} · ${v.away ? 'at' : 'vs'} ${v.opp.name}`, el('small', {}, `${v.coordinators.oc ? `OC ${v.coordinators.oc.name} (${v.coordinators.oc.rating})` : ''}${v.coordinators.dc ? ` · DC ${v.coordinators.dc.name} (${v.coordinators.dc.rating})` : ''} · leans move inside the coordinators' range`)));
+  s.append(el('h2', {}, `Week ${v.week} ${v.away ? 'at' : 'vs'} ${v.opp.name}`, el('small', {}, "Your Leans Within the Range Your Identity Allows · Gold Marks the Assistants' Suggestion")));
   // suggestions
   const sug = el('div', { class: 'sugs' });
-  sug.append(el('div', { class: 'h5' }, 'The Report Suggests', el('span', {}, `${v.suggestions.filter(x => x.taken).length} of ${v.suggestions.length} taken`)));
-  for (const x of v.suggestions) sug.append(el('div', { class: 'sug-row' + (x.taken ? ' on' : '') }, el('div', { class: 't' }, x.text, el('small', {}, `${x.side} · ${x.why}`)), el('div', { class: 'a', style: 'display:flex;gap:4px' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); reload(); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); reload(); } }, 'Take'), x.taken ? '' : el('button', { class: 'btn quiet', 'data-tip': 'Hide it for now', onclick: e => e.currentTarget.closest('.sug-row').remove() }, 'Skip'))));
+  sug.append(el('div', { class: 'h5' }, "Assistants' Suggestions", el('span', {}, 'Accept Moves the Slider · Gold Ghost Shows Where')));
+  for (const x of v.suggestions) sug.append(el('div', { class: 'sug-row' + (x.taken ? ' on' : '') }, el('div', { class: 't' }, x.text, el('small', {}, `${x.target ? x.target + ' · ' : ''}${x.taken ? 'Accepted · ' : ''}${x.why}`)), el('div', { class: 'a', style: 'display:flex;gap:4px' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); reload(); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); reload(); } }, 'Accept'), x.taken ? '' : el('button', { class: 'btn quiet', 'data-tip': 'Hide it for now', onclick: e => e.currentTarget.closest('.sug-row').remove() }, 'Skip'))));
   if (!v.suggestions.length) sug.append(el('div', { class: 'empty' }, 'The report has nothing to add this week; the plan is the coordinators\' own.'));
   else sug.append(el('div', { style: 'display:flex;gap:6px;padding:8px 0 0' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); reload(); } }, 'Accept All'), el('span', { class: 'count', style: 'align-self:center' }, '')));
   s.append(sug);
@@ -1289,9 +1328,11 @@ function renderThisWeek(v) {
       const lo = Math.max(0, ln.min), hi = Math.min(1, ln.max), span = Math.max(0.02, hi - lo);
       const pos = x => `${Math.round((Math.min(hi, Math.max(lo, x)) - lo) / span * 100)}%`;
       const moved = Math.abs(ln.value - ln.base) > 1e-6;
-      const track = el('div', { class: 'track' }, el('div', { class: 'range', style: 'left:0;right:0' }), el('div', { class: 'tick', style: `left:${pos(ln.base)}` }), el('div', { class: 'knob' + (moved ? ' sug' : ''), style: `left:${pos(ln.value)}` }));
+      const track = el('div', { class: 'track' }, el('div', { class: 'range', style: 'left:0;right:0' }), el('div', { class: 'tick', style: `left:${pos(ln.base)}` }));
+      if (ln.ghost != null) track.append(el('div', { class: 'knob ghost', style: `left:${pos(ln.ghost)}`, 'data-tip': `The assistants would put it at ${ln.ghost_word}` }));
+      track.append(el('div', { class: 'knob' + (moved ? ' sug' : ''), style: `left:${pos(ln.value)}` }));
       const rng = el('input', { type: 'range', min: String(Math.round(lo * 1000)), max: String(Math.round(hi * 1000)), value: String(Math.round(ln.value * 1000)) }); rng.onchange = () => { pyJSON(`SESSION.plan_act('set_lean', key=${JSON.stringify(ln.key)}, value=${+rng.value / 1000})`); reload(); }; track.append(rng);
-      d.append(el('div', { class: 'lean' }, el('div', { class: 'l' }, ln.label, el('small', {}, `${ln.lo} ← → ${ln.hi}`)), track, el('div', { class: 'v' + (moved ? ' sug' : '') }, moved ? `${ln.value > ln.base ? '+' : ''}${Math.round((ln.value - ln.base) * 100)}` : 'base')));
+      d.append(el('div', { class: 'lean' }, el('div', { class: 'l' }, ln.label, el('small', {}, ln.desc)), track, el('div', { class: 'v' + (moved ? ' sug' : ''), 'data-tip': moved ? `${ln.value > ln.base ? '+' : ''}${Math.round((ln.value - ln.base) * 100)} from your identity` : 'At your identity' }, ln.word)));
     }
     return d;
   };
@@ -1307,13 +1348,13 @@ function renderThisWeek(v) {
   const dec = el('div', { class: 'decide' });
   const prot = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Protection'), el('div', { class: 's' }, v.protection.options.find(o => o.key === v.protection.value)?.word || v.protection.value)); const po = el('div', { class: 'opts' }); for (const o of v.protection.options) po.append(el('button', { class: 'btn chip' + (o.key === v.protection.value ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='protection', value=${JSON.stringify(o.key === v.protection.base ? '' : o.key)})`); reload(); } }, o.word)); prot.append(po); dec.append(prot);
   const shadowWord = v.travel ? (v.travel_target ? `${v.my_cb1 ? v.my_cb1.name : 'CB1'} on ${v.travel_target.name}` : `${v.my_cb1 ? v.my_cb1.name : 'CB1'} follows their best receiver`) : 'Corners stay by side';
-  const tr = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Shadow'), el('div', { class: 's' }, shadowWord));
+  const tr = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Coverage · Shadow Their WR1?'), el('div', { class: 's' }, shadowWord));
   const tro = el('div', { class: 'opts' }, el('button', { class: 'btn chip' + (!v.travel ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='travel_target', value='')`); pyJSON(`SESSION.plan_act('set_decision', key='travel', value=False)`); reload(); } }, 'No Shadow'));
   for (const w of v.their_wrs) tro.append(el('button', { class: 'btn chip' + (v.travel && v.travel_target && v.travel_target.pid === w.pid ? ' go' : ''), 'data-tip': `${v.my_cb1 ? v.my_cb1.name : 'Your best corner'} follows him all game`, onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='travel_target', value=${JSON.stringify(w.pid)})`); reload(); } }, `${v.my_cb1 ? v.my_cb1.name : 'CB1'} on ${w.name.split(' ').pop()} · ${w.ovr}`));
   tr.append(tro); dec.append(tr);
-  const br = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Bracket'), el('div', { class: 's' }, v.bracket ? `Double ${v.bracket.name} on the shots` : 'Nobody doubled')); const bo = el('div', { class: 'opts' }, el('button', { class: 'btn chip' + (!v.bracket ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value='')`); reload(); } }, 'None')); for (const w of v.their_wrs) bo.append(el('button', { class: 'btn chip' + (v.bracket && v.bracket.pid === w.pid ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value=${JSON.stringify(w.pid)})`); reload(); } }, `${w.name} · ${w.ovr}`)); br.append(bo); dec.append(br);
+  const br = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Coverage · Bracket a Star?'), el('div', { class: 's' }, v.bracket ? `Bracket ${v.bracket.name.split(' ').pop()}` : (v.wr_out && v.wr_out.length ? `${v.wr_out[0]} Is Out · None` : 'None'))); const bo = el('div', { class: 'opts' }, el('button', { class: 'btn chip' + (!v.bracket ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value='')`); reload(); } }, 'None')); for (const w of v.their_wrs) bo.append(el('button', { class: 'btn chip' + (v.bracket && v.bracket.pid === w.pid ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value=${JSON.stringify(w.pid)})`); reload(); } }, `${w.name} · ${w.ovr}`)); br.append(bo); dec.append(br);
   s.append(dec);
-  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('reset')`)); reload(); } }, "Back to the Coordinators' Plan"), el('span', { class: 'count', style: 'margin-left:auto' }, v.forecast && v.forecast.text ? v.forecast.text : 'The plan you leave here is what the game runs on Sunday.')));
+  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', 'data-tip': 'The plan you leave here is the plan the game reads; this confirms it', onclick: () => { notify({ ok: true, line: 'Saved. Sunday reads this plan.' }); } }, 'Save Plan for Sunday'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('reset')`)); reload(); } }, 'Reset to Identity'), el('span', { class: 'count', style: 'margin-left:auto' }, v.forecast && v.forecast.text ? v.forecast.text : '')));
   page.append(s);
 }
 
@@ -1321,22 +1362,42 @@ function renderReport(v) {
   renderRail(v.rail); const page = persPage(); gpSecond('report');
   const s = el('section', { class: 'sheet c12' });
   if (v.off) { s.append(el('h2', {}, 'Opponent Report'), el('div', { class: 'empty' }, v.note)); page.append(s); return; }
-  s.append(el('h2', {}, `${v.opp.name} · ${v.record}`, el('small', {}, `Week ${v.week} · ${v.away ? 'away' : 'home'}` + (v.coach && v.coach.name ? ` · ${v.coach.name}, prestige ${v.coach.prestige}${v.coach.tree ? ' · ' + v.coach.tree : ''}` : ''))));
-  s.append(el('div', { class: 'h5', style: 'padding:10px 14px 6px' }, 'Tendencies', el('span', {}, v.tendencies ? `${v.tendencies.games} games in` : 'nothing on film yet')));
+  s.append(el('h2', {}, `Opponent Report · ${v.opp.name}`, el('small', {}, `Week ${v.week} · ${v.away ? 'Away' : 'Home'} · ${v.record}` + (v.coach && v.coach.name ? ` · ${v.coach.name}, prestige ${v.coach.prestige}` : ''))));
+  // their tendencies against the league
+  s.append(el('div', { class: 'h5', style: 'padding:10px 14px 6px' }, 'Their Tendencies', el('span', {}, v.tendencies ? `${v.tendencies.games} games in · the tick is the league` : 'nothing on film yet')));
   const tg = el('div', { class: 'tendgrid' });
-  const T = [['pass_rate', 'Pass rate', 'of plays'], ['pa_rate', 'Play action', 'of dropbacks'], ['deep', 'Deep shots', 'of throws'], ['motion', 'Motion', 'of plays'], ['fourth_go', 'Goes on fourth', 'of chances'], ['blitz', 'Blitz', 'of snaps'], ['man', 'Man coverage', 'of pass snaps'], ['two_high', 'Two-high', 'of snaps'], ['box8', 'Eight in the box', 'of snaps']];
-  for (const [k, lab, unit] of T) { const tv = v.tendencies ? v.tendencies[k] : null; tg.append(el('div', { class: 'tend', 'data-tip': `${v.opp.abbr} ${tv ?? '—'}% · NFL ${v.league_tend ? v.league_tend[k] : '—'}%` }, el('div', { class: 'k' }, lab), el('div', { class: 'v' }, tv != null ? `${tv}%` : '—'), el('div', { class: 'cmp' }, unit, v.league_tend ? el('span', {}, ' · NFL ', el('b', {}, `${v.league_tend[k]}%`)) : ''))); }
+  const T = [['pass_rate', 'Pass Rate'], ['pa_rate', 'Play Action'], ['deep', 'Deep Shots'], ['two_high', 'Two-High'], ['blitz', 'Blitz'], ['man', 'Man Coverage'], ['fourth_go', 'Fourth-Down Go'], ['motion', 'Motion']];
+  for (const [k, lab] of T) { const tv = v.tendencies ? v.tendencies[k] : null; const lg = v.league_tend ? v.league_tend[k] : null; tg.append(el('div', { class: 'tend', 'data-tip': `${v.opp.abbr} ${tv ?? '—'}% · NFL ${lg ?? '—'}%` }, el('div', { class: 'l' }, lab), el('div', { class: 'bar' }, el('i', { style: `width:${tv ?? 0}%` }), lg != null ? el('em', { style: `left:${lg}%` }) : ''), el('div', { class: 'v' }, tv != null ? `${tv}%` : '—'))); }
   s.append(tg);
+  // unit rankings, both clubs
   const two = el('div', { class: 'two' });
-  const units = (title, list, color) => { const d = el('div', {}, el('div', { class: 'h5' }, title)); for (const u of list) { const q = u.rank <= 8 ? 'var(--ok)' : u.rank >= 24 ? 'var(--danger)' : 'var(--rule-hi)'; d.append(el('div', { class: 'unitrow' }, el('span', {}, u.unit), el('div', { class: 't' }, el('i', { style: `width:${Math.round((1 - (u.rank - 1) / Math.max(1, u.of - 1)) * 100)}%;background:${q}` })), el('span', { class: 'v' }, `${u.rank} of ${u.of}`))); } return d; };
-  two.append(units(`${v.opp.abbr} Units`, v.units), units('Your Units', v.my_units)); s.append(two);
-  const three = el('div', { class: 'two' });
-  const men = el('div', {}, el('div', { class: 'h5' }, 'Players Who Matter')); for (const p of v.stars) men.append(el('div', { class: 'plate', style: 'margin-bottom:4px;cursor:pointer', onclick: () => { location.hash = '#club/player/' + p.pid; } }, el('div', { class: 'no' }, p.pos), el('div', { class: 'nm' }, p.name), el('div', { class: 'ov' }, p.ovr))); if (v.injured.length) { men.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Injured Starters')); for (const p of v.injured) men.append(el('div', { style: 'font-size:13px;color:var(--ink-2);padding:3px 0' }, `${p.name} (${p.pos}) · back week ${p.back}`)); }
-  const sw = el('div', {}, el('div', { class: 'h5' }, 'Strengths')); for (const x of v.strengths) sw.append(el('div', { style: 'font-size:13px;color:var(--ok);padding:3px 0' }, x)); if (!v.strengths.length) sw.append(el('div', { style: 'font-size:13px;color:var(--ink-3)' }, 'No unit in the top eight.')); sw.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Weaknesses')); for (const x of v.weaknesses) sw.append(el('div', { style: 'font-size:13px;color:var(--danger);padding:3px 0' }, x)); if (!v.weaknesses.length) sw.append(el('div', { style: 'font-size:13px;color:var(--ink-3)' }, 'No unit in the bottom nine.'));
-  three.append(men, sw); s.append(three);
-  s.append(el('div', { class: 'h5', style: 'padding:10px 14px 6px' }, "What We'd Do", el('span', {}, 'act on This Week')));
-  const sug = el('div', { class: 'sugs' }); for (const x of v.suggestions) sug.append(el('div', { class: 'sug-row' + (x.taken ? ' on' : '') }, el('div', { class: 't' }, x.text, el('small', {}, `${x.side} · ${x.why}`)), el('div', { class: 'a' }, el('span', { class: 'count' }, x.taken ? 'taken' : '')))); if (!v.suggestions.length) sug.append(el('div', { class: 'empty' }, 'Nothing to add this week.'));
-  s.append(sug, el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { location.hash = '#gameplan/week'; } }, 'Go to This Week'), el('span', { class: 'count', style: 'margin-left:auto' }, v.forecast && v.forecast.text ? v.forecast.text : '')));
+  const ut = el('div', {}, el('div', { class: 'h5' }, 'Unit Rankings', el('span', {}, `${v.rail.club.abbr} · ${v.opp.abbr}`)));
+  const rk = r => el('span', { class: 'rk ' + (r == null ? '' : r <= 8 ? 'good' : r >= 24 ? 'bad' : 'mid-rk'), style: 'font-size:15px' }, r == null ? '—' : `${r}${ord(r)}`);
+  for (const r of v.unit_table) ut.append(el('div', { class: 'side-row' }, el('span', { class: 'lab' }, r.label), rk(r.mine), el('span', { class: 'mid' }), rk(r.theirs)));
+  const men = el('div', {}, el('div', { class: 'h5' }, 'Players Who Matter')); for (const p of v.stars) men.append(el('div', { class: 'plate', style: 'margin-bottom:4px;cursor:pointer', onclick: () => { location.hash = '#club/player/' + p.pid; } }, el('div', { class: 'no' }, p.pos), el('div', { class: 'nm' }, p.name, el('small', {}, p.pos)), el('div', { class: 'ov' }, p.ovr)));
+  if (v.injured && v.injured.length) { men.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Injuries')); for (const x of v.injured) men.append(el('div', { style: 'font-size:13px;color:var(--ink-2);padding:2px 0' }, x)); }
+  two.append(ut, men); s.append(two);
+  // when each side has the ball, as on the Portal
+  if (v.panels) {
+    const P = v.panels; const grid = el('div', { class: 'two' });
+    const panel = (title, rows, extra, leftHead, rightHead) => {
+      const d = el('div', {}, el('div', { class: 'h5' }, title));
+      const box = el('div', { class: 'sides' }, el('div', { class: 'side-row head' }, el('span', {}), el('span', {}, leftHead), el('span', {}), el('span', {}, rightHead)));
+      for (const r of rows) box.append(el('div', { class: 'side-row' }, el('span', { class: 'lab' }, r.label), rk(r.mine), el('span', { class: 'mid' }, 'vs'), rk(r.theirs)));
+      (extra || []).forEach((t, i) => box.append(el('div', { class: 'side-row' + (i === 0 ? ' sep' : '') }, el('span', { class: 'lab' }, t.label, t.sub ? el('em', {}, t.sub) : ''), el('span', { class: 'rk', style: 'font-size:15px' }, t.left), el('span', { class: 'mid' }, 'vs'), el('span', { class: 'rk', style: 'font-size:15px' }, t.right))));
+      d.append(box); return d;
+    };
+    grid.append(panel(`When ${v.rail.club.name} Has the Ball`, P.ours, P.ours_extra, `${v.rail.club.abbr} Offense`, `${v.opp.abbr} Defense`), panel(`When ${v.opp.name} Has the Ball`, P.theirs, P.theirs_extra, `${v.opp.abbr} Offense`, `${v.rail.club.abbr} Defense`));
+    s.append(grid);
+  }
+  // what we would do
+  s.append(el('div', { class: 'h5', style: 'padding:10px 14px 6px' }, 'What We Would Do', el('span', {}, 'act on This Week')));
+  const cards = el('div', { class: 'cards' });
+  for (const x of v.suggestions) cards.append(el('div', { class: 'card', style: `--k:${x.side === 'offense' ? 'var(--ok)' : 'var(--live)'};opacity:${x.taken ? '.75' : '1'}` }, el('div', { class: 'h' }, el('div', { class: 'k' }, x.side.charAt(0).toUpperCase() + x.side.slice(1) + (x.taken ? ' · accepted' : '')), el('div', { class: 's' }, x.text)), el('div', { class: 'b' }, x.why),
+    el('div', { class: 'b', style: 'margin-top:6px' }, el('span', { style: 'font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em' }, 'Plan Change '), el('span', { style: 'font-family:var(--mono);font-size:12px' }, x.change || '—')),
+    el('div', { class: 'a' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Accept'), x.taken ? '' : el('button', { class: 'btn quiet', onclick: e => e.currentTarget.closest('.card').remove() }, 'Skip'))));
+  if (!v.suggestions.length) cards.append(el('div', { class: 'empty' }, 'Nothing to add this week.'));
+  s.append(cards, el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); location.hash = '#gameplan/week'; } }, "Accept All and Open This Week's Plan"), el('a', { class: 'btn', href: '#gameplan/week' }, "Back to This Week's Plan")));
   page.append(s);
 }
 

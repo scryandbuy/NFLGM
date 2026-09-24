@@ -51,6 +51,13 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
     ln = TK.play_line(league, q, off_abbr, def_abbr)
     if ln is None:
         return dict(head='', text='', kind='neutral', type=q.get('type'))
+    # the structured bones, so the page can keep a live box score as plays are revealed
+    def nm(pid):
+        pp = league.player(pid) if pid else None
+        if pp is None: return None
+        parts = pp.name.split(); return parts[-2] + ' ' + parts[-1] if parts[-1] in ('Jr.', 'Sr.', 'II', 'III', 'IV') and len(parts) > 1 else parts[-1]
+    ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
+              td=bool(q.get('touchdown') or q.get('td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'))
     return ln
 
 
@@ -150,6 +157,19 @@ def capture(league, played, user):
                 p = league.player(pid); box['receiving'].append(dict(team=abbr, name=p.name, tgt=int(l.get('tgt', 0)), rec=int(l.get('rec', 0)), yds=int(l.get('rec_yds', 0)), td=int(l.get('rec_td', 0)), lng=longest.get(('rec', pid), 0)))
             for pid, l in top(pids, 'tackles', 3):
                 p = league.player(pid); box['defense'].append(dict(team=abbr, name=p.name, tkl=int(l.get('tackles', 0)), sk=float(l.get('sacks', 0)), int_=int(l.get('int_def', 0)), pd=int(l.get('pass_def', 0))))
+        # line score by quarter, from the score at each drive's end
+        quarters = {home: [0, 0, 0, 0, 0], away: [0, 0, 0, 0, 0]}
+        for d in drives:
+            if not d.get('points'): continue
+            qi = min(4, max(0, int(d.get('quarter', 1)) - 1)); quarters[d['off']][qi] += int(d['points'])
+        # each drive: how it started and what came before it, in words
+        prev_result = None
+        for i, d in enumerate(drives):
+            how = {'Touchdown': 'after a touchdown', 'Field Goal': 'after a field goal', 'Punt': 'after a punt', 'Interception': 'after an interception', 'Fumble': 'after a fumble', 'Turnover on Downs': 'after a stop on fourth down', 'Missed FG': 'after a missed field goal'}.get(prev_result, 'to open' if i == 0 else 'after the kickoff' if prev_result in ('Touchdown', 'Field Goal') else '')
+            spot = d.get('start', 50); side = d['off'] if spot <= 50 else (away if d['off'] == home else home)
+            yard = int(round(spot if spot <= 50 else 100 - spot))
+            d['head'] = f"Drive {d['n']} · {d['off']} · Started at the {side} {yard} {how}".rstrip() + f" · {d['plays_n']} play{'s' if d['plays_n'] != 1 else ''}, {int(round(d['yards']))} yard{'s' if int(round(d['yards'])) != 1 else ''}" + (f", {str(d['result']).lower()}" if d.get('result') else '')
+            prev_result = d.get('result')
         out['game'] = dict(home=home, away=away, hs=res['home'], as_=res['away'], ot=bool(res.get('overtime')), me=user, opp=opp, me_home=me_home,
-                           drives=drives, wp=wp, box=box, env=res.get('env', {}), team_stats=team_stats, reads=reads)
+                           drives=drives, wp=wp, box=box, env=res.get('env', {}), team_stats=team_stats, reads=reads, quarters=quarters)
     return out

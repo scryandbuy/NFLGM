@@ -964,3 +964,9 @@ button.btn{line-height:normal;box-sizing:border-box}
 .aw .ln{font-size:12px;color:var(--ink-3);margin-top:4px}
 .trow .tag{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
 .bust .meta{font-size:12px;color:var(--ink-3);margin-top:3px}.bust .why{font-size:13px;color:var(--ink-2);margin-top:6px}
+
+.track .knob.ghost{background:transparent;border:2px dashed var(--club-2);opacity:.9}
+
+.linescore{margin:0 14px 10px;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.linescore th{color:var(--ink-3);font-weight:500;padding:2px 10px;text-align:center;border-bottom:1px solid var(--rule)}
+.linescore td{padding:3px 10px;text-align:center}.linescore td:first-child{font-family:var(--display);font-weight:700;text-align:left}
