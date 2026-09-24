@@ -35,6 +35,7 @@ class Session:
         # where we are: ('week', n) | ('playoffs',) | ('offseason', i)
         self.stop = getattr(league, '_stop', None) or ('week', 1)
         self.gameday = None
+        self.gamedays = {}
         self.draft = None
 
     # ------------------------------------------------------------ construction
@@ -58,7 +59,7 @@ class Session:
         L = LG.League.load(text)
         s = cls(L, np.random.default_rng(d.get('_seed_state', None)), d.get('_user_team'))
         s.stop = tuple(d.get('_stop', ['week', 1]))
-        s.gameday = d.get('_gameday')
+        s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}
         s.standings = d.get('_standings'); s.order = d.get('_order'); s.fired = [tuple(x) if isinstance(x, list) else x for x in (d.get('_fired') or [])]
         if d.get('_post'):
             class _Post:            # the shape awards, prestige and the almanac read
@@ -80,6 +81,7 @@ class Session:
         d = json.loads(self.L.save())
         d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
         d['_gameday'] = self.gameday
+        d['_gamedays'] = getattr(self, 'gamedays', None) or {}
         # the offseason reads what the playoffs left: standings for the new schedule, the fired
         # coaches for the carousel, and the postseason (champion, finalists, games, seeds) for
         # awards, prestige and the almanac. Without these a save between the playoffs and the
@@ -143,6 +145,9 @@ class Session:
             self.runner.play_week(wk)
             import gameday as GD
             self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team)
+            if self.gameday and self.gameday.get('game'):
+                self.gamedays = getattr(self, 'gamedays', None) or {}
+                self.gamedays[f"{self.L.year}-{wk}"] = self.gameday
             self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs',)
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':
@@ -358,6 +363,9 @@ class Session:
             if m.get('status') == 'unread': m['status'] = 'read'; n += 1
         return dict(ok=True, n=n)
 
-    def gameday_view(self):
+    def gameday_view(self, week=None, year=None):
         import views
+        if week is not None:
+            gd = (getattr(self, 'gamedays', None) or {}).get(f"{year or self.L.year}-{int(week)}")
+            if gd is not None: return views.gameday(self, self.L, self.user_team, gd=gd)
         return views.gameday(self, self.L, self.user_team)

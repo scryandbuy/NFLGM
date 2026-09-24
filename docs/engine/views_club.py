@@ -211,7 +211,7 @@ def card(session, league, pid):
 
 
 def _market_words(league, p, interest):
-    role = 'a starter' if p.ovr >= 78 else 'a rotation piece' if p.ovr >= 72 else 'a depth man'
+    role = 'a starter' if p.ovr >= 78 else 'a rotation piece' if p.ovr >= 72 else 'a depth player'
     age = 'in his prime' if 25 <= p.age <= 29 else 'still coming' if p.age < 25 else 'on the back half' if p.age <= 32 else 'near the end'
     deal = 'on a fair deal' if p.contract and p.apy <= max(1.5, p.ovr / 10) else 'on a heavy deal' if p.contract else 'without a contract'
     price = {'High': 'Clubs with a hole at the spot would pay a first-round pick and more.', 'Moderate': 'A second- or third-round pick is the range.', 'Low': 'A late pick, or a swap of depth.'}[interest]

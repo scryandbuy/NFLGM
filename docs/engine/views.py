@@ -24,6 +24,17 @@ INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 
 DECIDE_KINDS = {'trade_offer', 'match_request', 'staff', 'gameplan', 'game_plan', 'offer_sheet'}
 
 
+def sentence(text):
+    """Every sentence starts with a capital; the engine writes its fragments in lower case."""
+    if not text: return text
+    out = []; cap = True
+    for ch in str(text):
+        if cap and ch.isalpha(): out.append(ch.upper()); cap = False
+        else: out.append(ch)
+        if ch in '.!?': cap = True
+    return ''.join(out)
+
+
 def club(abbr):
     return dict(abbr=abbr, name=CLUB_NAME.get(abbr, abbr), nick=NICK.get(abbr, abbr).upper(), color=CLUB_COLOR.get(abbr, '#555'), accent=CLUB_ACCENT.get(abbr, '#ffb612'))
 
@@ -140,7 +151,7 @@ def _matchup(session, league, abbr):
                     dict(label='Tight End', mine=rk(U, 'tight end'), theirs=rk(M, 'linebackers'))],
             our_tend=[dict(label='They blitz', v=pct(T, 'blitz'), unit='% of snaps'), dict(label='They play two-high', v=pct(T, 'two_high'), unit='% of snaps'), dict(label='They play man', v=pct(T, 'man'), unit='% of pass snaps'), dict(label='Eight in the box', v=pct(T, 'box8'), unit='% of snaps')],
             their_tend=[dict(label='They throw', v=pct(T, 'pass_rate'), unit='% of plays'), dict(label='Play action', v=pct(T, 'pa_rate'), unit='% of dropbacks'), dict(label='Deep shots', v=pct(T, 'deep'), unit='% of throws'), dict(label='Go on fourth', v=pct(T, 'fourth_go'), unit='% of chances')],
-            suggestions=[dict(i=i, side=('Offense' if s['side'] == 'offence' else 'Defense'), text=s['text'], why=s['why']) for i, s in enumerate(rep['suggestions'])],
+            suggestions=[dict(i=i, side=('Offense' if s['side'] == 'offence' else 'Defense'), text=sentence(s['text']), why=sentence(s['why'])) for i, s in enumerate(rep['suggestions'])],
             taken=[i for i, s in enumerate(rep['suggestions']) if s['text'] in ((getattr(league, 'user_week_plan', None) or {}).get('taken', []) if (getattr(league, 'user_week_plan', None) or {}).get('week') == wk else [])])
     # this season's earlier meeting, if any
     series = [dict(week=g[0], home=g[2], away=g[1], hp=g[4], ap=g[3]) for g in league.schedule if g[3] is not None and {g[1], g[2]} == {abbr, opp_abbr}]
@@ -149,7 +160,7 @@ def _matchup(session, league, abbr):
                           prestige=round(getattr(them.gm, 'prestige', 0)) if them.gm else None),
                 wp=wp, forecast=(rep or {}).get('forecast', {}).get('text') if rep else None,
                 injuries=dict(me=inj(me), them=inj(them)), form=dict(me=form(me), them=form(them)),
-                say=say, watch=watch, has_report=rep is not None)
+                say=sentence(say), watch=watch, has_report=rep is not None)
 
 
 def _win_prob(league, abbr, opp, away):
@@ -299,9 +310,9 @@ def _season(league, abbr):
 
 
 # ============================================================ GAME DAY
-def gameday(session, league, abbr):
-    """The last week's games: the scoreboard, and the user's game in full."""
-    gd = getattr(session, 'gameday', None)
+def gameday(session, league, abbr, gd=None):
+    """The last week's games (or a past week's, when gd is given): the scoreboard, and the user's game in full."""
+    gd = gd if gd is not None else getattr(session, 'gameday', None)
     r = rail(session, league, abbr)
     if not gd:
         return dict(rail=r, empty=True, line='No game has been played yet. Advance to play the week.')
