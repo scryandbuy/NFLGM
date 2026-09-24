@@ -23,7 +23,9 @@ def _prospect(league, abbr, p, taken=()):
     flags = list(v.get('flags') or [])
     med = getattr(p, 'medical', None)
     if med and isinstance(med, dict) and med.get('flag'): flags.append(med['flag'])
-    return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), college=getattr(p, 'college', None) or '', mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
+    import scouting as SC
+    return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), college=getattr(p, 'college', None) or '', small=(not SC._power(p)), visited=('visited' in flags or p.pid in (getattr(league, 'user_visits', None) or [])),
+                proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
                 forty=(round(float(comb['forty']), 2) if comb.get('forty') else None), vert=(round(float(comb['vert']), 1) if comb.get('vert') else None),
                 bench=(int(comb['bench']) if comb.get('bench') else None), taken=(p.pid in taken))
@@ -52,9 +54,86 @@ def board(session, league, abbr):
     import staff as ST
     t = league.teams[abbr]
     scout = (getattr(t, 'staff', None) or {}).get('scout')
+    import spring as SP
+    visits = list(getattr(league, 'user_visits', None) or [])
+    spring_done = any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or []))
     return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=(league.year + 1 if not getattr(league, 'draft_pool', None) else league.year),
+                visits=visits, visits_max=SP.VISITS, spring_done=spring_done,
                 scout=(dict(name=scout.name, rating=round(scout.rating)) if scout else None), live=bool(getattr(session, 'draft', None)),
                 note=None if rows else 'The class is scouted in camp; the board fills once the season begins.')
+
+
+def act_visit(session, league, abbr, pid):
+    import spring as SP
+    cur = list(getattr(league, 'user_visits', None) or [])
+    if pid in cur: cur.remove(pid); SP.set_user_visits(league, cur); return dict(ok=True, line='Visit cancelled.', visits=cur)
+    if len(cur) >= SP.VISITS: return dict(ok=False, why=f'all {SP.VISITS} visits are spoken for', visits=cur)
+    cur.append(pid); SP.set_user_visits(league, cur); p = league.player(pid)
+    return dict(ok=True, line=f"{p.name if p else pid} gets a visit ({len(cur)} of {SP.VISITS}).", visits=cur)
+
+
+def spring(session, league, abbr):
+    """The Spring: stock moves by event, your visits with what the second look found, the flags."""
+    news = [x for x in (getattr(league, 'spring_news', None) or []) if x.get('year') == league.year]
+    pool = {p.pid: p for p in _pool(league)}
+    moves = []
+    for x in news:
+        if x.get('kind') != 'stock': continue
+        p = pool.get(x['pid']) or league.player(x['pid'])
+        moves.append(dict(event=x.get('event'), pid=x['pid'], name=x.get('name'), pos=x.get('pos'), college=x.get('college'), frm=x.get('frm'), to=x.get('to'), delta=(x.get('frm') or 0) - (x.get('to') or 0), why=x.get('why', '')))
+    risers = sorted([m for m in moves if m['delta'] > 0], key=lambda m: -m['delta'])[:12]
+    fallers = sorted([m for m in moves if m['delta'] < 0], key=lambda m: m['delta'])[:12]
+    events = []
+    for ev in ('combine', 'Senior Bowl', 'pro days', 'visits'):
+        ms = [m for m in moves if m['event'] == ev]
+        events.append(dict(event=ev.title() if ev != 'Senior Bowl' else ev, n=len(ms), up=sum(1 for m in ms if m['delta'] > 0), down=sum(1 for m in ms if m['delta'] < 0)))
+    visited = []
+    for pid in (getattr(league, 'user_visits', None) or []):
+        p = pool.get(pid) or league.player(pid)
+        if p is None: continue
+        r = _prospect(league, abbr, p)
+        if r: visited.append(r)
+    flagged = [r for r in (_prospect(league, abbr, p) for p in pool.values()) if r and any(f for f in r['flags'] if f != 'visited')]
+    flagged.sort(key=lambda r: (r['cons_rank'] if r['cons_rank'] is not None else 999))
+    done = bool(news)
+    return dict(rail=rail(session, league, abbr), done=done, events=events, risers=risers, fallers=fallers, visited=visited, flagged=flagged[:40],
+                note=None if done else 'The combine, the Senior Bowl, pro days and the thirty visits happen in the Spring step of the offseason. Name your visits on the board now; the second look is the sharpest read your scouts get.')
+
+
+def act_sim_round(session, league, abbr):
+    D = session.draft
+    if D is None: return dict(ok=False, why='no draft on')
+    if D.on_user(): return dict(ok=False, why='you are on the clock; make your pick first')
+    evs = D.sim_round()
+    if D.done: session._draft_over(); return dict(ok=True, line='The draft is over.', done=True)
+    return dict(ok=True, line=(f"{len(evs)} picks made; you are on the clock." if D.on_user() else f"{len(evs)} picks made."))
+
+
+def act_trade_up(session, league, abbr, target, sends):
+    """Buy a pick ahead of yours: the target pick (id) for the picks you send (ids), priced by its owner."""
+    import views_personnel as VP
+    D = session.draft
+    if D is None: return dict(ok=False, why='no draft on')
+    pk = None
+    for q in D.picks[D.i:]:
+        if f"{q.year}-{q.round}-{q.original}" == target: pk = q; break
+    if pk is None or pk.owner == abbr: return dict(ok=False, why='that pick is not on the board')
+    r = VP.act_propose(league, abbr, pk.owner, list(sends), [target])
+    if r.get('done'):
+        return dict(ok=True, done=False, line=f"Traded up to {SLOT(pk)} with {pk.owner}." + (' You are on the clock.' if D.on_user() else ''))
+    return dict(ok=True, done=False, line=r.get('why', 'They passed.'))
+
+
+def act_read_trade_up(session, league, abbr, target):
+    """What the owner would want for the pick, from your picks, cheapest first."""
+    import views_personnel as VP
+    D = session.draft
+    pk = next((q for q in D.picks[D.i:] if f"{q.year}-{q.round}-{q.original}" == target), None)
+    if pk is None: return dict(ok=False, why='that pick is not on the board')
+    mine = [q for q in D.picks[D.i:] if q.owner == abbr]
+    first = [f"{q.year}-{q.round}-{q.original}" for q in mine[:1]]
+    r = VP.act_ask(league, abbr, pk.owner, first, [target])
+    return dict(ok=True, owner=club(pk.owner), slot=SLOT(pk), line=r.get('line', ''), sends=first + list(r.get('adds', [])))
 
 
 # ------------------------------------------------------------ Draft Day
@@ -72,7 +151,7 @@ def draft_day(session, league, abbr):
     best = avail[:8]
     _my_rank(avail); my_board = sorted(avail, key=lambda x: x['my_rank'])[:40]
     # who is on the clock and the next few
-    clock = [dict(sel=q.selection, slot=SLOT(q), team=club(q.owner), mine=(q.owner == abbr)) for q in D.picks[D.i:D.i + 8]]
+    clock = [dict(sel=q.selection, slot=SLOT(q), team=club(q.owner), mine=(q.owner == abbr), id=f"{q.year}-{q.round}-{q.original}") for q in D.picks[D.i:D.i + 8]]
     return dict(rail=r, live=True, on_user=D.on_user(), current=(dict(sel=pk.selection, slot=SLOT(pk), round=pk.round, team=club(pk.owner), original=pk.original) if pk else None),
                 clock=clock, results=results, mine_next=mine_next, best=best, board=my_board, picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades))
 

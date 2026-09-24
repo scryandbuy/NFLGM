@@ -51,7 +51,7 @@ def logistic(x, k=6.0):
 # Re-solved INSIDE GAMES (refit_clock.py). 3.16 was the bare four-man answer;
 # with the blitz multiplier, simulated-pressure protection error and hot routes
 # all taking time off the clock, attempts were leaving the hand at 2.55s.
-RUSHER_BASE = 3.36
+RUSHER_BASE = 3.42          # a step slower once the front rotates: fresher rushers had sacks at 7.25% against a real 6.6
 BASE_TTT = 2.72          # the league mean the clock must land on
 # how much longer than the average dropback the ball is held, by the route's depth
 HOLD_BY_DEPTH = {'screen': -0.55, 'short': -0.22, 'medium': 0.08, 'deep': 0.40}   # deep sacks ran 24% against a real ~10 at 0.50
@@ -240,7 +240,7 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # man meant cover 0 or cover 1 on a fifth of snaps; with the full call
     # book man is a third of targets and was completing 66% against a real
     # ~60, ABOVE zone, which is backwards.
-    DEPTH_MULT = {'short': 1.50, 'medium': 1.13, 'deep': 0.82}   # re-solved with the starters staying in to block
+    DEPTH_MULT = {'short': 1.58, 'medium': 1.20, 'deep': 0.87}   # re-solved with the starters staying in to block, then again once the fourth receiver, second tight end and second back rotate into the pattern
     import matchups as M
     base = separation * (1.0 + M.ZONE_SLOPE['acc'] * (acc - AVG)) * outcome_mult
     p = float(np.clip(base * DEPTH_MULT[depth] * (ENV.deep_mult if depth == 'deep' else (1.0 - 0.3 * (1.0 - ENV.deep_mult)) if depth == 'medium' else 1.0), 0.02, 0.97))
@@ -629,7 +629,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # So the men the protection keeps are drawn from the starters: on a
     # six-man protection the back most often, the tight end otherwise; on
     # seven both; on max the second tight end too.
-    back = (off.get('backs') or [off.get('rb')])[0] if (off.get('backs') or off.get('rb')) else None
+    back = off.get('rb') or ((off.get('backs') or [None])[0])      # the back on the field this snap, not always the lead back
     te1 = next((x for x in off['wr'] if x.get('pos') == 'TE'), None)
     extras = []
     n_extra = max(0, prot['blockers'] - 5)

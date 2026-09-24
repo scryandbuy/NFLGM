@@ -733,10 +733,17 @@ def pick_runner(backs, state, rng, gameplan=None):
     return avail[i], i
 
 
-OFF_SLOTS = [('ol', ['LT', 'LG', 'C', 'RG', 'RT']), ('wr', ['WR', 'WR', 'WR'])]
-DEF_SLOTS = [('dl', ['LEDG', 'DT', 'DT', 'REDG']),
-             ('lb', ['MIKE', 'WILL']),
-             ('db', ['CB', 'CB', 'CB', 'FS', 'SS'])]
+# five skill slots: the package chooses up to five men (receivers, tight ends, a second back)
+# and every one of them gets on the field. With three slots the tight end in 11 personnel
+# was the fourth man in the list and sat unless a receiver was resting.
+OFF_SLOTS = [('ol', ['LT', 'LG', 'C', 'RG', 'RT']), ('wr', ['WR', 'WR', 'WR', 'WR', 'WR'])]
+# the slot lists are as long as the biggest package needs: heavy fields five linemen and
+# four linebackers, dime six defensive backs. Shorter lists cut the package's last man.
+DEF_SLOTS = [('dl', ['LEDG', 'DT', 'DT', 'REDG', 'DT']),
+             ('lb', ['MIKE', 'WILL', 'SAM', 'MIKE']),
+             ('db', ['CB', 'CB', 'CB', 'FS', 'SS', 'CB'])]
+# without a package (a call that names no personnel) the defence is the nickel shape
+NO_PACKAGE_SLOTS = {'dl': 4, 'lb': 2, 'db': 5, 'wr': 4, 'ol': 5}
 
 POS_KEY = {'WR': 'wr', 'TE': 'wr', 'HB': 'wr', 'CB': 'db', 'FS': 'db',
            'SS': 'db', 'LB': 'lb', 'DL': 'dl'}
@@ -759,8 +766,19 @@ def package_units(roster, state, rng, is_offense, package):
               [p for p in roster.get('extra_blockers', []) if p.get('pos') == 'TE']
         hbs = [p for p in pool if p.get('pos') in ('HB', 'RB', 'FB')] or \
               [roster.get('rb')]
-        chosen = wrs[:spec.get('WR', 3)] + tes[:spec.get('TE', 1)] + \
-                 hbs[:max(0, spec.get('HB', 1) - 1)]
+        n_wr, n_te = spec.get('WR', 3), spec.get('TE', 1)
+        chosen_wr = wrs[:n_wr]
+        # ROTATION THE PACKAGE DOES NOT EXPLAIN. Real fourth receivers play 20-30% of
+        # snaps and fifth receivers about a tenth; only a quarter of that is four-wide
+        # personnel, the rest is the third spot rotating. Same for the second tight
+        # end in single-tight-end sets (real TE2: 30-45%, of which 12 and 13 personnel
+        # are about 22 points).
+        if n_wr >= 3 and len(wrs) > n_wr and rng.random() < 0.23:
+            sub = wrs[n_wr] if (len(wrs) <= n_wr + 1 or rng.random() < 0.72) else wrs[n_wr + 1]
+            chosen_wr = wrs[:n_wr - 1] + [sub]
+        chosen_te = tes[:n_te]
+        if n_te == 1 and len(tes) > 1 and rng.random() < 0.15: chosen_te = [tes[1]]
+        chosen = chosen_wr + chosen_te + hbs[:max(0, spec.get('HB', 1) - 1)]
         out['wr'] = [c for c in chosen if c] or pool[:3]
     else:
         db = list(roster.get('db', []))
@@ -776,7 +794,30 @@ def package_units(roster, state, rng, is_offense, package):
         else:
             out['db'] = cbs[:n_cb] + saf[:spec.get('FS', 1) + spec.get('SS', 1)]
         out['lb'] = list(roster.get('lb', []))[:spec.get('LB', 2)]
-        out['dl'] = list(roster.get('dl', []))[:spec.get('DL', 4)]
+        # THE FRONT ROTATES. Fatigue alone left the starting four at 92-94% of snaps;
+        # real edges play 65-80% and interior linemen 55-70%, with the third edge at
+        # 30-45% and the third and fourth tackles at 30-45 and 15-30. Each slot rotates
+        # to the next man at its spot on a draw, with the interior turning over more.
+        dl = list(roster.get('dl', [])); n_dl = spec.get('DL', 4)
+        starters = dl[:n_dl]; depth = dl[n_dl:]
+        def same_spot(a, b):
+            ea = a.get('pos') in ('LEDG', 'REDG'); eb = b.get('pos') in ('LEDG', 'REDG'); return ea == eb
+        fielded, used = [], set()
+        # the starters are asked in a random order, so with one backup at the spot both
+        # starters share the rest rather than the first-listed (the best) man taking it all
+        order = list(range(len(starters))); rng.shuffle(order); fielded = [None] * len(starters)
+        for idx in order:
+            st_ = starters[idx]
+            edge = st_.get('pos') in ('LEDG', 'REDG')
+            p_rot = 0.30 if edge else 0.32
+            subs = [d for d in depth if same_spot(d, st_) and d.get('pid') not in used]
+            if subs and rng.random() < p_rot:
+                # the first backup takes most of the rotation, the second a share
+                pick = subs[0] if (len(subs) == 1 or rng.random() < (0.78 if edge else 0.68)) else subs[1]
+                fielded[idx] = pick; used.add(pick.get('pid'))
+            else:
+                fielded[idx] = st_; used.add(st_.get('pid'))
+        out['dl'] = fielded
     return out
 
 
@@ -793,6 +834,7 @@ def field_units(roster, state, rng, is_offense, package=None):
     pk = package_units(roster, state, rng, is_offense, package) if package else None
     if pk:
         roster = dict(roster); roster.update(pk)
+    packaged = set(pk.keys()) if pk else set()
     out, positions = dict(roster), {}
     slots = OFF_SLOTS if is_offense else DEF_SLOTS
     if is_offense:
@@ -837,7 +879,9 @@ def field_units(roster, state, rng, is_offense, package=None):
         # and produced a completely flat snap distribution.
         avail = state.available(group, poslist[0])
         used, chosen = set(), []
-        for pos in poslist[:min(len(poslist), len(avail))]:
+        # a package names exactly the men who play; without one, the default shape
+        n_slots = len(group) if key in packaged else NO_PACKAGE_SLOTS.get(key, len(poslist))
+        for pos in poslist[:min(len(poslist), len(avail), n_slots)]:
             pick = None
             for rank, p in enumerate(avail):
                 pid = p.get('pid')
@@ -850,9 +894,10 @@ def field_units(roster, state, rng, is_offense, package=None):
                 pick = next((p for p in avail if p.get('pid') not in used),
                             avail[-1])
             used.add(pick.get('pid'))
-            state.snap(pick, pos, True)
-            chosen.append(state.state(pick, pos))
-            positions[pick.get('pid')] = pos
+            ppos = pick.get('pos') or pos
+            state.snap(pick, ppos, True)
+            chosen.append(state.state(pick, ppos))
+            positions[pick.get('pid')] = ppos
         for p in group:
             if p.get('pid') not in used:
                 state.snap(p, poslist[0], False)
