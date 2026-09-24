@@ -36,7 +36,7 @@ GAME = 3600
 def play_seconds(result, clock_stopped=False, hurry=False, timeout=False):
     s = SEC.get(result, 25.0)
     if clock_stopped: s = min(s, 8.0)
-    if hurry: s *= 0.55
+    if hurry: s *= 0.65     # a two-minute drill runs about 17 seconds a snap against 25 to 27 at the normal pace
     if timeout: s = min(s, 6.0)     # the clock stops the moment it is called
     return float(s)
 
@@ -911,9 +911,15 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # the 30 does not run another play. The drive loop only ever kicked
         # on fourth down, so the tying kick was rarely attempted and
         # overtime ran at 3% against a real 6.2%. ----
-        if quarter >= 4 and -3 <= dr.score_diff <= 0 and dr.yardline <= 37 \
-                and dr.down < 4 and (dr.clock <= 8 or (dr.clock <= 22 and timeouts is not None
-                                                        and timeouts.left.get(pos, 0) == 0)):
+        # the seconds left in THIS half: the first-half two-minute drill and the
+        # kick before the break were missing, and the second quarter scored 8.4
+        # points a game against a real 13; games without those points finish
+        # farther apart than they should (12% decided by 1-3 against a real 23)
+        secs_in_half = dr.clock - half_end if half_end is not None else dr.clock
+        no_tos = timeouts is not None and timeouts.left.get(pos, 0) == 0
+        clock_kick_time = secs_in_half <= 8 or (secs_in_half <= 22 and no_tos)
+        if ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) \
+                and dr.yardline <= 37 and dr.down < 4 and clock_kick_time:
             fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
             if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
             dr.clock -= min(dr.clock, play_seconds('field_goal'))
@@ -966,8 +972,11 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             olean = dict(pass_bias=pl0.pass_bias, play_action=min(0.95, pl0.play_action_rate * pa_boost),
                          motion=getattr(pl0, 'motion_rate', 0.365), protection=getattr(pl0, 'protection', None),
                          screen_boost=getattr(pl0, 'screen_boost', 0.0))
+        secs_for_call = dr.clock
+        if half_end is not None and quarter <= 2 and secs_in_half <= 240 and dr.score_diff <= 0:
+            secs_for_call = secs_in_half          # the drive before the break is a two-minute drill for the side not ahead
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
-                      dr.score_diff, ytg_i, rng, secs_left=dr.clock,
+                      dr.score_diff, ytg_i, rng, secs_left=secs_for_call,
                       offense=offense, rate_fn=rate_fn, lean=olean)
         # Backed up against the own goal the offence plays differently. That
         # used to be an OVERRIDE here that rewrote a called pass as a run or
@@ -1217,8 +1226,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                 used = timeouts.use(other)
             elif dr.score_diff <= 0 and dr.clock < 120 and timeouts.left.get(pos, 0) > 0:
                 used = timeouts.use(pos)
-        dr.clock -= play_seconds(t, hurry=(dr.clock < 120 and dr.score_diff < 0),
-                                 timeout=used)
+        hurry = secs_in_half < 120 and dr.score_diff <= 0
+        dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
         scored = _advance(dr, out.get('yards', 0.0))
         if scored: break
         if dr.down > 4:
