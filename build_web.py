@@ -7,7 +7,7 @@ MODULES = ['adjust', 'advanced_stats', 'almanac', 'awards', 'cap_engine', 'coach
            'negotiation_engine', 'negotiations', 'newgens', 'otc_2026', 'personality', 'playcall', 'plays', 'position_change', 'postseason', 'practice_squad', 'progression_engine',
            'regression', 'retirement', 'roster_construction', 'rosters', 'schedule', 'schemes', 'scouting', 'season', 'session', 'spring', 'staff', 'standings_and_seeding', 'tags',
            'targets', 'ticker', 'gameday', 'gm_surfaces', 'draft_day', 'views_club', 'views_personnel', 'views_frontoffice', 'views_draft', 'views_league', 'views_gameplan', 'trade_engine', 'trades', 'valuation', 'views', 'waivers', 'weather', 'xp', 'xp_spend', 'zones']
-DATA = ['newgen_shape.json', 'league_seed_2026.csv', 'schedule_2026.csv', 'cfb27_ratings.csv', 'aging_curves.json', 'pick_values.json', 'wp_model.json', 'production_scores.json']
+DATA = ['newgen_shape.json', 'league_seed_2026.csv', 'schedule_2026.csv', 'cfb27_ratings.csv', 'aging_curves.json', 'pick_values.json', 'wp_model.json', 'production_scores.json', 'free_agent_pool.csv']
 os.makedirs(OUT, exist_ok=True)
 for m in MODULES: shutil.copy(os.path.join(HERE, m + '.py'), OUT)
 for d in DATA: shutil.copy(os.path.join(HERE, d), OUT)
