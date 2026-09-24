@@ -250,6 +250,7 @@ class Team:
         self.owner_patience = 0.5         # how long the owner waits on a plan
         self.owner_acumen = 0.5           # how well the owner reads a coach
         self.owner_star_pull = 0.5        # how much a big name sways him
+        self.owner_spend = 0.5            # how freely he pays the staff (0 tight .. 1 open); the staff budget tilts 15% either way
         self.picks = []                   # DraftPick
         self.cap = TeamCap(year)
         self.record = [0, 0, 0]           # W L T, this season
@@ -448,7 +449,7 @@ class Team:
                     roster=[p.pid for p in self.roster],
                     practice_squad=[p.pid for p in self.practice_squad],
                     owner_patience=self.owner_patience, owner_acumen=self.owner_acumen,
-                    owner_star_pull=getattr(self, 'owner_star_pull', 0.5),
+                    owner_star_pull=getattr(self, 'owner_star_pull', 0.5), owner_spend=getattr(self, 'owner_spend', 0.5),
                     ir=[p.pid for p in self.ir],
                     picks=[asdict(k) for k in self.picks],
                     cap_year=self.cap.year, cap_rollover=self.cap.rollover,
@@ -767,7 +768,7 @@ class League:
             t.practice_squad = [L.players[p] for p in td['practice_squad']
                                 if p in L.players]
             t.ir = [L.players[p] for p in td['ir'] if p in L.players]
-            t.owner_patience = td.get('owner_patience', 0.5); t.owner_acumen = td.get('owner_acumen', 0.5); t.owner_star_pull = td.get('owner_star_pull', 0.5)
+            t.owner_patience = td.get('owner_patience', 0.5); t.owner_acumen = td.get('owner_acumen', 0.5); t.owner_star_pull = td.get('owner_star_pull', 0.5); t.owner_spend = td.get('owner_spend', 0.5)
             t.picks = [DraftPick(**k) for k in td['picks']]
             t.cap = TeamCap(td['cap_year'], td['cap_rollover'])
             t.cap.dead = td['cap_dead']
@@ -989,6 +990,7 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         t.owner_patience = float(np.clip(rng.normal(0.5, 0.18), 0.05, 0.95))
         t.owner_acumen = float(np.clip(rng.normal(0.5, 0.18), 0.05, 0.95))
         t.owner_star_pull = float(np.clip(rng.normal(0.5, 0.2), 0.05, 0.95))   # how much a big name sways him
+        t.owner_spend = float(np.clip(rng.normal(0.5, 0.2), 0.05, 0.95))       # how freely he pays the staff
         L.teams[abbr] = t
     # the thirty men waiting for a job
     import coaching_pool as CP

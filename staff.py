@@ -49,11 +49,41 @@ POOL_SIZE = {'oc': 14, 'dc': 14, 'st': 8, 'scout': 10}
 CONTRACT_YEARS = (3, 4, 5)         # assistants sign longer than they used to; fewer come up each year
 OFFENSE_POS = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'}
 CHANGE_RATE_TARGET = 0.33          # share of clubs changing a coordinator per offseason
+BUDGET_BASE = 9.0                  # $m for the four assistants; the owner's spending weight tilts it 15% either way
+ROLE_SCALE = {'oc': 1.0, 'dc': 1.0, 'st': 0.5, 'scout': 0.4}
+HC_CANDIDATE_PREMIUM = 1.20
+ENTRANT_DISCOUNT = 0.85
+
+
+def ask(coach):
+    """What he asks a year, $m. Flat at the bottom of the market and steep at the
+    top: a floor for the job, a rating term quadratic above 50, a smaller linear
+    prestige term, a premium for a head-coaching candidate, a discount for a
+    first-year entrant, and his money trait either way."""
+    r = max(0.0, coach.rating - 50.0)
+    base = 0.9 + 0.0019 * r * r + 0.012 * coach.prestige
+    if coach.hc_candidate: base *= HC_CANDIDATE_PREMIUM
+    if not coach.history and coach.age <= 42: base *= ENTRANT_DISCOUNT
+    fp = (coach.traits or {}).get('financial_priority', 50) / 100.0
+    base *= 0.90 + 0.20 * fp
+    return round(base * ROLE_SCALE[coach.role], 2)
+
+
+def budget(team):
+    return round(BUDGET_BASE * (0.85 + 0.30 * float(getattr(team, 'owner_spend', 0.5))), 2)
+
+
+def payroll(team, without=None):
+    return round(sum(c.salary for r, c in (getattr(team, 'staff', None) or {}).items() if c is not None and r != without), 2)
+
+
+def room(team, without=None):
+    return round(budget(team) - payroll(team, without), 2)
 DISGRUNTLED_HIT = 12.0             # rating points lost for the year after being blocked
 
 
 class Coach:
-    __slots__ = ('name', 'role', 'rating', 'prestige', 'specialty', 'age', 'years', 'team', 'traits', 'history', 'unit_ranks', 'hc_candidate', 'disgruntled')
+    __slots__ = ('name', 'role', 'rating', 'prestige', 'specialty', 'age', 'years', 'team', 'traits', 'history', 'unit_ranks', 'hc_candidate', 'disgruntled', 'salary')
 
     def __init__(self, name, role, rating, prestige, specialty, age, years=3, team=None, traits=None):
         self.name, self.role = name, role
@@ -64,6 +94,7 @@ class Coach:
         self.unit_ranks = []           # last seasons' unit rank on his side
         self.hc_candidate = False
         self.disgruntled = 0            # the year he was kept against his will, 0 if not
+        self.salary = 0.0               # $m a year on his current deal
 
     def effective(self):
         """A coordinator kept from a head-coaching job coaches worse for a year:
@@ -72,12 +103,12 @@ class Coach:
 
     def to_dict(self):
         return dict(name=self.name, role=self.role, rating=self.rating, prestige=self.prestige, specialty=self.specialty, age=self.age,
-                    years=self.years, team=self.team, traits=self.traits, history=self.history, unit_ranks=self.unit_ranks, hc_candidate=self.hc_candidate, disgruntled=self.disgruntled)
+                    years=self.years, team=self.team, traits=self.traits, history=self.history, unit_ranks=self.unit_ranks, hc_candidate=self.hc_candidate, disgruntled=self.disgruntled, salary=self.salary)
 
     @classmethod
     def from_dict(cls, d):
         c = cls(d['name'], d['role'], d['rating'], d['prestige'], d['specialty'], d['age'], d.get('years', 1), d.get('team'), d.get('traits'))
-        c.history = d.get('history', []); c.unit_ranks = d.get('unit_ranks', []); c.hc_candidate = d.get('hc_candidate', False); c.disgruntled = d.get('disgruntled', 0)
+        c.history = d.get('history', []); c.unit_ranks = d.get('unit_ranks', []); c.hc_candidate = d.get('hc_candidate', False); c.disgruntled = d.get('disgruntled', 0); c.salary = d.get('salary', 0.0)
         return c
 
 
@@ -121,6 +152,10 @@ def seed(league, rng):
             r = float(np.clip(rng.normal(58 + 14 * hc_q, 10), 38, 90))
             c = make(rng, role, rating=r, team=abbr, league=league); c.history.append((league.year, abbr, role))
             team.staff[role] = c
+        for c in team.staff.values(): c.salary = ask(c)
+        over = payroll(team) - budget(team)
+        if over > 0:                                    # day one must fit: the men signed for a shade under the market
+            for c in team.staff.values(): c.salary = round(c.salary * budget(team) / payroll(team), 2)
     league.staff_pool = getattr(league, 'staff_pool', None) or []
     for role, n in POOL_SIZE.items():
         have = sum(1 for c in league.staff_pool if c.role == role)
@@ -263,7 +298,7 @@ def carousel(league, rng, new_head_coaches=(), verbose=False):
         if abbr != user or True:
             to_pool(team, side_role, 'new head coach brought his own')
             c = make(rng, side_role, rating=float(np.clip(rng.normal(60 + 0.2 * getattr(gm, 'prestige', 60) - 10, 8), 40, 90)), team=abbr, league=league)
-            c.years = int(rng.choice(CONTRACT_YEARS)); c.history.append((league.year, abbr, side_role)); team.staff[side_role] = c
+            c.years = int(rng.choice(CONTRACT_YEARS)); c.history.append((league.year, abbr, side_role)); c.salary = ask(c); team.staff[side_role] = c
             log.append(dict(team=abbr, role=side_role, hired=c.name, why='came with the head coach'))
             league.log('staff_in', team=abbr, role=side_role, name=c.name, why='came with the head coach')
 
@@ -290,8 +325,11 @@ def carousel(league, rng, new_head_coaches=(), verbose=False):
             # higher for a hot name with head-coaching interest and on a losing club
             stay = 0.74 + 0.02 * (wins - 8) + 0.25 * (c.traits.get('loyalty', 50) / 100.0 - 0.5) - (0.35 if c.hc_candidate else 0.0)
             if c.disgruntled: stay = 0.0                      # a man you blocked walks when he can
-            if rng.random() < stay:
-                c.years = int(rng.choice(CONTRACT_YEARS)); league.log('staff_extend', team=abbr, role=role, name=c.name)
+            new_ask = ask(c)
+            if rng.random() < stay and new_ask <= room(team, without=role) + 1e-9:
+                c.years = int(rng.choice(CONTRACT_YEARS)); c.salary = new_ask; league.log('staff_extend', team=abbr, role=role, name=c.name, salary=new_ask)
+            elif rng.random() < stay:
+                to_pool(team, role, 'contract up, priced out')       # the club could not fit his new ask
             else:
                 to_pool(team, role, 'contract up, walked')
 
@@ -305,8 +343,11 @@ def carousel(league, rng, new_head_coaches=(), verbose=False):
             if abbr == user:
                 _post_user(league, team, role, None, 'vacant', cands); continue
             hc_q = float(getattr(team.gm, 'prestige', 60)) / 100.0
-            best = max(cands, key=lambda c: c.rating * (0.6 + 0.4 * hc_q) + 0.35 * c.prestige + rng.normal(0, 4))
+            rm = room(team)
+            fit = [c for c in cands if ask(c) <= rm + 1e-9] or sorted(cands, key=ask)[:1]   # the best he can afford; if nothing fits, the cheapest
+            best = max(fit, key=lambda c: c.rating * (0.6 + 0.4 * hc_q) + 0.35 * c.prestige + rng.normal(0, 4))
             pool.remove(best); best.team = abbr; best.years = int(rng.choice(CONTRACT_YEARS)); best.history.append((league.year, abbr, role))
+            best.salary = min(ask(best), max(0.4 * ROLE_SCALE[role], rm)) if ask(best) > rm else ask(best)
             team.staff[role] = best
             log.append(dict(team=abbr, role=role, hired=best.name, why='from the pool'))
             league.log('staff_in', team=abbr, role=role, name=best.name, why='from the pool')
@@ -362,8 +403,10 @@ def poach_request(league, coach, to_abbr, alternate=None):
     return t
 
 
-def answer_poach(league, tid, action, raise_years=0, rng=None):
-    """action: 'let_go' | 'persuade' | 'block'. persuade with raise_years > 0 is a conversation and money."""
+def answer_poach(league, tid, action, raise_years=0, raise_to=None, rng=None):
+    """action: 'let_go' | 'persuade' | 'block'. persuade with raise_years and/or raise_to ($m a year) is a
+    conversation and money; the money has to fit the staff budget, and what moves an ambitious man is a
+    number near what a head-coaching job would pay him at his level, about 1.6x his ask."""
     rng = rng or np.random.default_rng(tid)
     t = next((x for x in (getattr(league, 'poaches', None) or []) if x['id'] == tid), None)
     if t is None or t['state'] != 'open': return dict(ok=False, why='nothing open')
@@ -375,9 +418,16 @@ def answer_poach(league, tid, action, raise_years=0, rng=None):
     if action == 'persuade':
         t['tries'] += 1
         base = {'go': 0.12, 'torn': 0.35, 'stay': 0.60}[t['lean']]
-        p = base + 0.25 * (loy - 0.5) - 0.25 * (amb - 0.5) + (0.12 * min(raise_years, 3) * (0.6 + 0.8 * money) if raise_years else 0.0) - 0.15 * (t['tries'] - 1)
+        a = ask(c); target = 1.6 * a
+        if raise_to is not None and raise_to > room(team, without=t['role']) + 1e-9:
+            return dict(ok=False, why=f'over the staff budget: ${room(team, without=t["role"]):.2f}m of room', ask=a)
+        money_term = 0.0
+        if raise_to is not None and raise_to > c.salary:
+            money_term = 0.35 * float(np.clip((raise_to - c.salary) / max(0.1, target - c.salary), 0, 1)) * (0.6 + 0.8 * money)
+        p = base + 0.25 * (loy - 0.5) - 0.25 * (amb - 0.5) + money_term + (0.04 * min(raise_years, 3) if raise_years else 0.0) - 0.15 * (t['tries'] - 1)
         if rng.random() < float(np.clip(p, 0.03, 0.9)):
             t['state'] = 'stayed'; c.years = max(c.years, int(raise_years) or c.years, 2); c.prestige = float(np.clip(c.prestige + 2, 0, 95))
+            if raise_to is not None and raise_to > c.salary: c.salary = round(float(raise_to), 2)
             league.log('staff_extend', team=team.abbr, role=c.role, name=c.name, why='stayed after a head-coaching offer')
             return dict(ok=True, result='he stays', line=f"{c.name} stays." + (f" A new {int(raise_years)}-year deal." if raise_years else " He appreciated the conversation."))
         return dict(ok=True, result='he still wants to go', line=f"{c.name} hears you out and still wants the job. Let him go, or block it.")
@@ -399,11 +449,15 @@ def finalize_poaches(league):
 
 
 # ------------------------------------------------------------ the user's actions
-def extend(league, abbr, role, years=3):
+def extend(league, abbr, role, years=3, salary=None):
+    """Extend at his ask (or the salary you name, which he takes if it is at least his ask). Must fit the budget."""
     team = league.teams[abbr]; c = team.staff.get(role)
     if c is None: return dict(ok=False, why='no one in the job')
-    c.years = int(years); league.log('staff_extend', team=abbr, role=role, name=c.name)
-    return dict(ok=True, name=c.name, years=years)
+    a = ask(c); pay = float(salary) if salary is not None else a
+    if pay + 1e-9 < a: return dict(ok=False, why=f'he asks ${a:.2f}m', ask=a)
+    if pay > room(team, without=role) + 1e-9: return dict(ok=False, why=f'over the staff budget: ${room(team, without=role):.2f}m of room', ask=a, room=room(team, without=role))
+    c.years = int(years); c.salary = round(pay, 2); league.log('staff_extend', team=abbr, role=role, name=c.name, salary=c.salary)
+    return dict(ok=True, name=c.name, years=years, salary=c.salary)
 
 
 def release(league, abbr, role):
@@ -419,7 +473,9 @@ def hire(league, abbr, coach_name, years=3):
     c = next((x for x in league.staff_pool if x.name == coach_name), None)
     if c is None: return dict(ok=False, why='not in the pool')
     if team.staff.get(c.role) is not None: return dict(ok=False, why=f'{ROLE_NAME[c.role]} job is filled')
-    league.staff_pool.remove(c); c.team = abbr; c.years = int(years); c.history.append((league.year, abbr, c.role)); team.staff[c.role] = c
+    a = ask(c)
+    if a > room(team) + 1e-9: return dict(ok=False, why=f'he asks ${a:.2f}m and you have ${room(team):.2f}m of room', ask=a, room=room(team))
+    league.staff_pool.remove(c); c.team = abbr; c.years = int(years); c.salary = a; c.history.append((league.year, abbr, c.role)); team.staff[c.role] = c
     league.log('staff_in', team=abbr, role=c.role, name=c.name, why='hired by the user')
     return dict(ok=True, name=c.name, role=c.role)
 
@@ -431,7 +487,7 @@ def pool_for(league, role):
 def card(coach):
     import personality as PT
     return dict(name=coach.name, role=ROLE_NAME[coach.role], rating=round(coach.rating), prestige=round(coach.prestige), specialty=coach.specialty,
-                age=coach.age, years=coach.years, personality=PT.words(coach.traits) if coach.traits else '', hc_candidate=coach.hc_candidate,
+                age=coach.age, years=coach.years, salary=coach.salary, ask=ask(coach), personality=PT.words(coach.traits) if coach.traits else '', hc_candidate=coach.hc_candidate,
                 unit_ranks=coach.unit_ranks[-3:])
 
 
