@@ -490,12 +490,12 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .pkgbox .plate{grid-template-columns:32px 1fr auto 30px}
 .pkgbox{min-height:132px;border:1px dashed var(--rule-hi);background:var(--board);padding:8px;display:flex;flex-direction:column;gap:6px}
 .pkgbox .empty{color:var(--ink-3);font-size:13px;text-align:center;padding:26px 0}
-.pick{display:grid;grid-template-columns:32px 1fr 30px;align-items:center;background:var(--sheet-2);border:1px solid var(--rule);height:40px}
-.pick .rd{font-family:var(--display);font-weight:900;font-size:16px;text-align:center;background:var(--club-2);color:#111;height:100%;display:grid;place-items:center}
-.pick .nm{font-family:var(--display);font-weight:700;font-size:15px;padding:0 8px;line-height:1}
-.pick .nm small{display:block;font-family:var(--text);font-weight:500;font-size:10.5px;color:var(--ink-3);margin-top:3px}
-.pick .x,.plate .x{font-family:var(--mono);font-size:12px;color:var(--ink-3);padding:0 10px;cursor:pointer}
-.pick .x:hover,.plate .x:hover{color:var(--danger)}
+.pkcard{display:grid;grid-template-columns:32px 1fr 30px;align-items:center;background:var(--sheet-2);border:1px solid var(--rule);height:40px}
+.pkcard .rd{font-family:var(--display);font-weight:900;font-size:16px;text-align:center;background:var(--club-2);color:#111;height:100%;display:grid;place-items:center}
+.pkcard .nm{font-family:var(--display);font-weight:700;font-size:15px;padding:0 8px;line-height:1}
+.pkcard .nm small{display:block;font-family:var(--text);font-weight:500;font-size:10.5px;color:var(--ink-3);margin-top:3px}
+.pkcard .x,.plate .x{font-family:var(--mono);font-size:12px;color:var(--ink-3);padding:0 10px;cursor:pointer}
+.pkcard .x:hover,.plate .x:hover{color:var(--danger)}
 .read{background:var(--sheet-2);border:1px solid var(--rule);padding:10px 12px;font-size:13.5px;line-height:1.5;color:var(--ink-2)}
 .read b{color:var(--ink);font-weight:600}
 .meter{display:flex;gap:3px}
@@ -562,10 +562,10 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .wrow{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;font-size:13px}
 .wrow .t{height:10px;background:var(--sheet-3);border:1px solid var(--rule)}
 .wrow .t i{display:block;height:100%;background:var(--rule-hi)}
-.hist{border:1px solid var(--rule)}
-.hist div{display:grid;grid-template-columns:70px 1fr;gap:10px;padding:7px 10px;border-bottom:1px solid var(--rule);font-size:13px}
-.hist div:last-child{border-bottom:0}
-.hist time{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.histlist{border:1px solid var(--rule)}
+.histlist div{display:grid;grid-template-columns:70px 1fr;gap:10px;padding:7px 10px;border-bottom:1px solid var(--rule);font-size:13px}
+.histlist div:last-child{border-bottom:0}
+.histlist time{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
 .arch{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding:12px 14px 4px}
 @media (max-width:1100px){.arch{grid-template-columns:repeat(4,1fr)}}
 .arch div{height:52px;border:1px solid var(--rule);background:var(--board);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;font-size:13px;color:var(--ink-3);text-align:center;line-height:1.05;padding:0 4px}
@@ -717,10 +717,10 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .yr{background:var(--board);border:1px solid var(--rule)}
 .yr h4{font-family:var(--display);font-weight:900;font-size:16px;padding:8px 10px 6px;border-bottom:1px solid var(--rule-2);display:flex;justify-content:space-between}
 .yr h4 small{font-family:var(--text);font-weight:500;font-size:11px;color:var(--ink-3)}
-.yr .pick{margin:6px 8px}
-.yr .pick.used{opacity:.55}
-.yr .pick.used .rd{background:var(--rule-hi)}
-.yr .pick.gone{opacity:.45}.yr .pick.gone .rd{background:var(--danger);color:#fff}
+.yr .pkcard{margin:6px 8px}
+.yr .pkcard.used{opacity:.55}
+.yr .pkcard.used .rd{background:var(--rule-hi)}
+.yr .pkcard.gone{opacity:.45}.yr .pkcard.gone .rd{background:var(--danger);color:#fff}
 .ctrl{display:flex;gap:6px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--rule)}
 .ctrl .sep{width:1px;height:24px;background:var(--rule-2);margin:0 6px}
 
