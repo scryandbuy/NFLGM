@@ -318,7 +318,7 @@ class Draft:
         p.potential = None
         self.L.sign(p.pid, pk.owner, DFT.rookie_contract(pk.selection, cap))
         self.L.log('draft', pid=p.pid, team=pk.owner, round=pk.round, selection=pk.selection,
-                   pos=p.pos, consensus_rank=self.L.consensus[p.pid]['rank'])
+                   pos=p.pos, consensus_rank=self.L.consensus[p.pid]['rank'], ovr_then=round(float(p.ovr), 1))
         self.results.append((pk.selection, pk.owner, p))
         self.i += 1
         if self.done:
