@@ -448,7 +448,7 @@ function renderTrades(v) {
     for (const id of sel) {
       const p = own.roster.find(r => r.pid === id), k = own.picks.find(r => r.id === id);
       if (p) pk.append(el('div', { class: 'plate' }, el('div', { class: 'no' }, p.no || p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${p.age} · $${p.hit}m · ${p.yrs} yrs`)), el('div', { class: 'ov' }, p.ovr), el('div', { class: 'x', onclick: () => { sel.splice(sel.indexOf(id), 1); reload(); } }, '✕')));
-      else if (k) pk.append(el('div', { class: 'pick' }, el('div', { class: 'rd' }, k.round), el('div', { class: 'nm' }, k.label, el('small', {}, k.slot === `R${k.round}` ? `Round ${k.round}` : `Pick ${k.slot}`)), el('div', { class: 'x', onclick: () => { sel.splice(sel.indexOf(id), 1); reload(); } }, '✕')));
+      else if (k) pk.append(el('div', { class: 'pkcard' }, el('div', { class: 'rd' }, k.round), el('div', { class: 'nm' }, k.label, el('small', {}, k.slot === `R${k.round}` ? `Round ${k.round}` : `Pick ${k.slot}`)), el('div', { class: 'x', onclick: () => { sel.splice(sel.indexOf(id), 1); reload(); } }, '✕')));
     }
     box.append(pk);
     // pickers
@@ -456,7 +456,7 @@ function renderTrades(v) {
     const drawList = () => {
       list1.innerHTML = '';
       if (mode === 'players') for (const p of own.roster) { if (sel.includes(p.pid)) continue; const sur = own.surplus.find(x => x.pid === p.pid); list1.append(el('div', { class: 'plate pickable', onclick: () => { sel.push(p.pid); reload(); } }, el('div', { class: 'no' }, p.no || p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${p.age} · $${p.hit}m · ${p.yrs} yrs` + (sur ? ` · ${sur.why}` : ''))), el('div', { class: 'ov' }, p.ovr))); }
-      else for (const k of own.picks) { if (sel.includes(k.id)) continue; list1.append(el('div', { class: 'pick pickable', style: 'cursor:pointer', onclick: () => { sel.push(k.id); reload(); } }, el('div', { class: 'rd' }, k.round), el('div', { class: 'nm' }, k.label, el('small', {}, k.slot === `R${k.round}` ? `Round ${k.round}` : `Pick ${k.slot}`)), el('div', {}))); }
+      else for (const k of own.picks) { if (sel.includes(k.id)) continue; list1.append(el('div', { class: 'pkcard pickable', style: 'cursor:pointer', onclick: () => { sel.push(k.id); reload(); } }, el('div', { class: 'rd' }, k.round), el('div', { class: 'nm' }, k.label, el('small', {}, k.slot === `R${k.round}` ? `Round ${k.round}` : `Pick ${k.slot}`)), el('div', {}))); }
     };
     for (const [k, l] of [['players', 'Players'], ['picks', 'Picks']]) tabs.append(el('button', { 'aria-pressed': String(mode === k), onclick: e => { mode = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); drawList(); } }, l));
     box.append(tabs, list1); drawList();
@@ -577,7 +577,7 @@ function renderOwner(v) {
   for (const [k, lab, word] of [['wins', 'Winning now', v.patience_word], ['stars', 'Star power', v.stars_word], ['spend', 'Spending on staff', v.spend_word], ['acumen', 'Football acumen', null]]) w.append(el('div', { class: 'wrow' }, el('span', {}, lab + (word ? ` · ${word}` : '')), el('div', { class: 't' }, el('i', { style: `width:${Math.round(v.weights[k] * 100)}%` }))));
   r.append(w, el('div', { class: 'h5', style: 'margin-top:14px' }, 'Staff Budget'), el('div', { class: 'expect' }, el('span', {}, 'Total'), el('span', {}, `$${v.staff_budget.total}m`), el('span', {}, 'Payroll'), el('span', {}, `$${v.staff_budget.payroll}m`), el('span', {}, 'Available'), el('span', {}, `$${v.staff_budget.available}m`)));
   r.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Season Reviews'));
-  const h = el('div', { class: 'hist' }); for (const x of v.reviews) h.append(el('div', {}, el('time', {}, x.year), el('span', {}, `${x.record || ''} · ${x.line || ''}`))); if (!v.reviews.length) h.append(el('div', {}, el('time', {}, '—'), el('span', {}, 'He reviews you after each season.')));
+  const h = el('div', { class: 'histlist' }); for (const x of v.reviews) h.append(el('div', {}, el('time', {}, x.year), el('span', {}, `${x.record || ''} · ${x.line || ''}`))); if (!v.reviews.length) h.append(el('div', {}, el('time', {}, '—'), el('span', {}, 'He reviews you after each season.')));
   r.append(h); g.append(r); s.append(g); page.append(s);
 }
 
@@ -615,7 +615,7 @@ function renderIdentity(v) {
   ch.append(kd); s.append(ch);
   if (Object.keys(idDraft).length) s.append(el('div', { class: 'confirm' }, el('span', {}, 'Preview. Nothing changes until you confirm; assistants regrade the roster under the new identity.'), el('div', { style: 'display:flex;gap:6px' }, el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.frontoffice_act('set_identity', changes=${JSON.stringify(idDraft)})`); notify({ ok: r.ok, line: r.ok ? 'Identity set.' : r.why }); idDraft = {}; reload(); } }, 'Confirm'), el('button', { class: 'btn quiet', onclick: () => { idDraft = {}; reload(); } }, 'Discard'))));
   s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'History', el('small', {}, `${v.history.length} changes`)));
-  const h = el('div', { class: 'hist', style: 'margin:0 14px 14px' }); for (const x of v.history.slice().reverse()) h.append(el('div', {}, el('time', {}, `${x.year} W${x.week ?? 0}`), el('span', {}, x.change))); if (!v.history.length) h.append(el('div', {}, el('time', {}, '—'), el('span', {}, 'The identity you inherited.')));
+  const h = el('div', { class: 'histlist', style: 'margin:0 14px 14px' }); for (const x of v.history.slice().reverse()) h.append(el('div', {}, el('time', {}, `${x.year} W${x.week ?? 0}`), el('span', {}, x.change))); if (!v.history.length) h.append(el('div', {}, el('time', {}, '—'), el('span', {}, 'The identity you inherited.')));
   s.append(h); page.append(s);
 }
 
@@ -741,7 +741,7 @@ function renderPicks(v) {
   renderRail(v.rail); const page = persPage(); drSecond('picks');
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Picks', el('small', {}, `${v.years.reduce((a, y) => a + y.picks.length, 0)} held` + (v.gone.length ? ` · ${v.gone.length} of yours held elsewhere` : ''))));
   const yrs = el('div', { class: 'years' });
-  for (const y of v.years) { const box = el('div', { class: 'yr' }, el('h4', {}, String(y.year), el('small', {}, `${y.picks.length} picks`))); for (const p of y.picks) box.append(el('div', { class: 'pick' }, el('div', { class: 'rd' }, p.round), el('div', { class: 'nm' }, p.slot === `R${p.round}` ? `Round ${p.round}` : `Pick ${p.slot}`, el('small', {}, p.own ? 'own' : `via ${p.via.abbr}`)), el('div', {}))); for (const g of v.gone.filter(g => g.year === y.year)) box.append(el('div', { class: 'pick gone' }, el('div', { class: 'rd' }, g.round), el('div', { class: 'nm' }, `Round ${g.round}`, el('small', {}, `held by ${g.holder.abbr}`)), el('div', {}))); yrs.append(box); }
+  for (const y of v.years) { const box = el('div', { class: 'yr' }, el('h4', {}, String(y.year), el('small', {}, `${y.picks.length} picks`))); for (const p of y.picks) box.append(el('div', { class: 'pkcard' }, el('div', { class: 'rd' }, p.round), el('div', { class: 'nm' }, p.slot === `R${p.round}` ? `Round ${p.round}` : `Pick ${p.slot}`, el('small', {}, p.own ? 'own' : `via ${p.via.abbr}`)), el('div', {}))); for (const g of v.gone.filter(g => g.year === y.year)) box.append(el('div', { class: 'pkcard gone' }, el('div', { class: 'rd' }, g.round), el('div', { class: 'nm' }, `Round ${g.round}`, el('small', {}, `held by ${g.holder.abbr}`)), el('div', {}))); yrs.append(box); }
   s.append(yrs);
   if (v.last) { s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, `${v.last.year} Draft Results`, el('small', {}, `${v.last.rows.length} picks · ${v.last.trades} trades`))); const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); const pm = el('div', { class: 'picksmade' }); let mine = false; const draw = () => { pm.innerHTML = ''; for (const r of v.last.rows.filter(r => !mine || r.mine)) pm.append(el('div', { class: 'pk' + (r.mine ? ' next' : '') }, el('span', { class: 'n' }, r.slot), crest(r.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm', style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name), el('small', {}, r.pos)), el('span', {}))); }; for (const [k, l] of [[false, 'All'], [true, 'Your Picks']]) tabs.append(el('button', { 'aria-pressed': String(mine === k), onclick: e => { mine = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, l)); s.append(tabs, pm); draw(); }
   page.append(s);
