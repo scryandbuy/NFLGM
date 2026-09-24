@@ -619,7 +619,8 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .srow .l{font-size:13px;color:var(--ink-2)}
 .srow .v{font-family:var(--mono);font-size:12.5px;text-align:right}
 .tr{position:relative;height:20px}
-.tr .all{position:absolute;left:0;right:0;top:7px;height:6px;background:var(--sheet-3);border:1px solid var(--rule)}
+.tr .all{position:absolute;top:7px;height:6px;background:var(--sheet-3);border:1px solid var(--rule)}
+.tr .rail-line{position:absolute;left:0;right:0;top:9px;height:2px;background:var(--rule)}
 .tr .all em{position:absolute;top:9px;font-style:normal;font-size:10px;color:var(--ink-3)}
 .tr .all em:first-child{left:0}.tr .all em:last-child{right:0}
 .tr .band{position:absolute;top:7px;height:6px;background:var(--ink-2)}
@@ -931,3 +932,10 @@ button.btn{line-height:normal;box-sizing:border-box}
 /* the archetype you are closest to */
 .arch div.now{outline:2px solid var(--club-2);outline-offset:-2px;background:var(--sheet-2)}
 .arch div.now small{color:var(--club-2)}
+
+/* identity: centered archetype rows, the current tile and the preview tile */
+.arch.center{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+.arch.center div{width:150px}
+.arch div.preview{outline:2px dashed var(--decide);outline-offset:-2px}
+.arch div.now small{color:var(--club-2)}
+.pill{display:inline-block;font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;background:var(--decide);color:#111;padding:1px 8px;margin-right:6px}
