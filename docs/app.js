@@ -265,27 +265,31 @@ function renderGameDay(v) {
 
   // the ticker, revealed by drive
   const tick = el('section', { class: 'sheet c8' });
-  let shown = 1;
+  let shown = 1, shownPlays = null;      // shownPlays: within the last shown drive, how many plays are revealed (null = all)
   const body = el('div', { class: 'ticker' });
   const filt = { mode: 'all' };
   const draw = () => {
     body.innerHTML = '';
-    g.drives.slice(0, shown).forEach(d => {
-      body.append(el('div', { class: 'drive' }, `Drive ${d.n} · ${d.off} · Q${d.quarter} · ${d.plays_n} play${d.plays_n === 1 ? '' : 's'}, ${Math.round(d.yards)} yard${Math.round(d.yards) === 1 ? '' : 's'}` + (d.result ? ` · ${String(d.result).toLowerCase()}` : '') + ` · ${d.score}`));
-      for (const p of d.plays) {
+    g.drives.slice(0, shown).forEach((d, di) => {
+      const last = di === shown - 1; const plays = (last && shownPlays != null) ? d.plays.slice(0, shownPlays) : d.plays;
+      body.append(el('div', { class: 'drive' }, `Drive ${d.n} · ${d.off} · Q${d.quarter}` + ((last && shownPlays != null) ? '' : ` · ${d.plays_n} play${d.plays_n === 1 ? '' : 's'}, ${Math.round(d.yards)} yard${Math.round(d.yards) === 1 ? '' : 's'}` + (d.result ? ` · ${String(d.result).toLowerCase()}` : '') + ` · ${d.score}`)));
+      for (const p of plays) {
         if (!p.text) continue;
         if (filt.mode === 'key' && !['score', 'turnover', 'loss'].includes(p.kind) && !(p.type === 'complete' && /for (\d\d) yards/.test(p.text) && +p.text.match(/for (\d\d) yards/)[1] >= 15)) continue;
         if (filt.mode === 'score' && p.kind !== 'score') continue;
         const line = el('div', { class: 'pl ' + p.kind }); if (p.head) line.append(el('span', { class: 'dn' }, p.head), '  '); line.append(p.text); body.append(line);
       }
     });
-    tick.querySelector('h2 small').textContent = shown >= g.drives.length ? 'Final' : `Through Drive ${shown} of ${g.drives.length}`;
+    tick.querySelector('h2 small').textContent = (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays}` : '');
     body.scrollTop = body.scrollHeight;
   };
+  const nextPlay = () => { const d = g.drives[shown - 1]; if (shownPlays == null) { if (shown >= g.drives.length) return; shown++; shownPlays = 1; } else if (shownPlays < d.plays.length) shownPlays++; else { if (shown >= g.drives.length) { shownPlays = null; } else { shown++; shownPlays = 1; } } draw(); };
   const ctrl = el('div', { class: 'ctrl2' },
-    el('button', { class: 'btn go', onclick: () => { shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
-    el('button', { class: 'btn', onclick: () => { const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; while (shown < g.drives.length && g.drives[shown].quarter === q) shown++; shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Quarter'),
-    el('button', { class: 'btn', onclick: () => { shown = g.drives.length; draw(); } }, 'Finish Game'),
+    el('button', { class: 'btn', 'data-tip': 'One snap at a time', onclick: nextPlay }, 'Next Play'),
+    el('button', { class: 'btn go', onclick: () => { shownPlays = null; shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
+    el('button', { class: 'btn', onclick: () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; while (shown < g.drives.length && g.drives[shown].quarter === q) shown++; shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Quarter'),
+    el('button', { class: 'btn', 'data-tip': 'Run to the break', onclick: () => { shownPlays = null; while (shown < g.drives.length && g.drives[shown].quarter <= 2) shown++; draw(); } }, 'To Halftime'),
+    el('button', { class: 'btn', onclick: () => { shownPlays = null; shown = g.drives.length; draw(); } }, 'Finish Game'),
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
   tick.append(el('h2', {}, 'Play by Play', el('small', {}, '')), ctrl, body);
@@ -313,11 +317,21 @@ function renderGameDay(v) {
   right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Box Score'));
   const box = el('table', { class: 'box' });
   const th = (...c) => el('tr', {}, ...c.map((x, i) => el('th', {}, x)));
-  box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT')); g.box.passing.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.ca), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_))));
-  box.append(th('Rushing', 'Att', 'Yds', 'TD', '')); g.box.rushing.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, ''))));
-  box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD')); g.box.receiving.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td))));
-  box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD')); g.box.defense.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd))));
+  box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT', 'Lng')); g.box.passing.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.ca), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_), el('td', {}, r.lng ?? ''))));
+  box.append(th('Rushing', 'Att', 'Yds', 'TD', '', 'Lng')); g.box.rushing.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, ''), el('td', {}, r.lng ?? ''))));
+  box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD', 'Lng')); g.box.receiving.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng ?? ''))));
+  box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD', '')); g.box.defense.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd), el('td', {}, ''))));
   right.append(box);
+  // team stats side by side, and the assistants' read of what decided it
+  if (g.team_stats && g.team_stats[g.home.abbr]) {
+    right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Team Stats'));
+    const ts = el('table', { class: 'box' }); const A = g.team_stats[g.away.abbr], H = g.team_stats[g.home.abbr];
+    ts.append(el('tr', {}, el('th', {}, ''), el('th', {}, g.away.abbr), el('th', {}, g.home.abbr)));
+    for (const [k, label] of [['yards', 'Total Yards'], ['plays', 'Plays'], ['ypp', 'Yards per Play'], ['pass_yds', 'Passing'], ['rush_yds', 'Rushing'], ['first_downs', 'First Downs'], ['third', 'Third Down'], ['fourth', 'Fourth Down'], ['red_zone', 'Red Zone TD'], ['turnovers', 'Turnovers'], ['sacks_allowed', 'Sacks Allowed'], ['penalties', 'Penalties'], ['top', 'Possession']])
+      ts.append(el('tr', {}, el('td', {}, label), el('td', {}, String(A[k])), el('td', {}, String(H[k]))));
+    right.append(ts);
+  }
+  if (g.reads && g.reads.length) { right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, "Assistants' Read")); for (const r of g.reads) right.append(el('div', { class: 'pad', style: 'font-size:13.5px;color:var(--ink-2);padding-top:4px' }, r)); }
   page.append(right);
   draw();
 }
@@ -1023,7 +1037,7 @@ function renderThisWeek(v) {
   // suggestions
   const sug = el('div', { class: 'sugs' });
   sug.append(el('div', { class: 'h5' }, 'The Report Suggests', el('span', {}, `${v.suggestions.filter(x => x.taken).length} of ${v.suggestions.length} taken`)));
-  for (const x of v.suggestions) sug.append(el('div', { class: 'sug-row' + (x.taken ? ' on' : '') }, el('div', { class: 't' }, x.text, el('small', {}, `${x.side} · ${x.why}`)), el('div', { class: 'a' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); reload(); } }, 'Put Back') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); reload(); } }, 'Take'))));
+  for (const x of v.suggestions) sug.append(el('div', { class: 'sug-row' + (x.taken ? ' on' : '') }, el('div', { class: 't' }, x.text, el('small', {}, `${x.side} · ${x.why}`)), el('div', { class: 'a', style: 'display:flex;gap:4px' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); reload(); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); reload(); } }, 'Take'), x.taken ? '' : el('button', { class: 'btn quiet', 'data-tip': 'Hide it for now', onclick: e => e.currentTarget.closest('.sug-row').remove() }, 'Skip'))));
   if (!v.suggestions.length) sug.append(el('div', { class: 'empty' }, 'The report has nothing to add this week; the plan is the coordinators\' own.'));
   else sug.append(el('div', { style: 'display:flex;gap:6px;padding:8px 0 0' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); reload(); } }, 'Accept All'), el('span', { class: 'count', style: 'align-self:center' }, 'or take them one at a time')));
   s.append(sug);
@@ -1052,7 +1066,11 @@ function renderThisWeek(v) {
   s.append(el('div', { class: 'h5', style: 'padding:10px 14px 6px' }, 'Game-Week Decisions'));
   const dec = el('div', { class: 'decide' });
   const prot = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Protection'), el('div', { class: 's' }, v.protection.options.find(o => o.key === v.protection.value)?.word || v.protection.value)); const po = el('div', { class: 'opts' }); for (const o of v.protection.options) po.append(el('button', { class: 'btn chip' + (o.key === v.protection.value ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='protection', value=${JSON.stringify(o.key === v.protection.base ? '' : o.key)})`); reload(); } }, o.word)); prot.append(po); dec.append(prot);
-  const tr = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Corner Travel'), el('div', { class: 's' }, v.travel ? 'CB1 follows their best receiver' : 'Corners stay by side')); tr.append(el('div', { class: 'opts' }, el('button', { class: 'btn chip' + (v.travel ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='travel', value=${v.travel ? 'False' : 'True'})`); reload(); } }, v.travel ? 'Travel on' : 'Travel off'))); dec.append(tr);
+  const shadowWord = v.travel ? (v.travel_target ? `${v.my_cb1 ? v.my_cb1.name : 'CB1'} on ${v.travel_target.name}` : `${v.my_cb1 ? v.my_cb1.name : 'CB1'} follows their best receiver`) : 'Corners stay by side';
+  const tr = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Shadow'), el('div', { class: 's' }, shadowWord));
+  const tro = el('div', { class: 'opts' }, el('button', { class: 'btn chip' + (!v.travel ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='travel_target', value='')`); pyJSON(`SESSION.plan_act('set_decision', key='travel', value=False)`); reload(); } }, 'No Shadow'));
+  for (const w of v.their_wrs) tro.append(el('button', { class: 'btn chip' + (v.travel && v.travel_target && v.travel_target.pid === w.pid ? ' go' : ''), 'data-tip': `${v.my_cb1 ? v.my_cb1.name : 'Your best corner'} follows him all game`, onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='travel_target', value=${JSON.stringify(w.pid)})`); reload(); } }, `${v.my_cb1 ? v.my_cb1.name : 'CB1'} on ${w.name.split(' ').pop()} · ${w.ovr}`));
+  tr.append(tro); dec.append(tr);
   const br = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Bracket'), el('div', { class: 's' }, v.bracket ? `Double ${v.bracket.name} on the shots` : 'Nobody doubled')); const bo = el('div', { class: 'opts' }, el('button', { class: 'btn chip' + (!v.bracket ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value='')`); reload(); } }, 'None')); for (const w of v.their_wrs) bo.append(el('button', { class: 'btn chip' + (v.bracket && v.bracket.pid === w.pid ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value=${JSON.stringify(w.pid)})`); reload(); } }, `${w.name} · ${w.ovr}`)); br.append(bo); dec.append(br);
   s.append(dec);
   s.append(el('div', { class: 'foot' }, el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('reset')`)); reload(); } }, "Back to the Coordinators' Plan"), el('span', { class: 'count', style: 'margin-left:auto' }, v.forecast && v.forecast.text ? v.forecast.text : 'The plan you leave here is what the game runs on Sunday.')));

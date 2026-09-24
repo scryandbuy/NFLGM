@@ -1377,16 +1377,19 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         if len(cbs) >= 2 and wrs:
             wr1 = max(wrs, key=lambda w: rate_fn(w, {'route_run_short_rating': .20, 'route_run_med_rating': .25,
                                                      'route_run_deep_rating': .25, 'speed_rating': .30}))
-            st.plan.travel = CV.should_travel(cbs[0], cbs[1], wr1, rate_fn, True, rng,
-                                              coach_willingness=float(st.coach.get('travel_willingness', 0.5)),
-                                              scale=1.6)          # a game-week call has a lower bar than a snap
-            st.plan.travel_target = wr1.get('pid') if st.plan.travel else None
+            if not getattr(st.plan, 'travel_locked', False):     # the GM's own call, when he made one, stands
+                st.plan.travel = CV.should_travel(cbs[0], cbs[1], wr1, rate_fn, True, rng,
+                                                  coach_willingness=float(st.coach.get('travel_willingness', 0.5)),
+                                                  scale=1.6)          # a game-week call has a lower bar than a snap
+                st.plan.travel_target = wr1.get('pid') if st.plan.travel else None
+            elif st.plan.travel and not getattr(st.plan, 'travel_target', None):
+                st.plan.travel_target = wr1.get('pid')
             # BRACKETING IS A GAME-WEEK DECISION TOO. A coordinator doubles
             # their star when the second receiver is not one and the plan can
             # afford the safety: real clubs bracket the top man on about a
             # third of his snaps, more against the true elite.
-            st.plan.bracket = None
-            if len(wrs) >= 2:
+            if not getattr(st.plan, 'bracket_locked', False): st.plan.bracket = None
+            if len(wrs) >= 2 and not getattr(st.plan, 'bracket_locked', False):
                 srt = sorted(wrs, key=lambda w: -rate_fn(w, {'route_run_short_rating': .20, 'route_run_med_rating': .25,
                                                               'route_run_deep_rating': .25, 'speed_rating': .30}))
                 gap = rate_fn(srt[0], {'route_run_med_rating': .5, 'speed_rating': .5}) - rate_fn(srt[1], {'route_run_med_rating': .5, 'speed_rating': .5})
