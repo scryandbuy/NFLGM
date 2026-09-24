@@ -275,3 +275,23 @@ def _season(league, abbr):
         if wk not in weeks: games.append(dict(week=wk, bye=True))
     games.sort(key=lambda g: g['week'])
     return dict(games=games, playoff_odds=None)
+
+
+# ============================================================ GAME DAY
+def gameday(session, league, abbr):
+    """The last week's games: the scoreboard, and the user's game in full."""
+    gd = getattr(session, 'gameday', None)
+    r = rail(session, league, abbr)
+    if not gd:
+        return dict(rail=r, empty=True, line='No game has been played yet. Advance to play the week.')
+    scores = []
+    for s in gd['scores']:
+        scores.append(dict(home=club(s['home']), away=club(s['away']), hs=s['hs'], as_=s['as_'], ot=s['ot'], mine=abbr in (s['home'], s['away'])))
+    g = gd.get('game')
+    game = None
+    if g:
+        game = dict(home=club(g['home']), away=club(g['away']), hs=g['hs'], as_=g['as_'], ot=g['ot'], me=g['me'], opp=g['opp'], me_home=g['me_home'],
+                    drives=g['drives'], wp=g['wp'], box=g['box'], env=g.get('env', {}),
+                    home_rec=league.teams[g['home']].record[:2], away_rec=league.teams[g['away']].record[:2])
+    return dict(rail=r, empty=False, week=gd['week'], scores=scores, game=game)
+

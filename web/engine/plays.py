@@ -428,10 +428,44 @@ def resolve_play(off, deff, off_call, def_call, yards_to_endzone, rng):
             out['travelled'] = LAST_TRAVEL
             out['xcomp'] = None if LAST_XCOMP is None else LAST_XCOMP * 0.965    # a clean catch is made about 96.5% of the time
             out['bracketed'] = bool(def_call.get('bracket')) and out.get('target') == def_call.get('bracket')
+            # THE NAMES for the ticker: who threw it, and who is likeliest to have made the stop
+            if not out.get('passer'): out['passer'] = (off.get('qb') or {}).get('pid')
+            if 'tackler' not in out and out.get('type') in ('complete', 'scramble'):
+                out['tackler'] = _likely_tackler(deff, out, rng, pass_play=True)
         return out
     if off_call.get('sneak'):
-        return _sneak(off, deff, off_call, def_call, yards_to_endzone, rng)
-    return _run_play(off, deff, off_call, def_call, yards_to_endzone, rng)
+        out = _sneak(off, deff, off_call, def_call, yards_to_endzone, rng)
+    else:
+        out = _run_play(off, deff, off_call, def_call, yards_to_endzone, rng)
+    if isinstance(out, dict):
+        if not out.get('carrier'): out['carrier'] = (off.get('rb') or off.get('qb') or {}).get('pid') if not off_call.get('sneak') else (off.get('qb') or {}).get('pid')
+        if 'tackler' not in out and not out.get('touchdown'):
+            out['tackler'] = _likely_tackler(deff, out, rng, pass_play=False)
+    return out
+
+
+def _likely_tackler(deff, out, rng, pass_play):
+    """Who made the stop, drawn from the men whose job puts them there: the front
+    on a short run, the linebackers in the middle, the secondary on long gains
+    and completions. The engine does not simulate the tackle itself; this is the
+    name the ticker gives it, weighted the way real tackle counts fall."""
+    yards = float(out.get('yards', 0) or 0)
+    dl = [x for x in (deff.get('dl') or []) if x][:4]; lb = [x for x in (deff.get('lb') or []) if x][:3]; db = [x for x in (deff.get('db') or []) if x][:5]
+    if pass_play:
+        pools = [(db, 0.62), (lb, 0.30), (dl, 0.08)]
+    elif yards <= 2:
+        pools = [(dl, 0.50), (lb, 0.38), (db, 0.12)]
+    elif yards <= 8:
+        pools = [(lb, 0.50), (dl, 0.22), (db, 0.28)]
+    else:
+        pools = [(db, 0.70), (lb, 0.25), (dl, 0.05)]
+    pools = [(p, w) for p, w in pools if p]
+    if not pools: return None
+    ws = np.array([w for _, w in pools]); ws = ws / ws.sum()
+    pool = pools[int(rng.choice(len(pools), p=ws))][0]
+    # within the group, the better tackler and the higher on the chart more often
+    wt = np.array([0.6 + 0.4 * float(x.get('tackle_rating', 60)) / 100.0 for x in pool]); wt = wt / wt.sum()
+    return pool[int(rng.choice(len(pool), p=wt))].get('pid')
 
 
 def push_capable(off):

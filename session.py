@@ -34,6 +34,7 @@ class Session:
         self.standings = None
         # where we are: ('week', n) | ('playoffs',) | ('offseason', i)
         self.stop = getattr(league, '_stop', None) or ('week', 1)
+        self.gameday = None
 
     # ------------------------------------------------------------ construction
     @classmethod
@@ -52,12 +53,14 @@ class Session:
         L = LG.League.load(text)
         s = cls(L, np.random.default_rng(d.get('_seed_state', None)), d.get('_user_team'))
         s.stop = tuple(d.get('_stop', ['week', 1]))
+        s.gameday = d.get('_gameday')
         return s
 
     def save(self):
         d = json.loads(self.L.save())
         d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
-        return json.dumps(d)
+        d['_gameday'] = self.gameday
+        return json.dumps(d, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
 
     # ------------------------------------------------------------ the calendar
     OFFSEASON = [
@@ -102,6 +105,8 @@ class Session:
             if self.runner is None:
                 self.runner = SN.SeasonRunner(self.L, self.rng)
             self.runner.play_week(wk)
+            import gameday as GD
+            self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team)
             self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs',)
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':
@@ -202,3 +207,7 @@ class Session:
     def portal(self):
         import views
         return views.portal(self, self.L, self.user_team)
+
+    def gameday_view(self):
+        import views
+        return views.gameday(self, self.L, self.user_team)

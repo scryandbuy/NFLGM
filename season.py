@@ -194,6 +194,7 @@ class SeasonRunner:
             except Exception:
                 pass
         book = G.StatBook()
+        self._book = book
         res = G.play_game(hr, ar, self.rng, P.resolve_play, self.co, self.cd,
                           P.rate, home_state=self.states[home],
                           away_state=self.states[away], week=week, book=book,
@@ -267,12 +268,14 @@ class SeasonRunner:
         self.week = week
         self.injury_week(week)
         played = []
+        self.last_games = []                      # (home, away, res, book) for Game Day
         for i, (wk, away, home, ap, hp) in enumerate(self.L.schedule):
             if wk != week or hp is not None:
                 continue
             res = self.play(home, away, week)
             if res is None:
                 continue
+            self.last_games.append((home, away, res, self._book))
             self.L.schedule[i] = (wk, away, home, res['away'], res['home'])
             played.append((home, away, res['home'], res['away']))
 

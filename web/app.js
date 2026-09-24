@@ -175,15 +175,119 @@ function openMessage(id) {
   page.append(el('section', { class: 'sheet' }, el('h2', {}, m.subject, el('small', {}, `${m.sender || ''} · ${m.year} Week ${m.week}`)), el('div', { class: 'pad', style: 'max-width:70ch;line-height:1.5;color:var(--ink-2)' }, m.body), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => refresh() }, 'Back to Portal'))));
 }
 
+
+// ---------------------------------------------------------------- Game Day
+function renderGameDay(v) {
+  renderRail(v.rail);
+  const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
+  $('#crumb').textContent = 'Game Day';
+  $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'gameday'));
+  $('#second').innerHTML = '';
+  if (v.empty) { page.append(el('section', { class: 'sheet c12' }, el('h2', {}, 'Game Day'), el('div', { class: 'empty' }, v.line))); return; }
+  const g = v.game;
+  const top = el('section', { class: 'sheet c12' });
+  // the Sunday scoreboard
+  const sb = el('div', { class: 'scoreboard' });
+  for (const s of v.scores) {
+    const hw = s.hs > s.as_, aw = s.as_ > s.hs;
+    sb.append(el('div', { class: 'sb' + (s.mine ? ' mine' : '') },
+      el('div', { class: 'row' + (aw ? ' w' : '') }, stripe(s.away.abbr), el('b', {}, s.as_)),
+      el('div', { class: 'row' + (hw ? ' w' : '') }, stripe(s.home.abbr), el('b', {}, s.hs)),
+      el('div', { class: 'st' }, el('span', {}, 'Final' + (s.ot ? ' · OT' : '')))));
+  }
+  top.append(sb);
+  if (!g) { top.append(el('div', { class: 'empty' }, 'Your club was on its bye this week.')); page.append(top); return; }
+  // the big bug
+  const me = g.me_home ? g.home : g.away, them = g.me_home ? g.away : g.home;
+  const myScore = g.me_home ? g.hs : g.as_, theirScore = g.me_home ? g.as_ : g.hs;
+  const won = myScore > theirScore, tie = myScore === theirScore;
+  const rec = r => `${r[0]}–${r[1]}`;
+  top.append(el('div', { class: 'bigbug' },
+    el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${g.away.color}` }, g.away.abbr), el('div', {}, el('div', { class: 'nm' }, g.away.nick), el('div', { class: 'rec' }, rec(g.away_rec))), el('div', { class: 'score', style: 'margin-left:auto' }, g.as_)),
+    el('div', { class: 'mid' }, el('div', { class: 'q' }, 'Final' + (g.ot ? ' · Overtime' : '')), el('div', { class: 'dd' }, tie ? 'A tie' : (won ? `${me.name} wins` : `${them.name} wins`)), el('div', { class: 'q', style: 'font-size:11px;color:var(--ink-3);margin-top:6px' }, `Week ${v.week}`)),
+    el('div', { class: 'side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, g.home.abbr), el('div', {}, el('div', { class: 'nm' }, g.home.nick), el('div', { class: 'rec' }, rec(g.home_rec))), el('div', { class: 'score', style: 'margin-right:auto' }, g.hs))));
+  // win probability by drive
+  const W = 720, H = 70; const pts = g.wp.map((p, i) => [i / Math.max(1, g.wp.length - 1) * W, H - 4 - (p / 100) * (H - 8)]);
+  const svgNS = 'http://www.w3.org/2000/svg'; const svg = document.createElementNS(svgNS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio', 'none');
+  const mk = (tag, attrs) => { const e = document.createElementNS(svgNS, tag); for (const [k, val] of Object.entries(attrs)) e.setAttribute(k, val); return e; };
+  svg.append(mk('line', { x1: 0, y1: H / 2, x2: W, y2: H / 2, stroke: '#3a424c' }));
+  [0.25, 0.5, 0.75].forEach(f => svg.append(mk('line', { x1: f * W, y1: 0, x2: f * W, y2: H, stroke: '#2e353e' })));
+  svg.append(mk('polyline', { fill: 'none', stroke: me.color, 'stroke-width': 2, points: pts.map(p => p.join(',')).join(' ') }));
+  const t1 = mk('text', { x: 4, y: 12, fill: '#7b8593', 'font-size': 10, 'font-family': 'Big Shoulders Text' }); t1.textContent = me.abbr; const t2 = mk('text', { x: 4, y: H - 4, fill: '#7b8593', 'font-size': 10, 'font-family': 'Big Shoulders Text' }); t2.textContent = them.abbr; svg.append(t1, t2);
+  const wpc = el('div', { class: 'wpchart' }); wpc.append(svg); top.append(wpc);
+  page.append(top);
+
+  // the ticker, revealed by drive
+  const tick = el('section', { class: 'sheet c8' });
+  let shown = 1;
+  const body = el('div', { class: 'ticker' });
+  const filt = { mode: 'all' };
+  const draw = () => {
+    body.innerHTML = '';
+    g.drives.slice(0, shown).forEach(d => {
+      body.append(el('div', { class: 'drive' }, `Drive ${d.n} · ${d.off} · Q${d.quarter} · ${d.plays_n} play${d.plays_n === 1 ? '' : 's'}, ${Math.round(d.yards)} yard${Math.round(d.yards) === 1 ? '' : 's'}` + (d.result ? ` · ${String(d.result).toLowerCase()}` : '') + ` · ${d.score}`));
+      for (const p of d.plays) {
+        if (!p.text) continue;
+        if (filt.mode === 'key' && !['score', 'turnover', 'loss'].includes(p.kind) && !(p.type === 'complete' && /for (\d\d) yards/.test(p.text) && +p.text.match(/for (\d\d) yards/)[1] >= 15)) continue;
+        if (filt.mode === 'score' && p.kind !== 'score') continue;
+        const line = el('div', { class: 'pl ' + p.kind }); if (p.head) line.append(el('span', { class: 'dn' }, p.head), '  '); line.append(p.text); body.append(line);
+      }
+    });
+    tick.querySelector('h2 small').textContent = shown >= g.drives.length ? 'Final' : `Through Drive ${shown} of ${g.drives.length}`;
+    body.scrollTop = body.scrollHeight;
+  };
+  const ctrl = el('div', { class: 'ctrl2' },
+    el('button', { class: 'btn go', onclick: () => { shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
+    el('button', { class: 'btn', onclick: () => { const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; while (shown < g.drives.length && g.drives[shown].quarter === q) shown++; shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Quarter'),
+    el('button', { class: 'btn', onclick: () => { shown = g.drives.length; draw(); } }, 'Finish Game'),
+    el('span', { class: 'sep' }),
+    (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
+  tick.append(el('h2', {}, 'Play by Play', el('small', {}, '')), ctrl, body);
+  page.append(tick);
+
+  // drive chart and box score
+  const right = el('section', { class: 'sheet c4' });
+  right.append(el('h2', {}, 'Drive Chart'));
+  const fh = 14 * g.drives.length + 10; const fsvg = mk('svg', { viewBox: `0 0 720 ${fh}`, class: 'field' });
+  fsvg.append(mk('rect', { x: 0, y: 0, width: 720, height: fh, fill: '#1f252c' }), mk('rect', { x: 0, y: 0, width: 60, height: fh, fill: '#3a1216' }), mk('rect', { x: 660, y: 0, width: 60, height: fh, fill: '#3a2a10' }));
+  [180, 360, 540].forEach(x => fsvg.append(mk('line', { x1: x, y1: 0, x2: x, y2: fh, stroke: x === 360 ? '#8791a0' : '#3a424c' })));
+  g.drives.forEach((d, i) => {
+    // the drive's club drives toward the far end zone: home left-to-right, away right-to-left
+    const dirHome = d.off === g.home.abbr; const x = v => 60 + 6 * v; const sx = dirHome ? x(d.start) : x(100 - d.start), ex = dirHome ? x(d.end) : x(100 - d.end);
+    const y = 8 + 14 * i; const col = d.off === g.home.abbr ? g.home.color : g.away.color;
+    fsvg.append(mk('line', { x1: sx, y1: y, x2: ex, y2: y, stroke: col, 'stroke-width': 6, 'stroke-linecap': 'round' }));
+    const r = String(d.result || '');
+    if (/Touchdown/.test(r)) fsvg.append(mk('circle', { cx: ex, cy: y, r: 5, fill: '#ffb612' }));
+    else if (/Field goal/.test(r)) fsvg.append(mk('rect', { x: ex - 5, y: y - 6, width: 10, height: 12, fill: '#4cc9f0' }));
+    else if (/Interception|Fumble|Turnover|downs/i.test(r)) fsvg.append(mk('circle', { cx: ex, cy: y, r: 5, fill: '#e5484d' }));
+    else fsvg.append(mk('circle', { cx: ex, cy: y, r: 3.5, fill: '#3a424c' }));
+  });
+  right.append(el('div', { class: 'pad', style: 'padding-top:8px' }, fsvg,
+    el('div', { style: 'padding:6px 0 0;display:flex;gap:12px;font-size:11.5px;color:var(--ink-2);flex-wrap:wrap' }, stripe(g.home.abbr), stripe(g.away.abbr), el('span', {}, el('i', { style: 'display:inline-block;width:9px;height:9px;background:#ffb612;border-radius:50%;margin-right:4px' }), 'TD'), el('span', {}, el('i', { style: 'display:inline-block;width:9px;height:9px;background:#4cc9f0;margin-right:4px' }), 'FG'), el('span', {}, el('i', { style: 'display:inline-block;width:9px;height:9px;background:#e5484d;border-radius:50%;margin-right:4px' }), 'Turnover'))));
+  right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Box Score'));
+  const box = el('table', { class: 'box' });
+  const th = (...c) => el('tr', {}, ...c.map((x, i) => el('th', {}, x)));
+  box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT')); g.box.passing.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.ca), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_))));
+  box.append(th('Rushing', 'Att', 'Yds', 'TD', '')); g.box.rushing.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, ''))));
+  box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD')); g.box.receiving.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td))));
+  box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD')); g.box.defense.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd))));
+  right.append(box);
+  page.append(right);
+  draw();
+}
+
 // ---------------------------------------------------------------- flow
 function refresh() { view = pyJSON('SESSION.portal()'); renderRail(view.rail); renderPortal(view); }
 
 async function advance() {
   const adv = $('#advance'); adv.disabled = true; busy(view.rail.advance.title + '…');
   await new Promise(r => setTimeout(r, 30));
-  try { const r = pyJSON('SESSION.advance()'); busy(`${r.done} done.`); setTimeout(() => busy(null), 1200); }
+  let r = null;
+  try { r = pyJSON('SESSION.advance()'); busy(`${r.done} done.`); setTimeout(() => busy(null), 1200); }
   catch (e) { console.error(e); busy('Something broke: ' + String(e).slice(0, 120)); }
-  adv.disabled = false; refresh(); saveGame();
+  adv.disabled = false;
+  if (r && /^Week \d+$/.test(r.done)) { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); } else refresh();
+  saveGame();
 }
 
 // ---------------------------------------------------------------- start
@@ -198,5 +302,5 @@ async function advance() {
   $('#advance').onclick = advance;
   $('#save').onclick = saveGame;
   $('#back').onclick = () => refresh();
-  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
+  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) renderGameDay(pyJSON('SESSION.gameday_view()')); else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();

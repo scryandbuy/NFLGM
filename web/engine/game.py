@@ -1108,7 +1108,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # the situation rides with the play, for the ticker and the probes
         if isinstance(out, dict):
             out['down'] = dr.down; out['ydstogo'] = dr.togo; out['yardline'] = dr.yardline; out['clock'] = dr.clock
-            out['passer'] = off_f['qb'].get('pid') if out.get('is_pass') or out.get('type') in ('sack', 'scramble') else None
+            out['passer'] = off_f['qb'].get('pid') if out.get('is_pass') or out.get('type') in ('complete', 'incomplete', 'interception', 'drop', 'sack', 'scramble') else None
             _snap_state = (dr.down, dr.togo, dr.yardline)
         if script_mod != 1.0 and out.get('yards'):
             out['yards'] = round(float(out['yards']) * script_mod, 1)
