@@ -123,6 +123,17 @@ def pool(league):
     return league.coach_pool
 
 
+def coordinators_as_candidates(league):
+    """Sitting coordinators with the prestige get considered for head-coaching jobs;
+    if hired, staff.carousel sees the hole."""
+    out = []
+    for t in league.teams.values():
+        for role in ('oc', 'dc'):
+            c = (getattr(t, 'staff', None) or {}).get(role)
+            if c is not None and c.hc_candidate: out.append(c)
+    return out
+
+
 def top_up(league, rng):
     """Retirements out, new coordinators in, back to thirty each offseason."""
     p = pool(league)
@@ -191,6 +202,16 @@ def owner_hire(league, team, rng, verbose=False):
     # not the man he just fired
     just_fired = getattr(team, '_just_fired', None)
     p_cands = [c for c in p if c is not just_fired] or p
+    # SITTING COORDINATORS with the prestige are candidates too: a man from
+    # the staff module becomes a head-coaching candidate carrying his name,
+    # his prestige and his side of the ball; if hired he leaves a hole
+    for co in coordinators_as_candidates(league):
+        if co.team == team.abbr: continue
+        g = make_candidate(rng, taken=[c.name for c in p], background=('offensive coordinator' if co.role == 'oc' else 'defensive coordinator'))
+        g.name = co.name; g.prestige = float(co.prestige); g.age = co.age
+        g.reputation = round(float(np.clip((co.rating - 35.0) / 55.0 + rng.normal(0, 0.06), 0.05, 0.95)), 2)
+        g._from_staff = (co.team, co.role)
+        p_cands.append(g)
     st = owner_state(team)
     # how much the owner wants continuity, 0 = tear it down, 1 = keep the roster
     decent = float(np.clip((st['win_pct'] - 0.30) / 0.30, 0, 1))
@@ -226,7 +247,32 @@ def owner_hire(league, team, rng, verbose=False):
         scored.append((score, c, fit, len(misfits), cost, seen_q, sim))
     scored.sort(key=lambda x: -x[0])
     score, hired, fit, n_mis, cost, seen_q, sim = scored[0]
-    p.remove(hired)
+    user = getattr(league, 'user_team', None)
+    if getattr(hired, '_from_staff', None) and hired._from_staff[0] == user:
+        # YOUR coordinator: he tells you first. The hire waits on your answer;
+        # a poach left open resolves to letting him go at the carousel. If you
+        # keep him or block him, the club takes its second choice.
+        import staff as STF
+        src_abbr, role = hired._from_staff
+        src = league.teams[src_abbr]; co = src.staff.get(role)
+        alt = next((c for _s, c, *_r in scored[1:] if c in p or getattr(c, '_from_staff', None) is None), None)
+        pend = getattr(league, 'poaches', None) or []
+        open_t = next((t for t in pend if t['coach'] == co.name and t['year'] == league.year and t['state'] != 'void'), None)
+        if open_t is None:
+            open_t = STF.poach_request(league, co, team.abbr, alternate=alt)
+        if open_t['state'] in ('stayed', 'blocked') or (open_t['state'] == 'open' and getattr(league, 'poach_policy', None) == 'keep'):
+            # take the second choice
+            for sc, c, f, nm, cst, sq, sm in scored[1:]:
+                if getattr(c, '_from_staff', None) and c._from_staff[0] == user: continue
+                hired, fit, n_mis, cost, seen_q, sim = c, f, nm, cst, sq, sm; break
+    if hired in p:
+        p.remove(hired)
+    elif getattr(hired, '_from_staff', None):
+        src_abbr, role = hired._from_staff
+        src = league.teams.get(src_abbr)
+        if src is not None and getattr(src, 'staff', None) and src.staff.get(role) is not None and src.staff[role].name == hired.name:
+            src.staff[role] = None                  # the hole staff.carousel will fill
+            league.log('staff_out', team=src_abbr, role=role, name=hired.name, why=f'hired as head coach by {team.abbr}')
     reasons = dict(continuity=round(continuity, 2), fit=round(fit, 2), old_fit=round(old_fit, 2), misfits=n_mis,
                    conversion_cost=round(cost, 1), seen_quality=round(seen_q, 2), similarity=round(sim, 2),
                    same_scheme=sim >= 0.75, prestige=round(getattr(hired, 'prestige', 20.0)),

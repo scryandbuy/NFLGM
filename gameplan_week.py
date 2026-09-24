@@ -240,9 +240,13 @@ def apply_changes(plan, base, changes):
 def ai_plan(league, state, me_abbr, opp_abbr, week, rng):
     """An AI coordinator takes the report's suggestions by his skill and willingness."""
     rep = opponent_report(league, me_abbr, opp_abbr, week)
-    skill = float(state.coach.get('adjust_skill', 0.5)); will = float(state.coach.get('adjust_willingness', 0.5))
+    will = float(state.coach.get('adjust_willingness', 0.5))
+    team = league.teams[me_abbr]
+    import staff as ST
     taken = []
     for s in rep['suggestions']:
+        # the coordinator on that side of the ball decides how much of the report he sees
+        skill = ST.plan_skill(team, s.get('side', 'offence')) if getattr(team, 'staff', None) else float(state.coach.get('adjust_skill', 0.5))
         if rng.random() < 0.35 + 0.5 * skill * (0.6 + 0.8 * will):
             apply_changes(state.plan, state.base_plan, s['changes']); taken.append(s['text'])
     state.week_plan_taken = taken

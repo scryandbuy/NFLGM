@@ -104,7 +104,7 @@ def senior_bowl(league, rng):
     invited = sorted(seniors, key=lambda p: cons.get(p.pid, {}).get('rank', 9999))[:SENIOR_BOWL]
     looks = 0
     for abbr, team in league.teams.items():
-        sd = SC.error_sd(team.gm)
+        sd = SC.error_sd(team.gm, team)
         for p in invited:
             if _attends(team, p, 0.55, rng):
                 SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.8, rng); looks += 1
@@ -117,7 +117,7 @@ def pro_days(league, rng):
     pool = _pool(league); cons = league.consensus or {}
     looks = 0
     for abbr, team in league.teams.items():
-        sd = SC.error_sd(team.gm)
+        sd = SC.error_sd(team.gm, team)
         needs = [pos for pos, ps in team.depth.items() if len([q for q in ps if q.out_until is None]) < 2]
         cands = sorted([p for p in pool if p.pos in needs or rng.random() < 0.15], key=lambda p: cons.get(p.pid, {}).get('rank', 9999))
         for p in cands[:PRO_DAY_LOOKS]:
@@ -140,7 +140,7 @@ def visits(league, rng):
     pool = _pool(league); cons = league.consensus or {}
     user = getattr(league, 'user_team', None); looks = 0
     for abbr, team in league.teams.items():
-        sd = SC.error_sd(team.gm)
+        sd = SC.error_sd(team.gm, team)
         if abbr == user:
             chosen = [league.player(pid) for pid in (getattr(league, 'user_visits', None) or [])[:VISITS]]
             chosen = [p for p in chosen if p is not None]

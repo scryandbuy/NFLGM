@@ -49,6 +49,7 @@ import extensions as EXT
 import morale as MO
 import almanac as AL
 import spring as SP
+import staff as STF
 import postseason as PS
 import awards as AW
 import retirement as RT
@@ -112,6 +113,10 @@ class Franchise:
 
         votes = AW.vote(L, post)
         CP.season_prestige(L, post, coty_team=votes.get('coty'))
+        # THE STAFF: unit ranks land on the coordinators, prestige moves,
+        # contracts run down, then the carousel after the head-coaching moves
+        STF.season_end(L, STF.unit_ranks(L, L.year))
+        log['staff_moves'] = len(STF.carousel(L, rng, new_head_coaches=[a for a, _bg in fired]))
         AL.close_season(L, L.year, post, votes)      # the almanac: leaders, records, the coaching ledger
         log['awards'] = {k: (v.name if hasattr(v, 'name') else v)
                          for k, v in votes.items() if not isinstance(v, list)}

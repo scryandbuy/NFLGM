@@ -74,7 +74,7 @@ class Player:
                  # a position change he is still learning: frm, to, penalty, games_left, games_total
                  'transition',
                  # personality: work_ethic, financial_priority, loyalty, ambition (hidden)
-                 'traits', 'last_team', 'retired_year', 'conference', 'combine', 'medical')
+                 'traits', 'last_team', 'retired_year', 'conference', 'combine', 'medical', '_team_ref')
 
     def __init__(self, pid, name, pos, age, ratings, *, dev='normal',
                  potential=None, potential_range=None, longevity=1.0,
@@ -123,6 +123,7 @@ class Player:
         self.last_team = None
         self.retired_year = None
         self.conference = None; self.combine = None; self.medical = None
+        self._team_ref = None
 
     # ---- derived ability -------------------------------------------------
     @property
@@ -189,7 +190,7 @@ class Player:
     # ---- persistence -----------------------------------------------------
     def to_dict(self):
         d = {k: getattr(self, k) for k in self.__slots__
-             if k not in ('contract', 'morale')}
+             if k not in ('contract', 'morale', '_team_ref')}
         d['contract'] = contract_to_dict(self.contract)
         d['morale'] = morale_to_dict(self.morale)
         return d
@@ -729,6 +730,8 @@ class League:
             inbox_next_id=_inbox_next_id(),
             almanac=getattr(self, 'almanac', None),
             negotiations=getattr(self, 'negotiations', None) or [],
+            staff=__import__('staff').to_dict(self),
+            poaches=getattr(self, 'poaches', None) or [],
             promises=getattr(self, 'promises', None) or [],
             tendencies={str(y): {a: dict(c) for a, c in T.items()} for y, T in getattr(self, 'tendencies', {}).items()},
             rng_state=self.rng_state)
@@ -787,6 +790,9 @@ class League:
         L.inbox = [_inbox_from_dict(L, m) for m in d.get('inbox', [])]
         L.almanac = d.get('almanac')
         L.negotiations = d.get('negotiations', []) or []; L.promises = d.get('promises', []) or []
+        import staff as _ST
+        _ST.from_dict(L, d.get('staff'))
+        L.poaches = d.get('poaches', []) or []
         if L.negotiations:
             import negotiations as _NG, itertools as _it
             _NG._ids = _it.count(max(t['id'] for t in L.negotiations) + 1)
@@ -1101,6 +1107,8 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
     import personality as PT
     PT.assign_all(L, rng)
     for _t in L.teams.values(): _t.league = L
+    import staff as ST
+    ST.seed(L, rng)
     return L
 
 

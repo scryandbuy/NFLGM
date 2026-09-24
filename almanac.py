@@ -46,8 +46,9 @@ def close_season(league, year, post=None, votes=None):
     aw = {}
     for k, v in (votes or league.awards.get(year, {}) or {}).items():
         if isinstance(v, list): continue
-        p = league.player(v) if isinstance(v, str) else None
-        aw[k] = dict(pid=v, name=p.name if p else str(v), pos=p.pos if p else None, team=p.team if p else None)
+        p = league.player(v) if isinstance(v, str) else (v if hasattr(v, 'pid') else None)
+        pid = p.pid if p is not None else (v if isinstance(v, str) else str(v))
+        aw[k] = dict(pid=pid, name=p.name if p else str(v), pos=p.pos if p else None, team=p.team if p else None)
     A['seasons'][year] = dict(champion=getattr(post, 'champion', None), runner_up=_runner_up(post),
                               awards=aw, leaders=leaders)
     # records

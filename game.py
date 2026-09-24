@@ -196,7 +196,12 @@ def fg_probability(distance, kicker=None, rate_fn=None, AVG=0.70):
 
 def attempt_field_goal(yardline_100, kicker, rng, rate_fn):
     dist = yardline_100 + 17               # 10 end zone + 7 snap
-    made = rng.random() < fg_probability(dist, kicker, rate_fn) * (ENV.kick_mult if dist >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult))
+    p_make = fg_probability(dist, kicker, rate_fn) * (ENV.kick_mult if dist >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult))
+    # the special teams coordinator: a good one keeps the kicker near his number, a poor one adds variance either way
+    kn = float(kicker.get('st_noise', 1.0)) if isinstance(kicker, dict) else 1.0
+    if kn != 1.0:
+        p_make = float(np.clip(0.5 + (p_make - 0.5) / kn, 0.02, 0.99))
+    made = rng.random() < p_make
     return dict(type='field_goal', distance=dist, made=made,
                 points=3 if made else 0)
 

@@ -155,7 +155,12 @@ class SeasonRunner:
 
     def refresh(self, abbr):
         self.states[abbr].roster = self._units(abbr)
-        return self.states[abbr].roster
+        r = self.states[abbr].roster
+        # the special teams coordinator rides on the kicker's dict into the game
+        if r and isinstance(r.get('k'), dict):
+            import staff as ST
+            r['k']['st_noise'] = ST.kick_noise_mult(self.L.teams[abbr]) if getattr(self.L.teams[abbr], 'staff', None) else 1.0
+        return r
 
     # ---- one game -------------------------------------------------------
     def play(self, home, away, week, playoffs=False):
@@ -298,6 +303,8 @@ class SeasonRunner:
         MO.unresolved_weekly(self.L)
         import negotiations as NG
         NG.resolve(self.L, week=week)          # agents get back to you
+        for t in self.L.teams.values():          # coordinators reach XP through the player's club
+            for p in t.roster: p._team_ref = t
         NG.check_promises(self.L, week)        # promises not kept are broken
         # the assistants' report on next week's opponent, into the inbox now
         if week < 18:

@@ -363,8 +363,11 @@ def award_xp(player, awards):
 def credit(player, amount, source):
     """Record the source and return the amount, so `p.xp += credit(...)`.
     Work ethic scales everything a man earns, 0.8x to 1.2x (personality.py)."""
-    import personality as PT
+    import personality as PT, staff as ST
     amount = float(amount or 0.0) * PT.xp_mult(player)
+    team = getattr(player, '_team_ref', None)
+    if team is not None:
+        amount *= ST.xp_mult(team, player)
     if amount:
         led = player.xp_spent.setdefault('_earned', {})
         led[source] = led.get(source, 0.0) + float(amount)

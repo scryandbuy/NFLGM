@@ -47,6 +47,10 @@ def change_position(league, pid, new_pos, log=True):
     pen, games = COST[d]
     aw = float(p.ratings.get('awareness_rating', 70))
     games = int(round(games * (1.0 + 0.03 * max(0.0, p.age - 25)) * (1.15 - 0.3 * (aw - 60) / 40.0)))
+    team = league.teams.get(p.team) if p.team else None
+    if team is not None and getattr(team, 'staff', None):
+        import staff as ST
+        games = int(round(games * ST.tax_mult(team, new_pos)))
     games = max(3, games)
     prior = p.transition
     # a second move before the first is paid off does not stack; the bigger tax stands

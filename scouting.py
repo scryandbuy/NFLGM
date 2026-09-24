@@ -65,8 +65,14 @@ def consensus(league):
     return cons
 
 
-def error_sd(gm):
-    s = float(getattr(gm, 'scouting', 0.5)) if gm is not None else 0.5
+def error_sd(gm, team=None):
+    """The room's error. The head scout sets it when the club has one; the GM's
+    own dial is the fallback for a league built before staff existed."""
+    if team is not None and getattr(team, 'staff', None) and team.staff.get('scout') is not None:
+        import staff as ST
+        s = ST.scout_quality(team)
+    else:
+        s = float(getattr(gm, 'scouting', 0.5)) if gm is not None else 0.5
     return SD_WORST - (SD_WORST - SD_BEST) * s
 
 
@@ -83,7 +89,7 @@ def scout(league, rng):
     deep = {p.pid for p in by_val[len(by_val) // 2:]}
     views = {}
     for abbr, team in league.teams.items():
-        sd = error_sd(team.gm)
+        sd = error_sd(team.gm, team)
         v = {}
         for p in pool:
             wide = 1.0 + (0.5 if p.pid in deep else 0.0) + (0.4 if not _power(p) else 0.0)
