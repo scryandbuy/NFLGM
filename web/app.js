@@ -306,6 +306,7 @@ function renderRoster(v) {
                   Ratings: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Ovr', 'Overall Rating', 1), H('Ceiling', "The player's estimated potential", 1), H('Dev', 'Rate of XP Growth'), H('Fit', "How well the player matches your coach's scheme", 1), H('Morale', "Player's happiness")],
                   Contract: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Yrs', 'Years left on his contract', 1), H('Cap Hit', "This year's cap hit", 1), H('Penalty', 'Dead cap charged if player is cut/traded', 1), H('Status')],
                   Stats: [H('Player'), H('Pos', 'Position'), H('G', 'Games played', 1), H('This Season')] }[clubView];
+  if (clubTab === 'ps') heads.push(el('th', {}, ''));
   tbl.append(el('tr', {}, ...heads));
   const rowsFor = () => clubTab === 'ps' ? [{ title: 'Practice Squad', rows: v.practice }] : clubTab === 'injured' ? [{ title: 'Injured', rows: v.injured }] : v.groups;
   for (const g of rowsFor()) {
@@ -315,11 +316,18 @@ function renderRoster(v) {
                       Ratings: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.pot_range ? `${r.pot_range[0]}–${r.pot_range[1]}` : (r.pot ?? '—')), el('td', {}, el('span', { class: 'dev' + (r.dev === 'Star' || r.dev === 'Superstar' ? ' star' : '') }, r.dev)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, pill(r.morale))],
                       Contract: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n' }, `$${r.penalty.toFixed(1)}m`), el('td', {}, el('span', { class: 'inj' }, r.status))],
                       Stats: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.stats.games), el('td', { style: 'text-align:left;font-family:var(--mono);font-size:12px' }, r.stats.line)] }[clubView]();
+      if (clubTab === 'ps') {
+        const act = (name, extra) => { const res = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, ${extra})`); busy(res.ok ? (res.moves ? res.moves.map(m => `${m.name} ${m.how}`).join(', ') : `${res.name}: done.`) : res.why); setTimeout(() => busy(null), 2200); renderRoster(pyJSON('SESSION.club_roster()')); };
+        cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' },
+          el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', 'data-tip': 'Sign him to the 53 at the minimum', onclick: () => act('call_up', `pid=${JSON.stringify(r.pid)}`) }, 'Call Up'),
+          el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:12px', disabled: r.elevated_now ? '' : null, 'data-tip': `Dress him Sunday and send him back after · ${r.elevations} of ${v.per_man_max} used`, onclick: () => act('elevate', `pids=[${JSON.stringify(r.pid)}]`) }, r.elevated_now ? 'Elevated' : `Elevate · ${r.elevations}/${v.per_man_max}`),
+          el('button', { class: 'btn warn', style: 'width:auto;padding:3px 8px;font-size:12px', onclick: () => { if (confirm(`Release ${r.name} from the practice squad?`)) act('release_ps', `pid=${JSON.stringify(r.pid)}`); } }, 'Release'))));
+      }
       tbl.append(el('tr', {}, ...cells));
     }
   }
   sheet.append(tbl);
-  if (clubTab === 'ps') sheet.append(el('div', { class: 'foot' }, el('span', { class: 'count' }, 'Open a player to call him up or elevate him for Sunday.')));
+  if (clubTab === 'ps') sheet.append(el('div', { class: 'foot' }, el('span', { class: 'count' }, `Elevations this week: ${v.elevations_used} of ${v.elevations_max} · a man's ${v.per_man_max + 1}${ord(v.per_man_max + 1)} elevation signs him to the 53`)));
   page.append(sheet);
 }
 
@@ -379,7 +387,7 @@ function renderDepth(v) {
   const s = el('section', { class: 'sheet c12' });
   const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
   for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)})`)); } }, p));
-  pk.append(el('span', { class: 'snaps' }, 'Use the arrows to reorder; the game fields the order you set'));
+  pk.append(el('span', { class: 'snaps' }, 'Drag a plate or use the arrows; the game fields the order you set'));
   s.append(pk);
   const chart = el('div', { class: 'chart' });
   for (const c of v.cols) {
@@ -388,7 +396,18 @@ function renderDepth(v) {
     const byPos = {}; c.slots.forEach(x => (byPos[x.pos] = byPos[x.pos] || []).push(x));
     for (const [pos, men] of Object.entries(byPos)) {
       men.forEach((x, i) => {
-        const plate = el('div', { class: 'plate' + (x.flag === 'out' ? ' out' : '') }, el('div', { class: 'no' }, x.no || pos), el('div', { class: 'nm', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.short, el('small', {}, x.flag === 'out' ? 'Out' : x.flag === 'questionable' ? 'Questionable' : '')), el('div', { class: 'ov' }, x.ovr));
+        const plate = el('div', { class: 'plate' + (x.flag === 'out' ? ' out' : ''), draggable: 'true', 'data-pid': x.pid, 'data-pos': pos }, el('div', { class: 'no' }, x.no || pos), el('div', { class: 'nm', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.short, el('small', {}, x.flag === 'out' ? 'Out' : x.flag === 'questionable' ? 'Questionable' : '')), el('div', { class: 'ov' }, x.ovr));
+        plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos })); plate.classList.add('dragging'); });
+        plate.addEventListener('dragend', () => plate.classList.remove('dragging'));
+        plate.addEventListener('dragover', e => { e.preventDefault(); plate.classList.add('over'); });
+        plate.addEventListener('dragleave', () => plate.classList.remove('over'));
+        plate.addEventListener('drop', e => {
+          e.preventDefault(); plate.classList.remove('over');
+          let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; }
+          if (!d || d.pos !== pos || d.pid === x.pid) return;      // a plate only moves within its own position
+          const order = men.map(m => m.pid).filter(p => p !== d.pid); order.splice(order.indexOf(x.pid), 0, d.pid);
+          pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`));
+        });
         if (x.flag !== 'out') plate.append(el('div', { class: 'cbar' }, el('i', { class: x.cond < 80 ? 'mid' : '', style: `width:${x.cond}%` })));
         const arrows = el('div', { class: 'arrows' },
           el('button', { disabled: i === 0 ? '' : null, onclick: () => { const order = men.map(m => m.pid); [order[i - 1], order[i]] = [order[i], order[i - 1]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(pos)}, pids=${JSON.stringify(order)})`); renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`)); } }, '▲'),

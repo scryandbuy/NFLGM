@@ -90,10 +90,13 @@ def roster(session, league, abbr):
         men.sort(key=lambda p: (poss.index(p.pos), -p.ovr))
         if men: groups.append(dict(title=title, rows=[_row(session, league, t, p) for p in men]))
     import practice_squad as PSQ
-    ps = [_row(session, league, t, p) for p in PSQ.squad(t)]
+    ps = []
+    for p in PSQ.squad(t):
+        r = _row(session, league, t, p); r['elevations'] = int(p.xp_spent.get('_elevations', 0) or 0); r['elevated_now'] = p in (getattr(t, '_elevated', []) or [])
+        ps.append(r)
     injured = [_row(session, league, t, p) for p in t.active() if p.out_until is not None]
     return dict(rail=rail(session, league, abbr), groups=groups, count=len(t.active()), cap_total=round(sum(p.cap_hit(0) for p in t.active()), 1),
-                practice=ps, injured=injured, ps_charge=round(PSQ.ps_charge(t), 1))
+                practice=ps, injured=injured, ps_charge=round(PSQ.ps_charge(t), 1), elevations_used=len(getattr(t, '_elevated', []) or []), elevations_max=PSQ.ELEVATIONS_PER_GAME, per_man_max=PSQ.ELEVATIONS_PER_MAN)
 
 
 # ------------------------------------------------------------ the card
@@ -228,14 +231,19 @@ def act_position_change(league, abbr, pid, new_pos):
 
 def act_call_up(league, abbr, pid):
     import practice_squad as PSQ
-    return PSQ.call_up(league, abbr, pid) or dict(ok=True)
+    p = league.player(pid); ok = bool(PSQ.call_up(league, abbr, pid))
+    return dict(ok=ok, name=p.name if p else pid, why=None if ok else 'he is not on your practice squad')
 
 
 def act_elevate(league, abbr, pids, week):
     import practice_squad as PSQ
-    return PSQ.elevate(league, abbr, list(pids), week) or dict(ok=True)
+    t = league.teams[abbr]; already = len(getattr(t, '_elevated', []) or [])
+    if already + len(pids) > PSQ.ELEVATIONS_PER_GAME: return dict(ok=False, why=f'only {PSQ.ELEVATIONS_PER_GAME} elevations a game')
+    out = PSQ.elevate(league, abbr, list(pids), week)
+    return dict(ok=bool(out), moves=[dict(name=league.player(pid).name, how=how) for pid, how in out], why=None if out else 'nobody eligible')
 
 
 def act_release_ps(league, abbr, pid):
     import practice_squad as PSQ
-    return PSQ.release_from_squad(league, abbr, pid) or dict(ok=True)
+    p = league.player(pid); PSQ.release_from_squad(league, abbr, pid)
+    return dict(ok=True, name=p.name if p else pid)
