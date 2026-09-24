@@ -65,6 +65,10 @@ def main():
     s, C_all, C_sea, log = _load()
     if cmd == 'weeks':
         n = int(sys.argv[2]) if len(sys.argv) > 2 else 6
+        if 'noplan' in sys.argv:
+            # the AI game-plan layer off: every club plays its coordinators' base plan all season
+            import gameplan_week as GW
+            GW.ai_plan = lambda league, state, me, opp, week, rng: (None, [])
         t0 = time.time()
         for _ in range(n):
             if s.stop[0] == 'week' and s.runner is None:
