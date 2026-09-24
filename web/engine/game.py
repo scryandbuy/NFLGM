@@ -181,8 +181,11 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
 # Real made% by distance.
 # Re-solved on real kickers, whose ratings sit above the flat-70 clones the
 # curve was first fitted against.
-FG_PCT = [(29, .960), (34, .940), (39, .878), (44, .805), (49, .728),
-          (54, .694), (99, .552)]
+# by distance, at the modern rate: kickers made about 84-86% overall in 2023-24,
+# roughly 81% from 40-49 and 70% from 50 and beyond. The earlier table was a
+# 2010s one and the league kicked 81% with it against a real 85.
+FG_PCT = [(29, .975), (34, .955), (39, .905), (44, .840), (49, .785),
+          (54, .720), (99, .590)]
 
 def fg_probability(distance, kicker=None, rate_fn=None, AVG=0.70):
     base = next(p for d, p in FG_PCT if distance <= d)

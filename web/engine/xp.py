@@ -194,6 +194,12 @@ PHYSICAL_MULT = 2.5
 AWARENESS_MULT = 1.75
 
 ESCALATOR = 1.030            # per point ever bought, into anything
+# and the same skill again costs more than a new one: learning has diminishing
+# returns per skill. Without this a corner put nearly every point into man
+# coverage and the league's corners gained +3.5 a year in it at 21-24 and +2.3
+# at 25-27 (CB1 average 84 to 86 in three seasons) while receivers, whose
+# points spread across routes, catching and release, grew a point a year.
+ATTR_ESCALATOR = 1.060       # per point already bought into this attribute
 
 AGE_FROM, AGE_SLOPE = 21.0, 0.15     # per year of age past a rookie's
 # A quarterback's production curve is flat into his late thirties, so the
@@ -227,8 +233,9 @@ def cost_per_point(player, attr=None):
             AWARENESS_MULT if attr == 'awareness_rating' else 1.0)
     late_from, late_slope = LATE_SLOPE.get(player.pos, (99.0, 0.0))
     late = 1.0 + late_slope * max(0.0, float(player.age) - late_from)
+    same = float(player.xp_spent.get(attr, 0) or 0) if attr else 0.0
     return (BASE_COST * curve * (1.0 + AGE_SLOPE * years) * ovr_scale * late
-            * ESCALATOR ** points_bought(player) * phys)
+            * ESCALATOR ** points_bought(player) * ATTR_ESCALATOR ** same * phys)
 
 
 # ============================================================ THE CEILING
