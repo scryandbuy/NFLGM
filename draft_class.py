@@ -171,7 +171,11 @@ def convert(row, pos, target):
     college = TG.position_score(raw, pos)
 
     def scaled(k):
-        return {a: float(np.clip(v * (k ** 0.5 if a in PHYSICAL else k), 20, 99)) for a, v in raw.items()}
+        # injury and toughness are not ability: a man does not get more durable because
+        # he is a better player, so they keep the profile's value and are not scaled to
+        # the target. Scaling them had newgen classes arriving at 84.9 injury against a
+        # real rookie class at 87.8, and injuries per game climbing every season.
+        return {a: (float(np.clip(v, 20, 99)) if a in ('injury_rating', 'tough_rating') else float(np.clip(v * (k ** 0.5 if a in PHYSICAL else k), 20, 99))) for a, v in raw.items()}
     lo, hi = 0.4, 1.6
     for _ in range(40):
         mid = (lo + hi) / 2
