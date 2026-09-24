@@ -983,3 +983,9 @@ button.btn{line-height:normal;box-sizing:border-box}
 .sprow{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule);font-size:13px}
 .flag.sen{--fc:var(--ok)}.flag.small{--fc:var(--mid)}.flag.under{--fc:var(--club-2)}
 .pkrow.gone{opacity:.6}
+
+/* the market's calendar is a marker, not a row of tabs */
+.phase.marker div{cursor:default;position:relative}
+.phase.marker div.now{border-bottom-color:var(--club-2)}
+.phase.marker div small{display:block;font-size:10px;color:var(--club-2);text-transform:uppercase;letter-spacing:.06em}
+.phase.marker div:not(.now):not(.done){color:var(--ink-3)}
