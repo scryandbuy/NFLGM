@@ -485,6 +485,7 @@ function renderRoster(v) {
 
 let cardTab = 'Overview';
 function renderCard(v) {
+  if (v.cls_year !== undefined && v.confidence !== undefined) return renderProspectCard(v);
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Club'; secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '');
@@ -562,6 +563,52 @@ function renderCard(v) {
     if (!(v.history || []).length) h.append(el('div', {}, el('time', {}, '—'), el('span', {}, 'Nothing on record yet.')));
     box.append(h); s.append(box);
   }
+  page.append(s);
+}
+
+function renderProspectCard(v) {
+  renderRail(v.rail);
+  const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
+  $('#crumb').textContent = 'Draft'; drSecond('board');
+  if (v.error) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, v.error))); return; }
+  const reload = () => renderProspectCard(pyJSON(`SESSION.club_card(${JSON.stringify(v.pid)})`));
+  const s = el('section', { class: 'sheet c12' });
+  s.append(el('div', { class: 'head' },
+    el('div', { class: 'jersey', style: 'background:var(--sheet-3);color:var(--ink)' }, v.pos),
+    el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
+      el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.cls_year} · ${v.age}${v.size ? ' · ' + v.size : ''} · ${v.college}${v.conference ? ' · ' + v.conference : ''}${v.small ? ' · Small School' : ''}${v.taken ? ' · Drafted' : ''}`),
+      el('div', { class: 'hfacts' }, el('div', {}, el('span', {}, 'Consensus'), el('b', {}, v.cons != null ? `${v.cons}${v.cons_rank ? ' · #' + v.cons_rank : ''}` : '—')), el('div', {}, el('span', {}, 'Gap'), el('b', { style: v.gap > 0 ? 'color:var(--ok)' : v.gap < 0 ? 'color:var(--danger)' : '' }, v.gap != null ? (v.gap > 0 ? '+' : '') + v.gap : '—')), el('div', {}, el('span', {}, 'Projected'), el('b', {}, v.proj_range)), el('div', {}, el('span', {}, 'Your Board'), el('b', {}, v.dnd ? 'Do Not Draft' : v.on_board ? `#${v.on_board}` : 'Not placed')), el('div', {}, el('span', {}, 'Read'), el('b', { style: 'color:var(--ink-2)' }, `${v.confidence} · ${v.reads} look${v.reads === 1 ? '' : 's'}`)))),
+    el('div', { class: 'ovrbig' }, el('b', {}, v.mine), el('span', {}, 'Estimated Overall · your scouts'), el('div', { class: 'pot' }, `Ceiling ${v.ceiling}${v.my_round ? ' · Your Grade ' + v.my_round : ''}`))));
+  const acts = el('div', { class: 'ctabs' }, el('span', { style: 'font-family:var(--display);font-weight:700;color:var(--ink-3);padding:8px 0' }, 'Prospect Card'));
+  const a = el('div', { class: 'acts' });
+  if (!v.taken) {
+    a.append(v.on_board ? el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(v.pid)})`); reload(); } }, 'Take Off Your Board') : el('button', { class: 'btn go', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(v.pid)})`); reload(); } }, 'Add to Your Board'));
+    if (!v.spring_done) a.append(el('button', { class: 'btn' + (v.visited ? ' go' : ''), 'data-tip': v.visited ? 'Cancel the visit' : 'Bring him in for the second look', onclick: () => { const r = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(v.pid)})`); if (!r.ok) notify(r); reload(); } }, v.visited ? 'Visiting' : 'Visit'));
+    a.append(el('button', { class: 'btn quiet', 'data-tip': 'Keep him off your board on draft day', onclick: () => { pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(v.pid)})`); const cur = pyJSON(`SESSION.draft_view('board')`).user_board.dnd.map(x => x.pid); pyJSON(`SESSION.draft_act('board', dnd=${JSON.stringify(cur.concat([v.pid]))})`); reload(); } }, 'Do Not Draft'));
+  }
+  a.append(el('button', { class: 'btn quiet', onclick: () => history.back() }, 'Back'));
+  acts.append(a); s.append(acts);
+  const h5 = (t, sub) => el('div', { class: 'h5' }, t, sub ? el('span', {}, sub) : '');
+  const left = el('div', {});
+  left.append(h5('Combine', v.combine.every(c => c.v === '—') ? 'comes in the Spring' : 'from the Spring'));
+  left.append(el('div', { class: 'kv' }, ...v.combine.flatMap(c => [el('span', {}, c.label), el('span', {}, c.v)])));
+  left.append(h5('Flags'), el('div', { style: 'padding:4px 0 8px' }, ...(v.words.length ? v.words.map(wordTag) : [el('span', { class: 'muted', style: 'font-size:12.5px' }, 'None')])));
+  left.append(h5('Medical'), el('div', { style: 'font-size:13px;color:var(--ink-2);padding-bottom:8px' }, v.medical));
+  if (v.personality) left.append(h5('Character', 'from your visit'), el('div', { style: 'font-size:13px;color:var(--ink-2)' }, v.personality));
+  const mid = el('div', {});
+  mid.append(h5('Attributes', "your scouts' read, not the truth"));
+  const attrs = el('div', { class: 'attrs' });
+  for (const c of v.cols) {
+    const box = el('div', {}, el('div', { class: 'h5', style: 'margin-bottom:4px' }, c.title));
+    const rowsOf = rows => { for (const r of rows) box.append(el('div', { class: 'arow ' + r.tier }, el('span', {}, r.label), el('em', {}), el('b', {}, r.v))); };
+    rowsOf(c.rows); if (c.extra && c.extra.rows && c.extra.rows.length) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
+    attrs.append(box);
+  }
+  mid.append(attrs);
+  const right = el('div', {});
+  right.append(h5('The Scouts', "the room's read"), el('div', { class: 'read' }, el('b', {}, 'Assistants: '), v.read));
+  right.append(h5('Where He Goes', 'consensus against your board'), el('div', { class: 'kv' }, el('span', {}, 'Consensus'), el('span', {}, v.cons_rank ? `#${v.cons_rank} · picks ${v.proj_range}` : '—'), el('span', {}, 'Your Read'), el('span', {}, v.my_rank ? `#${v.my_rank}${v.my_round ? ' · ' + v.my_round + ' grade' : ''}` : '—'), el('span', {}, 'Ceiling'), el('span', {}, v.ceiling)));
+  s.append(el('div', { class: 'body' }, left, mid, right));
   page.append(s);
 }
 
@@ -982,46 +1029,103 @@ function renderCap(v) {
 
 // ---------------------------------------------------------------- Draft
 const DR = { board: 'Scouting Board', spring: 'The Spring', day: 'Draft Day', picks: 'Picks' };
-let boardPos = 'All', boardFilt = { early: false, small: false, visited: false };
+let boardPos = 'All', boardFilt = { early: false, late: false, small: false, needs: false }, boardTab = 'class', boardQuery = '', boardSel = null;
 function drSecond(cur) { secondRow(Object.entries(DR).map(([k, l]) => [l, '#draft/' + k]), '#draft/' + cur); $('#crumb').textContent = 'Draft'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'draft')); }
 function gapCell(g) { if (g == null) return el('span', { class: 'gap' }, '—'); return el('span', { class: 'gap ' + (g > 0 ? 'up' : g < 0 ? 'dn' : '') }, (g > 0 ? '+' : '') + g); }
 function flagTags(fl) { const s = el('span', {}); for (const f of fl || []) s.append(el('span', { class: 'flag ' + ({ medical: 'med', character: 'chr', visit: 'vis', riser: 'up', faller: 'dn', 'senior bowl': 'sr' }[String(f).toLowerCase()] || 'ss') }, String(f))); return s; }
 const POS_GROUPS = ['All', 'QB', 'HB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'ST'];
 const POS_OF = { QB: ['QB'], HB: ['HB', 'FB'], WR: ['WR'], TE: ['TE'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], DL: ['LEDG', 'DT', 'REDG'], LB: ['MIKE', 'WILL', 'SAM'], DB: ['CB', 'FS', 'SS'], ST: ['K', 'P', 'LS'] };
 
+const NEED_POS = { QB: ['QB'], RB: ['HB', 'FB'], WR: ['WR'], TE: ['TE'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], EDGE: ['LEDG', 'REDG'], DT: ['DT'], LB: ['MIKE', 'WILL', 'SAM'], CB: ['CB'], S: ['FS', 'SS'] };
+const wordTag = w => el('span', { class: 'flag ' + ({ Medical: 'med', Character: 'chr', Visited: 'vis', Riser: 'up', Faller: 'dn', 'Sr. Bowl': 'sen', 'Small School': 'small', Underclassman: 'under' }[w] || '') }, w);
+
 function renderBoard(v) {
   renderRail(v.rail); const page = persPage(); drSecond('board');
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, `Scouting Board · Class of ${v.year}`, el('small', {}, `${v.count} prospects` + (v.scout ? ` · Head Scout ${v.scout.name} (${v.scout.rating})` : ''))));
-  if (v.note) { s.append(el('div', { class: 'empty' }, v.note)); page.append(s); return; }
-  const filt = el('div', { class: 'filt-pos' }); for (const g of POS_GROUPS) filt.append(el('button', { class: 'btn' + (boardPos === g ? ' go' : ''), onclick: () => { boardPos = g; renderBoard(v); } }, g));
+  const reload = () => renderBoard(pyJSON(`SESSION.draft_view('board')`));
+  const onBoard = new Set(v.user_board.order.map(x => x.pid)), dnd = new Set(v.user_board.dnd.map(x => x.pid));
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Scouting Board', el('small', {}, `${v.count} prospects` + (v.scout ? ` · Head Scout ${v.scout.name} (${v.scout.rating})` : ''))));
+  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
+  for (const [k, l, n] of [['class', `Class of ${v.year}`, v.count], ['board', 'Your Board', onBoard.size], ['visited', 'Visited', v.rows.filter(r => r.visited).length]]) tabs.append(el('button', { 'aria-pressed': String(boardTab === k), onclick: () => { boardTab = k; renderBoard(v); } }, l + ' ', el('em', {}, n)));
+  s.append(tabs);
+  if (boardTab === 'board') { s.append(yourBoard(v, reload)); page.append(s); return; }
+  const filt = el('div', { class: 'filt-pos' });
+  for (const g of ['All', 'QB', 'OL', 'WR', 'EDGE', 'CB']) filt.append(el('button', { class: 'btn' + (boardPos === g ? ' go' : ''), onclick: () => { boardPos = g; renderBoard(v); } }, g));
   filt.append(el('span', { style: 'width:1px;background:var(--rule-2);margin:0 6px' }));
-  for (const [k, label, tip] of [['early', 'Rounds 1–3', 'Consensus in the first 96'], ['small', 'Small School', 'Outside the power conferences: your read is wider on these players'], ['visited', 'Visited', `Your ${v.visits_max} visits`]]) filt.append(el('button', { class: 'btn' + (boardFilt[k] ? ' go' : ''), 'data-tip': tip, onclick: () => { boardFilt[k] = !boardFilt[k]; renderBoard(v); } }, label));
+  for (const [k, label, tip] of [['needs', 'Needs', `Your needs: ${v.needs.join(', ') || 'none'}`], ['early', 'Rounds 1–3', 'Consensus in the first 96'], ['late', '4–7', 'Consensus after the first 96'], ['small', 'Small School', 'Outside the power conferences: your read is wider on these players']]) filt.append(el('button', { class: 'btn' + (boardFilt[k] ? ' go' : ''), 'data-tip': tip, onclick: () => { boardFilt[k] = !boardFilt[k]; if (k === 'early' && boardFilt.early) boardFilt.late = false; if (k === 'late' && boardFilt.late) boardFilt.early = false; renderBoard(v); } }, label));
+  const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Prospect', value: boardQuery }); search.oninput = () => { boardQuery = search.value; draw(); }; filt.append(search);
   filt.append(el('span', { class: 'count', style: 'margin-left:auto;align-self:center' }, `Visits ${v.visits.length} of ${v.visits_max}` + (v.spring_done ? ' · the spring has run' : ' · name them before the Spring')));
   s.append(filt);
   const tbl = el('table', { class: 'tbl' });
-  tbl.append(el('tr', {}, el('th', { class: 'n', 'data-tip': 'Where he sits on your board' }, '#'), el('th', {}, 'Prospect'), el('th', {}, 'Pos'), el('th', {}, 'School'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n', 'data-tip': "Your scouts' grade of him today" }, 'Your Read'), el('th', { class: 'n', 'data-tip': 'The range your scouts see him growing into' }, 'Ceiling'), el('th', { class: 'n', 'data-tip': 'Where the league as a whole has him' }, 'Consensus'), el('th', { class: 'n', 'data-tip': 'The round the consensus puts him in' }, 'Proj.'), el('th', { class: 'n', 'data-tip': 'Your read minus the consensus: plus means you like him more than the room does' }, 'Gap'), el('th', {}, 'Measurables'), el('th', {}, 'Flags'), el('th', {}, '')));
-  const rows = v.rows.filter(r => (boardPos === 'All' || POS_OF[boardPos].includes(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.small || r.small) && (!boardFilt.visited || r.visited)).slice(0, 200);
-  for (const r of rows) tbl.append(el('tr', { style: r.taken ? 'opacity:.4' : '' }, el('td', { class: 'n' }, r.my_rank), el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.pos), el('td', {}, r.college + (r.small ? ' ·' : ''), r.small ? el('small', { style: 'color:var(--ink-3)', 'data-tip': 'small school' }, ' ss') : ''), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons != null ? `${r.cons} · #${r.cons_rank}` : '—'), el('td', { class: 'n' }, r.proj), el('td', { class: 'n' }, gapCell(r.gap)), el('td', {}, el('span', { class: 'meas' }, [r.forty ? `${r.forty} forty` : null, r.vert ? `${r.vert}" vert` : null, r.bench ? `${r.bench} bench` : null].filter(Boolean).join(' · ') || '—')), el('td', {}, flagTags(r.flags)),
-    el('td', {}, v.spring_done ? '' : el('button', { class: 'btn' + (r.visited ? ' go' : ''), style: 'width:auto;padding:2px 8px;font-size:12px', 'data-tip': r.visited ? 'Cancel the visit' : 'Bring him in: the second look is the sharpest read your scouts get', onclick: () => { const res = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(r.pid)})`); if (!res.ok) notify(res); renderBoard(pyJSON(`SESSION.draft_view('board')`)); } }, r.visited ? 'Visiting' : 'Visit'))));
-  s.append(el('div', { class: 'board-wrap' }, tbl)); page.append(s);
+  const draw = () => {
+    tbl.innerHTML = '';
+    tbl.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Prospect'), el('th', {}, 'Pos'), el('th', {}, 'School'), el('th', { class: 'n', 'data-tip': "Your scouts' estimate of him today" }, 'Estimated Overall'), el('th', { class: 'n', 'data-tip': 'The range your scouts see him growing into' }, 'Ceiling'), el('th', { class: 'n', 'data-tip': 'Where the league as a whole has him' }, 'Consensus'), el('th', { class: 'n', 'data-tip': 'Your read minus the consensus' }, 'Gap'), el('th', { class: 'n', 'data-tip': 'Where the consensus projects him to go' }, 'Proj.'), el('th', {}, 'Flags'), el('th', {}, '')));
+    const q = boardQuery.trim().toLowerCase(); const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], EDGE: ['LEDG', 'REDG', 'DT'], CB: ['CB', 'FS', 'SS'] };
+    const needPos = new Set(v.needs.flatMap(g => NEED_POS[g] || []));
+    const rows = v.rows.filter(r => (boardTab !== 'visited' || r.visited) && (boardPos === 'All' || (GROUP[boardPos] || []).includes(r.pos)) && (!boardFilt.needs || needPos.has(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.late || (r.cons_rank != null && r.cons_rank > 96)) && (!boardFilt.small || r.small) && (!q || r.name.toLowerCase().includes(q) || (r.college || '').toLowerCase().includes(q))).slice(0, 200);
+    for (const r of rows) tbl.append(el('tr', { class: (r.visited ? 'visited' : '') + (boardSel === r.pid ? ' sel' : ''), style: r.taken ? 'opacity:.4' : '', onclick: e => { if (e.target.closest('button')) return; boardSel = boardSel === r.pid ? null : r.pid; draw(); drawFoot(); } },
+      el('td', { class: 'n' }, r.my_rank), el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.cls_year}${r.size ? ' · ' + r.size : ''}`)))), el('td', {}, r.pos), el('td', {}, r.college), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons != null ? r.cons : '—'), el('td', { class: 'n' }, gapCell(r.gap)), el('td', { class: 'n' }, r.proj_range), el('td', {}, ...r.words.map(wordTag)),
+      el('td', {}, el('div', { style: 'display:flex;gap:4px' }, v.spring_done ? '' : el('button', { class: 'btn' + (r.visited ? ' go' : ''), style: 'width:auto;padding:2px 8px;font-size:12px', 'data-tip': r.visited ? 'Cancel the visit' : 'Bring him in: the second look is the sharpest read your scouts get', onclick: () => { const res = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(r.pid)})`); if (!res.ok) notify(res); reload(); } }, r.visited ? 'Visiting' : 'Visit'),
+        onBoard.has(r.pid) ? el('span', { class: 'badge-sm' }, `#${v.user_board.order.findIndex(x => x.pid === r.pid) + 1}`) : el('button', { class: 'btn', style: 'width:auto;padding:2px 8px;font-size:12px', 'data-tip': 'Add him to the bottom of your board', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(r.pid)})`); reload(); } }, 'Add')))));
+    if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '11' }, el('div', { class: 'empty' }, 'Nobody matches the filter.'))));
+  };
+  const foot = el('div', { class: 'foot' });
+  const drawFoot = () => { foot.innerHTML = ''; const r = v.rows.find(x => x.pid === boardSel);
+    foot.append(el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(boardSel)})`); reload(); } }, 'Add to Your Board'), el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { location.hash = '#club/player/' + boardSel; } }, 'Prospect Card'), el('span', { class: 'count', style: 'margin-left:auto' }, r ? `${r.name} · ${r.pos} · ${r.college}` : 'Click a row to select a prospect')); };
+  s.append(el('div', { class: 'board-wrap' }, tbl), foot); draw(); drawFoot();
+  // the spring, inline: stock moves and flags
+  const sp = v.spring || null;
+  s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'The Spring', el('small', {}, 'Stock Moves and Flags')));
+  const spBox = el('div', { class: 'pad' });
+  if (v.spring_done) spBox.append(el('a', { class: 'btn', href: '#draft/spring' }, 'Open the Spring'));
+  else spBox.append(el('div', { class: 'empty' }, 'The combine, the Senior Bowl, pro days and your visits come in the Spring step. Name your visits now; the second look is the sharpest read your scouts get.'));
+  s.append(spBox);
+  page.append(s);
+}
+
+function yourBoard(v, reload) {
+  const box = el('div', {});
+  const byid = {}; for (const r of v.rows) byid[r.pid] = r;
+  const list = el('div', { class: 'pad' });
+  const tiers = { 1: `Tier 1 · Worth Your Pick at ${v.my_slot || '—'}`, 2: 'Tier 2 · Second-Round Grades', 3: 'Later Rounds' };
+  const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Player'), el('th', { class: 'n', 'data-tip': 'Where the consensus projects him' }, 'Proj.'), el('th', { class: 'n' }, 'Est. Ovr'), el('th', {}, '')));
+  let lastTier = null;
+  const order = v.user_board.order.map(x => x.pid);
+  v.user_board.order.forEach((x, i) => {
+    const r = byid[x.pid]; if (!r) return;
+    if (x.tier !== lastTier) { t.append(el('tr', { class: 'grp' }, el('td', { colspan: '5' }, tiers[x.tier]))); lastTier = x.tier; }
+    t.append(el('tr', { draggable: 'true', 'data-pid': r.pid }, el('td', { class: 'n' }, i + 1), el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.college}${r.my_round && x.tier > 1 ? ' · Your Grade ' + r.my_round : ''}`)))), el('td', { class: 'n' }, r.proj_range), el('td', { class: 'n' }, ovrCell(r.mine)),
+      el('td', {}, el('div', { style: 'display:flex;gap:4px' }, el('button', { class: 'btn', style: 'padding:2px 6px;font-size:12px', disabled: i === 0 ? '' : null, onclick: () => { const o = order.slice(); [o[i - 1], o[i]] = [o[i], o[i - 1]]; pyJSON(`SESSION.draft_act('board', order=${JSON.stringify(o)})`); reload(); } }, '▲'), el('button', { class: 'btn', style: 'padding:2px 6px;font-size:12px', disabled: i === order.length - 1 ? '' : null, onclick: () => { const o = order.slice(); [o[i + 1], o[i]] = [o[i], o[i + 1]]; pyJSON(`SESSION.draft_act('board', order=${JSON.stringify(o)})`); reload(); } }, '▼'),
+        el('button', { class: 'btn quiet', style: 'padding:2px 6px;font-size:12px', 'data-tip': 'Do Not Draft', onclick: () => { const d = v.user_board.dnd.map(z => z.pid).concat([r.pid]); pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(r.pid)})`); pyJSON(`SESSION.draft_act('board', dnd=${JSON.stringify(d)})`); reload(); } }, '✕')))));
+  });
+  if (!order.length) t.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, "Your board is empty. Add prospects from the class, or Auto-Fill by Read to start from your scouts' order."))));
+  if (v.user_board.dnd.length) { t.append(el('tr', { class: 'grp' }, el('td', { colspan: '5' }, 'Do Not Draft'))); for (const x of v.user_board.dnd) { const r = byid[x.pid]; if (!r) continue; t.append(el('tr', { style: 'opacity:.6' }, el('td', { class: 'n' }, '✕'), el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.college} · ${x.why}`)))), el('td', { class: 'n' }, '—'), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', {}, el('button', { class: 'btn quiet', style: 'padding:2px 6px;font-size:12px', onclick: () => { pyJSON(`SESSION.draft_act('board', dnd=${JSON.stringify(v.user_board.dnd.map(z => z.pid).filter(z => z !== r.pid))})`); reload(); } }, 'Restore')))); } }
+  // drag to order
+  let dragPid = null;
+  t.addEventListener('dragstart', e => { const tr = e.target.closest('tr[data-pid]'); if (tr) dragPid = tr.dataset.pid; });
+  t.addEventListener('dragover', e => { if (e.target.closest('tr[data-pid]')) e.preventDefault(); });
+  t.addEventListener('drop', e => { const tr = e.target.closest('tr[data-pid]'); if (!tr || !dragPid || tr.dataset.pid === dragPid) return; e.preventDefault(); const o = order.filter(p => p !== dragPid); o.splice(o.indexOf(tr.dataset.pid), 0, dragPid); pyJSON(`SESSION.draft_act('board', order=${JSON.stringify(o)})`); reload(); });
+  list.append(t); box.append(list);
+  box.append(el('div', { class: 'read', style: 'margin:0 14px 12px' }, el('b', {}, 'Assistants: '), v.read || ''));
+  box.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => notify({ ok: true, line: 'Your board is saved as you change it.' }) }, 'Save Board'), el('button', { class: 'btn', 'data-tip': "Your scouts' order, top to bottom", onclick: () => { notify(pyJSON(`SESSION.draft_act('board_autofill')`)); reload(); } }, 'Auto-Fill by Read'), el('button', { class: 'btn quiet', onclick: () => { if (confirm('Clear your board?')) { pyJSON(`SESSION.draft_act('board', reset=True)`); reload(); } } }, 'Reset'), el('span', { class: 'count', style: 'margin-left:auto' }, 'Drag to Order · Draft Day picks from the top of this board')));
+  return box;
 }
 
 function renderSpring(v) {
   renderRail(v.rail); const page = persPage(); drSecond('spring');
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'The Spring', el('small', {}, v.done ? v.events.map(e => `${e.event} ${e.n} moves`).join(' · ') : 'stock moves and flags')));
   if (!v.done) { s.append(el('div', { class: 'empty' }, v.note)); page.append(s); return; }
-  const two = el('div', { class: 'two' });
-  const mk = (title, list, up) => { const d = el('div', {}, el('div', { class: 'h5' }, title)); for (const m of list) d.append(el('div', { class: 'brow', style: 'grid-template-columns:1fr' }, el('div', { class: 'plate' }, el('div', { class: 'nm', style: 'padding-left:8px' }, m.name, el('small', {}, `${m.pos} · ${m.college} · ${m.event}`)), el('div', { class: 'pj' }, `#${m.frm} → #${m.to}`, el('small', {}, up ? 'up' : 'down')), el('div', { class: 'ov', style: `color:${up ? 'var(--ok)' : 'var(--danger)'}` }, (up ? '+' : '') + m.delta)))); if (!list.length) d.append(el('div', { class: 'empty' }, 'None.')); return d; };
-  two.append(mk('Risers', v.risers, true), mk('Fallers', v.fallers, false)); s.append(two);
+  const list = el('div', { class: 'pad' });
+  const line = (kind, m) => el('div', { class: 'sprow' }, el('span', { class: 'flag ' + ({ Rises: 'up', Falls: 'dn', Medical: 'med', Character: 'chr' }[kind] || '') }, kind), el('span', {}, el('b', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + m.pid; } }, m.name), ` (${m.pos}, ${m.college}) ${m.frm} to ${m.to} after the ${m.event}${m.why ? ' · ' + m.why : ''}`));
+  for (const m of v.risers) list.append(line('Rises', m));
+  for (const m of v.fallers) list.append(line('Falls', m));
+  for (const r of v.flagged) { const med = r.flags.includes('medical'), chr = r.flags.includes('character'); if (med) list.append(el('div', { class: 'sprow' }, el('span', { class: 'flag med' }, 'Medical'), el('span', {}, el('b', {}, r.name), ` (${r.pos}, ${r.college}) flagged out of the combine`))); if (chr) list.append(el('div', { class: 'sprow' }, el('span', { class: 'flag chr' }, 'Character'), el('span', {}, `Your room came away from the ${r.name} visit with a concern about his character.`))); }
+  if (!list.children.length) list.append(el('div', { class: 'empty' }, 'No stock moves or flags this spring.'));
+  s.append(list);
   s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Your Visits', el('small', {}, `${v.visited.length} players · the second look`)));
   const vt = el('table', { class: 'tbl' }); vt.append(el('tr', {}, el('th', {}, 'Prospect'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Your Read'), el('th', { class: 'n' }, 'Ceiling'), el('th', { class: 'n' }, 'Consensus'), el('th', { class: 'n' }, 'Gap'), el('th', {}, 'Flags')));
-  for (const r of v.visited) vt.append(el('tr', {}, el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, r.college)))), el('td', {}, r.pos), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons_rank != null ? `#${r.cons_rank}` : '—'), el('td', { class: 'n' }, gapCell(r.gap)), el('td', {}, flagTags(r.flags.filter(f => f !== 'visited')))));
+  for (const r of v.visited) vt.append(el('tr', {}, el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, r.college)))), el('td', {}, r.pos), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons_rank != null ? `#${r.cons_rank}` : '—'), el('td', { class: 'n' }, gapCell(r.gap)), el('td', {}, ...(r.words || []).filter(w => w !== 'Visited').map(wordTag))));
   if (!v.visited.length) vt.append(el('tr', {}, el('td', { colspan: '7' }, el('div', { class: 'empty' }, 'You named no visits this year.'))));
-  s.append(vt);
-  s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Flags', el('small', {}, 'medical and character, from the spring')));
-  const ft = el('table', { class: 'tbl' }); ft.append(el('tr', {}, el('th', {}, 'Prospect'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Consensus'), el('th', {}, 'Flags')));
-  for (const r of v.flagged) ft.append(el('tr', {}, el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, r.college)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.cons_rank != null ? `#${r.cons_rank}` : '—'), el('td', {}, flagTags(r.flags.filter(f => f !== 'visited')))));
-  s.append(ft); page.append(s);
+  s.append(vt); page.append(s);
 }
 
 function renderDraftDay(v) {
@@ -1029,55 +1133,76 @@ function renderDraftDay(v) {
   const reload = () => renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`));
   if (!v.live) {
     const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Draft Day'), el('div', { class: 'empty' }, v.note));
-    if (v.last) { s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, `${v.last.year} Draft Results`, el('small', {}, `${v.last.rows.length} picks · ${v.last.trades} trades`))); const pm = el('div', { class: 'picksmade' }); for (const r of v.last.rows) pm.append(el('div', { class: 'pk' + (r.mine ? ' next' : '') }, el('span', { class: 'n' }, r.slot), crest(r.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, r.name), el('small', {}, r.pos)), el('span', {}))); s.append(pm); }
+    if (v.last) { s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, `${v.last.year} Draft Results`, el('small', {}, `${v.last.rows.length} picks · ${v.last.trades} trades`))); const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Pick'), el('th', {}, 'Club'), el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Consensus'))); for (const r of v.last.rows) t.append(el('tr', { style: r.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, r.slot), el('td', {}, stripe(r.team.abbr, r.team.name)), el('td', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name), el('td', {}, r.pos), el('td', { class: 'n' }, r.cons_rank ?? '—'))); s.append(t); }
     page.append(s); return;
   }
-  const left = el('section', { class: 'sheet c8' });
+  const act = (name, extra) => { const r = pyJSON(`SESSION.draft_act(${JSON.stringify(name)}${extra ? ', ' + extra : ''})`); notify(r); if (r.done) { location.hash = '#draft/picks'; return; } reload(); };
   const cur = v.current;
-  left.append(el('div', { class: 'clockbar' }, el('div', { class: 'onclock' }, crest(cur.team, 44), el('div', {}, el('b', {}, `${cur.team.name} ${v.on_user ? 'are on the clock' : 'on the clock'}`), el('span', {}, `Pick ${cur.slot} · Round ${cur.round}` + (cur.original !== cur.team.abbr ? ` · via ${cur.original}` : '')))), el('div', {}),
-    el('div', { class: 'timer' }, el('b', {}, `${v.total - v.picks_left} of ${v.total}`), el('span', {}, 'picks made')), el('div', { class: 'timer' }, el('b', {}, v.mine_next.length ? v.mine_next[0].slot : '—'), el('span', {}, v.on_user ? 'your pick now' : 'your next pick'))));
-  const ctrl = el('div', { class: 'ctrl' });
-  const act = (name, extra) => { const r = pyJSON(`SESSION.draft_act(${JSON.stringify(name)}${extra ? ', ' + extra : ''})`); notify(r); if (r.done) { refresh(); location.hash = '#draft/picks'; } else reload(); };
-  ctrl.append(el('button', { class: 'btn go', disabled: v.on_user ? '' : null, onclick: () => act('sim_to_me') }, 'Sim to My Pick'),
-    el('button', { class: 'btn', disabled: v.on_user ? null : '', 'data-tip': 'Take the top of your own board', onclick: () => act('auto_pick') }, 'Auto Pick'),
-    el('button', { class: 'btn', disabled: v.on_user ? null : '', 'data-tip': 'See which clubs would come up for this pick', onclick: () => { const r = pyJSON(`SESSION.draft_act('offers')`); const box = $('#offers'); box.innerHTML = ''; if (!r.ok) { box.append(el('div', { class: 'empty' }, r.why)); return; } if (!r.offers.length) box.append(el('div', { class: 'empty' }, r.line)); for (const o of r.offers) box.append(el('div', { class: 'offercard' }, el('div', { class: 'from' }, `${o.team.name} · ${o.gm} · wants a ${o.target_pos}`), el('div', { class: 's' }, o.summary.join(' + ')), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => act('accept_offer', `i=${o.i}`) }, 'Accept'), el('button', { class: 'btn quiet', onclick: () => box.removeChild(box.children[Array.from(box.children).findIndex(c => c.contains(event.target))]) }, 'Pass')))); } }, 'Trade the Pick'),
+  const left = el('section', { class: 'sheet c8' });
+  // the clock
+  left.append(el('div', { class: 'clockhead' }, crest(cur.team, 44), el('div', {}, el('div', { class: 'big' }, v.on_user ? 'You Are On the Clock' : `${cur.team.name} Is On the Clock`), el('div', { class: 'sub' }, `Round ${cur.round} · Pick ${cur.sel}` + (cur.needs && cur.needs.length ? ` · Needs ${cur.needs.join(', ')}` : ''))),
+    el('div', { class: 'yours' }, v.mine_next.length ? el('div', {}, el('div', { class: 'big', style: 'font-size:18px' }, `You Pick ${v.mine_next[0].sel}${ord(v.mine_next[0].sel)}`), el('div', { class: 'sub' }, v.on_user ? 'Now' : v.picks_away === 1 ? 'One Pick Away' : v.picks_away != null ? `${['Two', 'Three', 'Four', 'Five', 'Six', 'Seven'][v.picks_away - 2] || v.picks_away} Picks Away` : '')) : el('div', { class: 'sub' }, 'No picks left'))));
+  left.append(el('div', { class: 'ctrl2', style: 'padding:0 14px 10px' },
+    el('button', { class: 'btn', disabled: v.on_user ? '' : null, onclick: () => act('sim_pick_one') }, 'Next Pick'),
+    el('button', { class: 'btn go', disabled: v.on_user ? '' : null, onclick: () => act('sim_to_me') }, 'Sim to Your Pick'),
     el('button', { class: 'btn', disabled: v.on_user ? '' : null, 'data-tip': 'Sim to the end of this round, or to your pick if it comes first', onclick: () => act('sim_round') }, 'Sim Round'),
-    el('span', { class: 'sep' }), el('button', { class: 'btn quiet', onclick: () => { if (confirm('Run the rest of the draft on auto? Your picks go to the top of your board.')) act('finish_auto'); } }, 'Finish on Auto'));
-  left.append(ctrl, el('div', { id: 'offers' }));
-  // best available and your board
-  const two = el('div', { class: 'two' });
-  const ba = el('div', {}, el('div', { class: 'h5' }, 'Best Available · consensus'));
-  for (const r of v.best) ba.append(el('div', { class: 'brow' }, el('div', { class: 'r' }, r.cons_rank ?? '—'), el('div', { class: 'plate' }, el('div', { class: 'nm', style: 'padding-left:8px' }, r.name, el('small', {}, `${r.pos} · ${r.college}`)), el('div', { class: 'pj' }, r.ceiling, el('small', {}, 'your ceiling')), el('div', { class: 'ov' }, r.mine))));
-  two.append(ba);
-  const mb = el('div', {}, el('div', { class: 'h5' }, 'Your Board'), el('div', { class: 'bhead' }, el('span', {}, '#'), el('span', {}, 'Prospect'), el('span', {}, 'Consensus'), el('span', {}, 'Read')));
-  const list = el('div', { class: 'board', style: 'max-height:56vh;overflow-y:auto;padding:6px 0' });
-  for (const r of v.board) list.append(el('div', { class: 'brow' + (r.cons_rank != null && r.cons_rank - r.my_rank >= 12 ? ' mine-high' : r.cons_rank != null && r.my_rank - r.cons_rank >= 12 ? ' mine-low' : ''), 'data-tip': r.cons_rank != null && Math.abs(r.cons_rank - r.my_rank) >= 12 ? (r.cons_rank > r.my_rank ? 'You have him well above the room' : 'The room has him well above you') : null }, el('div', { class: 'r' }, r.my_rank), el('div', { class: 'plate' + (v.on_user ? ' pickable' : ''), onclick: v.on_user ? () => { if (confirm(`Take ${r.name}, ${r.pos}, at ${cur.slot}?`)) act('pick', `pid=${JSON.stringify(r.pid)}`); } : null }, el('div', { class: 'nm', style: 'padding-left:8px' }, r.name, el('small', {}, `${r.pos} · ${r.college}` + (r.flags.length ? ' · ' + r.flags.join(', ') : ''))), el('div', { class: 'pj' }, r.cons_rank != null ? `#${r.cons_rank}` : '—', el('small', {}, gapCell(r.gap))), el('div', { class: 'ov' }, r.mine))));
-  mb.append(list); two.append(mb); left.append(two);
-  if (v.on_user && v.board.length) left.append(el('div', { class: 'pad' }, el('button', { class: 'bigpick', onclick: () => { if (confirm(`Take ${v.board[0].name}, ${v.board[0].pos}, at ${cur.slot}?`)) act('pick', `pid=${JSON.stringify(v.board[0].pid)}`); } }, `PICK ${v.board[0].name.toUpperCase()}`, el('small', {}, `${v.board[0].pos} · top of your board · or tap any player on it`))));
-  page.append(left);
-  const right = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Clock', el('small', {}, `${v.trades} trades`)));
-  const myNext = v.mine_next.length ? v.mine_next[0].sel : Infinity;
+    el('button', { class: 'btn quiet', onclick: () => { if (confirm('Run the rest of the draft? Your picks go to the top of your board.')) act('sim_draft'); } }, 'Sim Draft'),
+    el('span', { class: 'sep' }),
+    el('button', { class: 'btn', disabled: v.on_user ? '' : null, 'data-tip': 'Ask a club ahead of you what it wants for its pick', onclick: () => { const q = v.clock.find(x => !x.mine && x.sel < (v.mine_next[0] ? v.mine_next[0].sel : Infinity)); if (!q) { notify({ ok: false, why: 'Nobody picks between now and your pick.' }); return; } const rd = pyJSON(`SESSION.draft_act('read_trade_up', target=${JSON.stringify(q.id)})`); if (!rd.ok) { notify(rd); return; } if (confirm(`${rd.line}\n\nSend ${rd.sends.map(x => x.replace(/^(\d+)-(\d+)-(\w+)$/, '$1 R$2 ($3)')).join(', ')} for pick ${rd.slot}?`)) act('trade_up', `target=${JSON.stringify(q.id)}, sends=${JSON.stringify(rd.sends)}`); } }, 'Trade Up'),
+    el('button', { class: 'btn', disabled: v.on_user ? null : '', 'data-tip': 'Gather offers for this pick', onclick: () => { const r = pyJSON(`SESSION.draft_act('offers')`); notify(r); if (r.ok) { offersCache = r.offers; reload(); } } }, 'Trade Down')));
+  // the picks around the clock
   const nx = el('div', { class: 'picksmade' });
+  const recent = v.results.slice(0, 3).reverse();
+  for (const r of recent) nx.append(el('div', { class: 'pk' }, el('span', { class: 'n' }, r.slot), crest(r.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, r.name), el('small', {}, `${r.pos}`)), el('span', {})));
   for (const q of v.clock) {
-    const canUp = !q.mine && q.sel < myNext && !v.on_user;
-    nx.append(el('div', { class: 'pk' + (q.mine ? ' next' : '') + (q.sel === cur.sel ? ' now' : '') }, el('span', { class: 'n' }, q.slot), crest(q.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, q.team.nick), el('small', {}, q.sel === cur.sel ? 'on the clock' : '')),
-      canUp ? el('button', { class: 'btn', style: 'width:auto;padding:2px 8px;font-size:12px', 'data-tip': 'Ask what they want for this pick', onclick: () => { const rd = pyJSON(`SESSION.draft_act('read_trade_up', target=${JSON.stringify(q.id)})`); if (!rd.ok) { notify(rd); return; } if (confirm(`${rd.line}\n\nSend ${rd.sends.map(x => x.replace(/^(\d+)-(\d+)-(\w+)$/, '$1 R$2 ($3)')).join(', ')} for pick ${rd.slot}?`)) act('trade_up', `target=${JSON.stringify(q.id)}, sends=${JSON.stringify(rd.sends)}`); } }, 'Trade Up') : el('span', {})));
+    const now = q.sel === cur.sel;
+    nx.append(el('div', { class: 'pk' + (q.mine ? ' next' : '') + (now ? ' now' : '') }, el('span', { class: 'n' }, q.slot), crest(q.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, now ? 'On the Clock' : q.mine ? 'Your Pick' : '—'), el('small', {}, `${q.team.name}${q.needs && q.needs.length && !q.mine ? ' · Needs ' + q.needs.join(', ') : ''}`)), el('span', {})));
   }
-  right.append(nx);
-  right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Picks Made', el('small', {}, 'latest first')));
-  const pm = el('div', { class: 'picksmade' }); for (const r of v.results) { const d = r.cons_rank != null ? r.sel - r.cons_rank : null; pm.append(el('div', { class: 'pk' }, el('span', { class: 'n' }, r.slot), crest(r.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, r.name), el('small', {}, r.pos)), el('span', { class: 'cons' + (d != null && d >= 12 ? ' steal' : d != null && d <= -12 ? ' reach' : ''), 'data-tip': 'Consensus rank' }, r.cons_rank != null ? `#${r.cons_rank}` : ''))); }
-  if (!v.results.length) pm.append(el('div', { class: 'empty' }, 'No picks yet.'));
-  right.append(pm); page.append(right);
+  left.append(nx);
+  // offers for your pick
+  if (v.on_user && offersCache && offersCache.length) {
+    for (const o of offersCache) left.append(el('div', { class: 'card', style: '--k:var(--live);margin:0 14px 10px' }, el('div', { class: 'h' }, el('div', { class: 'k' }, `Trade Offer · ${o.team.name} · Expires When You Pick`), el('div', { class: 's' }, `${o.team.name} offers ${o.summary.join(' and ')} for ${cur.slot}`)), el('div', { class: 'b' }, `They want a ${o.target_pos}. ${o.value >= 0 ? 'The value favors you' : 'You would be giving up value'} by about $${Math.abs(o.value).toFixed(1)}m in draft capital.`),
+      el('div', { class: 'a' }, el('button', { class: 'btn go', onclick: () => { offersCache = null; act('accept_offer', `i=${o.i}`); } }, 'Accept'), el('button', { class: 'btn', onclick: () => { location.hash = '#personnel/trades'; } }, 'Counter'), el('button', { class: 'btn quiet', onclick: () => { offersCache = offersCache.filter(x => x.i !== o.i); reload(); } }, 'Decline'))));
+  }
+  page.append(left);
+  const right = el('section', { class: 'sheet c4' }, el('h2', {}, 'Best Available', el('small', {}, 'By Your Board')));
+  const bt = el('table', { class: 'tbl' }); bt.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Player'), el('th', { class: 'n' }, 'Proj.'), el('th', { class: 'n' }, 'Est. Ovr')));
+  for (const r of v.board.slice(0, 12)) bt.append(el('tr', { style: 'cursor:pointer', onclick: () => { if (v.on_user && confirm(`Draft ${r.name}, ${r.pos}, ${r.college} at ${cur.slot}?`)) act('pick', `pid=${JSON.stringify(r.pid)}`); } }, el('td', { class: 'n' }, r.board_no), el('td', {}, el('div', { class: 'who' }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name.split(' ').slice(-1)[0], el('small', {}, `${r.pos} · ${r.college}${r.my_round && r.my_rank > 32 ? ' · Your Grade ' + r.my_round : ''}`)))), el('td', { class: 'n' }, r.proj_range), el('td', { class: 'n' }, ovrCell(r.mine))));
+  right.append(bt);
+  right.append(el('div', { class: 'read', style: 'margin:10px 12px' }, el('b', {}, 'Assistants: '), v.read || ''));
+  if (v.on_user && v.default_pick) right.append(el('div', { class: 'pad', style: 'padding-top:0' }, el('button', { class: 'btn go', style: 'width:100%;justify-content:center', onclick: () => act('pick', `pid=${JSON.stringify(v.default_pick.pid)}`) }, `Draft ${v.default_pick.name}`, el('small', { style: 'margin-left:8px;font-weight:500' }, `${v.default_pick.pos} · ${v.default_pick.college} · Your Board #1`))));
+  right.append(el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#draft/board' }, 'Your Board'), el('span', { class: 'count', 'data-tip': v.my_needs.join(', ') }, `Needs · ${v.my_needs.slice(0, 3).join(', ') || 'none'}`), el('button', { class: 'btn quiet', disabled: v.board.length ? null : '', onclick: () => { location.hash = '#club/player/' + v.board[0].pid; } }, 'Prospect Card')));
+  page.append(right);
 }
+let offersCache = null;
 
+let picksClub = 'mine', picksYear = null, picksQuery = '';
 function renderPicks(v) {
   renderRail(v.rail); const page = persPage(); drSecond('picks');
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Picks', el('small', {}, `${v.years.reduce((a, y) => a + y.picks.length, 0)} held` + (v.gone.length ? ` · ${v.gone.length} of yours held elsewhere` : ''))));
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Your Picks', el('small', {}, `${v.years.reduce((a, y) => a + y.picks.length, 0)} picks over ${v.years.length} drafts`)));
   const yrs = el('div', { class: 'years' });
-  for (const y of v.years) { const box = el('div', { class: 'yr' }, el('h4', {}, String(y.year), el('small', {}, `${y.picks.length} picks`))); for (const p of y.picks) box.append(el('div', { class: 'pkcard' }, el('div', { class: 'rd' }, p.round), el('div', { class: 'nm' }, p.slot === `R${p.round}` ? `Round ${p.round}` : `Pick ${p.slot}`, el('small', {}, p.own ? 'own' : `via ${p.via.abbr}`)), el('div', {}))); for (const g of v.gone.filter(g => g.year === y.year)) box.append(el('div', { class: 'pkcard gone' }, el('div', { class: 'rd' }, g.round), el('div', { class: 'nm' }, `Round ${g.round}`, el('small', {}, `held by ${g.holder.abbr}`)), el('div', {}))); yrs.append(box); }
+  for (const y of v.years) {
+    const box = el('div', { class: 'ybox' }, el('h4', {}, y.year === v.rail.year ? `${y.year} This Draft` : String(y.year)));
+    for (const p of y.picks) box.append(el('div', { class: 'pkrow' }, el('span', { class: 'rd' }, `R${p.round}`), el('div', { class: 'nm' }, p.slot + (p.own ? ' · Own' : ''), el('small', {}, p.note || ''))));
+    for (const g of v.gone.filter(g => g.year === y.year)) box.append(el('div', { class: 'pkrow gone' }, el('span', { class: 'rd' }, `R${g.round}`), el('div', { class: 'nm' }, `${g.round}${ord(g.round)} · To ${g.holder.name}`, el('small', {}, g.note || ''))));
+    yrs.append(box);
+  }
   s.append(yrs);
-  if (v.last) { s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, `${v.last.year} Draft Results`, el('small', {}, `${v.last.rows.length} picks · ${v.last.trades} trades`))); const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); const pm = el('div', { class: 'picksmade' }); let mine = false; const draw = () => { pm.innerHTML = ''; for (const r of v.last.rows.filter(r => !mine || r.mine)) pm.append(el('div', { class: 'pk' + (r.mine ? ' next' : '') }, el('span', { class: 'n' }, r.slot), crest(r.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm', style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name), el('small', {}, r.pos)), el('span', {}))); }; for (const [k, l] of [[false, 'All'], [true, 'Your Picks']]) tabs.append(el('button', { 'aria-pressed': String(mine === k), onclick: e => { mine = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, l)); s.append(tabs, pm); draw(); }
-  page.append(s);
+  s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Draft Results', el('small', {}, 'every drafted player on record')));
+  const tools = el('div', { class: 'tools' });
+  const clubs = el('div', { class: 'chips' }); for (const [k, l] of [['mine', v.rail.club.name], ['all', 'All Clubs'], ['div', v.my_division]]) clubs.append(el('button', { class: 'chip', 'aria-pressed': String(picksClub === k), onclick: () => { picksClub = k; renderPicks(v); } }, l));
+  const yrsChips = el('div', { class: 'chips' }); for (const y of v.result_years) yrsChips.append(el('button', { class: 'chip', 'aria-pressed': String(picksYear === y), onclick: () => { picksYear = picksYear === y ? null : y; renderPicks(v); } }, y));
+  const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Player', value: picksQuery }); search.oninput = () => { picksQuery = search.value; drawR(); };
+  tools.append(clubs, yrsChips, search); s.append(tools);
+  const rt = el('table', { class: 'tbl' });
+  const drawR = () => {
+    rt.innerHTML = ''; rt.append(el('tr', {}, el('th', {}, 'Player'), el('th', { class: 'n' }, 'Year'), el('th', { class: 'n' }, 'Pick'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n', 'data-tip': 'His rating the day he was drafted' }, 'Drafted At'), el('th', { class: 'n', 'data-tip': 'Where the league had him ranked' }, 'Consensus Was'), el('th', {}, 'Status')));
+    const q = picksQuery.trim().toLowerCase();
+    const rows = v.results.filter(r => (picksClub === 'all' || (picksClub === 'mine' && r.team && r.team.abbr === v.rail.club.abbr) || (picksClub === 'div' && r.division === v.my_division)) && (!picksYear || r.year === picksYear) && (!q || r.name.toLowerCase().includes(q)));
+    for (const r of rows.slice(0, 200)) rt.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.college}${r.team ? ' · ' + r.team.abbr : ''}`)))), el('td', { class: 'n' }, r.year), el('td', { class: 'n' }, r.pick), el('td', {}, r.pos), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.drafted_at ?? '—'), el('td', { class: 'n' }, r.cons_was ?? '—'), el('td', {}, r.status)));
+    if (!rows.length) rt.append(el('tr', {}, el('td', { colspan: '8' }, el('div', { class: 'empty' }, v.results.length ? 'Nobody matches.' : 'The first class is drafted in the spring.'))));
+  };
+  s.append(rt); drawR(); page.append(s);
 }
 
 // ---------------------------------------------------------------- League

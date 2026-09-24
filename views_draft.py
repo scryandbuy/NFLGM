@@ -24,7 +24,23 @@ def _prospect(league, abbr, p, taken=()):
     med = getattr(p, 'medical', None)
     if med and isinstance(med, dict) and med.get('flag'): flags.append(med['flag'])
     import scouting as SC
+    # the words the board shows for what the room knows
+    words = []
+    if 'visited' in flags or p.pid in (getattr(league, 'user_visits', None) or []): words.append('Visited')
+    if getattr(p, 'age', 22) >= 22 and any(x.get('pid') == p.pid and x.get('event') == 'Senior Bowl' for x in (getattr(league, 'spring_news', None) or [])): words.append('Sr. Bowl')
+    if 'character' in flags: words.append('Character')
+    if 'medical' in flags or (med and isinstance(med, dict) and med.get('flag')): words.append('Medical')
+    if not SC._power(p): words.append('Small School')
+    if getattr(p, 'age', 22) < 21.5: words.append('Underclassman')
+    mv = next((x for x in reversed(getattr(league, 'spring_news', None) or []) if x.get('pid') == p.pid and x.get('kind') == 'stock'), None)
+    if mv and (mv.get('to') or 0) - (mv.get('frm') or 0) >= 10: words.append('Faller')
+    elif mv and (mv.get('frm') or 0) - (mv.get('to') or 0) >= 10: words.append('Riser')
+    cls_year = ('Senior' if p.age >= 22.5 else 'Junior' if p.age >= 21.5 else 'Sophomore')
+    h = getattr(p, 'height', None); size = (f"{int(h) // 12}'{int(h) % 12}\" {int(getattr(p, 'weight', 0) or 0)}".strip() if h else '')
+    rk = c.get('rank') if c else None
+    proj_range = (f"{max(1, rk - 4)}–{rk + 4}" if rk and rk <= 224 else '—')
     return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), college=getattr(p, 'college', None) or '', small=(not SC._power(p)), visited=('visited' in flags or p.pid in (getattr(league, 'user_visits', None) or [])),
+                cls_year=cls_year, size=size, words=words, proj_range=proj_range, my_round=None,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
                 forty=(round(float(comb['forty']), 2) if comb.get('forty') else None), vert=(round(float(comb['vert']), 1) if comb.get('vert') else None),
@@ -55,12 +71,154 @@ def board(session, league, abbr):
     t = league.teams[abbr]
     scout = (getattr(t, 'staff', None) or {}).get('scout')
     import spring as SP
+    # my grade as a round, from where my read ranks him against the class
+    for r in rows:
+        r['my_round'] = f"R{min(7, (r['my_rank'] - 1) // 32 + 1)}" if r.get('my_rank') else None
+    needs = _needs(league, league.teams[abbr])
+    ub = _user_board(league, rows)
     visits = list(getattr(league, 'user_visits', None) or [])
     spring_done = any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or []))
     return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=(league.year + 1 if not getattr(league, 'draft_pool', None) else league.year),
-                visits=visits, visits_max=SP.VISITS, spring_done=spring_done,
+                visits=visits, visits_max=SP.VISITS, spring_done=spring_done, needs=sorted(needs), user_board=ub, my_slot=_my_first_slot(league, abbr), read=_board_read(league, abbr, rows, ub, needs),
                 scout=(dict(name=scout.name, rating=round(scout.rating)) if scout else None), live=bool(getattr(session, 'draft', None)),
                 note=None if rows else 'The class is scouted in camp; the board fills once the season begins.')
+
+
+NEED_GROUPS = {'QB': ['QB'], 'RB': ['HB', 'FB'], 'WR': ['WR'], 'TE': ['TE'], 'OL': ['LT', 'LG', 'C', 'RG', 'RT'], 'EDGE': ['LEDG', 'REDG'], 'DT': ['DT'], 'LB': ['MIKE', 'WILL', 'SAM'], 'CB': ['CB'], 'S': ['FS', 'SS']}
+
+
+def _needs(league, t):
+    """The groups where a starter's deal is up or the depth is thin."""
+    out = set()
+    for g, poss in NEED_GROUPS.items():
+        men = sorted((p for p in t.active() if p.pos in poss), key=lambda p: -p.ovr)
+        n_start = {'QB': 1, 'RB': 1, 'WR': 3, 'TE': 1, 'OL': 5, 'EDGE': 2, 'DT': 2, 'LB': 2, 'CB': 3, 'S': 2}[g]
+        starters = men[:n_start]
+        if len(men) < n_start + 1 or any(p.contract and p.contract.years <= 1 for p in starters) or (starters and min(p.ovr for p in starters) < 70): out.add(g)
+    return out
+
+
+def _my_first_slot(league, abbr):
+    t = league.teams[abbr]
+    pk = next((k for k in sorted(t.picks, key=lambda k: (k.year, k.round, k.selection or 99)) if not k.used_on), None)
+    if pk is None: return None
+    if pk.selection: return f"{pk.round}.{((pk.selection - 1) % 32) + 1}"
+    import views_personnel as VP
+    proj = VP._proj_slot(league, pk); return f"{pk.round}.{proj}" if proj else f"R{pk.round}"
+
+
+def _user_board(league, rows):
+    """The GM's own board: his order, plus a Do Not Draft list. Men he has not placed follow his scouts' read."""
+    ub = getattr(league, 'user_board', None) or {}
+    order = [pid for pid in (ub.get('order') or []) if any(r['pid'] == pid and not r['taken'] for r in rows)]
+    dnd = [pid for pid in (ub.get('dnd') or []) if any(r['pid'] == pid and not r['taken'] for r in rows)]
+    byid = {r['pid']: r for r in rows}
+    placed = [byid[pid] for pid in order]
+    # tiers by my grade: first-round grades, second-round grades, the rest
+    def tier(r): return 1 if (r.get('my_rank') or 999) <= 32 else 2 if (r.get('my_rank') or 999) <= 64 else 3
+    return dict(order=[dict(pid=r['pid'], tier=tier(r)) for r in placed], dnd=[dict(pid=pid, why=(', '.join(w for w in byid[pid]['words'] if w in ('Medical', 'Character')) or 'your call')) for pid in dnd], saved=bool(ub.get('order')))
+
+
+def _board_read(league, abbr, rows, ub, needs):
+    """The assistants on the board: the need, the one player in range graded above the league, the value, and the fallback."""
+    t = league.teams[abbr]
+    parts = []
+    exp = [p for p in t.active() if p.contract and p.contract.years <= 1 and p.ovr >= 74]
+    if needs:
+        from views import surname
+        g = sorted(needs)[0]; men = [surname(p.name) for p in exp if p.pos in NEED_GROUPS[g]][:2]
+        parts.append(f"{g} is the need" + (f" with {' and '.join(men)} expiring" if men else ''))
+    slot = _my_first_slot(league, abbr)
+    try: slot_n = int(slot.split('.')[1]) if slot and '.' in slot else 24
+    except Exception: slot_n = 24
+    in_range = [r for r in rows if not r['taken'] and r['cons_rank'] and slot_n - 6 <= r['cons_rank'] <= slot_n + 10]
+    above = sorted([r for r in in_range if (r.get('gap') or 0) >= 3], key=lambda r: -(r['gap'] or 0))
+    from views import surname
+    if above: parts.append(f"{surname(above[0]['name'])} is the one player in our range we grade above the league")
+    value = sorted([r for r in rows if not r['taken'] and r['cons_rank'] and r['cons_rank'] > slot_n + 40 and (r.get('my_rank') or 999) <= slot_n + 40], key=lambda r: (r.get('my_rank') or 999))
+    if value: parts.append(f"{surname(value[0]['name'])} is the value: the consensus has him in the {['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'][min(6, (value[0]['cons_rank'] - 1) // 32)]} round and our read is a {['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'][min(6, ((value[0].get('my_rank') or 1) - 1) // 32)]}-round player")
+    if above and value: parts.append(f"If {surname(above[0]['name'])} is gone at {slot_n}, trading back and taking {surname(value[0]['name'])} is the play")
+    if not parts: parts.append('The board is the class as your scouts see it; name your visits and it sharpens in the Spring')
+    from views import sentence
+    return sentence('. '.join(parts) + '.')
+
+
+def act_board(session, league, abbr, order=None, dnd=None, add=None, remove=None, reset=False):
+    """Save the GM's board: a whole order, a Do Not Draft list, one man added or removed, or reset to the scouts' read."""
+    ub = dict(getattr(league, 'user_board', None) or {}); ub.setdefault('order', []); ub.setdefault('dnd', [])
+    if reset: ub = dict(order=[], dnd=[])
+    if order is not None: ub['order'] = [str(x) for x in order]
+    if dnd is not None: ub['dnd'] = [str(x) for x in dnd]
+    if add: ub['order'] = [x for x in ub['order'] if x != add] + [add]; ub['dnd'] = [x for x in ub['dnd'] if x != add]
+    if remove: ub['order'] = [x for x in ub['order'] if x != remove]; ub['dnd'] = [x for x in ub['dnd'] if x != remove]
+    league.user_board = ub
+    return dict(ok=True, line=('Board reset to your scouts\' read.' if reset else 'Board saved.'), n=len(ub['order']))
+
+
+def act_board_autofill(session, league, abbr):
+    """Auto-Fill by Read: the top of your scouts' read becomes your order."""
+    rows = board(session, league, abbr)['rows']
+    top = [r['pid'] for r in rows if not r['taken']][:75]
+    league.user_board = dict(order=top, dnd=list((getattr(league, 'user_board', None) or {}).get('dnd') or []))
+    return dict(ok=True, line=f"{len(top)} players on your board, in your scouts' order.")
+
+
+def prospect_card(session, league, abbr, pid):
+    """A prospect's card: what your scouts see. Attributes carry the room's error (physical
+    and skill groups shifted by the read's error terms), never the true rating."""
+    import views_club as VC, scouting as SC
+    p = next((q for q in _pool(league) if q.pid == pid), None) or league.player(pid)
+    if p is None: return dict(error='no such prospect')
+    row = _prospect(league, abbr, p, (getattr(session, 'draft', None).taken if getattr(session, 'draft', None) else ()))
+    if row is None: return dict(error='your scouts have no read on him')
+    view = league.scouting[abbr][p.pid]
+    e_phys = float(view.get('e_phys', 0.0)); e_skill = float(view.get('e_skill', 0.0))
+    fam = VC.FAM.get(p.pos, 'DB')
+    def col(keys, err):
+        rows = []
+        for k, label in keys:
+            true = p.ratings.get(k)
+            if true is None: continue
+            seen = int(round(max(20, min(99, float(true) + err))))
+            rows.append(dict(key=k, label=label, v=seen, tier=('hi' if seen >= 85 else 'mid' if seen >= 72 else 'lo')))
+        return rows
+    phys = dict(title='Physical', rows=col(VC.ATTR['phys'], e_phys), extra=None)
+    if fam == 'DB': skill = dict(title='Coverage', rows=col(VC.ATTR['coverage'], e_skill), extra=dict(title='Run Defense', rows=col(VC.ATTR['rundef'], e_skill)))
+    elif fam in ('LB', 'DL'): skill = dict(title=VC.SKILL_TITLE.get(fam, 'Skill'), rows=col([k for k in VC.ATTR[fam] if k[0] not in ('tackle_rating', 'hit_power_rating', 'pursuit_rating', 'block_shed_rating')], e_skill), extra=dict(title='Run Defense', rows=col(VC.ATTR['rundef'], e_skill)))
+    else: skill = dict(title=VC.SKILL_TITLE.get(fam, 'Skill'), rows=col(VC.ATTR.get(fam, VC.ATTR['DB']), e_skill), extra=None)
+    mental = dict(title='Mental', rows=col(VC.ATTR['mental'], e_skill), extra=None)
+    comb = getattr(p, 'combine', None) or {}
+    combine = [dict(label=l, v=(f"{comb[k]:.2f}" if k in ('forty', 'shuttle') and comb.get(k) is not None else (f"{comb[k]:.1f}\"" if k == 'vertical' and comb.get(k) is not None else (str(comb[k]) if comb.get(k) is not None else '—')))) for k, l in (('forty', 'Forty'), ('vertical', 'Vertical'), ('bench', 'Bench'), ('shuttle', 'Shuttle'))]
+    med = getattr(p, 'medical', None) or {}
+    ub = getattr(league, 'user_board', None) or {}
+    on_board = (ub.get('order') or []).index(p.pid) + 1 if p.pid in (ub.get('order') or []) else None
+    reads = int(view.get('reads', 1) or 1)
+    confidence = 'Firm' if reads >= 3 else 'Fair' if reads == 2 else 'One look'
+    import personality as PT
+    words = PT.words(getattr(p, 'traits', None) or {}) if getattr(p, 'traits', None) and 'Character' in row['words'] else ''
+    return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], college=row['college'], conference=getattr(p, 'conference', None) or '',
+                small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
+                words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine, medical=(med.get('note') or ('Flagged out of the combine' if med.get('flag') else 'Clean')),
+                reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality=words, spring_done=any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or [])),
+                read=_prospect_read(league, abbr, p, row, view))
+
+
+def _prospect_read(league, abbr, p, row, view):
+    """The scouts on one man: the grade against the room, where he goes, what the flags mean."""
+    from views import sentence, surname
+    parts = []
+    gap = row.get('gap')
+    if gap is not None and gap >= 3: parts.append(f"we have {surname(p.name)} {gap} points above the league; if the room is right he is a value wherever he goes")
+    elif gap is not None and gap <= -3: parts.append(f"we have him {abs(gap)} points under the consensus; the league likes him more than we do")
+    else: parts.append(f"our read is in line with the league on {surname(p.name)}")
+    if row.get('cons_rank'): parts.append(f"the consensus puts him in the {['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'][min(6, (row['cons_rank'] - 1) // 32)]} round")
+    lo, hi = row['ceiling'].split('–') if '–' in row['ceiling'] else (None, None)
+    if lo and hi and int(hi) - int(lo) >= 8: parts.append('the ceiling is wide, which is the room saying it does not know yet')
+    if 'Medical' in row['words']: parts.append('the medical is a real concern and the later he goes the more it explains')
+    if 'Character' in row['words']: parts.append('the character flag came out of our own visit')
+    if 'Small School' in row['words']: parts.append('the small-school tape makes every number here softer')
+    if not row['visited'] and not any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or [])): parts.append('a visit would tighten this read')
+    return sentence('. '.join(parts) + '.')
 
 
 def act_visit(session, league, abbr, pid):
@@ -150,10 +308,39 @@ def draft_day(session, league, abbr):
     avail.sort(key=lambda x: (x['cons_rank'] if x['cons_rank'] is not None else 999))
     best = avail[:8]
     _my_rank(avail); my_board = sorted(avail, key=lambda x: x['my_rank'])[:40]
-    # who is on the clock and the next few
-    clock = [dict(sel=q.selection, slot=SLOT(q), team=club(q.owner), mine=(q.owner == abbr), id=f"{q.year}-{q.round}-{q.original}") for q in D.picks[D.i:D.i + 8]]
-    return dict(rail=r, live=True, on_user=D.on_user(), current=(dict(sel=pk.selection, slot=SLOT(pk), round=pk.round, team=club(pk.owner), original=pk.original) if pk else None),
-                clock=clock, results=results, mine_next=mine_next, best=best, board=my_board, picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades))
+    # who is on the clock and the next few, with each club's needs
+    clock = [dict(sel=q.selection, slot=SLOT(q), team=club(q.owner), mine=(q.owner == abbr), id=f"{q.year}-{q.round}-{q.original}", needs=sorted(_needs(league, league.teams[q.owner]))[:3]) for q in D.picks[D.i:D.i + 8]]
+    # the board as the GM ordered it, the unplaced men after in the scouts' order; Do Not Draft kept out
+    ub = getattr(league, 'user_board', None) or {}; order = [x for x in (ub.get('order') or [])]; dnd = set(ub.get('dnd') or [])
+    byid = {x['pid']: x for x in avail}
+    my_board = [byid[pid] for pid in order if pid in byid and pid not in dnd] + [x for x in sorted(avail, key=lambda x: x['my_rank']) if x['pid'] not in order and x['pid'] not in dnd]
+    my_board = my_board[:40]
+    for i, x in enumerate(my_board): x['board_no'] = i + 1
+    # the assistants on the clock: what the club picking now needs and who they take, whether your man reaches you
+    from views import surname, sentence
+    read = ''
+    if pk is not None and my_board:
+        cur_team = league.teams[pk.owner]; cur_needs = sorted(_needs(league, cur_team))
+        top = my_board[0]
+        if not D.on_user():
+            fit = next((x for x in my_board if any(x['pos'] in NEED_GROUPS[g] for g in cur_needs)), None)
+            parts = []
+            if fit and fit['pid'] != top['pid']: parts.append(f"{club(pk.owner)['name']} needs {' and '.join(cur_needs[:2]).lower()} and {surname(fit['name'])} is the best one left, so expect him to go at {pk.selection}. {surname(top['name'])} should reach you")
+            elif fit and fit['pid'] == top['pid']: parts.append(f"{club(pk.owner)['name']} needs {' and '.join(cur_needs[:2]).lower()} and {surname(top['name'])} is the best one left; he may not reach you")
+            else: parts.append(f"{surname(top['name'])} should reach you")
+            picks_away = sum(1 for q in D.picks[D.i:] if q.owner != abbr and (D.picks[D.i:].index(q) < next((j for j, z in enumerate(D.picks[D.i:]) if z.owner == abbr), 0)))
+            if picks_away >= 2 and len(my_board) > 1: parts.append(f"If he goes, {surname(my_board[1]['name'])} is next on your board")
+            read = sentence('. '.join(parts) + '.')
+        else:
+            read = sentence(f"{surname(top['name'])} is your board's top man and a {top['pos']}" + (f", which is a need" if any(top['pos'] in NEED_GROUPS[g] for g in _needs(league, league.teams[abbr])) else '') + f". The consensus has him {top['cons_rank']}{_ordd(top['cons_rank'])}." if top.get('cons_rank') else f"{surname(top['name'])} is your board's top man.")
+    picks_away = next((j for j, z in enumerate(D.picks[D.i:]) if z.owner == abbr), None)
+    return dict(rail=r, live=True, on_user=D.on_user(), current=(dict(sel=pk.selection, slot=SLOT(pk), round=pk.round, team=club(pk.owner), original=pk.original, needs=sorted(_needs(league, league.teams[pk.owner]))[:3]) if pk else None),
+                clock=clock, results=results, mine_next=mine_next, best=best, board=my_board, picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades), picks_away=picks_away, read=read,
+                default_pick=(dict(pid=my_board[0]['pid'], name=my_board[0]['name'], pos=my_board[0]['pos'], college=my_board[0]['college']) if my_board else None), my_needs=sorted(_needs(league, league.teams[abbr])))
+
+
+def _ordd(n):
+    return 'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
 
 
 def _results(league, ld):
@@ -175,6 +362,16 @@ def act_pick(session, league, abbr, pid):
     return dict(ok=True, line=line, done=False)
 
 
+def act_sim_pick_one(session, league, abbr):
+    """Next Pick: one club picks."""
+    D = session.draft
+    if D is None: return dict(ok=False, why='no draft on')
+    if D.on_user(): return dict(ok=False, why='you are on the clock')
+    ev = D.sim_pick()
+    if D.done: session._draft_over(); return dict(ok=True, line='The draft is over.', done=True)
+    return dict(ok=True, line=(f"{ev[1]} take {ev[2].name}." if isinstance(ev, tuple) and len(ev) >= 3 and hasattr(ev[2], 'name') else 'Pick made.') + (' You are on the clock.' if D.on_user() else ''))
+
+
 def act_sim_to_me(session, league, abbr):
     D = session.draft
     if D is None: return dict(ok=False, why='no draft on')
@@ -190,6 +387,10 @@ def act_auto_pick(session, league, abbr):
     if D is None or not D.on_user(): return dict(ok=False, why='not your pick')
     rows = D.board_for(abbr)
     return act_pick(session, league, abbr, rows[0][1].pid)
+
+
+def act_sim_draft(session, league, abbr):
+    return act_finish_auto(session, league, abbr)
 
 
 def act_finish_auto(session, league, abbr):
@@ -225,13 +426,39 @@ def picks(session, league, abbr):
     years = {}
     for pk in sorted(t.picks, key=lambda k: (k.year, k.round, k.selection or 0)):
         if pk.used_on: continue
-        years.setdefault(pk.year, []).append(dict(round=pk.round, slot=SLOT(pk), original=pk.original, own=(pk.original == abbr), via=(None if pk.original == abbr else club(pk.original))))
+        import views_personnel as VP
+        prov = (getattr(league, 'pick_provenance', None) or {}).get(f"{pk.year}-{pk.round}-{pk.original}")
+        proj = VP._proj_slot(league, pk)
+        if pk.original == abbr and pk.year == league.year and not pk.selection: note = f"Projected From a {t.record[0]}–{t.record[1]} Season" if sum(t.record) else 'Own'
+        elif pk.original == abbr: note = 'Own' if not proj or pk.selection else f"Projected {max(1, proj - 2)}{_ordd(max(1, proj - 2))}–{min(32, proj + 2)}{_ordd(min(32, proj + 2))}"
+        else: note = f"From {club(pk.original)['name']}" + (f" · {prov['how']} · {prov.get('phase', '').replace('_', ' ').title() if not prov.get('week') else 'Week ' + str(prov['week'])} {prov['year']}" if prov else '')
+        years.setdefault(pk.year, []).append(dict(round=pk.round, slot=(SLOT(pk) if pk.selection else (f"{pk.round}.{proj}" if proj and pk.year == league.year else f"{pk.round}{_ordd(pk.round)}")), original=pk.original, own=(pk.original == abbr), via=(None if pk.original == abbr else club(pk.original)), note=note))
     # picks of ours held by others
     gone = []
     for other, ot in league.teams.items():
         if other == abbr: continue
         for pk in ot.picks:
-            if pk.original == abbr and not pk.used_on: gone.append(dict(year=pk.year, round=pk.round, slot=SLOT(pk), holder=club(other)))
+            if pk.original == abbr and not pk.used_on:
+                prov = (getattr(league, 'pick_provenance', None) or {}).get(f"{pk.year}-{pk.round}-{pk.original}")
+                gone.append(dict(year=pk.year, round=pk.round, slot=SLOT(pk), holder=club(other), note=f"To {club(other)['name']}" + (f" · {prov['how']}" if prov else '')))
     gone.sort(key=lambda g: (g['year'], g['round']))
     ld = getattr(league, 'last_draft', None)
-    return dict(rail=rail(session, league, abbr), years=[dict(year=y, picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if ld else None))
+    # draft results across years: every drafted man on record with where he was taken, what he was and is, and his role now
+    results = []
+    for x in league.transactions:
+        if x.get('kind') != 'draft': continue
+        p = league.player(x.get('pid'))
+        if p is None: continue
+        tm = league.teams.get(p.team) if p.team else None
+        role = 'Retired' if p.retired else ('Free Agent' if tm is None else _role_word(tm, p))
+        results.append(dict(pid=p.pid, name=p.name, pos=p.pos, college=getattr(p, 'college', None) or '', year=x.get('year'), pick=f"{x.get('round')}.{((x.get('selection') or 1) - 1) % 32 + 1}", sel=x.get('selection'), team=club(x.get('team')) if x.get('team') in league.teams else None,
+                            division=(league.teams[x['team']].division if x.get('team') in league.teams else None), ovr=round(p.ovr), drafted_at=(round(float(x['ovr_then'])) if x.get('ovr_then') is not None else None), cons_was=x.get('consensus_rank'), status=role, now=(club(p.team) if p.team in league.teams else None)))
+    results.sort(key=lambda r: (-(r['year'] or 0), r['sel'] or 999))
+    return dict(rail=rail(session, league, abbr), years=[dict(year=y, picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if ld else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division)
+
+
+def _role_word(t, p):
+    d = t.depth.get(p.pos, []); idx = next((i for i, q in enumerate(d) if q.pid == p.pid), None)
+    n_start = {'QB': 1, 'HB': 1, 'WR': 3, 'TE': 1, 'LEDG': 1, 'REDG': 1, 'DT': 2, 'MIKE': 1, 'WILL': 1, 'SAM': 1, 'CB': 3, 'FS': 1, 'SS': 1}.get(p.pos, 1)
+    if idx is None: return 'Practice Squad' if any(q.pid == p.pid for q in getattr(t, 'practice_squad', []) or []) else 'Reserve'
+    return 'Starter' if idx < n_start else 'Rotation' if idx < n_start + 1 else 'Depth'

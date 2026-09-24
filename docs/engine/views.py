@@ -30,14 +30,29 @@ STADIUM = {'ARI': 'State Farm Stadium', 'ATL': 'Mercedes-Benz Stadium', 'BAL': '
            'SF': "Levi's Stadium", 'SEA': 'Lumen Field', 'TB': 'Raymond James Stadium', 'TEN': 'Nissan Stadium', 'WAS': 'Northwest Stadium'}
 
 
+SUFFIXES = ('Jr.', 'Sr.', 'St.', 'Dr.', 'Mr.', 'II.', 'III.', 'IV.')
+
+
+def surname(name):
+    """The last name, keeping a suffix with it: 'Marvin Mims Jr.' -> 'Mims Jr.'."""
+    parts = str(name or '').split()
+    if not parts: return ''
+    if parts[-1] in ('Jr.', 'Sr.', 'II', 'III', 'IV', 'V') and len(parts) >= 2: return parts[-2] + ' ' + parts[-1]
+    return parts[-1]
+
+
 def sentence(text):
-    """Every sentence starts with a capital; the engine writes its fragments in lower case."""
+    """Every sentence starts with a capital; the engine writes its fragments in lower case.
+    A period inside a suffix (Jr., Sr., St.) does not end a sentence."""
     if not text: return text
-    out = []; cap = True
-    for ch in str(text):
+    s = str(text); out = []; cap = True
+    for i, ch in enumerate(s):
         if cap and ch.isalpha(): out.append(ch.upper()); cap = False
         else: out.append(ch)
-        if ch in '.!?': cap = True
+        if ch in '!?': cap = True
+        elif ch == '.':
+            tail = s[max(0, i - 3):i + 1]
+            if not any(tail.endswith(sf) for sf in SUFFIXES): cap = True
     return ''.join(out)
 
 

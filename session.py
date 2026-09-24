@@ -280,7 +280,11 @@ class Session:
         import views_club as VC; return VC.roster(self, self.L, self.user_team)
 
     def club_card(self, pid):
-        import views_club as VC; return VC.card(self, self.L, pid)
+        import views_club as VC
+        pool = list(getattr(self.L, 'draft_pool', None) or []) + list(getattr(self.L, 'next_class', None) or [])
+        if any(q.pid == pid for q in pool):
+            import views_draft as VD; return VD.prospect_card(self, self.L, self.user_team, pid)
+        return VC.card(self, self.L, pid)
 
     def club_depth(self, package='Nickel'):
         import views_club as VC; return VC.depth(self, self.L, self.user_team, package)

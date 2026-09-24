@@ -619,6 +619,13 @@ class League:
                 self.teams[src].picks.remove(item)
                 item.owner = dst
                 self.teams[dst].picks.append(item)
+                # how the pick got here, for the Picks page: the headline man in the deal and the date
+                men = [self.player(x) for x in (a_sends if src == a else b_sends) if not isinstance(x, DraftPick)]
+                men = [m for m in men if m is not None]
+                star = max(men, key=lambda m: m.ovr).name.split()[-1] + ' Trade' if men else 'Pick Swap'
+                prov = getattr(self, 'pick_provenance', None) or {}
+                prov[f"{item.year}-{item.round}-{item.original}"] = dict(how=star, frm=src, year=self.year, week=self.week, phase=self.phase)
+                self.pick_provenance = prov
             else:
                 p = self.player(item)
                 # THE BONUS STAYS WITH THE CLUB THAT PAID IT. A trade is a
@@ -747,7 +754,7 @@ class League:
             class_strength=getattr(self, 'class_strength', {}),
             scouting=getattr(self, 'scouting', {}) or {},
             consensus=getattr(self, 'consensus', {}) or {},
-            spring_news=getattr(self, 'spring_news', None) or [], user_visits=getattr(self, 'user_visits', None) or [],
+            spring_news=getattr(self, 'spring_news', None) or [], user_visits=getattr(self, 'user_visits', None) or [], pick_provenance=getattr(self, 'pick_provenance', None) or {}, user_board=getattr(self, 'user_board', None) or {},
             # the wire and the inbox, with any live objects reduced to ids
             waivers=getattr(self, 'waivers', []) or [],
             inbox=[_inbox_to_dict(m) for m in (getattr(self, 'inbox', []) or [])],
@@ -812,7 +819,7 @@ class League:
         L.class_strength = d.get('class_strength', {})
         L.scouting = d.get('scouting', {}) or {}
         L.consensus = d.get('consensus', {}) or {}
-        L.spring_news = d.get('spring_news') or []; L.user_visits = d.get('user_visits') or []
+        L.spring_news = d.get('spring_news') or []; L.user_visits = d.get('user_visits') or []; L.pick_provenance = d.get('pick_provenance') or {}; L.user_board = d.get('user_board') or {}
         L.waivers = d.get('waivers', []) or []
         L.inbox = [_inbox_from_dict(L, m) for m in d.get('inbox', [])]
         L.almanac = d.get('almanac')
