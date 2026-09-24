@@ -379,18 +379,28 @@ def package_linebackers(men, package, scheme=None, key=lambda m: m):
     def own(m):
         r = key(m); pos = m.get('pos') if isinstance(m, dict) else getattr(m, 'pos', 'MIKE')
         return float(position_score(r, pos if pos in ('MIKE', 'WILL', 'SAM') else 'MIKE', scheme))
-    mikes = [m for m in men if (m.get('pos') if isinstance(m, dict) else getattr(m, 'pos', None)) == 'MIKE']
-    mike = max(mikes, key=own) if mikes else max(men, key=own)
+    # the MIKE is whoever the depth chart has first at MIKE; the package does not reassign him
+    pos_of = lambda m: (m.get('pos') if isinstance(m, dict) else getattr(m, 'pos', None))
+    mikes = [m for m in men if pos_of(m) == 'MIKE']
+    mike = mikes[0] if mikes else men[0]
     out = []
     if role == 'every_down':
-        # base: the three best at their own spots, the MIKE first
-        rest = sorted([m for m in men if m is not mike], key=own, reverse=True)
-        out = [(mike, 'the MIKE')] + [(m, 'every down') for m in rest[:n - 1]]
+        # base: the MIKE, the WILL and the SAM as charted; a missing spot is filled by the best remaining man at his own spot
+        starters = [mike]
+        for spot in ('WILL', 'SAM'):
+            m = next((x for x in men if pos_of(x) == spot and x not in starters), None)
+            if m is not None: starters.append(m)
+        rest = sorted([m for m in men if m not in starters], key=own, reverse=True)
+        starters += rest[:max(0, n - len(starters))]
+        out = [(mike, 'the MIKE')] + [(m, pos_of(m) if pos_of(m) in ('WILL', 'SAM') else 'fills in') for m in starters[1:n]]
     elif role == 'coverage':
         if n == 1:
-            best = max(men, key=lambda m: _role_score(key(m), 'coverage') + (1.0 if m is mike else 0.0))
-            out = [(best, 'the cover man' if best is not mike else 'the MIKE, covers')]
+            # dime and two-minute: one linebacker; the MIKE stays unless another man covers clearly better
+            best = max(men, key=lambda m: _role_score(key(m), 'coverage'))
+            keep_mike = _role_score(key(best), 'coverage') - _role_score(key(mike), 'coverage') < 4.0
+            out = [(mike, 'the MIKE') if keep_mike else (best, 'covers better than the MIKE')]
         else:
+            # nickel and third down: the MIKE and the best of the rest on coverage and speed
             rest = sorted([m for m in men if m is not mike], key=lambda m: 0.65 * _role_score(key(m), 'coverage') + 0.35 * own(m), reverse=True)
             out = [(mike, 'the MIKE')] + [(m, 'runs and covers') for m in rest[:n - 1]]
     else:   # run
