@@ -264,7 +264,14 @@ class SeasonRunner:
 
     # ---- one week -------------------------------------------------------
     def play_week(self, week):
-        """Play every scheduled game in this week and write the scores back."""
+        """Play every scheduled game in this week and write the scores back, then roll the week."""
+        played = self.play_games(week)
+        self.roll_week(week, played)
+        return played
+
+    def play_games(self, week):
+        """The games only. Sunday: every scheduled game this week, the scores written back,
+        expired injuries cleared. The week itself has not rolled; that is roll_week."""
         self.week = week
         self.injury_week(week)
         played = []
@@ -283,7 +290,15 @@ class SeasonRunner:
         for p in self.L.players.values():
             if p.out_until is not None and p.out_until <= week:
                 p.out_until = None
+        self.week = week
+        self.L.week = week
+        self.last_played = played
+        return played
 
+    def roll_week(self, week, played=None):
+        """The week after Sunday: XP spent, morale, agents, promises, next week's report,
+        the wire, the squads, the trade window. Called by Advance once the games are in."""
+        if played is None: played = getattr(self, 'last_played', []) or []
         self.week = week
         self.L.week = week
         # THE WEEKLY ADVANCE: every AI club spends what its men earned, and
