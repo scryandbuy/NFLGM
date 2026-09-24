@@ -9,7 +9,7 @@ GROUPS = [('Quarterbacks', ['QB']), ('Running Backs', ['HB', 'FB']), ('Wide Rece
           ('Offensive Line', ['LT', 'LG', 'C', 'RG', 'RT']), ('Defensive Line', ['LEDG', 'DT', 'REDG']), ('Linebackers', ['MIKE', 'WILL', 'SAM']),
           ('Defensive Backs', ['CB', 'FS', 'SS']), ('Specialists', ['K', 'P', 'LS'])]
 OFFENSE = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'}
-DEV_WORD = {'superstar': 'Superstar', 'star': 'Star', 'normal': 'Normal', 'slow': 'Slow'}
+DEV_WORD = {'xfactor': 'X-Factor', 'superstar': 'Superstar', 'star': 'Star', 'normal': 'Normal', 'slow': 'Slow'}
 
 # attribute groups per position family for the card, in FM's three columns
 ATTR = {
