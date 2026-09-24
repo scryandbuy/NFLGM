@@ -225,6 +225,18 @@ class Session:
         if name == 'elevate': kw['week'] = self.stop[1] if self.stop[0] == 'week' else 1
         return fn(self.L, self.user_team, **kw)
 
+    # ---- personnel
+    def personnel(self, page, **kw):
+        import views_personnel as VP
+        return getattr(VP, page)(self, self.L, self.user_team, **kw)
+
+    def personnel_act(self, name, **kw):
+        import views_personnel as VP
+        fn = getattr(VP, 'act_' + name, None)
+        if fn is None: return dict(ok=False, why='unknown action')
+        r = fn(self.L, self.user_team, **kw)
+        return r if isinstance(r, dict) else dict(ok=bool(r))
+
     def gameday_view(self):
         import views
         return views.gameday(self, self.L, self.user_team)
