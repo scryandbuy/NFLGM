@@ -654,7 +654,7 @@ function foSecond(cur) { secondRow(Object.entries(FO).map(([k, l]) => [l, '#fron
 
 function renderOwner(v) {
   renderRail(v.rail); const page = persPage(); foSecond('owner');
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Owner', el('small', {}, `${v.record} · Year ${v.tenure + 1} in the chair`)));
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, v.owner ? `${v.owner.name}` : 'Owner', el('small', {}, `${v.owner ? `owner since ${v.owner.since} · ` : ''}${v.record} · your year ${v.tenure + 1} in the chair`)));
   const g = el('div', { class: 'ownergrid' });
   const l = el('div', {});
   l.append(el('div', { class: 'h5' }, 'Mood'), el('div', { class: 'word-big' }, v.mood), el('div', { class: 'h5', style: 'margin-top:14px' }, 'Your Job'), el('div', { class: 'word-big', style: v.job === 'Hot Seat' ? 'color:var(--danger)' : v.job === 'Warming' ? 'color:var(--decide)' : '' }, v.job),
@@ -702,6 +702,14 @@ function renderIdentity(v) {
     mk(v.gainers, 'ok'); mk(v.losers, 'danger'); if (!v.gainers.length && !v.losers.length) kd.append(el('div', { class: 'empty' }, 'Nobody moves more than a point.'));
   }
   ch.append(kd); s.append(ch);
+  const fitg = el('div', { class: 'fitgrid' });
+  const fp = el('div', {}, el('div', { class: 'h5' }, 'Roster Fit by Position', el('span', {}, 'starters, against the current identity')));
+  for (const r of v.fit_by_pos) fp.append(el('div', { class: 'fitrow' }, el('span', {}, r.group), el('div', { class: 'bar', style: 'height:8px;background:var(--sheet-3);border:1px solid var(--rule);position:relative' }, el('i', { style: `position:absolute;top:0;bottom:0;left:${r.fit >= 0 ? 50 : 50 + r.fit * 8}%;width:${Math.abs(r.fit) * 8}%;background:${r.fit >= 0 ? 'var(--ok)' : 'var(--danger)'}` })), el('span', { class: 'v', style: `color:${r.fit > 0.05 ? 'var(--ok)' : r.fit < -0.05 ? 'var(--danger)' : 'var(--ink-3)'}` }, (r.fit > 0 ? '+' : '') + r.fit.toFixed(1))));
+  fitg.append(fp);
+  const mf = el('div', {}, el('div', { class: 'h5' }, 'Misfits', el('span', {}, 'starters the scheme asks the most of')));
+  for (const m of v.misfits.filter(x => !x.kept)) mf.append(el('div', { class: 'fitrow', style: 'grid-template-columns:1fr auto auto auto;gap:8px' }, el('span', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + m.pid; } }, `${m.name} · ${m.pos} · ${m.ovr}`), el('span', { class: 'v', style: 'color:var(--danger)' }, m.fit.toFixed(1)), el('button', { class: 'btn', style: 'padding:2px 8px;font-size:12px', onclick: () => { tradeState = { other: tradeState.other, a: [m.pid], b: [], keep: true }; location.hash = '#personnel/trades'; } }, 'Trade Block'), el('button', { class: 'btn quiet', style: 'padding:2px 8px;font-size:12px', onclick: () => { pyJSON(`SESSION.frontoffice_act('keep_misfit', pid=${JSON.stringify(m.pid)})`); reload(); } }, 'Keep Him')));
+  if (!v.misfits.filter(x => !x.kept).length) mf.append(el('div', { class: 'empty' }, 'No starter fits the scheme badly.'));
+  fitg.append(mf); s.append(fitg);
   if (Object.keys(idDraft).length) s.append(el('div', { class: 'confirm' }, el('span', {}, 'Preview. Nothing changes until you confirm; assistants regrade the roster under the new identity.'), el('div', { style: 'display:flex;gap:6px' }, el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.frontoffice_act('set_identity', changes=${JSON.stringify(idDraft)})`); notify({ ok: r.ok, line: r.ok ? 'Identity set.' : r.why }); idDraft = {}; reload(); } }, 'Confirm'), el('button', { class: 'btn quiet', onclick: () => { idDraft = {}; reload(); } }, 'Discard'))));
   s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'History', el('small', {}, `${v.history.length} changes`)));
   const h = el('div', { class: 'histlist', style: 'margin:0 14px 14px' }); for (const x of v.history.slice().reverse()) h.append(el('div', {}, el('time', {}, `${x.year} W${x.week ?? 0}`), el('span', {}, x.change))); if (!v.history.length) h.append(el('div', {}, el('time', {}, '—'), el('span', {}, 'The identity you inherited.')));
@@ -764,7 +772,14 @@ function renderCap(v) {
         el('div', { style: 'display:flex;gap:6px;margin-top:10px' }, el('button', { class: 'btn go', onclick: () => { const q = pyJSON(`SESSION.frontoffice_act('restructure', pid=${JSON.stringify(r.pid)}, amount=${+amt.value}, void_years=${+voids.value})`); notify({ ok: q.ok, line: q.ok ? `Restructured. Saves $${q.saves_now}m this year.` : q.why }); reload(); } }, 'Restructure'), el('button', { class: 'btn quiet', onclick: () => { box.innerHTML = ''; box.append('Pick a man from the ledger.'); } }, 'Cancel')));
       drawD(p);
     } }, 'Restructure') : '')));
-  ledger.append(tbl); two.append(ledger, pv); s.append(two); page.append(s);
+  ledger.append(tbl); two.append(ledger, pv);
+  // largest hits and the dead money detail sit under the preview
+  pv.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Largest Hits', el('span', {}, String(v.years[0].year))));
+  for (const r of v.largest) pv.append(el('div', { class: 'fitrow', style: 'grid-template-columns:1fr 1fr 60px' }, el('span', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, `${r.name} · ${r.pos}`), el('div', { class: 'bar', style: 'height:8px;background:var(--sheet-3);border:1px solid var(--rule)' }, el('i', { style: `display:block;height:100%;width:${Math.min(100, r.share * 4)}%;background:var(--club)` })), el('span', { class: 'v' }, `$${r.hit.toFixed(1)}m`)));
+  pv.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Penalty Detail', el('span', {}, `$${v.dead_total}m this year · $${v.dead_next}m next`)));
+  if (v.dead_rows.length) { const dt = el('table', { class: 'stab' }); dt.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'How'), el('th', {}, 'This Year'), el('th', {}, 'Next Year'))); for (const r of v.dead_rows) dt.append(el('tr', {}, el('td', {}, `${r.name} · ${r.pos}`), el('td', {}, r.how + (r.week ? ` wk ${r.week}` : '')), el('td', {}, `$${r.dead.toFixed(1)}m`), el('td', {}, r.dead_next ? `$${r.dead_next.toFixed(1)}m` : '—'))); pv.append(dt); }
+  else pv.append(el('div', { class: 'empty' }, v.dead_total ? 'Charges carried in from before this season.' : 'No penalty on the books.'));
+  s.append(two); page.append(s);
 }
 
 // ---------------------------------------------------------------- Draft

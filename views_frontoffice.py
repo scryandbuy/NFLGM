@@ -23,10 +23,24 @@ def _gm(league, abbr):
 
 
 # ============================================================ OWNER
+OWNER_FIRST = ['Robert', 'Arthur', 'Jerry', 'Stephen', 'Mark', 'Clark', 'Jeffrey', 'Michael', 'David', 'Terry', 'Shahid', 'Amy', 'Gayle', 'Virginia', 'Kim', 'Denise', 'Woody', 'Zygi', 'Jimmy', 'Dean', 'Stan', 'Jody', 'Tom', 'Josh', 'Bill', 'Cal', 'Martha', 'Sheila', 'Carol', 'Janice', 'Paul', 'Edward']
+OWNER_LAST = ['Kraft', 'Blank', 'Jones', 'Ross', 'Davis', 'Hunt', 'Lurie', 'Bidwill', 'Tepper', 'Pegula', 'Khan', 'Adams', 'Benson', 'McCaskey', 'Pegula', 'York', 'Johnson', 'Wilf', 'Haslam', 'Spanos', 'Kroenke', 'Allen', 'Glazer', 'Harris', 'Bisciotti', 'McNair', 'Ford', 'Ford', 'Rooney', 'Irsay', 'Brown', 'Snyder']
+
+
+def _owner(league, t):
+    """The owner's name and the year he bought in, drawn once and kept on the club."""
+    o = getattr(t, 'owner', None)
+    if o is None:
+        rng = np.random.default_rng(hash(t.abbr) % (2 ** 32))
+        i = int(rng.integers(len(OWNER_FIRST))); j = int(rng.integers(len(OWNER_LAST)))
+        t.owner = o = dict(name=f"{OWNER_FIRST[i]} {OWNER_LAST[j]}", since=int(league.year - rng.integers(3, 35)))
+    return o
+
+
 def owner(session, league, abbr):
     import firing_model as FM
     from views import _owner_mood
-    t = league.teams[abbr]; h = t.hist()
+    t = league.teams[abbr]; h = t.hist(); own = _owner(league, t)
     sec = FM.job_security(h)
     w, l, d = t.record
     exp = float(h.get('expected_pct') or 0.5)
@@ -34,7 +48,7 @@ def owner(session, league, abbr):
     weights = dict(wins=round(0.5 + 0.3 * (1 - getattr(t, 'owner_patience', 0.5)), 2), stars=round(getattr(t, 'owner_star_pull', 0.5), 2), spend=round(getattr(t, 'owner_spend', 0.5), 2), acumen=round(getattr(t, 'owner_acumen', 0.5), 2))
     reviews = [dict(year=r.get('year'), record=r.get('record'), line=r.get('line')) for r in (getattr(t, 'owner_reviews', None) or [])]
     import staff as ST
-    return dict(rail=rail(session, league, abbr), mood=_owner_mood(t), job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat'), security=round(sec, 2),
+    return dict(rail=rail(session, league, abbr), owner=own, mood=_owner_mood(t), job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat'), security=round(sec, 2),
                 expects=exp_words, expected_pct=round(exp, 2), record=f"{w}–{l}" + (f"–{d}" if d else ''), tenure=int(h.get('tenure') or 0), drought=int(h.get('playoff_drought') or 0),
                 prev_pct=round(float(h.get('prev_win_pct') or 0), 3), weights=weights,
                 staff_budget=dict(total=round(ST.budget(t), 1), payroll=round(ST.payroll(t), 1), available=round(ST.room(t), 1)),
@@ -79,12 +93,38 @@ def identity(session, league, abbr, preview=None):
     archs = [dict(key=k, name=ARCH_WORDS.get(k, (k, ''))[0], words=ARCH_WORDS.get(k, ('', ''))[1], side=('offense' if 'offence' in v else 'defense'), leans={kk: vv for side in v.values() for kk, vv in side.items()})
              for k, v in IC.ARCHETYPES.items() if 'offence' in v or 'defence' in v]
     losers, gainers = _misfits(league, t, after) if preview else ([], [])
+    fit_by_pos, misfits = _fit_by_position(league, t)
     words = dict(zone='zone runs', gap='gap runs', one_gap='one-gap front', two_gap='two-gap front', man='man coverage', zone_cov='zone coverage', heavy_te='blocking tight ends', spread_te='route-running tight ends')
     return dict(rail=rail(session, league, abbr), coach=gm.name, prestige=round(getattr(gm, 'prestige', 50)), rigidity=round(float(getattr(gm, 'scheme_rigidity', 0.5)), 2),
                 leans=cur, after=_leans(after) if preview else None, keys=[words.get(k, k) for k in keys],
                 off=[dict(key=k, label=l, lo=lo, hi=hi) for k, l, lo, hi in LEANS_OFF], deff=[dict(key=k, label=l, lo=lo, hi=hi) for k, l, lo, hi in LEANS_DEF],
-                choices=[dict(key=k, label=l, options=o) for k, l, o in CHOICES], archetypes=archs, losers=losers, gainers=gainers,
+                choices=[dict(key=k, label=l, options=o) for k, l, o in CHOICES], archetypes=archs, losers=losers, gainers=gainers, fit_by_pos=fit_by_pos, misfits=misfits,
                 history=[dict(year=h.get('year'), week=h.get('week'), change=h.get('change')) for h in (getattr(t, 'identity_history', None) or [])])
+
+
+def _fit_by_position(league, t):
+    """How the starters fit the scheme, by group, and the men who fit it worst."""
+    import gm_engine as GE
+    G = {'QB': ['QB'], 'RB': ['HB', 'FB'], 'WR': ['WR'], 'TE': ['TE'], 'OL': ['LT', 'LG', 'C', 'RG', 'RT'], 'DL': ['LEDG', 'DT', 'REDG'], 'LB': ['MIKE', 'WILL', 'SAM'], 'DB': ['CB', 'FS', 'SS']}
+    n = {'QB': 1, 'RB': 1, 'WR': 3, 'TE': 1, 'OL': 5, 'DL': 4, 'LB': 2, 'DB': 5}
+    rows = []; allmen = []
+    for g, poss in G.items():
+        men = sorted((p for p in t.active() if p.pos in poss), key=lambda p: -p.ovr)[:n[g]]
+        fits = []
+        for p in men:
+            try: f = float(GE.scheme_fit(p.ratings, p.pos, t))
+            except Exception: f = 0.0
+            fits.append(f); allmen.append((p, f))
+        rows.append(dict(group=g, fit=(round(float(np.mean(fits)), 1) if fits else 0.0), n=len(men)))
+    keep = set(getattr(t, 'misfit_keep', []) or [])
+    mis = sorted(allmen, key=lambda x: x[1])[:6]
+    misfits = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), fit=round(f, 1), kept=(p.pid in keep)) for p, f in mis if f < -1.0]
+    return rows, misfits
+
+
+def act_keep_misfit(league, abbr, pid):
+    t = league.teams[abbr]; keep = set(getattr(t, 'misfit_keep', []) or []); keep.add(pid); t.misfit_keep = sorted(keep)
+    return dict(ok=True, line='Kept. He stays off the misfit list.')
 
 
 def act_set_identity(league, abbr, changes):
@@ -184,7 +224,15 @@ def cap(session, league, abbr):
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), yrs=c.years, hits=[round(c.cap_hit(i), 1) if i < c.years else None for i in range(3)], penalty=round(p.dead_if_cut(0), 1),
                          restructurable=round(CT.restructure_room(p, CAP.get(league.year, 301.2)), 1) if hasattr(CT, 'restructure_room') else 0.0,
                          tags=[x for x in [('Final Year' if c.years == 1 else None), ('Rookie Deal' if getattr(c, 'rookie', False) else None), ('Big Penalty' if p.dead_if_cut(0) > 2 * c.cap_hit(0) and c.cap_hit(0) > 5 else None)] if x]))
-    return dict(rail=rail(session, league, abbr), years=years, rows=rows, cap_space=round(t.cap_space, 1))
+    # dead money detail: every release and trade this year that left a charge, from the log
+    dead_rows = []
+    for x in league.transactions:
+        if x.get('year') != league.year or x.get('team') != abbr or x.get('kind') not in ('release', 'trade_dead'): continue
+        if not x.get('dead'): continue
+        p = league.player(x.get('pid')); dead_rows.append(dict(name=(p.name if p else x.get('pid')), pos=(p.pos if p else ''), how=('released' if x['kind'] == 'release' else 'traded'), week=x.get('week'), dead=round(float(x['dead']), 1), dead_next=round(float(x.get('dead_next', 0) or 0), 1)))
+    dead_rows.sort(key=lambda r: -r['dead'])
+    largest = [dict(pid=r['pid'], name=r['name'], pos=r['pos'], hit=r['hits'][0], share=round(r['hits'][0] / years[0]['limit'] * 100, 1)) for r in rows[:8] if r['hits'][0]]
+    return dict(rail=rail(session, league, abbr), years=years, rows=rows, cap_space=round(t.cap_space, 1), dead_rows=dead_rows, dead_total=round(float(t.cap.dead), 1), dead_next=round(float(getattr(t.cap, 'dead_next', 0.0) or 0.0), 1), largest=largest)
 
 
 def act_restructure_preview(league, abbr, pid, amount=None, void_years=0):
