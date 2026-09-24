@@ -109,7 +109,9 @@ def _lean_rows(gm_leans, scheme_leans):
     import identity_catalog as IC
     rows = []
     for side, k, label, kind in LEAN_ROWS:
-        allv = [a[side][k] for a in IC.side_archetypes(side).values()]
+        # every scheme's range means the league's: the archetypes and every real coach in the catalog,
+        # so a club whose coach leans further than any archetype still sits inside the grey
+        allv = [a[side][k] for a in IC.side_archetypes(side).values()] + [c[side][k] for c in IC.CATALOG.values() if side in c and k in c[side]]
         lo, hi = min(allv), max(allv)
         mine = float(gm_leans.get(k, 0.5)); sch = float(scheme_leans.get(k, mine))
         rows.append(dict(key=k, label=label, all_lo=round(lo * 100), all_hi=round(hi * 100), band_lo=round(max(0.0, sch - 0.08) * 100), band_hi=round(min(1.0, sch + 0.08) * 100), dot=round(mine * 100), value=_lean_value(k, kind, mine)))
