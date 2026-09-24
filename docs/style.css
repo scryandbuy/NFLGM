@@ -944,3 +944,8 @@ button.btn{line-height:normal;box-sizing:border-box}
 .man .nm{flex:1;font-size:13px}
 .man .nm small{display:block;font-size:11px;color:var(--ink-3)}
 .man .ov{font-family:var(--display);font-weight:900;font-size:18px}
+
+.tools .find{margin-left:10px;background:var(--board);color:var(--ink);border:1px solid var(--rule-2);padding:5px 9px;font-size:13px;width:180px}
+.tools .find::placeholder{color:var(--ink-3)}
+.tbl tr.sel td{background:var(--sheet-2)}
+.tbl tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--club)}
