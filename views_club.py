@@ -24,6 +24,8 @@ ATTR = {
     'K': [('kick_power_rating', 'Kick Power'), ('kick_acc_rating', 'Kick Accuracy')],
     'mental': [('awareness_rating', 'Awareness')],
     'st': [('kick_ret_rating', 'Return')],
+    'rundef': [('tackle_rating', 'Tackle'), ('hit_power_rating', 'Hit Power'), ('pursuit_rating', 'Pursuit'), ('block_shed_rating', 'Block Shedding')],
+    'coverage': [('man_cover_rating', 'Man Coverage'), ('zone_cover_rating', 'Zone Coverage'), ('press_rating', 'Press'), ('play_rec_rating', 'Play Recognition'), ('catch_rating', 'Catching')],
 }
 FAM = {'HB': 'HB', 'FB': 'HB', 'WR': 'WR', 'TE': 'WR', 'LT': 'OL', 'LG': 'OL', 'C': 'OL', 'RG': 'OL', 'RT': 'OL', 'LEDG': 'DL', 'DT': 'DL', 'REDG': 'DL',
        'MIKE': 'LB', 'WILL': 'LB', 'SAM': 'LB', 'CB': 'DB', 'FS': 'DB', 'SS': 'DB', 'K': 'K', 'P': 'K', 'LS': 'OL', 'QB': 'QB'}
@@ -60,7 +62,7 @@ def _status(league, p, t):
 
 def _row(session, league, t, p):
     yrs = p.contract.years if p.contract else 0
-    return dict(pid=p.pid, no=getattr(p, 'number', None) or '', name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=round(_fit(league, t, p), 1),
+    return dict(pid=p.pid, no=getattr(p, 'number', None) or '', name=p.name, pos=p.pos, side=('offense' if p.pos in OFFENSE else 'special' if p.pos in ('K', 'P', 'LS') else 'defense'), age=int(p.age), ovr=round(p.ovr), fit=round(_fit(league, t, p), 1),
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), cond=_cond(session, p), morale=morale_word(p), yrs=yrs,
                 hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1), status=_status(league, p, t),
                 college=getattr(p, 'college', None) or '', season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
@@ -158,9 +160,11 @@ def card(session, league, pid):
             if v is None: continue
             out.append(dict(key=k, label=lab, v=int(round(float(v))), tier=('hi' if v >= 85 else 'md' if v >= 72 else 'lo'), shift=shift.get(k)))
         return out
-    cols = [dict(title='Physical', rows=col(ATTR['phys']) + col(ATTR['st']) if p.pos in ('WR', 'HB', 'CB', 'FS', 'SS') else col(ATTR['phys'])),
-            dict(title=SKILL_TITLE.get(fam, 'Skill'), rows=col(ATTR.get(fam, ATTR['DB']))),
-            dict(title='Mental', rows=col(ATTR['mental']))]
+    phys = dict(title='Physical', rows=col(ATTR['phys']), extra=(dict(title='Special Teams', rows=col(ATTR['st'])) if p.pos in ('WR', 'HB', 'CB', 'FS', 'SS') and col(ATTR['st']) else None))
+    if fam == 'DB': skill = dict(title='Coverage', rows=col(ATTR['coverage']), extra=dict(title='Run Defense', rows=col(ATTR['rundef'])))
+    elif fam in ('LB', 'DL'): skill = dict(title=SKILL_TITLE.get(fam, 'Skill'), rows=col([k for k in ATTR[fam] if k[0] not in ('tackle_rating', 'hit_power_rating', 'pursuit_rating', 'block_shed_rating')]), extra=dict(title='Run Defense', rows=col(ATTR['rundef'])))
+    else: skill = dict(title=SKILL_TITLE.get(fam, 'Skill'), rows=col(ATTR.get(fam, ATTR['DB'])), extra=None)
+    cols = [phys, skill, dict(title='Mental', rows=col(ATTR['mental']), extra=None)]
     # positions: his spot and the family he could move to, with his grade at each
     family = PC.FAMILY.get(p.pos, [])
     grades = [dict(pos=p.pos, ovr=round(p.ovr), mine=True)]
@@ -175,8 +179,37 @@ def card(session, league, pid):
         for i in range(c.years):
             try: years.append(dict(year=league.year + i, base=round(c.base[i] + c.rb[i], 1), bonus=round(c.annual_proration if i < c.proration_years else 0.0, 1), hit=round(c.cap_hit(i), 1), penalty=round(c.release(i)[0], 1)))
             except Exception: years.append(dict(year=league.year + i, hit=round(c.cap_hit(i), 1)))
+    if p.pos == 'CB':
+        try:
+            nk = float(TG.position_score(p.ratings, 'CB', ['man']))
+            grades.append(dict(pos='Nickel', ovr=round(float(TG.position_score(dict(p.ratings, speed_rating=p.ratings.get('agility_rating', 70)), 'CB', getattr(user, 'scheme', None)))), mine=False, tax=0))
+        except Exception: pass
     import personality as PT
     words = PT.words(getattr(p, 'traits', None) or {}) if getattr(p, 'traits', None) else ''
+    # role and snaps: where he sits on his club's depth chart, and his share of the club's snaps this season
+    role = None; snap_share = None; snaps = None
+    if t is not None:
+        d = t.depth.get(p.pos, []); idx = next((i for i, q in enumerate(d) if q.pid == p.pid), None)
+        if idx is not None: role = f"{p.pos}{idx + 1}"
+        S_all = league.stats.get(league.year, {}); mine_snaps = int((S_all.get(p.pid, {}) or {}).get('snaps', 0) or 0)
+        side_pos = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'}
+        unit = [q for q in t.roster if (q.pos in side_pos) == (p.pos in side_pos)]
+        team_snaps = max((int((S_all.get(q.pid, {}) or {}).get('snaps', 0) or 0) for q in unit if q.pos == ('QB' if p.pos in side_pos else 'MIKE')), default=0)
+        if team_snaps: snap_share = round(mine_snaps / team_snaps * 100); snaps = f"{snap_share}% · {mine_snaps} of {team_snaps}"
+    missed = sum(1 for h in (getattr(p, 'injury_history', None) or []) for _ in range(int(h.get('weeks', 1) or 1))) if isinstance(getattr(p, 'injury_history', None), list) else 0
+    tr = getattr(p, 'transition', None)
+    pending = f"Learning {tr.get('to')} · {tr.get('games_left')} games left" if tr and tr.get('games_left', 0) > 0 else 'None pending'
+    # the market and the extension ask
+    market_apy = None; ext_ask = None
+    try:
+        import valuation as VAL
+        mv = VAL.value_player(league, p, side='buyer'); market_apy = round(float(mv['apy']), 1) if mv and mv.get('apy') else None
+    except Exception: pass
+    try:
+        import extensions as EXT
+        if _ext_ok(league, p):
+            tm = EXT.terms(league, p, np.random.default_rng(abs(hash(p.pid)) % (2 ** 32))); ext_ask = round(float(tm['ask']), 1) if tm else None
+    except Exception: pass
     # trade interest in words, from the market read
     interest = 'Low'
     try:
@@ -198,8 +231,12 @@ def card(session, league, pid):
     for yr in sorted(career)[-3:]:
         ln = _season_line(league, p, yr); seasons.append(dict(year=yr, team=career[yr].get('team') or '', games=int((career[yr] or {}).get('games', 0) or 0), row=ln['row'], cols=ln['cols']))
     cur = _season_line(league, p)
-    return dict(rail=rail(session, league, session.user_team), pid=p.pid, no=getattr(p, 'number', None) or '', name=p.name, pos=p.pos, age=int(p.age),
-                team=club(p.team) if p.team else None, college=getattr(p, 'college', None) or '', draft=(f"drafted {p.draft_round}" if getattr(p, 'draft_round', None) else 'undrafted'),
+    h = getattr(p, 'height', None); size = (f"{h // 12}'{h % 12}\" {getattr(p, 'weight', '') or ''}".strip() if h else '')
+    drafted = (f"drafted {p.draft_overall}{_ordn(p.draft_overall)} overall, {p.draft_year}" if getattr(p, 'draft_overall', None) else f"drafted round {p.draft_round}, {p.draft_year}" if getattr(p, 'draft_round', None) else 'undrafted')
+    return dict(rail=rail(session, league, session.user_team), pid=p.pid, no=getattr(p, 'number', None) or '', name=p.name, pos=p.pos, age=int(p.age), size=size,
+                team=club(p.team) if p.team else None, college=getattr(p, 'college', None) or '', draft=drafted,
+                role=role, snaps=snaps, missed=missed, pending=pending, market_apy=market_apy, ext_ask=ext_ask, ext_eligible=_ext_ok(league, p),
+                contract_caption=(f"Contract signed {getattr(p.contract, 'signed', league.year)} · {p.contract.years + (len(getattr(p.contract, 'base', [])) - p.contract.years if hasattr(p.contract, 'base') else 0)} yrs · ${round(sum(getattr(p.contract, 'base', [])) + getattr(p.contract, 'annual_proration', 0) * getattr(p.contract, 'proration_years', 0), 1)}m" if p.contract else 'No contract'),
                 season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
                 ovr=round(p.ovr), fit=round(fit, 1), ceiling=(f"{int(p.potential_range[0])}–{int(p.potential_range[1])}" if getattr(p, 'potential_range', None) else (str(round(p.potential)) if getattr(p, 'potential', None) else '—')),
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), morale=morale_word(p), morale_v=round(m.value) if m is not None else None,
@@ -207,6 +244,7 @@ def card(session, league, pid):
                 interest=interest, cols=cols, grades=grades, personality=words, status=_status(league, p, t) if t else '',
                 cond=_cond(session, p), out=p.out_until, season=cur, games=int(S.get('games', 0) or 0), seasons=seasons,
                 market=market, interest_line=interest_line, dev_line=dev_line, morale_line=_morale_line(p),
+                history=_player_history(league, p),
                 actions=dict(mine=(p.team == session.user_team), extend_eligible=_ext_ok(league, p), can_cut=(p.team == session.user_team)))
 
 
@@ -226,6 +264,23 @@ def _morale_line(p):
     return 'Steady since camp'
 
 
+def _player_history(league, p):
+    """Every logged move that names him: signings, releases, trades, extensions, tags, position changes, elevations."""
+    import views_league as VL
+    out = []
+    for x in league.transactions:
+        if x.get('kind') not in VL.TAGS: continue
+        named = x.get('pid') == p.pid or p.pid in [str(a) for a in (x.get('a_sends') or [])] or p.pid in [str(a) for a in (x.get('b_sends') or [])]
+        if not named: continue
+        out.append(dict(when=f"{x.get('year')}" + (f" · Wk {x['week']}" if x.get('week') else (' · ' + x['phase']) if x.get('phase') else ''), line=VL._tx_line(league, x)))
+    if getattr(p, 'draft_year', None) and getattr(p, 'draft_round', None): out.insert(0, dict(when=str(p.draft_year), line=f"Drafted {p.draft_overall}{_ordn(p.draft_overall)} overall (round {p.draft_round})" if getattr(p, 'draft_overall', None) else f"Drafted, round {p.draft_round}"))
+    return out[-30:]
+
+
+def _ordn(n):
+    return 'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+
+
 def _ext_ok(league, p):
     import extensions as EXT
     try: return bool(EXT.eligible(p, league))
@@ -236,7 +291,7 @@ def _ext_ok(league, p):
 PACKAGES = {'Base': dict(WR=2, TE=2, HB=1, LB=3, CB=2, S=2), 'Nickel': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Dime': dict(WR=3, TE=1, HB=1, LB=1, CB=4, S=2),
             'Goal Line': dict(WR=1, TE=2, HB=1, FB=1, LB=3, CB=2, S=2), 'Third Down': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Two Minute': dict(WR=4, TE=1, HB=1, LB=1, CB=4, S=2)}
 COLS = [('QB', ['QB'], 1), ('HB', ['HB', 'FB'], 1), ('WR', ['WR'], 3), ('TE', ['TE'], 1), ('OL', ['LT', 'LG', 'C', 'RG', 'RT'], 5),
-        ('DL', ['LEDG', 'DT', 'REDG'], 4), ('LB', ['MIKE', 'WILL', 'SAM'], 2), ('CB', ['CB'], 3), ('S', ['FS', 'SS'], 2), ('ST', ['K', 'P', 'LS'], 3)]
+        ('DL', ['LEDG', 'DT', 'REDG'], 4), ('LB', ['MIKE', 'WILL', 'SAM'], 2), ('CB', ['CB'], 3), ('S', ['FS', 'SS'], 2), ('Specialists', ['K', 'P', 'LS'], 3)]
 
 
 def depth(session, league, abbr, package='Nickel'):
@@ -247,14 +302,19 @@ def depth(session, league, abbr, package='Nickel'):
         slots = []
         for pos in poss:
             men = d.get(pos, [])
-            n_start = 1 if len(poss) > 1 and title in ('OL', 'DL', 'LB', 'S', 'ST') else (pk.get(title, on_field) if title in pk else on_field)
+            n_start = 1 if len(poss) > 1 and title in ('OL', 'DL', 'LB', 'S', 'Specialists') else (pk.get(title, on_field) if title in pk else on_field)
             if title == 'DL': n_start = 2 if pos == 'DT' else 1
             if title == 'LB': n_start = 1 if pk.get('LB', 2) >= (1 if pos == 'MIKE' else 2 if pos == 'WILL' else 3) else 0
             if title == 'S': n_start = 1
-            if title == 'ST': n_start = 1
+            if title == 'Specialists': n_start = 1
+            desk = (session.runner.desks.get(abbr) if getattr(session, 'runner', None) is not None else None)
+            status = getattr(desk, 'status', {}) if desk is not None else {}
             for i, p in enumerate(men):
-                pl = player_plate(p); pl['cond'] = _cond(session, p); pl['start'] = i < n_start; pl['slot'] = pos if len(poss) > 1 else str(i + 1)
-                pl['flag'] = 'out' if p.out_until is not None else ('questionable' if pl['cond'] < 70 else None)
+                pl = player_plate(p); pl['cond'] = _cond(session, p); pl['start'] = i < n_start
+                pl['slot'] = _slot_label(title, pos, i, len(poss))
+                desig = status.get(p.pid)
+                pl['flag'] = 'out' if p.out_until is not None else (desig if desig in ('questionable', 'doubtful') else None)
+                pl['flag_word'] = ('Out' if pl['flag'] == 'out' else pl['flag'].capitalize() if pl['flag'] else '')
                 pl['fit'] = round(_fit(league, t, p), 1)
                 slots.append(pl)
         cols.append(dict(title=title, slots=slots, on_field=pk.get(title, on_field) if title in pk else on_field))
@@ -262,6 +322,16 @@ def depth(session, league, abbr, package='Nickel'):
 
 
 # ------------------------------------------------------------ actions
+def _slot_label(title, pos, i, n_pos):
+    """The real slot names: X / Z / SL for receivers, LT LG C RG RT, LE / DT / RE, MI / WI, NI for the nickel, FS / SS."""
+    if title == 'WR': return ['X', 'Z', 'SL'][i] if i < 3 else str(i + 1)
+    if title == 'CB': return ['1', '2', 'NI'][i] if i < 3 else str(i + 1)
+    if title == 'DL': return {'LEDG': 'LE', 'REDG': 'RE', 'DT': 'DT'}.get(pos, pos) if i == 0 else str(i + 1)
+    if title == 'LB': return {'MIKE': 'MI', 'WILL': 'WI', 'SAM': 'SA'}.get(pos, pos) if i == 0 else str(i + 1)
+    if n_pos > 1: return pos if i == 0 else str(i + 1)
+    return str(i + 1)
+
+
 def act_set_depth(league, abbr, pos, pids):
     t = league.teams[abbr]; order = t.set_depth_order(pos, list(pids))
     return dict(ok=True, pos=pos, order=order)

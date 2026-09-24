@@ -14,11 +14,24 @@ def _rng(league, salt=0):
 
 
 # ============================================================ TRADES
+def _proj_slot(league, pk):
+    """Where a future pick projects today: the original club's place in the current standings, worst record first."""
+    if pk.selection: return ((pk.selection - 1) % 32) + 1
+    order = sorted(league.teams.values(), key=lambda t: ((t.record[0] + 0.5 * t.record[2]) / max(1, sum(t.record)), t.record[0]))
+    try: return [t.abbr for t in order].index(pk.original) + 1
+    except ValueError: return None
+
+
+def _ordp(n):
+    return 'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+
+
 def _pick_row(league, pk):
-    yrs = pk.year - league.year
+    yrs = pk.year - league.year; proj = _proj_slot(league, pk)
     return dict(id=f"{pk.year}-{pk.round}-{pk.original}", year=pk.year, round=pk.round, original=pk.original, owner=pk.owner,
                 slot=(f"{pk.round}.{((pk.selection - 1) % 32) + 1}" if pk.selection else f"R{pk.round}"), label=f"{pk.year} R{pk.round}" + (f" ({pk.original})" if pk.original != pk.owner else ''),
-                years_out=yrs, used=bool(pk.used_on))
+                words=f"{pk.year} {['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'][pk.round - 1] if 1 <= pk.round <= 7 else str(pk.round)} Round", own_words=(f"{club(pk.original)['nick'].title()}{'’' if club(pk.original)['nick'].endswith('S') else '’s'} Own" if pk.original == pk.owner and pk.original in league.teams else f"via {pk.original}"),
+                proj=(f"Projected {proj}{_ordp(proj)}" if proj and not pk.selection else (f"Pick {pk.round}.{((pk.selection - 1) % 32) + 1}" if pk.selection else '')), years_out=yrs, used=bool(pk.used_on))
 
 
 def _find_pick(league, abbr, pid_str):
@@ -45,12 +58,12 @@ def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
     return dict(rail=rail(session, league, abbr), clubs=[club(c) for c in CLUBS if c != abbr], other=club(other),
                 me=dict(club=club(abbr), cap=round(me.cap_space, 1), roster=[_plate(league, p) for p in sorted(me.active(), key=lambda p: -p.ovr)],
                         picks=[_pick_row(league, pk) for pk in sorted(me.picks, key=lambda k: (k.year, k.round)) if not pk.used_on],
-                        surplus=[dict(pid=x['pid'], why=('asked out' if x.get('wants_out') else 'depth behind a starter')) for x in my_surplus], needs=sorted(my_needs)),
+                        surplus=[dict(pid=x['pid'], why=_surplus_why(league, me, x)) for x in my_surplus], needs=sorted(my_needs)),
                 them=dict(club=club(other), cap=round(them.cap_space, 1), roster=[_plate(league, p) for p in sorted(them.active(), key=lambda p: -p.ovr)],
                           picks=[_pick_row(league, pk) for pk in sorted(them.picks, key=lambda k: (k.year, k.round)) if not pk.used_on],
-                          surplus=[dict(pid=x['pid'], why=('asked out' if x.get('wants_out') else 'depth behind a starter')) for x in their_surplus], needs=sorted(their_needs),
+                          surplus=[dict(pid=x['pid'], why=_surplus_why(league, them, x)) for x in their_surplus], needs=sorted(their_needs),
                           coach=them.gm.name if them.gm else '', prestige=round(getattr(them.gm, 'prestige', 50)) if them.gm else None),
-                package=pkg, can_trade=can_trade, deadline_week=TR.TRADE_DEADLINE_WEEK,
+                package=pkg, can_trade=can_trade, deadline_week=TR.TRADE_DEADLINE_WEEK, balance=f"{len([x for x in a_sends if '-' not in str(x)])} for {len([x for x in b_sends if '-' not in str(x)])}",
                 note=None if can_trade else 'The trade deadline has passed. Trades reopen after the season.')
 
 
@@ -77,18 +90,60 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
     r = TE.evaluate(offer_a, me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
     # words for their side
     g = r['b_gain']
-    if r.get('blocked'): read = f"It does not work on the cap: {r['blocked']}."; verdict = 'blocked'
+    if r.get('blocked'):
+        why = {'a_dead_money': 'the penalty on what you send is more than your cap can carry', 'b_dead_money': f"the penalty on what {them.abbr} sends is more than their cap can carry", 'a_space': 'you do not have the cap space to take on what comes back', 'b_space': f"{them.abbr} do not have the cap space to take on what you send"}.get(str(r['blocked']), str(r['blocked']))
+        read = f"It does not work on the cap: {why}."; verdict = 'blocked'
     elif g >= 4: read = f"{them.abbr} would take this and feel they won it. You are giving more than you need to."; verdict = 'overpay'
     elif g >= 0.5: read = f"This is fair for {them.abbr}. They would take it."; verdict = 'fair'
     elif g >= -3: read = f"Close, a touch short for {them.abbr}. A mid-round pick or a depth piece would get it done."; verdict = 'short'
     else: read = f"Well short. {them.abbr} would not consider this as it stands."; verdict = 'far'
     mine = r['a_gain']
     my_read = 'Your assistants like your side of it.' if mine > 1 else 'Your assistants call your side about even.' if mine > -2 else 'Your assistants think you are giving up too much.'
+    try:
+        their_surplus, _n = TR.surplus_and_needs(league, them, pool, rng); my_needs = TR.surplus_and_needs(league, me, pool, rng)[1]
+    except Exception: their_surplus, my_needs = [], set()
+    extra = []
+    if verdict in ('short', 'far'):
+        adds = [league.player(x['pid']) for x in their_surplus if league.player(x['pid']) and x['pid'] not in b_sends]
+        fills = [q for q in adds if any(q.pos in poss for g, poss in _need_groups().items() if g in my_needs)]
+        fill = fills[0] if fills else (adds[0] if adds else None)
+        if fill: extra.append(f"If you want more, {fill.name.split()[-1]} would balance it" + (' and fills a spot you need.' if fills else '.'))
+    for pid in a_sends:
+        if '-' in str(pid): continue
+        p = league.player(pid)
+        if p is None: continue
+        d = me.depth.get(p.pos, []); nxt = next((q for q in d if q.pid != pid and q.out_until is None), None)
+        if nxt:
+            depth_word = 'our deepest position' if len(d) >= 5 and nxt.ovr >= p.ovr - 6 else 'thin behind him' if len(d) <= 2 or nxt.ovr < p.ovr - 12 else 'covered'
+            extra.append(f"{p.pos} is {depth_word}; {nxt.name.split()[-1]} would start Sunday.")
+        else: extra.append(f"Nobody is behind {p.name.split()[-1]} at {p.pos}.")
+    read = read + (' ' + ' '.join(extra) if extra else '')
     # roster counts after
     return dict(verdict=verdict, read=read, my_read=my_read, roster_after=dict(me=len(me.active()) - len([x for x in a_sends if '-' not in str(x)]) + len([x for x in b_sends if '-' not in str(x)]),
                                                                               them=len(them.active()) + len([x for x in a_sends if '-' not in str(x)]) - len([x for x in b_sends if '-' not in str(x)])),
                 cap_after=dict(me=round(me.cap_space - sum(league.player(x).cap_hit(0) for x in b_sends if '-' not in str(x) and league.player(x)) + sum(league.player(x).cap_hit(0) for x in a_sends if '-' not in str(x) and league.player(x)), 1)),
                 would_accept=bool(r.get('accepted', False)) or (g >= 0.5 and not r.get('blocked')))
+
+
+def _need_groups():
+    return {'QB': ['QB'], 'RB': ['HB', 'FB'], 'WR': ['WR'], 'TE': ['TE'], 'OL': ['LT', 'LG', 'C', 'RG', 'RT'], 'DL': ['LEDG', 'DT', 'REDG'], 'LB': ['MIKE', 'WILL', 'SAM'], 'CB': ['CB'], 'S': ['FS', 'SS'], 'ST': ['K', 'P', 'LS']}
+
+
+def _surplus_why(league, t, x):
+    p = league.player(x['pid'])
+    if p is None: return ''
+    if x.get('wants_out'): return 'Unhappy · Asked Out'
+    d = t.depth.get(p.pos, []); idx = next((i for i, q in enumerate(d) if q.pid == p.pid), None)
+    words = []
+    if idx is not None and idx >= 1: words.append(['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth'][min(idx, 5)] + ' on the chart')
+    elif idx == 0: words.append('Starter at a deep spot')
+    try:
+        import gm_engine as GE
+        f = float(GE.scheme_fit(p.ratings, p.pos, t))
+        if f <= -0.5: words.append(f"Fit {f:+.1f}")
+    except Exception: pass
+    if p.contract: words.append(f"{p.contract.years} Yr{'s' if p.contract.years != 1 else ''}")
+    return ' · '.join(words) or 'Depth behind a starter'
 
 
 def act_propose(league, abbr, other, a_sends, b_sends):
@@ -166,8 +221,13 @@ def free_agency(session, league, abbr):
         p = league.player(pid)
         if p is None or p.retired: continue
         t = NG.open_for(league, pid)
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0),
-                         talks=(t['state'] if t else None), ask=(t['ask'] if t else None), years=(t['years'] if t else None), thread=(t['id'] if t else None)))
+        mine = [o for o in (t.get('offers') or [])] if t else []
+        my_offer = (f"${mine[-1]['apy']:.1f}m × {mine[-1]['years']}" if mine else None)
+        interest = (None if not t else 'Match Asked' if t.get('rival') and t['state'] not in ('accepted', 'declined') else 'Agreed' if t['state'] in ('accepted', 'signed') else 'Countered' if t['state'] == 'countered' else 'Mulling' if t['state'] == 'waiting' else 'Walked' if t['state'] in ('broken_off', 'declined') else 'Talking' if mine else 'Not Yet')
+        try: fit = round(float(__import__('gm_engine').scheme_fit(p.ratings, p.pos, me)), 1)
+        except Exception: fit = 0.0
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0),
+                         talks=(t['state'] if t else None), ask=(t['ask'] if t else None), years=(t['years'] if t else None), thread=(t['id'] if t else None), interest=interest, my_offer=my_offer))
     rows.sort(key=lambda r: -r['ovr'])
     phase = league.phase
     step = getattr(league, 'fa_step', None)
@@ -182,14 +242,39 @@ def free_agency(session, league, abbr):
             if p is None: continue
             feed.append(dict(team=club(x['team']), name=p.name, pos=p.pos, kind=('signs' if x['kind'] == 'sign' else 'extends'), years=x.get('years'), apy=(round(float(x['apy']), 1) if x.get('apy') else None), week=x.get('week'), year=x.get('year')))
             if len(feed) >= 14: break
-    return dict(rail=rail(session, league, abbr), rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()),
+    steps = ['Tags', 'Tampering', 'Open Market', 'Post-Draft', 'Camp']
+    step_i = None
+    if phase in ('offseason', 'free_agency'):
+        step_i = 0 if step is None else 1 if step == 1 else 2 if step in (2, 3) else 3
+    elif phase == 'preseason': step_i = 4
+    return dict(rail=rail(session, league, abbr), rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()), steps=steps, step_i=step_i, top51=(phase != 'regular'),
                 in_season=(phase == 'regular'), phase=phase, step=step, threads=threads, feed=feed, positions=sorted({r['pos'] for r in rows}))
 
 
 def _thread(league, t):
     p = league.player(t['pid'])
-    return dict(id=t['id'], pid=t['pid'], name=p.name if p else t['pid'], pos=p.pos if p else '', kind=t['kind'], state=t['state'], ask=t.get('ask'), years=t.get('years'), mood=t.get('mood'),
-                offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=t.get('patience'), log=t.get('log', []))
+    mood = t.get('mood') or 'open'
+    temper = {'eager': 'Eager', 'firm': 'Firm', 'open': 'Open', 'deferring': 'Deferring'}.get(mood, mood.capitalize())
+    pat = t.get('patience'); pat_word = ('Patient' if (pat or 0) >= 3 else 'Short on patience' if (pat or 0) <= 1 else 'Measured')
+    answers = ('at the next step of the market' if t['kind'].startswith('fa_offseason') else 'at the next Advance' if t['kind'] == 'fa_inseason' else 'within a week or two')
+    return dict(id=t['id'], pid=t['pid'], name=p.name if p else t['pid'], pos=p.pos if p else '', kind=t['kind'], state=t['state'], ask=t.get('ask'), years=t.get('years'), mood=mood,
+                offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=pat, log=t.get('log', []),
+                agent_line=f"The agent is {temper} and {pat_word}. He answers {answers}.")
+
+
+def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None):
+    """What an offer would cost by year: the cap hit each season, the year-one hit, the total."""
+    import contract_structure as CS
+    from cap_engine import CAP
+    p = league.player(pid); t = league.teams[abbr]
+    if p is None: return dict(ok=False, why='no such player')
+    d = CS.structure(float(apy), int(years), p.pos, CAP.get(league.year, 301.2), t.gm, front_load=(float(front_load) if front_load is not None else None))
+    hits = list(d.get('cap_hits', []))
+    if bonus is not None and hits:
+        b = float(bonus); yrs = int(years); base_total = max(0.0, float(apy) * yrs - b)
+        sh = float(d.get('front_load', 0.5)); weights = [1.0 + (sh - 0.5) * 2 * (1 - 2 * i / max(1, yrs - 1)) for i in range(yrs)] if yrs > 1 else [1.0]
+        wsum = sum(weights); hits = [round(base_total * w / wsum + b / yrs, 2) for w in weights]
+    return dict(ok=True, hits=hits, years=[league.year + i for i in range(int(years))], total=round(float(apy) * int(years), 1), year1=(hits[0] if hits else None), dead_if_cut=d.get('dead_if_cut', []))
 
 
 def act_open_talks(league, abbr, pid, kind):
@@ -237,8 +322,12 @@ def waivers(session, league, abbr):
         p = league.player(e['pid']) if isinstance(e, dict) else league.player(e.pid)
         if p is None: continue
         d = e if isinstance(e, dict) else e.__dict__
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), frm=d.get('from_team') or d.get('team') or '', hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1),
-                         yrs=p.contract.years if p.contract else 0, accrued=int(p.accrued or 0), claimed=(abbr in (d.get('claims') or []))))
+        try: fit = round(float(__import__('gm_engine').scheme_fit(p.ratings, p.pos, me)), 1)
+        except Exception: fit = 0.0
+        frm = d.get('from_team') or d.get('team') or ''
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, college=getattr(p, 'college', None) or '', frm=frm, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1),
+                         yrs=p.contract.years if p.contract else 0, inherited=(f"${p.cap_hit(0):.1f}m · {p.contract.years} Yr{'s' if p.contract.years != 1 else ''}" if p.contract else 'Min'), accrued=int(p.accrued or 0), claimed=(abbr in (d.get('claims') or [])),
+                         read=_claim_read(league, me, p, frm, order, abbr)))
     rows.sort(key=lambda r: -r['ovr'])
     rel = {(e['pid'] if isinstance(e, dict) else e.pid): (e.get('release_if_awarded') if isinstance(e, dict) else None) for e in entries}
     mine = [dict(r, release=rel.get(r['pid']), release_name=(league.player(rel[r['pid']]).name if rel.get(r['pid']) and league.player(rel[r['pid']]) else None)) for r in rows if r['claimed']]
@@ -251,6 +340,20 @@ def waivers(session, league, abbr):
     cut_options = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), penalty=round(p.dead_if_cut(0), 1)) for p in sorted(me.active(), key=lambda p: p.ovr)[:12]]
     return dict(rail=rail(session, league, abbr), rows=rows, claims=mine, awarded=awarded, cut_options=cut_options, priority=[club(a) for a in order], my_priority=(order.index(abbr) + 1 if abbr in order else None),
                 roster=len(me.active()), roster_full=(len(me.active()) >= 53), cap=round(me.cap_space, 1), awards='at the next advance')
+
+
+def _claim_read(league, me, p, frm, order, abbr):
+    """The assistants on a claim: where he would sit, why the other club let him go, who is ahead of you."""
+    d = me.depth.get(p.pos, []); better = sum(1 for q in d if q.ovr > p.ovr)
+    place = ('a starter here' if better == 0 else f"{['second', 'third', 'fourth', 'fifth'][min(better - 1, 3)]} on the chart at {p.pos}")
+    thin = len(d) <= 2 or (len(d) >= 2 and d[1].ovr < d[0].ovr - 12)
+    try:
+        import gm_engine as GE
+        f = float(GE.scheme_fit(p.ratings, p.pos, me)); fitw = ' and grades well in our scheme' if f >= 0.5 else ' though he grades below his rating in our scheme' if f <= -0.5 else ''
+    except Exception: fitw = ''
+    why = 'a cap move, not a judgment on his play' if p.contract and p.apy >= 3.0 else 'a numbers cut at a deep spot'
+    ahead = (order.index(abbr) if abbr in order else 0)
+    return f"He would be {place}{fitw}. {p.pos} is {'thin' if thin else 'covered'} behind the starter. {frm} let him go as {why}. {ahead} club{'s are' if ahead != 1 else ' is'} ahead of you in priority."
 
 
 def act_claim(league, abbr, pid, release_pid=None):
@@ -292,7 +395,15 @@ def extensions(session, league, abbr):
         r['restructurable'] = round(CT.restructure_room(p, cap), 1) if hasattr(CT, 'restructure_room') else 0.0
     tag_open = TG_.user_tag_window(league); choice = getattr(league, 'user_tag_choice', None)
     # before the New Year a man's last season shows as one year left; after it his deal is up (0) and he is a UFA, RFA or ERFA until tagged, tendered or re-signed
-    return dict(rail=rail(session, league, abbr), rows=rows, expiring=[r for r in rows if r['yrs'] <= 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1),
+    from cap_engine import CAP
+    committed_next = round(sum(p.contract.cap_hit(1) for p in me.roster if p.contract and p.contract.years >= 2) + float(getattr(me.cap, 'dead_next', 0.0) or 0.0), 1)
+    limit_next = round(CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.055), 1)
+    for r in rows:
+        st = r.get('talks')
+        r['talks_word'] = ({'waiting': 'Waiting', 'countered': 'Countered', 'open': 'Talking', 'accepted': 'Agreed', 'signed': 'Agreed', 'declined': 'Declined', 'broken_off': 'Broke Off'}.get(st, 'Not Started') if st else ('Not Started' if r.get('eligible') else 'After the Season' if r.get('yrs', 0) <= 1 else 'Not Yet Eligible'))
+        r['ask_word'] = (f"${r['ask']}m × {r['years']}" if r.get('ask') else ('Ask First' if r.get('eligible') else '—'))
+        r['tag_line'] = ('Final Year' if r.get('yrs') <= 1 else f"{r.get('yrs')} Yrs Left") + (' · Eligible' if r.get('eligible') and r.get('yrs', 0) > 1 else '')
+    return dict(rail=rail(session, league, abbr), rows=rows, expiring=[r for r in rows if r['yrs'] <= 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1), committed_next=committed_next, limit_next=limit_next,
                 tag=dict(open=tag_open, used=(choice not in (None, 'none')), none=(choice == 'none'), tagged=(league.player(choice).name if choice not in (None, 'none') and league.player(choice) else None)),
                 promise_kinds=[dict(key=k, label=v_['label']) for k, v_ in __import__('negotiation_engine').PROMISES.items()])
 

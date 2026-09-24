@@ -109,7 +109,9 @@ def _lean_rows(gm_leans, scheme_leans):
     import identity_catalog as IC
     rows = []
     for side, k, label, kind in LEAN_ROWS:
-        allv = [a[side][k] for a in IC.side_archetypes(side).values()]
+        # every scheme's range means the league's: the archetypes and every real coach in the catalog,
+        # so a club whose coach leans further than any archetype still sits inside the grey
+        allv = [a[side][k] for a in IC.side_archetypes(side).values()] + [c[side][k] for c in IC.CATALOG.values() if side in c and k in c[side]]
         lo, hi = min(allv), max(allv)
         mine = float(gm_leans.get(k, 0.5)); sch = float(scheme_leans.get(k, mine))
         rows.append(dict(key=k, label=label, all_lo=round(lo * 100), all_hi=round(hi * 100), band_lo=round(max(0.0, sch - 0.08) * 100), band_hi=round(min(1.0, sch + 0.08) * 100), dot=round(mine * 100), value=_lean_value(k, kind, mine)))
@@ -162,7 +164,8 @@ def _assistants_read(league, t, rows_now, men_now, rows_alt=None, men_alt=None, 
         if top and top[0][1] <= -1.0:
             p, f, g = top[0]; alt = _best_scheme_for(p, 'offence' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defence')
             import identity_catalog as IC
-            line += f" {p.name.split()[-1]} is the worst fit; he would grade better in a {IC.ARCHETYPES[alt]['name']} {'offense' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defense'}."
+            an = 'an' if IC.ARCHETYPES[alt]['name'][0] in 'AEIOU' else 'a'
+            line += f" {p.name.split()[-1]} is the worst fit; he would grade better in {an} {IC.ARCHETYPES[alt]['name']} {'offense' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defense'}."
         return line
     d = {r['group']: r2['fit'] - r['fit'] for r, r2 in zip(rows_now, rows_alt)}
     up = [g for g, v in sorted(d.items(), key=lambda kv: -kv[1]) if v >= 0.5]; down = [g for g, v in sorted(d.items(), key=lambda kv: kv[1]) if v <= -0.5]
@@ -228,7 +231,8 @@ def _misfit_rows(league, t, men):
         if f > -0.5 or p.pid in keep: continue
         side = 'offence' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defence'
         alt = _best_scheme_for(p, side)
-        out.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), fit=round(f, 1), reason=f"{IC.ARCHETYPES[alt]['name']} {'offense' if side == 'offence' else 'defense'} player in a {IC.ARCHETYPES[club_identity(league, t)[side]]['name']}" if alt else ''))
+        cur_name = IC.ARCHETYPES[club_identity(league, t)[side]]['name']
+        out.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), fit=round(f, 1), reason=f"{IC.ARCHETYPES[alt]['name']} {'offense' if side == 'offence' else 'defense'} player in {'an' if cur_name[0] in 'AEIOU' else 'a'} {cur_name}" if alt else ''))
     return out
 
 

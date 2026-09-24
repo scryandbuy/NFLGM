@@ -892,6 +892,7 @@ table.rank .edge.me{color:var(--club-2)}table.rank .edge.them{color:var(--opp)}t
 /* the scouting board is wide: measurables and flags keep to one line, the sheet scrolls sideways before anything overlaps */
 .board-wrap{overflow-x:auto}
 .board-wrap .tbl{min-width:1180px}
+.board-wrap .tbl th{position:static}      /* a sticky header inside a sideways-scrolling wrapper floats into the rows */
 .board-wrap .meas{white-space:nowrap;font-size:11.5px}
 .board-wrap .flag{white-space:nowrap}
 /* decision chips wrap instead of overrunning the card */
@@ -934,8 +935,8 @@ button.btn{line-height:normal;box-sizing:border-box}
 .arch div.now small{color:var(--club-2)}
 
 /* identity: centered archetype rows, the current tile and the preview tile */
-.arch.center{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
-.arch.center div{width:150px}
+.arch.center{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.arch.center div{width:auto}
 .arch div.preview{outline:2px dashed var(--decide);outline-offset:-2px}
 .arch div.now small{color:var(--club-2)}
 .pill{display:inline-block;font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;background:var(--decide);color:#111;padding:1px 8px;margin-right:6px}
@@ -943,3 +944,16 @@ button.btn{line-height:normal;box-sizing:border-box}
 .man .nm{flex:1;font-size:13px}
 .man .nm small{display:block;font-size:11px;color:var(--ink-3)}
 .man .ov{font-family:var(--display);font-weight:900;font-size:18px}
+
+.tools .find{margin-left:10px;background:var(--board);color:var(--ink);border:1px solid var(--rule-2);padding:5px 9px;font-size:13px;width:180px}
+.tools .find::placeholder{color:var(--ink-3)}
+.tbl tr.sel td{background:var(--sheet-2)}
+.tbl tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--club)}
+
+.pkgbox.over{outline:2px dashed var(--club-2);outline-offset:-2px}
+.hits{display:flex;gap:8px;align-items:flex-end;margin:8px 0}
+.hits .hit{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--ink-3);flex:1}
+.hits .hit .hbar{width:100%;height:40px;background:var(--sheet-3);border:1px solid var(--rule);display:flex;align-items:flex-end}
+.hits .hit .hbar i{display:block;width:100%;background:var(--club-2)}
+.hits .hit b{font-family:var(--mono);font-weight:500;font-size:11px;color:var(--ink)}
+.offer label b{display:block;font-family:var(--mono);font-size:14px;padding:6px 0}

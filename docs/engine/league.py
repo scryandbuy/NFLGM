@@ -74,7 +74,7 @@ class Player:
                  # a position change he is still learning: frm, to, penalty, games_left, games_total
                  'transition',
                  # personality: work_ethic, financial_priority, loyalty, ambition (hidden)
-                 'traits', 'last_team', 'retired_year', 'conference', 'combine', 'medical', '_team_ref')
+                 'traits', 'last_team', 'retired_year', 'conference', 'combine', 'medical', 'number', '_team_ref')
 
     def __init__(self, pid, name, pos, age, ratings, *, dev='normal',
                  potential=None, potential_range=None, longevity=1.0,
@@ -118,6 +118,7 @@ class Player:
         self.college_ovr = None
         self.height = None
         self.weight = None
+        self.number = None
         self.transition = None
         self.traits = None
         self.last_team = None
@@ -1086,6 +1087,11 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
                    draft_round=(int(r.draft_round) if pd.notna(r.get('draft_round')) else None),
                    draft_overall=(int(r.draft_overall) if pd.notna(r.get('draft_overall')) else None),
                    entry_year=(int(r.entry_year) if pd.notna(r.get('entry_year')) else None))
+        # the bio the seed carries: height in inches, weight, the jersey number, the school
+        if pd.notna(r.get('height')): p.height = int(r.height)
+        if pd.notna(r.get('weight')): p.weight = int(r.weight)
+        if pd.notna(r.get('jersey_number')): p.number = int(r.jersey_number)
+        if pd.notna(r.get('college')) and not getattr(p, 'college', None): p.college = str(r.college)
         L.players[p.pid] = p
         if r.team in L.teams:
             L.teams[r.team].roster.append(p)
