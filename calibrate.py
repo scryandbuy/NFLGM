@@ -193,12 +193,20 @@ class Collector:
         return c
 
 
-def run(seasons=1, seed=2026, verbose=True):
-    """Simulate whole seasons on the REAL rosters and measure everything."""
+def run(seasons=1, seed=2026, verbose=True, coaches='random'):
+    """Simulate whole seasons on the REAL rosters and measure everything.
+    coaches='random' draws each club's leans from a normal (the register's fit);
+    coaches='catalog' uses the real identity catalog through season.make_coach,
+    which is what the franchise plays with."""
     import rosters as R, game as G, plays as P, schemes as S
     rng = np.random.default_rng(seed)
     L = R.load_league()
     teams = sorted(L)
+    use_catalog = (coaches == 'catalog'); cat = None
+    if use_catalog:
+        import league as LG, season as SN
+        LL = LG.build_league(rng=np.random.default_rng(seed))
+        cat = {t: SN.make_coach(LL.teams[t].gm) for t in teams if t in LL.teams}
     co = lambda d, di, sd, ytg, r, secs_left=None, **kw: S.call_offense(
         d, di, sd, ytg, r, secs_left=secs_left, **kw)
     cd = lambda oc, d, di, r, ytg=50, **kw: S.call_defense(
@@ -210,6 +218,8 @@ def run(seasons=1, seed=2026, verbose=True):
         blitz_rate=float(np.clip(rng.normal(.133, .05), .05, .28)),
         travel_willingness=float(np.clip(rng.normal(.5, .22), .05, .95)),
         off_script_skill=float(np.clip(rng.normal(.5, .2), .1, .9))) for t in teams}
+    if use_catalog:
+        coaches = cat
 
     C = Collector()
     for s in range(seasons):
@@ -221,9 +231,10 @@ def run(seasons=1, seed=2026, verbose=True):
                 r = G.play_game(L[h], L[a], rng, P.resolve_play, co, cd, P.rate,
                                 home_state=ST[h], away_state=ST[a], week=wk + 1)
                 C.add(r)
-    got = C.report(f'{seasons} season(s) on the REAL 2026 rosters') if verbose else C.got()
+    got = C.report(f'{seasons} season(s) on the REAL 2026 rosters, {"catalog" if use_catalog else "random"} coaches') if verbose else C.got()
     return got
 
 
 if __name__ == '__main__':
-    run(seasons=1)
+    import sys
+    run(seasons=1, coaches=('catalog' if 'catalog' in sys.argv else 'random'))

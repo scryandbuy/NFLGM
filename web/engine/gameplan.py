@@ -61,10 +61,10 @@ class Gameplan:
     tempo: float = 0.5                # 0 = grind clock, 1 = no huddle
     target_priority: dict = field(default_factory=dict)   # pid -> weight
     play_action_rate: float = 0.5           # the caller's lean, 0.5 neutral
-    motion_rate: float = 0.5
+    motion_rate: float = 0.581           # the league-average lean (schemes.MOTION_NEUTRAL); a club with no identity plays at the average
     shell_lean: float = 0.5
     zone_aggression: float = 0.5      # underneath zones sit on the quick game (1) or sink (0)
-    blitz_lean: float = 0.35
+    blitz_lean: float = 0.384            # the league-average lean (schemes.BLITZ_NEUTRAL)
     # ---- defence ----
     man_rate: float = 0.35
     shell_weights: dict = field(default_factory=lambda: {
@@ -106,10 +106,10 @@ def base_plan(coach=None, opponent=None, rng=None):
     g.tempo = float(coach.get('tempo', g.tempo))
     g.pass_bias = float(coach.get('pass_bias', 0.0))
     g.play_action_rate = float(coach.get('play_action_rate', g.play_action_rate))
-    g.motion_rate = float(coach.get('motion_rate', 0.5))
+    g.motion_rate = float(coach.get('motion_rate', 0.581))
     g.shell_lean = float(coach.get('shell_lean', 0.5))
     g.zone_aggression = float(coach.get('zone_aggression', 0.5))
-    g.blitz_lean = float(coach.get('blitz_lean', 0.35))
+    g.blitz_lean = float(coach.get('blitz_lean', 0.384))
     if 'personnel_mix' in coach: g.personnel_mix = dict(coach['personnel_mix'])
     if 'depth_mix' in coach: g.depth_mix = tuple(coach['depth_mix'])
 

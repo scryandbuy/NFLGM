@@ -330,6 +330,11 @@ def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers,
         L += w * (_logit(target) - neutral)
     return float(np.clip(_sigmoid(L), 0.03, 0.98))
 
+MOTION_NEUTRAL = 0.581        # the identity catalog's mean motion lean
+BLITZ_NEUTRAL = 0.384         # the catalog's mean blitz lean
+BLITZ_BASE = 0.048            # was 0.085 centred at 0.35; the coverage call's fire zones and cover 0 add about six points on their own
+
+
 def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
                  secs_left=None, offense=None, rate_fn=None, lean=None):
     """Full offensive call: personnel, formation, pass or run, and the concept.
@@ -450,7 +455,9 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         else:
             call['scheme'] = rng.choice(['inside_zone', 'outside_zone', 'stretch',
                                          'inside_zone', 'draw'])
-    mo_scale = float(np.exp(1.0 * (float(lean.get('motion', 0.5)) - 0.5)))
+    # the lean is centred on the identity catalog's average (0.58), so a league of real
+    # coaches averages the real 36.5%; a club with no lean plays at the average
+    mo_scale = float(np.exp(1.0 * (float(lean.get('motion', MOTION_NEUTRAL) or MOTION_NEUTRAL) - MOTION_NEUTRAL)))
     call['motion'] = rng.random() < min(0.75, 0.365 * mo_scale)
     call['no_huddle'] = rng.random() < 0.085
     return call
@@ -489,8 +496,11 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
     r = rng.random()
     # the coordinator's blitz lean scales the league rate: 0.35 is neutral,
     # Flores at 1.0 blitzes about two and a half times the league
-    bl = float(lean.get('blitz', 0.35))
-    p_blitz = 0.085 * (0.6 + 0.9 * aggr) * float(np.exp(1.6 * (bl - 0.35)))   # plus the fire zones and cover 0 the coverage call brings, lands at the real 13.3
+    bl = float(lean.get('blitz', BLITZ_NEUTRAL))
+    # centred on the catalog's average lean (0.38) so a league of real coaches lands on
+    # the real 13.3% with the fire zones and cover 0 the coverage call brings; before
+    # this the franchise blitzed at 19% while the random-coach register sat at 16
+    p_blitz = BLITZ_BASE * (0.6 + 0.9 * aggr) * float(np.exp(1.6 * (bl - BLITZ_NEUTRAL)))
     if down == 3 and ydstogo >= 6: p_blitz *= 1.35
     if r < p_blitz * 0.73:   blitzers = 1
     elif r < p_blitz * 0.96: blitzers = 2
