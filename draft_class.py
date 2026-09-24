@@ -139,6 +139,24 @@ def target_curve(rookies, n, spread_floor=4.0, tail_max=8.0):
     return out
 
 
+# THE SHAPE OF A ROOKIE. College Football rates its players on its own scale:
+# slower and less durable than the men who reach the league, and with the
+# skill and awareness numbers filled in high. Scaling a college profile to a
+# rookie overall kept that shape, so newgen classes arrived five to ten points
+# slow with awareness ten high, and after three seasons the league's starters
+# had lost four points of speed. newgen_shape.json holds, per position group
+# and attribute, the offset that lines the newgen class up with the real 2026
+# rookie class at the same rank; measured, not chosen (see tools in the repo
+# history: franchise_register.py and the shape fit in this session).
+SHAPE_GROUP = {'HB': 'HB', 'FB': 'HB', 'LT': 'OL', 'LG': 'OL', 'C': 'OL', 'RG': 'OL', 'RT': 'OL', 'LEDG': 'EDGE', 'REDG': 'EDGE', 'DT': 'DT',
+               'MIKE': 'LB', 'WILL': 'LB', 'SAM': 'LB', 'CB': 'CB', 'FS': 'S', 'SS': 'S', 'QB': 'QB', 'WR': 'WR', 'TE': 'TE', 'K': 'ST', 'P': 'ST', 'LS': 'ST'}
+try:
+    import json as _json, os as _os
+    SHAPE_OFFSET = _json.load(open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'newgen_shape.json')))
+except Exception:
+    SHAPE_OFFSET = {}
+
+
 def convert(row, pos, target):
     """His college attributes scaled so his engine overall lands on target."""
     raw = {}
@@ -148,6 +166,8 @@ def convert(row, pos, target):
         raw[ATTR_MAP.get(c, c)] = float(v)
     if pos in ('WR', 'TE', 'HB', 'FB') and 'release_rating' not in raw:
         raw['release_rating'] = 0.6 * raw.get('route_run_short_rating', 60) + 0.4 * raw.get('agility_rating', 60)
+    for a, off in SHAPE_OFFSET.get(SHAPE_GROUP.get(pos, pos), {}).items():
+        if a in raw: raw[a] = float(np.clip(raw[a] + off, 20, 99))
     college = TG.position_score(raw, pos)
 
     def scaled(k):

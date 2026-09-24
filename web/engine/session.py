@@ -229,6 +229,8 @@ class Session:
         CD.finalize(L, rng)
         WV.notify_user(L, WV.pending(L), 0, digest=True); WV.process(L, rng, 0)
         PSQ.fill_squads(L, rng)
+        from franchise import clear_undrafted
+        clear_undrafted(L, rng)
         L.set_phase('regular')
 
     # ------------------------------------------------------------ helpers

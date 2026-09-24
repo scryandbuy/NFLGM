@@ -198,8 +198,13 @@ ESCALATOR = 1.030            # per point ever bought, into anything
 AGE_FROM, AGE_SLOPE = 21.0, 0.15     # per year of age past a rookie's
 # A quarterback's production curve is flat into his late thirties, so the
 # curve term never bites for him and a 38-year-old off a big year was adding
-# two overall. Learning still slows: an extra 12% a year past 30, QB only.
-LATE_SLOPE = {'QB': (30.0, 0.12)}
+# two overall. Learning still slows. The first version started the brake at
+# 30 at 12% a year; three franchise seasons showed QBs aged 25-27 gaining
+# +0.9 a year in accuracy and 28-30 gaining +1.4, and the league's QB1
+# average rose 85.7 to 88.3. Real quarterbacks plateau at 27-28. The brake now
+# starts at 27 and is steeper, so a 30-year-old pays roughly double a 26-year-old
+# for the same point and a 34-year-old about triple.
+LATE_SLOPE = {'QB': (27.0, 0.30)}
 OVR_PIVOT, OVR_SLOPE = 70.0, 0.030
 
 

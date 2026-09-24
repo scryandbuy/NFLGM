@@ -76,11 +76,29 @@ def prune_pool(league, rng):
         # the year has rolled: the season just played is league.year - 1, and a
         # man with no stat line in it, and no club now, sat out the whole year
         if pid in league.stats.get(league.year - 1, {}): continue
-        pr = 0.85 if p.age >= 30 else 0.55 if p.age >= 26 else 0.35
+        pr = 0.90 if p.age >= 30 else 0.75 if p.age >= 26 else 0.60
         if rng.random() < pr:
             p.retired = True; p.retired_year = league.year; p.team = None
             league.free_agents.remove(pid); gone += 1
     if gone: league.log('pool_pruned', n=gone)
+    return gone
+
+
+def clear_undrafted(league, rng, keep=0.25):
+    """After the cut-down: an undrafted rookie with no club never entered the
+    league. Real UDFAs who are not signed after the draft do not appear on a
+    roster or the wire; they go elsewhere. A quarter stay as street free agents
+    for the in-season depth signings. Without this the unsigned pile grew by
+    about 180 a year and the active league by 250."""
+    gone = 0
+    for pid in list(league.free_agents):
+        p = league.player(pid)
+        if p is None or p.retired or p.team is not None: continue
+        if getattr(p, 'entry_year', None) != league.year or getattr(p, 'draft_round', None): continue
+        if rng.random() < keep: continue
+        p.retired = True; p.retired_year = league.year
+        league.free_agents.remove(pid); gone += 1
+    if gone: league.log('udfa_cleared', n=gone)
     return gone
 
 
@@ -212,6 +230,7 @@ class Franchise:
         WV.notify_user(L, WV.pending(L), 0, digest=True)
         log['waiver_claims'] += len(WV.process(L, rng, 0))
         log['practice_squad'] = PSQ.fill_squads(L, rng)
+        log['udfa_cleared'] = clear_undrafted(L, rng)
         log['cut_to_53'] = len(cut)
         log['filled'] = filled
 

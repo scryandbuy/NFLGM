@@ -73,6 +73,13 @@ POS_GROUP = {
 # is set by what a year of decline should look like on a rating sheet rather
 # than by the curve's face value.
 DAMPING = 0.17
+# The same men tracked over three franchise seasons lost speed at -0.9 a year
+# at 25-27 and -2.3 a year at 28-30, and the league's starter-level speed fell
+# four points in three years. Real men lose roughly half that. Physical
+# attributes now take the decline at PHYS_DAMP of the fitted rate; the skill
+# and mental attributes keep the fitted damping, since their movement matched.
+PHYS_DAMP = 0.55
+PHYS_GROUP = {'speed_rating', 'accel_rating', 'agility_rating', 'change_of_direction_rating', 'jump_rating', 'stamina_rating', 'strength_rating'}
 
 # HOW PHYSICAL EACH ATTRIBUTE IS, 0 to 1.
 #
@@ -177,7 +184,7 @@ def decline(player, rng):
         w = PHYS_WEIGHT.get(k, DEFAULT_PHYS)
         v = player.ratings[k]
         if w > 0:
-            v *= 1.0 - drop * w
+            v *= 1.0 - drop * w * (PHYS_DAMP if k in PHYS_GROUP else 1.0)
         if w < 0.5:
             # he knows more than he did, right up until the end, and the more
             # of an attribute is head the more it keeps growing
