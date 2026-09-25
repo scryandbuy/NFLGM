@@ -1071,3 +1071,7 @@ button.btn{line-height:normal;box-sizing:border-box}
 
 .trait.unhappy-t{color:var(--danger);border-color:var(--danger)}
 .trait.unknown{color:var(--ink-3);border-color:var(--rule-hi);border-style:dashed;min-width:22px;text-align:center}
+
+/* trait chips inside a card's key-value grid sit on the label's line, no top margin */
+.scard .kv .traits{margin-top:0;align-items:center;gap:4px}
+.scard .kv .traits .trait{font-size:11px;padding:1px 7px;line-height:1.4}
