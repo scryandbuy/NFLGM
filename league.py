@@ -560,12 +560,32 @@ class League:
         self.transactions.append(dict(year=self.year, week=self.week,
                                       phase=self.phase, kind=kind, **detail))
 
+    # the numbers a position wears, under the current rules
+    NUMBERS = {'QB': list(range(1, 20)), 'K': list(range(1, 20)) + list(range(90, 100)), 'P': list(range(1, 20)) + list(range(90, 100)), 'LS': list(range(40, 60)),
+               'HB': list(range(0, 50)), 'FB': list(range(20, 50)), 'WR': list(range(0, 50)) + list(range(80, 90)), 'TE': list(range(40, 50)) + list(range(80, 90)),
+               'LT': list(range(50, 80)), 'LG': list(range(50, 80)), 'C': list(range(50, 80)), 'RG': list(range(50, 80)), 'RT': list(range(50, 80)),
+               'LEDG': list(range(50, 60)) + list(range(90, 100)), 'REDG': list(range(50, 60)) + list(range(90, 100)), 'DT': list(range(50, 80)) + list(range(90, 100)),
+               'MIKE': list(range(0, 60)), 'WILL': list(range(0, 60)), 'SAM': list(range(0, 60)), 'CB': list(range(0, 50)), 'FS': list(range(0, 50)), 'SS': list(range(0, 50))}
+
+    def assign_number(self, p, abbr):
+        """A jersey number for a man who has none, or whose number a teammate already wears: the first
+        free one his position is allowed, so a rookie or a street signing shows a number and not his position."""
+        t = self.teams.get(abbr)
+        if t is None: return
+        taken = {getattr(q, 'number', None) for q in t.roster if q is not p}
+        cur = getattr(p, 'number', None)
+        if cur is not None and cur not in taken: return
+        for n in self.NUMBERS.get(p.pos, list(range(0, 100))) + list(range(0, 100)):    # the position's numbers first, then any free one on a crowded camp roster
+            if n not in taken:
+                p.number = n; return
+
     def sign(self, pid, abbr, contract):
         p = self.player(pid)
         if p.team and p.team in self.teams:
             self.release(pid, log=False)
         p.team, p.contract = abbr, contract
         self.teams[abbr].roster.append(p)
+        self.assign_number(p, abbr)
         if pid in self.free_agents: self.free_agents.remove(pid)
         self.log('sign', pid=pid, team=abbr, apy=p.apy, years=contract.years)
 
@@ -648,6 +668,7 @@ class League:
                 self.teams[src].roster.remove(p)
                 p.team = dst
                 self.teams[dst].roster.append(p)
+                self.assign_number(p, dst)
         for abbr in (a, b):
             self.teams[abbr].sync_cap()
         # a man who asked out has his trade
@@ -1105,6 +1126,10 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         L.players[p.pid] = p
         if r.team in L.teams:
             L.teams[r.team].roster.append(p)
+
+    # everyone on a roster wears a number; the seed leaves about 120 fringe men without one
+    for t in L.teams.values():
+        for p in list(t.roster): L.assign_number(p, t.abbr)
 
     # ---- the street: the real unsigned veterans, from the roster join ------
     # Madden men on no nflverse or Sleeper roster were set aside into
