@@ -113,6 +113,12 @@ _p = _rates / _rates.sum()
 PEN_INFO = {p[0]: dict(yards=p[2], auto_first=p[3], offense=p[4], phase=p[5])
             for p in PENALTIES}
 
+# the rulebook: enforcement yardage by foul (Rule 12 and 7; DPI is a spot foul and drawn separately)
+RULE_YARDS = {'Offensive Holding': 10, 'False Start': 5, 'Defensive Holding': 5, 'Unnecessary Roughness': 15, 'Delay of Game': 5, 'Defensive Offside': 5,
+              'Roughing the Passer': 15, 'Neutral Zone Infraction': 5, 'Face Mask': 15, 'Illegal Formation': 5, 'Offensive Pass Interference': 10, 'Illegal Contact': 5,
+              'Illegal Block Above the Waist': 10, 'Illegal Use of Hands': 10, 'Ineligible Downfield Pass': 5, 'Intentional Grounding': 10,
+              'Defensive Too Many Men on Field': 5, 'Illegal Shift': 5, 'Encroachment': 5}
+
 # Defensive pass interference is a SPOT foul and the biggest single swing in
 # the game: mean 15.3, median 13, p90 30, p99 46, max 52. 28% go 20+ yards.
 DPI = dict(mean=15.3, median=13, p75=21, p90=30, p99=46, max=52,
@@ -165,7 +171,9 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
     if name == 'Defensive Pass Interference':
         yds = dpi_yards(rng, air_yards)
     else:
-        yds = max(1.0, rng.normal(info['yards'], info['yards'] * 0.22))
+        # THE RULEBOOK'S YARDAGE, not a draw around the average: five, ten or fifteen by foul.
+        # Half the distance to the goal is applied where the ball is, in the game.
+        yds = float(RULE_YARDS.get(name, round(info['yards'] / 5.0) * 5.0 or 5.0))
 
     on_off = info['offense']
     if on_off is None:                     # can be either side
@@ -176,9 +184,12 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
         # (the 20 types cover 10.96 of the real 11.88 per game), which skews
         # defensive. These specific fouls go against the defence more often.
         on_off = rng.random() < 0.18
+    # the rulebook's automatic first down: every defensive foul except the pre-snap fives
+    # (offside, neutral zone, encroachment, too many men) and delay-type fouls; never an offensive foul
+    AUTO = {'Defensive Pass Interference', 'Defensive Holding', 'Roughing the Passer', 'Illegal Contact', 'Unnecessary Roughness', 'Face Mask', 'Illegal Use of Hands'}
     return dict(penalty=name, yards=round(float(yds), 1),
                 on_offense=bool(on_off),
-                auto_first=rng.random() < info['auto_first'],
+                auto_first=(not on_off) and (name in AUTO),
                 nullifies=info['phase'] in ('pre',) or name in
                           ('Offensive Holding', 'Offensive Pass Interference',
                            'Illegal Formation', 'Ineligible Downfield Pass',

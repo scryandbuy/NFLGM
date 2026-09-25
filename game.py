@@ -389,12 +389,18 @@ KICKOFF = dict(touchback=.155, return_rate=.799, return_mean=26.9,
                touchback_from_50=80,       # own 20, the 2026 anti-loophole rule
                onside_recovery=.0645)      # under the dynamic kickoff
 
+LAST_KICKOFF = {}
+
+
 def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
     """kickoff(), and the return goes in the book against the returner. Kickoff returns were resolved
-    for years and never booked, so no kick returner had a line."""
+    for years and never booked, so no kick returner had a line. The result is kept so the drive it
+    opens can log the kick as its first play."""
     r = kickoff(returner, rng, rate_fn, from_50=from_50)
     if book is not None and not r.get('touchback') and returner:
         book.special('kr', returner.get('pid'), ret=r.get('ret', 0.0))
+    r['returner'] = (returner or {}).get('pid')
+    LAST_KICKOFF['r'] = r
     return r
 
 
@@ -621,11 +627,14 @@ def _resolve_live_penalty(dr, pen, out, oc):
     turnover = out.get('type') == 'interception'
     if pen['on_offense']:
         if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
-            # after the whistle: the result stands and they walk back
+            # after the whistle: the result stands and they walk back, half the distance at most
+            spot = dr.yardline - gained
+            yards = min(yards, (100.0 - spot) / 2.0); pen['yards'] = round(yards, 1)
             dr.log_pen_after = yards
             return 'added'
         # during the play (grounding, a face mask by a blocker): the play is
-        # wiped and the offence is set back from the previous spot
+        # wiped and the offence is set back from the previous spot, half the distance at most
+        yards = min(yards, (100.0 - dr.yardline) / 2.0); pen['yards'] = round(yards, 1)
         dr.yardline = min(99.0, dr.yardline + yards)
         dr.togo += yards
         if pen['penalty'] == 'Intentional Grounding':
@@ -929,6 +938,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
     """
     dr = Drive(offense, defense, start_yardline, clock, quarter, score_diff, rng)
     import events as E
+    # the kick that opened this possession, when there was one, is the drive's first entry
+    ko = LAST_KICKOFF.pop('r', None)
+    if ko is not None and abs(float(ko.get('new_yardline', -1)) - float(start_yardline)) < 0.5:
+        dr.log.append(dict(type='kickoff', touchback=bool(ko.get('touchback')), new_yardline=float(ko.get('new_yardline', start_yardline)), ret=float(ko.get('ret', 0.0) or 0.0), carrier=ko.get('returner'), clock=clock))
     # Adjustment happens AFTER EACH SERIES, which is what the coaches describe:
     # "If you wait until halftime to make your adjustments, you're too late."
     for st in (off_state, def_state):
@@ -1155,10 +1168,15 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if pen and pen['nullifies']:
             dr.clock -= play_seconds('penalty')
             if pen['on_offense']:
-                dr.yardline = min(99, dr.yardline + pen['yards'])
-                dr.togo += pen['yards']
+                # half the distance to the offense's own goal when the full yardage would reach it
+                walk = min(float(pen['yards']), (100.0 - dr.yardline) / 2.0)
+                pen['yards'] = round(walk, 1)
+                dr.yardline = min(99, dr.yardline + walk)
+                dr.togo += walk
             else:
-                gained = min(pen['yards'], dr.yardline - 1)
+                # half the distance to the defense's goal
+                gained = min(float(pen['yards']), dr.yardline / 2.0)
+                pen['yards'] = round(gained, 1)
                 if pen['auto_first']:
                     dr.yardline -= gained; dr.down, dr.togo = 1, min(10, dr.yardline)
                     dr.first_downs += 1
