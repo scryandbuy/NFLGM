@@ -1026,3 +1026,5 @@ button.btn{line-height:normal;box-sizing:border-box}
 .lpos{text-align:center;font-family:var(--display);font-weight:900;font-size:15px;letter-spacing:.06em;color:var(--ink-3);padding:8px 0 0}
 .lcol.pinned .lpos{color:var(--club-2)}
 .lpos small{display:block;font-size:10px;font-weight:500;letter-spacing:.04em}
+
+#boot .btn{vertical-align:middle;box-sizing:border-box;height:44px;line-height:normal;display:inline-flex;align-items:center}
