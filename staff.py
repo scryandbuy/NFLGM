@@ -83,13 +83,15 @@ DISGRUNTLED_HIT = 12.0             # rating points lost for the year after being
 
 
 class Coach:
-    __slots__ = ('name', 'role', 'rating', 'prestige', 'specialty', 'age', 'years', 'team', 'traits', 'history', 'unit_ranks', 'hc_candidate', 'disgruntled', 'salary')
+    __slots__ = ('name', 'role', 'rating', 'prestige', 'specialty', 'age', 'years', 'team', 'traits', 'history', 'unit_ranks', 'hc_candidate', 'disgruntled', 'salary', 'staff_traits', 'known')
 
     def __init__(self, name, role, rating, prestige, specialty, age, years=3, team=None, traits=None):
         self.name, self.role = name, role
         self.rating, self.prestige, self.specialty, self.age = float(rating), float(prestige), specialty, int(age)
         self.years, self.team = int(years), team
         self.traits = traits or {}
+        self.staff_traits = None        # the words (staff_traits.py); drawn on first use
+        self.known = []                 # which of them the GM has learned, while he is in the pool
         self.history = []              # (year, team, role)
         self.unit_ranks = []           # last seasons' unit rank on his side
         self.hc_candidate = False
@@ -103,12 +105,14 @@ class Coach:
 
     def to_dict(self):
         return dict(name=self.name, role=self.role, rating=self.rating, prestige=self.prestige, specialty=self.specialty, age=self.age,
-                    years=self.years, team=self.team, traits=self.traits, history=self.history, unit_ranks=self.unit_ranks, hc_candidate=self.hc_candidate, disgruntled=self.disgruntled, salary=self.salary)
+                    years=self.years, team=self.team, traits=self.traits, history=self.history, unit_ranks=self.unit_ranks, hc_candidate=self.hc_candidate, disgruntled=self.disgruntled, salary=self.salary,
+                    staff_traits=self.staff_traits, known=self.known)
 
     @classmethod
     def from_dict(cls, d):
         c = cls(d['name'], d['role'], d['rating'], d['prestige'], d['specialty'], d['age'], d.get('years', 1), d.get('team'), d.get('traits'))
         c.history = d.get('history', []); c.unit_ranks = d.get('unit_ranks', []); c.hc_candidate = d.get('hc_candidate', False); c.disgruntled = d.get('disgruntled', 0); c.salary = d.get('salary', 0.0)
+        c.staff_traits = d.get('staff_traits'); c.known = d.get('known') or []
         return c
 
 
@@ -138,6 +142,8 @@ def make(rng, role, rating=None, prestige=None, team=None, league=None, young=Fa
         prestige = float(np.clip(rating * 0.7 + rng.normal(0, 9), 10, 90)) if prestige is None else prestige
     c = Coach(_name(rng, league), role, rating, prestige, rng.choice(SPECIALTY[role]), age,
               years=int(rng.choice(CONTRACT_YEARS)), team=team, traits=PT.draw(rng))
+    import staff_traits as STR
+    STR.ensure(c, rng)
     return c
 
 
@@ -172,16 +178,55 @@ def rating(team, role, default=60.0):
 
 
 def plan_skill(team, side):
-    """0-1 skill for the game plan on one side, from the coordinator."""
+    """0-1 skill for the game plan on one side, from the coordinator; Sharp on Sunday adds 0.15."""
+    import staff_traits as STR
     role = 'oc' if side.startswith('off') else 'dc'
-    return float(np.clip((rating(team, role) - 35.0) / 55.0, 0.05, 1.0))
+    sk = float(np.clip((rating(team, role) - 35.0) / 55.0, 0.05, 1.0))
+    c = (getattr(team, 'staff', None) or {}).get(role)
+    if c is not None and STR.has(c, 'sharp'): sk = min(1.0, sk + 0.15)
+    return sk
+
+
+def coordinator_of(team, pos):
+    """The coach whose unit a position belongs to."""
+    st = getattr(team, 'staff', None) or {}
+    role = 'oc' if pos in OFFENSE_POS else 'st' if pos in ('K', 'P', 'LS') else 'dc'
+    return st.get(role)
+
+
+def trait(team, pos, key):
+    """Does the coordinator over this position carry the trait?"""
+    import staff_traits as STR
+    c = coordinator_of(team, pos)
+    return c is not None and STR.has(c, key)
 
 
 def xp_mult(team, player):
-    """0.85-1.15 by the coordinator on the player's side."""
+    """0.85-1.15 by the coordinator on the player's side; a Teacher adds 15% to his whole unit,
+    a Developer 15% to the men 24 and under."""
     if team is None: return 1.0
     role = 'oc' if player.pos in OFFENSE_POS else 'dc' if player.pos not in ('K', 'P') else 'st'
-    return 0.85 + 0.30 * float(np.clip((rating(team, role) - 35.0) / 55.0, 0.0, 1.0))
+    m = 0.85 + 0.30 * float(np.clip((rating(team, role) - 35.0) / 55.0, 0.0, 1.0))
+    if trait(team, player.pos, 'teacher'): m *= 1.15
+    elif trait(team, player.pos, 'developer') and float(getattr(player, 'age', 30)) <= 24.0: m *= 1.15
+    return m
+
+
+def game_terms(team):
+    """What the game reads off the staff each Sunday: the Disciplinarian's penalty and fumble
+    factors by side, and the Sharp on Sunday edge by side."""
+    st = getattr(team, 'staff', None) or {}
+    import staff_traits as STR
+    def has(role, key):
+        c = st.get(role); return c is not None and STR.has(c, key)
+    return dict(pen_off=(0.90 if has('oc', 'disciplinarian') else 1.0), pen_def=(0.90 if has('dc', 'disciplinarian') else 1.0),
+                fum_off=(0.90 if has('oc', 'disciplinarian') else 1.0),
+                sharp_off=has('oc', 'sharp'), sharp_def=has('dc', 'sharp'))
+
+
+def recruit_pull(team, pos):
+    """A Recruiter over the position: the club's offer reads 5% richer to a free agent and his ask to the club runs 4% lower."""
+    return (1.05, 0.96) if trait(team, pos, 'recruiter') else (1.0, 1.0)
 
 
 def tax_mult(team, new_pos):
@@ -228,7 +273,10 @@ def season_end(league, unit_ranks_by_team):
                 d = (0.4 if good else 0.0) - (1.0 if bad else 0.0)
             else:
                 d = -0.6 - (0.7 if bad else 0.0)
+            import staff_traits as STR
+            if STR.has(c, 'riser') and d > 0: d *= 1.5
             c.rating = float(np.clip(c.rating + d, 30, 95))
+            if STR.has(c, 'riser') and r is not None and r <= 16: c.prestige = float(np.clip(c.prestige + 2.0, 5, 95))
             c.age += 1; c.years -= 1
             if c.disgruntled and c.disgruntled < league.year: c.disgruntled = 0
             if c.role in ('oc', 'dc') and c.prestige >= 72 and c.rating >= 70:
@@ -484,11 +532,14 @@ def pool_for(league, role):
     return sorted([c for c in league.staff_pool if c.role == role], key=lambda c: -(c.rating + 0.3 * c.prestige))
 
 
-def card(coach):
-    import personality as PT
+def card(coach, revealed_only=False):
+    """The card. On your own staff every trait shows; in the pool only the ones the interview has revealed,
+    the rest as '?'."""
+    import staff_traits as STR
+    STR.ensure(coach, np.random.default_rng(abs(hash(coach.name)) % (2 ** 32)))
     return dict(name=coach.name, role=ROLE_NAME[coach.role], rating=round(coach.rating), prestige=round(coach.prestige), specialty=coach.specialty,
-                age=coach.age, years=coach.years, salary=coach.salary, ask=ask(coach), personality=PT.words(coach.traits) if coach.traits else '', hc_candidate=coach.hc_candidate,
-                unit_ranks=coach.unit_ranks[-3:])
+                age=coach.age, years=coach.years, salary=coach.salary, ask=ask(coach), hc_candidate=coach.hc_candidate,
+                unit_ranks=coach.unit_ranks[-3:], traits=STR.words(coach, revealed_only=revealed_only), n_traits=len(coach.staff_traits or []))
 
 
 # ------------------------------------------------------------ save

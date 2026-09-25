@@ -1068,3 +1068,6 @@ button.btn{line-height:normal;box-sizing:border-box}
 .attrs .arow{grid-template-columns:1fr minmax(0,112px) 34px}
 .arow em.fitd{grid-column:2;font-size:9.5px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;padding-right:4px;cursor:help}
 .arow b{grid-column:3}
+
+.trait.unhappy-t{color:var(--danger);border-color:var(--danger)}
+.trait.unknown{color:var(--ink-3);border-color:var(--rule-hi);border-style:dashed;min-width:22px;text-align:center}

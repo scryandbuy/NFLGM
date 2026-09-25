@@ -58,6 +58,8 @@ def weekly(league, week, results, snaps_by_pid, game_lines=None):
         losing = team.win_pct < 0.5 and (team.record[0] + team.record[1]) >= 4
         depth = team.depth                      # built once per club per week
         cache = {pos: (ps, sorted((q.apy for q in ps), reverse=True)) for pos, ps in depth.items()}
+        import staff as ST, staff_traits as STR
+        disc = {role: (c is not None and STR.has(c, 'disciplinarian')) for role, c in (getattr(team, 'staff', None) or {}).items()}
         for p in team.active():
             m = ensure(p)
             m.tick()
@@ -82,6 +84,9 @@ def weekly(league, week, results, snaps_by_pid, game_lines=None):
                 g = game_lines[p.pid]
                 if g.get('good'): m.apply('good_game')
                 elif g.get('bad'): m.apply('bad_game')
+            # a Disciplinarian's unit: the ambitious men chafe a little each week
+            if disc.get('oc' if p.pos in ST.OFFENSE_POS else 'dc') and float((getattr(p, 'traits', None) or {}).get('ambition', 50)) >= 62:
+                m.apply('chafes')
         _room_pass(team)
 
 

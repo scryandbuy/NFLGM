@@ -1135,8 +1135,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # real ~3.4 - and drives died four yards and a third of a first down
         # short of real. The non-nullifying fouls are held here and resolved
         # after the play, where the offence decides whether to take them.
+        # the Disciplinarian's units foul less: the offense's factor on its plays, the defense's folded in evenly
+        fx_o = getattr(off_state, 'staff_fx', None) or {}; fx_d = getattr(def_state, 'staff_fx', None) or {}
         pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'],
-                              noise=getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0)
+                              noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)))
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
             dr.clock -= play_seconds('penalty')
@@ -1260,7 +1262,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if ev:
             carrier = offense['qb'] if ev in ('sack', 'scramble') else \
                       (offense['rb'] if ev == 'run' else offense['wr'][0])
-            fum = E.fumble_check(carrier, ev, rng, rate_fn, env_mult=ENV.fumble_mult)
+            fum = E.fumble_check(carrier, ev, rng, rate_fn, env_mult=ENV.fumble_mult, rate_mult=(getattr(off_state, 'staff_fx', None) or {}).get('fum_off', 1.0))
             if fum and fum['lost']:
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 

@@ -107,7 +107,7 @@ def senior_bowl(league, rng):
         sd = SC.error_sd(team.gm, team)
         for p in invited:
             if _attends(team, p, 0.55, rng):
-                SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.8, rng); looks += 1
+                SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.8, rng, R=SC.room(team)); looks += 1
                 _character(league, abbr, team, p, sd, rng)
     SC.consensus(league)
     return looks, _stock_moves(league, 'Senior Bowl')
@@ -119,9 +119,11 @@ def pro_days(league, rng):
     for abbr, team in league.teams.items():
         sd = SC.error_sd(team.gm, team)
         needs = [pos for pos, ps in team.depth.items() if len([q for q in ps if q.out_until is None]) < 2]
+        R = SC.room(team)
         cands = sorted([p for p in pool if p.pos in needs or rng.random() < 0.15], key=lambda p: cons.get(p.pid, {}).get('rank', 9999))
-        for p in cands[:PRO_DAY_LOOKS]:
-            SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.9, rng); looks += 1
+        if not R['day3_reads']: cands = [p for p in cands if cons.get(p.pid, {}).get('rank', 9999) <= 96]
+        for p in cands[:int(PRO_DAY_LOOKS * R['looks_mult'])]:
+            SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.9, rng, R=R); looks += 1
     SC.consensus(league)
     return looks, _stock_moves(league, 'pro days')
 
@@ -153,7 +155,7 @@ def visits(league, rng):
         for p in chosen:
             v = league.scouting[abbr].get(p.pid)
             if v is None: continue
-            SC.second_look(v, p, sd * 0.55, rng, weight=1.5); looks += 1
+            SC.second_look(v, p, sd * 0.55, rng, weight=1.5, R=SC.room(team)); looks += 1
             v['flags'] = list(set(v.get('flags', []) + ['visited']))
             _character(league, abbr, team, p, sd * 0.7, rng)
     SC.consensus(league)
@@ -165,7 +167,9 @@ def _character(league, abbr, team, p, sd, rng):
     import personality as PT
     v = league.scouting[abbr][p.pid]
     if 'character_read' in v: return
-    read = PT.scout_read(p, sd / 4.0, rng)['work_ethic']
+    R = SC.room(team)
+    if R['character'] == 'none': return                    # Trusts the Tape: the visit sharpens the ratings and stops there
+    read = PT.scout_read(p, (sd / 4.0) * (0.35 if R['character'] == 'sharp' else 1.0), rng)['work_ethic']
     v['character_read'] = round(read)
     if read < 35:
         v['adj'] = v.get('adj', 0.0) - 2.0

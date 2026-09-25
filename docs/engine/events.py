@@ -60,14 +60,15 @@ FUMBLE_LOST = {'run': 0.420, 'complete_pass': 0.483, 'sack': 0.483,
                'scramble': 0.420, 'punt_return': 0.358, 'kick_return': 0.487}
 FORCED_SHARE = 0.676             # 67.6% of fumbles are forced, not muffed
 
-def fumble_check(carrier, event, rng, rate_fn, hit_power=0.70, AVG=0.70, env_mult=1.0):
+def fumble_check(carrier, event, rng, rate_fn, hit_power=0.70, AVG=0.70, env_mult=1.0, rate_mult=1.0):
     """
     Ball security against the hit. A sack fumbles at 12.5% - eight times the
     rate of a run - which is what makes a strip sack its own event.
+    rate_mult scales the chance of the ball coming out at all (a Disciplinarian's unit: 0.9).
     """
     base = FUMBLE_RATE.get(event, 0.0140)
     sec = rate_fn(carrier, {'carry_rating': .70, 'awareness_rating': .30})
-    p = base * (1.0 + 2.4 * (AVG - sec)) * (1.0 + 1.3 * (hit_power - AVG))
+    p = base * (1.0 + 2.4 * (AVG - sec)) * (1.0 + 1.3 * (hit_power - AVG)) * rate_mult
     if rng.random() >= max(0.0, p):
         return None
     lost = rng.random() * (1.0 / env_mult) < FUMBLE_LOST.get(event, 0.45)
