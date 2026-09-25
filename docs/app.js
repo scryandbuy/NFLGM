@@ -537,7 +537,7 @@ function renderRoster(v) {
   $('#crumb').textContent = mine ? 'Club' : 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === (mine ? 'club' : 'league')));
   secondRow(clubNav(abbr, mine, null), mine ? (clubTab === 'ps' ? '#club/ps' : clubTab === 'ir' ? '#club/ir' : '#club') : (clubTab === 'ps' ? `#league/team/${abbr}/ps` : `#league/team/${abbr}/roster`));
   const sheet = el('section', { class: 'sheet c12' });
-  if (!mine) sheet.append(el('h2', {}, `${v.rail.clubs ? '' : ''}${abbr} Roster`, el('small', {}, 'another club · read-only')));
+  if (!mine) sheet.append(el('h2', {}, `${abbr} Roster`));
   const tabs = el('div', { class: 'tabs' });
   for (const [k, label, n] of [['active', 'Active', v.count], ['ps', 'Practice Squad', v.practice.length], ['injured', 'Injured', v.injured.length]])
     tabs.append(el('button', { 'aria-pressed': String(clubTab === k), onclick: () => { clubTab = k; const want = mine ? (k === 'ps' ? '#club/ps' : k === 'ir' ? '#club/ir' : k === 'active' ? '#club' : null) : (k === 'ps' ? `#league/team/${abbr}/ps` : k === 'active' ? `#league/team/${abbr}/roster` : null); if (want && location.hash !== want) { location.hash = want; } else renderRoster(v); } }, label + ' ', el('em', {}, n)));
@@ -597,7 +597,7 @@ function renderRoster(v) {
   const foot = el('div', { class: 'foot' });
   const drawFoot = () => {
     foot.innerHTML = '';
-    if (!mine) { foot.append(el('span', { class: 'count' }, `${v.count} on the 53 · ${v.practice.length} on the practice squad · read-only; double-click a name for his card`)); return; }
+    if (!mine) { foot.append(el('span', { class: 'count' }, `${v.count} on the 53 · ${v.practice.length} on the practice squad`)); return; }
     const all = [...v.groups.flatMap(g => g.rows), ...v.practice, ...v.injured]; const r = all.find(x => x.pid === rosterSel);
     if (!r) { foot.append(el('span', { class: 'count' }, clubTab === 'ps' ? `Elevations this week: ${v.elevations_used} of ${v.elevations_max} · a player's ${v.per_man_max + 1}${ord(v.per_man_max + 1)} elevation signs him to the 53` : 'Click a row to select a player, then act on him here.')); return; }
     foot.append(el('span', { class: 'count' }, el('b', {}, r.name), ` · ${r.pos} · ${r.ovr} · ${r.yrs} yr${r.yrs === 1 ? '' : 's'} · $${r.hit.toFixed(1)}m`),
@@ -767,7 +767,6 @@ function renderDepth(v) {
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   for (const [k, l] of [['offense', 'Offense'], ['defense', 'Defense'], ['specialists', 'Specialists']]) tabs.append(el('button', { 'aria-pressed': String(depthSide === k), onclick: () => { depthSide = k; renderDepth(v); } }, l));
   tabs.append(el('span', { style: 'margin-left:auto' }), clubSelect(abbr, a => { const m = pyJSON('SESSION.club_list()').find(c => c.abbr === a); location.hash = m && m.mine ? '#club/depth' : `#league/team/${a}/depth`; }));
-  if (!mine) tabs.append(el('span', { class: 'count', style: 'margin-left:8px;align-self:center' }, 'read-only'));
   s.append(tabs);
   if (depthSide === 'defense') {
     const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
@@ -801,7 +800,7 @@ function renderDepth(v) {
   s.append(chart);
   if (mine) s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); reload(); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); reload(); } }, 'Auto-Fill by Fit'),
     v.assistant && depthSide === 'defense' ? el('span', { class: 'read', style: 'margin:0 0 0 10px;padding:6px 10px;flex:1' }, el('b', {}, 'Assistants: '), v.assistant) : el('span', { class: 'count', style: 'margin-left:auto' }, 'Highlighted players are starters')));
-  else s.append(el('div', { class: 'foot' }, el('span', { class: 'count' }, 'Highlighted players are starters · another club, read-only')));
+  else s.append(el('div', { class: 'foot' }, el('span', { class: 'count' }, 'Highlighted players are starters')));
   page.append(s);
 }
 
