@@ -233,7 +233,8 @@ def free_agency(session, league, abbr):
         out_men = [q for q in d[:2] if q.out_until is not None]
         if out_men: hole = f"Fills the hole at {p.pos} with {out_men[0].name.split()[-1]} out" + (f" to week {out_men[0].out_until}" if isinstance(out_men[0].out_until, int) else '')
         elif len(d) <= 1: hole = f"Only {len(d)} healthy {p.pos} on the roster"
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0),
+        import practice_squad as PSQ
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0), ps_ok=PSQ.can_add(me, p),
                          talks=(t['state'] if t else None), ask=(t['ask'] if t else None), ask_now=ask_now, years=(t['years'] if t else None), thread=(t['id'] if t else None), interest=interest, my_offer=my_offer, hole=hole))
     rows.sort(key=lambda r: -r['ovr'])
     phase = league.phase
@@ -308,6 +309,20 @@ def act_match(league, abbr, tid):
 def act_withdraw(league, abbr, tid):
     import negotiations as NG
     return NG.withdraw(league, tid)
+
+
+def act_sign_ps(league, abbr, pid):
+    """Sign a free agent to the practice squad. He can say no: a man who grades as a roster player wants a
+    53-man deal, and an ambitious one will not take a squad spot unless he has nowhere else to go."""
+    import practice_squad as PSQ
+    t = league.teams[abbr]; p = league.player(pid)
+    if p is None or pid not in league.free_agents: return dict(ok=False, why='he is not on the market')
+    if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most, one specialist)'))
+    amb = float((getattr(p, 'traits', None) or {}).get('ambition', 50))
+    if p.ovr >= 76: return dict(ok=False, why=f"{p.name} wants a roster spot, not the practice squad.")
+    if p.ovr >= 72 and amb >= 58: return dict(ok=False, why=f"{p.name} turned it down; he believes he can start somewhere.")
+    if not PSQ.sign_to_squad(league, abbr, pid): return dict(ok=False, why='the squad could not take him')
+    return dict(ok=True, line=f"{p.name} signed to the practice squad.")
 
 
 def act_watch(league, abbr, pid):
