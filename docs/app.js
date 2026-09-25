@@ -662,7 +662,7 @@ function renderDepth(v) {
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   for (const [k, l] of [['offense', 'Offense'], ['defense', 'Defense'], ['specialists', 'Specialists']]) tabs.append(el('button', { 'aria-pressed': String(depthSide === k), onclick: () => { depthSide = k; renderDepth(v); } }, l));
   s.append(tabs);
-  if (depthSide !== 'specialists') {
+  if (depthSide === 'defense') {
     const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
     for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)})`)); } }, p));
     pk.append(el('span', { class: 'snaps' }, 'Drag within a column · double-click opens the player'));
@@ -678,7 +678,7 @@ function renderDepth(v) {
     men.forEach((x, i) => {
       const fit = x.fit || 0; const fitEl = x.flag_word ? el('span', { class: 'tag ' + (x.flag === 'out' ? 'out' : 'q') }, x.flag_word + (x.flag === 'out' && x.out ? ` · Wk ${x.out}` : '')) : el('span', { class: 'fit' }, 'Fit ', el('b', { class: fit > 0.05 ? 'up' : fit < -0.05 ? 'dn' : '' }, (fit > 0.05 ? '+' : fit < -0.05 ? '−' : '\u00a0') + Math.abs(fit).toFixed(1)));
       const plate = el('div', { class: 'plate3' + (x.start ? ' start' : '') + (x.flag === 'out' ? ' out' : ''), draggable: 'true', title: x.name },
-        el('div', { class: 'row1' }, el('span', { class: 'no' }, x.no || ''), el('span', { class: 'nm' }, x.name.split(' ').slice(1).join(' ') || x.name), el('span', { class: 'arrows' }, el('button', { disabled: i === 0 ? '' : null, onclick: e => { e.stopPropagation(); move(i, -1); } }, '▲'), el('button', { disabled: i === men.length - 1 ? '' : null, onclick: e => { e.stopPropagation(); move(i, 1); } }, '▼'))),
+        el('div', { class: 'row1' }, el('span', { class: 'no' }, x.no || ''), el('span', { class: 'nm' }, x.name.split(' ').slice(1).join(' ') || x.name)),
         el('div', { class: 'row2' }, fitEl, el('span', { class: 'ov' }, x.ovr)));
       plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); plate.classList.add('dragging'); });
       plate.addEventListener('dragend', () => plate.classList.remove('dragging'));

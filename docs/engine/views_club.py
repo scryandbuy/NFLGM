@@ -288,6 +288,7 @@ def _ext_ok(league, p):
 
 
 # ------------------------------------------------------------ the depth chart
+OFF_BASE = {'11': dict(WR=3, TE=1, HB=1, FB=0), '12': dict(WR=2, TE=2, HB=1, FB=0), '21': dict(WR=2, TE=1, HB=1, FB=1), '13': dict(WR=1, TE=3, HB=1, FB=0), '10': dict(WR=4, TE=0, HB=1, FB=0)}
 PACKAGES = {'Base': dict(WR=2, TE=2, HB=1, LB=3, CB=2, S=2), 'Nickel': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Dime': dict(WR=3, TE=1, HB=1, LB=1, CB=4, S=2),
             'Goal Line': dict(WR=1, TE=2, HB=1, FB=1, LB=3, CB=2, S=2), 'Third Down': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Two Minute': dict(WR=4, TE=1, HB=1, LB=1, CB=4, S=2)}
 # one column a position, grouped by side; the heading is the position, the group is the caption
@@ -330,7 +331,8 @@ def depth(session, league, abbr, package='Nickel'):
     for side, cols_ in SIDES.items():
         cols = []
         for pos, label, group in cols_:
-            men = d.get(pos, []); n_start = _starters(pos, pk); slots = []
+            # the offense has no package view: its starters are the club's own base personnel (11, 12, 21 or 13), and the coordinators decide the rest on Sunday
+            men = d.get(pos, []); n_start = _starters(pos, pk if side == 'defense' else OFF_BASE.get(getattr(t.gm, 'off_personnel', '11'), OFF_BASE['11'])); slots = []
             for i, p in enumerate(men):
                 pl = player_plate(p); pl['cond'] = _cond(session, p)
                 if pos in ('MIKE', 'WILL', 'SAM'): pl['start'] = p.pid in lb_choice; pl['why'] = lb_choice.get(p.pid, '')
