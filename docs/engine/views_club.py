@@ -131,7 +131,9 @@ def roster(session, league, abbr):
         ps.append(r)
     injured = [_row(session, league, t, p) for p in t.active() if p.out_until is not None]
     return dict(rail=rail(session, league, abbr), groups=groups, count=len(t.active()), cap_total=round(sum(p.cap_hit(0) for p in t.active()), 1),
-                practice=ps, injured=injured, ps_charge=round(PSQ.ps_charge(t), 1), elevations_used=len(getattr(t, '_elevated', []) or []), elevations_max=PSQ.ELEVATIONS_PER_GAME, per_man_max=PSQ.ELEVATIONS_PER_MAN)
+                practice=ps, injured=injured, ps_charge=round(PSQ.ps_charge(t), 1), elevations_used=len(getattr(t, '_elevated', []) or []), elevations_max=PSQ.ELEVATIONS_PER_GAME, per_man_max=PSQ.ELEVATIONS_PER_MAN,
+                ir=[dict(_row(session, league, t, p), ir_week=int(p.xp_spent.get('_ir_week', 0) or 0), returnable=bool(p.xp_spent.get('_ir_return', False)), can_activate=bool(t.activate_from_ir.__doc__) and (league.week or 0) - int(p.xp_spent.get('_ir_week', 0) or 0) >= t.IR_MIN_WEEKS and (p.out_until is None or int(p.out_until) <= (league.week or 0)) and bool(p.xp_spent.get('_ir_return', False))) for p in (getattr(t, 'ir', None) or [])],
+                ir_returns_left=t.IR_RETURNS - int(getattr(t, 'ir_returns_used', 0) or 0), week=league.week)
 
 
 # ------------------------------------------------------------ the card
@@ -253,7 +255,8 @@ def card(session, league, pid):
                 market=market, interest_line=interest_line, dev_line=dev_line, morale_line=_morale_line(p),
                 history=_player_history(league, p),
                 actions=dict(mine=(p.team == session.user_team), extend_eligible=_ext_ok(league, p), can_cut=(p.team == session.user_team),
-                             ps_ok=(p.team == session.user_team and t is not None and __import__('practice_squad').can_add(t, p)), vested=(int(p.accrued or 0) >= 4)))
+                             ps_ok=(p.team == session.user_team and t is not None and __import__('practice_squad').can_add(t, p)), vested=(int(p.accrued or 0) >= 4),
+                             hurt=(p.out_until is not None), on_ir=(t is not None and any(q.pid == p.pid for q in (getattr(t, 'ir', None) or [])))))
 
 
 def _market_words(league, p, interest):
@@ -356,7 +359,10 @@ def depth(session, league, abbr, package='Nickel'):
                 pl['slot'] = _slot_label(pos, i)
                 desig = status.get(p.pid)
                 pl['flag'] = 'out' if p.out_until is not None else (desig if desig in ('questionable', 'doubtful') else None)
-                pl['flag_word'] = ('Out' if pl['flag'] == 'out' else pl['flag'].capitalize() if pl['flag'] else '')
+                weeks_left = (max(0, int(p.out_until) - int(league.week or 0)) if p.out_until is not None and int(p.out_until) < 99 else None)
+                pl['flag_word'] = (('Out · season' if p.out_until is not None and int(p.out_until) >= 99 else f"Out · {weeks_left} wk{'s' if weeks_left != 1 else ''}" if weeks_left else 'Out') if pl['flag'] == 'out' else pl['flag'].capitalize() if pl['flag'] else '')
+                pl['elevated'] = p not in t.roster
+                pl['out_week'] = weeks_left
                 pl['fit'] = round(_fit(league, t, p), 1)
                 if pos in ('KR', 'PR'): pl['sub'] = f"{p.pos} · return {round(RO.return_score(p))}"
                 slots.append(pl)
@@ -418,6 +424,25 @@ def act_fill_by_fit(league, abbr):
         scored = sorted(men, key=lambda p: -float(TG.position_score(p.ratings, pos, t.scheme)))
         t.depth_pins[pos] = [p.pid for p in scored]
     return dict(ok=True, line='Ordered by fit at each spot.')
+
+
+def act_ir(league, abbr, pid, season_ending=False):
+    """Place a hurt man on injured reserve: off the 53 now, salary counts in full, back after four weeks if a return is left."""
+    t = league.teams[abbr]; p = league.player(pid)
+    if p is None or p not in t.roster: return dict(ok=False, why='not on your roster')
+    r = t.place_on_ir(p, league.week, season_ending=bool(season_ending))
+    if not r.get('ok'): return r
+    import inbox as IB
+    IB.post(league, 'injury', f"{p.name} to injured reserve", f"{p.name} ({p.pos}) is on IR" + (' for the season' if not r['returnable'] else f"; he can return after {t.IR_MIN_WEEKS} weeks if he is healthy and a return is left ({t.IR_RETURNS - int(getattr(t, 'ir_returns_used', 0) or 0)} of {t.IR_RETURNS} this season)") + '. His salary counts in full; his roster spot is open.', sender='trainers')
+    return dict(ok=True, line=f"{p.name} placed on IR." + ('' if r['returnable'] else ' Out for the season.'), returnable=r['returnable'])
+
+
+def act_ir_activate(league, abbr, pid):
+    t = league.teams[abbr]; p = league.player(pid)
+    if p is None: return dict(ok=False, why='no such player')
+    r = t.activate_from_ir(p, league.week)
+    if not r.get('ok'): return r
+    return dict(ok=True, line=f"{p.name} activated from IR. {r['returns_left']} return{'s' if r['returns_left'] != 1 else ''} left this season.")
 
 
 def act_to_squad(league, abbr, pid):
