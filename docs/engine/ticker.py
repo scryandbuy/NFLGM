@@ -127,6 +127,9 @@ def play_line(league, p, off_abbr, def_abbr):
         if not text: return None
     else:
         return None
+    if p.get('fumble'):
+        text = (text.rstrip('.') + (f". FUMBLE, recovered by {def_abbr}." if p.get('fumble_lost') else ". Fumbles, and the offense recovers.")) if text else ('FUMBLE.' if p.get('fumble_lost') else 'Fumble, recovered.')
+        if p.get('fumble_lost'): kind = 'turnover'
     if p.get('safety'):
         text = (text.rstrip('.') + '. SAFETY.') if text else 'SAFETY.'; kind = 'turnover'
     return dict(head=head, text=text, kind=kind, type=t, made=p.get('made'), safety=bool(p.get('safety')))

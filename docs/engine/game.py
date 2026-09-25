@@ -1048,9 +1048,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         secs_for_call = dr.clock
         if half_end is not None and quarter <= 2 and secs_in_half <= 240 and dr.score_diff <= 0:
             secs_for_call = secs_in_half          # the drive before the break is a two-minute drill for the side not ahead
+        last_shot = (half_end is not None and quarter <= 2 or (quarter >= 4 and -8 <= dr.score_diff <= 0)) and secs_in_half <= 25 and dr.yardline <= 37 and dr.yardline > 1
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
                       dr.score_diff, ytg_i, rng, secs_left=secs_for_call,
-                      offense=offense, rate_fn=rate_fn, lean=olean)
+                      offense=offense, rate_fn=rate_fn, lean=(dict(olean or {}, pass_bias=float((olean or {}).get('pass_bias', 0.0)) + 6.0) if last_shot else olean))
         # Backed up against the own goal the offence plays differently. That
         # used to be an OVERRIDE here that rewrote a called pass as a run or
         # forced its depth short. The coach now reads the field position
@@ -1293,6 +1294,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             carrier = offense['qb'] if ev in ('sack', 'scramble') else \
                       (offense['rb'] if ev == 'run' else offense['wr'][0])
             fum = E.fumble_check(carrier, ev, rng, rate_fn, env_mult=ENV.fumble_mult, rate_mult=(getattr(off_state, 'staff_fx', None) or {}).get('fum_off', 1.0))
+            if fum:
+                out['fumble'] = True; out['fumble_lost'] = bool(fum['lost']); out['fumble_by'] = (carrier or {}).get('pid')
             if fum and fum['lost']:
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 
@@ -1310,6 +1313,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
         before = dr.yardline
         scored = _advance(dr, out.get('yards', 0.0))
+        if not scored and out.get('touchdown'):
+            out['touchdown'] = False                # the play engine's own read used a fraction; the drive's whole yards say he was short
         if scored:
             # the play that scored says so: the touchdown flag on the entry, the yards capped at the
             # distance to the goal, the tackler cleared (a 54-yard pass from the 48 is a 52-yard touchdown)
