@@ -95,3 +95,8 @@ def decline(league, msg_id):
     if m is not None and m['status'] in ('unread', 'open'):
         m['status'] = 'declined'
     return m
+
+
+def news(league, subject, body, payload=None):
+    """A league-wide item: something that happened elsewhere and the GM should know. Read-only, tagged for the League filter."""
+    return post(league, 'league', subject, body, sender='league', payload=payload)

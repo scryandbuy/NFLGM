@@ -684,6 +684,23 @@ class League:
         self.log('trade', a=a, b=b,
                  a_sends=[str(x) for x in a_sends],
                  b_sends=[str(x) for x in b_sends])
+        # THE LEAGUE HEARS ABOUT THE BIG ONES: a first-round pick or a player 85 or better changing hands
+        try:
+            import inbox as IB
+            def words(items):
+                out = []
+                for x in items:
+                    if isinstance(x, DraftPick): out.append(f"a {x.year} {['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'][x.round - 1] if 1 <= x.round <= 7 else str(x.round)}-round pick")
+                    else:
+                        p = self.player(x)
+                        if p is not None: out.append(f"{p.name} ({p.pos}, {round(p.ovr)})")
+                return out
+            def big(items): return any((isinstance(x, DraftPick) and x.round == 1) or (not isinstance(x, DraftPick) and self.player(x) is not None and self.player(x).ovr >= 85) for x in items)
+            user = getattr(self, 'user_team', None)
+            if (big(a_sends) or big(b_sends)) and user not in (a, b):
+                IB.news(self, f"{a} and {b} make a trade", f"{a} send {', '.join(words(a_sends)) or 'nothing'} to {b} for {', '.join(words(b_sends)) or 'nothing'}.")
+        except Exception:
+            pass
 
     # ---- calendar --------------------------------------------------------
     def roll_year(self, rng=None):

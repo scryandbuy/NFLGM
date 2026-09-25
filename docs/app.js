@@ -90,15 +90,17 @@ function inboxSheet(v) {
     for (const r of v.inbox.rows) {
       if (inboxFilter === 'decide' && !r.decide) continue;
       if (inboxFilter === 'unread' && !r.unread) continue;
+      if (inboxFilter === 'league' && r.tag !== 'League') continue;
+      if (inboxFilter === 'club' && r.tag === 'League') continue;
       n++;
       const day = `${r.year} · Week ${r.week}`;
       if (day !== lastDay) { list.append(el('div', { class: 'dayh' }, day)); lastDay = day; }
       list.append(el('button', { class: 'row' + (r.unread ? ' unread' : ''), onclick: () => openMessage(r.id) }, el('div', {}, el('div', { class: 't' }, r.subject), inboxDense ? '' : el('div', { class: 'f' }, r.body)), el('span', { class: 'tag ' + tagClass(r.tag) }, r.tag)));
     }
-    if (!n) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : 'All read.'));
+    if (!n) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : inboxFilter === 'league' ? 'Nothing from around the league yet.' : 'All read.'));
   };
   const filt = el('div', { class: 'filt' });
-  for (const [k, label, count] of [['all', 'All', v.inbox.total], ['decide', 'Decide', v.inbox.decide], ['unread', 'Unread', v.inbox.unread]])
+  for (const [k, label, count] of [['all', 'All', v.inbox.total], ['club', 'Your Club', v.inbox.rows.filter(r => r.tag !== 'League').length], ['league', 'League', v.inbox.rows.filter(r => r.tag === 'League').length], ['decide', 'Decide', v.inbox.decide], ['unread', 'Unread', v.inbox.unread]])
     filt.append(el('button', { 'aria-pressed': String(inboxFilter === k), onclick: e => { inboxFilter = k; filt.querySelectorAll('button[data-f]').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); drawInbox(); }, 'data-f': k }, label + ' ', el('em', {}, count)));
   filt.append(el('span', { class: 'sep' }),
     el('button', { onclick: e => { inboxDense = !inboxDense; list.classList.toggle('dense', inboxDense); e.currentTarget.textContent = inboxDense ? 'Detailed' : 'Condensed'; drawInbox(); } }, inboxDense ? 'Detailed' : 'Condensed'),
