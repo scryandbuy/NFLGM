@@ -20,7 +20,7 @@ NICK = {'ARI': 'Cardinals', 'ATL': 'Falcons', 'BAL': 'Ravens', 'BUF': 'Bills', '
         'TB': 'Buccaneers', 'TEN': 'Titans', 'WAS': 'Commanders'}
 INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 'contract': 'Contract', 'contract_year': 'Contract', 'negotiation': 'Contract', 'waiver': 'Wire', 'waivers': 'Wire', 'wire': 'Wire',
              'squad': 'Squad', 'practice_squad': 'Squad', 'game': 'Game', 'result': 'Game', 'scouting': 'Scouting', 'spring': 'Scouting', 'morale': 'Locker Room', 'trade_request': 'Locker Room',
-             'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad'}
+             'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad', 'league': 'League', 'trade_done': 'Trade', 'waiver_notice': 'Wire', 'waiver_digest': 'Wire'}
 DECIDE_KINDS = {'trade_offer', 'match_request', 'staff', 'gameplan', 'game_plan', 'offer_sheet', 'contract_year'}
 
 

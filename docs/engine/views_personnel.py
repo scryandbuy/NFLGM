@@ -125,6 +125,17 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
                 would_accept=bool(r.get('accepted', False)) or (g >= 0.5 and not r.get('blocked')))
 
 
+def _words(league, items):
+    out = []
+    for x in items:
+        if x is None: continue
+        if hasattr(x, 'round') and hasattr(x, 'year'): out.append(f"{x.year} R{x.round}")
+        else:
+            p = league.player(getattr(x, 'pid', x))
+            if p is not None: out.append(f"{p.name} ({p.pos})")
+    return out or ['nothing']
+
+
 def _need_groups():
     return {'QB': ['QB'], 'RB': ['HB', 'FB'], 'WR': ['WR'], 'TE': ['TE'], 'OL': ['LT', 'LG', 'C', 'RG', 'RT'], 'DL': ['LEDG', 'DT', 'REDG'], 'LB': ['MIKE', 'WILL', 'SAM'], 'CB': ['CB'], 'S': ['FS', 'SS'], 'ST': ['K', 'P', 'LS']}
 
@@ -158,9 +169,13 @@ def act_propose(league, abbr, other, a_sends, b_sends):
     r = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, TR.persona(me.gm), TR.persona(them.gm))
     yes = TR.will_accept(r['b_gain'], rng, TR.persona(them.gm)['aggression'], selling=True)
     if not yes:
+        import inbox as IB
+        IB.post(league, 'trade_done', f"{them.abbr} decline your offer", f"You offered {', '.join(_words(league, a_items))} for {', '.join(_words(league, b_items))}. " + ev['read'], sender=other)
         return dict(ok=True, done=False, why=f"{them.abbr} declines. " + ev['read'])
     a_items = [(_find_pick(league, abbr, x) if '-' in str(x) else x) for x in a_sends]; b_items = [(_find_pick(league, other, x) if '-' in str(x) else x) for x in b_sends]
     league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
+    import inbox as IB
+    IB.post(league, 'trade_done', f"Trade with {other} is done", f"You send {', '.join(_words(league, a_items))} to {other} for {', '.join(_words(league, b_items))}.", sender=other)
     league.log('trade', a=abbr, b=other, a_sends=[str(x) for x in a_sends], b_sends=[str(x) for x in b_sends], user=True)
     return dict(ok=True, done=True, why=f"Done. {them.abbr} accepts.")
 
@@ -322,6 +337,8 @@ def act_sign_ps(league, abbr, pid):
     if p.ovr >= 76: return dict(ok=False, why=f"{p.name} wants a roster spot, not the practice squad.")
     if p.ovr >= 72 and amb >= 58: return dict(ok=False, why=f"{p.name} turned it down; he believes he can start somewhere.")
     if not PSQ.sign_to_squad(league, abbr, pid): return dict(ok=False, why='the squad could not take him')
+    import inbox as IB
+    IB.post(league, 'squad', f"{p.name} to the practice squad", f"{p.name} ({p.pos}, {round(p.ovr)}) signed to your practice squad at the weekly rate.", sender='assistants')
     return dict(ok=True, line=f"{p.name} signed to the practice squad.")
 
 
@@ -348,7 +365,7 @@ def waivers(session, league, abbr):
     rows = []
     for e in entries:
         p = league.player(e['pid']) if isinstance(e, dict) else league.player(e.pid)
-        if p is None: continue
+        if p is None or p.team is not None: continue        # signed to a squad since he was waived: not available
         d = e if isinstance(e, dict) else e.__dict__
         try: fit = round(float(__import__('gm_engine').scheme_fit(p.ratings, p.pos, me)), 1)
         except Exception: fit = 0.0

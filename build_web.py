@@ -1,7 +1,7 @@
 """Assemble docs/engine from the repo: the modules a session imports and the data they read."""
 import json, os, shutil, sys, importlib
 HERE = os.path.dirname(os.path.abspath(__file__)); OUT = os.path.join(HERE, 'docs', 'engine')
-MODULES = ['staff_traits', 'adjust', 'advanced_stats', 'almanac', 'awards', 'cap_engine', 'coaching_pool', 'contract_structure', 'contracts', 'coverage', 'coverage_call', 'cutdown', 'decisions',
+MODULES = ['staff_traits', 'club_notes', 'league_notes', 'adjust', 'advanced_stats', 'almanac', 'awards', 'cap_engine', 'coaching_pool', 'contract_structure', 'contracts', 'coverage', 'coverage_call', 'cutdown', 'decisions',
            'dev_roll', 'draft', 'draft_class', 'events', 'extensions', 'firing_model', 'formations', 'franchise', 'free_agency', 'game', 'gameplan', 'gameplan_week', 'gm_engine',
            'health', 'identity', 'identity_catalog', 'inbox', 'injury_status', 'ir_and_hiring', 'league', 'market', 'matchups', 'min_salary', 'morale', 'morale_system',
            'negotiation_engine', 'negotiations', 'newgens', 'otc_2026', 'personality', 'playcall', 'plays', 'position_change', 'postseason', 'practice_squad', 'progression_engine',

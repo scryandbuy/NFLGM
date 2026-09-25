@@ -435,6 +435,8 @@ def act_to_squad(league, abbr, pid):
         return dict(ok=True, line=f"{p.name} to the practice squad. Penalty ${dead}m.", now=True)
     league.release(pid)
     intent = dict(getattr(league, 'ps_intent', None) or {}); intent[pid] = abbr; league.ps_intent = intent
+    import inbox as IB
+    IB.post(league, 'waiver_notice', f"{p.name} waived for the practice squad", f"{p.name} ({p.pos}) has been waived and goes through waivers. If no club claims him by the Advance he is assigned to your practice squad; if a club claims him, he is theirs. Penalty ${dead}m against this year's cap.", sender='assistants')
     return dict(ok=True, line=f"{p.name} waived. If he clears at the Advance he joins your practice squad. Penalty ${dead}m.", now=False)
 
 

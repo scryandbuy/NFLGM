@@ -201,6 +201,8 @@ def resolve(league, week=None, fa_step=None):
     for t in _threads(league):
         if t['state'] == 'broken_off' and t.get('broken_until', 0) <= now:
             t['state'] = 'expired'
+            pp = league.player(t['pid'])
+            if pp is not None: _post(league, t, f"{pp.name}'s agent will talk again", 'The break he took after your last offer is over. Ask again if you still want him.')
         if t['state'] != 'waiting' or (t.get('due') or 0) > now:
             continue
         p = league.player(t['pid'])
@@ -263,7 +265,7 @@ def _accept(league, t, offer, how):
     t['state'] = 'accepted'; _say(t, 'agent', f"Done. {p.name} is signed.")
     for k in offer.get('promises', []):
         record_promise(league, p.pid, t['team'], k)
-    _post(league, t, f"{p.name} signs", f"{offer['years']} years at ${offer['apy']:.1f}m a year, {how}.")
+    _post(league, t, (f"{p.name} extended" if t['kind'] == 'extension' else f"{p.name} signs"), f"{offer['years']} years at ${offer['apy']:.1f}m a year, {how}.")
     return dict(ok=True, state='accepted', how=how)
 
 
