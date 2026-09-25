@@ -83,13 +83,15 @@ DISGRUNTLED_HIT = 12.0             # rating points lost for the year after being
 
 
 class Coach:
-    __slots__ = ('name', 'role', 'rating', 'prestige', 'specialty', 'age', 'years', 'team', 'traits', 'history', 'unit_ranks', 'hc_candidate', 'disgruntled', 'salary')
+    __slots__ = ('name', 'role', 'rating', 'prestige', 'specialty', 'age', 'years', 'team', 'traits', 'history', 'unit_ranks', 'hc_candidate', 'disgruntled', 'salary', 'staff_traits', 'known')
 
     def __init__(self, name, role, rating, prestige, specialty, age, years=3, team=None, traits=None):
         self.name, self.role = name, role
         self.rating, self.prestige, self.specialty, self.age = float(rating), float(prestige), specialty, int(age)
         self.years, self.team = int(years), team
         self.traits = traits or {}
+        self.staff_traits = None        # the words (staff_traits.py); drawn on first use
+        self.known = []                 # which of them the GM has learned, while he is in the pool
         self.history = []              # (year, team, role)
         self.unit_ranks = []           # last seasons' unit rank on his side
         self.hc_candidate = False
@@ -103,12 +105,14 @@ class Coach:
 
     def to_dict(self):
         return dict(name=self.name, role=self.role, rating=self.rating, prestige=self.prestige, specialty=self.specialty, age=self.age,
-                    years=self.years, team=self.team, traits=self.traits, history=self.history, unit_ranks=self.unit_ranks, hc_candidate=self.hc_candidate, disgruntled=self.disgruntled, salary=self.salary)
+                    years=self.years, team=self.team, traits=self.traits, history=self.history, unit_ranks=self.unit_ranks, hc_candidate=self.hc_candidate, disgruntled=self.disgruntled, salary=self.salary,
+                    staff_traits=self.staff_traits, known=self.known)
 
     @classmethod
     def from_dict(cls, d):
         c = cls(d['name'], d['role'], d['rating'], d['prestige'], d['specialty'], d['age'], d.get('years', 1), d.get('team'), d.get('traits'))
         c.history = d.get('history', []); c.unit_ranks = d.get('unit_ranks', []); c.hc_candidate = d.get('hc_candidate', False); c.disgruntled = d.get('disgruntled', 0); c.salary = d.get('salary', 0.0)
+        c.staff_traits = d.get('staff_traits'); c.known = d.get('known') or []
         return c
 
 
@@ -138,6 +142,8 @@ def make(rng, role, rating=None, prestige=None, team=None, league=None, young=Fa
         prestige = float(np.clip(rating * 0.7 + rng.normal(0, 9), 10, 90)) if prestige is None else prestige
     c = Coach(_name(rng, league), role, rating, prestige, rng.choice(SPECIALTY[role]), age,
               years=int(rng.choice(CONTRACT_YEARS)), team=team, traits=PT.draw(rng))
+    import staff_traits as STR
+    STR.ensure(c, rng)
     return c
 
 
