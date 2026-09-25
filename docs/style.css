@@ -1028,3 +1028,28 @@ button.btn{line-height:normal;box-sizing:border-box}
 .lpos small{display:block;font-size:10px;font-weight:500;letter-spacing:.04em}
 
 #boot .btn{vertical-align:middle;box-sizing:border-box;height:44px;line-height:normal;display:inline-flex;align-items:center}
+
+/* the depth chart, v5: one column a position, rows aligned, starters lit */
+.chart3{display:grid;gap:12px;padding:16px 18px 18px}
+.dcol{min-width:0;display:flex;flex-direction:column;gap:6px}
+.dcol .pos{font-family:var(--display);font-weight:900;font-size:18px;letter-spacing:.08em;color:var(--ink);padding:0 0 6px 2px;border-bottom:2px solid var(--rule-2)}
+.dcol.yours .pos{border-bottom-color:var(--club-2)}
+.plate3{background:var(--board);border:1px solid var(--rule);padding:8px 10px;display:flex;flex-direction:column;gap:6px;cursor:grab;min-width:0;position:relative}
+.plate3 .row1{display:flex;align-items:baseline;gap:8px;min-width:0}
+.plate3 .no{font-family:var(--mono);font-size:12px;color:var(--ink-3);flex:0 0 22px}
+.plate3 .nm{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.02em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.plate3 .row2{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.plate3 .fit{font-size:12px;color:var(--ink-3)}
+.plate3 .fit b{font-family:var(--mono);font-weight:500;font-size:12px;color:var(--ink-2);display:inline-block;min-width:4ch;text-align:right}
+.plate3 .fit b.up{color:var(--ok)}.plate3 .fit b.dn{color:var(--danger)}
+.plate3 .ov{font-family:var(--display);font-weight:900;font-size:26px;line-height:1;color:var(--ink-2)}
+.plate3.start{background:linear-gradient(180deg,var(--sheet-3),var(--sheet-2));border-color:var(--rule-hi);box-shadow:inset 3px 0 0 var(--club-2)}
+.plate3.start .ov{color:var(--club-2)}.plate3.start .nm{color:#fff}
+.plate3 .tag{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:1px 6px;border:1px solid}
+.plate3 .tag.out{color:var(--danger);border-color:var(--danger)}.plate3 .tag.q{color:var(--decide);border-color:var(--decide)}
+.plate3.out{opacity:.5}
+.plate3.over{outline:2px dashed var(--club-2)}
+.plate3.none{border-style:dashed;color:var(--ink-3);font-size:12px;align-items:center;cursor:default}
+.plate3 .arrows{display:none;gap:2px;margin-left:auto}
+.plate3:hover .arrows{display:flex}
+.plate3 .arrows button{width:20px;height:18px;border:1px solid var(--rule-2);color:var(--ink-2);background:var(--board);font-size:9px;cursor:pointer;padding:0}
