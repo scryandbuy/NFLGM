@@ -1123,3 +1123,15 @@ button.btn{line-height:normal;box-sizing:border-box}
 .contract{table-layout:fixed}
 .contract th{font-size:11.5px;padding:4px 4px;white-space:nowrap}
 .contract td{font-size:12.5px;padding:4px 4px;white-space:nowrap}
+
+/* the inbox: the list and the message each scroll inside a fixed box; the page does not */
+.mailbox{height:calc(100vh - 250px);min-height:420px;max-height:none;grid-template-rows:minmax(0,1fr)}
+.mailbox .list,.mailbox .pane{min-height:0;overflow-y:auto}
+/* hovers sit above everything, and a row-action's hover opens upward so the next row never covers it */
+[data-tip]:hover::after{z-index:200}
+.row-act [data-tip]:hover::after,.tbl td .btn[data-tip]:hover::after{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
+
+/* dropdowns keep the dark board in every state; the browser was painting its own white on focus */
+select,select.btn,select.btn:focus,select.btn:focus-visible,select.btn:active{background-color:var(--sheet-2);color:var(--ink);color-scheme:dark;outline:none;border-color:var(--rule-hi);-webkit-appearance:none;appearance:none;padding-right:26px;background-image:linear-gradient(45deg,transparent 50%,var(--ink-3) 50%),linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);background-position:calc(100% - 14px) 55%,calc(100% - 9px) 55%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+select.btn:focus-visible{border-color:var(--club-2)}
+select.btn option{background:var(--sheet-2);color:var(--ink)}

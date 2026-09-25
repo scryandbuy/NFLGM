@@ -169,7 +169,7 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
     info = PEN_INFO[name]
 
     if name == 'Defensive Pass Interference':
-        yds = dpi_yards(rng, air_yards)
+        yds = float(round(dpi_yards(rng, air_yards)))       # a spot foul lands on a yard line
     else:
         # THE RULEBOOK'S YARDAGE, not a draw around the average: five, ten or fifteen by foul.
         # Half the distance to the goal is applied where the ball is, in the game.
