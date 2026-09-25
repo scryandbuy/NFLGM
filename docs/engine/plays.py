@@ -240,7 +240,7 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # man meant cover 0 or cover 1 on a fifth of snaps; with the full call
     # book man is a third of targets and was completing 66% against a real
     # ~60, ABOVE zone, which is backwards.
-    DEPTH_MULT = {'short': 1.58, 'medium': 1.20, 'deep': 0.87}   # re-solved with the starters staying in to block, then again once the fourth receiver, second tight end and second back rotate into the pattern
+    DEPTH_MULT = {'short': 1.61, 'medium': 1.22, 'deep': 0.89}   # re-solved once nickel fields its best cover linebacker   # re-solved with the starters staying in to block, then again once the fourth receiver, second tight end and second back rotate into the pattern
     import matchups as M
     base = separation * (1.0 + M.ZONE_SLOPE['acc'] * (acc - AVG)) * outcome_mult
     p = float(np.clip(base * DEPTH_MULT[depth] * (ENV.deep_mult if depth == 'deep' else (1.0 - 0.3 * (1.0 - ENV.deep_mult)) if depth == 'medium' else 1.0), 0.02, 0.97))

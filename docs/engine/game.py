@@ -279,7 +279,7 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
 # Real: returned on 35% of punts, mean 11.5 yards WHEN returned (the 4.23
 # figure counted all punts including fair catches), p90 19, max 97, and 0.36%
 # go for a touchdown.
-PUNT = dict(gross=47.2, sd=8.5, blocked=.0043,
+PUNT = dict(gross=48.6, sd=8.5, blocked=.0043,          # the full swing; pooches from better field position pull the league gross to the real 47.2
             # real: 45% returned, mean return 10.4; the rest fair caught,
             # downed, out of bounds or a touchback
             return_rate=.45, return_mean=10.4, return_p90=19, td_rate=.0036,
@@ -349,7 +349,7 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70):
                                        'juke_move_rating': .25})
             # shape/scale solved against mean 10.4 and p90 19, with a long
             # right tail so 0.36% reach the end zone
-            ret = max(0.0, rng.gamma(1.9, 5.5) * (1.0 + 0.9 * (skill - AVG)))
+            ret = max(0.0, rng.gamma(1.9, 5.5) * (1.0 + 0.9 * (skill - RET_AVG)))
         else:
             how = 'fair_catch'
     if touchback:
@@ -383,6 +383,7 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70):
 # point in the game, only five receiving players must have a foot on the
 # restraining line (was six), and a touchback on a kickoff from the 50 after
 # penalty enforcement is spotted at the 20 rather than the 35.
+RET_AVG = 0.80                    # the return skill of the man clubs actually send back there
 KICKOFF = dict(touchback=.155, return_rate=.799, return_mean=26.9,
                touchback_to=65,            # receiving team's own 35
                touchback_from_50=80,       # own 20, the 2026 anti-loophole rule
@@ -403,7 +404,9 @@ def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False):
         return dict(type='kickoff', touchback=True, new_yardline=spot)
     skill = rate_fn(returner, {'kick_ret_rating': .45, 'speed_rating': .30,
                                'juke_move_rating': .25})
-    ret = rng.gamma(2.4, KICKOFF['return_mean'] / 2.4) * (1.0 + 0.8 * (skill - AVG))
+    # the returner is the club's best now, not its last receiver: the skill term is centered on
+    # the typical chosen returner, so the league mean stays at the real 26.9
+    ret = rng.gamma(2.4, KICKOFF['return_mean'] / 2.4) * (1.0 + 0.8 * (skill - RET_AVG))
     # the landing zone runs from the goal line to the 20, so a returned kick
     # starts from roughly the 5 and the return is measured from there
     start = 5.0 + ret
