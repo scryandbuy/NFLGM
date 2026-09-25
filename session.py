@@ -348,6 +348,12 @@ class Session:
         v['club_abbr'] = abbr or self.user_team; v['mine'] = (abbr or self.user_team) == self.user_team
         return v
 
+    def development(self, pid):
+        import views_club as VC; return VC.development(self, self.L, self.user_team, pid)
+
+    def progression(self):
+        import views_club as VC; return VC.progression(self, self.L, self.user_team)
+
     def club_list(self):
         from views import club
         return [dict(club(a), mine=(a == self.user_team)) for a in sorted(self.L.teams)]

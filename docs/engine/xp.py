@@ -309,6 +309,7 @@ def buy(player, attr):
     player.xp -= cost
     player.ratings[attr] = cur + 1.0
     player.xp_spent[attr] = player.xp_spent.get(attr, 0) + 1
+    player.xp_spent['_bought_season'] = player.xp_spent.get('_bought_season', 0) + 1
     return cost
 
 

@@ -426,6 +426,97 @@ def act_fill_by_fit(league, abbr):
     return dict(ok=True, line='Ordered by fit at each spot.')
 
 
+# ============================================================ DEVELOPMENT: the GM spends his men's XP
+def development(session, league, abbr, pid):
+    """One man's development sheet: his bank, his ceiling and the room under it, every attribute his
+    position weighs with the price of the next point, and the ceiling unlock."""
+    import xp as XP, targets as TG
+    p = league.player(pid); t = league.teams[abbr]
+    if p is None or p.team != abbr: return dict(error='not on your roster')
+    pot = XP.ceiling(p, session.rng)
+    fam = FAM.get(p.pos, 'DB')
+    weights = TG.DEPTH_WEIGHTS.get(p.pos, {})
+    labels = {k: l for grp in ATTR.values() for k, l in grp}
+    keys = list(dict.fromkeys(list(weights.keys()) + [k for k, _ in ATTR['phys']] + ['awareness_rating'] + [k for k, _ in ATTR.get(fam, [])]))
+    rows = []
+    for k in keys:
+        if k not in p.ratings: continue
+        cost = XP.cost_per_point(p, k)
+        blocked = ('at 99' if p.ratings[k] >= 99 else 'at his ceiling' if XP.at_ceiling(p, k) else None)
+        rows.append(dict(key=k, label=labels.get(k, k.replace('_rating', '').replace('_', ' ').title()), v=int(round(p.ratings[k])), cost=int(round(cost)), weight=round(float(weights.get(k, 0.0)), 2),
+                         phys=(k in XP.PHYSICAL), afford=(p.xp >= cost), blocked=blocked, bought=int(p.xp_spent.get(k, 0) or 0),
+                         gain=round(float(TG.position_score(dict(p.ratings, **{k: p.ratings[k] + 1.0}), p.pos) - p.ovr), 2)))
+    rows.sort(key=lambda r: (-r['weight'], r['cost']))
+    uc = XP.unlock_cost(p)
+    return dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr, 1), age=int(p.age), bank=int(round(float(p.xp or 0))), ceiling=(round(pot, 1) if pot is not None else None),
+                room=(round(pot - p.ovr, 1) if pot is not None else None), unlock_cost=(int(round(uc)) if uc else None), unlock_ok=(uc is not None and p.xp >= uc and (pot or 0) < 99),
+                bought=int(XP.points_bought(p)), unlocks=int(p.xp_spent.get('_unlocks', 0) or 0), auto=bool(p.xp_spent.get('_auto', False)), dev=modifier_word(p), rows=rows)
+
+
+def modifier_word(p):
+    try:
+        import xp as XP; m = XP.modifier(p); return f"×{m:.2f}"
+    except Exception: return ''
+
+
+def act_buy_point(league, abbr, pid, attr):
+    import xp as XP
+    p = league.player(pid)
+    if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
+    cost = XP.buy(p, attr)
+    if cost is None:
+        why = ('he is at 99 there' if p.ratings.get(attr, 0) >= 99 else 'that point would take him past his ceiling' if XP.at_ceiling(p, attr) else 'not enough XP')
+        return dict(ok=False, why=why)
+    return dict(ok=True, line=f"+1 {attr.replace('_rating', '').replace('_', ' ')} for {int(round(cost)):,} XP. {p.name} is a {round(p.ovr)}.", cost=int(round(cost)), ovr=round(p.ovr, 1))
+
+
+def act_unlock_ceiling(league, abbr, pid):
+    import xp as XP
+    p = league.player(pid)
+    if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
+    cost = XP.unlock(p)
+    if cost is None: return dict(ok=False, why=('his ceiling is already 99' if (p.potential or 0) >= 99 else 'not enough XP for the unlock'))
+    return dict(ok=True, line=f"Ceiling raised to {round(p.potential)} for {int(round(cost)):,} XP.")
+
+
+def act_auto_xp(league, abbr, pid=None, on=True):
+    """Auto-spend, one man or the whole roster: the assistants spend his XP each week by the same policy the AI uses."""
+    import xp_spend as XS
+    t = league.teams[abbr]
+    men = [league.player(pid)] if pid else list(t.roster)
+    for p in men:
+        if p is not None: XS.set_auto(p, bool(on))
+    t.xp_auto_all = bool(on) if pid is None else getattr(t, 'xp_auto_all', False)
+    return dict(ok=True, line=(f"Auto-spend {'on' if on else 'off'} for {men[0].name}." if pid else f"Auto-spend {'on' if on else 'off'} for the whole roster."))
+
+
+def act_spend_by_read(league, abbr, pid=None):
+    """Spend now, once, by the assistants' read: one man or everyone with XP in the bank."""
+    import xp_spend as XS, numpy as np
+    t = league.teams[abbr]; rng = np.random.default_rng(abs(hash(abbr + str(league.week))) % (2 ** 32))
+    men = [league.player(pid)] if pid else list(t.active())
+    n = 0; pts = 0
+    for p in men:
+        if p is None: continue
+        acts = XS.spend_player(p, t.gm, t, league.week or 0, rng)
+        if acts: n += 1; pts += len(acts)
+    return dict(ok=True, line=f"{pts} point{'s' if pts != 1 else ''} bought for {n} player{'s' if n != 1 else ''}.")
+
+
+def progression(session, league, abbr):
+    """The roster's development at a glance: bank, points bought this year, ceiling room, auto."""
+    import xp as XP
+    t = league.teams[abbr]
+    rows = []
+    for p in sorted(t.active(), key=lambda p: -float(p.xp or 0)):
+        pot = XP.ceiling(p, session.rng)
+        cheapest = min((XP.cost_per_point(p, k) for k in p.ratings if k.endswith('_rating') and k not in XP.PHYSICAL), default=None)
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), no=getattr(p, 'number', None), bank=int(round(float(p.xp or 0))), ceiling=(round(pot) if pot is not None else None),
+                         room=(round(pot - p.ovr, 1) if pot is not None else None), bought=int(p.xp_spent.get('_bought_season', 0) or 0), career=int(XP.points_bought(p)), auto=bool(p.xp_spent.get('_auto', False)),
+                         cheapest=(int(round(cheapest)) if cheapest else None), can_buy=(cheapest is not None and p.xp >= cheapest and not XP.at_ceiling(p)), dev=modifier_word(p)))
+    return dict(rail=rail(session, league, abbr), rows=rows, auto_all=bool(getattr(t, 'xp_auto_all', False)), bank_total=sum(r['bank'] for r in rows), idle=sum(1 for r in rows if r['can_buy'] and not r['auto']))
+
+
 def act_ir(league, abbr, pid, season_ending=False):
     """Place a hurt man on injured reserve: off the 53 now, salary counts in full, back after four weeks if a return is left."""
     t = league.teams[abbr]; p = league.player(pid)
