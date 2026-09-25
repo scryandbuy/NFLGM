@@ -600,6 +600,9 @@ class League:
             WV.waive(self, p, t.abbr, self.week)
         else:
             p.contract = None
+        # the ledger is rebuilt now, not at the next roll: the dead money was added above and his
+        # hit has to come off in the same breath, or the space reads lower after a cut than before
+        t.sync_cap()
         if pid not in self.free_agents: self.free_agents.append(pid)
         if log:
             self.log('release', pid=pid, team=t.abbr, dead=dead_now, saved=saved, waived=on_wire)
