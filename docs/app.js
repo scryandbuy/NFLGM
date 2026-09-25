@@ -665,49 +665,35 @@ function renderDepth(v) {
   if (depthSide !== 'specialists') {
     const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
     for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)})`)); } }, p));
-    pk.append(el('span', { class: 'snaps' }, 'Drag a card or use the arrows; double-click opens the card; the game fields the order you set'));
+    pk.append(el('span', { class: 'snaps' }, 'Drag within a column · double-click opens the player'));
     s.append(pk);
   }
-  // one column a position, the starters as big cards on top and the depth as rows beneath, the position under the column
+  // one column a position, rows aligned across columns, starters lit
   const cols = v.sides[depthSide];
-  const chart = el('div', { class: 'lineup' });
+  const chart = el('div', { class: 'chart3', style: `grid-template-columns:repeat(${cols.length},minmax(0,1fr))` });
   for (const c of cols) {
     const men = c.slots; const pinned = v.pins[c.pos] && v.pins[c.pos].length;
-    const col = el('div', { class: 'lcol' + (pinned ? ' pinned' : '') });
-    const stack = el('div', { class: 'lstack' });
+    const col = el('div', { class: 'dcol' + (pinned ? ' yours' : '') }, el('div', { class: 'pos' }, c.title));
     const move = (i, dir) => { const order = men.map(m => m.pid); [order[i + dir], order[i]] = [order[i], order[i + dir]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); };
-    const wire = (elm, x, i) => {
-      elm.setAttribute('draggable', 'true');
-      elm.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); elm.classList.add('dragging'); });
-      elm.addEventListener('dragend', () => elm.classList.remove('dragging'));
-      elm.addEventListener('dragover', e => { e.preventDefault(); elm.classList.add('over'); });
-      elm.addEventListener('dragleave', () => elm.classList.remove('over'));
-      elm.addEventListener('drop', e => { e.preventDefault(); elm.classList.remove('over'); let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; } if (!d || d.pos !== c.pos || d.pid === x.pid) return; const order = men.map(m => m.pid).filter(p => p !== d.pid); order.splice(order.indexOf(x.pid), 0, d.pid); pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); });
-      elm.addEventListener('dblclick', () => { location.hash = '#club/player/' + x.pid; });
-    };
     men.forEach((x, i) => {
-      if (x.start) {
-        // the starter's card
-        const card = el('div', { class: 'lcard' + (x.flag === 'out' ? ' out' : '') },
-          el('div', { class: 'top' }, el('span', { class: 'slot' }, x.slot), el('span', { class: 'ov' }, x.ovr)),
-          el('div', { class: 'face' }, el('span', { class: 'no' }, x.no || c.pos)),
-          el('div', { class: 'nm', title: x.name }, `${x.name.split(' ')[0][0]}.${x.name.split(' ').slice(1).join(' ').toUpperCase()}`),
-          el('div', { class: 'sub' }, x.flag_word || (x.why ? `${v.package} · ${x.why}` : (x.fit ? `Fit ${x.fit > 0 ? '+' : ''}${x.fit}` : ' '))),
-          el('div', { class: 'cbar' }, el('i', { class: x.cond < 80 ? 'mid' : '', style: `width:${x.cond}%` })),
-          el('div', { class: 'arrows' }, el('button', { disabled: i === 0 ? '' : null, onclick: () => move(i, -1) }, '▲'), el('button', { disabled: i === men.length - 1 ? '' : null, onclick: () => move(i, 1) }, '▼')));
-        wire(card, x, i); stack.append(card);
-      } else {
-        const row = el('div', { class: 'lrow2' + (x.flag === 'out' ? ' out' : '') }, el('span', { class: 'nm', title: x.name }, `${x.name.split(' ')[0][0]}.${x.name.split(' ').slice(1).join(' ').toUpperCase()}`, x.flag_word ? el('small', {}, ` ${x.flag_word}`) : ''), el('span', { class: 'ov' }, x.ovr),
-          el('span', { class: 'arrows' }, el('button', { disabled: i === 0 ? '' : null, onclick: () => move(i, -1) }, '▲'), el('button', { disabled: i === men.length - 1 ? '' : null, onclick: () => move(i, 1) }, '▼')));
-        wire(row, x, i); stack.append(row);
-      }
+      const fit = x.fit || 0; const fitEl = x.flag_word ? el('span', { class: 'tag ' + (x.flag === 'out' ? 'out' : 'q') }, x.flag_word + (x.flag === 'out' && x.out ? ` · Wk ${x.out}` : '')) : el('span', { class: 'fit' }, 'Fit ', el('b', { class: fit > 0.05 ? 'up' : fit < -0.05 ? 'dn' : '' }, (fit > 0.05 ? '+' : fit < -0.05 ? '−' : '\u00a0') + Math.abs(fit).toFixed(1)));
+      const plate = el('div', { class: 'plate3' + (x.start ? ' start' : '') + (x.flag === 'out' ? ' out' : ''), draggable: 'true', title: x.name },
+        el('div', { class: 'row1' }, el('span', { class: 'no' }, x.no || ''), el('span', { class: 'nm' }, x.name.split(' ').slice(1).join(' ') || x.name), el('span', { class: 'arrows' }, el('button', { disabled: i === 0 ? '' : null, onclick: e => { e.stopPropagation(); move(i, -1); } }, '▲'), el('button', { disabled: i === men.length - 1 ? '' : null, onclick: e => { e.stopPropagation(); move(i, 1); } }, '▼'))),
+        el('div', { class: 'row2' }, fitEl, el('span', { class: 'ov' }, x.ovr)));
+      plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); plate.classList.add('dragging'); });
+      plate.addEventListener('dragend', () => plate.classList.remove('dragging'));
+      plate.addEventListener('dragover', e => { e.preventDefault(); plate.classList.add('over'); });
+      plate.addEventListener('dragleave', () => plate.classList.remove('over'));
+      plate.addEventListener('drop', e => { e.preventDefault(); plate.classList.remove('over'); let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; } if (!d || d.pos !== c.pos || d.pid === x.pid) return; const order = men.map(m => m.pid).filter(p => p !== d.pid); order.splice(order.indexOf(x.pid), 0, d.pid); pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); });
+      plate.addEventListener('dblclick', () => { location.hash = '#club/player/' + x.pid; });
+      col.append(plate);
     });
-    if (!men.length) stack.append(el('div', { class: 'empty', style: 'padding:10px' }, 'Nobody'));
-    col.append(stack, el('div', { class: 'lpos' }, c.title, pinned ? el('small', {}, 'yours') : ''));
+    if (!men.length) col.append(el('div', { class: 'plate3 none' }, 'Nobody'));
     chart.append(col);
   }
   s.append(chart);
-  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); reload(); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); reload(); } }, 'Auto-Fill by Fit'), el('span', { class: 'count', style: 'margin-left:auto' }, Object.keys(v.pins).length ? `Your order set at: ${Object.keys(v.pins).join(', ')}` : 'Ordered by rating')));
+  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); reload(); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); reload(); } }, 'Auto-Fill by Fit'),
+    v.assistant && depthSide === 'defense' ? el('span', { class: 'read', style: 'margin:0 0 0 10px;padding:6px 10px;flex:1' }, el('b', {}, 'Assistants: '), v.assistant) : el('span', { class: 'count', style: 'margin-left:auto' }, 'Highlighted players are starters')));
   page.append(s);
 }
 

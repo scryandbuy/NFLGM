@@ -343,7 +343,36 @@ def depth(session, league, abbr, package='Nickel'):
                 slots.append(pl)
             cols.append(dict(pos=pos, title=label, group=group, slots=slots, on_field=n_start))
         sides[side] = cols
-    return dict(rail=rail(session, league, abbr), package=package, packages=list(PACKAGES), sides=sides, pins=getattr(t, 'depth_pins', None) or {})
+    return dict(rail=rail(session, league, abbr), package=package, packages=list(PACKAGES), sides=sides, pins=getattr(t, 'depth_pins', None) or {},
+                assistant=_package_line(package, lbs, lb_choice, pk))
+
+
+def _package_line(package, lbs, lb_choice, pk):
+    """One sentence from the assistants on the sub package's call: who plays at linebacker and why."""
+    if package == 'Base' or not lbs: return None
+    from views import surname, sentence
+    on = [p for p in lbs if p.pid in lb_choice]
+    mike = next((p for p in on if lb_choice[p.pid] == 'the MIKE'), None)
+    others = [p for p in on if p is not mike]
+    parts = []
+    if mike: parts.append(f"{surname(mike.name)} stays at MIKE")
+    seen_why = set()
+    for p in others:
+        why = lb_choice[p.pid]
+        if why in seen_why: parts.append(f"{surname(p.name)} ({p.pos}) with him for the same reason"); continue
+        seen_why.add(why)
+        role = {'runs and covers': "his coverage and speed are the best of the rest", 'covers better than the MIKE': "he covers better than the MIKE, who sits", 'stops the run': "he is the best run stopper we have", 'the cover man': 'he is our best cover linebacker'}.get(why, why)
+        parts.append(f"we start {surname(p.name)} ({p.pos}) because {role}")
+    if not others and mike and pk.get('LB', 2) == 1: parts[-1] = f"{surname(mike.name)} is the one linebacker; nobody covers well enough to take his place"
+    line = f"In {package}, " + ', and '.join(parts) + '.'
+    # who from the base three sits: the first man at WILL and at SAM, if he is not on
+    firsts = [next((p for p in lbs if p.pos == spot), None) for spot in ('WILL', 'SAM')]
+    sat = [p for p in firsts if p is not None and p.pid not in lb_choice]
+    if sat: line += ' ' + ' and '.join(surname(p.name) for p in sat) + (' sits.' if len(sat) == 1 else ' sit.')
+    n_cb = pk.get('CB', 3)
+    if n_cb >= 4: line += ' Four corners dress; the fourth is the dime back.'
+    elif n_cb == 3 and package in ('Nickel', 'Third Down'): line += ' The third corner is the nickel.'
+    return sentence(line)
 
 
 # ------------------------------------------------------------ actions
