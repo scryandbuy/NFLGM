@@ -217,6 +217,9 @@ class Session:
         STF.season_end(L, STF.unit_ranks(L, L.year))
         AL.close_season(L, L.year, self.post, self.votes)
         XP.close_season(L, self.votes)
+        try:
+            import club_notes as CN; CN.season_end(L)
+        except Exception: pass
         DR.run(L, self.votes, rng)
 
     def step_coaching(self):

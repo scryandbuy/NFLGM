@@ -214,6 +214,10 @@ class SeasonRunner:
             H.record[2] += 1; A.record[2] += 1
 
         key = f'{self.L.year}-{week}-{home}-{away}'
+        # this week's lines, league-wide, for the honors note
+        wb = self.L.__dict__.setdefault('week_book', {})
+        for pid, line in book.p.items():
+            wb[pid] = dict(line)
         for pid, line in book.p.items():
             self.L.record_stats(self.L.year, pid, line,
                                 postseason=playoffs, game=key)
@@ -282,6 +286,7 @@ class SeasonRunner:
             st.coach['adjust_skill'] = min(1.0, float(st.coach_base.get('adjust_skill', 0.5)) + 0.15)
 
     def play_games(self, week):
+        self.L.week_book = {}                                        # this Sunday's lines only
         for abbr in self.states: self._staff_terms(abbr)          # a staff change since last Sunday counts
         """The games only. Sunday: every scheduled game this week, the scores written back,
         expired injuries cleared. The week itself has not rolled; that is roll_week."""
@@ -306,6 +311,11 @@ class SeasonRunner:
         self.week = week
         self.L.week = week
         self.last_played = played
+        try:
+            import club_notes as CN
+            CN.after_games(self.L, week, played)
+        except Exception:
+            pass
         return played
 
     def roll_week(self, week, played=None):
@@ -329,7 +339,28 @@ class SeasonRunner:
         snaps = {}
         for abbr, st in self.states.items():
             for pid, n in (getattr(st, 'last_snaps', None) or st.snaps or {}).items(): snaps[pid] = n
+        # a start: he took at least 60% of his club's snaps on the day (the busiest man on his side sets the day's count)
+        for abbr_, st_ in self.states.items():
+            sn_ = getattr(st_, 'last_snaps', None) or st_.snaps or {}
+            if not sn_: continue
+            t_ = self.L.teams[abbr_]; off_ = {p.pid: p for p in t_.active()}
+            side_max = {}
+            for pid_, n_ in sn_.items():
+                p_ = off_.get(pid_)
+                if p_ is None: continue
+                side_ = 'off' if p_.pos in ('QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT') else 'def'
+                side_max[side_] = max(side_max.get(side_, 0), n_)
+            for pid_, n_ in sn_.items():
+                p_ = off_.get(pid_)
+                if p_ is None or p_.pos in ('K', 'P', 'LS'): continue
+                side_ = 'off' if p_.pos in ('QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT') else 'def'
+                if side_max.get(side_, 0) and n_ >= 0.6 * side_max[side_]: p_.xp_spent['_starts'] = int(p_.xp_spent.get('_starts', 0) or 0) + 1
         MO.weekly(self.L, week, results, snaps)
+        try:
+            import club_notes as CN
+            CN.returns(self.L, week + 1)
+        except Exception:
+            pass
         MO.check_resolutions(self.L, week)
         MO.unresolved_weekly(self.L)
         import negotiations as NG
@@ -347,6 +378,11 @@ class SeasonRunner:
         # claim from the inbox), then notify the user of this week's waivers
         WV.process(self.L, self.rng, week)
         WV.notify_user(self.L, WV.pending(self.L), week)
+        try:
+            import club_notes as CN
+            CN.weekly(self.L, week)
+        except Exception as e:
+            import sys; print('club_notes weekly failed:', e, file=sys.stderr)
         # the squads: elevations for clubs short of healthy men, the odd poach
         PSQ.weekly(self.L, self.rng, week, user_team=getattr(self.L, 'user_team', None))
         # THE TRADE WINDOW. A trickle through the early weeks, the phones
