@@ -691,7 +691,7 @@ function renderDepth(v) {
       const fit = x.fit || 0; const fitEl = x.flag_word ? el('span', { class: 'tag ' + (x.flag === 'out' ? 'out' : 'q') }, x.flag_word + (x.flag === 'out' && x.out ? ` · Wk ${x.out}` : '')) : el('span', { class: 'fit' }, 'Fit ', el('b', { class: fit > 0.05 ? 'up' : fit < -0.05 ? 'dn' : '' }, (fit > 0.05 ? '+' : fit < -0.05 ? '−' : '\u00a0') + Math.abs(fit).toFixed(1)));
       const plate = el('div', { class: 'plate3' + (x.start ? ' start' : '') + (x.flag === 'out' ? ' out' : ''), draggable: 'true', title: x.name },
         el('div', { class: 'row1' }, el('span', { class: 'no' }, x.no || ''), el('span', { class: 'nm' }, x.name.split(' ').slice(1).join(' ') || x.name)),
-        el('div', { class: 'row2' }, fitEl, el('span', { class: 'ov' }, x.ovr)));
+        el('div', { class: 'row2' }, x.sub ? el('span', { class: 'fit' }, x.sub) : fitEl, el('span', { class: 'ov' }, x.ovr)));
       plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); plate.classList.add('dragging'); });
       plate.addEventListener('dragend', () => plate.classList.remove('dragging'));
       plate.addEventListener('dragover', e => { e.preventDefault(); plate.classList.add('over'); });

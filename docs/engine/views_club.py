@@ -5,9 +5,9 @@ show, as plain dicts, and the actions their buttons call.
 import numpy as np
 from views import club, money, morale_word, player_plate, rail
 
-GROUPS = [('Quarterbacks', ['QB']), ('Running Backs', ['HB', 'FB']), ('Wide Receivers', ['WR']), ('Tight Ends', ['TE']),
-          ('Offensive Line', ['LT', 'LG', 'C', 'RG', 'RT']), ('Defensive Line', ['LEDG', 'DT', 'REDG']), ('Linebackers', ['MIKE', 'WILL', 'SAM']),
-          ('Defensive Backs', ['CB', 'FS', 'SS']), ('Specialists', ['K', 'P', 'LS'])]
+GROUPS = [('QB', ['QB']), ('HB', ['HB']), ('FB', ['FB']), ('WR', ['WR']), ('TE', ['TE']), ('LT', ['LT']), ('LG', ['LG']), ('C', ['C']), ('RG', ['RG']), ('RT', ['RT']),
+          ('LEDG', ['LEDG']), ('DT', ['DT']), ('REDG', ['REDG']), ('MIKE', ['MIKE']), ('WILL', ['WILL']), ('SAM', ['SAM']), ('CB', ['CB']), ('FS', ['FS']), ('SS', ['SS']),
+          ('K', ['K']), ('P', ['P']), ('LS', ['LS'])]
 OFFENSE = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'}
 DEV_WORD = {'xfactor': 'X-Factor', 'superstar': 'Superstar', 'star': 'Star', 'normal': 'Normal', 'slow': 'Slow'}
 
@@ -305,7 +305,7 @@ SIDES = {
                 ('LT', 'LT', 'Line'), ('LG', 'LG', 'Line'), ('C', 'C', 'Line'), ('RG', 'RG', 'Line'), ('RT', 'RT', 'Line')],
     'defense': [('LEDG', 'LE', 'Front'), ('DT', 'DT', 'Front'), ('REDG', 'RE', 'Front'), ('MIKE', 'MIKE', 'Linebackers'), ('WILL', 'WILL', 'Linebackers'), ('SAM', 'SAM', 'Linebackers'),
                 ('CB', 'CB', 'Secondary'), ('FS', 'FS', 'Secondary'), ('SS', 'SS', 'Secondary')],
-    'specialists': [('K', 'K', 'Specialists'), ('P', 'P', 'Specialists'), ('LS', 'LS', 'Specialists')],
+    'specialists': [('K', 'K', 'Specialists'), ('P', 'P', 'Specialists'), ('LS', 'LS', 'Specialists'), ('KR', 'KR', 'Returners'), ('PR', 'PR', 'Returners')],
 }
 # how many start at each position, by package
 def _starters(pos, pk):
@@ -335,12 +335,20 @@ def depth(session, league, abbr, package='Nickel'):
     lbs = [p for pos_ in ('MIKE', 'WILL', 'SAM') for p in d.get(pos_, []) if p.out_until is None]
     pkg_key = package.lower().replace(' ', '_')
     lb_choice = {p.pid: why for p, why in TG.package_linebackers(lbs, pkg_key, scheme=getattr(t, 'scheme', None), key=lambda q: q.ratings)}
+    import rosters as RO
+    pins = getattr(t, 'depth_pins', None) or {}
+    def returners(slot):
+        """The candidates at KR or PR: the club's order first, then the rest by return score; healthy men only."""
+        cands = [p for p in t.active() if p.pos in RO.RETURN_POS and p.out_until is None]
+        order = [pid for pid in pins.get(slot, []) if any(p.pid == pid for p in cands)]
+        rest = sorted([p for p in cands if p.pid not in order], key=lambda p: -RO.return_score(p))
+        return [next(p for p in cands if p.pid == pid) for pid in order] + rest[:max(0, 5 - len(order))]
     sides = {}
     for side, cols_ in SIDES.items():
         cols = []
         for pos, label, group in cols_:
             # the offense has no package view: its starters are the club's own base personnel (11, 12, 21 or 13), and the coordinators decide the rest on Sunday
-            men = d.get(pos, []); n_start = _starters(pos, pk if side == 'defense' else OFF_BASE.get(getattr(t.gm, 'off_personnel', '11'), OFF_BASE['11'])); slots = []
+            men = returners(pos) if pos in ('KR', 'PR') else d.get(pos, []); n_start = 1 if pos in ('KR', 'PR') else _starters(pos, pk if side == 'defense' else OFF_BASE.get(getattr(t.gm, 'off_personnel', '11'), OFF_BASE['11'])); slots = []
             for i, p in enumerate(men):
                 pl = player_plate(p); pl['cond'] = _cond(session, p)
                 if pos in ('MIKE', 'WILL', 'SAM'): pl['start'] = p.pid in lb_choice; pl['why'] = lb_choice.get(p.pid, '')
@@ -350,6 +358,7 @@ def depth(session, league, abbr, package='Nickel'):
                 pl['flag'] = 'out' if p.out_until is not None else (desig if desig in ('questionable', 'doubtful') else None)
                 pl['flag_word'] = ('Out' if pl['flag'] == 'out' else pl['flag'].capitalize() if pl['flag'] else '')
                 pl['fit'] = round(_fit(league, t, p), 1)
+                if pos in ('KR', 'PR'): pl['sub'] = f"{p.pos} · return {round(RO.return_score(p))}"
                 slots.append(pl)
             cols.append(dict(pos=pos, title=label, group=group, slots=slots, on_field=n_start))
         sides[side] = cols
@@ -391,6 +400,9 @@ def _slot_label(pos, i):
     if pos == 'WR': return ['X', 'Z', 'SL'][i] if i < 3 else str(i + 1)
     if pos == 'CB': return ['1', '2', 'NI'][i] if i < 3 else str(i + 1)
     return str(i + 1)
+
+
+RETURN_SLOTS = ('KR', 'PR')
 
 
 def act_set_depth(league, abbr, pos, pids):

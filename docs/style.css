@@ -1075,3 +1075,13 @@ button.btn{line-height:normal;box-sizing:border-box}
 /* trait chips inside a card's key-value grid sit on the label's line, no top margin */
 .scard .kv .traits{margin-top:0;align-items:center;gap:4px}
 .scard .kv .traits .trait{font-size:12.5px;padding:1px 7px;line-height:1.4}
+
+/* the white position box fits LEDG, REDG, WILL, MIKE */
+.who .no{width:auto;min-width:30px;padding:0 5px;font-size:15px;letter-spacing:.01em}
+.plate{grid-template-columns:minmax(32px,auto) 1fr auto}
+.plate .no{font-size:15px;padding:0 5px;letter-spacing:.01em}
+.plate3 .no{flex:0 0 auto;min-width:22px}
+.lcard .face .no,.plate .no{white-space:nowrap}
+/* the cap year card: its bar's hovers were clipped by the card */
+.cy{overflow:visible}
+.cy .stack{overflow:visible}

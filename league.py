@@ -326,7 +326,12 @@ class Team:
     def set_depth_order(self, pos, pids):
         """The user's order at a position. Players not named fall in by rating below the named ones."""
         if not hasattr(self, 'depth_pins') or self.depth_pins is None: self.depth_pins = {}
-        mine = {p.pid for p in self.active() if p.pos == pos}
+        if pos in ('KR', 'PR'):
+            # the return slots take anyone who dresses at a return position
+            import rosters as RO
+            mine = {p.pid for p in self.active() if p.pos in RO.RETURN_POS}
+        else:
+            mine = {p.pid for p in self.active() if p.pos == pos}
         self.depth_pins[pos] = [pid for pid in pids if pid in mine]
         return self.depth_pins[pos]
 

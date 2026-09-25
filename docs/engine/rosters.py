@@ -60,7 +60,7 @@ def build_roster_rows(rows, scheme=None, pins=None):
             # the user's order at this spot: the men he named first, in his order, then the rest by the engine's grade
             order = {pid: i for i, pid in enumerate(pins[pos])}
             by_pos[pos] = sorted(by_pos[pos], key=lambda x: order.get(x.get('pid'), 10**6))
-    return _assemble(by_pos)
+    return _assemble(by_pos, pins=pins)
 
 
 def build_roster(grp, scheme=None):
@@ -76,7 +76,8 @@ def build_roster(grp, scheme=None):
     return _assemble(by_pos)
 
 
-def _assemble(by_pos):
+def _assemble(by_pos, pins=None):
+    rows = [p for men in by_pos.values() for p in men]
     """Position groups -> the eleven-man shape the engine takes."""
     def take(pos, n=None):
         v = by_pos.get(pos, [])
@@ -121,9 +122,31 @@ def _assemble(by_pos):
         ol=ol, dl=dl, lb=lb, db=db,
         k=(take('K', 1) or [None])[0],
         p=(take('P', 1) or [None])[0],
-        kr=(wrs[-1] if len(wrs) > 3 else (wrs[0] if wrs else None)),
+        kr=_returner(rows, pins, 'KR'),
+        pr=_returner(rows, pins, 'PR'),
         depth=by_pos,
     )
+
+
+def return_score(p):
+    """How good a returner: the return rating, the speed and the shiftiness, with ball security."""
+    g = lambda k, d=60.0: float(p.get(k, d) if isinstance(p, dict) else p.ratings.get(k, d))
+    return 0.40 * g('kick_ret_rating') + 0.25 * g('speed_rating') + 0.15 * g('agility_rating') + 0.10 * g('juke_move_rating') + 0.10 * g('carry_rating')
+
+
+RETURN_POS = ('WR', 'HB', 'CB', 'FS', 'SS')
+
+
+def _returner(rows, pins, slot):
+    """The returner: the club's order at KR or PR if it set one, else the best return score
+    among the receivers, backs and defensive backs who dress. A starter at his own spot still returns;
+    the real league does it too, and the depth chart shows who."""
+    avail = {p['pid']: p for p in rows if p.get('pos') in RETURN_POS}
+    if pins and pins.get(slot):
+        for pid in pins[slot]:
+            if pid in avail: return avail[pid]
+    if not avail: return None
+    return max(avail.values(), key=return_score)
 
 
 def team_strength(roster):
