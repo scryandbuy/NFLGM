@@ -1009,6 +1009,24 @@ function staffTraits(c) {
   return box;
 }
 
+let interviewOpen = null;
+// the interview thread on a pool card: three questions, then Offer or Pass
+function interviewPanel(c, role, reload) {
+  const st = pyJSON(`SESSION.frontoffice_act('staff_interview', name=${JSON.stringify(c.name)})`).state;
+  const box = el('div', { class: 'thread', style: 'margin-top:10px;padding:0' });
+  const log = el('div', { class: 'thread', style: 'padding:0;font-size:13px' });
+  for (const m of st.log) log.append(el('div', { class: 'msg' + (m.who === 'gm' ? ' you' : '') + (m.trait ? ' match' : '') }, m.text));
+  box.append(log);
+  const ask = q => { const r = pyJSON(`SESSION.frontoffice_act('staff_interview', name=${JSON.stringify(c.name)}, question=${JSON.stringify(q)})`); if (!r.ok) notify(r); reload(); };
+  const qs = role === 'scout' ? [['hits', 'Ask about his hits', 'One of his strengths, in his words'], ['misses', 'Ask about his misses', 'One of his blind spots'], ['references', 'Ask his references', 'One more trait, at the Advance; a reference can be wrong']]
+                             : [['coaching', 'Ask about his coaching', 'One coaching trait, in his words'], ['situation', 'Ask about his situation', 'What he wants from you; a Mercenary hears you are shopping'], ['references', 'Ask his references', 'One more trait, at the Advance; a reference can be wrong']];
+  const row = el('div', { class: 'acts', style: 'flex-wrap:wrap' });
+  for (const [k, label, tip] of qs) row.append(el('button', { class: 'btn', disabled: st.asked.includes(k) ? '' : null, 'data-tip': tip, onclick: () => ask(k) }, st.asked.includes(k) ? (k === 'references' && st.refs_due ? 'Calls out' : 'Asked') : label));
+  box.append(row);
+  box.append(el('div', { class: 'read', style: 'margin-top:6px' }, st.all_known ? 'You know everything he is.' : `${st.n_hidden} trait${st.n_hidden === 1 ? '' : 's'} you have not learned. Offer at $${(+st.ask).toFixed(1)}m or keep asking.`));
+  return box;
+}
+
 function renderStaff(v) {
   renderRail(v.rail); const page = persPage(); foSecond('staff');
   const reload = () => renderStaff(pyJSON(`SESSION.frontoffice('staff')`));
@@ -1042,7 +1060,11 @@ function renderStaff(v) {
   s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'The Pool', el('small', {}, v.offseason ? 'Hire Into an Open Job · Greyed Where He Does Not Fit What You Have Available' : 'hiring reopens after the season')));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); const list = el('div', { class: 'pad' }); let role = 'oc';
   const draw = () => { list.innerHTML = ''; const cur = v.cards.find(x => x.role_key === role); const room = v.budget.available + (cur && !cur.empty ? +cur.salary : 0); const grid2 = el('div', { class: 'staffgrid', style: 'grid-template-columns:repeat(4,1fr);padding:0' });
-    for (const c of v.pools[role]) { const fits = +c.ask <= room + 1e-9; grid2.append(el('div', { class: 'scard', style: fits ? '' : 'opacity:.45' }, el('div', { class: 'nm' }, c.name), el('div', { class: 'role', style: 'text-transform:none;letter-spacing:0' }, c.background), el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Asks'), el('span', {}, `$${(+c.ask).toFixed(1)}m`), el('span', {}, 'Traits'), staffTraits(c)), el('div', { class: 'acts' }, el('button', { class: 'btn', disabled: v.offseason && fits ? null : '', 'data-tip': v.offseason ? (fits ? 'Three years at his ask; replaces the sitting coach' : 'Over what you have available') : 'Offseason only', onclick: () => { notify(pyJSON(`SESSION.frontoffice_act('staff_hire', name=${JSON.stringify(c.name)}, years=3)`)); reload(); } }, 'Hire')))); }
+    for (const c of v.pools[role]) { const fits = +c.ask <= room + 1e-9; const card = el('div', { class: 'scard', style: fits ? '' : 'opacity:.45' }, el('div', { class: 'nm' }, c.name), el('div', { class: 'role', style: 'text-transform:none;letter-spacing:0' }, c.background), el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Asks'), el('span', {}, `$${(+c.ask).toFixed(1)}m`), el('span', {}, 'Traits'), staffTraits(c)),
+        el('div', { class: 'acts' }, el('button', { class: 'btn go', 'data-tip': 'Sit down with him: learn his traits before you decide', onclick: () => { interviewOpen = interviewOpen === c.name ? null : c.name; draw(); } }, interviewOpen === c.name ? 'Close' : 'Interview'),
+          el('button', { class: 'btn', disabled: v.offseason && fits ? null : '', 'data-tip': v.offseason ? (fits ? 'Three years at his ask; replaces the sitting coach' : 'Over what you have available') : 'Offseason only', onclick: () => { notify(pyJSON(`SESSION.frontoffice_act('staff_hire', name=${JSON.stringify(c.name)})`)); interviewOpen = null; renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); } }, 'Offer')));
+      if (interviewOpen === c.name) card.append(interviewPanel(c, role, () => renderStaff(pyJSON(`SESSION.frontoffice('staff')`))));
+      grid2.append(card); }
     list.append(grid2); };
   for (const [k, l] of [['oc', 'Offensive Coordinators'], ['dc', 'Defensive Coordinators'], ['st', 'Special Teams'], ['scout', 'Head Scouts']]) tabs.append(el('button', { 'aria-pressed': String(role === k), onclick: e => { role = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, l));
   s.append(tabs, list); draw(); page.append(s);

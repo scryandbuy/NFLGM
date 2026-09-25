@@ -156,6 +156,7 @@ class Session:
     def _league_log_notes(self):
         try:
             import league_notes as LN; LN.transactions(self.L, self.L.week or 0)
+            import staff as STF_; STF_.resolve_references(self.L)
         except Exception: pass
 
     def advance(self):
@@ -365,9 +366,9 @@ class Session:
         import views_frontoffice as VF
         return getattr(VF, page)(self, self.L, self.user_team, **kw)
 
-    def frontoffice_act(self, name, **kw):
+    def frontoffice_act(self, action, **kw):
         import views_frontoffice as VF
-        fn = getattr(VF, 'act_' + name, None)
+        fn = getattr(VF, 'act_' + action, None)
         if fn is None: return dict(ok=False, why='unknown action')
         r = fn(self.L, self.user_team, **kw)
         return r if isinstance(r, dict) else dict(ok=bool(r))

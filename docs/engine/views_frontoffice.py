@@ -318,6 +318,11 @@ def act_staff_release(league, abbr, role):
     r = ST.release(league, abbr, role); return r if isinstance(r, dict) else dict(ok=bool(r))
 
 
+def act_staff_interview(league, abbr, name, question=None):
+    import staff as ST
+    return ST.interview_ask(league, abbr, name, question) if question else ST.interview(league, abbr, name)
+
+
 def act_staff_hire(league, abbr, name, years=3):
     import staff as ST
     r = ST.hire(league, abbr, name, years=int(years)); return r if isinstance(r, dict) else dict(ok=bool(r))

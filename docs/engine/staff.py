@@ -524,8 +524,122 @@ def hire(league, abbr, coach_name, years=3):
     a = ask(c)
     if a > room(team) + 1e-9: return dict(ok=False, why=f'he asks ${a:.2f}m and you have ${room(team):.2f}m of room', ask=a, room=room(team))
     league.staff_pool.remove(c); c.team = abbr; c.years = int(years); c.salary = a; c.history.append((league.year, abbr, c.role)); team.staff[c.role] = c
+    c.known = list(c.staff_traits or [])                        # yours now: every trait shows
+    iv = getattr(league, 'interviews', None) or {}; iv.pop(c.name, None)
     league.log('staff_in', team=abbr, role=c.role, name=c.name, why='hired by the user')
     return dict(ok=True, name=c.name, role=c.role)
+
+
+# ------------------------------------------------------------ the interview
+# Hiring is a conversation before it is a number. In the interview the GM learns the man's
+# traits one question at a time; the moment he is hired, everything shows. Three questions:
+#   coaching (or, for a scout, hits): reveals one coaching trait / one strength
+#   situation (or misses): reveals what he wants / one blind spot
+#   references: one more trait, arriving at the next Advance, wrong about one time in six
+# A Mercenary who hears you are shopping asks a little more after the interview.
+def interview(league, abbr, name):
+    import staff_traits as STR
+    c = next((x for x in league.staff_pool if x.name == name), None)
+    if c is None: return dict(ok=False, why='not in the pool')
+    STR.ensure(c, np.random.default_rng(abs(hash(c.name)) % (2 ** 32)))
+    iv = getattr(league, 'interviews', None) or {}
+    st = iv.get(name) or dict(name=name, asked=[], log=[], refs_due=None, pending_ref=None)
+    iv[name] = st; league.interviews = iv
+    if not st['log']:
+        st['log'].append(dict(who='coach', text=f"{c.name} sits down. {ROLE_NAME[c.role]}, {c.age}, {c.specialty}. He knows you are looking."))
+    return dict(ok=True, state=_interview_view(league, c, st))
+
+
+def _interview_view(league, c, st):
+    import staff_traits as STR
+    known = set(c.known or [])
+    return dict(name=c.name, role=c.role, asked=st['asked'], log=st['log'], refs_due=st.get('refs_due'), ask=ask(c),
+                traits=STR.words(c, revealed_only=True), all_known=all(k in known for k in (c.staff_traits or [])), n_hidden=sum(1 for k in (c.staff_traits or []) if k not in known))
+
+
+def _reveal(league, c, st, pool_keys, question):
+    """Reveal one of the man's traits from a family, in his own words."""
+    import staff_traits as STR
+    known = set(c.known or [])
+    cands = [k for k in (c.staff_traits or []) if k in pool_keys and k not in known]
+    if not cands:
+        # nothing in that family: he says so, and that is information too
+        fam_word = {'coaching': 'how he coaches', 'situation': 'what he wants', 'hits': 'his best calls', 'misses': 'where he has been wrong'}[question]
+        st['log'].append(dict(who='coach', text=f"You ask about {fam_word}. Nothing he says stands out either way."))
+        st['asked'].append(question); return None
+    rng = np.random.default_rng(abs(hash(c.name + question)) % (2 ** 32))
+    k = str(rng.choice(cands))
+    c.known = list(known | {k})
+    SAY = {'mercenary': 'He is plain about the money: he wants to be paid what the job is worth, and he will listen to anyone who pays more.',
+           'loyal': 'He talks about finishing somewhere. Stability matters to him more than the next job.',
+           'climber': 'He wants to be a head coach and says so. He would take the first real one.',
+           'teacher': 'He talks about the classroom: the whole room gets better under him, he says, and his history backs it.',
+           'developer': 'He lights up talking about young players. Veterans, less so.',
+           'disciplinarian': 'Penalties and turnovers offend him personally. Some players have chafed under him.',
+           'recruiter': 'He knows agents by first name and players want to play for him.',
+           'sharp': 'He talks through last Sunday like a chess match. His game-week read is his pride.',
+           'riser': 'He is getting better every year and he knows it.',
+           'eye': 'His first reads on a player\'s skill have held up; he trusts his eyes over the numbers.',
+           'wants': 'He falls for players. Once he likes one, his read on him drifts up.',
+           'stopwatch': 'He does not miss on the body: the forty, the size, the combine numbers.',
+           'measurables': 'He is a sucker for a workout. Athletes grade high in his room.',
+           'projector': 'He is good on how far a man can grow.',
+           'floor': 'He grades the floor and undersells the ceiling. His boards are full of safe picks.',
+           'small_school': 'He has an eye for the small-school player; conference means nothing to him.',
+           'big_program': 'He leans toward the big programs and it shows in his grades.',
+           'character': 'His character reads have been reliable; his flags land on the right men.',
+           'tape': 'He trusts the tape and skips the character work.',
+           'grinder': 'He watches more players than any room in the league.',
+           'narrow': 'His board goes three rounds deep and stops.'}
+    st['log'].append(dict(who='coach', text=SAY.get(k, STR.tip(k)), trait=k))
+    st['asked'].append(question)
+    return k
+
+
+def interview_ask(league, abbr, name, question):
+    """question: coaching | situation | references (coach); hits | misses | references (scout)."""
+    import staff_traits as STR
+    c = next((x for x in league.staff_pool if x.name == name), None)
+    if c is None: return dict(ok=False, why='not in the pool')
+    r = interview(league, abbr, name); st = league.interviews[name]
+    if question in st['asked']: return dict(ok=False, why='you asked that already', state=_interview_view(league, c, st))
+    COACHING = {'teacher', 'developer', 'disciplinarian', 'recruiter', 'sharp', 'riser'}; WANT = {'mercenary', 'loyal', 'climber'}
+    POS = {k for k, v in STR.SCOUT.items() if v['fam'] == 'pos'}; NEG = {k for k, v in STR.SCOUT.items() if v['fam'] == 'neg'}
+    if question == 'coaching': _reveal(league, c, st, COACHING, question)
+    elif question == 'situation':
+        k = _reveal(league, c, st, WANT, question)
+        if k == 'mercenary': c.prestige = float(min(95.0, c.prestige + 1.5)); st['log'].append(dict(who='gm', text='He heard you are shopping. His ask has ticked up.'))
+    elif question == 'hits': _reveal(league, c, st, POS, question)
+    elif question == 'misses': _reveal(league, c, st, NEG, question)
+    elif question == 'references':
+        st['asked'].append(question); st['refs_due'] = int(league.week or 0) + 1
+        st['log'].append(dict(who='gm', text='You put in calls to people who have worked with him. The answers come back at the Advance.'))
+    else: return dict(ok=False, why='no such question')
+    return dict(ok=True, state=_interview_view(league, c, st))
+
+
+def resolve_references(league):
+    """At the roll: every reference call that is due comes back. One time in six the reference is wrong
+    about him: it names a trait he does not have, and the interview shows it as hearsay."""
+    import staff_traits as STR
+    iv = getattr(league, 'interviews', None) or {}
+    wk = int(league.week or 0)
+    for name, st in iv.items():
+        if st.get('refs_due') is None or st['refs_due'] > wk: continue
+        st['refs_due'] = None
+        c = next((x for x in league.staff_pool if x.name == name), None)
+        if c is None: continue
+        rng = np.random.default_rng(abs(hash(name + 'refs')) % (2 ** 32))
+        known = set(c.known or []); hidden = [k for k in (c.staff_traits or []) if k not in known]
+        if hidden and rng.random() >= 1 / 6:
+            k = str(rng.choice(hidden)); c.known = list(known | {k})
+            st['log'].append(dict(who='ref', text=f"A reference calls back: {STR.tip(k)}", trait=k))
+        else:
+            fam = STR.SCOUT if c.role == 'scout' else STR.COACH
+            wrong = str(rng.choice([k for k in fam if k not in (c.staff_traits or [])]))
+            st['log'].append(dict(who='ref', text=f"A reference calls back with a story that does not check out: he calls him {STR.name(wrong).lower()}. Hearsay.", hearsay=wrong))
+        import inbox as IB
+        IB.post(league, 'staff', f"References on {name}", st['log'][-1]['text'], sender='assistants', payload=dict(link='front_office:staff'))
 
 
 def pool_for(league, role):

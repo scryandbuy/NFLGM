@@ -384,6 +384,7 @@ class SeasonRunner:
             import club_notes as CN, league_notes as LN
             CN.weekly(self.L, week)
             LN.transactions(self.L, week)
+            import staff as STF_; STF_.resolve_references(self.L)
         except Exception as e:
             import sys; print('club_notes weekly failed:', e, file=sys.stderr)
         # the squads: elevations for clubs short of healthy men, the odd poach
