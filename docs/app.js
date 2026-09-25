@@ -69,7 +69,7 @@ function renderRail(r) {
   $('#st-week').textContent = r.clock.line; $('#st-year').textContent = r.clock.sub;
   const badge = $('#badge'); badge.hidden = !r.inbox_unread; badge.textContent = r.inbox_unread;
   const adv = $('#advance');
-  if (r.blocking.length) { adv.classList.add('blocked'); $('#adv-title').textContent = `${r.blocking.length} Decision${r.blocking.length > 1 ? 's' : ''}`; $('#adv-sub').textContent = `Then ${r.advance.title}`; }
+  if (r.blocking.length) { adv.classList.add('blocked'); const roster = r.blocking.find(b => b.kind === 'roster'); $('#adv-title').textContent = roster ? roster.subject.split(':')[0] : `${r.blocking.length} Decision${r.blocking.length > 1 ? 's' : ''}`; $('#adv-sub').textContent = roster ? roster.subject.split(': ')[1] : `Then ${r.advance.title}`; }
   else { adv.classList.remove('blocked'); $('#adv-title').textContent = r.advance.title; $('#adv-sub').textContent = r.advance.sub || ''; }
 }
 
@@ -572,7 +572,7 @@ function renderCard(v) {
     mid.append(attrs);
     const right = el('div', {});
     right.append(h5('Contract', v.contract_caption));
-    if (v.contract.by_year.length) { const ct = el('table', { class: 'contract' }); ct.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Base'), el('th', {}, 'Bonus'), el('th', {}, 'Cap Hit'), el('th', {}, 'Penalty'))); v.contract.by_year.forEach((y, i) => ct.append(el('tr', { class: i === 0 ? 'now' : '' }, el('td', {}, y.year), el('td', {}, y.base != null ? y.base.toFixed(1) : '—'), el('td', {}, y.bonus != null ? y.bonus.toFixed(1) : '—'), el('td', {}, y.hit.toFixed(1)), el('td', {}, y.penalty != null ? y.penalty.toFixed(1) : '—')))); right.append(ct); }
+    if (v.contract.by_year.length) { const ct = el('table', { class: 'contract' }); ct.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Base'), el('th', {}, 'Bonus'), el('th', {}, 'Cap Hit'), el('th', {}, 'Penalty'))); v.contract.by_year.forEach((y, i) => ct.append(el('tr', { class: i === 0 ? 'now' : '' }, el('td', {}, y.year), el('td', {}, y.base != null ? `$${y.base.toFixed(1)}m` : '—'), el('td', {}, y.bonus != null ? `$${y.bonus.toFixed(1)}m` : '—'), el('td', {}, `$${y.hit.toFixed(1)}m`), el('td', {}, y.penalty != null ? `$${y.penalty.toFixed(1)}m` : '—')))); right.append(ct); }
     right.append(el('div', { class: 'kv', style: 'margin-top:8px' }, el('span', {}, 'Market'), el('span', {}, v.market_apy != null ? `About $${v.market_apy}m per year` : '—'), el('span', {}, 'Extension'), el('span', {}, v.ext_eligible ? `Eligible${v.ext_ask != null ? ` · agent's ask ~$${v.ext_ask}m` : ''}` : 'Not yet eligible')));
     right.append(h5('Trade Value', "the scout's read"), el('div', { class: 'kv' }, el('span', {}, 'Market'), el('span', {}, v.market), el('span', {}, 'Interest'), el('span', {}, v.interest_line)));
     s.append(el('div', { class: 'body' }, left, mid, right));
@@ -584,7 +584,7 @@ function renderCard(v) {
     s.append(tiles);
   } else if (cardTab === 'Contract') {
     const box = el('div', { class: 'pad' }, h5('Contract', v.contract_caption));
-    if (v.contract.by_year.length) { const ct = el('table', { class: 'contract', style: 'max-width:620px' }); ct.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Base'), el('th', {}, 'Bonus'), el('th', {}, 'Cap Hit'), el('th', {}, 'Penalty'))); v.contract.by_year.forEach((y, i) => ct.append(el('tr', { class: i === 0 ? 'now' : '' }, el('td', {}, y.year), el('td', {}, y.base != null ? y.base.toFixed(1) : '—'), el('td', {}, y.bonus != null ? y.bonus.toFixed(1) : '—'), el('td', {}, y.hit.toFixed(1)), el('td', {}, y.penalty != null ? y.penalty.toFixed(1) : '—')))); box.append(ct); }
+    if (v.contract.by_year.length) { const ct = el('table', { class: 'contract', style: 'max-width:620px' }); ct.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Base'), el('th', {}, 'Bonus'), el('th', {}, 'Cap Hit'), el('th', {}, 'Penalty'))); v.contract.by_year.forEach((y, i) => ct.append(el('tr', { class: i === 0 ? 'now' : '' }, el('td', {}, y.year), el('td', {}, y.base != null ? `$${y.base.toFixed(1)}m` : '—'), el('td', {}, y.bonus != null ? `$${y.bonus.toFixed(1)}m` : '—'), el('td', {}, `$${y.hit.toFixed(1)}m`), el('td', {}, y.penalty != null ? `$${y.penalty.toFixed(1)}m` : '—')))); box.append(ct); }
     else box.append(el('div', { class: 'empty' }, 'No contract on file.'));
     box.append(el('div', { class: 'kv', style: 'margin-top:12px;max-width:620px' }, el('span', {}, 'Market'), el('span', {}, v.market_apy != null ? `About $${v.market_apy}m per year` : '—'), el('span', {}, 'Extension'), el('span', {}, v.ext_eligible ? `Eligible${v.ext_ask != null ? ` · agent's ask ~$${v.ext_ask}m` : ''}` : 'Not yet eligible'), el('span', {}, 'Penalty if cut now'), el('span', {}, `$${v.contract.penalty.toFixed(1)}m`)));
     s.append(box);
@@ -1582,13 +1582,18 @@ function renderReport(v) {
 function refresh() { view = pyJSON('SESSION.portal()'); renderRail(view.rail); renderPortal(view); }
 
 async function advance() {
+  // a block stops the click: a roster over 53 or under 46 sends you to fix it; a decision opens it
+  const blocks = pyJSON('SESSION.blocking()');
+  if (blocks.length) { const b = blocks[0]; notify({ ok: false, why: b.subject }); if (b.go) location.hash = b.go; else if (b.id != null) location.hash = `#portal/inbox/${b.id}`; return; }
   const adv = $('#advance'); adv.disabled = true; const wasSim = /^Sim Week/.test(view.rail.advance.title); busy(view.rail.advance.title + '…');
   await new Promise(r => setTimeout(r, 30));
   let r = null;
   try { r = pyJSON('SESSION.advance()'); busy(`${r.done} done.`); setTimeout(() => busy(null), 1200); }
   catch (e) { console.error(e); busy('Something broke: ' + String(e).slice(0, 120)); }
   adv.disabled = false;
-  if (r && /^Week \d+ played$/.test(r.done)) { if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#gameday'; }
+  if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
+  else if (r && r.done === 'Camp') { location.hash = '#portal'; refresh(); }
+  else if (r && /^Week \d+ played$/.test(r.done)) { if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#gameday'; }
   else if (r && /^Week \d+$/.test(r.done)) { if (location.hash === '' || location.hash.startsWith('#portal')) refresh(); else if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#portal'; } else if (r && /on the clock/.test(r.done)) { location.hash = '#draft/day'; renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); } else refresh();
   saveGame();
 }

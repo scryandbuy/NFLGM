@@ -46,7 +46,7 @@ def _base_plan(session, league, abbr):
 
 
 def _week(session, league):
-    return session.stop[1] if session.stop[0] == 'week' else None
+    return session.stop[1] if session.stop[0] == 'week' else 1 if session.stop[0] == 'cutdown' else None
 
 
 def _saved(league, week):
