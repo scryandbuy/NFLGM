@@ -58,6 +58,7 @@ def run(league, rng, verbose=False):
     """
     cuts, short = [], []
     for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None) and len(rows_for(team)) <= ROSTER_LIMIT: continue   # the GM cut his own club
         pool = rows_for(team)
         if len(pool) <= ROSTER_LIMIT:
             # Not a cut-down problem - he is SHORT, which free agency should

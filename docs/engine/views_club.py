@@ -144,21 +144,28 @@ def card(session, league, pid):
     fam = FAM.get(p.pos, 'DB')
     import targets as TG, position_change as PC
     # the shift the user's scheme puts on each attribute, from the scheme's weights at his spot
-    shift = {}
+    # which way your scheme leans on each attribute, tagged with the name of the archetype that asks for it
+    shift = {}; shift_name = {}
     try:
+        import views_frontoffice as VF, identity_catalog as IC
+        ident = VF.club_identity(league, user)
+        names = {'offence': IC.ARCHETYPES[ident['offence']]['name'], 'defence': IC.ARCHETYPES[ident['defence']]['name']}
+        OFF_KEYS = {'zone', 'gap', 'heavy_te', 'spread_te', 'deep_game', 'quick_game', 'pa_heavy', 'motion_off', 'run_first', 'tempo_off'}
         schemes = getattr(user, 'scheme', None) or {}
         keys = list(schemes.values()) if isinstance(schemes, dict) else ([schemes] if isinstance(schemes, str) else list(schemes))
         for s in keys:
+            if p.pos not in TG.SCHEME_DOMAIN.get(s, ()): continue
             for k, v in TG.SCHEME_SHIFT.get(s, {}).items():
-                if k in p.ratings: shift[k] = shift.get(k, 0) + round(float(v) * 20)
-        shift = {k: v for k, v in shift.items() if v}
+                if k in p.ratings and k in TG.DEPTH_WEIGHTS.get(p.pos, {}):
+                    shift[k] = shift.get(k, 0.0) + float(v); shift_name[k] = names['offence' if s in OFF_KEYS else 'defence']
+        shift = {k: (1 if v > 0 else -1) for k, v in shift.items() if abs(v) > 1e-9}
     except Exception: pass
     def col(keys):
         out = []
         for k, lab in keys:
             v = p.ratings.get(k)
             if v is None: continue
-            out.append(dict(key=k, label=lab, v=int(round(float(v))), tier=('hi' if v >= 85 else 'md' if v >= 72 else 'lo'), shift=shift.get(k)))
+            out.append(dict(key=k, label=lab, v=int(round(float(v))), tier=('hi' if v >= 85 else 'md' if v >= 72 else 'lo'), shift=shift.get(k), scheme=shift_name.get(k)))
         return out
     phys = dict(title='Physical', rows=col(ATTR['phys']), extra=(dict(title='Special Teams', rows=col(ATTR['st'])) if p.pos in ('WR', 'HB', 'CB', 'FS', 'SS') and col(ATTR['st']) else None))
     if fam == 'DB': skill = dict(title='Coverage', rows=col(ATTR['coverage']), extra=dict(title='Run Defense', rows=col(ATTR['rundef'])))
@@ -245,7 +252,8 @@ def card(session, league, pid):
                 cond=_cond(session, p), out=p.out_until, season=cur, games=int(S.get('games', 0) or 0), seasons=seasons,
                 market=market, interest_line=interest_line, dev_line=dev_line, morale_line=_morale_line(p),
                 history=_player_history(league, p),
-                actions=dict(mine=(p.team == session.user_team), extend_eligible=_ext_ok(league, p), can_cut=(p.team == session.user_team)))
+                actions=dict(mine=(p.team == session.user_team), extend_eligible=_ext_ok(league, p), can_cut=(p.team == session.user_team),
+                             ps_ok=(p.team == session.user_team and t is not None and __import__('practice_squad').can_add(t, p)), vested=(int(p.accrued or 0) >= 4)))
 
 
 def _market_words(league, p, interest):
@@ -398,6 +406,24 @@ def act_fill_by_fit(league, abbr):
         scored = sorted(men, key=lambda p: -float(TG.position_score(p.ratings, pos, t.scheme)))
         t.depth_pins[pos] = [p.pid for p in scored]
     return dict(ok=True, line='Ordered by fit at each spot.')
+
+
+def act_to_squad(league, abbr, pid):
+    """Waive to the practice squad. A man with fewer than four accrued seasons goes through waivers first: he is released
+    now and, if no club claims him at the Advance, joins your squad. A vested veteran (four or more) is not subject to
+    waivers and goes straight to the squad. The squad must have room for him under its rules."""
+    import practice_squad as PSQ
+    t = league.teams[abbr]; p = league.player(pid)
+    if p is None or p not in t.roster: return dict(ok=False, why='not on your roster')
+    if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most, one specialist)'))
+    dead = round(float(p.dead_if_cut(0)), 1)
+    if int(p.accrued or 0) >= 4:
+        league.release(pid)
+        PSQ.sign_to_squad(league, abbr, pid)
+        return dict(ok=True, line=f"{p.name} to the practice squad. Penalty ${dead}m.", now=True)
+    league.release(pid)
+    intent = dict(getattr(league, 'ps_intent', None) or {}); intent[pid] = abbr; league.ps_intent = intent
+    return dict(ok=True, line=f"{p.name} waived. If he clears at the Advance he joins your practice squad. Penalty ${dead}m.", now=False)
 
 
 def act_reset_depth(league, abbr, pos=None):

@@ -50,6 +50,7 @@ class Session:
         L.next_class = list(L.draft_pool); L.draft_pool = []
         SC.scout(L, rng)
         s = cls(L, rng, team)
+        s.stop = ('cutdown',)
         try: GW.post_report(L, 1)
         except Exception: pass
         return s
@@ -117,6 +118,9 @@ class Session:
 
     def next_label(self):
         k = self.stop[0]
+        if k == 'cutdown':
+            n = len(self.L.teams[self.user_team].active())
+            return dict(title='Break Camp', sub=(f"Cut to 53 first · you are at {n}" if n > self.ROSTER_MAX else 'Cut-down day: the league goes to 53'), played=False)
         if k == 'week':
             wk = self.stop[1]; opp = self._opponent(wk)
             if getattr(self, 'played', False):
@@ -131,9 +135,18 @@ class Session:
         title, _ = self.OFFSEASON[i]
         return dict(title=title, sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)}")
 
+    ROSTER_MAX, ROSTER_MIN = 53, 46
+
     def blocking(self):
         """Decisions that must be made before the next stop. Empty list = nothing blocks."""
         out = []
+        # THE ROSTER RULE. A club plays with 53 at most and 46 at least; the game will not
+        # run a week, or leave camp, until yours is legal. A new franchise starts in camp at
+        # 68 and cuts to 53 before week 1, the way every club does.
+        if self.stop[0] in ('week', 'cutdown') and not getattr(self, 'played', False):
+            n = len(self.L.teams[self.user_team].active())
+            if n > self.ROSTER_MAX: out.append(dict(id=None, subject=f"Roster at {n}: cut to {self.ROSTER_MAX} before Sunday", kind='roster', go='#club'))
+            elif n < self.ROSTER_MIN: out.append(dict(id=None, subject=f"Roster at {n}: sign to at least {self.ROSTER_MIN}", kind='roster', go='#personnel/fa'))
         for m in getattr(self.L, 'inbox', []):
             if m.get('status') in ('unread', 'open') and m.get('kind') in ('trade_offer', 'match_request', 'staff') and m.get('needs_decision', True):
                 if m.get('kind') == 'trade_offer' or (m.get('payload') or {}).get('poach'):
@@ -142,6 +155,13 @@ class Session:
 
     def advance(self):
         k = self.stop[0]
+        if k == 'cutdown':
+            # camp breaks: every club cuts to 53 (yours must already be there), the wire runs, the squads fill
+            if any(b['kind'] == 'roster' for b in self.blocking()):
+                return dict(done='Blocked', next=self.next_label(), why=self.blocking()[0]['subject'])
+            self.step_cutdown()
+            self.stop = ('week', 1); self.played = False
+            return dict(done='Camp', next=self.next_label())
         if k == 'week':
             wk = self.stop[1]
             if self.runner is None:

@@ -96,6 +96,7 @@ def rail(session, league, abbr):
 def _clock(league, session):
     k = session.stop[0]
     if k == 'week': return dict(line=f"Week {session.stop[1]}", sub=f"{league.year}")
+    if k == 'cutdown': return dict(line='Camp', sub=f"{league.year} · cut to 53")
     if k == 'playoffs': return dict(line='Playoffs', sub=f"{league.year}")
     return dict(line='Offseason', sub=f"{league.year}")
 
@@ -128,9 +129,9 @@ def portal(session, league, abbr):
 
 
 def _matchup(session, league, abbr):
-    if session.stop[0] != 'week':
+    if session.stop[0] not in ('week', 'cutdown'):
         return None
-    wk = session.stop[1]; opp = session._opponent(wk)
+    wk = session.stop[1] if session.stop[0] == 'week' else 1; opp = session._opponent(wk)
     if opp is None:
         return dict(bye=True, week=wk)
     opp_abbr, away = opp
@@ -495,10 +496,10 @@ def gameday(session, league, abbr, gd=None):
     scoreboard and the user's game in full. A past week's, when gd is given."""
     r = rail(session, league, abbr)
     if gd is None:
-        in_week = session.stop[0] == 'week'
+        in_week = session.stop[0] in ('week', 'cutdown')
         if in_week and not getattr(session, 'played', False):
             m = _matchup(session, league, abbr)
-            wk = session.stop[1]
+            wk = session.stop[1] if session.stop[0] == 'week' else 1
             if m is None or m.get('bye'):
                 return dict(rail=r, preview=True, week=wk, bye=True, matchup=None, line=f'Week {wk} is your bye. Sim the week to play the rest of the league.')
             plan_ok = bool((getattr(league, 'user_week_plan', None) or {}).get('changes'))
