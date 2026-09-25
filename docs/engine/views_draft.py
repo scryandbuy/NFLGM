@@ -429,10 +429,10 @@ def picks(session, league, abbr):
         import views_personnel as VP
         prov = (getattr(league, 'pick_provenance', None) or {}).get(f"{pk.year}-{pk.round}-{pk.original}")
         proj = VP._proj_slot(league, pk)
-        if pk.original == abbr and pk.year == league.year and not pk.selection: note = f"Projected From a {t.record[0]}–{t.record[1]} Season" if sum(t.record) else 'Own'
-        elif pk.original == abbr: note = 'Own' if not proj or pk.selection else f"Projected {max(1, proj - 2)}{_ordd(max(1, proj - 2))}–{min(32, proj + 2)}{_ordd(min(32, proj + 2))}"
-        else: note = f"From {club(pk.original)['name']}" + (f" · {prov['how']} · {prov.get('phase', '').replace('_', ' ').title() if not prov.get('week') else 'Week ' + str(prov['week'])} {prov['year']}" if prov else '')
-        years.setdefault(pk.year, []).append(dict(round=pk.round, slot=(SLOT(pk) if pk.selection else (f"{pk.round}.{proj}" if proj and pk.year == league.year else f"{pk.round}{_ordd(pk.round)}")), original=pk.original, own=(pk.original == abbr), via=(None if pk.original == abbr else club(pk.original)), note=note))
+        if pk.original == abbr and pk.year == league.year and not pk.selection: note = f"Projected From a {t.record[0]}–{t.record[1]} Season" if sum(t.record) else ''
+        elif pk.original == abbr: note = '' if not proj or pk.selection else f"Projected {max(1, proj - 2)}{_ordd(max(1, proj - 2))}–{min(32, proj + 2)}{_ordd(min(32, proj + 2))}"
+        else: note = (f"{prov['how']} · {prov.get('phase', '').replace('_', ' ').title() if not prov.get('week') else 'Week ' + str(prov['week'])} {prov['year']}" if prov else '')
+        years.setdefault(pk.year, []).append(dict(round=pk.round, slot=(SLOT(pk) if pk.selection else (f"{pk.round}.{proj}" if proj and pk.year == league.year else f"{pk.round}{_ordd(pk.round)}")), original=pk.original, own=(pk.original == abbr), via=(None if pk.original == abbr else club(pk.original)), frm=(None if pk.original == abbr else pk.original), note=note))
     # picks of ours held by others
     gone = []
     for other, ot in league.teams.items():
