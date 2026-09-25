@@ -620,7 +620,9 @@ class League:
     def sign(self, pid, abbr, contract):
         p = self.player(pid)
         if p.team and p.team in self.teams:
-            self.release(pid, log=False)
+            import practice_squad as PSQ
+            if p in PSQ.squad(self.teams[p.team]): PSQ.release_from_squad(self, p.team, pid)      # poached off another club's squad
+            elif p in self.teams[p.team].roster: self.release(pid, log=False)
         p.team, p.contract = abbr, contract
         self.teams[abbr].roster.append(p)
         self.assign_number(p, abbr)

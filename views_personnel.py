@@ -350,6 +350,22 @@ def act_withdraw(league, abbr, tid):
     return NG.withdraw(league, tid)
 
 
+def act_poach_ps(league, abbr, pid):
+    """Sign another club's practice-squad man to your 53. The real rule: any club may, he is promoted at a 53-man
+    salary, and he must stay on your active roster three weeks. His agent hears the number first (a one-year deal
+    at the minimum or a little over); Sign in the thread takes him off their squad and onto your roster."""
+    import practice_squad as PSQ, negotiations as NG
+    p = league.player(pid)
+    if p is None or p.team is None or p.team == abbr: return dict(ok=False, why='not on another club\'s practice squad')
+    other = league.teams.get(p.team)
+    if other is None or p not in PSQ.squad(other): return dict(ok=False, why='he is not on a practice squad')
+    me = league.teams[abbr]
+    if len(me.active()) >= 53: return dict(ok=False, why='your 53 is full; open a spot first')
+    r = NG.open_talks(league, pid, kind='fa_inseason')
+    if r.get('ok'): r['line'] = f"{p.name}'s agent will listen: a 53-man deal at ${r['ask']:.1f}m. Sign him from the thread and he leaves {p.team}'s squad for your roster."
+    return r
+
+
 def act_sign_ps(league, abbr, pid):
     """Sign a free agent to the practice squad. He can say no: a man who grades as a roster player wants a
     53-man deal, and an ambitious one will not take a squad spot unless he has nowhere else to go."""

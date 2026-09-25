@@ -342,8 +342,18 @@ class Session:
         import views
         return views.portal(self, self.L, self.user_team)
 
-    def club_roster(self):
-        import views_club as VC; return VC.roster(self, self.L, self.user_team)
+    def club_roster(self, abbr=None):
+        import views_club as VC
+        v = VC.roster(self, self.L, abbr or self.user_team)
+        v['club_abbr'] = abbr or self.user_team; v['mine'] = (abbr or self.user_team) == self.user_team
+        return v
+
+    def club_list(self):
+        from views import club
+        return [dict(club(a), mine=(a == self.user_team)) for a in sorted(self.L.teams)]
+
+    def team_page(self, abbr):
+        import views_league as VL; return VL.team_page(self, self.L, self.user_team, abbr)
 
     def club_card(self, pid):
         import views_club as VC
@@ -352,8 +362,11 @@ class Session:
             import views_draft as VD; return VD.prospect_card(self, self.L, self.user_team, pid)
         return VC.card(self, self.L, pid)
 
-    def club_depth(self, package='Nickel'):
-        import views_club as VC; return VC.depth(self, self.L, self.user_team, package)
+    def club_depth(self, package='Nickel', abbr=None):
+        import views_club as VC
+        v = VC.depth(self, self.L, abbr or self.user_team, package)
+        v['club_abbr'] = abbr or self.user_team; v['mine'] = (abbr or self.user_team) == self.user_team
+        return v
 
     def club_act(self, name, **kw):
         """Roster and depth actions from the page; the page re-reads the view after."""

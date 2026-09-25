@@ -377,3 +377,48 @@ def almanac(session, league, abbr):
             if x.get('name'): ledger.append(dict(club=club(a), name=x['name'], frm=x.get('from'), to=x.get('to'), record=x.get('record'), current=(x.get('to') is None)))
     ledger.sort(key=lambda x: (x['frm'] or 0), reverse=True)
     return dict(rail=rail(session, league, abbr), seasons=seasons, records=records, hall=hall, careers=careers, ledger=ledger, next_ballot=next_ballot, note=None if (seasons or hall or records) else 'The almanac fills as seasons close.')
+
+
+# ============================================================ THE TEAM PAGE
+def team_page(session, league, me_abbr, abbr):
+    """One club at a glance: record and place, the unit ranks, the coaches, the top five, the cap this year and
+    next, and the trading block (the men the club would move). Your own club shows the same page."""
+    import staff as ST, trades as TR, valuation as VAL, numpy as np
+    from views import rail, _division_place
+    from cap_engine import CAP
+    t = league.teams[abbr]; me = league.teams[me_abbr]
+    w, l = t.record[0], t.record[1]; d = t.record[2] if len(t.record) > 2 else 0
+    try: ranks = ST.unit_ranks(league, league.year).get(abbr, {})
+    except Exception: ranks = {}
+    staff = {role: (dict(name=c.name, rating=round(c.rating), specialty=c.specialty) if c else None) for role, c in (getattr(t, 'staff', None) or {}).items()}
+    top = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(p.apy, 1), yrs=(p.contract.years if p.contract else 0), no=getattr(p, 'number', None)) for p in sorted(t.active(), key=lambda p: -p.ovr)[:5]]
+    committed_next = round(sum(p.contract.cap_hit(1) for p in t.roster if p.contract and p.contract.years >= 2), 1)
+    limit_next = round(CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.055), 1)
+    # the block: the men this club would move, in the trade engine's own read
+    block = []
+    try:
+        rng = np.random.default_rng(abs(hash(abbr + str(league.week))) % (2 ** 32)); pool = VAL.pool_from_league(league)
+        sur, needs = TR.surplus_and_needs(league, t, pool, rng)
+        import views_personnel as VP
+        for x in sur[:8]:
+            p = league.player(x['pid'])
+            if p is None: continue
+            block.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(p.apy, 1), yrs=(p.contract.years if p.contract else 0), why=VP._surplus_why(league, t, x)))
+        needs = sorted(needs)
+    except Exception:
+        needs = []
+    from views import club
+    import practice_squad as PSQ
+    return dict(rail=rail(session, league, me_abbr), club=club(abbr), mine=(abbr == me_abbr), record=f"{w}–{l}" + (f"–{d}" if d else ''), place=_division_place(league, abbr), division=t.division,
+                ranks=dict(offense=ranks.get('oc'), defense=ranks.get('dc'), kicking=ranks.get('st')), coach=dict(name=t.gm.name if t.gm else '', prestige=round(getattr(t.gm, 'prestige', 0) or 0), background=getattr(t.gm, 'background', ''), personnel=getattr(t.gm, 'off_personnel', '')) if t.gm else None,
+                staff=staff, identity=_identity_names(league, t), top=top, cap=dict(space=round(t.cap_space, 1), limit=round(CAP.get(league.year, 301.2), 1), committed_next=committed_next, limit_next=limit_next), block=block, needs=needs,
+                roster_n=len(t.active()), ps_n=len(PSQ.squad(t)), ir_n=len(getattr(t, 'ir', None) or []), clubs=[club(c) for c in sorted(league.teams)])
+
+
+def _identity_names(league, t):
+    try:
+        import views_frontoffice as VF, identity_catalog as IC
+        ident = VF.club_identity(league, t)
+        return dict(offense=IC.ARCHETYPES[ident['offence']]['name'], defense=IC.ARCHETYPES[ident['defence']]['name'])
+    except Exception:
+        return dict(offense='', defense='')
