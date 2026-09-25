@@ -99,6 +99,10 @@ def open_talks(league, pid, kind='extension'):
         v = VAL.value_player(league, p, side='agent', rng=None)
         if not v: return dict(ok=False, why='no market read on him')
         ask, years = v['apy'], int(np.clip(v['years'], 1, 4))
+        # a Recruiter over his position: he wants to play for that coach, and the ask comes down a little
+        import staff as ST
+        _pull, ask_mult = ST.recruit_pull(league.teams[league.user_team], p.pos)
+        ask = round(ask * ask_mult, 2)
     mood = ('eager' if s['loyalty'] > 0.62 and s['morale'] >= 45 else 'firm' if s['money'] > 0.62 or s['star'] else 'open')
     line = {'eager': f"{p.name} wants to stay. His agent will move quickly on a fair deal.",
             'firm': f"{p.name}'s agent knows the market for his position and will not go under it.",
@@ -172,6 +176,10 @@ def _floor(league, p, t, offer):
         floor = ask * (1.0 - disc)
     else:
         floor = ask * 0.96
+        # a Recruiter over his position: the club's money reads richer to him
+        import staff as ST
+        pull, _m = ST.recruit_pull(league.teams[league.user_team], p.pos)
+        floor = floor / pull
     fl = offer.get('front_load')
     if fl is not None:
         fp = (getattr(p, 'traits', None) or {}).get('financial_priority', 50) / 100.0

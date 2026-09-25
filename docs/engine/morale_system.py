@@ -29,6 +29,7 @@ FAST = {
     'blowout_loss':       -2.0,
     'good_game':          +1.5,
     'bad_game':           -1.0,
+    'chafes':             -0.35,   # a week under a Disciplinarian, for a man with real ambition; small on purpose
 }
 # per week, on a clock that keeps 96.5% a week: the equilibrium of a
 # constant weekly push is about 29x the push, so -1.3 a week for a losing

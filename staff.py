@@ -178,16 +178,55 @@ def rating(team, role, default=60.0):
 
 
 def plan_skill(team, side):
-    """0-1 skill for the game plan on one side, from the coordinator."""
+    """0-1 skill for the game plan on one side, from the coordinator; Sharp on Sunday adds 0.15."""
+    import staff_traits as STR
     role = 'oc' if side.startswith('off') else 'dc'
-    return float(np.clip((rating(team, role) - 35.0) / 55.0, 0.05, 1.0))
+    sk = float(np.clip((rating(team, role) - 35.0) / 55.0, 0.05, 1.0))
+    c = (getattr(team, 'staff', None) or {}).get(role)
+    if c is not None and STR.has(c, 'sharp'): sk = min(1.0, sk + 0.15)
+    return sk
+
+
+def coordinator_of(team, pos):
+    """The coach whose unit a position belongs to."""
+    st = getattr(team, 'staff', None) or {}
+    role = 'oc' if pos in OFFENSE_POS else 'st' if pos in ('K', 'P', 'LS') else 'dc'
+    return st.get(role)
+
+
+def trait(team, pos, key):
+    """Does the coordinator over this position carry the trait?"""
+    import staff_traits as STR
+    c = coordinator_of(team, pos)
+    return c is not None and STR.has(c, key)
 
 
 def xp_mult(team, player):
-    """0.85-1.15 by the coordinator on the player's side."""
+    """0.85-1.15 by the coordinator on the player's side; a Teacher adds 15% to his whole unit,
+    a Developer 15% to the men 24 and under."""
     if team is None: return 1.0
     role = 'oc' if player.pos in OFFENSE_POS else 'dc' if player.pos not in ('K', 'P') else 'st'
-    return 0.85 + 0.30 * float(np.clip((rating(team, role) - 35.0) / 55.0, 0.0, 1.0))
+    m = 0.85 + 0.30 * float(np.clip((rating(team, role) - 35.0) / 55.0, 0.0, 1.0))
+    if trait(team, player.pos, 'teacher'): m *= 1.15
+    elif trait(team, player.pos, 'developer') and float(getattr(player, 'age', 30)) <= 24.0: m *= 1.15
+    return m
+
+
+def game_terms(team):
+    """What the game reads off the staff each Sunday: the Disciplinarian's penalty and fumble
+    factors by side, and the Sharp on Sunday edge by side."""
+    st = getattr(team, 'staff', None) or {}
+    import staff_traits as STR
+    def has(role, key):
+        c = st.get(role); return c is not None and STR.has(c, key)
+    return dict(pen_off=(0.90 if has('oc', 'disciplinarian') else 1.0), pen_def=(0.90 if has('dc', 'disciplinarian') else 1.0),
+                fum_off=(0.90 if has('oc', 'disciplinarian') else 1.0),
+                sharp_off=has('oc', 'sharp'), sharp_def=has('dc', 'sharp'))
+
+
+def recruit_pull(team, pos):
+    """A Recruiter over the position: the club's offer reads 5% richer to a free agent and his ask to the club runs 4% lower."""
+    return (1.05, 0.96) if trait(team, pos, 'recruiter') else (1.0, 1.0)
 
 
 def tax_mult(team, new_pos):
@@ -234,7 +273,10 @@ def season_end(league, unit_ranks_by_team):
                 d = (0.4 if good else 0.0) - (1.0 if bad else 0.0)
             else:
                 d = -0.6 - (0.7 if bad else 0.0)
+            import staff_traits as STR
+            if STR.has(c, 'riser') and d > 0: d *= 1.5
             c.rating = float(np.clip(c.rating + d, 30, 95))
+            if STR.has(c, 'riser') and r is not None and r <= 16: c.prestige = float(np.clip(c.prestige + 2.0, 5, 95))
             c.age += 1; c.years -= 1
             if c.disgruntled and c.disgruntled < league.year: c.disgruntled = 0
             if c.role in ('oc', 'dc') and c.prestige >= 72 and c.rating >= 70:

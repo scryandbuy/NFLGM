@@ -122,6 +122,7 @@ class SeasonRunner:
             self.states[abbr] = G.TeamState(self._units(abbr), coach=coach,
                                             scheme=t.scheme)
             self.states[abbr].abbr = abbr
+            self._staff_terms(abbr)
         self.week = 0
 
     # ---- the field ------------------------------------------------------
@@ -269,7 +270,19 @@ class SeasonRunner:
         self.roll_week(week, played)
         return played
 
+    def _staff_terms(self, abbr):
+        """The staff's Sunday terms onto the state: penalty and fumble factors, and the Sharp on
+        Sunday edge as a step in the in-game adjustment skill on that side."""
+        import staff as ST
+        t = self.L.teams[abbr]; st = self.states[abbr]
+        st.staff_fx = ST.game_terms(t)
+        if not hasattr(st, 'coach_base'): st.coach_base = dict(st.coach)     # the head coach's own numbers, before any staff edge
+        st.coach = dict(st.coach_base)
+        if st.staff_fx.get('sharp_off') or st.staff_fx.get('sharp_def'):
+            st.coach['adjust_skill'] = min(1.0, float(st.coach_base.get('adjust_skill', 0.5)) + 0.15)
+
     def play_games(self, week):
+        for abbr in self.states: self._staff_terms(abbr)          # a staff change since last Sunday counts
         """The games only. Sunday: every scheduled game this week, the scores written back,
         expired injuries cleared. The week itself has not rolled; that is roll_week."""
         self.week = week
