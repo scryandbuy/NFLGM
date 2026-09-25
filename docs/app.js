@@ -520,7 +520,7 @@ const CLUB_LIST = () => (view && view.rail && view.rail.clubs) ? view.rail.clubs
 function clubSelect(current, onPick) {
   const sel = el('select', { class: 'btn', style: 'width:auto;padding:4px 8px', 'data-tip': "Look at another club's roster and depth chart" });
   const clubs = pyJSON('SESSION.club_list()');
-  for (const c of clubs) sel.append(el('option', { value: c.abbr, selected: c.abbr === current ? '' : null }, `${c.name}${c.mine ? ' (yours)' : ''}`));
+  for (const c of clubs) sel.append(el('option', { value: c.abbr, selected: c.abbr === current ? '' : null }, `${c.name}${c.mine ? ' (User)' : ''}`));
   sel.onchange = () => onPick(sel.value);
   return sel;
 }
