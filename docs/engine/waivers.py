@@ -153,6 +153,10 @@ def award(league, entry, abbr):
     p.team = abbr; p.contract = c
     league.teams[abbr].roster.append(p); league.teams[abbr].sync_cap()
     league.log('waiver_claim', pid=p.pid, team=abbr, from_team=entry['from_team'])
+    league.assign_number(p, abbr)
+    if abbr == getattr(league, 'user_team', None):
+        import inbox as IB
+        IB.post(league, 'waiver_notice', f"Claim awarded: {p.name}", f"You were awarded {p.name} ({p.pos}, {round(p.ovr)}) off waivers from {entry['from_team']}. He is on your roster with his contract" + (f", ${p.apy:.1f}m a year" if p.contract else '') + '.', sender='league')
     # the user named the man to make room with
     rel = entry.get('release_if_awarded')
     if rel and abbr == getattr(league, 'user_team', None) and league.player(rel) is not None and league.player(rel).team == abbr:
@@ -242,6 +246,8 @@ def process(league, rng, week, verbose=False):
     for e in list(ents):
         p = league.player(e['pid'])
         if p is None or p.retired or p.team is not None:
+            if p is not None and user in e.get('claims', []) and p.team is not None:
+                IB.post(league, 'waiver_notice', f"Claim void: {p.name}", f"{p.name} ({p.pos}) was signed by {p.team} before the wire cleared. Your claim did not go through.", sender='league')
             ents.remove(e); continue
         # his price, once
         market = VAL.value_player(league, p, side='team', rng=None, pool=pool)
@@ -249,11 +255,17 @@ def process(league, rng, week, verbose=False):
             ents.remove(e); continue
         for abbr in order:
             if abbr == user:
-                if user in e['claims'] and make_room(league, user, p):
-                    award(league, e, user); awarded.append((p.pid, user)); break
+                if user in e['claims']:
+                    if make_room(league, user, p):
+                        award(league, e, user); awarded.append((p.pid, user)); break
+                    IB.post(league, 'waiver_notice', f"Claim failed: {p.name}", f"Your claim on {p.name} ({p.pos}) could not be processed: no roster spot could be opened for him. He stays on the wire.", sender='league')
                 continue
             if wants(league, abbr, p, week, market=market) and make_room(league, abbr, p):
-                award(league, e, abbr); awarded.append((p.pid, abbr)); break
+                award(league, e, abbr); awarded.append((p.pid, abbr))
+                if user in e.get('claims', []):
+                    import inbox as IB
+                    IB.post(league, 'waiver_notice', f"Claim lost: {p.name} to {abbr}", f"You claimed {p.name} ({p.pos}) and {abbr} held the higher priority. He is theirs.", sender='league')
+                break
         ents.remove(e)
         # the club that waived him meant him for its practice squad: if nobody claimed, he goes there
         intent = (getattr(league, 'ps_intent', None) or {})
