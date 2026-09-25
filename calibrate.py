@@ -57,7 +57,7 @@ TARGETS = [
     ('motion_pct',             36.50, 3.00, 'schemes.call_offense'),
     ('blitz_pct',              13.30, 3.00, 'schemes.call_defense'),     # pass plays with a charted blitzer
     # ---- health ----
-    ('injuries_per_team_game',  2.51, 0.50, 'health._RULED_OUT_SHARE'),
+    ('injuries_per_team_game',  1.20, 0.35, 'health._RULED_OUT_SHARE'),     # by decision: under the real 2.51, so depth matters without taking your men away
     # ---- game shape ----
     ('mean_margin',            11.10, 1.50, 'emergent'),
     ('margin_10plus_pct',      44.70, 4.00, 'emergent'),

@@ -193,7 +193,11 @@ INJURIES_PER_TEAM_WEEK = 2.51
 # fixed the rate came out at 3.10, and by decision this game would rather have
 # a squad you can field than one that is medically accurate: injuries are here
 # to make depth matter, not to take your players away.
-_RULED_OUT_SHARE = 0.115
+# Re-solved once the roll was made fair (the carrier and one other man on the field each snap,
+# both sides): the register counts injury EVENTS (about 2.65 a team a game, many of them a week
+# or less and played through as Questionable); the men actually missing a game land at 1.2 a
+# team a game, which is the number the GM decided on.
+_RULED_OUT_SHARE = 0.0146
 
 def condition_injury_multiplier(condition):
     """
@@ -201,7 +205,11 @@ def condition_injury_multiplier(condition):
     in-match injuries, 80% produced 20, 60% produced 87. That is roughly a
     2.4x multiplier per 20 points lost, and the nonlinearity is the point.
     """
-    return float(np.exp(0.0603 * (100.0 - condition)))
+    # Softened from 0.0603 once every man on the field rolled a snap: this engine drains a sprinting
+    # receiver's condition far faster than a lineman's, and at the FM slope the receivers took the whole
+    # league's injuries (WR 13.5 expected hits to LT 0.2 over the same snaps). At 0.030 a man at 60
+    # still carries 3.3x the risk of a fresh one, and the position table sets the distribution.
+    return float(np.exp(0.030 * (100.0 - condition)))
 
 # The base rate has to be set AFTER the condition multiplier, not before it.
 # At a realistic in-game condition around 88 that multiplier is already ~2.0,
@@ -209,10 +217,19 @@ def condition_injury_multiplier(condition):
 # team per week against a real 2.51.
 _COND_REFERENCE = 88.0
 
+# men of the label on the field a snap, then nudged once against a two-week measure so the league's
+# injury distribution lands on the table (linemen and corners were under, tight ends and tackles over)
+FIELD_N = {'WR': 4.4, 'CB': 1.5, 'DT': 3.6, 'TE': 2.4, 'HB': 1.0, 'FB': 0.3, 'QB': 0.4, 'LT': 0.42, 'LG': 0.42, 'C': 0.42, 'RG': 0.42, 'RT': 0.42,
+           'LEDG': 1.8, 'REDG': 1.8, 'MIKE': 1.0, 'WILL': 1.0, 'SAM': 0.5, 'FS': 0.9, 'SS': 0.9, 'K': 1.0, 'P': 1.0, 'LS': 1.0}
+
+
 def injury_chance(player, position, contact, rate_fn, condition=100.0,
                   jaded=0.0, AVG=0.70, snaps_per_game=65.0):
+    # INJURY_SHARE is the share of the league's injuries a position LABEL takes; three receivers share
+    # the WR figure and one left tackle takes all of LT, so the chance per man per snap is the share
+    # divided by how many of him are on the field. Every man on the field rolls once a snap (game.py).
     base = (INJURIES_PER_TEAM_WEEK / (snaps_per_game * 2.0)) * \
-           (INJURY_SHARE.get(position, .04) / .045) * _RULED_OUT_SHARE / \
+           (INJURY_SHARE.get(position, .04) / .045) / FIELD_N.get(position, 1.0) * _RULED_OUT_SHARE / \
            condition_injury_multiplier(_COND_REFERENCE)
     # Durability is measured against the REAL league mean, not the 0.70
     # midpoint. Actual NFL players average 89 on injury rating, so centring on
