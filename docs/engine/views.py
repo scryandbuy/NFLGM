@@ -368,9 +368,9 @@ def _payload(pl):
 def _inbox(league, limit=14):
     box = getattr(league, 'inbox', []) or []
     rows = []
-    for m in sorted(box, key=lambda m: -m['id'])[:limit]:
+    for m in (sorted(box, key=lambda m: -m['id'])[:limit] if limit else sorted(box, key=lambda m: -m['id'])):
         rows.append(dict(id=m['id'], subject=m['subject'], body=(m.get('body') or '')[:140], tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), decide=(m.get('status') in ('unread', 'open') and m.get('kind') in DECIDE_KINDS),
-                         kind=m.get('kind'), unread=m.get('status') == 'unread', week=m.get('week'), year=m.get('year'), sender=m.get('sender')))
+                         kind=m.get('kind'), unread=m.get('status') == 'unread', week=m.get('week'), year=m.get('year'), sender=m.get('sender'), **{'from': m.get('sender')}, when=(f"Wk {m.get('week')}" if m.get('week') else str(m.get('year') or ''))))
     return dict(rows=rows, total=len(box), unread=sum(1 for m in box if m.get('status') == 'unread'), decide=sum(1 for m in box if m.get('status') in ('unread', 'open') and m.get('kind') in DECIDE_KINDS))
 
 

@@ -866,6 +866,9 @@ class League:
         L.scouting = d.get('scouting', {}) or {}
         L.consensus = d.get('consensus', {}) or {}
         L.spring_news = d.get('spring_news') or []; L.user_visits = d.get('user_visits') or []; L.pick_provenance = d.get('pick_provenance') or {}; L.user_board = d.get('user_board') or {}; L.ps_intent = d.get('ps_intent') or {}; L.interviews = d.get('interviews') or {}; L.notes_sent = d.get('notes_sent') or {}; L.league_notes_sent = d.get('league_notes_sent') or {}
+        # older saves: everyone on a roster wears a number
+        for t in L.teams.values():
+            for p in list(t.roster): L.assign_number(p, t.abbr)
         L.waivers = d.get('waivers', []) or []
         L.inbox = [_inbox_from_dict(L, m) for m in d.get('inbox', [])]
         L.almanac = d.get('almanac')

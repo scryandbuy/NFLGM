@@ -120,7 +120,7 @@ class Session:
         k = self.stop[0]
         if k == 'cutdown':
             n = len(self.L.teams[self.user_team].active())
-            return dict(title='Break Camp', sub=(f"Cut to 53 first · you are at {n}" if n > self.ROSTER_MAX else 'Cut-down day: the league goes to 53'), played=False)
+            return dict(title='Sim to Reg. Season', sub=(f"Cut to 53 first · you are at {n}" if n > self.ROSTER_MAX else 'Cut-down day: the league goes to 53'), played=False)
         if k == 'week':
             wk = self.stop[1]; opp = self._opponent(wk)
             if getattr(self, 'played', False):
@@ -419,6 +419,38 @@ class Session:
         for m in getattr(self.L, 'inbox', []):
             if m.get('status') == 'unread': m['status'] = 'read'; n += 1
         return dict(ok=True, n=n)
+
+    def inbox_read(self, mid):
+        for m in getattr(self.L, 'inbox', []):
+            if m['id'] == int(mid) and m.get('status') == 'unread': m['status'] = 'read'
+        return dict(ok=True)
+
+    def inbox_delete(self, mid):
+        box = getattr(self.L, 'inbox', [])
+        self.L.inbox = [m for m in box if m['id'] != int(mid)]
+        return dict(ok=True)
+
+    def inbox_clear_read(self):
+        import views
+        box = getattr(self.L, 'inbox', [])
+        keep = [m for m in box if m.get('status') == 'unread' or (m.get('status') in ('unread', 'open') and m.get('kind') in views.DECIDE_KINDS)]
+        n = len(box) - len(keep); self.L.inbox = keep
+        return dict(ok=True, n=n)
+
+    def inbox_message(self, mid):
+        import views
+        m = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
+        if m is None: return dict(error='no such message')
+        pl = m.get('payload') or {}
+        return dict(id=m['id'], subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'),
+                    **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=pl.get('link'), decide=(m.get('status') in ('unread', 'open') and m.get('kind') in views.DECIDE_KINDS))
+
+    def portal_full(self):
+        """The Portal view with every inbox message (the Portal itself keeps the recent fourteen)."""
+        import views
+        v = views.portal(self, self.L, self.user_team)
+        v['inbox'] = views._inbox(self.L, limit=None)
+        return v
 
     def gameday_view(self, week=None, year=None):
         import views
