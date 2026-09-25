@@ -1308,8 +1308,16 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                 used = timeouts.use(pos)
         hurry = secs_in_half < 120 and dr.score_diff <= 0
         dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
+        before = dr.yardline
         scored = _advance(dr, out.get('yards', 0.0))
-        if scored: break
+        if scored:
+            # the play that scored says so: the touchdown flag on the entry, the yards capped at the
+            # distance to the goal, the tackler cleared (a 54-yard pass from the 48 is a 52-yard touchdown)
+            if dr.result == 'Touchdown':
+                out['touchdown'] = True; out['yards'] = float(min(float(out.get('yards', 0.0) or 0.0), before)); out.pop('tackler', None)
+            elif dr.result == 'Safety':
+                out['safety'] = True
+            break
         if dr.down > 4:
             dr.result = 'Turnover on downs'; break
 

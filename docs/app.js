@@ -344,7 +344,7 @@ function renderGameDay(v) {
     const d = g.drives[Math.max(0, shown - 1)]; const revealed = (shownPlays != null ? vis(d).slice(0, shownPlays) : vis(d));
     const atBreak = shownPlays == null && shown < g.drives.length && g.drives[shown].quarter > d.quarter;   // the drive shown was the quarter's last
     let hs = g.hs, as_ = g.as_;
-    if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { for (const p of revealed) if (p.kind === 'score') { if (p.type === 'field_goal') { if (d.off === g.home.abbr) hs += 3; else as_ += 3; } else if (p.td) { if (d.off === g.home.abbr) hs += 7; else as_ += 7; } } } }
+    if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { const add = (n, toOff) => { if ((d.off === g.home.abbr) === toOff) hs += n; else as_ += n; }; for (const p of revealed) { if (p.type === 'field_goal' && p.made) add(3, true); else if (p.td) add(6, true); else if (p.type === 'extra_point' && p.made !== false) add(1, true); else if (p.type === 'two_point' && p.made) add(2, true); else if (p.safety) add(2, false); } } }
     const lastPlay = revealed.length ? revealed[revealed.length - 1] : null;
     const headParts = lastPlay && lastPlay.head ? lastPlay.head.split(' · ') : [];
     const clock = atBreak ? '0:00' : (headParts.length >= 3 ? headParts[headParts.length - 1] : '');
@@ -444,6 +444,7 @@ function renderGameDay(v) {
     box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD', '')); D.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd), el('td', {}, ''))));
   };
   const drawLiveBox = (shown, shownPlays) => {
+    drawTeamStats(shown, shownPlays);
     if (shown >= g.drives.length && shownPlays == null) { drawFullBox(); return; }
     boxHead.querySelector('small').textContent = 'Live'; box.innerHTML = '';
     const pass = {}, rush = {}, recv = {};
@@ -461,15 +462,37 @@ function renderGameDay(v) {
     if (!Object.keys(pass).length && !Object.keys(rush).length) box.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'Step through the game; the box fills as plays are revealed.'))));
   };
 
-  // team stats side by side, and the assistants' read of what decided it
+  // team stats side by side: the full book at Final, and until then the totals of the plays revealed so far
+  let tsTable = null;
   if (g.team_stats && g.team_stats[g.home.abbr]) {
-    right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Team Stats'));
-    const ts = el('table', { class: 'box' }); const A = g.team_stats[g.away.abbr], H = g.team_stats[g.home.abbr];
-    ts.append(el('tr', {}, el('th', {}, ''), el('th', {}, g.away.abbr), el('th', {}, g.home.abbr)));
-    for (const [k, label] of [['yards', 'Total Yards'], ['plays', 'Plays'], ['ypp', 'Yards per Play'], ['pass_yds', 'Passing'], ['rush_yds', 'Rushing'], ['first_downs', 'First Downs'], ['third', 'Third Down'], ['fourth', 'Fourth Down'], ['red_zone', 'Red Zone TD'], ['turnovers', 'Turnovers'], ['sacks_allowed', 'Sacks Allowed'], ['penalties', 'Penalties'], ['top', 'Possession']])
-      ts.append(el('tr', {}, el('td', {}, label), el('td', {}, String(A[k])), el('td', {}, String(H[k]))));
-    right.append(ts);
+    right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Team Stats', el('small', { class: 'ts-note' }, 'Live')));
+    tsTable = el('table', { class: 'box' }); right.append(tsTable);
   }
+  const drawTeamStats = (shown, shownPlays) => {
+    if (!tsTable) return;
+    const final = shown >= g.drives.length && shownPlays == null;
+    tsTable.innerHTML = ''; tsTable.append(el('tr', {}, el('th', {}, ''), el('th', {}, g.away.abbr), el('th', {}, g.home.abbr)));
+    right.querySelector('.ts-note').textContent = final ? 'Final' : 'Live';
+    let A, H;
+    if (final) { A = g.team_stats[g.away.abbr]; H = g.team_stats[g.home.abbr]; }
+    else {
+      const mk = () => ({ plays: 0, yards: 0, pass_yds: 0, rush_yds: 0, first_downs: 0, turnovers: 0, sacks_allowed: 0, penalties: 0, ypp: 0, third: '—', fourth: '—', red_zone: '—', top: '—' });
+      const T = { [g.away.abbr]: mk(), [g.home.abbr]: mk() };
+      g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const plays = (last && shownPlays != null) ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays; const t = T[d.off]; if (!t) return;
+        for (const p of plays) { if (!p.type) continue; const y = p.yards || 0;
+          if (['run', 'scramble'].includes(p.type)) { t.plays++; t.yards += y; t.rush_yds += y; }
+          else if (['complete', 'incomplete', 'drop', 'interception', 'sack'].includes(p.type)) { t.plays++; if (p.type === 'complete') { t.yards += y; t.pass_yds += y; } if (p.type === 'sack') { t.yards += y; t.pass_yds += y; t.sacks_allowed++; } if (p.type === 'interception') t.turnovers++; }
+          else if (p.type === 'penalty') t.penalties++;
+          if (p.kind === 'turnover' && p.type !== 'interception' && !p.safety) t.turnovers++;
+        }
+        if (!(last && shownPlays != null)) t.first_downs += (d.first_downs || 0);
+      });
+      for (const t of Object.values(T)) t.ypp = t.plays ? (t.yards / t.plays).toFixed(1) : '0.0';
+      A = T[g.away.abbr]; H = T[g.home.abbr];
+    }
+    for (const [k, label] of [['yards', 'Total Yards'], ['plays', 'Plays'], ['ypp', 'Yards per Play'], ['pass_yds', 'Passing'], ['rush_yds', 'Rushing'], ['first_downs', 'First Downs'], ['third', 'Third Down'], ['fourth', 'Fourth Down'], ['red_zone', 'Red Zone TD'], ['turnovers', 'Turnovers'], ['sacks_allowed', 'Sacks Allowed'], ['penalties', 'Penalties'], ['top', 'Possession']])
+      tsTable.append(el('tr', {}, el('td', {}, label), el('td', {}, String(A[k] ?? '—')), el('td', {}, String(H[k] ?? '—'))));
+  };
   if (g.reads && g.reads.length) { right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, "Assistants' Read")); for (const r of g.reads) right.append(el('div', { class: 'pad', style: 'font-size:15.5px;color:var(--ink-2);padding-top:4px' }, r)); }
   page.append(right);
   draw();

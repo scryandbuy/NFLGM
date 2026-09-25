@@ -127,7 +127,9 @@ def play_line(league, p, off_abbr, def_abbr):
         if not text: return None
     else:
         return None
-    return dict(head=head, text=text, kind=kind, type=t)
+    if p.get('safety'):
+        text = (text.rstrip('.') + '. SAFETY.') if text else 'SAFETY.'; kind = 'turnover'
+    return dict(head=head, text=text, kind=kind, type=t, made=p.get('made'), safety=bool(p.get('safety')))
 
 
 def _result_word(r):

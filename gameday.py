@@ -57,7 +57,7 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
         if pp is None: return None
         parts = pp.name.split(); return parts[-2] + ' ' + parts[-1] if parts[-1] in ('Jr.', 'Sr.', 'II', 'III', 'IV') and len(parts) > 1 else parts[-1]
     ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
-              td=bool(q.get('touchdown') or q.get('td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'))
+              td=bool(q.get('touchdown') or q.get('td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')))
     return ln
 
 
@@ -90,7 +90,7 @@ def capture(league, played, user):
             if pos == 'home': hs += pts
             else: as_ += pts
             start = float(getattr(dr, 'start', 75)); end = float(getattr(dr, 'yardline', start))
-            drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=round(start - end, 1),
+            drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=round(start - end, 1), first_downs=int(getattr(dr, 'first_downs', 0) or 0),
                                result=getattr(dr, 'result', ''), points=pts, quarter=int(getattr(dr, 'quarter', 1) or 1), clock=_clock(getattr(dr, 'clock', 0)),
                                score=f"{hs}–{as_}", plays=plays))
             diff = (hs - as_) if me_home else (as_ - hs)
