@@ -367,6 +367,8 @@ def waivers(session, league, abbr):
         p = league.player(e['pid']) if isinstance(e, dict) else league.player(e.pid)
         if p is None or p.team is not None: continue        # signed to a squad since he was waived: not available
         d = e if isinstance(e, dict) else e.__dict__
+        if d.get('from_team') == abbr: continue              # your own waived men are not yours to claim
+        if not WV.reaches_user(league, d, week): continue    # a club ahead of you will take him; you never see him
         try: fit = round(float(__import__('gm_engine').scheme_fit(p.ratings, p.pos, me)), 1)
         except Exception: fit = 0.0
         frm = d.get('from_team') or d.get('team') or ''

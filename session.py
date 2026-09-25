@@ -120,7 +120,11 @@ class Session:
         k = self.stop[0]
         if k == 'cutdown':
             n = len(self.L.teams[self.user_team].active())
-            return dict(title='Sim to Reg. Season', sub=(f"Cut to 53 first · you are at {n}" if n > self.ROSTER_MAX else 'Cut-down day: the league goes to 53'), played=False)
+            return dict(title='Cut-Down Day', sub=(f"Cut to 53 first · you are at {n}" if n > self.ROSTER_MAX else 'The league goes to 53; the cuts hit the wire'), played=False)
+        if k == 'wire':
+            import waivers as WV
+            n = sum(1 for e in WV.pending(self.L) if e.get('ahead', None) is None and e.get('from_team') != self.user_team and self.L.player(e['pid']) is not None and self.L.player(e['pid']).team is None)
+            return dict(title='Sim to Reg. Season', sub=f"{n} on the wire reach your priority · claim any first", played=False)
         if k == 'week':
             wk = self.stop[1]; opp = self._opponent(wk)
             if getattr(self, 'played', False):
@@ -143,7 +147,7 @@ class Session:
         # THE ROSTER RULE. A club plays with 53 at most and 46 at least; the game will not
         # run a week, or leave camp, until yours is legal. A new franchise starts in camp at
         # 68 and cuts to 53 before week 1, the way every club does.
-        if self.stop[0] in ('week', 'cutdown') and not getattr(self, 'played', False):
+        if self.stop[0] in ('week', 'cutdown', 'wire') and not getattr(self, 'played', False):
             n = len(self.L.teams[self.user_team].active())
             if n > self.ROSTER_MAX: out.append(dict(id=None, subject=f"Roster at {n}: cut to {self.ROSTER_MAX} before Sunday", kind='roster', go='#club'))
             elif n < self.ROSTER_MIN: out.append(dict(id=None, subject=f"Roster at {n}: sign to at least {self.ROSTER_MIN}", kind='roster', go='#personnel/fa'))
@@ -166,6 +170,10 @@ class Session:
             if any(b['kind'] == 'roster' for b in self.blocking()):
                 return dict(done='Blocked', next=self.next_label(), why=self.blocking()[0]['subject'])
             self.step_cutdown()
+            self.stop = ('wire',); self.played = False
+            return dict(done='Cutdown', next=self.next_label())
+        if k == 'wire':
+            self.step_clear_wire()
             self.stop = ('week', 1); self.played = False
             return dict(done='Camp', next=self.next_label())
         if k == 'week':
@@ -309,7 +317,13 @@ class Session:
             for p in list(PSQ.squad(t)): PSQ.release_from_squad(L, t.abbr, p.pid)
         PSQ.reset_season(L)
         CD.finalize(L, rng)
-        WV.notify_user(L, WV.pending(L), 0, digest=True); WV.process(L, rng, 0)
+        # the cuts are on the wire; the GM reads it and claims before it clears (the next step)
+        WV.notify_user(L, WV.pending(L), 0, digest=True)
+
+    def step_clear_wire(self):
+        """Cut-down waivers clear: claims awarded by priority, the squads fill, the undrafted pile is settled, the season opens."""
+        L, rng = self.L, self.rng
+        WV.process(L, rng, 0)
         PSQ.fill_squads(L, rng)
         from franchise import clear_undrafted
         clear_undrafted(L, rng)
