@@ -149,7 +149,7 @@ TAGS = {'sign': 'Signing', 'release': 'Cut', 'trade': 'Trade', 'draft': 'Draft',
         'season_end': 'Season', 'inbox_trade': 'Trade', 'staff_hire': 'Staff', 'staff_release': 'Staff', 'staff_extend': 'Staff', 'poach': 'Staff', 'ps_sign': 'Practice Squad', 'ps_release': 'Practice Squad'}
 
 
-GROUP_TAG = {'trade': 'Trades', 'inbox_trade': 'Trades', 'sign': 'Signings', 'ps_sign': 'Signings', 'ps_callup': 'Signings', 'release': 'Cuts', 'ps_release': 'Cuts', 'waiver_claim': 'Claims', 'extension': 'Extensions', 'restructure': 'Extensions', 'tag': 'Tags',
+GROUP_TAG = {'trade': 'Trades', 'inbox_trade': 'Trades', 'sign': 'Signings', 'ps_sign': 'Practice Squad', 'ps_callup': 'Practice Squad', 'release': 'Cuts', 'ps_release': 'Practice Squad', 'waiver_claim': 'Claims', 'extension': 'Extensions', 'restructure': 'Extensions', 'tag': 'Tags',
              'fire': 'Coaching', 'hire': 'Coaching', 'gm_change': 'Coaching', 'staff_hire': 'Coaching', 'staff_release': 'Coaching', 'staff_extend': 'Coaching', 'poach': 'Coaching', 'retire': 'Other', 'hall_of_fame': 'Other', 'season_end': 'Other', 'position_change': 'Other', 'ir': 'Other', 'draft': 'Other'}
 
 
@@ -170,42 +170,50 @@ def _num(x):
 
 
 def _tx_line(league, x):
+    """'KC Sign: Noah Avinger (WR), 2 yrs at $1.2m': the club, the move, the man. The page draws the club's color in front."""
     k = x.get('kind'); p = league.player(x['pid']) if x.get('pid') else None
     nm = p.name if p else x.get('name', '')
     pos = f" ({p.pos})" if p else ''
     team = x.get('team') or x.get('to') or ''
-    if k == 'sign': return f"{team} sign {nm}{pos}" + (f", {x['years']} yrs" if x.get('years') else '') + (f" at ${x['apy']:.1f}m" if x.get('apy') else '')
-    if k == 'release': return f"{team} release {nm}{pos}" + (f", ${x['dead']:.1f}m penalty" if x.get('dead') else '')
+    if k == 'sign': return f"{team} Sign: {nm}{pos}" + (f", {x['years']} yrs" if x.get('years') else '') + (f" at ${x['apy']:.1f}m" if x.get('apy') else '')
+    if k == 'release': return f"{team} Release: {nm}{pos}" + (f", ${x['dead']:.1f}m penalty" if x.get('dead') else '')
     if k in ('trade', 'inbox_trade'):
         a, b = x.get('a') or x.get('buyer', ''), x.get('b') or x.get('seller', league.user_team if hasattr(league, 'user_team') else '')
-        return f"{a} and {b} make a trade" + (f": {a} send {', '.join(_asset(league, y) for y in x.get('a_sends', []))} for {', '.join(_asset(league, y) for y in x.get('b_sends', []))}" if x.get('a_sends') else '')
-    if k == 'draft': return f"{team} draft {nm}{pos} at {x.get('round', '?')}.{((x.get('selection', 1) - 1) % 32) + 1}"
-    if k == 'extension': return f"{team} extend {nm}{pos}" + (f", {x['years']} yrs at ${x['apy']:.1f}m" if x.get('apy') else '')
-    if k == 'waiver_claim': return f"{team} claim {nm}{pos} off waivers" + (f" from {x['from_team']}" if x.get('from_team') else '')
-    if k == 'ps_callup': return f"{team} call up {nm}{pos} from the practice squad"
+        return f"{a} Trade: send {', '.join(_asset(league, y) for y in x.get('a_sends', []))} to {b} for {', '.join(_asset(league, y) for y in x.get('b_sends', []))}" if x.get('a_sends') is not None else f"{a} Trade: with {b}"
+    if k == 'draft': return f"{team} Draft: {nm}{pos} at {x.get('round', '?')}.{((x.get('selection', 1) - 1) % 32) + 1}"
+    if k == 'extension': return f"{team} Extend: {nm}{pos}" + (f", {x['years']} yrs at ${x['apy']:.1f}m" if x.get('apy') else '')
+    if k == 'waiver_claim': return f"{team} Claim: {nm}{pos}" + (f" off waivers from {x['from_team']}" if x.get('from_team') else '')
+    if k == 'ps_sign': return f"{team} Practice Squad: {nm}{pos}"
+    if k == 'ps_release': return f"{team} Practice Squad Release: {nm}{pos}"
+    if k == 'ps_callup': return f"{team} Elevate: {nm}{pos} from the practice squad"
     if k == 'retire': return f"{nm}{pos} retires" + (f" at {x['age']}" if x.get('age') else '')
-    if k == 'fire': return f"{team} fire {x.get('coach', 'their head coach')}"
-    if k == 'hire': return f"{team} hire {x.get('coach', x.get('name', 'a head coach'))}"
-    if k == 'gm_change': return f"{team} hire {x.get('hired', 'a head coach')}" + (f", {x['background'].lower()}" if x.get('background') else '') + (f" after a {x['win_pct']:.3f} season" if x.get('win_pct') is not None else '')
+    if k == 'fire': return f"{team} Fire: {x.get('coach', 'their head coach')}"
+    if k == 'hire': return f"{team} Hire: {x.get('coach', x.get('name', 'a head coach'))}"
+    if k == 'gm_change': return f"{team} Hire: {x.get('hired', 'a head coach')}" + (f", {x['background'].lower()}" if x.get('background') else '')
     if k == 'hall_of_fame': return f"{nm}{pos} elected to the Hall of Fame"
     if k == 'season_end': return f"{x.get('champion', '')} win the Super Bowl"
-    if k == 'position_change': return f"{team} move {nm} to {x.get('to', '')}"
-    if k == 'tag': return f"{team} tag {nm}{pos}"
-    return f"{k.replace('_', ' ')}: {nm} {team}".strip()
+    if k == 'position_change': return f"{team} Position Change: {nm} to {x.get('to', '')}"
+    if k in ('tag', 'franchise_tag'): return f"{team} Tag: {nm}{pos}"
+    if k == 'restructure': return f"{team} Restructure: {nm}{pos}"
+    if k in ('staff_hire', 'staff_release', 'staff_extend', 'poach'): return f"{team} Staff: {x.get('name', '')}" + (f", {x['why']}" if x.get('why') else '')
+    return f"{team} {k.replace('_', ' ').title()}: {nm}".strip()
 
 
 def transactions(session, league, abbr, n=150):
-    rows = []
-    for x in reversed(league.transactions[-2000:]):
+    """The most recent n of each group, so a cut-down day's hundreds of squad signings do not push the cuts and claims off the page."""
+    rows = []; per = {}
+    for x in reversed(league.transactions[-6000:]):
         k = x.get('kind')
         if k not in TAGS: continue
+        g = GROUP_TAG.get(k, 'Other')
+        if per.get(g, 0) >= n: continue
+        per[g] = per.get(g, 0) + 1
         team = x.get('team') or x.get('a') or x.get('buyer') or x.get('to') or ''
         grp = GROUP_TAG.get(k, 'Other')
         link = ('trade' if k in ('trade', 'inbox_trade') else 'contract' if k in ('extension', 'sign', 'tag', 'restructure') else 'carousel' if k in ('fire', 'hire', 'gm_change') else 'card' if x.get('pid') else None)
         rows.append(dict(year=x.get('year'), week=x.get('week'), phase=x.get('phase'), kind=k, tag=TAGS.get(k, k), group=grp, line=_tx_line(league, x), mine=(abbr in (x.get('team'), x.get('a'), x.get('b'), x.get('buyer'), x.get('to'), x.get('from_team'))),
                         pid=x.get('pid'), team=(club(team) if team in league.teams else None), division=(league.teams[team].division if team in league.teams else None), link=link, i=len(rows)))
-        if len(rows) >= n: break
-    return dict(rail=rail(session, league, abbr), rows=rows, groups=['Trades', 'Signings', 'Cuts', 'Claims', 'Extensions', 'Tags', 'Coaching'], my_division=league.teams[abbr].division)
+    return dict(rail=rail(session, league, abbr), rows=rows, groups=['Trades', 'Signings', 'Cuts', 'Claims', 'Practice Squad', 'Extensions', 'Tags', 'Coaching'], my_division=league.teams[abbr].division)
 
 
 LEADERS = [('Passing Yards', 'pass_yds', 'yds'), ('Passing TD', 'pass_td', 'TD'), ('Rushing Yards', 'rush_yds', 'yds'), ('Rushing TD', 'rush_td', 'TD'), ('Receiving Yards', 'rec_yds', 'yds'), ('Receptions', 'rec', 'rec'),
@@ -369,3 +377,48 @@ def almanac(session, league, abbr):
             if x.get('name'): ledger.append(dict(club=club(a), name=x['name'], frm=x.get('from'), to=x.get('to'), record=x.get('record'), current=(x.get('to') is None)))
     ledger.sort(key=lambda x: (x['frm'] or 0), reverse=True)
     return dict(rail=rail(session, league, abbr), seasons=seasons, records=records, hall=hall, careers=careers, ledger=ledger, next_ballot=next_ballot, note=None if (seasons or hall or records) else 'The almanac fills as seasons close.')
+
+
+# ============================================================ THE TEAM PAGE
+def team_page(session, league, me_abbr, abbr):
+    """One club at a glance: record and place, the unit ranks, the coaches, the top five, the cap this year and
+    next, and the trading block (the men the club would move). Your own club shows the same page."""
+    import staff as ST, trades as TR, valuation as VAL, numpy as np
+    from views import rail, _division_place
+    from cap_engine import CAP
+    t = league.teams[abbr]; me = league.teams[me_abbr]
+    w, l = t.record[0], t.record[1]; d = t.record[2] if len(t.record) > 2 else 0
+    try: ranks = ST.unit_ranks(league, league.year).get(abbr, {})
+    except Exception: ranks = {}
+    staff = {role: (dict(name=c.name, rating=round(c.rating), specialty=c.specialty) if c else None) for role, c in (getattr(t, 'staff', None) or {}).items()}
+    top = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(p.apy, 1), yrs=(p.contract.years if p.contract else 0), no=getattr(p, 'number', None)) for p in sorted(t.active(), key=lambda p: -p.ovr)[:5]]
+    committed_next = round(sum(p.contract.cap_hit(1) for p in t.roster if p.contract and p.contract.years >= 2), 1)
+    limit_next = round(CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.055), 1)
+    # the block: the men this club would move, in the trade engine's own read
+    block = []
+    try:
+        rng = np.random.default_rng(abs(hash(abbr + str(league.week))) % (2 ** 32)); pool = VAL.pool_from_league(league)
+        sur, needs = TR.surplus_and_needs(league, t, pool, rng)
+        import views_personnel as VP
+        for x in sur[:8]:
+            p = league.player(x['pid'])
+            if p is None: continue
+            block.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(p.apy, 1), yrs=(p.contract.years if p.contract else 0), why=VP._surplus_why(league, t, x)))
+        needs = sorted(needs)
+    except Exception:
+        needs = []
+    from views import club
+    import practice_squad as PSQ
+    return dict(rail=rail(session, league, me_abbr), club=club(abbr), mine=(abbr == me_abbr), record=f"{w}–{l}" + (f"–{d}" if d else ''), place=_division_place(league, abbr), division=t.division,
+                ranks=dict(offense=ranks.get('oc'), defense=ranks.get('dc'), kicking=ranks.get('st')), coach=dict(name=t.gm.name if t.gm else '', prestige=round(getattr(t.gm, 'prestige', 0) or 0), background=getattr(t.gm, 'background', ''), personnel=getattr(t.gm, 'off_personnel', '')) if t.gm else None,
+                staff=staff, identity=_identity_names(league, t), top=top, cap=dict(space=round(t.cap_space, 1), limit=round(CAP.get(league.year, 301.2), 1), committed_next=committed_next, limit_next=limit_next), block=block, needs=needs,
+                roster_n=len(t.active()), ps_n=len(PSQ.squad(t)), ir_n=len(getattr(t, 'ir', None) or []), clubs=[club(c) for c in sorted(league.teams)])
+
+
+def _identity_names(league, t):
+    try:
+        import views_frontoffice as VF, identity_catalog as IC
+        ident = VF.club_identity(league, t)
+        return dict(offense=IC.ARCHETYPES[ident['offence']]['name'], defense=IC.ARCHETYPES[ident['defence']]['name'])
+    except Exception:
+        return dict(offense='', defense='')

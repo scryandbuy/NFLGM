@@ -86,7 +86,9 @@ def pick_belief(pick, years_out=0, lens=0.5):
     """
     p = int(np.clip(pick, 1, 262))
     t, m = PICK_VALUE.get(p, .01), MARKET_VALUE.get(p, .01)
-    return (lens * m + (1 - lens) * t) * (0.86 ** years_out)
+    # the analytics view discounts the market, but no GM gives a pick for less than 80% of what it fetches:
+    # the outcome chart is flat enough that an unbounded lens sold second-round picks for backups
+    return max(lens * m + (1 - lens) * t, 0.80 * m) * (0.86 ** years_out)
 
 def pick_edge(pick, years_out=0, lens=0.5):
     """
@@ -185,6 +187,12 @@ def trade_value(player, val, cap=CAP, contract=None):
             surplus = max(surplus, floor)
         total += surplus * (0.90 ** k)                      # future years discounted
         total += STAR_PREMIUM * worth * decline * tier * (0.90 ** k)
+    # SCARCITY. A backup's paper surplus (market minus salary over his years) is not what the league pays
+    # for him: a 71 or a 75 is on the street for the minimum, so his surplus is worth a fraction until he is a
+    # starter. Real compensation for depth is a sixth or a seventh (Kaleb Johnson for a 2028 sixth, Irvin Charles
+    # for a conditional seventh, Mac Jones for a sixth); a starter fetches a fourth or fifth; a star a second or first.
+    scarcity = float(np.clip((ovr - 72.0) / 12.0, 0.0, 1.0)) ** 1.5
+    total *= scarcity
     total *= POSITION_TRADE_MULT.get(player.get('madden_position'), 1.0)
     return round(total, 2)
 
@@ -263,7 +271,7 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
         # only decides whether he wants the deal.
         v = pick_belief_dollars(asset['pick'], asset.get('years_out', 0),
                                 lens=g['pick_lens'])
-        v *= WINDOW_PICK_BIAS[wdw] * (1.25 - 0.45*g['aggression'])
+        v *= max(0.75, WINDOW_PICK_BIAS[wdw] * (1.25 - 0.45*g['aggression']))
         return v
     # the owner values him on the full contract he is paying; a buyer on the
     # base and roster bonus he would inherit, the bonus having been paid

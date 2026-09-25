@@ -52,6 +52,27 @@ def waive(league, p, from_team, week):
                                 claims=[], user_notified=False))
 
 
+def reaches_user(league, e, week, market=None):
+    """Does this man reach the user's priority? False when a club ahead of him wants the man
+    (the wants() read is the same one the award uses, so this is the award foretold)."""
+    user = getattr(league, 'user_team', None)
+    if not user: return False
+    if 'ahead' in e: return e['ahead'] is None
+    p = league.player(e['pid'])
+    if p is None: e['ahead'] = 'gone'; return False
+    order = priority(league, week)
+    import valuation as VAL
+    if market is None:
+        try: market = VAL.value_player(league, p, side='team', rng=None)
+        except Exception: market = None
+    e['ahead'] = None
+    for abbr in order:
+        if abbr == user: break
+        if abbr != e['from_team'] and wants(league, abbr, p, week, market=market):
+            e['ahead'] = abbr; break
+    return e['ahead'] is None
+
+
 def priority(league, week, standings=None):
     """Clubs in claim order, first claims first."""
     teams = list(league.teams)
@@ -165,45 +186,39 @@ def award(league, entry, abbr):
 
 # ------------------------------------------------------------ the wire
 def notify_user(league, entries, week, digest=False):
-    """Inbox notices for the user's club: one per man in season, one digest at cut-down."""
+    """Inbox notices for the user's club. Cut-down: one note pointing at the wire page, which lists every
+    man who reaches his priority. In season: one note a man, and only for the men who reach him; a man a
+    club ahead will take is never offered."""
     import inbox as IB
     user = getattr(league, 'user_team', None)
     if not user: return
     order = priority(league, week)
     mine = order.index(user) + 1 if user in order else None
-    ents = [e for e in entries if not e['user_notified']]
+    ents = [e for e in entries if not e['user_notified'] and e.get('from_team') != user]
     for e in ents: e['user_notified'] = True
     seen = set(); ents = [e for e in ents if not (e['pid'] in seen or seen.add(e['pid']))]
     if not ents: return
-    if digest:
-        import draft as DFT
-        scale = DFT.position_scale(league)
-        top = sorted(ents, key=lambda e: -DFT.common_scale(league.player(e['pid']).ovr, league.player(e['pid']).pos, scale))
-        body = (f"{len(ents)} players were waived at cut-down. Your claim priority is {mine} of 32. "
-                "Claims are awarded at the next advance to the highest-priority club that claims.")
-        IB.post(league, 'waiver_digest', f'Waiver wire: {len(ents)} players available', body, sender='league',
-                payload=dict(players=[dict(pid=e['pid'], from_team=e['from_team'],
-                                           name=league.player(e['pid']).name, pos=league.player(e['pid']).pos,
-                                           ovr=round(league.player(e['pid']).ovr, 1), age=round(league.player(e['pid']).age),
-                                           accrued=league.player(e['pid']).accrued or 0,
-                                           cap_hit=round(league.player(e['pid']).contract.cap_hit(0) - league.player(e['pid']).contract.annual_proration, 2) if league.player(e['pid']).contract else None,
-                                           link=f'player:{e["pid"]}') for e in top],
-                             priority=mine), expires_week=(week or 0) + 1)
-        return
-    # the eight best of the week by common-scale grade; the rest are on the
-    # wire but not in the inbox
-    import draft as DFT
-    scale = DFT.position_scale(league)
-    ents = sorted(ents, key=lambda e: -DFT.common_scale(league.player(e['pid']).ovr, league.player(e['pid']).pos, scale))[:8]
+    import valuation as VAL
+    pool = VAL.pool_from_league(league)
+    reach = []
     for e in ents:
+        p = league.player(e['pid'])
+        if p is None: continue
+        try: market = VAL.value_player(league, p, side='team', rng=None, pool=pool)
+        except Exception: market = None
+        if reaches_user(league, e, week, market=market): reach.append(e)
+    if not reach: return
+    if digest or len(reach) > 12:
+        IB.post(league, 'waiver_digest', f'The wire: {len(reach)} players reach your priority', f"{len(ents)} players were waived and {len(reach)} of them clear every club ahead of you (you are {mine} of 32). They are on the wire page; claim any you want before the Advance, or leave them and nothing happens.", sender='league', payload=dict(link='personnel:waivers', n=len(reach), priority=mine), expires_week=(week or 0) + 1)
+        return
+    for e in reach:
         p = league.player(e['pid'])
         hit = round(p.contract.cap_hit(0) - p.contract.annual_proration, 2) if p.contract else None
         yrs = p.contract.years if p.contract else 0
-        body = (f"{p.name}, {p.pos}, age {p.age:.0f}, {p.accrued or 0} accrued seasons, was waived by {e['from_team']}. "
-                f"Inherited deal: {yrs} year(s) at ${hit}m this season. Your claim priority is {mine} of 32.")
-        IB.post(league, 'waiver_notice', f'On waivers: {p.name} ({p.pos})', body, sender='league',
-                payload=dict(pid=p.pid, from_team=e['from_team'], link=f'player:{p.pid}', priority=mine,
-                             cap_hit=hit, years=yrs), expires_week=(week or 0) + 1)
+        body = (f"{p.name}, {p.pos}, {round(p.ovr)} overall, age {p.age:.0f}, {p.accrued or 0} accrued seasons, waived by {e['from_team']}. "
+                f"No club ahead of you wants him; he is yours if you claim before the Advance." + (f" Inherited deal: {yrs} year(s) at ${hit}m this season." if hit is not None else ''))
+        IB.post(league, 'waiver_notice', f'Available on waivers: {p.name} ({p.pos})', body, sender='league',
+                payload=dict(pid=p.pid, from_team=e['from_team'], link=f'player:{p.pid}', priority=mine, cap_hit=hit, years=yrs), expires_week=(week or 0) + 1)
 
 
 def user_claim(league, pid, release_pid=None):
@@ -256,7 +271,9 @@ def process(league, rng, week, verbose=False):
         for abbr in order:
             if abbr == user:
                 if user in e['claims']:
-                    if make_room(league, user, p):
+                    # the user named his own man to make room with; only if he did not does the engine pick one
+                    rel = e.get('release_if_awarded')
+                    if (rel and league.player(rel) is not None and league.player(rel).team == user) or make_room(league, user, p):
                         award(league, e, user); awarded.append((p.pid, user)); break
                     IB.post(league, 'waiver_notice', f"Claim failed: {p.name}", f"Your claim on {p.name} ({p.pos}) could not be processed: no roster spot could be opened for him. He stays on the wire.", sender='league')
                 continue

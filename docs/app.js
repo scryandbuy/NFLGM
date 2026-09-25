@@ -76,6 +76,8 @@ function renderRail(r) {
 // ---------------------------------------------------------------- the Portal
 function sheet(title, small, ...body) { return el('section', { class: 'sheet' }, el('h2', {}, title, small ? el('small', {}, small) : null), ...body); }
 function stripe(abbr, text) { return el('span', { class: 'stripe', style: `--c:${COLOR[abbr] || '#555'}` }, text ?? abbr); }
+// a club's name as a link to its team page (your own club goes to Club)
+function clubLink(abbr, text) { const s = stripe(abbr, text); s.classList.add('clublink'); s.style.cursor = 'pointer'; s.onclick = e => { e.stopPropagation(); location.hash = (view && view.rail && view.rail.club && view.rail.club.abbr === abbr) ? '#club' : `#league/team/${abbr}`; }; return s; }
 function formDots(f, big = false) { return el('div', { class: 'form' + (big ? ' big-form' : '') }, ...f.map(x => el('i', { class: x }))); }
 
 // the desk card's second button: where the decision is made
@@ -109,15 +111,52 @@ function inboxSheet(v) {
   return inbox;
 }
 
-function redrawInbox() { view = pyJSON('SESSION.portal()'); if (location.hash === '#portal/inbox') renderInbox(view); else { renderRail(view.rail); renderPortal(view); } }
+function redrawInbox() { if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal_full()'); renderInbox(view); } else { view = pyJSON('SESSION.portal()'); renderRail(view.rail); renderPortal(view); } }
 
+let mailSel = null;
 function renderInbox(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Portal'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'portal'));
   document.body.classList.remove('no-second');
   $('#second').innerHTML = `<a href="#portal">Overview</a><a aria-current="page" href="#portal/inbox">Inbox <em>${v.inbox.total}</em></a><a href="#league/schedule">Calendar</a><a href="#league/transactions">News</a><a href="#frontoffice">Owner</a>`;
-  page.append(inboxSheet(v));
+  const reload = () => renderInbox(pyJSON('SESSION.portal_full()'));
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Inbox', el('small', {}, `${v.inbox.total} Messages · ${v.inbox.decide} Need a Decision · ${v.inbox.unread} Unread`)));
+  // the filters and the page-level actions
+  const tools = el('div', { class: 'mailtools' });
+  for (const [k, label, count] of [['all', 'All', v.inbox.total], ['club', 'Your Club', v.inbox.rows.filter(r => r.tag !== 'League').length], ['league', 'League', v.inbox.rows.filter(r => r.tag === 'League').length], ['decide', 'Decide', v.inbox.decide], ['unread', 'Unread', v.inbox.unread]])
+    tools.append(el('button', { class: 'chip', 'aria-pressed': String(inboxFilter === k), onclick: () => { inboxFilter = k; renderInbox(v); } }, `${label} `, el('em', {}, count)));
+  const rows = v.inbox.rows.filter(r => (inboxFilter !== 'decide' || r.decide) && (inboxFilter !== 'unread' || r.unread) && (inboxFilter !== 'league' || r.tag === 'League') && (inboxFilter !== 'club' || r.tag !== 'League'));
+  if (mailSel == null || !rows.some(r => r.id === mailSel)) mailSel = rows.length ? rows[0].id : null;
+  const cur = rows.find(r => r.id === mailSel) || null;
+  tools.append(el('span', { style: 'width:1px;background:var(--rule-2);height:22px;margin:0 6px' }),
+    el('button', { class: 'btn', disabled: cur && cur.unread ? null : '', onclick: () => { pyJSON(`SESSION.inbox_read(${cur.id})`); reload(); } }, 'Mark Read'),
+    el('button', { class: 'btn', disabled: cur ? null : '', 'data-tip': 'Remove this message', onclick: () => { pyJSON(`SESSION.inbox_delete(${cur.id})`); mailSel = null; reload(); } }, 'Delete'),
+    el('button', { class: 'btn quiet', onclick: () => { pyJSON('SESSION.inbox_mark_all()'); reload(); } }, 'Mark All Read'),
+    el('button', { class: 'btn quiet', 'data-tip': 'Remove every read message that needs no decision', onclick: () => { if (confirm('Clear every read message that needs no decision?')) { pyJSON('SESSION.inbox_clear_read()'); mailSel = null; reload(); } } }, 'Clear Read'),
+    el('span', { class: 'count' }, `${rows.length} shown`));
+  s.append(tools);
+  const box = el('div', { class: 'mailbox' });
+  const list = el('div', { class: 'list' });
+  for (const r of rows) list.append(el('div', { class: 'row' + (r.unread ? ' unread' : '') + (r.id === mailSel ? ' sel' : ''), onclick: () => { mailSel = r.id; if (r.unread) pyJSON(`SESSION.inbox_read(${r.id})`); renderInbox(pyJSON('SESSION.portal_full()')); } },
+    el('span', { class: 'dot' }), el('div', { style: 'min-width:0' }, el('div', { class: 'subj' }, r.subject), el('div', { class: 'from' }, `${r.tag}${r.from ? ' · ' + r.from : ''}`)), el('span', { class: 'meta' }, r.when || '')));
+  if (!rows.length) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : inboxFilter === 'league' ? 'Nothing from around the league yet.' : 'All read.'));
+  const pane = el('div', { class: 'pane' });
+  if (cur) {
+    const m = pyJSON(`SESSION.inbox_message(${cur.id})`);
+    pane.append(el('h3', {}, m.subject), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), el('div', { class: 'body' }, m.body || ''));
+    if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
+    else if (cur.decide) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { location.hash = `#portal/inbox/${cur.id}`; } }, 'Open the Decision')));
+    else if (m.link) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn', href: linkHash(m.link) }, 'Go There')));
+  } else pane.append(el('div', { class: 'empty' }, 'Select a message.'));
+  box.append(list, pane); s.append(box); page.append(s);
+}
+function linkHash(link) {
+  if (!link) return '#portal';
+  const [a, b] = String(link).split(':');
+  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
+  if (a === 'player') return '#club/player/' + b;
+  return MAP[link] || MAP[a] || '#portal';
 }
 
 function renderPortal(v) {
@@ -214,7 +253,7 @@ function renderPortal(v) {
   // cap, room, front office
   const capG = v.cap.by_group; const total = Object.values(capG).reduce((a, b) => a + b, 0) + v.cap.dead;
   const colors = { QB: '#c8102e', OL: '#e0b400', WR: '#4cc9f0', DL: '#3fb37f', DB: '#8791a0', LB: '#b6bec9', TE: '#5a6472', RB: '#a0603a', ST: '#3a3f47' };
-  const stack = el('div', { class: 'stack', style: 'margin-top:10px' }, ...Object.entries(capG).filter(([, x]) => x > 0).map(([g, x]) => el('i', { style: `width:${100 * x / v.cap.cap}%;background:${colors[g]}`, 'data-tip': `${g}: $${x.toFixed(1)}m` }, el('span', {}, g))), el('i', { style: `width:${100 * v.cap.dead / v.cap.cap}%;background:#3a1216`, 'data-tip': `Dead Money: $${v.cap.dead.toFixed(1)}m` }));
+  const stack = el('div', { class: 'stack', style: 'margin-top:10px' }, ...Object.entries(capG).filter(([, x]) => x > 0).map(([g, x]) => el('i', { class: (100 * x / v.cap.cap) < 7 ? 'narrow' : '', style: `width:${100 * x / v.cap.cap}%;background:${colors[g]}`, 'data-tip': `${g}: $${x.toFixed(1)}m` }, el('span', {}, g))), el('i', { style: `width:${100 * v.cap.dead / v.cap.cap}%;background:#3a1216`, 'data-tip': `Dead Money: $${v.cap.dead.toFixed(1)}m` }));
   const capS = sheet('Cap', `${v.cap.years[0].year} · $${v.cap.cap}m Limit`, el('div', { class: 'pad' }, el('div', { class: 'big' }, v.cap.space, el('span', { class: 'muted', style: 'font-size:16px;font-family:var(--text);font-weight:500' }, ' Space')), stack,
     el('div', { class: 'bars', style: 'padding:10px 0 0;grid-template-columns:96px 1fr 70px' }, ...v.cap.years.flatMap(y => [el('div', { class: 'l' }, y.year), el('div', { class: 't' }, el('i', { style: `width:${Math.min(100, 100 * y.committed / y.cap)}%;background:var(--ink-2)` })), el('div', { class: 'v' }, `$${y.committed}/${y.cap}`)]))),
     el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#frontoffice/cap' }, 'Restructure'), el('a', { class: 'btn', href: '#personnel/extensions' }, 'Extensions'), el('a', { class: 'btn quiet', href: '#frontoffice/cap' }, 'Ledger')));
@@ -307,7 +346,7 @@ function renderGameDay(v) {
     const d = g.drives[Math.max(0, shown - 1)]; const revealed = (shownPlays != null ? vis(d).slice(0, shownPlays) : vis(d));
     const atBreak = shownPlays == null && shown < g.drives.length && g.drives[shown].quarter > d.quarter;   // the drive shown was the quarter's last
     let hs = g.hs, as_ = g.as_;
-    if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { for (const p of revealed) if (p.kind === 'score') { if (p.type === 'field_goal') { if (d.off === g.home.abbr) hs += 3; else as_ += 3; } else if (p.td) { if (d.off === g.home.abbr) hs += 7; else as_ += 7; } } } }
+    if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { const add = (n, toOff) => { if ((d.off === g.home.abbr) === toOff) hs += n; else as_ += n; }; for (const p of revealed) { if (p.type === 'field_goal' && p.made) add(3, true); else if (p.td) add(6, true); else if (p.type === 'extra_point' && p.made !== false) add(1, true); else if (p.type === 'two_point' && p.made) add(2, true); else if (p.safety) add(2, false); } } }
     const lastPlay = revealed.length ? revealed[revealed.length - 1] : null;
     const headParts = lastPlay && lastPlay.head ? lastPlay.head.split(' · ') : [];
     const clock = atBreak ? '0:00' : (headParts.length >= 3 ? headParts[headParts.length - 1] : '');
@@ -407,6 +446,7 @@ function renderGameDay(v) {
     box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD', '')); D.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd), el('td', {}, ''))));
   };
   const drawLiveBox = (shown, shownPlays) => {
+    drawTeamStats(shown, shownPlays);
     if (shown >= g.drives.length && shownPlays == null) { drawFullBox(); return; }
     boxHead.querySelector('small').textContent = 'Live'; box.innerHTML = '';
     const pass = {}, rush = {}, recv = {};
@@ -424,15 +464,37 @@ function renderGameDay(v) {
     if (!Object.keys(pass).length && !Object.keys(rush).length) box.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'Step through the game; the box fills as plays are revealed.'))));
   };
 
-  // team stats side by side, and the assistants' read of what decided it
+  // team stats side by side: the full book at Final, and until then the totals of the plays revealed so far
+  let tsTable = null;
   if (g.team_stats && g.team_stats[g.home.abbr]) {
-    right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Team Stats'));
-    const ts = el('table', { class: 'box' }); const A = g.team_stats[g.away.abbr], H = g.team_stats[g.home.abbr];
-    ts.append(el('tr', {}, el('th', {}, ''), el('th', {}, g.away.abbr), el('th', {}, g.home.abbr)));
-    for (const [k, label] of [['yards', 'Total Yards'], ['plays', 'Plays'], ['ypp', 'Yards per Play'], ['pass_yds', 'Passing'], ['rush_yds', 'Rushing'], ['first_downs', 'First Downs'], ['third', 'Third Down'], ['fourth', 'Fourth Down'], ['red_zone', 'Red Zone TD'], ['turnovers', 'Turnovers'], ['sacks_allowed', 'Sacks Allowed'], ['penalties', 'Penalties'], ['top', 'Possession']])
-      ts.append(el('tr', {}, el('td', {}, label), el('td', {}, String(A[k])), el('td', {}, String(H[k]))));
-    right.append(ts);
+    right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Team Stats', el('small', { class: 'ts-note' }, 'Live')));
+    tsTable = el('table', { class: 'box' }); right.append(tsTable);
   }
+  const drawTeamStats = (shown, shownPlays) => {
+    if (!tsTable) return;
+    const final = shown >= g.drives.length && shownPlays == null;
+    tsTable.innerHTML = ''; tsTable.append(el('tr', {}, el('th', {}, ''), el('th', {}, g.away.abbr), el('th', {}, g.home.abbr)));
+    right.querySelector('.ts-note').textContent = final ? 'Final' : 'Live';
+    let A, H;
+    if (final) { A = g.team_stats[g.away.abbr]; H = g.team_stats[g.home.abbr]; }
+    else {
+      const mk = () => ({ plays: 0, yards: 0, pass_yds: 0, rush_yds: 0, first_downs: 0, turnovers: 0, sacks_allowed: 0, penalties: 0, ypp: 0, third: '—', fourth: '—', red_zone: '—', top: '—' });
+      const T = { [g.away.abbr]: mk(), [g.home.abbr]: mk() };
+      g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const plays = (last && shownPlays != null) ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays; const t = T[d.off]; if (!t) return;
+        for (const p of plays) { if (!p.type) continue; const y = p.yards || 0;
+          if (['run', 'scramble'].includes(p.type)) { t.plays++; t.yards += y; t.rush_yds += y; }
+          else if (['complete', 'incomplete', 'drop', 'interception', 'sack'].includes(p.type)) { t.plays++; if (p.type === 'complete') { t.yards += y; t.pass_yds += y; } if (p.type === 'sack') { t.yards += y; t.pass_yds += y; t.sacks_allowed++; } if (p.type === 'interception') t.turnovers++; }
+          else if (p.type === 'penalty') t.penalties++;
+          if (p.kind === 'turnover' && p.type !== 'interception' && !p.safety) t.turnovers++;
+        }
+        if (!(last && shownPlays != null)) t.first_downs += (d.first_downs || 0);
+      });
+      for (const t of Object.values(T)) t.ypp = t.plays ? (t.yards / t.plays).toFixed(1) : '0.0';
+      A = T[g.away.abbr]; H = T[g.home.abbr];
+    }
+    for (const [k, label] of [['yards', 'Total Yards'], ['plays', 'Plays'], ['ypp', 'Yards per Play'], ['pass_yds', 'Passing'], ['rush_yds', 'Rushing'], ['first_downs', 'First Downs'], ['third', 'Third Down'], ['fourth', 'Fourth Down'], ['red_zone', 'Red Zone TD'], ['turnovers', 'Turnovers'], ['sacks_allowed', 'Sacks Allowed'], ['penalties', 'Penalties'], ['top', 'Possession']])
+      tsTable.append(el('tr', {}, el('td', {}, label), el('td', {}, String(A[k] ?? '—')), el('td', {}, String(H[k] ?? '—'))));
+  };
   if (g.reads && g.reads.length) { right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, "Assistants' Read")); for (const r of g.reads) right.append(el('div', { class: 'pad', style: 'font-size:15.5px;color:var(--ink-2);padding-top:4px' }, r)); }
   page.append(right);
   draw();
@@ -453,29 +515,48 @@ function fitCell(f) { return el('span', { class: 'fit ' + (f > 0.05 ? 'p' : f < 
 function who(r) { return el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.no || r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, [r.college, r.season_no ? `${r.season_no}${ord(r.season_no)} season` : null].filter(Boolean).join(' · ')))); }
 
 let rosterSide = 'All', rosterQuery = '', rosterSel = null;
+let viewClub = null;   // null = your own club; an abbreviation = another club's page, read-only
+const CLUB_LIST = () => (view && view.rail && view.rail.clubs) ? view.rail.clubs : Object.keys(COLOR).sort().map(a => ({ abbr: a, name: a }));
+function clubSelect(current, onPick) {
+  const sel = el('select', { class: 'btn', style: 'width:auto;padding:4px 8px', 'data-tip': "Look at another club's roster and depth chart" });
+  const clubs = pyJSON('SESSION.club_list()');
+  for (const c of clubs) sel.append(el('option', { value: c.abbr, selected: c.abbr === current ? '' : null }, `${c.name}${c.mine ? ' (yours)' : ''}`));
+  sel.onchange = () => onPick(sel.value);
+  return sel;
+}
+function clubNav(abbr, mine, current) {
+  // the club's own sub-tabs: your club keeps its pages, another club's live under its team page
+  if (mine) return [['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps'], ['Injured Reserve', '#club/ir']];
+  return [['Team', `#league/team/${abbr}`], ['Roster', `#league/team/${abbr}/roster`], ['Depth Chart', `#league/team/${abbr}/depth`], ['Practice Squad', `#league/team/${abbr}/ps`]];
+}
+
 function renderRoster(v) {
   renderRail(v.rail);
+  const mine = v.mine !== false; const abbr = v.club_abbr || v.rail.club.abbr;
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
-  $('#crumb').textContent = 'Club'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
-  secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], clubTab === 'ps' ? '#club/ps' : '#club');
+  $('#crumb').textContent = mine ? 'Club' : 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === (mine ? 'club' : 'league')));
+  secondRow(clubNav(abbr, mine, null), mine ? (clubTab === 'ps' ? '#club/ps' : clubTab === 'ir' ? '#club/ir' : '#club') : (clubTab === 'ps' ? `#league/team/${abbr}/ps` : `#league/team/${abbr}/roster`));
   const sheet = el('section', { class: 'sheet c12' });
+  if (!mine) sheet.append(el('h2', {}, `${v.rail.clubs ? '' : ''}${abbr} Roster`, el('small', {}, 'another club · read-only')));
   const tabs = el('div', { class: 'tabs' });
   for (const [k, label, n] of [['active', 'Active', v.count], ['ps', 'Practice Squad', v.practice.length], ['injured', 'Injured', v.injured.length]])
-    tabs.append(el('button', { 'aria-pressed': String(clubTab === k), onclick: () => { clubTab = k; const want = k === 'ps' ? '#club/ps' : k === 'active' ? '#club' : null; if (want && location.hash !== want) { location.hash = want; } else renderRoster(v); } }, label + ' ', el('em', {}, n)));
+    tabs.append(el('button', { 'aria-pressed': String(clubTab === k), onclick: () => { clubTab = k; const want = mine ? (k === 'ps' ? '#club/ps' : k === 'ir' ? '#club/ir' : k === 'active' ? '#club' : null) : (k === 'ps' ? `#league/team/${abbr}/ps` : k === 'active' ? `#league/team/${abbr}/roster` : null); if (want && location.hash !== want) { location.hash = want; } else renderRoster(v); } }, label + ' ', el('em', {}, n)));
   const views = el('div', { class: 'tabs', style: 'margin-left:14px' });
   for (const k of ['Overview', 'Ratings', 'Contract', 'Stats']) views.append(el('button', { 'aria-pressed': String(clubView === k), onclick: () => { clubView = k; renderRoster(v); } }, k));
   const sides = el('div', { class: 'chips' });
   for (const k of ['All', 'Offense', 'Defense', 'Specialists']) sides.append(el('button', { class: 'chip', 'aria-pressed': String(rosterSide === k), onclick: () => { rosterSide = k; renderRoster(v); } }, k));
   const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a player', value: rosterQuery }); search.oninput = () => { rosterQuery = search.value; drawRows(); };
   const count = el('span', { class: 'count', style: 'margin-left:auto' });
-  sheet.append(el('div', { class: 'tools' }, tabs, views, sides, search, count));
+  const pick = clubSelect(abbr, a => { const m = pyJSON('SESSION.club_list()').find(c => c.abbr === a); location.hash = m && m.mine ? (clubTab === 'ps' ? '#club/ps' : '#club') : `#league/team/${a}/${clubTab === 'ps' ? 'ps' : 'roster'}`; });
+  sheet.append(el('div', { class: 'tools' }, pick, tabs, views, sides, search, count));
   const tbl = el('table', { class: 'tbl' });
   const H = (t, tip, n) => el('th', { 'data-tip': tip || null, class: n ? 'n' : null }, t);
   const heads = { Overview: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Ovr', 'Overall Rating', 1), H('Fit', "How well the player matches your coach's scheme", 1), H('Dev', 'Rate of XP Growth'), H('Condition', 'Game-day Freshness'), H('Morale', "Player's happiness"), H('Yrs', 'Years left on his contract', 1), H('Cap Hit', "This year's cap hit", 1), H('Penalty', 'Dead cap charged if player is cut/traded', 1), H('Status'), H('')],
                   Ratings: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Ovr', 'Overall Rating', 1), H('Ceiling', "The player's estimated potential", 1), H('Dev', 'Rate of XP Growth'), H('Fit', "How well the player matches your coach's scheme", 1), H('Morale', "Player's happiness"), H('')],
                   Contract: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Yrs', 'Years left on his contract', 1), H('Cap Hit', "This year's cap hit", 1), H('Penalty', 'Dead cap charged if player is cut/traded', 1), H('Status'), H('')],
                   Stats: [H('Player'), H('Pos', 'Position'), H('G', 'Games played', 1), H('This Season'), H('Comp%', 'Completion pct for a quarterback, catch pct for a receiver', 1), H('EPA', 'Expected points added per dropback, rush, target or defensive play by position', 1), H('')] }[clubView];
-  if (clubTab === 'ps') heads.push(el('th', {}, ''));
+  const hasStatus = ['Overview', 'Contract'].includes(clubView);
+  if (clubTab === 'ps' || clubTab === 'ir') { heads.splice(heads.length - (hasStatus ? 2 : 1), hasStatus ? 2 : 1); heads.push(el('th', {}, clubTab === 'ir' ? 'IR' : '')); }
   const acts = r => el('td', {}, el('div', { class: 'row-act' },
     el('button', { title: 'Card', 'data-tip': 'Open his card', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, '▣'),
     el('button', { title: 'Extend', 'data-tip': 'Ask his agent and open the talks', onclick: e => { e.stopPropagation(); const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`); notify(res); if (res.ok) location.hash = '#personnel/extensions'; } }, '$'),
@@ -483,7 +564,7 @@ function renderRoster(v) {
   const drawRows = () => {
     tbl.innerHTML = ''; tbl.append(el('tr', {}, ...heads));
     const q = rosterQuery.trim().toLowerCase(); let shown = 0;
-    const rowsFor = () => clubTab === 'ps' ? [{ title: 'Practice Squad', rows: v.practice }] : clubTab === 'injured' ? [{ title: 'Injured', rows: v.injured }] : v.groups;
+    const rowsFor = () => clubTab === 'ps' ? [{ title: 'Practice Squad', rows: v.practice }] : clubTab === 'ir' ? [{ title: `Injured Reserve · ${v.ir_returns_left} returns left`, rows: v.ir || [] }] : clubTab === 'injured' ? [{ title: 'Injured', rows: v.injured }] : v.groups;
     for (const g of rowsFor()) {
       const rows = g.rows.filter(r => (rosterSide === 'All' || r.side === rosterSide.toLowerCase().replace('specialists', 'special')) && (!q || r.name.toLowerCase().includes(q) || (r.college || '').toLowerCase().includes(q) || r.pos.toLowerCase() === q));
       if (!rows.length) continue;
@@ -494,8 +575,13 @@ function renderRoster(v) {
                         Ratings: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.pot_range ? `${r.pot_range[0]}–${r.pot_range[1]}` : (r.pot ?? '—')), el('td', {}, el('span', { class: 'dev' + (r.dev === 'Star' || r.dev === 'Superstar' || r.dev === 'X-Factor' ? ' star' : '') }, r.dev)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, pill(r.morale))],
                         Contract: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n' }, `$${r.penalty.toFixed(1)}m`), el('td', {}, el('span', { class: 'inj' }, r.status))],
                         Stats: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.stats.games), el('td', { style: 'text-align:left;font-family:var(--mono);font-size:14px' }, r.stats.line), el('td', { class: 'n' }, r.stats.comp != null ? `${r.stats.comp}%` : '—'), el('td', { class: 'n', style: r.stats.epa != null ? (r.stats.epa > 0 ? 'color:var(--ok)' : 'color:var(--danger)') : '' }, r.stats.epa != null ? (r.stats.epa > 0 ? '+' : '') + r.stats.epa.toFixed(2) : '—')] }[clubView]();
-        cells.push(acts(r));
-        if (clubTab === 'ps') {
+        if (clubTab === 'ps' || clubTab === 'ir') { if (hasStatus) cells.splice(cells.length - 1, 1); }   // the squad and IR pages carry no Status column and no card/agent/trade icons
+        else if (!mine) { if (hasStatus) cells.splice(cells.length - 1, 1); cells.push(el('td', {}, el('div', { class: 'row-act' }, el('button', { title: 'Card', 'data-tip': 'Open his card', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, '▣'), el('button', { title: 'Trade', 'data-tip': 'Ask about him in a trade', onclick: e => { e.stopPropagation(); tradeState = { other: abbr, a: [], b: [r.pid] }; location.hash = '#personnel/trades'; } }, '⇄')))); }
+        else cells.push(acts(r));
+        if (clubTab === 'ir') cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' }, el('span', { class: 'muted', style: 'font-size:12px;margin-right:6px' }, r.returnable ? `placed wk ${r.ir_week}` : 'season'), el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: r.can_activate ? null : '', 'data-tip': r.can_activate ? 'Back to the 53 (a spot must be open)' : (r.returnable ? 'Four weeks on the list and healthy first' : 'Placed for the season; no return'), onclick: () => { const res = pyJSON(`SESSION.club_act('ir_activate', pid=${JSON.stringify(r.pid)})`); notify(res); renderRoster(pyJSON('SESSION.club_roster()')); } }, 'Activate'))));
+        if (clubTab === 'ps' && !mine) {
+          cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' }, el('button', { class: 'btn go', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': "Sign him to your 53. Any club may; he leaves their squad when he signs, and must stay on your active roster three weeks", onclick: () => { const res = pyJSON(`SESSION.personnel_act('poach_ps', pid=${JSON.stringify(r.pid)})`); notify(res.ok ? { ok: true, line: res.line } : res); if (res.ok) location.hash = '#personnel/fa'; } }, 'Sign to Your Roster'))));
+        } else if (clubTab === 'ps') {
           const act = (name, extra) => { const res = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, ${extra})`); busy(res.ok ? (res.moves ? res.moves.map(m => `${m.name} ${m.how}`).join(', ') : `${res.name}: done.`) : res.why); setTimeout(() => busy(null), 2200); renderRoster(pyJSON('SESSION.club_roster()')); };
           cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' },
             el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'Sign him to the 53 at the minimum', onclick: () => act('call_up', `pid=${JSON.stringify(r.pid)}`) }, 'Call Up'),
@@ -511,6 +597,7 @@ function renderRoster(v) {
   const foot = el('div', { class: 'foot' });
   const drawFoot = () => {
     foot.innerHTML = '';
+    if (!mine) { foot.append(el('span', { class: 'count' }, `${v.count} on the 53 · ${v.practice.length} on the practice squad · read-only; double-click a name for his card`)); return; }
     const all = [...v.groups.flatMap(g => g.rows), ...v.practice, ...v.injured]; const r = all.find(x => x.pid === rosterSel);
     if (!r) { foot.append(el('span', { class: 'count' }, clubTab === 'ps' ? `Elevations this week: ${v.elevations_used} of ${v.elevations_max} · a player's ${v.per_man_max + 1}${ord(v.per_man_max + 1)} elevation signs him to the 53` : 'Click a row to select a player, then act on him here.')); return; }
     foot.append(el('span', { class: 'count' }, el('b', {}, r.name), ` · ${r.pos} · ${r.ovr} · ${r.yrs} yr${r.yrs === 1 ? '' : 's'} · $${r.hit.toFixed(1)}m`),
@@ -561,6 +648,8 @@ function renderCard(v) {
     acts.append(el('button', { class: 'btn', 'data-tip': 'Put him in a trade package and shop him', onclick: () => { tradeState = { other: tradeState.other, a: [v.pid], b: [], keep: true }; location.hash = '#personnel/trades'; } }, 'Trade Block'));
     acts.append(el('button', { class: 'btn warn', onclick: () => { if (!confirm(`Cut ${v.name}? Penalty $${v.contract.penalty.toFixed(1)}m against this year's cap.`)) return; const r = pyJSON(`SESSION.club_act('cut', pid=${JSON.stringify(v.pid)})`); notify(r.ok ? { ok: true, line: `${r.name} released. Penalty $${r.penalty}m.` } : r); location.hash = '#club'; } }, `Cut · Penalty $${v.contract.penalty.toFixed(1)}m`));
     acts.append(el('button', { class: 'btn', disabled: v.actions.ps_ok ? null : '', 'data-tip': v.actions.ps_ok ? (v.actions.vested ? 'A vested veteran: he goes straight to the practice squad' : 'He must clear waivers first; if no club claims him at the Advance he joins your practice squad') : 'The squad has no room for him under its rules', onclick: () => { if (!confirm(`Waive ${v.name} to the practice squad? Penalty $${v.contract.penalty.toFixed(1)}m.${v.actions.vested ? '' : ' Another club may claim him first.'}`)) return; const r = pyJSON(`SESSION.club_act('to_squad', pid=${JSON.stringify(v.pid)})`); notify(r); if (r.ok) location.hash = '#club'; } }, 'Waive to Practice Squad'));
+    if (v.actions.hurt && !v.actions.on_ir) acts.append(el('button', { class: 'btn', 'data-tip': 'Injured reserve: off the 53 now, salary counts in full; back after four weeks if a return is left', onclick: () => { const se = confirm(`Place ${v.name} on IR.\n\nOK = designated to return (four weeks minimum, uses one of the club's returns).\nCancel = ask again for season-ending.`); let res; if (se) res = pyJSON(`SESSION.club_act('ir', pid=${JSON.stringify(v.pid)})`); else if (confirm(`Place ${v.name} on IR for the season? He will not return this year.`)) res = pyJSON(`SESSION.club_act('ir', pid=${JSON.stringify(v.pid)}, season_ending=True)`); else return; notify(res); if (res.ok) location.hash = '#club/ir'; } }, 'Place on IR'));
+    if (v.actions.on_ir) acts.append(el('button', { class: 'btn', 'data-tip': 'Back to the 53', onclick: () => { const res = pyJSON(`SESSION.club_act('ir_activate', pid=${JSON.stringify(v.pid)})`); notify(res); if (res.ok) location.hash = '#club'; } }, 'Activate from IR'));
   }
   acts.append(el('button', { class: 'btn quiet', onclick: () => history.back() }, 'Back'));
   tabs.append(acts); s.append(tabs);
@@ -669,16 +758,20 @@ function renderDepth(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Club'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
-  secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '#club/depth');
-  const reload = () => renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)})`));
+  const mine = v.mine !== false; const abbr = v.club_abbr || v.rail.club.abbr;
+  $('#crumb').textContent = mine ? 'Club' : 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === (mine ? 'club' : 'league')));
+  secondRow(clubNav(abbr, mine, null), mine ? '#club/depth' : `#league/team/${abbr}/depth`);
+  const reload = () => renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)}${mine ? '' : ', ' + JSON.stringify(abbr)})`));
   const s = el('section', { class: 'sheet c12' });
   // the side tabs, then the package
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   for (const [k, l] of [['offense', 'Offense'], ['defense', 'Defense'], ['specialists', 'Specialists']]) tabs.append(el('button', { 'aria-pressed': String(depthSide === k), onclick: () => { depthSide = k; renderDepth(v); } }, l));
+  tabs.append(el('span', { style: 'margin-left:auto' }), clubSelect(abbr, a => { const m = pyJSON('SESSION.club_list()').find(c => c.abbr === a); location.hash = m && m.mine ? '#club/depth' : `#league/team/${a}/depth`; }));
+  if (!mine) tabs.append(el('span', { class: 'count', style: 'margin-left:8px;align-self:center' }, 'read-only'));
   s.append(tabs);
   if (depthSide === 'defense') {
     const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
-    for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)})`)); } }, p));
+    for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)}${mine ? '' : ', ' + JSON.stringify(abbr)})`)); } }, p));
     pk.append(el('span', { class: 'snaps' }, 'Drag within a column · double-click opens the player'));
     s.append(pk);
   }
@@ -690,15 +783,15 @@ function renderDepth(v) {
     const col = el('div', { class: 'dcol' + (pinned ? ' yours' : '') }, el('div', { class: 'pos' }, c.title));
     const move = (i, dir) => { const order = men.map(m => m.pid); [order[i + dir], order[i]] = [order[i], order[i + dir]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); };
     men.forEach((x, i) => {
-      const fit = x.fit || 0; const fitEl = x.flag_word ? el('span', { class: 'tag ' + (x.flag === 'out' ? 'out' : 'q') }, x.flag_word + (x.flag === 'out' && x.out ? ` · Wk ${x.out}` : '')) : el('span', { class: 'fit' }, 'Fit ', el('b', { class: fit > 0.05 ? 'up' : fit < -0.05 ? 'dn' : '' }, (fit > 0.05 ? '+' : fit < -0.05 ? '−' : '\u00a0') + Math.abs(fit).toFixed(1)));
-      const plate = el('div', { class: 'plate3' + (x.start ? ' start' : '') + (x.flag === 'out' ? ' out' : ''), draggable: 'true', title: x.name },
+      const fit = x.fit || 0; const fitEl = x.flag_word ? el('span', { class: 'tag ' + (x.flag === 'out' ? 'out' : 'q') }, x.flag_word) : x.elevated ? el('span', { class: 'tag q', 'data-tip': 'Elevated from the practice squad for this game' }, 'Elevated') : el('span', { class: 'fit' }, 'Fit ', el('b', { class: fit > 0.05 ? 'up' : fit < -0.05 ? 'dn' : '' }, (fit > 0.05 ? '+' : fit < -0.05 ? '−' : '\u00a0') + Math.abs(fit).toFixed(1)));
+      const plate = el('div', { class: 'plate3' + (x.start ? ' start' : '') + (x.flag === 'out' ? ' out' : ''), draggable: mine ? 'true' : 'false', title: x.name },
         el('div', { class: 'row1' }, el('span', { class: 'no' }, x.no || ''), el('span', { class: 'nm' }, x.name.split(' ').slice(1).join(' ') || x.name)),
         el('div', { class: 'row2' }, x.sub ? el('span', { class: 'fit' }, x.sub) : fitEl, el('span', { class: 'ov' }, x.ovr)));
       plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); plate.classList.add('dragging'); });
       plate.addEventListener('dragend', () => plate.classList.remove('dragging'));
       plate.addEventListener('dragover', e => { e.preventDefault(); plate.classList.add('over'); });
       plate.addEventListener('dragleave', () => plate.classList.remove('over'));
-      plate.addEventListener('drop', e => { e.preventDefault(); plate.classList.remove('over'); let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; } if (!d || d.pos !== c.pos || d.pid === x.pid) return; const order = men.map(m => m.pid).filter(p => p !== d.pid); order.splice(order.indexOf(x.pid), 0, d.pid); pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); });
+      plate.addEventListener('drop', e => { if (!mine) return; e.preventDefault(); plate.classList.remove('over'); let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; } if (!d || d.pos !== c.pos || d.pid === x.pid) return; const order = men.map(m => m.pid).filter(p => p !== d.pid); order.splice(order.indexOf(x.pid), 0, d.pid); pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); });
       plate.addEventListener('dblclick', () => { location.hash = '#club/player/' + x.pid; });
       col.append(plate);
     });
@@ -706,8 +799,9 @@ function renderDepth(v) {
     chart.append(col);
   }
   s.append(chart);
-  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); reload(); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); reload(); } }, 'Auto-Fill by Fit'),
+  if (mine) s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); reload(); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); reload(); } }, 'Auto-Fill by Fit'),
     v.assistant && depthSide === 'defense' ? el('span', { class: 'read', style: 'margin:0 0 0 10px;padding:6px 10px;flex:1' }, el('b', {}, 'Assistants: '), v.assistant) : el('span', { class: 'count', style: 'margin-left:auto' }, 'Highlighted players are starters')));
+  else s.append(el('div', { class: 'foot' }, el('span', { class: 'count' }, 'Highlighted players are starters · another club, read-only')));
   page.append(s);
 }
 
@@ -767,7 +861,7 @@ function renderTrades(v) {
   const can = v.can_trade && (tradeState.a.length || tradeState.b.length);
   foot.append(el('button', { class: 'btn go', disabled: can ? null : '', onclick: () => { const r = pyJSON(`SESSION.personnel_act('propose', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`); notify(r); if (r.done) { tradeState.a = []; tradeState.b = []; } reload(); } }, 'Propose'),
     el('button', { class: 'btn', disabled: v.can_trade && tradeState.b.length ? null : '', 'data-tip': 'Ask what it would take from your picks', onclick: () => { const r = pyJSON(`SESSION.personnel_act('ask', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`); notify(r); if (r.adds) for (const id of r.adds) if (!tradeState.a.includes(id)) tradeState.a.push(id); reload(); } }, 'Ask What They Want'),
-    el('button', { class: 'btn', disabled: v.can_trade && tradeState.a.length === 1 && !tradeState.a[0].includes('-') ? null : '', 'data-tip': 'Shop the one player you send to every club', onclick: () => { const r = pyJSON(`SESSION.personnel_act('gather', pid=${JSON.stringify(tradeState.a[0])})`); const box = $('#gather'); box.innerHTML = ''; box.append(el('b', {}, r.line)); for (const o of r.offers) box.append(el('div', { style: 'display:flex;gap:10px;align-items:center;margin-top:6px' }, crest(o.club, 26), el('span', {}, `${o.club.name} offers `, el('b', {}, o.pick.label)), el('button', { class: 'btn', style: 'margin-left:auto;padding:3px 8px;font-size:14px', onclick: () => { tradeState = { other: o.club.abbr, a: [tradeState.a[0]], b: [o.pick.id] }; reload(); } }, 'Open'))); } }, 'Gather Offers'),
+    el('button', { class: 'btn', disabled: v.can_trade && tradeState.a.length === 1 && !tradeState.a[0].includes('-') ? null : '', 'data-tip': 'Shop the one player you send to every club', onclick: () => { const r = pyJSON(`SESSION.personnel_act('gather', pid=${JSON.stringify(tradeState.a[0])})`); const box = $('#gather'); box.innerHTML = ''; box.append(el('b', {}, r.line)); const list = el('div', { style: 'max-height:320px;overflow-y:auto;margin-top:6px;padding-right:6px' }); for (const o of r.offers) list.append(el('div', { style: 'display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule)' }, crest(o.club, 26), el('span', {}, `${o.club.name} offer `, el('b', {}, o.words.join(' and '))), el('button', { class: 'btn', style: 'margin-left:auto;padding:3px 8px;font-size:14px', onclick: () => { tradeState = { other: o.club.abbr, a: [tradeState.a[0]], b: o.ids }; reload(); } }, 'Open'))); box.append(list); } }, 'Gather Offers'),
     el('button', { class: 'btn quiet', onclick: () => { tradeState.a = []; tradeState.b = []; reload(); } }, 'Clear'));
   foot.append(el('span', { class: 'count', style: 'margin-left:auto' }, (v.note || (v.can_trade ? `Deadline after Week ${v.deadline_week}` : '')) + ` · ${v.balance}`));
   s.append(foot, two, el('div', { class: 'read', id: 'gather', style: 'margin:0 14px 14px' }, 'Send one player and Gather Offers to see what the league would give.'));
@@ -1299,6 +1393,39 @@ function renderPicks(v) {
   s.append(rt); drawR(); page.append(s);
 }
 
+// ---------------------------------------------------------------- Team page (another club at a glance)
+function renderTeam(v) {
+  renderRail(v.rail);
+  const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
+  $('#crumb').textContent = 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'league'));
+  secondRow(clubNav(v.club.abbr, false, null), `#league/team/${v.club.abbr}`);
+  const left = el('section', { class: 'sheet c8' });
+  left.append(el('div', { class: 'head', style: 'padding:14px' }, crest(v.club, 56), el('div', {}, el('div', { class: 'hname' }, `${v.club.name.toUpperCase()} ${v.club.nick}`), el('div', { class: 'hline' }, `${v.record} · ${v.place}`),
+    el('div', { class: 'hfacts' }, el('div', {}, el('span', {}, 'Offense'), el('b', {}, v.ranks.offense ? `${v.ranks.offense}${ord(v.ranks.offense)}` : '—')), el('div', {}, el('span', {}, 'Defense'), el('b', {}, v.ranks.defense ? `${v.ranks.defense}${ord(v.ranks.defense)}` : '—')), el('div', {}, el('span', {}, 'Cap Space'), el('b', {}, `$${v.cap.space}m`)), el('div', {}, el('span', {}, 'Next Year'), el('b', {}, `$${v.cap.committed_next}m of $${v.cap.limit_next}m`)), el('div', {}, el('span', {}, 'Roster'), el('b', {}, `${v.roster_n} · PS ${v.ps_n}${v.ir_n ? ' · IR ' + v.ir_n : ''}`)))),
+    el('div', { style: 'margin-left:auto' }, clubSelect(v.club.abbr, a => { const m = pyJSON('SESSION.club_list()').find(c => c.abbr === a); location.hash = m && m.mine ? '#club' : `#league/team/${a}`; }))));
+  // the coaches
+  const h5 = (t, sub) => el('div', { class: 'h5' }, t, sub ? el('span', {}, sub) : '');
+  const st = el('div', { class: 'pad' }, h5('Coaching', `${v.identity.offense} · ${v.identity.defense}`));
+  const kv = el('div', { class: 'kv' });
+  if (v.coach) kv.append(el('span', {}, 'Head Coach'), el('span', {}, `${v.coach.name}${v.coach.background ? ' · ' + v.coach.background : ''}${v.coach.personnel ? ' · ' + v.coach.personnel + ' personnel' : ''}`));
+  for (const [k, l] of [['oc', 'Offensive Coordinator'], ['dc', 'Defensive Coordinator'], ['st', 'Special Teams'], ['scout', 'Head Scout']]) { const c = v.staff[k]; kv.append(el('span', {}, l), el('span', {}, c ? `${c.name} (${c.rating}) · ${c.specialty}` : '—')); }
+  st.append(kv); left.append(st);
+  // the top five
+  left.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Top Players'));
+  const tt = el('table', { class: 'tbl' }); tt.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n' }, 'Deal')));
+  for (const p of v.top) tt.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + p.pid; } }, el('div', { class: 'no' }, p.no ?? p.pos), el('div', { class: 'nm' }, p.name))), el('td', {}, p.pos), el('td', { class: 'n' }, p.age), el('td', { class: 'n' }, ovrCell(p.ovr)), el('td', { class: 'n' }, `$${p.apy}m × ${p.yrs}`)));
+  left.append(tt);
+  page.append(left);
+  // the block
+  const right = el('section', { class: 'sheet c4' }, el('h2', {}, 'Trading Block', el('small', {}, v.needs.length ? `needs ${v.needs.join(', ')}` : '')));
+  const bt = el('table', { class: 'tbl' }); bt.append(el('tr', {}, el('th', {}, 'Player'), el('th', { class: 'n' }, 'Ovr'), el('th', {}, '')));
+  for (const p of v.block) bt.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + p.pid; } }, el('div', { class: 'no' }, p.pos), el('div', { class: 'nm' }, p.name, el('small', {}, `${p.why} · $${p.apy}m`)))), el('td', { class: 'n' }, ovrCell(p.ovr)), el('td', {}, v.mine ? '' : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:13px', 'data-tip': 'Open a trade for him', onclick: () => { tradeState = { other: v.club.abbr, a: [], b: [p.pid] }; location.hash = '#personnel/trades'; } }, 'Ask'))));
+  if (!v.block.length) bt.append(el('tr', {}, el('td', { colspan: '3' }, el('div', { class: 'empty' }, 'Nobody they would move right now.'))));
+  right.append(bt);
+  right.append(el('div', { class: 'foot' }, el('a', { class: 'btn', href: `#league/team/${v.club.abbr}/roster` }, 'Roster'), el('a', { class: 'btn', href: `#league/team/${v.club.abbr}/depth` }, 'Depth Chart'), el('a', { class: 'btn', href: `#league/team/${v.club.abbr}/ps` }, 'Practice Squad'), v.mine ? '' : el('a', { class: 'btn quiet', href: '#personnel/trades', onclick: () => { tradeState = { other: v.club.abbr, a: [], b: [] }; } }, 'Trade')));
+  page.append(right);
+}
+
 // ---------------------------------------------------------------- League
 const LG = { standings: 'Standings', schedule: 'Schedule', transactions: 'Transactions', stats: 'Stats', awards: 'Awards', coaching: 'Coaching', almanac: 'Almanac' };
 function lgSecond(cur) { secondRow(Object.entries(LG).map(([k, l]) => [l, '#league/' + k]), '#league/' + cur); $('#crumb').textContent = 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'league')); }
@@ -1313,19 +1440,19 @@ function renderStandings(v) {
   if (standingsView === 'Conference') {
     for (const conf of ['AFC', 'NFC']) {
       const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, conf), el('th', { class: 'n' }, 'Seed'), el('th', { class: 'n' }, 'W'), el('th', { class: 'n' }, 'L'), el('th', { class: 'n' }, 'T'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Strength of victory' }, 'SOV'), el('th', { class: 'n', 'data-tip': 'Strength of schedule' }, 'SOS'), el('th', {}, 'Form')));
-      for (const r of v.conferences[conf]) t.append(el('tr', { style: r.me ? 'background:var(--sheet-2)' : '' }, el('td', {}, stripe(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.seed ? el('span', { class: 'seed ' + (r.seed === 1 ? 'bye' : 'in') + (r.me ? ' me' : '') }, r.seed) : ''), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', { class: 'n' }, r.t), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), pd(r), el('td', { class: 'n' }, r.sov != null ? r.sov.toFixed(3).replace(/^0/, '') : '—'), el('td', { class: 'n' }, r.sos != null ? r.sos.toFixed(3).replace(/^0/, '') : '—'), el('td', {}, formDots(r.form))));
+      for (const r of v.conferences[conf]) t.append(el('tr', { style: r.me ? 'background:var(--sheet-2)' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.seed ? el('span', { class: 'seed ' + (r.seed === 1 ? 'bye' : 'in') + (r.me ? ' me' : '') }, r.seed) : ''), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', { class: 'n' }, r.t), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), pd(r), el('td', { class: 'n' }, r.sov != null ? r.sov.toFixed(3).replace(/^0/, '') : '—'), el('td', { class: 'n' }, r.sos != null ? r.sos.toFixed(3).replace(/^0/, '') : '—'), el('td', {}, formDots(r.form))));
       s.append(t);
     }
   } else if (standingsView === 'League') {
     const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Club'), el('th', { class: 'n' }, 'W'), el('th', { class: 'n' }, 'L'), el('th', { class: 'n' }, 'T'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n' }, 'PF'), el('th', { class: 'n' }, 'PA'), el('th', { class: 'n' }, 'PD'), el('th', {}, 'Form')));
-    v.league_rows.forEach((r, i) => t.append(el('tr', { style: r.me ? 'background:var(--sheet-2)' : '' }, el('td', { class: 'n' }, i + 1), el('td', {}, stripe(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', { class: 'n' }, r.t), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', {}, formDots(r.form)))));
+    v.league_rows.forEach((r, i) => t.append(el('tr', { style: r.me ? 'background:var(--sheet-2)' : '' }, el('td', { class: 'n' }, i + 1), el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', { class: 'n' }, r.t), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', {}, formDots(r.form)))));
     s.append(t);
   } else {
     const grid = el('div', { class: 'divgrid' });
     for (const d of v.divisions) {
       const box = el('div', { class: 'divbox' }, el('h4', {}, d.name)); const t = el('table', { class: 'tbl' });
       t.append(el('tr', {}, el('th', {}, 'Club'), el('th', { class: 'n' }, 'W'), el('th', { class: 'n' }, 'L'), el('th', {}, 'Form'), el('th', { class: 'n', 'data-tip': 'Points for' }, 'PF'), el('th', { class: 'n', 'data-tip': 'Points against' }, 'PA'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Record inside the division' }, 'Div'), el('th', { class: 'n', 'data-tip': 'Moved since last week' }, '')));
-      for (const r of d.rows) t.append(el('tr', { style: r.me ? 'background:var(--sheet-2)' : '' }, el('td', {}, stripe(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', {}, formDots(r.form)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', { class: 'n' }, r.div_rec), el('td', { class: 'n' }, arrow(r))));
+      for (const r of d.rows) t.append(el('tr', { style: r.me ? 'background:var(--sheet-2)' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', {}, formDots(r.form)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', { class: 'n' }, r.div_rec), el('td', { class: 'n' }, arrow(r))));
       box.append(t); grid.append(box);
     }
     s.append(grid);
@@ -1339,8 +1466,8 @@ function pictureSheet(v) {
   for (const c of v.picture) {
     r.append(el('h4', { style: 'padding:8px 14px 0;font-size:15px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em' }, c.conf));
     const t = el('table', { class: 'tbl' });
-    for (const x of c.seeds) t.append(el('tr', { style: x.me ? 'background:var(--sheet-2)' : '' }, el('td', { style: 'width:34px' }, el('span', { class: 'seed ' + (x.bye ? 'bye' : 'in') + (x.me ? ' me' : '') }, x.seed)), el('td', {}, stripe(x.club.abbr, x.club.name)), el('td', { class: 'n' }, x.record), el('td', {}, el('small', { style: 'color:var(--ink-3)' }, x.bye ? 'Bye' : x.div_winner ? 'Div' : 'WC'))));
-    for (const x of c.hunt) t.append(el('tr', { style: 'color:var(--ink-3)' + (x.me ? ';background:var(--sheet-2)' : '') }, el('td', {}, el('span', { class: 'seed bub' }, '·')), el('td', {}, stripe(x.club.abbr, x.club.name)), el('td', { class: 'n' }, x.record), el('td', {}, el('small', {}, 'in the hunt'))));
+    for (const x of c.seeds) t.append(el('tr', { style: x.me ? 'background:var(--sheet-2)' : '' }, el('td', { style: 'width:34px' }, el('span', { class: 'seed ' + (x.bye ? 'bye' : 'in') + (x.me ? ' me' : '') }, x.seed)), el('td', {}, clubLink(x.club.abbr, x.club.name)), el('td', { class: 'n' }, x.record), el('td', {}, el('small', { style: 'color:var(--ink-3)' }, x.bye ? 'Bye' : x.div_winner ? 'Div' : 'WC'))));
+    for (const x of c.hunt) t.append(el('tr', { style: 'color:var(--ink-3)' + (x.me ? ';background:var(--sheet-2)' : '') }, el('td', {}, el('span', { class: 'seed bub' }, '·')), el('td', {}, clubLink(x.club.abbr, x.club.name)), el('td', { class: 'n' }, x.record), el('td', {}, el('small', {}, 'in the hunt'))));
     r.append(t);
   }
   r.append(el('div', { class: 'legend-line' }, 'Division winners seed one through four; the one seed has the bye. Ties break by the league rules.'));
@@ -1358,7 +1485,7 @@ function renderSchedule(v) {
   s.append(el('div', { class: 'h5', style: 'padding:8px 14px 0' }, `Week ${v.week} · ${done ? 'Results' : 'Upcoming'}`, el('span', {}, done ? 'Click your game for the box score' : '')));
   const grid = el('div', { class: 'games' });
   for (const g of v.games) {
-    const tm = (c, rec, win, at) => el('div', { class: 'tm' + (g.done ? (win ? ' w' : ' l') : '') }, at ? el('small', {}, 'at') : '', stripe(c.abbr, c.name), el('small', {}, rec));
+    const tm = (c, rec, win, at) => el('div', { class: 'tm' + (g.done ? (win ? ' w' : ' l') : '') }, at ? el('small', {}, 'at') : '', clubLink(c.abbr, c.name), el('small', {}, rec));
     const card = el('div', { class: 'game' + (g.mine ? ' mine' : '') + (g.done ? ' done' : '') },
       tm(g.away, g.away_rec, g.winner === g.away.abbr, false), el('div', { class: 'sc' }, g.done ? String(g.ap) : ''),
       tm(g.home, g.home_rec, g.winner === g.home.abbr, true), el('div', { class: 'sc' }, g.done ? String(g.hp) : ''),
@@ -1379,7 +1506,7 @@ function renderTeamSchedule(v) {
   for (const r of rows) {
     if (r.bye) { t.append(el('tr', { style: 'color:var(--ink-3)' }, el('td', { class: 'n' }, r.week), el('td', { class: 'l', colspan: '4' }, 'Bye'))); continue; }
     const g = r.g;
-    t.append(el('tr', { style: g.done && g.result === 'W' ? '' : g.done ? 'color:var(--ink-2)' : 'color:var(--ink-3)' }, el('td', { class: 'n' }, g.week), el('td', { class: 'l' }, el('span', { style: 'display:inline-block;width:22px;color:var(--ink-3)' }, g.home ? 'vs' : 'at'), stripe(g.opp.abbr, g.opp.name)), el('td', {}, g.opp_rec), el('td', {}, g.result ? el('span', { style: `font-family:var(--display);font-weight:900;color:${g.result === 'W' ? 'var(--ok)' : g.result === 'L' ? 'var(--danger)' : 'var(--ink-2)'}` }, g.result) : 'Upcoming'),
+    t.append(el('tr', { style: g.done && g.result === 'W' ? '' : g.done ? 'color:var(--ink-2)' : 'color:var(--ink-3)' }, el('td', { class: 'n' }, g.week), el('td', { class: 'l' }, el('span', { style: 'display:inline-block;width:22px;color:var(--ink-3)' }, g.home ? 'vs' : 'at'), clubLink(g.opp.abbr, g.opp.name)), el('td', {}, g.opp_rec), el('td', {}, g.result ? el('span', { style: `font-family:var(--display);font-weight:900;color:${g.result === 'W' ? 'var(--ok)' : g.result === 'L' ? 'var(--danger)' : 'var(--ink-2)'}` }, g.result) : 'Upcoming'),
       el('td', { class: 'n' }, g.done ? (g.box ? el('a', { href: `#gameday/${g.week}`, class: 'score-link', 'data-tip': 'Open the box score' }, `${g.mine}–${g.theirs}`) : `${g.mine}–${g.theirs}`) : '')));
   }
   s.append(t); page.append(s);
@@ -1425,7 +1552,7 @@ function renderStats(v) {
     s.append(grid);
   } else if (statsTab === 'Team') {
     const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Club'), el('th', { class: 'n' }, 'PF/G'), el('th', { class: 'n' }, 'PA/G'), el('th', { class: 'n' }, 'Yds/G'), el('th', { class: 'n' }, 'Pass/G'), el('th', { class: 'n' }, 'Rush/G'), el('th', { class: 'n' }, 'EPA/Play'), el('th', { class: 'n' }, 'Sacks'), el('th', { class: 'n' }, 'INT')));
-    for (const r of v.team) t.append(el('tr', { style: r.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, stripe(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), el('td', { class: 'n' }, r.ypg), el('td', { class: 'n' }, r.pyds), el('td', { class: 'n' }, r.ryds), el('td', { class: 'n', style: r.epa > 0 ? 'color:var(--ok)' : r.epa < 0 ? 'color:var(--danger)' : '' }, (r.epa > 0 ? '+' : '') + r.epa.toFixed(2)), el('td', { class: 'n' }, r.sacks), el('td', { class: 'n' }, r.ints)));
+    for (const r of v.team) t.append(el('tr', { style: r.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), el('td', { class: 'n' }, r.ypg), el('td', { class: 'n' }, r.pyds), el('td', { class: 'n' }, r.ryds), el('td', { class: 'n', style: r.epa > 0 ? 'color:var(--ok)' : r.epa < 0 ? 'color:var(--danger)' : '' }, (r.epa > 0 ? '+' : '') + r.epa.toFixed(2)), el('td', { class: 'n' }, r.sacks), el('td', { class: 'n' }, r.ints)));
     s.append(t);
   } else {
     const tb = v.tables[statsTab.toLowerCase()];
@@ -1443,7 +1570,7 @@ function renderAwards(v) {
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const y of v.years.slice().reverse()) tabs.append(el('button', { 'aria-pressed': String(y === v.year), onclick: () => renderAwards(pyJSON(`SESSION.league_view('awards', year=${y})`)) }, y)); s.append(tabs);
   if (v.note && !v.rows.length) { s.append(el('div', { class: 'empty' }, v.note)); page.append(s); return; }
   const grid = el('div', { class: 'awards' });
-  for (const r of v.rows) grid.append(el('div', { class: 'aw' + (r.mine ? ' mine' : ''), style: r.mine ? 'border-color:var(--club)' : '' }, el('div', { class: 'code' }, r.code || ''), el('div', { class: 'a' }, r.award), el('div', { class: 'nm', style: r.pid ? 'cursor:pointer' : '', onclick: () => { if (r.pid) location.hash = '#club/player/' + r.pid; } }, r.name), el('div', { class: 'tm' }, r.team ? stripe(r.team.abbr, r.team.name) : ''), el('div', { class: 'ln' }, `${r.pos ? r.pos + ' · ' : ''}${r.line || ''}`)));
+  for (const r of v.rows) grid.append(el('div', { class: 'aw' + (r.mine ? ' mine' : ''), style: r.mine ? 'border-color:var(--club)' : '' }, el('div', { class: 'code' }, r.code || ''), el('div', { class: 'a' }, r.award), el('div', { class: 'nm', style: r.pid ? 'cursor:pointer' : '', onclick: () => { if (r.pid) location.hash = '#club/player/' + r.pid; } }, r.name), el('div', { class: 'tm' }, r.team ? clubLink(r.team.abbr, r.team.name) : ''), el('div', { class: 'ln' }, `${r.pos ? r.pos + ' · ' : ''}${r.line || ''}`)));
   s.append(grid);
   for (const [title, list] of [['All-Pro First Team', v.first], ['All-Pro Second Team', v.second]]) {
     if (!list || !list.length) continue;
@@ -1452,7 +1579,7 @@ function renderAwards(v) {
     for (const side of ['Offense', 'Defense']) {
       const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, side), el('th', {}, 'Player'), el('th', {}, 'Club')));
       const isOff = p => ['QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT', 'K', 'P'].includes(p);
-      for (const x of list.filter(x => isOff(x.pos) === (side === 'Offense'))) t.append(el('tr', { style: x.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, x.pos), el('td', {}, el('span', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.name)), el('td', {}, x.team ? stripe(x.team.abbr, x.team.name) : '')));
+      for (const x of list.filter(x => isOff(x.pos) === (side === 'Offense'))) t.append(el('tr', { style: x.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, x.pos), el('td', {}, el('span', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.name)), el('td', {}, x.team ? clubLink(x.team.abbr, x.team.name) : '')));
       two.append(t);
     }
     s.append(two);
@@ -1467,7 +1594,7 @@ function renderCoaching(v) {
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const [k, l] of [['seats', 'The Seats'], ['pool', 'The Pool'], ['carousel', 'This Offseason']]) tabs.append(el('button', { 'aria-pressed': String(coachTab === k), onclick: () => { coachTab = k; renderCoaching(v); } }, l)); s.append(tabs);
   if (coachTab === 'seats') {
     const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Club'), el('th', {}, 'Coach'), el('th', {}, 'Seat'), el('th', { class: 'n' }, 'Prestige')));
-    for (const r of v.seats) t.append(el('tr', { style: r.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, stripe(r.club.abbr, r.club.name)), el('td', {}, el('div', { class: 'nm' }, r.coach, el('small', { style: 'display:block;color:var(--ink-3)' }, `${r.tenure + 1}${ord(r.tenure + 1)} year · ${r.record}${r.note ? ' · ' + r.note : ''}`))), el('td', {}, el('span', { class: 'seat ' + r.seat.toLowerCase().replace(' ', '') }, r.seat)), el('td', { class: 'n' }, r.prestige ?? '—')));
+    for (const r of v.seats) t.append(el('tr', { style: r.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', {}, el('div', { class: 'nm' }, r.coach, el('small', { style: 'display:block;color:var(--ink-3)' }, `${r.tenure + 1}${ord(r.tenure + 1)} year · ${r.record}${r.note ? ' · ' + r.note : ''}`))), el('td', {}, el('span', { class: 'seat ' + r.seat.toLowerCase().replace(' ', '') }, r.seat)), el('td', { class: 'n' }, r.prestige ?? '—')));
     s.append(t);
   } else if (coachTab === 'pool') {
     const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Coach'), el('th', {}, 'Background'), el('th', { class: 'n' }, 'Prestige'), el('th', { class: 'n' }, 'Age')));
@@ -1476,7 +1603,7 @@ function renderCoaching(v) {
     s.append(t);
   } else {
     const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Club'), el('th', {}, 'Hired'), el('th', {}, 'Background'), el('th', { class: 'n' }, 'After')));
-    for (const c of v.carousel) t.append(el('tr', {}, el('td', {}, c.year), el('td', {}, stripe(c.club.abbr, c.club.name)), el('td', {}, c.hired), el('td', {}, c.background || ''), el('td', { class: 'n' }, c.win_pct != null ? `.${String(Math.round(c.win_pct * 1000)).padStart(3, '0')}` : '')));
+    for (const c of v.carousel) t.append(el('tr', {}, el('td', {}, c.year), el('td', {}, clubLink(c.club.abbr, c.club.name)), el('td', {}, c.hired), el('td', {}, c.background || ''), el('td', { class: 'n' }, c.win_pct != null ? `.${String(Math.round(c.win_pct * 1000)).padStart(3, '0')}` : '')));
     if (!v.carousel.length) t.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'No changes this offseason.'))));
     s.append(t);
   }
@@ -1510,12 +1637,12 @@ function renderAlmanac(v) {
     s.append(el('div', { class: 'read', style: 'margin:0 14px 14px' }, el('b', {}, `Next Ballot · ${v.next_ballot.year}: `), v.next_ballot.names.length ? `${v.next_ballot.names.join(', ')} eligible.` : 'Nobody comes eligible next offseason.'));
   } else if (almTab === 'champions') {
     const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Season'), el('th', {}, 'Champion'), el('th', {}, ''), el('th', {}, 'Runner-Up'), el('th', {}, 'Score')));
-    for (const x of v.seasons) t.append(el('tr', { style: x.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, x.year), el('td', {}, x.champion ? stripe(x.champion.abbr, x.champion.name) : '—'), el('td', {}, 'over'), el('td', {}, x.runner_up ? stripe(x.runner_up.abbr, x.runner_up.name) : '—'), el('td', {}, x.score || '')));
+    for (const x of v.seasons) t.append(el('tr', { style: x.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, x.year), el('td', {}, x.champion ? clubLink(x.champion.abbr, x.champion.name) : '—'), el('td', {}, 'over'), el('td', {}, x.runner_up ? clubLink(x.runner_up.abbr, x.runner_up.name) : '—'), el('td', {}, x.score || '')));
     if (!v.seasons.length) t.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'The first champion is crowned in February.'))));
     s.append(t);
   } else {
     const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Club'), el('th', {}, 'Coach'), el('th', { class: 'n' }, 'From'), el('th', { class: 'n' }, 'To'), el('th', {}, 'Record')));
-    for (const x of v.ledger) t.append(el('tr', {}, el('td', {}, stripe(x.club.abbr, x.club.name)), el('td', {}, x.name), el('td', { class: 'n' }, x.frm ?? '—'), el('td', { class: 'n' }, x.current ? 'now' : (x.to ?? '—')), el('td', {}, x.record || '')));
+    for (const x of v.ledger) t.append(el('tr', {}, el('td', {}, clubLink(x.club.abbr, x.club.name)), el('td', {}, x.name), el('td', { class: 'n' }, x.frm ?? '—'), el('td', { class: 'n' }, x.current ? 'now' : (x.to ?? '—')), el('td', {}, x.record || '')));
     if (!v.ledger.length) t.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'The ledger fills as coaches come and go.'))));
     s.append(t);
   }
@@ -1595,7 +1722,7 @@ function renderReport(v) {
   const rk = r => el('span', { class: 'rk ' + (r == null ? '' : r <= 8 ? 'good' : r >= 24 ? 'bad' : 'mid-rk'), style: 'font-size:17px' }, r == null ? '—' : `${r}${ord(r)}`);
   for (const r of v.unit_table) ut.append(el('div', { class: 'side-row' }, el('span', { class: 'lab' }, r.label), rk(r.mine), el('span', { class: 'mid' }), rk(r.theirs)));
   const men = el('div', {}, el('div', { class: 'h5' }, 'Players Who Matter')); for (const p of v.stars) men.append(el('div', { class: 'plate', style: 'margin-bottom:4px;cursor:pointer', onclick: () => { location.hash = '#club/player/' + p.pid; } }, el('div', { class: 'no' }, p.pos), el('div', { class: 'nm' }, p.name, el('small', {}, p.pos)), el('div', { class: 'ov' }, p.ovr)));
-  if (v.injured && v.injured.length) { men.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Injuries')); for (const x of v.injured) men.append(el('div', { style: 'font-size:15px;color:var(--ink-2);padding:2px 0' }, x)); }
+  if (v.injured && v.injured.length) { men.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Injuries')); for (const x of v.injured) men.append(el('div', { style: 'font-size:15px;color:var(--ink-2);padding:2px 0' }, typeof x === 'string' ? x : `${x.name} (${x.pos})${x.back ? ' · out to week ' + x.back : ' · out'}`)); }
   two.append(ut, men); s.append(two);
   // when each side has the ball, as on the Portal
   if (v.panels) {
@@ -1635,6 +1762,7 @@ async function advance() {
   catch (e) { console.error(e); busy('Something broke: ' + String(e).slice(0, 120)); }
   adv.disabled = false;
   if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
+  else if (r && r.done === 'Cutdown') { location.hash = '#personnel/waivers'; renderWire(pyJSON(`SESSION.personnel('waivers')`)); }
   else if (r && r.done === 'Camp') { location.hash = '#portal'; refresh(); }
   else if (r && /^Week \d+ played$/.test(r.done)) { if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#gameday'; }
   else if (r && /^Week \d+$/.test(r.done)) { if (location.hash === '' || location.hash.startsWith('#portal')) refresh(); else if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#portal'; } else if (r && /on the clock/.test(r.done)) { location.hash = '#draft/day'; renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); } else refresh();
@@ -1654,5 +1782,6 @@ async function advance() {
   $('#save').onclick = saveGame;
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
-  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
+  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal_full()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
+    else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();

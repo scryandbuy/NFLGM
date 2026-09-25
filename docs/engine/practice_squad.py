@@ -170,6 +170,12 @@ def clear_elevations(team):
 
 
 def reset_season(league):
+    # IR clears at camp: everyone comes off, the returns count resets, the designations reset
+    for t in league.teams.values():
+        for p in list(getattr(t, 'ir', None) or []):
+            p.xp_spent.pop('_ir_week', None); p.xp_spent.pop('_ir_return', None); p.xp_spent['_ir_desig'] = 0
+            if p.out_until == 99: p.out_until = None
+        t.ir = []; t.ir_returns_used = 0
     for p in league.players.values():
         p.xp_spent.pop('_elevations', None)
 

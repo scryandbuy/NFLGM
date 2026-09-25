@@ -120,7 +120,11 @@ class Session:
         k = self.stop[0]
         if k == 'cutdown':
             n = len(self.L.teams[self.user_team].active())
-            return dict(title='Break Camp', sub=(f"Cut to 53 first · you are at {n}" if n > self.ROSTER_MAX else 'Cut-down day: the league goes to 53'), played=False)
+            return dict(title='Cut-Down Day', sub=(f"Cut to 53 first · you are at {n}" if n > self.ROSTER_MAX else 'The league goes to 53; the cuts hit the wire'), played=False)
+        if k == 'wire':
+            import waivers as WV
+            n = sum(1 for e in WV.pending(self.L) if e.get('ahead', None) is None and e.get('from_team') != self.user_team and self.L.player(e['pid']) is not None and self.L.player(e['pid']).team is None)
+            return dict(title='Sim to Reg. Season', sub=f"{n} on the wire reach your priority · claim any first", played=False)
         if k == 'week':
             wk = self.stop[1]; opp = self._opponent(wk)
             if getattr(self, 'played', False):
@@ -143,7 +147,7 @@ class Session:
         # THE ROSTER RULE. A club plays with 53 at most and 46 at least; the game will not
         # run a week, or leave camp, until yours is legal. A new franchise starts in camp at
         # 68 and cuts to 53 before week 1, the way every club does.
-        if self.stop[0] in ('week', 'cutdown') and not getattr(self, 'played', False):
+        if self.stop[0] in ('week', 'cutdown', 'wire') and not getattr(self, 'played', False):
             n = len(self.L.teams[self.user_team].active())
             if n > self.ROSTER_MAX: out.append(dict(id=None, subject=f"Roster at {n}: cut to {self.ROSTER_MAX} before Sunday", kind='roster', go='#club'))
             elif n < self.ROSTER_MIN: out.append(dict(id=None, subject=f"Roster at {n}: sign to at least {self.ROSTER_MIN}", kind='roster', go='#personnel/fa'))
@@ -166,6 +170,10 @@ class Session:
             if any(b['kind'] == 'roster' for b in self.blocking()):
                 return dict(done='Blocked', next=self.next_label(), why=self.blocking()[0]['subject'])
             self.step_cutdown()
+            self.stop = ('wire',); self.played = False
+            return dict(done='Cutdown', next=self.next_label())
+        if k == 'wire':
+            self.step_clear_wire()
             self.stop = ('week', 1); self.played = False
             return dict(done='Camp', next=self.next_label())
         if k == 'week':
@@ -309,7 +317,13 @@ class Session:
             for p in list(PSQ.squad(t)): PSQ.release_from_squad(L, t.abbr, p.pid)
         PSQ.reset_season(L)
         CD.finalize(L, rng)
-        WV.notify_user(L, WV.pending(L), 0, digest=True); WV.process(L, rng, 0)
+        # the cuts are on the wire; the GM reads it and claims before it clears (the next step)
+        WV.notify_user(L, WV.pending(L), 0, digest=True)
+
+    def step_clear_wire(self):
+        """Cut-down waivers clear: claims awarded by priority, the squads fill, the undrafted pile is settled, the season opens."""
+        L, rng = self.L, self.rng
+        WV.process(L, rng, 0)
         PSQ.fill_squads(L, rng)
         from franchise import clear_undrafted
         clear_undrafted(L, rng)
@@ -328,8 +342,18 @@ class Session:
         import views
         return views.portal(self, self.L, self.user_team)
 
-    def club_roster(self):
-        import views_club as VC; return VC.roster(self, self.L, self.user_team)
+    def club_roster(self, abbr=None):
+        import views_club as VC
+        v = VC.roster(self, self.L, abbr or self.user_team)
+        v['club_abbr'] = abbr or self.user_team; v['mine'] = (abbr or self.user_team) == self.user_team
+        return v
+
+    def club_list(self):
+        from views import club
+        return [dict(club(a), mine=(a == self.user_team)) for a in sorted(self.L.teams)]
+
+    def team_page(self, abbr):
+        import views_league as VL; return VL.team_page(self, self.L, self.user_team, abbr)
 
     def club_card(self, pid):
         import views_club as VC
@@ -338,8 +362,11 @@ class Session:
             import views_draft as VD; return VD.prospect_card(self, self.L, self.user_team, pid)
         return VC.card(self, self.L, pid)
 
-    def club_depth(self, package='Nickel'):
-        import views_club as VC; return VC.depth(self, self.L, self.user_team, package)
+    def club_depth(self, package='Nickel', abbr=None):
+        import views_club as VC
+        v = VC.depth(self, self.L, abbr or self.user_team, package)
+        v['club_abbr'] = abbr or self.user_team; v['mine'] = (abbr or self.user_team) == self.user_team
+        return v
 
     def club_act(self, name, **kw):
         """Roster and depth actions from the page; the page re-reads the view after."""
@@ -419,6 +446,38 @@ class Session:
         for m in getattr(self.L, 'inbox', []):
             if m.get('status') == 'unread': m['status'] = 'read'; n += 1
         return dict(ok=True, n=n)
+
+    def inbox_read(self, mid):
+        for m in getattr(self.L, 'inbox', []):
+            if m['id'] == int(mid) and m.get('status') == 'unread': m['status'] = 'read'
+        return dict(ok=True)
+
+    def inbox_delete(self, mid):
+        box = getattr(self.L, 'inbox', [])
+        self.L.inbox = [m for m in box if m['id'] != int(mid)]
+        return dict(ok=True)
+
+    def inbox_clear_read(self):
+        import views
+        box = getattr(self.L, 'inbox', [])
+        keep = [m for m in box if m.get('status') == 'unread' or (m.get('status') in ('unread', 'open') and m.get('kind') in views.DECIDE_KINDS)]
+        n = len(box) - len(keep); self.L.inbox = keep
+        return dict(ok=True, n=n)
+
+    def inbox_message(self, mid):
+        import views
+        m = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
+        if m is None: return dict(error='no such message')
+        pl = m.get('payload') or {}
+        return dict(id=m['id'], subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'),
+                    **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=pl.get('link'), decide=(m.get('status') in ('unread', 'open') and m.get('kind') in views.DECIDE_KINDS))
+
+    def portal_full(self):
+        """The Portal view with every inbox message (the Portal itself keeps the recent fourteen)."""
+        import views
+        v = views.portal(self, self.L, self.user_team)
+        v['inbox'] = views._inbox(self.L, limit=None)
+        return v
 
     def gameday_view(self, week=None, year=None):
         import views

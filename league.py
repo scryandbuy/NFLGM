@@ -301,7 +301,40 @@ class Team:
 
     # ---- roster shape ----------------------------------------------------
     def active(self):
-        return [p for p in self.roster if not p.retired]
+        """The 53: everyone under contract who is not on injured reserve. IR men stay on the roster
+        (and on the cap) but not on the 53 or the depth chart."""
+        ir = {q.pid for q in (getattr(self, 'ir', None) or [])}
+        return [p for p in self.roster if not p.retired and p.pid not in ir]
+
+    # ---- injured reserve (Rule 5): the spot opens, the money stays -------------------------
+    IR_MIN_WEEKS = 4; IR_RETURNS = 8
+
+    def place_on_ir(self, p, week, season_ending=False):
+        """Any injured man may go on IR. He is off the 53 at once; his salary counts in full. He may
+        come back after four weeks if the club has a return left (eight a season) and he has not been
+        designated twice this year; a season-ending placement gives up the return."""
+        if p not in self.roster or p.out_until is None: return dict(ok=False, why='he is not hurt')
+        if any(q.pid == p.pid for q in (getattr(self, 'ir', None) or [])): return dict(ok=False, why='he is on IR already')
+        if not hasattr(self, 'ir') or self.ir is None: self.ir = []
+        desig = int(p.xp_spent.get('_ir_desig', 0) or 0)
+        returnable = (not season_ending) and desig < 2
+        self.ir.append(p); p.xp_spent['_ir_week'] = int(week or 0); p.xp_spent['_ir_return'] = bool(returnable)
+        if returnable: p.xp_spent['_ir_desig'] = desig + 1
+        else: p.out_until = 99
+        return dict(ok=True, returnable=returnable)
+
+    def activate_from_ir(self, p, week):
+        """Back to the 53 after four weeks, healthy, with a return left and a roster spot open."""
+        ir = getattr(self, 'ir', None) or []
+        if not any(q.pid == p.pid for q in ir): return dict(ok=False, why='he is not on IR')
+        if not p.xp_spent.get('_ir_return', False): return dict(ok=False, why='he was placed on IR for the season')
+        if int(week or 0) - int(p.xp_spent.get('_ir_week', 0) or 0) < self.IR_MIN_WEEKS: return dict(ok=False, why=f"he must sit {self.IR_MIN_WEEKS} weeks first")
+        if p.out_until is not None and int(p.out_until) > int(week or 0): return dict(ok=False, why=f"he is not healthy until week {p.out_until}")
+        used = int(getattr(self, 'ir_returns_used', 0) or 0)
+        if used >= self.IR_RETURNS: return dict(ok=False, why='the club has used its eight returns this season')
+        if len(self.active()) >= 53: return dict(ok=False, why='the 53 is full; open a spot first')
+        self.ir = [q for q in ir if q.pid != p.pid]; self.ir_returns_used = used + 1; p.out_until = None
+        return dict(ok=True, returns_left=self.IR_RETURNS - self.ir_returns_used)
 
     def by_pos(self, pos):
         return sorted((p for p in self.active() if p.pos == pos),
@@ -313,7 +346,7 @@ class Team:
     @property
     def depth(self):
         d = {}
-        for p in self.active():
+        for p in self.active() + [q for q in (getattr(self, '_elevated', None) or []) if q not in self.roster]:
             d.setdefault(p.pos, []).append(p)
         pins = getattr(self, 'depth_pins', None) or {}
         for pos in d:
@@ -331,7 +364,7 @@ class Team:
             import rosters as RO
             mine = {p.pid for p in self.active() if p.pos in RO.RETURN_POS}
         else:
-            mine = {p.pid for p in self.active() if p.pos == pos}
+            mine = {p.pid for p in self.active() if p.pos == pos} | {q.pid for q in (getattr(self, '_elevated', None) or []) if q.pos == pos}
         self.depth_pins[pos] = [pid for pid in pids if pid in mine]
         return self.depth_pins[pos]
 
@@ -477,7 +510,7 @@ class Team:
                     practice_squad=[p.pid for p in self.practice_squad],
                     owner_patience=self.owner_patience, owner_acumen=self.owner_acumen,
                     owner_star_pull=getattr(self, 'owner_star_pull', 0.5), owner_spend=getattr(self, 'owner_spend', 0.5), depth_pins=getattr(self, 'depth_pins', None) or {}, identity_history=getattr(self, 'identity_history', None) or [], owner=getattr(self, 'owner', None), misfit_keep=getattr(self, 'misfit_keep', None) or [], identity=getattr(self, 'identity', None),
-                    ir=[p.pid for p in self.ir],
+                    ir=[p.pid for p in self.ir], ir_returns_used=int(getattr(self, 'ir_returns_used', 0) or 0),
                     picks=[asdict(k) for k in self.picks],
                     cap_year=self.cap.year, cap_rollover=self.cap.rollover,
                     cap_dead=self.cap.dead, cap_dead_next=self.cap.dead_next,
@@ -587,7 +620,9 @@ class League:
     def sign(self, pid, abbr, contract):
         p = self.player(pid)
         if p.team and p.team in self.teams:
-            self.release(pid, log=False)
+            import practice_squad as PSQ
+            if p in PSQ.squad(self.teams[p.team]): PSQ.release_from_squad(self, p.team, pid)      # poached off another club's squad
+            elif p in self.teams[p.team].roster: self.release(pid, log=False)
         p.team, p.contract = abbr, contract
         self.teams[abbr].roster.append(p)
         self.assign_number(p, abbr)
@@ -845,7 +880,7 @@ class League:
             t.roster = [L.players[p] for p in td['roster'] if p in L.players]
             t.practice_squad = [L.players[p] for p in td['practice_squad']
                                 if p in L.players]
-            t.ir = [L.players[p] for p in td['ir'] if p in L.players]
+            t.ir = [L.players[p] for p in td['ir'] if p in L.players]; t.ir_returns_used = int(td.get('ir_returns_used', 0) or 0)
             t.owner_patience = td.get('owner_patience', 0.5); t.owner_acumen = td.get('owner_acumen', 0.5); t.owner_star_pull = td.get('owner_star_pull', 0.5); t.owner_spend = td.get('owner_spend', 0.5); t.depth_pins = td.get('depth_pins') or {}; t.identity_history = td.get('identity_history') or []; t.owner = td.get('owner'); t.misfit_keep = td.get('misfit_keep') or []; t.identity = td.get('identity')
             t.picks = [DraftPick(**k) for k in td['picks']]
             t.cap = TeamCap(td['cap_year'], td['cap_rollover'])
@@ -866,6 +901,9 @@ class League:
         L.scouting = d.get('scouting', {}) or {}
         L.consensus = d.get('consensus', {}) or {}
         L.spring_news = d.get('spring_news') or []; L.user_visits = d.get('user_visits') or []; L.pick_provenance = d.get('pick_provenance') or {}; L.user_board = d.get('user_board') or {}; L.ps_intent = d.get('ps_intent') or {}; L.interviews = d.get('interviews') or {}; L.notes_sent = d.get('notes_sent') or {}; L.league_notes_sent = d.get('league_notes_sent') or {}
+        # older saves: everyone on a roster wears a number
+        for t in L.teams.values():
+            for p in list(t.roster): L.assign_number(p, t.abbr)
         L.waivers = d.get('waivers', []) or []
         L.inbox = [_inbox_from_dict(L, m) for m in d.get('inbox', [])]
         L.almanac = d.get('almanac')

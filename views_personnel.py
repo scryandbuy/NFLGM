@@ -207,24 +207,48 @@ def act_ask(league, abbr, other, a_sends, b_sends):
 
 
 def act_gather(league, abbr, pid):
-    """What the league would give for one of your men: each club's best single-asset offer, in words."""
-    import trades as TR, trade_engine as TE, valuation as VAL
+    """What the league would give for one of your men: every club's best offer, as a package. A package is a
+    pick, two picks, or a pick and a surplus player; a club makes it only if it thinks it gained, and the offer
+    shown is the one that pays you the most. All offers are returned; the page scrolls them."""
+    import trades as TR, trade_engine as TE, valuation as VAL, itertools
     me = league.teams[abbr]; p = league.player(pid)
     if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
     rng = _rng(league, 17); pool = VAL.pool_from_league(league); ga = TR.persona(me.gm)
+    mine = _assets(league, abbr, [pid], pool, rng, viewer=None)
+    my_value = sum(x.get('trade_value', 0.0) for x in mine) if mine else 0.0
     offers = []
     for other, them in league.teams.items():
         if other == abbr: continue
         gb = TR.persona(them.gm)
-        cands = [pk for pk in them.picks if not pk.used_on and pk.year - league.year <= 1]
+        picks = [pk for pk in them.picks if not pk.used_on and pk.year - league.year <= 1]
+        picks.sort(key=lambda k: (k.year, k.round))
+        try: their_surplus, _n = TR.surplus_and_needs(league, them, pool, rng)
+        except Exception: their_surplus = []
+        sur = [x for x in their_surplus if league.player(x['pid']) is not None][:4]
+        cands = [[('pick', pk)] for pk in picks]
+        # two picks: a later pick sweetening an earlier one, when one pick alone falls short of him
+        if my_value >= 1.5:
+            for a_, b_ in itertools.combinations(picks, 2):
+                if a_.round >= 2 or b_.round >= 2: cands.append([('pick', a_), ('pick', b_)])
+            for pk in picks:
+                for x in sur: cands.append([('pick', pk), ('player', x['pid'])])
         best = None
-        for pk in sorted(cands, key=lambda k: (k.round, k.year)):
-            r = TE.evaluate(dict(a_sends=_assets(league, abbr, [pid], pool, rng, viewer=them), a_gets=[TR.pick_asset(league, pk)]), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
-            if r.get('blocked'): continue
-            if r['b_gain'] >= 0.5: best = (pk, r); break
-        if best: offers.append(dict(club=club(other), pick=_pick_row(league, best[0]), gain=best[1]['a_gain']))
-    offers.sort(key=lambda o: (o['pick']['round'], -o['gain']))
-    return dict(ok=True, name=p.name, offers=offers[:6], line=(f"{len(offers)} clubs would give a pick for {p.name}." if offers else f"No club would give a pick for {p.name} right now."))
+        for pkg in cands[:60]:
+            gets = []
+            for kind, it in pkg:
+                gets.append(TR.pick_asset(league, it) if kind == 'pick' else TR.player_asset(league, them, league.player(it), pool, rng))
+            r = TE.evaluate(dict(a_sends=_assets(league, abbr, [pid], pool, rng, viewer=them), a_gets=gets), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
+            if r.get('blocked') or r['b_gain'] < 0.5: continue
+            if best is None or r['a_gain'] > best[1]['a_gain']: best = (pkg, r)
+        if best:
+            pkg, r = best
+            items = [(_pick_row(league, it) if kind == 'pick' else None) for kind, it in pkg]
+            words = [(_pick_row(league, it)['label'] if kind == 'pick' else f"{league.player(it).name} ({league.player(it).pos}, {round(league.player(it).ovr)})") for kind, it in pkg]
+            ids = [(f"{it.year}-{it.round}-{it.original}" if kind == 'pick' else it) for kind, it in pkg]
+            first_round = min((it.round for kind, it in pkg if kind == 'pick'), default=8)
+            offers.append(dict(club=club(other), words=words, ids=ids, gain=r['a_gain'], first_round=first_round, n=len(pkg)))
+    offers.sort(key=lambda o: -o['gain'])
+    return dict(ok=True, name=p.name, offers=offers, line=(f"{len(offers)} club{'s' if len(offers) != 1 else ''} would deal for {p.name}." if offers else f"No club would give anything for {p.name} right now."))
 
 
 # ============================================================ FREE AGENCY
@@ -326,6 +350,22 @@ def act_withdraw(league, abbr, tid):
     return NG.withdraw(league, tid)
 
 
+def act_poach_ps(league, abbr, pid):
+    """Sign another club's practice-squad man to your 53. The real rule: any club may, he is promoted at a 53-man
+    salary, and he must stay on your active roster three weeks. His agent hears the number first (a one-year deal
+    at the minimum or a little over); Sign in the thread takes him off their squad and onto your roster."""
+    import practice_squad as PSQ, negotiations as NG
+    p = league.player(pid)
+    if p is None or p.team is None or p.team == abbr: return dict(ok=False, why='not on another club\'s practice squad')
+    other = league.teams.get(p.team)
+    if other is None or p not in PSQ.squad(other): return dict(ok=False, why='he is not on a practice squad')
+    me = league.teams[abbr]
+    if len(me.active()) >= 53: return dict(ok=False, why='your 53 is full; open a spot first')
+    r = NG.open_talks(league, pid, kind='fa_inseason')
+    if r.get('ok'): r['line'] = f"{p.name}'s agent will listen: a 53-man deal at ${r['ask']:.1f}m. Sign him from the thread and he leaves {p.team}'s squad for your roster."
+    return r
+
+
 def act_sign_ps(league, abbr, pid):
     """Sign a free agent to the practice squad. He can say no: a man who grades as a roster player wants a
     53-man deal, and an ambitious one will not take a squad spot unless he has nowhere else to go."""
@@ -367,6 +407,8 @@ def waivers(session, league, abbr):
         p = league.player(e['pid']) if isinstance(e, dict) else league.player(e.pid)
         if p is None or p.team is not None: continue        # signed to a squad since he was waived: not available
         d = e if isinstance(e, dict) else e.__dict__
+        if d.get('from_team') == abbr: continue              # your own waived men are not yours to claim
+        if not WV.reaches_user(league, d, week): continue    # a club ahead of you will take him; you never see him
         try: fit = round(float(__import__('gm_engine').scheme_fit(p.ratings, p.pos, me)), 1)
         except Exception: fit = 0.0
         frm = d.get('from_team') or d.get('team') or ''

@@ -153,11 +153,46 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     row = dict(age=p.age, apy=p.apy, ovr=float(seen),
                contract_years_left=p.contract_years_left, madden_position=p.pos)
     row_buyer = dict(row, apy=inherited_apy)
+    tv_buyer = TE.trade_value(row_buyer, v)
+    # THE STREET AND THE SQUAD ARE THE ALTERNATIVE. Why give a pick for a man when a comparable one is a free
+    # agent for salary alone, or already on your practice squad? The buyer grades the best man available to
+    # him at the spot the same way he grades the target; if the target is not clearly better, his trade value
+    # collapses toward what the target has that the alternative does not: a cheaper deal, more years, a scheme fit.
+    if viewer is not None:
+        alt = _street_alternative(league, viewer, p)
+        if alt is not None:
+            alt_seen, alt_cost = alt
+            edge = float(seen) - alt_seen                          # how much better the target grades to this club
+            cheaper = max(0.0, alt_cost - inherited_apy)          # what the target saves against the alternative's price
+            if edge <= 1.5: tv_buyer = min(tv_buyer, 0.15 * tv_buyer + 0.5 * cheaper)
+            elif edge <= 4.0: tv_buyer = min(tv_buyer, 0.55 * tv_buyer + 0.5 * cheaper)
     return dict(kind='player', pid=p.pid, pos=p.pos, age=p.age, apy=p.apy,
                 need=need, trade_value=TE.trade_value(row, v),
-                trade_value_buyer=TE.trade_value(row_buyer, v),
+                trade_value_buyer=round(max(0.0, tv_buyer), 2),
                 seen_ovr=round(float(seen), 1), obj=p, dead=dead, dead_now=dead_now,
                 inherit=inherit, inherited_apy=inherited_apy)
+
+
+def _street_alternative(league, viewer, p):
+    """The best man the viewing club could have at the target's position without a trade: a free agent (for his
+    asking price) or a man on its own practice squad (for the minimum). Returns (graded overall, yearly cost) or None."""
+    from gm_engine import scheme_fit
+    import practice_squad as PSQ, valuation as VAL
+    best = None
+    def grade(q): return q.ovr + scheme_fit(q.ratings, q.pos, viewer)
+    for pid in (getattr(league, 'free_agents', None) or [])[:300]:
+        q = league.player(pid)
+        if q is None or q.pos != p.pos or q.retired: continue
+        try:
+            vv = VAL.value_player(league, q, side='agent', rng=None); cost = float(vv['apy']) if vv else 1.2
+        except Exception: cost = 1.2
+        g = grade(q)
+        if best is None or g > best[0]: best = (g, cost)
+    for q in PSQ.squad(viewer):
+        if q.pos != p.pos: continue
+        g = grade(q)
+        if best is None or g > best[0]: best = (g, 1.0)
+    return best
 
 
 def through_buyer_eyes(asset, buyer, seller):

@@ -123,13 +123,15 @@ class InjuryDesk:
             # A long injury goes on the list: it frees a roster spot and he
             # keeps his money. Only worth doing if the club can still bring
             # somebody back, or if he is gone for the year anyway.
-            if (p.pid not in self.ir and ir_eligible(left)
-                    and self.designated.get(p.pid, 0) < IR_DESIGNATIONS_PER_PLAYER):
-                self.ir[p.pid] = week
-                self.status[p.pid] = 'ir'
-                league.log('ir', pid=p.pid, team=team.abbr, weeks=left)
-                continue
-            if p.pid in self.ir:
+            on_ir = any(q.pid == p.pid for q in (getattr(team, 'ir', None) or []))
+            if (not on_ir and ir_eligible(left) and team.abbr != getattr(league, 'user_team', None)
+                    and int(p.xp_spent.get('_ir_desig', 0) or 0) < IR_DESIGNATIONS_PER_PLAYER):
+                r = team.place_on_ir(p, week, season_ending=(left >= 14))
+                if r.get('ok'):
+                    self.status[p.pid] = 'ir'
+                    league.log('ir', pid=p.pid, team=team.abbr, weeks=left)
+                    continue
+            if on_ir:
                 self.status[p.pid] = 'ir'
                 continue
 
@@ -148,24 +150,12 @@ class InjuryDesk:
         Bring back whoever has served his four games, while returns remain.
         """
         back = []
-        for pid, placed in list(self.ir.items()):
-            if week - placed < IR_MIN_WEEKS:
-                continue
-            if self.returns_used >= IR_RETURNS_PER_TEAM:
-                continue
-            p = league.player(pid)
-            if p is None:
-                del self.ir[pid]
-                continue
-            if p.out_until is not None and p.out_until > week:
-                continue
-            del self.ir[pid]
-            self.designated[pid] = self.designated.get(pid, 0) + 1
-            self.returns_used += 1
-            p.out_until = None
-            back.append(p)
-            league.log('ir_return', pid=pid, team=team.abbr,
-                       returns_left=IR_RETURNS_PER_TEAM - self.returns_used)
+        if team.abbr == getattr(league, 'user_team', None): return back        # the GM activates his own
+        for p in list(getattr(team, 'ir', None) or []):
+            r = team.activate_from_ir(p, week)
+            if r.get('ok'):
+                back.append(p); self.status.pop(p.pid, None)
+                league.log('ir_return', pid=p.pid, team=team.abbr, returns_left=r.get('returns_left'))
         return back
 
     def available(self, player, week):

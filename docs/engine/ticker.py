@@ -113,16 +113,23 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"Two-point try is {'GOOD.' if p.get('made') else 'no good.'}"; kind = 'score' if p.get('made') else 'loss'
     elif t == 'penalty':
         side = 'defense' if not p.get('on_offense') else 'offense'
-        text = f"Penalty, {p.get('penalty', 'flag')} on the {side}, {int(round(abs(p.get('yards', 0))))} yards" + (", automatic first down." if p.get('auto_first') else '.')
+        import events as E
+        yds = abs(float(p.get('yards', 0) or 0)); rule = E.RULE_YARDS.get(p.get('penalty'))
+        half = rule is not None and yds < rule - 0.01
+        ydtxt = (f"{yds:g} yards" if yds != 1 else '1 yard') + (', half the distance to the goal' if half else '')
+        text = f"Penalty, {p.get('penalty', 'flag')} on the {side}, {ydtxt}" + (", automatic first down." if (p.get('auto_first') and not p.get('on_offense')) else '.')
         kind = 'neutral'
     elif t == 'kickoff':
-        text = f"Kickoff" + (", touchback." if p.get('touchback') else f", returned to the {int(round(100 - p.get('new_yardline', 75)))}." if p.get('new_yardline') else '.'); kind = 'special'
+        who = carrier if p.get('carrier') and not p.get('touchback') else None
+        text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {int(round(100 - p.get('new_yardline', 75)))}." if who else f", returned to the {int(round(100 - p.get('new_yardline', 75)))}.")); kind = 'special'
     elif t in ('audible', 'kneel', 'spike'):
         text = {'kneel': f"{passer or 'The quarterback'} kneels.", 'spike': f"{passer or 'The quarterback'} spikes it."}.get(t, ''); kind = 'neutral'
         if not text: return None
     else:
         return None
-    return dict(head=head, text=text, kind=kind, type=t)
+    if p.get('safety'):
+        text = (text.rstrip('.') + '. SAFETY.') if text else 'SAFETY.'; kind = 'turnover'
+    return dict(head=head, text=text, kind=kind, type=t, made=p.get('made'), safety=bool(p.get('safety')))
 
 
 def _result_word(r):
