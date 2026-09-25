@@ -999,6 +999,14 @@ function renderIdentity(v) {
   s.append(h); page.append(s);
 }
 
+// the staff's trait chips: want traits gold, coaching traits green, a scout's strengths green and blind spots red, unknown gray
+function staffTraits(c) {
+  const box = el('div', { class: 'traits', style: 'gap:4px' });
+  if (!c.traits || !c.traits.length) { box.append(el('span', { class: 'trait even', 'data-tip': 'Nothing about him stands out' }, 'None')); return box; }
+  for (const t of c.traits) box.append(el('span', { class: 'trait ' + ({ want: 'money', coach: 'work', pos: 'work', neg: 'unhappy-t', unknown: 'unknown' }[t.fam] || 'even'), 'data-tip': t.tip }, t.name));
+  return box;
+}
+
 function renderStaff(v) {
   renderRail(v.rail); const page = persPage(); foSecond('staff');
   const reload = () => renderStaff(pyJSON(`SESSION.frontoffice('staff')`));
@@ -1007,7 +1015,7 @@ function renderStaff(v) {
   for (const c of v.cards) {
     if (c.empty) { grid.append(el('div', { class: 'scard open' }, `${c.role_name} · open. Hire from the pool below.`)); continue; }
     const card = el('div', { class: 'scard' }, el('div', { class: 'role' }, c.role + (c.hc_candidate ? ' · Head-Coaching Candidate' : '') + (c.disgruntled ? ' · Disgruntled' : '')), el('div', { class: 'nm' }, c.name),
-      el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Specialty'), el('span', {}, c.specialty || '—'), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Contract'), el('span', {}, `$${(+c.salary).toFixed(1)}m · Expires ${v.rail.year + c.years}`), el('span', {}, 'Asks'), el('span', {}, `$${(+c.extend_ask).toFixed(1)}m`), el('span', {}, `${c.role.replace(' Coordinator', '')} Rank`), el('span', {}, (c.unit_ranks || []).length ? c.unit_ranks.map(r => `${r}${ord(r)}`).join(' · ') : '—'), el('span', {}, 'Traits'), el('span', {}, (c.personality || '—').replace(/\b\w/g, ch => ch.toUpperCase()))));
+      el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Specialty'), el('span', {}, c.specialty || '—'), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Contract'), el('span', {}, `$${(+c.salary).toFixed(1)}m · Expires ${v.rail.year + c.years}`), el('span', {}, 'Asks'), el('span', {}, `$${(+c.extend_ask).toFixed(1)}m`), el('span', {}, `${c.role.replace(' Coordinator', '')} Rank`), el('span', {}, (c.unit_ranks || []).length ? c.unit_ranks.map(r => `${r}${ord(r)}`).join(' · ') : '—'), el('span', {}, 'Traits'), staffTraits(c)));
     const acts = el('div', { class: 'acts' });
     acts.append(el('button', { class: 'btn', 'data-tip': `Three more years at his ask, $${(+c.extend_ask).toFixed(1)}m`, onclick: () => { notify(pyJSON(`SESSION.frontoffice_act('staff_extend', role=${JSON.stringify(c.role_key)}, years=3, salary=${c.extend_ask})`)); reload(); } }, 'Extend'));
     if (v.offseason) acts.append(el('button', { class: 'btn warn', onclick: () => { if (confirm(`Release ${c.name}? You owe what is left on his deal.`)) { notify(pyJSON(`SESSION.frontoffice_act('staff_release', role=${JSON.stringify(c.role_key)})`)); reload(); } } }, 'Release'));
@@ -1032,7 +1040,7 @@ function renderStaff(v) {
   s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'The Pool', el('small', {}, v.offseason ? 'Hire Into an Open Job · Greyed Where He Does Not Fit What You Have Available' : 'hiring reopens after the season')));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); const list = el('div', { class: 'pad' }); let role = 'oc';
   const draw = () => { list.innerHTML = ''; const cur = v.cards.find(x => x.role_key === role); const room = v.budget.available + (cur && !cur.empty ? +cur.salary : 0); const grid2 = el('div', { class: 'staffgrid', style: 'grid-template-columns:repeat(4,1fr);padding:0' });
-    for (const c of v.pools[role]) { const fits = +c.ask <= room + 1e-9; grid2.append(el('div', { class: 'scard', style: fits ? '' : 'opacity:.45' }, el('div', { class: 'nm' }, c.name), el('div', { class: 'role', style: 'text-transform:none;letter-spacing:0' }, c.background), el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Asks'), el('span', {}, `$${(+c.ask).toFixed(1)}m`), el('span', {}, 'Traits'), el('span', {}, (c.personality || '—').replace(/\b\w/g, ch => ch.toUpperCase()))), el('div', { class: 'acts' }, el('button', { class: 'btn', disabled: v.offseason && fits ? null : '', 'data-tip': v.offseason ? (fits ? 'Three years at his ask; replaces the sitting coach' : 'Over what you have available') : 'Offseason only', onclick: () => { notify(pyJSON(`SESSION.frontoffice_act('staff_hire', name=${JSON.stringify(c.name)}, years=3)`)); reload(); } }, 'Hire')))); }
+    for (const c of v.pools[role]) { const fits = +c.ask <= room + 1e-9; grid2.append(el('div', { class: 'scard', style: fits ? '' : 'opacity:.45' }, el('div', { class: 'nm' }, c.name), el('div', { class: 'role', style: 'text-transform:none;letter-spacing:0' }, c.background), el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Asks'), el('span', {}, `$${(+c.ask).toFixed(1)}m`), el('span', {}, `Traits · ${c.n_traits}`), staffTraits(c)), el('div', { class: 'acts' }, el('button', { class: 'btn', disabled: v.offseason && fits ? null : '', 'data-tip': v.offseason ? (fits ? 'Three years at his ask; replaces the sitting coach' : 'Over what you have available') : 'Offseason only', onclick: () => { notify(pyJSON(`SESSION.frontoffice_act('staff_hire', name=${JSON.stringify(c.name)}, years=3)`)); reload(); } }, 'Hire')))); }
     list.append(grid2); };
   for (const [k, l] of [['oc', 'Offensive Coordinators'], ['dc', 'Defensive Coordinators'], ['st', 'Special Teams'], ['scout', 'Head Scouts']]) tabs.append(el('button', { 'aria-pressed': String(role === k), onclick: e => { role = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, l));
   s.append(tabs, list); draw(); page.append(s);

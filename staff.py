@@ -532,11 +532,14 @@ def pool_for(league, role):
     return sorted([c for c in league.staff_pool if c.role == role], key=lambda c: -(c.rating + 0.3 * c.prestige))
 
 
-def card(coach):
-    import personality as PT
+def card(coach, revealed_only=False):
+    """The card. On your own staff every trait shows; in the pool only the ones the interview has revealed,
+    the rest as '?'."""
+    import staff_traits as STR
+    STR.ensure(coach, np.random.default_rng(abs(hash(coach.name)) % (2 ** 32)))
     return dict(name=coach.name, role=ROLE_NAME[coach.role], rating=round(coach.rating), prestige=round(coach.prestige), specialty=coach.specialty,
-                age=coach.age, years=coach.years, salary=coach.salary, ask=ask(coach), personality=PT.words(coach.traits) if coach.traits else '', hc_candidate=coach.hc_candidate,
-                unit_ranks=coach.unit_ranks[-3:])
+                age=coach.age, years=coach.years, salary=coach.salary, ask=ask(coach), hc_candidate=coach.hc_candidate,
+                unit_ranks=coach.unit_ranks[-3:], traits=STR.words(coach, revealed_only=revealed_only), n_traits=len(coach.staff_traits or []))
 
 
 # ------------------------------------------------------------ save

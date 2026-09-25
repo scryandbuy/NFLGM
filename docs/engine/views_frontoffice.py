@@ -288,7 +288,7 @@ def staff(session, league, abbr):
         cd = ST.card(c); cd.update(role_key=role, disgruntled=bool(getattr(c, 'disgruntled', False)), extend_ask=round(ST.ask(c), 2)); cards.append(cd)
     pools = {}
     for role in ('oc', 'dc', 'st', 'scout'):
-        pools[role] = [dict(ST.card(c), role_key=role, background=(('Head-coaching candidate' if getattr(c, 'hc_candidate', False) else 'Coordinator') + (f" · {c.specialty}" if getattr(c, 'specialty', None) else ''))) for c in ST.pool_for(league, role)[:8]]
+        pools[role] = [dict(ST.card(c, revealed_only=True), role_key=role, background=(('Head-coaching candidate' if getattr(c, 'hc_candidate', False) else 'Coordinator' if role != 'scout' else 'Scout') + (f" · {c.specialty}" if getattr(c, 'specialty', None) else ''))) for c in ST.pool_for(league, role)[:8]]
     poaches = []
     for p in (getattr(league, 'poaches', None) or []):
         if p.get('team') != abbr or p.get('state') != 'open': continue
