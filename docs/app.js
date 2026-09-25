@@ -535,7 +535,8 @@ function renderRoster(v) {
                   Ratings: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Ovr', 'Overall Rating', 1), H('Ceiling', "The player's estimated potential", 1), H('Dev', 'Rate of XP Growth'), H('Fit', "How well the player matches your coach's scheme", 1), H('Morale', "Player's happiness"), H('')],
                   Contract: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Yrs', 'Years left on his contract', 1), H('Cap Hit', "This year's cap hit", 1), H('Penalty', 'Dead cap charged if player is cut/traded', 1), H('Status'), H('')],
                   Stats: [H('Player'), H('Pos', 'Position'), H('G', 'Games played', 1), H('This Season'), H('Comp%', 'Completion pct for a quarterback, catch pct for a receiver', 1), H('EPA', 'Expected points added per dropback, rush, target or defensive play by position', 1), H('')] }[clubView];
-  if (clubTab === 'ps') heads.push(el('th', {}, ''));
+  const hasStatus = ['Overview', 'Contract'].includes(clubView);
+  if (clubTab === 'ps') { heads.splice(heads.length - (hasStatus ? 2 : 1), hasStatus ? 2 : 1); heads.push(el('th', {}, '')); }
   const acts = r => el('td', {}, el('div', { class: 'row-act' },
     el('button', { title: 'Card', 'data-tip': 'Open his card', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, '▣'),
     el('button', { title: 'Extend', 'data-tip': 'Ask his agent and open the talks', onclick: e => { e.stopPropagation(); const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`); notify(res); if (res.ok) location.hash = '#personnel/extensions'; } }, '$'),
@@ -554,7 +555,8 @@ function renderRoster(v) {
                         Ratings: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.pot_range ? `${r.pot_range[0]}–${r.pot_range[1]}` : (r.pot ?? '—')), el('td', {}, el('span', { class: 'dev' + (r.dev === 'Star' || r.dev === 'Superstar' || r.dev === 'X-Factor' ? ' star' : '') }, r.dev)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, pill(r.morale))],
                         Contract: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n' }, `$${r.penalty.toFixed(1)}m`), el('td', {}, el('span', { class: 'inj' }, r.status))],
                         Stats: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.stats.games), el('td', { style: 'text-align:left;font-family:var(--mono);font-size:14px' }, r.stats.line), el('td', { class: 'n' }, r.stats.comp != null ? `${r.stats.comp}%` : '—'), el('td', { class: 'n', style: r.stats.epa != null ? (r.stats.epa > 0 ? 'color:var(--ok)' : 'color:var(--danger)') : '' }, r.stats.epa != null ? (r.stats.epa > 0 ? '+' : '') + r.stats.epa.toFixed(2) : '—')] }[clubView]();
-        cells.push(acts(r));
+        if (clubTab === 'ps') { if (hasStatus) cells.splice(cells.length - 1, 1); }   // the squad page carries no Status column and no card/agent/trade icons
+        else cells.push(acts(r));
         if (clubTab === 'ps') {
           const act = (name, extra) => { const res = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, ${extra})`); busy(res.ok ? (res.moves ? res.moves.map(m => `${m.name} ${m.how}`).join(', ') : `${res.name}: done.`) : res.why); setTimeout(() => busy(null), 2200); renderRoster(pyJSON('SESSION.club_roster()')); };
           cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' },
@@ -1655,7 +1657,7 @@ function renderReport(v) {
   const rk = r => el('span', { class: 'rk ' + (r == null ? '' : r <= 8 ? 'good' : r >= 24 ? 'bad' : 'mid-rk'), style: 'font-size:17px' }, r == null ? '—' : `${r}${ord(r)}`);
   for (const r of v.unit_table) ut.append(el('div', { class: 'side-row' }, el('span', { class: 'lab' }, r.label), rk(r.mine), el('span', { class: 'mid' }), rk(r.theirs)));
   const men = el('div', {}, el('div', { class: 'h5' }, 'Players Who Matter')); for (const p of v.stars) men.append(el('div', { class: 'plate', style: 'margin-bottom:4px;cursor:pointer', onclick: () => { location.hash = '#club/player/' + p.pid; } }, el('div', { class: 'no' }, p.pos), el('div', { class: 'nm' }, p.name, el('small', {}, p.pos)), el('div', { class: 'ov' }, p.ovr)));
-  if (v.injured && v.injured.length) { men.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Injuries')); for (const x of v.injured) men.append(el('div', { style: 'font-size:15px;color:var(--ink-2);padding:2px 0' }, x)); }
+  if (v.injured && v.injured.length) { men.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Injuries')); for (const x of v.injured) men.append(el('div', { style: 'font-size:15px;color:var(--ink-2);padding:2px 0' }, typeof x === 'string' ? x : `${x.name} (${x.pos})${x.back ? ' · out to week ' + x.back : ' · out'}`)); }
   two.append(ut, men); s.append(two);
   // when each side has the ball, as on the Portal
   if (v.panels) {
