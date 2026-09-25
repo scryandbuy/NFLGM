@@ -222,6 +222,9 @@ def user_withdraw(league, pid):
     return False
 
 
+def done_ids(awarded): return {pid for pid, _ in awarded}
+
+
 def process(league, rng, week, verbose=False):
     """
     Award every man on the wire: AI clubs decide, the user's claim (if any)
@@ -252,6 +255,18 @@ def process(league, rng, week, verbose=False):
             if wants(league, abbr, p, week, market=market) and make_room(league, abbr, p):
                 award(league, e, abbr); awarded.append((p.pid, abbr)); break
         ents.remove(e)
+        # the club that waived him meant him for its practice squad: if nobody claimed, he goes there
+        intent = (getattr(league, 'ps_intent', None) or {})
+        if intent.get(p.pid):
+            import practice_squad as PSQ
+            club = intent.pop(p.pid)
+            if p.pid in done_ids(awarded):
+                to = next(a for pid_, a in awarded if pid_ == p.pid)
+                if club == user: IB.post(league, 'waiver_notice', f"{p.name} claimed by {to}", f"You waived {p.name} for the practice squad and {to} claimed him off the wire. He is theirs.", sender='assistants')
+            elif PSQ.sign_to_squad(league, club, p.pid):
+                league.log('ps_sign', pid=p.pid, team=club, cleared=True)
+                if club == user: IB.post(league, 'waiver_notice', f"{p.name} cleared to the practice squad", f"{p.name} cleared waivers and is on your practice squad.", sender='assistants')
+            elif club == user: IB.post(league, 'waiver_notice', f"{p.name} cleared, no room on the squad", f"{p.name} cleared waivers but the squad had no room for him under its rules; he is a free agent.", sender='assistants')
     # close the notices
     done = {pid for pid, _ in awarded}
     for m in IB.pending(league, 'waiver_notice'):

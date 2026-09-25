@@ -1050,3 +1050,12 @@ button.btn{line-height:normal;box-sizing:border-box}
 .plate3.out{opacity:.5}
 .plate3.over{outline:2px dashed var(--club-2)}
 .plate3.none{border-style:dashed;color:var(--ink-3);font-size:12px;align-items:center;cursor:default}
+
+/* traits by family: work ethic green, money gold, loyalty blue, ambition purple; the minus side muted */
+.traits .trait{border:1px solid;padding:2px 8px;font-size:12px;cursor:help}
+.trait.work{color:var(--ok);border-color:var(--ok)}.trait.work-{color:#8fbf9f;border-color:#3c6b4d}
+.trait.money{color:var(--club-2);border-color:var(--club-2)}.trait.money-{color:#c9a86a;border-color:#6b5a30}
+.trait.loyal{color:var(--mid);border-color:var(--mid)}.trait.loyal-{color:#7fb3c9;border-color:#2f5c6b}
+.trait.amb{color:#b48cff;border-color:#b48cff}.trait.amb-{color:#a08fc9;border-color:#4d3f7a}
+.trait.even{color:var(--ink-3);border-color:var(--rule-hi)}
+.arow em.fitd{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;cursor:help}

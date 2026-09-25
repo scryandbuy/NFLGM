@@ -521,6 +521,17 @@ function renderRoster(v) {
   page.append(sheet);
 }
 
+const TRAIT_META = {
+  'grinder': { k: 'work', tip: 'Outworks his rating. Gains XP faster and keeps his condition.' }, 'hard worker': { k: 'work', tip: 'Puts in the time. A little more development than most.' },
+  'coasts': { k: 'work-', tip: 'Does the minimum. Develops slower than his talent says he should.' }, 'needs pushing': { k: 'work-', tip: 'Has to be driven. The slowest to improve, and condition slips.' },
+  'wants to be paid': { k: 'money', tip: 'Money first. He will hold out for market value and will not take a discount.' }, 'money matters': { k: 'money', tip: 'Wants a fair number. Harder to extend cheaply.' },
+  'not about the money': { k: 'money-', tip: 'Will leave money on the table for the right situation.' }, 'plays for the love of it': { k: 'money-', tip: 'Money is an afterthought. The easiest man on the roster to extend.' },
+  'loyal': { k: 'loyal', tip: 'Wants to finish here. Likely to take less to stay.' }, 'settled': { k: 'loyal', tip: 'Comfortable where he is. Not looking to leave.' },
+  'keeps his options open': { k: 'loyal-', tip: 'Will test the market when his deal is up.' }, 'follows the money': { k: 'loyal-', tip: 'No attachment to the club. Goes to the highest bidder.' },
+  'wants the ball': { k: 'amb', tip: 'Needs a big role. Unhappy as a backup or in a rotation.' }, 'ambitious': { k: 'amb', tip: 'Wants to start and to matter. Morale depends on his snaps.' },
+  'team-first': { k: 'amb-', tip: 'Accepts his role. Morale holds even when the snaps drop.' }, 'happy in a role': { k: 'amb-', tip: 'Content wherever you put him. The easiest man to keep happy.' },
+  'even-keeled': { k: 'even', tip: 'Nothing about him stands out either way.' },
+};
 let cardTab = 'Overview';
 function renderCard(v) {
   if (v.cls_year !== undefined && v.confidence !== undefined) return renderProspectCard(v);
@@ -547,6 +558,7 @@ function renderCard(v) {
     if (alts.length) { const sel = el('select', { class: 'btn' }); sel.append(el('option', { value: '' }, 'Position Change…')); alts.forEach(g => sel.append(el('option', { value: g.pos }, `${g.pos} · ${g.ovr} Ovr`))); sel.onchange = () => { if (!sel.value) return; const r = pyJSON(`SESSION.club_act('position_change', pid=${JSON.stringify(v.pid)}, new_pos=${JSON.stringify(sel.value)})`); notify(r.ok ? { ok: true, line: `${r.name} moves to ${r.to}: ${r.penalty} points for ${r.games} games.` } : r); if (r.ok) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(v.pid)})`)); }; acts.append(sel); }
     acts.append(el('button', { class: 'btn', 'data-tip': 'Put him in a trade package and shop him', onclick: () => { tradeState = { other: tradeState.other, a: [v.pid], b: [], keep: true }; location.hash = '#personnel/trades'; } }, 'Trade Block'));
     acts.append(el('button', { class: 'btn warn', onclick: () => { if (!confirm(`Cut ${v.name}? Penalty $${v.contract.penalty.toFixed(1)}m against this year's cap.`)) return; const r = pyJSON(`SESSION.club_act('cut', pid=${JSON.stringify(v.pid)})`); notify(r.ok ? { ok: true, line: `${r.name} released. Penalty $${r.penalty}m.` } : r); location.hash = '#club'; } }, `Cut · Penalty $${v.contract.penalty.toFixed(1)}m`));
+    acts.append(el('button', { class: 'btn', disabled: v.actions.ps_ok ? null : '', 'data-tip': v.actions.ps_ok ? (v.actions.vested ? 'A vested veteran: he goes straight to the practice squad' : 'He must clear waivers first; if no club claims him at the Advance he joins your practice squad') : 'The squad has no room for him under its rules', onclick: () => { if (!confirm(`Waive ${v.name} to the practice squad? Penalty $${v.contract.penalty.toFixed(1)}m.${v.actions.vested ? '' : ' Another club may claim him first.'}`)) return; const r = pyJSON(`SESSION.club_act('to_squad', pid=${JSON.stringify(v.pid)})`); notify(r); if (r.ok) location.hash = '#club'; } }, 'Waive to Practice Squad'));
   }
   acts.append(el('button', { class: 'btn quiet', onclick: () => history.back() }, 'Back'));
   tabs.append(acts); s.append(tabs);
@@ -563,10 +575,10 @@ function renderCard(v) {
     const attrs = el('div', { class: 'attrs' });
     for (const c of v.cols) {
       const box = el('div', {}, el('div', { class: 'h5', style: 'margin-bottom:4px' }, c.title));
-      const rowsOf = rows => { for (const r of rows) { const row = el('div', { class: 'arow ' + r.tier }, el('span', {}, r.label)); row.append(r.shift ? el('em', { class: 'fitd ' + (r.shift > 0 ? 'p' : 'm') }, (r.shift > 0 ? '+' : '') + r.shift) : el('em', {})); row.append(el('b', {}, r.v)); box.append(row); } };
+      const rowsOf = rows => { for (const r of rows) { const row = el('div', { class: 'arow ' + r.tier }, el('span', {}, r.label)); row.append(r.shift ? el('em', { class: 'fitd ' + (r.shift > 0 ? 'p' : 'm'), 'data-tip': r.shift > 0 ? `${r.scheme} counts this more` : `${r.scheme} counts this less` }, r.scheme || '') : el('em', {})); row.append(el('b', {}, r.v)); box.append(row); } };
       rowsOf(c.rows);
       if (c.extra && c.extra.rows && c.extra.rows.length) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
-      if (c.title === 'Mental' && v.personality) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Traits')); const tr = el('div', { class: 'traits' }); v.personality.split(',').map(x => x.trim()).filter(Boolean).forEach(w => tr.append(el('span', {}, w.replace(/\b\w/g, ch => ch.toUpperCase())))); box.append(tr); }
+      if (c.title === 'Mental' && v.personality) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Traits')); const tr = el('div', { class: 'traits' }); v.personality.split(',').map(x => x.trim()).filter(Boolean).forEach(w => { const m = TRAIT_META[w] || { k: 'even', tip: 'Nothing about him stands out.' }; tr.append(el('span', { class: 'trait ' + m.k, 'data-tip': m.tip }, w.replace(/\b\w/g, ch => ch.toUpperCase()))); }); box.append(tr); }
       attrs.append(box);
     }
     mid.append(attrs);
