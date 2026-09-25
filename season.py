@@ -312,10 +312,12 @@ class SeasonRunner:
         self.L.week = week
         self.last_played = played
         try:
-            import club_notes as CN
+            import club_notes as CN, league_notes as LN
             CN.after_games(self.L, week, played)
-        except Exception:
-            pass
+            LN.standings(self.L, week)
+            LN.big_result(self.L, week, played)
+        except Exception as e:
+            import sys; print('notes after games failed:', e, file=sys.stderr)
         return played
 
     def roll_week(self, week, played=None):
@@ -379,8 +381,9 @@ class SeasonRunner:
         WV.process(self.L, self.rng, week)
         WV.notify_user(self.L, WV.pending(self.L), week)
         try:
-            import club_notes as CN
+            import club_notes as CN, league_notes as LN
             CN.weekly(self.L, week)
+            LN.transactions(self.L, week)
         except Exception as e:
             import sys; print('club_notes weekly failed:', e, file=sys.stderr)
         # the squads: elevations for clubs short of healthy men, the odd poach

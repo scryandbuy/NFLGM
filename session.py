@@ -153,6 +153,11 @@ class Session:
                     out.append(dict(id=m.get('id'), subject=m.get('subject'), kind=m.get('kind')))
         return out
 
+    def _league_log_notes(self):
+        try:
+            import league_notes as LN; LN.transactions(self.L, self.L.week or 0)
+        except Exception: pass
+
     def advance(self):
         k = self.stop[0]
         if k == 'cutdown':
@@ -199,6 +204,7 @@ class Session:
             self.draft.auto = True; self.draft.sim_all(); self._draft_over()
         else:
             getattr(self, self.OFFSEASON[i][1])()
+            self._league_log_notes()
             if self.draft_live():
                 return dict(done='The Draft is on the clock', next=self.next_label())
         if i + 1 < len(self.OFFSEASON):
@@ -220,6 +226,10 @@ class Session:
         try:
             import club_notes as CN; CN.season_end(L)
         except Exception: pass
+        try:
+            import league_notes as LN; LN.season_end(L, self.votes)
+        except Exception as e:
+            import sys; print('league_notes season_end failed:', e, file=sys.stderr)
         DR.run(L, self.votes, rng)
 
     def step_coaching(self):
@@ -228,6 +238,10 @@ class Session:
     def step_retire(self):
         L, rng = self.L, self.rng
         RT.run(L, rng); AL.hall_vote(L, L.year); RG.run(L, rng)
+        try:
+            import league_notes as LN; LN.season_end(L, None)          # the Hall class and the retirements, now that they are in
+        except Exception as e:
+            import sys; print('league_notes retire failed:', e, file=sys.stderr)
 
     def step_roll(self):
         self.L.user_tag_choice = None          # a new year, a new tag
