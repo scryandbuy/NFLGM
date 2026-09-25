@@ -1050,6 +1050,3 @@ button.btn{line-height:normal;box-sizing:border-box}
 .plate3.out{opacity:.5}
 .plate3.over{outline:2px dashed var(--club-2)}
 .plate3.none{border-style:dashed;color:var(--ink-3);font-size:12px;align-items:center;cursor:default}
-.plate3 .arrows{display:none;gap:2px;margin-left:auto}
-.plate3:hover .arrows{display:flex}
-.plate3 .arrows button{width:20px;height:18px;border:1px solid var(--rule-2);color:var(--ink-2);background:var(--board);font-size:9px;cursor:pointer;padding:0}
