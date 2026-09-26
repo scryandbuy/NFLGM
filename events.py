@@ -190,7 +190,6 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
     return dict(penalty=name, yards=round(float(yds), 1),
                 on_offense=bool(on_off),
                 auto_first=(not on_off) and (name in AUTO),
-                nullifies=info['phase'] in ('pre',) or name in
-                          ('Offensive Holding', 'Offensive Pass Interference',
-                           'Illegal Formation', 'Ineligible Downfield Pass',
-                           'Illegal Block Above the Waist'))
+                # only a dead-ball, pre-snap foul is decided before the snap; holding, OPI, an ineligible man downfield
+                # and a block above the waist happen DURING the play, which runs and is then wiped in the book
+                nullifies=info['phase'] in ('pre',) or name in ('Illegal Formation',))

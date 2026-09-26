@@ -1190,3 +1190,7 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 [data-tip]:hover::after{z-index:1000}
 /* a row action's upward hover clears the sticky header: rows near the top open downward instead */
 .tbl tr:nth-child(-n+3) .btn[data-tip]:hover::after,.tbl tr:nth-child(-n+3) .row-act [data-tip]:hover::after{top:100%;bottom:auto;margin-top:6px;margin-bottom:0}
+
+/* tendency bars: the club's fill in its color, the league average as a white tick */
+.tend .bar i{background:var(--club-2)}
+.tend .bar em{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);transform:translateX(-1px)}

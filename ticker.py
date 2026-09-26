@@ -12,12 +12,13 @@ def _nm(league, pid, short=True):
     p = league.player(pid) if pid else None
     if p is None: return None
     if not short: return p.name
-    parts = p.name.split()
-    return parts[-1] if len(parts) == 1 else (parts[-1] if parts[-1] not in ('Jr.', 'II', 'III', 'Sr.') else parts[-2])
+    from views import surname
+    return surname(p.name)                                   # 'Mathieu Jr.', not 'Jr.' or 'Mathieu'
 
 
 def _clock(secs):
     # a play at exactly the edge of a quarter (2700, 1800, 900 seconds left) is the first snap of the next one
+    secs = round(float(secs), 2)                             # a play that lands a hair off the edge is on the edge
     q = int((3600 - secs) // 900) + 1 if secs > 0 else 4
     q = max(1, min(q, 4))
     rem = secs - (4 - q) * 900
@@ -126,7 +127,9 @@ def play_line(league, p, off_abbr, def_abbr):
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None
         spot = _spot(float(p.get('new_yardline', 75)), off_abbr, def_abbr)
-        if p.get('onside'):
+        if p.get('free_kick'):
+            text = f"Free kick after the safety; {off_abbr} takes over at the {spot}."; kind = 'special'
+        elif p.get('onside'):
             text = f"Onside kick, {'RECOVERED by the kicking team' if p.get('recovered') else 'recovered by ' + off_abbr} at the {spot}."; kind = 'turnover' if p.get('recovered') else 'special'
         else:
             text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {spot}." if who else f", returned to the {spot}.")); kind = 'special'

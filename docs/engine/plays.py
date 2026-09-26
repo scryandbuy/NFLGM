@@ -54,6 +54,7 @@ def logistic(x, k=6.0):
 RUSHER_BASE = 3.42          # a step slower once the front rotates: fresher rushers had sacks at 7.25% against a real 6.6
 BASE_TTT = 2.72          # the league mean the clock must land on
 # how much longer than the average dropback the ball is held, by the route's depth
+DEF_AWR_MEAN = 0.787          # the league's defenders on awareness; every awareness read on defense is centered here so the league total holds
 HOLD_BY_DEPTH = {'screen': -0.55, 'short': -0.22, 'medium': 0.08, 'deep': 0.40}   # deep sacks ran 24% against a real ~10 at 0.50
 SACK_K = 22.6            # solved with the hold so the blend lands on the real 6.6%
 # ESPN's pass block win rate is whether a lineman sustains his block for 2.5
@@ -205,7 +206,7 @@ def resolve_man(receiver, defender, depth, time_available, rng):
 
 # ============================================================ THE THROW
 def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
-                  play_action=False, outcome_mult=1.0):
+                  play_action=False, outcome_mult=1.0, def_awr=0.70):
     """
     Accuracy at this depth against the separation actually available.
     Returns completion, interception, or incompletion.
@@ -253,7 +254,7 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # Picks are modelled on the ball that did NOT complete, so the rate per
     # attempt moves with completion. Re-anchored after the completion refit
     # (66% completion left the league at 1.82% against a real 2.10).
-    p_int = (1.0 - separation) * 0.129 * (1.0 + 2.2 * (AVG - acc))
+    p_int = (1.0 - separation) * 0.129 * (1.0 + 2.2 * (AVG - acc)) * (1.0 + 0.9 * (float(def_awr) - DEF_AWR_MEAN))   # a smart defender is where the bad ball ends up
     if rng.random() < max(0.0, p_int):
         return dict(result='interception', contested=True, p=p, base=base)
     return dict(result='incomplete', contested=separation < 0.45, p=p, base=base)
@@ -344,8 +345,8 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
             break
         broken += 1
         chase = logistic(edge(brk, rate(t, YAC['tackler']['angle'])), k=5.5)
-        gained += max(0.3, rng.gamma(1.7, (1.55 if not in_space else 1.8)
-                                      + (4.7 if not in_space else 5.0) * chase))     # re-solved with the free and strong safety pairing on the field (YAC had settled at 4.4 against 5.19)
+        gained += max(0.3, rng.gamma(1.7, (1.50 if not in_space else 1.95)
+                                      + (4.6 if not in_space else 5.4) * chase))     # runs a touch tighter (scrambles count as runs now), receivers in space a touch looser     # re-solved with the free and strong safety pairing on the field (YAC had settled at 4.4 against 5.19)
     else:
         # Every pursuer beaten. Rare by construction now, and even then the
         # secondary still has to be outrun.
@@ -708,10 +709,14 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # the concept, against the coverage it actually faces
     cmult = S.concept_multiplier(
         concept, def_call.get('coverage') or def_call['shell'])
-    if off_call.get('play_action') and not off_call.get('shotgun'):
-        cmult *= 1.18                      # real: 6.91 ypp vs 3.63 without
-    elif off_call.get('play_action'):
-        cmult *= 1.10
+    if off_call.get('play_action'):
+        # THE FAKE WORKS ON WHOEVER HAS TO HONOR IT. The linebackers and safeties bite by their awareness:
+        # a green second level makes play action worth more, a veteran one takes half of it away
+        second = [d for d in (deff.get('lb') or []) + (deff.get('db') or []) if d.get('pos') in ('MIKE', 'WILL', 'SAM', 'FS', 'SS')] or (deff.get('lb') or [])
+        awr = float(np.mean([rate(d, {'awareness_rating': 1.0}) for d in second])) if second else AVG
+        bite = 1.0 - 1.6 * (awr - DEF_AWR_MEAN)            # 0.88 awareness: bite 0.85; 0.68: 1.17
+        pa_gain = (0.18 if not off_call.get('shotgun') else 0.10) * float(np.clip(bite, 0.4, 1.5))
+        cmult *= 1.0 + pa_gain                             # real: 6.91 ypp vs 3.63 without, league average
     dis = S.disguise_penalty(off['qb'], def_call.get('fooled', False), rate)
 
     # The pattern is the concept's receivers, but the BACK is always an outlet
@@ -814,7 +819,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         sep = float(np.clip(sep_raw, .02, .98))
         thr = resolve_throw(off['qb'], depth, sep, p['pressure'], rng,
                             play_action=off_call.get('play_action', False),
-                            outcome_mult=cmult * (1.0 - dis) * rmod['comp'])
+                            outcome_mult=cmult * (1.0 - dis) * rmod['comp'],
+                            def_awr=rate(cov, {'awareness_rating': 1.0}) if cov else DEF_AWR_MEAN)
         complete = thr['result'] == 'complete'
         global LAST_XCOMP; LAST_XCOMP = float(thr['p'])
         if PASS_TRACE is not None:
@@ -975,6 +981,11 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # 9-10 yards a target against a real 6
     in_space = tgt.get('pos') not in ('HB', 'FB')
     yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space)
+    if screen and tacklers:
+        # A SCREEN LIVES OR DIES ON THE READ. The pursuers' awareness decides whether the defense rallied:
+        # a smart unit kills it for two, a slow one gives up fifteen (about a third either way)
+        awr = float(np.mean([rate(t_, {'awareness_rating': 1.0}) for t_ in tacklers[:3]]))
+        yac['yards'] = max(0.0, yac['yards'] * float(np.clip(1.0 - 1.8 * (awr - DEF_AWR_MEAN), 0.55, 1.45)))
     yac['yards'] = round(yac['yards'] * _compression(room), 1)
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),

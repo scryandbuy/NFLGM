@@ -51,10 +51,11 @@ ROUTE = {
     },
     'defender_man': {
         'press':   {'press_rating': .55, 'strength_rating': .25, 'man_cover_rating': .20},
-        'short':   {'man_cover_rating': .50, 'change_of_direction_rating': .25,
-                    'agility_rating': .25},
-        'medium':  {'man_cover_rating': .50, 'speed_rating': .25, 'agility_rating': .25},
-        'deep':    {'man_cover_rating': .40, 'speed_rating': .45, 'accel_rating': .15},
+        # awareness is the anticipation of the break: a savvy corner with fading legs still holds up
+        'short':   {'man_cover_rating': .45, 'change_of_direction_rating': .20,
+                    'agility_rating': .20, 'awareness_rating': .15},
+        'medium':  {'man_cover_rating': .45, 'speed_rating': .20, 'agility_rating': .20, 'awareness_rating': .15},
+        'deep':    {'man_cover_rating': .35, 'speed_rating': .40, 'accel_rating': .10, 'awareness_rating': .15},
     },
     # ZONE: a structurally different contest, not man with a different stat.
     #
@@ -116,7 +117,7 @@ YAC = {
                 'breakaway': {'speed_rating': .60, 'accel_rating': .40},
                 'vision':  {'bcv_rating': .70, 'awareness_rating': .30}},
     'tackler': {'wrap':    {'tackle_rating': .70, 'pursuit_rating': .30},
-                'angle':   {'pursuit_rating': .55, 'speed_rating': .45},
+                'angle':   {'pursuit_rating': .45, 'speed_rating': .40, 'awareness_rating': .15},   # the right angle is a read, not a sprint
                 'impact':  {'hit_power_rating': .60, 'tackle_rating': .40}},
 }
 

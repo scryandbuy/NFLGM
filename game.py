@@ -376,7 +376,7 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70):
 # restraining line (was six), and a touchback on a kickoff from the 50 after
 # penalty enforcement is spotted at the 20 rather than the 35.
 RET_AVG = 0.80                    # the return skill of the man clubs actually send back there
-KICKOFF = dict(touchback=.155, return_rate=.799, return_mean=26.9,
+KICKOFF = dict(touchback=.155, return_rate=.799, return_mean=25.0,      # 26.9 drew a 30.8 mean once the return-man skill term was applied; 25.0 lands the league at about 27.6
                touchback_to=65,            # receiving team's own 35
                touchback_from_50=80,       # own 20, the 2026 anti-loophole rule
                onside_recovery=.0645)      # under the dynamic kickoff
@@ -969,7 +969,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     # the kick that opened this possession, when there was one, is the drive's first entry
     ko = LAST_KICKOFF.pop('r', None)
     if ko is not None and abs(float(ko.get('new_yardline', -1)) - float(start_yardline)) < 0.5:
-        dr.log.append(dict(type='kickoff', touchback=bool(ko.get('touchback')), new_yardline=float(ko.get('new_yardline', start_yardline)), ret=float(ko.get('ret', 0.0) or 0.0), carrier=ko.get('returner'), clock=clock, onside=bool(ko.get('onside')), recovered=bool(ko.get('recovered'))))
+        dr.log.append(dict(type='kickoff', touchback=bool(ko.get('touchback')), new_yardline=float(ko.get('new_yardline', start_yardline)), ret=float(ko.get('ret', 0.0) or 0.0), carrier=ko.get('returner'), clock=clock, onside=bool(ko.get('onside')), recovered=bool(ko.get('recovered')), free_kick=bool(ko.get('free_kick'))))
     # Adjustment happens AFTER EACH SERIES, which is what the coaches describe:
     # "If you wait until halftime to make your adjustments, you're too late."
     for st in (off_state, def_state):
@@ -1015,7 +1015,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         secs_left_half = dr.clock - wall
         opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
         clock_dies = secs_left_half <= 3 or (secs_left_half <= 10 and opp_tos == 0)
-        if clock_dies and dr.yardline > 45 and (half_end is not None or dr.score_diff >= 0) and not getattr(dr, '_kneeled', False):
+        if clock_dies and secs_left_half > 0 and dr.yardline > 45 and dr.score_diff >= 0 and not getattr(dr, '_kneeled', False):
             dr._kneeled = True
             dr.log.append(dict(type='kneel', passer=(offense.get('qb') or {}).get('pid'), down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock))
             dr.plays += 1; dr.clock = wall; dr.result = 'End of half'; break
@@ -1224,7 +1224,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # after the play, where the offence decides whether to take them.
         # the Disciplinarian's units foul less: the offense's factor on its plays, the defense's folded in evenly
         fx_o = getattr(off_state, 'staff_fx', None) or {}; fx_d = getattr(def_state, 'staff_fx', None) or {}
-        pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'],
+        # the defense's discipline carries its awareness: the smart unit jumps offside and grabs less
+        _dmen = (defense.get('db') or [])[:5] + (defense.get('lb') or [])[:3] + (defense.get('dl') or [])[:4]
+        d_awr = float(np.mean([rate_fn(d, {'awareness_rating': 1.0}) for d in _dmen])) if _dmen else 0.70
+        pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'], discipline=float(np.clip(0.70 + 0.8 * (d_awr - 0.787), 0.5, 0.9)),
                               noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)))
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
@@ -1305,8 +1308,6 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         out['shell'] = dc.get('shell'); out['box'] = dc.get('box'); out['personnel'] = oc.get('personnel')
         out['blitz'] = bool(dc.get('blitz')) or int(dc.get('rushers', 4)) >= 5
         dr.log.append(out)
-        if book is not None: book.record(out, off_f, def_f, rng)
-        pending = (out, off_f, def_f, _snap_state)
         for st in (off_state, def_state):
             if st is not None: st.observe(oc, dc, out)
 
@@ -1350,9 +1351,16 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # a collapsed pocket is not automatically a sack - a mobile QB runs
         if t == 'sack':
             if rng.random() < E.scramble_chance(offense['qb'], 1.0, 1.4, rate_fn):
-                _head = {k: dr.log[-1].get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass') if k in dr.log[-1]}
+                _old = out
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass') if k in _old}
                 out = E.resolve_scramble(offense['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
-                t = 'scramble'; dr.log[-1] = out
+                t = 'scramble'
+                for _i in range(len(dr.log) - 1, -1, -1):
+                    if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
+        # THE BOOK IS WRITTEN HERE, after the flags and the scramble are settled: a play wiped by a penalty or
+        # turned into a scramble was being credited as it first resolved
+        if book is not None: book.record(out, off_f, def_f, rng)
+        pending = (out, off_f, def_f, _snap_state)
 
         if t == 'interception':
             dr.clock -= play_seconds('interception'); dr.result = 'Turnover'; break
@@ -1382,14 +1390,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             # half only a two-score deficit is worth a timeout to get the ball back before the break
             if dr.score_diff > 0 and in_bounds and timeouts.left.get(other, 0) > 0 and ((half_end is None and secs_in_half < 180) or (half_end is not None and secs_in_half < 90 and dr.score_diff >= 9)):
                 used = timeouts.use(other); used_by = other
-            elif (dr.score_diff < 0 or (dr.score_diff == 0 and secs_in_half < 40)) and secs_in_half < 120 and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
-                used = timeouts.use(pos); used_by = pos                        # the trailing offense saves its clock in either half; a tied one only at the very end
+            elif ((-8 <= dr.score_diff < 0 and secs_in_half < 60) or (dr.score_diff == 0 and secs_in_half < 40)) and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
+                used = timeouts.use(pos); used_by = pos                        # one score down inside a minute, or tied at the very end; down two the offense runs the hurry-up and keeps them for the defense
         hurry = secs_in_half < 120 and dr.score_diff <= 0
         before_clock = secs_in_half
         clock_before = dr.clock
         dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
         for edge in (2700.0, 900.0):
-            if clock_before > edge >= dr.clock: dr.clock = edge       # the quarter ends with this play; no huddle runs into the next one
+            if clock_before > edge >= dr.clock: dr.clock = float(edge)   # the quarter ends with this play; no huddle runs into the next one
+        dr.clock = round(dr.clock, 2)
         after_clock = dr.clock - half_end if half_end is not None else dr.clock
         if used and used_by:
             dr.log.append(dict(type='timeout', side=used_by, side_abbr=(getattr(off_state if used_by == pos else def_state, 'abbr', None) or used_by.upper()), left=timeouts.left.get(used_by, 0), clock=dr.clock))
@@ -1656,6 +1665,10 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             start = float(np.clip(100 - dr.yardline, 1, 99))
         elif dr.result == 'Missed field goal':
             start = float(np.clip(100 - dr.yardline - 8, 1, 99))
+        elif dr.result == 'Safety':
+            # the free kick: the side that gave it up punts from its 20 and the scoring side takes over around its own 40
+            start = float(np.clip(rng.normal(60.0, 6.0), 45.0, 75.0))
+            LAST_KICKOFF['r'] = dict(free_kick=True, new_yardline=start, ret=0.0, returner=None, touchback=False)
         else:
             start = 75
         if not onside_kept:
