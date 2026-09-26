@@ -33,6 +33,11 @@ STADIUM = {'ARI': 'State Farm Stadium', 'ATL': 'Mercedes-Benz Stadium', 'BAL': '
 SUFFIXES = ('Jr.', 'Sr.', 'St.', 'Dr.', 'Mr.', 'II.', 'III.', 'IV.')
 
 
+def draft_year(y):
+    """A pick's year as the league names it: the draft held after the {y} season is the {y+1} draft."""
+    return int(y) + 1
+
+
 def surname(name):
     """The last name, keeping a suffix with it: 'Marvin Mims Jr.' -> 'Mims Jr.'."""
     parts = str(name or '').split()

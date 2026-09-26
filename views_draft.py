@@ -355,7 +355,7 @@ def _results(league, ld):
     for s, t, pid in ld['results']:
         p = league.player(pid)
         out.append(dict(sel=s, slot=f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1}", team=club(t), name=(p.name if p else pid), pos=(p.pos if p else ''), mine=(t == getattr(league, 'user_team', None))))
-    return dict(year=ld['year'], rows=out, trades=ld.get('trades', 0))
+    return dict(year=__import__('views').draft_year(ld['year']), rows=out, trades=ld.get('trades', 0))
 
 
 def act_pick(session, league, abbr, pid):
@@ -461,7 +461,9 @@ def picks(session, league, abbr):
         results.append(dict(pid=p.pid, name=p.name, pos=p.pos, college=getattr(p, 'college', None) or '', year=x.get('year'), pick=f"{x.get('round')}.{((x.get('selection') or 1) - 1) % 32 + 1}", sel=x.get('selection'), team=club(x.get('team')) if x.get('team') in league.teams else None,
                             division=(league.teams[x['team']].division if x.get('team') in league.teams else None), ovr=round(p.ovr), drafted_at=(round(float(x['ovr_then'])) if x.get('ovr_then') is not None else None), cons_was=x.get('consensus_rank'), status=role, now=(club(p.team) if p.team in league.teams else None)))
     results.sort(key=lambda r: (-(r['year'] or 0), r['sel'] or 999))
-    return dict(rail=rail(session, league, abbr), years=[dict(year=y, picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if ld else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division)
+    from views import draft_year
+    for g_ in gone: g_['year'] = draft_year(g_['year'])
+    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == league.year), picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if ld else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division)
 
 
 def _role_word(t, p):

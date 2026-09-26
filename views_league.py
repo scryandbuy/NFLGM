@@ -157,9 +157,10 @@ def _asset(league, a):
     """A pid, a DraftPick, or the repr of one, as words."""
     import re
     s = str(a)
-    if hasattr(a, 'round') and hasattr(a, 'year'): return f"{a.year} R{a.round}"
+    from views import draft_year
+    if hasattr(a, 'round') and hasattr(a, 'year'): return f"{draft_year(a.year)} R{a.round}"
     m = re.match(r"DraftPick\(year=(\d+), round=(\d+)", s)
-    if m: return f"{m.group(1)} R{m.group(2)}"
+    if m: return f"{draft_year(m.group(1))} R{m.group(2)}"
     p = league.player(s)
     return f"{p.name} ({p.pos})" if p else s
 

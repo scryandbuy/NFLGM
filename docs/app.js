@@ -1445,7 +1445,7 @@ function renderPicks(v) {
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Your Picks', el('small', {}, `${v.years.reduce((a, y) => a + y.picks.length, 0)} picks over ${v.years.length} drafts`)));
   const yrs = el('div', { class: 'years' });
   for (const y of v.years) {
-    const box = el('div', { class: 'ybox' }, el('h4', {}, y.year === v.rail.year ? `${y.year} This Draft` : String(y.year)));
+    const box = el('div', { class: 'ybox' }, el('h4', {}, y.this_draft ? `${y.year} Draft · this season's` : `${y.year} Draft`));
     for (const p of y.picks) box.append(el('div', { class: 'pkrow' }, el('span', { class: 'rd' }, `R${p.round}`), el('div', { class: 'nm' }, p.slot + (p.frm ? ` (From ${p.frm})` : ''), el('small', {}, p.note || ''))));
     for (const g of v.gone.filter(g => g.year === y.year)) box.append(el('div', { class: 'pkrow gone' }, el('span', { class: 'rd' }, `R${g.round}`), el('div', { class: 'nm' }, `${g.round}${ord(g.round)} · To ${g.holder.name}`, el('small', {}, g.note || ''))));
     yrs.append(box);

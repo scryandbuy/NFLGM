@@ -382,7 +382,7 @@ def _picks_by_price(league, team, gm, ctx, space):
     """
     out = []
     for pk in team.picks:
-        if pk.year < league.year or pk.used_on is not None:
+        if pk.year < league.year or pk.year > league.year + 2 or pk.used_on is not None:      # this draft and the next two
             continue
         a = pick_asset(league, pk)
         out.append((TE.team_price(a, ctx, space, gm, owns=True), a))
@@ -400,7 +400,7 @@ def _pick_to_offer(league, team, target, gm, ctx, space):
     and it is why two front offices can both be happy.
     """
     owned = [pk for pk in team.picks
-             if pk.year >= league.year and pk.used_on is None]
+             if league.year <= pk.year <= league.year + 2 and pk.used_on is None]
     if not owned:
         return None
     want = TE.team_price(target, ctx, space, gm, owns=False)
