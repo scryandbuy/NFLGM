@@ -158,7 +158,7 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     # agent for salary alone, or already on your practice squad? The buyer grades the best man available to
     # him at the spot the same way he grades the target; if the target is not clearly better, his trade value
     # collapses toward what the target has that the alternative does not: a cheaper deal, more years, a scheme fit.
-    if viewer is not None:
+    if viewer is not None and viewer is not team and getattr(viewer, 'abbr', None) != p.team:
         alt = _street_alternative(league, viewer, p)
         if alt is not None:
             alt_seen, alt_cost = alt
@@ -175,22 +175,36 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
 
 def _street_alternative(league, viewer, p):
     """The best man the viewing club could have at the target's position without a trade: a free agent (for his
-    asking price) or a man on its own practice squad (for the minimum). Returns (graded overall, yearly cost) or None."""
+    asking price) or a man on its own practice squad (for the minimum). Returns (graded overall, yearly cost) or None.
+    The street is priced once a week and cached on the league; only the viewer's scheme fit is applied per call."""
     from gm_engine import scheme_fit
     import practice_squad as PSQ, valuation as VAL
+    key = (league.year, league.week or 0, len(league.free_agents))
+    cache = league.__dict__.setdefault('_street_cache', {})
+    if cache.get('key') != key:
+        by_pos = {}
+        for pid in (getattr(league, 'free_agents', None) or [])[:400]:
+            q = league.player(pid)
+            if q is None or q.retired: continue
+            by_pos.setdefault(q.pos, []).append(q)
+        table = {}
+        for pos, men in by_pos.items():
+            top = sorted(men, key=lambda q: -q.ovr)[:4]
+            rows = []
+            for q in top:
+                try:
+                    vv = VAL.value_player(league, q, side='agent', rng=None); cost = float(vv['apy']) if vv else 1.2
+                except Exception: cost = 1.2
+                rows.append((q, cost))
+            table[pos] = rows
+        cache.clear(); cache['key'] = key; cache['table'] = table
     best = None
-    def grade(q): return q.ovr + scheme_fit(q.ratings, q.pos, viewer)
-    for pid in (getattr(league, 'free_agents', None) or [])[:300]:
-        q = league.player(pid)
-        if q is None or q.pos != p.pos or q.retired: continue
-        try:
-            vv = VAL.value_player(league, q, side='agent', rng=None); cost = float(vv['apy']) if vv else 1.2
-        except Exception: cost = 1.2
-        g = grade(q)
+    for q, cost in cache['table'].get(p.pos, []):
+        g = q.ovr + scheme_fit(q.ratings, q.pos, viewer)
         if best is None or g > best[0]: best = (g, cost)
     for q in PSQ.squad(viewer):
         if q.pos != p.pos: continue
-        g = grade(q)
+        g = q.ovr + scheme_fit(q.ratings, q.pos, viewer)
         if best is None or g > best[0]: best = (g, 1.0)
     return best
 

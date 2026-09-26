@@ -363,6 +363,13 @@ def depth(session, league, abbr, package='Nickel'):
                 pl['flag_word'] = (('Out · season' if p.out_until is not None and int(p.out_until) >= 99 else f"Out · {weeks_left} wk{'s' if weeks_left != 1 else ''}" if weeks_left else 'Out') if pl['flag'] == 'out' else pl['flag'].capitalize() if pl['flag'] else '')
                 pl['elevated'] = p not in t.roster
                 pl['out_week'] = weeks_left
+                pl['pending'] = bool(desk is not None and p.pid in getattr(desk, 'pending', {}))
+                pl['playing_hurt'] = (getattr(desk, 'playing_hurt', {}) or {}).get(p.pid) if desk is not None else None
+                if pl['pending'] or (pl['flag'] in ('questionable', 'doubtful')):
+                    try:
+                        import injury_status as IS; pl['hurt_words'] = IS.hurt_words(league, t, p, desig)
+                    except Exception: pl['hurt_words'] = None
+                if pl['flag'] in ('questionable', 'doubtful') and not pl['pending'] and pl['playing_hurt'] is None and p.out_until is not None: pl['flag_word'] = pl['flag'].capitalize() + ' · sits'
                 pl['fit'] = round(_fit(league, t, p), 1)
                 if pos in ('KR', 'PR'): pl['sub'] = f"{p.pos} · return {round(RO.return_score(p))}"
                 slots.append(pl)
@@ -448,8 +455,8 @@ def development(session, league, abbr, pid):
                          gain=round(float(TG.position_score(dict(p.ratings, **{k: p.ratings[k] + 1.0}), p.pos) - p.ovr), 2)))
     rows.sort(key=lambda r: (-r['weight'], r['cost']))
     uc = XP.unlock_cost(p)
-    return dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr, 1), age=int(p.age), bank=int(round(float(p.xp or 0))), ceiling=(round(pot, 1) if pot is not None else None),
-                room=(round(pot - p.ovr, 1) if pot is not None else None), unlock_cost=(int(round(uc)) if uc else None), unlock_ok=(uc is not None and p.xp >= uc and (pot or 0) < 99),
+    return dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), bank=int(round(float(p.xp or 0))), ceiling=(int(round(pot)) if pot is not None else None),
+                room=(max(0, int(round(pot)) - int(round(p.ovr))) if pot is not None else None), unlock_cost=(int(round(uc)) if uc else None), unlock_ok=(uc is not None and p.xp >= uc and (pot or 0) < 99),
                 bought=int(XP.points_bought(p)), unlocks=int(p.xp_spent.get('_unlocks', 0) or 0), auto=bool(p.xp_spent.get('_auto', False)), dev=modifier_word(p), rows=rows)
 
 
@@ -512,9 +519,29 @@ def progression(session, league, abbr):
         pot = XP.ceiling(p, session.rng)
         cheapest = min((XP.cost_per_point(p, k) for k in p.ratings if k.endswith('_rating') and k not in XP.PHYSICAL), default=None)
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), no=getattr(p, 'number', None), bank=int(round(float(p.xp or 0))), ceiling=(round(pot) if pot is not None else None),
-                         room=(round(pot - p.ovr, 1) if pot is not None else None), bought=int(p.xp_spent.get('_bought_season', 0) or 0), career=int(XP.points_bought(p)), auto=bool(p.xp_spent.get('_auto', False)),
+                         room=(max(0, int(round(pot)) - int(round(p.ovr))) if pot is not None else None), bought=int(p.xp_spent.get('_bought_season', 0) or 0), career=int(XP.points_bought(p)), auto=bool(p.xp_spent.get('_auto', False)),
                          cheapest=(int(round(cheapest)) if cheapest else None), can_buy=(cheapest is not None and p.xp >= cheapest and not XP.at_ceiling(p)), dev=modifier_word(p)))
     return dict(rail=rail(session, league, abbr), rows=rows, auto_all=bool(getattr(t, 'xp_auto_all', False)), bank_total=sum(r['bank'] for r in rows), idle=sum(1 for r in rows if r['can_buy'] and not r['auto']))
+
+
+def act_hurt_decision(league, abbr, pid, play=True, session=None):
+    """Play or Sit a man listed Questionable or Doubtful."""
+    runner = getattr(session, 'runner', None) if session is not None else None
+    desk = runner.desks.get(abbr) if runner is not None else None
+    p = league.player(pid); t = league.teams[abbr]
+    if desk is None or p is None: return dict(ok=False, why='no injury desk this week')
+    d = desk.pending.get(pid) or desk.status.get(pid)
+    if d not in ('questionable', 'doubtful'): return dict(ok=False, why='he is not listed Questionable or Doubtful')
+    if play:
+        if str(p.xp_spent.get('_inj_kind') or '') == 'Concussion': return dict(ok=False, why='concussion protocol: he cannot play through it')
+        desk.play_through(league, t, p, d); runner.refresh(abbr)
+        line = f"{p.name} plays Sunday, listed {d}."
+    else:
+        desk.sit(p); line = f"{p.name} sits Sunday."
+    # the decision item closes
+    for m in getattr(league, 'inbox', []):
+        if m.get('kind') == 'injury_decision' and (m.get('payload') or {}).get('pid') == pid and m.get('status') in ('unread', 'open'): m['status'] = 'done'
+    return dict(ok=True, line=line)
 
 
 def act_ir(league, abbr, pid, season_ending=False):

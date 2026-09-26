@@ -1248,22 +1248,23 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         for st in (off_state, def_state):
             if st is not None: st.observe(oc, dc, out)
 
-        # injuries attach to contact events
-        if off_state is not None and out['type'] in ('run', 'complete', 'sack',
-                                                     'scramble'):
-            contact = 0.9 if out['type'] in ('run', 'sack') else 0.7
-            # the man who actually took the snap, not the depth-chart starter
-            carrier = (off_f['qb'] if out['type'] in ('sack', 'scramble')
-                       else (off_f['qb'] if out.get('sneak') else off_f['rb']) if out['type'] == 'run'
-                       else off_f['wr'][0])
-            cpos = ('QB' if out['type'] in ('sack', 'scramble')
-                    else 'HB' if out['type'] == 'run' else 'WR')
-            off_state.hurt(carrier, cpos, contact, rng, rate_fn, week)
-        if def_state is not None and out['type'] in ('run', 'complete'):
-            pool = def_f['db'] + def_f['lb'] + def_f['dl']
-            d = pool[rng.integers(0, len(pool))]
-            def_state.hurt(d, def_pos.get(d.get('pid'), 'CB'), 0.8, rng,
-                           rate_fn, week)
+        # INJURIES: EVERY MAN ON THE FIELD ROLLS ONCE A SNAP, at his position's real share of the
+        # league's injuries, with the man who took the hit rolling harder. The old roll touched only
+        # the ball carrier and one random defender, so backs and the top wideout took half the league's
+        # injuries and no lineman was ever hurt; the position table (health.INJURY_SHARE) now sets the
+        # distribution by construction and the total is solved with health._RULED_OUT_SHARE.
+        if out['type'] in ('run', 'complete', 'sack', 'scramble', 'incomplete'):
+            hit_pid = None
+            if out['type'] in ('sack', 'scramble'): hit_pid = off_f['qb'].get('pid')
+            elif out['type'] == 'run': hit_pid = (off_f['qb'] if out.get('sneak') else off_f['rb']).get('pid')
+            elif out['type'] == 'complete': hit_pid = out.get('target') or off_f['wr'][0].get('pid')
+            if off_state is not None:
+                men = [(off_f['qb'], 'QB'), (off_f['rb'], 'HB')] + [(m, m.get('pos', 'LT')) for m in (off_f.get('ol') or [])] + [(m, m.get('pos', 'WR')) for m in off_f['wr']] + [(m, m.get('pos', 'TE')) for m in (off_f.get('te') or [])]
+                for m, mp in men:
+                    if m: off_state.hurt(m, mp, 1.6 if m.get('pid') == hit_pid else 1.0, rng, rate_fn, week)
+            if def_state is not None:
+                for d in def_f['db'] + def_f['lb'] + def_f['dl']:
+                    def_state.hurt(d, def_pos.get(d.get('pid'), 'CB'), 1.3 if out['type'] in ('run', 'complete') else 1.0, rng, rate_fn, week)
 
         t = out['type']
         if live_pen is not None:
