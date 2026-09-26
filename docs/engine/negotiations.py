@@ -218,7 +218,14 @@ def resolve(league, week=None, fa_step=None):
                   payload=dict(rival=rival, thread=t['id'], link=f'negotiation:{t["id"]}'))
             out.append((t, 'match_requested')); continue
         if offer['apy'] + 1e-9 >= floor and not (rival and rival['apy'] > offer['apy'] * 1.12):
-            out.append((t, _accept(league, t, offer, how='agreed')['how'])); continue
+            r = _accept(league, t, offer, how='agreed')
+            if not r.get('ok'):
+                # the agent agreed but the deal could not be written (cap, eligibility, a roster spot): the
+                # thread closes with the reason instead of sitting there and failing every week
+                t['state'] = 'declined'; _say(t, 'agent', f"The deal fell through: {r.get('why') or 'it could not be written'}.")
+                _post(league, t, f"{p.name}: the deal fell through", f"He agreed to your terms but the deal could not be written: {r.get('why') or 'it could not be written'}. Open talks again once that is fixed.")
+                out.append((t, 'failed')); continue
+            out.append((t, r['how'])); continue
         if rival and rival['apy'] > offer['apy'] * 1.12:
             t['state'] = 'declined'; _say(t, 'agent', 'Another club is well above you and he is going to take it.'); _post(league, t, f"{p.name} says no", f"Another club is well above you and he is going to take it."); out.append((t, 'declined')); continue
         # a counter: toward the floor, not all the way
@@ -260,8 +267,10 @@ def _accept(league, t, offer, how):
             return dict(ok=False, why=r.get('why'))
     else:
         team = league.teams[t['team']]; cap = CAP.get(league.year, 301.2)
+        if len(team.active()) >= 53 and p not in team.roster: return dict(ok=False, why='the 53 is full; open a roster spot')
         o = MK.Offer(t['team'], p.pid, offer['apy'], offer['years'], promises=offer.get('promises', ()), front_load=offer.get('front_load'))
-        MK.sign(league, p, o, cap); team.sync_cap()
+        try: MK.sign(league, p, o, cap); team.sync_cap()
+        except Exception as e: return dict(ok=False, why=str(e)[:120] or 'the contract could not be written')
     t['state'] = 'accepted'; _say(t, 'agent', f"Done. {p.name} is signed.")
     for k in offer.get('promises', []):
         record_promise(league, p.pid, t['team'], k)
