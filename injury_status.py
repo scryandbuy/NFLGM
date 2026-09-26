@@ -123,14 +123,14 @@ def hurt_profile(p, desig):
 def hurt_words(league, team, p, desig):
     """The trainers' sentence: what he gives up, what the risk is, what they would do. No numbers."""
     from views import surname, sentence
-    kind = str(p.xp_spent.get('_inj_kind') or 'injury')
+    kind = str(p.xp_spent.get('_inj_kind') or 'knock')
     hits, risk = hurt_profile(p, desig)
     d = [q for q in team.depth.get(p.pos, []) if q.pid != p.pid and q.out_until is None]
     backup = d[0] if d else None
     cost = {'Hamstring': 'he will not have his top gear', 'Calf': 'he will not have his top gear', 'Groin': 'he will be a step slow', 'Quadricep': 'he will be a step slow',
             'Ankle': 'his cuts will not be sharp', 'Foot': 'his cuts will not be sharp', 'Toe': 'his cuts will not be sharp', 'Knee': 'he will play well short of himself',
             'Shoulder': 'his hands and his strength at the point will be off', 'Elbow': 'his hands will be off', 'Hand': 'his hands will be off', 'Back': 'his strength will be down', 'Hip': 'he will be stiff',
-            'Neck': 'he will not be at full strength', 'Pectoral': 'his strength will be down', 'Concussion': 'he is cleared and should be himself', 'Illness': 'he will tire early'}.get(kind, 'he will play short of himself')
+            'Neck': 'he will not be at full strength', 'Pectoral': 'his strength will be down', 'Concussion': 'he is cleared and should be himself', 'Illness': 'he will tire early'}.get(kind, 'he will not be at full strength')
     if risk >= 0.15: risk_w = f"a {kind.lower()} that goes again costs him a couple more weeks, and this one is the kind that goes again"
     elif risk >= 0.07: risk_w = f"there is some risk the {kind.lower()} gets worse, a week or two if it does"
     elif risk > 0: risk_w = f"the risk of making the {kind.lower()} worse is small"

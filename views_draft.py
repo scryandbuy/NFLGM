@@ -27,6 +27,8 @@ def _prospect(league, abbr, p, taken=()):
     # the words the board shows for what the room knows
     words = []
     if 'visited' in flags or p.pid in (getattr(league, 'user_visits', None) or []): words.append('Visited')
+    _when = getattr(league, 'user_visit_week', None) or {}
+    visit_locked = bool(p.pid in (getattr(league, 'user_visits', None) or []) and _when.get(p.pid) != f"{league.year}-{league.week}-{league.phase}")
     if getattr(p, 'age', 22) >= 22 and any(x.get('pid') == p.pid and x.get('event') == 'Senior Bowl' for x in (getattr(league, 'spring_news', None) or [])): words.append('Sr. Bowl')
     if 'character' in flags: words.append('Character')
     if 'medical' in flags or (med and isinstance(med, dict) and med.get('flag')): words.append('Medical')
@@ -40,7 +42,7 @@ def _prospect(league, abbr, p, taken=()):
     rk = c.get('rank') if c else None
     proj_range = (f"{max(1, rk - 4)}–{rk + 4}" if rk and rk <= 224 else '—')
     return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), college=getattr(p, 'college', None) or '', small=(not SC._power(p)), visited=('visited' in flags or p.pid in (getattr(league, 'user_visits', None) or [])),
-                cls_year=cls_year, size=size, words=words, proj_range=proj_range, my_round=None,
+                cls_year=cls_year, size=size, words=words, proj_range=proj_range, my_round=None, visit_locked=visit_locked,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
                 forty=(round(float(comb['forty']), 2) if comb.get('forty') else None), vert=(round(float(comb['vert']), 1) if comb.get('vert') else None),
@@ -222,12 +224,17 @@ def _prospect_read(league, abbr, p, row, view):
 
 
 def act_visit(session, league, abbr, pid):
+    """Name a visit, or cancel one named this week. Once the week rolls a visit is locked in: the scouts have made the call."""
     import spring as SP
     cur = list(getattr(league, 'user_visits', None) or [])
-    if pid in cur: cur.remove(pid); SP.set_user_visits(league, cur); return dict(ok=True, line='Visit cancelled.', visits=cur)
+    when = league.__dict__.setdefault('user_visit_week', {})
+    stamp = f"{league.year}-{league.week}-{league.phase}"
+    if pid in cur:
+        if when.get(pid) != stamp: return dict(ok=False, why='that visit is locked in; visits can only be cancelled the week they are named', visits=cur, locked=True)
+        cur.remove(pid); when.pop(pid, None); SP.set_user_visits(league, cur); return dict(ok=True, line='Visit cancelled.', visits=cur)
     if len(cur) >= SP.VISITS: return dict(ok=False, why=f'all {SP.VISITS} visits are spoken for', visits=cur)
-    cur.append(pid); SP.set_user_visits(league, cur); p = league.player(pid)
-    return dict(ok=True, line=f"{p.name if p else pid} gets a visit ({len(cur)} of {SP.VISITS}).", visits=cur)
+    cur.append(pid); when[pid] = stamp; SP.set_user_visits(league, cur); p = league.player(pid)
+    return dict(ok=True, line=f"{p.name if p else pid} gets a visit ({len(cur)} of {SP.VISITS}). Locks in when the week rolls.", visits=cur)
 
 
 def spring(session, league, abbr):

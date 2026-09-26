@@ -176,7 +176,6 @@ def act_propose(league, abbr, other, a_sends, b_sends):
     league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
     import inbox as IB
     IB.post(league, 'trade_done', f"Trade with {other} is done", f"You send {', '.join(_words(league, a_items))} to {other} for {', '.join(_words(league, b_items))}.", sender=other)
-    league.log('trade', a=abbr, b=other, a_sends=[str(x) for x in a_sends], b_sends=[str(x) for x in b_sends], user=True)
     return dict(ok=True, done=True, why=f"Done. {them.abbr} accepts.")
 
 
@@ -298,9 +297,8 @@ def free_agency(session, league, abbr):
     if phase in ('offseason', 'free_agency'):
         step_i = 0 if step is None else 1 if step == 1 else 2 if step in (2, 3) else 3
     elif phase == 'preseason': step_i = 4
-    from cap_engine import CAP
-    committed_next = round(sum(p.contract.cap_hit(1) for p in me.roster if p.contract and p.contract.years >= 2) + float(getattr(me.cap, 'dead_next', 0.0) or 0.0), 1)
-    limit_next = round(CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.055), 1)
+    from views import next_year_cap
+    limit_next, committed_next, _ro, _dn = next_year_cap(league, me)
     import practice_squad as PSQ
     ps_n = len(PSQ.squad(me))
     return dict(rail=rail(session, league, abbr), rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
@@ -486,9 +484,8 @@ def extensions(session, league, abbr):
         r['restructurable'] = round(CT.restructure_room(p, cap), 1) if hasattr(CT, 'restructure_room') else 0.0
     tag_open = TG_.user_tag_window(league); choice = getattr(league, 'user_tag_choice', None)
     # before the New Year a man's last season shows as one year left; after it his deal is up (0) and he is a UFA, RFA or ERFA until tagged, tendered or re-signed
-    from cap_engine import CAP
-    committed_next = round(sum(p.contract.cap_hit(1) for p in me.roster if p.contract and p.contract.years >= 2) + float(getattr(me.cap, 'dead_next', 0.0) or 0.0), 1)
-    limit_next = round(CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.055), 1)
+    from views import next_year_cap
+    limit_next, committed_next, _ro, _dn = next_year_cap(league, me)
     for r in rows:
         st = r.get('talks')
         r['talks_word'] = ({'waiting': 'Waiting', 'countered': 'Countered', 'open': 'Talking', 'accepted': 'Agreed', 'signed': 'Agreed', 'declined': 'Declined', 'broken_off': 'Broke Off'}.get(st, 'Not Started') if st else ('Not Started' if r.get('eligible') else 'After the Season' if r.get('yrs', 0) <= 1 else 'Not Yet Eligible'))

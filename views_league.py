@@ -392,8 +392,8 @@ def team_page(session, league, me_abbr, abbr):
     except Exception: ranks = {}
     staff = {role: (dict(name=c.name, rating=round(c.rating), specialty=c.specialty) if c else None) for role, c in (getattr(t, 'staff', None) or {}).items()}
     top = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(p.apy, 1), yrs=(p.contract.years if p.contract else 0), no=getattr(p, 'number', None)) for p in sorted(t.active(), key=lambda p: -p.ovr)[:5]]
-    committed_next = round(sum(p.contract.cap_hit(1) for p in t.roster if p.contract and p.contract.years >= 2), 1)
-    limit_next = round(CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.055), 1)
+    from views import next_year_cap
+    limit_next, committed_next, _ro, _dn = next_year_cap(league, t)
     # the block: the men this club would move, in the trade engine's own read
     block = []
     try:

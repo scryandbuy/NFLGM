@@ -122,6 +122,14 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     The table is kept and still reachable with use_wp=False, because it is a
     faithful record of observed behaviour and worth comparing against.
     """
+    # THE MODEL DOES NOT GET TO GO FOR IT IN YOUR OWN END. Its win-probability surface values possession
+    # too richly (tied, your ball at your own 15 reads 0.575), so from deep in its own territory it went
+    # for it on fourth and three, tied, in the third quarter. No club does that. In your own territory the
+    # decision follows what clubs actually do (the GO_RATE table by down, distance and zone) unless the
+    # game is late and the club is chasing it; the model keeps the rest of the field.
+    chasing = (score_diff < 0 and secs_left < 480) or (score_diff <= -9 and secs_left < 1200)
+    if use_wp and yardline_100 > 55 and not chasing:
+        use_wp = False
     if use_wp:
         import decisions as DEC
         r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100,
@@ -158,6 +166,10 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
 
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_go = GO_RATE[band][zone] * (0.70 + 0.60 * aggression)
+    # inside your own 40 and not chasing the game: a fourth-and-one is a rare gamble, anything longer is a punt
+    chasing = (score_diff < 0 and secs_left < 480) or (score_diff <= -9 and secs_left < 1200)
+    if yardline_100 > 60 and not chasing:
+        p_go = 0.0 if ydstogo >= 2 else p_go * 0.35
     # trailing late, you have no choice
     if secs_left < 300 and score_diff < 0:
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
