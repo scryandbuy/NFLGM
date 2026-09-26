@@ -207,7 +207,7 @@ function renderPortal(v) {
     const rkCell = r => el('span', { class: 'rk ' + (r == null ? '' : r <= 8 ? 'good' : r >= 24 ? 'bad' : 'mid-rk') }, r == null ? '—' : `${r}${ord(r)}`);
     const panel = (title, rows, extra, leftHead, rightHead) => {
       const s = el('section', { class: 'sheet c6' }, el('h2', {}, title));
-      const box = el('div', { class: 'sides' }, el('div', { class: 'side-row head' }, el('span', {}), el('span', {}, leftHead), el('span', {}), el('span', {}, rightHead)));
+      const box = el('div', { class: 'sides' }, el('div', { class: 'side-row head', style: 'display:grid' }, el('span', { class: 'lab' }, 'Rank of'), el('span', { class: 'colhead' }, leftHead.toUpperCase()), el('span', { class: 'mid' }, 'vs'), el('span', { class: 'colhead' }, rightHead.toUpperCase())));
       for (const r of rows) box.append(el('div', { class: 'side-row' }, el('span', { class: 'lab' }, r.label), rkCell(r.mine), el('span', { class: 'mid' }, 'vs'), rkCell(r.theirs)));
       (extra || []).forEach((t, i) => box.append(el('div', { class: 'side-row' + (i === 0 ? ' sep' : '') }, el('span', { class: 'lab' }, t.label, t.sub ? el('em', {}, t.sub) : ''), el('span', { class: 'rk', style: 'font-size:17px' }, t.left), el('span', { class: 'mid' }, 'vs'), el('span', { class: 'rk', style: 'font-size:17px' }, t.right))));
       s.append(box); return s;
@@ -909,6 +909,7 @@ function renderTrades(v) {
   renderRail(v.rail); const page = persPage(); persSecond('trades');
   tradeState.other = v.other.abbr;
   const s = el('section', { class: 'sheet c12' });
+  if (!v.can_trade) page.append(el('div', { class: 'banner c12' }, el('b', {}, 'The trade deadline has passed.'), ' Trades reopen after the season. You can still look at every club and read offers, but nothing can be sent or received until then.'));
   s.append(el('h2', {}, 'Trades', el('small', {}, v.can_trade ? `Deadline after Week ${v.deadline_week}` : 'Closed until the season ends')));
   const strip = el('div', { class: 'clubs' });
   for (const c of v.clubs) strip.append(el('button', { class: 'cl', style: `background:${c.color}`, 'aria-pressed': String(c.abbr === v.other.abbr), 'data-tip': c.name, onclick: () => { tradeState = { other: c.abbr, a: [], b: [] }; renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(c.abbr)})`)); } }, c.abbr));
@@ -1847,7 +1848,7 @@ function renderReport(v) {
   s.append(tg);
   // unit rankings, both clubs
   const two = el('div', { class: 'two' });
-  const ut = el('div', {}, el('div', { class: 'h5' }, 'Unit Rankings', el('span', {}, `${v.rail.club.abbr} · ${v.opp.abbr}`)));
+  const ut = el('div', {}, el('div', { class: 'h5' }, 'Unit Rankings'), el('div', { class: 'side-row head', style: 'display:grid' }, el('span', {}), el('span', { class: 'colhead' }, v.rail.club.abbr), el('span', { class: 'mid' }), el('span', { class: 'colhead' }, v.opp.abbr)));
   const rk = r => el('span', { class: 'rk ' + (r == null ? '' : r <= 8 ? 'good' : r >= 24 ? 'bad' : 'mid-rk'), style: 'font-size:17px' }, r == null ? '—' : `${r}${ord(r)}`);
   for (const r of v.unit_table) ut.append(el('div', { class: 'side-row' }, el('span', { class: 'lab' }, r.label), rk(r.mine), el('span', { class: 'mid' }), rk(r.theirs)));
   const men = el('div', {}, el('div', { class: 'h5' }, 'Players Who Matter')); for (const p of v.stars) men.append(el('div', { class: 'plate', style: 'margin-bottom:4px;cursor:pointer', onclick: () => { location.hash = '#club/player/' + p.pid; } }, el('div', { class: 'no' }, p.pos), el('div', { class: 'nm' }, p.name, el('small', {}, p.pos)), el('div', { class: 'ov' }, p.ovr)));
@@ -1858,7 +1859,7 @@ function renderReport(v) {
     const P = v.panels; const grid = el('div', { class: 'two' });
     const panel = (title, rows, extra, leftHead, rightHead) => {
       const d = el('div', {}, el('div', { class: 'h5' }, title));
-      const box = el('div', { class: 'sides' }, el('div', { class: 'side-row head' }, el('span', {}), el('span', {}, leftHead), el('span', {}), el('span', {}, rightHead)));
+      const box = el('div', { class: 'sides' }, el('div', { class: 'side-row head', style: 'display:grid' }, el('span', { class: 'lab' }, 'Rank of'), el('span', { class: 'colhead' }, leftHead.toUpperCase()), el('span', { class: 'mid' }, 'vs'), el('span', { class: 'colhead' }, rightHead.toUpperCase())));
       for (const r of rows) box.append(el('div', { class: 'side-row' }, el('span', { class: 'lab' }, r.label), rk(r.mine), el('span', { class: 'mid' }, 'vs'), rk(r.theirs)));
       (extra || []).forEach((t, i) => box.append(el('div', { class: 'side-row' + (i === 0 ? ' sep' : '') }, el('span', { class: 'lab' }, t.label, t.sub ? el('em', {}, t.sub) : ''), el('span', { class: 'rk', style: 'font-size:17px' }, t.left), el('span', { class: 'mid' }, 'vs'), el('span', { class: 'rk', style: 'font-size:17px' }, t.right))));
       d.append(box); return d;

@@ -1173,3 +1173,10 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 
 /* hovers on action rows and footers open upward, so a box that scrolls never grows for one */
 .acts [data-tip]:hover::after,.foot [data-tip]:hover::after,.thread [data-tip]:hover::after,.offer [data-tip]:hover::after{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
+
+.side-row.head .colhead{text-align:center;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.04em;color:var(--ink-2)}
+.side-row.head .lab{font-size:12.5px;color:var(--ink-3)}
+
+/* a page-wide notice: the trade deadline */
+.banner{grid-column:1 / -1;background:rgba(229,72,77,.14);border:1px solid var(--danger);color:var(--ink);padding:14px 18px;text-align:center;font-size:17px;margin-bottom:4px}
+.banner b{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.02em;margin-right:8px}
