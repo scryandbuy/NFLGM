@@ -109,24 +109,63 @@ def call_up(league, abbr, pid, years=1):
     if p not in squad(team): return False
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
+    if len(team.active()) >= 53 and league.phase == 'regular' and room_candidate(league, team, p) is None:
+        return False                                      # nobody the club would release for him
     squad(team).remove(p); p.xp_spent.pop('_ps', None); p.team = None
     _make_room(league, abbr, p)
-    league.sign(pid, abbr, Contract(years=years, base=[mn] * years, signing_bonus=0.0, signed=league.year))
-    league.log('ps_callup', pid=pid, team=abbr)
+    league.sign(pid, abbr, Contract(years=years, base=[mn] * years, signing_bonus=0.0, signed=league.year), log=False)
+    league.log('ps_callup', pid=pid, team=abbr)          # the one line for the move
     return True
 
 
+def shunned(p, abbr, league):
+    """A club does not sign or claim a man it released in the last eight weeks, and a man released by three clubs
+    this season is nobody's first call."""
+    rb = (p.xp_spent.get('_released_by') or {}) if hasattr(p, 'xp_spent') else {}
+    wk = int(league.week or 0)
+    if abbr in rb and 0 <= wk - int(rb[abbr]) <= 8: return True
+    if int(p.xp_spent.get('_releases_year', -1) or -1) == league.year and int(p.xp_spent.get('_releases_this_year', 0) or 0) >= 3: return True
+    return False
+
+
+def protected(team, q, league):
+    """Men a club does not release to make room: its only kicker, punter or long snapper; a first- or second-round
+    pick in his first two seasons; anyone whose release costs more than about two million in dead money."""
+    if q.pos in ('K', 'P', 'LS') and sum(1 for x in team.active() if x.pos == q.pos) <= 1: return True
+    rd = getattr(q, 'draft_round', None); dy = getattr(q, 'draft_year', None)
+    if rd is not None and int(rd) <= 2 and dy is not None and league.year - int(dy) <= 1: return True
+    try:
+        if float(q.dead_if_cut(0)) > 2.0: return True
+    except Exception: pass
+    return False
+
+
+def room_candidate(league, team, p):
+    """Who goes when the club needs a spot for p: the least valuable unprotected man at p's position, then on
+    p's side of the ball, then anywhere. Value is his grade less the dead money his release would cost."""
+    def value(q):
+        try: dead = float(q.dead_if_cut(0))
+        except Exception: dead = 0.0
+        return float(q.ovr) - 4.0 * dead
+    wk = league.week
+    pools = ([q for q in team.active() if q.pos == p.pos], [q for q in team.active() if GROUP_OF.get(q.pos, q.pos) == GROUP_OF.get(p.pos, p.pos)], list(team.active()))
+    for pool in pools:
+        cands = [q for q in pool if q is not p and not locked(q, wk) and not protected(team, q, league)]
+        if cands: return min(cands, key=value)
+    return None
+
+
 def _make_room(league, abbr, p):
-    """The 53 is the 53: a call-up or a poach in season releases the worst
-    man at his spot, who goes through waivers like anyone else. That is
-    where the in-season wire comes from."""
+    """The 53 is the 53: a call-up or a poach in season releases a man, who goes through waivers like anyone
+    else. That is where the in-season wire comes from. Returns False when no acceptable man exists, and the move
+    that needed the spot does not happen."""
     team = league.teams[abbr]
     if league.phase != 'regular' or len(team.active()) < 53:
-        return
-    cands = [q for q in team.active() if q.pos == p.pos and not locked(q, league.week)] or \
-            [q for q in team.active() if not locked(q, league.week)]
-    if cands:
-        league.release(min(cands, key=lambda q: q.ovr).pid)
+        return True
+    q = room_candidate(league, team, p)
+    if q is None: return False
+    league.release(q.pid)
+    return True
 
 
 def poach(league, abbr, pid, week):
@@ -134,11 +173,13 @@ def poach(league, abbr, pid, week):
     p = league.player(pid)
     src = p.team
     if src is None or src == abbr or p not in squad(league.teams[src]): return False
+    team = league.teams[abbr]
+    if len(team.active()) >= 53 and league.phase == 'regular' and room_candidate(league, team, p) is None: return False
     squad(league.teams[src]).remove(p); p.xp_spent.pop('_ps', None); p.team = None
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
     _make_room(league, abbr, p)
-    league.sign(pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
+    league.sign(pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)
     p.xp_spent['_poach_lock'] = (week or 0) + POACH_LOCK_GAMES
     league.log('ps_poach', pid=pid, team=abbr, source=src, locked_until=(week or 0) + POACH_LOCK_GAMES)
     return True
@@ -263,7 +304,10 @@ def keep_groups_whole(league, rng, week):
     moves = []
     user = getattr(league, 'user_team', None)
     for abbr, team in league.teams.items():
-        healthy = collections.Counter(GROUP_OF.get(p.pos, p.pos) for p in team.active() if p.out_until is None)
+        wk_ = int(week or 0)
+        # a man out two weeks or less still counts as the club's man: the game-day elevation covers him, and nobody
+        # releases a player to cover a fortnight (that was the weekly backup-quarterback carousel)
+        healthy = collections.Counter(GROUP_OF.get(p.pos, p.pos) for p in team.active() if p.out_until is None or (int(p.out_until) < 99 and int(p.out_until) - wk_ <= 2))
         for grp, floor in GROUP_MIN.items():
             short = floor - healthy.get(grp, 0)
             hard = healthy.get(grp, 0) < HARD_MIN.get(grp, 0)
@@ -287,16 +331,21 @@ def keep_groups_whole(league, rng, week):
                     import inbox as IB
                     IB.post(league, 'injury', f"Emergency at {grp}: the trainers filled it", f"The chart at {grp} fell below what the game can dress ({healthy.get(grp, 0)} healthy). The best man available was called up so a team could take the field; the practice-squad and free-agent pages are yours for anything more.", sender='trainers', payload=dict(link='club:ps'))
                 except Exception: pass
+            if abbr != user and getattr(team, '_moved_week', None) == wk_ and not hard:
+                continue                                  # one roster addition a week per club, short of an emergency
             while short > 0:
                 cands = [p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp]
                 if cands:
-                    best = max(cands, key=lambda p: p.ovr); call_up(league, abbr, best.pid); moves.append((abbr, 'callup', best.pid))
+                    best = max(cands, key=lambda p: p.ovr)
+                    if not call_up(league, abbr, best.pid): break
+                    moves.append((abbr, 'callup', best.pid)); team._moved_week = wk_
                 else:
                     fa = [league.player(pid) for pid in league.free_agents]
-                    fa = [p for p in fa if p and GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired]
+                    fa = [p for p in fa if p and GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired and not shunned(p, abbr, league)]
                     if not fa: break
                     best = max(fa, key=lambda p: p.ovr)
-                    _make_room(league, abbr, best)
+                    if len(team.active()) >= 53 and room_candidate(league, team, best) is None: break
+                    _make_room(league, abbr, best); team._moved_week = wk_
                     mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
                     if best.pid in league.free_agents: league.free_agents.remove(best.pid)
                     best.contract = None

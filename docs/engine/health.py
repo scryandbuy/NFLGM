@@ -250,11 +250,15 @@ def roll_injury(player, position, contact, rng, rate_fn, condition=100.0,
     kind = _it[int(rng.choice(len(_it), p=_ip))]
     sev = _isev[kind]
     r = rng.random()
-    if   r < .667: weeks = 1
-    elif r < .880: weeks = 2
-    elif r < .969: weeks = 3
-    elif r < .997: weeks = int(rng.integers(4, 6))
-    else:          weeks = int(rng.integers(6, 17))
+    # how long a man who misses a game misses: about 40% one game, a fifth two, a tenth three, and a quarter
+    # four or more, which is the share that goes on injured reserve in the real league (roughly eight a club a
+    # season). The old table sent 0.3% past five weeks and the league placed seventeen men on IR all year
+    if   r < .40: weeks = 1
+    elif r < .62: weeks = 2
+    elif r < .73: weeks = 3
+    elif r < .85: weeks = int(rng.integers(4, 6))
+    elif r < .94: weeks = int(rng.integers(6, 10))
+    else:          weeks = int(rng.integers(10, 18))
     weeks = max(1, int(round(weeks * (0.92 + 0.16 * (sev - 1.5)))))
     return dict(player=player.get('pid'), position=position, kind=kind,
                 weeks_out=weeks, season_ending=weeks >= 8,
