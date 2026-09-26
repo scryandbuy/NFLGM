@@ -267,7 +267,6 @@ def _accept(league, t, offer, how):
             return dict(ok=False, why=r.get('why'))
     else:
         team = league.teams[t['team']]; cap = CAP.get(league.year, 301.2)
-        if len(team.active()) >= 53 and p not in team.roster: return dict(ok=False, why='the 53 is full; open a roster spot')
         o = MK.Offer(t['team'], p.pid, offer['apy'], offer['years'], promises=offer.get('promises', ()), front_load=offer.get('front_load'))
         try: MK.sign(league, p, o, cap); team.sync_cap()
         except Exception as e: return dict(ok=False, why=str(e)[:120] or 'the contract could not be written')

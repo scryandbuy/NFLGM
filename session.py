@@ -62,6 +62,11 @@ class Session:
         s = cls(L, np.random.default_rng(d.get('_seed_state', None)), d.get('_user_team'))
         s.stop = tuple(d.get('_stop', ['week', 1]))
         s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
+        lp = d.get('_live_pending')
+        if lp and s.stop[0] == 'week' and s.played:
+            import season as SN
+            s.runner = SN.SeasonRunner(s.L, s.rng); s.runner.week = lp['week']; s.runner.last_games = []; s.runner.last_played = []
+            s.runner.open_live(lp['home'], lp['away'], lp['week'])
         s.standings = d.get('_standings'); s.order = d.get('_order'); s.fired = [tuple(x) if isinstance(x, list) else x for x in (d.get('_fired') or [])]
         if d.get('_post'):
             class _Post:            # the shape awards, prestige and the almanac read
@@ -80,8 +85,11 @@ class Session:
         return s
 
     def save(self):
-        self._finish_live()                       # a half-played game cannot be written down: it is played out first
         d = json.loads(self.L.save())
+        lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if lv is not None and not lv['done']:
+            # a half-played game cannot be written down; the save marks it pending and a load reopens it at the kick
+            d['_live_pending'] = dict(home=lv['home'], away=lv['away'], week=lv['week'])
         d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
         d['_gameday'] = self.gameday
         d['_gamedays'] = getattr(self, 'gamedays', None) or {}
@@ -156,8 +164,19 @@ class Session:
         # 68 and cuts to 53 before week 1, the way every club does.
         if self.stop[0] in ('week', 'cutdown', 'wire') and not getattr(self, 'played', False):
             n = len(self.L.teams[self.user_team].active())
-            if n > self.ROSTER_MAX: out.append(dict(id=None, subject=f"Roster at {n}: cut to {self.ROSTER_MAX} before Sunday", kind='roster', go='#club'))
-            elif n < self.ROSTER_MIN: out.append(dict(id=None, subject=f"Roster at {n}: sign to at least {self.ROSTER_MIN}", kind='roster', go='#personnel/fa'))
+            import inbox as IB
+            key_ = f"roster-{self.L.year}-{self.stop[1] if len(self.stop) > 1 else 0}"
+            existing = next((m for m in getattr(self.L, 'inbox', []) if (m.get('payload') or {}).get('key') == key_ and m.get('status') in ('unread', 'open')), None)
+            if n > self.ROSTER_MAX or n < self.ROSTER_MIN:
+                subj = f"Roster at {n}: cut to {self.ROSTER_MAX} before Sunday" if n > self.ROSTER_MAX else f"Roster at {n}: sign to at least {self.ROSTER_MIN}"
+                if existing is None:
+                    IB.post(self.L, 'roster', subj, (f"You are carrying {n}. The game needs 53 or fewer to start; release or waive to the practice squad before you sim." if n > self.ROSTER_MAX else f"You are at {n}; the game needs at least {self.ROSTER_MIN}. Sign from free agency or call up from the squad."), sender='front office', payload=dict(key=key_, link=('club' if n > self.ROSTER_MAX else 'personnel:fa')))
+                    existing = self.L.inbox[-1]
+                else:
+                    existing['subject'] = subj
+                out.append(dict(id=existing.get('id'), subject=subj, kind='roster', go=('#club' if n > self.ROSTER_MAX else '#personnel/fa')))
+            elif existing is not None:
+                existing['status'] = 'done'
         for m in getattr(self.L, 'inbox', []):
             if m.get('status') in ('unread', 'open') and m.get('kind') in ('trade_offer', 'match_request', 'staff') and m.get('needs_decision', True):
                 if m.get('kind') == 'trade_offer' or (m.get('payload') or {}).get('poach'):

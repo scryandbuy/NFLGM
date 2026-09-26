@@ -296,7 +296,7 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
 # Real: returned on 35% of punts, mean 11.5 yards WHEN returned (the 4.23
 # figure counted all punts including fair catches), p90 19, max 97, and 0.36%
 # go for a touchdown.
-PUNT = dict(gross=48.6, sd=8.5, blocked=.0043,          # the full swing; pooches from better field position pull the league gross to the real 47.2
+PUNT = dict(gross=48.6, sd=7.4, blocked=.0043,          # sd from 8.5: 60-yard punts are about 4% of the real league's and 65-yarders about 1%; at 8.5 they ran 9% and 3%          # the full swing; pooches from better field position pull the league gross to the real 47.2
             # real: 45% returned, mean return 10.4; the rest fair caught,
             # downed, out of bounds or a touchback
             return_rate=.45, return_mean=10.4, return_p90=19, td_rate=.0036,
@@ -332,7 +332,7 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70):
                     new_yardline=100 - yardline_100)
     pwr = rate_fn(punter, {'kick_power_rating': .70, 'kick_acc_rating': .30})
     acc = rate_fn(punter, {'kick_acc_rating': 1.0})
-    full = rng.normal(PUNT['full'] * (1.0 + 0.30 * (pwr - AVG)) * ENV.punt_mult, PUNT['sd'])
+    full = min(68.0, rng.normal(PUNT['full'] * (1.0 + 0.30 * (pwr - AVG)) * ENV.punt_mult, PUNT['sd']))     # 68 is a season-long league high
     pooch = False
     if yardline_100 - full < PUNT['aim']:
         # a full swing goes into or through the end zone: drop it short.
@@ -357,7 +357,7 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70):
                 if land - roll <= 0:
                     touchback = True
                 else:
-                    land -= roll; how = 'downed'
+                    land -= roll; how = 'downed'; gross = min(70.0, gross + roll)      # the roll is part of the gross; 70 is the modern high
             else:
                 how = 'fair_catch'
         elif rng.random() < PUNT['return_rate']:
@@ -407,6 +407,18 @@ KICKOFF = dict(touchback=.155, return_rate=.799, return_mean=26.9,
                onside_recovery=.0645)      # under the dynamic kickoff
 
 LAST_KICKOFF = {}
+
+
+def returner_for(ros, state, rate_fn, kind='kr'):
+    """The club's return man for this kick: the charted one unless he is hurt or out, then the best healthy
+    man among the return positions. A hurt returner kept returning kicks because the slot was fixed at kickoff."""
+    out = state.out if state is not None else set()
+    kr = ros.get(kind) or {}
+    if kr and kr.get('pid') not in out: return kr
+    import rosters as R
+    cands = [p for grp in ('wr', 'db', 'backs') for p in (ros.get(grp) or []) if p and p.get('pid') not in out and p.get('pos') in R.RETURN_POS]
+    if ros.get('rb') and ros['rb'].get('pid') not in out: cands.append(ros['rb'])
+    return max(cands, key=R.return_score) if cands else (kr or {})
 
 
 def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
@@ -679,9 +691,11 @@ def _resolve_live_penalty(dr, pen, out, oc):
         pen['penalty'] in ('Defensive Pass Interference', 'Illegal Contact')
     if not take:
         return None
-    gained_p = min(yards, dr.yardline - 1)
-    if gained_p < yards - 0.01 and pen['penalty'] == 'Defensive Pass Interference':
-        pen['end_zone'] = True; pen['spot'] = 1                # the foul was in the end zone: the ball goes to the 1
+    if pen['penalty'] == 'Defensive Pass Interference':
+        gained_p = min(yards, dr.yardline - 1)                 # a spot foul: in the end zone the ball goes to the 1
+        if gained_p < yards - 0.01: pen['end_zone'] = True; pen['spot'] = 1
+    else:
+        gained_p = min(yards, float(np.floor(dr.yardline / 2.0)))   # every other foul: half the distance to the goal, whole yards
     pen['yards'] = round(gained_p, 1)
     dr.yardline -= gained_p
     if pen_first:
@@ -1008,7 +1022,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             _o, _off, _def, _st = pending
             _v = AS.epa(_o, _st[0], _st[1], _st[2], dr.down, dr.togo, dr.yardline)
             _o['epa'] = round(_v, 3); AS.book_play(book, _o, _off, _def, _v); pending = None
-        if dr.clock <= 0:
+        wall = half_end if half_end is not None else 0.0
+        if dr.clock <= wall and getattr(dr, 'untimed', False):
+            # a half does not end on an accepted defensive foul: one untimed down
+            dr.untimed = False; dr.clock = wall + 0.5
+        elif dr.clock <= 0:
             dr.result = 'End of half'; break
         # THE HALF IS A WALL TOO. Without this the game ran as one continuous
         # 3600 seconds and only ONE drive a game was ever killed by a clock -
@@ -1017,6 +1035,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if half_end is not None and dr.clock <= half_end:
             dr.clock = half_end
             dr.result = 'End of half'; break
+        # 10. THE KNEEL. With the ball and no time to use it, out of range, a club takes a knee: the first half at
+        # any score, the second half when it is not behind. Real clubs do not throw from their own 35 at 0:04.
+        secs_left_half = dr.clock - wall
+        if secs_left_half <= 10 and dr.yardline > 45 and (half_end is not None or dr.score_diff >= 0) and not getattr(dr, '_kneeled', False):
+            dr._kneeled = True
+            dr.log.append(dict(type='kneel', passer=(offense.get('qb') or {}).get('pid'), down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock))
+            dr.plays += 1; dr.clock = wall; dr.result = 'End of half'; break
         if dr.plays > 25:
             dr.result = 'End of half'; break
 
@@ -1182,7 +1207,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             import adjust as AD
             their = def_state.last_adjustment if def_state is not None else None
             ch = AD.cheater_available(their)
-            if ch and rng.random() < 0.20 + 0.55 * float(
+            if ch and not (late_lean or last_shot) and rng.random() < 0.20 + 0.55 * float(
                     off_state.coach.get('adjust_skill', 0.5)):
                 if ch['call'] == 'run':
                     oc['is_pass'] = False
@@ -1227,14 +1252,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dr.clock -= play_seconds('penalty')
             if pen['on_offense']:
                 # half the distance to the offense's own goal when the full yardage would reach it
-                walk = min(float(pen['yards']), (100.0 - dr.yardline) / 2.0)
+                walk = max(1.0, float(np.floor(min(float(pen['yards']), (100.0 - dr.yardline) / 2.0))))
                 pen['yards'] = round(walk, 1)
                 dr.yardline = min(99, dr.yardline + walk)
                 dr.togo += walk
             else:
                 # half the distance to the defense's goal
-                gained = min(float(pen['yards']), dr.yardline / 2.0)
+                gained = max(1.0, float(np.floor(min(float(pen['yards']), dr.yardline / 2.0))))
                 pen['yards'] = round(gained, 1)
+                dr.untimed = True                       # a half cannot end on this
                 if pen['auto_first']:
                     dr.yardline -= gained; dr.down, dr.togo = 1, min(10, dr.yardline)
                     dr.first_downs += 1
@@ -1329,6 +1355,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         t = out['type']
         if live_pen is not None:
             taken = _resolve_live_penalty(dr, live_pen, out, oc)
+            if taken in ('replaced', 'added') and not live_pen.get('on_offense'):
+                dr.untimed = True                       # a half cannot end on an accepted defensive foul
             if taken == 'replaced':
                 # accepted in place of the play: the down is replayed and the snap does not count, but the
                 # play-by-play keeps the play it wiped (marked), so a reader sees the pass the flag came on
@@ -1343,7 +1371,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # a collapsed pocket is not automatically a sack - a mobile QB runs
         if t == 'sack':
             if rng.random() < E.scramble_chance(offense['qb'], 1.0, 1.4, rate_fn):
-                out = E.resolve_scramble(offense['qb'], [], ytg_i, rng, rate_fn)
+                _head = {k: dr.log[-1].get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass') if k in dr.log[-1]}
+                out = E.resolve_scramble(offense['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'; dr.log[-1] = out
 
         if t == 'interception':
@@ -1372,11 +1401,14 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
             if dr.score_diff > 0 and dr.clock < 180 and in_bounds and timeouts.left.get(other, 0) > 0:
                 used = timeouts.use(other); used_by = other                    # the trailing defense stops the clock
-            elif dr.score_diff <= 0 and dr.clock < 120 and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
-                used = timeouts.use(pos); used_by = pos                        # the trailing offense saves its clock
+            elif (dr.score_diff < 0 or (dr.score_diff == 0 and secs_in_half < 40)) and dr.clock < 120 and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
+                used = timeouts.use(pos); used_by = pos                        # the trailing offense saves its clock; a tied one only at the very end
         hurry = secs_in_half < 120 and dr.score_diff <= 0
         before_clock = secs_in_half
+        clock_before = dr.clock
         dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
+        for edge in (2700.0, 900.0):
+            if clock_before > edge >= dr.clock: dr.clock = edge       # the quarter ends with this play; no huddle runs into the next one
         after_clock = dr.clock - half_end if half_end is not None else dr.clock
         if used and used_by:
             dr.log.append(dict(type='timeout', side=used_by, side_abbr=(getattr(off_state if used_by == pos else def_state, 'abbr', None) or used_by.upper()), left=timeouts.left.get(used_by, 0), clock=dr.clock))
@@ -1454,7 +1486,7 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
     pos = first
     had = {'home': False, 'away': False}
     drives = []
-    start = kickoff_booked(((home if pos == 'home' else away).get('kr') or {}),
+    start = kickoff_booked(returner_for(home if pos == 'home' else away, home_state if pos == 'home' else away_state, rate_fn),
                            rng, rate_fn, book)['new_yardline']
 
     while clock > 0:
@@ -1491,7 +1523,7 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
                 return score, drives, 'decided'
 
         if dr.result in ('Touchdown', 'Field goal'):
-            start = kickoff_booked((deff.get('kr') or {}), rng, rate_fn, book)['new_yardline']
+            start = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)['new_yardline']
         elif dr.result == 'Punt':
             start = getattr(dr, 'next_yardline', 75)
         elif dr.result in ('Turnover', 'Turnover on downs'):
@@ -1526,7 +1558,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
     pos = 'away'                                   # away receives first
-    start = kickoff_booked((away.get('kr') or {}), rng, rate_fn, book)['new_yardline']    # the RECEIVING side's man returns it
+    start = kickoff_booked(returner_for(away, away_state, rate_fn), rng, rate_fn, book)['new_yardline']    # the RECEIVING side's man returns it
 
     tos = Timeouts()
     half_done = False
@@ -1613,12 +1645,12 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             yield ('halftime', dict(score))          # the live game stops here: the GM's halftime adjustments apply to what follows
             ENV.turn(rng, home_abbr); _P.ENV = ENV
             pos = 'home'                            # away received the opener, so home receives now
-            start = kickoff_booked((home.get('kr') or {}), rng, rate_fn, book)['new_yardline']
+            start = kickoff_booked(returner_for(home, home_state, rate_fn), rng, rate_fn, book)['new_yardline']
             continue
 
         # where the next possession starts
         if dr.result in ('Touchdown', 'Field goal'):
-            start = kickoff_booked((deff.get('kr') or {}), rng, rate_fn, book)['new_yardline']
+            start = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)['new_yardline']
         elif dr.result == 'Punt':
             start = getattr(dr, 'next_yardline', 75)
         elif dr.result in ('Turnover', 'Turnover on downs'):
