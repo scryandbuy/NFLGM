@@ -148,7 +148,7 @@ function renderInbox(v) {
     if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
     else if (m.kind === 'injury_decision' && m.status !== 'done' && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=False)`)); reload(); } }, 'Sit Him'), el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
     else if (cur.decide) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { location.hash = `#portal/inbox/${cur.id}`; } }, 'Open the Decision')));
-    else if (m.link) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn', href: linkHash(m.link) }, 'Go There')));
+    else if (m.link) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn' + (m.kind === 'negotiation' ? ' go' : ''), href: linkHash(m.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There')));
   } else pane.append(el('div', { class: 'empty' }, 'Select a message.'));
   box.append(list, pane); s.append(box); page.append(s);
 }
@@ -157,6 +157,7 @@ function linkHash(link) {
   const [a, b] = String(link).split(':');
   const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
   if (a === 'player') return '#club/player/' + b;
+  if (a === 'negotiation') { const kind = String(link).split(':')[1] || ''; return kind === 'extension' ? '#personnel/extensions' : kind.startsWith('fa') ? '#personnel/fa' : '#personnel/fa'; }
   return MAP[link] || MAP[a] || '#portal';
 }
 
@@ -302,6 +303,7 @@ function openMessage(id) {
       el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(pid)}, play=False)`)); location.hash = '#portal/inbox'; } }, 'Sit Him'),
       el('a', { class: 'btn quiet', href: '#club/player/' + pid }, 'His Card'));
   } else if (m.kind === 'injury_decision') acts.append(el('span', { class: 'count' }, 'Decided.'));
+  if (m.payload && m.payload.link) acts.append(el('a', { class: 'btn go', href: linkHash(m.payload.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There'));
   acts.append(el('button', { class: 'btn quiet', onclick: () => refresh() }, 'Back to Portal'));
   page.append(el('section', { class: 'sheet' }, el('h2', {}, m.subject, el('small', {}, `${m.sender || ''} · ${m.year} Week ${m.week}`)), el('div', { class: 'pad', style: 'max-width:70ch;line-height:1.5;color:var(--ink-2)' }, m.body), acts));
 }
