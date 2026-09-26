@@ -157,7 +157,7 @@ function renderInbox(v) {
 function linkHash(link) {
   if (!link) return '#portal';
   const [a, b] = String(link).split(':');
-  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
+  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:ps': '#club/ps', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/waivers', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
   if (a === 'player') return '#club/player/' + b;
   if (a === 'negotiation') { const kind = String(link).split(':')[1] || ''; return kind === 'extension' ? '#personnel/extensions' : kind.startsWith('fa') ? '#personnel/fa' : '#personnel/fa'; }
   return MAP[link] || MAP[a] || '#portal';
