@@ -1079,7 +1079,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             pa_boost = float(np.clip(1.0 + 0.55 * min(seq['run_hot'], 3.0) / 3.0, 0.85, 1.55))
             olean = dict(pass_bias=pl0.pass_bias, play_action=min(0.95, pl0.play_action_rate * pa_boost),
                          motion=getattr(pl0, 'motion_rate', 0.365), protection=getattr(pl0, 'protection', None),
-                         screen_boost=getattr(pl0, 'screen_boost', 0.0))
+                         screen_boost=getattr(pl0, 'screen_boost', 0.0), heavy_lean=getattr(pl0, 'heavy_lean', 0.0))
         secs_for_call = dr.clock
         if half_end is not None and quarter <= 2 and secs_in_half <= 240 and dr.score_diff <= 0:
             secs_for_call = secs_in_half          # the drive before the break is a two-minute drill for the side not ahead
@@ -1122,7 +1122,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if def_state is not None and def_state.plan is not None:
             dp0 = def_state.plan
             dlean = dict(coverage=dp0.man_rate, shell=getattr(dp0, 'shell_lean', 0.5),
-                         blitz=getattr(dp0, 'blitz_lean', 0.35), front_pref=dp0.front_pref)
+                         blitz=getattr(dp0, 'blitz_lean', 0.35), front_pref=dp0.front_pref, sub_lean=getattr(dp0, 'sub_lean', 0.0))
         dc = call_def(oc, dr.down, max(1, int(np.ceil(dr.togo))), rng, ytg_i,
                       defense=defense, rate_fn=rate_fn, score_diff=dr.score_diff,
                       secs_left=dr.clock, lean=dlean,

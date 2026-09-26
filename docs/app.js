@@ -443,7 +443,15 @@ function renderGameDay(v) {
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
   tick.append(el('h2', {}, 'Play by Play', el('small', {}, '')), ctrl);
-  if (live && live.halftime_open) tick.append(el('div', { class: 'read', style: 'margin:0 14px 10px;padding:12px 14px' }, el('b', {}, `Halftime · ${g.away.abbr} ${live.score.away}, ${g.home.abbr} ${live.score.home}. `), 'The second half kicks when you are ready. ', el('button', { class: 'btn go', style: 'margin-left:10px', onclick: () => step('resume') }, 'Start the Second Half')));
+  if (live && live.halftime_open) {
+    const card = el('div', { class: 'read', style: 'margin:0 14px 10px;padding:12px 14px' });
+    card.append(el('div', { style: 'display:flex;align-items:center;gap:10px;flex-wrap:wrap' }, el('b', {}, `Halftime · ${g.away.abbr} ${live.score.away}, ${g.home.abbr} ${live.score.home}`), el('span', { class: 'count' }, live.recs && live.recs.length ? "The assistants' read of the half. Take what you want; the second half plays what you take." : 'The assistants have nothing to change at the break.'), el('button', { class: 'btn go', style: 'margin-left:auto', onclick: () => step('resume') }, 'Start the Second Half')));
+    for (const r of (live.recs || [])) card.append(el('div', { style: 'display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--rule)' },
+      el('span', { class: 'tag ' + (r.side === 'offence' ? 'q' : 'out'), style: 'margin-top:3px' }, r.side === 'offence' ? 'OFFENSE' : 'DEFENSE'),
+      el('div', { style: 'flex:1' }, el('div', { style: 'font-weight:700' }, r.text), el('div', { class: 'count' }, r.why)),
+      el('button', { class: 'btn' + (r.taken ? ' go' : ''), style: 'width:auto;padding:3px 10px', onclick: () => { renderGameDay(pyJSON(`SESSION.half_take(${r.i}, ${r.taken ? 'False' : 'True'})`)); } }, r.taken ? 'Taken' : 'Take')));
+    tick.append(card);
+  }
   tick.append(body);
   page.append(tick);
 

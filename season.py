@@ -256,7 +256,8 @@ class SeasonRunner:
                     _k, pos, dr, score = ev; lv['drives'].append((pos, dr)); lv['current'] = None; lv['score'] = dict(score); lv['at'] = 'drive'; lv['pos'] = 'away' if pos == 'home' else 'home'
                     if mode in ('play', 'drive'): break
                 elif kind == 'halftime':
-                    lv['score'] = dict(ev[1]); lv['halftime_open'] = True; lv['at'] = 'halftime'; lv['pos'] = 'home'; break
+                    lv['score'] = dict(ev[1]); lv['halftime_open'] = True; lv['at'] = 'halftime'; lv['pos'] = 'home'
+                    self._halftime_read(lv); break
                 elif kind == 'overtime':
                     lv['score'] = dict(ev[1]); lv['at'] = 'overtime'
                     if mode in ('play', 'drive', 'half'): break
@@ -264,6 +265,34 @@ class SeasonRunner:
             lv['res'] = done.value; lv['done'] = True; lv['current'] = None; lv['score'] = {'home': lv['res']['home'], 'away': lv['res']['away']}; lv['at'] = 'final'
             self._close_live()
         return lv
+
+    def _halftime_read(self, lv):
+        """The assistants' halftime recommendations for the user's club, from the half as played."""
+        import halftime as HT
+        user = getattr(self.L, 'user_team', None)
+        me_side = 'home' if lv['home'] == user else 'away'
+        opp = lv['away'] if me_side == 'home' else lv['home']
+        st = self.states.get(user)
+        if st is None or st.plan is None: lv['half_recs'] = []; return
+        try: recs = HT.recommendations(self.L, user, opp, lv['drives'], me_side, lv['score'], st.plan, st.base_plan)
+        except Exception as e:
+            import sys; print('halftime read failed:', e, file=sys.stderr); recs = []
+        for i, r in enumerate(recs): r['i'] = i; r['taken'] = False
+        lv['half_recs'] = recs
+
+    def half_take(self, i, on=True):
+        """Accept (or withdraw) one halftime recommendation; the plan the second half reads changes now."""
+        import gameplan_week as GW
+        lv = getattr(self, 'live', None)
+        if lv is None or not lv['halftime_open']: return False
+        recs = lv.get('half_recs') or []
+        if i < 0 or i >= len(recs): return False
+        r = recs[i]; user = getattr(self.L, 'user_team', None); st = self.states.get(user)
+        if r['taken'] == bool(on) or st is None: return True
+        ch = r['changes'] if on else {k: (tuple(-x for x in v) if isinstance(v, (tuple, list)) else (-v if isinstance(v, (int, float)) else st.base_plan.__dict__.get(k, v))) for k, v in r['changes'].items()}
+        GW.apply_changes(st.plan, st.base_plan, ch); r['taken'] = bool(on)
+        lv['half_taken'] = [x['text'] for x in recs if x['taken']]
+        return True
 
     def _close_live(self):
         """The live game is over: recorded exactly as a simmed game, and the week's after-game steps run."""
@@ -282,7 +311,7 @@ class SeasonRunner:
         drives = list(lv['drives'])
         if lv['current'] is not None:
             drives = drives + [(lv['pos'], lv['current'])]
-        return dict(home=lv['score']['home'], away=lv['score']['away'], drives=drives, overtime=(lv['at'] == 'overtime' or (lv['res'] or {}).get('overtime')), env=(lv['res'] or {}).get('env'), live=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'])
+        return dict(home=lv['score']['home'], away=lv['score']['away'], drives=drives, overtime=(lv['at'] == 'overtime' or (lv['res'] or {}).get('overtime')), env=(lv['res'] or {}).get('env'), live=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], half_recs=lv.get('half_recs') or [])
 
     def _record(self, home, away, week, res, book, playoffs=False):
         import gameplan_week as GW

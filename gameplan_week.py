@@ -231,6 +231,8 @@ def apply_changes(plan, base, changes):
             setattr(plan, k, v)
         elif k == 'screen_boost':
             plan.screen_boost = getattr(plan, 'screen_boost', 0.0) + v
+        elif k in ('sub_lean', 'heavy_lean'):
+            setattr(plan, k, float(np.clip(getattr(plan, k, 0.0) + v, -1.0, 1.0)))
         elif k in RANGE:
             b = float(getattr(base, k, getattr(plan, k)))
             setattr(plan, k, float(np.clip(getattr(plan, k) + v, b - RANGE[k], b + RANGE[k])))

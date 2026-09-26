@@ -73,6 +73,8 @@ class Gameplan:
     blitz_rate: float = 0.133
     front_pref: list = field(default_factory=lambda: ['4-3 over', '4-3 under'])
     box_bias: float = 0.0
+    sub_lean: float = 0.0             # defense: +1 more nickel and dime against the pass, -1 heavier fronts
+    heavy_lean: float = 0.0           # offense: +1 more 12 and 21 (two tight ends, a fullback), -1 more spread (11, 10)
     travel: bool = False              # CB1 follows their best receiver
     travel_target: str = None
     travel_locked: bool = False          # set by the GM's game-week decision; kickoff does not re-decide
