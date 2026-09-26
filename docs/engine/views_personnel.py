@@ -233,11 +233,15 @@ def act_gather(league, abbr, pid):
             for pk in picks:
                 for x in sur: cands.append([('pick', pk), ('player', x['pid'])])
         best = None
-        for pkg in cands[:60]:
-            gets = []
-            for kind, it in pkg:
-                gets.append(TR.pick_asset(league, it) if kind == 'pick' else TR.player_asset(league, them, league.player(it), pool, rng))
-            r = TE.evaluate(dict(a_sends=_assets(league, abbr, [pid], pool, rng, viewer=them), a_gets=gets), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
+        sends_them = _assets(league, abbr, [pid], pool, rng, viewer=them)            # my man through their eyes, once a club
+        asset_cache = {}
+        def asset_of(kind, it):
+            k = (kind, it if kind != 'pick' else f"{it.year}-{it.round}-{it.original}")
+            if k not in asset_cache: asset_cache[k] = TR.pick_asset(league, it) if kind == 'pick' else TR.player_asset(league, them, league.player(it), pool, rng)
+            return asset_cache[k]
+        for pkg in cands[:24]:
+            gets = [asset_of(kind, it) for kind, it in pkg]
+            r = TE.evaluate(dict(a_sends=sends_them, a_gets=gets), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
             if r.get('blocked') or r['b_gain'] < 0.5: continue
             if best is None or r['a_gain'] > best[1]['a_gain']: best = (pkg, r)
         if best:
