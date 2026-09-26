@@ -1180,3 +1180,13 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 /* a page-wide notice: the trade deadline */
 .banner{grid-column:1 / -1;background:rgba(229,72,77,.14);border:1px solid var(--danger);color:var(--ink);padding:14px 18px;text-align:center;font-size:17px;margin-bottom:4px}
 .banner b{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.02em;margin-right:8px}
+
+/* header hovers: open downward, stay inside the header's own box edges (a header with overflow hidden clipped its own hover), above every row's hover
+   and the sticky header itself */
+.tbl th[data-tip]{overflow:visible}
+.tbl th[data-tip]:hover::after{top:100%;bottom:auto;margin-top:6px;margin-bottom:0;left:auto;right:0;transform:none;white-space:normal;max-width:220px;width:max-content;z-index:1000}
+.tbl th:first-child[data-tip]:hover::after,.tbl th:nth-child(2)[data-tip]:hover::after{left:0;right:auto}
+.tbl th:hover{z-index:1001}
+[data-tip]:hover::after{z-index:1000}
+/* a row action's upward hover clears the sticky header: rows near the top open downward instead */
+.tbl tr:nth-child(-n+3) .btn[data-tip]:hover::after,.tbl tr:nth-child(-n+3) .row-act [data-tip]:hover::after{top:100%;bottom:auto;margin-top:6px;margin-bottom:0}
