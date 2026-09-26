@@ -1156,6 +1156,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         try:
             import playcall as PC
             oc, checked = PC.audible(oc, dc, offense, rate_fn, rng)
+            if checked and late_lean >= 6.0 and not oc.get('is_pass') and dr.togo > 1.5:
+                oc['is_pass'] = True; checked = None          # a light box is no reason to run in the two-minute drill; the check stays a pass
             if checked:
                 dr.log.append(dict(type='audible', kind=checked,
                                    off_a_lie=bool(dc.get('shown_shell')
