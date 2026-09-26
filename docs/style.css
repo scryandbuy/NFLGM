@@ -1146,3 +1146,7 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 [data-tip]:hover::after{max-width:min(260px,70vw)}
 .tbl th[data-tip]:hover::after{left:auto;right:0;transform:none}
 .tbl th:first-child[data-tip]:hover::after{left:0;right:auto}
+
+/* the message pane uses the width it has */
+.mailbox .pane .body{max-width:none;font-size:16px}
+.mailbox .pane{padding:18px 28px}
