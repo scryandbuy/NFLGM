@@ -17,9 +17,12 @@ def _nm(league, pid, short=True):
 
 
 def _clock(secs):
+    # a play at exactly the edge of a quarter (2700, 1800, 900 seconds left) is the first snap of the next one
     q = int((3600 - secs) // 900) + 1 if secs > 0 else 4
     q = max(1, min(q, 4))
     rem = secs - (4 - q) * 900
+    if rem <= 0 and q < 4 and secs > 0:
+        q += 1; rem = 900.0
     rem = max(0.0, rem)
     return q, f"{int(rem // 60)}:{int(rem % 60):02d}"
 
@@ -123,6 +126,10 @@ def play_line(league, p, off_abbr, def_abbr):
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None
         text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {int(round(100 - p.get('new_yardline', 75)))}." if who else f", returned to the {int(round(100 - p.get('new_yardline', 75)))}.")); kind = 'special'
+    elif t == 'injury':
+        who = _nm(league, p.get('pid')) or 'A player'
+        wk = int(p.get('weeks') or 0)
+        text = f"{who} ({p.get('pos', '')}) is hurt on the play" + (' and will not return.' if wk >= 2 else '; he is done for the day.' if wk == 1 else '.'); kind = 'neutral'
     elif t == 'timeout':
         text = f"Timeout, {'the offense' if p.get('side') == 'off' else p.get('side_abbr') or p.get('side', '').upper()} ({p.get('left', 0)} left)."; kind = 'neutral'
     elif t == 'two_minute':

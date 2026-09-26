@@ -127,7 +127,9 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # for it on fourth and three, tied, in the third quarter. No club does that. In your own territory the
     # decision follows what clubs actually do (the GO_RATE table by down, distance and zone) unless the
     # game is late and the club is chasing it; the model keeps the rest of the field.
-    chasing = (score_diff < 0 and secs_left < 480) or (score_diff <= -9 and secs_left < 1200)
+    # chasing: trailing with less time than the possessions he needs (about two and a half minutes each)
+    need = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
+    chasing = score_diff < 0 and secs_left < 150 * need + 90
     if use_wp and yardline_100 > 55 and not chasing:
         use_wp = False
     if use_wp:
@@ -167,7 +169,8 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_go = GO_RATE[band][zone] * (0.70 + 0.60 * aggression)
     # inside your own 40 and not chasing the game: a fourth-and-one is a rare gamble, anything longer is a punt
-    chasing = (score_diff < 0 and secs_left < 480) or (score_diff <= -9 and secs_left < 1200)
+    need = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
+    chasing = score_diff < 0 and secs_left < 150 * need + 90
     if yardline_100 > 60 and not chasing:
         p_go = 0.0 if ydstogo >= 2 else p_go * 0.35
     # trailing late, you have no choice
@@ -642,7 +645,7 @@ def _resolve_live_penalty(dr, pen, out, oc):
             # after the whistle: the result stands and they walk back, half the distance at most
             spot = dr.yardline - gained
             yards = min(yards, (100.0 - spot) / 2.0); pen['yards'] = round(yards, 1)
-            dr.log_pen_after = yards
+            dr.log_pen_after = -yards                 # the offense fouled after the whistle: it walks back
             return 'added'
         # during the play (grounding, a face mask by a blocker): the play is
         # wiped and the offence is set back from the previous spot, half the distance at most
@@ -656,8 +659,10 @@ def _resolve_live_penalty(dr, pen, out, oc):
     if out.get('touchdown'):
         return None                               # six beats fifteen
     if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
-        # dead ball: added to the play result from where it ended
-        dr.log_pen_after = -yards
+        # dead ball: added to the play result from where it ended, half the distance at most
+        spot = max(1.0, dr.yardline - float(out.get('yards', 0.0) or 0.0))
+        yards = min(yards, (spot - 1.0) / 2.0 if spot - yards < 1 else yards); pen['yards'] = round(yards, 1)
+        dr.log_pen_after = yards                      # the defense fouled: the offense walks forward
         dr.log_pen_first = bool(pen['auto_first'])
         return 'added'
     # live-ball defensive foul: the better of the two, and a turnover is
@@ -1070,7 +1075,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         late_lean = 0.0
         final_period = (quarter >= 4 and half_end is None) or (half_end is not None and quarter <= 2)
         if final_period:
-            if dr.score_diff > 0 and secs_in_half <= 240 and dr.clock <= 240:
+            if dr.score_diff > 0 and half_end is None and dr.clock <= 240:
                 late_lean = -1.5 if (dr.down == 3 and dr.togo >= 6) else -8.0
             elif dr.score_diff <= 0 and secs_in_half <= 120:
                 late_lean = 1.0 if dr.togo <= 1 else 6.5
@@ -1289,10 +1294,13 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             if off_state is not None:
                 men = [(off_f['qb'], 'QB'), (off_f['rb'], 'HB')] + [(m, m.get('pos', 'LT')) for m in (off_f.get('ol') or [])] + [(m, m.get('pos', 'WR')) for m in off_f['wr']] + [(m, m.get('pos', 'TE')) for m in (off_f.get('te') or [])]
                 for m, mp in men:
-                    if m: off_state.hurt(m, mp, 1.6 if m.get('pid') == hit_pid else 1.0, rng, rate_fn, week)
+                    if m:
+                        inj_ = off_state.hurt(m, mp, 1.6 if m.get('pid') == hit_pid else 1.0, rng, rate_fn, week)
+                        if inj_: dr.log.append(dict(type='injury', pid=m.get('pid'), pos=mp, kind=inj_.get('kind'), weeks=inj_.get('weeks_out'), side='off', clock=dr.clock))
             if def_state is not None:
                 for d in def_f['db'] + def_f['lb'] + def_f['dl']:
-                    def_state.hurt(d, def_pos.get(d.get('pid'), 'CB'), 1.3 if out['type'] in ('run', 'complete') else 1.0, rng, rate_fn, week)
+                    inj_ = def_state.hurt(d, def_pos.get(d.get('pid'), 'CB'), 1.3 if out['type'] in ('run', 'complete') else 1.0, rng, rate_fn, week)
+                    if inj_: dr.log.append(dict(type='injury', pid=d.get('pid'), pos=def_pos.get(d.get('pid'), 'CB'), kind=inj_.get('kind'), weeks=inj_.get('weeks_out'), side='def', clock=dr.clock))
 
         t = out['type']
         if live_pen is not None:

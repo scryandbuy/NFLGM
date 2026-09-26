@@ -91,8 +91,10 @@ def capture(league, played, user):
             if pos == 'home': hs += pts
             else: as_ += pts
             start = float(getattr(dr, 'start', 75)); end = float(getattr(dr, 'yardline', start))
+            res_word = dr.result
+            if res_word == 'End of half' and getattr(dr, 'quarter', 0) >= 4: res_word = 'End of game'
             drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=round(start - end, 1), first_downs=int(getattr(dr, 'first_downs', 0) or 0),
-                               result=getattr(dr, 'result', ''), points=pts, quarter=int(getattr(dr, 'quarter', 1) or 1), clock=_clock(getattr(dr, 'clock', 0)),
+                               result=res_word, points=pts, quarter=int(getattr(dr, 'quarter', 1) or 1), clock=_clock(getattr(dr, 'clock', 0)),
                                score=f"{hs}–{as_}", plays=plays))
             diff = (hs - as_) if me_home else (as_ - hs)
             wp.append(round(100 * _wp(diff, float(getattr(dr, 'clock', 0) or 0), me_home)))
