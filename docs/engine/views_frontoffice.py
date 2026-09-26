@@ -355,6 +355,9 @@ def cap(session, league, abbr):
         elif i == 0: dead = float(getattr(t.cap, 'dead', 0.0) or 0.0) if hasattr(t, 'cap') else 0.0
         limit = CAP.get(yr, CAP.get(league.year, 301.2) * (1.055 ** i))
         rollover = 0.0
+        if i == 0 and hasattr(t, 'cap'):
+            # this year as the ledger has it: the league cap plus what rolled in from last year
+            rollover = float(getattr(t.cap, 'rollover', 0.0) or 0.0); limit = float(t.cap.limit)
         if i == 1:
             # next year as it will roll: unused space carries over, and the dead money already assigned to it counts
             from views import next_year_cap
