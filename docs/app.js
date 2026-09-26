@@ -949,12 +949,14 @@ function offerForm(t, kind, onDone, preset) {
   const preview = () => {
     const r = pyJSON(`SESSION.personnel_act('offer_preview', pid=${JSON.stringify(t.pid)}, apy=${+apy.value || 0}, years=${+yrs.value || 1}, bonus=${+bonus.value || 0}, front_load=${shape})`);
     if (!r.ok) return; y1.textContent = r.year1 != null ? `$${r.year1.toFixed(1)}m` : '—'; total.textContent = `$${r.total}m`;
+    { const a = +apy.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${(a - b / n).toFixed(1)}m salary + $${(b / n).toFixed(1)}m of bonus a year = $${a.toFixed(1)}m a year · $${b.toFixed(1)}m of the $${(a * n).toFixed(1)}m total is the signing bonus`; }
     hitsRow.innerHTML = ''; r.hits.forEach((h, i) => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, h / Math.max(...r.hits, 0.1) * 100)}%` })), el('span', {}, r.years[i]), el('b', {}, `$${h.toFixed(1)}m`))));
   };
   apy.onchange = yrs.onchange = bonus.onchange = preview;
   const promises = el('div', { class: 'promise' }, el('span', {}, 'Promise:')); const chosen = [];
   for (const [k, l] of [['starting_role', 'Named the Starter'], ['captaincy', 'Captaincy'], ['no_trade', 'No Trade'], ['extension_by', 'Extension by a Set Year'], ['no_tag', 'No Franchise Tag']]) promises.append(el('button', { class: 'btn quiet', style: 'padding:2px 8px;font-size:14px', 'aria-pressed': 'false', onclick: e => { const i = chosen.indexOf(k); if (i < 0) chosen.push(k); else chosen.splice(i, 1); e.currentTarget.setAttribute('aria-pressed', String(i < 0)); } }, l));
-  f.append(el('div', { class: 'offer', style: 'grid-template-columns:repeat(5,1fr)' }, el('label', {}, 'New Years', yrs), el('label', {}, 'Per Year ($m)', apy), el('label', {}, 'Bonus ($m)', bonus), el('label', {}, 'Year 1 Hit', y1), el('label', {}, 'Total', total)),
+  const breakdown = el('div', { class: 'count', style: 'padding:0 0 6px' });
+  f.append(el('div', { class: 'offer', style: 'grid-template-columns:repeat(5,1fr)' }, el('label', { 'data-tip': 'Total value divided by years; the signing bonus is part of it, not on top' }, 'Per Year ($m)', apy), el('label', {}, 'New Years', yrs), el('label', { 'data-tip': 'Paid up front, part of the per-year total, counted against the cap spread over the years' }, 'Signing Bonus ($m)', bonus), el('label', {}, 'Year 1 Hit', y1), el('label', {}, 'Total', total)), breakdown,
     el('div', { class: 'shape' }, el('span', {}, 'Shape'), shapeChips), hitsRow, promises);
   const acts = el('div', { class: 'acts' });
   acts.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${+apy.value}, years=${+yrs.value}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`); notify(r); onDone(); } }, kind === 'fa_inseason' ? 'Offer (decides at Advance)' : preset ? 'Send Counter' : 'Send Offer'));
