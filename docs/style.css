@@ -1135,3 +1135,9 @@ button.btn{line-height:normal;box-sizing:border-box}
 select,select.btn,select.btn:focus,select.btn:focus-visible,select.btn:active{background-color:var(--sheet-2);color:var(--ink);color-scheme:dark;outline:none;border-color:var(--rule-hi);-webkit-appearance:none;appearance:none;padding-right:26px;background-image:linear-gradient(45deg,transparent 50%,var(--ink-3) 50%),linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);background-position:calc(100% - 14px) 55%,calc(100% - 9px) 55%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
 select.btn:focus-visible{border-color:var(--club-2)}
 select.btn option{background:var(--sheet-2);color:var(--ink)}
+
+/* a pressed chip-style button (promises, filters) shows it */
+.btn[aria-pressed="true"],.btn.quiet[aria-pressed="true"]{background:var(--club-2);color:#111;border-color:var(--club-2)}
+/* the cap stack's hover was clipped by the segment's own overflow; the label clips, the segment does not */
+.stack i{overflow:visible}
+.stack i span{overflow:hidden}
