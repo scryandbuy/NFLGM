@@ -1015,7 +1015,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         secs_left_half = dr.clock - wall
         opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
         clock_dies = secs_left_half <= 3 or (secs_left_half <= 10 and opp_tos == 0)
-        if clock_dies and dr.yardline > 45 and dr.score_diff >= 0 and not getattr(dr, '_kneeled', False):
+        if clock_dies and secs_left_half > 0 and dr.yardline > 45 and dr.score_diff >= 0 and not getattr(dr, '_kneeled', False):
             dr._kneeled = True
             dr.log.append(dict(type='kneel', passer=(offense.get('qb') or {}).get('pid'), down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock))
             dr.plays += 1; dr.clock = wall; dr.result = 'End of half'; break
