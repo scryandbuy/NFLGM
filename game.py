@@ -26,8 +26,8 @@ import weather as W
 ENV = W.CLEAR
 
 # ============================================================ CLOCK
-SEC = {'complete': 31.4, 'incomplete': 10.2, 'run': 34.7, 'sack': 30.0,
-       'scramble': 34.7, 'punt': 9.4, 'field_goal': 4.0, 'kickoff': 5.8,
+SEC = {'complete': 32.6, 'incomplete': 10.2, 'run': 36.0, 'sack': 31.2,      # re-centered once a touchdown stopped the clock at the whistle (it had been charged a full play's runoff)
+       'scramble': 36.0, 'punt': 9.4, 'field_goal': 4.0, 'kickoff': 5.8,
        'penalty': 14.4, 'interception': 12.0, 'drop': 10.2, 'fumble': 12.0}
 QUARTER = 900
 HALF = 1800
@@ -1113,6 +1113,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
                       dr.score_diff, ytg_i, rng, secs_left=secs_for_call,
                       offense=offense, rate_fn=rate_fn, lean=(lean_now if (last_shot or late_lean) else olean))
+        if late_lean >= 6.0 and not oc.get('is_pass') and dr.togo > 1.5:
+            # THE TWO-MINUTE DRILL THROWS. The lean left a few percent of runs and the weather's run lean ate into it
+            # further; trailing under two minutes with more than a yard to go, a designed run is not a call
+            oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))), dr.score_diff, ytg_i, rng, secs_left=secs_for_call,
+                          offense=offense, rate_fn=rate_fn, lean=dict(lean_now, pass_bias=lean_now.get('pass_bias', 0.0) + 30.0))
+            if not oc.get('is_pass'): oc['is_pass'] = True; oc['depth'] = oc.get('depth') or 'medium'; oc['concept'] = oc.get('concept') or 'levels'
+        if late_lean >= 6.0: oc['rpo'] = False                    # the RPO's handoff option is off the table too: that was where the last of the two-minute runs came from
         # Backed up against the own goal the offence plays differently. That
         # used to be an OVERRIDE here that rewrote a called pass as a run or
         # forced its depth short. The coach now reads the field position
@@ -1395,7 +1402,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         hurry = secs_in_half < 120 and dr.score_diff <= 0
         before_clock = secs_in_half
         clock_before = dr.clock
-        dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
+        if t in ('run', 'complete', 'scramble') and float(out.get('yards', 0.0) or 0.0) >= dr.yardline - 0.01:
+            dr.clock -= 6.0                                    # a touchdown stops the clock at the whistle; no huddle follows it
+        else:
+            dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
         for edge in (2700.0, 900.0):
             if clock_before > edge >= dr.clock: dr.clock = float(edge)   # the quarter ends with this play; no huddle runs into the next one
         dr.clock = round(dr.clock, 2)

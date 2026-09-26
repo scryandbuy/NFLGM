@@ -69,7 +69,7 @@ def play_line(league, p, off_abbr, def_abbr):
         else:
             kind = cls
             if p.get('broken_tackles'): text += f", breaking {int(p['broken_tackles'])} tackle{'s' if p['broken_tackles'] > 1 else ''}"
-            text += f". Tackled by {tackler}." if tackler else '.'
+            text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
     elif t == 'complete':
         cls, yd = _yards(p.get('yards', 0))
         pre = 'Play action. ' if p.get('play_action') else ''
@@ -78,7 +78,7 @@ def play_line(league, p, off_abbr, def_abbr):
         if td: text += f". TOUCHDOWN."; kind = 'score'
         else:
             kind = cls
-            text += f". Tackled by {tackler}." if tackler else '.'
+            text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
     elif t == 'incomplete':
         pd = _nm(league, p.get('pass_def'))
         text = f"{passer or 'The quarterback'} throws to {target or 'his receiver'}, incomplete" + (f". {pd} breaks it up." if pd else ('. Under pressure.' if p.get('pressured') else '.'))
@@ -91,7 +91,7 @@ def play_line(league, p, off_abbr, def_abbr):
         kind = 'loss'
     elif t == 'scramble':
         cls, yd = _yards(p.get('yards', 0))
-        text = f"{passer or 'The quarterback'} scrambles for {yd}" + (f". Tackled by {tackler}." if tackler else '.')
+        text = f"{passer or 'The quarterback'} scrambles for {yd}" + ((f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.')
         if td: text = f"{passer or 'The quarterback'} scrambles in. TOUCHDOWN."; kind = 'score'
         else: kind = cls
     elif t == 'interception':
@@ -105,7 +105,9 @@ def play_line(league, p, off_abbr, def_abbr):
     elif t == 'punt':
         if p.get('blocked'): text = "Punt BLOCKED."; kind = 'turnover'
         else:
-            text = f"Punt, {int(round(p.get('gross', 0)))} yards" + (", touchback." if p.get('touchback') else (f", returned {int(round(p.get('ret', 0)))} yards." if p.get('how') == 'return' and p.get('ret') else (", fair catch." if p.get('how') == 'fair_catch' else '.')))
+            _ny = p.get('new_yardline')
+            _down_spot = _spot(100.0 - float(_ny), off_abbr, def_abbr) if _ny is not None else None
+            text = f"Punt, {int(round(p.get('gross', 0)))} yards" + (", touchback." if p.get('touchback') else (f", returned {int(round(p.get('ret', 0)))} yards." if p.get('how') == 'return' and p.get('ret') else (", fair catch." if p.get('how') == 'fair_catch' else (f", downed at the {_down_spot}." if p.get('how') == 'downed' and _down_spot else '.'))))
             kind = 'special'
     elif t == 'field_goal':
         d = int(round(p.get('distance', 0)))
