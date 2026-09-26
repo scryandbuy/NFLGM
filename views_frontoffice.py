@@ -165,14 +165,14 @@ def _assistants_read(league, t, rows_now, men_now, rows_alt=None, men_alt=None, 
             p, f, g = top[0]; alt = _best_scheme_for(p, 'offence' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defence')
             import identity_catalog as IC
             an = 'an' if IC.ARCHETYPES[alt]['name'][0] in 'AEIOU' else 'a'
-            line += f" {p.name.split()[-1]} is the worst fit; he would grade better in {an} {IC.ARCHETYPES[alt]['name']} {'offense' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defense'}."
+            line += f" {__import__('views').surname(p.name)} is the worst fit; he would grade better in {an} {IC.ARCHETYPES[alt]['name']} {'offense' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defense'}."
         return line
     d = {r['group']: r2['fit'] - r['fit'] for r, r2 in zip(rows_now, rows_alt)}
     up = [g for g, v in sorted(d.items(), key=lambda kv: -kv[1]) if v >= 0.5]; down = [g for g, v in sorted(d.items(), key=lambda kv: kv[1]) if v <= -0.5]
     net = sum(d.values()) / max(1, len(d))
     movers_up = sorted([(p, f2 - f1) for (p, f1, g), (_, f2, _g) in zip(men_now, men_alt)], key=lambda x: -x[1])[:2]
     movers_dn = sorted([(p, f2 - f1) for (p, f1, g), (_, f2, _g) in zip(men_now, men_alt)], key=lambda x: x[1])[:2]
-    names_up = ' and '.join(p.name.split()[-1] for p, v in movers_up if v >= 0.8); names_dn = ' and '.join(p.name.split()[-1] for p, v in movers_dn if v <= -0.8)
+    names_up = ' and '.join(__import__('views').surname(p.name) for p, v in movers_up if v >= 0.8); names_dn = ' and '.join(__import__('views').surname(p.name) for p, v in movers_dn if v <= -0.8)
     if applied:
         line = f"{_join(up).capitalize()} carry this identity" if up else 'No group is a natural fit for this identity'
         line += (f"; {names_up} grade well in it." if names_up else '.')
@@ -365,7 +365,7 @@ def cap(session, league, abbr):
         import practice_squad as PSQ
         years.append(dict(year=yr, limit=round(limit, 1), est=(i > 0), rollover=round(rollover, 1), by={g: round(v, 1) for g, v in by.items()}, dead=round(dead, 1), committed=round(committed, 1), space=round(limit - committed, 1), under_contract=n,
                           ps_charge=(round(PSQ.ps_charge(t), 1) if i == 0 else None), rookie_pool=(None if i == 0 else round(len([k for k in t.picks if k.year == yr and not k.used_on]) * 1.3, 1)),
-                          expiring_into=[p.name.split()[-1] for p in expiring[:3]], expiring_more=max(0, len(expiring) - 3)))
+                          expiring_into=[__import__('views').surname(p.name) for p in expiring[:3]], expiring_more=max(0, len(expiring) - 3)))
     # the ledger: every man, three years
     rows = []
     for p in sorted(t.roster, key=lambda p: -p.cap_hit(0)):
@@ -402,11 +402,11 @@ def act_restructure_preview(league, abbr, pid, amount=None, void_years=0):
     p = league.player(pid); t = league.teams[abbr]
     saves = float(r.get('saves_now', 0)); later = float(sum(r.get('added_later', []) or []))
     expiring = sorted((q for q in t.roster if q.contract and q.contract.years == 1 and q.pid != pid and q.pos not in ('K', 'P', 'LS')), key=lambda q: -q.ovr)
-    buys = f"This buys the room to extend {expiring[0].name.split()[-1]}" if expiring and saves >= 3 else f"This frees ${saves:.1f}m this year"
+    buys = f"This buys the room to extend {__import__('views').surname(expiring[0].name)}" if expiring and saves >= 3 else f"This frees ${saves:.1f}m this year"
     yrs_left = p.contract.years
     late = (p.age + yrs_left) >= (37 if p.pos == 'QB' else 33)
     age_note = f"; at {int(p.age)} that is the real price of the move" if late else ''
-    cost = f"The cost is ${later:.1f}m in years {p.name.split()[-1]} may not be on the roster{age_note}." if late else f"The cost is ${later:.1f}m added across his remaining {yrs_left - 1} years, which he is likely to play."
+    cost = f"The cost is ${later:.1f}m in years {__import__('views').surname(p.name)} may not be on the roster{age_note}." if late else f"The cost is ${later:.1f}m added across his remaining {yrs_left - 1} years, which he is likely to play."
     r['say'] = f"{buys}. {cost}"
     r['player'] = dict(name=p.name, pos=p.pos, age=int(p.age), hit=round(p.cap_hit(0), 1), yrs=yrs_left, ovr=round(p.ovr))
     return r

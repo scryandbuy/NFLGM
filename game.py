@@ -673,6 +673,9 @@ def _resolve_live_penalty(dr, pen, out, oc):
     if not take:
         return None
     gained_p = min(yards, dr.yardline - 1)
+    if gained_p < yards - 0.01:
+        pen['end_zone'] = True; pen['spot'] = 1                # the foul was in the end zone: the ball goes to the 1
+    pen['yards'] = round(gained_p, 1)
     dr.yardline -= gained_p
     if pen_first:
         dr.down, dr.togo = 1, min(10.0, dr.yardline); dr.first_downs += 1
@@ -1061,9 +1064,22 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if half_end is not None and quarter <= 2 and secs_in_half <= 240 and dr.score_diff <= 0:
             secs_for_call = secs_in_half          # the drive before the break is a two-minute drill for the side not ahead
         last_shot = (half_end is not None and quarter <= 2 or (quarter >= 4 and -8 <= dr.score_diff <= 0)) and secs_in_half <= 25 and dr.yardline <= 37 and dr.yardline > 1
+        # THE CLOCK DECIDES THE CALL LATE. Ahead in the last four minutes the offense runs to burn it
+        # (a pass on third and long, otherwise the ball stays on the ground); behind, or tied, in the
+        # last two minutes of a half it throws, a draw once in a while and a run only on a yard to go.
+        late_lean = 0.0
+        final_period = (quarter >= 4 and half_end is None) or (half_end is not None and quarter <= 2)
+        if final_period:
+            if dr.score_diff > 0 and secs_in_half <= 240 and dr.clock <= 240:
+                late_lean = -1.5 if (dr.down == 3 and dr.togo >= 6) else -8.0
+            elif dr.score_diff <= 0 and secs_in_half <= 120:
+                late_lean = 1.0 if dr.togo <= 1 else 6.5
+        lean_now = dict(olean or {})
+        if last_shot: lean_now['pass_bias'] = float(lean_now.get('pass_bias', 0.0)) + 6.0
+        elif late_lean: lean_now['pass_bias'] = float(lean_now.get('pass_bias', 0.0)) + late_lean
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
                       dr.score_diff, ytg_i, rng, secs_left=secs_for_call,
-                      offense=offense, rate_fn=rate_fn, lean=(dict(olean or {}, pass_bias=float((olean or {}).get('pass_bias', 0.0)) + 6.0) if last_shot else olean))
+                      offense=offense, rate_fn=rate_fn, lean=(lean_now if (last_shot or late_lean) else olean))
         # Backed up against the own goal the offence plays differently. That
         # used to be an OVERRIDE here that rewrote a called pass as a run or
         # forced its depth short. The coach now reads the field position
@@ -1282,9 +1298,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if live_pen is not None:
             taken = _resolve_live_penalty(dr, live_pen, out, oc)
             if taken == 'replaced':
-                # accepted in place of the play: the down is replayed, the
-                # snap is wiped from the drive the same way a holding call is
-                dr.plays -= 1; dr.log.pop()
+                # accepted in place of the play: the down is replayed and the snap does not count, but the
+                # play-by-play keeps the play it wiped (marked), so a reader sees the pass the flag came on
+                dr.plays -= 1
+                out['nullified'] = True
                 dr.log.append(dict(type='penalty', **live_pen))
                 dr.clock -= play_seconds('penalty')
                 continue
@@ -1315,15 +1332,24 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         # ---- timeouts ----
         # The trailing side spends them to get the ball back; the driving side
         # to keep the clock alive. Neither wastes one early.
-        used = False
+        used = False; used_by = None
         if timeouts is not None and dr.clock < 300:
             other = 'away' if pos == 'home' else 'home'
-            if dr.score_diff > 0 and dr.clock < 180 and timeouts.left.get(other, 0) > 0:
-                used = timeouts.use(other)
-            elif dr.score_diff <= 0 and dr.clock < 120 and timeouts.left.get(pos, 0) > 0:
-                used = timeouts.use(pos)
+            in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
+            if dr.score_diff > 0 and dr.clock < 180 and in_bounds and timeouts.left.get(other, 0) > 0:
+                used = timeouts.use(other); used_by = other                    # the trailing defense stops the clock
+            elif dr.score_diff <= 0 and dr.clock < 120 and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
+                used = timeouts.use(pos); used_by = pos                        # the trailing offense saves its clock
         hurry = secs_in_half < 120 and dr.score_diff <= 0
+        before_clock = secs_in_half
         dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
+        after_clock = dr.clock - half_end if half_end is not None else dr.clock
+        if used and used_by:
+            dr.log.append(dict(type='timeout', side=used_by, side_abbr=(getattr(off_state if used_by == pos else def_state, 'abbr', None) or used_by.upper()), left=timeouts.left.get(used_by, 0), clock=dr.clock))
+        if before_clock > 120 >= after_clock and not getattr(dr, '_two_min', False):
+            # the two-minute warning: the clock stops at 2:00, so the runoff this play would have taken past it is given back
+            dr.clock += min(20.0, 120.0 - after_clock); dr._two_min = True
+            dr.log.append(dict(type='two_minute', clock=dr.clock))
         before = dr.yardline
         scored = _advance(dr, out.get('yards', 0.0))
         if not scored and out.get('touchdown'):
@@ -1393,7 +1419,7 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
     pos = first
     had = {'home': False, 'away': False}
     drives = []
-    start = kickoff_booked(((home if pos == 'away' else away).get('kr') or {}),
+    start = kickoff_booked(((home if pos == 'home' else away).get('kr') or {}),
                            rng, rate_fn, book)['new_yardline']
 
     while clock > 0:
@@ -1453,7 +1479,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
     pos = 'away'                                   # away receives first
-    start = kickoff_booked((home.get('kr') or {}), rng, rate_fn, book)['new_yardline']
+    start = kickoff_booked((away.get('kr') or {}), rng, rate_fn, book)['new_yardline']    # the RECEIVING side's man returns it
 
     tos = Timeouts()
     half_done = False
@@ -1537,8 +1563,8 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             tos.halftime()
             half_done = True
             ENV.turn(rng, home_abbr); _P.ENV = ENV
-            pos = 'home'                            # away received the opener
-            start = kickoff_booked((away.get('kr') or {}), rng, rate_fn, book)['new_yardline']
+            pos = 'home'                            # away received the opener, so home receives now
+            start = kickoff_booked((home.get('kr') or {}), rng, rate_fn, book)['new_yardline']
             continue
 
         # where the next possession starts

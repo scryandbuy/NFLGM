@@ -46,6 +46,7 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
     drive's quarterback and back fill in when the play did not name them."""
     import ticker as TK
     q = dict(p)
+
     if not q.get('passer') and q.get('type') in ('complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble'): q['passer'] = qb_pid
     if not q.get('carrier') and q.get('type') == 'run': q['carrier'] = rb_pid
     ln = TK.play_line(league, q, off_abbr, def_abbr)
@@ -57,7 +58,7 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
         if pp is None: return None
         parts = pp.name.split(); return parts[-2] + ' ' + parts[-1] if parts[-1] in ('Jr.', 'Sr.', 'II', 'III', 'IV') and len(parts) > 1 else parts[-1]
     ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
-              td=bool(q.get('touchdown') or q.get('td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')))
+              td=bool(q.get('touchdown') or q.get('td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')), nullified=bool(q.get('nullified')))
     return ln
 
 

@@ -282,8 +282,9 @@ def _post(league, t, subject, body, payload=None):
     import inbox as IB
     user = getattr(league, 'user_team', None)
     if user and t.get('team') == user:
-        IB.post(league, 'negotiation', subject, body, sender=league.player(t['pid']).name if league.player(t['pid']) else 'agent',
-                payload=payload or dict(thread=t['id'], link=f'negotiation:{t["id"]}'))
+        pl = dict(payload or {}); pl.setdefault('thread', t['id']); pl['kind'] = t.get('kind'); pl['pid'] = t.get('pid')
+        pl['link'] = f"negotiation:{t.get('kind')}:{t['id']}"
+        IB.post(league, 'negotiation', subject, body, sender=league.player(t['pid']).name if league.player(t['pid']) else 'agent', payload=pl)
 
 
 # ------------------------------------------------------------ the promise ledger

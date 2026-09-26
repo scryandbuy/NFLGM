@@ -126,7 +126,7 @@ def _morale(league, t, week):
             p.xp_spent['_mood_seen'] = st
             if st in ('quietly unhappy', 'publicly discontent', 'locker room distraction') and last == 'settled' or (st == 'publicly discontent' and last == 'quietly unhappy'):
                 why = MO.request_reason(p)
-                reason = {'contract': 'he believes he is underpaid', 'role': 'his role is not what he was promised', 'losing': 'the losing has worn on him'}.get(why, 'the season has worn on him')
+                reason = {'contract': 'he believes he is underpaid', 'role': 'he wants a bigger role than he has', 'losing': 'the losing has worn on him'}.get(why, 'the season has worn on him')
                 word = {'quietly unhappy': 'is unhappy', 'publicly discontent': 'has gone public with his unhappiness', 'locker room distraction': 'is a problem in the room'}[st]
                 IB.post(league, 'morale', f"{p.name} {word}", f"{p.name} ({p.pos}, {round(p.ovr)}) {word}: {reason}. Left alone this becomes a trade request. A talk, more snaps or a new deal are the ways to turn it.", sender='assistants', payload=dict(link=f'player:{p.pid}'))
 

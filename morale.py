@@ -43,7 +43,18 @@ def entitlement_of(team, p, cache=None):
     rank = next((i + 1 for i, q in enumerate(depth) if q is p), len(depth) or 1)
     pay_rank = next((i + 1 for i, a in enumerate(pays) if a <= p.apy), len(pays) or 1)
     import personality as PT
-    return float(np.clip(MS.entitlement(p.ovr, pos_rank=rank, pay_rank=pay_rank) * PT.entitlement_mult(p), 0.0, 1.0))
+    e = MS.entitlement(p.ovr, pos_rank=rank, pay_rank=pay_rank) * PT.entitlement_mult(p)
+    # A MAN KNOWS HIS ROOM. A backup behind better, better-paid players understands why he sits; his
+    # grievance exists only when someone ahead of him is worse or paid less. A 78 fourth on the chart
+    # behind an 85, an 83 and an 82 has no case, and only the rare ambitious man makes one anyway.
+    ahead = depth[:max(0, rank - 1)]
+    amb = float((getattr(p, 'traits', None) or {}).get('ambition', 50))
+    passed_over = any(q.ovr + 1.5 <= p.ovr or q.apy < p.apy * 0.8 for q in ahead)
+    if ahead and not passed_over:
+        e *= (0.80 if amb >= 80 else 0.35)
+    if p.ovr < 74 and pay_rank > 2:
+        e = min(e, 0.30)
+    return float(np.clip(e, 0.0, 1.0))
 
 
 # ------------------------------------------------------------ weekly

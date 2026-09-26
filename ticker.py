@@ -117,22 +117,29 @@ def play_line(league, p, off_abbr, def_abbr):
         yds = abs(float(p.get('yards', 0) or 0)); rule = E.RULE_YARDS.get(p.get('penalty'))
         half = rule is not None and yds < rule - 0.01
         ydtxt = (f"{yds:g} yards" if yds != 1 else '1 yard') + (', half the distance to the goal' if half else '')
+        if p.get('end_zone'): ydtxt = 'in the end zone, ball placed at the 1'
         text = f"Penalty, {p.get('penalty', 'flag')} on the {side}, {ydtxt}" + (", automatic first down." if (p.get('auto_first') and not p.get('on_offense')) else '.')
         kind = 'neutral'
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None
         text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {int(round(100 - p.get('new_yardline', 75)))}." if who else f", returned to the {int(round(100 - p.get('new_yardline', 75)))}.")); kind = 'special'
+    elif t == 'timeout':
+        text = f"Timeout, {'the offense' if p.get('side') == 'off' else p.get('side_abbr') or p.get('side', '').upper()} ({p.get('left', 0)} left)."; kind = 'neutral'
+    elif t == 'two_minute':
+        text = 'Two-minute warning.'; kind = 'neutral'
     elif t in ('audible', 'kneel', 'spike'):
         text = {'kneel': f"{passer or 'The quarterback'} kneels.", 'spike': f"{passer or 'The quarterback'} spikes it."}.get(t, ''); kind = 'neutral'
         if not text: return None
     else:
         return None
+    if p.get('nullified'):
+        text = (text.rstrip('.') + '. No play; flag on the field.') if text else 'No play; flag on the field.'; kind = 'neutral'
     if p.get('fumble'):
         text = (text.rstrip('.') + (f". FUMBLE, recovered by {def_abbr}." if p.get('fumble_lost') else ". Fumbles, and the offense recovers.")) if text else ('FUMBLE.' if p.get('fumble_lost') else 'Fumble, recovered.')
         if p.get('fumble_lost'): kind = 'turnover'
     if p.get('safety'):
         text = (text.rstrip('.') + '. SAFETY.') if text else 'SAFETY.'; kind = 'turnover'
-    return dict(head=head, text=text, kind=kind, type=t, made=p.get('made'), safety=bool(p.get('safety')))
+    return dict(head=head, text=text, kind=kind, type=t, made=p.get('made'), safety=bool(p.get('safety')), nullified=bool(p.get('nullified')))
 
 
 def _result_word(r):

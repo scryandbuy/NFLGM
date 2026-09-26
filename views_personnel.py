@@ -107,7 +107,7 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
         adds = [league.player(x['pid']) for x in their_surplus if league.player(x['pid']) and x['pid'] not in b_sends]
         fills = [q for q in adds if any(q.pos in poss for g, poss in _need_groups().items() if g in my_needs)]
         fill = fills[0] if fills else (adds[0] if adds else None)
-        if fill: extra.append(f"If you want more, {fill.name.split()[-1]} would balance it" + (' and fills a spot you need.' if fills else '.'))
+        if fill: extra.append(f"If you want more, {__import__('views').surname(fill.name)} would balance it" + (' and fills a spot you need.' if fills else '.'))
     for pid in a_sends:
         if '-' in str(pid): continue
         p = league.player(pid)
@@ -115,8 +115,8 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
         d = me.depth.get(p.pos, []); nxt = next((q for q in d if q.pid != pid and q.out_until is None), None)
         if nxt:
             depth_word = 'our deepest position' if len(d) >= 5 and nxt.ovr >= p.ovr - 6 else 'thin behind him' if len(d) <= 2 or nxt.ovr < p.ovr - 12 else 'covered'
-            extra.append(f"{p.pos} is {depth_word}; {nxt.name.split()[-1]} would start Sunday.")
-        else: extra.append(f"Nobody is behind {p.name.split()[-1]} at {p.pos}.")
+            extra.append(f"{p.pos} is {depth_word}; {__import__('views').surname(nxt.name)} would start Sunday.")
+        else: extra.append(f"Nobody is behind {__import__('views').surname(p.name)} at {p.pos}.")
     read = read + (' ' + ' '.join(extra) if extra else '')
     # roster counts after
     return dict(verdict=verdict, read=read, my_read=my_read, roster_after=dict(me=len(me.active()) - len([x for x in a_sends if '-' not in str(x)]) + len([x for x in b_sends if '-' not in str(x)]),
@@ -273,7 +273,7 @@ def free_agency(session, league, abbr):
         hole = None
         d = me.depth.get(p.pos, [])
         out_men = [q for q in d[:2] if q.out_until is not None]
-        if out_men: hole = f"Fills the hole at {p.pos} with {out_men[0].name.split()[-1]} out" + (f" to week {out_men[0].out_until}" if isinstance(out_men[0].out_until, int) else '')
+        if out_men: hole = f"Fills the hole at {p.pos} with {__import__('views').surname(out_men[0].name)} out" + (f" to week {out_men[0].out_until}" if isinstance(out_men[0].out_until, int) else '')
         elif len(d) <= 1: hole = f"Only {len(d)} healthy {p.pos} on the roster"
         import practice_squad as PSQ
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0), ps_ok=PSQ.can_add(me, p),
