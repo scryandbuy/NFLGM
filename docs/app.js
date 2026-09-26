@@ -962,7 +962,12 @@ function renderTrades(v) {
 function offerForm(t, kind, onDone, preset) {
   const f = el('div', { class: 'msg you' }, el('div', { class: 'from' }, preset ? 'Or Counter' : 'Your Offer'));
   const start = preset || {};
-  const apy = el('input', { type: 'number', step: '0.1', min: '0.8', value: start.apy != null ? String(start.apy) : (t.ask ? (t.ask * 0.97).toFixed(1) : '1.0') }), yrs = el('input', { type: 'number', min: '1', max: '5', value: String(start.years || t.years || 3) });
+  const startYears = Math.max(1, +(start.years || t.years || 3)); const startBonus = start.bonus != null ? +start.bonus : Math.round((t.ask || 1) * (t.years || 3) * 0.3 * 2) / 2;
+  const startApy = start.apy != null ? +start.apy : (t.ask ? t.ask * 0.97 : 1.0);
+  const salary = el('input', { type: 'number', step: '0.1', min: '0.5', value: Math.max(0.5, startApy - startBonus / startYears).toFixed(1) });
+  const apyOf = () => { const n = Math.max(1, +yrs.value || 1); return Math.round(((+salary.value || 0) + (+bonus.value || 0) / n) * 100) / 100; };
+  const apy = { get value() { return String(apyOf()); } };
+  void apy, yrs = el('input', { type: 'number', min: '1', max: '5', value: String(start.years || t.years || 3) });
   const bonus = el('input', { type: 'number', step: '0.5', min: '0', value: start.bonus != null ? String(start.bonus) : String(Math.round((t.ask || 1) * (t.years || 3) * 0.3 * 2) / 2) });
   const shapeChips = el('div', { class: 'chips' }); let shape = 0.5;
   for (const [val, label] of [[0.85, 'Pay It Now'], [0.5, 'League Shape'], [0.15, 'Back-Load']]) shapeChips.append(el('button', { class: 'chip', 'aria-pressed': String(val === shape), onclick: e => { shape = val; shapeChips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); preview(); } }, label));
@@ -970,20 +975,35 @@ function offerForm(t, kind, onDone, preset) {
   const preview = () => {
     const r = pyJSON(`SESSION.personnel_act('offer_preview', pid=${JSON.stringify(t.pid)}, apy=${+apy.value || 0}, years=${+yrs.value || 1}, bonus=${+bonus.value || 0}, front_load=${shape})`);
     if (!r.ok) return; y1.textContent = r.year1 != null ? `$${r.year1.toFixed(1)}m` : '—'; total.textContent = `$${r.total}m`;
-    { const a = +apy.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${(a - b / n).toFixed(1)}m salary + $${(b / n).toFixed(1)}m of bonus a year = $${a.toFixed(1)}m a year · $${b.toFixed(1)}m of the $${(a * n).toFixed(1)}m total is the signing bonus`; }
+    { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m total`; }
     hitsRow.innerHTML = ''; r.hits.forEach((h, i) => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, h / Math.max(...r.hits, 0.1) * 100)}%` })), el('span', {}, r.years[i]), el('b', {}, `$${h.toFixed(1)}m`))));
   };
-  apy.onchange = yrs.onchange = bonus.onchange = preview;
+  salary.onchange = yrs.onchange = bonus.onchange = preview; salary.oninput = yrs.oninput = bonus.oninput = preview;
   const promises = el('div', { class: 'promise' }, el('span', {}, 'Promise:')); const chosen = [];
   for (const [k, l] of [['starting_role', 'Named the Starter'], ['captaincy', 'Captaincy'], ['no_trade', 'No Trade'], ['extension_by', 'Extension by a Set Year'], ['no_tag', 'No Franchise Tag']]) promises.append(el('button', { class: 'btn quiet', style: 'padding:2px 8px;font-size:14px', 'aria-pressed': 'false', onclick: e => { const i = chosen.indexOf(k); if (i < 0) chosen.push(k); else chosen.splice(i, 1); e.currentTarget.setAttribute('aria-pressed', String(i < 0)); } }, l));
   const breakdown = el('div', { class: 'count', style: 'padding:0 0 6px' });
-  f.append(el('div', { class: 'offer', style: 'grid-template-columns:repeat(5,1fr)' }, el('label', { 'data-tip': 'Total value divided by years; the signing bonus is part of it, not on top' }, 'Per Year ($m)', apy), el('label', {}, 'New Years', yrs), el('label', { 'data-tip': 'Paid up front, part of the per-year total, counted against the cap spread over the years' }, 'Signing Bonus ($m)', bonus), el('label', {}, 'Year 1 Hit', y1), el('label', {}, 'Total', total)), breakdown,
+  f.append(el('div', { class: 'offer', style: 'grid-template-columns:repeat(5,1fr)' }, el('label', {}, 'Years', yrs), el('label', {}, 'Salary ($m / yr)', salary), el('label', {}, 'Signing Bonus ($m)', bonus), el('label', {}, 'Year 1 Hit', y1), el('label', {}, 'Total', total)), breakdown,
     el('div', { class: 'shape' }, el('span', {}, 'Shape'), shapeChips), hitsRow, promises);
   const acts = el('div', { class: 'acts' });
   acts.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${+apy.value}, years=${+yrs.value}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`); notify(r); onDone(); } }, kind === 'fa_inseason' ? 'Offer (decides at Advance)' : preset ? 'Send Counter' : 'Send Offer'));
   if (kind === 'fa_inseason') acts.append(el('button', { class: 'btn', 'data-tip': 'His full ask, signed now', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${t.ask}, years=${t.years}, sign_today=True)`); notify(r); onDone(); } }, `Sign Today at $${t.ask}m`));
   acts.append(el('button', { class: 'btn quiet', onclick: () => { const r = pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`); notify(r); onDone(); } }, 'Let Him Go'));
   f.append(acts); setTimeout(preview, 0); return f;
+}
+
+// one line per open talk; click opens the conversation in its own window
+function talkLine(t, reload) {
+  const state = { open: 'awaiting your offer', waiting: 'agent deciding', countered: 'countered', match_requested: 'matching', accepted: 'agreed', declined: 'declined', expired: 'expired', broken: 'walked away' }[t.state] || t.state;
+  return el('div', { class: 'talkline', onclick: () => openTalks(t, reload) },
+    el('div', { class: 'nm' }, `${t.name} · ${t.pos}`), el('div', { class: 'count' }, `${t.opened ? 'entered ' + t.opened + ' · ' : ''}${state}${t.ask ? ` · asking $${(+t.ask).toFixed(1)}m × ${t.years}` : ''}`), el('span', { class: 'go' }, 'Open ›'));
+}
+function openTalks(t, reload) {
+  const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center' });
+  const box = el('section', { class: 'sheet', style: 'width:min(820px,94vw);max-height:88vh;overflow:auto' });
+  const close = () => { overlay.remove(); reload(); };
+  box.append(el('h2', {}, `${t.name} · ${t.pos}`, el('small', {}, t.opened ? `talks opened ${t.opened}` : ''), el('button', { class: 'btn quiet', style: 'margin-left:auto', onclick: close }, 'Close')));
+  box.append(threadBox(t, () => { const fresh = pyJSON(`SESSION.personnel(${JSON.stringify(t.kind === 'extension' ? 'extensions' : 'free_agency')})`); const nt = fresh.threads.find(x => x.id === t.id); overlay.remove(); if (nt && !['accepted', 'declined', 'expired', 'broken'].includes(nt.state)) openTalks(nt, reload); else reload(); }));
+  overlay.append(box); document.body.append(overlay);
 }
 
 function threadBox(t, onDone) {
@@ -1030,7 +1050,7 @@ function renderFA(v) {
     const rows = v.rows.filter(r => (!faPos || (GROUP[faPos] || []).includes(r.pos)) && (faRole === 'All' || (faRole === 'Starters') === r.starter) && (!faCheap || r.ask == null || r.ask < 5) && (!faWatch || r.watch) && (!q || r.name.toLowerCase().includes(q)));
     for (const r of rows) {
       const who = el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, inSeason ? (r.hole || r.pos) : `${r.pos}${r.last ? ' · from ' + r.last : ''}`))));
-      const askBtn = el('div', { style: 'display:flex;gap:4px' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { document.getElementById('th-' + r.thread)?.scrollIntoView(); } }, inSeason ? 'Talks' : 'Offer') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { notify(pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(inSeason ? 'fa_inseason' : 'fa_offseason')})`)); reload(); } }, 'Ask the Agent'),
+      const askBtn = el('div', { style: 'display:flex;gap:4px' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const th = v.threads.find(x => x.id === r.thread); if (th) openTalks(th, reload); } }, inSeason ? 'Talks' : 'Offer') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(inSeason ? 'fa_inseason' : 'fa_offseason')})`); if (!res.ok) { notify(res); reload(); return; } const fresh = pyJSON(`SESSION.personnel('free_agency')`); const th = fresh.threads.find(x => x.pid === r.pid); renderFA(fresh); if (th) openTalks(th, () => renderFA(pyJSON(`SESSION.personnel('free_agency')`))); } }, 'Ask the Agent'),
         r.ps_ok ? el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'Sign him to the practice squad at the weekly rate; he can say no', onclick: () => { notify(pyJSON(`SESSION.personnel_act('sign_ps', pid=${JSON.stringify(r.pid)})`)); reload(); } }, 'Practice Squad') : '');
       if (inSeason) tbl.append(el('tr', {}, who, el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', { class: 'n' }, r.ask_now != null ? `$${r.ask_now.toFixed(2)}m` : '—'),
         el('td', {}, r.thread && r.ask ? el('button', { class: 'btn go', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'His full ask, signed now', onclick: () => { const t = v.threads.find(x => x.id === r.thread); const res = pyJSON(`SESSION.personnel_act('offer', tid=${r.thread}, apy=${t ? t.ask : r.ask}, years=${t ? t.years : r.years}, sign_today=True)`); notify(res); reload(); } }, 'Sign') : ''), el('td', {}, askBtn)));
@@ -1042,7 +1062,7 @@ function renderFA(v) {
   left.append(tbl); drawRows();
   page.append(left);
   const right = el('section', { class: 'sheet c5' }, el('h2', {}, inSeason ? 'Talks' : 'Negotiation', el('small', {}, `${v.threads.length} open`)));
-  for (const t of v.threads) { const w = el('div', { id: 'th-' + t.id }, el('div', { class: 'h5', style: 'padding:10px 12px 0' }, `${t.name} · ${t.pos}`)); w.append(threadBox(t, reload)); right.append(w); }
+  for (const t of v.threads) right.append(talkLine(t, reload));
   if (!v.threads.length) right.append(el('div', { class: 'empty' }, inSeason ? 'Ask an agent to hear his number. Sign at the ask today, or make a one-week offer that decides at the Advance.' : 'Ask an agent to open talks; he weighs offers through each round of the market.'));
   const feedSheet = el('section', { class: 'sheet c5', style: 'order:2' }, el('h2', {}, 'Around the League Today', el('small', {}, 'latest signings')));
   const fd = el('div', { class: 'feed' }); for (const f of v.feed) fd.append(el('div', {}, el('span', {}, stripe(f.team.abbr)), el('span', {}, `${f.team.name} ${f.kind === 'signs' ? 'signed' : 'extended'} `, el('b', {}, f.name), `, ${f.pos}${f.years ? `, ${f.years} year${f.years === 1 ? '' : 's'}` : ''}${f.apy ? ` at $${f.apy}m a year` : ''}`), el('time', {}, f.week ? `Wk ${f.week}` : ''))); if (!v.feed.length) fd.append(el('div', { class: 'empty' }, 'Quiet so far.')); feedSheet.append(fd);
@@ -1119,7 +1139,7 @@ function renderExtensions(v) {
   left.append(pt);
   page.append(left);
   const right = el('section', { class: 'sheet c5' }, el('h2', {}, 'Negotiation', el('small', {}, `${v.threads.length} open`)));
-  for (const t of v.threads) { const w = el('div', { id: 'th-' + t.id }, el('div', { class: 'h5', style: 'padding:10px 12px 0' }, `${t.name} · ${t.pos}`)); w.append(threadBox(t, reload)); right.append(w); }
+  for (const t of v.threads) right.append(talkLine(t, reload));
   if (!v.threads.length) right.append(el('div', { class: 'empty' }, 'Ask an agent to hear his number. Offers are answered in one to three weeks by situation.'));
   page.append(right);
 }

@@ -312,7 +312,9 @@ def _thread(league, t):
     temper = {'eager': 'Eager', 'firm': 'Firm', 'open': 'Open', 'deferring': 'Deferring'}.get(mood, mood.capitalize())
     pat = t.get('patience'); pat_word = ('Patient' if (pat or 0) >= 3 else 'Short on patience' if (pat or 0) <= 1 else 'Measured')
     answers = ('at the next step of the market' if t['kind'].startswith('fa_offseason') else 'at the next Advance' if t['kind'] == 'fa_inseason' else 'within a week or two')
-    return dict(id=t['id'], pid=t['pid'], name=p.name if p else t['pid'], pos=p.pos if p else '', kind=t['kind'], state=t['state'], ask=t.get('ask'), years=t.get('years'), mood=mood,
+    op = t.get('opened')
+    opened = (f"Week {op}" if op is not None and op < 100 else (f"FA step {op - 100}" if op is not None else ''))
+    return dict(id=t['id'], pid=t['pid'], name=p.name if p else t['pid'], pos=p.pos if p else '', kind=t['kind'], state=t['state'], ask=t.get('ask'), years=t.get('years'), mood=mood, opened=opened,
                 offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=pat, log=t.get('log', []),
                 agent_line=f"The agent is {temper} and {pat_word}. He answers {answers}.")
 
