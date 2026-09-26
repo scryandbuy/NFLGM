@@ -354,10 +354,16 @@ def cap(session, league, abbr):
         if isinstance(dm, dict): dead = float(dm.get(yr, 0.0) or 0.0)
         elif i == 0: dead = float(getattr(t.cap, 'dead', 0.0) or 0.0) if hasattr(t, 'cap') else 0.0
         limit = CAP.get(yr, CAP.get(league.year, 301.2) * (1.055 ** i))
+        rollover = 0.0
+        if i == 1:
+            # next year as it will roll: unused space carries over, and the dead money already assigned to it counts
+            from views import next_year_cap
+            limit, _c, rollover, dead_sched = next_year_cap(league, t)
+            dead = max(dead, dead_sched)
         committed = sum(by.values()) + dead
         expiring = sorted([p for p in t.roster if p.contract and p.contract.years == i and p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.cap_hit(0))
         import practice_squad as PSQ
-        years.append(dict(year=yr, limit=round(limit, 1), est=(i > 0), by={g: round(v, 1) for g, v in by.items()}, dead=round(dead, 1), committed=round(committed, 1), space=round(limit - committed, 1), under_contract=n,
+        years.append(dict(year=yr, limit=round(limit, 1), est=(i > 0), rollover=round(rollover, 1), by={g: round(v, 1) for g, v in by.items()}, dead=round(dead, 1), committed=round(committed, 1), space=round(limit - committed, 1), under_contract=n,
                           ps_charge=(round(PSQ.ps_charge(t), 1) if i == 0 else None), rookie_pool=(None if i == 0 else round(len([k for k in t.picks if k.year == yr and not k.used_on]) * 1.3, 1)),
                           expiring_into=[p.name.split()[-1] for p in expiring[:3]], expiring_more=max(0, len(expiring) - 3)))
     # the ledger: every man, three years

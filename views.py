@@ -518,3 +518,15 @@ def gameday(session, league, abbr, gd=None):
                     home_rec=league.teams[g['home']].record[:2], away_rec=league.teams[g['away']].record[:2])
     return dict(rail=r, empty=False, week=gd['week'], scores=scores, game=game)
 
+
+
+def next_year_cap(league, t):
+    """Next year's cap as it will actually roll: the league cap plus the space this club has unspent now
+    (unused space carries over), and the money committed against it including the dead money already
+    assigned to next year. Returns (limit, committed, rollover, dead_next)."""
+    from cap_engine import CAP
+    base = CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.055)
+    rollover = max(0.0, float(t.cap_space)) if hasattr(t, 'cap_space') else 0.0
+    dead_next = float(getattr(t.cap, 'dead_next', 0.0) or 0.0) if hasattr(t, 'cap') else 0.0
+    committed = sum(p.contract.cap_hit(1) for p in t.roster if p.contract and p.contract.years >= 2) + dead_next
+    return round(base + rollover, 1), round(committed, 1), round(rollover, 1), round(dead_next, 1)

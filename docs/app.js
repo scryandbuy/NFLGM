@@ -1224,7 +1224,7 @@ function renderCap(v) {
     if (i === 0) kv.append(el('span', {}, 'Practice Squad'), el('span', {}, `$${y.ps_charge}m`), el('span', {}, 'Rookie Pool'), el('span', {}, '—'));
     else kv.append(el('span', {}, 'Expiring Into It'), el('span', {}, y.expiring_into.length ? y.expiring_into.join(', ') + (y.expiring_more ? `, ${y.expiring_more} more` : '') : 'Nobody'), el('span', {}, 'Rookie Pool'), el('span', {}, `$${y.rookie_pool}m est.`));
     kv.append(el('span', {}, 'Under Contract'), el('span', {}, `${y.under_contract} players`));
-    yrs.append(el('div', { class: 'cy' }, el('h4', {}, `${y.year}${i === 0 ? ' Now' : ''}`, el('small', {}, `Limit $${y.limit}m${y.est ? ' est.' : ''}`)), el('div', { class: 'big' + (y.space < 0 ? ' neg' : '') }, `${y.space < 0 ? '−' : ''}$${Math.abs(y.space).toFixed(1)}m`), el('div', { style: 'font-size:12.5px;color:var(--ink-3)' }, 'space'), st, kv));
+    yrs.append(el('div', { class: 'cy' }, el('h4', {}, `${y.year}${i === 0 ? ' Now' : ''}`, el('small', { 'data-tip': y.rollover ? `League cap plus $${y.rollover}m you have unspent now, which carries over` : null }, `Limit $${y.limit}m${y.rollover ? ` incl. $${y.rollover}m rollover` : y.est ? ' est.' : ''}`)), el('div', { class: 'big' + (y.space < 0 ? ' neg' : '') }, `${y.space < 0 ? '−' : ''}$${Math.abs(y.space).toFixed(1)}m`), el('div', { style: 'font-size:12.5px;color:var(--ink-3)' }, 'space'), st, kv));
   });
   s.append(yrs);
   const two = el('div', { class: 'restr' });
