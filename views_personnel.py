@@ -176,7 +176,6 @@ def act_propose(league, abbr, other, a_sends, b_sends):
     league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
     import inbox as IB
     IB.post(league, 'trade_done', f"Trade with {other} is done", f"You send {', '.join(_words(league, a_items))} to {other} for {', '.join(_words(league, b_items))}.", sender=other)
-    league.log('trade', a=abbr, b=other, a_sends=[str(x) for x in a_sends], b_sends=[str(x) for x in b_sends], user=True)
     return dict(ok=True, done=True, why=f"Done. {them.abbr} accepts.")
 
 
