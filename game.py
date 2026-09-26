@@ -950,7 +950,17 @@ def field_units(roster, state, rng, is_offense, package=None):
         out[key] = chosen
     return out, positions
 
-def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
+def run_drive(*args, **kwargs):
+    """One possession, played to its end. Thin wrapper over drive_steps, which is the same code paused
+    after every snap so a game can be played live; the AI's games and the register come through here."""
+    gen = drive_steps(*args, **kwargs)
+    try:
+        while True: next(gen)
+    except StopIteration as done:
+        return done.value
+
+
+def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
               rng, resolve_fn, call_off, call_def, rate_fn, aggression=0.5,
               book=None, off_state=None, def_state=None, week=1,
               timeouts=None, pos='home', half_end=None):
@@ -983,7 +993,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
 
     import advanced_stats as AS
     pending = None                        # the last scrimmage play, waiting for its after-state
+    _seen = 0
     while dr.result is None:
+        if len(dr.log) > _seen:
+            _seen = len(dr.log); yield ('snap', dr)              # the book grew: a live game shows it before the next snap
         if pending is not None:
             _o, _off, _def, _st = pending
             _v = AS.epa(_o, _st[0], _st[1], _st[2], dr.down, dr.togo, dr.yardline)
@@ -1401,6 +1414,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
     if dr.result in ('Punt', 'Field goal', 'Missed field goal') and dr.log and isinstance(dr.log[-1], dict):
         last = dr.log[-1]
         AS.book_special(book, dr, last, offense)
+    if len(dr.log) > _seen: yield ('snap', dr)
     return dr
 
 OT_LENGTH = 600          # one 10-minute period in the regular season
@@ -1486,10 +1500,22 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
     return score, drives, ('tie' if score['home'] == score['away'] else 'decided')
 
 
-def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
+def play_game(*args, **kwargs):
+    """A full 60-minute game, played to the end. Thin wrapper over game_steps, the same game paused after
+    every snap, at every drive's end and at halftime so it can be played live."""
+    gen = game_steps(*args, **kwargs)
+    try:
+        while True: next(gen)
+    except StopIteration as done:
+        return done.value
+
+
+def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
               home_aggr=0.5, away_aggr=0.5, book=None,
               home_state=None, away_state=None, week=1, playoffs=False):
-    """A full 60-minute game. Returns the score and every drive."""
+    """A full 60-minute game as a generator. Yields ('snap', dr) after every logged entry, ('drive', pos, dr, score)
+    when a possession ends, ('halftime', score) at the break before the second-half kick, ('overtime', score)
+    before overtime; returns the result dict."""
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
     pos = 'away'                                   # away receives first
@@ -1553,7 +1579,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         d_st = away_state if pos == 'home' else home_state
         # the unit that just came off recovers while the other side plays
         if d_st is not None: d_st.sideline_recovery(dr_snaps if 'dr_snaps' in dir() else 30)
-        dr = run_drive(off, deff, start, clock, quarter, sd, rng,
+        dr = yield from drive_steps(off, deff, start, clock, quarter, sd, rng,
                        resolve_fn, call_off, call_def, rate_fn, aggr, book,
                        o_st, d_st, week, timeouts=tos, pos=pos,
                        half_end=(GAME / 2 if not half_done else None))
@@ -1567,6 +1593,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             score[pos] += dr.points
         elif dr.points < 0:
             score['away' if pos == 'home' else 'home'] += 2
+        yield ('drive', pos, dr, dict(score))
 
         # ---- HALFTIME ----
         # The side that KICKED OFF to open the game receives the second half,
@@ -1576,6 +1603,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         if not half_done and clock <= GAME / 2:
             tos.halftime()
             half_done = True
+            yield ('halftime', dict(score))          # the live game stops here: the GM's halftime adjustments apply to what follows
             ENV.turn(rng, home_abbr); _P.ENV = ENV
             pos = 'home'                            # away received the opener, so home receives now
             start = kickoff_booked((home.get('kr') or {}), rng, rate_fn, book)['new_yardline']
@@ -1597,6 +1625,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     # overtime
     ot = None
     if score['home'] == score['away']:
+        yield ('overtime', dict(score))
         first = 'away' if rng.random() < 0.5 else 'home'
         score, ot_drives, ot = play_overtime(
             home, away, score, rng, resolve_fn, call_off, call_def, rate_fn,
