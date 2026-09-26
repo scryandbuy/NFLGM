@@ -1224,7 +1224,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # after the play, where the offence decides whether to take them.
         # the Disciplinarian's units foul less: the offense's factor on its plays, the defense's folded in evenly
         fx_o = getattr(off_state, 'staff_fx', None) or {}; fx_d = getattr(def_state, 'staff_fx', None) or {}
-        pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'],
+        # the defense's discipline carries its awareness: the smart unit jumps offside and grabs less
+        _dmen = (defense.get('db') or [])[:5] + (defense.get('lb') or [])[:3] + (defense.get('dl') or [])[:4]
+        d_awr = float(np.mean([rate_fn(d, {'awareness_rating': 1.0}) for d in _dmen])) if _dmen else 0.70
+        pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'], discipline=float(np.clip(0.70 + 0.8 * (d_awr - 0.787), 0.5, 0.9)),
                               noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)))
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
