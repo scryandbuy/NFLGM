@@ -254,7 +254,7 @@ class SeasonRunner:
                     if mode == 'play': break
                 elif kind == 'drive':
                     _k, pos, dr, score = ev; lv['drives'].append((pos, dr)); lv['current'] = None; lv['score'] = dict(score); lv['at'] = 'drive'; lv['pos'] = 'away' if pos == 'home' else 'home'
-                    if mode in ('play', 'drive'): break
+                    if mode == 'drive': break          # in play mode the end of a drive rides with its last play; the next click is the next snap
                 elif kind == 'halftime':
                     lv['score'] = dict(ev[1]); lv['halftime_open'] = True; lv['at'] = 'halftime'; lv['pos'] = 'home'
                     self._halftime_read(lv); break
@@ -309,9 +309,14 @@ class SeasonRunner:
         lv = getattr(self, 'live', None)
         if lv is None: return None
         drives = list(lv['drives'])
+        score = dict(lv['score'])
         if lv['current'] is not None:
             drives = drives + [(lv['pos'], lv['current'])]
-        return dict(home=lv['score']['home'], away=lv['score']['away'], drives=drives, overtime=(lv['at'] == 'overtime' or (lv['res'] or {}).get('overtime')), env=(lv['res'] or {}).get('env'), live=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], half_recs=lv.get('half_recs') or [])
+            # the points of a drive that has scored show with the scoring play, before the drive's own event lands
+            pts = int(getattr(lv['current'], 'points', 0) or 0)
+            if pts > 0: score[lv['pos']] += pts
+            elif pts < 0: score['away' if lv['pos'] == 'home' else 'home'] += 2
+        return dict(home=score['home'], away=score['away'], drives=drives, overtime=(lv['at'] == 'overtime' or (lv['res'] or {}).get('overtime')), env=(lv['res'] or {}).get('env'), live=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], half_recs=lv.get('half_recs') or [])
 
     def _record(self, home, away, week, res, book, playoffs=False):
         import gameplan_week as GW

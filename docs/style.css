@@ -1170,3 +1170,6 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 
 .talkline.done{opacity:.6}
 .talkline.done .go{color:var(--ink-3)}
+
+/* hovers on action rows and footers open upward, so a box that scrolls never grows for one */
+.acts [data-tip]:hover::after,.foot [data-tip]:hover::after,.thread [data-tip]:hover::after,.offer [data-tip]:hover::after{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
