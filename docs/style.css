@@ -1167,3 +1167,6 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .talkline:hover{background:var(--sheet-2)}
 .talkline .nm{font-family:var(--display);font-weight:700;font-size:17px}
 .talkline .go{margin-left:auto;color:var(--club-2);font-family:var(--display);font-weight:700}
+
+.talkline.done{opacity:.6}
+.talkline.done .go{color:var(--ink-3)}
