@@ -69,8 +69,10 @@ function renderRail(r) {
   $('#st-week').textContent = r.clock.line; $('#st-year').textContent = r.clock.sub;
   const badge = $('#badge'); badge.hidden = !r.inbox_unread; badge.textContent = r.inbox_unread;
   const adv = $('#advance');
-  if (r.blocking.length) { adv.classList.add('blocked'); const roster = r.blocking.find(b => b.kind === 'roster'); $('#adv-title').textContent = roster ? roster.subject.split(':')[0] : `${r.blocking.length} Decision${r.blocking.length > 1 ? 's' : ''}`; $('#adv-sub').textContent = roster ? roster.subject.split(': ')[1] : `Then ${r.advance.title}`; }
-  else { adv.classList.remove('blocked'); $('#adv-title').textContent = r.advance.title; $('#adv-sub').textContent = r.advance.sub || ''; }
+  const hard = r.blocking.filter(b => b.kind !== 'live');
+  if (r.blocking.length && r.blocking[0].kind === 'live') { adv.classList.remove('blocked', 'hard'); $('#adv-title').textContent = r.advance.title; $('#adv-sub').textContent = r.advance.sub || ''; }
+  else if (hard.length) { adv.classList.add('blocked', 'hard'); $('#adv-title').textContent = 'Fix Before You Advance'; $('#adv-sub').textContent = hard.length === 1 ? hard[0].subject : `${hard.length} items block the advance`; }
+  else { adv.classList.remove('blocked', 'hard'); $('#adv-title').textContent = r.advance.title; $('#adv-sub').textContent = r.advance.sub || ''; }
 }
 
 // ---------------------------------------------------------------- the Portal
@@ -99,7 +101,7 @@ function inboxSheet(v) {
       n++;
       const day = `${r.year} · Week ${r.week}`;
       if (day !== lastDay) { list.append(el('div', { class: 'dayh' }, day)); lastDay = day; }
-      list.append(el('button', { class: 'row' + (r.unread ? ' unread' : ''), onclick: () => openMessage(r.id) }, el('div', {}, el('div', { class: 't' }, r.subject), inboxDense ? '' : el('div', { class: 'f' }, r.body)), el('span', { class: 'tag ' + tagClass(r.tag) }, r.tag)));
+      list.append(el('button', { class: 'row' + (r.unread ? ' unread' : '') + (r.block ? ' block' : ''), onclick: () => openMessage(r.id) }, el('div', {}, el('div', { class: 't' }, r.subject), inboxDense ? '' : el('div', { class: 'f' }, r.body)), el('span', { class: 'tag ' + tagClass(r.tag) }, r.tag)));
     }
     if (!n) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : inboxFilter === 'league' ? 'Nothing from around the league yet.' : 'All read.'));
   };
@@ -140,7 +142,7 @@ function renderInbox(v) {
   s.append(tools);
   const box = el('div', { class: 'mailbox' });
   const list = el('div', { class: 'list' });
-  for (const r of rows) list.append(el('div', { class: 'row' + (r.unread ? ' unread' : '') + (r.id === mailSel ? ' sel' : ''), onclick: () => { mailSel = r.id; if (r.unread) pyJSON(`SESSION.inbox_read(${r.id})`); renderInbox(pyJSON('SESSION.portal_full()')); } },
+  for (const r of rows) list.append(el('div', { class: 'row' + (r.unread ? ' unread' : '') + (r.block ? ' block' : '') + (r.id === mailSel ? ' sel' : ''), onclick: () => { mailSel = r.id; if (r.unread) pyJSON(`SESSION.inbox_read(${r.id})`); renderInbox(pyJSON('SESSION.portal_full()')); } },
     el('span', { class: 'dot' }), el('div', { style: 'min-width:0' }, el('div', { class: 'subj' }, r.subject), el('div', { class: 'from' }, `${r.tag}${r.from ? ' · ' + r.from : ''}`)), el('span', { class: 'meta' }, r.when || '')));
   if (!rows.length) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : inboxFilter === 'league' ? 'Nothing from around the league yet.' : 'All read.'));
   const pane = el('div', { class: 'pane' });

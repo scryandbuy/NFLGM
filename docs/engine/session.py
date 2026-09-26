@@ -164,8 +164,19 @@ class Session:
         # 68 and cuts to 53 before week 1, the way every club does.
         if self.stop[0] in ('week', 'cutdown', 'wire') and not getattr(self, 'played', False):
             n = len(self.L.teams[self.user_team].active())
-            if n > self.ROSTER_MAX: out.append(dict(id=None, subject=f"Roster at {n}: cut to {self.ROSTER_MAX} before Sunday", kind='roster', go='#club'))
-            elif n < self.ROSTER_MIN: out.append(dict(id=None, subject=f"Roster at {n}: sign to at least {self.ROSTER_MIN}", kind='roster', go='#personnel/fa'))
+            import inbox as IB
+            key_ = f"roster-{self.L.year}-{self.stop[1] if len(self.stop) > 1 else 0}"
+            existing = next((m for m in getattr(self.L, 'inbox', []) if (m.get('payload') or {}).get('key') == key_ and m.get('status') in ('unread', 'open')), None)
+            if n > self.ROSTER_MAX or n < self.ROSTER_MIN:
+                subj = f"Roster at {n}: cut to {self.ROSTER_MAX} before Sunday" if n > self.ROSTER_MAX else f"Roster at {n}: sign to at least {self.ROSTER_MIN}"
+                if existing is None:
+                    IB.post(self.L, 'roster', subj, (f"You are carrying {n}. The game needs 53 or fewer to start; release or waive to the practice squad before you sim." if n > self.ROSTER_MAX else f"You are at {n}; the game needs at least {self.ROSTER_MIN}. Sign from free agency or call up from the squad."), sender='front office', payload=dict(key=key_, link=('club' if n > self.ROSTER_MAX else 'personnel:fa')))
+                    existing = self.L.inbox[-1]
+                else:
+                    existing['subject'] = subj
+                out.append(dict(id=existing.get('id'), subject=subj, kind='roster', go=('#club' if n > self.ROSTER_MAX else '#personnel/fa')))
+            elif existing is not None:
+                existing['status'] = 'done'
         for m in getattr(self.L, 'inbox', []):
             if m.get('status') in ('unread', 'open') and m.get('kind') in ('trade_offer', 'match_request', 'staff') and m.get('needs_decision', True):
                 if m.get('kind') == 'trade_offer' or (m.get('payload') or {}).get('poach'):

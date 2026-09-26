@@ -1154,3 +1154,10 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .plate3 .row2 .tag{font-size:9.5px;padding:1px 5px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 46px)}
 .plate3 .row2 .ov{flex:0 0 auto}
 .plate3 .row2>span:first-child{min-width:0}
+
+/* a hard block: the advance turns red and the item that blocks it is red in the inbox */
+.advance.blocked.hard{background:var(--danger);color:#fff}
+.advance.blocked.hard .sub{color:#fff}
+.mailbox .list .row.block{border-left:3px solid var(--danger);background:rgba(229,72,77,.08)}
+.mailbox .list .row.block .subj{color:#ff8a8e}
+.inboxlist .row.block,.portal .inbox .row.block{border-left:3px solid var(--danger);background:rgba(229,72,77,.08)}

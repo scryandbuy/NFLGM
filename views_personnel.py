@@ -362,7 +362,6 @@ def act_poach_ps(league, abbr, pid):
     other = league.teams.get(p.team)
     if other is None or p not in PSQ.squad(other): return dict(ok=False, why='he is not on a practice squad')
     me = league.teams[abbr]
-    if len(me.active()) >= 53: return dict(ok=False, why='your 53 is full; open a spot first')
     r = NG.open_talks(league, pid, kind='fa_inseason')
     if r.get('ok'): r['line'] = f"{p.name}'s agent will listen: a 53-man deal at ${r['ask']:.1f}m. Sign him from the thread and he leaves {p.team}'s squad for your roster."
     return r
