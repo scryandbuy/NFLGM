@@ -295,6 +295,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     # SURPLUS is a GROUP question: a fourth healthy lineman is spare whatever
     # slot he is listed at.
     for grp, men in by_group.items():
+        if grp == 'ST': continue                 # kickers, punters and snappers are signed off the street, not traded for; the ST group (K + P + LS) is not a depth chart
         men = sorted(men, key=lambda p: -p.ovr)
         if len(men) >= 3:
             for p in men[2:4]:
@@ -318,6 +319,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
         have = max((p.ovr for p in fit), default=0.0)
         if have < league_bar.get(pos, 75.0) - NEED_GAP:
             grp = GRP.get(pos, pos)
+            if grp == 'ST': continue                 # a club short a kicker signs one; it does not trade for one
             if grp not in needs or have < needs[grp]:
                 needs[grp] = have
 

@@ -835,7 +835,14 @@ def package_units(roster, state, rng, is_offense, package):
             n_cb = 2
             out['db'] = cbs[:2] + saf[:3]
         else:
-            out['db'] = cbs[:n_cb] + saf[:spec.get('FS', 1) + spec.get('SS', 1)]
+            # a free safety and a strong safety, not the first two in the list (a club with two free safeties was
+            # fielding both and its strong safety never played)
+            fss = [d for d in saf if d.get('pos') == 'FS']; sss = [d for d in saf if d.get('pos') == 'SS']
+            pick = fss[:spec.get('FS', 1)] + sss[:spec.get('SS', 1)]
+            for d in saf:
+                if len(pick) >= spec.get('FS', 1) + spec.get('SS', 1): break
+                if d not in pick: pick.append(d)
+            out['db'] = cbs[:n_cb] + pick
         # the linebackers are the coordinator's call by the package's job, not the first N in the list
         lbs = [m for m in roster.get('lb', []) if m.get('pid') not in (state.out if state is not None else set())]
         chosen = TG.package_linebackers(lbs, package, scheme=None, key=lambda m: m)
