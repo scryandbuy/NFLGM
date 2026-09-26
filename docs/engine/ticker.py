@@ -125,7 +125,8 @@ def play_line(league, p, off_abbr, def_abbr):
         kind = 'neutral'
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None
-        text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {int(round(100 - p.get('new_yardline', 75)))}." if who else f", returned to the {int(round(100 - p.get('new_yardline', 75)))}.")); kind = 'special'
+        spot = _spot(float(p.get('new_yardline', 75)), off_abbr, def_abbr)
+        text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {spot}." if who else f", returned to the {spot}.")); kind = 'special'
     elif t == 'injury':
         who = _nm(league, p.get('pid')) or 'A player'
         wk = int(p.get('weeks') or 0)

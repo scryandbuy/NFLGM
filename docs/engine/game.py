@@ -130,8 +130,8 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # chasing: trailing with less time than the possessions he needs (about two and a half minutes each)
     need = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
     chasing = score_diff < 0 and secs_left < 150 * need + 90
-    if use_wp and yardline_100 > 55 and not chasing:
-        use_wp = False
+    if use_wp and not chasing and (yardline_100 > 55 or (yardline_100 >= 50 and ydstogo >= 6 and secs_left > 600)):
+        use_wp = False                                   # own side of midfield: fourth and long is a punt unless chasing
     if use_wp:
         import decisions as DEC
         r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100,
@@ -678,7 +678,7 @@ def _resolve_live_penalty(dr, pen, out, oc):
     if not take:
         return None
     gained_p = min(yards, dr.yardline - 1)
-    if gained_p < yards - 0.01:
+    if gained_p < yards - 0.01 and pen['penalty'] == 'Defensive Pass Interference':
         pen['end_zone'] = True; pen['spot'] = 1                # the foul was in the end zone: the ball goes to the 1
     pen['yards'] = round(gained_p, 1)
     dr.yardline -= gained_p
@@ -1077,7 +1077,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if final_period:
             if dr.score_diff > 0 and half_end is None and dr.clock <= 240:
                 late_lean = -1.5 if (dr.down == 3 and dr.togo >= 6) else -8.0
-            elif dr.score_diff <= 0 and secs_in_half <= 120:
+            elif (dr.score_diff <= 0 and secs_in_half <= 120) or (dr.score_diff < 0 and half_end is None and dr.clock < 150 * int(np.ceil(-dr.score_diff / 8.0)) + 90):
                 late_lean = 1.0 if dr.togo <= 1 else 6.5
         lean_now = dict(olean or {})
         if last_shot: lean_now['pass_bias'] = float(lean_now.get('pass_bias', 0.0)) + 6.0
@@ -1311,7 +1311,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.plays -= 1
                 out['nullified'] = True
                 dr.log.append(dict(type='penalty', **live_pen))
-                dr.clock -= play_seconds('penalty')
+                dr.clock -= play_seconds(t) + play_seconds('penalty')      # the play ran; the clock ran with it, then stopped for the flag
                 continue
             if taken == 'added':
                 dr.log.append(dict(type='penalty', **live_pen))
@@ -1335,6 +1335,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             if fum:
                 out['fumble'] = True; out['fumble_lost'] = bool(fum['lost']); out['fumble_by'] = (carrier or {}).get('pid')
             if fum and fum['lost']:
+                # the ball comes out where the play ended, not where it started: the gain (or loss) is applied first
+                dr.yardline = float(np.clip(dr.yardline - float(out.get('yards', 0.0) or 0.0), 1.0, 99.0))
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 
         # ---- timeouts ----
