@@ -150,6 +150,14 @@ class SeasonRunner:
                 for p in t.active()
                 if (desk.available(p, self.week) if desk
                     else p.out_until is None)]
+        # a man playing hurt plays with the injury's hit on his ratings this Sunday
+        if desk is not None and desk.playing_hurt:
+            import injury_status as IS
+            for r in rows:
+                d = desk.playing_hurt.get(r['pid'])
+                if d:
+                    p_ = self.L.player(r['pid']); hits, _risk = IS.hurt_profile(p_, d)
+                    for a, v in hits.items(): r[a] = max(1.0, float(r.get(a, 60.0)) + v)
         # game-day elevations from the practice squad dress this week
         rows += [dict(p.ratings, pid=p.pid, pos=p.pos) for p in getattr(t, '_elevated', [])]
         return R.build_roster_rows(rows, t.scheme, pins=getattr(t, 'depth_pins', None))
@@ -260,6 +268,8 @@ class SeasonRunner:
             if p is None: continue
             weeks = int(inj['weeks_out'])
             p.out_until = week + weeks
+            p.xp_spent['_inj_kind'] = inj.get('kind'); p.xp_spent['_inj_week'] = week
+            k_ = f"_inj_count_{inj.get('kind')}"; p.xp_spent[k_] = int(p.xp_spent.get(k_, 0) or 0) + 1
             p.injury_history.append(dict(year=self.L.year, week=week,
                                          weeks_out=weeks, kind=inj['kind'],
                                          season_ending=inj['season_ending']))
@@ -287,6 +297,8 @@ class SeasonRunner:
 
     def play_games(self, week):
         self.L.week_book = {}                                        # this Sunday's lines only
+        for abbr_, desk_ in self.desks.items():
+            desk_.resolve_pending(self.L, self.L.teams[abbr_], self.rng); self.refresh(abbr_)
         for abbr in self.states: self._staff_terms(abbr)          # a staff change since last Sunday counts
         """The games only. Sunday: every scheduled game this week, the scores written back,
         expired injuries cleared. The week itself has not rolled; that is roll_week."""
@@ -311,6 +323,12 @@ class SeasonRunner:
         self.week = week
         self.L.week = week
         self.last_played = played
+        # men who played hurt: did it flare?
+        for abbr_, desk_ in self.desks.items():
+            for p_, wks in desk_.flare(self.L, self.L.teams[abbr_], week, self.rng):
+                if abbr_ == getattr(self.L, 'user_team', None):
+                    import inbox as IB
+                    IB.post(self.L, 'injury', f"{p_.name} aggravated the {str(p_.xp_spent.get('_inj_kind') or 'injury').lower()}", f"{p_.name} ({p_.pos}) played through it and it went again; he is out {wks} more week{'s' if wks != 1 else ''}.", sender='trainers')
         try:
             import club_notes as CN, league_notes as LN
             CN.after_games(self.L, week, played)

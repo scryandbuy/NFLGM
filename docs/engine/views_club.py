@@ -517,6 +517,26 @@ def progression(session, league, abbr):
     return dict(rail=rail(session, league, abbr), rows=rows, auto_all=bool(getattr(t, 'xp_auto_all', False)), bank_total=sum(r['bank'] for r in rows), idle=sum(1 for r in rows if r['can_buy'] and not r['auto']))
 
 
+def act_hurt_decision(league, abbr, pid, play=True, session=None):
+    """Play or Sit a man listed Questionable or Doubtful."""
+    runner = getattr(session, 'runner', None) if session is not None else None
+    desk = runner.desks.get(abbr) if runner is not None else None
+    p = league.player(pid); t = league.teams[abbr]
+    if desk is None or p is None: return dict(ok=False, why='no injury desk this week')
+    d = desk.pending.get(pid) or desk.status.get(pid)
+    if d not in ('questionable', 'doubtful'): return dict(ok=False, why='he is not listed Questionable or Doubtful')
+    if play:
+        if str(p.xp_spent.get('_inj_kind') or '') == 'Concussion': return dict(ok=False, why='concussion protocol: he cannot play through it')
+        desk.play_through(league, t, p, d); runner.refresh(abbr)
+        line = f"{p.name} plays Sunday, listed {d}."
+    else:
+        desk.sit(p); line = f"{p.name} sits Sunday."
+    # the decision item closes
+    for m in getattr(league, 'inbox', []):
+        if m.get('kind') == 'injury_decision' and (m.get('payload') or {}).get('pid') == pid and m.get('status') in ('unread', 'open'): m['status'] = 'done'
+    return dict(ok=True, line=line)
+
+
 def act_ir(league, abbr, pid, season_ending=False):
     """Place a hurt man on injured reserve: off the 53 now, salary counts in full, back after four weeks if a return is left."""
     t = league.teams[abbr]; p = league.player(pid)

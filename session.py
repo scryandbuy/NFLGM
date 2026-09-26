@@ -380,6 +380,7 @@ class Session:
         fn = getattr(VC, 'act_' + name, None)
         if fn is None: return dict(ok=False, why='unknown action')
         if name == 'elevate': kw['week'] = self.stop[1] if self.stop[0] == 'week' else 1
+        if name == 'hurt_decision': kw['session'] = self
         return fn(self.L, self.user_team, **kw)
 
     # ---- personnel
