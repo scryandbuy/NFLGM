@@ -1841,7 +1841,7 @@ function renderReport(v) {
   if (v.off) { s.append(el('h2', {}, 'Opponent Report'), el('div', { class: 'empty' }, v.note)); page.append(s); return; }
   s.append(el('h2', {}, `Opponent Report · ${v.opp.name}`, el('small', {}, `Week ${v.week} · ${v.away ? 'Away' : 'Home'} · ${v.record}` + (v.coach && v.coach.name ? ` · ${v.coach.name}, prestige ${v.coach.prestige}` : ''))));
   // their tendencies against the league
-  s.append(el('div', { class: 'h5', style: 'padding:10px 14px 6px' }, 'Their Tendencies', el('span', {}, v.tendencies ? `${v.tendencies.games} games in · the tick is the league` : 'nothing on film yet')));
+  s.append(el('div', { class: 'h5', style: 'padding:10px 14px 6px' }, 'Their Tendencies', el('span', {}, v.tendencies ? `${v.tendencies.games} game${v.tendencies.games === 1 ? '' : 's'} on film · the white tick is the league average` : 'nothing on film yet')));
   const tg = el('div', { class: 'tendgrid' });
   const T = [['pass_rate', 'Pass Rate'], ['pa_rate', 'Play Action'], ['deep', 'Deep Shots'], ['two_high', 'Two-High'], ['blitz', 'Blitz'], ['man', 'Man Coverage'], ['fourth_go', 'Fourth-Down Go'], ['motion', 'Motion']];
   for (const [k, lab] of T) { const tv = v.tendencies ? v.tendencies[k] : null; const lg = v.league_tend ? v.league_tend[k] : null; tg.append(el('div', { class: 'tend', 'data-tip': `${v.opp.abbr} ${tv ?? '—'}% · NFL ${lg ?? '—'}%` }, el('div', { class: 'l' }, lab), el('div', { class: 'bar' }, el('i', { style: `width:${tv ?? 0}%` }), lg != null ? el('em', { style: `left:${lg}%` }) : ''), el('div', { class: 'v' }, tv != null ? `${tv}%` : '—'))); }
