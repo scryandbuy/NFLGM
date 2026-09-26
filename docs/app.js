@@ -991,6 +991,21 @@ function offerForm(t, kind, onDone, preset) {
   f.append(acts); setTimeout(preview, 0); return f;
 }
 
+// one line per open talk; click opens the conversation in its own window
+function talkLine(t, reload) {
+  const state = { open: 'awaiting your offer', waiting: 'agent deciding', countered: 'countered', match_requested: 'matching', accepted: 'agreed', declined: 'declined', expired: 'expired', broken: 'walked away' }[t.state] || t.state;
+  return el('div', { class: 'talkline', onclick: () => openTalks(t, reload) },
+    el('div', { class: 'nm' }, `${t.name} · ${t.pos}`), el('div', { class: 'count' }, `${t.opened ? 'entered ' + t.opened + ' · ' : ''}${state}${t.ask ? ` · asking $${(+t.ask).toFixed(1)}m × ${t.years}` : ''}`), el('span', { class: 'go' }, 'Open ›'));
+}
+function openTalks(t, reload) {
+  const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center' });
+  const box = el('section', { class: 'sheet', style: 'width:min(820px,94vw);max-height:88vh;overflow:auto' });
+  const close = () => { overlay.remove(); reload(); };
+  box.append(el('h2', {}, `${t.name} · ${t.pos}`, el('small', {}, t.opened ? `talks opened ${t.opened}` : ''), el('button', { class: 'btn quiet', style: 'margin-left:auto', onclick: close }, 'Close')));
+  box.append(threadBox(t, () => { const fresh = pyJSON(`SESSION.personnel(${JSON.stringify(t.kind === 'extension' ? 'extensions' : 'free_agency')})`); const nt = fresh.threads.find(x => x.id === t.id); overlay.remove(); if (nt && !['accepted', 'declined', 'expired', 'broken'].includes(nt.state)) openTalks(nt, reload); else reload(); }));
+  overlay.append(box); document.body.append(overlay);
+}
+
 function threadBox(t, onDone) {
   const box = el('div', { class: 'thread' });
   // the conversation as logged: every line with who said it, then the agent's temperament, then the decision
@@ -1035,7 +1050,7 @@ function renderFA(v) {
     const rows = v.rows.filter(r => (!faPos || (GROUP[faPos] || []).includes(r.pos)) && (faRole === 'All' || (faRole === 'Starters') === r.starter) && (!faCheap || r.ask == null || r.ask < 5) && (!faWatch || r.watch) && (!q || r.name.toLowerCase().includes(q)));
     for (const r of rows) {
       const who = el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, inSeason ? (r.hole || r.pos) : `${r.pos}${r.last ? ' · from ' + r.last : ''}`))));
-      const askBtn = el('div', { style: 'display:flex;gap:4px' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { document.getElementById('th-' + r.thread)?.scrollIntoView(); } }, inSeason ? 'Talks' : 'Offer') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { notify(pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(inSeason ? 'fa_inseason' : 'fa_offseason')})`)); reload(); } }, 'Ask the Agent'),
+      const askBtn = el('div', { style: 'display:flex;gap:4px' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const th = v.threads.find(x => x.id === r.thread); if (th) openTalks(th, reload); } }, inSeason ? 'Talks' : 'Offer') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(inSeason ? 'fa_inseason' : 'fa_offseason')})`); if (!res.ok) { notify(res); reload(); return; } const fresh = pyJSON(`SESSION.personnel('free_agency')`); const th = fresh.threads.find(x => x.pid === r.pid); renderFA(fresh); if (th) openTalks(th, () => renderFA(pyJSON(`SESSION.personnel('free_agency')`))); } }, 'Ask the Agent'),
         r.ps_ok ? el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'Sign him to the practice squad at the weekly rate; he can say no', onclick: () => { notify(pyJSON(`SESSION.personnel_act('sign_ps', pid=${JSON.stringify(r.pid)})`)); reload(); } }, 'Practice Squad') : '');
       if (inSeason) tbl.append(el('tr', {}, who, el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', { class: 'n' }, r.ask_now != null ? `$${r.ask_now.toFixed(2)}m` : '—'),
         el('td', {}, r.thread && r.ask ? el('button', { class: 'btn go', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'His full ask, signed now', onclick: () => { const t = v.threads.find(x => x.id === r.thread); const res = pyJSON(`SESSION.personnel_act('offer', tid=${r.thread}, apy=${t ? t.ask : r.ask}, years=${t ? t.years : r.years}, sign_today=True)`); notify(res); reload(); } }, 'Sign') : ''), el('td', {}, askBtn)));
@@ -1047,7 +1062,7 @@ function renderFA(v) {
   left.append(tbl); drawRows();
   page.append(left);
   const right = el('section', { class: 'sheet c5' }, el('h2', {}, inSeason ? 'Talks' : 'Negotiation', el('small', {}, `${v.threads.length} open`)));
-  for (const t of v.threads) { const w = el('div', { id: 'th-' + t.id }, el('div', { class: 'h5', style: 'padding:10px 12px 0' }, `${t.name} · ${t.pos}`)); w.append(threadBox(t, reload)); right.append(w); }
+  for (const t of v.threads) right.append(talkLine(t, reload));
   if (!v.threads.length) right.append(el('div', { class: 'empty' }, inSeason ? 'Ask an agent to hear his number. Sign at the ask today, or make a one-week offer that decides at the Advance.' : 'Ask an agent to open talks; he weighs offers through each round of the market.'));
   const feedSheet = el('section', { class: 'sheet c5', style: 'order:2' }, el('h2', {}, 'Around the League Today', el('small', {}, 'latest signings')));
   const fd = el('div', { class: 'feed' }); for (const f of v.feed) fd.append(el('div', {}, el('span', {}, stripe(f.team.abbr)), el('span', {}, `${f.team.name} ${f.kind === 'signs' ? 'signed' : 'extended'} `, el('b', {}, f.name), `, ${f.pos}${f.years ? `, ${f.years} year${f.years === 1 ? '' : 's'}` : ''}${f.apy ? ` at $${f.apy}m a year` : ''}`), el('time', {}, f.week ? `Wk ${f.week}` : ''))); if (!v.feed.length) fd.append(el('div', { class: 'empty' }, 'Quiet so far.')); feedSheet.append(fd);
@@ -1124,7 +1139,7 @@ function renderExtensions(v) {
   left.append(pt);
   page.append(left);
   const right = el('section', { class: 'sheet c5' }, el('h2', {}, 'Negotiation', el('small', {}, `${v.threads.length} open`)));
-  for (const t of v.threads) { const w = el('div', { id: 'th-' + t.id }, el('div', { class: 'h5', style: 'padding:10px 12px 0' }, `${t.name} · ${t.pos}`)); w.append(threadBox(t, reload)); right.append(w); }
+  for (const t of v.threads) right.append(talkLine(t, reload));
   if (!v.threads.length) right.append(el('div', { class: 'empty' }, 'Ask an agent to hear his number. Offers are answered in one to three weeks by situation.'));
   page.append(right);
 }

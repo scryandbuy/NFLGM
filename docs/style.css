@@ -1161,3 +1161,9 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .mailbox .list .row.block{border-left:3px solid var(--danger);background:rgba(229,72,77,.08)}
 .mailbox .list .row.block .subj{color:#ff8a8e}
 .inboxlist .row.block,.portal .inbox .row.block{border-left:3px solid var(--danger);background:rgba(229,72,77,.08)}
+
+/* the talks list: one line a conversation */
+.talkline{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--rule);cursor:pointer}
+.talkline:hover{background:var(--sheet-2)}
+.talkline .nm{font-family:var(--display);font-weight:700;font-size:17px}
+.talkline .go{margin-left:auto;color:var(--club-2);font-family:var(--display);font-weight:700}
