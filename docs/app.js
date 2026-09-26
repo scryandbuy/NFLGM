@@ -391,7 +391,9 @@ function renderGameDay(v) {
 
   // the ticker, revealed by drive
   const tick = el('section', { class: 'sheet c8' });
-  let shown = 1, shownPlays = null;      // shownPlays: within the last shown drive, how many plays are revealed (null = all)
+  const gkey = `${g.home.abbr}-${g.away.abbr}-${v.week || ''}-${v.year || ''}`;
+  const saved = gdReveal[gkey] || { shown: 1, shownPlays: 0 };
+  let shown = saved.shown, shownPlays = saved.shownPlays;      // shownPlays: within the last shown drive, how many plays are revealed (null = all)
   const body = el('div', { class: 'ticker' });
   const filt = { mode: 'all' };
   const draw = () => {
@@ -408,11 +410,11 @@ function renderGameDay(v) {
     });
     tick.querySelector('h2 small').textContent = (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
     body.scrollTop = body.scrollHeight;
-    drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays);
+    gdReveal[gkey] = { shown, shownPlays };
+    drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays); drawRead(shown >= g.drives.length && shownPlays == null);
   };
   const vis = d => d.plays.filter(p => p.text);
   // the first drive opens one play at a time too
-  shown = 1; shownPlays = 0;
   const nextPlay = () => { const d = g.drives[shown - 1]; const n = vis(d).length; if (shownPlays == null || shownPlays >= n) { if (shownPlays != null && shownPlays >= n) shownPlays = null; if (shown >= g.drives.length) { shownPlays = null; draw(); return; } shown++; shownPlays = 1; } else shownPlays++; if (shownPlays >= vis(g.drives[shown - 1]).length) shownPlays = null; draw(); };
   const quarterEnd = q => { let i = g.drives.findIndex(d => d.quarter > q); return i < 0 ? g.drives.length : i; };   // how many drives are in through the end of quarter q
   const nextQuarter = () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; const end = quarterEnd(q); shown = (shown >= end) ? quarterEnd(q + 1) : end; draw(); };
@@ -427,27 +429,11 @@ function renderGameDay(v) {
   tick.append(el('h2', {}, 'Play by Play', el('small', {}, '')), ctrl, body);
   page.append(tick);
 
-  // drive chart and box score
+  // the right column: team stats and the assistants' read; the box score sits under the ticker at its width
   const right = el('section', { class: 'sheet c4' });
-  right.append(el('h2', {}, 'Drive Chart'));
-  const fh = 14 * g.drives.length + 10; const fsvg = mk('svg', { viewBox: `0 0 720 ${fh}`, class: 'field' });
-  fsvg.append(mk('rect', { x: 0, y: 0, width: 720, height: fh, fill: '#1f252c' }), mk('rect', { x: 0, y: 0, width: 60, height: fh, fill: '#3a1216' }), mk('rect', { x: 660, y: 0, width: 60, height: fh, fill: '#3a2a10' }));
-  [180, 360, 540].forEach(x => fsvg.append(mk('line', { x1: x, y1: 0, x2: x, y2: fh, stroke: x === 360 ? '#8791a0' : '#3a424c' })));
-  g.drives.forEach((d, i) => {
-    // the drive's club drives toward the far end zone: home left-to-right, away right-to-left
-    const dirHome = d.off === g.home.abbr; const x = v => 60 + 6 * v; const sx = dirHome ? x(d.start) : x(100 - d.start), ex = dirHome ? x(d.end) : x(100 - d.end);
-    const y = 8 + 14 * i; const col = d.off === g.home.abbr ? g.home.color : g.away.color;
-    fsvg.append(mk('line', { x1: sx, y1: y, x2: ex, y2: y, stroke: col, 'stroke-width': 6, 'stroke-linecap': 'round' }));
-    const r = String(d.result || '');
-    if (/Touchdown/.test(r)) fsvg.append(mk('circle', { cx: ex, cy: y, r: 5, fill: '#ffb612' }));
-    else if (/Field goal/.test(r)) fsvg.append(mk('rect', { x: ex - 5, y: y - 6, width: 10, height: 12, fill: '#4cc9f0' }));
-    else if (/Interception|Fumble|Turnover|downs/i.test(r)) fsvg.append(mk('circle', { cx: ex, cy: y, r: 5, fill: '#e5484d' }));
-    else fsvg.append(mk('circle', { cx: ex, cy: y, r: 3.5, fill: '#3a424c' }));
-  });
-  right.append(el('div', { class: 'pad', style: 'padding-top:8px' }, fsvg,
-    el('div', { style: 'padding:6px 0 0;display:flex;gap:12px;font-size:13px;color:var(--ink-2);flex-wrap:wrap' }, stripe(g.home.abbr), stripe(g.away.abbr), el('span', {}, el('i', { style: 'display:inline-block;width:9px;height:9px;background:#ffb612;border-radius:50%;margin-right:4px' }), 'TD'), el('span', {}, el('i', { style: 'display:inline-block;width:9px;height:9px;background:#4cc9f0;margin-right:4px' }), 'FG'), el('span', {}, el('i', { style: 'display:inline-block;width:9px;height:9px;background:#e5484d;border-radius:50%;margin-right:4px' }), 'Turnover'))));
-  const boxHead = el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Box Score', el('small', {}, 'Live')); right.append(boxHead);
-  const box = el('table', { class: 'box' }); right.append(box);
+  const boxSheet = el('section', { class: 'sheet c8' });
+  const boxHead = el('h2', {}, 'Box Score', el('small', {}, 'Live')); boxSheet.append(boxHead);
+  const box = el('table', { class: 'box' }); boxSheet.append(box);
   const th = (...c) => el('tr', {}, ...c.map((x, i) => el('th', {}, x)));
   const awayFirst = arr => [...arr.filter(r => r.team === g.away.abbr), ...arr.filter(r => r.team !== g.away.abbr)];
   const drawFullBox = () => {
@@ -471,16 +457,16 @@ function renderGameDay(v) {
       if (['run', 'scramble'].includes(p.type) && (p.carrier || p.passer)) { const who = p.carrier || p.passer; const k = p.off + '|' + who; const r = rush[k] = rush[k] || { team: p.off, name: who, att: 0, yds: 0, td: 0, lng: 0 }; r.att++; r.yds += y; if (p.td) r.td++; r.lng = Math.max(r.lng, y); }
     }
     const top = (o, key, n) => awayFirst(Object.values(o).sort((a, b) => b[key] - a[key])).slice(0, n);
-    box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT')); top(pass, 'att', 2).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, `${r.cmp}/${r.att}`), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_))));
-    box.append(th('Rushing', 'Att', 'Yds', 'TD', 'Lng')); top(rush, 'att', 3).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng))));
-    box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD')); top(recv, 'tgt', 4).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td))));
+    box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT')); top(pass, 'att', 4).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, `${r.cmp}/${r.att}`), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_))));
+    box.append(th('Rushing', 'Att', 'Yds', 'TD', 'Lng')); top(rush, 'att', 6).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng))));
+    box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD')); top(recv, 'tgt', 10).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td))));
     if (!Object.keys(pass).length && !Object.keys(rush).length) box.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'Step through the game; the box fills as plays are revealed.'))));
   };
 
   // team stats side by side: the full book at Final, and until then the totals of the plays revealed so far
   let tsTable = null;
   if (g.team_stats && g.team_stats[g.home.abbr]) {
-    right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Team Stats', el('small', { class: 'ts-note' }, 'Live')));
+    right.append(el('h2', {}, 'Team Stats', el('small', { class: 'ts-note' }, 'Live')));
     tsTable = el('table', { class: 'box' }); right.append(tsTable);
   }
   const drawTeamStats = (shown, shownPlays) => {
@@ -508,8 +494,9 @@ function renderGameDay(v) {
     for (const [k, label] of [['yards', 'Total Yards'], ['plays', 'Plays'], ['ypp', 'Yards per Play'], ['pass_yds', 'Passing'], ['rush_yds', 'Rushing'], ['first_downs', 'First Downs'], ['third', 'Third Down'], ['fourth', 'Fourth Down'], ['red_zone', 'Red Zone TD'], ['turnovers', 'Turnovers'], ['sacks_allowed', 'Sacks Allowed'], ['penalties', 'Penalties'], ['top', 'Possession']])
       tsTable.append(el('tr', {}, el('td', {}, label), el('td', {}, String(A[k] ?? '—')), el('td', {}, String(H[k] ?? '—'))));
   };
-  if (g.reads && g.reads.length) { right.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, "Assistants' Read")); for (const r of g.reads) right.append(el('div', { class: 'pad', style: 'font-size:15.5px;color:var(--ink-2);padding-top:4px' }, r)); }
-  page.append(right);
+  const readBox = el('div', { class: 'readbox' }); right.append(readBox);
+  const drawRead = (final) => { readBox.innerHTML = ''; if (!(g.reads && g.reads.length)) return; readBox.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, "Assistants' Read", el('small', {}, final ? '' : 'at the final'))); if (final) for (const r of g.reads) readBox.append(el('div', { class: 'pad', style: 'font-size:15.5px;color:var(--ink-2);padding-top:4px' }, r)); else readBox.append(el('div', { class: 'pad', style: 'font-size:14px;color:var(--ink-3)' }, 'The assistants read the game when it is over.')); };
+  page.append(right, boxSheet);
   draw();
 }
 
@@ -1415,6 +1402,7 @@ function renderDraftDay(v) {
   page.append(right);
 }
 let offersCache = null;
+const gdReveal = {};      // where each game's reveal stands, so leaving the page and coming back holds the place
 
 let picksClub = 'mine', picksYear = null, picksQuery = '';
 function renderPicks(v) {

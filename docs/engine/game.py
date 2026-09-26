@@ -1393,7 +1393,7 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
     pos = first
     had = {'home': False, 'away': False}
     drives = []
-    start = kickoff_booked(((home if pos == 'away' else away).get('kr') or {}),
+    start = kickoff_booked(((home if pos == 'home' else away).get('kr') or {}),
                            rng, rate_fn, book)['new_yardline']
 
     while clock > 0:
@@ -1453,7 +1453,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
     pos = 'away'                                   # away receives first
-    start = kickoff_booked((home.get('kr') or {}), rng, rate_fn, book)['new_yardline']
+    start = kickoff_booked((away.get('kr') or {}), rng, rate_fn, book)['new_yardline']    # the RECEIVING side's man returns it
 
     tos = Timeouts()
     half_done = False
@@ -1537,8 +1537,8 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             tos.halftime()
             half_done = True
             ENV.turn(rng, home_abbr); _P.ENV = ENV
-            pos = 'home'                            # away received the opener
-            start = kickoff_booked((away.get('kr') or {}), rng, rate_fn, book)['new_yardline']
+            pos = 'home'                            # away received the opener, so home receives now
+            start = kickoff_booked((home.get('kr') or {}), rng, rate_fn, book)['new_yardline']
             continue
 
         # where the next possession starts
