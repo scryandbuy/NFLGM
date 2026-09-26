@@ -340,12 +340,15 @@ function renderGameDay(v) {
   const top = el('section', { class: 'sheet c12' });
   // the Sunday scoreboard
   const sb = el('div', { class: 'scoreboard' });
+  const strips = {};
   for (const s of v.scores) {
     const hw = s.hs > s.as_, aw = s.as_ > s.hs;
-    sb.append(el('div', { class: 'sb' + (s.mine ? ' mine' : '') },
-      el('div', { class: 'row' + (aw ? ' w' : '') }, stripe(s.away.abbr), el('b', {}, s.as_)),
-      el('div', { class: 'row' + (hw ? ' w' : '') }, stripe(s.home.abbr), el('b', {}, s.hs)),
-      el('div', { class: 'st' }, el('span', {}, 'Final' + (s.ot ? ' · OT' : '')))));
+    const card = el('div', { class: 'sb' + (s.mine ? ' mine' : '') },
+      el('div', { class: 'row' + (aw && !s.mine ? ' w' : '') }, stripe(s.away.abbr), el('b', { class: 'as' }, s.mine ? '' : s.as_)),
+      el('div', { class: 'row' + (hw && !s.mine ? ' w' : '') }, stripe(s.home.abbr), el('b', { class: 'hs' }, s.mine ? '' : s.hs)),
+      el('div', { class: 'st' }, el('span', {}, s.mine ? 'In progress' : 'Final' + (s.ot ? ' · OT' : ''))));
+    if (s.mine) strips.mine = { card, s };
+    sb.append(card);
   }
   top.append(sb);
   if (!g) { top.append(el('div', { class: 'empty' }, 'Your club was on its bye this week.')); page.append(top); return; }
@@ -387,6 +390,8 @@ function renderGameDay(v) {
   svg.append(mk('polyline', { fill: 'none', stroke: me.color, 'stroke-width': 2, points: pts.map(p => p.join(',')).join(' ') }));
   const t1 = mk('text', { x: 4, y: 12, fill: '#7b8593', 'font-size': 10, 'font-family': 'Big Shoulders Text' }); t1.textContent = me.abbr; const t2 = mk('text', { x: 4, y: H - 4, fill: '#7b8593', 'font-size': 10, 'font-family': 'Big Shoulders Text' }); t2.textContent = them.abbr; svg.append(t1, t2);
   const wpc = el('div', { class: 'wpchart' }); wpc.append(svg); top.append(wpc);
+  const wpLine = svg.querySelector('polyline');
+  const drawWp = (shown, shownPlays) => { const n = Math.max(1, (shownPlays != null ? shown - 1 : shown)); wpLine.setAttribute('points', pts.slice(0, Math.min(pts.length, n + 1)).map(p => p.join(',')).join(' ')); };
   page.append(top);
 
   // the ticker, revealed by drive
@@ -400,7 +405,7 @@ function renderGameDay(v) {
     body.innerHTML = '';
     g.drives.slice(0, shown).forEach((d, di) => {
       const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
-      body.append(el('div', { class: 'drive' }, (last && shownPlays != null) ? `Drive ${d.n} · ${d.off} · Q${d.quarter} · ${(d.head || '').split(' · ').slice(2, 3).join('')}` : `Q${d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`));
+      body.append(el('div', { class: 'drive' }, (last && shownPlays != null) ? `Drive ${d.n} · ${d.off} · Q${d.quarter}` : `Q${d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`));
       for (const p of plays) {
         if (!p.text) continue;
         if (filt.mode === 'key' && !['score', 'turnover', 'loss'].includes(p.kind) && !(p.type === 'complete' && /for (\d\d) yards/.test(p.text) && +p.text.match(/for (\d\d) yards/)[1] >= 15)) continue;
@@ -411,7 +416,8 @@ function renderGameDay(v) {
     tick.querySelector('h2 small').textContent = (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
     body.scrollTop = body.scrollHeight;
     gdReveal[gkey] = { shown, shownPlays };
-    drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays); drawRead(shown >= g.drives.length && shownPlays == null);
+    drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays); drawRead(shown >= g.drives.length && shownPlays == null); drawWp(shown, shownPlays);
+    if (strips.mine) { const fin = shown >= g.drives.length && shownPlays == null; const { card, s } = strips.mine; card.querySelector('.as').textContent = fin ? s.as_ : ''; card.querySelector('.hs').textContent = fin ? s.hs : ''; card.querySelector('.st span').textContent = fin ? 'Final' + (s.ot ? ' · OT' : '') : 'In progress'; }
   };
   const vis = d => d.plays.filter(p => p.text);
   // the first drive opens one play at a time too
