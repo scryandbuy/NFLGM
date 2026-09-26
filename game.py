@@ -673,6 +673,9 @@ def _resolve_live_penalty(dr, pen, out, oc):
     if not take:
         return None
     gained_p = min(yards, dr.yardline - 1)
+    if gained_p < yards - 0.01:
+        pen['end_zone'] = True; pen['spot'] = 1                # the foul was in the end zone: the ball goes to the 1
+    pen['yards'] = round(gained_p, 1)
     dr.yardline -= gained_p
     if pen_first:
         dr.down, dr.togo = 1, min(10.0, dr.yardline); dr.first_downs += 1
@@ -1282,9 +1285,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if live_pen is not None:
             taken = _resolve_live_penalty(dr, live_pen, out, oc)
             if taken == 'replaced':
-                # accepted in place of the play: the down is replayed, the
-                # snap is wiped from the drive the same way a holding call is
-                dr.plays -= 1; dr.log.pop()
+                # accepted in place of the play: the down is replayed and the snap does not count, but the
+                # play-by-play keeps the play it wiped (marked), so a reader sees the pass the flag came on
+                dr.plays -= 1
+                out['nullified'] = True
                 dr.log.append(dict(type='penalty', **live_pen))
                 dr.clock -= play_seconds('penalty')
                 continue

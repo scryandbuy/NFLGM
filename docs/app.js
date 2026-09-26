@@ -477,18 +477,23 @@ function renderGameDay(v) {
     let A, H;
     if (final) { A = g.team_stats[g.away.abbr]; H = g.team_stats[g.home.abbr]; }
     else {
-      const mk = () => ({ plays: 0, yards: 0, pass_yds: 0, rush_yds: 0, first_downs: 0, turnovers: 0, sacks_allowed: 0, penalties: 0, ypp: 0, third: '—', fourth: '—', red_zone: '—', top: '—' });
+      const mk = () => ({ plays: 0, yards: 0, pass_yds: 0, rush_yds: 0, first_downs: 0, turnovers: 0, sacks_allowed: 0, penalties: 0, ypp: 0, third: '—', fourth: '—', red_zone: '—', top: '—', _3a: 0, _3c: 0, _4a: 0, _4c: 0, _rz: 0, _rztd: 0, _secs: 0 });
       const T = { [g.away.abbr]: mk(), [g.home.abbr]: mk() };
-      g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const plays = (last && shownPlays != null) ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays; const t = T[d.off]; if (!t) return;
-        for (const p of plays) { if (!p.type) continue; const y = p.yards || 0;
+      const SCRIM = ['run', 'scramble', 'complete', 'incomplete', 'drop', 'interception', 'sack'];
+      g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const partial = last && shownPlays != null; const plays = partial ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays; const t = T[d.off]; if (!t) return;
+        const clocks = plays.map(p => p.clock).filter(c => c != null);
+        if (clocks.length >= 2) t._secs += Math.max(0, clocks[0] - clocks[clocks.length - 1]);
+        plays.forEach((p, k) => { if (!p.type || p.nullified) return; const y = p.yards || 0;
           if (['run', 'scramble'].includes(p.type)) { t.plays++; t.yards += y; t.rush_yds += y; }
           else if (['complete', 'incomplete', 'drop', 'interception', 'sack'].includes(p.type)) { t.plays++; if (p.type === 'complete') { t.yards += y; t.pass_yds += y; } if (p.type === 'sack') { t.yards += y; t.pass_yds += y; t.sacks_allowed++; } if (p.type === 'interception') t.turnovers++; }
           else if (p.type === 'penalty') t.penalties++;
           if (p.kind === 'turnover' && p.type !== 'interception' && !p.safety) t.turnovers++;
-        }
-        if (!(last && shownPlays != null)) t.first_downs += (d.first_downs || 0);
+          // third and fourth down: converted when the next scrimmage snap is a first down, or the play scored
+          if (SCRIM.includes(p.type) && (p.down === 3 || p.down === 4)) { const next = plays.slice(k + 1).find(q => q.down != null && SCRIM.includes(q.type)); const conv = p.td || (next && next.down === 1) || (!next && !partial && /Touchdown/.test(d.result || '')); if (p.down === 3) { t._3a++; if (conv) t._3c++; } else { t._4a++; if (conv) t._4c++; } }
+        });
+        if (!partial) { t.first_downs += (d.first_downs || 0); if ((d.end != null && d.end >= 80) || /Touchdown/.test(d.result || '')) { t._rz++; if (/Touchdown/.test(d.result || '')) t._rztd++; } }   // the drive's end is on a 0-100 line toward the goal; inside the 20 is 80 and up
       });
-      for (const t of Object.values(T)) t.ypp = t.plays ? (t.yards / t.plays).toFixed(1) : '0.0';
+      for (const t of Object.values(T)) { t.ypp = t.plays ? (t.yards / t.plays).toFixed(1) : '0.0'; t.third = t._3a ? `${t._3c}/${t._3a}` : '—'; t.fourth = t._4a ? `${t._4c}/${t._4a}` : '—'; t.red_zone = t._rz ? `${t._rztd}/${t._rz}` : '—'; t.top = t._secs ? `${Math.floor(t._secs / 60)}:${String(Math.round(t._secs % 60)).padStart(2, '0')}` : '—'; }
       A = T[g.away.abbr]; H = T[g.home.abbr];
     }
     for (const [k, label] of [['yards', 'Total Yards'], ['plays', 'Plays'], ['ypp', 'Yards per Play'], ['pass_yds', 'Passing'], ['rush_yds', 'Rushing'], ['first_downs', 'First Downs'], ['third', 'Third Down'], ['fourth', 'Fourth Down'], ['red_zone', 'Red Zone TD'], ['turnovers', 'Turnovers'], ['sacks_allowed', 'Sacks Allowed'], ['penalties', 'Penalties'], ['top', 'Possession']])
