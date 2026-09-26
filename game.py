@@ -1305,8 +1305,6 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         out['shell'] = dc.get('shell'); out['box'] = dc.get('box'); out['personnel'] = oc.get('personnel')
         out['blitz'] = bool(dc.get('blitz')) or int(dc.get('rushers', 4)) >= 5
         dr.log.append(out)
-        if book is not None: book.record(out, off_f, def_f, rng)
-        pending = (out, off_f, def_f, _snap_state)
         for st in (off_state, def_state):
             if st is not None: st.observe(oc, dc, out)
 
@@ -1350,9 +1348,16 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # a collapsed pocket is not automatically a sack - a mobile QB runs
         if t == 'sack':
             if rng.random() < E.scramble_chance(offense['qb'], 1.0, 1.4, rate_fn):
-                _head = {k: dr.log[-1].get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass') if k in dr.log[-1]}
+                _old = out
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass') if k in _old}
                 out = E.resolve_scramble(offense['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
-                t = 'scramble'; dr.log[-1] = out
+                t = 'scramble'
+                for _i in range(len(dr.log) - 1, -1, -1):
+                    if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
+        # THE BOOK IS WRITTEN HERE, after the flags and the scramble are settled: a play wiped by a penalty or
+        # turned into a scramble was being credited as it first resolved
+        if book is not None: book.record(out, off_f, def_f, rng)
+        pending = (out, off_f, def_f, _snap_state)
 
         if t == 'interception':
             dr.clock -= play_seconds('interception'); dr.result = 'Turnover'; break
