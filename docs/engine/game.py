@@ -130,8 +130,8 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # chasing: trailing with less time than the possessions he needs (about two and a half minutes each)
     need = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
     chasing = score_diff < 0 and secs_left < 150 * need + 90
-    if use_wp and not chasing and (yardline_100 > 55 or (yardline_100 >= 50 and ydstogo >= 6 and secs_left > 600)):
-        use_wp = False                                   # own side of midfield: fourth and long is a punt unless chasing
+    if use_wp and yardline_100 > 55 and not chasing and ydstogo >= 2:
+        use_wp = False                                   # fourth and one stays the model's call anywhere past your own 20; longer, in your own end, follows the league
     if use_wp:
         import decisions as DEC
         r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100,
@@ -173,6 +173,8 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     chasing = score_diff < 0 and secs_left < 150 * need + 90
     if yardline_100 > 60 and not chasing:
         p_go = 0.0 if ydstogo >= 2 else p_go * 0.35
+    if yardline_100 > 80 and ydstogo <= 1 and not chasing:
+        p_go = 0.0                                       # fourth and one inside your own 20 is a punt
     # trailing late, you have no choice
     if secs_left < 300 and score_diff < 0:
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
@@ -1076,9 +1078,11 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         final_period = (quarter >= 4 and half_end is None) or (half_end is not None and quarter <= 2)
         if final_period:
             if dr.score_diff > 0 and half_end is None and dr.clock <= 240:
-                late_lean = -1.5 if (dr.down == 3 and dr.togo >= 6) else -8.0
-            elif (dr.score_diff <= 0 and secs_in_half <= 120) or (dr.score_diff < 0 and half_end is None and dr.clock < 150 * int(np.ceil(-dr.score_diff / 8.0)) + 90):
-                late_lean = 1.0 if dr.togo <= 1 else 6.5
+                late_lean = -1.0 if (dr.down == 3 and dr.togo >= 6) else -3.5    # run-heavy, not run-only: a lead still needs first downs
+            elif dr.score_diff <= 0 and secs_in_half <= 120:
+                late_lean = 1.0 if dr.togo <= 1 else 6.5          # the two-minute drill: throw
+            elif dr.score_diff < 0 and half_end is None and dr.clock < 150 * int(np.ceil(-dr.score_diff / 8.0)) + 90:
+                late_lean = 0.5 if dr.togo <= 1 else 2.5          # chasing with little time: lean to the pass, not all of it
         lean_now = dict(olean or {})
         if last_shot: lean_now['pass_bias'] = float(lean_now.get('pass_bias', 0.0)) + 6.0
         elif late_lean: lean_now['pass_bias'] = float(lean_now.get('pass_bias', 0.0)) + late_lean
