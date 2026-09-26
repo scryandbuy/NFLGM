@@ -19,6 +19,9 @@ def _prospect(league, abbr, p, taken=()):
     mine = round(float(v['ovr']))
     cons = round(float(c['ovr'])) if c else None
     gap = (mine - cons) if cons is not None else None
+    import scouting as _SC
+    fit = _SC.scheme_fit_view(league, abbr, p, v)                 # in your scheme, on your scouts' read
+    scheme_ovr = round(float(v['ovr']) + fit)
     comb = getattr(p, 'combine', None) or {}
     flags = list(v.get('flags') or [])
     med = getattr(p, 'medical', None)
@@ -42,7 +45,7 @@ def _prospect(league, abbr, p, taken=()):
     rk = c.get('rank') if c else None
     proj_range = (f"{max(1, rk - 4)}–{rk + 4}" if rk and rk <= 224 else '—')
     return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), college=getattr(p, 'college', None) or '', small=(not SC._power(p)), visited=('visited' in flags or p.pid in (getattr(league, 'user_visits', None) or [])),
-                cls_year=cls_year, size=size, words=words, proj_range=proj_range, my_round=None, visit_locked=visit_locked,
+                cls_year=cls_year, size=size, words=words, proj_range=proj_range, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
                 forty=(round(float(comb['forty']), 2) if comb.get('forty') else None), vert=(round(float(comb['vert']), 1) if comb.get('vert') else None),
@@ -198,7 +201,7 @@ def prospect_card(session, league, abbr, pid):
     confidence = 'Firm' if reads >= 3 else 'Fair' if reads == 2 else 'One look'
     import personality as PT
     words = PT.words(getattr(p, 'traits', None) or {}) if getattr(p, 'traits', None) and 'Character' in row['words'] else ''
-    return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], college=row['college'], conference=getattr(p, 'conference', None) or '',
+    return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], fit=row.get('fit', 0.0), scheme_ovr=row.get('scheme_ovr'), college=row['college'], conference=getattr(p, 'conference', None) or '',
                 small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
                 words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine, medical=(med.get('note') or ('Flagged out of the combine' if med.get('flag') else 'Clean')),
                 reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality=words, spring_done=any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or [])),
