@@ -80,6 +80,7 @@ class Session:
         return s
 
     def save(self):
+        self._finish_live()                       # a half-played game cannot be written down: it is played out first
         d = json.loads(self.L.save())
         d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
         d['_gameday'] = self.gameday
@@ -128,6 +129,9 @@ class Session:
         if k == 'week':
             wk = self.stop[1]; opp = self._opponent(wk)
             if getattr(self, 'played', False):
+                lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+                if lv is not None and not lv['done']:
+                    return dict(title='Game Day', sub=('Halftime: your adjustments' if lv['halftime_open'] else 'Your game is on; finish it to advance'), played=True, live=True)
                 return dict(title=(f"Advance to Week {wk + 1}" if wk < WEEKS else 'Advance to the Playoffs'), sub=(f"Week {wk} is in the books"), played=True)
             return dict(title=f"Sim Week {wk}", sub=(f"{'at' if opp and opp[1] else 'vs'} {opp[0]}" if opp else 'Bye Week'), played=False)
         if k == 'playoffs':
@@ -142,6 +146,9 @@ class Session:
     ROSTER_MAX, ROSTER_MIN = 53, 46
 
     def blocking(self):
+        lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if lv is not None and not lv['done']:
+            return [dict(id=None, subject='Your game is still being played: finish it first', kind='live', go='#gameday')]
         """Decisions that must be made before the next stop. Empty list = nothing blocks."""
         out = []
         # THE ROSTER RULE. A club plays with 53 at most and 46 at least; the game will not
@@ -184,16 +191,21 @@ class Session:
                 # SUNDAY: the games are played and Game Day shows them. The week does not roll
                 # until Advance, so the GM can read the box score, work the wire and the
                 # inbox, and still be in this week.
+                # the other fifteen games are played and stored; YOUR game opens live at the opening kick
+                mine = next(((a, h) for (w, a, h, ap, hp) in self.L.schedule if w == wk and self.user_team in (a, h) and hp is None), None)
+                self.runner._skip_game = (mine[1], mine[0]) if mine else None
                 self.runner.play_games(wk)
-                import gameday as GD
-                self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team)
-                if self.gameday and self.gameday.get('game'):
-                    self.gamedays = getattr(self, 'gamedays', None) or {}
-                    self.gamedays[f"{self.L.year}-{wk}"] = self.gameday
+                self.runner._skip_game = None
+                if mine:
+                    self.runner.open_live(mine[1], mine[0], wk)
+                    self.played = True
+                    return dict(done=f'Week {wk} live', next=self.next_label())
+                self._capture_gameday(wk)
                 self.played = True
                 return dict(done=f'Week {wk} played', next=self.next_label())
             # ADVANCE: the week rolls (XP, morale, agents, the report on next week, the wire,
             # the squads, the trade window) and the calendar moves on
+            self._finish_live()
             self.runner.roll_week(wk)
             IB.expire(self.L, wk + 1)
             self.played = False
@@ -486,8 +498,54 @@ class Session:
         v['inbox'] = views._inbox(self.L, limit=None)
         return v
 
+    def _capture_gameday(self, wk):
+        import gameday as GD
+        self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team)
+        if self.gameday and self.gameday.get('game'):
+            self.gamedays = getattr(self, 'gamedays', None) or {}
+            self.gamedays[f"{self.L.year}-{wk}"] = self.gameday
+
+    # ---- the live game
+    def live_state(self):
+        lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if lv is None: return None
+        return dict(open=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], score=lv['score'], home=lv['home'], away=lv['away'])
+
+    def live_step(self, mode='play'):
+        """Move the live game: 'play', 'drive', 'half', 'finish', or 'resume' from halftime. Returns Game Day."""
+        lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if lv is None: return self.gameday_view()
+        was_done = lv['done']
+        self.runner.live_step(mode)
+        if lv['done'] and not was_done:
+            self._capture_gameday(lv['week'])
+        return self.gameday_view()
+
+    def half_take(self, i, on=True):
+        ok = self.runner.half_take(int(i), bool(on)) if self.runner is not None else False
+        return self.gameday_view() if ok else dict(ok=False, why='no halftime recommendation to take')
+
+    def _finish_live(self):
+        """A save or an advance with a game still open plays it out first."""
+        lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if lv is None or lv['done']: return False
+        if lv['halftime_open']: self.runner.live_step('resume')
+        self.runner.live_step('finish')
+        if lv['halftime_open']: self.runner.live_step('resume'); self.runner.live_step('finish')
+        self._capture_gameday(lv['week'])
+        return True
+
     def gameday_view(self, week=None, year=None):
         import views
+        lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if week is None and lv is not None and not lv['done']:
+            import gameday as GD
+            partial = self.runner.live_partial()
+            others = [(h, a, r, b) for (h, a, r, b) in getattr(self.runner, 'last_games', [])]
+            gd = GD.capture(self.L, others + [(lv['home'], lv['away'], partial, lv['book'])], self.user_team)
+            v = views.gameday(self, self.L, self.user_team, gd=gd)
+            v['live'] = dict(open=True, at=lv['at'], halftime_open=lv['halftime_open'], score=lv['score'], recs=[dict(i=r['i'], side=r['side'], text=r['text'], why=r['why'], taken=r['taken']) for r in (lv.get('half_recs') or [])])
+            return v
         if week is not None:
             gd = (getattr(self, 'gamedays', None) or {}).get(f"{year or self.L.year}-{int(week)}")
             if gd is not None: return views.gameday(self, self.L, self.user_team, gd=gd)

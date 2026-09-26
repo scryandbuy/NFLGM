@@ -30,8 +30,9 @@ PERSONNEL_DEF = {
     'heavy':  dict(db=3, lb=4, dl=5, box_bonus=+2.0, cover_penalty=0.22),
 }
 
-def defensive_personnel(off_pers, down, ydstogo, rng, gm_aggr=0.5):
-    """What the defence puts on the field to answer the offence's grouping."""
+def defensive_personnel(off_pers, down, ydstogo, rng, gm_aggr=0.5, sub_lean=0.0):
+    """What the defence puts on the field to answer the offence's grouping. sub_lean is the coordinator's
+    halftime call: +1 leans a step lighter (base to nickel, nickel to dime), -1 a step heavier."""
     wr = PERSONNEL_OFF.get(off_pers, PERSONNEL_OFF['11'])['wr']
     if wr >= 4:  base = 'dime' if (down == 3 and ydstogo >= 7) else 'nickel'
     elif wr == 3: base = 'nickel'
@@ -41,6 +42,9 @@ def defensive_personnel(off_pers, down, ydstogo, rng, gm_aggr=0.5):
         base = 'nickel' if base == 'base' else 'dime'
     if down in (3, 4) and ydstogo <= 2 and base == 'nickel':
         base = 'base' if rng.random() < 0.6 else 'nickel'
+    if sub_lean and rng.random() < min(0.85, abs(sub_lean) * 0.6):
+        order = ['heavy', 'base', 'nickel', 'dime']; i = order.index(base) if base in order else 1
+        base = order[max(0, min(3, i + (1 if sub_lean > 0 else -1)))]
     return base
 
 # ============================================================ FRONTS
@@ -364,6 +368,12 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     import identity as ID2
     base = ID2.situational_weights(base, down, ydstogo, yards_to_endzone,
                                    score_diff, secs_left)
+    hl = float(lean.get('heavy_lean', 0.0) or 0.0)
+    if hl:
+        # the coordinator's halftime call on personnel: heavier groupings up (or down) by the lean
+        for k in list(base):
+            heavy = PERSONNEL_OFF.get(k, PERSONNEL_OFF['11'])['wr'] <= 2
+            base[k] = max(0.005, base[k] * (np.exp(0.9 * hl) if heavy else np.exp(-0.9 * hl)))
     keys = list(base)
     w = np.array([base[k] for k in keys], float)
     pers = keys[int(rng.choice(len(keys), p=w / w.sum()))]
@@ -478,7 +488,7 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
     aggr = gm.aggression if gm is not None else 0.5
     decep = (gm.board_trust if gm is not None else 0.5)
     lean = lean or {}
-    pers = defensive_personnel(off_call['personnel'], down, ydstogo, rng, aggr)
+    pers = defensive_personnel(off_call['personnel'], down, ydstogo, rng, aggr, sub_lean=float(lean.get('sub_lean', 0.0) or 0.0))
     dl = PERSONNEL_DEF[pers]['dl']
     fp = lean.get('front_pref')
     if fp:

@@ -127,9 +127,11 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # for it on fourth and three, tied, in the third quarter. No club does that. In your own territory the
     # decision follows what clubs actually do (the GO_RATE table by down, distance and zone) unless the
     # game is late and the club is chasing it; the model keeps the rest of the field.
-    chasing = (score_diff < 0 and secs_left < 480) or (score_diff <= -9 and secs_left < 1200)
-    if use_wp and yardline_100 > 55 and not chasing:
-        use_wp = False
+    # chasing: trailing with less time than the possessions he needs (about two and a half minutes each)
+    need = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
+    chasing = score_diff < 0 and secs_left < 150 * need + 90
+    if use_wp and yardline_100 > 55 and not chasing and ydstogo >= 2:
+        use_wp = False                                   # fourth and one stays the model's call anywhere past your own 20; longer, in your own end, follows the league
     if use_wp:
         import decisions as DEC
         r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100,
@@ -167,9 +169,12 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_go = GO_RATE[band][zone] * (0.70 + 0.60 * aggression)
     # inside your own 40 and not chasing the game: a fourth-and-one is a rare gamble, anything longer is a punt
-    chasing = (score_diff < 0 and secs_left < 480) or (score_diff <= -9 and secs_left < 1200)
+    need = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
+    chasing = score_diff < 0 and secs_left < 150 * need + 90
     if yardline_100 > 60 and not chasing:
         p_go = 0.0 if ydstogo >= 2 else p_go * 0.35
+    if yardline_100 > 80 and ydstogo <= 1 and not chasing:
+        p_go = 0.0                                       # fourth and one inside your own 20 is a punt
     # trailing late, you have no choice
     if secs_left < 300 and score_diff < 0:
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
@@ -642,7 +647,7 @@ def _resolve_live_penalty(dr, pen, out, oc):
             # after the whistle: the result stands and they walk back, half the distance at most
             spot = dr.yardline - gained
             yards = min(yards, (100.0 - spot) / 2.0); pen['yards'] = round(yards, 1)
-            dr.log_pen_after = yards
+            dr.log_pen_after = -yards                 # the offense fouled after the whistle: it walks back
             return 'added'
         # during the play (grounding, a face mask by a blocker): the play is
         # wiped and the offence is set back from the previous spot, half the distance at most
@@ -656,8 +661,10 @@ def _resolve_live_penalty(dr, pen, out, oc):
     if out.get('touchdown'):
         return None                               # six beats fifteen
     if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
-        # dead ball: added to the play result from where it ended
-        dr.log_pen_after = -yards
+        # dead ball: added to the play result from where it ended, half the distance at most
+        spot = max(1.0, dr.yardline - float(out.get('yards', 0.0) or 0.0))
+        yards = min(yards, (spot - 1.0) / 2.0 if spot - yards < 1 else yards); pen['yards'] = round(yards, 1)
+        dr.log_pen_after = yards                      # the defense fouled: the offense walks forward
         dr.log_pen_first = bool(pen['auto_first'])
         return 'added'
     # live-ball defensive foul: the better of the two, and a turnover is
@@ -673,7 +680,7 @@ def _resolve_live_penalty(dr, pen, out, oc):
     if not take:
         return None
     gained_p = min(yards, dr.yardline - 1)
-    if gained_p < yards - 0.01:
+    if gained_p < yards - 0.01 and pen['penalty'] == 'Defensive Pass Interference':
         pen['end_zone'] = True; pen['spot'] = 1                # the foul was in the end zone: the ball goes to the 1
     pen['yards'] = round(gained_p, 1)
     dr.yardline -= gained_p
@@ -943,7 +950,17 @@ def field_units(roster, state, rng, is_offense, package=None):
         out[key] = chosen
     return out, positions
 
-def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
+def run_drive(*args, **kwargs):
+    """One possession, played to its end. Thin wrapper over drive_steps, which is the same code paused
+    after every snap so a game can be played live; the AI's games and the register come through here."""
+    gen = drive_steps(*args, **kwargs)
+    try:
+        while True: next(gen)
+    except StopIteration as done:
+        return done.value
+
+
+def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
               rng, resolve_fn, call_off, call_def, rate_fn, aggression=0.5,
               book=None, off_state=None, def_state=None, week=1,
               timeouts=None, pos='home', half_end=None):
@@ -976,7 +993,10 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
 
     import advanced_stats as AS
     pending = None                        # the last scrimmage play, waiting for its after-state
+    _seen = 0
     while dr.result is None:
+        if len(dr.log) > _seen:
+            _seen = len(dr.log); yield ('snap', dr)              # the book grew: a live game shows it before the next snap
         if pending is not None:
             _o, _off, _def, _st = pending
             _v = AS.epa(_o, _st[0], _st[1], _st[2], dr.down, dr.togo, dr.yardline)
@@ -1059,7 +1079,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             pa_boost = float(np.clip(1.0 + 0.55 * min(seq['run_hot'], 3.0) / 3.0, 0.85, 1.55))
             olean = dict(pass_bias=pl0.pass_bias, play_action=min(0.95, pl0.play_action_rate * pa_boost),
                          motion=getattr(pl0, 'motion_rate', 0.365), protection=getattr(pl0, 'protection', None),
-                         screen_boost=getattr(pl0, 'screen_boost', 0.0))
+                         screen_boost=getattr(pl0, 'screen_boost', 0.0), heavy_lean=getattr(pl0, 'heavy_lean', 0.0))
         secs_for_call = dr.clock
         if half_end is not None and quarter <= 2 and secs_in_half <= 240 and dr.score_diff <= 0:
             secs_for_call = secs_in_half          # the drive before the break is a two-minute drill for the side not ahead
@@ -1070,10 +1090,12 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         late_lean = 0.0
         final_period = (quarter >= 4 and half_end is None) or (half_end is not None and quarter <= 2)
         if final_period:
-            if dr.score_diff > 0 and secs_in_half <= 240 and dr.clock <= 240:
-                late_lean = -1.5 if (dr.down == 3 and dr.togo >= 6) else -8.0
+            if dr.score_diff > 0 and half_end is None and dr.clock <= 240:
+                late_lean = -1.0 if (dr.down == 3 and dr.togo >= 6) else -3.5    # run-heavy, not run-only: a lead still needs first downs
             elif dr.score_diff <= 0 and secs_in_half <= 120:
-                late_lean = 1.0 if dr.togo <= 1 else 6.5
+                late_lean = 1.0 if dr.togo <= 1 else 6.5          # the two-minute drill: throw
+            elif dr.score_diff < 0 and half_end is None and dr.clock < 150 * int(np.ceil(-dr.score_diff / 8.0)) + 90:
+                late_lean = 0.5 if dr.togo <= 1 else 2.5          # chasing with little time: lean to the pass, not all of it
         lean_now = dict(olean or {})
         if last_shot: lean_now['pass_bias'] = float(lean_now.get('pass_bias', 0.0)) + 6.0
         elif late_lean: lean_now['pass_bias'] = float(lean_now.get('pass_bias', 0.0)) + late_lean
@@ -1100,7 +1122,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
         if def_state is not None and def_state.plan is not None:
             dp0 = def_state.plan
             dlean = dict(coverage=dp0.man_rate, shell=getattr(dp0, 'shell_lean', 0.5),
-                         blitz=getattr(dp0, 'blitz_lean', 0.35), front_pref=dp0.front_pref)
+                         blitz=getattr(dp0, 'blitz_lean', 0.35), front_pref=dp0.front_pref, sub_lean=getattr(dp0, 'sub_lean', 0.0))
         dc = call_def(oc, dr.down, max(1, int(np.ceil(dr.togo))), rng, ytg_i,
                       defense=defense, rate_fn=rate_fn, score_diff=dr.score_diff,
                       secs_left=dr.clock, lean=dlean,
@@ -1289,10 +1311,13 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             if off_state is not None:
                 men = [(off_f['qb'], 'QB'), (off_f['rb'], 'HB')] + [(m, m.get('pos', 'LT')) for m in (off_f.get('ol') or [])] + [(m, m.get('pos', 'WR')) for m in off_f['wr']] + [(m, m.get('pos', 'TE')) for m in (off_f.get('te') or [])]
                 for m, mp in men:
-                    if m: off_state.hurt(m, mp, 1.6 if m.get('pid') == hit_pid else 1.0, rng, rate_fn, week)
+                    if m:
+                        inj_ = off_state.hurt(m, mp, 1.6 if m.get('pid') == hit_pid else 1.0, rng, rate_fn, week)
+                        if inj_: dr.log.append(dict(type='injury', pid=m.get('pid'), pos=mp, kind=inj_.get('kind'), weeks=inj_.get('weeks_out'), side='off', clock=dr.clock))
             if def_state is not None:
                 for d in def_f['db'] + def_f['lb'] + def_f['dl']:
-                    def_state.hurt(d, def_pos.get(d.get('pid'), 'CB'), 1.3 if out['type'] in ('run', 'complete') else 1.0, rng, rate_fn, week)
+                    inj_ = def_state.hurt(d, def_pos.get(d.get('pid'), 'CB'), 1.3 if out['type'] in ('run', 'complete') else 1.0, rng, rate_fn, week)
+                    if inj_: dr.log.append(dict(type='injury', pid=d.get('pid'), pos=def_pos.get(d.get('pid'), 'CB'), kind=inj_.get('kind'), weeks=inj_.get('weeks_out'), side='def', clock=dr.clock))
 
         t = out['type']
         if live_pen is not None:
@@ -1303,7 +1328,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.plays -= 1
                 out['nullified'] = True
                 dr.log.append(dict(type='penalty', **live_pen))
-                dr.clock -= play_seconds('penalty')
+                dr.clock -= play_seconds(t) + play_seconds('penalty')      # the play ran; the clock ran with it, then stopped for the flag
                 continue
             if taken == 'added':
                 dr.log.append(dict(type='penalty', **live_pen))
@@ -1327,6 +1352,8 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
             if fum:
                 out['fumble'] = True; out['fumble_lost'] = bool(fum['lost']); out['fumble_by'] = (carrier or {}).get('pid')
             if fum and fum['lost']:
+                # the ball comes out where the play ended, not where it started: the gain (or loss) is applied first
+                dr.yardline = float(np.clip(dr.yardline - float(out.get('yards', 0.0) or 0.0), 1.0, 99.0))
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 
         # ---- timeouts ----
@@ -1387,6 +1414,7 @@ def run_drive(offense, defense, start_yardline, clock, quarter, score_diff,
     if dr.result in ('Punt', 'Field goal', 'Missed field goal') and dr.log and isinstance(dr.log[-1], dict):
         last = dr.log[-1]
         AS.book_special(book, dr, last, offense)
+    if len(dr.log) > _seen: yield ('snap', dr)
     return dr
 
 OT_LENGTH = 600          # one 10-minute period in the regular season
@@ -1472,10 +1500,22 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
     return score, drives, ('tie' if score['home'] == score['away'] else 'decided')
 
 
-def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
+def play_game(*args, **kwargs):
+    """A full 60-minute game, played to the end. Thin wrapper over game_steps, the same game paused after
+    every snap, at every drive's end and at halftime so it can be played live."""
+    gen = game_steps(*args, **kwargs)
+    try:
+        while True: next(gen)
+    except StopIteration as done:
+        return done.value
+
+
+def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
               home_aggr=0.5, away_aggr=0.5, book=None,
               home_state=None, away_state=None, week=1, playoffs=False):
-    """A full 60-minute game. Returns the score and every drive."""
+    """A full 60-minute game as a generator. Yields ('snap', dr) after every logged entry, ('drive', pos, dr, score)
+    when a possession ends, ('halftime', score) at the break before the second-half kick, ('overtime', score)
+    before overtime; returns the result dict."""
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
     pos = 'away'                                   # away receives first
@@ -1539,7 +1579,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         d_st = away_state if pos == 'home' else home_state
         # the unit that just came off recovers while the other side plays
         if d_st is not None: d_st.sideline_recovery(dr_snaps if 'dr_snaps' in dir() else 30)
-        dr = run_drive(off, deff, start, clock, quarter, sd, rng,
+        dr = yield from drive_steps(off, deff, start, clock, quarter, sd, rng,
                        resolve_fn, call_off, call_def, rate_fn, aggr, book,
                        o_st, d_st, week, timeouts=tos, pos=pos,
                        half_end=(GAME / 2 if not half_done else None))
@@ -1553,6 +1593,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             score[pos] += dr.points
         elif dr.points < 0:
             score['away' if pos == 'home' else 'home'] += 2
+        yield ('drive', pos, dr, dict(score))
 
         # ---- HALFTIME ----
         # The side that KICKED OFF to open the game receives the second half,
@@ -1562,6 +1603,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         if not half_done and clock <= GAME / 2:
             tos.halftime()
             half_done = True
+            yield ('halftime', dict(score))          # the live game stops here: the GM's halftime adjustments apply to what follows
             ENV.turn(rng, home_abbr); _P.ENV = ENV
             pos = 'home'                            # away received the opener, so home receives now
             start = kickoff_booked((home.get('kr') or {}), rng, rate_fn, book)['new_yardline']
@@ -1583,6 +1625,7 @@ def play_game(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     # overtime
     ot = None
     if score['home'] == score['away']:
+        yield ('overtime', dict(score))
         first = 'away' if rng.random() < 0.5 else 'home'
         score, ot_drives, ot = play_overtime(
             home, away, score, rng, resolve_fn, call_off, call_def, rate_fn,

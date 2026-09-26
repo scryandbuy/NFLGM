@@ -358,18 +358,25 @@ def depth(session, league, abbr, package='Nickel'):
                 else: pl['start'] = i < n_start; pl['why'] = ''
                 pl['slot'] = _slot_label(pos, i)
                 desig = status.get(p.pid)
-                pl['flag'] = 'out' if p.out_until is not None else (desig if desig in ('questionable', 'doubtful') else None)
+                # the week's listing comes first: a Questionable or Doubtful man reads as listed (with the decision if it is
+                # yours), a man out longer reads Out with the weeks, a healthy man reads nothing
+                pending = bool(desk is not None and p.pid in getattr(desk, 'pending', {}))
+                hurt_now = (getattr(desk, 'playing_hurt', {}) or {}).get(p.pid) if desk is not None else None
+                if desig in ('questionable', 'doubtful') and (pending or hurt_now or p.out_until is not None): pl['flag'] = desig
+                elif p.out_until is not None: pl['flag'] = 'out'
+                else: pl['flag'] = None
                 weeks_left = (max(0, int(p.out_until) - int(league.week or 0)) if p.out_until is not None and int(p.out_until) < 99 else None)
                 pl['flag_word'] = (('Out · season' if p.out_until is not None and int(p.out_until) >= 99 else f"Out · {weeks_left} wk{'s' if weeks_left != 1 else ''}" if weeks_left else 'Out') if pl['flag'] == 'out' else pl['flag'].capitalize() if pl['flag'] else '')
                 pl['elevated'] = p not in t.roster
                 pl['out_week'] = weeks_left
-                pl['pending'] = bool(desk is not None and p.pid in getattr(desk, 'pending', {}))
-                pl['playing_hurt'] = (getattr(desk, 'playing_hurt', {}) or {}).get(p.pid) if desk is not None else None
+                pl['pending'] = pending
+                pl['playing_hurt'] = hurt_now
                 if pl['pending'] or (pl['flag'] in ('questionable', 'doubtful')):
                     try:
                         import injury_status as IS; pl['hurt_words'] = IS.hurt_words(league, t, p, desig)
                     except Exception: pl['hurt_words'] = None
-                if pl['flag'] in ('questionable', 'doubtful') and not pl['pending'] and pl['playing_hurt'] is None and p.out_until is not None: pl['flag_word'] = pl['flag'].capitalize() + ' · sits'
+                if pl['flag'] in ('questionable', 'doubtful') and not pending and hurt_now is None: pl['flag_word'] = pl['flag'].capitalize() + ' · sits'
+                if hurt_now: pl['flag_word'] = ''
                 pl['fit'] = round(_fit(league, t, p), 1)
                 if pos in ('KR', 'PR'): pl['sub'] = f"{p.pos} · return {round(RO.return_score(p))}"
                 slots.append(pl)

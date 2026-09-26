@@ -74,6 +74,10 @@ def weekly(league, week, results, snaps_by_pid, game_lines=None):
         for p in team.active():
             m = ensure(p)
             m.tick()
+            if p.pos in ('K', 'P', 'LS'):
+                # a specialist has no role to complain about: he plays every snap of his job. Contract talks
+                # still run through the agent; his morale holds where it is
+                continue
             if res == 'W': m.apply('win')
             elif res == 'L': m.apply('blowout_loss' if margin <= -17 else 'loss')
             if losing: m.apply('losing_season')

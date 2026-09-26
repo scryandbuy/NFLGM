@@ -249,6 +249,8 @@ def fill_squads(league, rng, verbose=False):
 
 
 GROUP_MIN = {'QB': 2, 'HB': 2, 'WR': 4, 'TE': 2, 'OL': 7, 'DL': 6, 'LB': 4, 'DB': 7, 'K': 1, 'P': 1}
+# below this the game cannot dress a side at all; the user's club is filled automatically only here, with a note
+HARD_MIN = {'QB': 1, 'HB': 1, 'WR': 3, 'TE': 1, 'OL': 5, 'DL': 4, 'LB': 3, 'DB': 5, 'K': 1, 'P': 1}
 GROUP_OF = {'LT': 'OL', 'LG': 'OL', 'C': 'OL', 'RG': 'OL', 'RT': 'OL', 'LEDG': 'DL', 'REDG': 'DL', 'DT': 'DL',
             'MIKE': 'LB', 'WILL': 'LB', 'SAM': 'LB', 'CB': 'DB', 'FS': 'DB', 'SS': 'DB', 'FB': 'HB'}
 
@@ -259,10 +261,32 @@ def keep_groups_whole(league, rng, week):
     import min_salary as MS
     from cap_engine import CAP, Contract
     moves = []
+    user = getattr(league, 'user_team', None)
     for abbr, team in league.teams.items():
         healthy = collections.Counter(GROUP_OF.get(p.pos, p.pos) for p in team.active() if p.out_until is None)
         for grp, floor in GROUP_MIN.items():
             short = floor - healthy.get(grp, 0)
+            hard = healthy.get(grp, 0) < HARD_MIN.get(grp, 0)
+            if short > 0 and abbr == user and not hard:
+                # THE GM'S CLUB IS HIS TO FILL. No automatic call-up: the trainers say who is out, that the chart is
+                # short there, and who on the squad (or the street) could cover; the game dresses what he has.
+                try:
+                    import inbox as IB
+                    out_men = [p for p in team.active() if GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is not None]
+                    cands = sorted([p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp], key=lambda p: -p.ovr)
+                    fa = sorted([q for q in (league.player(pid) for pid in league.free_agents) if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired], key=lambda q: -q.ovr)[:2]
+                    who = ', '.join(f"{p.name} ({p.pos})" for p in out_men[:3]) or 'injuries'
+                    cover = (f"On the practice squad: {', '.join(f'{p.name} ({p.pos}, {round(p.ovr)})' for p in cands[:2])}." if cands else '') + (f" On the street: {', '.join(f'{q.name} ({q.pos}, {round(q.ovr)})' for q in fa)}." if fa else '')
+                    key_ = f"short-{grp}-{league.year}-{week}"
+                    if not any((mm.get('payload') or {}).get('key') == key_ for mm in getattr(league, 'inbox', [])):
+                        IB.post(league, 'injury', f"Short at {grp}: {short} below the floor", f"With {who} out, the chart at {grp} is {short} below the number the game needs. {cover or 'Nobody on the squad or the street plays there.'} Call up or sign before Sunday, or the game dresses what you have.", sender='trainers', payload=dict(key=key_, link='club:ps' if cands else 'personnel:fa', group=grp))
+                except Exception: pass
+                continue
+            if short > 0 and abbr == user and hard:
+                try:
+                    import inbox as IB
+                    IB.post(league, 'injury', f"Emergency at {grp}: the trainers filled it", f"The chart at {grp} fell below what the game can dress ({healthy.get(grp, 0)} healthy). The best man available was called up so a team could take the field; the practice-squad and free-agent pages are yours for anything more.", sender='trainers', payload=dict(link='club:ps'))
+                except Exception: pass
             while short > 0:
                 cands = [p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp]
                 if cands:
