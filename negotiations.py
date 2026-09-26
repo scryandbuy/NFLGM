@@ -262,7 +262,7 @@ def _accept(league, t, offer, how):
     from cap_engine import CAP
     p = league.player(t['pid'])
     if t['kind'] == 'extension':
-        r = EXT.extend(league, p.pid, offer['apy'], offer['years'], front_load=offer.get('front_load'))
+        r = EXT.extend(league, p.pid, offer['apy'], offer['years'], front_load=offer.get('front_load'), agreed=True)
         if r['result'] != 'accepted':
             return dict(ok=False, why=r.get('why'))
     else:
