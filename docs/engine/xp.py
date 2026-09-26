@@ -80,6 +80,20 @@ PER_EVENT = {
     'sacks_allowed':     -200.0,
     'pressures_allowed': -35.0,
 
+    # ---- kicking ----
+    # a kicker's book is the make and the miss: a made field goal nets +260 (380 on the make, 120 charged
+    # on every attempt), an extra point nets +40, a miss of either costs. A punt is worth about a snap's
+    # worth of work plus the gross yards, a punt inside the 20 more, a touchback less.
+    'fg_att':    -120.0,
+    'fg_made':    380.0,
+    'xp_att':     -30.0,
+    'xp_made':     70.0,
+    'punts':       25.0,
+    'punt_yds':     0.9,
+    'punt_in20':   90.0,
+    'punt_tb':    -60.0,
+    'kr_yds':       4.0,
+    'pr_yds':       5.0,
     # ---- being out there ----
     # A snap is worth something on its own. It is why rotating a backup in
     # develops him, and why a man buried on a depth chart does not grow.
@@ -98,6 +112,8 @@ WEEKLY = [
     ('rec', 8, 900),
     ('sacks', 2, 1400), ('sacks', 3, 1300),
     ('tackles', 10, 1100), ('int_def', 1, 1200), ('int_def', 2, 1400),
+    ('fg_made', 3, 900), ('fg_made', 4, 900), ('fg_long', 50, 800),
+    ('punt_in20', 3, 800), ('punts', 6, 500),
     ('ff', 1, 900),
     # A LINEMAN CLEARS THIRTY BLOCKS EVERY WEEK HE STARTS, so a threshold
     # there is not a goal, it is a salary. It has to sit where only a good
@@ -117,6 +133,8 @@ SEASON = [
     ('rec', 80, 4000), ('rec', 100, 2000),
     ('sacks', 10, 6000), ('sacks', 15, 2750),
     ('tackles', 100, 6000), ('tackles', 140, 2250),
+    ('fg_made', 25, 4500), ('fg_made', 32, 2500), ('xp_made', 40, 1500),
+    ('punt_in20', 25, 4000), ('punts', 60, 1500),
     ('int_def', 4, 6500), ('int_def', 7, 2750),
     ('pb_wins', 500, 5000),
 ]
@@ -184,6 +202,7 @@ def modifier(player):
 #
 # The overall wall stays alongside these (a 90 improving is harder than a 70
 # improving), so a man who arrived at 95 pays more than one who was built up.
+LS_FLAT_PER_GAME = 150.0     # a long snapper's game: no line in the book, a flat credit for every game he dresses
 BASE_COST = 600.0            # a rookie's first point into a position skill
 PHYSICAL_BASE = 2500.0       # a 21-year-old's first point of speed; see the wall in cost_per_point
 PHYS_ATTR_ESCALATOR = 1.25   # per point already bought into the same physical
