@@ -129,8 +129,10 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
         p_model = 1.0 / (1.0 + np.exp(-(edge - thresh) / 0.015))
         # the model's possession bias is worst deep in its own end; there the league's behavior carries more weight
-        w_model = 0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.10
+        w_model = 0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.0     # inside your own 25 the model's possession bias has no vote
         p_go = w_model * p_model + (1.0 - w_model) * p_table
+    if score_diff >= 9 and secs_left < 1800:
+        p_go *= 0.25                                     # two scores up in the second half, the punt protects the lead
     else:
         p_go = p_table
     if chasing:
@@ -384,6 +386,15 @@ KICKOFF = dict(touchback=.155, return_rate=.799, return_mean=25.0,      # 26.9 d
 LAST_KICKOFF = {}
 
 
+def _tick(dr, secs):
+    """Take seconds off the clock; a deduction that crosses a quarter's edge stops there (the quarter ends, the next snap is at 15:00)."""
+    before = dr.clock
+    dr.clock -= secs
+    for edge in (2700.0, 1800.0, 900.0):
+        if before > edge >= dr.clock: dr.clock = float(edge); break
+    dr.clock = round(dr.clock, 2)
+
+
 def returner_for(ros, state, rate_fn, kind='kr'):
     """The club's return man for this kick: the charted one unless he is hurt or out, then the best healthy
     man among the return positions. A hurt returner kept returning kicks because the slot was fixed at kickoff."""
@@ -613,64 +624,83 @@ class TeamState:
         self.out = set()
 
 # ============================================================ DRIVE
+def _ep_state(down, togo, spot):
+    """Expected points for the offense with the ball at spot (yards to the goal), from the offense's view."""
+    import advanced_stats as AS
+    return float(AS.ep(int(down), float(togo), float(spot)))
+
+
+def _ep_play_stands(dr, out):
+    """The offense's expected points if the play is allowed to stand: the next down and spot, a first down, a
+    touchdown, a turnover, or a failed fourth down handing the ball over."""
+    import advanced_stats as AS
+    gained = float(np.round(float(out.get('yards') or 0.0)))
+    if out.get('touchdown') or gained >= dr.yardline - 0.01: return float(AS.TD_VALUE)
+    spot = float(np.clip(dr.yardline - gained, 1.0, 99.0))
+    if out.get('type') == 'interception' or out.get('fumble_lost'):
+        return -_ep_state(1, 10, 100.0 - spot)
+    if gained >= dr.togo - 0.01:
+        return _ep_state(1, min(10.0, spot), spot)
+    if dr.down >= 4:
+        return -_ep_state(1, 10, 100.0 - spot)                     # a failed fourth down is the other side's ball
+    return _ep_state(dr.down + 1, dr.togo - gained, spot)
+
+
 def _resolve_live_penalty(dr, pen, out, oc):
     """
-    A foul during or after the play. Returns 'replaced' if the penalty is
-    taken instead of the play, 'added' if it is tacked on after it, None if
-    declined.
+    A foul during or after the play. Returns 'replaced' if the penalty is taken instead of the play, 'added' if
+    it is tacked on after it, None if declined.
 
-    THE OFFENCE CHOOSES. A defensive foul during the play is an option: take
-    the yards and the automatic first down, or keep a play that did better.
-    A touchdown stands. A dead-ball foul after the whistle is not a choice -
-    it is added to whatever the play produced.
+    THE RULE: the side that did not foul looks at both outcomes, the play standing and the penalty enforced, and
+    takes whichever is better for it. Both are whole game states (down, distance, spot, possession) valued in
+    expected points, so a failed fourth down that stands is a change of possession and the comparison sees it,
+    and a defense would rather face second and goal from the 9 than first and goal from the 12. A dead-ball foul
+    after the whistle is not a choice; it is added to whatever the play produced.
     """
     import events as E
     yards = float(pen['yards'])
     gained = float(out.get('yards') or 0.0)
-    play_first = gained >= dr.togo or bool(out.get('touchdown'))
-    turnover = out.get('type') == 'interception'
     if pen['on_offense']:
         if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
-            # after the whistle: the result stands and they walk back, half the distance at most
             spot = dr.yardline - gained
             yards = min(yards, (100.0 - spot) / 2.0); pen['yards'] = round(yards, 1)
             dr.log_pen_after = -yards                 # the offense fouled after the whistle: it walks back
             return 'added'
-        # during the play (grounding, a face mask by a blocker): the play is
-        # wiped and the offence is set back from the previous spot, half the distance at most
-        yards = min(yards, (100.0 - dr.yardline) / 2.0); pen['yards'] = round(yards, 1)
-        dr.yardline = min(99.0, dr.yardline + yards)
+        # THE DEFENSE DECIDES: the play standing against the down replayed from further back
+        yards = min(yards, float(np.floor((100.0 - dr.yardline) / 2.0))); pen['yards'] = round(yards, 1)
+        ep_stand = _ep_play_stands(dr, out)
+        down_e = dr.down + (1 if pen['penalty'] == 'Intentional Grounding' else 0)
+        spot_e = min(99.0, dr.yardline + yards)
+        ep_enf = -_ep_state(1, 10, 100.0 - spot_e) if down_e > 4 else _ep_state(down_e, dr.togo + yards, spot_e)
+        if ep_enf >= ep_stand:
+            return None                               # the play as it stands is worse for the offense: the defense declines
+        dr.yardline = spot_e
         dr.togo += yards
         if pen['penalty'] == 'Intentional Grounding':
             dr.down += 1                          # loss of down
         return 'replaced'
-    # defensive foul
     if out.get('touchdown'):
         return None                               # six beats fifteen
     if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
-        # dead ball: added to the play result from where it ended, half the distance at most
         spot = max(1.0, dr.yardline - float(out.get('yards', 0.0) or 0.0))
         yards = min(yards, (spot - 1.0) / 2.0 if spot - yards < 1 else yards); pen['yards'] = round(yards, 1)
         dr.log_pen_after = yards                      # the defense fouled: the offense walks forward
         dr.log_pen_first = bool(pen['auto_first'])
         return 'added'
-    # live-ball defensive foul: the better of the two, and a turnover is
-    # always wiped by an accepted flag. Interference and illegal contact are
-    # the exception: they are called BECAUSE the ball did not arrive, so the
-    # flag is the play. Drawing them independently of the outcome and then
-    # letting the offence decline them on completions produced 0.34 a game
-    # against a real 1.05.
-    pen_first = pen['auto_first'] or yards >= dr.togo
-    take = turnover or (pen_first and not play_first) or \
-        (pen_first == play_first and yards > gained) or \
-        pen['penalty'] in ('Defensive Pass Interference', 'Illegal Contact')
-    if not take:
-        return None
+    # THE OFFENSE DECIDES: the play standing against the penalty enforced
     if pen['penalty'] == 'Defensive Pass Interference':
         gained_p = min(yards, dr.yardline - 1)                 # a spot foul: in the end zone the ball goes to the 1
-        if gained_p < yards - 0.01: pen['end_zone'] = True; pen['spot'] = 1
+        end_zone = gained_p < yards - 0.01
     else:
         gained_p = min(yards, float(np.floor(dr.yardline / 2.0)))   # every other foul: half the distance to the goal, whole yards
+        end_zone = False
+    pen_first = bool(pen['auto_first']) or gained_p >= dr.togo - 0.01
+    spot_e = max(1.0, dr.yardline - gained_p)
+    ep_enf = _ep_state(1, min(10.0, spot_e), spot_e) if pen_first else _ep_state(dr.down, dr.togo - gained_p, spot_e)
+    ep_stand = _ep_play_stands(dr, out)
+    if ep_stand >= ep_enf:
+        return None                               # the play did better: the offense declines
+    if end_zone: pen['end_zone'] = True; pen['spot'] = 1
     pen['yards'] = round(gained_p, 1)
     dr.yardline -= gained_p
     if pen_first:
@@ -1240,7 +1270,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                               noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)))
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
-            dr.clock -= play_seconds('penalty')
+            _tick(dr, play_seconds('penalty'))
             if pen['on_offense']:
                 # half the distance to the offense's own goal when the full yardage would reach it
                 walk = max(1.0, float(np.floor(min(float(pen['yards']), (100.0 - dr.yardline) / 2.0))))
@@ -1352,7 +1382,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.plays -= 1
                 out['nullified'] = True
                 dr.log.append(dict(type='penalty', **live_pen))
-                dr.clock -= play_seconds(t) + play_seconds('penalty')      # the play ran; the clock ran with it, then stopped for the flag
+                _tick(dr, play_seconds(t) + play_seconds('penalty'))      # the play ran; the clock ran with it, then stopped for the flag
                 continue
             if taken == 'added':
                 dr.log.append(dict(type='penalty', **live_pen))
@@ -1368,6 +1398,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
         # THE BOOK IS WRITTEN HERE, after the flags and the scramble are settled: a play wiped by a penalty or
         # turned into a scramble was being credited as it first resolved
+        if t in ('run', 'complete', 'scramble') and not out.get('nullified') and float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01:
+            out['touchdown'] = True                          # the drive awards whole yards; a 45.6 from the 46 is a touchdown and the book must see it
         if book is not None: book.record(out, off_f, def_f, rng)
         pending = (out, off_f, def_f, _snap_state)
 
