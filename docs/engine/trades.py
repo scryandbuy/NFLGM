@@ -295,6 +295,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     # SURPLUS is a GROUP question: a fourth healthy lineman is spare whatever
     # slot he is listed at.
     for grp, men in by_group.items():
+        if grp == 'ST': continue                 # kickers, punters and snappers are signed off the street, not traded for; the ST group (K + P + LS) is not a depth chart
         men = sorted(men, key=lambda p: -p.ovr)
         if len(men) >= 3:
             for p in men[2:4]:
@@ -313,11 +314,23 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     # A size because a club with a 74 where the league starts 82s and a club
     # with a 60 are not the same, and treating them alike meant both chased
     # the same 71 when only one of them is improved by him.
+    wk_now = int(getattr(league, 'week', 0) or 0)
+    street = {}
+    for pid_ in (getattr(league, 'free_agents', None) or [])[:400]:
+        q_ = league.player(pid_)
+        if q_ is not None and not q_.retired and q_.out_until is None: street[q_.pos] = max(street.get(q_.pos, 0.0), q_.ovr)
     for pos, men in depth.items():
-        fit = [p for p in men if p.out_until is None]
+        # a man out two weeks or less still counts as the club's man at the spot: nobody trades a pick to cover a fortnight
+        fit = [p for p in men if p.out_until is None or (int(p.out_until) < 99 and int(p.out_until) - wk_now <= 2)]
         have = max((p.ovr for p in fit), default=0.0)
-        if have < league_bar.get(pos, 75.0) - NEED_GAP:
+        # the street counts too: a club does not trade for a spot a free agent fills as well
+        have = max(have, street.get(pos, 0.0) - 2.0)
+        # a hole worth a trade: a real weakness at the premium spots, a gaping one on the interior line, where
+        # clubs live with a 72 and sign a veteran rather than pay a pick
+        gap = NEED_GAP + (5.0 if pos in ('C', 'LG', 'RG') else 2.0 if pos in ('LT', 'RT', 'SS', 'FS', 'MIKE', 'WILL', 'SAM', 'TE') else 0.0)
+        if have < league_bar.get(pos, 75.0) - gap:
             grp = GRP.get(pos, pos)
+            if grp == 'ST': continue                 # a club short a kicker signs one; it does not trade for one
             if grp not in needs or have < needs[grp]:
                 needs[grp] = have
 
@@ -380,7 +393,7 @@ def _picks_by_price(league, team, gm, ctx, space):
     """
     out = []
     for pk in team.picks:
-        if pk.year < league.year or pk.used_on is not None:
+        if pk.year < league.year or pk.year > league.year + 2 or pk.used_on is not None:      # this draft and the next two
             continue
         a = pick_asset(league, pk)
         out.append((TE.team_price(a, ctx, space, gm, owns=True), a))
@@ -398,7 +411,7 @@ def _pick_to_offer(league, team, target, gm, ctx, space):
     and it is why two front offices can both be happy.
     """
     owned = [pk for pk in team.picks
-             if pk.year >= league.year and pk.used_on is None]
+             if league.year <= pk.year <= league.year + 2 and pk.used_on is None]
     if not owned:
         return None
     want = TE.team_price(target, ctx, space, gm, owns=False)
@@ -491,12 +504,28 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         fits = [x for x in cands if needs_b and x.get('grp') in needs_b] or cands
         if fits:
             pkg.append(max(fits, key=lambda x: x.get('seen_ovr', 0)))
+    # THE LEAGUE'S PRICE IS THE CEILING. A buyer prices a man through his own eyes (his scheme, his hole, his
+    # window), and a contender with a hole talked itself into a first and a second for a backup center. No
+    # club pays more than the market's value of the man plus a premium: a modest one for depth, a real one
+    # for a star in a contender's window, which is how Metcalf fetches a second and Bortolini a sixth.
+    market = float(target.get('trade_value', 0.0) or 0.0)
+    wdw = TE.window(ctx_a)
+    prem = (1.40 if target.get('star') else 1.25) if wdw in ('contending', 'win_now') else (1.25 if target.get('star') else 1.10)
+    ceiling = market * prem + 0.35
+    def _paid(items):
+        tot = 0.0
+        for x in items:
+            if x['kind'] == 'pick': tot += float(TE.pick_value_dollars(x['pick'], x.get('years_out', 0)))
+            else: tot += float(x.get('trade_value', 0.0) or 0.0)
+        return tot
     for _step in range(MAX_PACKAGE):
         best = None
         for cand in bank:
             if cand in pkg:
                 continue
             o = dict(a_sends=pkg + [cand], a_gets=[target])
+            if _paid(o['a_sends']) > ceiling:
+                continue                    # more than the league would pay for him
             r = TE.evaluate(o, ctx_a, ctx_b, sa, sb, ga, gb)
             if r['a_gain'] <= -ACCEPT_WINDOW:
                 continue                    # paying this much stops paying off

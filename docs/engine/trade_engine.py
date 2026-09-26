@@ -133,7 +133,12 @@ def pick_value_dollars(pick, years_out=0, cap=CAP, lens='blend', blend=0.5):
 STAR_PREMIUM = 0.50     # share of a proven player's market salary his certainty is worth, per year, at the elite tier
 # specialists do not fetch premium picks whatever their overall: kickers and
 # punters go for late-round picks in the real market, full stop
-POSITION_TRADE_MULT = {'K': 0.30, 'P': 0.30, 'LS': 0.20, 'FB': 0.60}
+# what the trade market pays by position, relative to the man's overall: interior linemen, linebackers and
+# safeties move for less than their grades say (Frazier-level centers go for thirds, not firsts); edge rushers,
+# tackles, corners and receivers for more
+POSITION_TRADE_MULT = {'K': 0.30, 'P': 0.30, 'LS': 0.20, 'FB': 0.60, 'C': 0.55, 'LG': 0.55, 'RG': 0.55, 'LT': 0.90, 'RT': 0.80,
+                       'MIKE': 0.70, 'WILL': 0.70, 'SAM': 0.60, 'FS': 0.75, 'SS': 0.70, 'TE': 0.85, 'HB': 0.75, 'DT': 0.85,
+                       'LEDG': 1.10, 'REDG': 1.10, 'CB': 1.05, 'WR': 1.05, 'QB': 1.15}
 
 
 def trade_value(player, val, cap=CAP, contract=None):

@@ -29,8 +29,8 @@ def _ordp(n):
 def _pick_row(league, pk):
     yrs = pk.year - league.year; proj = _proj_slot(league, pk)
     return dict(id=f"{pk.year}-{pk.round}-{pk.original}", year=pk.year, round=pk.round, original=pk.original, owner=pk.owner,
-                slot=(f"{pk.round}.{((pk.selection - 1) % 32) + 1}" if pk.selection else f"R{pk.round}"), label=f"{pk.year} R{pk.round}" + (f" ({pk.original})" if pk.original != pk.owner else ''),
-                words=f"{pk.year} {['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'][pk.round - 1] if 1 <= pk.round <= 7 else str(pk.round)} Round", own_words=(f"{club(pk.original)['nick'].title()}{'’' if club(pk.original)['nick'].endswith('S') else '’s'} Own" if pk.original == pk.owner and pk.original in league.teams else f"via {pk.original}"),
+                slot=(f"{pk.round}.{((pk.selection - 1) % 32) + 1}" if pk.selection else f"R{pk.round}"), label=f"{__import__('views').draft_year(pk.year)} R{pk.round}" + (f" ({pk.original})" if pk.original != pk.owner else ''),
+                words=f"{__import__('views').draft_year(pk.year)} {['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'][pk.round - 1] if 1 <= pk.round <= 7 else str(pk.round)} Round", draft_year=__import__('views').draft_year(pk.year), own_words=(f"{club(pk.original)['nick'].title()}{'’' if club(pk.original)['nick'].endswith('S') else '’s'} Own" if pk.original == pk.owner and pk.original in league.teams else f"via {pk.original}"),
                 proj=(f"Projected {proj}{_ordp(proj)}" if proj and not pk.selection else (f"Pick {pk.round}.{((pk.selection - 1) % 32) + 1}" if pk.selection else '')), years_out=yrs, used=bool(pk.used_on))
 
 
@@ -57,10 +57,10 @@ def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
     pkg = _evaluate(league, abbr, other, list(a_sends), list(b_sends)) if (a_sends or b_sends) else None
     return dict(rail=rail(session, league, abbr), clubs=[club(c) for c in CLUBS if c != abbr], other=club(other),
                 me=dict(club=club(abbr), cap=round(me.cap_space, 1), roster=[_plate(league, p) for p in sorted(me.active(), key=lambda p: -p.ovr)],
-                        picks=[_pick_row(league, pk) for pk in sorted(me.picks, key=lambda k: (k.year, k.round)) if not pk.used_on],
+                        picks=[_pick_row(league, pk) for pk in sorted(me.picks, key=lambda k: (k.year, k.round)) if not pk.used_on and pk.year <= league.year + 2],
                         surplus=[dict(pid=x['pid'], why=_surplus_why(league, me, x)) for x in my_surplus], needs=sorted(my_needs)),
                 them=dict(club=club(other), cap=round(them.cap_space, 1), roster=[_plate(league, p) for p in sorted(them.active(), key=lambda p: -p.ovr)],
-                          picks=[_pick_row(league, pk) for pk in sorted(them.picks, key=lambda k: (k.year, k.round)) if not pk.used_on],
+                          picks=[_pick_row(league, pk) for pk in sorted(them.picks, key=lambda k: (k.year, k.round)) if not pk.used_on and pk.year <= league.year + 2],
                           surplus=[dict(pid=x['pid'], why=_surplus_why(league, them, x)) for x in their_surplus], needs=sorted(their_needs),
                           coach=them.gm.name if them.gm else '', prestige=round(getattr(them.gm, 'prestige', 50)) if them.gm else None),
                 package=pkg, can_trade=can_trade, deadline_week=TR.TRADE_DEADLINE_WEEK, balance=f"{len([x for x in a_sends if '-' not in str(x)])} for {len([x for x in b_sends if '-' not in str(x)])}",
@@ -129,7 +129,7 @@ def _words(league, items):
     out = []
     for x in items:
         if x is None: continue
-        if hasattr(x, 'round') and hasattr(x, 'year'): out.append(f"{x.year} R{x.round}")
+        if hasattr(x, 'round') and hasattr(x, 'year'): out.append(f"{__import__('views').draft_year(x.year)} R{x.round}")
         else:
             p = league.player(getattr(x, 'pid', x))
             if p is not None: out.append(f"{p.name} ({p.pos})")

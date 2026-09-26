@@ -223,7 +223,7 @@ class Draft:
     def _label(self, x):
         if x['kind'] == 'pick':
             pk = x['obj']
-            return f"pick {pk.selection}" if pk.selection and pk.year == self.year else f"{pk.year} R{pk.round}"
+            return f"pick {pk.selection}" if pk.selection and pk.year == self.year else f"{pk.year + 1} R{pk.round}"
         p = self.L.players[x['pid']]
         return f"{p.name} ({p.pos} {x.get('seen_ovr', p.ovr):.0f})"
 
