@@ -563,7 +563,7 @@ class Session:
             others = [(h, a, r, b) for (h, a, r, b) in getattr(self.runner, 'last_games', [])]
             gd = GD.capture(self.L, others + [(lv['home'], lv['away'], partial, lv['book'])], self.user_team)
             v = views.gameday(self, self.L, self.user_team, gd=gd)
-            v['live'] = dict(open=True, at=lv['at'], halftime_open=lv['halftime_open'], score=lv['score'], recs=[dict(i=r['i'], side=r['side'], text=r['text'], why=r['why'], taken=r['taken']) for r in (lv.get('half_recs') or [])])
+            v['live'] = dict(open=True, at=lv['at'], halftime_open=lv['halftime_open'], score={'home': partial['home'], 'away': partial['away']}, recs=[dict(i=r['i'], side=r['side'], text=r['text'], why=r['why'], taken=r['taken']) for r in (lv.get('half_recs') or [])])
             return v
         if week is not None:
             gd = (getattr(self, 'gamedays', None) or {}).get(f"{year or self.L.year}-{int(week)}")

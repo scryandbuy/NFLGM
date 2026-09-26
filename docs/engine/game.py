@@ -108,99 +108,74 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     """
     go, field_goal or punt.
 
-    NOW DECIDED ON WIN PROBABILITY. The GO_RATE table below is what real
-    clubs DO; decisions.fourth_down is what maximises the chance of winning,
-    and the literature is unanimous that those are not the same thing - Yam
-    and Lopez put the gap at about 0.4 wins a season, Baldwin at clubs going
-    roughly half as often as they should.
-
-    The table cannot express that gap, because it only knows down, distance
-    and field zone. It has no idea what the score is, how much clock is left
-    or who has timeouts, so it cannot tell a coach that trailing by ten with
-    four minutes left changes everything. The model can.
-
-    The table is kept and still reachable with use_wp=False, because it is a
-    faithful record of observed behaviour and worth comparing against.
+    THE AI HAS A SAY, NOT A RULE. The win-probability model produces an edge (going against the best
+    alternative); that edge becomes a PROBABILITY of going, shifted by the coach's aggression, and is blended
+    half and half with what clubs actually do in that spot (GO_RATE by distance and zone). So fourth and one
+    from the own 30 is a lean, fourth and three from the own 45 in the first quarter is a long shot, fourth
+    and one at midfield is nearly always, and fourth and goal from the 2 down seventeen is always. No zone is
+    a rule. The field goal is taken only when three points change the number of scores the club still needs.
     """
-    # THE MODEL DOES NOT GET TO GO FOR IT IN YOUR OWN END. Its win-probability surface values possession
-    # too richly (tied, your ball at your own 15 reads 0.575), so from deep in its own territory it went
-    # for it on fourth and three, tied, in the third quarter. No club does that. In your own territory the
-    # decision follows what clubs actually do (the GO_RATE table by down, distance and zone) unless the
-    # game is late and the club is chasing it; the model keeps the rest of the field.
-    # chasing: trailing with less time than the possessions he needs (about two and a half minutes each)
-    need = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
-    chasing = score_diff < 0 and secs_left < 150 * need + 90
-    if use_wp and yardline_100 > 55 and not chasing and ydstogo >= 2:
-        use_wp = False                                   # fourth and one stays the model's call anywhere past your own 20; longer, in your own end, follows the league
-    if use_wp:
-        import decisions as DEC
-        r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100,
-                            ydstogo, aggression=aggression,
-                            is_home=1)
-        if r['call'] == 'go':
-            return 'go'
-        if r['call'] == 'field_goal':
-            # HOW FAR CLUBS ACTUALLY KICK FROM. Field goal accuracy read 80.5%
-            # against a real 85.0%, and the per-distance curve was already
-            # right - 93.1% from 30-39 against 94.3%, 76.7% from 40-49 against
-            # 77.9%. The kicker was fine; the ATTEMPTS were wrong. Mean attempt
-            # distance ran 45.7 yards against a real 39.5, with a third of them
-            # from 50-59 against a real 22%.
-            #
-            # Real clubs kick 60+ on 1% of attempts. Allowing anything inside
-            # the 45 is a 62-yarder, and they simply do not take those unless
-            # the half is ending or they are chasing the game.
-            limit = 41 if secs_left > 300 or score_diff >= 0 else 44
-            if secs_left < 20:
-                limit = 45                 # the last play of a half
-            if yardline_100 <= limit:
-                return 'field_goal'
-            # Out of range. Vetoing the kick does NOT make it a punt - the
-            # model already weighed going against punting, and forcing the punt
-            # put them at 40.7% of drives against a real 35.2%. Fall back to
-            # whichever of the two it preferred.
-            return 'go' if r['wp_go'] > r['wp_punt'] else 'punt'
-        # TRUST THE MODEL WHEN IT SAYS PUNT. Bolting the old table's rule on
-        # top - kick anything inside the 38 - overrode a decision the model
-        # had already weighed, and field goals jumped to 18.3% of drives
-        # against a real 15.4% while punts fell to 28.7% against 35.2%.
-        return 'punt'
-
+    import decisions as DEC
+    need_now = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
+    chasing = score_diff < 0 and secs_left < 150 * need_now + 90
+    # does a field goal matter? Down 14 it leaves two scores either way; down 10 it makes it one
+    need_after_fg = int(np.ceil(-(score_diff + 3) / 8.0)) if score_diff + 3 < 0 else 0
+    fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now)
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
-    p_go = GO_RATE[band][zone] * (0.70 + 0.60 * aggression)
-    # inside your own 40 and not chasing the game: a fourth-and-one is a rare gamble, anything longer is a punt
-    need = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
-    chasing = score_diff < 0 and secs_left < 150 * need + 90
-    if yardline_100 > 60 and not chasing:
-        p_go = 0.0 if ydstogo >= 2 else p_go * 0.35
-    if yardline_100 > 80 and ydstogo <= 1 and not chasing:
-        p_go = 0.0                                       # fourth and one inside your own 20 is a punt
-    # trailing late, you have no choice
-    if secs_left < 300 and score_diff < 0:
+    p_table = float(np.clip(GO_RATE[band][zone] * (0.55 + 0.60 * aggression), 0.0, 1.0))     # the observed rates already carry an average coach; the personality term sits around them
+    r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100, ydstogo, aggression=aggression, is_home=1) if use_wp else None
+    if r is not None:
+        # the model's edge as a probability: a small edge is a lean, a big one nearly certain, a negative one nearly never
+        edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
+        p_model = 1.0 / (1.0 + np.exp(-(edge - thresh) / 0.015))
+        # the model's possession bias is worst deep in its own end; there the league's behavior carries more weight
+        w_model = 0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.10
+        p_go = w_model * p_model + (1.0 - w_model) * p_table
+    else:
+        p_go = p_table
+    if chasing:
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
+    if score_diff <= -9 and yardline_100 <= 5 and ydstogo <= 5:
+        p_go = max(p_go, 0.85)                           # down two scores at the goal line, the touchdown is the point
     if secs_left < 120 and score_diff < 0 and yardline_100 > 40:
-        p_go = max(p_go, 0.90)
-    if rng.random() < p_go: return 'go'
-    # 45 yards out is a 62-yard attempt. Real clubs kick from about the 38 or
-    # closer (a 55-yarder); beyond that they punt. Allowing 62-yarders put
-    # missed field goals at 4.24% against a real 2.66%.
-    if yardline_100 <= 38: return 'field_goal'
-    if secs_left < 10 and yardline_100 <= 45: return 'field_goal'
+        p_go = 1.0                                       # a punt down late is the game
+    if rng.random() < p_go:
+        return 'go'
+    # not going: the kick when it is in range and worth something, else the punt
+    limit = 41 if secs_left > 300 or score_diff >= 0 else 44
+    if secs_left < 20: limit = 45                        # the last play of a half
+    if yardline_100 <= limit and fg_matters:
+        return 'field_goal'
+    if yardline_100 <= limit and not fg_matters:
+        return 'go'                                      # three points change nothing here; the down is the drive
     return 'punt'
 
-# A club can finish an offseason with no kicker, no punter or no return man.
-# dict.get(key, {}) hands back None when the key EXISTS holding None - which
-# is exactly what build_roster writes for an empty slot - so every one of
-# these used `or {}` instead. An empty dict rates as an average man, which is
-# the right stand-in for a body the club will sign before Sunday.
 
-# ============================================================ FIELD GOALS
-# Real made% by distance.
-# Re-solved on real kickers, whose ratings sit above the flat-70 clones the
-# curve was first fitted against.
-# by distance, at the modern rate: kickers made about 84-86% overall in 2023-24,
-# roughly 81% from 40-49 and 70% from 50 and beyond. The earlier table was a
-# 2010s one and the league kicked 81% with it against a real 85.
+def returner_for(ros, state, rate_fn, kind='kr'):
+    """The club's return man for this kick: the charted one unless he is hurt or out, then the best healthy
+    man among the return positions. A hurt returner kept returning kicks because the slot was fixed at kickoff."""
+    out = state.out if state is not None else set()
+    kr = ros.get(kind) or {}
+    if kr and kr.get('pid') not in out: return kr
+    import rosters as R
+    cands = [p for grp in ('wr', 'db', 'backs') for p in (ros.get(grp) or []) if p and p.get('pid') not in out and p.get('pos') in R.RETURN_POS]
+    if ros.get('rb') and ros['rb'].get('pid') not in out: cands.append(ros['rb'])
+    return max(cands, key=R.return_score) if cands else (kr or {})
+
+
+def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
+    """kickoff(), and the return goes in the book against the returner. Kickoff returns were resolved
+    for years and never booked, so no kick returner had a line. The result is kept so the drive it
+    opens can log the kick as its first play."""
+    r = kickoff(returner, rng, rate_fn, from_50=from_50)
+    if book is not None and not r.get('touchback') and returner:
+        book.special('kr', returner.get('pid'), ret=r.get('ret', 0.0))
+    r['returner'] = (returner or {}).get('pid')
+    LAST_KICKOFF['r'] = r
+    return r
+
+
+
 FG_PCT = [(29, .975), (34, .955), (39, .905), (44, .840), (49, .785),
           (54, .720), (99, .590)]
 
@@ -296,7 +271,7 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
 # Real: returned on 35% of punts, mean 11.5 yards WHEN returned (the 4.23
 # figure counted all punts including fair catches), p90 19, max 97, and 0.36%
 # go for a touchdown.
-PUNT = dict(gross=48.6, sd=7.4, blocked=.0043,          # sd from 8.5: 60-yard punts are about 4% of the real league's and 65-yarders about 1%; at 8.5 they ran 9% and 3%          # the full swing; pooches from better field position pull the league gross to the real 47.2
+PUNT = dict(gross=50.2, sd=7.4, blocked=.0043,        # gross up from 48.6 once the 70-yard cap and the 7.4 spread trimmed the long tail          # sd from 8.5: 60-yard punts are about 4% of the real league's and 65-yarders about 1%; at 8.5 they ran 9% and 3%          # the full swing; pooches from better field position pull the league gross to the real 47.2
             # real: 45% returned, mean return 10.4; the rest fair caught,
             # downed, out of bounds or a touchback
             return_rate=.45, return_mean=10.4, return_p90=19, td_rate=.0036,
@@ -441,7 +416,7 @@ def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False):
                                'juke_move_rating': .25})
     # the returner is the club's best now, not its last receiver: the skill term is centered on
     # the typical chosen returner, so the league mean stays at the real 26.9
-    ret = rng.gamma(2.4, KICKOFF['return_mean'] / 2.4) * (1.0 + 0.8 * (skill - RET_AVG))
+    ret = min(98.0, rng.gamma(7.0, KICKOFF['return_mean'] / 7.0) * (1.0 + 0.8 * (skill - RET_AVG)))     # 2024-25: mean 27.6 with most returns 20 to 35; a 50-yarder is a few a season, not two a game
     # the landing zone runs from the goal line to the 20, so a returned kick
     # starts from roughly the 5 and the return is measured from there
     start = 5.0 + ret
@@ -994,7 +969,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     # the kick that opened this possession, when there was one, is the drive's first entry
     ko = LAST_KICKOFF.pop('r', None)
     if ko is not None and abs(float(ko.get('new_yardline', -1)) - float(start_yardline)) < 0.5:
-        dr.log.append(dict(type='kickoff', touchback=bool(ko.get('touchback')), new_yardline=float(ko.get('new_yardline', start_yardline)), ret=float(ko.get('ret', 0.0) or 0.0), carrier=ko.get('returner'), clock=clock))
+        dr.log.append(dict(type='kickoff', touchback=bool(ko.get('touchback')), new_yardline=float(ko.get('new_yardline', start_yardline)), ret=float(ko.get('ret', 0.0) or 0.0), carrier=ko.get('returner'), clock=clock, onside=bool(ko.get('onside')), recovered=bool(ko.get('recovered'))))
     # Adjustment happens AFTER EACH SERIES, which is what the coaches describe:
     # "If you wait until halftime to make your adjustments, you're too late."
     for st in (off_state, def_state):
@@ -1038,7 +1013,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # 10. THE KNEEL. With the ball and no time to use it, out of range, a club takes a knee: the first half at
         # any score, the second half when it is not behind. Real clubs do not throw from their own 35 at 0:04.
         secs_left_half = dr.clock - wall
-        if secs_left_half <= 10 and dr.yardline > 45 and (half_end is not None or dr.score_diff >= 0) and not getattr(dr, '_kneeled', False):
+        opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
+        clock_dies = secs_left_half <= 3 or (secs_left_half <= 10 and opp_tos == 0)
+        if clock_dies and dr.yardline > 45 and (half_end is not None or dr.score_diff >= 0) and not getattr(dr, '_kneeled', False):
             dr._kneeled = True
             dr.log.append(dict(type='kneel', passer=(offense.get('qb') or {}).get('pid'), down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock))
             dr.plays += 1; dr.clock = wall; dr.result = 'End of half'; break
@@ -1122,10 +1099,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         late_lean = 0.0
         final_period = (quarter >= 4 and half_end is None) or (half_end is not None and quarter <= 2)
         if final_period:
-            if dr.score_diff > 0 and half_end is None and dr.clock <= 240:
+            if dr.score_diff > 0 and dr.yardline >= 80 and secs_in_half <= 60:
+                late_lean = -8.0                                   # ahead, inside your own 20, under a minute: the clock is the point and a run cannot stop it
+            elif dr.score_diff > 0 and half_end is None and dr.clock <= 240:
                 late_lean = -1.0 if (dr.down == 3 and dr.togo >= 6) else -3.5    # run-heavy, not run-only: a lead still needs first downs
             elif dr.score_diff <= 0 and secs_in_half <= 120:
-                late_lean = 1.0 if dr.togo <= 1 else 6.5          # the two-minute drill: throw
+                late_lean = 1.0 if dr.togo <= 1 else (12.0 if secs_in_half <= 30 else 6.5)          # the two-minute drill: throw; under thirty seconds there is no other call
             elif dr.score_diff < 0 and half_end is None and dr.clock < 150 * int(np.ceil(-dr.score_diff / 8.0)) + 90:
                 late_lean = 0.5 if dr.togo <= 1 else 2.5          # chasing with little time: lean to the pass, not all of it
         lean_now = dict(olean or {})
@@ -1396,13 +1375,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # The trailing side spends them to get the ball back; the driving side
         # to keep the clock alive. Neither wastes one early.
         used = False; used_by = None
-        if timeouts is not None and dr.clock < 300:
+        if timeouts is not None and secs_in_half < 300:
             other = 'away' if pos == 'home' else 'home'
             in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
-            if dr.score_diff > 0 and dr.clock < 180 and in_bounds and timeouts.left.get(other, 0) > 0:
-                used = timeouts.use(other); used_by = other                    # the trailing defense stops the clock
-            elif (dr.score_diff < 0 or (dr.score_diff == 0 and secs_in_half < 40)) and dr.clock < 120 and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
-                used = timeouts.use(pos); used_by = pos                        # the trailing offense saves its clock; a tied one only at the very end
+            # the defense stops the clock in the last three minutes of the GAME when it trails; in the first
+            # half only a two-score deficit is worth a timeout to get the ball back before the break
+            if dr.score_diff > 0 and in_bounds and timeouts.left.get(other, 0) > 0 and ((half_end is None and secs_in_half < 180) or (half_end is not None and secs_in_half < 90 and dr.score_diff >= 9)):
+                used = timeouts.use(other); used_by = other
+            elif (dr.score_diff < 0 or (dr.score_diff == 0 and secs_in_half < 40)) and secs_in_half < 120 and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
+                used = timeouts.use(pos); used_by = pos                        # the trailing offense saves its clock in either half; a tied one only at the very end
         hurry = secs_in_half < 120 and dr.score_diff <= 0
         before_clock = secs_in_half
         clock_before = dr.clock
@@ -1417,6 +1398,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dr.clock += min(20.0, 120.0 - after_clock); dr._two_min = True
             dr.log.append(dict(type='two_minute', clock=dr.clock))
         before = dr.yardline
+        if t == 'sack' and dr.yardline - float(out.get('yards', 0.0) or 0.0) >= 100.0:
+            out['yards'] = float(-(100.0 - dr.yardline)); out['safety'] = True
+            dr.clock -= 0; dr.result, dr.points = 'Safety', -2
+            break
         scored = _advance(dr, out.get('yards', 0.0))
         if not scored and out.get('touchdown'):
             out['touchdown'] = False                # the play engine's own read used a fraction; the drive's whole yards say he was short
@@ -1649,8 +1634,22 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             continue
 
         # where the next possession starts
+        onside_kept = False
         if dr.result in ('Touchdown', 'Field goal'):
-            start = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)['new_yardline']
+            # THE ONSIDE KICK. The scoring side still trails and the clock says it needs the ball back: under
+            # two and a half minutes down by one score, or under five down by two. Recovered about 6% of the
+            # time under the dynamic kickoff (2024-25); a failed one gives the receiving side the ball near
+            # the kicking team's 45.
+            my_diff = score[pos] - score['away' if pos == 'home' else 'home']
+            need_after = int(np.ceil(-my_diff / 8.0)) if my_diff < 0 else 0
+            try_onside = my_diff < 0 and half_done and ((need_after <= 1 and clock < 150) or (need_after == 2 and clock < 300)) and clock > 0
+            if try_onside:
+                got = rng.random() < KICKOFF['onside_recovery']
+                LAST_KICKOFF['r'] = dict(onside=True, recovered=got, new_yardline=(55.0 if got else 45.0), ret=0.0, returner=None, touchback=False)
+                if got: onside_kept = True; start = 55.0                 # the kicking side has it around its own 45
+                else: start = 45.0                                       # the receiving side takes over at the kicking team's 45
+            else:
+                start = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)['new_yardline']
         elif dr.result == 'Punt':
             start = getattr(dr, 'next_yardline', 75)
         elif dr.result in ('Turnover', 'Turnover on downs'):
@@ -1659,7 +1658,8 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             start = float(np.clip(100 - dr.yardline - 8, 1, 99))
         else:
             start = 75
-        pos = 'away' if pos == 'home' else 'home'
+        if not onside_kept:
+            pos = 'away' if pos == 'home' else 'home'      # a recovered onside kick keeps the ball with the kicking side
 
     # overtime
     ot = None

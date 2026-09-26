@@ -116,14 +116,16 @@ def capture(league, played, user):
                 elif ty == 'complete': t_['pass_yds'] += y; t_['yards'] += y; longest[('pass', pl.get('passer'))] = max(longest.get(('pass', pl.get('passer')), 0), int(round(y))); longest[('rec', pl.get('target'))] = max(longest.get(('rec', pl.get('target')), 0), int(round(y)))
                 elif ty == 'sack': t_['pass_yds'] += y; t_['yards'] += y; t_['sacks_allowed'] += 1
                 elif ty == 'interception': t_['turnovers'] += 1
-                elif ty == 'fumble' and pl.get('lost', True): t_['turnovers'] += 1
+                if pl.get('fumble_lost'): t_['turnovers'] += 1               # a lost fumble is a flag on the play, not a play of its own
                 elif ty == 'penalty': t_['penalties'] += 1; t_['pen_yds'] += abs(int(round(y)))
                 if pl.get('down') == 3 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
                     t_['third_att'] += 1; t_['third_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble'))
                 if pl.get('down') == 4 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
                     t_['fourth_att'] += 1; t_['fourth_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble'))
             t_['first_downs'] += int(getattr(dr, 'first_downs', 0) or 0)
-            if first_clock is not None and last_clock is not None: t_['top'] += max(0.0, first_clock - last_clock)
+            # possession: from the drive's first entry (the kick that opened it, or the first snap) to the clock when it ended
+            _clocks = [float(pl['clock']) for pl in getattr(dr, 'log', []) if isinstance(pl, dict) and pl.get('clock') is not None]
+            if _clocks: t_['top'] += max(0.0, _clocks[0] - float(getattr(dr, 'clock', _clocks[-1]) or _clocks[-1]))
             if float(getattr(dr, 'yardline', 99) or 99) <= 20 or (dr.result == 'Touchdown'): t_['red_zone'] += 1; t_['red_zone_td'] += int(dr.result == 'Touchdown')
         team_stats = {}
         for abbr_, t_ in T.items():

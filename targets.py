@@ -125,6 +125,9 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70):
         plan.target_priority else 0.0) for p in pairs], float)
     # a man who chipped on the way out is late into his route and last in the read
     w = w * np.array([0.35 if p.get('late') else 1.0 for p in pairs])
+    # a bracketed man: the quarterback reads the double and goes elsewhere more often. Real doubled stars lose
+    # about a fifth to a third of their targets; the squeeze on his separation is applied at the throw
+    w = w * np.array([0.70 if p.get('bracket') else 1.0 for p in pairs])
     # depth-chart position carries a mild designed bias: a coordinator does
     # build for his best player, but it breaks ties rather than setting a share
     # Real target share by rank: 23.6 / 17.5 / 13.3 / 10.5 / 8.5 - a ratio of

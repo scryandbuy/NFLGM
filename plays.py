@@ -344,8 +344,8 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
             break
         broken += 1
         chase = logistic(edge(brk, rate(t, YAC['tackler']['angle'])), k=5.5)
-        gained += max(0.3, rng.gamma(1.7, (1.4 if not in_space else 1.6)
-                                      + (4.4 if not in_space else 4.6) * chase))
+        gained += max(0.3, rng.gamma(1.7, (1.55 if not in_space else 1.8)
+                                      + (4.7 if not in_space else 5.0) * chase))     # re-solved with the free and strong safety pairing on the field (YAC had settled at 4.4 against 5.19)
     else:
         # Every pursuer beaten. Rare by construction now, and even then the
         # secondary still has to be outrun.
@@ -700,7 +700,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         PASS_TRACE.append(dict(path='clock', time=p['time'], hot=bool(hot),
                                sack=bool(p['sack']), rushers=def_call['rushers']))
     if p['sack'] and not hot:
-        return dict(type='sack', yards=round(-rng.gamma(2.0, 3.4), 1), depth=depth, screen=bool(screen),
+        return dict(type='sack', yards=round(-min(18.0, rng.gamma(2.0, 3.4)), 1), depth=depth, screen=bool(screen),     # real sacks lose 6 to 8; 18 is the extreme, and the gamma tail once produced a 32-yard sack
                     touchdown=False, by=p['beaten_by'], concept=concept,
                     protection=prot_name, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
                     beaten=p.get('beaten'), pressured=True)
@@ -774,7 +774,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         # a bracketed man is squeezed, not erased - an elite receiver doubled
         # still beats an average one singled
         if def_call.get('bracket') == pr['receiver'].get('pid'):
-            pr['separation'] *= 0.72
+            pr['separation'] *= 0.72; pr['bracket'] = True        # and the read goes elsewhere more often (targets.select_target)
 
     tgt, cov, read_kind, sep_raw = TG.select_target(
         pairs, off['qb'], concept, rng, rate, plan=off_call.get('plan'))
