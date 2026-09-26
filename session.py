@@ -62,6 +62,11 @@ class Session:
         s = cls(L, np.random.default_rng(d.get('_seed_state', None)), d.get('_user_team'))
         s.stop = tuple(d.get('_stop', ['week', 1]))
         s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
+        lp = d.get('_live_pending')
+        if lp and s.stop[0] == 'week' and s.played:
+            import season as SN
+            s.runner = SN.SeasonRunner(s.L, s.rng); s.runner.week = lp['week']; s.runner.last_games = []; s.runner.last_played = []
+            s.runner.open_live(lp['home'], lp['away'], lp['week'])
         s.standings = d.get('_standings'); s.order = d.get('_order'); s.fired = [tuple(x) if isinstance(x, list) else x for x in (d.get('_fired') or [])]
         if d.get('_post'):
             class _Post:            # the shape awards, prestige and the almanac read
@@ -80,8 +85,11 @@ class Session:
         return s
 
     def save(self):
-        self._finish_live()                       # a half-played game cannot be written down: it is played out first
         d = json.loads(self.L.save())
+        lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if lv is not None and not lv['done']:
+            # a half-played game cannot be written down; the save marks it pending and a load reopens it at the kick
+            d['_live_pending'] = dict(home=lv['home'], away=lv['away'], week=lv['week'])
         d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
         d['_gameday'] = self.gameday
         d['_gamedays'] = getattr(self, 'gamedays', None) or {}

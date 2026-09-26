@@ -426,7 +426,7 @@ function renderGameDay(v) {
   const nextPlay = () => { const d = g.drives[shown - 1]; const n = vis(d).length; if (shownPlays == null || shownPlays >= n) { if (shownPlays != null && shownPlays >= n) shownPlays = null; if (shown >= g.drives.length) { shownPlays = null; draw(); return; } shown++; shownPlays = 1; } else shownPlays++; if (shownPlays >= vis(g.drives[shown - 1]).length) shownPlays = null; draw(); };
   const quarterEnd = q => { let i = g.drives.findIndex(d => d.quarter > q); return i < 0 ? g.drives.length : i; };   // how many drives are in through the end of quarter q
   const nextQuarter = () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; const end = quarterEnd(q); shown = (shown >= end) ? quarterEnd(q + 1) : end; draw(); };
-  const step = mode => { const r = pyJSON(`SESSION.live_step(${JSON.stringify(mode)})`); renderGameDay(r); if (!(r.live && r.live.open)) renderRail(pyJSON('SESSION.portal()').rail); };
+  const step = mode => { const y = window.scrollY; const r = pyJSON(`SESSION.live_step(${JSON.stringify(mode)})`); renderGameDay(r); window.scrollTo(0, y); if (!(r.live && r.live.open)) renderRail(pyJSON('SESSION.portal()').rail); };
   const ctrl = live ? el('div', { class: 'ctrl2' },
     el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, onclick: () => step('play') }, 'Next Play'),
     el('button', { class: 'btn go', disabled: live.halftime_open ? '' : null, onclick: () => step('drive') }, 'Next Drive'),
@@ -444,12 +444,12 @@ function renderGameDay(v) {
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
   tick.append(el('h2', {}, 'Play by Play', el('small', {}, '')), ctrl);
   if (live && live.halftime_open) {
-    const card = el('div', { class: 'read', style: 'margin:0 14px 10px;padding:12px 14px' });
-    card.append(el('div', { style: 'display:flex;align-items:center;gap:10px;flex-wrap:wrap' }, el('b', {}, `Halftime · ${g.away.abbr} ${live.score.away}, ${g.home.abbr} ${live.score.home}`), el('span', { class: 'count' }, live.recs && live.recs.length ? "The assistants' read of the half. Take what you want; the second half plays what you take." : 'The assistants have nothing to change at the break.'), el('button', { class: 'btn go', style: 'margin-left:auto', onclick: () => step('resume') }, 'Start the Second Half')));
-    for (const r of (live.recs || [])) card.append(el('div', { style: 'display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--rule)' },
-      el('span', { class: 'tag ' + (r.side === 'offence' ? 'q' : 'out'), style: 'margin-top:3px' }, r.side === 'offence' ? 'OFFENSE' : 'DEFENSE'),
-      el('div', { style: 'flex:1' }, el('div', { style: 'font-weight:700' }, r.text), el('div', { class: 'count' }, r.why)),
-      el('button', { class: 'btn' + (r.taken ? ' go' : ''), style: 'width:auto;padding:3px 10px', onclick: () => { renderGameDay(pyJSON(`SESSION.half_take(${r.i}, ${r.taken ? 'False' : 'True'})`)); } }, r.taken ? 'Taken' : 'Take')));
+    const confirmed = !!halfConfirmed[gkey];
+    const card = el('div', { class: 'read', style: 'margin:0 14px 10px;padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap' });
+    card.append(el('b', {}, `Halftime · ${g.away.abbr} ${live.score.away}, ${g.home.abbr} ${live.score.home}`),
+      el('button', { class: 'btn' + (confirmed ? '' : ' go'), onclick: () => openHalftime(g, live, gkey, () => { const y = window.scrollY; renderGameDay(pyJSON('SESSION.gameday_view()')); window.scrollTo(0, y); }) }, confirmed ? 'Halftime Adjustments · confirmed' : 'Halftime Adjustments'),
+      el('span', { class: 'count' }, confirmed ? 'Adjustments confirmed.' : 'Review the adjustments and confirm to unlock the second half.'),
+      el('button', { class: 'btn go', style: 'margin-left:auto', disabled: confirmed ? null : '', 'data-tip': confirmed ? null : 'Confirm the halftime adjustments first', onclick: () => step('resume') }, 'Start the Second Half'));
     tick.append(card);
   }
   tick.append(body);
@@ -756,6 +756,25 @@ function developmentPanel(pid, reload) {
     el('td', {}, el('button', { class: 'btn' + (r.afford && !r.blocked ? ' go' : ''), disabled: (r.afford && !r.blocked) ? null : '', style: 'padding:3px 10px;font-size:13px', 'data-tip': r.blocked || (r.afford ? 'Buy one point' : 'Not enough XP'), onclick: () => act('buy_point', `attr=${JSON.stringify(r.key)}`) }, 'Buy +1'))));
   box.append(t);
   return box;
+}
+
+// halftime adjustments: a popup with the assistants' read of the half; Take applies to the second half; Confirm unlocks it
+const halfConfirmed = {};
+function openHalftime(g, live, gkey, onClose) {
+  const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center' });
+  const box = el('section', { class: 'sheet', style: 'width:min(760px,92vw);max-height:84vh;overflow:auto' });
+  const draw = () => {
+    box.innerHTML = '';
+    const v = pyJSON('SESSION.gameday_view()'); const recs = (v.live && v.live.recs) || [];
+    box.append(el('h2', {}, 'Halftime Adjustments', el('small', {}, `${g.away.abbr} ${live.score.away} · ${g.home.abbr} ${live.score.home}`)));
+    box.append(el('div', { class: 'pad', style: 'color:var(--ink-2)' }, recs.length ? "The assistants' read of the half, on top of your plan and the pregame changes you took. Take what you want; the second half plays what you take." : 'The assistants have nothing to change at the break. Your plan carries into the second half as it stands.'));
+    for (const r of recs) box.append(el('div', { style: 'display:flex;gap:12px;align-items:flex-start;padding:10px 16px;border-top:1px solid var(--rule)' },
+      el('span', { class: 'tag ' + (r.side === 'offence' ? 'q' : 'out'), style: 'margin-top:3px' }, r.side === 'offence' ? 'OFFENSE' : 'DEFENSE'),
+      el('div', { style: 'flex:1' }, el('div', { style: 'font-weight:700' }, r.text), el('div', { class: 'count' }, r.why)),
+      el('button', { class: 'btn' + (r.taken ? ' go' : ''), style: 'width:auto;padding:4px 12px', onclick: () => { pyJSON(`SESSION.half_take(${r.i}, ${r.taken ? 'False' : 'True'})`); draw(); } }, r.taken ? 'Taken' : 'Take')));
+    box.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { halfConfirmed[gkey] = true; overlay.remove(); onClose(); } }, 'Confirm'), el('button', { class: 'btn quiet', onclick: () => { overlay.remove(); onClose(); } }, 'Close')));
+  };
+  draw(); overlay.append(box); document.body.append(overlay);
 }
 
 // the roster's development at a glance
