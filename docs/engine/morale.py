@@ -69,17 +69,32 @@ def weekly(league, week, results, snaps_by_pid, game_lines=None):
             e = entitlement_of(team, p, cache)
             sn = snaps_by_pid.get(p.pid, 0)
             want = STARTER_SNAPS.get(GROUP.get(p.pos, p.pos), 45) * (0.55 + 0.45 * e)
-            if p.out_until is None and res is not None:
+            just_back = p.xp_spent.get('_was_hurt') or (p.xp_spent.get('_cleared_wk') is not None and week - int(p.xp_spent.get('_cleared_wk')) < 1)
+            if p.out_until is None and res is not None and not just_back:
                 if sn >= want * 0.8: m.apply('well_used', entitle=e)
                 elif sn < want * 0.35 and e >= 0.45: m.apply('underused', entitle=e)
             grp = depth.get(p.pos, [])
             rank = next((i for i, q in enumerate(grp) if q is p), 0)
-            if rank >= 3 and e >= 0.5: m.apply('buried_on_depth', entitle=e)
-            # benched: he lost two or more places on his depth chart since last week
-            last = p.xp_spent.get('_depth_rank')
-            if last is not None and rank - last >= 2 and e >= 0.5:
-                m.apply('benched', entitle=e)
-            p.xp_spent['_depth_rank'] = rank
+            # A HURT MAN DOES NOT COMPLAIN ABOUT THE DEPTH CHART, and neither does a man who just got healthy:
+            # the club gets a week's grace after he clears to move him back before he reads anything into
+            # where he sits. Without this a back on the shelf raged about losing his starting spot to the man
+            # covering for him, and the moment he was cleared the same week triggered it again.
+            hurt = p.out_until is not None
+            cleared_wk = p.xp_spent.get('_cleared_wk')
+            if not hurt and p.xp_spent.get('_was_hurt'):
+                p.xp_spent['_cleared_wk'] = week; p.xp_spent.pop('_was_hurt', None); cleared_wk = week
+            if hurt: p.xp_spent['_was_hurt'] = True
+            grace = hurt or (cleared_wk is not None and week - int(cleared_wk) < 1) or bool(p.xp_spent.pop('_hurt_desig', None))
+            if not grace:
+                if rank >= 3 and e >= 0.5: m.apply('buried_on_depth', entitle=e)
+                # benched: he lost two or more places on his depth chart since last week
+                last = p.xp_spent.get('_depth_rank')
+                if last is not None and rank - last >= 2 and e >= 0.5:
+                    m.apply('benched', entitle=e)
+                p.xp_spent['_depth_rank'] = rank
+            else:
+                # his place while hurt is not held against the club, and the comparison restarts from where he is when the grace ends
+                p.xp_spent['_depth_rank'] = rank
             if game_lines and p.pid in game_lines:
                 g = game_lines[p.pid]
                 if g.get('good'): m.apply('good_game')
