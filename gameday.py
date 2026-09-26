@@ -88,8 +88,12 @@ def capture(league, played, user):
                 if not isinstance(p, dict): continue
                 plays.append(write_play(league, p, qb, off_abbr, def_abbr, rb_pid=rb))
             pts = int(getattr(dr, 'points', 0) or 0)
-            if pos == 'home': hs += pts
-            else: as_ += pts
+            if pts > 0:
+                if pos == 'home': hs += pts
+                else: as_ += pts
+            elif pts < 0:                                   # a safety: two points to the DEFENSE
+                if pos == 'home': as_ += 2
+                else: hs += 2
             start = float(getattr(dr, 'start', 75)); end = float(getattr(dr, 'yardline', start))
             res_word = dr.result
             if res_word == 'End of half' and getattr(dr, 'quarter', 0) >= 4: res_word = 'End of game'
