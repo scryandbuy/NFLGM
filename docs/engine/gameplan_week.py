@@ -56,7 +56,7 @@ def tendencies(league, abbr):
     p, ps, ds = T['plays'], max(1, T['passes']), max(1, T['def_snaps'])
     return dict(pass_rate=T['passes'] / p, pa_rate=T['pa'] / ps, motion=T['motion'] / p, deep=T['deep'] / ps,
                 fourth_go=T['fourth_go'] / max(1, T['fourth_opp']), blitz=T['blitz'] / ds, man=T['man'] / max(1, ds * 0.55),
-                two_high=T['two_high'] / ds, box8=T['box8'] / ds, shadow=T['shadow'] / ds, bracket=T['bracket'] / ds, games=p / 62.0)
+                two_high=T['two_high'] / ds, box8=T['box8'] / ds, shadow=T['shadow'] / ds, bracket=T['bracket'] / ds, games=sum(league.teams[abbr].record) if abbr in league.teams else 0)
 
 
 def league_rank(league, abbr, key, higher_is_more=True):

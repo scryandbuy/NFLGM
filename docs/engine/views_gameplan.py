@@ -231,7 +231,7 @@ def report(session, league, abbr):
     def tend(t):
         if not t: return None
         return dict(pass_rate=round(t['pass_rate'] * 100), pa_rate=round(t['pa_rate'] * 100), motion=round(t['motion'] * 100), deep=round(t['deep'] * 100), fourth_go=round(t['fourth_go'] * 100),
-                    blitz=round(t['blitz'] * 100), man=round(min(1.0, t['man']) * 100), two_high=round(t['two_high'] * 100), box8=round(t['box8'] * 100), games=int(round(t['games'])))
+                    blitz=round(t['blitz'] * 100), man=round(min(1.0, t['man']) * 100), two_high=round(t['two_high'] * 100), box8=round(t['box8'] * 100), games=int(t['games']))
     lg = _league_tend(league)
     units = [dict(unit=u, rank=v[0], of=v[1]) for u, v in (rep['units'] or {}).items()]
     mine = [dict(unit=u, rank=v[0], of=v[1]) for u, v in (rep['my_units'] or {}).items()]
