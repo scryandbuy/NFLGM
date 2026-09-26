@@ -208,8 +208,84 @@ class SeasonRunner:
                           P.rate, home_state=self.states[home],
                           away_state=self.states[away], week=week, book=book,
                           playoffs=playoffs)
+        self._record(home, away, week, res, book, playoffs)
+        return res
 
-        # ---- record ------------------------------------------------------
+    # ------------------------------------------------------------ the live game
+    def open_live(self, home, away, week):
+        """The user's game, opened at the opening kick and played on demand. The same preparation as play()
+        (hurt men, the week's plans), then the stepped engine held open until Finish."""
+        hr, ar = self.refresh(home), self.refresh(away)
+        if hr is None or ar is None: return None
+        for side in (home, away):
+            desk = self.desks.get(side); st = self.states.get(side)
+            if desk is None or st is None: continue
+            for pid in desk.playing_hurt:
+                hit, _mult = desk.condition_hit(pid)
+                if hit: st.cond.cond[pid] = max(35.0, st.cond.get(pid) - hit)
+        import gameplan_week as GW
+        user = getattr(self.L, 'user_team', None)
+        for me, opp in ((home, away), (away, home)):
+            st = self.states.get(me)
+            if st is None or st.plan is None: continue
+            try:
+                if me == user: GW.user_plan(self.L, st, week)
+                else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
+            except Exception: pass
+        book = G.StatBook(); self._book = book
+        gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book)
+        self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False)
+        return self.live
+
+    def live_step(self, mode='play'):
+        """Advance the live game: 'play' one snap, 'drive' to the end of the possession, 'half' to halftime or the
+        end, 'finish' to the end. Halftime is a stop the GM must release (mode 'resume')."""
+        lv = getattr(self, 'live', None)
+        if lv is None or lv['done']: return lv
+        if lv['halftime_open'] and mode != 'resume': return lv
+        if mode == 'resume': lv['halftime_open'] = False; mode = 'play'
+        gen = lv['gen']
+        try:
+            while True:
+                ev = next(gen)
+                kind = ev[0]
+                if kind == 'snap':
+                    lv['current'] = ev[1]; lv['at'] = 'snap'
+                    if mode == 'play': break
+                elif kind == 'drive':
+                    _k, pos, dr, score = ev; lv['drives'].append((pos, dr)); lv['current'] = None; lv['score'] = dict(score); lv['at'] = 'drive'; lv['pos'] = 'away' if pos == 'home' else 'home'
+                    if mode in ('play', 'drive'): break
+                elif kind == 'halftime':
+                    lv['score'] = dict(ev[1]); lv['halftime_open'] = True; lv['at'] = 'halftime'; lv['pos'] = 'home'; break
+                elif kind == 'overtime':
+                    lv['score'] = dict(ev[1]); lv['at'] = 'overtime'
+                    if mode in ('play', 'drive', 'half'): break
+        except StopIteration as done:
+            lv['res'] = done.value; lv['done'] = True; lv['current'] = None; lv['score'] = {'home': lv['res']['home'], 'away': lv['res']['away']}; lv['at'] = 'final'
+            self._close_live()
+        return lv
+
+    def _close_live(self):
+        """The live game is over: recorded exactly as a simmed game, and the week's after-game steps run."""
+        lv = self.live; res = lv['res']; home, away, week = lv['home'], lv['away'], lv['week']
+        self._record(home, away, week, res, lv['book'], False)
+        self.last_games.append((home, away, res, lv['book']))
+        for i, (wk, a_, h_, ap, hp) in enumerate(self.L.schedule):
+            if wk == week and h_ == home and a_ == away: self.L.schedule[i] = (wk, a_, h_, res['away'], res['home'])
+        self.last_played = list(getattr(self, 'last_played', []) or []) + [(home, away, res['home'], res['away'])]
+        self._after_games(week, self.last_played)
+
+    def live_partial(self):
+        """The live game as a result-shaped record for Game Day: the drives so far and the one in progress."""
+        lv = getattr(self, 'live', None)
+        if lv is None: return None
+        drives = list(lv['drives'])
+        if lv['current'] is not None:
+            drives = drives + [(lv['pos'], lv['current'])]
+        return dict(home=lv['score']['home'], away=lv['score']['away'], drives=drives, overtime=(lv['at'] == 'overtime' or (lv['res'] or {}).get('overtime')), env=(lv['res'] or {}).get('env'), live=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'])
+
+    def _record(self, home, away, week, res, book, playoffs=False):
+        import gameplan_week as GW
         GW.record_game(self.L, home, away, res)
         H, A = self.L.teams[home], self.L.teams[away]
         if playoffs:
@@ -307,9 +383,11 @@ class SeasonRunner:
             self.injury_week(week)                      # a week that was never listed (the first, or a loaded save) lists now
         played = []
         self.last_games = []                      # (home, away, res, book) for Game Day
+        skip = getattr(self, '_skip_game', None)
         for i, (wk, away, home, ap, hp) in enumerate(self.L.schedule):
             if wk != week or hp is not None:
                 continue
+            if skip and (home, away) == skip: continue          # the user's game is played live, after these
             res = self.play(home, away, week)
             if res is None:
                 continue
@@ -317,14 +395,22 @@ class SeasonRunner:
             self.L.schedule[i] = (wk, away, home, res['away'], res['home'])
             played.append((home, away, res['home'], res['away']))
 
-        # anyone whose injury has expired is available again
-        for p in self.L.players.values():
-            if p.out_until is not None and p.out_until <= week:
-                p.out_until = None
         self.week = week
         self.L.week = week
         self.last_played = played
         self._listed_week = week
+        if not skip: self._after_games(week, played)
+        return played
+
+    def _after_games(self, week, played):
+        """Once every game of the week is in (the user's live game included): expired injuries clear, playing-hurt
+        flares roll, and the week's club and league notes post. Runs once a week."""
+        if getattr(self, '_after_done', None) == week: return
+        self._after_done = week
+        # anyone whose injury has expired is available again
+        for p in self.L.players.values():
+            if p.out_until is not None and p.out_until <= week:
+                p.out_until = None
         # men who played hurt: did it flare?
         for abbr_, desk_ in self.desks.items():
             for p_, wks in desk_.flare(self.L, self.L.teams[abbr_], week, self.rng):

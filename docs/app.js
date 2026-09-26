@@ -358,11 +358,12 @@ function renderGameDay(v) {
   const bug = el('div', { class: 'bigbug' }); top.append(bug);
   const lineScore = el('table', { class: 'linescore' }); top.append(lineScore);
   const drawBug = (shown, shownPlays) => {
-    const final = shown >= g.drives.length && shownPlays == null;
-    const d = g.drives[Math.max(0, shown - 1)]; const revealed = (shownPlays != null ? vis(d).slice(0, shownPlays) : vis(d));
+    const final = !live && shown >= g.drives.length && shownPlays == null;
+    const d = g.drives[Math.max(0, shown - 1)] || { plays: [], quarter: 1, score: '0–0', off: g.home.abbr, n: 0 }; const revealed = (shownPlays != null ? vis(d).slice(0, shownPlays) : vis(d));
     const atBreak = shownPlays == null && shown < g.drives.length && g.drives[shown].quarter > d.quarter;   // the drive shown was the quarter's last
     let hs = g.hs, as_ = g.as_;
-    if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { const add = (n, toOff) => { if ((d.off === g.home.abbr) === toOff) hs += n; else as_ += n; }; for (const p of revealed) { if (p.type === 'field_goal' && p.made) add(3, true); else if (p.td) add(6, true); else if (p.type === 'extra_point' && p.made !== false) add(1, true); else if (p.type === 'two_point' && p.made) add(2, true); else if (p.safety) add(2, false); } } }
+    if (live) { hs = live.score.home; as_ = live.score.away; }
+    else if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { const add = (n, toOff) => { if ((d.off === g.home.abbr) === toOff) hs += n; else as_ += n; }; for (const p of revealed) { if (p.type === 'field_goal' && p.made) add(3, true); else if (p.td) add(6, true); else if (p.type === 'extra_point' && p.made !== false) add(1, true); else if (p.type === 'two_point' && p.made) add(2, true); else if (p.safety) add(2, false); } } }
     const lastPlay = revealed.length ? revealed[revealed.length - 1] : null;
     const headParts = lastPlay && lastPlay.head ? lastPlay.head.split(' · ') : [];
     const clock = atBreak ? '0:00' : (headParts.length >= 3 ? headParts[headParts.length - 1] : '');
@@ -396,8 +397,9 @@ function renderGameDay(v) {
 
   // the ticker, revealed by drive
   const tick = el('section', { class: 'sheet c8' });
+  const live = v.live && v.live.open ? v.live : null;
   const gkey = `${g.home.abbr}-${g.away.abbr}-${v.week || ''}-${v.year || ''}`;
-  const saved = gdReveal[gkey] || { shown: 1, shownPlays: 0 };
+  const saved = live ? { shown: Math.max(1, g.drives.length), shownPlays: null } : (gdReveal[gkey] || { shown: 1, shownPlays: 0 });
   let shown = saved.shown, shownPlays = saved.shownPlays;      // shownPlays: within the last shown drive, how many plays are revealed (null = all)
   const body = el('div', { class: 'ticker' });
   const filt = { mode: 'all' };
@@ -413,18 +415,26 @@ function renderGameDay(v) {
         const line = el('div', { class: 'pl ' + p.kind }); if (p.head) line.append(el('span', { class: 'dn' }, p.head), '  '); line.append(p.text); body.append(line);
       }
     });
-    tick.querySelector('h2 small').textContent = (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
+    tick.querySelector('h2 small').textContent = live ? (live.halftime_open ? 'Halftime' : `Live · drive ${g.drives.length}`) : (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
     body.scrollTop = body.scrollHeight;
     gdReveal[gkey] = { shown, shownPlays };
     drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays); drawRead(shown >= g.drives.length && shownPlays == null); drawWp(shown, shownPlays);
-    if (strips.mine) { const fin = shown >= g.drives.length && shownPlays == null; const { card, s } = strips.mine; card.querySelector('.as').textContent = fin ? s.as_ : ''; card.querySelector('.hs').textContent = fin ? s.hs : ''; card.querySelector('.st span').textContent = fin ? 'Final' + (s.ot ? ' · OT' : '') : 'In progress'; }
+    if (strips.mine) { const fin = !live && shown >= g.drives.length && shownPlays == null; const { card, s } = strips.mine; card.querySelector('.as').textContent = fin ? s.as_ : ''; card.querySelector('.hs').textContent = fin ? s.hs : ''; card.querySelector('.st span').textContent = fin ? 'Final' + (s.ot ? ' · OT' : '') : 'In progress'; }
   };
   const vis = d => d.plays.filter(p => p.text);
   // the first drive opens one play at a time too
   const nextPlay = () => { const d = g.drives[shown - 1]; const n = vis(d).length; if (shownPlays == null || shownPlays >= n) { if (shownPlays != null && shownPlays >= n) shownPlays = null; if (shown >= g.drives.length) { shownPlays = null; draw(); return; } shown++; shownPlays = 1; } else shownPlays++; if (shownPlays >= vis(g.drives[shown - 1]).length) shownPlays = null; draw(); };
   const quarterEnd = q => { let i = g.drives.findIndex(d => d.quarter > q); return i < 0 ? g.drives.length : i; };   // how many drives are in through the end of quarter q
   const nextQuarter = () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; const end = quarterEnd(q); shown = (shown >= end) ? quarterEnd(q + 1) : end; draw(); };
-  const ctrl = el('div', { class: 'ctrl2' },
+  const step = mode => { const r = pyJSON(`SESSION.live_step(${JSON.stringify(mode)})`); renderGameDay(r); if (!(r.live && r.live.open)) renderRail(pyJSON('SESSION.portal()').rail); };
+  const ctrl = live ? el('div', { class: 'ctrl2' },
+    el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, onclick: () => step('play') }, 'Next Play'),
+    el('button', { class: 'btn go', disabled: live.halftime_open ? '' : null, onclick: () => step('drive') }, 'Next Drive'),
+    el('button', { class: 'btn', disabled: live.halftime_open || live.at === 'overtime' || (g.drives.length && g.drives[g.drives.length - 1].quarter > 2) ? '' : null, onclick: () => step('half') }, 'To Halftime'),
+    el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, onclick: () => step('finish') }, 'Finish Game'),
+    el('span', { class: 'sep' }),
+    (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })())
+  : el('div', { class: 'ctrl2' },
     el('button', { class: 'btn', 'data-tip': 'One snap at a time', onclick: nextPlay }, 'Next Play'),
     el('button', { class: 'btn go', 'data-tip': 'Through the end of this drive, or the next one if this one is in', onclick: () => { if (shownPlays != null) { shownPlays = null; } else shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
     el('button', { class: 'btn', 'data-tip': 'Through the end of the quarter', onclick: nextQuarter }, 'Next Quarter'),
@@ -432,7 +442,9 @@ function renderGameDay(v) {
     el('button', { class: 'btn', onclick: () => { shownPlays = null; shown = g.drives.length; draw(); } }, 'Finish Game'),
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
-  tick.append(el('h2', {}, 'Play by Play', el('small', {}, '')), ctrl, body);
+  tick.append(el('h2', {}, 'Play by Play', el('small', {}, '')), ctrl);
+  if (live && live.halftime_open) tick.append(el('div', { class: 'read', style: 'margin:0 14px 10px;padding:12px 14px' }, el('b', {}, `Halftime · ${g.away.abbr} ${live.score.away}, ${g.home.abbr} ${live.score.home}. `), 'The second half kicks when you are ready. ', el('button', { class: 'btn go', style: 'margin-left:10px', onclick: () => step('resume') }, 'Start the Second Half')));
+  tick.append(body);
   page.append(tick);
 
   // the right column: team stats and the assistants' read; the box score sits under the ticker at its width
@@ -477,7 +489,7 @@ function renderGameDay(v) {
   }
   const drawTeamStats = (shown, shownPlays) => {
     if (!tsTable) return;
-    const final = shown >= g.drives.length && shownPlays == null;
+    const final = !live && shown >= g.drives.length && shownPlays == null;
     tsTable.innerHTML = ''; tsTable.append(el('tr', {}, el('th', {}, ''), el('th', {}, g.away.abbr), el('th', {}, g.home.abbr)));
     right.querySelector('.ts-note').textContent = final ? 'Final' : 'Live';
     let A, H;
@@ -1820,6 +1832,7 @@ async function advance() {
 async function advanceInner() {
   // a block stops the click: a roster over 53 or under 46 sends you to fix it; a decision opens it
   const blocks = pyJSON('SESSION.blocking()');
+  if (blocks.length && blocks[0].kind === 'live') { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); return; }
   if (blocks.length) { const b = blocks[0]; notify({ ok: false, why: `Blocked: ${b.subject}. ${b.kind === 'roster' ? 'Fix the roster first.' : 'Answer it (or decline) to advance.'}` }); busy(`Blocked: ${b.subject}`); setTimeout(() => busy(null), 4000); renderRail(pyJSON('SESSION.portal()').rail); if (b.go) location.hash = b.go; else if (b.id != null) location.hash = `#portal/inbox/${b.id}`; return; }
   const adv = $('#advance'); adv.disabled = true; const wasSim = /^Sim Week/.test(view.rail.advance.title); busy(view.rail.advance.title + '…');
   await new Promise(r => setTimeout(r, 30));
@@ -1830,6 +1843,7 @@ async function advanceInner() {
   if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
   else if (r && r.done === 'Cutdown') { location.hash = '#personnel/waivers'; renderWire(pyJSON(`SESSION.personnel('waivers')`)); }
   else if (r && r.done === 'Camp') { location.hash = '#portal'; refresh(); }
+  else if (r && /^Week \d+ live$/.test(r.done)) { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); }
   else if (r && /^Week \d+ played$/.test(r.done)) { if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#gameday'; }
   else if (r && /^Week \d+$/.test(r.done)) { if (location.hash === '' || location.hash.startsWith('#portal')) refresh(); else if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#portal'; } else if (r && /on the clock/.test(r.done)) { location.hash = '#draft/day'; renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); } else refresh();
   saveGame();
