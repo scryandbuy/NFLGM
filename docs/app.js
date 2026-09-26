@@ -1800,6 +1800,17 @@ function renderReport(v) {
 function refresh() { view = pyJSON('SESSION.portal()'); renderRail(view.rail); renderPortal(view); }
 
 async function advance() {
+  try { await advanceInner(); }
+  catch (e) {
+    // whatever failed, the GM sees it and can send it on: the message, and where in the engine it happened
+    console.error(e); const msg = String(e && e.message || e); const tail = msg.split('\n').filter(l => l.trim()).slice(-6).join('\n');
+    $('#advance').disabled = false; busy('The advance failed; see the notice.'); setTimeout(() => busy(null), 6000);
+    notify({ ok: false, why: 'The advance failed. Copy this and send it: ' + tail.slice(0, 600) });
+    try { const box = el('div', { class: 'sheet', style: 'position:fixed;left:16px;right:16px;bottom:16px;z-index:999;padding:12px 16px;max-height:40vh;overflow:auto;border-color:var(--danger)' }, el('b', {}, 'The advance failed. Copy this text and send it:'), el('pre', { style: 'white-space:pre-wrap;font-size:12px;margin:8px 0 0' }, msg.slice(-1500)), el('button', { class: 'btn', style: 'margin-top:8px', onclick: e => e.currentTarget.parentNode.remove() }, 'Close')); document.body.append(box); } catch (_) {}
+  }
+}
+
+async function advanceInner() {
   // a block stops the click: a roster over 53 or under 46 sends you to fix it; a decision opens it
   const blocks = pyJSON('SESSION.blocking()');
   if (blocks.length) { const b = blocks[0]; notify({ ok: false, why: `Blocked: ${b.subject}. ${b.kind === 'roster' ? 'Fix the roster first.' : 'Answer it (or decline) to advance.'}` }); busy(`Blocked: ${b.subject}`); setTimeout(() => busy(null), 4000); renderRail(pyJSON('SESSION.portal()').rail); if (b.go) location.hash = b.go; else if (b.id != null) location.hash = `#portal/inbox/${b.id}`; return; }
@@ -1807,7 +1818,7 @@ async function advance() {
   await new Promise(r => setTimeout(r, 30));
   let r = null;
   try { r = pyJSON('SESSION.advance()'); busy(`${r.done} done.`); setTimeout(() => busy(null), 1200); }
-  catch (e) { console.error(e); busy('Something broke: ' + String(e).slice(0, 120)); }
+  catch (e) { adv.disabled = false; throw e; }
   adv.disabled = false;
   if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
   else if (r && r.done === 'Cutdown') { location.hash = '#personnel/waivers'; renderWire(pyJSON(`SESSION.personnel('waivers')`)); }
