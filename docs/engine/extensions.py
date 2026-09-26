@@ -76,7 +76,7 @@ def build(p, add_years, apy, cap, gm, league, front_load=None):
     return c
 
 
-def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None):
+def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agreed=False):
     """The offer to the man. Returns dict(result, ...)."""
     rng = rng or np.random.default_rng()
     p = league.player(pid)
@@ -100,7 +100,10 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None):
         floor *= 1.0 + ne['demand_premium']
         if not ne['will_discount']: floor = max(floor, tm['ask'] * (1.0 + ne['demand_premium']) * (1.0 - 0.02))
     team = league.teams[p.team]
-    if apy + 1e-9 < floor * 0.97:
+    # a number the agent has already agreed to in talks is not re-priced here: the negotiation set the
+    # floor with the same morale and shape terms, and a second floor that disagreed by a few cents made
+    # an agreed deal 'fall through' and left the thread failing every week
+    if not agreed and apy + 1e-9 < floor * 0.97:
         counter = round(floor, 2)
         return dict(result='countered', ask=counter, years=tm['years'], why=f"his agent wants ${counter}m a year over {tm['years']} years")
     if years < 1:
