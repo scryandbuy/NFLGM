@@ -152,7 +152,7 @@ function renderInbox(v) {
     if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
     else if (m.kind === 'injury_decision' && m.status !== 'done' && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=False)`)); reload(); } }, 'Sit Him'), el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
     else if (cur.decide) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { location.hash = `#portal/inbox/${cur.id}`; } }, 'Open the Decision')));
-    else if (m.link) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn' + (m.kind === 'negotiation' ? ' go' : ''), href: linkHash(m.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There')));
+    else if (m.link && !(m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60)))) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn' + (m.kind === 'negotiation' ? ' go' : ''), href: linkHash(m.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There')));
   } else pane.append(el('div', { class: 'empty' }, 'Select a message.'));
   box.append(list, pane); s.append(box); page.append(s);
 }
@@ -307,7 +307,8 @@ function openMessage(id) {
       el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(pid)}, play=False)`)); location.hash = '#portal/inbox'; } }, 'Sit Him'),
       el('a', { class: 'btn quiet', href: '#club/player/' + pid }, 'His Card'));
   } else if (m.kind === 'injury_decision') acts.append(el('span', { class: 'count' }, 'Decided.'));
-  if (m.payload && m.payload.link) acts.append(el('a', { class: 'btn go', href: linkHash(m.payload.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There'));
+  const settled = m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60));
+  if (m.payload && m.payload.link && !settled) acts.append(el('a', { class: 'btn go', href: linkHash(m.payload.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There'));
   acts.append(el('button', { class: 'btn quiet', onclick: () => refresh() }, 'Back to Portal'));
   page.append(el('section', { class: 'sheet' }, el('h2', {}, m.subject, el('small', {}, `${m.sender || ''} · ${m.year} Week ${m.week}`)), el('div', { class: 'pad', style: 'max-width:70ch;line-height:1.5;color:var(--ink-2)' }, m.body), acts));
 }

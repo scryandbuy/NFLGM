@@ -441,7 +441,7 @@ def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False):
                                'juke_move_rating': .25})
     # the returner is the club's best now, not its last receiver: the skill term is centered on
     # the typical chosen returner, so the league mean stays at the real 26.9
-    ret = rng.gamma(2.4, KICKOFF['return_mean'] / 2.4) * (1.0 + 0.8 * (skill - RET_AVG))
+    ret = min(98.0, rng.gamma(7.0, KICKOFF['return_mean'] / 7.0) * (1.0 + 0.8 * (skill - RET_AVG)))     # 2024-25: mean 27.6 with most returns 20 to 35; a 50-yarder is a few a season, not two a game
     # the landing zone runs from the goal line to the 20, so a returned kick
     # starts from roughly the 5 and the return is measured from there
     start = 5.0 + ret
@@ -1038,7 +1038,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # 10. THE KNEEL. With the ball and no time to use it, out of range, a club takes a knee: the first half at
         # any score, the second half when it is not behind. Real clubs do not throw from their own 35 at 0:04.
         secs_left_half = dr.clock - wall
-        if secs_left_half <= 10 and dr.yardline > 45 and (half_end is not None or dr.score_diff >= 0) and not getattr(dr, '_kneeled', False):
+        opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
+        clock_dies = secs_left_half <= 3 or (secs_left_half <= 10 and opp_tos == 0)
+        if clock_dies and dr.yardline > 45 and (half_end is not None or dr.score_diff >= 0) and not getattr(dr, '_kneeled', False):
             dr._kneeled = True
             dr.log.append(dict(type='kneel', passer=(offense.get('qb') or {}).get('pid'), down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock))
             dr.plays += 1; dr.clock = wall; dr.result = 'End of half'; break
@@ -1122,10 +1124,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         late_lean = 0.0
         final_period = (quarter >= 4 and half_end is None) or (half_end is not None and quarter <= 2)
         if final_period:
-            if dr.score_diff > 0 and half_end is None and dr.clock <= 240:
+            if dr.score_diff > 0 and dr.yardline >= 80 and secs_in_half <= 60:
+                late_lean = -8.0                                   # ahead, inside your own 20, under a minute: the clock is the point and a run cannot stop it
+            elif dr.score_diff > 0 and half_end is None and dr.clock <= 240:
                 late_lean = -1.0 if (dr.down == 3 and dr.togo >= 6) else -3.5    # run-heavy, not run-only: a lead still needs first downs
             elif dr.score_diff <= 0 and secs_in_half <= 120:
-                late_lean = 1.0 if dr.togo <= 1 else 6.5          # the two-minute drill: throw
+                late_lean = 1.0 if dr.togo <= 1 else (12.0 if secs_in_half <= 30 else 6.5)          # the two-minute drill: throw; under thirty seconds there is no other call
             elif dr.score_diff < 0 and half_end is None and dr.clock < 150 * int(np.ceil(-dr.score_diff / 8.0)) + 90:
                 late_lean = 0.5 if dr.togo <= 1 else 2.5          # chasing with little time: lean to the pass, not all of it
         lean_now = dict(olean or {})
@@ -1417,6 +1421,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dr.clock += min(20.0, 120.0 - after_clock); dr._two_min = True
             dr.log.append(dict(type='two_minute', clock=dr.clock))
         before = dr.yardline
+        if t == 'sack' and dr.yardline - float(out.get('yards', 0.0) or 0.0) >= 100.0:
+            out['yards'] = float(-(100.0 - dr.yardline)); out['safety'] = True
+            dr.clock -= 0; dr.result, dr.points = 'Safety', -2
+            break
         scored = _advance(dr, out.get('yards', 0.0))
         if not scored and out.get('touchdown'):
             out['touchdown'] = False                # the play engine's own read used a fraction; the drive's whole yards say he was short
