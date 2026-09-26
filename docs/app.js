@@ -445,7 +445,12 @@ function renderGameDay(v) {
     el('button', { class: 'btn', onclick: () => { shownPlays = null; shown = g.drives.length; draw(); } }, 'Finish Game'),
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
-  tick.append(el('h2', {}, 'Play by Play', el('small', {}, '')), ctrl);
+  const copyPbp = el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 10px;font-size:14px', 'data-tip': 'Copy the play-by-play shown so far as text' , onclick: () => {
+    const lines = [`${g.away.abbr} at ${g.home.abbr} · Week ${v.week || ''} ${v.year || ''}`];
+    g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
+      lines.push(`Q${d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`); for (const p of plays) if (p.text) lines.push(`${p.head ? p.head + ' ' : ''}${p.text}`); });
+    copyText(lines.join('\n'), copyPbp); } }, 'Copy');
+  tick.append(el('h2', {}, 'Play by Play', el('small', {}, ''), copyPbp), ctrl);
   if (live && live.halftime_open) {
     const confirmed = !!halfConfirmed[gkey];
     const card = el('div', { class: 'read', style: 'margin:0 14px 10px;padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap' });
@@ -761,6 +766,13 @@ function developmentPanel(pid, reload) {
     el('td', {}, el('button', { class: 'btn' + (r.afford && !r.blocked ? ' go' : ''), disabled: (r.afford && !r.blocked) ? null : '', style: 'padding:3px 10px;font-size:13px', 'data-tip': r.blocked || (r.afford ? 'Buy one point' : 'Not enough XP'), onclick: () => act('buy_point', `attr=${JSON.stringify(r.key)}`) }, 'Buy +1'))));
   box.append(t);
   return box;
+}
+
+// copy text to the clipboard, with a fallback for browsers that refuse the API
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { const ta = document.createElement('textarea'); ta.value = text; document.body.append(ta); ta.select(); try { document.execCommand('copy'); } catch (e2) {} ta.remove(); }
+  if (btn) { const was = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = was; }, 1400); }
 }
 
 // halftime adjustments: a popup with the assistants' read of the half; Take applies to the second half; Confirm unlocks it
@@ -1647,7 +1659,12 @@ function renderTeamSchedule(v) {
 let txGroup = 'All', txClub = 'all', txQuery = '', txShown = 60;
 function renderTransactions(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('transactions');
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Transactions', el('small', {}, 'the league record')));
+  const copyTx = el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 10px;font-size:14px', 'data-tip': 'Copy the list as filtered, every entry, as text', onclick: () => {
+    const q = txQuery.trim().toLowerCase();
+    const rows = v.rows.filter(r => (txGroup === 'All' || r.group === txGroup) && (txClub === 'all' || (txClub === 'mine' && r.mine) || (txClub === 'div' && r.division === v.my_division)) && (!q || r.line.toLowerCase().includes(q)));
+    const lines = rows.map(r => { const when = r.week ? `Wk ${r.week}` : r.phase ? r.phase.charAt(0).toUpperCase() + r.phase.slice(1).replace('_', ' ') : String(r.year); return `${r.year} · ${when} · ${r.tag} · ${r.line}`; });
+    copyText(lines.join('\n'), copyTx); } }, 'Copy');
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Transactions', el('small', {}, 'the league record'), copyTx));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0;flex-wrap:wrap' });
   for (const g of ['All', ...v.groups]) tabs.append(el('button', { 'aria-pressed': String(txGroup === g), onclick: () => { txGroup = g; txShown = 60; renderTransactions(v); } }, g));
   const clubs = el('div', { class: 'chips' }); for (const [k, label] of [['all', 'All Clubs'], ['mine', v.rail.club.name], ['div', v.my_division]]) clubs.append(el('button', { class: 'chip', 'aria-pressed': String(txClub === k), onclick: () => { txClub = k; txShown = 60; renderTransactions(v); } }, label));
