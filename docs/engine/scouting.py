@@ -169,3 +169,16 @@ def _rank(league, pool, cons):
 def view(league, abbr, pid):
     """What one club believes about one prospect."""
     return league.scouting[abbr][pid]
+
+
+def scheme_fit_view(league, abbr, p, view):
+    """How the prospect grades in this club's scheme, ON THE ROOM'S READ: the scouted attribute vector (the true
+    ratings shifted by the room's physical and skill errors) run through the same fit function the roster uses.
+    As uncertain as the estimate it is built from; a visit tightens both."""
+    import gm_engine as GE, xp as XP
+    team = league.teams.get(abbr)
+    if team is None or view is None: return 0.0
+    e_p, e_s = float(view.get('e_phys', 0.0) or 0.0), float(view.get('e_skill', 0.0) or 0.0)
+    seen = {k: float(np.clip(v + (e_p if k in XP.PHYSICAL else e_s), 30.0, 99.0)) for k, v in p.ratings.items()}
+    try: return round(float(GE.scheme_fit(seen, p.pos, team)), 1)
+    except Exception: return 0.0

@@ -333,7 +333,7 @@ main[hidden]{display:none}
 .pill{display:block;margin:0 auto;font-size:12.5px;font-weight:700;padding:1px 0;border:1px solid var(--pc,var(--rule-hi));color:var(--pc,var(--ink-2));border-radius:2px;width:84px;text-align:center}
 .pill.happy{--pc:var(--ok)}.pill.content{--pc:var(--ink-3)}.pill.unsettled{--pc:var(--decide)}.pill.unhappy{--pc:var(--danger)}
 .ovr{font-family:var(--display);font-weight:900;font-size:22px}
-.ovr.t1{color:var(--ok)}.ovr.t2{color:var(--ink)}.ovr.t3{color:var(--ink-3)}
+.ovr.t1,.ovr.t2,.ovr.t3{color:var(--ink)}    /* one color for overall everywhere; the tiering read as a signal */
 .fit{font-family:var(--mono);font-size:14px}
 .fit.p{color:var(--ok)}.fit.m{color:var(--danger)}.fit.z{color:var(--ink-3)}
 .cond{display:block;margin:0 auto;width:56px;height:7px;background:var(--sheet-3);border:1px solid var(--rule);vertical-align:middle}
