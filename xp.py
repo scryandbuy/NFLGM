@@ -185,6 +185,8 @@ def modifier(player):
 # The overall wall stays alongside these (a 90 improving is harder than a 70
 # improving), so a man who arrived at 95 pays more than one who was built up.
 BASE_COST = 600.0            # a rookie's first point into a position skill
+PHYSICAL_BASE = 2500.0       # a 21-year-old's first point of speed; see the wall in cost_per_point
+PHYS_ATTR_ESCALATOR = 1.25   # per point already bought into the same physical
 
 PHYSICAL = {'speed_rating', 'accel_rating', 'agility_rating', 'strength_rating',
             'change_of_direction_rating', 'jump_rating'}
@@ -234,6 +236,17 @@ def cost_per_point(player, attr=None):
     late_from, late_slope = LATE_SLOPE.get(player.pos, (99.0, 0.0))
     late = 1.0 + late_slope * max(0.0, float(player.age) - late_from)
     same = float(player.xp_spent.get(attr, 0) or 0) if attr else 0.0
+    if attr in PHYSICAL:
+        # PHYSICALS ARE NOT LEARNED. Speed, burst, agility, jumping and strength grow only while a
+        # young man's body is still finishing, and by a little. They price off their own base and
+        # climb a wall with age: x1 at 21 and 22, x2 at 23, x3.5 at 24, x6 at 25, x10 at 26, doubling
+        # each year after; strength grows a little longer, so its wall is softer. Repeats climb 25%
+        # a point, so speed goes up in ones. A 22-year-old starter can add a point of speed once or
+        # twice a season if he spends nothing else; a 26-year-old is looking at three seasons of XP.
+        age = float(player.age)
+        wall = 1.0 if age < 23 else 2.0 if age < 24 else 3.5 if age < 25 else 6.0 if age < 26 else 10.0 * (2.0 ** max(0.0, age - 26.0))
+        if attr == 'strength_rating': wall = wall ** 0.7
+        return (PHYSICAL_BASE * wall * ovr_scale * ESCALATOR ** points_bought(player) * PHYS_ATTR_ESCALATOR ** same)
     return (BASE_COST * curve * (1.0 + AGE_SLOPE * years) * ovr_scale * late
             * ESCALATOR ** points_bought(player) * ATTR_ESCALATOR ** same * phys)
 
