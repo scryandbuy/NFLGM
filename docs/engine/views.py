@@ -201,7 +201,7 @@ def _matchup(session, league, abbr):
         def prw(p):
             l = S.get(p.pid, {}) if p else {}; return (round(l['pr_wins'] / l['pr_reps'] * 100) if l.get('pr_reps') else None)
         mw, tc, tw, mc = wr1(me), cb1(them), wr1(them), cb1(me); tr_, mr_ = rusher(them), rusher(me)
-        def name(p): return p.name.split()[-1] if p else '—'
+        def name(p): return __import__('views').surname(p.name) if p else '—'
         ours_extra = [dict(label='Deep Ball', sub=(f"{abbr} {pct(MT, 'deep')}% of throws" if pct(MT, 'deep') is not None else ''), left=(f"{pct(MT, 'deep')}% deep" if pct(MT, 'deep') is not None else '—'), right=(f"Two-high {pct(T, 'two_high')}%" if pct(T, 'two_high') is not None else '—')),
                       dict(label=f"{name(mw)} vs {name(tc)}", sub=(f"They shadow {pct(T, 'shadow')}%" if pct(T, 'shadow') else 'No shadow yet'), left=(f"{sep(mw)} sep" if sep(mw) is not None else f"{round(mw.ovr) if mw else '—'} WR"), right=(f"{round(tc.ovr)} CB" if tc else '—')),
                       dict(label='Pressure', sub=(f"They blitz {pct(T, 'blitz')}%" if pct(T, 'blitz') is not None else ''), left=(f"{rk(M, 'pass block')}{_ord(rk(M, 'pass block'))} protection" if rk(M, 'pass block') else '—'), right=(f"{rk(U, 'pass rush')}{_ord(rk(U, 'pass rush'))} rush" if rk(U, 'pass rush') else '—'))]
@@ -323,7 +323,7 @@ def _asset_words(league, a):
     if isinstance(a, dict) and a.get('pick'): return f"{a.get('year')} R{a.get('round')}"
     m = re.match(r"DraftPick\(year=(\d+), round=(\d+)", s)
     if m: return f"{m.group(1)} R{m.group(2)}"
-    p = league.player(s); return p.name.split()[-1] if p else s
+    p = league.player(s); return __import__('views').surname(p.name) if p else s
 
 
 def _desk_detail(league, abbr, m):

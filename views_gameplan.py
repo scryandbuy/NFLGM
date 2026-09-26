@@ -108,7 +108,7 @@ def this_week(session, league, abbr):
         sugg.append(dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=sentence(s['text']), why=sentence(s['why']), target=target_words(s), changes={k: (list(v) if isinstance(v, tuple) else v) for k, v in s['changes'].items()}, taken=taken))
     bracket = plan.bracket; bp = league.player(bracket) if bracket else None
     their_wrs = [dict(pid=p.pid, name=p.name, ovr=round(p.ovr)) for p in league.teams[opp_abbr].depth.get('WR', [])[:3] if p.out_until is None]
-    wr_out = [p.name.split()[-1] for p in league.teams[opp_abbr].depth.get('WR', [])[:2] if p.out_until is not None]
+    wr_out = [__import__('views').surname(p.name) for p in league.teams[opp_abbr].depth.get('WR', [])[:2] if p.out_until is not None]
     import staff as ST
     t = league.teams[abbr]
     return dict(rail=r, off=False, week=wk, opp=club(opp_abbr), away=away, leans=leans,
@@ -121,7 +121,7 @@ def this_week(session, league, abbr):
 
 def _cb1(league, t):
     cbs = sorted((p for p in t.active() if p.pos == 'CB' and p.out_until is None), key=lambda p: -p.ovr)
-    return dict(pid=cbs[0].pid, name=cbs[0].name.split()[-1]) if cbs else None
+    return dict(pid=cbs[0].pid, name=__import__('views').surname(cbs[0].name)) if cbs else None
 
 
 def _coord(t, role):

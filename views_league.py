@@ -131,7 +131,7 @@ def schedule(session, league, abbr, week=None):
         note = ''
         gd = (getattr(session, 'gamedays', None) or {}).get(f"{league.year}-{cur}")
         if done and abbr in (a, h) and gd and gd.get('game'):
-            g = gd['game']; note = ('OT · ' if g.get('ot') else '') + ' · '.join(f"{r['name'].split()[-1]} {r['yds']} yds, {r['td']} TD" for r in (g.get('box') or {}).get('passing', [])[:1])
+            g = gd['game']; note = ('OT · ' if g.get('ot') else '') + ' · '.join(f"{__import__('views').surname(r['name'])} {r['yds']} yds, {r['td']} TD" for r in (g.get('box') or {}).get('passing', [])[:1])
         games.append(dict(away=club(a), home=club(h), ap=ap, hp=hp, done=done, mine=(abbr in (a, h)), winner=(h if done and hp > ap else a if done and ap > hp else None),
                           away_rec=_rec(league, a), home_rec=_rec(league, h), note=note, box=(abbr in (a, h) and done and f"{league.year}-{cur}" in (getattr(session, 'gamedays', None) or {}))))
     games.sort(key=lambda g: (not g['mine'], g['home']['abbr']))
