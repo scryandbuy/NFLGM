@@ -356,6 +356,59 @@ def keep_groups_whole(league, rng, week):
     return moves
 
 
+SWAP_GAP = 3.0                 # the newcomer must grade three points better at the spot
+
+
+def roster_review(league, rng, week, user_team=None):
+    """THE HOUSEKEEPING. Once every four weeks an AI club looks at its bottom five by value and at the best
+    unsigned men and other clubs' squad men at those positions, and makes at most one swap: the newcomer at
+    least three points better, the outgoing man free to cut (a minimum deal, no dead money, not a recent
+    high pick, not the only specialist), and the club not having moved already this week. Real clubs make
+    about one such move a month; the released man goes through waivers like anyone else."""
+    import gm_engine as GE
+    moves = []
+    if league.phase != 'regular' or not (1 <= int(week or 0) <= 17): return moves
+    cap = CAP.get(league.year, 301.2)
+    fa_all = [league.player(pid) for pid in league.free_agents]
+    fa_all = [p for p in fa_all if p is not None and not p.retired and p.out_until is None]
+    for abbr, team in league.teams.items():
+        if abbr == user_team or team.gm is None: continue
+        if (int(week or 0) + (sum(map(ord, abbr)) % 4)) % 4 != 0: continue          # each club's review month falls on a different week
+        if getattr(team, '_moved_week', None) == int(week or 0): continue
+        if len(team.active()) < 50: continue
+        def value(q):
+            try: dead = float(q.dead_if_cut(0))
+            except Exception: dead = 0.0
+            return float(q.ovr) - 4.0 * dead
+        bottom = sorted([q for q in team.active() if not protected(team, q, league) and not locked(q, week) and q.out_until is None
+                         and float(getattr(q, 'apy', 0.0) or 0.0) <= MS.minimum_salary(3, cap) + 0.05], key=value)[:5]
+        best = None
+        for q in bottom:
+            pool = [p for p in fa_all if p.pos == q.pos and not shunned(p, abbr, league)]
+            pool += [p for t2, tm in league.teams.items() if t2 != abbr for p in squad(tm) if p.pos == q.pos and not shunned(p, abbr, league)]
+            if not pool: continue
+            p = max(pool, key=lambda x: x.ovr + GE.scheme_fit(x.ratings, x.pos, team))
+            gain = (p.ovr + GE.scheme_fit(p.ratings, p.pos, team)) - (q.ovr + GE.scheme_fit(q.ratings, q.pos, team))
+            if gain >= SWAP_GAP and (best is None or gain > best[0]):
+                best = (gain, q, p)
+        if best is None: continue
+        gain, q, p = best
+        mn = MS.minimum_salary(p.accrued or 0, cap)
+        if team.cap_space < mn + 0.2: continue
+        league.release(q.pid)
+        if p.pid in league.free_agents:
+            league.free_agents.remove(p.pid); p.contract = None
+            league.sign(p.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
+        else:
+            src = p.team; squad(league.teams[src]).remove(p); p.xp_spent.pop('_ps', None); p.team = None
+            league.sign(p.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)
+            p.xp_spent['_poach_lock'] = int(week or 0) + POACH_LOCK_GAMES
+            league.log('ps_poach', pid=p.pid, team=abbr, source=src, locked_until=int(week or 0) + POACH_LOCK_GAMES)
+        team._moved_week = int(week or 0)
+        moves.append((abbr, 'swap', q.pid, p.pid))
+    return moves
+
+
 def weekly(league, rng, week, user_team=None):
     """
     In season, every week: clubs short of healthy men at a group elevate two
@@ -364,6 +417,7 @@ def weekly(league, rng, week, user_team=None):
     """
     import contracts as CT
     moves = keep_groups_whole(league, rng, week)
+    moves += roster_review(league, rng, week, user_team=user_team)
     for abbr, team in league.teams.items():
         clear_elevations(team)
         healthy = [p for p in team.active() if p.out_until is None]
