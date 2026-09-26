@@ -303,7 +303,8 @@ class SeasonRunner:
         """The games only. Sunday: every scheduled game this week, the scores written back,
         expired injuries cleared. The week itself has not rolled; that is roll_week."""
         self.week = week
-        self.injury_week(week)
+        if getattr(self, '_listed_week', None) != week:
+            self.injury_week(week)                      # a week that was never listed (the first, or a loaded save) lists now
         played = []
         self.last_games = []                      # (home, away, res, book) for Game Day
         for i, (wk, away, home, ap, hp) in enumerate(self.L.schedule):
@@ -323,6 +324,7 @@ class SeasonRunner:
         self.week = week
         self.L.week = week
         self.last_played = played
+        self._listed_week = week
         # men who played hurt: did it flare?
         for abbr_, desk_ in self.desks.items():
             for p_, wks in desk_.flare(self.L, self.L.teams[abbr_], week, self.rng):
@@ -398,6 +400,10 @@ class SeasonRunner:
         # claim from the inbox), then notify the user of this week's waivers
         WV.process(self.L, self.rng, week)
         WV.notify_user(self.L, WV.pending(self.L), week)
+        # WEDNESDAY: next week's injury report is listed now, so the Questionable and Doubtful decisions sit in
+        # the inbox all week and are answered before Sunday, not thirty seconds before the kick
+        if week < 18:
+            self.injury_week(week + 1); self._listed_week = week + 1
         try:
             import club_notes as CN, league_notes as LN
             CN.weekly(self.L, week)

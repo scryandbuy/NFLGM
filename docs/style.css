@@ -1149,3 +1149,8 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 
 /* the message pane uses the width it has */
 .mailbox .pane{padding:18px 28px}
+
+/* the designation tag fits beside the overall */
+.plate3 .row2 .tag{font-size:9.5px;padding:1px 5px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 46px)}
+.plate3 .row2 .ov{flex:0 0 auto}
+.plate3 .row2>span:first-child{min-width:0}
