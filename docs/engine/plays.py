@@ -774,7 +774,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         # a bracketed man is squeezed, not erased - an elite receiver doubled
         # still beats an average one singled
         if def_call.get('bracket') == pr['receiver'].get('pid'):
-            pr['separation'] *= 0.72
+            pr['separation'] *= 0.72; pr['bracket'] = True        # and the read goes elsewhere more often (targets.select_target)
 
     tgt, cov, read_kind, sep_raw = TG.select_target(
         pairs, off['qb'], concept, rng, rate, plan=off_call.get('plan'))
