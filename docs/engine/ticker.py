@@ -123,6 +123,10 @@ def play_line(league, p, off_abbr, def_abbr):
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None
         text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {int(round(100 - p.get('new_yardline', 75)))}." if who else f", returned to the {int(round(100 - p.get('new_yardline', 75)))}.")); kind = 'special'
+    elif t == 'timeout':
+        text = f"Timeout, {'the offense' if p.get('side') == 'off' else p.get('side_abbr') or p.get('side', '').upper()} ({p.get('left', 0)} left)."; kind = 'neutral'
+    elif t == 'two_minute':
+        text = 'Two-minute warning.'; kind = 'neutral'
     elif t in ('audible', 'kneel', 'spike'):
         text = {'kneel': f"{passer or 'The quarterback'} kneels.", 'spike': f"{passer or 'The quarterback'} spikes it."}.get(t, ''); kind = 'neutral'
         if not text: return None

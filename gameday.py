@@ -46,6 +46,7 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
     drive's quarterback and back fill in when the play did not name them."""
     import ticker as TK
     q = dict(p)
+
     if not q.get('passer') and q.get('type') in ('complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble'): q['passer'] = qb_pid
     if not q.get('carrier') and q.get('type') == 'run': q['carrier'] = rb_pid
     ln = TK.play_line(league, q, off_abbr, def_abbr)
