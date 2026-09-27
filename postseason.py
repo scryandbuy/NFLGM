@@ -280,8 +280,9 @@ def run_firings(league, rng, pool=None, verbose=False, clubs=None):
                 continue                      # the user is the man; his seat is his own story
             import coaching_pool as CP
             hired, reasons = CP.fire_and_hire(league, t, rng, verbose)
-            fired.append((abbr, hired.background))
-            league.__dict__.setdefault('_fired_this_year', {}).setdefault(yr, []).append((abbr, hired.background))
+            bg = hired.background if hired is not None else 'pending a search'
+            fired.append((abbr, bg))
+            league.__dict__.setdefault('_fired_this_year', {}).setdefault(yr, []).append((abbr, bg))
         else:
             t.tenure += 1
             t.gm.tenure = t.tenure

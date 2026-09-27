@@ -849,6 +849,7 @@ class League:
             negotiations=getattr(self, 'negotiations', None) or [],
             staff=__import__('staff').to_dict(self),
             poaches=getattr(self, 'poaches', None) or [],
+            pending_hires=getattr(self, 'pending_hires', None) or {},
             last_draft=getattr(self, 'last_draft', None),
             user_tag_choice=getattr(self, 'user_tag_choice', None), tags_done_year=getattr(self, 'tags_done_year', None), watchlist=sorted(getattr(self, 'watchlist', set()) or []),
             promises=getattr(self, 'promises', None) or [],
@@ -915,6 +916,7 @@ class League:
         L.almanac = d.get('almanac')
         L.negotiations = d.get('negotiations', []) or []; L.promises = d.get('promises', []) or []
         L.exit_meetings = d.get('exit_meetings', {}) or {}
+        L.pending_hires = d.get('pending_hires', {}) or {}
         import staff as _ST
         _ST.from_dict(L, d.get('staff'))
         L.poaches = d.get('poaches', []) or []

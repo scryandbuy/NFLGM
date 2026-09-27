@@ -330,6 +330,8 @@ def carousel(league, rng, new_head_coaches=(), verbose=False):
     pool = league.staff_pool
     user = getattr(league, 'user_team', None)
     finalize_poaches(league)
+    import coaching_pool as CP
+    CP.close_pending_hires(league, rng)                    # a club still waiting on the user takes the coordinator
 
     def to_pool(team, role, why):
         c = team.staff.get(role)
@@ -461,8 +463,13 @@ def answer_poach(league, tid, action, raise_years=0, raise_to=None, rng=None):
     team = league.teams[t['team']]; c = team.staff.get(t['role'])
     if c is None or c.name != t['coach']: t['state'] = 'void'; return dict(ok=False, why='he is no longer on your staff')
     tr = c.traits or {}; amb = tr.get('ambition', 50) / 100.0; loy = tr.get('loyalty', 50) / 100.0; money = tr.get('financial_priority', 50) / 100.0
+    def _complete(take_first):
+        club = t.get('pending_club')
+        if club and club in (getattr(league, 'pending_hires', None) or {}):
+            import coaching_pool as CP
+            CP.complete_pending_hire(league, club, rng, take_first=take_first)
     if action == 'let_go':
-        t['state'] = 'let_go'; return dict(ok=True, result='he goes', line=f"{c.name} thanks you and takes the job.")
+        t['state'] = 'let_go'; _complete(True); return dict(ok=True, result='he goes', line=f"{c.name} thanks you and takes the job.")
     if action == 'persuade':
         t['tries'] += 1
         base = {'go': 0.12, 'torn': 0.35, 'stay': 0.60}[t['lean']]
@@ -477,11 +484,13 @@ def answer_poach(league, tid, action, raise_years=0, raise_to=None, rng=None):
             t['state'] = 'stayed'; c.years = max(c.years, int(raise_years) or c.years, 2); c.prestige = float(np.clip(c.prestige + 2, 0, 95))
             if raise_to is not None and raise_to > c.salary: c.salary = round(float(raise_to), 2)
             league.log('staff_extend', team=team.abbr, role=c.role, name=c.name, why='stayed after a head-coaching offer')
+            _complete(False)
             return dict(ok=True, result='he stays', line=f"{c.name} stays." + (f" A new {int(raise_years)}-year deal." if raise_years else " He appreciated the conversation."))
         return dict(ok=True, result='he still wants to go', line=f"{c.name} hears you out and still wants the job. Let him go, or block it.")
     if action == 'block':
         t['state'] = 'blocked'; c.disgruntled = league.year
         league.log('staff_blocked', team=team.abbr, role=c.role, name=c.name)
+        _complete(False)
         return dict(ok=True, result='blocked', line=f"{c.name} stays because you said so. He will coach, but not the way he did, and he will leave when his deal is up.")
     return dict(ok=False, why='unknown action')
 

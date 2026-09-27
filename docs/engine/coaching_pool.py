@@ -262,6 +262,14 @@ def owner_hire(league, team, rng, verbose=False):
             for sc, c, f, nm, cst, sq, sm in scored[1:]:
                 if getattr(c, '_from_staff', None) and c._from_staff[0] == user: continue
                 hired, fit, n_mis, cost, seen_q, sim = c, f, nm, cst, sq, sm; break
+        elif open_t['state'] == 'open':
+            # THE SEARCH WAITS FOR YOUR ANSWER. The club holds the job open with your coordinator as its choice and its
+            # second choice noted; the answer completes the hire either way (staff.answer_poach), and the carousel
+            # closes anything still pending with him leaving
+            second = next((c for sc, c, f, nm, cst, sq, sm in scored[1:] if not (getattr(c, '_from_staff', None) and c._from_staff[0] == user)), None)
+            open_t['pending_club'] = team.abbr; open_t['second'] = second.name if second is not None else None
+            league.__dict__.setdefault('pending_hires', {})[team.abbr] = dict(poach=open_t['id'], first=hired.name, first_from=list(hired._from_staff), second=(second.name if second is not None else None), year=league.year)
+            return None, dict(pending=True, waiting_on=hired.name)
     if hired in p:
         p.remove(hired)
     elif getattr(hired, '_from_staff', None):
@@ -296,6 +304,11 @@ def fire_and_hire(league, team, rng, verbose=False):
     AL.coach_fired(league, team.abbr, league.year)
     hired, reasons = owner_hire(league, team, rng, verbose)
     team._just_fired = None
+    if hired is None:
+        # the job is held open while the user answers for his coordinator; the club has no head coach for now
+        team.gm = None
+        league.log('gm_search', team=team.abbr, waiting_on=reasons.get('waiting_on'))
+        return None, reasons
     hired.tenure = 0
     hired.job_security = float(np.clip(rng.normal(.78, .10), .45, .97))
     team.gm = hired
@@ -307,3 +320,36 @@ def fire_and_hire(league, team, rng, verbose=False):
     league.log('gm_change', team=team.abbr, hired=hired.name, background=hired.background,
                win_pct=round(team.win_pct, 3), **reasons)
     return hired, reasons
+
+
+def complete_pending_hire(league, club_abbr, rng, take_first):
+    """The user answered for his coordinator: the waiting club hires him (take_first) or its second choice."""
+    pend = (getattr(league, 'pending_hires', None) or {}).pop(club_abbr, None)
+    team = league.teams.get(club_abbr)
+    if pend is None or team is None: return None
+    p = pool(league); hired = None
+    if take_first:
+        src_abbr, role = pend['first_from']
+        src = league.teams.get(src_abbr); co = (getattr(src, 'staff', None) or {}).get(role) if src is not None else None
+        if co is not None and co.name == pend['first']:
+            g = make_candidate(rng, taken=[c.name for c in p], background=('offensive coordinator' if role == 'oc' else 'defensive coordinator'))
+            g.name = co.name; g.prestige = float(co.prestige); g.age = co.age
+            g.reputation = round(float(np.clip((co.rating - 35.0) / 55.0 + rng.normal(0, 0.06), 0.05, 0.95)), 2)
+            src.staff[role] = None
+            league.log('staff_out', team=src_abbr, role=role, name=co.name, why=f'hired as head coach by {club_abbr}')
+            hired = g
+    if hired is None:
+        hired = next((c for c in p if c.name == pend.get('second')), None) or (max(p, key=lambda c: getattr(c, 'prestige', 0)) if p else None)
+        if hired is None: return None
+        if hired in p: p.remove(hired)
+    hired.tenure = 0
+    hired.job_security = float(np.clip(rng.normal(.78, .10), .45, .97))
+    team.gm = hired; team.scheme = GE.scheme_of(hired); team.tenure = 0
+    league.log('gm_change', team=team.abbr, hired=hired.name, background=hired.background, win_pct=round(team.win_pct, 3), after_search=True)
+    return hired
+
+
+def close_pending_hires(league, rng):
+    """The carousel: any club still waiting on an answer takes the coordinator (the user did not answer)."""
+    for club_abbr in list((getattr(league, 'pending_hires', None) or {}).keys()):
+        complete_pending_hire(league, club_abbr, rng, take_first=True)
