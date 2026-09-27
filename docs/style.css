@@ -1390,3 +1390,7 @@ h2{letter-spacing:-.01em}
 [data-tip].tip-right:hover::after{left:auto;right:0;transform:none}
 [data-tip].tip-left:hover::after{left:0;transform:none}
 [data-tip].tip-up:hover::after{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
+
+/* the free-agency rows: the action buttons stay inside their cell */
+.fa-tbl td:last-child,.fa-tbl th:last-child{white-space:nowrap}
+.fa-tbl .btn{font-size:13px;padding:3px 8px}

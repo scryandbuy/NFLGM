@@ -260,7 +260,7 @@ function renderPortal(v) {
   const colors = { QB: '#c8102e', OL: '#e0b400', WR: '#4cc9f0', DL: '#3fb37f', DB: '#8791a0', LB: '#b6bec9', TE: '#5a6472', RB: '#a0603a', ST: '#3a3f47' };
   const stack = el('div', { class: 'stack', style: 'margin-top:10px' }, ...Object.entries(capG).filter(([, x]) => x > 0).map(([g, x]) => el('i', { class: (100 * x / v.cap.cap) < 7 ? 'narrow' : '', style: `width:${100 * x / v.cap.cap}%;background:${colors[g]}`, 'data-tip': `${g}: $${x.toFixed(1)}m` }, el('span', {}, g))), el('i', { style: `width:${100 * v.cap.dead / v.cap.cap}%;background:#3a1216`, 'data-tip': `Dead Money: $${v.cap.dead.toFixed(1)}m` }));
   const capS = sheet('Cap', `${v.cap.years[0].year} · $${v.cap.cap}m Limit`, el('div', { class: 'pad' }, el('div', { class: 'big' }, v.cap.space, el('span', { class: 'muted', style: 'font-size:16px;font-family:var(--text);font-weight:500' }, ' Space')), stack,
-    el('div', { class: 'bars', style: 'padding:10px 0 0;grid-template-columns:96px 1fr 70px' }, ...v.cap.years.flatMap(y => [el('div', { class: 'l' }, y.year), el('div', { class: 't' }, el('i', { style: `width:${Math.min(100, 100 * y.committed / y.cap)}%;background:var(--ink-2)` })), el('div', { class: 'v' }, `$${y.committed}/${y.cap}`)]))),
+    el('div', { class: 'bars', style: 'padding:10px 0 0;grid-template-columns:60px 1fr 118px' }, ...v.cap.years.flatMap(y => [el('div', { class: 'l' }, y.year), el('div', { class: 't' }, el('i', { style: `width:${Math.min(100, 100 * y.committed / y.cap)}%;background:var(--ink-2)` })), el('div', { class: 'v', style: 'white-space:nowrap;text-align:right' }, `$${y.committed}/${y.cap}`)]))),
     el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#frontoffice/cap' }, 'Restructure'), el('a', { class: 'btn', href: '#personnel/extensions' }, 'Extensions'), el('a', { class: 'btn quiet', href: '#frontoffice/cap' }, 'Ledger')));
   capS.classList.add('c4'); page.append(capS);
 
@@ -1101,7 +1101,7 @@ function renderFA(v) {
   const reload = () => renderFA(pyJSON(`SESSION.personnel('free_agency')`));
   const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], DL: ['LEDG', 'DT', 'REDG'], DB: ['CB', 'FS', 'SS'], LB: ['MIKE', 'WILL', 'SAM'] };
   const inSeason = v.in_season;
-  const left = el('section', { class: 'sheet c7' }, el('h2', {}, v.fa_round ? `Free Agency · Round ${v.fa_round}` : 'Free Agency', el('small', {}, inSeason
+  const left = el('section', { class: 'sheet c8' }, el('h2', {}, v.fa_round ? `Free Agency · Round ${v.fa_round}` : 'Free Agency', el('small', {}, inSeason
     ? `${v.count} Available · Cap Space $${v.cap}m · ${v.weeks_left} week${v.weeks_left === 1 ? '' : 's'} left · Roster ${v.roster} · Practice Squad ${v.ps}`
     : `${v.count} Available · Cap Space $${v.cap}m${v.top51 ? ' · Top 51' : ''} · Next Year $${v.committed_next}m of $${v.limit_next}m committed${v.fa_round ? ' · offers resolve when you advance' : ''}`)));
   const tools = el('div', { class: 'tools' });
@@ -1132,10 +1132,10 @@ function renderFA(v) {
   };
   left.append(tbl); drawRows();
   page.append(left);
-  const right = el('section', { class: 'sheet c5' }, el('h2', {}, inSeason ? 'Talks' : 'Negotiation', el('small', {}, `${v.threads.length} open`)));
+  const right = el('section', { class: 'sheet c4' }, el('h2', {}, inSeason ? 'Talks' : 'Negotiation', el('small', {}, `${v.threads.length} open`)));
   { const live_ = ['open', 'waiting', 'countered', 'match_requested']; const ths = [...v.threads].sort((a, b) => (live_.includes(b.state) ? 1 : 0) - (live_.includes(a.state) ? 1 : 0) || b.id - a.id); for (const t of ths) right.append(talkLine(t, reload)); }
   if (!v.threads.length) right.append(el('div', { class: 'empty' }, inSeason ? 'Ask an agent to hear his number. Sign at the ask today, or make a one-week offer that decides at the Advance.' : 'Ask an agent to open talks; he weighs offers through each round of the market.'));
-  const feedSheet = el('section', { class: 'sheet c5', style: 'order:2' }, el('h2', {}, 'Around the League Today', el('small', {}, 'latest signings')));
+  const feedSheet = el('section', { class: 'sheet c4', style: 'order:2' }, el('h2', {}, 'Around the League Today', el('small', {}, 'latest signings')));
   const fd = el('div', { class: 'feed' }); for (const f of v.feed) fd.append(el('div', {}, el('span', {}, stripe(f.team.abbr)), el('span', {}, `${f.team.name} ${f.kind === 'signs' ? 'signed' : 'extended'} `, el('b', {}, f.name), `, ${f.pos}${f.years ? `, ${f.years} year${f.years === 1 ? '' : 's'}` : ''}${f.apy ? ` at $${f.apy}m a year` : ''}`), el('time', {}, f.week ? `Wk ${f.week}` : ''))); if (!v.feed.length) fd.append(el('div', { class: 'empty' }, 'Quiet so far.')); feedSheet.append(fd);
   page.append(right, feedSheet);
 }
@@ -1911,7 +1911,7 @@ function renderBracket(v) {
     line(g.home, g.home_seed, g.hs, g.done, g.winner === g.home.abbr, g.home.abbr === v.rail.club.abbr, g.home_record),
     el('div', { class: 'foot' }, g.done ? 'Final' : g.round === 'SB' ? '' : `at ${g.home.name}`, g.round === 'SB' ? '' : el('span', {}, g.stadium || '')))
     : el('div', { class: 'bk-game tbd ' + (cls || '') }, el('div', { class: 'bk-line' }, el('span', { class: 'sd' }, ''), el('span', { class: 'str' }), el('span', { class: 'ab' }, 'TBD')), el('div', { class: 'bk-line' }, el('span', { class: 'sd' }, ''), el('span', { class: 'str' }), el('span', { class: 'ab' }, 'TBD')), el('div', { class: 'foot' }, 'to be decided'));
-  const byeCard = (b, cls) => b ? el('div', { class: 'bk-game bye ' + cls + (b.me ? ' mine' : '') }, line(b.club, 1, null, false, false, b.me, b.record), el('div', { class: 'foot' }, 'First-round bye')) : el('div', { class: cls });
+  const byeCard = (b, cls) => b ? el('div', { class: 'bk-game bye ' + cls + (b.me ? ' mine' : '') }, line(b.club, 1, null, false, false, b.me, null), el('div', { class: 'foot' }, 'First-round bye')) : el('div', { class: cls });
   const tree = el('div', { class: 'bk-tree' });
   const side = (c, flip) => {
     // three wild card games plus the bye in one column; two divisional games; the championship. Rows are the tree's
