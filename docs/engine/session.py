@@ -409,7 +409,7 @@ class Session:
             two = sorted([p for p in t.active() if p.contract and p.contract.years == 2 and p.ovr >= 82], key=lambda p: -p.ovr)
             limit_next, committed_next, _ro, _dn = next_year_cap(self.L, t)
             if up or two:
-                body = (f"Deals up: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in up[:6])}. " if up else '') + (f"Two years left and worth a look: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in two[:4])}. " if two else '') + f"About ${limit_next - committed_next:.0f}m of room next year. The other clubs are working their own lists now."
+                body = (f"Deals up: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in up[:6])}. " if up else '') + (f"Two years left and worth a look: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in two[:4])}. " if two else '') + f"About ${limit_next - committed_next:.0f}m of room next year."
                 IB.post(self.L, 'contract', "The extension window is open", body, sender='front office', payload=dict(key=f"extwin-{self.L.year}", link='personnel:extensions'))
         except Exception as e:
             import sys; print('extension window note failed:', e, file=sys.stderr)
