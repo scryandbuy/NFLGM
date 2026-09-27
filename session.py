@@ -342,6 +342,15 @@ class Session:
             IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the men whose deals are up.", sender='front office', payload=dict(key=key_, link='front_office:review'))
         except Exception as e:
             import sys; print('season review failed:', e, file=sys.stderr)
+        try:
+            import views_frontoffice as VF
+            ms = VF.build_exit_meetings(self, self.L, self.user_team)
+            if ms:
+                from views import surname
+                names = ', '.join(surname(self.L.player(x['pid']).name) for x in ms if self.L.player(x['pid']))
+                IB.post(self.L, 'exit', f"Exit meetings: {len(ms)} men want a word", f"{names}. Each has a question for you and will remember the answer.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
+        except Exception as e:
+            import sys; print('exit meetings failed:', e, file=sys.stderr)
 
     def _playoff_prep(self, rnd_i):
         """The week before a playoff game, for every club: the round's games scheduled, the injury desk's listings and
@@ -566,6 +575,12 @@ class Session:
     def frontoffice(self, page, **kw):
         import views_frontoffice as VF
         return getattr(VF, page)(self, self.L, self.user_team, **kw)
+
+    def exit_answer(self, pid, key):
+        import views_frontoffice as VF
+        r = VF.exit_answer(self, self.L, self.user_team, pid, key)
+        if r.get('ok'): self.save_dirty = True
+        return r
 
     def frontoffice_act(self, action, **kw):
         import views_frontoffice as VF

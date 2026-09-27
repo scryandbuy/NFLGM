@@ -1250,3 +1250,25 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .rv-notes{padding-bottom:10px}
 .rv-note{display:flex;gap:10px;padding:8px 18px;font-size:16.5px;line-height:1.45}
 .rv-note .q{font-family:var(--display);font-size:30px;line-height:1;color:var(--club-2)}
+
+/* EXIT MEETINGS */
+.xm-head{padding:22px 26px 20px}
+.xm-kicker{font-family:var(--display);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:13px;color:var(--ink-3)}
+.xm-title{font-family:var(--display);font-weight:900;font-size:44px;line-height:1;margin-top:6px}
+.xm-sub{margin-top:8px;color:var(--ink-2);font-size:15.5px}
+.xm-card{padding:18px 20px}
+.xm-card.done{opacity:.85}
+.xm-who{display:flex;gap:14px;align-items:center}
+.xm-who .plate{width:52px;height:52px;display:grid;place-items:center;font-family:var(--display);font-weight:900;font-size:24px;border-radius:4px;flex:none}
+.xm-who .nm{font-family:var(--display);font-weight:700;font-size:22px;line-height:1.1}
+.xm-who .ln{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);margin-top:3px}
+.xm-quote{display:flex;gap:10px;margin:16px 0 14px;font-size:19px;line-height:1.4;font-style:italic;color:var(--ink)}
+.xm-quote .q,.xm-said .q{font-family:var(--display);font-size:34px;line-height:.9;color:var(--club-2);font-style:normal}
+.xm-opts{display:grid;gap:8px}
+.xm-opt{text-align:left;display:grid;gap:3px;padding:10px 14px;background:var(--sheet-2);border:1px solid var(--rule);border-left:4px solid var(--club-2);cursor:pointer;color:var(--ink)}
+.xm-opt:hover{background:var(--sheet-3);border-color:var(--rule-hi);border-left-color:var(--club-2)}
+.xm-opt b{font-family:var(--display);font-weight:700;font-size:16.5px}
+.xm-opt span{font-size:13.5px;color:var(--ink-3)}
+.xm-said{border-top:1px solid var(--rule);padding-top:12px}
+.xm-said .you{font-size:14.5px;color:var(--ink-2)}
+.xm-said .him{display:flex;gap:8px;margin-top:8px;font-size:17px;font-style:italic}
