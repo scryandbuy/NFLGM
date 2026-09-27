@@ -180,7 +180,9 @@ def convert(row, pos, target):
         # he is a better player, so they keep the profile's value and are not scaled to
         # the target. Scaling them had newgen classes arriving at 84.9 injury against a
         # real rookie class at 87.8, and injuries per game climbing every season.
-        return {a: (float(np.clip(v, 20, 99)) if (a in ('injury_rating', 'tough_rating') or a in TOOLS) else float(np.clip(v * (k ** 0.5 if a in PHYSICAL else k), 20, 99))) for a, v in raw.items()}
+        # durability keeps the profile's number less three: the college file runs a few points high against the
+        # real rookie classes (91 against 88)
+        return {a: (float(np.clip(v - (3.0 if a in ('injury_rating', 'tough_rating') else 0.0), 20, 99)) if (a in ('injury_rating', 'tough_rating') or a in TOOLS) else float(np.clip(v * (k ** 0.5 if a in PHYSICAL else k), 20, 99))) for a, v in raw.items()}
     lo, hi = 0.4, 1.6
     for _ in range(40):
         mid = (lo + hi) / 2
@@ -189,13 +191,14 @@ def convert(row, pos, target):
     return scaled((lo + hi) / 2), college
 
 
-def draw_dev(rank_pct, rng):
+def draw_dev(rank_pct, rng, pos=None):
     """Tilted toward the top of the class: rank_pct 0 = best, 1 = last. The tilt is steep (square root of the
     rank), so the late rounds are nearly all normal: past the midpoint no X-Factor, about 8% star, 1% superstar."""
     w = min(1.0, float(rank_pct) / 0.4) ** 0.6              # the top of the class is the first tenth; by the fifth round the bottom table rules
     p = np.array(DEV_TOP) * (1 - w) + np.array(DEV_BOTTOM) * w
     p[3] *= max(0.0, 1.0 - rank_pct / 0.5)               # X-Factor is gone by the midpoint
     p[2] *= max(0.0, 1.0 - rank_pct / 0.7)               # superstar by the fifth round
+    if pos in ('K', 'P', 'LS'): p[2] = 0.0; p[3] = 0.0     # a specialist is normal or star; the tiers are built around snaps
     p = p / p.sum()
     return DEV_ORDER[int(rng.choice(4, p=p))]
 
@@ -222,7 +225,7 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
             ratings, college_ovr = convert(row, pos, curve[i])
             age = CLASS_AGE[row.school_year] + float(rng.uniform(0.1, 0.9))
             p = LG.Player(f"C{int(row['id'])}", f"{row.first_name} {row.last_name}".strip(), pos,
-                          age, ratings, dev=draw_dev(i / max(n - 1, 1), rng),
+                          age, ratings, dev=draw_dev(i / max(n - 1, 1), rng, pos=pos),
                           draft_year=year, entry_year=year)
             # the seed's own headroom rule, on the engine's overall
             headroom = rng.uniform(2.0, 4.5) + max(0.0, 28.0 - age) * rng.uniform(0.35, 1.15)

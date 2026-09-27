@@ -30,6 +30,7 @@ def _power(p):
     return conf is None or conf in POWER
 
 
+POT_ERR_CAP = 7.0        # the most a room's read of a ceiling can be off
 TAPE_SD = 4.0            # the whole league's shared error on a player: what his tape says against what he is
 TAPE_FLOOR = 0.4         # how much of it survives every look; a visit and a workout uncover the rest, not all of it
 
@@ -53,8 +54,11 @@ def _refresh(view, p):
     n = float(view.get('reads', 1) or 1)
     tp = tape(p) * max(TAPE_FLOOR, 1.0 - 0.25 * (n - 1.0))
     view['ovr'] = round(float(np.clip(p.ovr + view['e_phys'] + view['e_skill'] + tp + adj, 30, 99)), 1)
-    view['pot_lo'] = round(float(np.clip(lo + view['e_pot'] + adj, 30, 99)), 1)
-    view['pot_hi'] = round(float(np.clip(hi + view['e_pot'] + adj, 30, 99)), 1)
+    # a room's ceiling read is bounded: nobody sees a 59 as a 97. The ceiling error is capped and the ceiling
+    # itself cannot sit more than eighteen points above what the room sees today
+    e_pot = float(np.clip(view.get('e_pot', 0.0) or 0.0, -POT_ERR_CAP, POT_ERR_CAP)); view['e_pot'] = e_pot
+    view['pot_lo'] = round(float(np.clip(min(lo + e_pot + adj, view['ovr'] + 12.0), 30, 99)), 1)
+    view['pot_hi'] = round(float(np.clip(min(hi + e_pot + adj, view['ovr'] + 18.0), max(view['pot_lo'], 30), 99)), 1)
 
 
 def second_look(view, p, sd, rng, weight=1.0, R=None):
@@ -64,7 +68,7 @@ def second_look(view, p, sd, rng, weight=1.0, R=None):
     n = view.get('reads', 1)
     draw_s = float(rng.normal(0.0, sd * (1 - PHYS_SHARE) ** 0.5)) * R['skill_mult'] + R['skill_bias']; draw_p = float(rng.normal(0.0, sd * CEILING_MULT)) * R['pot_mult'] + R['pot_bias']
     view['e_skill'] = (view['e_skill'] * n + draw_s * weight) / (n + weight)
-    view['e_pot'] = (view['e_pot'] * n + draw_p * weight) / (n + weight)
+    view['e_pot'] = float(np.clip((view['e_pot'] * n + draw_p * weight) / (n + weight), -POT_ERR_CAP, POT_ERR_CAP))
     view['reads'] = n + weight
     _refresh(view, p)
 
@@ -151,7 +155,7 @@ def scout(league, rng):
             e_phys = float(rng.normal(0.0, sd * wide * PHYS_SHARE ** 0.5)) * R['phys_mult'] + (R['phys_bias_athlete'] if _athlete(p) > 4.0 else 0.0)
             e_skill = float(rng.normal(0.0, sd * wide * (1 - PHYS_SHARE) ** 0.5)) * R['skill_mult'] + R['skill_bias'] + (R['power_bias'] if _power(p) else 0.0)
             lo, hi = p.potential_range if p.potential_range else (p.ovr, p.ovr + 3)
-            e_pot = float(rng.normal(0.0, sd * wide * CEILING_MULT)) * R['pot_mult'] + R['pot_bias']
+            e_pot = float(np.clip(float(rng.normal(0.0, sd * wide * CEILING_MULT)) * R['pot_mult'] + R['pot_bias'], -POT_ERR_CAP, POT_ERR_CAP))
             v[p.pid] = dict(e_phys=e_phys, e_skill=e_skill, e_pot=e_pot, reads=1, flags=[])
             _refresh(v[p.pid], p)
         views[abbr] = v
@@ -176,10 +180,19 @@ def _rank(league, pool, cons):
     for p in pool:
         if p.pid in cons: groups.setdefault(DRAFT.SLOT_GROUP.get(p.pos, p.pos), []).append(p)
     slot = {}
+    # A STRONG POSITION CLASS DOES NOT BURY ITS EIGHTH PLAYER. The slot is the position's rank table (the mix by
+    # construction) blended with where his grade sits in the whole class, so a 79 back in a year with ten of them
+    # still reads as a third-round player rather than a seventh
+    grade_of = {p.pid: 0.6 * cons[p.pid]['ovr'] + 0.4 * cons[p.pid]['pot'] for p in pool if p.pid in cons}
+    grades_desc = sorted(grade_of.values())
     for g, ps in groups.items():
-        ps.sort(key=lambda p: -(0.6 * cons[p.pid]['ovr'] + 0.4 * cons[p.pid]['pot']))
+        ps.sort(key=lambda p: -grade_of[p.pid])
         for i, p in enumerate(ps):
-            slot[p.pid] = DRAFT.expected_slot(p.pos, i)
+            by_rank = DRAFT.expected_slot(p.pos, i)
+            if p.pos in ('K', 'P', 'FB'):
+                slot[p.pid] = by_rank
+            else:
+                slot[p.pid] = 0.5 * by_rank + 0.5 * DRAFT.grade_slot(grade_of[p.pid], grades_desc)
     for r, pid in enumerate(sorted(cons, key=lambda k: slot[k]), 1):
         cons[pid]['rank'] = r; cons[pid]['slot'] = slot[pid]
 

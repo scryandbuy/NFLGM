@@ -131,7 +131,7 @@ def needs(team, level):
 # construction and leaves the reaches to scouting, need and personality.
 SLOT = {
     'QB':   [3, 7, 15, 35, 65, 100, 150, 200, 240],
-    'HB':   [18, 38, 55, 75, 95, 120, 150, 180, 210, 240],
+    'HB':   [18, 38, 55, 72, 88, 105, 125, 150, 175, 200],
     'WR':   [8, 15, 22, 30, 40, 52, 65, 80, 95, 110, 130, 150, 175, 200, 225, 250],
     'TE':   [12, 42, 65, 90, 115, 140, 170, 200, 230],
     'T':    [6, 11, 18, 26, 34, 45, 58, 75, 95, 120, 150, 180, 210, 240],
@@ -146,6 +146,12 @@ SLOT = {
 SLOT_GROUP = {'LT': 'T', 'RT': 'T', 'LG': 'IOL', 'RG': 'IOL', 'C': 'IOL',
               'LEDG': 'EDGE', 'REDG': 'EDGE', 'MIKE': 'LB', 'WILL': 'LB', 'SAM': 'LB',
               'FS': 'S', 'SS': 'S'}
+
+
+def grade_slot(grade, grades_desc):
+    """Where a grade lands in the class regardless of position: one plus the number graded above him."""
+    import bisect
+    return 1 + len(grades_desc) - bisect.bisect_right(grades_desc, grade)
 
 
 def expected_slot(pos, rank):
@@ -200,7 +206,7 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None):
     need = needs(team, level)
     mine = league.scouting[abbr]; cons = league.consensus
     d = team.depth
-    w_pot = 0.40 + 0.35 * belief * (1.0 - 0.8 * heat)
+    w_pot = min(0.5, 0.30 + 0.25 * belief * (1.0 - 0.8 * heat))     # the ceiling is at most half the grade; a believer had been buying 60% ceiling
     # my grade and the room's grade on every man left
     left = [p for p in league.draft_pool if p.pid not in taken]
     def grade(p, v):
@@ -247,6 +253,10 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None):
             # and never two of them in one draft
             if p.pos in POS_CAP_EARLY and any(league.players[pid].pos == p.pos and league.players[pid].team == abbr for pid in taken):
                 slot += 200.0
+            # NO TRIPLE DIPPING. A club that has taken a position in the first three rounds does not take it again
+            # in the top hundred: the need is filled, and the pull that filled it goes with it
+            if selection <= 100 and gap > 0 and any(league.players[pid].pos == p.pos and league.players[pid].team == abbr and (league.players[pid].draft_overall or 999) <= 96 for pid in taken):
+                slot += gap * (0.6 + 2.0 * (1 - trust)) * (0.5 + inflate) + 40.0
             rows.append((slot_value(max(1.0, slot)), p))
     rows.sort(key=lambda r: -r[0])
     return rows

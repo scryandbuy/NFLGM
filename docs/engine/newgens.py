@@ -99,7 +99,7 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
             ratings, _ = DC.convert(row, pos, curve[i])
             age = (22.0 if rng.random() < 0.68 else 21.0) + float(rng.uniform(0.1, 0.9))
             p = LG.Player(f"N{draft_year}{pos}{i:03d}", name(rng), pos, age, ratings,
-                          dev=DC.draw_dev(i / max(n - 1, 1), rng),
+                          dev=DC.draw_dev(i / max(n - 1, 1), rng, pos=pos),
                           draft_year=draft_year, entry_year=draft_year)
             headroom = rng.uniform(2.0, 4.5) + max(0.0, 28.0 - age) * rng.uniform(0.35, 1.15)
             pot = float(np.clip(p.ovr + headroom, p.ovr, 99.0)); spread = rng.uniform(3.0, 11.0)

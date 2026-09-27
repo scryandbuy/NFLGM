@@ -25,7 +25,7 @@ import scouting as SC
 
 COMBINE_INVITES = 330
 SENIOR_BOWL = 110
-PRO_DAY_LOOKS = 25
+PRO_DAY_LOOKS = 70
 VISITS = 30
 STOCK_MOVE = 15
 
@@ -112,12 +112,13 @@ def pro_days(league, rng):
     looks = 0
     for abbr, team in league.teams.items():
         sd = SC.error_sd(team.gm, team)
-        needs = [pos for pos, ps in team.depth.items() if len([q for q in ps if q.out_until is None]) < 2]
+        # a room's scouts are at most of the pro days: every position where the club is thin, and half the rest
+        needs = [pos for pos, ps in team.depth.items() if len([q for q in ps if q.out_until is None]) < 3]
         R = SC.room(team)
-        cands = sorted([p for p in pool if p.pos in needs or rng.random() < 0.15], key=lambda p: cons.get(p.pid, {}).get('rank', 9999))
-        if not R['day3_reads']: cands = [p for p in cands if cons.get(p.pid, {}).get('rank', 9999) <= 96]
+        cands = sorted([p for p in pool if p.pos in needs or rng.random() < 0.5], key=lambda p: cons.get(p.pid, {}).get('rank', 9999))
+        if not R['day3_reads']: cands = [p for p in cands if cons.get(p.pid, {}).get('rank', 9999) <= 150]
         for p in cands[:int(PRO_DAY_LOOKS * R['looks_mult'])]:
-            SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.9, rng, R=R); looks += 1
+            SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.75, rng, R=R); looks += 1     # a controlled workout: a good look
     SC.consensus(league)
     return looks, _stock_moves(league, 'pro days')
 
@@ -161,6 +162,7 @@ def visits(league, rng):
 
 def _medical(league, abbr, team, p, rng):
     """A visit uncovers a medical risk: the room's doctors read the injury history and the room marks him down."""
+    if p.pos in ('K', 'P'): return                         # durability is not a draft question on a specialist
     med = getattr(p, 'medical', None)
     inj = float(p.ratings.get('injury_rating', 80))
     cut = float((med or {}).get('cut', 70.0))
@@ -168,7 +170,8 @@ def _medical(league, abbr, team, p, rng):
     v = league.scouting[abbr].get(p.pid)
     if v is None or 'medical' in v.get('flags', []): return
     fear = 1.0 - float(getattr(team.gm, 'aggression', 0.5))
-    v['adj'] = v.get('adj', 0.0) - (1.0 + 3.0 * fear) * max(0.5, (cut - inj) / 8.0 + 0.5)
+    # a flag costs a round or two, not six: at most three grade points on this room's board
+    v['adj'] = v.get('adj', 0.0) - min(3.0, (1.0 + 1.5 * fear) * max(0.5, (cut - inj) / 8.0 + 0.5))
     v['flags'] = list(set(v.get('flags', []) + ['medical']))
     SC._refresh(v, p)
     if abbr == getattr(league, 'user_team', None):
