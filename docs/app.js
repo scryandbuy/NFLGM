@@ -1468,7 +1468,7 @@ function renderBoard(v) {
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Scouting Board', el('small', {}, `${v.count} prospects` + (v.slot ? ` · you pick ${ordn_(v.slot)} in the first round` : '') + (v.scout ? ` · Head Scout ${v.scout.name} (${v.scout.rating})` : ''))));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   const taken = v.rows.filter(r => r.taken).length;
-  if (taken) tabs.append(el('label', { class: 'chk', style: 'margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink-2)' }, el('input', { type: 'checkbox', checked: boardHideTaken ? '' : null, onchange: e => { boardHideTaken = e.target.checked; boardPage = 0; draw(); } }), `Hide drafted (${taken})`));
+  if (taken) tabs.append(el('label', { class: 'chk', style: 'margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink-2)' }, el('input', { type: 'checkbox', checked: boardHideTaken ? '' : null, onchange: e => { boardHideTaken = e.target.checked; boardPage = 0; draw(); } }), 'Hide drafted'));
   for (const [k, l, n] of [['class', `Class of ${v.year}`, v.count], ['board', 'Your Board', onBoard.size], ['visited', 'Visited', v.rows.filter(r => r.visited).length]]) tabs.append(el('button', { 'aria-pressed': String(boardTab === k), onclick: () => { boardTab = k; renderBoard(v); } }, l + ' ', el('em', {}, n)));
   s.append(tabs);
   if (boardTab === 'board') { s.append(yourBoard(v, reload)); page.append(s); return; }
