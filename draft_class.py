@@ -70,8 +70,17 @@ NOT_RATINGS = {'overall_rating', 'running_style_rating'}
 SHAPE = [(1, 91.0), (32, 82.0), (64, 79.0), (100, 76.0), (150, 71.0), (250, 65.0), (400, 59.0), (504, 50.0)]
 
 
-def shape_class(cls):
+def shape_class(cls, rng=None):
     import numpy as np
+    # DEVELOPMENT BY CLASS RANK. The trait is drawn against where a player sits in the whole class, not among his
+    # position: the 200th player draws 200th-of-479 odds whichever position he plays, so a weak position year
+    # yields no star traits there and a strong one several, and the late rounds land near all-normal
+    r_ = rng if rng is not None else np.random.default_rng(abs(hash(tuple(sorted(p.pid for p in cls)))) % (2**32))
+    ranked = sorted([p for p in cls if p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.ovr); n = len(ranked)
+    for i, p in enumerate(ranked):
+        p.dev = draw_dev(i / max(n - 1, 1), r_, pos=p.pos)
+    for p in cls:
+        if p.pos in ('K', 'P', 'LS'): p.dev = draw_dev(0.5, r_, pos=p.pos)          # specialists: normal or star, off the class ladder
     men = sorted([p for p in cls if p.pos not in ('K', 'P')], key=lambda p: -p.ovr)
     xs = np.array([r for r, _ in SHAPE], float); ys = np.array([v for _, v in SHAPE], float)
     for i, p in enumerate(men):
@@ -196,8 +205,8 @@ def draw_dev(rank_pct, rng, pos=None):
     rank), so the late rounds are nearly all normal: past the midpoint no X-Factor, about 8% star, 1% superstar."""
     w = min(1.0, float(rank_pct) / 0.4) ** 0.6              # the top of the class is the first tenth; by the fifth round the bottom table rules
     p = np.array(DEV_TOP) * (1 - w) + np.array(DEV_BOTTOM) * w
-    p[3] *= max(0.0, 1.0 - rank_pct / 0.5)               # X-Factor is gone by the midpoint
-    p[2] *= max(0.0, 1.0 - rank_pct / 0.7)               # superstar by the fifth round
+    p[3] *= max(0.0, 1.0 - rank_pct / 0.27)              # X-Factor is gone after the fourth round
+    p[2] *= max(0.0, 1.0 - rank_pct / 0.45)              # superstar fades out through the draft
     if pos in ('K', 'P', 'LS'): p[2] = 0.0; p[3] = 0.0     # a specialist is normal or star; the tiers are built around snaps
     p = p / p.sum()
     return DEV_ORDER[int(rng.choice(4, p=p))]
