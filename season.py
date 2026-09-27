@@ -209,6 +209,9 @@ class SeasonRunner:
                           away_state=self.states[away], week=week, book=book,
                           playoffs=playoffs)
         self._record(home, away, week, res, book, playoffs)
+        if playoffs:
+            self.last_games.append((home, away, res, book))
+            self.last_played = list(getattr(self, 'last_played', []) or []) + [(home, away, res['home'], res['away'])]
         return res
 
     # ------------------------------------------------------------ the live game
@@ -570,7 +573,7 @@ class SeasonRunner:
     def completed(self):
         """(home, away, home_pts, away_pts) for every finished game."""
         return [(h, a, hp, ap) for _wk, a, h, ap, hp in self.L.schedule
-                if hp is not None]
+                if hp is not None and _wk <= 18]                 # playoff games sit in the schedule (weeks 19-22) but never count in the standings
 
     def season_state(self):
         """The tiebreaker engine, fed from live results instead of history."""

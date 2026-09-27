@@ -104,8 +104,11 @@ class Postseason:
         return out
 
     def record(self, rnd, conf, home, away, res):
-        """A finished playoff game into the bracket."""
+        """A finished playoff game into the bracket, and its score into the schedule entry."""
         self.games.append((rnd, conf, home, away, res['home'], res['away']))
+        wk_ = 19 + self.ROUNDS.index(rnd)
+        for i, g in enumerate(self.L.schedule):
+            if g[0] == wk_ and g[2] == home and g[1] == away: self.L.schedule[i] = (wk_, away, home, res['away'], res['home']); break
         win = home if res['home'] >= res['away'] else away
         lose = away if win == home else home
         self.exit_round[lose] = rnd
@@ -118,6 +121,16 @@ class Postseason:
         else:
             self.alive[conf] = {s: t for s, t in self.alive[conf].items() if t != lose}
         return win
+
+    def schedule_round(self, rnd):
+        """The round's games into the league schedule as weeks 19 to 22, so the report, the game plan, the rail and
+        the strip find them the way they find a regular week's game."""
+        wk_ = 19 + self.ROUNDS.index(rnd)
+        have = {(g[1], g[2]) for g in self.L.schedule if g[0] == wk_}
+        ms = self.matchups(rnd)
+        for conf, home, away in ms:
+            if (away, home) not in have: self.L.schedule.append((wk_, away, home, None, None))
+        return ms
 
     def play_round(self, rnd, skip=None, week=None):
         """Play every game of the round except the one involving `skip` (the user's club, played live).

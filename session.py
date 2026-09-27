@@ -165,6 +165,9 @@ class Session:
             if rnd_i >= 4: return dict(title='Close the Season', sub='the champion is crowned', played=True)
             rnd = PS.Postseason.ROUNDS[rnd_i]; name = PS.Postseason.ROUND_NAMES[rnd]
             post = getattr(self, 'post_live', None); user = self.user_team
+            if self.played:
+                nxt = PS.Postseason.ROUND_NAMES[PS.Postseason.ROUNDS[rnd_i + 1]] if rnd_i + 1 < 4 else 'Offseason'
+                return dict(title=f'Advance to the {nxt}', sub=f'The {name} is in the books', played=True)
             if post is not None and hasattr(post, 'alive'):
                 alive = {t for a in post.alive.values() for t in a.values()} if rnd != 'SB' else set(post.conf_champs.values())
                 if user in alive:
@@ -262,11 +265,16 @@ class Session:
             IB.expire(self.L, wk + 1)
             self.played = False
             self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs', 0)
+            if wk >= WEEKS:
+                self._playoff_prep(0)
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':
-            # THE PLAYOFFS, A ROUND AT A TIME. Each Advance plays one round: the AI games are simmed, and if your club
-            # is in the round its game opens live on Game Day, exactly like a regular-season week. Out of it, or on
-            # the bye, you sim the round. After the Super Bowl the season closes.
+            # THE PLAYOFFS, A ROUND AT A TIME, with the whole week around each game. Entering a round (from week 18's
+            # roll or the roll after the last round) is the prep: the bracket is seeded, the round's games go into the
+            # schedule, the injury desk lists the hurt with their Play/Sit notes, the opponent report and game plan
+            # post, and the inbox gets the round. Advance then plays the round: the other games sim onto the strip and
+            # yours opens live on Game Day. Advance again rolls the week (XP, morale, injuries, notes) into the next
+            # round's prep. After the Super Bowl the season closes.
             if self.runner is None: self.runner = SN.SeasonRunner(self.L, self.rng)
             rnd_i = int(self.stop[1]) if len(self.stop) > 1 else 0
             lv = getattr(self.runner, 'live', None)
@@ -275,27 +283,32 @@ class Session:
             if rnd_i >= 4:
                 return self._close_playoffs()
             if getattr(self, 'post_live', None) is None or not hasattr(self.post_live, 'seeds'):
-                self.standings = self.runner.standings()
-                self.L.set_phase('playoffs')
-                self.post_live = PS.Postseason(self.runner); self.post_live.start()
+                self._playoff_prep(0)
             post = self.post_live
-            rnd = PS.Postseason.ROUNDS[rnd_i]
-            user = self.user_team
-            self.runner.last_games = []; self.runner.last_played = []
-            held = post.play_round(rnd, skip=user)
-            if held is not None:
-                conf, home, away = held
-                post.held = (rnd, conf, home, away)                   # for a save taken mid-game
-                def _close(res, _c=conf, _h=home, _a=away, _r=rnd): post.record(_r, _c, _h, _a, res); post.held = None
-                self.runner.open_live(home, away, 19 + rnd_i, playoffs=True, on_close=_close)
+            rnd = PS.Postseason.ROUNDS[rnd_i]; wk_ = 19 + rnd_i
+            if not self.played:
+                # PLAY THE ROUND
+                user = self.user_team
+                self.runner.last_games = []; self.runner.last_played = []
+                held = post.play_round(rnd, skip=user, week=wk_)
                 self.played = True
-                self.stop = ('playoffs', rnd_i + 1) if rnd_i + 1 < len(PS.Postseason.ROUNDS) else ('playoffs', 4)
-                self._capture_gameday(19 + rnd_i)
-                return dict(done=f'{PS.Postseason.ROUND_NAMES[rnd]} live', next=self.next_label())
-            self.played = True
-            self._capture_gameday(19 + rnd_i)
+                if held is not None:
+                    conf, home, away = held
+                    post.held = (rnd, conf, home, away)
+                    def _close(res, _c=conf, _h=home, _a=away, _r=rnd): post.record(_r, _c, _h, _a, res); post.held = None
+                    self.runner.open_live(home, away, wk_, playoffs=True, on_close=_close)
+                    self._capture_gameday(wk_)
+                    return dict(done=f'{PS.Postseason.ROUND_NAMES[rnd]} live', next=self.next_label())
+                self._capture_gameday(wk_)
+                self.runner._after_games(wk_, self.runner.last_played)
+                return dict(done=PS.Postseason.ROUND_NAMES[rnd], next=self.next_label())
+            # ROLL INTO THE NEXT ROUND
+            self.runner.roll_week(wk_)
+            IB.expire(self.L, wk_ + 1)
+            self.played = False
             if rnd_i + 1 < len(PS.Postseason.ROUNDS):
                 self.stop = ('playoffs', rnd_i + 1)
+                self._playoff_prep(rnd_i + 1)
                 return dict(done=PS.Postseason.ROUND_NAMES[rnd], next=self.next_label())
             self.stop = ('playoffs', 4)
             return self._close_playoffs()
@@ -314,6 +327,37 @@ class Session:
             try: GW.post_report(self.L, 1)
             except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
+
+    def _playoff_prep(self, rnd_i):
+        """The week before a playoff game, for every club: the round's games scheduled, the injury desk's listings and
+        Play/Sit notes, the opponent report and the plan, and the round in the inbox."""
+        import gameplan_week as GW
+        if getattr(self, 'post_live', None) is None or not hasattr(self.post_live, 'seeds'):
+            self.standings = self.runner.standings()
+            self.L.set_phase('playoffs')
+            self.post_live = PS.Postseason(self.runner); self.post_live.start()
+        post = self.post_live; rnd = PS.Postseason.ROUNDS[rnd_i]; wk_ = 19 + rnd_i
+        self.L.week = wk_; self.runner.week = wk_
+        ms = post.schedule_round(rnd)
+        try: self.runner.injury_week(wk_); self.runner._listed_week = wk_
+        except Exception as e:
+            import sys; print('playoff injury listing failed:', e, file=sys.stderr)
+        user = self.user_team
+        mine = next(((c, h, a) for c, h, a in ms if user in (h, a)), None)
+        try: GW.post_report(self.L, wk_)
+        except Exception as e:
+            import sys; print('playoff report failed:', e, file=sys.stderr)
+        name = PS.Postseason.ROUND_NAMES[rnd]
+        from views import CLUB_NAME
+        nm = lambda x: CLUB_NAME.get(x, x)
+        lines = [f"{nm(a)} at {nm(h)}" for c, h, a in ms]
+        if mine is not None:
+            c, h, a = mine
+            body = f"Your {name} game: {'at ' + nm(h) if a == user else 'vs ' + nm(a)}. " + ('' if not lines else 'The round: ' + '; '.join(lines) + '.')
+        else:
+            alive = {t for al in post.alive.values() for t in al.values()} if rnd != 'SB' else set(post.conf_champs.values())
+            body = ('You have the bye this round. ' if user in alive else 'Your season is over. ') + ('The round: ' + '; '.join(lines) + '.' if lines else '')
+        IB.post(self.L, 'league', f"{name}: the field", body, sender='league', payload=dict(link='league:bracket'))
 
     def _close_playoffs(self):
         """After the Super Bowl: the champion, the draft order, the firings, and into the offseason."""

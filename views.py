@@ -460,7 +460,7 @@ def _division_standings(league, abbr):
 def _points(league, abbr):
     pf = pa = 0
     for (wk, a, h, ap, hp) in league.schedule:
-        if ap is None: continue
+        if ap is None or wk > 18: continue                     # playoff games never count in the standings
         if a == abbr: pf += ap; pa += hp
         elif h == abbr: pf += hp; pa += ap
     return pf, pa
@@ -469,7 +469,7 @@ def _points(league, abbr):
 def _form(league, abbr):
     out = []
     for (wk, a, h, ap, hp) in league.schedule:
-        if ap is None or abbr not in (a, h): continue
+        if ap is None or abbr not in (a, h) or wk > 18: continue
         mine = ap if a == abbr else hp; theirs = hp if a == abbr else ap
         out.append('w' if mine > theirs else 'l' if mine < theirs else 't')
     return out[-5:]

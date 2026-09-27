@@ -1194,3 +1194,20 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 /* tendency bars: the club's fill in its color, the league average as a white tick */
 .tend .bar i{background:var(--club-2)}
 .tend .bar em{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);transform:translateX(-1px)}
+
+/* the bracket */
+.bracket{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;padding:6px 14px 12px}
+.bconf .h5{margin-top:10px}
+.bseeds,.bgame{border:1px solid var(--rule);background:var(--sheet-2);margin-bottom:8px}
+.brow{display:grid;grid-template-columns:22px 4px 1fr auto;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--rule);font-size:15px}
+.brow:last-child{border-bottom:0}
+.brow .sd{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);text-align:center}
+.brow .str{width:4px;height:18px;border-radius:2px}
+.brow .nm{color:var(--ink)}
+.brow b{font-family:var(--mono);min-width:22px;text-align:right}
+.brow.mine .nm{color:var(--club-2);font-weight:700}
+.brow.out{opacity:.45}
+.brow.win .nm,.brow.win b{color:var(--ok);font-weight:700}
+.bgame.done .brow:not(.win){opacity:.65}
+.bfinal{padding:0 14px 14px;max-width:420px}
+.champ{font-family:var(--display);font-weight:900;font-size:22px;color:var(--club-2);padding:8px 0}
