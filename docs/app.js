@@ -1583,7 +1583,7 @@ function renderDraftDay(v) {
     el('button', { class: 'btn', disabled: v.on_user ? '' : null, 'data-tip': 'Ask a team ahead of you what it wants for its pick', onclick: () => { const q = v.clock.find(x => !x.mine && x.sel < (v.mine_next[0] ? v.mine_next[0].sel : Infinity)); if (!q) { notify({ ok: false, why: 'Nobody picks between now and your pick.' }); return; } const rd = pyJSON(`SESSION.draft_act('read_trade_up', target=${JSON.stringify(q.id)})`); if (!rd.ok) { notify(rd); return; } if (confirm(`${rd.line}\n\nSend ${rd.sends.map(x => x.replace(/^(\d+)-(\d+)-(\w+)$/, '$1 R$2 ($3)')).join(', ')} for pick ${rd.slot}?`)) act('trade_up', `target=${JSON.stringify(q.id)}, sends=${JSON.stringify(rd.sends)}`); } }, 'Trade Up'),
     el('button', { class: 'btn', disabled: v.on_user ? null : '', 'data-tip': 'Gather offers for this pick', onclick: () => { const r = pyJSON(`SESSION.draft_act('offers')`); notify(r); if (r.ok) { offersCache = r.offers; reload(); } } }, 'Trade Down')));
   // the picks around the clock
-  const nx = el('div', { class: 'picksmade', hidden: '' });
+  const nx = el('div', { class: 'picksmade' });
   const recent = v.results.slice(0, 3).reverse();
   for (const r of recent) nx.append(el('div', { class: 'pk' }, el('span', { class: 'n' }, r.slot), crest(r.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, r.name), el('small', {}, `${r.pos}`)), el('span', {})));
   for (const q of v.clock) {
@@ -1591,7 +1591,7 @@ function renderDraftDay(v) {
     const tradeFor = q.mine ? null : () => { tradeState = { other: q.team.abbr, a: [], b: [q.id], keep: true, draft: true }; location.hash = '#personnel/trades'; };
     nx.append(el('div', { class: 'pk' + (q.mine ? ' next' : '') + (now ? ' now' : '') + (q.mine ? '' : ' tradeable'), 'data-tip': q.mine ? null : `Trade for pick ${q.slot}: opens the Trades tab with ${q.team.abbr}'s pick loaded`, onclick: tradeFor, style: q.mine ? '' : 'cursor:pointer' }, el('span', { class: 'n' }, q.slot), crest(q.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, now ? 'On the Clock' : q.mine ? 'Your Pick' : 'Trade for it'), el('small', {}, `${q.team.name}${q.needs && q.needs.length && !q.mine ? ' · Needs ' + q.needs.join(', ') : ''}`)), el('span', {})));
   }
-  left.append(nx);
+  // (the strip of pick rows is not shown; the board below is the order)
   // THE PICK BOARD. Every slot of the draft, eight to a row, four rows a round. A made pick shows the player, his
   // position and the club; one to come shows the club and the number. Click a club's slot to trade for it.
   const rounds = [...new Set(v.order.map(q => q.round))];
@@ -1610,10 +1610,10 @@ function renderDraftDay(v) {
   }
   left.append(board);
   // the round pagers sit in the tool row, right of Trade Down
-  const pagers = el('span', { class: 'pagers', style: 'margin-left:auto;display:inline-flex;gap:4px' },
-    el('button', { class: 'btn', disabled: boardRound <= rounds[0] ? '' : null, onclick: () => { boardRound = Math.max(rounds[0], boardRound - 1); renderDraftDay(v); } }, '‹ Round'),
-    el('span', { class: 'count', style: 'align-self:center;padding:0 6px' }, `Round ${boardRound} of ${rounds[rounds.length - 1]}`),
-    el('button', { class: 'btn', disabled: boardRound >= rounds[rounds.length - 1] ? '' : null, onclick: () => { boardRound = Math.min(rounds[rounds.length - 1], boardRound + 1); renderDraftDay(v); } }, 'Round ›'));
+  const pagers = el('span', { class: 'pagers', style: 'margin-left:auto;display:inline-flex;gap:4px;align-items:center;white-space:nowrap' },
+    el('button', { class: 'btn', style: 'width:34px;padding:4px 0', 'data-tip': 'Previous round', disabled: boardRound <= rounds[0] ? '' : null, onclick: () => { boardRound = Math.max(rounds[0], boardRound - 1); renderDraftDay(v); } }, '‹'),
+    el('span', { class: 'count', style: 'padding:0 4px' }, `${boardRound} / ${rounds[rounds.length - 1]}`),
+    el('button', { class: 'btn', style: 'width:34px;padding:4px 0', 'data-tip': 'Next round', disabled: boardRound >= rounds[rounds.length - 1] ? '' : null, onclick: () => { boardRound = Math.min(rounds[rounds.length - 1], boardRound + 1); renderDraftDay(v); } }, '›'));
   const toolRow = left.querySelector('.ctrl2'); if (toolRow) toolRow.append(pagers); else left.insertBefore(pagers, board);
   // offers for your pick
   if (v.on_user && offersCache && offersCache.length) {
