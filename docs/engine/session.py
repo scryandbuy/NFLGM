@@ -116,6 +116,25 @@ class Session:
         try: s._open_fa_if_due()
         except Exception as e:
             import sys; print('open round on load failed:', e, file=sys.stderr)
+        try:
+            # a class built before arms were treated as tools: a quarterback prospect's arm is lifted to the tool
+            # scale once (an 80-overall rookie about 87, a 70 about 82), and the scouting reads follow
+            import scouting as SC
+            fixed = 0
+            for p in list(getattr(L, 'draft_pool', None) or []) + list(getattr(L, 'next_class', None) or []):
+                if p.pos != 'QB' or p.xp_spent.get('_arm_fixed'): continue
+                floor = 78.0 + 0.45 * (float(p.ovr) - 60.0)
+                cur = float(p.ratings.get('throw_power_rating', 70))
+                if cur < floor:
+                    p.ratings['throw_power_rating'] = float(min(96.0, floor)); fixed += 1
+                    for abbr_, views in (getattr(L, 'scouting', None) or {}).items():
+                        v = views.get(p.pid)
+                        if v is not None:
+                            try: SC._refresh(v, p)
+                            except Exception: pass
+                p.xp_spent['_arm_fixed'] = 1
+        except Exception as e:
+            import sys; print('arm fix failed:', e, file=sys.stderr)
         try: s._backfill_history()
         except Exception as e:
             import sys; print('history backfill failed:', e, file=sys.stderr)

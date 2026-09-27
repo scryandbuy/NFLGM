@@ -53,7 +53,10 @@ ATTR_MAP = {
 }
 PHYSICAL = {'speed_rating', 'accel_rating', 'agility_rating', 'strength_rating',
             'change_of_direction_rating', 'jump_rating', 'stamina_rating', 'injury_rating',
-            'tough_rating'}
+            'tough_rating',
+            # the innate tools: an arm and a leg are what a player arrives with and only fade with age, so they
+            # come down to the pro scale gently (the square root) like speed, not in step with his skills
+            'throw_power_rating', 'kick_power_rating'}
 NOT_RATINGS = {'overall_rating', 'running_style_rating'}
 
 # THE SHAPE OF A CLASS. The rookie distribution both classes were built on
