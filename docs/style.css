@@ -1078,8 +1078,8 @@ button.btn{line-height:normal;box-sizing:border-box}
 .scard .kv .traits{margin-top:0;align-items:center;gap:4px}
 .scard .kv .traits .trait{font-size:12.5px;padding:1px 7px;line-height:1.4}
 
-/* the white position box fits LEDG, REDG, WILL, MIKE */
-.who .no{width:auto;min-width:30px;padding:0 5px;font-size:15px;letter-spacing:.01em}
+/* the white position box is one size everywhere; the letters fit four (LEDG, REDG, WILL, MIKE) */
+.who .no{width:42px;min-width:42px;max-width:42px;padding:0;font-size:13px;letter-spacing:-.01em}
 .plate{grid-template-columns:minmax(32px,auto) 1fr auto}
 .plate .no{font-size:15px;padding:0 5px;letter-spacing:.01em}
 .plate3 .no{flex:0 0 auto;min-width:22px}

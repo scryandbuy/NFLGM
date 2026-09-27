@@ -143,7 +143,7 @@ function renderInbox(v) {
   s.append(tools);
   const box = el('div', { class: 'mailbox' });
   const list = el('div', { class: 'list' });
-  for (const r of rows) list.append(el('div', { class: 'row' + (r.unread ? ' unread' : '') + (r.block ? ' block' : '') + (r.id === mailSel ? ' sel' : ''), onclick: () => { mailSel = r.id; if (r.unread) pyJSON(`SESSION.inbox_read(${r.id})`); renderInbox(pyJSON('SESSION.portal_full()')); } },
+  for (const r of rows) list.append(el('div', { class: 'row' + (r.unread ? ' unread' : '') + (r.block ? ' block' : '') + (r.id === mailSel ? ' sel' : ''), onclick: () => { mailSel = r.id; if (r.unread) pyJSON(`SESSION.inbox_read(${r.id})`); const keepList = list.scrollTop, keepPage = window.scrollY; renderInbox(pyJSON('SESSION.portal_full()')); const nl = document.querySelector('.mailbox .list'); if (nl) nl.scrollTop = keepList; window.scrollTo(0, keepPage); } },
     el('span', { class: 'dot' }), el('div', { style: 'min-width:0' }, el('div', { class: 'subj' }, r.subject), el('div', { class: 'from' }, `${r.tag}${r.from ? ' · ' + r.from : ''}`)), el('span', { class: 'meta' }, r.when || '')));
   if (!rows.length) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : inboxFilter === 'league' ? 'Nothing from around the league yet.' : 'All read.'));
   const pane = el('div', { class: 'pane' });
@@ -824,7 +824,7 @@ function renderProgression(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Team'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
-  secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps'], ['Injured Reserve', '#club/ir'], ['Progression', '#club/progression']], '#club/progression');
+  secondRow(clubNav(v.rail.club.abbr, true, null), '#club/progression');
   const reload = () => renderProgression(pyJSON('SESSION.progression()'));
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Progression', el('small', {}, `${v.bank_total.toLocaleString()} XP banked across the roster · ${v.idle} players could buy a point now and are not on auto`)));
   s.append(el('div', { class: 'tools' }, el('button', { class: 'btn' + (v.auto_all ? ' go' : ''), 'data-tip': 'Every player, spent weekly by the assistants', onclick: () => { notify(pyJSON(`SESSION.club_act('auto_xp', on=${v.auto_all ? 'False' : 'True'})`)); reload(); } }, v.auto_all ? 'Auto-Spend: On for All' : 'Turn Auto-Spend On for All'),
