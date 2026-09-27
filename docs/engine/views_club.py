@@ -653,7 +653,9 @@ def regression(session, league, abbr, year=None):
         if p is None: continue
         attrs = []
         for k, (b, a) in sorted(v.get('attrs', {}).items(), key=lambda kv: (kv[1][1] - kv[1][0])):
-            attrs.append(dict(key=k, label=labels.get(k, k.replace('_rating', '').replace('_', ' ').title()), before=b, after=a, delta=round(a - b, 1)))
+            bi, ai = int(round(b)), int(round(a))
+            if bi == ai: continue                                   # a fraction underneath shows as no change
+            attrs.append(dict(key=k, label=labels.get(k, k.replace('_rating', '').replace('_', ' ').title()), before=bi, after=ai, delta=ai - bi))
         rows.append(dict(pid=pid, name=p.name, pos=p.pos, age=int(v.get('age', p.age)), no=getattr(p, 'number', None), ovr=round(v['after']), before=round(v['before']), lost=round(max(0.0, v['lost'])), gained=round(max(0.0, -v['lost'])), still_here=(p.team == abbr), attrs=attrs, moved=len([x for x in attrs if x['delta'] < 0])))
     rows.sort(key=lambda r: (-r['lost'], -r['ovr']))
     n_hit = sum(1 for r in rows if r['lost'] >= 1)
