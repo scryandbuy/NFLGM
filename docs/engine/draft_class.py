@@ -32,7 +32,7 @@ import targets as TG
 COUNTS = {'QB': 30, 'HB': 30, 'WR': 30, 'TE': 30, 'LEDG': 30, 'REDG': 30, 'DT': 30,
           'MIKE': 30, 'WILL': 30, 'SAM': 30, 'CB': 30,
           'LT': 20, 'LG': 20, 'C': 20, 'RG': 20, 'RT': 20, 'FS': 20, 'SS': 20,
-          'K': 10, 'P': 10, 'FB': 30}
+          'K': 3, 'P': 3, 'FB': 3}          # a real class carries a handful of each; the rest come undrafted
 POS_MAP = {'LE': 'LEDG', 'RE': 'REDG', 'MLB': 'MIKE', 'ROLB': 'WILL', 'LOLB': 'SAM'}
 ATTR_MAP = {
     'acceleration_rating': 'accel_rating', 'b_c_vision_rating': 'bcv_rating',
@@ -89,7 +89,7 @@ def shape_class(cls):
     return cls
 CLASS_AGE = {'Senior': 22.0, 'Junior': 21.0}
 DEV_ORDER = ['normal', 'star', 'superstar', 'xfactor']
-DEV_TOP, DEV_BOTTOM = [0.40, 0.32, 0.18, 0.10], [0.85, 0.12, 0.03, 0.00]
+DEV_TOP, DEV_BOTTOM = [0.40, 0.32, 0.18, 0.10], [0.95, 0.05, 0.00, 0.00]
 
 
 def load_college(path='cfb27_ratings.csv'):
@@ -190,8 +190,12 @@ def convert(row, pos, target):
 
 
 def draw_dev(rank_pct, rng):
-    """Tilted toward the top of the class: rank_pct 0 = best, 1 = last."""
-    p = np.array(DEV_TOP) * (1 - rank_pct) + np.array(DEV_BOTTOM) * rank_pct
+    """Tilted toward the top of the class: rank_pct 0 = best, 1 = last. The tilt is steep (square root of the
+    rank), so the late rounds are nearly all normal: past the midpoint no X-Factor, about 8% star, 1% superstar."""
+    w = min(1.0, float(rank_pct) / 0.4) ** 0.6              # the top of the class is the first tenth; by the fifth round the bottom table rules
+    p = np.array(DEV_TOP) * (1 - w) + np.array(DEV_BOTTOM) * w
+    p[3] *= max(0.0, 1.0 - rank_pct / 0.5)               # X-Factor is gone by the midpoint
+    p[2] *= max(0.0, 1.0 - rank_pct / 0.7)               # superstar by the fifth round
     p = p / p.sum()
     return DEV_ORDER[int(rng.choice(4, p=p))]
 

@@ -30,11 +30,29 @@ def _power(p):
     return conf is None or conf in POWER
 
 
+TAPE_SD = 4.0            # the whole league's shared error on a player: what his tape says against what he is
+TAPE_FLOOR = 0.4         # how much of it survives every look; a visit and a workout uncover the rest, not all of it
+
+
+def tape(p):
+    """THE TAPE. One error per prospect that every room sees on top of its own, drawn once and kept with him.
+    Thirty-two independent reads average to the truth, which had the league grading every player within a point of
+    what he was; real drafts have busts and steals because the league is wrong about a player together. The tape
+    fades with a room's looks (a visit uncovers part of it) but never entirely."""
+    t = p.xp_spent.get('_tape')
+    if t is None:
+        r = np.random.default_rng(abs(hash(('tape', p.pid))) % (2**32))
+        t = float(np.clip(r.normal(0.0, TAPE_SD), -10.0, 10.0)); p.xp_spent['_tape'] = t
+    return float(t)
+
+
 def _refresh(view, p):
-    """The numbers a room sees, from the truth and its own errors."""
+    """The numbers a room sees, from the truth, the tape, and its own errors."""
     lo, hi = p.potential_range if p.potential_range else (p.ovr, p.ovr + 3)
     adj = view.get('adj', 0.0)          # medical and character, by this room
-    view['ovr'] = round(float(np.clip(p.ovr + view['e_phys'] + view['e_skill'] + adj, 30, 99)), 1)
+    n = float(view.get('reads', 1) or 1)
+    tp = tape(p) * max(TAPE_FLOOR, 1.0 - 0.25 * (n - 1.0))
+    view['ovr'] = round(float(np.clip(p.ovr + view['e_phys'] + view['e_skill'] + tp + adj, 30, 99)), 1)
     view['pot_lo'] = round(float(np.clip(lo + view['e_pot'] + adj, 30, 99)), 1)
     view['pot_hi'] = round(float(np.clip(hi + view['e_pot'] + adj, 30, 99)), 1)
 
@@ -179,6 +197,7 @@ def scheme_fit_view(league, abbr, p, view):
     team = league.teams.get(abbr)
     if team is None or view is None: return 0.0
     e_p, e_s = float(view.get('e_phys', 0.0) or 0.0), float(view.get('e_skill', 0.0) or 0.0)
+    e_s += tape(p) * max(TAPE_FLOOR, 1.0 - 0.25 * (float(view.get('reads', 1) or 1) - 1.0))
     seen = {k: float(np.clip(v + (e_p if (k in XP.PHYSICAL or k in XP.TOOLS) else e_s), 30.0, 99.0)) for k, v in p.ratings.items()}
     try: return round(float(GE.scheme_fit(seen, p.pos, team)), 1)
     except Exception: return 0.0
