@@ -240,6 +240,8 @@ def division_ranks(league, standings):
 
 
 def new_season(league, rank, rng):
+    try: league.set_expectations()                 # the owners' preseason ask, against this year's league
+    except Exception: pass
     """
     Build next year's slate onto the league: 272 (week, away, home, None,
     None) rows in league.schedule, byes in league.byes. rank: {team: 1-4}.

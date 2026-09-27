@@ -282,8 +282,17 @@ class Team:
 
     @property
     def expected_pct(self):
-        """What this roster should be worth, independent of results. The
-        firing model needs luck separated from quality."""
+        """What this roster should be worth, independent of results. The firing model needs luck separated from
+        quality. Set once a season against the league (set_expectations): the league averages .500, a roster one
+        standard deviation better than the middle is expected to win about .610, one below about .390. The old
+        absolute scale read every club at .750 to .900 once the overall weights changed, and fired good coaches."""
+        cached = getattr(self, 'expected_cached', None)
+        if cached is not None: return float(cached)
+        L = getattr(self, 'league', None)
+        if L is not None and len(L.teams) >= 8:
+            s = [t.roster_strength() for t in L.teams.values()]
+            mu, sd = float(np.mean(s)), max(0.5, float(np.std(s)))
+            return float(np.clip(0.5 + 0.11 * (self.roster_strength() - mu) / sd, 0.25, 0.80))
         return float(np.clip((self.roster_strength() - 68.0) / 18.0, .05, .95))
 
     def hist(self):
@@ -504,7 +513,7 @@ class Team:
     def to_dict(self):
         return dict(abbr=self.abbr, division=self.division, conf=self.conf,
                     scheme=self.scheme, record=list(self.record),
-                    history=self.history, tenure=self.tenure,
+                    history=self.history, tenure=self.tenure, expected_cached=getattr(self, 'expected_cached', None),
                     gm=(asdict(self.gm) if self.gm else None),
                     roster=[p.pid for p in self.roster],
                     practice_squad=[p.pid for p in self.practice_squad],
@@ -743,6 +752,27 @@ class League:
             pass
 
     # ---- calendar --------------------------------------------------------
+    def set_expectations(self):
+        """The owners' preseason expectations, relative to the league this year, fixed for the season."""
+        s = {a: t.roster_strength() for a, t in self.teams.items()}
+        vals = np.array(list(s.values())); mu, sd = float(vals.mean()), max(0.5, float(vals.std()))
+        for a, t in self.teams.items():
+            t.expected_cached = float(np.clip(0.5 + 0.11 * (s[a] - mu) / sd, 0.25, 0.80))
+
+    def seed_tenures(self, rng):
+        """A league does not start with 32 first-year coaches. When every club shows the same tenure (a fresh
+        league, or a save that rolled once with everyone at zero), draw real-looking tenures: a fifth in their first
+        year, most in their second to fifth, a few long-tenured, one or two institutions."""
+        tens = [t.tenure for t in self.teams.values()]
+        if len(set(tens)) > 1: return False
+        base = tens[0] if tens else 0
+        draws = rng.choice([0, 1, 2, 3, 4, 5, 6, 8, 10, 15], size=len(self.teams), p=[.20, .16, .16, .12, .10, .08, .07, .05, .04, .02])
+        for t, d in zip(self.teams.values(), draws):
+            t.tenure = int(d) + int(base)
+            if t.gm is not None:
+                t.gm.job_security = float(np.clip(getattr(t.gm, 'job_security', 0.75) + 0.02 * min(6, int(d)), 0.45, 0.97))
+        return True
+
     def roll_year(self, rng=None):
         """
         Move the league into the next year and roll every cap forward.
@@ -884,7 +914,7 @@ class League:
                      scheme=td.get('scheme'))
             t.league = L
             t.record = td['record']; t.history = td['history']
-            t.tenure = td['tenure']
+            t.tenure = td['tenure']; t.expected_cached = td.get('expected_cached')
             t.gm = GM(**td['gm']) if td.get('gm') else None
             t.roster = [L.players[p] for p in td['roster'] if p in L.players]
             t.practice_squad = [L.players[p] for p in td['practice_squad']

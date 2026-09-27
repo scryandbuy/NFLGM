@@ -60,8 +60,9 @@ def pressure(hist, roster_pct=0.5, qb_dev=False):
 
     # 5. tenure. year 1-2 is fragile; the middle is judged hardest on results;
     #    long tenure buys patience until a sharp fall.
-    if ten <= 1:   p *= 1.15
-    elif ten <= 3: p *= 1.25
+    if ten == 0:   p *= 0.40          # a first-year coach is nearly untouchable; the real league fires one in twenty
+    elif ten == 1: p *= 1.00
+    elif ten <= 3: p *= 1.25          # years three and four are judged hardest on results
     elif ten >= 6: p *= 0.70 if (prev is None or prev - w < 0.18) else 1.05
 
     # 6. a developing young QB is the single biggest source of patience

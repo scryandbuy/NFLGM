@@ -47,6 +47,8 @@ class Session:
         rng = np.random.default_rng(seed)
         L = LG.build_league(rng=rng)
         L.user_team = team
+        L.seed_tenures(rng)              # not 32 first-year coaches
+        L.set_expectations()             # the owners' preseason ask, relative to the league
         # the first class sits on the scouting board all season, the way every class after it does
         DC.build(L, rng, draft_year=L.year + 1)
         L.next_class = list(L.draft_pool); L.draft_pool = []
@@ -61,7 +63,13 @@ class Session:
     def load(cls, text):
         d = json.loads(text)
         L = LG.League.load(text)
-        s = cls(L, np.random.default_rng(d.get('_seed_state', None)), d.get('_user_team'))
+        rng_ = np.random.default_rng(d.get('_seed_state', None))
+        try:
+            L.seed_tenures(np.random.default_rng(int(d.get('_seed_state', 1) or 1) + 7))       # a save where every coach shares one tenure
+            if any(getattr(t, 'expected_cached', None) is None for t in L.teams.values()): L.set_expectations()
+        except Exception as e:
+            import sys; print('tenure/expectation seed failed:', e, file=sys.stderr)
+        s = cls(L, rng_, d.get('_user_team'))
         s.stop = tuple(d.get('_stop', ['week', 1]))
         s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
         if d.get('_post_live'):
