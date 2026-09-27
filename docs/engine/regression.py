@@ -193,21 +193,34 @@ def decline(player, rng):
     return before - player.ovr
 
 
-def run(league, rng, verbose=False):
+def run(league, rng, verbose=False, record_for=None, tick_age=True):
     """
-    Age the league a year and take what age takes. Called after retirement -
-    a man who has just retired does not need to get slower first.
+    Age the league a year and take what age takes. Runs the day after the Super Bowl (session._close_playoffs); the
+    year's age tick can be left to the Retirements step (tick_age=False) so retirement hazards read the age they did.
+
+    record_for: a club whose players' before-and-after is written to league.regression[year] for the Regression
+    page: every player, overall before and after, and each attribute that moved.
     """
     moved = []
+    rec = {}
     for p in league.players.values():
         if p.retired:
             continue
-        p.age += 1.0
+        mine = record_for is not None and p.team == record_for
+        before_r = dict(p.ratings) if mine else None; before_o = p.ovr
+        if tick_age: p.age += 1.0
+        else: p.age += 1.0
         lost = decline(p, rng)
+        if not tick_age: p.age -= 1.0                 # the decline reads the age he is turning; the tick itself waits
+        if mine:
+            changed = {k: (round(float(before_r[k]), 1), round(float(p.ratings[k]), 1)) for k in p.ratings if abs(float(p.ratings[k]) - float(before_r.get(k, p.ratings[k]))) >= 0.05}
+            rec[p.pid] = dict(before=round(float(before_o), 1), after=round(float(p.ovr), 1), lost=round(float(before_o - p.ovr), 1), attrs=changed, age=round(float(p.age) + (1.0 if not tick_age else 0.0)))
         if lost:
             moved.append((p, lost))
             league.log('regress', pid=p.pid, pos=p.pos,
                        age=round(p.age, 1), lost=round(lost, 2))
+    if record_for is not None:
+        league.__dict__.setdefault('regression', {})[str(league.year)] = rec
     if verbose and moved:
         print(f'  {len(moved)} declined, mean {np.mean([m for _p, m in moved]):.2f} ovr')
     return moved

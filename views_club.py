@@ -632,3 +632,29 @@ def act_release_ps(league, abbr, pid):
     import practice_squad as PSQ
     p = league.player(pid); PSQ.release_from_squad(league, abbr, pid)
     return dict(ok=True, name=p.name if p else pid)
+
+
+# ============================================================ REGRESSION
+def regression(session, league, abbr, year=None):
+    """What age took, going into next year: every player on the club with his overall now and the points he lost (zero
+    is fine), and for each the attributes that moved, before and after."""
+    from views import rail, club
+    store = getattr(league, 'regression', {}) or {}
+    years = sorted(int(k) for k in store)
+    yr = int(year) if year else (years[-1] if years else int(league.year))
+    rec = store.get(str(yr), {}) or {}
+    labels = {}
+    for grp in ATTR.values():
+        for k, lab in grp: labels[k] = lab
+    rows = []
+    t = league.teams[abbr]
+    for pid, v in rec.items():
+        p = league.player(pid)
+        if p is None: continue
+        attrs = []
+        for k, (b, a) in sorted(v.get('attrs', {}).items(), key=lambda kv: (kv[1][1] - kv[1][0])):
+            attrs.append(dict(key=k, label=labels.get(k, k.replace('_rating', '').replace('_', ' ').title()), before=b, after=a, delta=round(a - b, 1)))
+        rows.append(dict(pid=pid, name=p.name, pos=p.pos, age=int(v.get('age', p.age)), no=getattr(p, 'number', None), ovr=round(v['after']), before=round(v['before']), lost=round(max(0.0, v['lost'])), gained=round(max(0.0, -v['lost'])), still_here=(p.team == abbr), attrs=attrs, moved=len([x for x in attrs if x['delta'] < 0])))
+    rows.sort(key=lambda r: (-r['lost'], -r['ovr']))
+    n_hit = sum(1 for r in rows if r['lost'] >= 1)
+    return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=years or [yr], rows=rows, hit=n_hit, total_lost=sum(r['lost'] for r in rows), empty=(not rec))

@@ -883,6 +883,7 @@ class League:
             awards_paid=getattr(self, 'awards_paid', None) or {},
             history=getattr(self, 'history', None) or {},
             fa_bids=getattr(self, 'fa_bids', None) or {}, fa_bids_phase=getattr(self, 'fa_bids_phase', None), fa_step=getattr(self, 'fa_step', None),
+            regression=getattr(self, 'regression', None) or {},
             last_draft=getattr(self, 'last_draft', None),
             user_tag_choice=getattr(self, 'user_tag_choice', None), tags_done_year=getattr(self, 'tags_done_year', None), user_no_tender=list(getattr(self, 'user_no_tender', None) or []), watchlist=sorted(getattr(self, 'watchlist', set()) or []),
             promises=getattr(self, 'promises', None) or [],
@@ -964,6 +965,7 @@ class League:
         L.awards_paid = d.get('awards_paid', {}) or {}
         L.history = {str(k): v for k, v in (d.get('history', {}) or {}).items()}
         L.fa_bids = d.get('fa_bids', {}) or {}; L.fa_bids_phase = d.get('fa_bids_phase'); L.fa_step = d.get('fa_step')
+        L.regression = {str(k): v for k, v in (d.get('regression', {}) or {}).items()}
         import staff as _ST
         _ST.from_dict(L, d.get('staff'))
         L.poaches = d.get('poaches', []) or []

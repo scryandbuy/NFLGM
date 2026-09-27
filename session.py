@@ -648,6 +648,18 @@ class Session:
         MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
         self.post_live = None
         self.stop = ('offseason', 0)
+        # REGRESSION HITS THE DAY AFTER THE SUPER BOWL. Every player takes what age takes; your club's before-and-after
+        # is kept, and the analysis lands in the inbox as the offseason opens
+        try:
+            RG.run(self.L, self.rng, record_for=self.user_team, tick_age=False)
+            rec = (getattr(self.L, 'regression', {}) or {}).get(str(self.L.year), {})
+            from views import surname
+            hit = sorted([(v['lost'], pid) for pid, v in rec.items() if v['lost'] >= 0.5], reverse=True)
+            names = ', '.join(f"{surname(self.L.player(pid).name)} ({self.L.player(pid).pos}, −{lost:.0f})" for lost, pid in hit[:6] if self.L.player(pid))
+            body = (f"{len(hit)} of your players lost ground with age: {names}. " if hit else "None of your players lost ground with age this year. ") + "The full analysis, every player and every attribute, is on the Regression page."
+            IB.post(self.L, 'club', f"Going into {self.L.year + 1}: what age took", body, sender='assistants', payload=dict(link='club:regression'))
+        except Exception as e:
+            import sys; print('regression report failed:', e, file=sys.stderr)
         return dict(done='Playoffs', champion=self.post.champion, next=self.next_label())
 
     # ---- the offseason steps, the same code as franchise.play_year in the same order
@@ -679,7 +691,9 @@ class Session:
 
     def step_retire(self):
         L, rng = self.L, self.rng
-        RT.run(L, rng); AL.hall_vote(L, L.year); RG.run(L, rng)
+        RT.run(L, rng); AL.hall_vote(L, L.year)
+        for p in L.players.values():
+            if not p.retired: p.age += 1.0                     # the year's age tick; the decline itself ran the day after the Super Bowl
         try:
             import league_notes as LN; LN.season_end(L, None)          # the Hall class and the retirements, now that they are in
         except Exception as e:
@@ -843,6 +857,10 @@ class Session:
     def portal(self):
         import views
         return views.portal(self, self.L, self.user_team)
+
+    def club_regression(self, year=None):
+        import views_club as VC
+        return VC.regression(self, self.L, self.user_team, year=year)
 
     def club_roster(self, abbr=None):
         import views_club as VC
