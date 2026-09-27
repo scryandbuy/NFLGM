@@ -712,6 +712,7 @@ class Session:
         L, rng = self.L, self.rng
         L.roll_year(rng)
         (getattr(L, 'exit_meetings', None) or {}).pop(str(L.year), None)          # the new year has no meetings yet
+        ((getattr(L, 'history', None) or {}).get(str(L.year)) or {}).pop('review', None)   # and no review
         try:
             import negotiations as NG
             NG.check_promises(L, week=0)       # the new year: extension promises are judged here
