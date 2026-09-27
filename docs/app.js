@@ -1423,6 +1423,7 @@ function renderCap(v) {
 
 // ---------------------------------------------------------------- Draft
 const DR = { board: 'Scouting Board', spring: 'The Spring', day: 'Draft Day', picks: 'Picks' };
+let boardRound = null;
 let boardPos = 'All', boardFilt = { early: false, late: false, small: false, needs: false }, boardTab = 'class', boardQuery = '', boardSel = null, boardPage = 0, boardSort = 'rank', boardDir = 1;
 // THE BOARD'S SORT. Every column but Flags sorts; click a head to sort by it, click again to flip. Numbers sort high
 // first, text A to Z, blanks last either way.
@@ -1578,7 +1579,7 @@ function renderDraftDay(v) {
     el('button', { class: 'btn', disabled: v.on_user ? '' : null, 'data-tip': 'Ask a team ahead of you what it wants for its pick', onclick: () => { const q = v.clock.find(x => !x.mine && x.sel < (v.mine_next[0] ? v.mine_next[0].sel : Infinity)); if (!q) { notify({ ok: false, why: 'Nobody picks between now and your pick.' }); return; } const rd = pyJSON(`SESSION.draft_act('read_trade_up', target=${JSON.stringify(q.id)})`); if (!rd.ok) { notify(rd); return; } if (confirm(`${rd.line}\n\nSend ${rd.sends.map(x => x.replace(/^(\d+)-(\d+)-(\w+)$/, '$1 R$2 ($3)')).join(', ')} for pick ${rd.slot}?`)) act('trade_up', `target=${JSON.stringify(q.id)}, sends=${JSON.stringify(rd.sends)}`); } }, 'Trade Up'),
     el('button', { class: 'btn', disabled: v.on_user ? null : '', 'data-tip': 'Gather offers for this pick', onclick: () => { const r = pyJSON(`SESSION.draft_act('offers')`); notify(r); if (r.ok) { offersCache = r.offers; reload(); } } }, 'Trade Down')));
   // the picks around the clock
-  const nx = el('div', { class: 'picksmade' });
+  const nx = el('div', { class: 'picksmade', hidden: '' });
   const recent = v.results.slice(0, 3).reverse();
   for (const r of recent) nx.append(el('div', { class: 'pk' }, el('span', { class: 'n' }, r.slot), crest(r.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, r.name), el('small', {}, `${r.pos}`)), el('span', {})));
   for (const q of v.clock) {
@@ -1589,10 +1590,12 @@ function renderDraftDay(v) {
   left.append(nx);
   // THE PICK BOARD. Every slot of the draft, eight to a row, four rows a round. A made pick shows the player, his
   // position and the club; one to come shows the club and the number. Click a club's slot to trade for it.
+  const rounds = [...new Set(v.order.map(q => q.round))];
+  const nowRound = (v.order.find(q => q.now) || v.order[0] || {}).round || 1;
+  if (boardRound == null || !rounds.includes(boardRound)) boardRound = nowRound;
   const board = el('div', { class: 'pickboard' });
-  let curRound = 0;
-  for (const q of v.order) {
-    if (q.round !== curRound) { curRound = q.round; board.append(el('div', { class: 'pb-round' }, `Round ${q.round}`)); }
+  board.append(el('div', { class: 'pb-round' }, `Round ${boardRound}`, el('span', { class: 'count', style: 'margin-left:8px;text-transform:none;letter-spacing:0' }, boardRound === nowRound ? 'on the clock' : '')));
+  for (const q of v.order.filter(x => x.round === boardRound)) {
     const tradeFor = (!q.done && !q.mine) ? () => { tradeState = { other: q.team.abbr, a: [], b: [q.id], keep: true, draft: true }; location.hash = '#personnel/trades'; } : null;
     const sq = el('div', { class: 'pb-sq' + (q.done ? ' done' : '') + (q.now ? ' now' : '') + (q.mine ? ' mine' : ''), style: `--c1:${q.team.color};--c2:${q.team.accent || '#fff'}` + (tradeFor ? ';cursor:pointer' : ''), 'data-tip': tradeFor ? `Trade for pick ${q.slot}` : null, onclick: tradeFor });
     sq.append(el('div', { class: 'pb-top' }, el('span', { class: 'ab' }, q.team.abbr), el('span', { class: 'sl' }, q.slot)));
@@ -1601,6 +1604,12 @@ function renderDraftDay(v) {
     board.append(sq);
   }
   left.append(board);
+  // the round pagers sit in the tool row, right of Trade Down
+  const pagers = el('span', { class: 'pagers', style: 'margin-left:auto;display:inline-flex;gap:4px' },
+    el('button', { class: 'btn', disabled: boardRound <= rounds[0] ? '' : null, onclick: () => { boardRound = Math.max(rounds[0], boardRound - 1); renderDraftDay(v); } }, '‹ Round'),
+    el('span', { class: 'count', style: 'align-self:center;padding:0 6px' }, `Round ${boardRound} of ${rounds[rounds.length - 1]}`),
+    el('button', { class: 'btn', disabled: boardRound >= rounds[rounds.length - 1] ? '' : null, onclick: () => { boardRound = Math.min(rounds[rounds.length - 1], boardRound + 1); renderDraftDay(v); } }, 'Round ›'));
+  const toolRow = left.querySelector('.ctrl2'); if (toolRow) toolRow.append(pagers); else left.insertBefore(pagers, board);
   // offers for your pick
   if (v.on_user && offersCache && offersCache.length) {
     for (const o of offersCache) left.append(el('div', { class: 'card', style: '--k:var(--live);margin:0 14px 10px' }, el('div', { class: 'h' }, el('div', { class: 'k' }, `Trade Offer · ${o.team.name}`), el('div', { class: 's' }, `${o.team.name} offers ${o.summary.join(' and ')} for ${cur.slot}`)),

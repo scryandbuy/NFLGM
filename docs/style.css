@@ -1407,3 +1407,6 @@ h2{letter-spacing:-.01em}
 .pb-top .ab{font-weight:800;color:var(--ink)}
 .pb-nm{font-weight:700;font-size:14px;line-height:1.15}.pb-nm.dim{color:var(--ink-3);font-weight:500}
 .pb-pos{font-size:12px;color:var(--ink-2)}
+
+.ctrl2{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ctrl2 .pagers .btn{width:auto;padding:4px 10px}
