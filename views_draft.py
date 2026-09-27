@@ -558,3 +558,36 @@ def draft_text(session, league, abbr):
             except Exception: continue
             lines.append(f"pick {sel}: {buyer} from {seller} for {', '.join(str(x) for x in desc)}")
     return dict(ok=True, text='\n'.join(lines))
+
+
+def draft_csv(session, league, abbr):
+    """The whole draft as a CSV file: every pick with the club, the player, his position, school, age, the consensus
+    rank and grade, your scouts' read, his overall now, and every one of his attributes as the engine holds them."""
+    ld = getattr(league, 'last_draft', None)
+    D = getattr(session, 'draft', None)
+    if D is not None and not D.done:
+        results = list(getattr(D, 'results', [])); year = D.year
+    elif ld:
+        results = [tuple(x) for x in ld.get('results', [])]; year = ld['year']
+    else:
+        return dict(ok=False, why='no draft has been run yet')
+    cons = getattr(league, 'consensus', None) or {}
+    from views import draft_year
+    attrs = sorted({k for _s, _t, pid in results for k in ((league.player(pid).ratings if league.player(pid) else {}) or {}) if k.endswith('_rating')})
+    labels = {}
+    import views_club as VC
+    for grp in VC.ATTR.values():
+        for k, lab in grp: labels[k] = lab
+    head = ['pick', 'round', 'slot', 'team', 'player', 'pos', 'age', 'school', 'consensus_rank', 'consensus_grade', 'your_read', 'overall_now', 'dev'] + [labels.get(k, k.replace('_rating', '')) for k in attrs]
+    rows = [head]
+    for s, t, pid in results:
+        p = league.player(pid)
+        c = cons.get(pid, {}) or {}
+        v = ((getattr(league, 'scouting', None) or {}).get(abbr) or {}).get(pid) or {}
+        base = [s, (s - 1) // 32 + 1, f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d}", t, (p.name if p else pid), (p.pos if p else ''), (int(p.age) if p else ''), (p.college if p else ''),
+                c.get('rank', ''), (round(float(c['ovr'])) if c.get('ovr') else ''), (round(float(v['ovr'])) if v.get('ovr') else ''), (round(float(p.ovr)) if p else ''), (getattr(p, 'dev', '') if p else '')]
+        rows.append(base + [(round(float(p.ratings.get(k, 0))) if p else '') for k in attrs])
+    def cell(x):
+        x = '' if x is None else str(x)
+        return '"' + x.replace('"', '""') + '"' if (',' in x or '"' in x) else x
+    return dict(ok=True, name=f"draft-{draft_year(year)}.csv", text='\n'.join(','.join(cell(x) for x in r) for r in rows))
