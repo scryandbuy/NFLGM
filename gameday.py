@@ -106,11 +106,17 @@ def capture(league, played, user):
         longest = {}; T = {home: dict(plays=0, yards=0, pass_yds=0, rush_yds=0, first_downs=0, third_att=0, third_conv=0, fourth_att=0, fourth_conv=0, turnovers=0, sacks_allowed=0, penalties=0, pen_yds=0, top=0.0, red_zone=0, red_zone_td=0), away: None}
         T[away] = dict(T[home])
         for pos, dr in res['drives']:
-            off = home if pos == 'home' else away; t_ = T[off]
-            first_clock = last_clock = None
+            off = home if pos == 'home' else away; t_ = T[off]; d_ = T[away if pos == 'home' else home]
+            first_clock = last_clock = None; deepest = float(getattr(dr, 'start', getattr(dr, 'yardline', 99)) or 99)
             for pl in dr.log:
                 if not isinstance(pl, dict): continue
                 ty = pl.get('type'); y = float(pl.get('yards', 0) or 0)
+                if pl.get('yardline') is not None and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception', 'kneel'):
+                    deepest = min(deepest, float(pl['yardline']))
+                if ty == 'penalty':
+                    side_ = t_ if pl.get('on_offense', True) else d_
+                    side_['penalties'] += 1; side_['pen_yds'] += abs(int(round(y))); continue
+                if pl.get('nullified'): continue                   # a play wiped by a flag is not a play
                 if ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
                     t_['plays'] += 1
                     if pl.get('clock') is not None:
@@ -121,7 +127,6 @@ def capture(league, played, user):
                 elif ty == 'sack': t_['pass_yds'] += y; t_['yards'] += y; t_['sacks_allowed'] += 1
                 elif ty == 'interception': t_['turnovers'] += 1
                 if pl.get('fumble_lost'): t_['turnovers'] += 1               # a lost fumble is a flag on the play, not a play of its own
-                elif ty == 'penalty': t_['penalties'] += 1; t_['pen_yds'] += abs(int(round(y)))
                 if pl.get('down') == 3 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
                     t_['third_att'] += 1; t_['third_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble'))
                 if pl.get('down') == 4 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
@@ -130,7 +135,8 @@ def capture(league, played, user):
             # possession: from the drive's first entry (the kick that opened it, or the first snap) to the clock when it ended
             _clocks = [float(pl['clock']) for pl in getattr(dr, 'log', []) if isinstance(pl, dict) and pl.get('clock') is not None]
             if _clocks: t_['top'] += max(0.0, _clocks[0] - float(getattr(dr, 'clock', _clocks[-1]) or _clocks[-1]))
-            if float(getattr(dr, 'yardline', 99) or 99) <= 20 or (dr.result == 'Touchdown'): t_['red_zone'] += 1; t_['red_zone_td'] += int(dr.result == 'Touchdown')
+            deepest = min(deepest, float(getattr(dr, 'yardline', 99) or 99))
+            if deepest <= 20 or (dr.result == 'Touchdown'): t_['red_zone'] += 1; t_['red_zone_td'] += int(dr.result == 'Touchdown')
         team_stats = {}
         for abbr_, t_ in T.items():
             team_stats[abbr_] = dict(plays=t_['plays'], yards=int(round(t_['yards'])), pass_yds=int(round(t_['pass_yds'])), rush_yds=int(round(t_['rush_yds'])), ypp=(round(t_['yards'] / t_['plays'], 1) if t_['plays'] else 0.0), first_downs=t_['first_downs'],

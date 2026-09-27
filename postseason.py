@@ -69,7 +69,83 @@ class Postseason:
                    score=f"{res['home']}-{res['away']}")
         return win
 
-    # ---- the bracket ----------------------------------------------------
+    # ---- the bracket, one round at a time -------------------------------
+    ROUNDS = ('WC', 'DIV', 'CONF', 'SB')
+    ROUND_NAMES = {'WC': 'Wild Card', 'DIV': 'Divisional Round', 'CONF': 'Conference Championship', 'SB': 'Super Bowl'}
+
+    def start(self):
+        """Seed the bracket. State is plain data so a save can carry it between rounds."""
+        seeds = self.r.seeds()
+        self.seeds = {c: list(sd) for c, sd in seeds.items()}
+        self.alive = {c: {i + 1: t for i, t in enumerate(sd)} for c, sd in seeds.items()}
+        self.conf_champs = {}
+        self.round_idx = 0
+
+    def matchups(self, rnd):
+        """(conf, home, away) for a round from the bracket as it stands."""
+        out = []
+        if rnd == 'SB':
+            cs = list(self.conf_champs.values())
+            if len(cs) == 2:
+                a, b = sorted(cs, key=lambda t: -self.L.teams[t].win_pct)
+                out.append(('NFL', a, b))
+            return out
+        for conf, alive in self.alive.items():
+            if rnd == 'WC':
+                for hi, lo in SS.wc_matchups(self.seeds[conf]):
+                    out.append((conf, alive[hi], alive[lo]))
+            elif rnd == 'DIV':
+                order = sorted(alive); top, rest = order[0], order[1:]
+                if len(rest) >= 3:
+                    out.append((conf, alive[top], alive[rest[-1]])); out.append((conf, alive[rest[0]], alive[rest[1]]))
+            elif rnd == 'CONF':
+                order = sorted(alive)
+                if len(order) >= 2: out.append((conf, alive[order[0]], alive[order[1]]))
+        return out
+
+    def record(self, rnd, conf, home, away, res):
+        """A finished playoff game into the bracket."""
+        self.games.append((rnd, conf, home, away, res['home'], res['away']))
+        win = home if res['home'] >= res['away'] else away
+        lose = away if win == home else home
+        self.exit_round[lose] = rnd
+        self.L.log('playoff', round=rnd, conf=conf, winner=win, loser=lose, score=f"{res['home']}-{res['away']}")
+        if rnd == 'SB':
+            self.champion = win
+        elif rnd == 'CONF':
+            self.conf_champs[conf] = win; self.finalists[conf] = win
+            self.alive[conf] = {s: t for s, t in self.alive[conf].items() if t == win}
+        else:
+            self.alive[conf] = {s: t for s, t in self.alive[conf].items() if t != lose}
+        return win
+
+    def play_round(self, rnd, skip=None, week=None):
+        """Play every game of the round except the one involving `skip` (the user's club, played live).
+        Returns the skipped matchup as (conf, home, away) or None."""
+        week = week if week is not None else 19 + self.ROUNDS.index(rnd)
+        held = None
+        for conf, home, away in self.matchups(rnd):
+            if skip is not None and skip in (home, away):
+                held = (conf, home, away); continue
+            res = self.r.play(home, away, week, playoffs=True)
+            if res is None: res = dict(home=1, away=0)
+            self.record(rnd, conf, home, away, res)
+        return held
+
+    def to_dict(self):
+        return dict(games=self.games, champion=self.champion, finalists=self.finalists, exit_round=self.exit_round,
+                    seeds=getattr(self, 'seeds', {}), alive={c: {str(k): v for k, v in a.items()} for c, a in getattr(self, 'alive', {}).items()},
+                    conf_champs=getattr(self, 'conf_champs', {}), round_idx=getattr(self, 'round_idx', 0), held=list(getattr(self, 'held', None) or []) or None)
+
+    @classmethod
+    def from_dict(cls, runner, d):
+        p = cls(runner)
+        p.games = [tuple(g) for g in d.get('games', [])]; p.champion = d.get('champion'); p.finalists = dict(d.get('finalists', {}))
+        p.exit_round = dict(d.get('exit_round', {})); p.seeds = {c: list(v) for c, v in d.get('seeds', {}).items()}
+        p.alive = {c: {int(k): v for k, v in a.items()} for c, a in d.get('alive', {}).items()}
+        p.conf_champs = dict(d.get('conf_champs', {})); p.round_idx = int(d.get('round_idx', 0)); p.held = tuple(d['held']) if d.get('held') else None
+        return p
+
     def run(self, verbose=False):
         seeds = self.r.seeds()
         week = 19
@@ -194,11 +270,13 @@ def run_firings(league, rng, pool=None, verbose=False):
 
 
 # ============================================================== CLOSE THE YEAR
-def close_season(league, runner, rng, pool=None, verbose=False):
-    """Bracket, champion, draft order, firings. Awards are NOT computed."""
+def close_season(league, runner, rng, pool=None, verbose=False, post=None):
+    """Bracket, champion, draft order, firings. Awards are NOT computed. With `post` given (a bracket already
+    played round by round), only the closing runs."""
     league.set_phase('playoffs')
-    post = Postseason(runner)
-    post.run(verbose)
+    if post is None:
+        post = Postseason(runner)
+        post.run(verbose)
     league.standings_history.setdefault(league.year, {})
     for abbr in league.teams:
         row = league.standings_history[league.year].get(abbr)

@@ -120,7 +120,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     chasing = score_diff < 0 and secs_left < 150 * need_now + 90
     # does a field goal matter? Down 14 it leaves two scores either way; down 10 it makes it one
     need_after_fg = int(np.ceil(-(score_diff + 3) / 8.0)) if score_diff + 3 < 0 else 0
-    fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now)
+    fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now and -score_diff not in (7, 8) and -(score_diff + 3) not in (7, 8))
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_table = float(np.clip(GO_RATE[band][zone] * (0.55 + 0.60 * aggression), 0.0, 1.0))     # the observed rates already carry an average coach; the personality term sits around them
     r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100, ydstogo, aggression=aggression, is_home=1) if use_wp else None
@@ -144,7 +144,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     if rng.random() < p_go:
         return 'go'
     # not going: the kick when it is in range and worth something, else the punt
-    limit = 41 if secs_left > 300 or score_diff >= 0 else 44
+    limit = 38 if secs_left > 300 or score_diff >= 0 else 44        # a 55-yarder is the ordinary limit; longer only chasing the game late
     if secs_left < 20: limit = 45                        # the last play of a half
     if yardline_100 <= limit and fg_matters:
         return 'field_goal'
@@ -392,7 +392,7 @@ def _tick(dr, secs):
     dr.clock -= secs
     for edge in (2700.0, 1800.0, 900.0):
         if before > edge >= dr.clock: dr.clock = float(edge); break
-    dr.clock = round(dr.clock, 2)
+    dr.clock = float(np.ceil(dr.clock - 1e-9))                          # whole seconds
 
 
 def returner_for(ros, state, rate_fn, kind='kr'):
@@ -1028,9 +1028,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             _v = AS.epa(_o, _st[0], _st[1], _st[2], dr.down, dr.togo, dr.yardline)
             _o['epa'] = round(_v, 3); AS.book_play(book, _o, _off, _def, _v); pending = None
         wall = half_end if half_end is not None else 0.0
-        if dr.clock <= wall and getattr(dr, 'untimed', False):
-            # a half does not end on an accepted defensive foul: one untimed down
-            dr.untimed = False; dr.clock = wall + 0.5
+        if dr.clock <= wall and getattr(dr, 'untimed', False) and getattr(dr, 'untimed_at', -1) == len(dr.log):
+            # a half does not end on an accepted defensive foul: one untimed down, only when the foul was the last thing to happen
+            dr.untimed = False; dr.clock = wall + 1.0
+        elif getattr(dr, 'untimed', False) and getattr(dr, 'untimed_at', -1) != len(dr.log):
+            dr.untimed = False                                 # a snap has been run since the foul: the flag is stale
         elif dr.clock <= 0:
             dr.result = 'End of half'; break
         # THE HALF IS A WALL TOO. Without this the game ran as one continuous
@@ -1281,7 +1283,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # half the distance to the defense's goal
                 gained = max(1.0, float(np.floor(min(float(pen['yards']), dr.yardline / 2.0))))
                 pen['yards'] = round(gained, 1)
-                dr.untimed = True                       # a half cannot end on this
+                dr.untimed = True; dr.untimed_at = len(dr.log) + 1     # a half cannot end on this; the penalty entry appended below is the last thing in the log
                 if pen['auto_first']:
                     dr.yardline -= gained; dr.down, dr.togo = 1, min(10, dr.yardline)
                     dr.first_downs += 1
@@ -1375,7 +1377,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if live_pen is not None:
             taken = _resolve_live_penalty(dr, live_pen, out, oc)
             if taken in ('replaced', 'added') and not live_pen.get('on_offense'):
-                dr.untimed = True                       # a half cannot end on an accepted defensive foul
+                dr.untimed = True; dr.untimed_at = len(dr.log) + 1     # the penalty entry appended next is the last thing in the log
             if taken == 'replaced':
                 # accepted in place of the play: the down is replayed and the snap does not count, but the
                 # play-by-play keeps the play it wiped (marked), so a reader sees the pass the flag came on
@@ -1424,8 +1426,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # The trailing side spends them to get the ball back; the driving side
         # to keep the clock alive. Neither wastes one early.
         used = False; used_by = None
-        if timeouts is not None and secs_in_half < 300:
+        _scored_now = t in ('run', 'complete', 'scramble') and float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01
+        _at_warning = secs_in_half > 120 and secs_in_half - play_seconds(t) <= 120 and not getattr(dr, '_two_min', False)
+        if timeouts is not None and secs_in_half < 300 and not _scored_now and not _at_warning:
             other = 'away' if pos == 'home' else 'home'
+            # nothing to stop after a score (the clock is dead at the whistle) or on the play that reaches the
+            # two-minute warning (the warning stops it for free)
             in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
             # the defense stops the clock in the last three minutes of the GAME when it trails; in the first
             # half only a two-score deficit is worth a timeout to get the ball back before the break
@@ -1436,13 +1442,14 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         hurry = secs_in_half < 120 and dr.score_diff <= 0
         before_clock = secs_in_half
         clock_before = dr.clock
-        if t in ('run', 'complete', 'scramble') and float(out.get('yards', 0.0) or 0.0) >= dr.yardline - 0.01:
-            dr.clock -= 6.0                                    # a touchdown stops the clock at the whistle; no huddle follows it
+        _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
+        if (t in ('run', 'complete', 'scramble') and float(out.get('yards', 0.0) or 0.0) >= dr.yardline - 0.01) or _fourth_fail:
+            dr.clock -= 6.0                                    # a touchdown or a change of possession stops the clock at the whistle; no huddle follows it
         else:
             dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
         for edge in (2700.0, 900.0):
             if clock_before > edge >= dr.clock: dr.clock = float(edge)   # the quarter ends with this play; no huddle runs into the next one
-        dr.clock = round(dr.clock, 2)
+        dr.clock = float(np.ceil(dr.clock - 1e-9))                          # the clock is whole seconds; a fraction left is a second
         after_clock = dr.clock - half_end if half_end is not None else dr.clock
         if used and used_by:
             dr.log.append(dict(type='timeout', side=used_by, side_abbr=(getattr(off_state if used_by == pos else def_state, 'abbr', None) or used_by.upper()), left=timeouts.left.get(used_by, 0), clock=dr.clock))

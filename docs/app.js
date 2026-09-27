@@ -324,7 +324,7 @@ function renderGameDay(v) {
   if (v.empty) { page.append(el('section', { class: 'sheet c12' }, el('h2', {}, 'Game Day'), el('div', { class: 'empty' }, v.line))); return; }
   if (v.preview) {
     // the week has not been played: the preview of this week's game, and the button that plays it
-    const s = el('section', { class: 'sheet c12' }, el('h2', {}, `Week ${v.week} · Game Day`, el('small', {}, v.bye ? 'Bye week' : `${v.matchup.away ? 'at' : 'vs'} ${v.matchup.them.club.name} · ${v.matchup.header || ''}`)));
+    const s = el('section', { class: 'sheet c12' }, el('h2', {}, `${weekName(v.week)} · Game Day`, el('small', {}, v.bye ? 'Bye week' : `${v.matchup.away ? 'at' : 'vs'} ${v.matchup.them.club.name} · ${v.matchup.header || ''}`)));
     if (v.bye) { s.append(el('div', { class: 'empty' }, v.line)); }
     else {
       const m = v.matchup;
@@ -336,7 +336,7 @@ function renderGameDay(v) {
       s.append(el('div', { class: 'read', style: 'margin:0 14px 10px' }, el('b', {}, 'Assistants: '), m.say));
       s.append(el('div', { class: 'read', style: 'margin:0 14px 12px;color:var(--ink-2)' }, v.plan_set ? 'Your game plan for this week is set.' : "You have not changed the coordinators' plan this week; the game reads their plan as it stands."));
     }
-    s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, `Sim Week ${v.week}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart'), el('span', { class: 'count', style: 'margin-left:auto' }, 'Every club plays this week when you sim; the week itself moves on when you Advance.')));
+    s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, v.week >= 19 ? `Play the ${weekName(v.week)}` : `Sim Week ${v.week}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart'), el('span', { class: 'count', style: 'margin-left:auto' }, 'Every club plays this week when you sim; the week itself moves on when you Advance.')));
     page.append(s); return;
   }
   const g = v.game;
@@ -767,6 +767,9 @@ function developmentPanel(pid, reload) {
   box.append(t);
   return box;
 }
+
+// weeks 19 to 22 are the playoff rounds
+function weekName(w) { return ({ 19: 'Wild Card', 20: 'Divisional Round', 21: 'Conference Championship', 22: 'Super Bowl' })[w] || `Week ${w}`; }
 
 // copy text to the clipboard, with a fallback for browsers that refuse the API
 async function copyText(text, btn) {
