@@ -97,7 +97,13 @@ def read_profile(qb, rate_fn, AVG=0.70):
     return {k: v / t for k, v in m.items()}
 
 
-def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70):
+# what a coordinator sees when he builds the read order: hands, routes, speed, release, the contested catch
+READ_BY_PLAYERS = 0.6     # share of the designed read order that follows the players' quality rather than the formation
+RECV_GRADE = {'catch_rating': 0.20, 'route_run_short_rating': 0.15, 'route_run_med_rating': 0.15, 'speed_rating': 0.22,
+              'accel_rating': 0.08, 'release_rating': 0.10, 'cit_rating': 0.10}
+
+
+def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zone=False):
     """
     Who gets the ball.
 
@@ -133,7 +139,25 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70):
     # Real target share by rank: 23.6 / 17.5 / 13.3 / 10.5 / 8.5 - a ratio of
     # about 0.76 between neighbours. A flatter curve produced a near-uniform
     # distribution where the fifth option saw as many balls as the second.
-    w *= np.array([0.76 ** i for i in range(n)], float)
+    # THE READ ORDER FOLLOWS THE PLAYERS, NOT THE FORMATION. The pattern arrives in alignment order (outside
+    # receivers, slot, tight end, back), and weighting by that order made the tight end the fourth read on every
+    # play whatever he was: an 86 tight end drew 86 targets in a season against a real 169. The designed bias runs
+    # by the receivers' quality instead: a tight end is graded a touch under his overall (his blocking is in it),
+    # a back well under (he is the checkdown, and the checkdown read handles him), and the best gets the first
+    # read's weight
+    def rgrade(p):
+        r = p['receiver']; pos = r.get('pos')
+        try: o = float(rate_fn(r, RECV_GRADE))
+        except Exception: o = 70.0
+        return o - (8.0 if pos in ('HB', 'FB') else 0.0)
+    rank = {i: k for k, i in enumerate(sorted(range(n), key=lambda i: -rgrade(pairs[i])))}
+    # half the design is the formation (the X and the Z are built to be first), half is who the best players are
+    w *= np.array([READ_BY_PLAYERS * 0.76 ** rank[i] + (1.0 - READ_BY_PLAYERS) * 0.76 ** i for i in range(n)], float)
+    if red_zone:
+        # INSIDE THE TEN THE TIGHT END IS THE TARGET. The field is short, the windows are bodies, and the big target
+        # in the middle draws the ball: real tight ends take about a quarter of red-zone targets and the position's
+        # touchdowns follow (a leader at 11 to 13 a year; the engine had him at 5)
+        w = w * np.array([1.45 if p['receiver'].get('pos') == 'TE' else 0.9 if p['receiver'].get('pos') in ('HB', 'FB') else 1.0 for p in pairs], float)
     w = w / w.sum()
     order = list(rng.choice(n, size=n, replace=False, p=w))
 

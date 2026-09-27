@@ -299,6 +299,10 @@ def _compression(room):
     return float(min(1.0, max(0.42, 0.34 + room / 40.0)))
 
 
+TE_CATCH_MULT = 1.12                    # a tight end is a big target on short and medium throws: real tight ends catch 70% to the receivers' 65%
+TE_FREE_BASE, TE_FREE_SEP = 1.0, 2.2      # a tight end's step at the catch: first contact comes downfield, by his separation
+
+
 def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
                         already=0.0, contact_at=0.0, in_space=False):
     """
@@ -789,7 +793,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
             pr['separation'] *= 0.72; pr['bracket'] = True        # and the read goes elsewhere more often (targets.select_target)
 
     tgt, cov, read_kind, sep_raw = TG.select_target(
-        pairs, off['qb'], concept, rng, rate, plan=off_call.get('plan'))
+        pairs, off['qb'], concept, rng, rate, plan=off_call.get('plan'), red_zone=(ytg <= 10))
     if tgt is None:
         tgt, cov, read_kind, sep_raw = receivers[0], deff['db'][0], 'first', 0.42
 
@@ -826,7 +830,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         sep = float(np.clip(sep_raw, .02, .98))
         thr = resolve_throw(off['qb'], depth, sep, p['pressure'], rng,
                             play_action=off_call.get('play_action', False),
-                            outcome_mult=cmult * (1.0 - dis) * rmod['comp'],
+                            outcome_mult=cmult * (1.0 - dis) * rmod['comp'] * (TE_CATCH_MULT if (tgt.get('pos') == 'TE' and depth != 'deep') else 1.0),
                             def_awr=rate(cov, {'awareness_rating': 1.0}) if cov else DEF_AWR_MEAN)
         complete = thr['result'] == 'complete'
         global LAST_XCOMP; LAST_XCOMP = float(thr['p'])
@@ -987,7 +991,12 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # defence, not a receiver in space: at in_space the backs averaged
     # 9-10 yards a target against a real 6
     in_space = tgt.get('pos') not in ('HB', 'FB')
-    yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space)
+    # A TIGHT END CATCHES THE SEAM WITH A STEP. He is running away from a linebacker or a safety when the ball arrives,
+    # and the first tackler reaches him a few yards downfield, not at the catch point; the better his separation
+    # the longer the step. Tight ends had been gaining 2.8 after the catch against the receivers' 5.4 and a real 4.5
+    # to 5, with the ball arriving at the same depth
+    te_free = (TE_FREE_BASE + TE_FREE_SEP * float(np.clip(sep_raw, 0.0, 1.0))) if tgt.get('pos') == 'TE' else 0.0
+    yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space, contact_at=min(te_free, room))
     if screen and tacklers:
         # A SCREEN LIVES OR DIES ON THE READ. The pursuers' awareness decides whether the defense rallied:
         # a smart unit kills it for two, a slow one gives up fifteen (about a third either way)
