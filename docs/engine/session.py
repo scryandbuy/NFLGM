@@ -947,6 +947,11 @@ class Session:
         import views_frontoffice as VF
         return getattr(VF, page)(self, self.L, self.user_team, **kw)
 
+    def rail_state(self):
+        """A short state for file names and the like."""
+        k = self.stop[0]; tail = '-'.join(str(x) for x in self.stop[1:])
+        return dict(year=int(self.L.year), stop=(f"{k}{'-' + tail if tail else ''}"), build=None)
+
     def trade_offer_view(self, msg_id):
         """An AI club's trade offer, laid out for the popup: what they send, what they want, the read, the value gap."""
         import inbox as IB, views_personnel as VP
