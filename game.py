@@ -1417,6 +1417,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             fum = E.fumble_check(carrier, ev, rng, rate_fn, env_mult=ENV.fumble_mult, rate_mult=(getattr(off_state, 'staff_fx', None) or {}).get('fum_off', 1.0))
             if fum:
                 out['fumble'] = True; out['fumble_lost'] = bool(fum['lost']); out['fumble_by'] = (carrier or {}).get('pid')
+                if book is not None: book.record_fumble(out)          # the book was written before the ball came out
             if fum and fum['lost']:
                 # the ball comes out where the play ended, not where it started: the gain (or loss) is applied first
                 dr.yardline = float(np.clip(dr.yardline - float(out.get('yards', 0.0) or 0.0), 1.0, 99.0))
@@ -1775,7 +1776,7 @@ class StatBook:
                 pass_att=0, pass_cmp=0, pass_yds=0.0, pass_td=0, ints=0, sacked=0,
                 rush_att=0, rush_yds=0.0, rush_td=0,
                 tgt=0, rec=0, rec_yds=0.0, rec_td=0, drops=0,
-                tackles=0, sacks=0.0, int_def=0, pressures=0, ff=0,
+                tackles=0, sacks=0.0, int_def=0, pressures=0, ff=0, fumbles=0, fumbles_lost=0,
                 pass_def=0,
                 fum=0, fum_lost=0,
                 # ---- specialists ----
@@ -1814,6 +1815,14 @@ class StatBook:
             l = self._get(pid)
             l['rb_snaps'] += 1
             l['rb_wins'] += 1 if won else 0
+        # THE RUSH. Every rusher's rep is booked; a rusher who won his rep on a play the quarterback was pressured on
+        # is credited the pressure (the blocker who lost it already carries the pressure allowed)
+        for pid, won in out.get('pr_reps') or ():
+            if not pid: continue
+            l = self._get(pid)
+            l['pr_reps'] += 1
+            if won:
+                l['pr_wins'] += 1; l['pressures'] += 1          # a won rep is a pressure, the way the charting services count it (about 12 a team a game)
         # A sack is charged to the man who was actually beaten, which the
         # protection resolver already names.
         if out.get('pass_def'):
@@ -1845,11 +1854,23 @@ class StatBook:
             rb = out.get('carrier_pid') or off['rb'].get('pid', 'RB1')
             s = self._get(rb); s['rush_att'] += 1; s['rush_yds'] += out['yards']
             if out.get('touchdown'): s['rush_td'] += 1
-        # a tackle is credited on any play that ends in the field of play
+        # a tackle is credited on any play that ends in the field of play, to the player the play-by-play names
         if t in ('run', 'complete', 'scramble') and not out.get('touchdown'):
-            pool = deff['db'] + deff['lb'] + deff['dl']
-            tk = pool[rng.integers(0, len(pool))]
-            self._get(tk.get('pid', 'D?'))['tackles'] += 1
+            tk_pid = out.get('tackler')
+            if not tk_pid:
+                pool = deff['db'] + deff['lb'] + deff['dl']
+                tk_pid = pool[rng.integers(0, len(pool))].get('pid', 'D?')
+            self._get(tk_pid)['tackles'] += 1
+
+    def record_fumble(self, out):
+        """The carrier's fumble, lost or not, and the forced fumble to the tackler who hit him. Called from the drive
+        once the ball has come out, which is after the play itself was booked."""
+        fb = out.get('fumble_by') or out.get('carrier') or out.get('target')
+        if fb:
+            s = self._get(fb); s['fumbles'] = s.get('fumbles', 0) + 1
+            if out.get('fumble_lost'): s['fumbles_lost'] = s.get('fumbles_lost', 0) + 1
+        if out.get('tackler'):
+            d = self._get(out['tackler']); d['ff'] += 1
 
     def table(self):
         import pandas as pd
