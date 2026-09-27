@@ -597,3 +597,36 @@ def draft_csv(session, league, abbr):
         x = '' if x is None else str(x)
         return '"' + x.replace('"', '""') + '"' if (',' in x or '"' in x) else x
     return dict(ok=True, name=f"draft-{draft_year(year)}.csv", text='\n'.join(','.join(cell(x) for x in r) for r in rows))
+
+
+def class_csv(session, league, abbr):
+    """The coming class as a CSV: every prospect with the truth beside your room's read, so the class builder and
+    the scouting can be checked. Truth: overall, ceiling, development trait, the tape, every attribute. Your room:
+    the estimate, the ceiling read, the consensus rank and grade, certainty, flags."""
+    pool = list(getattr(league, 'draft_pool', None) or []) or list(getattr(league, 'next_class', None) or [])
+    if not pool: return dict(ok=False, why='no class has been built yet')
+    cons = getattr(league, 'consensus', None) or {}
+    views = ((getattr(league, 'scouting', None) or {}).get(abbr) or {})
+    attrs = sorted({k for p in pool for k in (p.ratings or {}) if k.endswith('_rating')})
+    import views_club as VC
+    labels = {}
+    for grp in VC.ATTR.values():
+        for k, lab in grp: labels[k] = lab
+    from views import draft_year
+    head = ['name', 'pos', 'age', 'school', 'class_year', 'true_overall', 'true_ceiling_lo', 'true_ceiling_hi', 'dev', 'tape', 'tape_role',
+            'consensus_rank', 'consensus_grade', 'your_read', 'your_ceiling_lo', 'your_ceiling_hi', 'your_certainty', 'flags'] + [labels.get(k, k.replace('_rating', '')) for k in attrs]
+    rows = [head]
+    for p in sorted(pool, key=lambda p: -p.ovr):
+        c = cons.get(p.pid, {}) or {}; v = views.get(p.pid) or {}
+        lo, hi = (p.potential_range or (p.ovr, p.ovr))
+        rows.append([p.name, p.pos, int(p.age), p.college, getattr(p, 'class_year', '') or '', round(float(p.ovr)), round(float(lo)), round(float(hi)), p.dev,
+                     round(float(p.xp_spent.get('_tape', 0) or 0), 1), p.xp_spent.get('_tape_role', ''),
+                     c.get('rank', ''), (round(float(c['ovr'])) if c.get('ovr') else ''), (round(float(v['ovr'])) if v.get('ovr') else ''),
+                     (round(float(v['pot_lo'])) if v.get('pot_lo') else ''), (round(float(v['pot_hi'])) if v.get('pot_hi') else ''),
+                     (round(float(v.get('cert', 0) or 0), 2) if v else ''), ' '.join(v.get('flags', []) or [])]
+                    + [round(float(p.ratings.get(k, 0))) for k in attrs])
+    def cell(x):
+        x = '' if x is None else str(x)
+        return '"' + x.replace('"', '""') + '"' if (',' in x or '"' in x) else x
+    yr = coming_season(league) + 1
+    return dict(ok=True, name=f"class-{yr}.csv", text='\n'.join(','.join(cell(x) for x in r) for r in rows))
