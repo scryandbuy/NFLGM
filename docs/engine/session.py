@@ -15,6 +15,7 @@ button reads. Anything the user must do before a stop is a blocking
 decision the Portal shows on the button.
 """
 import json, numpy as np
+from views import CLUB_NAME as CLUB_NAME_
 import league as LG, season as SN, postseason as PS, awards as AW, coaching_pool as CP, position_change as PC
 import morale as MO, staff as STF, almanac as AL, xp as XP, dev_roll as DR, retirement as RT, regression as RG
 import schedule as SCH, contracts as CT, waivers as WV, extensions as EXT, tags as TG, market as MK, trades as TRD
@@ -272,6 +273,7 @@ class Session:
                     field = {t for sd in post.seeds.values() for t in sd}
                     if self.user_team not in field: self._post_review('missed')
                     self._ai_exit_meetings([a for a in self.L.teams if a not in field])
+                    self._black_monday([a for a in self.L.teams if a not in field])
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':
             # THE PLAYOFFS, A ROUND AT A TIME, with the whole week around each game. Entering a round (from week 18's
@@ -313,7 +315,9 @@ class Session:
             self.played = False
             if self.user_team in (getattr(post, 'exit_round', {}) or {}):
                 self._post_review('eliminated')
-            self._ai_exit_meetings([a for a, r in (getattr(post, 'exit_round', {}) or {}).items() if r == rnd])
+            losers = [a for a, r in (getattr(post, 'exit_round', {}) or {}).items() if r == rnd]
+            self._ai_exit_meetings(losers)
+            self._black_monday(losers)
             if rnd_i + 1 < len(PS.Postseason.ROUNDS):
                 self.stop = ('playoffs', rnd_i + 1)
                 self._playoff_prep(rnd_i + 1)
@@ -335,6 +339,17 @@ class Session:
             try: GW.post_report(self.L, 1)
             except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
+
+    def _black_monday(self, clubs):
+        """The clubs whose season just ended roll their firings now, and a new head coach comes for his staff,
+        which can mean a request for one of your coordinators while the playoffs go on."""
+        try:
+            fired = PS.run_firings(self.L, self.rng, clubs=list(clubs))
+            for abbr, bg in fired:
+                t = self.L.teams[abbr]
+                IB.post(self.L, 'league', f"{t.abbr} makes a change", f"{CLUB_NAME_.get(abbr, abbr)} moved on from its head coach the morning after its season ended. {t.gm.name if t.gm else 'A new coach'} takes over.", sender='league')
+        except Exception as e:
+            import sys; print('black monday failed:', e, file=sys.stderr)
 
     def _ai_exit_meetings(self, clubs):
         import views_frontoffice as VF

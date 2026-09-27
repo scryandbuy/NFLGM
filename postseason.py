@@ -248,19 +248,28 @@ def set_draft_order(league, post, year=None):
 
 
 # ================================================================== FIRING
-def run_firings(league, rng, pool=None, verbose=False):
+def run_firings(league, rng, pool=None, verbose=False, clubs=None):
     """
     Every club rolls its own chance off accumulated pressure. No quota, no
     target turnover - the league lands where it lands, which is the point of
     having a pressure model at all.
+
+    BLACK MONDAY. With `clubs` given, only those clubs roll (the ones whose season just ended), and the result is
+    remembered so the season's close rolls only the clubs that have not yet. That is how the real market works:
+    a club fires the day after it is eliminated, and the two Super Bowl clubs wait.
     """
     pool = pool if pool is not None else []
     fired = []
+    done = league.__dict__.setdefault('_firings_rolled', {})
+    yr = str(league.year); rolled = done.setdefault(yr, [])
     strengths = {a: t.roster_strength() for a, t in league.teams.items()}
     lo, hi = min(strengths.values()), max(strengths.values())
     for abbr, t in league.teams.items():
         if t.gm is None:
             continue
+        if clubs is not None and abbr not in clubs: continue
+        if abbr in rolled: continue
+        rolled.append(abbr)
         # roster quality 0-1: a bad record with a bad roster is survivable
         rp = (strengths[abbr] - lo) / (hi - lo) if hi > lo else 0.5
         qb = t.starter('QB')
@@ -272,6 +281,7 @@ def run_firings(league, rng, pool=None, verbose=False):
             import coaching_pool as CP
             hired, reasons = CP.fire_and_hire(league, t, rng, verbose)
             fired.append((abbr, hired.background))
+            league.__dict__.setdefault('_fired_this_year', {}).setdefault(yr, []).append((abbr, hired.background))
         else:
             t.tenure += 1
             t.gm.tenure = t.tenure
@@ -298,7 +308,10 @@ def close_season(league, runner, rng, pool=None, verbose=False, post=None):
                            else post.exit_round.get(abbr))
     order = set_draft_order(league, post)
     league.set_phase('offseason')
-    fired = run_firings(league, rng, pool, verbose)
+    fired = run_firings(league, rng, pool, verbose)                 # whoever has not rolled yet (the two finalists, or all 32 when the bracket was simmed at once)
+    earlier = (league.__dict__.get('_fired_this_year', {}) or {}).get(str(league.year), [])
+    seen = {a for a, _ in fired}
+    fired = fired + [x for x in earlier if x[0] not in seen]
     league.log('season_end', champion=post.champion,
                top_pick=order[0], gm_changes=len(fired))
     return post, order, fired
