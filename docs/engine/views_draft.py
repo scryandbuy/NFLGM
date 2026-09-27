@@ -101,7 +101,9 @@ def board(session, league, abbr):
         import postseason as PS
         slot = PS.provisional_slot(league, getattr(session, 'post_live', None) or getattr(session, 'post', None), abbr)
     except Exception: slot = None
-    return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=coming_season(league) + 1, slot=slot,
+    D_ = getattr(session, 'draft', None)
+    on_clock = bool(D_ is not None and not D_.done and D_.on_user())
+    return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=coming_season(league) + 1, slot=slot, on_clock=on_clock,
                 visits=visits, visits_max=SP.VISITS, spring_done=spring_done, needs=sorted(needs), user_board=ub, my_slot=_my_first_slot(league, abbr), read=_board_read(league, abbr, rows, ub, needs),
                 scout=(dict(name=scout.name, rating=round(scout.rating)) if scout else None), live=bool(getattr(session, 'draft', None)),
                 note=None if rows else 'The class is scouted in camp; the board fills once the season begins.')
@@ -117,7 +119,9 @@ def _needs(league, t):
         men = sorted((p for p in t.active() if p.pos in poss), key=lambda p: -p.ovr)
         n_start = {'QB': 1, 'RB': 1, 'WR': 3, 'TE': 1, 'OL': 5, 'EDGE': 2, 'DT': 2, 'LB': 2, 'CB': 3, 'S': 2}[g]
         starters = men[:n_start]
-        if len(men) < n_start + 1 or any(p.contract and p.contract.years <= 1 for p in starters) or (starters and min(p.ovr for p in starters) < 70): out.add(g)
+        # a need for the draft: too few bodies, a starter below the line, or a starter past thirty with his deal
+        # up (a young starter with a year left is an extension question, not a hole)
+        if len(men) < n_start + 1 or (starters and min(p.ovr for p in starters) < 72) or any(p.contract and p.contract.years <= 1 and p.age >= 31 for p in starters): out.add(g)
     return out
 
 
@@ -193,6 +197,7 @@ def prospect_card(session, league, abbr, pid):
     p = next((q for q in _pool(league) if q.pid == pid), None) or league.player(pid)
     if p is None: return dict(error='no such prospect')
     row = _prospect(league, abbr, p, (getattr(session, 'draft', None).taken if getattr(session, 'draft', None) else ()))
+    taken_now = bool(getattr(session, 'draft', None) is not None and p.pid in getattr(session.draft, 'taken', set())) or bool(p.team)
     if row is None: return dict(error='your scouts have no read on him')
     view = league.scouting[abbr][p.pid]
     e_phys = float(view.get('e_phys', 0.0)); e_skill = float(view.get('e_skill', 0.0))
@@ -222,6 +227,7 @@ def prospect_card(session, league, abbr, pid):
     return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], fit=row.get('fit', 0.0), scheme_ovr=row.get('scheme_ovr'), college=row['college'], conference=getattr(p, 'conference', None) or '',
                 small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
                 words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine, medical=(med.get('note') or ('Flagged out of the combine' if med.get('flag') else 'Clean')),
+                on_clock=bool(getattr(session, 'draft', None) is not None and not session.draft.done and session.draft.on_user() and not taken_now),
                 reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality=words, spring_done=any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or [])),
                 read=_prospect_read(league, abbr, p, row, view))
 
@@ -397,7 +403,7 @@ def draft_day(session, league, abbr):
             if picks_away >= 2 and len(my_board) > 1: parts.append(f"If he goes, {surname(my_board[1]['name'])} is next on your board")
             read = sentence('. '.join(parts) + '.')
         else:
-            read = sentence(f"{surname(top['name'])} is your board's top man and a {top['pos']}" + (f", which is a need" if any(top['pos'] in NEED_GROUPS[g] for g in _needs(league, league.teams[abbr])) else '') + f". The consensus has him {top['cons_rank']}{_ordd(top['cons_rank'])}." if top.get('cons_rank') else f"{surname(top['name'])} is your board's top man.")
+            read = sentence(f"{surname(top['name'])} is your board's top player and a {top['pos']}" + (f", which is a need" if any(top['pos'] in NEED_GROUPS[g] for g in _needs(league, league.teams[abbr])) else '') + f". The consensus has him {top['cons_rank']}{_ordd(top['cons_rank'])}." if top.get('cons_rank') else f"{surname(top['name'])} is your board's top man.")
     picks_away = next((j for j, z in enumerate(D.picks[D.i:]) if z.owner == abbr), None)
     return dict(rail=r, live=True, on_user=D.on_user(), current=(dict(sel=pk.selection, slot=SLOT(pk), round=pk.round, team=club(pk.owner), original=pk.original, needs=sorted(_needs(league, league.teams[pk.owner]))[:3]) if pk else None),
                 clock=clock, order=pick_board, results=results, mine_next=mine_next, best=best, board=my_board, picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades), picks_away=picks_away, read=read,

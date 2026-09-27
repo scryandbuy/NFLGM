@@ -853,7 +853,8 @@ function renderProspectCard(v) {
   const acts = el('div', { class: 'ctabs' }, el('span', { style: 'font-family:var(--display);font-weight:700;color:var(--ink-3);padding:8px 0' }, 'Prospect Card'));
   const a = el('div', { class: 'acts' });
   if (!v.taken) {
-    a.append(v.on_board ? el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(v.pid)})`); reload(); } }, 'Take Off Your Board') : el('button', { class: 'btn go', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(v.pid)})`); reload(); } }, 'Add to Your Board'));
+    if (v.on_clock) a.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.draft_act('pick', pid=${JSON.stringify(v.pid)})`); notify(r); if (r.ok) location.hash = '#draft/day'; } }, 'Draft Player'));
+    a.append(v.on_board ? el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(v.pid)})`); reload(); } }, 'Take Off Your Board') : el('button', { class: 'btn' + (v.on_clock ? '' : ' go'), onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(v.pid)})`); reload(); } }, 'Add to Your Board'));
     if (!v.spring_done) a.append(el('button', { class: 'btn' + (v.visited ? ' go' : ''), 'data-tip': v.visited ? 'Cancel the visit' : 'Scout this player further', onclick: () => { const r = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(v.pid)})`); if (!r.ok) notify(r); reload(); } }, v.visited ? 'Visiting' : 'Visit'));
     a.append(el('button', { class: 'btn quiet', 'data-tip': 'Keep him off your board on draft day', onclick: () => { pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(v.pid)})`); const cur = pyJSON(`SESSION.draft_view('board')`).user_board.dnd.map(x => x.pid); pyJSON(`SESSION.draft_act('board', dnd=${JSON.stringify(cur.concat([v.pid]))})`); reload(); } }, 'Do Not Draft'));
   }
@@ -1423,7 +1424,7 @@ function renderCap(v) {
 
 // ---------------------------------------------------------------- Draft
 const DR = { board: 'Scouting Board', spring: 'The Spring', day: 'Draft Day', picks: 'Picks' };
-let boardRound = null;
+let boardRound = null, boardHideTaken = false;
 let boardPos = 'All', boardFilt = { early: false, late: false, small: false, needs: false }, boardTab = 'class', boardQuery = '', boardSel = null, boardPage = 0, boardSort = 'rank', boardDir = 1;
 // THE BOARD'S SORT. Every column but Flags sorts; click a head to sort by it, click again to flip. Numbers sort high
 // first, text A to Z, blanks last either way.
@@ -1466,6 +1467,8 @@ function renderBoard(v) {
   const ordn_ = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Scouting Board', el('small', {}, `${v.count} prospects` + (v.slot ? ` · you pick ${ordn_(v.slot)} in the first round` : '') + (v.scout ? ` · Head Scout ${v.scout.name} (${v.scout.rating})` : ''))));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
+  const taken = v.rows.filter(r => r.taken).length;
+  if (taken) tabs.append(el('label', { class: 'chk', style: 'margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink-2)' }, el('input', { type: 'checkbox', checked: boardHideTaken ? '' : null, onchange: e => { boardHideTaken = e.target.checked; boardPage = 0; draw(); } }), `Hide drafted (${taken})`));
   for (const [k, l, n] of [['class', `Class of ${v.year}`, v.count], ['board', 'Your Board', onBoard.size], ['visited', 'Visited', v.rows.filter(r => r.visited).length]]) tabs.append(el('button', { 'aria-pressed': String(boardTab === k), onclick: () => { boardTab = k; renderBoard(v); } }, l + ' ', el('em', {}, n)));
   s.append(tabs);
   if (boardTab === 'board') { s.append(yourBoard(v, reload)); page.append(s); return; }
@@ -1484,7 +1487,7 @@ function renderBoard(v) {
     tbl.append(el('tr', {}, H('#', 'rank', 'n', 'Your board order'), H('Prospect', 'name', '', ''), H('Pos', 'pos', '', ''), H('School', 'school', '', ''), H('Estimated Overall', 'mine', 'n', "Your scouts' read. Carries error; a visit tightens it"), H('Scheme Ovr', 'scheme', 'n', "How he grades in your scheme, on your scouts' read; the league's grade does not move"), H('Ceiling', 'ceiling', 'n', 'Where he can grow to. Wide means your scouts are unsure'), H('Consensus', 'cons', 'n', "The league's grade, same scale as yours"), H('Gap', 'gap', 'n', "Yours minus the league's. Positive means the league undervalues him"), H('Proj.', 'proj', 'n', 'Where the league expects him to go'), el('th', {}, 'Flags'), el('th', {}, '')));
     const q = boardQuery.trim().toLowerCase(); const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], EDGE: ['LEDG', 'REDG', 'DT'], CB: ['CB', 'FS', 'SS'] };
     const needPos = new Set(v.needs.flatMap(g => NEED_POS[g] || []));
-    const rows = v.rows.filter(r => (boardTab !== 'visited' || r.visited) && (boardPos === 'All' || (GROUP[boardPos] || []).includes(r.pos)) && (!boardFilt.needs || needPos.has(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.late || (r.cons_rank != null && r.cons_rank > 96)) && (!boardFilt.small || r.small) && (!q || r.name.toLowerCase().includes(q) || (r.college || '').toLowerCase().includes(q)));
+    const rows = v.rows.filter(r => (!boardHideTaken || !r.taken) && (boardTab !== 'visited' || r.visited) && (boardPos === 'All' || (GROUP[boardPos] || []).includes(r.pos)) && (!boardFilt.needs || needPos.has(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.late || (r.cons_rank != null && r.cons_rank > 96)) && (!boardFilt.small || r.small) && (!q || r.name.toLowerCase().includes(q) || (r.college || '').toLowerCase().includes(q)));
     const sorted = boardSortRows(rows);
     const PAGE = 100, pages = Math.max(1, Math.ceil(rows.length / PAGE)); if (boardPage >= pages) boardPage = pages - 1; if (boardPage < 0) boardPage = 0;
     pager.innerHTML = ''; pager.append(el('button', { class: 'btn', disabled: boardPage === 0 ? '' : null, onclick: () => { boardPage--; draw(); } }, '‹ Prev'), el('span', { class: 'count' }, `${rows.length ? boardPage * PAGE + 1 : 0}–${Math.min(rows.length, (boardPage + 1) * PAGE)} of ${rows.length}`), el('button', { class: 'btn', disabled: boardPage >= pages - 1 ? '' : null, onclick: () => { boardPage++; draw(); } }, 'Next ›'));
@@ -1497,6 +1500,7 @@ function renderBoard(v) {
   };
   const foot = el('div', { class: 'foot' });
   const drawFoot = () => { foot.innerHTML = ''; const r = v.rows.find(x => x.pid === boardSel);
+    if (v.on_clock) foot.append(el('button', { class: 'btn go', disabled: (r && !r.taken) ? null : '', onclick: () => { const rr = pyJSON(`SESSION.draft_act('pick', pid=${JSON.stringify(boardSel)})`); notify(rr); if (rr.ok) location.hash = '#draft/day'; } }, 'Draft Player'));
     foot.append(el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(boardSel)})`); reload(); } }, 'Add to Your Board'), el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { location.hash = '#club/player/' + boardSel; } }, 'Prospect Card'), el('span', { class: 'count', style: 'margin-left:auto' }, r ? `${r.name} · ${r.pos} · ${r.college}` : 'Click a row to select a prospect')); };
   s.append(el('div', { class: 'board-wrap' }, tbl), foot); draw(); drawFoot();
   // the spring, inline: stock moves and flags
@@ -1600,6 +1604,7 @@ function renderDraftDay(v) {
     const sq = el('div', { class: 'pb-sq' + (q.done ? ' done' : '') + (q.now ? ' now' : '') + (q.mine ? ' mine' : ''), style: `--c1:${q.team.color};--c2:${q.team.accent || '#fff'}` + (tradeFor ? ';cursor:pointer' : ''), 'data-tip': tradeFor ? `Trade for pick ${q.slot}` : null, onclick: tradeFor });
     sq.append(el('div', { class: 'pb-top' }, el('span', { class: 'ab' }, q.team.abbr), el('span', { class: 'sl' }, q.slot)));
     if (q.done) sq.append(el('div', { class: 'pb-nm' }, q.name), el('div', { class: 'pb-pos' }, `${q.pos}${q.original ? ` · from ${q.original}` : ''}`));
+    else if (q.now && q.mine) sq.append(el('button', { class: 'btn go', style: 'width:auto;padding:3px 8px;font-size:12.5px;margin-top:2px', onclick: e => { e.stopPropagation(); location.hash = '#draft/board'; } }, 'Draft Player'));
     else sq.append(el('div', { class: 'pb-nm dim' }, q.now ? 'On the clock' : (q.mine ? 'Your pick' : q.team.name)), el('div', { class: 'pb-pos' }, q.original ? `from ${q.original}` : ''));
     board.append(sq);
   }
