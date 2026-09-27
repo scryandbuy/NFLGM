@@ -496,6 +496,12 @@ class SeasonRunner:
         for home, away, hs, as_ in played:
             results[home] = ('W' if hs > as_ else 'L' if hs < as_ else 'T', hs - as_)
             results[away] = ('W' if as_ > hs else 'L' if as_ < hs else 'T', as_ - hs)
+        # A BYE WEEK RESTORES. A club that did not play this week recovers to full and sheds some of the season's wear
+        played_clubs = {h for h, _a, _hs, _as in played} | {a for _h, a, _hs, _as in played}
+        for abbr, st in self.states.items():
+            if abbr not in played_clubs and 1 <= int(week) <= 18:
+                try: st.end_game(self.rng, bye=True)
+                except Exception: pass
         snaps = {}
         for abbr, st in self.states.items():
             for pid, n in (getattr(st, 'last_snaps', None) or st.snaps or {}).items(): snaps[pid] = n

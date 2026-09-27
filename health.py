@@ -127,7 +127,9 @@ def recover_between_games(condition, natural_fitness=70.0, days_rest=7,
     Natural fitness governs the RATE; stamina does not enter. Jadedness slows
     it, which is how a season grinds a player down.
     """
-    rate = 0.55 + 0.75 * (natural_fitness / 100.0)
+    # the rate never saturates: at full fitness a week restores about 93% of what the game took, so a 60-snap starter
+    # comes back at 96 or 97 in September; jadedness slows it, and by December a worn starter is back at 90 to 94
+    rate = 0.68 + 0.25 * (natural_fitness / 100.0)
     rate *= 1.0 - 0.35 * float(np.clip(jadedness, 0.0, 1.0))
     gain = (100.0 - condition) * float(np.clip(rate * (days_rest / 7.0), 0.0, 1.0))
     return float(np.clip(condition + gain, 0.0, 100.0))

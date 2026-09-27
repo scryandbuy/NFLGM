@@ -588,10 +588,29 @@ class TeamState:
         """Recovery and jadedness roll forward between games."""
         import health as H
         self.last_snaps = dict(self.snaps)     # keep the game log readable
+        fitness = {}
+        try:
+            for grp in (self.roster or {}).values():
+                if isinstance(grp, list):
+                    for p in grp:
+                        if isinstance(p, dict) and p.get('pid'):
+                            # natural fitness: durability and toughness, the body's rate of recovery
+                            fitness[p['pid']] = 0.6 * float(p.get('injury_rating', 80) or 80) + 0.4 * float(p.get('tough_rating', 80) or 80)
+        except Exception: pass
         for pid, n in self.snaps.items():
             self.jaded[pid] = H.update_jadedness(self.jaded.get(pid, 0.0), n,
-                                                 70.0, expected_snaps, bye)
+                                                 fitness.get(pid, 70.0), expected_snaps, bye)
+        # CONDITION CARRIES BETWEEN GAMES. A player leaves the field at whatever the game took from him and recovers
+        # over the week at his body's rate, slowed by how worn the season has left him; a bye week restores him. The
+        # old rule reset everyone to 100 after every game, so the roster's Condition never moved and December was
+        # no harder than September. Recovery at full fitness is nearly complete in seven days; a jaded starter in
+        # December comes back at 90 to 95, and plays the next game a little slower and a little more breakable
+        ended = dict(self.cond.cond)
         self.cond.reset_game()
+        if not bye:
+            for pid, c in ended.items():
+                self.cond.cond[pid] = H.recover_between_games(float(c), natural_fitness=fitness.get(pid, 70.0), days_rest=7,
+                                                              jadedness=self.jaded.get(pid, 0.0))
         self.snaps = {}
         self.injuries = []
         self.cov_memory = {}
