@@ -175,11 +175,20 @@ def ai_round(league, rng, verbose=False):
 def in_season_round(league, rng, week):
     """Clubs extend in September through December too: each week a few clubs get one of their expiring starters
     done ahead of the market. Real clubs sign dozens of in-season extensions a year; this engine signed none."""
-    if not (1 <= int(week or 0) <= 17): return []
+    wk = int(week or 0)
+    if not (1 <= wk <= 22): return []
+    # in the playoffs only the clubs whose season is over work the window: a real club in the bracket is not signing
+    # extensions the week of a game
+    alive = set()
+    if wk >= 18:
+        post = getattr(league, '_post_ref', None)
+        alive = set(getattr(post, 'alive_now', lambda: set())()) if post is not None else set()
     done = []
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None) or team.gm is None: continue
-        if rng.random() > 0.085: continue                       # about one club in twelve a week; forty-odd a season
+        if wk >= 18 and abbr in alive: continue
+        # the eliminated clubs work it harder: the window is short and the market is coming
+        if rng.random() > (0.085 if wk <= 17 else 0.16): continue
         cap = CAP.get(league.year, 301.2); cap_next = CAP.get(league.year + 1, cap * 1.07)
         cands = [p for pos, ps in team.depth.items() for p in ps[:1] if eligible(p, league) and p.age <= AGE_LIMIT.get(p.pos, 31) and p.ovr >= 76]
         if not cands: continue

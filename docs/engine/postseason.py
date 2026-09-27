@@ -81,6 +81,12 @@ class Postseason:
         self.conf_champs = {}
         self.round_idx = 0
 
+    def alive_now(self):
+        """Every club still in the bracket."""
+        if self.champion: return {self.champion}
+        alive = {t for al in getattr(self, 'alive', {}).values() for t in al.values()}
+        return alive | set(getattr(self, 'conf_champs', {}).values())
+
     def matchups(self, rnd):
         """(conf, home, away) for a round from the bracket as it stands."""
         out = []
