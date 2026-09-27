@@ -1388,9 +1388,9 @@ function boardSortRows(rows) {
     return (c || ((b.mine ?? 0) - (a.mine ?? 0))) * boardDir;
   });
 }
-function boardHead(label, key, cls, tip) {
+function boardHead(label, key, cls, tip, redraw) {
   const on = boardSort === key;
-  return el('th', { class: (cls || '') + ' sortable' + (on ? ' on' : ''), 'data-tip': (tip ? tip + '. ' : '') + 'Click to sort' + (on ? ', again to flip' : ''), onclick: () => { if (boardSort === key) boardDir = -boardDir; else { boardSort = key; boardDir = 1; } boardPage = 0; draw(); } }, label, on ? el('span', { class: 'arrow' }, boardDir === 1 ? ' ▼' : ' ▲') : '');
+  return el('th', { class: (cls || '') + ' sortable' + (on ? ' on' : ''), 'data-tip': (tip ? tip + '. ' : '') + 'Click to sort' + (on ? ', again to flip' : ''), onclick: () => { if (boardSort === key) boardDir = -boardDir; else { boardSort = key; boardDir = 1; } boardPage = 0; redraw(); } }, label, on ? el('span', { class: 'arrow' }, boardDir === 1 ? ' ▼' : ' ▲') : '');
 }
 function drSecond(cur) { secondRow(Object.entries(DR).map(([k, l]) => [l, '#draft/' + k]), '#draft/' + cur); $('#crumb').textContent = 'Draft'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'draft')); }
 function gapCell(g) { if (g == null) return el('span', { class: 'gap' }, '—'); return el('span', { class: 'gap ' + (g > 0 ? 'up' : g < 0 ? 'dn' : '') }, (g > 0 ? '+' : '') + g); }
@@ -1422,7 +1422,8 @@ function renderBoard(v) {
   const tbl = el('table', { class: 'tbl' });
   const draw = () => {
     tbl.innerHTML = '';
-    tbl.append(el('tr', {}, boardHead('#', 'rank', 'n', 'Your board order'), boardHead('Prospect', 'name', '', ''), boardHead('Pos', 'pos', '', ''), boardHead('School', 'school', '', ''), boardHead('Estimated Overall', 'mine', 'n', "Your scouts' read. Carries error; a visit tightens it"), boardHead('Scheme Ovr', 'scheme', 'n', "How he grades in your scheme, on your scouts' read; the league's grade does not move"), boardHead('Ceiling', 'ceiling', 'n', 'Where he can grow to. Wide means your scouts are unsure'), boardHead('Consensus', 'cons', 'n', "The league's grade, same scale as yours"), boardHead('Gap', 'gap', 'n', "Yours minus the league's. Positive means the league undervalues him"), boardHead('Proj.', 'proj', 'n', 'Where the league expects him to go'), el('th', {}, 'Flags'), el('th', {}, '')));
+    const H = (label, key, cls, tip) => boardHead(label, key, cls, tip, draw);
+    tbl.append(el('tr', {}, H('#', 'rank', 'n', 'Your board order'), H('Prospect', 'name', '', ''), H('Pos', 'pos', '', ''), H('School', 'school', '', ''), H('Estimated Overall', 'mine', 'n', "Your scouts' read. Carries error; a visit tightens it"), H('Scheme Ovr', 'scheme', 'n', "How he grades in your scheme, on your scouts' read; the league's grade does not move"), H('Ceiling', 'ceiling', 'n', 'Where he can grow to. Wide means your scouts are unsure'), H('Consensus', 'cons', 'n', "The league's grade, same scale as yours"), H('Gap', 'gap', 'n', "Yours minus the league's. Positive means the league undervalues him"), H('Proj.', 'proj', 'n', 'Where the league expects him to go'), el('th', {}, 'Flags'), el('th', {}, '')));
     const q = boardQuery.trim().toLowerCase(); const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], EDGE: ['LEDG', 'REDG', 'DT'], CB: ['CB', 'FS', 'SS'] };
     const needPos = new Set(v.needs.flatMap(g => NEED_POS[g] || []));
     const rows = v.rows.filter(r => (boardTab !== 'visited' || r.visited) && (boardPos === 'All' || (GROUP[boardPos] || []).includes(r.pos)) && (!boardFilt.needs || needPos.has(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.late || (r.cons_rank != null && r.cons_rank > 96)) && (!boardFilt.small || r.small) && (!q || r.name.toLowerCase().includes(q) || (r.college || '').toLowerCase().includes(q)));
