@@ -52,7 +52,12 @@ def _refresh(view, p):
     lo, hi = p.potential_range if p.potential_range else (p.ovr, p.ovr + 3)
     adj = view.get('adj', 0.0)          # medical and character, by this room
     n = float(view.get('reads', 1) or 1)
-    tp = tape(p) * max(TAPE_FLOOR, 1.0 - 0.25 * (n - 1.0))
+    fade = max(TAPE_FLOOR, 1.0 - 0.25 * (n - 1.0))
+    if 'visited' in (view.get('flags') or []):
+        # A VISIT IS THE LOOK THAT SEES THROUGH TAPE. In the building, on the board, in the interview, a room learns
+        # most of what the film hid: three-quarters of a gem's or a bust's tape, half of an ordinary player's
+        fade = min(fade, 0.25 if p.xp_spent.get('_tape_role') else 0.5)
+    tp = tape(p) * fade
     view['ovr'] = round(float(np.clip(p.ovr + view['e_phys'] + view['e_skill'] + tp + adj, 30, 99)), 1)
     # a room's ceiling read is bounded: nobody sees a 59 as a 97. The ceiling error is capped and the ceiling
     # itself cannot sit more than eighteen points above what the room sees today
@@ -211,7 +216,9 @@ def scheme_fit_view(league, abbr, p, view):
     team = league.teams.get(abbr)
     if team is None or view is None: return 0.0
     e_p, e_s = float(view.get('e_phys', 0.0) or 0.0), float(view.get('e_skill', 0.0) or 0.0)
-    e_s += tape(p) * max(TAPE_FLOOR, 1.0 - 0.25 * (float(view.get('reads', 1) or 1) - 1.0))
+    fade = max(TAPE_FLOOR, 1.0 - 0.25 * (float(view.get('reads', 1) or 1) - 1.0))
+    if 'visited' in (view.get('flags') or []): fade = min(fade, 0.25 if p.xp_spent.get('_tape_role') else 0.5)
+    e_s += tape(p) * fade
     seen = {k: float(np.clip(v + (e_p if (k in XP.PHYSICAL or k in XP.TOOLS) else e_s), 30.0, 99.0)) for k, v in p.ratings.items()}
     try: return round(float(GE.scheme_fit(seen, p.pos, team)), 1)
     except Exception: return 0.0

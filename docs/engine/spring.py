@@ -154,6 +154,7 @@ def visits(league, rng):
             v['pre_visit'] = dict(ovr=float(v.get('ovr', 0) or 0), lo=float(v.get('pot_lo', 0) or 0), hi=float(v.get('pot_hi', 0) or 0), rank=(cons.get(p.pid, {}) or {}).get('rank'), flags=list(v.get('flags', [])))
             SC.second_look(v, p, sd * 0.55, rng, weight=1.5, R=SC.room(team)); looks += 1
             v['flags'] = list(set(v.get('flags', []) + ['visited']))
+            SC._refresh(v, p)                                   # the visit's read, with most of the tape seen through
             _character(league, abbr, team, p, sd * 0.7, rng)
             _medical(league, abbr, team, p, rng)
     SC.consensus(league)
