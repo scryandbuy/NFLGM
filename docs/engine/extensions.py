@@ -29,7 +29,7 @@ from cap_engine import Contract, CAP, MAX_PRORATION_YEARS
 import contract_structure as CS
 import valuation as VAL
 
-MAX_PER_CLUB = 4
+MAX_PER_CLUB = 6                 # a ceiling, not a target; the per-player chance sets the number
 AGE_LIMIT = {'QB': 36, 'K': 38, 'P': 38}
 CERTAINTY_DISCOUNT = 0.07
 
@@ -168,6 +168,12 @@ def ai_round(league, rng, verbose=False):
         n = 0
         for rank, _o, p in cands:
             if n >= MAX_PER_CLUB: break
+            # NOT A QUOTA. Each expiring player is a chance, not a slot: a starter is likely to be kept, a backup
+            # rarely, and a club lands anywhere from none to several rather than four every time
+            yrs_left = int(p.contract.years) if p.contract is not None else 0
+            if yrs_left >= 2 and p.ovr < 82: continue                 # two years out, only the stars get done early
+            p_keep = (0.42 if rank == 0 else 0.10) * (1.2 if p.ovr >= 85 else 1.0) * (0.6 if yrs_left >= 2 else 1.0)
+            if rng.random() > p_keep: continue
             tm = terms(league, p, rng)
             if tm is None: continue
             floor = tm['ask'] * (1.0 - tm['discount'])

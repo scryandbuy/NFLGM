@@ -414,8 +414,47 @@ def value_player(league, player, side=None, rng=None, pool=None, season=None):
             w = 0.8 * float(np.clip((player.ovr - p95) / (pmax - p95), 0.0, 1.0))
             for k in ('apy', 'apy_low', 'apy_high'):
                 out[k] = round((1 - w) * out[k] + w * top3 * (1.0 if k == 'apy' else (0.9 if k == 'apy_low' else 1.1)), 2)
-            out['cap_pct'] = round(out['apy'] / cap * 100, 3)
+    # THE TOP OF A POSITION IS PAID BY RANK, NOT BY THE POSITION'S MEAN. A comp set is the whole position, so a
+    # top-ten player was anchored below what the top ten earn (a starting quarterback at 60% of market, the next
+    # tier of stars at 80-85%). His rank by grade among the position's paid veterans maps to the pay at that rank
+    # on the league's own contracts, and the value blends toward it, hardest at the very top.
+    anchor = _rank_anchor(league, player)
+    if anchor is not None:
+        rank, apy_at_rank, n_paid = anchor
+        w = 0.85 if rank <= 5 else 0.75 if rank <= 10 else 0.65 if rank <= 16 else 0.5 if rank <= 24 else 0.3 if rank <= 40 else 0.0
+        if player.pos == 'QB' and rank > 32: w = 0.0                # past the starters' ladder the comps speak
+        if w > 0 and apy_at_rank > 0:
+            for k in ('apy', 'apy_low', 'apy_high'):
+                out[k] = round((1 - w) * out[k] + w * apy_at_rank * (1.0 if k == 'apy' else (0.9 if k == 'apy_low' else 1.1)), 2)
+    if top is not None:
+        # nobody signs for more than a shade above the position's top three; corners had been running away on their
+        # own inflated deals feeding the next valuation
+        cap_apy = top[2] * 1.05
+        for k in ('apy', 'apy_low', 'apy_high'):
+            out[k] = round(min(out[k], cap_apy * (1.0 if k != 'apy_high' else 1.1)), 2)
+    out['cap_pct'] = round(out['apy'] / cap * 100, 3)
     return out
+
+
+_RA_CACHE = {}
+
+
+def _rank_anchor(league, player):
+    """(his rank by grade among the position's paid veterans, the APY paid at that rank, how many are paid).
+    'Paid' means a veteran contract: rookie deals are excluded, since they say nothing about the market. Both ladders
+    run over the same set, so a grade rank maps to a pay rank."""
+    key = (id(league), league.year, player.pos)
+    if key not in _RA_CACHE:
+        men = [p for t in league.teams.values() for p in t.active() if p.pos == player.pos and p.contract is not None]
+        paid = [p for p in men if p.apy and not (p.draft_year and (league.year - int(p.draft_year)) < 4 and p.draft_round is not None)]
+        pays = sorted((float(p.apy) for p in paid), reverse=True)
+        grades = sorted((float(p.ovr) for p in paid), reverse=True)
+        _RA_CACHE[key] = (grades, pays)
+    grades, pays = _RA_CACHE[key]
+    if len(pays) < 6 or not grades: return None
+    rank = 1 + sum(1 for g in grades if g > player.ovr + 0.5)     # a tie shares the higher rank
+    if rank > len(pays): return (rank, 0.0, len(pays))
+    return (rank, pays[rank - 1], len(pays))
 
 
 _MT_CACHE = {}
