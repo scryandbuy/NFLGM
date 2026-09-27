@@ -516,7 +516,12 @@ def season_review(session, league, abbr):
     else: notes.append("No starter comes off contract; the money can go to the market or an extension.")
     room = limit_next - committed_next
     notes.append(f"Next year's room is about ${room:.0f}m against a ${limit_next:.0f}m cap, with ${dead_next:.1f}m of dead money already on the books.")
-    return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, record=f"{w}–{l}" + (f"–{d}" if d else ''), pct=round(pct, 3), expected=exp_words, expected_pct=round(exp, 2),
+    slot = None
+    try:
+        import postseason as PS
+        slot = PS.provisional_slot(league, getattr(session, 'post_live', None) or getattr(session, 'post', None), abbr)
+    except Exception: slot = None
+    return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, record=f"{w}–{l}" + (f"–{d}" if d else ''), pct=round(pct, 3), expected=exp_words, expected_pct=round(exp, 2), slot=slot,
                 finish=exit_, div_rank=div_rank, division=t.division, owner=dict(name=own['name'], mood=mood, line=owner_line, job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat')),
                 timeline=timeline, units=units, sides=sides, exceeded=exceeded, short=short, cap=dict(limit=round(limit_next, 1), committed=round(committed_next, 1), dead=round(dead_next, 1), rollover=round(rollover, 1), room=round(room, 1)),
                 pending=pending, notes=notes[:3])

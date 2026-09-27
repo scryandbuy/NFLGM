@@ -336,3 +336,25 @@ if __name__ == '__main__':
           [pk.selection for t in L.teams.values() for pk in t.picks
            if pk.year == L.year and pk.round == 1 and pk.original == post.champion])
     print('total %.0fs' % (time.time() - t0))
+
+
+def provisional_slot(league, post, abbr):
+    """Where a club picks in the first round, as far as the season has settled it: the eighteen that missed are
+    fixed at week 18 by record; a round's losers are fixed once the round is complete; the finalists wait for the
+    Super Bowl. None until the club's own season is over."""
+    if post is None or not getattr(post, 'seeds', None): return None
+    field = {t for sd in post.seeds.values() for t in sd}
+    out = [a for a in league.teams if a not in field]
+    key = lambda a: (league.teams[a].win_pct, league.teams[a].record[0])
+    if abbr not in field:
+        return sorted(out, key=key).index(abbr) + 1
+    er = (getattr(post, 'exit_round', {}) or {}).get(abbr)
+    if er is None:
+        if post.champion == abbr: return 32
+        return None
+    rounds = ('WC', 'DIV', 'CONF', 'SB')
+    need = {'WC': 6, 'DIV': 4, 'CONF': 2, 'SB': 1}[er]
+    losers = [a for a, r in post.exit_round.items() if r == er]
+    if len(losers) < need: return None                     # the round is not finished
+    base = len(out) + sum({'WC': 6, 'DIV': 4, 'CONF': 2}[r] for r in rounds[:rounds.index(er)])
+    return base + sorted(losers, key=key).index(abbr) + 1

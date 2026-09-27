@@ -318,6 +318,8 @@ class Session:
             losers = [a for a, r in (getattr(post, 'exit_round', {}) or {}).items() if r == rnd]
             self._ai_exit_meetings(losers)
             self._black_monday(losers)
+            if rnd == 'CONF':
+                self._senior_bowl()
             if rnd_i + 1 < len(PS.Postseason.ROUNDS):
                 self.stop = ('playoffs', rnd_i + 1)
                 self._playoff_prep(rnd_i + 1)
@@ -339,6 +341,22 @@ class Session:
             try: GW.post_report(self.L, 1)
             except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
+
+    def _senior_bowl(self):
+        """The week before the Super Bowl: every room's second look at the seniors in Mobile, and the assistants'
+        word on who helped himself."""
+        try:
+            import scouting as SC
+            from views import surname
+            moves = SC.senior_bowl(self.L, self.rng)
+            if not moves: return
+            moves.sort(key=lambda x: -x[0])
+            up = [f"{surname(p.name)} ({p.pos}, {d:+.1f})" for d, p in moves[:3] if d > 0.4]
+            down = [f"{surname(p.name)} ({p.pos}, {d:+.1f})" for d, p in moves[-3:][::-1] if d < -0.4]
+            body = f"Your scouts spent the week in Mobile; {len(moves)} seniors played. " + (f"Helped himself: {', '.join(up)}. " if up else '') + (f"Hurt himself: {', '.join(down)}. " if down else '') + "Their marks on your board have moved; the players who played carry the Mobile tag."
+            IB.post(self.L, 'draft', "Senior Bowl week: the scouts' word", body, sender='scouts', payload=dict(link='draft:board'))
+        except Exception as e:
+            import sys; print('senior bowl failed:', e, file=sys.stderr)
 
     def _black_monday(self, clubs):
         """The clubs whose season just ended roll their firings now, and a new head coach comes for his staff,
@@ -377,7 +395,9 @@ class Session:
         if any((m.get('payload') or {}).get('key') == key_ for m in getattr(self.L, 'inbox', [])): return
         try:
             v = self.frontoffice('season_review')
-            IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the players whose deals are up.", sender='front office', payload=dict(key=key_, link='front_office:review'))
+            slot = PS.provisional_slot(self.L, getattr(self, 'post_live', None) or getattr(self, 'post', None), self.user_team)
+            slot_line = f" You pick {slot}{'st' if slot % 10 == 1 and slot != 11 else 'nd' if slot % 10 == 2 and slot != 12 else 'rd' if slot % 10 == 3 and slot != 13 else 'th'} in the first round." if slot else ''
+            IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the players whose deals are up.{slot_line}", sender='front office', payload=dict(key=key_, link='front_office:review'))
         except Exception as e:
             import sys; print('season review failed:', e, file=sys.stderr)
         try:

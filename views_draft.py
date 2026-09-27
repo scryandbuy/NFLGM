@@ -30,6 +30,7 @@ def _prospect(league, abbr, p, taken=()):
     # the words the board shows for what the room knows
     words = []
     if 'visited' in flags or p.pid in (getattr(league, 'user_visits', None) or []): words.append('Visited')
+    if p.xp_spent.get('_senior_bowl') == league.year: words.append('Mobile')
     _when = getattr(league, 'user_visit_week', None) or {}
     visit_locked = bool(p.pid in (getattr(league, 'user_visits', None) or []) and _when.get(p.pid) != f"{league.year}-{league.week}-{league.phase}")
     if getattr(p, 'age', 22) >= 22 and any(x.get('pid') == p.pid and x.get('event') == 'Senior Bowl' for x in (getattr(league, 'spring_news', None) or [])): words.append('Sr. Bowl')
@@ -83,7 +84,12 @@ def board(session, league, abbr):
     ub = _user_board(league, rows)
     visits = list(getattr(league, 'user_visits', None) or [])
     spring_done = any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or []))
-    return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=(league.year + 1 if not getattr(league, 'draft_pool', None) else league.year),
+    slot = None
+    try:
+        import postseason as PS
+        slot = PS.provisional_slot(league, getattr(session, 'post_live', None) or getattr(session, 'post', None), abbr)
+    except Exception: slot = None
+    return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=(league.year + 1 if not getattr(league, 'draft_pool', None) else league.year), slot=slot,
                 visits=visits, visits_max=SP.VISITS, spring_done=spring_done, needs=sorted(needs), user_board=ub, my_slot=_my_first_slot(league, abbr), read=_board_read(league, abbr, rows, ub, needs),
                 scout=(dict(name=scout.name, rating=round(scout.rating)) if scout else None), live=bool(getattr(session, 'draft', None)),
                 note=None if rows else 'The class is scouted in camp; the board fills once the season begins.')
@@ -131,8 +137,8 @@ def _board_read(league, abbr, rows, ub, needs):
     exp = [p for p in t.active() if p.contract and p.contract.years <= 1 and p.ovr >= 74]
     if needs:
         from views import surname
-        g = sorted(needs)[0]; men = [surname(p.name) for p in exp if p.pos in NEED_GROUPS[g]][:2]
-        parts.append(f"{g} is the need" + (f" with {' and '.join(players)} expiring" if men else ''))
+        g = sorted(needs)[0]; players = [surname(p.name) for p in exp if p.pos in NEED_GROUPS[g]][:2]
+        parts.append(f"{g} is the need" + (f" with {' and '.join(players)} expiring" if players else ''))
     slot = _my_first_slot(league, abbr)
     try: slot_n = int(slot.split('.')[1]) if slot and '.' in slot else 24
     except Exception: slot_n = 24

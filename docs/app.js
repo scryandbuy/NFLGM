@@ -1373,7 +1373,8 @@ function renderBoard(v) {
   renderRail(v.rail); const page = persPage(); drSecond('board');
   const reload = () => renderBoard(pyJSON(`SESSION.draft_view('board')`));
   const onBoard = new Set(v.user_board.order.map(x => x.pid)), dnd = new Set(v.user_board.dnd.map(x => x.pid));
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Scouting Board', el('small', {}, `${v.count} prospects` + (v.scout ? ` · Head Scout ${v.scout.name} (${v.scout.rating})` : ''))));
+  const ordn_ = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Scouting Board', el('small', {}, `${v.count} prospects` + (v.slot ? ` · you pick ${ordn_(v.slot)} in the first round` : '') + (v.scout ? ` · Head Scout ${v.scout.name} (${v.scout.rating})` : ''))));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   for (const [k, l, n] of [['class', `Class of ${v.year}`, v.count], ['board', 'Your Board', onBoard.size], ['visited', 'Visited', v.rows.filter(r => r.visited).length]]) tabs.append(el('button', { 'aria-pressed': String(boardTab === k), onclick: () => { boardTab = k; renderBoard(v); } }, l + ' ', el('em', {}, n)));
   s.append(tabs);
@@ -1672,7 +1673,7 @@ function renderReview(v) {
   const left = el('div', { class: 'rv-left' },
     el('div', { class: 'rv-kicker' }, `${v.year} · ${v.club.name}`),
     el('div', { class: 'rv-record' }, v.record),
-    el('div', { class: 'rv-finish' }, `${v.finish}${v.div_rank ? ` · ${ordn(v.div_rank)} in the ${v.division}` : ''}`),
+    el('div', { class: 'rv-finish' }, `${v.finish}${v.div_rank ? ` · ${ordn(v.div_rank)} in the ${v.division}` : ''}${v.slot ? ` · pick ${v.slot}` : ''}`),
     el('div', { class: 'rv-ask' }, 'The owner asked for ', el('b', {}, v.expected), `. You finished at .${String(v.pct.toFixed(3)).slice(2)} against .${String(v.expected_pct.toFixed(3)).slice(2)}.`));
   const strip = el('div', { class: 'rv-strip' });
   for (const g of v.timeline) strip.append(g.bye ? el('div', { class: 'rv-g bye', 'data-tip': `Week ${g.week} · Bye` }, '') : el('div', { class: 'rv-g ' + g.result.toLowerCase(), 'data-tip': `Week ${g.week} · ${g.away ? 'at' : 'vs'} ${g.opp.abbr} · ${g.mine}–${g.theirs}` }, g.result));
