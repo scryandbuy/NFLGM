@@ -555,7 +555,7 @@ def build_exit_meetings(session, league, abbr):
         if len(ps) < 2: continue
         s0, s1 = ps[0], ps[1]
         if s1.age <= 25 and s0.age >= 29 and s1.ovr >= s0.ovr - 3 and s1.pid not in seen:
-            add('young', s1, f"I'm ready. {surname(s0.name)} is {s0.age}. When do I get my shot?",
+            add('young', s1, f"I'm ready. {surname(s0.name)} is {int(s0.age)}. When do I get my shot?",
                 [dict(key='camp', label="The job is yours to win in camp", sub='A starting-role promise; sit him in September and it breaks', cost='promise:starting_role'),
                  dict(key='patient', label="Be patient", sub='He leaves unhappy', cost='brush'),
                  dict(key='truth', label="You're the plan for next year, not this one", sub='Told straight; he takes it', cost='heard')])

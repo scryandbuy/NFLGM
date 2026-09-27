@@ -478,6 +478,8 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .cl{width:44px;height:44px;display:grid;place-items:center;font-family:var(--display);font-weight:900;font-size:15px;color:#fff;border:2px solid transparent;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%);opacity:.85}
 .cl:hover{opacity:1}.cl[aria-pressed="true"]{opacity:1;outline:2px solid var(--club-2);outline-offset:1px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.ap-two{align-items:start;gap:0 14px}
+.ap-two .tbl th:first-child,.ap-two .tbl td:first-child{width:64px}
 @media (max-width:1100px){.two{grid-template-columns:1fr}}
 .two > div{padding:12px}
 .two > div + div{border-left:1px solid var(--rule)}

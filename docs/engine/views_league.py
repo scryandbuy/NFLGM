@@ -306,14 +306,27 @@ def awards(session, league, abbr, year=None):
             t = league.teams.get(v); rows.append(dict(award=name, code='COTY', name=(t.gm.name if t and t.gm else str(v)), team=club(v) if t else None, pos='HC', mine=(v == abbr), line=(f"{t.record[0]}–{t.record[1]} · Prestige {round(getattr(t.gm, 'prestige', 50))}" if t and t.gm else '')))
         else:
             p = league.player(v)
-            if p: rows.append(dict(award=name, code=k.upper().replace('SB_MVP', 'SB MVP'), name=p.name, pos=p.pos, team=(club(p.team) if p.team else None), pid=p.pid, mine=(p.team == abbr), line=_award_line(league, p, yr)))
+            if p: rows.append(dict(award=name, code=k.upper().replace('SB_MVP', 'SB MVP'), name=p.name, pos=p.pos, team=(club(p.team) if p.team else None), pid=p.pid, mine=(p.team == abbr), line=(_sb_line(league, p, yr) if k == 'sb_mvp' else _award_line(league, p, yr))))
     def team_list(key):
         out = []
         for pid in a.get(key, []) or []:
             p = league.player(pid)
-            if p: out.append(dict(pid=pid, name=p.name, pos=p.pos, team=(p.team or ''), mine=(p.team == abbr)))
+            if p: out.append(dict(pid=pid, name=p.name, pos=p.pos, team=(club(p.team) if p.team else None), mine=(p.team == abbr)))
         return out
     return dict(rail=rail(session, league, abbr), year=yr, years=years, rows=rows, first=team_list('all_pro_1'), second=team_list('all_pro_2'), pending=(league.year if league.year not in league.awards else None), note=None if a else f"{league.year} Awards Are Voted After Week 18")
+
+
+def _sb_line(league, p, yr):
+    """The Super Bowl MVP's line from THAT game (week 22 of the year), not his season."""
+    key = next((k for k in (getattr(league, 'game_stats', {}) or {}) if k.startswith(f'{yr}-22-') and p.pid in league.game_stats[k]), None)
+    l = league.game_stats[key][p.pid] if key else {}
+    if not l: return _award_line(league, p, yr)
+    if p.pos == 'QB': return f"{int(l.get('pass_cmp', l.get('cmp', 0)) or 0)}/{int(l.get('pass_att', l.get('att', 0)) or 0)}, {int(l.get('pass_yds', 0)):,} yds, {int(l.get('pass_td', 0))} TD, {int(l.get('ints', 0))} INT"
+    if p.pos in ('HB', 'FB'): return f"{int(l.get('rush_att', 0))} car, {int(l.get('rush_yds', 0))} yds, {int(l.get('rush_td', 0))} TD" + (f", {int(l.get('rec', 0))} rec, {int(l.get('rec_yds', 0))} yds" if l.get('rec') else '')
+    if p.pos in ('WR', 'TE'): return f"{int(l.get('rec', 0))} rec, {int(l.get('rec_yds', 0))} yds, {int(l.get('rec_td', 0))} TD"
+    if p.pos in ('LT', 'LG', 'C', 'RG', 'RT'): return f"{int(l.get('snaps', 0))} snaps, {int(l.get('pb_wins', 0))} of {int(l.get('pb_snaps', 0))} pass blocks won"
+    if p.pos in ('LEDG', 'REDG', 'DT'): return f"{float(l.get('sacks', 0) or 0):.1f} sacks, {int(l.get('pressures', 0))} pressures, {int(l.get('tackles', 0))} tkl"
+    return f"{int(l.get('tackles', 0))} tkl, {float(l.get('sacks', 0) or 0):.1f} sk, {int(l.get('int_def', 0))} INT, {int(l.get('pass_def', 0))} PD"
 
 
 def _award_line(league, p, yr):
