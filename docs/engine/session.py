@@ -268,8 +268,10 @@ class Session:
             if wk >= WEEKS:
                 self._playoff_prep(0)
                 post = self.post_live
-                if post is not None and self.user_team not in {t for sd in post.seeds.values() for t in sd}:
-                    self._post_review('missed')
+                if post is not None:
+                    field = {t for sd in post.seeds.values() for t in sd}
+                    if self.user_team not in field: self._post_review('missed')
+                    self._ai_exit_meetings([a for a in self.L.teams if a not in field])
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':
             # THE PLAYOFFS, A ROUND AT A TIME, with the whole week around each game. Entering a round (from week 18's
@@ -311,6 +313,7 @@ class Session:
             self.played = False
             if self.user_team in (getattr(post, 'exit_round', {}) or {}):
                 self._post_review('eliminated')
+            self._ai_exit_meetings([a for a, r in (getattr(post, 'exit_round', {}) or {}).items() if r == rnd])
             if rnd_i + 1 < len(PS.Postseason.ROUNDS):
                 self.stop = ('playoffs', rnd_i + 1)
                 self._playoff_prep(rnd_i + 1)
@@ -332,6 +335,14 @@ class Session:
             try: GW.post_report(self.L, 1)
             except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
+
+    def _ai_exit_meetings(self, clubs):
+        import views_frontoffice as VF
+        for a in clubs:
+            if a == self.user_team: continue
+            try: VF.ai_exit_meetings(self.L, a, self.rng)
+            except Exception as e:
+                import sys; print('AI exit meetings failed:', a, e, file=sys.stderr)
 
     def _post_review(self, how):
         """The season review lands once, the morning after the club's season ends."""
@@ -393,6 +404,7 @@ class Session:
                     post.play_round(rnd, skip=None)
         self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng, post=post)
         self._post_review('closed')
+        self._ai_exit_meetings([a for a in self.L.teams if f"{a}-{self.L.year}" not in (getattr(self.L, 'exit_meetings', {}) or {})])
         try: self.post.seeds_at_close = dict(getattr(post, 'seeds', {}) or {})
         except Exception: self.post.seeds_at_close = {}
         MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
@@ -432,6 +444,11 @@ class Session:
         self.L.user_tag_choice = None          # a new year, a new tag
         L, rng = self.L, self.rng
         L.roll_year(rng)
+        try:
+            import negotiations as NG
+            NG.check_promises(L, week=0)       # the new year: extension promises are judged here
+        except Exception as e:
+            import sys; print('promise check failed:', e, file=sys.stderr)
         ranks = SCH.division_ranks(L, self.standings); SCH.new_season(L, ranks, rng)
         for t in L.teams.values(): t.record = [0, 0, 0]
         L.advance_contracts()

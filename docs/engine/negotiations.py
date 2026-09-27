@@ -287,9 +287,11 @@ def _post(league, t, subject, body, payload=None):
 
 
 # ------------------------------------------------------------ the promise ledger
-def record_promise(league, pid, team, kind, year=None):
+def record_promise(league, pid, team, kind, year=None, source=None):
     league.promises = getattr(league, 'promises', None) or []
-    league.promises.append(dict(pid=pid, team=team, kind=kind, made=league.year, year=year or (league.year + 1 if kind == 'extension_by' else None), status='open'))
+    p = league.player(pid)
+    orig = (int(getattr(p.contract, 'signed', 0) or 0), int(p.contract.years)) if p is not None and p.contract is not None else None
+    league.promises.append(dict(pid=pid, team=team, kind=kind, made=league.year, year=year or (league.year + 1 if kind == 'extension_by' else None), status='open', source=source, orig=orig))
 
 
 def check_promises(league, week):
@@ -299,27 +301,67 @@ def check_promises(league, week):
     for pr in getattr(league, 'promises', None) or []:
         if pr['status'] != 'open': continue
         p = league.player(pr['pid']); team = league.teams.get(pr['team'])
-        if p is None or team is None or p.team != pr['team']:
+        if p is None or team is None:
             pr['status'] = 'void'; continue
-        ok = None
-        if pr['kind'] == 'starting_role' and week and week >= 4:
-            ps = team.depth.get(p.pos, []); ok = bool(ps) and ps[0] is p
-            if p.out_until is not None: ok = None                     # hurt men are not judged
-        elif pr['kind'] == 'extension_by' and league.year > (pr['year'] or 9999):
-            ok = False
-        elif pr['kind'] == 'no_franchise' and getattr(p, 'tagged_year', None) == league.year:
-            ok = False
-        elif pr['kind'] == 'no_trade' and p.team != pr['team']:
-            ok = False
+        if p.team != pr['team']:
+            # he is gone: a no-trade promise is broken by that; anything else is moot
+            if pr['kind'] == 'no_trade' and not pr.get('released'): ok = False
+            else: pr['status'] = 'void'; continue
+        else:
+            ok = None
+            if pr['kind'] == 'starting_role' and week and week >= 4:
+                ps = team.depth.get(p.pos, []); ok = bool(ps) and ps[0] is p
+                if p.out_until is not None: ok = None                     # hurt players are not judged
+            elif pr['kind'] == 'extension_by':
+                cur = (int(getattr(p.contract, 'signed', 0) or 0), int(p.contract.years)) if p.contract is not None else None
+                if cur is not None and cur != tuple(pr.get('orig') or ()) and cur[0] >= int(pr['made']) and cur[1] >= 2:
+                    ok = True                                          # a new deal since the promise: kept
+                elif league.year > (pr['year'] or 9999) or (league.year == (pr['year'] or 9999) and league.phase == 'regular'):
+                    ok = False                                         # the new year came and went with no deal
+            elif pr['kind'] == 'no_franchise' and getattr(p, 'tagged_year', None) == league.year:
+                ok = False
+            elif pr['kind'] == 'captaincy':
+                if p.xp_spent.get('_captain'): ok = True
+                elif league.year > int(pr['made']) and week and week >= 2: ok = False        # the season started and he is not wearing it
+            elif pr['kind'] == 'no_trade' and league.year > int(pr['made']) + 1:
+                ok = True                                              # a full season kept
         if ok is False:
             pr['status'] = 'broken'
             if p.morale is not None:
                 p.morale.break_promise(pr['kind'])
             league.log('promise_broken', pid=p.pid, team=pr['team'], promise=pr['kind'])
             broken.append(pr)
-        elif ok is True and pr['kind'] == 'starting_role' and week and week >= 8:
+            _promise_words(league, p, pr, kept=False)
+        elif ok is True and (pr['kind'] != 'starting_role' or (week and week >= 8)):
             pr['status'] = 'kept'
+            if p.morale is not None:
+                try: p.morale.apply('promise_kept')
+                except Exception: pass
+            league.log('promise_kept', pid=p.pid, team=pr['team'], promise=pr['kind'])
+            _promise_words(league, p, pr, kept=True)
     return broken
+
+
+def _promise_words(league, p, pr, kept):
+    """What he says when a promise is kept or broken, in the inbox, in his own words, for the user's club only."""
+    import inbox as IB
+    from views import surname
+    user = getattr(league, 'user_team', None)
+    if not user or pr['team'] != user: return
+    when = f"in January" if pr.get('source') == 'exit' else "when we talked"
+    KEPT = {'starting_role': f"You told me {when} the job was mine to win. I won it, and you kept your word. That matters in here.",
+            'extension_by': f"You said {when} we would get it done before the market, and we did. I'm here, and I'm all in.",
+            'captaincy': f"You said {when} I would wear the C. I do. Thank you for that.",
+            'no_trade': f"You told me {when} I wasn't going anywhere, and the season came and went and I'm still here. I remember that.",
+            'no_franchise': f"You said you wouldn't tag me, and you didn't. I'll take that into the next talk."}
+    BROKEN = {'starting_role': f"You told me {when} the job was mine to win. It wasn't, was it. I'll play, but I heard what I heard.",
+              'extension_by': f"You said {when} we would have a deal before the market. It's the new year and my agent hasn't had a real number from you. I'm done waiting.",
+              'captaincy': f"You told me {when} I'd wear the C. Somebody else is wearing it. Don't tell me things in that office you don't mean.",
+              'no_trade': f"You looked me in the eye {when} and said I wasn't going anywhere. Then you traded me. Everybody in that locker room knows now what your word is worth.",
+              'no_franchise': f"You said no tag. Then you tagged me. We'll talk through my agent from here."}
+    words = (KEPT if kept else BROKEN).get(pr['kind'])
+    if not words: return
+    IB.post(league, 'club', f"{p.name}: {'a promise kept' if kept else 'a promise broken'}", f'"{words}"', sender=surname(p.name), payload=dict(pid=p.pid, link='club:player:' + p.pid))
 
 
 def ledger(league, team=None):

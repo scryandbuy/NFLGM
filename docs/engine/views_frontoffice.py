@@ -531,7 +531,9 @@ def build_exit_meetings(session, league, abbr):
     from views import surname
     t = league.teams[abbr]; year = league.year
     store = league.__dict__.setdefault('exit_meetings', {})
-    if str(year) in store: return store[str(year)]
+    user = getattr(league, 'user_team', None)
+    slot = str(year) if abbr == user else f"{abbr}-{year}"
+    if slot in store: return store[slot]
     meetings = []
     seen = set()
     def add(kind, p, quote, options):
@@ -586,7 +588,7 @@ def build_exit_meetings(session, league, abbr):
                  dict(key='changes', label="There will be changes, and you're part of them", sub='He is heard', cost='heard'),
                  dict(key='march', label="Talk to me in March", sub='Brushed off', cost='brush')])
             break
-    store[str(year)] = meetings
+    store[slot] = meetings
     return meetings
 
 
@@ -618,7 +620,7 @@ def exit_answer(session, league, abbr, pid, key):
     said = ''
     if cost.startswith('promise:'):
         kind = cost.split(':', 1)[1]
-        NG.record_promise(league, p.pid, abbr, kind)
+        NG.record_promise(league, p.pid, abbr, kind, source='exit')
         if m is not None: m.apply('promised')
         said = {'no_trade': "Then I'm here. Don't make me regret saying that.", 'extension_by': "Good. My agent will be calling.", 'starting_role': "I'll be ready. Don't sit me.", 'captaincy': "I'll hold them to it, and you."}.get(kind, "Alright.")
     elif cost == 'block':
@@ -635,3 +637,43 @@ def exit_answer(session, league, abbr, pid, key):
     import inbox as IB
     IB.post(league, 'club', f"{p.name}, after the meeting", f"You told him: {opt['label'].lower()}. He said: \"{said}\"", sender=surname(p.name))
     return dict(ok=True, said=said)
+
+
+def ai_exit_meetings(league, abbr, rng):
+    """The other clubs hold their meetings too. The GM answers by his nature: a patient builder promises the young
+    player his shot and the star his deal, a win-now GM promises less and tells more of them to earn it, and every
+    promise goes on the same ledger, so an AI club that breaks one lives with the request that follows."""
+    import morale as MO, negotiations as NG
+    t = league.teams.get(abbr)
+    if t is None or t.gm is None: return 0
+    store = league.__dict__.setdefault('exit_meetings', {})
+    key = f"{abbr}-{league.year}"
+    if key in store: return 0
+    ms = build_exit_meetings(None, league, abbr)
+    gm = t.gm
+    patience = float(getattr(gm, 'youth', 0.5)); win_now = float(getattr(gm, 'aggression', 0.5))
+    n = 0
+    for mt in ms:
+        p = league.player(mt['pid']); m = MO.ensure(p) if p is not None else None
+        if p is None: continue
+        opts = mt['options']
+        promise = [o for o in opts if o['cost'].startswith('promise:')]; heard = [o for o in opts if o['cost'] in ('heard', 'block')]; brush = [o for o in opts if o['cost'] == 'brush']
+        r = rng.random()
+        p_prom = 0.25 + 0.35 * patience - 0.15 * win_now
+        p_brush = 0.15 + 0.15 * win_now
+        if r < p_prom and promise: o = promise[0]
+        elif r < p_prom + p_brush and brush: o = brush[0]
+        else: o = (heard or promise or opts)[0]
+        cost = o['cost']
+        if cost.startswith('promise:'):
+            NG.record_promise(league, p.pid, abbr, cost.split(':', 1)[1], source='exit')
+            if m is not None: m.apply('promised')
+        elif cost == 'block':
+            p.xp_spent['_on_block'] = league.year
+            if m is not None: m.apply('heard_out')
+        elif cost == 'heard':
+            if m is not None: m.apply('heard_out')
+        else:
+            if m is not None: m.apply('brushed_off')
+        mt['answer'] = o['key']; n += 1
+    return n
