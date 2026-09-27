@@ -174,12 +174,18 @@ def _matchup(session, league, abbr):
         watch = _watch_notes(league, abbr, opp_abbr, rep)
     # the header line: where, and in what
     home_abbr = opp_abbr if away else abbr
+    site = None
+    if wk >= 22:
+        try:
+            import postseason as PS
+            site = PS.sb_venue(league)
+        except Exception: site = None
     env = None
     try:
         import weather as W
-        env = W.draw(home_abbr, wk, np.random.default_rng(league.year * 100 + wk))
+        env = W.draw(site['abbr'] if site else home_abbr, wk, np.random.default_rng(league.year * 100 + wk), neutral=bool(site))
     except Exception: pass
-    where = STADIUM.get(home_abbr, '')
+    where = f"{site['stadium']}, {site['city']}" if site else STADIUM.get(home_abbr, '')
     weather_line = (env.describe() if env is not None and not env.dome else 'Indoors' if env is not None else '')
     header = ' · '.join(x for x in (weather_line, where) if x)
     import math

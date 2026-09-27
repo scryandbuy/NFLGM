@@ -2,7 +2,7 @@
 LEAGUE VIEWS. Standings, Schedule, Transactions, Stats, Awards, Coaching, Almanac.
 Read-only pages; nothing here changes the league.
 """
-from views import club, rail, _points, _form
+from views import STADIUM, club, rail, _points, _form
 
 DIVS = ['AFC East', 'AFC North', 'AFC South', 'AFC West', 'NFC East', 'NFC North', 'NFC South', 'NFC West']
 
@@ -434,39 +434,57 @@ def _identity_names(league, t):
 
 
 def bracket(session, league, abbr):
-    """The playoff bracket: seeds by conference, each round's games with scores as they are played, the champion.
-    Live while the postseason runs; the last finished bracket after it."""
-    import postseason as PS
+    """The playoff bracket as a tree: each conference's bye, three wild card games, two divisional games and the
+    championship, the Super Bowl in the middle with its site. Live while the postseason runs; the last finished
+    bracket after it; before the playoffs, the field as the standings would seed it."""
+    import postseason as PS, standings_and_seeding as SS
     post = getattr(session, 'post_live', None) or getattr(session, 'post', None)
-    if post is None or not getattr(post, 'seeds', None):
-        # before the playoffs: the seeds as they stand, from the standings
+    started = bool(post is not None and getattr(post, 'seeds', None))
+    if not started:
         r = _state(session)
-        try: seeds = r.seeds() if r is not None else {}
+        try: seeds = {c: list(sd)[:7] for c, sd in (r.seeds() if r is not None else {}).items()}
         except Exception: seeds = {}
-        confs = [dict(conf=c, seeds=[dict(seed=i + 1, club=club(t), record=_rec(league, t), me=(t == abbr), alive=True) for i, t in enumerate(list(sd)[:7])], rounds=[]) for c, sd in seeds.items()]
-        return dict(rail=rail(session, league, abbr), live=False, started=False, confs=confs, final=None, champion=None, note='The field as it stands. The bracket is set after Week 18.')
-    games = list(getattr(post, 'games', []) or [])
+        games = []; alive_now = {t for sd in seeds.values() for t in sd}; champion = None
+    else:
+        seeds = {c: list(sd) for c, sd in post.seeds.items()}
+        games = list(getattr(post, 'games', []) or [])
+        alive_now = {t for al in getattr(post, 'alive', {}).values() for t in al.values()} | set(getattr(post, 'conf_champs', {}).values())
+        champion = post.champion
+        if champion: alive_now = {champion}
+    seed_of = {t: i + 1 for sd in seeds.values() for i, t in enumerate(sd)}
     def game_row(rnd, conf, home, away, hs=None, as_=None):
         return dict(round=rnd, conf=conf, home=club(home), away=club(away), hs=hs, as_=as_, done=hs is not None,
                     winner=(home if (hs or 0) >= (as_ or 0) else away) if hs is not None else None, me=(abbr in (home, away)),
-                    home_seed=_seed_of(post, home), away_seed=_seed_of(post, away))
+                    home_seed=seed_of.get(home), away_seed=seed_of.get(away), home_record=_rec(league, home), away_record=_rec(league, away), stadium=STADIUM.get(home, ''))
     confs = []
-    alive_now = {t for al in getattr(post, 'alive', {}).values() for t in al.values()} | set(getattr(post, 'conf_champs', {}).values())
-    if post.champion: alive_now = {post.champion}
-    for conf, sd in post.seeds.items():
-        rounds = []
+    for conf, sd in seeds.items():
+        by_seed = {i + 1: t for i, t in enumerate(sd)}
+        rounds = {}
         prev_done = True
         for rnd in ('WC', 'DIV', 'CONF'):
             played = [game_row(rnd, c, h, a, hs, as_) for (r_, c, h, a, hs, as_) in games if r_ == rnd and c == conf]
-            # a round's matchups show only once the round before it is complete; until then it is to be decided
-            pending = [game_row(rnd, c, h, a) for (c, h, a) in (post.matchups(rnd) if not played and post.champion is None and prev_done else []) if c == conf]
+            if rnd == 'WC' and not played:
+                pending = [game_row('WC', conf, by_seed[hi], by_seed[lo]) for hi, lo in SS.wc_matchups(sd) if hi in by_seed and lo in by_seed]
+            else:
+                # a round's matchups show only once the round before it is complete; until then it is to be decided
+                pending = [game_row(rnd, c, h, a) for (c, h, a) in (post.matchups(rnd) if started and not played and champion is None and prev_done else []) if c == conf]
             need = {'WC': 3, 'DIV': 2, 'CONF': 1}[rnd]
             prev_done = len(played) >= need
-            rounds.append(dict(round=rnd, name=PS.Postseason.ROUND_NAMES[rnd], games=played or pending))
-        confs.append(dict(conf=conf, seeds=[dict(seed=i + 1, club=club(t), record=_rec(league, t), me=(t == abbr), alive=(t in alive_now or (post.champion is None and t in {x for al in post.alive.values() for x in al.values()} | set(post.conf_champs.values())))) for i, t in enumerate(sd)], rounds=rounds))
+            gs = played or pending
+            # wild card in seed order (2v7, 3v6, 4v5); divisional with the top seed's game first, so the tree reads top-down
+            if rnd == 'WC': gs.sort(key=lambda g: (g['home_seed'] or 9))
+            elif rnd == 'DIV': gs.sort(key=lambda g: min(g['home_seed'] or 9, g['away_seed'] or 9))
+            rounds[rnd] = gs
+        bye = by_seed.get(1)
+        confs.append(dict(conf=conf, bye=(dict(club=club(bye), seed=1, record=_rec(league, bye), me=(bye == abbr), alive=(bye in alive_now)) if bye else None),
+                          wc=rounds['WC'], div=rounds['DIV'], conf_game=(rounds['CONF'][0] if rounds['CONF'] else None),
+                          champ=club(post.conf_champs[conf]) if started and (getattr(post, 'conf_champs', {}) or {}).get(conf) else None))
+    order = {'AFC': 0, 'NFC': 1}; confs.sort(key=lambda c: order.get(c['conf'], 9))
     sb = [game_row('SB', c, h, a, hs, as_) for (r_, c, h, a, hs, as_) in games if r_ == 'SB']
-    if not sb and post.champion is None and len(getattr(post, 'conf_champs', {}) or {}) == 2: sb = [game_row('SB', c, h, a) for (c, h, a) in post.matchups('SB')]
-    return dict(rail=rail(session, league, abbr), live=(post.champion is None), started=True, confs=confs, final=(sb[0] if sb else None), champion=(club(post.champion) if post.champion else None), note=None)
+    if not sb and started and champion is None and len(getattr(post, 'conf_champs', {}) or {}) == 2: sb = [game_row('SB', c, h, a) for (c, h, a) in post.matchups('SB')]
+    site = PS.sb_venue(league)
+    return dict(rail=rail(session, league, abbr), live=(started and champion is None), started=started, confs=confs, final=(sb[0] if sb else None),
+                champion=(club(champion) if champion else None), site=site, note=(None if started else 'The field as it stands. The bracket is set after Week 18.'))
 
 
 def _rec(league, t):

@@ -1729,20 +1729,35 @@ function renderExit(v) {
 function renderBracket(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('bracket');
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Playoffs', el('small', {}, v.champion ? `Champion: ${v.champion.name}` : v.live ? 'the bracket, live' : v.note || 'the field')));
-  const gameCard = g => el('div', { class: 'bgame' + (g.me ? ' mine' : '') + (g.done ? ' done' : '') },
-    el('div', { class: 'brow' + (g.done && g.winner === g.away.abbr ? ' win' : '') }, el('span', { class: 'sd' }, g.away_seed || ''), el('span', { class: 'str', style: `background:${g.away.color}` }), el('span', { class: 'nm' }, g.away.name), el('b', {}, g.done ? g.as_ : '')),
-    el('div', { class: 'brow' + (g.done && g.winner === g.home.abbr ? ' win' : '') }, el('span', { class: 'sd' }, g.home_seed || ''), el('span', { class: 'str', style: `background:${g.home.color}` }), el('span', { class: 'nm' }, 'at ' + g.home.name), el('b', {}, g.done ? g.hs : '')));
-  const grid = el('div', { class: 'bracket' });
-  for (const c of v.confs) {
-    const col = el('div', { class: 'bconf' }, el('div', { class: 'h5' }, c.conf, el('span', {}, v.started ? '' : 'as it stands')));
-    const seeds = el('div', { class: 'bseeds' });
-    for (const sd of c.seeds) seeds.append(el('div', { class: 'brow' + (sd.me ? ' mine' : '') + (v.started && !sd.alive ? ' out' : '') }, el('span', { class: 'sd' }, sd.seed), el('span', { class: 'str', style: `background:${sd.club.color}` }), el('span', { class: 'nm' }, sd.club.name), el('b', {}, sd.record)));
-    col.append(seeds);
-    for (const r of c.rounds) { const rc = el('div', { class: 'bround' }, el('div', { class: 'h5' }, r.name)); if (!r.games.length) rc.append(el('div', { class: 'count' }, 'to be decided')); for (const g of r.games) rc.append(gameCard(g)); col.append(rc); }
-    grid.append(col);
-  }
-  s.append(grid);
-  if (v.started) s.append(el('div', { class: 'bfinal' }, el('div', { class: 'h5' }, 'Super Bowl'), v.final ? gameCard(v.final) : el('div', { class: 'count' }, 'to be decided'), v.champion ? el('div', { class: 'champ' }, `${v.champion.name} · Champions`) : ''));
+  // one team's line on a card: seed, stripe, abbreviation, score; the winner carries the marker, the loser dims
+  const line = (c, seed, pts, done, won, me, record) => el('div', { class: 'bk-line' + (done ? (won ? ' win' : ' lose') : '') + (me ? ' me' : '') },
+    el('span', { class: 'sd' }, seed || ''), el('span', { class: 'str', style: `background:${c.color}` }), el('span', { class: 'ab' }, c.abbr), el('span', { class: 'rec' }, done ? '' : record || ''), el('b', {}, done ? (won ? '▸ ' : '') + pts : ''));
+  const gameCard = (g, cls) => g ? el('div', { class: 'bk-game ' + (cls || '') + (g.me ? ' mine' : '') + (g.done ? ' done' : '') },
+    line(g.away, g.away_seed, g.as_, g.done, g.winner === g.away.abbr, g.away.abbr === v.rail.club.abbr, g.away_record),
+    line(g.home, g.home_seed, g.hs, g.done, g.winner === g.home.abbr, g.home.abbr === v.rail.club.abbr, g.home_record),
+    el('div', { class: 'foot' }, g.done ? 'Final' : g.round === 'SB' ? '' : `at ${g.home.name}`, g.round === 'SB' ? '' : el('span', {}, g.stadium || '')))
+    : el('div', { class: 'bk-game tbd ' + (cls || '') }, el('div', { class: 'bk-line' }, el('span', { class: 'sd' }, ''), el('span', { class: 'str' }), el('span', { class: 'ab' }, 'TBD')), el('div', { class: 'bk-line' }, el('span', { class: 'sd' }, ''), el('span', { class: 'str' }), el('span', { class: 'ab' }, 'TBD')), el('div', { class: 'foot' }, 'to be decided'));
+  const byeCard = (b, cls) => b ? el('div', { class: 'bk-game bye ' + cls + (b.me ? ' mine' : '') }, line(b.club, 1, null, false, false, b.me, b.record), el('div', { class: 'foot' }, 'First-round bye')) : el('div', { class: cls });
+  const tree = el('div', { class: 'bk-tree' });
+  const side = (c, flip) => {
+    // three wild card games plus the bye in one column; two divisional games; the championship. Rows are the tree's
+    // 8 half-rows: a wild card slot spans 2, a divisional slot 4, the championship 8; the joins sit in the gap columns
+    const f = flip ? ' r' : '';
+    const wc = [byeCard(c.bye, 'bk-slot s2' + f), ...[0, 1, 2].map(i => gameCard(c.wc[i], 'bk-slot s2' + f))];
+    const dv = [0, 1].map(i => gameCard(c.div[i], 'bk-slot s4' + f));
+    const cf = gameCard(c.conf_game, 'bk-slot s8' + f);
+    const cols = [el('div', { class: 'bk-col', 'data-name': 'Wild Card' }, ...wc), el('div', { class: 'bk-join j2' + f }, el('i', {}), el('i', {})), el('div', { class: 'bk-col', 'data-name': 'Divisional' }, ...dv), el('div', { class: 'bk-join j4' + f }, el('i', {})), el('div', { class: 'bk-col', 'data-name': c.conf + ' Championship' }, cf)];
+    return flip ? cols.reverse() : cols;
+  };
+  const afc = v.confs.find(c => c.conf === 'AFC') || v.confs[0]; const nfc = v.confs.find(c => c.conf === 'NFC') || v.confs[1];
+  if (afc) tree.append(...side(afc, false));
+  // the middle: the Super Bowl, its site, the champion beneath it
+  const sb = el('div', { class: 'bk-col bk-final', 'data-name': `Super Bowl ${v.site ? v.site.numeral : ''}` },
+    el('div', { class: 'bk-slot s8' }, el('div', { class: 'bk-site' }, v.site ? `${v.site.stadium} · ${v.site.city}` : ''), gameCard(v.final, 'sb'),
+      v.champion ? el('div', { class: 'bk-champ', style: `--c1:${v.champion.color};--c2:${v.champion.accent}` }, el('span', {}, v.champion.name), el('small', {}, 'Champions')) : ''));
+  tree.append(el('div', { class: 'bk-join j8' }, el('i', {})), sb, el('div', { class: 'bk-join j8 r' }, el('i', {})));
+  if (nfc) tree.append(...side(nfc, true));
+  s.append(tree);
   page.append(s);
 }
 

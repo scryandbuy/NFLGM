@@ -1597,7 +1597,7 @@ def play_game(*args, **kwargs):
 
 def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
               home_aggr=0.5, away_aggr=0.5, book=None,
-              home_state=None, away_state=None, week=1, playoffs=False):
+              home_state=None, away_state=None, week=1, playoffs=False, venue=None):
     """A full 60-minute game as a generator. Yields ('snap', dr) after every logged entry, ('drive', pos, dr, score)
     when a possession ends, ('halftime', score) at the break before the second-half kick, ('overtime', score)
     before overtime; returns the result dict."""
@@ -1614,7 +1614,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     global ENV
     import plays as _P
     home_abbr = (home_state.abbr if home_state is not None and getattr(home_state, 'abbr', None) else home.get('abbr', ''))
-    ENV = W.draw(home_abbr, week, rng, neutral=playoffs and week >= 22)
+    ENV = W.draw(venue or home_abbr, week, rng, neutral=playoffs and week >= 22)     # a neutral site draws its own sky
     _P.ENV = ENV
     if away_state is not None:
         away_state.road_noise = ENV.road_false_start; away_state.road_stamina = ENV.road_stamina

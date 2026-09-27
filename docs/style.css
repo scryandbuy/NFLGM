@@ -1195,22 +1195,50 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .tend .bar i{background:var(--club-2)}
 .tend .bar em{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);transform:translateX(-1px)}
 
-/* the bracket */
-.bracket{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;padding:6px 14px 12px}
-.bconf .h5{margin-top:10px}
-.bseeds,.bgame{border:1px solid var(--rule);background:var(--sheet-2);margin-bottom:8px}
-.brow{display:grid;grid-template-columns:22px 4px 1fr auto;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--rule);font-size:15px}
-.brow:last-child{border-bottom:0}
-.brow .sd{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);text-align:center}
-.brow .str{width:4px;height:18px;border-radius:2px}
-.brow .nm{color:var(--ink)}
-.brow b{font-family:var(--mono);min-width:22px;text-align:right}
-.brow.mine .nm{color:var(--club-2);font-weight:700}
-.brow.out{opacity:.45}
-.brow.win .nm,.brow.win b{color:var(--ok);font-weight:700}
-.bgame.done .brow:not(.win){opacity:.65}
-.bfinal{padding:0 14px 14px;max-width:420px}
-.champ{font-family:var(--display);font-weight:900;font-size:22px;color:var(--club-2);padding:8px 0}
+/* the bracket: a tree, wild card on the outside working in to the Super Bowl in the middle. Each side is three columns
+   and two gap columns; every column is a grid of 8 half-rows, so a wild card slot spans 2, a divisional slot 4, the
+   championship 8, and the joins in the gaps draw the lines from pair to pair */
+.bk-tree{display:grid;grid-template-columns:1fr 26px 1fr 26px 1fr 26px 1.25fr 26px 1fr 26px 1fr 26px 1fr;gap:0;padding:26px 14px 14px;overflow-x:auto;min-height:560px}
+.bk-col{display:grid;grid-template-rows:repeat(8,1fr);position:relative}
+.bk-col::before{content:attr(data-name);position:absolute;top:-20px;left:0;right:0;text-align:center;font-family:var(--display);font-weight:700;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.bk-slot{display:flex;flex-direction:column;justify-content:center;padding:6px 0;position:relative}
+.bk-slot.s2{grid-row:span 2}.bk-slot.s4{grid-row:span 4}.bk-slot.s8{grid-row:span 8}
+.bk-game{border:1px solid var(--rule);background:var(--sheet-2);border-radius:4px;overflow:hidden;position:relative}
+.bk-game.mine{border-color:var(--club-2)}
+.bk-line{display:grid;grid-template-columns:16px 4px 1fr auto auto;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--rule)}
+.bk-line:last-of-type{border-bottom:0}
+.bk-line .sd{font-family:var(--mono);font-size:12px;color:var(--ink-3);text-align:center}
+.bk-line .str{width:4px;height:22px;border-radius:2px;background:var(--sheet-3)}
+.bk-line .ab{font-family:var(--display);font-weight:900;font-size:22px;letter-spacing:.02em;color:var(--ink)}
+.bk-line .rec{font-family:var(--mono);font-size:12.5px;color:var(--ink-3)}
+.bk-line b{font-family:var(--display);font-weight:900;font-size:22px;min-width:44px;text-align:right;color:var(--ink)}
+.bk-line.lose .ab,.bk-line.lose b{color:var(--ink-3);font-weight:700}
+.bk-line.me .ab{color:var(--club-2)}
+.bk-game .foot{display:flex;justify-content:space-between;gap:8px;padding:4px 10px;font-family:var(--display);font-weight:700;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);background:var(--sheet);border-top:1px solid var(--rule)}
+.bk-game .foot span{font-family:var(--text);font-weight:500;text-transform:none;letter-spacing:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk-game.tbd .ab{color:var(--ink-3)}.bk-game.tbd{border-style:dashed;background:transparent}
+.bk-game.bye .foot{color:var(--ok)}
+/* the joins: a ] shape from the two cards' centres to the gap's far edge, and a stub on to the next card */
+.bk-join{display:grid;grid-template-rows:repeat(8,1fr)}
+.bk-join i{display:block;border:1px solid var(--rule-2);border-left:0;border-radius:0 4px 4px 0;position:relative}
+.bk-join.r i{border-left:1px solid var(--rule-2);border-right:0;border-radius:4px 0 0 4px}
+.bk-join.j2 i:nth-child(1){grid-row:2/4}.bk-join.j2 i:nth-child(2){grid-row:6/8}   /* the bye and game 1 centre at half-row lines 2 and 4; games 2 and 3 at 6 and 8 */
+.bk-join.j4 i{grid-row:3/7}                                                           /* the two divisional cards centre at lines 3 and 7 */
+.bk-join.j8 i{grid-row:4/6;border:0}                                                  /* the championship into the Super Bowl: one line across the gap */
+.bk-join.j8 i::after{content:'';position:absolute;top:50%;left:0;right:0;border-top:1px solid var(--rule-2)}
+/* the stub from a join's vertical on to the card it feeds */
+.bk-slot.s4::before,.bk-slot.s8::before{content:'';position:absolute;top:50%;left:-26px;width:26px;border-top:1px solid var(--rule-2)}
+.bk-slot.s4.r::before,.bk-slot.s8.r::before{left:auto;right:-26px}
+.bk-final .bk-slot::before{display:none}
+/* the middle */
+.bk-final{padding:0 8px}
+.bk-site{font-family:var(--text);font-size:12.5px;color:var(--ink-3);text-align:center;margin-bottom:8px}
+.bk-game.sb{border-color:var(--rule-hi)}
+.bk-game.sb .ab{font-size:26px}.bk-game.sb b{font-size:26px}.bk-game.sb .bk-line{padding:11px 12px}
+.bk-champ{margin-top:10px;padding:12px 14px;background:linear-gradient(135deg,var(--c1),color-mix(in srgb,var(--c1) 55%,#0b0d12));border-left:4px solid var(--c2);display:flex;flex-direction:column;gap:2px}
+.bk-champ span{font-family:var(--display);font-weight:900;font-size:24px;color:#fff;line-height:1}
+.bk-champ small{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--c2)}
+@media (max-width:1400px){.bk-tree{min-width:1320px}}
 
 /* THE SEASON REVIEW */
 .rv-hero{display:grid;grid-template-columns:1.6fr 1fr;gap:0;overflow:hidden;background:linear-gradient(135deg,var(--c1) 0%,color-mix(in srgb,var(--c1) 55%,#0b0d12) 100%);border-color:transparent;color:#fff;min-height:250px}
