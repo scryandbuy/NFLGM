@@ -24,20 +24,17 @@ CAP = {
 # growth fitted to the real series (2011-2026, excluding the 2021 COVID reset)
 BASE_GROWTH   = 0.075      # median year-over-year
 GROWTH_SD     = 0.022
+MIN_GROWTH    = 0.030      # the cap never goes down, and never stalls: the worst year is still +3%
 MEDIA_CYCLE   = 8          # new broadcast deals land roughly this often
 MEDIA_BUMP    = 0.055      # they add this on top (1998, 2006, 2022, 2024 pattern)
-SHOCK_PROB    = 0.02       # lockout / pandemic
-SHOCK_SIZE    = -0.08
 
 def project_cap(year, last_year, last_cap, rng=None, media_years=()):
-    """Advance the cap one year. Real values are used wherever we have them."""
+    """Advance the cap one year. Real values are used wherever we have them. The cap only ever rises."""
     if year in CAP and not np.isnan(CAP[year]): return CAP[year]
     rng = rng or np.random.default_rng()
-    g = rng.normal(BASE_GROWTH, GROWTH_SD)
+    g = max(MIN_GROWTH, float(rng.normal(BASE_GROWTH, GROWTH_SD)))
     if year in media_years or (year - 2024) % MEDIA_CYCLE == 0:
         g += MEDIA_BUMP
-    if rng.random() < SHOCK_PROB:
-        g = SHOCK_SIZE
     return round(last_cap * (1 + g), 3)
 
 # ---------------------------------------------------------------- contracts

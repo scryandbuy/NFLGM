@@ -39,7 +39,7 @@ from dataclasses import dataclass, field, asdict
 import numpy as np
 
 import targets as TG
-from cap_engine import Contract, TeamCap, CAP, project_cap
+from cap_engine import Contract, TeamCap, CAP, project_cap, BASE_GROWTH
 from gm_engine import GM, make_gm
 import contract_structure as CS
 import otc_2026 as OTC
@@ -901,6 +901,17 @@ class League:
                 t.cap.cap = td['cap_base']
             t.sync_cap()
             L.teams[abbr] = t
+        # THE CAP ONLY RISES. A save rolled under the old projection could carry a year where the cap fell; that
+        # year is re-based at the median growth over the last real or rolled figure, for every club at once.
+        prev = CAP.get(L.year - 1)
+        bases = [t.cap.cap for t in L.teams.values() if getattr(t, 'cap', None) is not None]
+        if prev and bases and max(bases) < prev - 1e-6:
+            fixed = round(prev * (1 + BASE_GROWTH), 3)
+            for t in L.teams.values():
+                t.cap.cap = fixed; t.sync_cap()
+            CAP[L.year] = fixed
+        elif bases and L.year not in CAP:
+            CAP[L.year] = max(bases)             # the module table forgets a rolled year between sessions; the save remembers it
         L.free_agents = d['free_agents']
         L.coach_pool = [GM(**g) for g in d.get('coach_pool', [])]
         L.draft_pool = [L.players[p] for p in d.get('draft_pool', []) if p in L.players]
