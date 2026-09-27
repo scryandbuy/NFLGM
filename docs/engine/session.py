@@ -353,7 +353,7 @@ class Session:
             moves.sort(key=lambda x: -x[0])
             up = [f"{surname(p.name)} ({p.pos}, {d:+.1f})" for d, p in moves[:3] if d > 0.4]
             down = [f"{surname(p.name)} ({p.pos}, {d:+.1f})" for d, p in moves[-3:][::-1] if d < -0.4]
-            body = f"Your scouts spent the week in Mobile; {len(moves)} seniors played. " + (f"Helped himself: {', '.join(up)}. " if up else '') + (f"Hurt himself: {', '.join(down)}. " if down else '') + "Their marks on your board have moved; the players who played carry the Mobile tag."
+            body = f"Your scouts spent the week at the Senior Bowl; {len(moves)} seniors played. " + (f"Helped himself: {', '.join(up)}. " if up else '') + (f"Hurt himself: {', '.join(down)}. " if down else '') + "Their marks on your board have moved; the players who played carry the Senior Bowl tag."
             IB.post(self.L, 'draft', "Senior Bowl week: the scouts' word", body, sender='scouts', payload=dict(link='draft:board'))
         except Exception as e:
             import sys; print('senior bowl failed:', e, file=sys.stderr)

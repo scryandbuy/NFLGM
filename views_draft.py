@@ -30,7 +30,7 @@ def _prospect(league, abbr, p, taken=()):
     # the words the board shows for what the room knows
     words = []
     if 'visited' in flags or p.pid in (getattr(league, 'user_visits', None) or []): words.append('Visited')
-    if p.xp_spent.get('_senior_bowl') == league.year: words.append('Mobile')
+    if p.xp_spent.get('_senior_bowl') == league.year: words.append('Senior Bowl')
     _when = getattr(league, 'user_visit_week', None) or {}
     visit_locked = bool(p.pid in (getattr(league, 'user_visits', None) or []) and _when.get(p.pid) != f"{league.year}-{league.week}-{league.phase}")
     if getattr(p, 'age', 22) >= 22 and any(x.get('pid') == p.pid and x.get('event') == 'Senior Bowl' for x in (getattr(league, 'spring_news', None) or [])): words.append('Sr. Bowl')
