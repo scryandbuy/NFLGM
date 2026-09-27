@@ -79,6 +79,7 @@ def combine(league, rng):
             v = league.scouting[abbr].get(p.pid)
             if v is None: continue
             v['e_phys'] = 0.0                     # every room saw the same forty
+            v['cert'] = float(min(SC.CERT_MAX, float(v.get('cert', SC.CERT_START_TOP) or 0.0) + SC.CERT_COMBINE))
             SC._refresh(v, p)
     SC.consensus(league)
     for p in []:
@@ -101,7 +102,7 @@ def senior_bowl(league, rng):
         sd = SC.error_sd(team.gm, team)
         for p in invited:
             if _attends(team, p, 0.55, rng):
-                SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.8, rng, R=SC.room(team)); looks += 1
+                SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.8, rng, R=SC.room(team), team=team); looks += 1
                 _character(league, abbr, team, p, sd, rng)
     SC.consensus(league)
     return looks, _stock_moves(league, 'Senior Bowl')
@@ -118,7 +119,7 @@ def pro_days(league, rng):
         cands = sorted([p for p in pool if p.pos in needs or rng.random() < 0.5], key=lambda p: cons.get(p.pid, {}).get('rank', 9999))
         if not R['day3_reads']: cands = [p for p in cands if cons.get(p.pid, {}).get('rank', 9999) <= 150]
         for p in cands[:int(PRO_DAY_LOOKS * R['looks_mult'])]:
-            SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.75, rng, R=R); looks += 1     # a controlled workout: a good look
+            SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.75, rng, R=R, team=team); looks += 1     # a controlled workout: a good look
     SC.consensus(league)
     return looks, _stock_moves(league, 'pro days')
 
@@ -152,7 +153,7 @@ def visits(league, rng):
             if v is None: continue
             # what the room thought before the visit, kept so the change shows
             v['pre_visit'] = dict(ovr=float(v.get('ovr', 0) or 0), lo=float(v.get('pot_lo', 0) or 0), hi=float(v.get('pot_hi', 0) or 0), rank=(cons.get(p.pid, {}) or {}).get('rank'), flags=list(v.get('flags', [])))
-            SC.second_look(v, p, sd * 0.55, rng, weight=1.5, R=SC.room(team)); looks += 1
+            SC.second_look(v, p, sd * 0.55, rng, weight=SC.CERT_VISIT_MULT, R=SC.room(team), team=team); looks += 1
             v['flags'] = list(set(v.get('flags', []) + ['visited']))
             SC._refresh(v, p)                                   # the visit's read, with most of the tape seen through
             _character(league, abbr, team, p, sd * 0.7, rng)

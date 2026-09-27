@@ -31,6 +31,32 @@ def _power(p):
 
 
 POT_ERR_CAP = 7.0        # the most a room's read of a ceiling can be off
+
+# CERTAINTY. How much of a player a room has seen, 0 to 1, kept on the view and never shown. It starts where the
+# first read's information starts (more on the top half of the class, less deep and at small schools), and every
+# look raises it by an amount the head scout sets: a great head scout learns more from the same Senior Bowl than
+# a poor one. The room's remaining error and the width of its ceiling read both follow it.
+CERT_START_TOP, CERT_START_DEEP, CERT_SMALL_SCHOOL = 0.35, 0.22, -0.06
+CERT_LOOK_BASE, CERT_LOOK_SCOUT = 0.10, 0.12          # a look adds base + scout share × head-scout quality
+CERT_VISIT_MULT, CERT_COMBINE, CERT_MAX = 1.6, 0.08, 0.92
+
+
+def scout_q(team):
+    """The head scout's quality, 0 to 1; the GM's dial when the club has no scout."""
+    try:
+        if team is not None and getattr(team, 'staff', None) and team.staff.get('scout') is not None:
+            import staff as ST
+            return float(np.clip(ST.scout_quality(team), 0.0, 1.0))
+    except Exception: pass
+    return float(np.clip(float(getattr(getattr(team, 'gm', None), 'scouting', 0.5) or 0.5), 0.0, 1.0))
+
+
+def cert_gain(team, weight=1.0):
+    return (CERT_LOOK_BASE + CERT_LOOK_SCOUT * scout_q(team)) * float(weight)
+
+
+def certainty(view):
+    return float(np.clip(float(view.get('cert', CERT_START_TOP) or 0.0), 0.0, CERT_MAX))
 TAPE_SD = 4.0            # the whole league's shared error on a player: what his tape says against what he is
 TAPE_FLOOR = 0.4         # how much of it survives every look; a visit and a workout uncover the rest, not all of it
 
@@ -52,6 +78,11 @@ def _refresh(view, p):
     lo, hi = p.potential_range if p.potential_range else (p.ovr, p.ovr + 3)
     adj = view.get('adj', 0.0)          # medical and character, by this room
     n = float(view.get('reads', 1) or 1)
+    # the room's own error left: the first draw scaled by what remains unknown, against what was unknown at the start
+    c, c0 = certainty(view), float(view.get('cert0', CERT_START_TOP) or CERT_START_TOP)
+    left = (1.0 - c) / max(0.05, 1.0 - c0)
+    if 'e_skill0' in view: view['e_skill'] = float(view['e_skill0']) * left
+    if 'e_pot0' in view: view['e_pot'] = float(np.clip(float(view['e_pot0']) * left, -POT_ERR_CAP, POT_ERR_CAP))
     fade = max(TAPE_FLOOR, 1.0 - 0.25 * (n - 1.0))
     if 'visited' in (view.get('flags') or []):
         # A VISIT IS THE LOOK THAT SEES THROUGH TAPE. In the building, on the board, in the interview, a room learns
@@ -62,16 +93,21 @@ def _refresh(view, p):
     # a room's ceiling read is bounded: nobody sees a 59 as a 97. The ceiling error is capped and the ceiling
     # itself cannot sit more than eighteen points above what the room sees today
     e_pot = float(np.clip(view.get('e_pot', 0.0) or 0.0, -POT_ERR_CAP, POT_ERR_CAP)); view['e_pot'] = e_pot
-    # the tape colours the ceiling too: a hidden player's upside is hidden with him, an inflated one's inflated
-    view['pot_lo'] = round(float(np.clip(min(lo + e_pot + tp + adj, view['ovr'] + 12.0), 30, 99)), 1)
-    view['pot_hi'] = round(float(np.clip(min(hi + e_pot + tp + adj, view['ovr'] + 18.0), max(view['pot_lo'], 30), 99)), 1)
+    # the tape colours the ceiling too: a hidden player's upside is hidden with him, an inflated one's inflated.
+    # The width of the ceiling read is the room's uncertainty: wide on a first look, narrowing with every one after
+    mid = (lo + hi) / 2.0 + e_pot + tp + adj
+    half = (hi - lo) / 2.0 * (0.5 + 0.5 * (1.0 - c)) + 5.0 * (1.0 - c)
+    view['pot_lo'] = round(float(np.clip(min(mid - half, view['ovr'] + 12.0), 30, 99)), 1)
+    view['pot_hi'] = round(float(np.clip(min(mid + half, view['ovr'] + 18.0), max(view['pot_lo'], 30), 99)), 1)
 
 
-def second_look(view, p, sd, rng, weight=1.0, R=None):
+def second_look(view, p, sd, rng, weight=1.0, R=None, team=None):
     """Another read on the player, averaged into the room's skill and ceiling errors. The room's
-    traits scale and lean the new draw the same way they did the first."""
+    traits scale and lean the new draw the same way they did the first. Certainty rises by what the head
+    scout gets from a look; the residual error and the ceiling's width follow it in the refresh."""
     R = R or dict(skill_mult=1.0, skill_bias=0.0, pot_mult=1.0, pot_bias=0.0)
     n = view.get('reads', 1)
+    view['cert'] = float(np.clip(float(view.get('cert', CERT_START_TOP) or 0.0) + cert_gain(team, weight), 0.0, CERT_MAX))
     draw_s = float(rng.normal(0.0, sd * (1 - PHYS_SHARE) ** 0.5)) * R['skill_mult'] + R['skill_bias']; draw_p = float(rng.normal(0.0, sd * CEILING_MULT)) * R['pot_mult'] + R['pot_bias']
     view['e_skill'] = (view['e_skill'] * n + draw_s * weight) / (n + weight)
     view['e_pot'] = float(np.clip((view['e_pot'] * n + draw_p * weight) / (n + weight), -POT_ERR_CAP, POT_ERR_CAP))
@@ -162,7 +198,9 @@ def scout(league, rng):
             e_skill = float(rng.normal(0.0, sd * wide * (1 - PHYS_SHARE) ** 0.5)) * R['skill_mult'] + R['skill_bias'] + (R['power_bias'] if _power(p) else 0.0)
             lo, hi = p.potential_range if p.potential_range else (p.ovr, p.ovr + 3)
             e_pot = float(np.clip(float(rng.normal(0.0, sd * wide * CEILING_MULT)) * R['pot_mult'] + R['pot_bias'], -POT_ERR_CAP, POT_ERR_CAP))
-            v[p.pid] = dict(e_phys=e_phys, e_skill=e_skill, e_pot=e_pot, reads=1, flags=[])
+            c0 = (CERT_START_DEEP if p.pid in deep else CERT_START_TOP) + (CERT_SMALL_SCHOOL if not _power(p) else 0.0)
+            v[p.pid] = dict(e_phys=e_phys, e_skill=e_skill, e_pot=e_pot, reads=1, flags=[], cert=float(c0), cert0=float(c0),
+                            e_skill0=e_skill, e_pot0=e_pot)
             _refresh(v[p.pid], p)
         views[abbr] = v
     cons = {}
@@ -243,7 +281,7 @@ def senior_bowl(league, rng):
         for p in invited:
             v = views.get(p.pid)
             if v is None: continue
-            second_look(v, p, sd * 0.85, rng, weight=0.7, R=R)
+            second_look(v, p, sd * 0.85, rng, weight=0.7, R=R, team=team)
     for p in invited:
         p.xp_spent['_senior_bowl'] = league.year
     # the consensus moves with the rooms
