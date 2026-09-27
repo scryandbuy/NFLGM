@@ -212,7 +212,7 @@ class SeasonRunner:
         return res
 
     # ------------------------------------------------------------ the live game
-    def open_live(self, home, away, week):
+    def open_live(self, home, away, week, playoffs=False, on_close=None):
         """The user's game, opened at the opening kick and played on demand. The same preparation as play()
         (hurt men, the week's plans), then the stepped engine held open until Finish."""
         hr, ar = self.refresh(home), self.refresh(away)
@@ -233,8 +233,8 @@ class SeasonRunner:
                 else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
             except Exception: pass
         book = G.StatBook(); self._book = book
-        gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book)
-        self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False)
+        gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book, playoffs=playoffs)
+        self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False, playoffs=playoffs, on_close=on_close)
         return self.live
 
     def live_step(self, mode='play'):
@@ -297,6 +297,12 @@ class SeasonRunner:
     def _close_live(self):
         """The live game is over: recorded exactly as a simmed game, and the week's after-game steps run."""
         lv = self.live; res = lv['res']; home, away, week = lv['home'], lv['away'], lv['week']
+        if lv.get('playoffs'):
+            # a playoff game: the stats book, but no standings; the bracket takes the result
+            self._record(home, away, week, res, lv['book'], True)
+            self.last_games.append((home, away, res, lv['book']))
+            if lv.get('on_close') is not None: lv['on_close'](res)
+            return
         self._record(home, away, week, res, lv['book'], False)
         self.last_games.append((home, away, res, lv['book']))
         for i, (wk, a_, h_, ap, hp) in enumerate(self.L.schedule):

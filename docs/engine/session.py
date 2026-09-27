@@ -30,6 +30,7 @@ class Session:
         self.L = league; self.rng = rng; self.user_team = user_team
         self.L.user_team = user_team
         self.runner = None
+        self.post_live = None
         self.post = None; self.order = None; self.fired = []; self.votes = None
         self.standings = None
         # where we are: ('week', n) | ('playoffs',) | ('offseason', i)
@@ -62,11 +63,23 @@ class Session:
         s = cls(L, np.random.default_rng(d.get('_seed_state', None)), d.get('_user_team'))
         s.stop = tuple(d.get('_stop', ['week', 1]))
         s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
-        lp = d.get('_live_pending')
-        if lp and s.stop[0] == 'week' and s.played:
+        if d.get('_post_live'):
             import season as SN
-            s.runner = SN.SeasonRunner(s.L, s.rng); s.runner.week = lp['week']; s.runner.last_games = []; s.runner.last_played = []
-            s.runner.open_live(lp['home'], lp['away'], lp['week'])
+            if s.runner is None: s.runner = SN.SeasonRunner(s.L, s.rng)
+            s.post_live = PS.Postseason.from_dict(s.runner, d['_post_live'])
+        lp = d.get('_live_pending')
+        if lp and s.played and (s.stop[0] == 'week' or (s.stop[0] == 'playoffs' and lp.get('playoffs'))):
+            import season as SN
+            if s.runner is None: s.runner = SN.SeasonRunner(s.L, s.rng)
+            s.runner.week = lp['week']; s.runner.last_games = []; s.runner.last_played = []
+            if lp.get('playoffs') and getattr(s, 'post_live', None) is not None:
+                post = s.post_live
+                held = getattr(post, 'held', None)
+                rnd, conf = (held[0], held[1]) if held else (PS.Postseason.ROUNDS[max(0, min(3, int(s.stop[1]) - 1))] if len(s.stop) > 1 else 'WC', 'NFL')
+                def _close(res, _c=conf, _h=lp['home'], _a=lp['away'], _r=rnd): post.record(_r, _c, _h, _a, res); post.held = None
+                s.runner.open_live(lp['home'], lp['away'], lp['week'], playoffs=True, on_close=_close)
+            else:
+                s.runner.open_live(lp['home'], lp['away'], lp['week'])
         s.standings = d.get('_standings'); s.order = d.get('_order'); s.fired = [tuple(x) if isinstance(x, list) else x for x in (d.get('_fired') or [])]
         if d.get('_post'):
             class _Post:            # the shape awards, prestige and the almanac read
@@ -86,10 +99,12 @@ class Session:
 
     def save(self):
         d = json.loads(self.L.save())
+        if getattr(self, 'post_live', None) is not None:
+            d['_post_live'] = self.post_live.to_dict()
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is not None and not lv['done']:
             # a half-played game cannot be written down; the save marks it pending and a load reopens it at the kick
-            d['_live_pending'] = dict(home=lv['home'], away=lv['away'], week=lv['week'])
+            d['_live_pending'] = dict(home=lv['home'], away=lv['away'], week=lv['week'], playoffs=bool(lv.get('playoffs')))
         d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
         d['_gameday'] = self.gameday
         d['_gamedays'] = getattr(self, 'gamedays', None) or {}
@@ -143,7 +158,25 @@ class Session:
                 return dict(title=(f"Advance to Week {wk + 1}" if wk < WEEKS else 'Advance to the Playoffs'), sub=(f"Week {wk} is in the books"), played=True)
             return dict(title=f"Sim Week {wk}", sub=(f"{'at' if opp and opp[1] else 'vs'} {opp[0]}" if opp else 'Bye Week'), played=False)
         if k == 'playoffs':
-            return dict(title='Play the Playoffs', sub='Wild Card Through the Super Bowl')
+            rnd_i = int(self.stop[1]) if len(self.stop) > 1 else 0
+            lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+            if lv is not None and not lv['done']:
+                return dict(title='Game Day', sub=('Halftime: your adjustments' if lv['halftime_open'] else 'Your playoff game is on; finish it to advance'), played=True, live=True)
+            if rnd_i >= 4: return dict(title='Close the Season', sub='the champion is crowned', played=True)
+            rnd = PS.Postseason.ROUNDS[rnd_i]; name = PS.Postseason.ROUND_NAMES[rnd]
+            post = getattr(self, 'post_live', None); user = self.user_team
+            if post is not None and hasattr(post, 'alive'):
+                alive = {t for a in post.alive.values() for t in a.values()} if rnd != 'SB' else set(post.conf_champs.values())
+                if user in alive:
+                    ms = [m for m in post.matchups(rnd) if user in (m[1], m[2])]
+                    if ms: c, h, a = ms[0]; return dict(title=f'Play the {name}', sub=(f'vs {a}' if h == user else f'at {h}'))
+                    return dict(title=f'Sim the {name}', sub='You have the bye')
+                return dict(title=f'Sim the {name}', sub="Your season is over")
+            try:
+                seeds = self.runner.seeds() if self.runner is not None else {}
+                inn = any(user in list(sd)[:7] for sd in seeds.values())
+            except Exception: inn = False
+            return dict(title=('Play the Wild Card' if inn else 'Sim the Wild Card'), sub=('Your playoff run starts' if inn else 'Your season is over'))
         i = self.stop[1]
         if self.draft_live():
             pk = self.draft.current()
@@ -228,17 +261,44 @@ class Session:
             self.runner.roll_week(wk)
             IB.expire(self.L, wk + 1)
             self.played = False
-            self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs',)
+            self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs', 0)
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':
+            # THE PLAYOFFS, A ROUND AT A TIME. Each Advance plays one round: the AI games are simmed, and if your club
+            # is in the round its game opens live on Game Day, exactly like a regular-season week. Out of it, or on
+            # the bye, you sim the round. After the Super Bowl the season closes.
             if self.runner is None: self.runner = SN.SeasonRunner(self.L, self.rng)
-            self.standings = self.runner.standings()
-            self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng)
-            try: self.post.seeds_at_close = self.runner.seeds()      # kept for the save: the runner's standings reset at the New Year
-            except Exception: self.post.seeds_at_close = {}
-            MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
-            self.stop = ('offseason', 0)
-            return dict(done='Playoffs', champion=self.post.champion, next=self.next_label())
+            rnd_i = int(self.stop[1]) if len(self.stop) > 1 else 0
+            lv = getattr(self.runner, 'live', None)
+            if lv is not None and not lv['done']:
+                return dict(done='Your playoff game is still being played', next=self.next_label())
+            if rnd_i >= 4:
+                return self._close_playoffs()
+            if getattr(self, 'post_live', None) is None or not hasattr(self.post_live, 'seeds'):
+                self.standings = self.runner.standings()
+                self.L.set_phase('playoffs')
+                self.post_live = PS.Postseason(self.runner); self.post_live.start()
+            post = self.post_live
+            rnd = PS.Postseason.ROUNDS[rnd_i]
+            user = self.user_team
+            self.runner.last_games = []; self.runner.last_played = []
+            held = post.play_round(rnd, skip=user)
+            if held is not None:
+                conf, home, away = held
+                post.held = (rnd, conf, home, away)                   # for a save taken mid-game
+                def _close(res, _c=conf, _h=home, _a=away, _r=rnd): post.record(_r, _c, _h, _a, res); post.held = None
+                self.runner.open_live(home, away, 19 + rnd_i, playoffs=True, on_close=_close)
+                self.played = True
+                self.stop = ('playoffs', rnd_i + 1) if rnd_i + 1 < len(PS.Postseason.ROUNDS) else ('playoffs', 4)
+                self._capture_gameday(19 + rnd_i)
+                return dict(done=f'{PS.Postseason.ROUND_NAMES[rnd]} live', next=self.next_label())
+            self.played = True
+            self._capture_gameday(19 + rnd_i)
+            if rnd_i + 1 < len(PS.Postseason.ROUNDS):
+                self.stop = ('playoffs', rnd_i + 1)
+                return dict(done=PS.Postseason.ROUND_NAMES[rnd], next=self.next_label())
+            self.stop = ('playoffs', 4)
+            return self._close_playoffs()
         i = self.stop[1]
         if self.draft_live():
             self.draft.auto = True; self.draft.sim_all(); self._draft_over()
@@ -254,6 +314,22 @@ class Session:
             try: GW.post_report(self.L, 1)
             except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
+
+    def _close_playoffs(self):
+        """After the Super Bowl: the champion, the draft order, the firings, and into the offseason."""
+        post = self.post_live
+        if post.champion is None:
+            # the bracket is unfinished (a final not yet played out): play what remains
+            for i, rnd in enumerate(PS.Postseason.ROUNDS):
+                if not any(g[0] == rnd for g in post.games) or (rnd == 'SB' and post.champion is None):
+                    post.play_round(rnd, skip=None)
+        self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng, post=post)
+        try: self.post.seeds_at_close = dict(getattr(post, 'seeds', {}) or {})
+        except Exception: self.post.seeds_at_close = {}
+        MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
+        self.post_live = None
+        self.stop = ('offseason', 0)
+        return dict(done='Playoffs', champion=self.post.champion, next=self.next_label())
 
     # ---- the offseason steps, the same code as franchise.play_year in the same order
     def step_awards(self):
