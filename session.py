@@ -348,7 +348,7 @@ class Session:
             if ms:
                 from views import surname
                 names = ', '.join(surname(self.L.player(x['pid']).name) for x in ms if self.L.player(x['pid']))
-                IB.post(self.L, 'exit', f"Exit meetings: {len(ms)} men want a word", f"{names}. Each has a question for you and will remember the answer.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
+                IB.post(self.L, 'exit', f"Exit meetings: {len(ms)} men want a word", f"{names}.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
         except Exception as e:
             import sys; print('exit meetings failed:', e, file=sys.stderr)
 
