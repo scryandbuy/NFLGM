@@ -153,7 +153,7 @@ class Session:
         ('Retirements and Development', 'step_retire'),
         ('New Year: Cap and Contracts', 'step_roll'),
         ('Offseason Waivers', 'step_waivers_1'),
-        ('Extensions and Tags', 'step_extensions'),
+        ('Re-sign: Tags and Tenders', 'step_extensions'),
         ('Free Agency: Round 1', 'step_fa_1'),
         ('Free Agency: Round 2', 'step_fa_2'),
         ('Free Agency: Round 3', 'step_fa_3'),
@@ -214,6 +214,12 @@ class Session:
             return dict(title='Finish the Draft on Auto', sub=f"or make your pick at {pk.round}.{((pk.selection - 1) % 32) + 1} on Draft Day" if pk else '')
         title, _ = self.OFFSEASON[i]
         name = self.OFFSEASON[i][1]
+        if name == 'step_extensions':
+            try:
+                sh = TG.user_resign_sheet(self.L)
+                tag_s = ('tag placed' if sh['tag_used'] else ('no tag' if sh['tag_choice'] == 'none' else 'no tag yet'))
+                return dict(title='Lock Tags and Tenders', sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)} · {len(sh['ufa'])} unrestricted, {len(sh['rfa'])} restricted · {tag_s}")
+            except Exception: pass
         if name in self.FA_STEPS or name == 'step_fa_close':
             n = len([x for x in self.L.free_agents if self.L.player(x)])
             import negotiations as NG
@@ -726,10 +732,31 @@ class Session:
         big = [f"{p.name} ({p.pos}, {round(p.ovr)}) to {t_} for ${o.apy:.1f}m" for t_, p, o in sorted(signed, key=lambda x: -x[1].ovr)[:8]]
         IB.post(L, 'league', "The market closes", f"{len(signed)} veterans signed one-year deals as the market closed; {n_left} players remain unsigned into camp. " + ('; '.join(big) + '.' if big else ''), sender='league', payload=dict(link='personnel:free_agency'))
 
+    def _resign_card(self):
+        """The calendar sits on Re-sign: one card with your expiring players by class, the tag price on each UFA, tender
+        or not on each RFA, the ERFAs kept at the minimum. Decide on the Extensions page; the advance locks it."""
+        L = self.L; key_ = f"resign-{L.year}"
+        if any((m.get('payload') or {}).get('key') == key_ for m in getattr(L, 'inbox', [])): return
+        sheet = TG.user_resign_sheet(L)
+        from views import surname
+        ufa = ', '.join(f"{surname(r['name'])} ({r['pos']}, {r['ovr']}; tag ${r['tag_price']}m)" for r in sheet['ufa'][:8])
+        rfa = ', '.join(f"{surname(r['name'])} ({r['pos']}, {r['ovr']}; tender ${r['tender_price']}m)" for r in sheet['rfa'][:8])
+        erfa = ', '.join(f"{surname(r['name'])} ({r['pos']})" for r in sheet['erfa'][:8])
+        body = (f"Unrestricted: {ufa}. One franchise tag, or none; anyone you do not tag or re-sign goes to the market when you advance. " if sheet['ufa'] else "No unrestricted free agents. ")
+        body += (f"Restricted: {rfa}. Tendered at right of first refusal unless you say otherwise; an untendered player goes to the market unrestricted. " if sheet['rfa'] else "")
+        body += (f"Exclusive rights, kept at the minimum: {erfa}. " if sheet['erfa'] else "")
+        body += f"You can commit about ${sheet['room']}m after the minimums you still owe."
+        IB.post(L, 'contract', "Re-sign: your tag and tenders", body, sender='front office', payload=dict(key=key_, link='personnel:extensions'))
+
     def _open_fa_if_due(self):
         """The calendar sits on a free-agency round: open it (once) so the offers can be made before the advance."""
         if self.stop[0] != 'offseason': return
         name = self.OFFSEASON[self.stop[1]][1]
+        if name == 'step_extensions':
+            try: self._resign_card()
+            except Exception as e:
+                import sys; print('resign card failed:', e, file=sys.stderr)
+            return
         k = self.FA_STEPS.get(name)
         if k is None: return
         L = self.L
@@ -867,6 +894,18 @@ class Session:
     def frontoffice(self, page, **kw):
         import views_frontoffice as VF
         return getattr(VF, page)(self, self.L, self.user_team, **kw)
+
+    def resign_sheet(self):
+        return TG.user_resign_sheet(self.L)
+
+    def resign_act(self, action, pid=None):
+        if action == 'tender': r = TG.user_tender(self.L, pid, True)
+        elif action == 'no_tender': r = TG.user_tender(self.L, pid, False)
+        elif action == 'tag': r = TG.user_tag(self.L, pid)
+        elif action == 'untag': r = TG.untag(self.L, pid)
+        elif action == 'no_tag': r = TG.user_tag(self.L, 'none')
+        else: r = dict(ok=False, why='unknown action')
+        return r
 
     def exit_answer(self, pid, key):
         import views_frontoffice as VF

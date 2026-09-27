@@ -1164,12 +1164,33 @@ function renderExtensions(v) {
   left.append(tbl);
   const foot = el('div', { class: 'foot' });
   foot.append(el('a', { class: 'btn', href: '#frontoffice/cap' }, 'Restructure Instead'));
-  if (v.tag && v.tag.open) {
-    const tagSel = el('select', { class: 'btn' }); tagSel.append(el('option', { value: '' }, 'Franchise Tag…')); for (const r of v.expiring.filter(x => x.fa_class === 'UFA')) tagSel.append(el('option', { value: r.pid }, `${r.name} · ${r.pos}` + (r.tag_price ? ` · $${r.tag_price}m` : ''))); tagSel.append(el('option', { value: 'none' }, 'No tag this year'));
-    tagSel.onchange = () => { if (!tagSel.value) return; notify(pyJSON(`SESSION.personnel_act('tag', pid=${JSON.stringify(tagSel.value)})`)); reload(); }; foot.append(tagSel);
-  } else if (v.tag && v.tag.tagged) foot.append(el('span', { class: 'count' }, `Franchise tag placed on ${v.tag.tagged}`));
-  else if (v.tag && v.tag.none) foot.append(el('span', { class: 'count' }, 'No tag this year'));
+  if (v.tag && v.tag.tagged && !v.tag.open) foot.append(el('span', { class: 'count' }, `Franchise tag placed on ${v.tag.tagged}`));
+  else if (v.tag && v.tag.none && !v.tag.open) foot.append(el('span', { class: 'count' }, 'No tag this year'));
   left.append(foot);
+  // RE-SIGN: TAGS AND TENDERS. In the window (the offseason, before the step runs) your expiring players by class:
+  // one tag or none on the unrestricted, tender or not on the restricted, the exclusive-rights players kept.
+  if (v.tag && v.tag.open) {
+    let sh = null; try { sh = pyJSON('SESSION.resign_sheet()'); } catch (_) { sh = null; }
+    if (sh && (sh.ufa.length || sh.rfa.length || sh.erfa.length)) {
+      const rs = el('section', { class: 'sheet c12 rs' }, el('h2', {}, 'Re-sign: Tags and Tenders', el('small', {}, `${sh.ufa.length} unrestricted · ${sh.rfa.length} restricted · ${sh.erfa.length} exclusive rights · you can commit about $${sh.room}m`)));
+      const act = (a, pid) => { const r = pyJSON(`SESSION.resign_act(${JSON.stringify(a)}, pid=${JSON.stringify(pid)})`); notify(r); reload(); };
+      const cols = el('div', { class: 'rs-cols' });
+      const col = (title, sub) => { const c = el('div', { class: 'rs-col' }, el('div', { class: 'h5' }, title, el('span', {}, sub))); cols.append(c); return c; };
+      const cU = col('Unrestricted', 'one tag, or none; the rest go to the market');
+      for (const r of sh.ufa) cU.append(el('div', { class: 'rs-row' + (r.tagged ? ' on' : '') }, el('span', { class: 'pos' }, r.pos), el('span', { class: 'nm', onclick: () => { location.hash = '#club/player/' + r.pid; }, style: 'cursor:pointer' }, r.name, el('small', {}, ` ${r.age} · ${r.ovr}`)), el('span', { class: 'price' }, `tag $${r.tag_price}m`),
+        r.tagged ? el('button', { class: 'btn', onclick: () => act('untag', r.pid) }, 'Remove Tag') : (sh.tag_used || sh.tag_choice === 'none' || !r.can_tag) ? el('span', { class: 'count' }, sh.tag_used ? 'tag used' : (sh.tag_choice === 'none' ? 'no tag' : 'ineligible')) : el('button', { class: 'btn go', onclick: () => act('tag', r.pid) }, 'Tag')));
+      if (!sh.ufa.length) cU.append(el('div', { class: 'empty' }, 'None.'));
+      else if (!sh.tag_used) cU.append(el('div', { class: 'rs-foot' }, sh.tag_choice === 'none' ? el('span', { class: 'count' }, 'No tag this year.') : el('button', { class: 'btn', onclick: () => act('no_tag', null) }, 'No Tag This Year')));
+      const cR = col('Restricted', 'right of first refusal; untendered goes unrestricted');
+      for (const r of sh.rfa) cR.append(el('div', { class: 'rs-row' + (r.tender ? ' on' : ' off') }, el('span', { class: 'pos' }, r.pos), el('span', { class: 'nm', onclick: () => { location.hash = '#club/player/' + r.pid; }, style: 'cursor:pointer' }, r.name, el('small', {}, ` ${r.age} · ${r.ovr}`)), el('span', { class: 'price' }, `tender $${r.tender_price}m`),
+        r.tender ? el('button', { class: 'btn', onclick: () => act('no_tender', r.pid) }, 'No Tender') : el('button', { class: 'btn go', onclick: () => act('tender', r.pid) }, 'Tender')));
+      if (!sh.rfa.length) cR.append(el('div', { class: 'empty' }, 'None.'));
+      const cE = col('Exclusive Rights', 'kept at the minimum');
+      for (const r of sh.erfa) cE.append(el('div', { class: 'rs-row on' }, el('span', { class: 'pos' }, r.pos), el('span', { class: 'nm', onclick: () => { location.hash = '#club/player/' + r.pid; }, style: 'cursor:pointer' }, r.name, el('small', {}, ` ${r.age} · ${r.ovr}`)), el('span', { class: 'price' }, `$${r.min_price}m`), el('span', { class: 'count' }, 'kept')));
+      if (!sh.erfa.length) cE.append(el('div', { class: 'empty' }, 'None.'));
+      rs.append(cols); page.append(rs);
+    }
+  }
   left.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Promises', el('small', {}, 'What You Have Told Your Players')));
   const pt = el('table', { class: 'tbl' }); pt.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Promise'), el('th', {}, 'Made'), el('th', {}, 'Checked'), el('th', {}, 'Status')));
   for (const p of v.promises) pt.append(el('tr', {}, el('td', {}, p.name), el('td', {}, (v.promise_kinds && v.promise_kinds[p.kind]) || p.kind.replace(/_/g, ' ')), el('td', {}, p.made), el('td', {}, p.checked || (p.kind === 'starting_role' ? 'Week 4' : p.kind === 'extension_by' ? 'Offseason' : 'Ongoing')), el('td', {}, el('span', { class: 'pill ' + (p.status === 'kept' ? 'happy' : p.status === 'broken' ? 'unhappy' : 'content') }, p.status.charAt(0).toUpperCase() + p.status.slice(1)))));

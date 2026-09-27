@@ -884,7 +884,7 @@ class League:
             history=getattr(self, 'history', None) or {},
             fa_bids=getattr(self, 'fa_bids', None) or {}, fa_bids_phase=getattr(self, 'fa_bids_phase', None), fa_step=getattr(self, 'fa_step', None),
             last_draft=getattr(self, 'last_draft', None),
-            user_tag_choice=getattr(self, 'user_tag_choice', None), tags_done_year=getattr(self, 'tags_done_year', None), watchlist=sorted(getattr(self, 'watchlist', set()) or []),
+            user_tag_choice=getattr(self, 'user_tag_choice', None), tags_done_year=getattr(self, 'tags_done_year', None), user_no_tender=list(getattr(self, 'user_no_tender', None) or []), watchlist=sorted(getattr(self, 'watchlist', set()) or []),
             promises=getattr(self, 'promises', None) or [],
             exit_meetings=getattr(self, 'exit_meetings', None) or {},
             tendencies={str(y): {a: dict(c) for a, c in T.items()} for y, T in getattr(self, 'tendencies', {}).items()},
@@ -969,6 +969,7 @@ class League:
         L.poaches = d.get('poaches', []) or []
         L.last_draft = d.get('last_draft')
         L.user_tag_choice = d.get('user_tag_choice'); L.tags_done_year = d.get('tags_done_year'); L.watchlist = set(d.get('watchlist') or [])
+        L.user_no_tender = list(d.get('user_no_tender', []) or [])
         if L.negotiations:
             import negotiations as _NG, itertools as _it
             _NG._ids = _it.count(max(t['id'] for t in L.negotiations) + 1)

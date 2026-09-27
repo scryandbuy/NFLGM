@@ -160,9 +160,11 @@ def run(league, rng, verbose=False):
         # ---- the one tag ------------------------------------------------
         mine = [p for p in groups['UFA'] if p.pid in roster]
         best = None
-        if abbr == getattr(league, 'user_team', None) and getattr(league, 'user_tag_choice', None) is not None:
-            # the user decided from the Extensions page: a man, or 'none'
-            mine = []          # the AI does not tag for a club whose GM has spoken
+        is_user = abbr == getattr(league, 'user_team', None)
+        if is_user:
+            # THE USER'S CLUB DECIDES FOR ITSELF. His tag (if any) was placed from the card or the Extensions page;
+            # the AI never places one for him, and a UFA he did not tag or re-sign goes to the market
+            mine = []
         if mine:
             # spend it on the man the club can least afford to lose: value
             # over the next man at his spot, not raw rating
@@ -185,6 +187,8 @@ def run(league, rng, verbose=False):
         # ---- restricted men ---------------------------------------------
         for p in [x for x in groups['RFA'] if x.pid in roster]:
             price = tender_price(p, cap)
+            if is_user and p.pid in set(getattr(league, 'user_no_tender', None) or []):
+                p.fa_class = 'UFA'; to_market.append((abbr, p)); continue        # the user chose not to tender him: unrestricted
             if price > power(league, team, cap):
                 to_market.append((abbr, p))     # cannot afford to keep him
                 continue
@@ -212,8 +216,8 @@ def run(league, rng, verbose=False):
             team.sync_cap()
 
         # ---- everyone else walks ----------------------------------------
-        for p in mine:
-            if p is best:
+        for p in ([q for q in groups['UFA'] if q.pid in roster] if is_user else mine):
+            if p is best or getattr(p, 'fa_class', None) == 'tagged':
                 continue
             to_market.append((abbr, p))
 
@@ -296,3 +300,54 @@ def user_tag(league, pid):
 def user_tag_window(league):
     """Whether the user can still tag: the offseason, before the Extensions and Tags step has run."""
     return league.phase != 'regular' and not getattr(league, 'tags_done_year', None) == league.year
+
+
+# ============================================================ THE USER'S RE-SIGN CARD
+def user_resign_sheet(league):
+    """What the user decides before the step runs: his expiring players by class, the tag price on each UFA, tender or
+    not on each RFA (right of first refusal, one price, by decision), the ERFAs he keeps at the minimum."""
+    from cap_engine import CAP
+    import free_agency as FA, min_salary as MS
+    user = getattr(league, 'user_team', None); team = league.teams[user]; cap = CAP.get(league.year, 301.2)
+    ufa, rfa, erfa = [], [], []
+    no_tender = set(getattr(league, 'user_no_tender', None) or [])
+    choice = getattr(league, 'user_tag_choice', None)
+    for p in team.active():
+        if p.fa_class == 'tagged' and choice != p.pid: continue
+        yrs_left = p.contract_years_left if p.contract is not None else 0
+        cls = FA.fa_class(p.accrued, yrs_left)
+        if cls == 'under_contract' and choice != p.pid: continue
+        row = dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), accrued=int(p.accrued or 0), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1))
+        if cls == 'UFA' or choice == p.pid:
+            row.update(tag_price=round(tag_price(p, cap), 1), tagged=(choice == p.pid), can_tag=(p.tag_count < MAX_TAGS or choice == p.pid))
+            ufa.append(row)
+        elif cls == 'RFA':
+            row.update(tender_price=round(tender_price(p, cap), 1), tender=(p.pid not in no_tender)); rfa.append(row)
+        else:
+            row.update(min_price=round(MS.minimum_salary(int(p.accrued or 0), cap), 2)); erfa.append(row)
+    ufa.sort(key=lambda r: -r['ovr']); rfa.sort(key=lambda r: -r['ovr']); erfa.sort(key=lambda r: -r['ovr'])
+    return dict(ufa=ufa, rfa=rfa, erfa=erfa, tag_choice=choice, tag_used=(choice not in (None, 'none')), room=round(power(league, team, cap), 1), cap_space=round(team.cap_space, 1),
+                open=user_tag_window(league), tags_done=(getattr(league, 'tags_done_year', None) == league.year))
+
+
+def user_tender(league, pid, tender=True):
+    """Tender or not, per RFA, before the step runs."""
+    p = league.player(pid); user = getattr(league, 'user_team', None)
+    if p is None or p.team != user: return dict(ok=False, why='not on your roster')
+    if not user_tag_window(league): return dict(ok=False, why='the tenders are placed; the step has run')
+    s = set(getattr(league, 'user_no_tender', None) or [])
+    if tender: s.discard(pid)
+    else: s.add(pid)
+    league.user_no_tender = sorted(s)
+    return dict(ok=True, tender=tender, line=(f"{p.name} will be tendered at right of first refusal." if tender else f"{p.name} will not be tendered; he goes to the market unrestricted."))
+
+
+def untag(league, pid):
+    """Take the tag back off before the step runs."""
+    user = getattr(league, 'user_team', None); p = league.player(pid)
+    if p is None or p.team != user or getattr(league, 'user_tag_choice', None) != pid: return dict(ok=False, why='he is not your tag')
+    if not user_tag_window(league): return dict(ok=False, why='the tag is placed; the step has run')
+    p.tag_count = max(0, p.tag_count - 1); p.tagged_year = None; p.fa_class = 'UFA'; p.contract = None
+    league.user_tag_choice = None; league.teams[user].sync_cap()
+    league.transactions = [x for x in league.transactions if not (x.get('kind') == 'franchise_tag' and x.get('pid') == pid and x.get('user'))]
+    return dict(ok=True, line=f"The tag comes off {p.name}.")

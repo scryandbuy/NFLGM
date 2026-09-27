@@ -68,7 +68,8 @@ FORWARD_WEIGHT = 0.5
 MATCH_REQUEST_CHANCE = 0.30
 MATCH_GAP_MAX = 0.18          # he only asks if the gap is closeable
 
-RFA_MATCH_DAYS = 5            # the real window
+RFA_MATCH_DAYS = 5
+OFFER_SHEETS_A_YEAR = 3            # the real league sees a few; every tendered player with a bid had been drawing one            # the real window
 
 
 class Offer:
@@ -313,6 +314,15 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
         # is available, but who gets the last word.
         holder = getattr(p, 'tender_team', None)
         if holder and holder != best.team:
+            # OFFER SHEETS ARE RARE: a handful a year across the league. The suitor must be paying well above the
+            # tender for a clear upgrade at a real need; otherwise the tendered player stays with the holder
+            yr = str(league.year); sheets = league.__dict__.setdefault('offer_sheets_year', {})
+            tender = float(p.contract.base[0]) if (p.contract is not None and getattr(p.contract, 'base', None)) else market * 0.6
+            suitor = league.teams.get(best.team); ps = (suitor.depth.get(p.pos) or []) if suitor is not None else []
+            starter_gap = p.ovr - (ps[0].ovr if ps else 60.0)
+            if sheets.get(yr, 0) >= OFFER_SHEETS_A_YEAR or best.apy < tender * 1.5 or starter_gap < 3.0:
+                waiting.append(p); continue
+            sheets[yr] = sheets.get(yr, 0) + 1
             messages.append(dict(
                 kind='offer_sheet', pid=p.pid, name=p.name, team=holder,
                 suitor=best.team, offer=round(best.apy, 2),
@@ -629,8 +639,9 @@ if __name__ == '__main__':
 # the register and the offline tools.
 
 def _pool(league):
+    # unsigned players, and the tendered restricted free agents (still the holder's, but biddable)
     pool = [league.player(pid) for pid in list(league.free_agents)]
-    return [p for p in pool if p and not p.retired and p.team is None]
+    return [p for p in pool if p and not p.retired and (p.team is None or getattr(p, 'fa_class', None) == 'tendered')]
 
 
 def open_round(league, rng, phase, user_team=None):
@@ -702,6 +713,10 @@ def close_market(league, rng, user_team=None, verbose=False):
             pp = league.player(t['pid'])
             t['state'] = 'declined'; NG._post(league, t, f"{pp.name if pp else 'He'} moves on", "The market has closed without a deal.")
     pool = _pool(league)
+    for p in [q for q in pool if getattr(q, 'fa_class', None) == 'tendered' and q.team]:
+        p.fa_class = 'under_contract'; p.tender_team = None           # the tender stands: he plays the year on it
+        if p.pid in league.free_agents: league.free_agents.remove(p.pid)
+    pool = [p for p in pool if p.team is None]
     signed = sign_the_leftovers(league, pool, rng, user_team=user_team)
     pool = [p for p in pool if p.team is None]
     fill_out_rosters(league, pool, rng, verbose)
