@@ -1587,9 +1587,23 @@ function renderDraftDay(v) {
     nx.append(el('div', { class: 'pk' + (q.mine ? ' next' : '') + (now ? ' now' : '') + (q.mine ? '' : ' tradeable'), 'data-tip': q.mine ? null : `Trade for pick ${q.slot}: opens the Trades tab with ${q.team.abbr}'s pick loaded`, onclick: tradeFor, style: q.mine ? '' : 'cursor:pointer' }, el('span', { class: 'n' }, q.slot), crest(q.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, now ? 'On the Clock' : q.mine ? 'Your Pick' : 'Trade for it'), el('small', {}, `${q.team.name}${q.needs && q.needs.length && !q.mine ? ' · Needs ' + q.needs.join(', ') : ''}`)), el('span', {})));
   }
   left.append(nx);
+  // THE PICK BOARD. Every slot of the draft, eight to a row, four rows a round. A made pick shows the player, his
+  // position and the club; one to come shows the club and the number. Click a club's slot to trade for it.
+  const board = el('div', { class: 'pickboard' });
+  let curRound = 0;
+  for (const q of v.order) {
+    if (q.round !== curRound) { curRound = q.round; board.append(el('div', { class: 'pb-round' }, `Round ${q.round}`)); }
+    const tradeFor = (!q.done && !q.mine) ? () => { tradeState = { other: q.team.abbr, a: [], b: [q.id], keep: true, draft: true }; location.hash = '#personnel/trades'; } : null;
+    const sq = el('div', { class: 'pb-sq' + (q.done ? ' done' : '') + (q.now ? ' now' : '') + (q.mine ? ' mine' : ''), style: `--c1:${q.team.color};--c2:${q.team.accent || '#fff'}` + (tradeFor ? ';cursor:pointer' : ''), 'data-tip': tradeFor ? `Trade for pick ${q.slot}` : null, onclick: tradeFor });
+    sq.append(el('div', { class: 'pb-top' }, el('span', { class: 'ab' }, q.team.abbr), el('span', { class: 'sl' }, q.slot)));
+    if (q.done) sq.append(el('div', { class: 'pb-nm' }, q.name), el('div', { class: 'pb-pos' }, `${q.pos}${q.original ? ` · from ${q.original}` : ''}`));
+    else sq.append(el('div', { class: 'pb-nm dim' }, q.now ? 'On the clock' : (q.mine ? 'Your pick' : q.team.name)), el('div', { class: 'pb-pos' }, q.original ? `from ${q.original}` : ''));
+    board.append(sq);
+  }
+  left.append(board);
   // offers for your pick
   if (v.on_user && offersCache && offersCache.length) {
-    for (const o of offersCache) left.append(el('div', { class: 'card', style: '--k:var(--live);margin:0 14px 10px' }, el('div', { class: 'h' }, el('div', { class: 'k' }, `Trade Offer · ${o.team.name} · Expires When You Pick`), el('div', { class: 's' }, `${o.team.name} offers ${o.summary.join(' and ')} for ${cur.slot}`)), el('div', { class: 'b' }, `They want a ${o.target_pos}. ${o.value >= 0 ? 'The value favors you' : 'You would be giving up value'} by about $${Math.abs(o.value).toFixed(1)}m in draft capital.`),
+    for (const o of offersCache) left.append(el('div', { class: 'card', style: '--k:var(--live);margin:0 14px 10px' }, el('div', { class: 'h' }, el('div', { class: 'k' }, `Trade Offer · ${o.team.name}`), el('div', { class: 's' }, `${o.team.name} offers ${o.summary.join(' and ')} for ${cur.slot}`)),
       el('div', { class: 'a' }, el('button', { class: 'btn go', onclick: () => { offersCache = null; act('accept_offer', `i=${o.i}`); } }, 'Accept'), el('button', { class: 'btn', onclick: () => { location.hash = '#personnel/trades'; } }, 'Counter'), el('button', { class: 'btn quiet', onclick: () => { offersCache = offersCache.filter(x => x.i !== o.i); reload(); } }, 'Decline'))));
   }
   page.append(left);

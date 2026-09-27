@@ -362,6 +362,19 @@ def draft_day(session, league, abbr):
     _my_rank(avail); my_board = sorted(avail, key=lambda x: x['my_rank'])[:40]
     # who is on the clock and the next few, with each club's needs
     clock = [dict(sel=q.selection, slot=SLOT(q), team=club(q.owner), mine=(q.owner == abbr), id=f"{q.year}-{q.round}-{q.original}", needs=sorted(_needs(league, league.teams[q.owner]))[:3]) for q in D.picks[D.i:D.i + 8]]
+    # THE PICK BOARD: every slot of the draft, eight to a row, four rows a round. A made pick carries the player;
+    # one still to come carries the club and the number. Each is a door to a trade for that pick.
+    made = {s: (t, p) for s, t, p in D.results}
+    squares = {}
+    for s, (t_, p) in made.items():
+        squares[s] = dict(sel=s, slot=f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d}", round=(s - 1) // 32 + 1, team=club(t_), mine=(t_ == abbr), id=None, now=False, done=True, name=p.name, pos=p.pos, original=None)
+    cur_sel = D.current().selection if D.current() is not None else None
+    for q in D.picks:
+        s = q.selection
+        if s in squares: continue
+        squares[s] = dict(sel=s, slot=SLOT(q), round=q.round, team=club(q.owner), mine=(q.owner == abbr), id=f"{q.year}-{q.round}-{q.original}", now=(s == cur_sel),
+                          done=False, name=None, pos=None, original=(q.original if q.original != q.owner else None))
+    pick_board = [squares[s] for s in sorted(squares)]
     # the board as the GM ordered it, the unplaced players after in the scouts' order; Do Not Draft kept out
     ub = getattr(league, 'user_board', None) or {}; order = [x for x in (ub.get('order') or [])]; dnd = set(ub.get('dnd') or [])
     byid = {x['pid']: x for x in avail}
@@ -387,7 +400,7 @@ def draft_day(session, league, abbr):
             read = sentence(f"{surname(top['name'])} is your board's top man and a {top['pos']}" + (f", which is a need" if any(top['pos'] in NEED_GROUPS[g] for g in _needs(league, league.teams[abbr])) else '') + f". The consensus has him {top['cons_rank']}{_ordd(top['cons_rank'])}." if top.get('cons_rank') else f"{surname(top['name'])} is your board's top man.")
     picks_away = next((j for j, z in enumerate(D.picks[D.i:]) if z.owner == abbr), None)
     return dict(rail=r, live=True, on_user=D.on_user(), current=(dict(sel=pk.selection, slot=SLOT(pk), round=pk.round, team=club(pk.owner), original=pk.original, needs=sorted(_needs(league, league.teams[pk.owner]))[:3]) if pk else None),
-                clock=clock, results=results, mine_next=mine_next, best=best, board=my_board, picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades), picks_away=picks_away, read=read,
+                clock=clock, order=pick_board, results=results, mine_next=mine_next, best=best, board=my_board, picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades), picks_away=picks_away, read=read,
                 default_pick=(dict(pid=my_board[0]['pid'], name=my_board[0]['name'], pos=my_board[0]['pos'], college=my_board[0]['college']) if my_board else None), my_needs=sorted(_needs(league, league.teams[abbr])))
 
 
@@ -409,7 +422,6 @@ def act_pick(session, league, abbr, pid):
     try: ev = D.make_pick(pid)
     except ValueError as e: return dict(ok=False, why=str(e))
     p = ev[3]; line = f"You take {p.name}, {p.pos}, at {ev[1]}."
-    D.sim_to_user()
     if D.done: session._draft_over(); return dict(ok=True, line=line + ' The draft is over.', done=True)
     return dict(ok=True, line=line, done=False)
 
@@ -456,7 +468,7 @@ def act_offers(session, league, abbr):
     D = session.draft
     if D is None or not D.on_user(): return dict(ok=False, why='offers come when you are on the clock')
     pk = D.current(); offers = D.gather_offers(pk)
-    out = [dict(i=i, team=club(o['team']), gm=o['gm'], summary=o['summary'], target_pos=o['target_pos'], value=o['value']) for i, o in enumerate(offers)]
+    out = [dict(i=i, team=club(o['team']), summary=o['summary']) for i, o in enumerate(offers)]
     session._draft_offers = offers
     return dict(ok=True, offers=out, line=(f"{len(out)} clubs want to come up." if out else 'Nobody is calling for this pick.'))
 

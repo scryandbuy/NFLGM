@@ -839,7 +839,7 @@ class Session:
         takes it from there, and an Advance from the Portal finishes it on auto."""
         import draft_day as DD
         self.draft = DD.Draft(self.L, self.rng, self.L.year - 1, user_team=self.user_team, auto_pick=False)
-        self.draft.sim_to_user()
+        # nothing is picked until you say so: the draft opens on pick one and the tools at the top move it
         if self.draft.done:
             self._draft_over()
 

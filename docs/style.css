@@ -1394,3 +1394,16 @@ h2{letter-spacing:-.01em}
 /* the free-agency rows: the action buttons stay inside their cell */
 .fa-tbl td:last-child,.fa-tbl th:last-child{white-space:nowrap}
 .fa-tbl .btn{font-size:13px;padding:3px 8px}
+
+/* THE PICK BOARD */
+.pickboard{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;padding:10px 14px 14px}
+.pb-round{grid-column:1/-1;font-weight:800;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:8px 0 2px}
+.pb-sq{background:var(--sheet-2);border:1px solid var(--rule);border-top:4px solid var(--c1);border-radius:3px;padding:6px 8px;min-height:64px;display:flex;flex-direction:column;gap:2px}
+.pb-sq.done{background:color-mix(in srgb,var(--c1) 22%,var(--sheet-2))}
+.pb-sq.now{outline:2px solid var(--club-2);outline-offset:-1px}
+.pb-sq.mine{border-color:var(--club-2)}
+.pb-sq:hover[style*="cursor"]{background:var(--sheet-3)}
+.pb-top{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3)}
+.pb-top .ab{font-weight:800;color:var(--ink)}
+.pb-nm{font-weight:700;font-size:14px;line-height:1.15}.pb-nm.dim{color:var(--ink-3);font-weight:500}
+.pb-pos{font-size:12px;color:var(--ink-2)}
