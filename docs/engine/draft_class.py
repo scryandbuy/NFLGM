@@ -109,7 +109,7 @@ def shape_class(cls, rng=None):
     gems = [gem_pool[i] for i in r_.choice(len(gem_pool), size=min(2, len(gem_pool)), replace=False)] if gem_pool else []
     busts = [bust_pool[i] for i in r_.choice(len(bust_pool), size=min(2, len(bust_pool)), replace=False)] if bust_pool else []
     for p in gems:
-        p.xp_spent['_tape'] = float(np.clip(r_.uniform(69.5, 72.0) - p.ovr, -15.0, -7.0)); p.xp_spent['_tape_role'] = 'gem'
+        p.xp_spent['_tape'] = float(np.clip(r_.uniform(71.0, 74.0) - p.ovr, -15.0, -5.0)); p.xp_spent['_tape_role'] = 'gem'
     for p in busts:
         p.xp_spent['_tape'] = float(np.clip(r_.uniform(79.0, 82.0) - p.ovr, 8.0, 15.0)); p.xp_spent['_tape_role'] = 'bust'
     return cls
@@ -206,9 +206,9 @@ def convert(row, pos, target):
         # he is a better player, so they keep the profile's value and are not scaled to
         # the target. Scaling them had newgen classes arriving at 84.9 injury against a
         # real rookie class at 87.8, and injuries per game climbing every season.
-        # durability keeps the profile's number less three: the college file runs a few points high against the
-        # real rookie classes (91 against 88)
-        return {a: (float(np.clip(v - (3.0 if a in ('injury_rating', 'tough_rating') else 0.0), 20, 99)) if (a in ('injury_rating', 'tough_rating') or a in TOOLS) else float(np.clip(v * (k ** 0.5 if a in PHYSICAL else k), 20, 99))) for a, v in raw.items()}
+        # durability keeps the profile's number less two: the drafted half of the college file runs about 91 against
+        # the real rookie classes' 88
+        return {a: (float(np.clip(v - (2.0 if a in ('injury_rating', 'tough_rating') else 0.0), 20, 99)) if (a in ('injury_rating', 'tough_rating') or a in TOOLS) else float(np.clip(v * (k ** 0.5 if a in PHYSICAL else k), 20, 99))) for a, v in raw.items()}
     lo, hi = 0.4, 1.6
     for _ in range(40):
         mid = (lo + hi) / 2
