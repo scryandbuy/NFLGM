@@ -56,10 +56,11 @@ def _stock_moves(league, event):
 def measurables(p, rng):
     """The forty, the vertical, the bench, exact from his attributes."""
     r = p.ratings
-    forty = 5.55 - 0.0155 * (r.get('speed_rating', 70) - 60) - 0.003 * (r.get('accel_rating', 70) - 70)
-    vert = 24 + 0.30 * (r.get('jump_rating', 70) - 60)
-    bench = 8 + 0.30 * (r.get('strength_rating', 70) - 50)
-    shuttle = 4.75 - 0.010 * (r.get('agility_rating', 70) - 60) - 0.004 * (r.get('change_of_direction_rating', 70) - 70)
+    # the real scale: 99 speed is a 4.30, 90 a 4.48, 80 a 4.68, 70 a 4.88, 60 a 5.08; a 90-speed player had been reading 5.08
+    forty = 4.30 + 0.020 * (99 - r.get('speed_rating', 70)) - 0.003 * (r.get('accel_rating', 70) - 70)
+    vert = 26 + 0.38 * (r.get('jump_rating', 70) - 60)                       # 86 jump about 36 inches
+    bench = 6 + 0.42 * (r.get('strength_rating', 70) - 50)                   # 64 strength about 12 reps, 90 about 23
+    shuttle = 4.55 - 0.011 * (r.get('agility_rating', 70) - 60) - 0.004 * (r.get('change_of_direction_rating', 70) - 70)   # 90 agility about 4.15
     return dict(forty=round(float(np.clip(forty + rng.normal(0, 0.02), 4.2, 5.6)), 2), vertical=round(float(np.clip(vert, 22, 46)), 1),
                 bench=int(np.clip(bench + rng.normal(0, 1), 3, 45)), shuttle=round(float(np.clip(shuttle, 3.9, 4.9)), 2),
                 height=p.height, weight=p.weight)

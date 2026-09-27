@@ -203,7 +203,7 @@ def prospect_card(session, league, abbr, pid):
             true = p.ratings.get(k)
             if true is None: continue
             seen = int(round(max(20, min(99, float(true) + err))))
-            rows.append(dict(key=k, label=label, v=seen, tier=('hi' if seen >= 85 else 'mid' if seen >= 72 else 'lo')))
+            rows.append(dict(key=k, label=label, v=seen, tier=('hi' if seen >= 85 else 'md' if seen >= 72 else 'lo')))   # 'md', not 'mid': .mid is the game-day midfield layout and centred the row
         return rows
     phys = dict(title='Physical', rows=col(VC.ATTR['phys'], e_phys), extra=None)
     if fam == 'DB': skill = dict(title='Coverage', rows=col(VC.ATTR['coverage'], e_skill), extra=dict(title='Run Defense', rows=col(VC.ATTR['rundef'], e_skill)))
@@ -216,7 +216,7 @@ def prospect_card(session, league, abbr, pid):
     ub = getattr(league, 'user_board', None) or {}
     on_board = (ub.get('order') or []).index(p.pid) + 1 if p.pid in (ub.get('order') or []) else None
     reads = int(view.get('reads', 1) or 1)
-    confidence = 'Firm' if reads >= 3 else 'Fair' if reads == 2 else 'One look'
+    confidence = 'Visited' if ('visited' in (view.get('flags') or []) or p.pid in (getattr(league, 'user_visits', None) or [])) else 'Not visited'
     import personality as PT
     words = PT.words(getattr(p, 'traits', None) or {}) if getattr(p, 'traits', None) and 'Character' in row['words'] else ''
     return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], fit=row.get('fit', 0.0), scheme_ovr=row.get('scheme_ovr'), college=row['college'], conference=getattr(p, 'conference', None) or '',
@@ -516,3 +516,33 @@ def _role_word(t, p):
     n_start = {'QB': 1, 'HB': 1, 'WR': 3, 'TE': 1, 'LEDG': 1, 'REDG': 1, 'DT': 2, 'MIKE': 1, 'WILL': 1, 'SAM': 1, 'CB': 3, 'FS': 1, 'SS': 1}.get(p.pos, 1)
     if idx is None: return 'Practice Squad' if any(q.pid == p.pid for q in getattr(t, 'practice_squad', []) or []) else 'Reserve'
     return 'Starter' if idx < n_start else 'Rotation' if idx < n_start + 1 else 'Depth'
+
+
+def draft_text(session, league, abbr):
+    """The whole draft as plain text, every pick with the club, the player, his position, school, the consensus rank
+    and the user's read, and the trades, so the draft can be pasted for a look."""
+    ld = getattr(league, 'last_draft', None)
+    D = getattr(session, 'draft', None)
+    rows = []
+    if D is not None and not D.done:
+        results = list(getattr(D, 'results', [])); trades = list(getattr(D, 'trades', [])); year = D.year
+    elif ld:
+        results = [tuple(x) for x in ld.get('results', [])]; trades = ld.get('trade_log', []) or []; year = ld['year']
+    else:
+        return dict(ok=False, text='', why='no draft has been run yet')
+    cons = getattr(league, 'consensus', None) or {}
+    from views import draft_year
+    lines = [f"{draft_year(year)} Draft"]
+    for s, t, pid in results:
+        p = league.player(pid)
+        c = cons.get(pid, {}) or {}
+        v = ((getattr(league, 'scouting', None) or {}).get(abbr) or {}).get(pid) or {}
+        mine = f"{round(float(v.get('ovr')))}" if v.get('ovr') else '—'
+        lines.append(f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d} ({s:3d}) {t:3s} {p.name if p else pid} · {p.pos if p else '?'} · {p.college if p else ''} · consensus #{c.get('rank', '—')} ({round(float(c.get('ovr', 0) or 0)) if c.get('ovr') else '—'}) · your read {mine} · age {int(p.age) if p else '—'}" + (f" · {p.ovr:.0f} ovr now" if p and p.team else ''))
+    if trades:
+        lines.append(''); lines.append('Trades on the clock')
+        for tr in trades:
+            try: sel, buyer, seller, desc = tr[0], tr[1], tr[2], tr[3]
+            except Exception: continue
+            lines.append(f"pick {sel}: {buyer} from {seller} for {', '.join(str(x) for x in desc)}")
+    return dict(ok=True, text='\n'.join(lines))

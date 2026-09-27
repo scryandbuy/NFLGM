@@ -827,7 +827,7 @@ class Session:
         D = self.draft
         if D is None: return
         if not D.done: D._finish()
-        self.L.last_draft = dict(year=D.year, results=[(s, t, p.pid) for s, t, p in D.results], trades=len(D.trades))
+        self.L.last_draft = dict(year=D.year, results=[(s, t, p.pid) for s, t, p in D.results], trades=len(D.trades), trade_log=[list(x) for x in D.trades])
         self.draft = None
 
     def draft_live(self):

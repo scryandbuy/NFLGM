@@ -848,7 +848,7 @@ function renderProspectCard(v) {
     el('div', { class: 'jersey', style: 'background:var(--sheet-3);color:var(--ink)' }, v.pos),
     el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
       el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.cls_year} · ${v.age}${v.size ? ' · ' + v.size : ''} · ${v.college}${v.conference ? ' · ' + v.conference : ''}${v.small ? ' · Small School' : ''}${v.taken ? ' · Drafted' : ''}`),
-      el('div', { class: 'hfacts' }, el('div', { 'data-tip': "The league's grade, same scale as yours" }, el('span', {}, 'Consensus'), el('b', {}, v.cons != null ? `${v.cons}${v.cons_rank ? ' · #' + v.cons_rank : ''}` : '—')), el('div', { 'data-tip': "Yours minus the league's. Positive means the league undervalues him" }, el('span', {}, 'Gap'), el('b', { style: v.gap > 0 ? 'color:var(--ok)' : v.gap < 0 ? 'color:var(--danger)' : '' }, v.gap != null ? (v.gap > 0 ? '+' : '') + v.gap : '—')), el('div', { 'data-tip': 'Where the league expects him to go' }, el('span', {}, 'Projected'), el('b', {}, v.proj_range)), el('div', {}, el('span', {}, 'Your Board'), el('b', {}, v.dnd ? 'Do Not Draft' : v.on_board ? `#${v.on_board}` : 'Not placed')), el('div', {}, el('span', {}, 'Read'), el('b', { style: 'color:var(--ink-2)' }, `${v.confidence} · ${v.reads} look${v.reads === 1 ? '' : 's'}`)))),
+      el('div', { class: 'hfacts' }, el('div', { 'data-tip': "The league's grade, same scale as yours" }, el('span', {}, 'Consensus'), el('b', {}, v.cons != null ? `${v.cons}${v.cons_rank ? ' · #' + v.cons_rank : ''}` : '—')), el('div', { 'data-tip': "Yours minus the league's. Positive means the league undervalues him" }, el('span', {}, 'Gap'), el('b', { style: v.gap > 0 ? 'color:var(--ok)' : v.gap < 0 ? 'color:var(--danger)' : '' }, v.gap != null ? (v.gap > 0 ? '+' : '') + v.gap : '—')), el('div', { 'data-tip': 'Where the league expects him to go' }, el('span', {}, 'Projected'), el('b', {}, v.proj_range)), el('div', {}, el('span', {}, 'Your Board'), el('b', {}, v.dnd ? 'Do Not Draft' : v.on_board ? `#${v.on_board}` : 'Not placed')), el('div', {}, el('span', {}, 'Read'), el('b', { style: 'color:var(--ink-2)' }, v.confidence)))),
     el('div', { class: 'ovrbig' }, el('b', { 'data-tip': "Your scouts' read. Carries error; a visit tightens it" }, v.mine), el('span', {}, 'Estimated Overall · your scouts'), (v.fit || 0) !== 0 ? el('div', { class: 'pot', 'data-tip': "How he grades in your scheme, on your scouts' read" }, `In your scheme ${v.scheme_ovr} · `, el('span', { class: 'fit ' + (v.fit > 0 ? 'p' : 'm') }, (v.fit > 0 ? '+' : '') + v.fit.toFixed(1))) : '', el('div', { class: 'pot', 'data-tip': 'Where he can grow to. Wide means your scouts are unsure' }, `Ceiling ${v.ceiling}${v.my_round ? ' · Your Grade ' + v.my_round : ''}`))));
   const acts = el('div', { class: 'ctabs' }, el('span', { style: 'font-family:var(--display);font-weight:700;color:var(--ink-3);padding:8px 0' }, 'Prospect Card'));
   const a = el('div', { class: 'acts' });
@@ -861,13 +861,13 @@ function renderProspectCard(v) {
   acts.append(a); s.append(acts);
   const h5 = (t, sub) => el('div', { class: 'h5' }, t, sub ? el('span', {}, sub) : '');
   const left = el('div', {});
-  left.append(h5('Combine', v.combine.every(c => c.v === '—') ? 'comes in the Spring' : 'from the Spring'));
+  left.append(h5('Combine', v.combine.every(c => c.v === '—') ? 'comes in the Spring' : ''));
   left.append(el('div', { class: 'kv' }, ...v.combine.flatMap(c => [el('span', {}, c.label), el('span', {}, c.v)])));
   left.append(h5('Flags'), el('div', { style: 'padding:4px 0 8px' }, ...(v.words.length ? v.words.map(wordTag) : [el('span', { class: 'muted', style: 'font-size:14.5px' }, 'None')])));
   left.append(h5('Medical'), el('div', { style: 'font-size:15px;color:var(--ink-2);padding-bottom:8px' }, v.medical));
   if (v.personality) left.append(h5('Character', 'from your visit'), el('div', { style: 'font-size:15px;color:var(--ink-2)' }, v.personality));
   const mid = el('div', {});
-  mid.append(h5('Attributes', "your scouts' read, not the truth"));
+  mid.append(h5('Attributes', "your scouts' read"));
   const attrs = el('div', { class: 'attrs' });
   for (const c of v.cols) {
     const box = el('div', {}, el('div', { class: 'h5', style: 'margin-bottom:4px' }, c.title));
@@ -1608,7 +1608,7 @@ const gdReveal = {};      // where each game's reveal stands, so leaving the pag
 let picksClub = 'mine', picksYear = null, picksQuery = '';
 function renderPicks(v) {
   renderRail(v.rail); const page = persPage(); drSecond('picks');
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Your Picks', el('small', {}, `${v.years.reduce((a, y) => a + y.picks.length, 0)} picks over ${v.years.length} drafts`)));
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Your Picks', el('small', {}, `${v.years.reduce((a, y) => a + y.picks.length, 0)} picks over ${v.years.length} drafts`), el('button', { class: 'btn', style: 'margin-left:auto;width:auto', 'data-tip': 'Copy the last draft, every pick and trade, as text', onclick: function () { const r = pyJSON(`SESSION.draft_view('draft_text')`); if (!r.ok) { notify(r); return; } copyText(r.text, this); } }, 'Copy Draft')));
   const yrs = el('div', { class: 'years' });
   for (const y of v.years) {
     const box = el('div', { class: 'ybox' }, el('h4', {}, y.this_draft ? `${y.year} Draft · this season's` : `${y.year} Draft`));
