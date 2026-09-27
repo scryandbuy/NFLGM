@@ -533,6 +533,11 @@ class SeasonRunner:
             import sys; print('club_notes weekly failed:', e, file=sys.stderr)
         # the squads: elevations for clubs short of healthy men, the odd poach
         PSQ.weekly(self.L, self.rng, week, user_team=getattr(self.L, 'user_team', None))
+        try:
+            import extensions as EXT
+            EXT.in_season_round(self.L, self.rng, week)          # a few clubs extend their expiring starters each week
+        except Exception as e:
+            import sys; print('in-season extensions failed:', e, file=sys.stderr)
         # THE TRADE WINDOW. A trickle through the early weeks, the phones
         # busy in the two weeks before the deadline, nothing after it. The
         # user's club is never traded with on its own account.

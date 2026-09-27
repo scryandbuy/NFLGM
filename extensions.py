@@ -172,6 +172,28 @@ def ai_round(league, rng, verbose=False):
     return done
 
 
+def in_season_round(league, rng, week):
+    """Clubs extend in September through December too: each week a few clubs get one of their expiring starters
+    done ahead of the market. Real clubs sign dozens of in-season extensions a year; this engine signed none."""
+    if not (1 <= int(week or 0) <= 17): return []
+    done = []
+    for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None) or team.gm is None: continue
+        if rng.random() > 0.085: continue                       # about one club in twelve a week; forty-odd a season
+        cap = CAP.get(league.year, 301.2); cap_next = CAP.get(league.year + 1, cap * 1.07)
+        cands = [p for pos, ps in team.depth.items() for p in ps[:1] if eligible(p, league) and p.age <= AGE_LIMIT.get(p.pos, 31) and p.ovr >= 76]
+        if not cands: continue
+        p = max(cands, key=lambda q: q.ovr)
+        tm = terms(league, p, rng)
+        if tm is None: continue
+        offer = tm['offer'] * 1.04
+        if offer < tm['ask'] * (1.0 - tm['discount']): continue
+        if offer * tm['years'] > next_year_room(team, cap_next) + offer * 0.35: continue
+        res = extend(league, p.pid, round(min(offer, tm['ask']), 2), tm['years'], rng, by_ai=True)
+        if res.get('result') == 'accepted': done.append((abbr, p.name, p.pos, res['apy'], res['years']))
+    return done
+
+
 def notify_user(league):
     """The inbox: your men entering their final year."""
     import inbox as IB

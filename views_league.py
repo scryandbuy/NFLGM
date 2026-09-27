@@ -144,7 +144,7 @@ def _rec(league, a):
     return f"{w}–{l}" + (f"–{d}" if d else '')
 
 
-TAGS = {'sign': 'Signing', 'release': 'Cut', 'trade': 'Trade', 'draft': 'Draft', 'extension': 'Extension', 'waiver_claim': 'Claim', 'ps_callup': 'Elevation', 'ir': 'Injured Reserve', 'gm_change': 'Coaching',
+TAGS = {'sign': 'Signing', 'release': 'Cut', 'trade': 'Trade', 'draft': 'Draft', 'extension': 'Extension', 'waiver_claim': 'Claim', 'ps_callup': 'Call-Up', 'ir': 'Injured Reserve', 'gm_change': 'Coaching',
         'retire': 'Retirement', 'fire': 'Fired', 'hire': 'Hired', 'tag': 'Franchise Tag', 'restructure': 'Restructure', 'position_change': 'Position Change', 'hall_of_fame': 'Hall of Fame',
         'season_end': 'Season', 'inbox_trade': 'Trade', 'staff_hire': 'Staff', 'staff_release': 'Staff', 'staff_extend': 'Staff', 'poach': 'Staff', 'ps_sign': 'Practice Squad', 'ps_release': 'Practice Squad'}
 
@@ -186,7 +186,7 @@ def _tx_line(league, x):
     if k == 'waiver_claim': return f"{team} Claim: {nm}{pos}" + (f" off waivers from {x['from_team']}" if x.get('from_team') else '')
     if k == 'ps_sign': return f"{team} Practice Squad: {nm}{pos}"
     if k == 'ps_release': return f"{team} Practice Squad Release: {nm}{pos}"
-    if k == 'ps_callup': return f"{team} Elevate: {nm}{pos} from the practice squad"
+    if k == 'ps_callup': return f"{team} Call-Up: {nm}{pos} signed from the practice squad"
     if k == 'retire': return f"{nm}{pos} retires" + (f" at {x['age']}" if x.get('age') else '')
     if k == 'fire': return f"{team} Fire: {x.get('coach', 'their head coach')}"
     if k == 'hire': return f"{team} Hire: {x.get('coach', x.get('name', 'a head coach'))}"
@@ -197,6 +197,7 @@ def _tx_line(league, x):
     if k in ('tag', 'franchise_tag'): return f"{team} Tag: {nm}{pos}"
     if k == 'restructure': return f"{team} Restructure: {nm}{pos}"
     if k in ('staff_hire', 'staff_release', 'staff_extend', 'poach'): return f"{team} Staff: {x.get('name', '')}" + (f", {x['why']}" if x.get('why') else '')
+    if k == 'ir': return f"{team} IR: {nm}{pos}" + (f", out {int(x.get('weeks'))} weeks" if x.get('weeks') else '')
     return f"{team} {k.replace('_', ' ').title()}: {nm}".strip()
 
 

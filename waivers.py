@@ -148,7 +148,7 @@ def make_room(league, abbr, p):
     import min_salary as MS
     from cap_engine import CAP
     ceiling = MS.minimum_salary(3, CAP.get(league.year, 301.2))
-    def ok(q): return q is not p and not PSQ.locked(q, league.week) and q.ovr < p.ovr - 0.5 and q.dead_if_cut(0) <= ceiling
+    def ok(q): return q is not p and not PSQ.locked(q, league.week) and q.ovr < p.ovr - 0.5 and q.dead_if_cut(0) <= ceiling and not PSQ.protected(team, q, league)
     grp = GRP.get(p.pos, p.pos)
     cands = [q for q in team.active() if GRP.get(q.pos, q.pos) == grp and ok(q)]
     if not cands:
@@ -277,7 +277,10 @@ def process(league, rng, week, verbose=False):
                         award(league, e, user); awarded.append((p.pid, user)); break
                     IB.post(league, 'waiver_notice', f"Claim failed: {p.name}", f"Your claim on {p.name} ({p.pos}) could not be processed: no roster spot could be opened for him. He stays on the wire.", sender='league')
                 continue
+            import practice_squad as _PSQ
+            if _PSQ.shunned(p, abbr, league) or getattr(league.teams[abbr], '_moved_week', None) == week: continue     # released him lately, or moved already this week
             if wants(league, abbr, p, week, market=market) and make_room(league, abbr, p):
+                league.teams[abbr]._moved_week = week
                 award(league, e, abbr); awarded.append((p.pid, abbr))
                 if user in e.get('claims', []):
                     import inbox as IB
@@ -292,8 +295,7 @@ def process(league, rng, week, verbose=False):
             if p.pid in done_ids(awarded):
                 to = next(a for pid_, a in awarded if pid_ == p.pid)
                 if club == user: IB.post(league, 'waiver_notice', f"{p.name} claimed by {to}", f"You waived {p.name} for the practice squad and {to} claimed him off the wire. He is theirs.", sender='assistants')
-            elif PSQ.sign_to_squad(league, club, p.pid):
-                league.log('ps_sign', pid=p.pid, team=club, cleared=True)
+            elif PSQ.sign_to_squad(league, club, p.pid):          # sign_to_squad logs the move
                 if club == user: IB.post(league, 'waiver_notice', f"{p.name} cleared to the practice squad", f"{p.name} cleared waivers and is on your practice squad.", sender='assistants')
             elif club == user: IB.post(league, 'waiver_notice', f"{p.name} cleared, no room on the squad", f"{p.name} cleared waivers but the squad had no room for him under its rules; he is a free agent.", sender='assistants')
     # close the notices

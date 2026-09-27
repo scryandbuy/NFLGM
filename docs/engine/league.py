@@ -617,7 +617,7 @@ class League:
             if n not in taken:
                 p.number = n; return
 
-    def sign(self, pid, abbr, contract):
+    def sign(self, pid, abbr, contract, log=True):
         p = self.player(pid)
         if p.team and p.team in self.teams:
             import practice_squad as PSQ
@@ -627,7 +627,7 @@ class League:
         self.teams[abbr].roster.append(p)
         self.assign_number(p, abbr)
         if pid in self.free_agents: self.free_agents.remove(pid)
-        self.log('sign', pid=pid, team=abbr, apy=p.apy, years=contract.years)
+        if log: self.log('sign', pid=pid, team=abbr, apy=p.apy, years=contract.years)
 
     def post_june1(self):
         """The simple rule: once the season is over and the league is in its
@@ -638,6 +638,11 @@ class League:
         return self.phase in ('offseason', 'free_agency')
 
     def release(self, pid, june1=None, log=True):
+        _p = self.players.get(pid)
+        if _p is not None and _p.team:
+            _rb = _p.xp_spent.setdefault('_released_by', {}); _rb[_p.team] = int(self.week or 0)
+            _p.xp_spent['_releases_this_year'] = int(_p.xp_spent.get('_releases_this_year', 0) or 0) + 1 if int(_p.xp_spent.get('_releases_year', -1) or -1) == self.year else 1
+            _p.xp_spent['_releases_year'] = self.year
         p = self.player(pid)
         t = self.teams.get(p.team)
         if t is None: return
