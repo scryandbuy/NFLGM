@@ -884,6 +884,7 @@ class League:
             history=getattr(self, 'history', None) or {},
             fa_bids=getattr(self, 'fa_bids', None) or {}, fa_bids_phase=getattr(self, 'fa_bids_phase', None), fa_step=getattr(self, 'fa_step', None),
             regression=getattr(self, 'regression', None) or {},
+            season_closed_year=getattr(self, 'season_closed_year', None),
             last_draft=getattr(self, 'last_draft', None),
             user_tag_choice=getattr(self, 'user_tag_choice', None), tags_done_year=getattr(self, 'tags_done_year', None), user_no_tender=list(getattr(self, 'user_no_tender', None) or []), watchlist=sorted(getattr(self, 'watchlist', set()) or []),
             promises=getattr(self, 'promises', None) or [],
@@ -966,6 +967,9 @@ class League:
         L.history = {str(k): v for k, v in (d.get('history', {}) or {}).items()}
         L.fa_bids = d.get('fa_bids', {}) or {}; L.fa_bids_phase = d.get('fa_bids_phase'); L.fa_step = d.get('fa_step')
         L.regression = {str(k): v for k, v in (d.get('regression', {}) or {}).items()}
+        L.season_closed_year = d.get('season_closed_year')
+        if L.season_closed_year is None and d.get('_post') and (d['_post'] or {}).get('champion') and (d['_post'] or {}).get('year') is not None:
+            L.season_closed_year = int(d['_post']['year'])           # a save from before the flag: the last closed postseason says which year
         import staff as _ST
         _ST.from_dict(L, d.get('staff'))
         L.poaches = d.get('poaches', []) or []

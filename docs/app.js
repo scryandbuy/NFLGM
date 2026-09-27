@@ -239,7 +239,8 @@ function renderPortal(v) {
         el('div', { class: 'facts2', style: 'grid-template-columns:1fr 1fr;padding:6px 0' }, el('div', {}, el('span', {}, 'They Send'), el('b', {}, c.they_send || '—')), el('div', {}, el('span', {}, 'Value Gap'), el('b', { style: c.gap != null ? (c.gap >= 0 ? 'color:var(--ok)' : 'color:var(--danger)') : '' }, c.gap != null ? `${c.gap >= 0 ? '+' : '−'}$${Math.abs(c.gap).toFixed(1)}m` : '—'))),
         el('div', { class: 'b' }, `You send ${c.you_send}. ${c.read || ''}`),
         el('div', { class: 'a' }, el('button', { class: 'btn go', onclick: () => { try { pyJSON(`__import__('inbox').accept(SESSION.L, ${c.id}, SESSION.user_team)`); notify({ ok: true, line: 'Trade accepted.' }); } catch (e) { notify({ ok: false, why: 'The offer could not be completed.' }); } refresh(); } }, 'Accept'),
-          el('button', { class: 'btn', onclick: () => { tradeState = { other: c.buyer.abbr, a: (c.payload.gets || []).map(String), b: [], keep: true }; location.hash = '#personnel/trades'; } }, 'Counter'),
+          el('button', { class: 'btn', onclick: () => openTradeOffer(c.id, refresh) }, 'Open'),
+          el('button', { class: 'btn', onclick: () => { tradeState = { other: c.buyer.abbr, a: (c.payload.gets || []).map(String), b: (c.payload.sends || []).map(x => (x && x.pick) ? `${x.year}-${x.round}-${x.original}` : String(x)), keep: true }; location.hash = '#personnel/trades'; } }, 'Counter'),
           el('button', { class: 'btn quiet', onclick: () => { pyJSON(`__import__('inbox').decline(SESSION.L, ${c.id})`); refresh(); } }, 'Decline')));
     } else if (c.ask != null || c.raw_kind === 'contract_year') {
       card.append(el('div', { class: 'h' }, el('div', { class: 'k' }, 'Contracts · Final Year'), el('div', { class: 's' }, c.subject)),
@@ -307,6 +308,7 @@ function openMessage(id) {
       el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(pid)}, play=False)`)); location.hash = '#portal/inbox'; } }, 'Sit Him'),
       el('a', { class: 'btn quiet', href: '#club/player/' + pid }, 'His Card'));
   } else if (m.kind === 'injury_decision') acts.append(el('span', { class: 'count' }, 'Decided.'));
+  if (m.kind === 'trade_offer') acts.append(el('button', { class: 'btn go', onclick: () => openTradeOffer(m.id, () => openMessage(m.id)) }, m.status === 'unread' || m.status === 'open' ? 'Open the Offer' : 'See the Offer'));
   const settled = m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60));
   if (m.payload && m.payload.link && !settled) acts.append(el('a', { class: 'btn go', href: linkHash(m.payload.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There'));
   acts.append(el('button', { class: 'btn quiet', onclick: () => refresh() }, 'Back to Portal'));
@@ -1035,6 +1037,26 @@ function reopenTalks(t, reload) {
   const fresh = pyJSON(`SESSION.personnel(${JSON.stringify(page)})`); const nt = fresh.threads.find(x => x.id === res.thread) || fresh.threads.filter(x => x.pid === t.pid).pop();
   if (nt) openTalks(nt, reload); else reload();
 }
+// A TRADE OFFER, as a popup: what they send, what they want, the read, and Accept, Decline or Counter. Counter
+// opens the Trades tab with both sides pre-loaded exactly as offered, to add to or change.
+function openTradeOffer(id, after) {
+  const v = pyJSON(`SESSION.trade_offer_view(${JSON.stringify(id)})`);
+  if (!v.ok) { notify(v); return; }
+  const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center' });
+  const box = el('section', { class: 'sheet', style: 'width:min(760px,94vw);max-height:88vh;overflow:auto' });
+  const close = () => { overlay.remove(); if (after) after(); };
+  box.append(el('h2', {}, `Trade Offer · ${v.buyer.name}`, el('small', {}, v.expires ? `expires after week ${v.expires}` : ''), el('button', { class: 'btn quiet', style: 'margin-left:auto;width:auto', onclick: close }, 'Close')));
+  const side = (title, items, color) => { const c = el('div', { class: 'to-side' }, el('div', { class: 'h5' }, title)); for (const x of items) c.append(el('div', { class: 'to-item' + (x.gone ? ' gone' : '') }, el('span', { class: 'str', style: `background:${color}` }), el('span', { class: 'nm' }, x.label, x.kind === 'player' ? el('small', {}, ` ${x.pos} · ${x.age} · ${x.ovr} ovr · $${x.apy}m`) : ''), x.gone ? el('small', { class: 'count' }, 'no longer theirs') : '')); if (!items.length) c.append(el('div', { class: 'count' }, 'Nothing')); return c; };
+  box.append(el('div', { class: 'to-grid' }, side(`${v.buyer.abbr} send`, v.they, v.buyer.color), side('You send', v.you, 'var(--club-2)')));
+  box.append(el('div', { class: 'read', style: 'margin:0 14px 10px' }, v.read || ''));
+  if (v.open) box.append(el('div', { class: 'acts', style: 'padding:0 14px 14px;display:flex;gap:8px' },
+    el('button', { class: 'btn go', style: 'width:auto', onclick: () => { const r = pyJSON(`SESSION.trade_offer_answer(${JSON.stringify(id)}, 'accept')`); notify(r); close(); } }, 'Accept'),
+    el('button', { class: 'btn quiet', style: 'width:auto', onclick: () => { const r = pyJSON(`SESSION.trade_offer_answer(${JSON.stringify(id)}, 'decline')`); notify(r); close(); } }, 'Decline'),
+    el('button', { class: 'btn', style: 'width:auto', onclick: () => { tradeState = { other: v.buyer.abbr, a: v.you.map(x => String(x.id)), b: v.they.map(x => String(x.id)), keep: true }; overlay.remove(); location.hash = '#personnel/trades'; } }, 'Counter')));
+  else box.append(el('div', { class: 'count', style: 'padding:0 14px 14px' }, `This offer is ${v.status}.`));
+  overlay.append(box); document.body.append(overlay);
+}
+
 function openTalks(t, reload) {
   const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center' });
   const box = el('section', { class: 'sheet', style: 'width:min(820px,94vw);max-height:88vh;overflow:auto' });
@@ -1799,6 +1821,7 @@ function renderReview(v) {
   renderRail(v.rail); const page = persPage(); foSecond('review');
   page.append(el('section', { class: 'sheet c12', style: 'padding:8px 14px' }, yearChips(v, y => renderReview(pyJSON(`SESSION.frontoffice('season_review', year=${y})`)))));
   if (v.missing) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, `No review was kept for ${v.year}.`))); return; }
+  if (v.not_yet) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, `The ${v.year} review comes when the ${v.year} season is over.`))); return; }
   const c1 = v.club.color, c2 = v.club.accent || '#fff';
   const ordn = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
   // hero
@@ -1807,14 +1830,15 @@ function renderReview(v) {
     el('div', { class: 'rv-kicker' }, `${v.year} · ${v.club.name}`),
     el('div', { class: 'rv-record' }, v.record),
     el('div', { class: 'rv-finish' }, `${v.finish}${v.div_rank ? ` · ${ordn(v.div_rank)} in the ${v.division}` : ''}${v.slot ? ` · pick ${v.slot}` : ''}`),
-    el('div', { class: 'rv-ask' }, 'The owner asked for ', el('b', {}, v.expected), `. You finished at .${String(v.pct.toFixed(3)).slice(2)}.`));
+    v.expected ? el('div', { class: 'rv-ask' }, 'The owner asked for ', el('b', {}, v.expected), `. You finished at .${String(v.pct.toFixed(3)).slice(2)}.`) : el('div', { class: 'rv-ask' }, `You finished at .${String(v.pct.toFixed(3)).slice(2)}.${v.rebuilt ? ' Rebuilt from the record; the owner\'s word and the money were not kept.' : ''}`));
   const strip = el('div', { class: 'rv-strip' });
   for (const g of v.timeline) strip.append(g.bye ? el('div', { class: 'rv-g bye', 'data-tip': `Week ${g.week} · Bye` }, '') : el('div', { class: 'rv-g ' + g.result.toLowerCase(), 'data-tip': `Week ${g.week} · ${g.away ? 'at' : 'vs'} ${g.opp.abbr} · ${g.mine}–${g.theirs}` }, g.result));
   left.append(strip);
-  const owner = el('div', { class: 'rv-owner' }, el('div', { class: 'rv-tag ' + v.owner.mood.toLowerCase() }, v.owner.mood), el('div', { class: 'rv-quote' }, v.owner.line), el('div', { class: 'rv-job' }, `Your seat: ${v.owner.job}`));
+  const owner = v.owner ? el('div', { class: 'rv-owner' }, el('div', { class: 'rv-tag ' + v.owner.mood.toLowerCase() }, v.owner.mood), el('div', { class: 'rv-quote' }, v.owner.line), el('div', { class: 'rv-job' }, `Your seat: ${v.owner.job}`)) : el('div', { class: 'rv-owner' }, el('div', { class: 'rv-quote' }, 'The owner\'s word from that year was not kept.'));
   hero.append(left, owner); page.append(hero);
   // three columns
   const units = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Units', el('small', {}, `offense ${v.sides.offense ? ordn(v.sides.offense) : '—'} · defense ${v.sides.defense ? ordn(v.sides.defense) : '—'}`)));
+  if (!v.units.length) units.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'The unit grades from that year were not kept.'));
   const ub = el('div', { class: 'rv-units' });
   for (const u of v.units) { const r = u.rank || 32; const pct = 100 * (1 - (r - 1) / Math.max(1, u.of - 1)); ub.append(el('div', { class: 'rv-u' }, el('span', { class: 'lab' }, u.label), el('div', { class: 'bar' }, el('i', { style: `width:${pct}%;background:${r <= 8 ? 'var(--ok)' : r >= 24 ? 'var(--danger)' : 'var(--ink-3)'}` })), el('b', { class: r <= 8 ? 'good' : r >= 24 ? 'bad' : '' }, u.rank ? ordn(u.rank) : '—'))); }
   units.append(ub); page.append(units);
@@ -1823,6 +1847,7 @@ function renderReview(v) {
   men.append(el('div', { class: 'h5', style: 'padding:6px 14px 0' }, 'Exceeded the grade')); for (const p of v.exceeded) men.append(cardOf(p));
   if (v.short.length) { men.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Fell short of it')); for (const p of v.short) men.append(cardOf(p)); }
   page.append(men);
+  if (!v.cap) { page.append(el('section', { class: 'sheet c4' }, el('h2', {}, 'Next Year'), el('div', { class: 'count', style: 'padding:8px 14px' }, 'The money from that year was not kept.'))); return; }
   const money = el('section', { class: 'sheet c4' }, el('h2', {}, 'Next Year', el('small', {}, `$${v.cap.limit}m cap`)));
   const tot = Math.max(1, v.cap.limit); const w = x => `${Math.max(0, Math.min(100, 100 * x / tot)).toFixed(1)}%`;
   money.append(el('div', { class: 'rv-capbar' }, el('i', { class: 'com', style: `width:${w(v.cap.committed - v.cap.dead)}`, 'data-tip': `Committed $${(v.cap.committed - v.cap.dead).toFixed(1)}m` }), el('i', { class: 'dead', style: `width:${w(v.cap.dead)}`, 'data-tip': `Dead money $${v.cap.dead}m` }), el('i', { class: 'room', style: `width:${w(v.cap.room)}`, 'data-tip': `Room $${v.cap.room}m` })),
@@ -1839,9 +1864,9 @@ function renderExit(v) {
   renderRail(v.rail); const page = persPage(); foSecond('exit');
   page.append(el('section', { class: 'sheet c12', style: 'padding:8px 14px' }, yearChips(v, y => renderExit(pyJSON(`SESSION.frontoffice('exit_interviews', year=${y})`)))));
   const c1 = v.club.color, c2 = v.club.accent || '#fff';
-  const head = el('section', { class: 'sheet c12 xm-head' }, el('div', { class: 'xm-kicker' }, `${v.year} · Exit Meetings`), el('div', { class: 'xm-title' }, v.past ? `The ${v.year} meetings` : v.pending ? `${v.year} Exit Meetings` : v.open ? `${v.open} ${v.open === 1 ? 'player wants' : 'players want'} a word` : 'The meetings are done'), el('div', { class: 'xm-sub' }, 'Each will remember what you tell him. A promise goes on the ledger; a brush-off goes in his memory.'));
+  const head = el('section', { class: 'sheet c12 xm-head' }, el('div', { class: 'xm-kicker' }, `${v.year} · Exit Meetings`), el('div', { class: 'xm-title' }, v.past ? `The ${v.year} meetings` : (v.pending || v.not_yet) ? `${v.year} Exit Meetings` : v.open ? `${v.open} ${v.open === 1 ? 'player wants' : 'players want'} a word` : 'The meetings are done'), el('div', { class: 'xm-sub' }, 'Each will remember what you tell him. A promise goes on the ledger; a brush-off goes in his memory.'));
   page.append(head);
-  if (!v.meetings.length) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, v.pending ? `The ${v.year} meetings come after the ${v.year} season.` : 'Nobody asked for a meeting this year.'))); return; }
+  if (!v.meetings.length) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, (v.not_yet || v.pending) ? `The ${v.year} meetings come after the ${v.year} season.` : v.missing ? `No meetings were kept for ${v.year}.` : 'Nobody asked for a meeting this year.'))); return; }
   for (const m of v.meetings) {
     const card = el('section', { class: 'sheet c6 xm-card' + (m.answer ? ' done' : '') });
     const who = el('div', { class: 'xm-who' }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, m.no != null ? m.no : m.pos), el('div', {}, el('div', { class: 'nm', onclick: () => { location.hash = '#club/player/' + m.pid; }, style: 'cursor:pointer' }, m.name), el('div', { class: 'ln' }, `${m.pos} · ${m.age} · ${m.ovr} ovr · ${m.years ? `${m.years} yr${m.years === 1 ? '' : 's'} left at $${m.apy}m` : 'contract up'}`)));

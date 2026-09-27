@@ -423,16 +423,90 @@ def act_restructure(league, abbr, pid, amount=None, void_years=0):
     return r if isinstance(r, dict) else dict(ok=bool(r))
 
 
+def _season_over(league):
+    """The current season is over once the playoffs have closed: the offseason, the preseason, or the season before
+    Week 1 all mean the year's review belongs to LAST year, not this one."""
+    return league.phase in ('playoffs_closed',) or getattr(league, 'season_closed_year', None) == int(league.year)
+
+
 def season_review(session, league, abbr, year=None):
     from views_league import _years, _past
-    yr = int(year) if year else int(league.year)
-    if yr != int(league.year):
-        past = _past(session, league, abbr, 'review', yr)
-        if past is not None: return past
-        return dict(rail=rail(session, league, abbr), year=yr, years=_years(league), past=True, missing=True)
-    out = _season_review_now(session, league, abbr)
-    out['year'] = yr; out['years'] = _years(league); out['past'] = False
-    return out
+    years = _years(league)
+    cur = int(league.year); over = _season_over(league)
+    finished = [y for y in years if y < cur or (y == cur and over)]
+    if not year:
+        yr = finished[-1] if finished else cur         # default: the latest season that is actually over
+    else:
+        yr = int(year)
+    if yr == cur and not over:
+        return dict(rail=rail(session, league, abbr), year=yr, years=years, past=False, not_yet=True)
+    if yr == cur and over:
+        snap = ((getattr(league, 'history', {}) or {}).get(str(yr)) or {}).get('review')
+        if snap is not None:
+            out = dict(snap); out['rail'] = rail(session, league, abbr); out['year'] = yr; out['years'] = years; out['past'] = False; return out
+        out = _season_review_now(session, league, abbr); out['year'] = yr; out['years'] = years; out['past'] = False; return out
+    past = _past(session, league, abbr, 'review', yr)
+    if past is not None: return past
+    rebuilt = _review_rebuilt(session, league, abbr, yr)
+    if rebuilt is not None: return rebuilt
+    return dict(rail=rail(session, league, abbr), year=yr, years=years, past=True, missing=True)
+
+
+def _review_rebuilt(session, league, abbr, yr):
+    """A season that closed before reviews were kept: what the record still holds. The record and finish from the
+    standings history and the last postseason, the units from that year's stats, the players from that year's
+    lines. The owner's word and next year's money are not recoverable and are left off."""
+    import staff as ST
+    from views import club, surname
+    from views_league import _years
+    hist = (getattr(league, 'standings_history', {}) or {}).get(yr) or {}
+    rec = hist.get(abbr); rec = rec.get('record') if isinstance(rec, dict) else rec
+    if not isinstance(rec, (list, tuple)): return None
+    w, l, d = (list(rec) + [0, 0, 0])[:3]; n = max(1, w + l + d); pct = (w + 0.5 * d) / n
+    post = getattr(session, 'post', None)
+    exit_ = 'Missed the playoffs'
+    if post is not None and int(getattr(post, 'year', 0) or 0) == yr:
+        if getattr(post, 'champion', None) == abbr: exit_ = 'Champions'
+        else:
+            er = (getattr(post, 'exit_round', {}) or {}).get(abbr)
+            exit_ = {'WC': 'Lost in the Wild Card round', 'DIV': 'Lost in the Divisional round', 'CONF': 'Lost the Conference Championship', 'SB': 'Lost the Super Bowl'}.get(er, exit_)
+            if er is None and abbr in {x for sd in (getattr(post, 'seeds', {}) or {}).values() for x in sd}: exit_ = 'In the playoffs'
+    try: sr = ST.unit_ranks(league, yr).get(abbr, {})
+    except Exception: sr = {}
+    sides = dict(offense=sr.get('oc'), defense=sr.get('dc'), kicking=sr.get('st'))
+    # the players from that year's lines
+    S = league.stats.get(yr, {}) or {}
+    scored = []
+    for pid, line in S.items():
+        p = league.player(pid)
+        if p is None: continue
+        if p.team != abbr and (getattr(p, 'last_team', None) != abbr): continue
+        snaps = int(line.get('snaps', 0) or 0)
+        if snaps < 200: continue
+        epa = sum(float(line.get(k, 0) or 0) for k in ('pass_epa', 'rush_epa', 'rec_epa', 'def_epa'))
+        scored.append((epa / max(1, snaps) * 100.0 - 0.02 * (p.ovr - 75), p, line, snaps))
+    scored.sort(key=lambda x: -x[0])
+    def card(p, line, up):
+        if p.pos == 'QB': bits = f"{int(line.get('pass_yds', 0))} yds, {int(line.get('pass_td', 0))} TD, {int(line.get('ints', 0))} INT"
+        elif p.pos in ('HB', 'FB'): bits = f"{int(line.get('rush_yds', 0))} rush yds, {int(line.get('rush_td', 0))} TD"
+        elif p.pos in ('WR', 'TE'): bits = f"{int(line.get('rec', 0))} rec, {int(line.get('rec_yds', 0))} yds, {int(line.get('rec_td', 0))} TD"
+        else: bits = f"{int(line.get('tackles', 0))} tkl, {float(line.get('sacks', 0) or 0):.0f} sk, {int(line.get('int_def', 0))} INT"
+        return dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), line=bits, up=up)
+    exceeded = [card(p, ln, True) for _s, p, ln, sn in scored[:3]]
+    short = [card(p, ln, False) for _s, p, ln, sn in scored[-3:][::-1] if p.ovr >= 78]
+    timeline = []
+    snap_s = ((getattr(league, 'history', {}) or {}).get(str(yr)) or {}).get('schedule')
+    for g in (snap_s or {}).get('all_games', []):
+        if g['week'] > 18 or abbr not in (g['away']['abbr'], g['home']['abbr']): continue
+        home = g['home']['abbr'] == abbr; mine, theirs = (g['hp'], g['ap']) if home else (g['ap'], g['hp'])
+        timeline.append(dict(week=g['week'], opp=(g['away'] if home else g['home']), away=(not home), mine=mine, theirs=theirs, result=('W' if mine > theirs else 'L' if mine < theirs else 'T')))
+    have = {x['week'] for x in timeline}
+    for wk in range(1, 19):
+        if wk not in have: timeline.append(dict(week=wk, bye=True))
+    timeline.sort(key=lambda x: x['week'])
+    return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=_years(league), past=True, rebuilt=True,
+                record=f"{w}–{l}" + (f"–{d}" if d else ''), pct=round(pct, 3), expected=None, expected_pct=None, finish=exit_, div_rank=None, division=league.teams[abbr].division,
+                owner=None, timeline=timeline, units=[], sides=sides, exceeded=exceeded, short=short, cap=None, pending=[], notes=[], slot=None)
 
 
 def _season_review_now(session, league, abbr):
@@ -602,10 +676,20 @@ def exit_interviews(session, league, abbr, year=None):
     from views import club, surname
     from views_league import _years
     t = league.teams[abbr]
-    yr = int(year) if year else int(league.year)
     store = getattr(league, 'exit_meetings', {}) or {}
-    if yr != int(league.year):
+    cur = int(league.year); over = _season_over(league)
+    if not year:
+        # default: the latest season that is over; the current year before its season ends is blank
+        finished = [y for y in _years(league) if y < cur or (y == cur and over)]
+        yr = finished[-1] if finished else cur
+    else:
+        yr = int(year)
+    if yr == cur and not over:
+        return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=_years(league), past=False, not_yet=True, meetings=[], open=0)
+    if yr != cur:
         ms = store.get(str(yr)) or []
+        if not ms:
+            return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=_years(league), past=True, missing=True, meetings=[], open=0)
         rows = []
         for mt in ms:
             p = league.player(mt['pid'])

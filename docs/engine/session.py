@@ -640,6 +640,7 @@ class Session:
             import sys; print('season records failed:', e, file=sys.stderr)
         self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng, post=post)
         self.post.year = self.L.year
+        self.L.season_closed_year = int(self.L.year)                  # this year's season is over: its review and meetings are its own
         self._post_review('closed')
         self._snapshot_season()
         self._ai_exit_meetings([a for a in self.L.teams if f"{a}-{self.L.year}" not in (getattr(self.L, 'exit_meetings', {}) or {})])
@@ -936,6 +937,36 @@ class Session:
     def frontoffice(self, page, **kw):
         import views_frontoffice as VF
         return getattr(VF, page)(self, self.L, self.user_team, **kw)
+
+    def trade_offer_view(self, msg_id):
+        """An AI club's trade offer, laid out for the popup: what they send, what they want, the read, the value gap."""
+        import inbox as IB, views_personnel as VP
+        from views import club
+        m = next((x for x in self.L.inbox if x.get('id') == int(msg_id)), None)
+        if m is None or m.get('kind') != 'trade_offer': return dict(ok=False, why='no such offer')
+        pl = m.get('payload') or {}; buyer = pl.get('buyer')
+        def item(x, owner):
+            if isinstance(x, dict) and x.get('pick'):
+                return dict(kind='pick', id=f"{x['year']}-{x['round']}-{x['original']}", label=f"{x['year']} round {x['round']} pick" + (f" (from {x['original']})" if x.get('original') and x['original'] != owner else ''), sel=x.get('selection'))
+            p = self.L.player(x)
+            if p is None: return dict(kind='player', id=str(x), label=str(x))
+            return dict(kind='player', id=p.pid, label=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), gone=(p.team != owner))
+        they = [item(x, buyer) for x in pl.get('sends', [])]; you = [item(x, self.user_team) for x in pl.get('gets', [])]
+        gap = None; read = ''
+        try:
+            ev = VP._evaluate(self.L, self.user_team, buyer, [x['id'] for x in you], [x['id'] for x in they])
+            read = (ev.get('my_read', '') + ' ' + ev.get('read', '')).strip()
+        except Exception: pass
+        return dict(ok=True, id=m['id'], buyer=club(buyer), they=they, you=you, gap=gap, read=read, status=m.get('status'), expires=m.get('expires_week'), open=(m.get('status') in ('unread', 'open')))
+
+    def trade_offer_answer(self, msg_id, action):
+        import inbox as IB
+        if action == 'accept':
+            try: IB.accept(self.L, int(msg_id), self.user_team); return dict(ok=True, line='Trade accepted.')
+            except Exception as e: return dict(ok=False, why=str(e)[:120] or 'the offer could not be completed')
+        if action == 'decline':
+            IB.decline(self.L, int(msg_id)); return dict(ok=True, line='Offer declined.')
+        return dict(ok=False, why='unknown action')
 
     def resign_sheet(self):
         return TG.user_resign_sheet(self.L)

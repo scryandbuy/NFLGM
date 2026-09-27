@@ -1353,3 +1353,12 @@ th.sortable .arrow{font-size:10px}
 .bk-final .bk-slot{align-items:stretch;justify-content:center}
 .bk-final .bk-game.sb{width:100%}
 .bk-final .bk-site{padding:0 4px}
+
+/* trade offer popup */
+.to-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:6px 14px 10px}
+.to-side{border:1px solid var(--rule);background:var(--sheet-2);padding:8px 10px}
+.to-item{display:grid;grid-template-columns:4px 1fr auto;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule);font-size:15px}
+.to-item:last-child{border-bottom:0}
+.to-item .str{width:4px;height:18px;border-radius:2px}
+.to-item .nm small{color:var(--ink-3);font-size:12.5px}
+.to-item.gone{opacity:.55}
