@@ -442,9 +442,12 @@ def close_season(league, votes, season=None):
                 if yr != year: before[k] = before.get(k, 0) + v
         got += credit(p, milestone_xp(p, before, after), 'milestone')
         p.xp += got; paid[pid] = got
-    # awards: a pid, or a list of pids for the All-Pro teams
+    # awards: a pid, or a list of pids for the All-Pro teams. Paid at the announcement when the honors came out
+    # during the playoffs (league.awards_paid holds the year); here only for whatever was not
+    paid_already = set((getattr(league, 'awards_paid', {}) or {}).get(str(season or league.year), []))
     for award, who in (votes or {}).items():
         if award not in AWARDS or not AWARDS[award]: continue
+        if award in paid_already: continue
         for w in (who if isinstance(who, list) else [who]):
             pid = getattr(w, 'pid', w)
             p = league.player(pid) if isinstance(pid, str) else None
@@ -493,3 +496,20 @@ if __name__ == '__main__':
                                                          modifier(p)))
     print('\nawards on top: MVP %s, All-Pro 1st %s'
           % (AWARDS['mvp'], AWARDS['all_pro_1']))
+
+
+def pay_awards(league, votes, year=None):
+    """Pay the honors the day they are announced, and remember which so the season's close does not pay them again."""
+    year = year or league.year
+    paid = league.__dict__.setdefault('awards_paid', {}).setdefault(str(year), [])
+    out = {}
+    for award, who in (votes or {}).items():
+        if award not in AWARDS or not AWARDS[award] or award in paid: continue
+        for w in (who if isinstance(who, list) else [who]):
+            pid = getattr(w, 'pid', w)
+            p = league.player(pid) if isinstance(pid, str) else None
+            if p is None: continue
+            got = credit(p, award_xp(p, [award]), 'award')
+            p.xp += got; out[pid] = out.get(pid, 0.0) + got
+        paid.append(award)
+    return out

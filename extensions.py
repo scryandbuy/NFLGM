@@ -43,6 +43,21 @@ def eligible(p, league):
     return True
 
 
+def honors_premium(league, p):
+    """An agent prices the hardware: a major award in the last two seasons adds 12%, a first-team All-Pro 6%, a
+    second team 3%, the best two counted, capped at 20%."""
+    prem = []
+    for yr in (league.year, league.year - 1):
+        a = (getattr(league, 'awards', {}) or {}).get(yr, {}) or {}
+        for k, v in a.items():
+            ids = v if isinstance(v, list) else [v]
+            if p.pid not in ids: continue
+            if k in ('mvp', 'opoy', 'dpoy', 'oroy', 'droy', 'protector'): prem.append(0.12)
+            elif k == 'all_pro_1': prem.append(0.06)
+            elif k == 'all_pro_2': prem.append(0.03)
+    return 1.0 + min(0.20, sum(sorted(prem, reverse=True)[:2]))
+
+
 def terms(league, p, rng):
     """(ask_apy, offer_apy, years_wanted, discount)."""
     a = VAL.value_player(league, p, side='agent', rng=rng)
@@ -54,7 +69,7 @@ def terms(league, p, rng):
     disc = 0.0 if star else CERTAINTY_DISCOUNT * (1.0 if p.contract.years <= 1 else 1.4)
     disc = disc * PT.certainty_discount_mult(p) + PT.extension_discount(p)    # money and loyalty
     disc = float(np.clip(disc, -0.05, 0.25))
-    ask = a['apy'] * PT.ask_mult(p)
+    ask = a['apy'] * PT.ask_mult(p) * honors_premium(league, p)
     years = int(np.clip(a['years'], 1, 5))
     if p.age >= 30: years = min(years, 3)
     return dict(ask=ask, offer=t['apy'], years=years, discount=disc)

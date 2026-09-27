@@ -318,6 +318,8 @@ class Session:
             losers = [a for a, r in (getattr(post, 'exit_round', {}) or {}).items() if r == rnd]
             self._ai_exit_meetings(losers)
             self._black_monday(losers)
+            if rnd == 'WC':
+                self._announce_honors()
             if rnd == 'CONF':
                 self._senior_bowl()
             if rnd_i + 1 < len(PS.Postseason.ROUNDS):
@@ -341,6 +343,35 @@ class Session:
             try: GW.post_report(self.L, 1)
             except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
+
+    def _announce_honors(self):
+        """The season's honors come out after the Wild Card round, as they do: the vote on the regular season, paid
+        in XP the same day, felt in the room, priced into the next ask. The Super Bowl MVP waits for the game."""
+        try:
+            import morale as MO
+            from views import surname
+            from views_league import AWARD_NAMES
+            self.votes = AW.vote(self.L, None)
+            paid = XP.pay_awards(self.L, self.votes)
+            names = dict(AWARD_NAMES)
+            mine = []; lines = []
+            for k, who in self.votes.items():
+                if k in ('coty',) or not who: continue
+                ws = who if isinstance(who, list) else [who]
+                for w in ws:
+                    p = self.L.player(getattr(w, 'pid', w)) if not hasattr(w, 'pid') else w
+                    if p is None: continue
+                    m = MO.ensure(p)
+                    if m is not None:
+                        m.apply('major_award' if k in ('mvp', 'opoy', 'dpoy', 'oroy', 'droy', 'protector') else 'all_pro' if k == 'all_pro_1' else 'all_pro_2')
+                    if p.team == self.user_team: mine.append(f"{surname(p.name)} ({names.get(k, k) if k not in ('all_pro_1', 'all_pro_2') else ('All-Pro first team' if k == 'all_pro_1' else 'All-Pro second team')})")
+                if k not in ('all_pro_1', 'all_pro_2'):
+                    p = self.L.player(getattr(ws[0], 'pid', ws[0])) if not hasattr(ws[0], 'pid') else ws[0]
+                    if p is not None: lines.append(f"{names.get(k, k)}: {p.name} ({p.pos}, {p.team})")
+            body = ('Yours: ' + ', '.join(mine) + '. ' if mine else 'None of yours were named. ') + ' · '.join(lines)
+            IB.post(self.L, 'league', "The season's honors", body, sender='league', payload=dict(link='league:awards'))
+        except Exception as e:
+            import sys; print('honors failed:', e, file=sys.stderr)
 
     def _senior_bowl(self):
         """The week before the Super Bowl: every room's second look at the seniors in Mobile, and the assistants'
@@ -476,7 +507,14 @@ class Session:
     # ---- the offseason steps, the same code as franchise.play_year in the same order
     def step_awards(self):
         L, rng = self.L, self.rng
-        self.votes = AW.vote(L, self.post)
+        if getattr(self, 'votes', None) and L.awards.get(L.year):
+            # the honors came out after the Wild Card; only the Super Bowl MVP is left to add
+            try:
+                self.votes['sb_mvp'] = AW.super_bowl_mvp(L, self.post, L.year)
+                if self.votes['sb_mvp']: L.awards[L.year]['sb_mvp'] = getattr(self.votes['sb_mvp'], 'pid', self.votes['sb_mvp'])
+            except Exception: pass
+        else:
+            self.votes = AW.vote(L, self.post)
         CP.season_prestige(L, self.post, coty_team=self.votes.get('coty'))
         STF.season_end(L, STF.unit_ranks(L, L.year))
         AL.close_season(L, L.year, self.post, self.votes)
