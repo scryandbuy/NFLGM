@@ -120,19 +120,20 @@ class Session:
             # a class built before arms were treated as tools: a quarterback prospect's arm is lifted to the tool
             # scale once (an 80-overall rookie about 87, a 70 about 82), and the scouting reads follow
             import scouting as SC
-            fixed = 0
+            # arms are drawn as tools, loosely tied to overall the way the college file is (mean 86, sd 3.8,
+            # correlation about 0.5): a 65 can carry a 99, an 81 an 88 or a little less
             for p in list(getattr(L, 'draft_pool', None) or []) + list(getattr(L, 'next_class', None) or []):
-                if p.pos != 'QB' or p.xp_spent.get('_arm_fixed'): continue
-                floor = 78.0 + 0.45 * (float(p.ovr) - 60.0)
-                cur = float(p.ratings.get('throw_power_rating', 70))
-                if cur < floor:
-                    p.ratings['throw_power_rating'] = float(min(96.0, floor)); fixed += 1
-                    for abbr_, views in (getattr(L, 'scouting', None) or {}).items():
-                        v = views.get(p.pid)
-                        if v is not None:
-                            try: SC._refresh(v, p)
-                            except Exception: pass
-                p.xp_spent['_arm_fixed'] = 1
+                if p.pos not in ('QB', 'K', 'P') or p.xp_spent.get('_arm_fixed') == 2: continue
+                key = 'throw_power_rating' if p.pos == 'QB' else 'kick_power_rating'
+                r_ = np.random.default_rng(abs(hash((p.pid, key))) % (2**32))
+                mean = (84.0 if p.pos == 'QB' else 86.0) + 0.35 * (float(p.ovr) - 72.0)
+                p.ratings[key] = float(np.clip(r_.normal(mean, 3.5), 67.0, 99.0))
+                for abbr_, views in (getattr(L, 'scouting', None) or {}).items():
+                    v = views.get(p.pid)
+                    if v is not None:
+                        try: SC._refresh(v, p)
+                        except Exception: pass
+                p.xp_spent['_arm_fixed'] = 2
         except Exception as e:
             import sys; print('arm fix failed:', e, file=sys.stderr)
         try: s._backfill_history()

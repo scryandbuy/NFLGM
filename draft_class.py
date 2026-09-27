@@ -53,10 +53,11 @@ ATTR_MAP = {
 }
 PHYSICAL = {'speed_rating', 'accel_rating', 'agility_rating', 'strength_rating',
             'change_of_direction_rating', 'jump_rating', 'stamina_rating', 'injury_rating',
-            'tough_rating',
-            # the innate tools: an arm and a leg are what a player arrives with and only fade with age, so they
-            # come down to the pro scale gently (the square root) like speed, not in step with his skills
-            'throw_power_rating', 'kick_power_rating'}
+            'tough_rating'}
+# the innate tools: an arm and a leg are what a player arrives with. They are not scaled to his overall at all; his
+# college profile's number is his number (the college file runs 67 to 99 on arms, mean 86, loosely tied to
+# overall), so a 65-overall rookie can carry a 99 arm and an 81 can carry an 88
+TOOLS = {'throw_power_rating', 'kick_power_rating'}
 NOT_RATINGS = {'overall_rating', 'running_style_rating'}
 
 # THE SHAPE OF A CLASS. The rookie distribution both classes were built on
@@ -170,6 +171,7 @@ def convert(row, pos, target):
     if pos in ('WR', 'TE', 'HB', 'FB') and 'release_rating' not in raw:
         raw['release_rating'] = 0.6 * raw.get('route_run_short_rating', 60) + 0.4 * raw.get('agility_rating', 60)
     for a, off in SHAPE_OFFSET.get(SHAPE_GROUP.get(pos, pos), {}).items():
+        if a in TOOLS: continue                      # the arm and the leg keep the college number as it is
         if a in raw: raw[a] = float(np.clip(raw[a] + off, 20, 99))
     college = TG.position_score(raw, pos)
 
@@ -178,7 +180,7 @@ def convert(row, pos, target):
         # he is a better player, so they keep the profile's value and are not scaled to
         # the target. Scaling them had newgen classes arriving at 84.9 injury against a
         # real rookie class at 87.8, and injuries per game climbing every season.
-        return {a: (float(np.clip(v, 20, 99)) if a in ('injury_rating', 'tough_rating') else float(np.clip(v * (k ** 0.5 if a in PHYSICAL else k), 20, 99))) for a, v in raw.items()}
+        return {a: (float(np.clip(v, 20, 99)) if (a in ('injury_rating', 'tough_rating') or a in TOOLS) else float(np.clip(v * (k ** 0.5 if a in PHYSICAL else k), 20, 99))) for a, v in raw.items()}
     lo, hi = 0.4, 1.6
     for _ in range(40):
         mid = (lo + hi) / 2
