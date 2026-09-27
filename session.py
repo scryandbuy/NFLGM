@@ -104,7 +104,17 @@ class Session:
                 rnd, conf, home, away, hs, as_ = g[:6]
                 lose = away if (hs or 0) >= (as_ or 0) else home
                 s.post.exit_round[lose] = rnd
-            if s.post.year is None and s.post.champion and s.stop[0] == 'offseason': s.post.year = int(L.year) - (1 if int(getattr(L, 'week', 0) or 0) == 0 else 0)
+            # a closed postseason in the offseason belongs to the season that just ended: the year itself until the
+            # New Year step has run (awards, carousel, retirements), and the year before after it. The old rule read
+            # the league's week, which the offseason keeps at 22, and stamped last season's bracket with the new year;
+            # that made the new year look closed and its review and meetings appear before it was played
+            roll_i = next((i for i, (_n, fn) in enumerate(cls.OFFSEASON) if fn == 'step_roll'), 3)
+            if s.post.champion and s.stop[0] == 'offseason':
+                right = int(L.year) if int(s.stop[1]) <= roll_i else int(L.year) - 1
+                if s.post.year is None or int(s.post.year) != right: s.post.year = right
+                if getattr(L, 'season_closed_year', None) != right: L.season_closed_year = right
+            elif s.post.champion and s.stop[0] == 'week' and s.post.year is not None and int(s.post.year) >= int(L.year):
+                s.post.year = int(L.year) - 1; L.season_closed_year = int(L.year) - 1
         s.draft = None
         try:
             # the current season's exit meetings and review exist only once it has closed; anything filed under the
