@@ -173,6 +173,14 @@ class SeasonRunner:
         return r
 
     # ---- one game -------------------------------------------------------
+    def _venue(self, week, playoffs):
+        """The building a game is played in when it is not the home club's: the Super Bowl's neutral site."""
+        if not playoffs or week < 22: return None
+        try:
+            import postseason as PS
+            return PS.sb_venue(self.L)['abbr']
+        except Exception: return None
+
     def play(self, home, away, week, playoffs=False):
         hr, ar = self.refresh(home), self.refresh(away)
         if hr is None or ar is None:          # a roster too thin to field
@@ -208,7 +216,7 @@ class SeasonRunner:
         res = G.play_game(hr, ar, self.rng, P.resolve_play, self.co, self.cd,
                           P.rate, home_state=self.states[home],
                           away_state=self.states[away], week=week, book=book,
-                          playoffs=playoffs)
+                          playoffs=playoffs, venue=self._venue(week, playoffs))
         self._record(home, away, week, res, book, playoffs)
         if playoffs:
             self.last_games.append((home, away, res, book))
@@ -237,7 +245,7 @@ class SeasonRunner:
                 else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
             except Exception: pass
         book = G.StatBook(); self._book = book
-        gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book, playoffs=playoffs)
+        gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book, playoffs=playoffs, venue=self._venue(week, playoffs))
         self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False, playoffs=playoffs, on_close=on_close)
         return self.live
 

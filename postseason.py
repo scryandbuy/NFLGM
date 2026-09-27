@@ -40,6 +40,29 @@ from gm_engine import make_gm
 
 ROUNDS = ('WC', 'DIV', 'CONF', 'SB')
 
+# ================================================================ THE SUPER BOWL SITE
+# A neutral site, awarded years ahead and rotating through the warm-weather and domed buildings the way the real
+# league does it. The 2026 season's game is Super Bowl LXI at SoFi; the list then cycles. The host club's
+# building supplies the weather (a dome plays as a dome); nobody gets the crowd or the altitude.
+SB_HOSTS = [('LA', 'SoFi Stadium', 'Inglewood, California'), ('ATL', 'Mercedes-Benz Stadium', 'Atlanta'), ('LV', 'Allegiant Stadium', 'Las Vegas'),
+            ('NO', 'Caesars Superdome', 'New Orleans'), ('MIA', 'Hard Rock Stadium', 'Miami Gardens, Florida'), ('ARI', 'State Farm Stadium', 'Glendale, Arizona'),
+            ('HOU', 'NRG Stadium', 'Houston'), ('TB', 'Raymond James Stadium', 'Tampa'), ('SF', "Levi's Stadium", 'Santa Clara, California'), ('DAL', 'AT&T Stadium', 'Arlington, Texas')]
+
+
+def sb_venue(league, year=None):
+    """Where this season's Super Bowl is played: dict(abbr, stadium, city, numeral). Deterministic from the year, so
+    the schedule, the report, the email and the game itself all agree without a save carrying it."""
+    y = int(year if year is not None else league.year)
+    abbr, stadium, city = SB_HOSTS[(y - 2026) % len(SB_HOSTS)]
+    return dict(abbr=abbr, stadium=stadium, city=city, numeral=_roman(y - 2026 + 61))
+
+
+def _roman(n):
+    out = ''
+    for v, sym in ((1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'), (90, 'XC'), (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'), (5, 'V'), (4, 'IV'), (1, 'I')):
+        while n >= v: out += sym; n -= v
+    return out
+
 
 class Postseason:
     """Runs the bracket on a SeasonRunner that has finished its schedule."""
@@ -200,7 +223,7 @@ class Postseason:
             if verbose:
                 print(f'  {conf} champion: {champ}')
 
-        # the Super Bowl. Home field is nominal; the better record hosts.
+        # the Super Bowl: a neutral site (sb_venue). 'Home' is nominal, the better record, for the box score only.
         cs = list(conf_champs.values())
         if len(cs) == 2:
             a, b = sorted(cs, key=lambda t: -self.L.teams[t].win_pct)
