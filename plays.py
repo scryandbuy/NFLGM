@@ -865,7 +865,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         # exactly why blitzing costs completion percentage and gains sacks.
         cover_relief = 1.0 + 0.085 * max(0, def_call['rushers'] - 4)
         adj = float(np.clip(z['p_complete'] * cmult * cover_relief * (1.0 - dis)
-                            * rmod['comp'], 0.02, 0.97))
+                            * rmod['comp'] * (TE_CATCH_MULT if (tgt.get('pos') == 'TE' and depth != 'deep') else 1.0), 0.02, 0.97))
         if screen:
             adj = min(0.97, adj + SCREEN_RESCUE)
         if PASS_TRACE is not None:

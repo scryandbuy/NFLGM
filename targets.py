@@ -98,7 +98,7 @@ def read_profile(qb, rate_fn, AVG=0.70):
 
 
 # what a coordinator sees when he builds the read order: hands, routes, speed, release, the contested catch
-READ_BY_PLAYERS = 0.6     # share of the designed read order that follows the players' quality rather than the formation
+READ_BY_PLAYERS = 0.7     # share of the designed read order that follows the players' quality rather than the formation
 RECV_GRADE = {'catch_rating': 0.20, 'route_run_short_rating': 0.15, 'route_run_med_rating': 0.15, 'speed_rating': 0.22,
               'accel_rating': 0.08, 'release_rating': 0.10, 'cit_rating': 0.10}
 
