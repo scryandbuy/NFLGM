@@ -458,7 +458,7 @@ def development(session, league, abbr, pid):
         cost = XP.cost_per_point(p, k)
         blocked = ('at 99' if p.ratings[k] >= 99 else 'at his ceiling' if XP.at_ceiling(p, k) else None)
         rows.append(dict(key=k, label=labels.get(k, k.replace('_rating', '').replace('_', ' ').title()), v=int(round(p.ratings[k])), cost=int(round(cost)), weight=round(float(weights.get(k, 0.0)), 2),
-                         phys=(k in XP.PHYSICAL), afford=(p.xp >= cost), blocked=blocked, bought=int(p.xp_spent.get(k, 0) or 0),
+                         phys=(k in XP.PHYSICAL or k in XP.TOOLS), afford=(p.xp >= cost), blocked=blocked, bought=int(p.xp_spent.get(k, 0) or 0),
                          gain=round(float(TG.position_score(dict(p.ratings, **{k: p.ratings[k] + 1.0}), p.pos) - p.ovr), 2)))
     rows.sort(key=lambda r: (-r['weight'], r['cost']))
     uc = XP.unlock_cost(p)
@@ -524,7 +524,7 @@ def progression(session, league, abbr):
     rows = []
     for p in sorted(t.active(), key=lambda p: -float(p.xp or 0)):
         pot = XP.ceiling(p, session.rng)
-        cheapest = min((XP.cost_per_point(p, k) for k in p.ratings if k.endswith('_rating') and k not in XP.PHYSICAL), default=None)
+        cheapest = min((XP.cost_per_point(p, k) for k in p.ratings if k.endswith('_rating') and k not in XP.PHYSICAL and k not in XP.TOOLS), default=None)
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), no=getattr(p, 'number', None), bank=int(round(float(p.xp or 0))), ceiling=(round(pot) if pot is not None else None),
                          room=(max(0, int(round(pot)) - int(round(p.ovr))) if pot is not None else None), bought=int(p.xp_spent.get('_bought_season', 0) or 0), career=int(XP.points_bought(p)), auto=bool(p.xp_spent.get('_auto', False)),
                          cheapest=(int(round(cheapest)) if cheapest else None), can_buy=(cheapest is not None and p.xp >= cheapest and not XP.at_ceiling(p)), dev=modifier_word(p)))

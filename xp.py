@@ -210,6 +210,10 @@ PHYS_ATTR_ESCALATOR = 1.25   # per point already bought into the same physical
 PHYSICAL = {'speed_rating', 'accel_rating', 'agility_rating', 'strength_rating',
             'change_of_direction_rating', 'jump_rating'}
 PHYSICAL_MULT = 2.5
+# the arm and the leg are tools, and the hardest thing on a player to change: priced like a physical, on the same
+# age wall, at 1.4 times what a point of speed costs
+TOOLS = {'throw_power_rating', 'kick_power_rating'}
+TOOL_OVER_SPEED = 1.4
 # Awareness carries the biggest weight for a quarterback, a centre and a
 # safety and is not a physical; it is buyable by anyone at a premium.
 AWARENESS_MULT = 1.75
@@ -255,7 +259,7 @@ def cost_per_point(player, attr=None):
     late_from, late_slope = LATE_SLOPE.get(player.pos, (99.0, 0.0))
     late = 1.0 + late_slope * max(0.0, float(player.age) - late_from)
     same = float(player.xp_spent.get(attr, 0) or 0) if attr else 0.0
-    if attr in PHYSICAL:
+    if attr in PHYSICAL or attr in TOOLS:
         # PHYSICALS ARE NOT LEARNED. Speed, burst, agility, jumping and strength grow only while a
         # young player's body is still finishing, and by a little. They price off their own base and
         # climb a wall with age: x1 at 21 and 22, x2 at 23, x3.5 at 24, x6 at 25, x10 at 26, doubling
@@ -265,7 +269,8 @@ def cost_per_point(player, attr=None):
         age = float(player.age)
         wall = 1.0 if age < 23 else 2.0 if age < 24 else 3.5 if age < 25 else 6.0 if age < 26 else 10.0 * (2.0 ** max(0.0, age - 26.0))
         if attr == 'strength_rating': wall = wall ** 0.7
-        return (PHYSICAL_BASE * wall * ovr_scale * ESCALATOR ** points_bought(player) * PHYS_ATTR_ESCALATOR ** same)
+        tool = TOOL_OVER_SPEED if attr in TOOLS else 1.0
+        return (PHYSICAL_BASE * wall * ovr_scale * ESCALATOR ** points_bought(player) * PHYS_ATTR_ESCALATOR ** same * tool)
     return (BASE_COST * curve * (1.0 + AGE_SLOPE * years) * ovr_scale * late
             * ESCALATOR ** points_bought(player) * ATTR_ESCALATOR ** same * phys)
 

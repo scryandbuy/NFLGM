@@ -61,14 +61,14 @@ def choose_attr(player, gm, rng):
     for k, wt in w.items():
         if vals[k] >= 99.0:
             continue
-        if k in XP.PHYSICAL and player.age > YOUNG:
+        if (k in XP.PHYSICAL or k in XP.TOOLS) and player.age > YOUNG:
             continue
         v = wt / XP.cost_per_point(player, k)         # overall per XP
         # a hole in his own profile: up to +60% for his lowest attribute,
         # scaled by how much the GM believes in filling men out
         if hi > lo:
             v *= 1.0 + 0.6 * belief * (hi - vals[k]) / (hi - lo)
-        if k in XP.PHYSICAL:
+        if k in XP.PHYSICAL or k in XP.TOOLS:
             # The price already says most of it: at 2.5x a physical draws at
             # under half a skill's rate on weight per XP alone, and with the
             # old 0.35-1.0 factor on top the league bought 13 physical points
