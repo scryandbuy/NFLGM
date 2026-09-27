@@ -196,12 +196,12 @@ def modifier(player):
 #    table is the guardrail this is solved against - what a big year should buy
 #    at 22, 25, 28, 31 and 34.
 # 3. THE ATTRIBUTE. Speed, acceleration, agility, strength, change of
-#    direction and jumping help every man on the field whatever his position,
+#    direction and jumping help every player on the field whatever his position,
 #    so they cost a multiple of what a position skill costs. Catching, block
 #    shed and the like help one kind of player and are priced at the base.
 #
 # The overall wall stays alongside these (a 90 improving is harder than a 70
-# improving), so a man who arrived at 95 pays more than one who was built up.
+# improving), so a player who arrived at 95 pays more than one who was built up.
 LS_FLAT_PER_GAME = 150.0     # a long snapper's game: no line in the book, a flat credit for every game he dresses
 BASE_COST = 600.0            # a rookie's first point into a position skill
 PHYSICAL_BASE = 2500.0       # a 21-year-old's first point of speed; see the wall in cost_per_point
@@ -238,13 +238,13 @@ OVR_PIVOT, OVR_SLOPE = 70.0, 0.030
 
 
 def points_bought(player):
-    """Every attribute point this man has ever bought."""
+    """Every attribute point this player has ever bought."""
     return sum(v for k, v in player.xp_spent.items()
                if not k.startswith('_') and isinstance(v, (int, float)))
 
 
 def cost_per_point(player, attr=None):
-    """XP for one more attribute point, for this man right now."""
+    """XP for one more attribute point, for this player right now."""
     import regression as RG
     f = RG.curve_factor(player.pos, player.age)
     curve = 1.0 if f >= 1.0 else (1.0 / max(f, 0.30)) ** 1.5
@@ -257,7 +257,7 @@ def cost_per_point(player, attr=None):
     same = float(player.xp_spent.get(attr, 0) or 0) if attr else 0.0
     if attr in PHYSICAL:
         # PHYSICALS ARE NOT LEARNED. Speed, burst, agility, jumping and strength grow only while a
-        # young man's body is still finishing, and by a little. They price off their own base and
+        # young player's body is still finishing, and by a little. They price off their own base and
         # climb a wall with age: x1 at 21 and 22, x2 at 23, x3.5 at 24, x6 at 25, x10 at 26, doubling
         # each year after; strength grows a little longer, so its wall is softer. Repeats climb 25%
         # a point, so speed goes up in ones. A 22-year-old starter can add a point of speed once or
@@ -409,7 +409,7 @@ def award_xp(player, awards):
 # be audited by source: game events, snaps, season lines, milestones, awards.
 def credit(player, amount, source):
     """Record the source and return the amount, so `p.xp += credit(...)`.
-    Work ethic scales everything a man earns, 0.8x to 1.2x (personality.py)."""
+    Work ethic scales everything a player earns, 0.8x to 1.2x (personality.py)."""
     import personality as PT, staff as ST
     amount = float(amount or 0.0) * PT.xp_mult(player)
     team = getattr(player, '_team_ref', None)
@@ -442,9 +442,12 @@ def close_season(league, votes, season=None):
                 if yr != year: before[k] = before.get(k, 0) + v
         got += credit(p, milestone_xp(p, before, after), 'milestone')
         p.xp += got; paid[pid] = got
-    # awards: a pid, or a list of pids for the All-Pro teams
+    # awards: a pid, or a list of pids for the All-Pro teams. Paid at the announcement when the honors came out
+    # during the playoffs (league.awards_paid holds the year); here only for whatever was not
+    paid_already = set((getattr(league, 'awards_paid', {}) or {}).get(str(season or league.year), []))
     for award, who in (votes or {}).items():
         if award not in AWARDS or not AWARDS[award]: continue
+        if award in paid_already: continue
         for w in (who if isinstance(who, list) else [who]):
             pid = getattr(w, 'pid', w)
             p = league.player(pid) if isinstance(pid, str) else None
@@ -493,3 +496,20 @@ if __name__ == '__main__':
                                                          modifier(p)))
     print('\nawards on top: MVP %s, All-Pro 1st %s'
           % (AWARDS['mvp'], AWARDS['all_pro_1']))
+
+
+def pay_awards(league, votes, year=None):
+    """Pay the honors the day they are announced, and remember which so the season's close does not pay them again."""
+    year = year or league.year
+    paid = league.__dict__.setdefault('awards_paid', {}).setdefault(str(year), [])
+    out = {}
+    for award, who in (votes or {}).items():
+        if award not in AWARDS or not AWARDS[award] or award in paid: continue
+        for w in (who if isinstance(who, list) else [who]):
+            pid = getattr(w, 'pid', w)
+            p = league.player(pid) if isinstance(pid, str) else None
+            if p is None: continue
+            got = credit(p, award_xp(p, [award]), 'award')
+            p.xp += got; out[pid] = out.get(pid, 0.0) + got
+        paid.append(award)
+    return out

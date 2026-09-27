@@ -20,8 +20,8 @@ NICK = {'ARI': 'Cardinals', 'ATL': 'Falcons', 'BAL': 'Ravens', 'BUF': 'Bills', '
         'TB': 'Buccaneers', 'TEN': 'Titans', 'WAS': 'Commanders'}
 INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 'contract': 'Contract', 'contract_year': 'Contract', 'negotiation': 'Contract', 'waiver': 'Wire', 'waivers': 'Wire', 'wire': 'Wire',
              'squad': 'Squad', 'practice_squad': 'Squad', 'game': 'Game', 'result': 'Game', 'scouting': 'Scouting', 'spring': 'Scouting', 'morale': 'Locker Room', 'trade_request': 'Locker Room',
-             'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad', 'league': 'League', 'trade_done': 'Trade', 'waiver_notice': 'Wire', 'waiver_digest': 'Wire', 'injury_decision': 'Trainers', 'injury': 'Trainers', 'roster': 'Roster'}
-DECIDE_KINDS = {'trade_offer', 'match_request', 'staff', 'gameplan', 'game_plan', 'offer_sheet', 'contract_year', 'injury_decision', 'roster'}
+             'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad', 'league': 'League', 'trade_done': 'Trade', 'waiver_notice': 'Wire', 'waiver_digest': 'Wire', 'injury_decision': 'Trainers', 'injury': 'Trainers', 'roster': 'Roster', 'review': 'Season Review', 'exit': 'Exit Meetings'}
+DECIDE_KINDS = {'trade_offer', 'match_request', 'staff', 'gameplan', 'game_plan', 'offer_sheet', 'contract_year', 'injury_decision', 'roster', 'exit'}
 
 
 STADIUM = {'ARI': 'State Farm Stadium', 'ATL': 'Mercedes-Benz Stadium', 'BAL': 'M&T Bank Stadium', 'BUF': 'Highmark Stadium', 'CAR': 'Bank of America Stadium', 'CHI': 'Soldier Field', 'CIN': 'Paycor Stadium', 'CLE': 'Huntington Bank Field',
@@ -233,8 +233,8 @@ def _win_prob(league, abbr, opp, away):
     """Pregame, from the two rosters' starter strength and home field. The model
     in the game itself is the drive-by-drive one; this is the number on the tile."""
     def strength(t):
-        men = sorted((p.ovr for p in t.active() if p.out_until is None), reverse=True)[:22]
-        return float(np.mean(men)) if men else 70.0
+        players = sorted((p.ovr for p in t.active() if p.out_until is None), reverse=True)[:22]
+        return float(np.mean(players)) if players else 70.0
     a, b = strength(league.teams[abbr]), strength(league.teams[opp])
     edge = (a - b) * 0.22 + (-0.25 if away else 0.25)
     return int(round(100 / (1 + np.exp(-edge))))
@@ -460,7 +460,7 @@ def _division_standings(league, abbr):
 def _points(league, abbr):
     pf = pa = 0
     for (wk, a, h, ap, hp) in league.schedule:
-        if ap is None: continue
+        if ap is None or wk > 18: continue                     # playoff games never count in the standings
         if a == abbr: pf += ap; pa += hp
         elif h == abbr: pf += hp; pa += ap
     return pf, pa
@@ -469,7 +469,7 @@ def _points(league, abbr):
 def _form(league, abbr):
     out = []
     for (wk, a, h, ap, hp) in league.schedule:
-        if ap is None or abbr not in (a, h): continue
+        if ap is None or abbr not in (a, h) or wk > 18: continue
         mine = ap if a == abbr else hp; theirs = hp if a == abbr else ap
         out.append('w' if mine > theirs else 'l' if mine < theirs else 't')
     return out[-5:]

@@ -92,7 +92,7 @@ def weekly(league, week, results, snaps_by_pid, game_lines=None):
             rank = next((i for i, q in enumerate(grp) if q is p), 0)
             # A HURT MAN DOES NOT COMPLAIN ABOUT THE DEPTH CHART, and neither does a man who just got healthy:
             # the club gets a week's grace after he clears to move him back before he reads anything into
-            # where he sits. Without this a back on the shelf raged about losing his starting spot to the man
+            # where he sits. Without this a back on the shelf raged about losing his starting spot to the player
             # covering for him, and the moment he was cleared the same week triggered it again.
             hurt = p.out_until is not None
             cleared_wk = p.xp_spent.get('_cleared_wk')
@@ -225,7 +225,7 @@ def clear_free_agents(league):
 
 def offseason_requests(league, rng):
     """
-    THE ROLL, ONCE A YEAR. After the season, every man with real entitlement
+    THE ROLL, ONCE A YEAR. After the season, every player with real entitlement
     whose morale finished under 28 rolls against how far under he is:
     about 20% at 28, 80% at 10. A fail means he asks out. A man already
     asking does not roll; he asks again. The request travels with its

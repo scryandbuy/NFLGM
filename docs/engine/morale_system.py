@@ -43,6 +43,13 @@ SLOW = {
     'buried_on_depth':    -0.70,
 }
 SHOCK = {
+    'promise_kept':       +6.0,    # a promise on the ledger, kept: the season or the deal proved it
+    'major_award':        +10.0,   # MVP, the players of the year, the rookies of the year, the Protector
+    'all_pro':            +6.0,    # first team
+    'all_pro_2':          +3.0,    # second team
+    'heard_out':          +4.0,    # the exit meeting: he was told the truth and given a plan
+    'brushed_off':        -6.0,    # the exit meeting: a non-answer to a real question
+    'promised':           +7.0,    # the exit meeting: a promise made to him (the ledger holds it)
     'benched':            -12.0,
     'made_available':     -10.0,
     'team_signed_over_him': -9.0,

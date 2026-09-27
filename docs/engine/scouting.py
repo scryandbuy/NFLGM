@@ -40,7 +40,7 @@ def _refresh(view, p):
 
 
 def second_look(view, p, sd, rng, weight=1.0, R=None):
-    """Another read on the man, averaged into the room's skill and ceiling errors. The room's
+    """Another read on the player, averaged into the room's skill and ceiling errors. The room's
     traits scale and lean the new draw the same way they did the first."""
     R = R or dict(skill_mult=1.0, skill_bias=0.0, pot_mult=1.0, pot_bias=0.0)
     n = view.get('reads', 1)
@@ -182,3 +182,38 @@ def scheme_fit_view(league, abbr, p, view):
     seen = {k: float(np.clip(v + (e_p if k in XP.PHYSICAL else e_s), 30.0, 99.0)) for k, v in p.ratings.items()}
     try: return round(float(GE.scheme_fit(seen, p.pos, team)), 1)
     except Exception: return 0.0
+
+
+def senior_bowl(league, rng):
+    """The week before the Super Bowl, in Mobile: the seniors who accept the invitation play in front of every
+    scouting department. Every room gets a second look at them (their estimates tighten and move), the players
+    carry the mark on the board, and the user's assistants say who helped himself and who did not."""
+    pool = list(getattr(league, 'draft_pool', None) or getattr(league, 'next_class', None) or [])   # in season the class waits in next_class
+    if not pool: return []
+    cons = getattr(league, 'consensus', None) or {}
+    seniors = [p for p in pool if p.age >= 22.5 and p.pos not in ('K', 'P', 'LS')]
+    # about 110 invitations: the consensus top of the senior class, with some depth mixed in
+    ranked = sorted(seniors, key=lambda p: (cons.get(p.pid, {}).get('rank') or 999))
+    invited = ranked[:80] + [p for p in ranked[80:] if rng.random() < 0.15][:35]
+    user = getattr(league, 'user_team', None)
+    before = {p.pid: (getattr(league, 'scouting', {}).get(user, {}).get(p.pid, {}) or {}).get('ovr') for p in invited} if user else {}
+    for abbr, team in league.teams.items():
+        views = (getattr(league, 'scouting', None) or {}).get(abbr) or {}
+        sd = error_sd(team.gm, team); R = room(team)
+        for p in invited:
+            v = views.get(p.pid)
+            if v is None: continue
+            second_look(v, p, sd * 0.85, rng, weight=0.7, R=R)
+    for p in invited:
+        p.xp_spent['_senior_bowl'] = league.year
+    # the consensus moves with the rooms
+    try: consensus(league)
+    except Exception: pass
+    moves = []
+    if user:
+        after = getattr(league, 'scouting', {}).get(user, {}) or {}
+        for p in invited:
+            b = before.get(p.pid); a = (after.get(p.pid) or {}).get('ovr')
+            if b is None or a is None: continue
+            moves.append((round(float(a) - float(b), 1), p))
+    return moves

@@ -421,3 +421,264 @@ def act_restructure(league, abbr, pid, amount=None, void_years=0):
     if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
     r = CT.restructure_user(league, pid, amount=(float(amount) if amount is not None else None), void_years=int(void_years or 0))
     return r if isinstance(r, dict) else dict(ok=bool(r))
+
+
+def season_review(session, league, abbr):
+    """The morning after the season ends: the year against what the owner asked for, the seventeen results, the
+    units against the league, the men who exceeded and fell short, next year's money and the men whose deals are
+    up, and the assistants' three notes. Composed once the club is out; readable all offseason."""
+    import gameplan_week as GW, staff as ST, firing_model as FM
+    from views import _owner_mood, CLUB_NAME, club, surname, next_year_cap
+    t = league.teams[abbr]; h = t.hist(); w, l, d = t.record; n = max(1, w + l + d); pct = (w + 0.5 * d) / n
+    exp = float(h.get('expected_pct') or 0.5)
+    exp_words = 'a title run' if exp >= 0.72 else 'the playoffs' if exp >= 0.56 else 'a winning season' if exp >= 0.5 else 'progress' if exp >= 0.4 else 'patience while you rebuild'
+    # the finish: division place, the postseason if any
+    st = {}
+    try:
+        import views_league as VL
+        r = VL._state(session); st = r.standings() if r is not None else {}
+    except Exception: st = {}
+    div_rank = (st.get(abbr) or {}).get('div_rank')
+    exit_ = None
+    post = getattr(session, 'post_live', None) or getattr(session, 'post', None)
+    if post is not None:
+        if getattr(post, 'champion', None) == abbr: exit_ = 'Champions'
+        else:
+            er = (getattr(post, 'exit_round', {}) or {}).get(abbr)
+            exit_ = {'WC': 'Lost in the Wild Card round', 'DIV': 'Lost in the Divisional round', 'CONF': 'Lost the Conference Championship', 'SB': 'Lost the Super Bowl'}.get(er)
+            if exit_ is None and abbr in {x for sd in (getattr(post, 'seeds', {}) or {}).values() for x in sd}: exit_ = 'In the playoffs'
+    if exit_ is None: exit_ = 'Missed the playoffs'
+    gap = pct - exp
+    verdict = ('He got more than he asked for.' if gap >= 0.12 else 'He got what he asked for.' if gap >= -0.05 else 'He got less than he asked for.' if gap >= -0.18 else 'He got a lot less than he asked for.')
+    own = _owner(league, t); mood = _owner_mood(t); sec = FM.job_security(h)
+    owner_line = {
+        'Pleased': f"{own['name']} is pleased. {exp_words.capitalize()} was the ask and you delivered on it; he wants to know what the next step is.",
+        'Settled': f"{own['name']} is settled on the year. {exp_words.capitalize()} was the ask, and {verdict.lower()} He is asking what changes.",
+        'Restless': f"{own['name']} is restless. He asked for {exp_words} and {verdict.lower()} He wants a plan on his desk before the new year.",
+        'Angry': f"{own['name']} is angry. He asked for {exp_words}; {verdict.lower()} Your seat is warm.",
+    }[mood]
+    # the seventeen results
+    timeline = []
+    for (wk, a, hm, ap, hp) in sorted(league.schedule, key=lambda g: g[0]):
+        if wk > 18 or abbr not in (a, hm): continue
+        if ap is None: timeline.append(dict(week=wk, bye=True)); continue
+        mine, theirs = (ap, hp) if a == abbr else (hp, ap)
+        opp = hm if a == abbr else a
+        timeline.append(dict(week=wk, opp=club(opp), away=(a == abbr), mine=mine, theirs=theirs, result=('W' if mine > theirs else 'L' if mine < theirs else 'T')))
+    weeks_played = {x['week'] for x in timeline}
+    for wk in range(1, 19):
+        if wk not in weeks_played: timeline.append(dict(week=wk, bye=True))
+    timeline.sort(key=lambda x: x['week'])
+    # the units against the league (stat-based offense and defense, grade-based subunits)
+    try: sr = ST.unit_ranks(league, league.year).get(abbr, {})
+    except Exception: sr = {}
+    try: ur = GW.unit_ranks(league, t)
+    except Exception: ur = {}
+    ROWS = [('Pass Offense', 'QB'), ('Run Offense', 'backs'), ('Pass Block', 'pass block'), ('Receivers', 'receivers'), ('Pass Rush', 'pass rush'), ('Run Front', 'run front'), ('Corners', 'corners'), ('Safeties', 'safeties'), ('Linebackers', 'linebackers')]
+    units = [dict(label=lab, rank=(ur[k][0] if ur.get(k) else None), of=(ur[k][1] if ur.get(k) else 32)) for lab, k in ROWS]
+    sides = dict(offense=sr.get('oc'), defense=sr.get('dc'), kicking=sr.get('st'))
+    # who exceeded and who fell short: this season's production against the player's grade
+    S = league.stats.get(league.year, {}) or {}
+    import xp as XP
+    scored = []
+    for p in t.active():
+        line = S.get(p.pid)
+        if not line: continue
+        snaps = int(line.get('snaps', 0) or 0)
+        if snaps < 200: continue
+        epa = float(line.get('pass_epa', 0) or 0) + float(line.get('rush_epa', 0) or 0) + float(line.get('rec_epa', 0) or 0) + float(line.get('def_epa', 0) or 0)
+        per = epa / max(1, snaps) * 100.0
+        scored.append((per - 0.02 * (p.ovr - 75), p, per, snaps))
+    scored.sort(key=lambda x: -x[0])
+    def card(p, per, snaps, up):
+        line = S.get(p.pid, {})
+        bits = []
+        if p.pos == 'QB': bits.append(f"{int(line.get('pass_yds', 0))} yds, {int(line.get('pass_td', 0))} TD, {int(line.get('ints', 0))} INT")
+        elif p.pos in ('HB', 'FB'): bits.append(f"{int(line.get('rush_yds', 0))} rush yds, {int(line.get('rush_td', 0))} TD")
+        elif p.pos in ('WR', 'TE'): bits.append(f"{int(line.get('rec', 0))} rec, {int(line.get('rec_yds', 0))} yds, {int(line.get('rec_td', 0))} TD")
+        else: bits.append(f"{int(line.get('tackles', 0))} tkl, {float(line.get('sacks', 0) or 0):.0f} sk, {int(line.get('int_def', 0))} INT")
+        return dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), line=bits[0], up=up)
+    exceeded = [card(p, per, sn, True) for _s, p, per, sn in scored[:3]]
+    short = [card(p, per, sn, False) for _s, p, per, sn in scored[-3:][::-1] if p.ovr >= 78]
+    # next year's money and the players whose deals are up
+    limit_next, committed_next, rollover, dead_next = next_year_cap(league, t)
+    expiring = sorted([p for p in t.active() if p.contract and p.contract.years <= 1], key=lambda p: -p.ovr)
+    pending = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), starter=(p in (t.depth.get(p.pos) or [])[:1])) for p in expiring[:8]]
+    # the assistants' three notes
+    notes = []
+    ranked = [u for u in units if u['rank']]
+    if ranked:
+        worst = max(ranked, key=lambda u: u['rank']); best = min(ranked, key=lambda u: u['rank'])
+        notes.append(f"The {worst['label'].lower()} ranked {worst['rank']}th of {worst['of']}; that is the first place the draft and the market should look.")
+        notes.append(f"The {best['label'].lower()} ranked {best['rank']}{'st' if best['rank'] == 1 else 'nd' if best['rank'] == 2 else 'rd' if best['rank'] == 3 else 'th'}; build around it, and pay to keep it together.")
+    starters_up = [x for x in pending if x['starter']]
+    if starters_up: notes.append(f"{len(starters_up)} starter{'s' if len(starters_up) != 1 else ''} come{'s' if len(starters_up) == 1 else ''} off contract: {', '.join(surname(x['name']) for x in starters_up[:4])}. Decide before the tag window.")
+    else: notes.append("No starter comes off contract; the money can go to the market or an extension.")
+    room = limit_next - committed_next
+    notes.append(f"Next year's room is about ${room:.0f}m against a ${limit_next:.0f}m cap, with ${dead_next:.1f}m of dead money already on the books.")
+    slot = None
+    try:
+        import postseason as PS
+        slot = PS.provisional_slot(league, getattr(session, 'post_live', None) or getattr(session, 'post', None), abbr)
+    except Exception: slot = None
+    return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, record=f"{w}–{l}" + (f"–{d}" if d else ''), pct=round(pct, 3), expected=exp_words, expected_pct=round(exp, 2), slot=slot,
+                finish=exit_, div_rank=div_rank, division=t.division, owner=dict(name=own['name'], mood=mood, line=owner_line, job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat')),
+                timeline=timeline, units=units, sides=sides, exceeded=exceeded, short=short, cap=dict(limit=round(limit_next, 1), committed=round(committed_next, 1), dead=round(dead_next, 1), rollover=round(rollover, 1), room=round(room, 1)),
+                pending=pending, notes=notes[:3])
+
+
+# ============================================================ EXIT INTERVIEWS
+# The days after the season: a few men want a word. Each meeting is a question in his voice and two or three
+# answers; a promise goes on the ledger the negotiation system already keeps, a plain answer moves his morale,
+# and what you said comes back later in his own words.
+def build_exit_meetings(session, league, abbr):
+    import morale as MO, negotiations as NG
+    from views import surname
+    t = league.teams[abbr]; year = league.year
+    store = league.__dict__.setdefault('exit_meetings', {})
+    user = getattr(league, 'user_team', None)
+    slot = str(year) if abbr == user else f"{abbr}-{year}"
+    if slot in store: return store[slot]
+    meetings = []
+    seen = set()
+    def add(kind, p, quote, options):
+        if p.pid in seen or len(meetings) >= 5: return
+        seen.add(p.pid); meetings.append(dict(pid=p.pid, kind=kind, quote=quote, options=options, answer=None, said=None))
+    starters = {pos: (ps[0] if ps else None) for pos, ps in t.depth.items()}
+    # 1. the man who wants out
+    for p in sorted(t.active(), key=lambda q: -q.ovr):
+        if MO.wants_out(p):
+            why = MO.request_reason(p)
+            q = {'role': "I'm not going to sit behind somebody another year. I want to be somewhere I play.", 'contract': "I've been underpaid here for two years and everybody knows it. Fix it or move me.", 'losing': "I've got a few years left and I want to spend them winning. Are we going to?"}[why]
+            add('wants_out', p, q, [dict(key='listen', label="We'll listen to offers", sub='He goes on the block; he settles down knowing you heard him', cost='block'),
+                                    dict(key='stay', label="You're not going anywhere", sub='A no-trade promise on the ledger; break it and it costs you', cost='promise:no_trade'),
+                                    dict(key='earn', label='Earn it', sub='No promise; he leaves the room angrier', cost='brush')])
+            break
+    # 2. the expiring starter
+    exp = sorted([p for p in t.active() if p.contract and p.contract.years <= 1 and starters.get(p.pos) is p and p.ovr >= 76 and p.pos not in ('K', 'P', 'LS')], key=lambda q: -q.ovr)
+    for p in exp[:2]:
+        add('expiring', p, f"My deal's up. I'd like to stay, but I'm not going to wait on you into March. Am I coming back?",
+            [dict(key='deal', label="We'll get a deal done before the market", sub='An extension by the new year goes on the ledger', cost='promise:extension_by'),
+             dict(key='market', label="We'll see what the market says", sub='Honest; he hears it as a no', cost='brush'),
+             dict(key='honest_no', label="We're going a different way", sub='He knows where he stands and stops waiting', cost='heard')])
+    # 3. the young man behind a veteran
+    for pos, ps in t.depth.items():
+        if len(ps) < 2: continue
+        s0, s1 = ps[0], ps[1]
+        if s1.age <= 25 and s0.age >= 29 and s1.ovr >= s0.ovr - 3 and s1.pid not in seen:
+            add('young', s1, f"I'm ready. {surname(s0.name)} is {s0.age}. When do I get my shot?",
+                [dict(key='camp', label="The job is yours to win in camp", sub='A starting-role promise; sit him in September and it breaks', cost='promise:starting_role'),
+                 dict(key='patient', label="Be patient", sub='He leaves unhappy', cost='brush'),
+                 dict(key='truth', label="You're the plan for next year, not this one", sub='Told straight; he takes it', cost='heard')])
+            break
+    # 4. the star with two years left
+    for p in sorted(t.active(), key=lambda q: -q.ovr):
+        if p.contract and p.contract.years == 2 and p.ovr >= 84 and p.age <= 30 and p.pid not in seen:
+            add('star', p, "I'm the best player in this building and I'm on a deal from three years ago. Are we doing this in the spring?",
+                [dict(key='spring', label="We'll extend you this offseason", sub='An extension promise by the new year', cost='promise:extension_by'),
+                 dict(key='next', label="Next year", sub="He'll remember", cost='brush'),
+                 dict(key='captain', label="You're a captain here; the money follows", sub='A captaincy on the ledger, and the extension talk stays open', cost='promise:captaincy')])
+            break
+    # 5. the unhappy veteran
+    def _mv(q):
+        m_ = MO.ensure(q)
+        if m_ is None: return 60.0
+        val = getattr(m_, 'value', 60.0)
+        return float(val() if callable(val) else val)
+    for p in sorted(t.active(), key=_mv):
+        mv = _mv(p)
+        if mv < 42 and p.age >= 27 and p.pid not in seen and not MO.wants_out(p):
+            add('unhappy', p, "This year wore on me. I need to know the room's going to be different, or I need to know now.",
+                [dict(key='captaincy', label="You'll wear the C", sub='A captaincy promise', cost='promise:captaincy'),
+                 dict(key='changes', label="There will be changes, and you're part of them", sub='He is heard', cost='heard'),
+                 dict(key='march', label="Talk to me in March", sub='Brushed off', cost='brush')])
+            break
+    store[slot] = meetings
+    return meetings
+
+
+def exit_interviews(session, league, abbr):
+    from views import club, surname
+    t = league.teams[abbr]
+    ms = build_exit_meetings(session, league, abbr)
+    rows = []
+    for mt in ms:
+        p = league.player(mt['pid'])
+        if p is None: continue
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), years=(p.contract.years if p.contract else 0), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1),
+                         kind=mt['kind'], quote=mt['quote'], options=mt['options'], answer=mt.get('answer'), said=mt.get('said')))
+    return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, meetings=rows, open=sum(1 for r in rows if not r['answer']))
+
+
+def exit_answer(session, league, abbr, pid, key):
+    """Your answer in the room: the promise on the ledger, the morale, and what he said back."""
+    import morale as MO, negotiations as NG, morale_system as MS
+    from views import surname
+    t = league.teams[abbr]; p = league.player(pid)
+    ms = build_exit_meetings(session, league, abbr)
+    mt = next((x for x in ms if x['pid'] == pid), None)
+    if mt is None or p is None: return dict(ok=False, why='no meeting with him')
+    if mt.get('answer'): return dict(ok=False, why='you have already answered him')
+    opt = next((o for o in mt['options'] if o['key'] == key), None)
+    if opt is None: return dict(ok=False, why='not one of the answers')
+    cost = opt['cost']; m = MO.ensure(p)
+    said = ''
+    if cost.startswith('promise:'):
+        kind = cost.split(':', 1)[1]
+        NG.record_promise(league, p.pid, abbr, kind, source='exit')
+        if m is not None: m.apply('promised')
+        said = {'no_trade': "Then I'm here. Don't make me regret saying that.", 'extension_by': "Good. My agent will be calling.", 'starting_role': "I'll be ready. Don't sit me.", 'captaincy': "I'll hold them to it, and you."}.get(kind, "Alright.")
+    elif cost == 'block':
+        p.xp_spent['_on_block'] = league.year
+        if m is not None: m.apply('heard_out')
+        said = "That's all I wanted to hear. Wherever it is, thank you for being straight."
+    elif cost == 'heard':
+        if m is not None: m.apply('heard_out')
+        said = "I can work with that. I'd rather know."
+    else:
+        if m is not None: m.apply('brushed_off')
+        said = "Right." if mt['kind'] != 'wants_out' else "Then we'll do this the other way."
+    mt['answer'] = key; mt['said'] = said
+    import inbox as IB
+    IB.post(league, 'club', f"{p.name}, after the meeting", f"You told him: {opt['label'].lower()}. He said: \"{said}\"", sender=surname(p.name))
+    return dict(ok=True, said=said)
+
+
+def ai_exit_meetings(league, abbr, rng):
+    """The other clubs hold their meetings too. The GM answers by his nature: a patient builder promises the young
+    player his shot and the star his deal, a win-now GM promises less and tells more of them to earn it, and every
+    promise goes on the same ledger, so an AI club that breaks one lives with the request that follows."""
+    import morale as MO, negotiations as NG
+    t = league.teams.get(abbr)
+    if t is None or t.gm is None: return 0
+    store = league.__dict__.setdefault('exit_meetings', {})
+    key = f"{abbr}-{league.year}"
+    if key in store: return 0
+    ms = build_exit_meetings(None, league, abbr)
+    gm = t.gm
+    patience = float(getattr(gm, 'youth', 0.5)); win_now = float(getattr(gm, 'aggression', 0.5))
+    n = 0
+    for mt in ms:
+        p = league.player(mt['pid']); m = MO.ensure(p) if p is not None else None
+        if p is None: continue
+        opts = mt['options']
+        promise = [o for o in opts if o['cost'].startswith('promise:')]; heard = [o for o in opts if o['cost'] in ('heard', 'block')]; brush = [o for o in opts if o['cost'] == 'brush']
+        r = rng.random()
+        p_prom = 0.25 + 0.35 * patience - 0.15 * win_now
+        p_brush = 0.15 + 0.15 * win_now
+        if r < p_prom and promise: o = promise[0]
+        elif r < p_prom + p_brush and brush: o = brush[0]
+        else: o = (heard or promise or opts)[0]
+        cost = o['cost']
+        if cost.startswith('promise:'):
+            NG.record_promise(league, p.pid, abbr, cost.split(':', 1)[1], source='exit')
+            if m is not None: m.apply('promised')
+        elif cost == 'block':
+            p.xp_spent['_on_block'] = league.year
+            if m is not None: m.apply('heard_out')
+        elif cost == 'heard':
+            if m is not None: m.apply('heard_out')
+        else:
+            if m is not None: m.apply('brushed_off')
+        mt['answer'] = o['key']; n += 1
+    return n

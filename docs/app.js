@@ -159,7 +159,7 @@ function renderInbox(v) {
 function linkHash(link) {
   if (!link) return '#portal';
   const [a, b] = String(link).split(':');
-  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:ps': '#club/ps', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/waivers', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
+  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:ps': '#club/ps', 'league:bracket': '#league/bracket', 'front_office:review': '#frontoffice/review', 'front_office:exit': '#frontoffice/exit', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/waivers', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
   if (a === 'player') return '#club/player/' + b;
   if (a === 'negotiation') { const kind = String(link).split(':')[1] || ''; return kind === 'extension' ? '#personnel/extensions' : kind.startsWith('fa') ? '#personnel/fa' : '#personnel/fa'; }
   return MAP[link] || MAP[a] || '#portal';
@@ -653,11 +653,11 @@ const TRAIT_META = {
   'grinder': { k: 'work', tip: 'Outworks his rating. Gains XP faster and keeps his condition.' }, 'hard worker': { k: 'work', tip: 'Puts in the time. A little more development than most.' },
   'coasts': { k: 'work-', tip: 'Does the minimum. Develops slower than his talent says he should.' }, 'needs pushing': { k: 'work-', tip: 'Has to be driven. The slowest to improve, and condition slips.' },
   'wants to be paid': { k: 'money', tip: 'Money first. He will hold out for market value and will not take a discount.' }, 'money matters': { k: 'money', tip: 'Wants a fair number. Harder to extend cheaply.' },
-  'not about the money': { k: 'money-', tip: 'Will leave money on the table for the right situation.' }, 'plays for the love of it': { k: 'money-', tip: 'Money is an afterthought. The easiest man on the roster to extend.' },
+  'not about the money': { k: 'money-', tip: 'Will leave money on the table for the right situation.' }, 'plays for the love of it': { k: 'money-', tip: 'Money is an afterthought. The easiest player on the roster to extend.' },
   'loyal': { k: 'loyal', tip: 'Wants to finish here. Likely to take less to stay.' }, 'settled': { k: 'loyal', tip: 'Comfortable where he is. Not looking to leave.' },
   'keeps his options open': { k: 'loyal-', tip: 'Will test the market when his deal is up.' }, 'follows the money': { k: 'loyal-', tip: 'No attachment to the club. Goes to the highest bidder.' },
   'wants the ball': { k: 'amb', tip: 'Needs a big role. Unhappy as a backup or in a rotation.' }, 'ambitious': { k: 'amb', tip: 'Wants to start and to matter. Morale depends on his snaps.' },
-  'team-first': { k: 'amb-', tip: 'Accepts his role. Morale holds even when the snaps drop.' }, 'happy in a role': { k: 'amb-', tip: 'Content wherever you put him. The easiest man to keep happy.' },
+  'team-first': { k: 'amb-', tip: 'Accepts his role. Morale holds even when the snaps drop.' }, 'happy in a role': { k: 'amb-', tip: 'Content wherever you put him. The easiest player to keep happy.' },
   'even-keeled': { k: 'even', tip: 'Nothing about him stands out either way.' },
 };
 let cardTab = 'Overview';
@@ -1175,7 +1175,7 @@ function renderExtensions(v) {
 let extTab = 'expiring';
 
 // ---------------------------------------------------------------- Front Office
-const FO = { owner: 'Owner', identity: 'Identity', staff: 'Staff', cap: 'Cap' };
+const FO = { owner: 'Owner', review: 'Season Review', exit: 'Exit Meetings', identity: 'Identity', staff: 'Staff', cap: 'Cap' };
 function foSecond(cur) { secondRow(Object.entries(FO).map(([k, l]) => [l, '#frontoffice/' + k]), '#frontoffice/' + cur); $('#crumb').textContent = 'Front Office'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'frontoffice')); }
 
 function renderOwner(v) {
@@ -1373,7 +1373,8 @@ function renderBoard(v) {
   renderRail(v.rail); const page = persPage(); drSecond('board');
   const reload = () => renderBoard(pyJSON(`SESSION.draft_view('board')`));
   const onBoard = new Set(v.user_board.order.map(x => x.pid)), dnd = new Set(v.user_board.dnd.map(x => x.pid));
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Scouting Board', el('small', {}, `${v.count} prospects` + (v.scout ? ` · Head Scout ${v.scout.name} (${v.scout.rating})` : ''))));
+  const ordn_ = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Scouting Board', el('small', {}, `${v.count} prospects` + (v.slot ? ` · you pick ${ordn_(v.slot)} in the first round` : '') + (v.scout ? ` · Head Scout ${v.scout.name} (${v.scout.rating})` : ''))));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   for (const [k, l, n] of [['class', `Class of ${v.year}`, v.count], ['board', 'Your Board', onBoard.size], ['visited', 'Visited', v.rows.filter(r => r.visited).length]]) tabs.append(el('button', { 'aria-pressed': String(boardTab === k), onclick: () => { boardTab = k; renderBoard(v); } }, l + ' ', el('em', {}, n)));
   s.append(tabs);
@@ -1574,7 +1575,7 @@ function renderTeam(v) {
 }
 
 // ---------------------------------------------------------------- League
-const LG = { standings: 'Standings', schedule: 'Schedule', transactions: 'Transactions', stats: 'Stats', awards: 'Awards', coaching: 'Coaching', almanac: 'Almanac' };
+const LG = { standings: 'Standings', schedule: 'Schedule', bracket: 'Playoffs', transactions: 'Transactions', stats: 'Stats', awards: 'Awards', coaching: 'Coaching', almanac: 'Almanac' };
 function lgSecond(cur) { secondRow(Object.entries(LG).map(([k, l]) => [l, '#league/' + k]), '#league/' + cur); $('#crumb').textContent = 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'league')); }
 const TAGCLS = { Trade: 'trade', Signing: 'sign', Release: 'cut', Draft: 'draft', Extension: 'contract', Waivers: 'wire', 'Call-Up': 'squad', 'Practice Squad': 'squad', 'Injured Reserve': 'wire', Retirement: 'retire', Fired: 'cut', Hired: 'staff', Staff: 'staff', 'Franchise Tag': 'tagg', Restructure: 'contract', 'Position Change': 'squad', 'Hall of Fame': 'hall', Season: 'season' };
 
@@ -1660,6 +1661,95 @@ function renderTeamSchedule(v) {
 }
 
 let txGroup = 'All', txClub = 'all', txQuery = '', txShown = 60;
+// THE SEASON REVIEW. The morning after: a hero in the club's colors with the record against the ask and the
+// seventeen results as a strip, the owner's word, the units as ranked bars, the men who rose and fell as cards,
+// next year's money as one bar, and the assistants' three notes.
+function renderReview(v) {
+  renderRail(v.rail); const page = persPage(); foSecond('review');
+  const c1 = v.club.color, c2 = v.club.accent || '#fff';
+  const ordn = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  // hero
+  const hero = el('section', { class: 'sheet c12 rv-hero', style: `--c1:${c1};--c2:${c2}` });
+  const left = el('div', { class: 'rv-left' },
+    el('div', { class: 'rv-kicker' }, `${v.year} · ${v.club.name}`),
+    el('div', { class: 'rv-record' }, v.record),
+    el('div', { class: 'rv-finish' }, `${v.finish}${v.div_rank ? ` · ${ordn(v.div_rank)} in the ${v.division}` : ''}${v.slot ? ` · pick ${v.slot}` : ''}`),
+    el('div', { class: 'rv-ask' }, 'The owner asked for ', el('b', {}, v.expected), `. You finished at .${String(v.pct.toFixed(3)).slice(2)} against .${String(v.expected_pct.toFixed(3)).slice(2)}.`));
+  const strip = el('div', { class: 'rv-strip' });
+  for (const g of v.timeline) strip.append(g.bye ? el('div', { class: 'rv-g bye', 'data-tip': `Week ${g.week} · Bye` }, '') : el('div', { class: 'rv-g ' + g.result.toLowerCase(), 'data-tip': `Week ${g.week} · ${g.away ? 'at' : 'vs'} ${g.opp.abbr} · ${g.mine}–${g.theirs}` }, g.result));
+  left.append(strip);
+  const owner = el('div', { class: 'rv-owner' }, el('div', { class: 'rv-tag ' + v.owner.mood.toLowerCase() }, v.owner.mood), el('div', { class: 'rv-quote' }, v.owner.line), el('div', { class: 'rv-job' }, `Your seat: ${v.owner.job}`));
+  hero.append(left, owner); page.append(hero);
+  // three columns
+  const units = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Units', el('small', {}, `offense ${v.sides.offense ? ordn(v.sides.offense) : '—'} · defense ${v.sides.defense ? ordn(v.sides.defense) : '—'}`)));
+  const ub = el('div', { class: 'rv-units' });
+  for (const u of v.units) { const r = u.rank || 32; const pct = 100 * (1 - (r - 1) / Math.max(1, u.of - 1)); ub.append(el('div', { class: 'rv-u' }, el('span', { class: 'lab' }, u.label), el('div', { class: 'bar' }, el('i', { style: `width:${pct}%;background:${r <= 8 ? 'var(--ok)' : r >= 24 ? 'var(--danger)' : 'var(--ink-3)'}` })), el('b', { class: r <= 8 ? 'good' : r >= 24 ? 'bad' : '' }, u.rank ? ordn(u.rank) : '—'))); }
+  units.append(ub); page.append(units);
+  const men = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Players', el('small', {}, 'who rose, who fell')));
+  const cardOf = p => el('div', { class: 'rv-card' + (p.up ? ' up' : ' down'), onclick: () => { location.hash = '#club/player/' + p.pid; }, style: 'cursor:pointer' }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, p.no != null ? p.no : p.pos), el('div', { class: 'body' }, el('div', { class: 'nm' }, p.name, el('small', {}, ` ${p.pos} · ${p.age}`)), el('div', { class: 'ln' }, p.line)), el('div', { class: 'ovr' }, p.ovr));
+  men.append(el('div', { class: 'h5', style: 'padding:6px 14px 0' }, 'Exceeded the grade')); for (const p of v.exceeded) men.append(cardOf(p));
+  if (v.short.length) { men.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Fell short of it')); for (const p of v.short) men.append(cardOf(p)); }
+  page.append(men);
+  const money = el('section', { class: 'sheet c4' }, el('h2', {}, 'Next Year', el('small', {}, `$${v.cap.limit}m cap`)));
+  const tot = Math.max(1, v.cap.limit); const w = x => `${Math.max(0, Math.min(100, 100 * x / tot)).toFixed(1)}%`;
+  money.append(el('div', { class: 'rv-capbar' }, el('i', { class: 'com', style: `width:${w(v.cap.committed - v.cap.dead)}`, 'data-tip': `Committed $${(v.cap.committed - v.cap.dead).toFixed(1)}m` }), el('i', { class: 'dead', style: `width:${w(v.cap.dead)}`, 'data-tip': `Dead money $${v.cap.dead}m` }), el('i', { class: 'room', style: `width:${w(v.cap.room)}`, 'data-tip': `Room $${v.cap.room}m` })),
+    el('div', { class: 'rv-caplegend' }, el('span', {}, el('i', { class: 'com' }), `Committed $${(v.cap.committed - v.cap.dead).toFixed(1)}m`), el('span', {}, el('i', { class: 'dead' }), `Dead $${v.cap.dead}m`), el('span', {}, el('i', { class: 'room' }), `Room $${v.cap.room}m`), v.cap.rollover ? el('span', { class: 'count' }, `incl. $${v.cap.rollover}m rollover`) : ''));
+  money.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Deals up'));
+  for (const p of v.pending) money.append(el('div', { class: 'rv-pend' + (p.starter ? ' starter' : ''), onclick: () => { location.hash = '#personnel/extensions'; }, style: 'cursor:pointer' }, el('span', { class: 'pos' }, p.pos), el('span', { class: 'nm' }, p.name, p.starter ? el('small', {}, ' · starter') : ''), el('b', {}, p.ovr), el('span', { class: 'apy' }, `$${p.apy}m`)));
+  if (!v.pending.length) money.append(el('div', { class: 'count', style: 'padding:6px 14px' }, 'Nobody comes off contract.'));
+  page.append(money);
+  // the assistants
+  const notes = el('section', { class: 'sheet c12 rv-notes' }, el('h2', {}, "The Assistants' Notes"));
+  for (const n of v.notes) notes.append(el('div', { class: 'rv-note' }, el('span', { class: 'q' }, '“'), n));
+  page.append(notes);
+}
+
+// EXIT MEETINGS. A room, one man at a time: his question in his own words, his contract on the table, and your
+// answers with what each one costs. Once you answer, his reply stays on the card.
+function renderExit(v) {
+  renderRail(v.rail); const page = persPage(); foSecond('exit');
+  const c1 = v.club.color, c2 = v.club.accent || '#fff';
+  const head = el('section', { class: 'sheet c12 xm-head' }, el('div', { class: 'xm-kicker' }, `${v.year} · Exit Meetings`), el('div', { class: 'xm-title' }, v.open ? `${v.open} ${v.open === 1 ? 'player wants' : 'players want'} a word` : 'The meetings are done'), el('div', { class: 'xm-sub' }, 'Each will remember what you tell him. A promise goes on the ledger; a brush-off goes in his memory.'));
+  page.append(head);
+  if (!v.meetings.length) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, 'Nobody asked for a meeting this year.'))); return; }
+  for (const m of v.meetings) {
+    const card = el('section', { class: 'sheet c6 xm-card' + (m.answer ? ' done' : '') });
+    const who = el('div', { class: 'xm-who' }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, m.no != null ? m.no : m.pos), el('div', {}, el('div', { class: 'nm', onclick: () => { location.hash = '#club/player/' + m.pid; }, style: 'cursor:pointer' }, m.name), el('div', { class: 'ln' }, `${m.pos} · ${m.age} · ${m.ovr} ovr · ${m.years ? `${m.years} yr${m.years === 1 ? '' : 's'} left at $${m.apy}m` : 'contract up'}`)));
+    const quote = el('div', { class: 'xm-quote' }, el('span', { class: 'q' }, '“'), m.quote);
+    card.append(who, quote);
+    if (!m.answer) {
+      const opts = el('div', { class: 'xm-opts' });
+      for (const o of m.options) opts.append(el('button', { class: 'xm-opt', onclick: () => { const r = pyJSON(`SESSION.exit_answer(${JSON.stringify(m.pid)}, ${JSON.stringify(o.key)})`); if (!r.ok) notify(r); renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); } }, el('b', {}, o.label), el('span', {}, o.sub)));
+      card.append(opts);
+    } else {
+      const o = m.options.find(x => x.key === m.answer) || {};
+      card.append(el('div', { class: 'xm-said' }, el('div', { class: 'you' }, 'You: ', el('b', {}, o.label || m.answer)), el('div', { class: 'him' }, el('span', { class: 'q' }, '“'), m.said || '')));
+    }
+    page.append(card);
+  }
+}
+
+// the playoff bracket: seeds down the side, the rounds across, scores as they land
+function renderBracket(v) {
+  renderRail(v.rail); const page = persPage(); lgSecond('bracket');
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Playoffs', el('small', {}, v.champion ? `Champion: ${v.champion.name}` : v.live ? 'the bracket, live' : v.note || 'the field')));
+  const gameCard = g => el('div', { class: 'bgame' + (g.me ? ' mine' : '') + (g.done ? ' done' : '') },
+    el('div', { class: 'brow' + (g.done && g.winner === g.away.abbr ? ' win' : '') }, el('span', { class: 'sd' }, g.away_seed || ''), el('span', { class: 'str', style: `background:${g.away.color}` }), el('span', { class: 'nm' }, g.away.name), el('b', {}, g.done ? g.as_ : '')),
+    el('div', { class: 'brow' + (g.done && g.winner === g.home.abbr ? ' win' : '') }, el('span', { class: 'sd' }, g.home_seed || ''), el('span', { class: 'str', style: `background:${g.home.color}` }), el('span', { class: 'nm' }, 'at ' + g.home.name), el('b', {}, g.done ? g.hs : '')));
+  const grid = el('div', { class: 'bracket' });
+  for (const c of v.confs) {
+    const col = el('div', { class: 'bconf' }, el('div', { class: 'h5' }, c.conf, el('span', {}, v.started ? '' : 'as it stands')));
+    const seeds = el('div', { class: 'bseeds' });
+    for (const sd of c.seeds) seeds.append(el('div', { class: 'brow' + (sd.me ? ' mine' : '') + (v.started && !sd.alive ? ' out' : '') }, el('span', { class: 'sd' }, sd.seed), el('span', { class: 'str', style: `background:${sd.club.color}` }), el('span', { class: 'nm' }, sd.club.name), el('b', {}, sd.record)));
+    col.append(seeds);
+    for (const r of c.rounds) { const rc = el('div', { class: 'bround' }, el('div', { class: 'h5' }, r.name)); if (!r.games.length) rc.append(el('div', { class: 'count' }, 'to be decided')); for (const g of r.games) rc.append(gameCard(g)); col.append(rc); }
+    grid.append(col);
+  }
+  s.append(grid);
+  if (v.started) s.append(el('div', { class: 'bfinal' }, el('div', { class: 'h5' }, 'Super Bowl'), v.final ? gameCard(v.final) : el('div', { class: 'count' }, 'to be decided'), v.champion ? el('div', { class: 'champ' }, `${v.champion.name} · Champions`) : ''));
+  page.append(s);
+}
+
 function renderTransactions(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('transactions');
   const copyTx = el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 10px;font-size:14px', 'data-tip': 'Copy the list as filtered, every entry, as text', onclick: () => {
@@ -1948,5 +2038,5 @@ async function advanceInner() {
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
   window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal_full()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
-    else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
+    else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();

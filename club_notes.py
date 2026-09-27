@@ -69,7 +69,7 @@ def _injury_report(league, t, week, results):
 
 
 def returns(league, week):
-    """Wednesday: a man cleared to play again, and where he sits."""
+    """Wednesday: a player cleared to play again, and where he sits."""
     user = getattr(league, 'user_team', None)
     if not user: return
     t = league.teams[user]
@@ -132,6 +132,7 @@ def _morale(league, t, week):
 
 
 def _milestones(league, t, week):
+    if int(week or 0) > 18: return                               # season milestones are regular-season numbers; playoff lines sit in their own book
     bk = league.stats.get(league.year, {}) if getattr(league, 'stats', None) else {}
     for p in t.active():
         gs = int(p.xp_spent.get('_starts', 0) or 0)

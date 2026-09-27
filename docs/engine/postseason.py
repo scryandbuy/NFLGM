@@ -81,6 +81,12 @@ class Postseason:
         self.conf_champs = {}
         self.round_idx = 0
 
+    def alive_now(self):
+        """Every club still in the bracket."""
+        if self.champion: return {self.champion}
+        alive = {t for al in getattr(self, 'alive', {}).values() for t in al.values()}
+        return alive | set(getattr(self, 'conf_champs', {}).values())
+
     def matchups(self, rnd):
         """(conf, home, away) for a round from the bracket as it stands."""
         out = []
@@ -104,8 +110,11 @@ class Postseason:
         return out
 
     def record(self, rnd, conf, home, away, res):
-        """A finished playoff game into the bracket."""
+        """A finished playoff game into the bracket, and its score into the schedule entry."""
         self.games.append((rnd, conf, home, away, res['home'], res['away']))
+        wk_ = 19 + self.ROUNDS.index(rnd)
+        for i, g in enumerate(self.L.schedule):
+            if g[0] == wk_ and g[2] == home and g[1] == away: self.L.schedule[i] = (wk_, away, home, res['away'], res['home']); break
         win = home if res['home'] >= res['away'] else away
         lose = away if win == home else home
         self.exit_round[lose] = rnd
@@ -118,6 +127,16 @@ class Postseason:
         else:
             self.alive[conf] = {s: t for s, t in self.alive[conf].items() if t != lose}
         return win
+
+    def schedule_round(self, rnd):
+        """The round's games into the league schedule as weeks 19 to 22, so the report, the game plan, the rail and
+        the strip find them the way they find a regular week's game."""
+        wk_ = 19 + self.ROUNDS.index(rnd)
+        have = {(g[1], g[2]) for g in self.L.schedule if g[0] == wk_}
+        ms = self.matchups(rnd)
+        for conf, home, away in ms:
+            if (away, home) not in have: self.L.schedule.append((wk_, away, home, None, None))
+        return ms
 
     def play_round(self, rnd, skip=None, week=None):
         """Play every game of the round except the one involving `skip` (the user's club, played live).
@@ -235,19 +254,30 @@ def set_draft_order(league, post, year=None):
 
 
 # ================================================================== FIRING
-def run_firings(league, rng, pool=None, verbose=False):
+def run_firings(league, rng, pool=None, verbose=False, clubs=None):
     """
     Every club rolls its own chance off accumulated pressure. No quota, no
     target turnover - the league lands where it lands, which is the point of
     having a pressure model at all.
+
+    BLACK MONDAY. With `clubs` given, only those clubs roll (the ones whose season just ended), and the result is
+    remembered so the season's close rolls only the clubs that have not yet. That is how the real market works:
+    a club fires the day after it is eliminated, and the two Super Bowl clubs wait.
     """
     pool = pool if pool is not None else []
     fired = []
+    done = league.__dict__.setdefault('_firings_rolled', {})
+    yr = str(league.year); rolled = done.setdefault(yr, [])
     strengths = {a: t.roster_strength() for a, t in league.teams.items()}
     lo, hi = min(strengths.values()), max(strengths.values())
-    for abbr, t in league.teams.items():
+    # the clubs searching in the same week compete for the same names; the worst record moves first
+    order = sorted(league.teams.items(), key=lambda kv: kv[1].win_pct)
+    for abbr, t in order:
         if t.gm is None:
             continue
+        if clubs is not None and abbr not in clubs: continue
+        if abbr in rolled: continue
+        rolled.append(abbr)
         # roster quality 0-1: a bad record with a bad roster is survivable
         rp = (strengths[abbr] - lo) / (hi - lo) if hi > lo else 0.5
         qb = t.starter('QB')
@@ -258,7 +288,9 @@ def run_firings(league, rng, pool=None, verbose=False):
                 continue                      # the user is the man; his seat is his own story
             import coaching_pool as CP
             hired, reasons = CP.fire_and_hire(league, t, rng, verbose)
-            fired.append((abbr, hired.background))
+            bg = hired.background if hired is not None else 'pending a search'
+            fired.append((abbr, bg))
+            league.__dict__.setdefault('_fired_this_year', {}).setdefault(yr, []).append((abbr, bg))
         else:
             t.tenure += 1
             t.gm.tenure = t.tenure
@@ -285,7 +317,10 @@ def close_season(league, runner, rng, pool=None, verbose=False, post=None):
                            else post.exit_round.get(abbr))
     order = set_draft_order(league, post)
     league.set_phase('offseason')
-    fired = run_firings(league, rng, pool, verbose)
+    fired = run_firings(league, rng, pool, verbose)                 # whoever has not rolled yet (the two finalists, or all 32 when the bracket was simmed at once)
+    earlier = (league.__dict__.get('_fired_this_year', {}) or {}).get(str(league.year), [])
+    seen = {a for a, _ in fired}
+    fired = fired + [x for x in earlier if x[0] not in seen]
     league.log('season_end', champion=post.champion,
                top_pick=order[0], gm_changes=len(fired))
     return post, order, fired
@@ -307,3 +342,25 @@ if __name__ == '__main__':
           [pk.selection for t in L.teams.values() for pk in t.picks
            if pk.year == L.year and pk.round == 1 and pk.original == post.champion])
     print('total %.0fs' % (time.time() - t0))
+
+
+def provisional_slot(league, post, abbr):
+    """Where a club picks in the first round, as far as the season has settled it: the eighteen that missed are
+    fixed at week 18 by record; a round's losers are fixed once the round is complete; the finalists wait for the
+    Super Bowl. None until the club's own season is over."""
+    if post is None or not getattr(post, 'seeds', None): return None
+    field = {t for sd in post.seeds.values() for t in sd}
+    out = [a for a in league.teams if a not in field]
+    key = lambda a: (league.teams[a].win_pct, league.teams[a].record[0])
+    if abbr not in field:
+        return sorted(out, key=key).index(abbr) + 1
+    er = (getattr(post, 'exit_round', {}) or {}).get(abbr)
+    if er is None:
+        if post.champion == abbr: return 32
+        return None
+    rounds = ('WC', 'DIV', 'CONF', 'SB')
+    need = {'WC': 6, 'DIV': 4, 'CONF': 2, 'SB': 1}[er]
+    losers = [a for a, r in post.exit_round.items() if r == er]
+    if len(losers) < need: return None                     # the round is not finished
+    base = len(out) + sum({'WC': 6, 'DIV': 4, 'CONF': 2}[r] for r in rounds[:rounds.index(er)])
+    return base + sorted(losers, key=key).index(abbr) + 1

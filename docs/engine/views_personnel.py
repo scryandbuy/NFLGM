@@ -206,7 +206,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
 
 
 def act_gather(league, abbr, pid):
-    """What the league would give for one of your men: every club's best offer, as a package. A package is a
+    """What the league would give for one of your players: every club's best offer, as a package. A package is a
     pick, two picks, or a pick and a surplus player; a club makes it only if it thinks it gained, and the offer
     shown is the one that pays you the most. All offers are returned; the page scrolls them."""
     import trades as TR, trade_engine as TE, valuation as VAL, itertools

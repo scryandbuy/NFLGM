@@ -73,7 +73,7 @@ def make_candidate(rng, taken=(), background=None):
 
 
 # ------------------------------------------------------------ prestige
-# How a name grows and fades. Per season, on the man in charge.
+# How a name grows and fades. Per season, on the player in charge.
 PRESTIGE = dict(win=0.45, loss=-0.35, playoffs=3.0, missed=-2.0, conf_title=4.0,
                 sb_berth=5.0, sb_win=8.0, coty=5.0, fired=-8.0, decay=0.04)
 
@@ -147,7 +147,7 @@ def top_up(league, rng):
 # ------------------------------------------------------------ the owner
 def roster_fit(team, gm):
     """
-    How the club's two-deep would grade under this man's scheme: mean fit
+    How the club's two-deep would grade under this player's scheme: mean fit
     (points added or lost) and the misfits, each with what he is owed.
     """
     scheme = GE.scheme_of(gm)
@@ -179,7 +179,7 @@ def owner_state(team):
 
 
 def scheme_similarity(a, b):
-    """0..1: how much of what the new man runs is what the club runs. Mixed
+    """0..1: how much of what the new player runs is what the club runs. Mixed
     blocking and multiple fronts are compatible with either answer."""
     if a is None or b is None: return 0.5
     s = 0.0
@@ -191,15 +191,15 @@ def scheme_similarity(a, b):
 
 def owner_hire(league, team, rng, verbose=False):
     """
-    The decision. Returns (hired, reasons) and moves the man out of the pool.
+    The decision. Returns (hired, reasons) and moves the player out of the pool.
     """
     p = pool(league)
     if not p:
         top_up(league, rng)
-    # not the man he just fired
+    # not the player he just fired
     just_fired = getattr(team, '_just_fired', None)
     p_cands = [c for c in p if c is not just_fired] or p
-    # SITTING COORDINATORS with the prestige are candidates too: a man from
+    # SITTING COORDINATORS with the prestige are candidates too: a player from
     # the staff module becomes a head-coaching candidate carrying his name,
     # his prestige and his side of the ball; if hired he leaves a hole
     for co in coordinators_as_candidates(league):
@@ -208,6 +208,11 @@ def owner_hire(league, team, rng, verbose=False):
         g.name = co.name; g.prestige = float(co.prestige); g.age = co.age
         g.reputation = round(float(np.clip((co.rating - 35.0) / 55.0 + rng.normal(0, 0.06), 0.05, 0.95)), 2)
         g._from_staff = (co.team, co.role)
+        g._recent_ranks = list(co.unit_ranks[-2:])          # what his unit did the last two seasons
+        import staff as STF
+        g._hc_ask = round(1.6 * STF.ask(co), 2)               # a head-coaching job pays about 1.6x his coordinator's ask
+        # a coordinator another club is already waiting on is off the board
+        if any(v.get('first') == co.name for v in (getattr(league, 'pending_hires', None) or {}).values()): continue
         p_cands.append(g)
     st = owner_state(team)
     # how much the owner wants continuity, 0 = tear it down, 1 = keep the roster
@@ -240,7 +245,22 @@ def owner_hire(league, team, rng, verbose=False):
         # sober one, which is enough to be passed over for a better fit.
         star = float(getattr(team, 'owner_star_pull', 0.5))
         name_term = (0.10 + 0.70 * star) * (getattr(c, 'prestige', 20.0) / 100.0) * 0.8
-        score = seen_q + fit_term - cost_term + name_term
+        # WHAT HIS UNIT DID. The last two seasons' ranks of his unit, the most recent weighted double: a top-five
+        # offense two years running is worth about a third of a point, a bottom-eight one costs the same
+        ranks = list(getattr(c, '_recent_ranks', None) or [])
+        if ranks:
+            recent = (2.0 * ranks[-1] + ranks[-2]) / 3.0 if len(ranks) >= 2 else float(ranks[-1])
+            results_term = 0.35 * (16.5 - recent) / 15.5
+        elif getattr(c, 'hc_record', None):
+            results_term = 0.25 * (float(c.hc_record.get('win_pct', 0.5)) - 0.5) / 0.2
+        else:
+            results_term = 0.0
+        # WHAT HE COSTS. His ask against what this owner will pay a head coach; over budget costs, well under is a small plus
+        hc_ask = float(getattr(c, '_hc_ask', 0.0) or (4.0 + 0.08 * getattr(c, 'prestige', 20.0)))
+        hc_budget = 6.0 + 8.0 * float(getattr(team, 'owner_spend', 0.5))
+        salary_term = -0.30 * max(0.0, (hc_ask - hc_budget) / hc_budget) + 0.05 * max(0.0, min(1.0, (hc_budget - hc_ask) / hc_budget))
+        score = seen_q + fit_term - cost_term + name_term + results_term + salary_term
+        c._score_parts = dict(seen=round(seen_q, 2), fit=round(fit_term, 2), cost=round(-cost_term, 2), name=round(name_term, 2), results=round(results_term, 2), salary=round(salary_term, 2), ask=round(hc_ask, 1), budget=round(hc_budget, 1))
         scored.append((score, c, fit, len(misfits), cost, seen_q, sim))
     scored.sort(key=lambda x: -x[0])
     score, hired, fit, n_mis, cost, seen_q, sim = scored[0]
@@ -262,6 +282,14 @@ def owner_hire(league, team, rng, verbose=False):
             for sc, c, f, nm, cst, sq, sm in scored[1:]:
                 if getattr(c, '_from_staff', None) and c._from_staff[0] == user: continue
                 hired, fit, n_mis, cost, seen_q, sim = c, f, nm, cst, sq, sm; break
+        elif open_t['state'] == 'open':
+            # THE SEARCH WAITS FOR YOUR ANSWER. The club holds the job open with your coordinator as its choice and its
+            # second choice noted; the answer completes the hire either way (staff.answer_poach), and the carousel
+            # closes anything still pending with him leaving
+            second = next((c for sc, c, f, nm, cst, sq, sm in scored[1:] if not (getattr(c, '_from_staff', None) and c._from_staff[0] == user)), None)
+            open_t['pending_club'] = team.abbr; open_t['second'] = second.name if second is not None else None
+            league.__dict__.setdefault('pending_hires', {})[team.abbr] = dict(poach=open_t['id'], first=hired.name, first_from=list(hired._from_staff), second=(second.name if second is not None else None), year=league.year)
+            return None, dict(pending=True, waiting_on=hired.name)
     if hired in p:
         p.remove(hired)
     elif getattr(hired, '_from_staff', None):
@@ -296,8 +324,15 @@ def fire_and_hire(league, team, rng, verbose=False):
     AL.coach_fired(league, team.abbr, league.year)
     hired, reasons = owner_hire(league, team, rng, verbose)
     team._just_fired = None
+    if hired is None:
+        # the job is held open while the user answers for his coordinator; the club has no head coach for now
+        team.gm = None
+        league.log('gm_search', team=team.abbr, waiting_on=reasons.get('waiting_on'))
+        return None, reasons
     hired.tenure = 0
     hired.job_security = float(np.clip(rng.normal(.78, .10), .45, .97))
+    try: hired.salary = round(float(getattr(hired, '_hc_ask', 0.0) or (4.0 + 0.08 * getattr(hired, 'prestige', 20.0))), 2)
+    except Exception: pass
     team.gm = hired
     team.scheme = GE.scheme_of(hired)
     team.tenure = 0
@@ -307,3 +342,36 @@ def fire_and_hire(league, team, rng, verbose=False):
     league.log('gm_change', team=team.abbr, hired=hired.name, background=hired.background,
                win_pct=round(team.win_pct, 3), **reasons)
     return hired, reasons
+
+
+def complete_pending_hire(league, club_abbr, rng, take_first):
+    """The user answered for his coordinator: the waiting club hires him (take_first) or its second choice."""
+    pend = (getattr(league, 'pending_hires', None) or {}).pop(club_abbr, None)
+    team = league.teams.get(club_abbr)
+    if pend is None or team is None: return None
+    p = pool(league); hired = None
+    if take_first:
+        src_abbr, role = pend['first_from']
+        src = league.teams.get(src_abbr); co = (getattr(src, 'staff', None) or {}).get(role) if src is not None else None
+        if co is not None and co.name == pend['first']:
+            g = make_candidate(rng, taken=[c.name for c in p], background=('offensive coordinator' if role == 'oc' else 'defensive coordinator'))
+            g.name = co.name; g.prestige = float(co.prestige); g.age = co.age
+            g.reputation = round(float(np.clip((co.rating - 35.0) / 55.0 + rng.normal(0, 0.06), 0.05, 0.95)), 2)
+            src.staff[role] = None
+            league.log('staff_out', team=src_abbr, role=role, name=co.name, why=f'hired as head coach by {club_abbr}')
+            hired = g
+    if hired is None:
+        hired = next((c for c in p if c.name == pend.get('second')), None) or (max(p, key=lambda c: getattr(c, 'prestige', 0)) if p else None)
+        if hired is None: return None
+        if hired in p: p.remove(hired)
+    hired.tenure = 0
+    hired.job_security = float(np.clip(rng.normal(.78, .10), .45, .97))
+    team.gm = hired; team.scheme = GE.scheme_of(hired); team.tenure = 0
+    league.log('gm_change', team=team.abbr, hired=hired.name, background=hired.background, win_pct=round(team.win_pct, 3), after_search=True)
+    return hired
+
+
+def close_pending_hires(league, rng):
+    """The carousel: any club still waiting on an answer takes the coordinator (the user did not answer)."""
+    for club_abbr in list((getattr(league, 'pending_hires', None) or {}).keys()):
+        complete_pending_hire(league, club_abbr, rng, take_first=True)

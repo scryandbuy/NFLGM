@@ -163,7 +163,7 @@ class InjuryDesk:
         self.designated = {}    # pid -> times designated to return
         self.returns_used = 0
         self.playing_hurt = {}  # pid -> designation he played through
-        self.pending = {}       # the user's men awaiting Play or Sit
+        self.pending = {}       # the user's players awaiting Play or Sit
 
     # ---- weekly ------------------------------------------------------
     def set_week(self, league, team, week, rng):
@@ -248,7 +248,7 @@ class InjuryDesk:
             else: self.pending.pop(pid, None)
 
     def flare(self, league, team, week, rng):
-        """After the game: a man who played hurt may have made it worse. One or two weeks, never more."""
+        """After the game: a player who played hurt may have made it worse. One or two weeks, never more."""
         out = []
         for pid, d in list(self.playing_hurt.items()):
             p = league.player(pid)

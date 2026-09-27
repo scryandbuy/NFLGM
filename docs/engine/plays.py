@@ -321,6 +321,11 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
             break
         wrap = rate(t, YAC['tackler']['wrap'])
         atk = max(elus, powr) + 0.30 * (vis - AVG)
+        if not in_space:
+            # the elite end of the contest is compressed for runners: a 97 truck beat the first man 60% of the time and
+            # the chain multiplied it into 7 yards a carry over 300 carries; real elite backs sit near 5.5. An average
+            # back is unchanged (the mean holds), the top of the scale wins more often but not on every defender
+            atk = 0.83 + 0.6 * (atk - 0.83)                 # pivot at the league's starting back, so the middle of the league is untouched
         # 0.52 base difficulty puts an average back's break rate near the real
         # ~18%; the ramp adds difficulty for every man already beaten
         # A receiver catching the ball in space is not a back hitting a pile:
@@ -571,7 +576,9 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # clubs with sd 0.66 against a real 0.35, most of which is sampling noise
     # on 430 carries, so the true real spread is small. RUN_BASE is re-anchored
     # so the league lands on 4.52.
-    ybc = RUN_BASE + 5.5 * push - 2.0 * (fill - AVG) + rng.normal(0, RUN_NOISE)
+    # slope 5.5 to 3.5: the best line in the league was worth two yards before contact on every carry, and with an
+    # elite back behind it the club ran for four thousand; a yard is the real gap between the best line and an average one
+    ybc = RUN_BASE + 3.5 * push - 2.0 * (fill - AVG) + rng.normal(0, RUN_NOISE)
     ybc *= S.box_run_multiplier(def_call['box'])
     ybc *= S.run_scheme_multiplier(scheme, def_call['front'], ytg, def_call['box'])
     ybc *= S.FRONTS[def_call['front']]['run_fit'] ** -1

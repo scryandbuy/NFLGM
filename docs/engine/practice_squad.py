@@ -255,7 +255,7 @@ def udfa_camp(league, rng, verbose=False):
 
 
 def fill_squads(league, rng, verbose=False):
-    """After cut-down: own cuts first, then the pool. Young men to the ten
+    """After cut-down: own cuts first, then the pool. Young players to the ten
     young slots, the best available veterans to the six."""
     cuts = collections.defaultdict(list)
     for x in league.transactions:
@@ -329,7 +329,7 @@ def keep_groups_whole(league, rng, week):
             if short > 0 and abbr == user and hard:
                 try:
                     import inbox as IB
-                    IB.post(league, 'injury', f"Emergency at {grp}: the trainers filled it", f"The chart at {grp} fell below what the game can dress ({healthy.get(grp, 0)} healthy). The best man available was called up so a team could take the field; the practice-squad and free-agent pages are yours for anything more.", sender='trainers', payload=dict(link='club:ps'))
+                    IB.post(league, 'injury', f"Emergency at {grp}: the trainers filled it", f"The chart at {grp} fell below what the game can dress ({healthy.get(grp, 0)} healthy). The best player available was called up so a team could take the field; the practice-squad and free-agent pages are yours for anything more.", sender='trainers', payload=dict(link='club:ps'))
                 except Exception: pass
             if abbr != user and getattr(team, '_moved_week', None) == wk_ and not hard:
                 continue                                  # one roster addition a week per club, short of an emergency
@@ -411,7 +411,7 @@ def roster_review(league, rng, week, user_team=None):
 
 def weekly(league, rng, week, user_team=None):
     """
-    In season, every week: clubs short of healthy men at a group elevate two
+    In season, every week: clubs short of healthy players at a group elevate two
     for the game or call one up; and a club with a hole may poach another's
     squad man to its 53 when nothing on its own squad fits. Rare.
     """
@@ -424,7 +424,7 @@ def weekly(league, rng, week, user_team=None):
         if len(healthy) >= 46:
             continue
         short = 46 - len(healthy)
-        # groups missing men
+        # groups missing players
         by_pos = collections.Counter(p.pos for p in healthy)
         want = sorted(squad(team), key=lambda p: -p.ovr)
         picks = [p.pid for p in want if by_pos.get(p.pos, 0) < {'QB': 2, 'HB': 2, 'WR': 5, 'TE': 2, 'CB': 4, 'DT': 3}.get(p.pos, 2)][:short]

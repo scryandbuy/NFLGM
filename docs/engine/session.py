@@ -15,6 +15,7 @@ button reads. Anything the user must do before a stop is a blocking
 decision the Portal shows on the button.
 """
 import json, numpy as np
+from views import CLUB_NAME as CLUB_NAME_
 import league as LG, season as SN, postseason as PS, awards as AW, coaching_pool as CP, position_change as PC
 import morale as MO, staff as STF, almanac as AL, xp as XP, dev_roll as DR, retirement as RT, regression as RG
 import schedule as SCH, contracts as CT, waivers as WV, extensions as EXT, tags as TG, market as MK, trades as TRD
@@ -165,6 +166,9 @@ class Session:
             if rnd_i >= 4: return dict(title='Close the Season', sub='the champion is crowned', played=True)
             rnd = PS.Postseason.ROUNDS[rnd_i]; name = PS.Postseason.ROUND_NAMES[rnd]
             post = getattr(self, 'post_live', None); user = self.user_team
+            if self.played:
+                nxt = PS.Postseason.ROUND_NAMES[PS.Postseason.ROUNDS[rnd_i + 1]] if rnd_i + 1 < 4 else 'Offseason'
+                return dict(title=f'Advance to the {nxt}', sub=f'The {name} is in the books', played=True)
             if post is not None and hasattr(post, 'alive'):
                 alive = {t for a in post.alive.values() for t in a.values()} if rnd != 'SB' else set(post.conf_champs.values())
                 if user in alive:
@@ -262,11 +266,22 @@ class Session:
             IB.expire(self.L, wk + 1)
             self.played = False
             self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs', 0)
+            if wk >= WEEKS:
+                self._playoff_prep(0)
+                post = self.post_live
+                if post is not None:
+                    field = {t for sd in post.seeds.values() for t in sd}
+                    if self.user_team not in field: self._post_review('missed')
+                    self._ai_exit_meetings([a for a in self.L.teams if a not in field])
+                    self._black_monday([a for a in self.L.teams if a not in field])
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':
-            # THE PLAYOFFS, A ROUND AT A TIME. Each Advance plays one round: the AI games are simmed, and if your club
-            # is in the round its game opens live on Game Day, exactly like a regular-season week. Out of it, or on
-            # the bye, you sim the round. After the Super Bowl the season closes.
+            # THE PLAYOFFS, A ROUND AT A TIME, with the whole week around each game. Entering a round (from week 18's
+            # roll or the roll after the last round) is the prep: the bracket is seeded, the round's games go into the
+            # schedule, the injury desk lists the hurt with their Play/Sit notes, the opponent report and game plan
+            # post, and the inbox gets the round. Advance then plays the round: the other games sim onto the strip and
+            # yours opens live on Game Day. Advance again rolls the week (XP, morale, injuries, notes) into the next
+            # round's prep. After the Super Bowl the season closes.
             if self.runner is None: self.runner = SN.SeasonRunner(self.L, self.rng)
             rnd_i = int(self.stop[1]) if len(self.stop) > 1 else 0
             lv = getattr(self.runner, 'live', None)
@@ -275,27 +290,41 @@ class Session:
             if rnd_i >= 4:
                 return self._close_playoffs()
             if getattr(self, 'post_live', None) is None or not hasattr(self.post_live, 'seeds'):
-                self.standings = self.runner.standings()
-                self.L.set_phase('playoffs')
-                self.post_live = PS.Postseason(self.runner); self.post_live.start()
+                self._playoff_prep(0)
             post = self.post_live
-            rnd = PS.Postseason.ROUNDS[rnd_i]
-            user = self.user_team
-            self.runner.last_games = []; self.runner.last_played = []
-            held = post.play_round(rnd, skip=user)
-            if held is not None:
-                conf, home, away = held
-                post.held = (rnd, conf, home, away)                   # for a save taken mid-game
-                def _close(res, _c=conf, _h=home, _a=away, _r=rnd): post.record(_r, _c, _h, _a, res); post.held = None
-                self.runner.open_live(home, away, 19 + rnd_i, playoffs=True, on_close=_close)
+            rnd = PS.Postseason.ROUNDS[rnd_i]; wk_ = 19 + rnd_i
+            if not self.played:
+                # PLAY THE ROUND
+                user = self.user_team
+                self.runner.last_games = []; self.runner.last_played = []
+                held = post.play_round(rnd, skip=user, week=wk_)
                 self.played = True
-                self.stop = ('playoffs', rnd_i + 1) if rnd_i + 1 < len(PS.Postseason.ROUNDS) else ('playoffs', 4)
-                self._capture_gameday(19 + rnd_i)
-                return dict(done=f'{PS.Postseason.ROUND_NAMES[rnd]} live', next=self.next_label())
-            self.played = True
-            self._capture_gameday(19 + rnd_i)
+                if held is not None:
+                    conf, home, away = held
+                    post.held = (rnd, conf, home, away)
+                    def _close(res, _c=conf, _h=home, _a=away, _r=rnd): post.record(_r, _c, _h, _a, res); post.held = None
+                    self.runner.open_live(home, away, wk_, playoffs=True, on_close=_close)
+                    self._capture_gameday(wk_)
+                    return dict(done=f'{PS.Postseason.ROUND_NAMES[rnd]} live', next=self.next_label())
+                self._capture_gameday(wk_)
+                self.runner._after_games(wk_, self.runner.last_played)
+                return dict(done=PS.Postseason.ROUND_NAMES[rnd], next=self.next_label())
+            # ROLL INTO THE NEXT ROUND
+            self.runner.roll_week(wk_)
+            IB.expire(self.L, wk_ + 1)
+            self.played = False
+            if self.user_team in (getattr(post, 'exit_round', {}) or {}):
+                self._post_review('eliminated')
+            losers = [a for a, r in (getattr(post, 'exit_round', {}) or {}).items() if r == rnd]
+            self._ai_exit_meetings(losers)
+            self._black_monday(losers)
+            if rnd == 'WC':
+                self._announce_honors()
+            if rnd == 'CONF':
+                self._senior_bowl()
             if rnd_i + 1 < len(PS.Postseason.ROUNDS):
                 self.stop = ('playoffs', rnd_i + 1)
+                self._playoff_prep(rnd_i + 1)
                 return dict(done=PS.Postseason.ROUND_NAMES[rnd], next=self.next_label())
             self.stop = ('playoffs', 4)
             return self._close_playoffs()
@@ -315,6 +344,148 @@ class Session:
             except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
 
+    def _announce_honors(self):
+        """The season's honors come out after the Wild Card round, as they do: the vote on the regular season, paid
+        in XP the same day, felt in the room, priced into the next ask. The Super Bowl MVP waits for the game."""
+        try:
+            import morale as MO
+            from views import surname
+            from views_league import AWARD_NAMES
+            self.votes = AW.vote(self.L, None)
+            paid = XP.pay_awards(self.L, self.votes)
+            names = dict(AWARD_NAMES)
+            mine = []; lines = []
+            for k, who in self.votes.items():
+                if k in ('coty',) or not who: continue
+                ws = who if isinstance(who, list) else [who]
+                for w in ws:
+                    p = self.L.player(getattr(w, 'pid', w)) if not hasattr(w, 'pid') else w
+                    if p is None: continue
+                    m = MO.ensure(p)
+                    if m is not None:
+                        m.apply('major_award' if k in ('mvp', 'opoy', 'dpoy', 'oroy', 'droy', 'protector') else 'all_pro' if k == 'all_pro_1' else 'all_pro_2')
+                    if p.team == self.user_team: mine.append(f"{surname(p.name)} ({names.get(k, k) if k not in ('all_pro_1', 'all_pro_2') else ('All-Pro first team' if k == 'all_pro_1' else 'All-Pro second team')})")
+                if k not in ('all_pro_1', 'all_pro_2'):
+                    p = self.L.player(getattr(ws[0], 'pid', ws[0])) if not hasattr(ws[0], 'pid') else ws[0]
+                    if p is not None: lines.append(f"{names.get(k, k)}: {p.name} ({p.pos}, {p.team})")
+            body = ('Yours: ' + ', '.join(mine) + '. ' if mine else 'None of yours were named. ') + ' · '.join(lines)
+            IB.post(self.L, 'league', "The season's honors", body, sender='league', payload=dict(link='league:awards'))
+        except Exception as e:
+            import sys; print('honors failed:', e, file=sys.stderr)
+
+    def _senior_bowl(self):
+        """The week before the Super Bowl: every room's second look at the seniors in Mobile, and the assistants'
+        word on who helped himself."""
+        try:
+            import scouting as SC
+            from views import surname
+            moves = SC.senior_bowl(self.L, self.rng)
+            if not moves: return
+            moves.sort(key=lambda x: -x[0])
+            up = [f"{surname(p.name)} ({p.pos}, {d:+.1f})" for d, p in moves[:3] if d > 0.4]
+            down = [f"{surname(p.name)} ({p.pos}, {d:+.1f})" for d, p in moves[-3:][::-1] if d < -0.4]
+            body = f"Your scouts spent the week at the Senior Bowl; {len(moves)} seniors played. " + (f"Helped himself: {', '.join(up)}. " if up else '') + (f"Hurt himself: {', '.join(down)}. " if down else '') + "Their marks on your board have moved; the players who played carry the Senior Bowl tag."
+            IB.post(self.L, 'draft', "Senior Bowl week: the scouts' word", body, sender='scouts', payload=dict(link='draft:board'))
+        except Exception as e:
+            import sys; print('senior bowl failed:', e, file=sys.stderr)
+
+    def _black_monday(self, clubs):
+        """The clubs whose season just ended roll their firings now, and a new head coach comes for his staff,
+        which can mean a request for one of your coordinators while the playoffs go on."""
+        try:
+            fired = PS.run_firings(self.L, self.rng, clubs=list(clubs))
+            for abbr, bg in fired:
+                t = self.L.teams[abbr]
+                who = (t.gm.name + ' takes over.') if t.gm else ('The search is on; ' + (f"they are waiting on {self.L.pending_hires[abbr]['first']}." if abbr in (getattr(self.L, 'pending_hires', None) or {}) else 'a name is coming.'))
+                IB.post(self.L, 'league', f"{t.abbr} makes a change", f"{CLUB_NAME_.get(abbr, abbr)} moved on from its head coach the morning after its season ended. {who}", sender='league')
+            if fired:
+                # the market: the names every searching club is calling, by what their units did
+                import coaching_pool as CP
+                cands = [c for c in CP.coordinators_as_candidates(self.L) if c.team != self.user_team or True]
+                def hot(c):
+                    rk = list(c.unit_ranks[-2:]); recent = ((2.0 * rk[-1] + rk[-2]) / 3.0 if len(rk) >= 2 else float(rk[-1])) if rk else 16.5
+                    return 0.35 * (16.5 - recent) / 15.5 + 0.6 * (c.prestige / 100.0)
+                top = sorted(cands, key=hot, reverse=True)[:3]
+                if top:
+                    lines = [f"{c.name} ({'OC' if c.role == 'oc' else 'DC'}, {c.team}; his unit ranked {', '.join(str(int(r)) + ('st' if r == 1 else 'nd' if r == 2 else 'rd' if r == 3 else 'th') for r in c.unit_ranks[-2:]) or 'unranked'} the last two years)" for c in top]
+                    IB.post(self.L, 'league', "The coaching market", f"{len(fired)} club{'s' if len(fired) != 1 else ''} searching. The names every owner is calling: " + '; '.join(lines) + '.', sender='league')
+        except Exception as e:
+            import sys; print('black monday failed:', e, file=sys.stderr)
+
+    def _ai_exit_meetings(self, clubs):
+        import views_frontoffice as VF
+        for a in clubs:
+            if a == self.user_team: continue
+            try: VF.ai_exit_meetings(self.L, a, self.rng)
+            except Exception as e:
+                import sys; print('AI exit meetings failed:', a, e, file=sys.stderr)
+
+    def _post_review(self, how):
+        """The season review lands once, the morning after the club's season ends."""
+        key_ = f"review-{self.L.year}"
+        if any((m.get('payload') or {}).get('key') == key_ for m in getattr(self.L, 'inbox', [])): return
+        try:
+            v = self.frontoffice('season_review')
+            slot = PS.provisional_slot(self.L, getattr(self, 'post_live', None) or getattr(self, 'post', None), self.user_team)
+            slot_line = f" You pick {slot}{'st' if slot % 10 == 1 and slot != 11 else 'nd' if slot % 10 == 2 and slot != 12 else 'rd' if slot % 10 == 3 and slot != 13 else 'th'} in the first round." if slot else ''
+            IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the players whose deals are up.{slot_line}", sender='front office', payload=dict(key=key_, link='front_office:review'))
+        except Exception as e:
+            import sys; print('season review failed:', e, file=sys.stderr)
+        try:
+            # THE EXTENSION WINDOW. Your own players are yours to extend from here until the tag period; the note says
+            # who is up and what the room is
+            t = self.L.teams[self.user_team]
+            from views import surname, next_year_cap
+            up = sorted([p for p in t.active() if p.contract and p.contract.years <= 1 and p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.ovr)
+            two = sorted([p for p in t.active() if p.contract and p.contract.years == 2 and p.ovr >= 82], key=lambda p: -p.ovr)
+            limit_next, committed_next, _ro, _dn = next_year_cap(self.L, t)
+            if up or two:
+                body = (f"Deals up: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in up[:6])}. " if up else '') + (f"Two years left and worth a look: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in two[:4])}. " if two else '') + f"About ${limit_next - committed_next:.0f}m of room next year."
+                IB.post(self.L, 'contract', "The extension window is open", body, sender='front office', payload=dict(key=f"extwin-{self.L.year}", link='personnel:extensions'))
+        except Exception as e:
+            import sys; print('extension window note failed:', e, file=sys.stderr)
+        try:
+            import views_frontoffice as VF
+            ms = VF.build_exit_meetings(self, self.L, self.user_team)
+            if ms:
+                from views import surname
+                names = ', '.join(surname(self.L.player(x['pid']).name) for x in ms if self.L.player(x['pid']))
+                IB.post(self.L, 'exit', f"Exit meetings: {len(ms)} players want a word", f"{names}.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
+        except Exception as e:
+            import sys; print('exit meetings failed:', e, file=sys.stderr)
+
+    def _playoff_prep(self, rnd_i):
+        """The week before a playoff game, for every club: the round's games scheduled, the injury desk's listings and
+        Play/Sit notes, the opponent report and the plan, and the round in the inbox."""
+        import gameplan_week as GW
+        if getattr(self, 'post_live', None) is None or not hasattr(self.post_live, 'seeds'):
+            self.standings = self.runner.standings()
+            self.L.set_phase('playoffs')
+            self.post_live = PS.Postseason(self.runner); self.post_live.start()
+        post = self.post_live; rnd = PS.Postseason.ROUNDS[rnd_i]; wk_ = 19 + rnd_i
+        self.L._post_ref = post
+        self.L.week = wk_; self.runner.week = wk_
+        ms = post.schedule_round(rnd)
+        try: self.runner.injury_week(wk_); self.runner._listed_week = wk_
+        except Exception as e:
+            import sys; print('playoff injury listing failed:', e, file=sys.stderr)
+        user = self.user_team
+        mine = next(((c, h, a) for c, h, a in ms if user in (h, a)), None)
+        try: GW.post_report(self.L, wk_)
+        except Exception as e:
+            import sys; print('playoff report failed:', e, file=sys.stderr)
+        name = PS.Postseason.ROUND_NAMES[rnd]
+        from views import CLUB_NAME
+        nm = lambda x: CLUB_NAME.get(x, x)
+        lines = [f"{nm(a)} at {nm(h)}" for c, h, a in ms]
+        if mine is not None:
+            c, h, a = mine
+            body = f"Your {name} game: {'at ' + nm(h) if a == user else 'vs ' + nm(a)}. " + ('' if not lines else 'The round: ' + '; '.join(lines) + '.')
+        else:
+            alive = {t for al in post.alive.values() for t in al.values()} if rnd != 'SB' else set(post.conf_champs.values())
+            body = ('You have the bye this round. ' if user in alive else 'Your season is over. ') + ('The round: ' + '; '.join(lines) + '.' if lines else '')
+        IB.post(self.L, 'league', f"{name}: the field", body, sender='league', payload=dict(link='league:bracket'))
+
     def _close_playoffs(self):
         """After the Super Bowl: the champion, the draft order, the firings, and into the offseason."""
         post = self.post_live
@@ -324,6 +495,8 @@ class Session:
                 if not any(g[0] == rnd for g in post.games) or (rnd == 'SB' and post.champion is None):
                     post.play_round(rnd, skip=None)
         self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng, post=post)
+        self._post_review('closed')
+        self._ai_exit_meetings([a for a in self.L.teams if f"{a}-{self.L.year}" not in (getattr(self.L, 'exit_meetings', {}) or {})])
         try: self.post.seeds_at_close = dict(getattr(post, 'seeds', {}) or {})
         except Exception: self.post.seeds_at_close = {}
         MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
@@ -334,7 +507,14 @@ class Session:
     # ---- the offseason steps, the same code as franchise.play_year in the same order
     def step_awards(self):
         L, rng = self.L, self.rng
-        self.votes = AW.vote(L, self.post)
+        if getattr(self, 'votes', None) and L.awards.get(L.year):
+            # the honors came out after the Wild Card; only the Super Bowl MVP is left to add
+            try:
+                self.votes['sb_mvp'] = AW.super_bowl_mvp(L, self.post, L.year)
+                if self.votes['sb_mvp']: L.awards[L.year]['sb_mvp'] = getattr(self.votes['sb_mvp'], 'pid', self.votes['sb_mvp'])
+            except Exception: pass
+        else:
+            self.votes = AW.vote(L, self.post)
         CP.season_prestige(L, self.post, coty_team=self.votes.get('coty'))
         STF.season_end(L, STF.unit_ranks(L, L.year))
         AL.close_season(L, L.year, self.post, self.votes)
@@ -363,6 +543,11 @@ class Session:
         self.L.user_tag_choice = None          # a new year, a new tag
         L, rng = self.L, self.rng
         L.roll_year(rng)
+        try:
+            import negotiations as NG
+            NG.check_promises(L, week=0)       # the new year: extension promises are judged here
+        except Exception as e:
+            import sys; print('promise check failed:', e, file=sys.stderr)
         ranks = SCH.division_ranks(L, self.standings); SCH.new_season(L, ranks, rng)
         for t in L.teams.values(): t.record = [0, 0, 0]
         L.advance_contracts()
@@ -506,6 +691,12 @@ class Session:
     def frontoffice(self, page, **kw):
         import views_frontoffice as VF
         return getattr(VF, page)(self, self.L, self.user_team, **kw)
+
+    def exit_answer(self, pid, key):
+        import views_frontoffice as VF
+        r = VF.exit_answer(self, self.L, self.user_team, pid, key)
+        if r.get('ok'): self.save_dirty = True
+        return r
 
     def frontoffice_act(self, action, **kw):
         import views_frontoffice as VF

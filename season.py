@@ -209,12 +209,15 @@ class SeasonRunner:
                           away_state=self.states[away], week=week, book=book,
                           playoffs=playoffs)
         self._record(home, away, week, res, book, playoffs)
+        if playoffs:
+            self.last_games.append((home, away, res, book))
+            self.last_played = list(getattr(self, 'last_played', []) or []) + [(home, away, res['home'], res['away'])]
         return res
 
     # ------------------------------------------------------------ the live game
     def open_live(self, home, away, week, playoffs=False, on_close=None):
         """The user's game, opened at the opening kick and played on demand. The same preparation as play()
-        (hurt men, the week's plans), then the stepped engine held open until Finish."""
+        (hurt players, the week's plans), then the stepped engine held open until Finish."""
         hr, ar = self.refresh(home), self.refresh(away)
         if hr is None or ar is None: return None
         for side in (home, away):
@@ -472,13 +475,13 @@ class SeasonRunner:
         if played is None: played = getattr(self, 'last_played', []) or []
         self.week = week
         self.L.week = week
-        # THE WEEKLY ADVANCE: every AI club spends what its men earned, and
+        # THE WEEKLY ADVANCE: every AI club spends what its players earned, and
         # the user's auto-spend men go with them. The user's other players
         # keep their XP until he spends it from the player tab.
         XS.spend_week(self.L, week, self.rng,
                       user_team=getattr(self.L, 'user_team', None))
         import inbox as IB, practice_squad as PSQ, waivers as WV, morale as MO
-        # MORALE moves with the week: results, usage against what each man
+        # MORALE moves with the week: results, usage against what each player
         # believes he is owed, the room, benchings
         results = {}
         for home, away, hs, as_ in played:
@@ -537,7 +540,7 @@ class SeasonRunner:
             import staff as STF_; STF_.resolve_references(self.L)
         except Exception as e:
             import sys; print('club_notes weekly failed:', e, file=sys.stderr)
-        # the squads: elevations for clubs short of healthy men, the odd poach
+        # the squads: elevations for clubs short of healthy players, the odd poach
         PSQ.weekly(self.L, self.rng, week, user_team=getattr(self.L, 'user_team', None))
         try:
             import extensions as EXT
@@ -570,7 +573,7 @@ class SeasonRunner:
     def completed(self):
         """(home, away, home_pts, away_pts) for every finished game."""
         return [(h, a, hp, ap) for _wk, a, h, ap, hp in self.L.schedule
-                if hp is not None]
+                if hp is not None and _wk <= 18]                 # playoff games sit in the schedule (weeks 19-22) but never count in the standings
 
     def season_state(self):
         """The tiebreaker engine, fed from live results instead of history."""
