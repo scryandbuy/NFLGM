@@ -1303,3 +1303,15 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 
 .yearchips{padding:8px 14px 0}
 .yearchips .chip[aria-pressed="true"]{background:var(--club-2);color:#111;border-color:var(--club-2)}
+
+/* a team's schedule */
+.ts-list{padding:10px 14px 14px}
+.ts-row{display:grid;grid-template-columns:52px 26px 4px 1fr 28px 70px;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--rule);font-size:15px}
+.ts-row .wk{font-family:var(--mono);font-size:12.5px;color:var(--ink-3)}
+.ts-row .ha{color:var(--ink-3);font-size:13px}
+.ts-row .str{width:4px;height:20px;border-radius:2px}
+.ts-row .opp small{color:var(--ink-3);font-size:12.5px}
+.ts-row .res{font-family:var(--display);font-weight:900;font-size:18px;text-align:center}
+.ts-row.w .res{color:var(--ok)}.ts-row.l .res{color:var(--danger)}.ts-row.t .res{color:var(--decide)}
+.ts-row .sc{font-family:var(--mono);text-align:right;color:var(--ink-2)}
+.ts-row.box:hover{background:var(--sheet-2)}

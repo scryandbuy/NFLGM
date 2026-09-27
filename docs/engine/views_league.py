@@ -137,8 +137,21 @@ def _rec_str(rec):
     return f"{w}–{l}" + (f"–{t}" if t else '')
 
 
-def team_schedule(session, league, abbr, team=None):
+def team_schedule(session, league, abbr, team=None, year=None):
     team = team or abbr
+    yr = int(year) if year else int(league.year)
+    if yr != int(league.year):
+        # a past season's games for this team, cut from the schedule the history kept
+        snap = ((getattr(league, 'history', {}) or {}).get(str(yr)) or {}).get('schedule')
+        games = []
+        for g in (snap or {}).get('all_games', []):
+            if team not in (g['away']['abbr'], g['home']['abbr']): continue
+            home = g['home']['abbr'] == team; opp = g['away'] if home else g['home']
+            mine, theirs = (g['hp'], g['ap']) if home else (g['ap'], g['hp'])
+            games.append(dict(week=g['week'], home=home, opp=opp, done=g['done'], mine=mine, theirs=theirs, result=(None if not g['done'] else 'W' if mine > theirs else 'L' if mine < theirs else 'T'), opp_rec='', box=False))
+        rec = (getattr(league, 'standings_history', {}) or {}).get(yr, {}).get(team)
+        rec_s = (f"{rec[0]}–{rec[1]}" + (f"–{rec[2]}" if len(rec) > 2 and rec[2] else '')) if isinstance(rec, (list, tuple)) else ''
+        return dict(rail=rail(session, league, abbr), team=club(team), record=rec_s, games=games, byes=[w for w in range(1, 19) if w not in {g['week'] for g in games}], clubs=[club(c) for c in sorted(league.teams)], year=yr, years=_years(league), past=True, missing=(snap is None))
     games = []
     for (wk, a, h, ap, hp) in sorted(league.schedule, key=lambda g: g[0]):
         if team not in (a, h): continue
@@ -149,7 +162,7 @@ def team_schedule(session, league, abbr, team=None):
     weeks = {g['week'] for g in games}
     byes = [w for w in range(1, 19) if w not in weeks]
     t = league.teams[team]; w, l, d = t.record
-    return dict(rail=rail(session, league, abbr), team=club(team), record=f"{w}–{l}" + (f"–{d}" if d else ''), games=games, byes=byes, clubs=[club(c) for c in sorted(league.teams)])
+    return dict(rail=rail(session, league, abbr), team=club(team), record=f"{w}–{l}" + (f"–{d}" if d else ''), games=games, byes=byes, clubs=[club(c) for c in sorted(league.teams)], year=int(league.year), years=_years(league), past=False)
 
 
 def schedule(session, league, abbr, week=None, year=None):
