@@ -43,7 +43,20 @@ def standings(session, league, abbr, year=None):
         if past is not None: return past
         # no snapshot (a season closed before snapshots existed): the records the league kept
         hist = (getattr(league, 'standings_history', {}) or {}).get(yr) or {}
-        rows = sorted([dict(club=club(a), record=(f"{r[0]}–{r[1]}" + (f"–{r[2]}" if len(r) > 2 and r[2] else '') if isinstance(r, (list, tuple)) else str(r)), pct=round(((r[0] + 0.5 * (r[2] if len(r) > 2 else 0)) / max(1, sum(r[:3]))) if isinstance(r, (list, tuple)) else 0, 3)) for a, r in hist.items() if a in league.teams], key=lambda x: -x['pct'])
+        rows = []
+        for a, r in hist.items():
+            if a not in league.teams: continue
+            rec = r.get('record') if isinstance(r, dict) else r
+            if not isinstance(rec, (list, tuple)): continue
+            w_, l_, d_ = (list(rec) + [0, 0, 0])[:3]
+            rows.append(dict(club=club(a), record=f"{w_}–{l_}" + (f"–{d_}" if d_ else ''), pct=round((w_ + 0.5 * d_) / max(1, w_ + l_ + d_), 3), division=league.teams[a].division))
+        if not rows and yr == int(league.year) - 1:
+            # the season closed before its records were kept: the win percentages the teams carried into the new year
+            for a, t in league.teams.items():
+                pct = getattr(t, 'prev_win_pct', None)
+                if pct is None: continue
+                w_ = int(round(float(pct) * 17)); rows.append(dict(club=club(a), record=f"{w_}–{17 - w_}", pct=round(float(pct), 3), division=t.division))
+        rows.sort(key=lambda x: -x['pct'])
         return dict(rail=rail(session, league, abbr), year=yr, years=_years(league), past=True, thin=True, league_rows=rows, divisions=[], picture=None, conferences=[], notes=[], games_played=0, week=0)
     r = _state(session)
     st = r.standings() if r is not None else {}

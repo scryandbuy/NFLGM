@@ -98,7 +98,17 @@ class Session:
                 def seeds(self): return self._s
             pp = d['_post']; s.post = _Post(); s.post.champion = pp.get('champion'); s.post.finalists = pp.get('finalists') or {}; s.post.year = pp.get('year')
             s.post.games = [tuple(g) for g in pp.get('games') or []]; s.post.r = _R(pp.get('seeds') or {}); s.post.seeds_at_close = pp.get('seeds') or {}
+            s.post.seeds = {c: list(sd) for c, sd in (pp.get('seeds') or {}).items()}
+            s.post.exit_round = {}; s.post.conf_champs = dict(s.post.finalists); s.post.alive = {}
+            for g in s.post.games:
+                rnd, conf, home, away, hs, as_ = g[:6]
+                lose = away if (hs or 0) >= (as_ or 0) else home
+                s.post.exit_round[lose] = rnd
+            if s.post.year is None and s.post.champion and s.stop[0] == 'offseason': s.post.year = int(L.year) - (1 if int(getattr(L, 'week', 0) or 0) == 0 else 0)
         s.draft = None
+        try: s._backfill_history()
+        except Exception as e:
+            import sys; print('history backfill failed:', e, file=sys.stderr)
         if d.get('_draft_live'):
             import draft_day as DD
             s.draft = DD.Draft(s.L, s.rng, d['_draft_live']['year'], user_team=s.user_team, auto_pick=False)
@@ -388,6 +398,40 @@ class Session:
         except Exception as e:
             import sys; print('honors failed:', e, file=sys.stderr)
 
+    def _backfill_history(self):
+        """A save whose last season closed before the history existed: rebuild what the game days kept (every week's
+        scores) into the season's schedule and standings, and the bracket from the postseason the save carries."""
+        import views_league as VL
+        from views import club as _club
+        yr = int(self.L.year) - 1
+        hist = self.L.__dict__.setdefault('history', {})
+        if str(yr) in hist and hist[str(yr)].get('standings'): return
+        days = {int(k.split('-')[1]): v for k, v in (getattr(self, 'gamedays', None) or {}).items() if k.startswith(f"{yr}-") and v and v.get('scores')}
+        if not days: return
+        snap = hist.setdefault(str(yr), {})
+        rec = {a: [0, 0, 0] for a in self.L.teams}; allg = []
+        for wk in sorted(days):
+            for g in days[wk]['scores']:
+                h, a, hs, as_ = g['home'], g['away'], g['hs'], g['as_']
+                if h not in self.L.teams or a not in self.L.teams: continue
+                allg.append(dict(week=wk, away=_club(a), home=_club(h), ap=as_, hp=hs, done=True, mine=(self.user_team in (a, h)), winner=(h if hs > as_ else a if as_ > hs else None), away_rec='', home_rec='', note='', box=(self.user_team in (a, h) and f"{yr}-{wk}" in self.gamedays)))
+                if wk <= 18:
+                    if hs > as_: rec[h][0] += 1; rec[a][1] += 1
+                    elif as_ > hs: rec[a][0] += 1; rec[h][1] += 1
+                    else: rec[h][2] += 1; rec[a][2] += 1
+        missing = [w for w in range(1, 19) if w not in days]
+        weeks = sorted(days)
+        snap['schedule'] = dict(weeks=weeks, week=max([w for w in weeks if w <= 18], default=18), games=[g for g in allg if g['week'] == max([w for w in weeks if w <= 18], default=18)], all_games=allg, byes=[], note=(f"Week {', '.join(map(str, missing))} was not kept." if missing else None))
+        rows = sorted([dict(club=_club(a), record=f"{r[0]}–{r[1]}" + (f"–{r[2]}" if r[2] else ''), pct=round((r[0] + 0.5 * r[2]) / max(1, sum(r)), 3), division=self.L.teams[a].division) for a, r in rec.items()], key=lambda x: -x['pct'])
+        snap['standings'] = dict(thin=True, league_rows=rows, divisions=[], picture=None, conferences=[], notes=[f"Rebuilt from the season's scores; week {', '.join(map(str, missing))} was not kept, so some records are a game short." if missing else ''], games_played=len([g for g in allg if g['week'] <= 18]), week=18)
+        if not (getattr(self.L, 'standings_history', {}) or {}).get(yr):
+            self.L.standings_history[yr] = {a: dict(record=list(r), pct=round((r[0] + 0.5 * r[2]) / max(1, sum(r)), 3), made_playoffs=False) for a, r in rec.items()}
+        try:
+            if self.post is not None and getattr(self.post, 'champion', None) and getattr(self.post, 'seeds', None):
+                b = VL.bracket(self, self.L, self.user_team, year=yr)
+                if b and not b.get('missing'): b.pop('rail', None); snap['bracket'] = b
+        except Exception: pass
+
     def _snapshot_season(self):
         """The season's pages, kept as they stood at the close, so the year chooser can show them later: standings,
         the full schedule, the bracket, the season review."""
@@ -561,6 +605,9 @@ class Session:
                 if sum(1 for g in post.games if g[0] == rnd) < need:
                     post.schedule_round(rnd)
                     post.play_round(rnd, skip=None, week=19 + i)
+        try: self.runner.finish()                 # records into standings_history and each team's history
+        except Exception as e:
+            import sys; print('season records failed:', e, file=sys.stderr)
         self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng, post=post)
         self.post.year = self.L.year
         self._post_review('closed')
@@ -856,7 +903,8 @@ class Session:
     def _capture_gameday(self, wk):
         import gameday as GD
         self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team)
-        if self.gameday and self.gameday.get('game'):
+        if self.gameday and (self.gameday.get('game') or self.gameday.get('scores')):
+            # your bye week is kept too: the league's scores that week are part of the season's record
             self.gamedays = getattr(self, 'gamedays', None) or {}
             self.gamedays[f"{self.L.year}-{wk}"] = self.gameday
 
