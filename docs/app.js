@@ -255,8 +255,6 @@ function renderPortal(v) {
   })));
   page.append(desk);
 
-  page.append(inboxSheet(v));
-
   // cap, room, front office
   const capG = v.cap.by_group; const total = Object.values(capG).reduce((a, b) => a + b, 0) + v.cap.dead;
   const colors = { QB: '#c8102e', OL: '#e0b400', WR: '#4cc9f0', DL: '#3fb37f', DB: '#8791a0', LB: '#b6bec9', TE: '#5a6472', RB: '#a0603a', ST: '#3a3f47' };
@@ -778,6 +776,18 @@ function yearChips(v, load) {
   for (const y of ys) row.append(el('button', { class: 'chip', 'aria-pressed': String(y === v.year), onclick: () => load(y) }, y));
   return row;
 }
+
+// HOVERS STAY ON THE PAGE. When the pointer enters anything with a data-tip, the element is classed by where it sits:
+// near the right edge the tip hangs from the right, near the left from the left, in the bottom of the window it opens
+// upward. The CSS does the rest.
+document.addEventListener('mouseover', e => {
+  const t = e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
+  if (!t) return;
+  const r = t.getBoundingClientRect(); const W = window.innerWidth, H = window.innerHeight;
+  t.classList.toggle('tip-right', r.left + r.width / 2 > W - 160);
+  t.classList.toggle('tip-left', r.left + r.width / 2 < 160);
+  t.classList.toggle('tip-up', r.bottom > H - 120);
+}, true);
 
 // weeks 19 to 22 are the playoff rounds
 function weekName(w) { return ({ 19: 'Wild Card', 20: 'Divisional Round', 21: 'Conference Championship', 22: 'Super Bowl' })[w] || `Week ${w}`; }

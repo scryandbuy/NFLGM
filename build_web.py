@@ -26,4 +26,12 @@ for d in DATA: shutil.copy(os.path.join(HERE, d), OUT)
 import hashlib
 build = hashlib.sha1(b''.join(open(os.path.join(OUT, f), 'rb').read() for f in sorted(os.listdir(OUT)) if f != 'manifest.json')).hexdigest()[:10]
 json.dump(dict(modules=MODULES, data=DATA, build=build), open(os.path.join(OUT, 'manifest.json'), 'w'))
+# the page's own script and stylesheet carry a stamp too, so a new push is never served from a stale cache: the
+# stamp is the hash of app.js and style.css together
+import re as _re
+_ui = hashlib.sha1(open('docs/app.js', 'rb').read() + open('docs/style.css', 'rb').read()).hexdigest()[:10]
+_html = open('docs/index.html').read()
+_html = _re.sub(r'app\.js\?v=[0-9a-f]+', f'app.js?v={_ui}', _html)
+_html = _re.sub(r'style\.css\?v=[0-9a-f]+', f'style.css?v={_ui}', _html)
+open('docs/index.html', 'w').write(_html)
 print(f"docs/engine: {len(MODULES)} modules, {len(DATA)} data files, {sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT)) // 1024} KB")
