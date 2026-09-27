@@ -303,7 +303,7 @@ def staff(session, league, abbr):
                             read=({'go': 'He leans toward going. A raise may move him; blocking him keeps him but not the coach he was.', 'torn': 'He is torn. A real raise would likely keep him; blocking him is a last resort.', 'stay': 'He wants to stay. A modest raise closes it.'}[p.get('lean', 'torn')]),
                             block_read=f"he stays through {league.year + int(c.years)}, coaches worse for the year, and leaves when his contract ends. {league.teams[p['to']].abbr} hires someone else."))
     return dict(rail=rail(session, league, abbr), cards=cards, pools=pools, poaches=poaches,
-                budget=dict(total=round(ST.budget(t), 1), payroll=round(ST.payroll(t), 1), available=round(ST.room(t), 1)),
+                budget=dict(total=round(ST.budget(t), 1), payroll=round(ST.payroll(t), 1), available=round(ST.room(t), 1), head_coach=dict(name=(t.gm.name if t.gm else None), salary=round(ST.hc_pay(t.gm), 1) if t.gm else 0.0)),
                 offseason=(league.phase != 'regular'))
 
 

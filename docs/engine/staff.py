@@ -49,7 +49,8 @@ POOL_SIZE = {'oc': 14, 'dc': 14, 'st': 8, 'scout': 10}
 CONTRACT_YEARS = (3, 4, 5)         # assistants sign longer than they used to; fewer come up each year
 OFFENSE_POS = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'}
 CHANGE_RATE_TARGET = 0.33          # share of clubs changing a coordinator per offseason
-BUDGET_BASE = 9.0                  # $m for the four assistants; the owner's spending weight tilts it 15% either way
+BUDGET_BASE = 22.0                 # $m for the whole staff, the head coach included; the owner's spending weight tilts it 15% either way
+HC_PAY_BASE, HC_PAY_PER_PRESTIGE = 4.0, 0.11   # a head coach's pay: $4m for a first-timer nobody knows, about $15m for a big name
 ROLE_SCALE = {'oc': 1.0, 'dc': 1.0, 'st': 0.5, 'scout': 0.4}
 HC_CANDIDATE_PREMIUM = 1.20
 ENTRANT_DISCOUNT = 0.85
@@ -73,8 +74,23 @@ def budget(team):
     return round(BUDGET_BASE * (0.85 + 0.30 * float(getattr(team, 'owner_spend', 0.5))), 2)
 
 
+def hc_pay(gm):
+    """What the head coach is paid, priced once from his name when he was hired and kept on him."""
+    if gm is None: return 0.0
+    s = float(getattr(gm, 'salary', 0.0) or 0.0)
+    if s <= 0:
+        s = round(HC_PAY_BASE + HC_PAY_PER_PRESTIGE * float(getattr(gm, 'prestige', 20.0) or 20.0), 2)
+        try: gm.salary = s
+        except Exception: pass
+    return s
+
+
 def payroll(team, without=None):
-    return round(sum(c.salary for r, c in (getattr(team, 'staff', None) or {}).items() if c is not None and r != without), 2)
+    """The staff payroll: the head coach and the four assistants. The head coach's salary is the anchor: a big name
+    leaves less for the room around him, a first-timer leaves more."""
+    assistants = sum(c.salary for r, c in (getattr(team, 'staff', None) or {}).items() if c is not None and r != without)
+    hc = 0.0 if without == 'hc' else hc_pay(getattr(team, 'gm', None))
+    return round(assistants + hc, 2)
 
 
 def room(team, without=None):
@@ -159,9 +175,11 @@ def seed(league, rng):
             c = make(rng, role, rating=r, team=abbr, league=league); c.history.append((league.year, abbr, role))
             team.staff[role] = c
         for c in team.staff.values(): c.salary = ask(c)
+        hc_pay(team.gm)
         over = payroll(team) - budget(team)
-        if over > 0:                                    # day one must fit: the men signed for a shade under the market
-            for c in team.staff.values(): c.salary = round(c.salary * budget(team) / payroll(team), 2)
+        if over > 0:                                    # day one must fit: the assistants signed for a shade under the market
+            avail = max(1.0, budget(team) - hc_pay(team.gm)); tot = max(0.01, payroll(team, without='hc'))
+            for c in team.staff.values(): c.salary = round(c.salary * avail / tot, 2)
     league.staff_pool = getattr(league, 'staff_pool', None) or []
     for role, n in POOL_SIZE.items():
         have = sum(1 for c in league.staff_pool if c.role == role)

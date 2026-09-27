@@ -1297,7 +1297,7 @@ function interviewPanel(c, role, reload) {
 function renderStaff(v) {
   renderRail(v.rail); const page = persPage(); foSecond('staff');
   const reload = () => renderStaff(pyJSON(`SESSION.frontoffice('staff')`));
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Staff', el('small', {}, `Budget $${v.budget.total}m · Paid $${v.budget.payroll}m · Available $${v.budget.available}m`)));
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Staff', el('small', {}, `Budget $${v.budget.total}m · Paid $${v.budget.payroll}m${v.budget.head_coach && v.budget.head_coach.salary ? ` (head coach $${v.budget.head_coach.salary}m)` : ''} · Available $${v.budget.available}m`)));
   const grid = el('div', { class: 'staffgrid', style: 'grid-template-columns:repeat(4,1fr)' });
   for (const c of v.cards) {
     if (c.empty) { grid.append(el('div', { class: 'scard open' }, `${c.role_name} · open. Hire from the pool below.`)); continue; }

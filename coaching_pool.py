@@ -256,8 +256,9 @@ def owner_hire(league, team, rng, verbose=False):
         else:
             results_term = 0.0
         # WHAT HE COSTS. His ask against what this owner will pay a head coach; over budget costs, well under is a small plus
-        hc_ask = float(getattr(c, '_hc_ask', 0.0) or (4.0 + 0.08 * getattr(c, 'prestige', 20.0)))
-        hc_budget = 6.0 + 8.0 * float(getattr(team, 'owner_spend', 0.5))
+        import staff as STF_
+        hc_ask = float(getattr(c, '_hc_ask', 0.0) or (STF_.HC_PAY_BASE + STF_.HC_PAY_PER_PRESTIGE * getattr(c, 'prestige', 20.0)))
+        hc_budget = max(2.0, STF_.budget(team) - STF_.payroll(team, without='hc'))      # what the staff budget leaves after the four assistants
         salary_term = -0.30 * max(0.0, (hc_ask - hc_budget) / hc_budget) + 0.05 * max(0.0, min(1.0, (hc_budget - hc_ask) / hc_budget))
         score = seen_q + fit_term - cost_term + name_term + results_term + salary_term
         c._score_parts = dict(seen=round(seen_q, 2), fit=round(fit_term, 2), cost=round(-cost_term, 2), name=round(name_term, 2), results=round(results_term, 2), salary=round(salary_term, 2), ask=round(hc_ask, 1), budget=round(hc_budget, 1))
@@ -331,7 +332,9 @@ def fire_and_hire(league, team, rng, verbose=False):
         return None, reasons
     hired.tenure = 0
     hired.job_security = float(np.clip(rng.normal(.78, .10), .45, .97))
-    try: hired.salary = round(float(getattr(hired, '_hc_ask', 0.0) or (4.0 + 0.08 * getattr(hired, 'prestige', 20.0))), 2)
+    try:
+        import staff as STF_
+        hired.salary = round(float(getattr(hired, '_hc_ask', 0.0) or (STF_.HC_PAY_BASE + STF_.HC_PAY_PER_PRESTIGE * getattr(hired, 'prestige', 20.0))), 2)
     except Exception: pass
     team.gm = hired
     team.scheme = GE.scheme_of(hired)

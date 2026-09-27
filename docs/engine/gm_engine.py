@@ -106,6 +106,7 @@ class GM:
     prestige:       float = 20.0    # how big a name he is, 0..100; public, moves with his career
     # --- state, not personality ---
     job_security:   float = 0.60   # low security collapses the time horizon
+    salary:         float = 0.0    # $m a year as head coach; 0 = not yet priced (staff.hc_pay fills it)
     tenure:         int   = 0      # years in the chair; 0 = brand new regime
 
     def shift(self, team):
