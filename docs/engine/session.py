@@ -858,6 +858,23 @@ class Session:
         if D is None: return
         if not D.done: D._finish()
         self.L.last_draft = dict(year=D.year, results=[(s, t, p.pid) for s, t, p in D.results], trades=len(D.trades), trade_log=[list(x) for x in D.trades])
+        # THE GEMS AND THE BUSTS, SURFACED. The day after the draft the rookies are on rosters at their true grades,
+        # and the league notices the ones it missed and the ones it overrated
+        try:
+            import inbox as IB
+            for s_, t_, p in D.results:
+                role = p.xp_spent.get('_tape_role')
+                if not role: continue
+                rnd = (s_ - 1) // 32 + 1
+                if role == 'gem' and rnd >= 3:
+                    IB.news(self.L, f"{t_} may have found one: {p.name} at pick {s_}", f"{p.name} ({p.pos}, {p.college}) went {s_}th, in round {rnd}, and the first look at him in a pro building says the league had him badly wrong. He grades {round(p.ovr)}, a starter's number. {t_} got a day-three pick that plays like a top-forty one.")
+                elif role == 'bust' and rnd <= 2:
+                    IB.news(self.L, f"Questions at {t_} about {p.name}, the {s_}th pick", f"{p.name} ({p.pos}, {p.college}) was taken {s_}th, in round {rnd}, and the first look at him in a pro building has the room wondering what it saw on tape. He grades {round(p.ovr)}. The league had him at {round(float((self.L.consensus.get(p.pid) or {}).get('ovr', 0) or 0))}; the tape was wrong.")
+                if t_ == self.user_team:
+                    if role == 'gem': IB.post(self.L, 'club', f"Your scouts on {p.name}: better than anyone thought", f"The first sessions with {p.name} ({p.pos}) say the whole league missed him. He grades {round(p.ovr)} today, not the {round(float((self.L.consensus.get(p.pid) or {}).get('ovr', 0) or 0))} the consensus carried. You have a starter on a round-{rnd} contract.", sender='assistants', payload=dict(link=f'player:{p.pid}'))
+                    elif role == 'bust': IB.post(self.L, 'club', f"Your scouts on {p.name}: the tape was wrong", f"The first sessions with {p.name} ({p.pos}) are not what the tape promised. He grades {round(p.ovr)} today, not the {round(float((self.L.consensus.get(p.pid) or {}).get('ovr', 0) or 0))} the consensus carried. The whole league had him there; the room did not see it either.", sender='assistants', payload=dict(link=f'player:{p.pid}'))
+        except Exception as e:
+            import sys; print('gem/bust notes failed:', e, file=sys.stderr)
         self.draft = None
 
     def draft_live(self):

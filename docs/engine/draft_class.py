@@ -95,6 +95,23 @@ def shape_class(cls, rng=None):
         if p.potential_range:
             lo, hi = p.potential_range
             p.potential_range = (round(max(p.ovr, lo + delta), 1), round(max(p.ovr + 1, hi + delta), 1))
+    # THE GEMS AND THE BUSTS. Every class carries two players the league will miss and two it will overrate:
+    # two of the genuinely good (true grade in the class's top eighty, off the skill positions' ladder or on it)
+    # whose tape reads eight to fifteen points low, so they fall to day three and start in September; and two
+    # whose tape reads eight to fifteen points high, so they go in the first two rounds and grade in the sixties.
+    # The tape is what every room sees on top of its own error (scouting.tape); these four have it set here
+    PREMIUM = ('QB', 'WR', 'CB', 'LEDG', 'REDG', 'LT', 'RT', 'HB', 'DT')      # where an 80 grade is a top-two-round pick
+    real = [p for p in cls if p.pos in PREMIUM]
+    real.sort(key=lambda p: -p.ovr)
+    # a gem is a true 78 to 84 whose tape reads him 67 to 71 (a day-three grade); a bust is a true 64 to 72 whose
+    # tape reads him 79 to 82 (a first- or second-round grade). The tape is set to hit the target read, within fifteen
+    gem_pool = [p for p in real if 78.0 <= p.ovr <= 84.5]; bust_pool = [p for p in real if 64.0 <= p.ovr <= 72.5]
+    gems = [gem_pool[i] for i in r_.choice(len(gem_pool), size=min(2, len(gem_pool)), replace=False)] if gem_pool else []
+    busts = [bust_pool[i] for i in r_.choice(len(bust_pool), size=min(2, len(bust_pool)), replace=False)] if bust_pool else []
+    for p in gems:
+        p.xp_spent['_tape'] = float(np.clip(r_.uniform(69.5, 72.0) - p.ovr, -15.0, -7.0)); p.xp_spent['_tape_role'] = 'gem'
+    for p in busts:
+        p.xp_spent['_tape'] = float(np.clip(r_.uniform(79.0, 82.0) - p.ovr, 8.0, 15.0)); p.xp_spent['_tape_role'] = 'bust'
     return cls
 CLASS_AGE = {'Senior': 22.0, 'Junior': 21.0}
 DEV_ORDER = ['normal', 'star', 'superstar', 'xfactor']
@@ -247,7 +264,7 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
             p.height, p.weight = float(row.height), float(row.weight)
             out.append(p)
     out.sort(key=lambda p: -p.ovr)
-    shape_class(out)
+    shape_class(out, rng=rng)
     league.draft_pool = out
     for p in out:
         league.players[p.pid] = p

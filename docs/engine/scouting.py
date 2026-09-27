@@ -44,7 +44,7 @@ def tape(p):
     if t is None:
         r = np.random.default_rng(abs(hash(('tape', p.pid))) % (2**32))
         t = float(np.clip(r.normal(0.0, TAPE_SD), -10.0, 10.0)); p.xp_spent['_tape'] = t
-    return float(t)
+    return float(np.clip(t, -15.0, 15.0))       # the class builder's gems and busts carry up to fifteen
 
 
 def _refresh(view, p):
@@ -57,8 +57,9 @@ def _refresh(view, p):
     # a room's ceiling read is bounded: nobody sees a 59 as a 97. The ceiling error is capped and the ceiling
     # itself cannot sit more than eighteen points above what the room sees today
     e_pot = float(np.clip(view.get('e_pot', 0.0) or 0.0, -POT_ERR_CAP, POT_ERR_CAP)); view['e_pot'] = e_pot
-    view['pot_lo'] = round(float(np.clip(min(lo + e_pot + adj, view['ovr'] + 12.0), 30, 99)), 1)
-    view['pot_hi'] = round(float(np.clip(min(hi + e_pot + adj, view['ovr'] + 18.0), max(view['pot_lo'], 30), 99)), 1)
+    # the tape colours the ceiling too: a hidden player's upside is hidden with him, an inflated one's inflated
+    view['pot_lo'] = round(float(np.clip(min(lo + e_pot + tp + adj, view['ovr'] + 12.0), 30, 99)), 1)
+    view['pot_hi'] = round(float(np.clip(min(hi + e_pot + tp + adj, view['ovr'] + 18.0), max(view['pot_lo'], 30), 99)), 1)
 
 
 def second_look(view, p, sd, rng, weight=1.0, R=None):
