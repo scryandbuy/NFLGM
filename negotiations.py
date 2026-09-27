@@ -274,9 +274,14 @@ def match(league, tid):
 
 
 def withdraw(league, tid):
+    """You pull out: the offer on the table is rescinded and the thread closes. Works whether he is mulling it,
+    has countered, or has asked you to match."""
     t = find(league, tid)
-    if t: t['state'] = 'declined'
-    return dict(ok=True)
+    if t is None: return dict(ok=False, why='no such negotiation')
+    if t['state'] in ('accepted', 'declined', 'expired', 'broken_off'): return dict(ok=False, why=f"this negotiation is already {t['state']}")
+    t['state'] = 'declined'; t['counter'] = None; t['due'] = None
+    _say(t, 'you', 'Offer withdrawn.')
+    return dict(ok=True, line='Offer withdrawn.')
 
 
 def _accept(league, t, offer, how, quiet=False):

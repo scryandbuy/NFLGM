@@ -8,6 +8,14 @@ from views import club, rail
 SLOT = lambda pk: f"{pk.round}.{((pk.selection - 1) % 32) + 1}" if pk.selection else f"R{pk.round}"
 
 
+
+def coming_season(league):
+    """The season whose draft is next. Picks carry the season year (the draft held after the 2026 season is the
+    2027 draft). Before the year rolls that is league.year; once the New Year step has run in the offseason
+    (week 0, or the pool built) the league is a year on but the draft still belongs to the season just played."""
+    rolled = bool(getattr(league, 'draft_pool', None)) or (league.phase in ('offseason', 'free_agency', 'draft') and int(league.week or 0) == 0)
+    return league.year - 1 if rolled else league.year
+
 def _pool(league):
     return list(getattr(league, 'draft_pool', None) or []) or list(getattr(league, 'next_class', None) or [])
 
@@ -89,7 +97,7 @@ def board(session, league, abbr):
         import postseason as PS
         slot = PS.provisional_slot(league, getattr(session, 'post_live', None) or getattr(session, 'post', None), abbr)
     except Exception: slot = None
-    return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=(league.year + 1 if not getattr(league, 'draft_pool', None) else league.year), slot=slot,
+    return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=coming_season(league) + 1, slot=slot,
                 visits=visits, visits_max=SP.VISITS, spring_done=spring_done, needs=sorted(needs), user_board=ub, my_slot=_my_first_slot(league, abbr), read=_board_read(league, abbr, rows, ub, needs),
                 scout=(dict(name=scout.name, rating=round(scout.rating)) if scout else None), live=bool(getattr(session, 'draft', None)),
                 note=None if rows else 'The class is scouted in camp; the board fills once the season begins.')
@@ -445,10 +453,10 @@ def picks(session, league, abbr):
         import views_personnel as VP
         prov = (getattr(league, 'pick_provenance', None) or {}).get(f"{pk.year}-{pk.round}-{pk.original}")
         proj = VP._proj_slot(league, pk)
-        if pk.original == abbr and pk.year == league.year and not pk.selection: note = f"Projected From a {t.record[0]}–{t.record[1]} Season" if sum(t.record) else ''
+        if pk.original == abbr and pk.year == coming_season(league) and not pk.selection: note = f"Projected From a {t.record[0]}–{t.record[1]} Season" if sum(t.record) else ''
         elif pk.original == abbr: note = '' if not proj or pk.selection else f"Projected {max(1, proj - 2)}{_ordd(max(1, proj - 2))}–{min(32, proj + 2)}{_ordd(min(32, proj + 2))}"
         else: note = ''
-        years.setdefault(pk.year, []).append(dict(round=pk.round, slot=(SLOT(pk) if pk.selection else (f"{pk.round}.{proj}" if proj and pk.year == league.year else f"{pk.round}{_ordd(pk.round)}")), original=pk.original, own=(pk.original == abbr), via=(None if pk.original == abbr else club(pk.original)), frm=(None if pk.original == abbr else pk.original), note=note))
+        years.setdefault(pk.year, []).append(dict(round=pk.round, slot=(SLOT(pk) if pk.selection else (f"{pk.round}.{proj}" if proj and pk.year == coming_season(league) else f"{pk.round}{_ordd(pk.round)}")), original=pk.original, own=(pk.original == abbr), via=(None if pk.original == abbr else club(pk.original)), frm=(None if pk.original == abbr else pk.original), note=note))
     # picks of ours held by others
     gone = []
     for other, ot in league.teams.items():
@@ -472,7 +480,7 @@ def picks(session, league, abbr):
     results.sort(key=lambda r: (-(r['year'] or 0), r['sel'] or 999))
     from views import draft_year
     for g_ in gone: g_['year'] = draft_year(g_['year'])
-    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == league.year), picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if ld else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division)
+    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if ld else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division)
 
 
 def _role_word(t, p):

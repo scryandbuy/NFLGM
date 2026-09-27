@@ -1006,7 +1006,7 @@ function offerForm(t, kind, onDone, preset) {
   const acts = el('div', { class: 'acts' });
   acts.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${+apy.value}, years=${+yrs.value}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`); notify(r); onDone(); } }, kind === 'fa_inseason' ? 'Offer (decides at Advance)' : preset ? 'Send Counter' : 'Send Offer'));
   if (kind === 'fa_inseason') acts.append(el('button', { class: 'btn', 'data-tip': 'His full ask, signed now', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${t.ask}, years=${t.years}, sign_today=True)`); notify(r); onDone(); } }, `Sign Today at $${t.ask}m`));
-  acts.append(el('button', { class: 'btn quiet', onclick: () => { const r = pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`); notify(r); onDone(); } }, 'Let Him Go'));
+  acts.append(el('button', { class: 'btn quiet', 'data-tip': (t.offers && t.offers.length) ? 'Pull your offer and end the talks' : 'End the talks', onclick: () => { const r = pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`); notify(r); onDone(); } }, (t.offers && t.offers.length) ? 'Rescind and Walk' : 'Let Him Go'));
   f.append(acts); setTimeout(preview, 0); return f;
 }
 
@@ -1045,7 +1045,7 @@ function threadBox(t, onDone) {
   box.append(el('div', { class: 'msg note' }, t.agent_line || ''));
   if (t.rival) box.append(el('div', { class: 'msg match' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${t.rival.team} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('match', tid=${t.id})`)); onDone(); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`)); onDone(); } }, 'Let Him Go'))));
   if (t.counter) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, 'Counter'), el('div', { class: 'txt' }, el('b', {}, `$${t.counter.apy}m × ${t.counter.years}`)), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('match_counter', tid=${t.id})`)); onDone(); } }, 'Accept Counter'))));
-  if (t.state === 'waiting') box.append(el('div', { class: 'msg note' }, `Waiting on his answer${t.due ? ' · due ' + t.due : ''}.`));
+  if (t.state === 'waiting') box.append(el('div', { class: 'msg note', style: 'display:flex;align-items:center;gap:12px' }, el('span', { style: 'flex:1' }, `Waiting on his answer${t.due ? ' · due ' + t.due : ''}.`), el('button', { class: 'btn quiet', 'data-tip': 'Pull the offer before he answers; the thread closes', onclick: () => { notify(pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`)); onDone(); } }, 'Rescind Offer')));
   else if (['accepted', 'signed'].includes(t.state)) box.append(el('div', { class: 'msg note' }, 'Signed.'));
   else if (t.state === 'broken_off') box.append(el('div', { class: 'msg note' }, 'He has broken off talks.'));
   else if (t.state === 'declined') box.append(el('div', { class: 'msg note' }, 'He declined.'));
@@ -1359,7 +1359,7 @@ function renderCap(v) {
 
 // ---------------------------------------------------------------- Draft
 const DR = { board: 'Scouting Board', spring: 'The Spring', day: 'Draft Day', picks: 'Picks' };
-let boardPos = 'All', boardFilt = { early: false, late: false, small: false, needs: false }, boardTab = 'class', boardQuery = '', boardSel = null, boardPage = 0;
+let boardPos = 'All', boardFilt = { early: false, late: false, small: false, needs: false }, boardTab = 'class', boardQuery = '', boardSel = null, boardPage = 0, boardSort = 'mine';
 function drSecond(cur) { secondRow(Object.entries(DR).map(([k, l]) => [l, '#draft/' + k]), '#draft/' + cur); $('#crumb').textContent = 'Draft'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'draft')); }
 function gapCell(g) { if (g == null) return el('span', { class: 'gap' }, '—'); return el('span', { class: 'gap ' + (g > 0 ? 'up' : g < 0 ? 'dn' : '') }, (g > 0 ? '+' : '') + g); }
 function flagTags(fl) { const s = el('span', {}); for (const f of fl || []) s.append(el('span', { class: 'flag ' + ({ medical: 'med', character: 'chr', visit: 'vis', riser: 'up', faller: 'dn', 'senior bowl': 'sr' }[String(f).toLowerCase()] || 'ss') }, String(f))); return s; }
@@ -1394,6 +1394,7 @@ function renderBoard(v) {
     const q = boardQuery.trim().toLowerCase(); const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], EDGE: ['LEDG', 'REDG', 'DT'], CB: ['CB', 'FS', 'SS'] };
     const needPos = new Set(v.needs.flatMap(g => NEED_POS[g] || []));
     const rows = v.rows.filter(r => (boardTab !== 'visited' || r.visited) && (boardPos === 'All' || (GROUP[boardPos] || []).includes(r.pos)) && (!boardFilt.needs || needPos.has(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.late || (r.cons_rank != null && r.cons_rank > 96)) && (!boardFilt.small || r.small) && (!q || r.name.toLowerCase().includes(q) || (r.college || '').toLowerCase().includes(q)));
+    if (boardSort === 'scheme') rows.sort((a, b) => ((b.scheme_ovr ?? b.mine ?? 0) - (a.scheme_ovr ?? a.mine ?? 0)) || ((b.mine ?? 0) - (a.mine ?? 0)));
     const PAGE = 100, pages = Math.max(1, Math.ceil(rows.length / PAGE)); if (boardPage >= pages) boardPage = pages - 1; if (boardPage < 0) boardPage = 0;
     pager.innerHTML = ''; pager.append(el('button', { class: 'btn', disabled: boardPage === 0 ? '' : null, onclick: () => { boardPage--; draw(); } }, '‹ Prev'), el('span', { class: 'count' }, `${rows.length ? boardPage * PAGE + 1 : 0}–${Math.min(rows.length, (boardPage + 1) * PAGE)} of ${rows.length}`), el('button', { class: 'btn', disabled: boardPage >= pages - 1 ? '' : null, onclick: () => { boardPage++; draw(); } }, 'Next ›'));
     const pageRows = rows.slice(boardPage * PAGE, (boardPage + 1) * PAGE);
