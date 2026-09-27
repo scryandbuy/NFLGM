@@ -106,6 +106,13 @@ class Session:
                 s.post.exit_round[lose] = rnd
             if s.post.year is None and s.post.champion and s.stop[0] == 'offseason': s.post.year = int(L.year) - (1 if int(getattr(L, 'week', 0) or 0) == 0 else 0)
         s.draft = None
+        try:
+            # the current season's exit meetings and review exist only once it has closed; anything filed under the
+            # current year before then (an older build wrote meetings on a page view) is removed
+            if getattr(L, 'season_closed_year', None) != int(L.year):
+                (getattr(L, 'exit_meetings', None) or {}).pop(str(L.year), None)
+                ((getattr(L, 'history', None) or {}).get(str(L.year)) or {}).pop('review', None)
+        except Exception: pass
         try: s._open_fa_if_due()
         except Exception as e:
             import sys; print('open round on load failed:', e, file=sys.stderr)
@@ -704,6 +711,7 @@ class Session:
         self.L.user_tag_choice = None          # a new year, a new tag
         L, rng = self.L, self.rng
         L.roll_year(rng)
+        (getattr(L, 'exit_meetings', None) or {}).pop(str(L.year), None)          # the new year has no meetings yet
         try:
             import negotiations as NG
             NG.check_promises(L, week=0)       # the new year: extension promises are judged here

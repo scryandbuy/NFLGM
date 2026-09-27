@@ -23,7 +23,8 @@ async function bootEngine() {
   // the manifest is always re-checked with the server, and every engine file carries the
   // build stamp in its URL, so a new push is picked up on the next load instead of after
   // the browser's ten-minute cache expires
-  const manifest = await (await fetch(ENGINE + 'manifest.json', { cache: 'no-cache' })).json();
+  const manifest = await (await fetch(ENGINE + 'manifest.json?t=' + Date.now(), { cache: 'no-store' })).json();
+  window.ENGINE_BUILD = (manifest.build || '0').slice(0, 7);
   const files = [...manifest.modules.map(m => m + '.py'), ...manifest.data];
   let n = 0;
   for (const f of files) {
@@ -66,7 +67,7 @@ function renderRail(r) {
   document.documentElement.style.setProperty('--club', r.club.color); document.documentElement.style.setProperty('--club-2', r.club.accent);
   $('#clubname').textContent = r.club.name.toUpperCase(); $('#coach').textContent = `${r.coach} · Head Coach and GM`;
   $('#st-record').textContent = r.record; $('#st-place').textContent = r.place; $('#st-cap').textContent = r.cap; $('#st-prestige').textContent = r.prestige ?? '—';
-  $('#st-week').textContent = r.clock.line; $('#st-year').textContent = r.clock.sub;
+  $('#st-week').textContent = r.clock.line; $('#st-year').textContent = r.clock.sub + (window.ENGINE_BUILD ? ` · build ${window.ENGINE_BUILD}` : '');
   const badge = $('#badge'); badge.hidden = !r.inbox_unread; badge.textContent = r.inbox_unread;
   const adv = $('#advance');
   const hard = r.blocking.filter(b => b.kind !== 'live');
