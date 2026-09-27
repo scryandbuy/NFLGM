@@ -55,7 +55,11 @@ def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
     offseason = league.phase in ('offseason', 'free_agency', 'preseason') or not league.week
     can_trade = offseason or deadline
     pkg = _evaluate(league, abbr, other, list(a_sends), list(b_sends)) if (a_sends or b_sends) else None
-    return dict(rail=rail(session, league, abbr), clubs=[club(c) for c in CLUBS if c != abbr], other=club(other),
+    draft_live = None
+    D = getattr(session, 'draft', None)
+    if D is not None and not D.done and D.current() is not None:
+        q = D.current(); draft_live = dict(slot=f"{q.round}.{q.selection - 32 * (q.round - 1):02d}", sel=q.selection, team=q.owner)
+    return dict(rail=rail(session, league, abbr), draft_live=draft_live, clubs=[club(c) for c in CLUBS if c != abbr], other=club(other),
                 me=dict(club=club(abbr), cap=round(me.cap_space, 1), roster=[_plate(league, p) for p in sorted(me.active(), key=lambda p: -p.ovr)],
                         picks=[_pick_row(league, pk) for pk in sorted(me.picks, key=lambda k: (k.year, k.round)) if not pk.used_on and pk.year <= league.year + 2],
                         surplus=[dict(pid=x['pid'], why=_surplus_why(league, me, x)) for x in my_surplus], needs=sorted(my_needs)),
@@ -167,12 +171,12 @@ def act_propose(league, abbr, other, a_sends, b_sends):
     import trade_engine as TE, valuation as VAL
     pool = VAL.pool_from_league(league); me = league.teams[abbr]
     r = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, TR.persona(me.gm), TR.persona(them.gm))
+    a_items = [(_find_pick(league, abbr, x) if '-' in str(x) else x) for x in a_sends]; b_items = [(_find_pick(league, other, x) if '-' in str(x) else x) for x in b_sends]
     yes = TR.will_accept(r['b_gain'], rng, TR.persona(them.gm)['aggression'], selling=True)
     if not yes:
         import inbox as IB
         IB.post(league, 'trade_done', f"{them.abbr} decline your offer", f"You offered {', '.join(_words(league, a_items))} for {', '.join(_words(league, b_items))}. " + ev['read'], sender=other)
         return dict(ok=True, done=False, why=f"{them.abbr} declines. " + ev['read'])
-    a_items = [(_find_pick(league, abbr, x) if '-' in str(x) else x) for x in a_sends]; b_items = [(_find_pick(league, other, x) if '-' in str(x) else x) for x in b_sends]
     league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
     import inbox as IB
     IB.post(league, 'trade_done', f"Trade with {other} is done", f"You send {', '.join(_words(league, a_items))} to {other} for {', '.join(_words(league, b_items))}.", sender=other)

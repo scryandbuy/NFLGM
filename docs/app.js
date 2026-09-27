@@ -936,7 +936,8 @@ function renderTrades(v) {
   tradeState.other = v.other.abbr;
   const s = el('section', { class: 'sheet c12' });
   if (!v.can_trade) page.append(el('div', { class: 'banner c12' }, el('b', {}, 'The trade deadline has passed.'), ' Trades reopen after the season. You can still look at every team and read offers, but nothing can be sent or received until then.'));
-  s.append(el('h2', {}, 'Trades', el('small', {}, v.can_trade ? `Deadline after Week ${v.deadline_week}` : 'Closed until the season ends')));
+  if (v.draft_live) page.append(el('div', { class: 'banner c12', style: 'background:var(--sheet-2)' }, el('b', {}, `Draft day · pick ${v.draft_live.slot} is on the clock (${v.draft_live.team}).`), ' A trade here moves the pick in the order at once; players and picks both sides, and the offseason\'s post-June 1 rule applies. ', el('a', { class: 'btn go', href: '#draft/day', style: 'width:auto;display:inline-block;margin-left:8px' }, 'Back to the Draft')));
+  s.append(el('h2', {}, 'Trades', el('small', {}, v.can_trade ? (v.draft_live ? 'the draft is on' : `Deadline after Week ${v.deadline_week}`) : 'Closed until the season ends')));
   const strip = el('div', { class: 'clubs' });
   for (const c of v.clubs) strip.append(el('button', { class: 'cl', style: `background:${c.color}`, 'aria-pressed': String(c.abbr === v.other.abbr), 'data-tip': c.name, onclick: () => { tradeState = { other: c.abbr, a: [], b: [] }; renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(c.abbr)})`)); } }, c.abbr));
   s.append(strip);
@@ -1546,7 +1547,8 @@ function renderDraftDay(v) {
   for (const r of recent) nx.append(el('div', { class: 'pk' }, el('span', { class: 'n' }, r.slot), crest(r.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, r.name), el('small', {}, `${r.pos}`)), el('span', {})));
   for (const q of v.clock) {
     const now = q.sel === cur.sel;
-    nx.append(el('div', { class: 'pk' + (q.mine ? ' next' : '') + (now ? ' now' : '') }, el('span', { class: 'n' }, q.slot), crest(q.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, now ? 'On the Clock' : q.mine ? 'Your Pick' : '—'), el('small', {}, `${q.team.name}${q.needs && q.needs.length && !q.mine ? ' · Needs ' + q.needs.join(', ') : ''}`)), el('span', {})));
+    const tradeFor = q.mine ? null : () => { tradeState = { other: q.team.abbr, a: [], b: [q.id], keep: true, draft: true }; location.hash = '#personnel/trades'; };
+    nx.append(el('div', { class: 'pk' + (q.mine ? ' next' : '') + (now ? ' now' : '') + (q.mine ? '' : ' tradeable'), 'data-tip': q.mine ? null : `Trade for pick ${q.slot}: opens the Trades tab with ${q.team.abbr}'s pick loaded`, onclick: tradeFor, style: q.mine ? '' : 'cursor:pointer' }, el('span', { class: 'n' }, q.slot), crest(q.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, now ? 'On the Clock' : q.mine ? 'Your Pick' : 'Trade for it'), el('small', {}, `${q.team.name}${q.needs && q.needs.length && !q.mine ? ' · Needs ' + q.needs.join(', ') : ''}`)), el('span', {})));
   }
   left.append(nx);
   // offers for your pick

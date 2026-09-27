@@ -888,6 +888,23 @@ class Session:
         fn = getattr(VP, 'act_' + name, None)
         if fn is None: return dict(ok=False, why='unknown action')
         r = fn(self.L, self.user_team, **kw)
+        # a trade made on the Trades tab during the live draft: the draft's own log carries it, and the order already
+        # reflects it (the pick objects are shared)
+        D = getattr(self, 'draft', None)
+        if name == 'propose' and isinstance(r, dict) and r.get('done') and D is not None and not D.done:
+            try:
+                other = kw.get('other'); moved = []
+                for side, items in (('to_me', kw.get('b_sends', [])), ('from_me', kw.get('a_sends', []))):
+                    for x in items:
+                        if '-' in str(x):
+                            yr, rnd, orig = str(x).split('-')[:3]
+                            pk = next((q for q in D.picks if q.year == int(yr) and q.round == int(rnd) and q.original == orig), None)
+                            if pk is not None and pk.year == D.year: moved.append((pk, side))
+                for pk, side in moved:
+                    buyer, seller = (self.user_team, other) if side == 'to_me' else (other, self.user_team)
+                    D.trades.append((pk.selection, buyer, seller, ['a package from the Trades tab']))
+                    self.L.log('draft_trade', selection=pk.selection, buyer=buyer, seller=seller, sent=['trades tab'], target=None)
+            except Exception: pass
         return r if isinstance(r, dict) else dict(ok=bool(r))
 
     # ---- front office
