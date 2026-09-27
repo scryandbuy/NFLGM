@@ -768,6 +768,15 @@ function developmentPanel(pid, reload) {
   return box;
 }
 
+// THE YEAR CHOOSER. Every season page carries it: the current year by default, every past season the game kept a
+// record of behind it. `load(y)` re-renders the page for that year.
+function yearChips(v, load) {
+  const row = el('div', { class: 'chips yearchips' });
+  const ys = (v.years && v.years.length ? v.years : [v.year]).slice().reverse();
+  for (const y of ys) row.append(el('button', { class: 'chip', 'aria-pressed': String(y === v.year), onclick: () => load(y) }, y));
+  return row;
+}
+
 // weeks 19 to 22 are the playoff rounds
 function weekName(w) { return ({ 19: 'Wild Card', 20: 'Divisional Round', 21: 'Conference Championship', 22: 'Super Bowl' })[w] || `Week ${w}`; }
 
@@ -1582,7 +1591,9 @@ const TAGCLS = { Trade: 'trade', Signing: 'sign', Release: 'cut', Draft: 'draft'
 
 function renderStandings(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('standings');
-  const s = el('section', { class: 'sheet c8' }, el('h2', {}, 'Standings', el('small', {}, `Through Week ${v.week ?? '—'} · ${v.games_played} games played`)));
+  const s = el('section', { class: 'sheet c8' }, el('h2', {}, `${v.year || ''} Standings`, el('small', {}, v.past ? 'final' : `Through Week ${v.week ?? '—'} · ${v.games_played} games played`)));
+  s.append(yearChips(v, y => renderStandings(pyJSON(`SESSION.league_view('standings', year=${y})`))));
+  if (v.thin) { const t = el('table', { class: 'grid' }, el('thead', {}, el('tr', {}, el('th', {}, 'Team'), el('th', {}, 'Record'), el('th', {}, 'Pct')))); const tb = el('tbody'); for (const r of v.league_rows) tb.append(el('tr', {}, el('td', {}, r.club.name), el('td', { class: 'mono' }, r.record), el('td', { class: 'mono' }, String(r.pct).replace(/^0/, '')))); t.append(tb); s.append(t); page.append(s); return; }
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const k of ['Divisions', 'Conference', 'League']) tabs.append(el('button', { 'aria-pressed': String(standingsView === k), onclick: () => { standingsView = k; renderStandings(v); } }, k)); s.append(tabs);
   const arrow = r => r.arrow > 0 ? el('span', { class: 'arr up' }, `▲${r.arrow}`) : r.arrow < 0 ? el('span', { class: 'arr dn' }, `▼${-r.arrow}`) : el('span', { class: 'arr' }, '–');
   const pd = r => el('td', { class: 'n', style: r.pd > 0 ? 'color:var(--ok)' : r.pd < 0 ? 'color:var(--danger)' : '' }, (r.pd > 0 ? '+' : '') + r.pd);
@@ -1625,10 +1636,13 @@ function pictureSheet(v) {
 
 function renderSchedule(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('schedule');
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Schedule', el('small', {}, `Week ${v.week}`)));
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, `${v.year || ''} Schedule`, el('small', {}, weekName(v.week))));
+  s.append(yearChips(v, y => renderSchedule(pyJSON(`SESSION.league_view('schedule', year=${y})`))));
+  if (v.missing) { s.append(el('div', { class: 'empty' }, 'No schedule is kept for that season.')); page.append(s); return; }
   s.append(el('div', { class: 'tabs', style: 'padding:8px 14px 0' }, el('button', { 'aria-pressed': 'true' }, 'League Schedule'), el('button', { 'aria-pressed': 'false', onclick: () => renderTeamSchedule(pyJSON(`SESSION.league_view('team_schedule')`)) }, 'Team Schedule')));
   const nav = el('div', { class: 'wknav' }, el('span', { class: 'lab' }, 'Week'));
-  for (let w = 1; w <= v.weeks; w++) nav.append(el('button', { 'aria-pressed': String(w === v.week), onclick: () => renderSchedule(pyJSON(`SESSION.league_view('schedule', week=${w})`)) }, w));
+  const wkList = Array.isArray(v.weeks) ? v.weeks : Array.from({ length: v.weeks || 18 }, (_, i) => i + 1);
+  for (const w of wkList) nav.append(el('button', { 'aria-pressed': String(w === v.week), onclick: () => renderSchedule(pyJSON(`SESSION.league_view('schedule', week=${w}, year=${v.year})`)) }, w >= 19 ? ({ 19: 'WC', 20: 'DIV', 21: 'CONF', 22: 'SB' })[w] : w));
   s.append(nav);
   const done = v.games.some(g => g.done);
   s.append(el('div', { class: 'h5', style: 'padding:8px 14px 0' }, `Week ${v.week} · ${done ? 'Results' : 'Upcoming'}`, el('span', {}, done ? 'Click your game for the box score' : '')));
@@ -1667,6 +1681,8 @@ let txGroup = 'All', txClub = 'all', txQuery = '', txShown = 60;
 // next year's money as one bar, and the assistants' three notes.
 function renderReview(v) {
   renderRail(v.rail); const page = persPage(); foSecond('review');
+  page.append(el('section', { class: 'sheet c12', style: 'padding:8px 14px' }, yearChips(v, y => renderReview(pyJSON(`SESSION.frontoffice('season_review', year=${y})`)))));
+  if (v.missing) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, `No review was kept for ${v.year}.`))); return; }
   const c1 = v.club.color, c2 = v.club.accent || '#fff';
   const ordn = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
   // hero
@@ -1705,8 +1721,9 @@ function renderReview(v) {
 // answers with what each one costs. Once you answer, his reply stays on the card.
 function renderExit(v) {
   renderRail(v.rail); const page = persPage(); foSecond('exit');
+  page.append(el('section', { class: 'sheet c12', style: 'padding:8px 14px' }, yearChips(v, y => renderExit(pyJSON(`SESSION.frontoffice('exit_interviews', year=${y})`)))));
   const c1 = v.club.color, c2 = v.club.accent || '#fff';
-  const head = el('section', { class: 'sheet c12 xm-head' }, el('div', { class: 'xm-kicker' }, `${v.year} · Exit Meetings`), el('div', { class: 'xm-title' }, v.open ? `${v.open} ${v.open === 1 ? 'player wants' : 'players want'} a word` : 'The meetings are done'), el('div', { class: 'xm-sub' }, 'Each will remember what you tell him. A promise goes on the ledger; a brush-off goes in his memory.'));
+  const head = el('section', { class: 'sheet c12 xm-head' }, el('div', { class: 'xm-kicker' }, `${v.year} · Exit Meetings`), el('div', { class: 'xm-title' }, v.past ? `The ${v.year} meetings` : v.open ? `${v.open} ${v.open === 1 ? 'player wants' : 'players want'} a word` : 'The meetings are done'), el('div', { class: 'xm-sub' }, 'Each will remember what you tell him. A promise goes on the ledger; a brush-off goes in his memory.'));
   page.append(head);
   if (!v.meetings.length) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, 'Nobody asked for a meeting this year.'))); return; }
   for (const m of v.meetings) {
@@ -1729,7 +1746,9 @@ function renderExit(v) {
 // the playoff bracket: seeds down the side, the rounds across, scores as they land
 function renderBracket(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('bracket');
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Playoffs', el('small', {}, v.champion ? `Champion: ${v.champion.name}` : v.live ? 'the bracket, live' : v.note || 'the field')));
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, `${v.year || ''} Playoffs`, el('small', {}, v.champion ? `Champion: ${v.champion.name}` : v.live ? 'the bracket, live' : v.note || 'the field')));
+  s.append(yearChips(v, y => renderBracket(pyJSON(`SESSION.league_view('bracket', year=${y})`))));
+  if (v.missing) { s.append(el('div', { class: 'empty' }, v.note || 'No bracket is kept for that season.')); page.append(s); return; }
   // one team's line on a card: seed, stripe, abbreviation, score; the winner carries the marker, the loser dims
   const line = (c, seed, pts, done, won, me, record) => el('div', { class: 'bk-line' + (done ? (won ? ' win' : ' lose') : '') + (me ? ' me' : '') },
     el('span', { class: 'sd' }, seed || ''), el('span', { class: 'str', style: `background:${c.color}` }), el('span', { class: 'ab' }, c.abbr), el('span', { class: 'rec' }, done ? '' : record || ''), el('b', {}, done ? (won ? '▸ ' : '') + pts : ''));

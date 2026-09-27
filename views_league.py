@@ -19,7 +19,32 @@ def _state(session):
     return r
 
 
-def standings(session, league, abbr):
+def _years(league):
+    """Every season the game has a record of, oldest first, the current year last."""
+    ys = {int(league.year)}
+    ys |= {int(k) for k in (getattr(league, 'history', {}) or {})}
+    ys |= {int(k) for k in (getattr(league, 'standings_history', {}) or {})}
+    ys |= {int(k) for k in (getattr(league, 'awards', {}) or {})}
+    return sorted(ys)
+
+
+def _past(session, league, abbr, page, year):
+    """A past season's page from the snapshot taken at that season's close, with a fresh rail."""
+    snap = ((getattr(league, 'history', {}) or {}).get(str(year)) or {}).get(page)
+    if snap is None: return None
+    out = dict(snap); out['rail'] = rail(session, league, abbr); out['year'] = int(year); out['years'] = _years(league); out['past'] = True
+    return out
+
+
+def standings(session, league, abbr, year=None):
+    yr = int(year) if year else int(league.year)
+    if yr != int(league.year):
+        past = _past(session, league, abbr, 'standings', yr)
+        if past is not None: return past
+        # no snapshot (a season closed before snapshots existed): the records the league kept
+        hist = (getattr(league, 'standings_history', {}) or {}).get(yr) or {}
+        rows = sorted([dict(club=club(a), record=(f"{r[0]}–{r[1]}" + (f"–{r[2]}" if len(r) > 2 and r[2] else '') if isinstance(r, (list, tuple)) else str(r)), pct=round(((r[0] + 0.5 * (r[2] if len(r) > 2 else 0)) / max(1, sum(r[:3]))) if isinstance(r, (list, tuple)) else 0, 3)) for a, r in hist.items() if a in league.teams], key=lambda x: -x['pct'])
+        return dict(rail=rail(session, league, abbr), year=yr, years=_years(league), past=True, thin=True, league_rows=rows, divisions=[], picture=None, conferences=[], notes=[], games_played=0, week=0)
     r = _state(session)
     st = r.standings() if r is not None else {}
     seeds = {}
@@ -83,7 +108,7 @@ def standings(session, league, abbr):
     league_rows = sorted([x for d in divs for x in d['rows']], key=lambda x: (-x['pct'], -x['pd']))
     if getattr(league, '_rank_week', None) != league.week:
         league._rank_prev = {x['club']['abbr']: x['div_rank'] for d in divs for x in d['rows'] if x['div_rank']}; league._rank_week = league.week
-    return dict(rail=rail(session, league, abbr), divisions=divs, picture=picture, games_played=played, week=league.week, conferences=conf_rows, notes=notes, league_rows=league_rows)
+    return dict(rail=rail(session, league, abbr), divisions=divs, picture=picture, games_played=played, week=league.week, conferences=conf_rows, notes=notes, league_rows=league_rows, year=int(league.year), years=_years(league))
 
 
 def _div_record(league, t):
@@ -127,7 +152,15 @@ def team_schedule(session, league, abbr, team=None):
     return dict(rail=rail(session, league, abbr), team=club(team), record=f"{w}–{l}" + (f"–{d}" if d else ''), games=games, byes=byes, clubs=[club(c) for c in sorted(league.teams)])
 
 
-def schedule(session, league, abbr, week=None):
+def schedule(session, league, abbr, week=None, year=None):
+    yr = int(year) if year else int(league.year)
+    if yr != int(league.year):
+        past = _past(session, league, abbr, 'schedule', yr)
+        if past is None: return dict(rail=rail(session, league, abbr), year=yr, years=_years(league), past=True, missing=True, weeks=[], week=0, games=[], mine=[])
+        if week is not None:
+            # a past season, a chosen week: re-cut from the stored games
+            wk = int(week); past['week'] = wk; past['games'] = [g for g in past.get('all_games', []) if g['week'] == wk]
+        return past
     weeks = sorted({g[0] for g in league.schedule})
     cur = week or (league.week if league.week and league.week in weeks else (min(weeks) if weeks else 1))
     cur = int(cur)
@@ -143,7 +176,19 @@ def schedule(session, league, abbr, week=None):
                           away_rec=_rec(league, a), home_rec=_rec(league, h), note=note, box=(abbr in (a, h) and done and f"{league.year}-{cur}" in (getattr(session, 'gamedays', None) or {}))))
     games.sort(key=lambda g: (not g['mine'], g['home']['abbr']))
     byes = [club(t) for t in league.teams if not any(t in (g[1], g[2]) for g in league.schedule if g[0] == cur)]
-    return dict(rail=rail(session, league, abbr), weeks=weeks, week=cur, games=games, byes=byes)
+    return dict(rail=rail(session, league, abbr), weeks=weeks, week=cur, games=games, byes=byes, year=int(league.year), years=_years(league))
+
+
+def schedule_snapshot(session, league, abbr):
+    """Every game of the season, week by week, for the history: the past-season schedule page re-cuts from this."""
+    weeks = sorted({g[0] for g in league.schedule})
+    allg = []
+    for (wk, a, h, ap, hp) in sorted(league.schedule, key=lambda g: g[0]):
+        done = ap is not None
+        allg.append(dict(week=wk, away=club(a), home=club(h), ap=ap, hp=hp, done=done, mine=(abbr in (a, h)), winner=(h if done and hp > ap else a if done and ap > hp else None),
+                         away_rec=_rec(league, a), home_rec=_rec(league, h), note='', box=False))
+    last = max([w for w in weeks if w <= 18], default=18)
+    return dict(weeks=weeks, week=last, games=[g for g in allg if g['week'] == last], all_games=allg, byes=[])
 
 
 def _rec(league, a):
@@ -446,12 +491,21 @@ def _identity_names(league, t):
         return dict(offense='', defense='')
 
 
-def bracket(session, league, abbr):
+def bracket(session, league, abbr, year=None):
     """The playoff bracket as a tree: each conference's bye, three wild card games, two divisional games and the
     championship, the Super Bowl in the middle with its site. Live while the postseason runs; the last finished
-    bracket after it; before the playoffs, the field as the standings would seed it."""
+    bracket after it; before the playoffs, the field as the standings would seed it; a past year's from the history."""
     import postseason as PS, standings_and_seeding as SS
-    post = getattr(session, 'post_live', None) or getattr(session, 'post', None)
+    yr = int(year) if year else int(league.year)
+    if yr != int(league.year):
+        past = _past(session, league, abbr, 'bracket', yr)
+        if past is not None: return past
+        post_last = getattr(session, 'post', None)
+        if not (post_last is not None and getattr(post_last, 'champion', None) and yr == int(league.year) - 1):
+            return dict(rail=rail(session, league, abbr), year=yr, years=_years(league), past=True, missing=True, live=False, started=False, confs=[], final=None, champion=None, sb=None, note='No bracket is kept for that season.')
+        post = post_last            # the season just closed: the bracket the close left behind
+    else:
+        post = getattr(session, 'post_live', None) or getattr(session, 'post', None)
     started = bool(post is not None and getattr(post, 'seeds', None))
     if not started:
         r = _state(session)
@@ -496,7 +550,7 @@ def bracket(session, league, abbr):
     sb = [game_row('SB', c, h, a, hs, as_) for (r_, c, h, a, hs, as_) in games if r_ == 'SB']
     if not sb and started and champion is None and len(getattr(post, 'conf_champs', {}) or {}) == 2: sb = [game_row('SB', c, h, a) for (c, h, a) in post.matchups('SB')]
     site = PS.sb_venue(league)
-    return dict(rail=rail(session, league, abbr), live=(started and champion is None), started=started, confs=confs, final=(sb[0] if sb else None),
+    return dict(rail=rail(session, league, abbr), year=yr, years=_years(league), live=(started and champion is None), started=started, confs=confs, final=(sb[0] if sb else None),
                 champion=(club(champion) if champion else None), site=site, note=(None if started else 'The field as it stands. The bracket is set after Week 18.'))
 
 

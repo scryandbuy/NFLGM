@@ -1300,3 +1300,6 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .xm-said{border-top:1px solid var(--rule);padding-top:12px}
 .xm-said .you{font-size:14.5px;color:var(--ink-2)}
 .xm-said .him{display:flex;gap:8px;margin-top:8px;font-size:17px;font-style:italic}
+
+.yearchips{padding:8px 14px 0}
+.yearchips .chip[aria-pressed="true"]{background:var(--club-2);color:#111;border-color:var(--club-2)}

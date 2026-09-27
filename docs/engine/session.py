@@ -88,7 +88,7 @@ class Session:
             class _R:
                 def __init__(self, seeds): self._s = seeds
                 def seeds(self): return self._s
-            pp = d['_post']; s.post = _Post(); s.post.champion = pp.get('champion'); s.post.finalists = pp.get('finalists') or {}
+            pp = d['_post']; s.post = _Post(); s.post.champion = pp.get('champion'); s.post.finalists = pp.get('finalists') or {}; s.post.year = pp.get('year')
             s.post.games = [tuple(g) for g in pp.get('games') or []]; s.post.r = _R(pp.get('seeds') or {}); s.post.seeds_at_close = pp.get('seeds') or {}
         s.draft = None
         if d.get('_draft_live'):
@@ -120,7 +120,7 @@ class Session:
         d['_post'] = None
         if self.post is not None:
             p = self.post
-            d['_post'] = dict(champion=p.champion, finalists=dict(p.finalists or {}), games=[list(g) for g in (p.games or [])],
+            d['_post'] = dict(champion=p.champion, year=getattr(p, 'year', None), finalists=dict(p.finalists or {}), games=[list(g) for g in (p.games or [])],
                               seeds=(getattr(p, 'seeds_at_close', None) if getattr(p, 'seeds_at_close', None) is not None else (p.r.seeds() if getattr(p, 'r', None) is not None else {})))
         d['_draft_live'] = dict(year=self.draft.year, taken=sorted(self.draft.taken), results=[(sel, t, p.pid) for sel, t, p in self.draft.results]) if self.draft_live() else None
         return json.dumps(d, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
@@ -380,6 +380,18 @@ class Session:
         except Exception as e:
             import sys; print('honors failed:', e, file=sys.stderr)
 
+    def _snapshot_season(self):
+        """The season's pages, kept as they stood at the close, so the year chooser can show them later: standings,
+        the full schedule, the bracket, the season review."""
+        import views_league as VL, views_frontoffice as VF
+        yr = str(self.L.year); hist = self.L.__dict__.setdefault('history', {}); snap = hist.setdefault(yr, {})
+        for page, fn in (('standings', lambda: VL.standings(self, self.L, self.user_team)), ('schedule', lambda: VL.schedule_snapshot(self, self.L, self.user_team)),
+                         ('bracket', lambda: VL.bracket(self, self.L, self.user_team)), ('review', lambda: VF.season_review(self, self.L, self.user_team))):
+            try:
+                d = fn(); d.pop('rail', None); snap[page] = d
+            except Exception as e:
+                import sys; print('snapshot failed:', page, e, file=sys.stderr)
+
     def _senior_bowl(self):
         """The week before the Super Bowl: every room's second look at the seniors in Mobile, and the assistants'
         word on who helped himself."""
@@ -542,7 +554,9 @@ class Session:
                     post.schedule_round(rnd)
                     post.play_round(rnd, skip=None, week=19 + i)
         self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng, post=post)
+        self.post.year = self.L.year
         self._post_review('closed')
+        self._snapshot_season()
         self._ai_exit_meetings([a for a in self.L.teams if f"{a}-{self.L.year}" not in (getattr(self.L, 'exit_meetings', {}) or {})])
         try: self.post.seeds_at_close = dict(getattr(post, 'seeds', {}) or {})
         except Exception: self.post.seeds_at_close = {}

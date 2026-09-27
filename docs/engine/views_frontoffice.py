@@ -423,7 +423,19 @@ def act_restructure(league, abbr, pid, amount=None, void_years=0):
     return r if isinstance(r, dict) else dict(ok=bool(r))
 
 
-def season_review(session, league, abbr):
+def season_review(session, league, abbr, year=None):
+    from views_league import _years, _past
+    yr = int(year) if year else int(league.year)
+    if yr != int(league.year):
+        past = _past(session, league, abbr, 'review', yr)
+        if past is not None: return past
+        return dict(rail=rail(session, league, abbr), year=yr, years=_years(league), past=True, missing=True)
+    out = _season_review_now(session, league, abbr)
+    out['year'] = yr; out['years'] = _years(league); out['past'] = False
+    return out
+
+
+def _season_review_now(session, league, abbr):
     """The morning after the season ends: the year against what the owner asked for, the seventeen results, the
     units against the league, the men who exceeded and fell short, next year's money and the men whose deals are
     up. Composed once the club is out; readable all offseason."""
@@ -586,9 +598,21 @@ def build_exit_meetings(session, league, abbr):
     return meetings
 
 
-def exit_interviews(session, league, abbr):
+def exit_interviews(session, league, abbr, year=None):
     from views import club, surname
+    from views_league import _years
     t = league.teams[abbr]
+    yr = int(year) if year else int(league.year)
+    store = getattr(league, 'exit_meetings', {}) or {}
+    if yr != int(league.year):
+        ms = store.get(str(yr)) or []
+        rows = []
+        for mt in ms:
+            p = league.player(mt['pid'])
+            if p is None: continue
+            rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), years=(p.contract.years if p.contract else 0), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1),
+                             kind=mt['kind'], quote=mt['quote'], options=mt['options'], answer=mt.get('answer') or 'unanswered', said=mt.get('said') or "The meeting came and went without an answer."))
+        return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=_years(league), past=True, meetings=rows, open=0)
     ms = build_exit_meetings(session, league, abbr)
     rows = []
     for mt in ms:
@@ -596,7 +620,7 @@ def exit_interviews(session, league, abbr):
         if p is None: continue
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), years=(p.contract.years if p.contract else 0), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1),
                          kind=mt['kind'], quote=mt['quote'], options=mt['options'], answer=mt.get('answer'), said=mt.get('said')))
-    return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, meetings=rows, open=sum(1 for r in rows if not r['answer']))
+    return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, years=_years(league), past=False, meetings=rows, open=sum(1 for r in rows if not r['answer']))
 
 
 def exit_answer(session, league, abbr, pid, key):
