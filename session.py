@@ -347,7 +347,19 @@ class Session:
             fired = PS.run_firings(self.L, self.rng, clubs=list(clubs))
             for abbr, bg in fired:
                 t = self.L.teams[abbr]
-                IB.post(self.L, 'league', f"{t.abbr} makes a change", f"{CLUB_NAME_.get(abbr, abbr)} moved on from its head coach the morning after its season ended. {t.gm.name if t.gm else 'A new coach'} takes over.", sender='league')
+                who = (t.gm.name + ' takes over.') if t.gm else ('The search is on; ' + (f"they are waiting on {self.L.pending_hires[abbr]['first']}." if abbr in (getattr(self.L, 'pending_hires', None) or {}) else 'a name is coming.'))
+                IB.post(self.L, 'league', f"{t.abbr} makes a change", f"{CLUB_NAME_.get(abbr, abbr)} moved on from its head coach the morning after its season ended. {who}", sender='league')
+            if fired:
+                # the market: the names every searching club is calling, by what their units did
+                import coaching_pool as CP
+                cands = [c for c in CP.coordinators_as_candidates(self.L) if c.team != self.user_team or True]
+                def hot(c):
+                    rk = list(c.unit_ranks[-2:]); recent = ((2.0 * rk[-1] + rk[-2]) / 3.0 if len(rk) >= 2 else float(rk[-1])) if rk else 16.5
+                    return 0.35 * (16.5 - recent) / 15.5 + 0.6 * (c.prestige / 100.0)
+                top = sorted(cands, key=hot, reverse=True)[:3]
+                if top:
+                    lines = [f"{c.name} ({'OC' if c.role == 'oc' else 'DC'}, {c.team}; his unit ranked {', '.join(str(int(r)) + ('st' if r == 1 else 'nd' if r == 2 else 'rd' if r == 3 else 'th') for r in c.unit_ranks[-2:]) or 'unranked'} the last two years)" for c in top]
+                    IB.post(self.L, 'league', "The coaching market", f"{len(fired)} club{'s' if len(fired) != 1 else ''} searching. The names every owner is calling: " + '; '.join(lines) + '.', sender='league')
         except Exception as e:
             import sys; print('black monday failed:', e, file=sys.stderr)
 

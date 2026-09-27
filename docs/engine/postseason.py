@@ -264,7 +264,9 @@ def run_firings(league, rng, pool=None, verbose=False, clubs=None):
     yr = str(league.year); rolled = done.setdefault(yr, [])
     strengths = {a: t.roster_strength() for a, t in league.teams.items()}
     lo, hi = min(strengths.values()), max(strengths.values())
-    for abbr, t in league.teams.items():
+    # the clubs searching in the same week compete for the same names; the worst record moves first
+    order = sorted(league.teams.items(), key=lambda kv: kv[1].win_pct)
+    for abbr, t in order:
         if t.gm is None:
             continue
         if clubs is not None and abbr not in clubs: continue

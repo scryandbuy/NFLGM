@@ -208,6 +208,11 @@ def owner_hire(league, team, rng, verbose=False):
         g.name = co.name; g.prestige = float(co.prestige); g.age = co.age
         g.reputation = round(float(np.clip((co.rating - 35.0) / 55.0 + rng.normal(0, 0.06), 0.05, 0.95)), 2)
         g._from_staff = (co.team, co.role)
+        g._recent_ranks = list(co.unit_ranks[-2:])          # what his unit did the last two seasons
+        import staff as STF
+        g._hc_ask = round(1.6 * STF.ask(co), 2)               # a head-coaching job pays about 1.6x his coordinator's ask
+        # a coordinator another club is already waiting on is off the board
+        if any(v.get('first') == co.name for v in (getattr(league, 'pending_hires', None) or {}).values()): continue
         p_cands.append(g)
     st = owner_state(team)
     # how much the owner wants continuity, 0 = tear it down, 1 = keep the roster
@@ -240,7 +245,22 @@ def owner_hire(league, team, rng, verbose=False):
         # sober one, which is enough to be passed over for a better fit.
         star = float(getattr(team, 'owner_star_pull', 0.5))
         name_term = (0.10 + 0.70 * star) * (getattr(c, 'prestige', 20.0) / 100.0) * 0.8
-        score = seen_q + fit_term - cost_term + name_term
+        # WHAT HIS UNIT DID. The last two seasons' ranks of his unit, the most recent weighted double: a top-five
+        # offense two years running is worth about a third of a point, a bottom-eight one costs the same
+        ranks = list(getattr(c, '_recent_ranks', None) or [])
+        if ranks:
+            recent = (2.0 * ranks[-1] + ranks[-2]) / 3.0 if len(ranks) >= 2 else float(ranks[-1])
+            results_term = 0.35 * (16.5 - recent) / 15.5
+        elif getattr(c, 'hc_record', None):
+            results_term = 0.25 * (float(c.hc_record.get('win_pct', 0.5)) - 0.5) / 0.2
+        else:
+            results_term = 0.0
+        # WHAT HE COSTS. His ask against what this owner will pay a head coach; over budget costs, well under is a small plus
+        hc_ask = float(getattr(c, '_hc_ask', 0.0) or (4.0 + 0.08 * getattr(c, 'prestige', 20.0)))
+        hc_budget = 6.0 + 8.0 * float(getattr(team, 'owner_spend', 0.5))
+        salary_term = -0.30 * max(0.0, (hc_ask - hc_budget) / hc_budget) + 0.05 * max(0.0, min(1.0, (hc_budget - hc_ask) / hc_budget))
+        score = seen_q + fit_term - cost_term + name_term + results_term + salary_term
+        c._score_parts = dict(seen=round(seen_q, 2), fit=round(fit_term, 2), cost=round(-cost_term, 2), name=round(name_term, 2), results=round(results_term, 2), salary=round(salary_term, 2), ask=round(hc_ask, 1), budget=round(hc_budget, 1))
         scored.append((score, c, fit, len(misfits), cost, seen_q, sim))
     scored.sort(key=lambda x: -x[0])
     score, hired, fit, n_mis, cost, seen_q, sim = scored[0]
@@ -311,6 +331,8 @@ def fire_and_hire(league, team, rng, verbose=False):
         return None, reasons
     hired.tenure = 0
     hired.job_security = float(np.clip(rng.normal(.78, .10), .45, .97))
+    try: hired.salary = round(float(getattr(hired, '_hc_ask', 0.0) or (4.0 + 0.08 * getattr(hired, 'prestige', 20.0))), 2)
+    except Exception: pass
     team.gm = hired
     team.scheme = GE.scheme_of(hired)
     team.tenure = 0
