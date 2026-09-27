@@ -109,6 +109,7 @@ class SeasonRunner:
 
     def __init__(self, league, rng=None):
         self.L = league
+        self.last_games = []; self.last_played = []                 # the strip and the notes read these; a runner built on a load starts empty
         self.rng = rng or np.random.default_rng()
         self.co, self.cd = _deps()
         self.states = {}

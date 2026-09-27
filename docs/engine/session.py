@@ -293,6 +293,10 @@ class Session:
                 self._playoff_prep(0)
             post = self.post_live
             rnd = PS.Postseason.ROUNDS[rnd_i]; wk_ = 19 + rnd_i
+            self.L._post_ref = post
+            if self.played and not any(g[0] == rnd for g in post.games):
+                self.played = False                       # a save from before the round flow: this round has not been played
+                self._playoff_prep(rnd_i)
             if not self.played:
                 # PLAY THE ROUND
                 user = self.user_team
@@ -489,11 +493,16 @@ class Session:
     def _close_playoffs(self):
         """After the Super Bowl: the champion, the draft order, the firings, and into the offseason."""
         post = self.post_live
+        if post is None or not getattr(post, 'seeds', None):
+            self._playoff_prep(0); post = self.post_live
+        if self.runner is not None and not hasattr(self.runner, 'last_games'): self.runner.last_games = []; self.runner.last_played = []
         if post.champion is None:
-            # the bracket is unfinished (a final not yet played out): play what remains
+            # the bracket is unfinished (a save from before the rounds, or a final not yet played): play what remains
             for i, rnd in enumerate(PS.Postseason.ROUNDS):
-                if not any(g[0] == rnd for g in post.games) or (rnd == 'SB' and post.champion is None):
-                    post.play_round(rnd, skip=None)
+                need = {'WC': 6, 'DIV': 4, 'CONF': 2, 'SB': 1}[rnd]
+                if sum(1 for g in post.games if g[0] == rnd) < need:
+                    post.schedule_round(rnd)
+                    post.play_round(rnd, skip=None, week=19 + i)
         self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng, post=post)
         self._post_review('closed')
         self._ai_exit_meetings([a for a in self.L.teams if f"{a}-{self.L.year}" not in (getattr(self.L, 'exit_meetings', {}) or {})])
