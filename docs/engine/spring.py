@@ -73,21 +73,14 @@ def combine(league, rng):
     for p in invited:
         p.combine = measurables(p, rng)
         inj = float(p.ratings.get('injury_rating', 80))
-        p.medical = dict(injury=inj, flag=inj <= cut)
+        p.medical = dict(injury=inj, flag=inj <= cut, cut=cut)      # the risk exists; a visit is what uncovers it
         for abbr, team in league.teams.items():
             v = league.scouting[abbr].get(p.pid)
             if v is None: continue
             v['e_phys'] = 0.0                     # every room saw the same forty
-            # the medical: the same knee moves a man down eight spots on one
-            # board and two on another, by how much the GM fears risk
-            if p.medical['flag']:
-                fear = 1.0 - float(getattr(team.gm, 'aggression', 0.5))
-                v['adj'] = v.get('adj', 0.0) - (1.0 + 3.0 * fear) * max(0.5, (cut - p.medical['injury']) / 8.0 + 0.5)
-                v['flags'] = list(set(v.get('flags', []) + ['medical']))
             SC._refresh(v, p)
     SC.consensus(league)
-    flagged = [p for p in invited if p.medical and p.medical['flag']]
-    for p in flagged[:8]:
+    for p in []:
         _log(league, 'medical', pid=p.pid, name=p.name, pos=p.pos, text=f"{p.name} ({p.pos}, {p.college}) has a medical flag out of the combine")
     return len(invited), _stock_moves(league, 'combine')
 
@@ -155,11 +148,30 @@ def visits(league, rng):
         for p in chosen:
             v = league.scouting[abbr].get(p.pid)
             if v is None: continue
+            # what the room thought before the visit, kept so the change shows
+            v['pre_visit'] = dict(ovr=float(v.get('ovr', 0) or 0), lo=float(v.get('pot_lo', 0) or 0), hi=float(v.get('pot_hi', 0) or 0), rank=(cons.get(p.pid, {}) or {}).get('rank'), flags=list(v.get('flags', [])))
             SC.second_look(v, p, sd * 0.55, rng, weight=1.5, R=SC.room(team)); looks += 1
             v['flags'] = list(set(v.get('flags', []) + ['visited']))
             _character(league, abbr, team, p, sd * 0.7, rng)
+            _medical(league, abbr, team, p, rng)
     SC.consensus(league)
     return looks, _stock_moves(league, 'visits')
+
+
+def _medical(league, abbr, team, p, rng):
+    """A visit uncovers a medical risk: the room's doctors read the injury history and the room marks him down."""
+    med = getattr(p, 'medical', None)
+    inj = float(p.ratings.get('injury_rating', 80))
+    cut = float((med or {}).get('cut', 70.0))
+    if inj > cut: return
+    v = league.scouting[abbr].get(p.pid)
+    if v is None or 'medical' in v.get('flags', []): return
+    fear = 1.0 - float(getattr(team.gm, 'aggression', 0.5))
+    v['adj'] = v.get('adj', 0.0) - (1.0 + 3.0 * fear) * max(0.5, (cut - inj) / 8.0 + 0.5)
+    v['flags'] = list(set(v.get('flags', []) + ['medical']))
+    SC._refresh(v, p)
+    if abbr == getattr(league, 'user_team', None):
+        _log(league, 'flag', event='visit', flag='medical', pid=p.pid, name=p.name, pos=p.pos, college=p.college, text=f"Uncovered a medical flag at the {p.name} visit")
 
 
 def _character(league, abbr, team, p, sd, rng):
@@ -174,6 +186,8 @@ def _character(league, abbr, team, p, sd, rng):
     if read < 35:
         v['adj'] = v.get('adj', 0.0) - 2.0
         v['flags'] = list(set(v.get('flags', []) + ['character']))
+        if abbr == getattr(league, 'user_team', None):
+            _log(league, 'flag', event='visit', flag='character', pid=p.pid, name=p.name, pos=p.pos, college=p.college, text=f"Uncovered a character flag at the {p.name} visit")
         SC._refresh(v, p)
 
 

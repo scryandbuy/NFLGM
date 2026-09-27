@@ -38,6 +38,10 @@ def _prospect(league, abbr, p, taken=()):
     # the words the board shows for what the room knows
     words = []
     if 'visited' in flags or p.pid in (getattr(league, 'user_visits', None) or []): words.append('Visited')
+    pre = v.get('pre_visit') if isinstance(v, dict) else None
+    visit_move = None
+    if pre and 'visited' in flags:
+        visit_move = dict(mine_from=round(float(pre.get('ovr', 0) or 0)), ceiling_from=f"{round(float(pre.get('lo', 0) or 0))}–{round(float(pre.get('hi', 0) or 0))}", rank_from=pre.get('rank'))
     if p.xp_spent.get('_senior_bowl') == league.year: words.append('Senior Bowl')
     _when = getattr(league, 'user_visit_week', None) or {}
     visit_locked = bool(p.pid in (getattr(league, 'user_visits', None) or []) and _when.get(p.pid) != f"{league.year}-{league.week}-{league.phase}")
@@ -54,7 +58,7 @@ def _prospect(league, abbr, p, taken=()):
     rk = c.get('rank') if c else None
     proj_range = (f"{max(1, rk - 4)}–{rk + 4}" if rk and rk <= 224 else '—')
     return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), college=getattr(p, 'college', None) or '', small=(not SC._power(p)), visited=('visited' in flags or p.pid in (getattr(league, 'user_visits', None) or [])),
-                cls_year=cls_year, size=size, words=words, proj_range=proj_range, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
+                cls_year=cls_year, size=size, words=words, proj_range=proj_range, visit_move=visit_move, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
                 forty=(round(float(comb['forty']), 2) if comb.get('forty') else None), vert=(round(float(comb['vert']), 1) if comb.get('vert') else None),
@@ -263,6 +267,24 @@ def spring(session, league, abbr):
         if x.get('kind') != 'stock': continue
         p = pool.get(x['pid']) or league.player(x['pid'])
         moves.append(dict(event=x.get('event'), pid=x['pid'], name=x.get('name'), pos=x.get('pos'), college=x.get('college'), frm=x.get('frm'), to=x.get('to'), delta=(x.get('frm') or 0) - (x.get('to') or 0), why=x.get('why', '')))
+    # flags your room uncovered at visits this spring, folded into the player's line
+    uncovered = {}
+    for x in news:
+        if x.get('kind') == 'flag': uncovered.setdefault(x['pid'], []).append(x.get('flag'))
+    EVENT_WORDS = {'combine': 'the combine', 'Senior Bowl': 'the Senior Bowl', 'pro days': 'his pro day', 'visits': 'the visit'}
+    for m in moves:
+        ev = EVENT_WORDS.get(m['event'], m['event']); fl = uncovered.get(m['pid'], [])
+        head = (f"Uncovered a {' and a '.join(fl)} flag at the visit; " if fl and m['event'] == 'visits' else '')
+        m['line'] = head + (f"rank went from {m['frm']} to {m['to']} after {ev}." if not head else f"rank went from {m['frm']} to {m['to']}.")
+        m['line'] = m['line'][0].upper() + m['line'][1:]
+    # a flag uncovered with no rank move of its own gets a line too
+    moved = {m['pid'] for m in moves if m['event'] == 'visits'}
+    flag_lines = []
+    for pid, fl in uncovered.items():
+        if pid in moved: continue
+        p = pool.get(pid) or league.player(pid)
+        if p is None: continue
+        flag_lines.append(dict(event='visits', pid=pid, name=p.name, pos=p.pos, college=p.college, frm=None, to=None, delta=0, kind='flag', line=f"Uncovered a {' and a '.join(fl)} flag at the visit."))
     risers = sorted([m for m in moves if m['delta'] > 0], key=lambda m: -m['delta'])[:12]
     fallers = sorted([m for m in moves if m['delta'] < 0], key=lambda m: m['delta'])[:12]
     events = []
@@ -275,8 +297,14 @@ def spring(session, league, abbr):
         if p is None: continue
         r = _prospect(league, abbr, p)
         if r: visited.append(r)
-    flagged = [r for r in (_prospect(league, abbr, p) for p in pool.values()) if r and any(f for f in r['flags'] if f != 'visited')]
-    flagged.sort(key=lambda r: (r['cons_rank'] if r['cons_rank'] is not None else 999))
+    flagged = flag_lines
+    # the visits table: what the second look changed, before and after
+    for r in visited:
+        v = (getattr(league, 'scouting', {}) or {}).get(abbr, {}).get(r['pid']) or {}
+        pre = v.get('pre_visit')
+        if pre:
+            r['before'] = dict(mine=round(float(pre.get('ovr', 0) or 0)), ceiling=f"{round(float(pre.get('lo', 0) or 0))}–{round(float(pre.get('hi', 0) or 0))}", cons_rank=pre.get('rank'))
+            r['uncovered'] = [f for f in v.get('flags', []) if f in ('medical', 'character') and f not in (pre.get('flags') or [])]
     done = bool(news)
     return dict(rail=rail(session, league, abbr), done=done, events=events, risers=risers, fallers=fallers, visited=visited, flagged=flagged[:40],
                 note=None if done else 'The combine, the Senior Bowl, pro days and the thirty visits happen in the Spring step of the offseason. Name your visits on the board now; the second look is the sharpest read your scouts get.')
