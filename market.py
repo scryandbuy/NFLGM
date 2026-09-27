@@ -84,6 +84,13 @@ class Offer:
     def as_dict(self):
         return dict(apy=self.apy, years=self.years, promises=self.promises, front_load=self.front_load)
 
+    def to_save(self):
+        return dict(team=self.team, pid=self.pid, apy=self.apy, years=self.years, promises=list(self.promises), phase=self.phase, front_load=self.front_load)
+
+    @classmethod
+    def from_save(cls, d):
+        return cls(d['team'], d['pid'], d['apy'], d.get('years', 3), d.get('promises', ()), d.get('phase', 1), d.get('front_load'))
+
     def total(self):
         return self.apy * self.years
 
@@ -294,7 +301,8 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
                         kind='match_request', pid=p.pid, name=p.name,
                         team=user_team, rival=best.team,
                         their_offer=theirs[0][1].apy, rival_offer=best.apy,
-                        expires_phase=phase))
+                        expires_phase=phase,
+                        subject=f"{p.name} asks you to match", body=f"{best.team} have offered {p.name} ${best.apy:.1f}m a year against your ${theirs[0][1].apy:.1f}m. He would rather be with you; match it before the round closes and he signs.", link=f'player:{p.pid}'))
                     waiting.append(p)
                     continue
 
@@ -308,7 +316,8 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
             messages.append(dict(
                 kind='offer_sheet', pid=p.pid, name=p.name, team=holder,
                 suitor=best.team, offer=round(best.apy, 2),
-                years=best.years, days=RFA_MATCH_DAYS, phase=phase))
+                years=best.years, days=RFA_MATCH_DAYS, phase=phase,
+                subject=f"Offer sheet: {p.name}", body=f"{best.team} have signed {p.name} ({p.pos}, {round(p.ovr)}) to an offer sheet at ${best.apy:.1f}m a year for {best.years} years. Match it and he stays on your terms; decline and he goes for the compensation.", link=f'player:{p.pid}'))
             waiting.append(p)
             continue
 
@@ -473,9 +482,9 @@ def fill_out_rosters(league, pool, rng, verbose=False):
         need = ROSTER_TARGET - len(team.active())
         if need <= 0:
             continue
-        # best available who will play for the minimum, his own position
+        # best available who will play for the minimum, his own position; never a player who should be paid
         # scarcity first
-        avail = sorted(pool, key=lambda p: -p.ovr)
+        avail = sorted([q for q in pool if q.ovr < REPLACEMENT_GRADE or q.pos in ('K', 'P', 'LS')], key=lambda p: -p.ovr)
         for p in list(avail):
             if need <= 0:
                 break
@@ -610,3 +619,126 @@ if __name__ == '__main__':
         else:
             print('  OFFER SHEET: %s signed with %s at $%.1fM - %s has %d days'
                   % (m['name'], m['suitor'], m['offer'], m['team'], m['days']))
+
+
+# ============================================================ THE MARKET AS STAGES
+# The offseason calendar carries four free-agency stages: Round 1, Round 2, Round 3, Market Closes. Entering a round
+# lodges the AI clubs' bids (league.fa_bids) so the user's talks can see who else is in on a player; advancing
+# resolves the round, with the user's offers in the mix (his answers come back through his talks); the close prices
+# whoever is left and fills rosters with genuine depth only. run() below is the old one-shot version and stays for
+# the register and the offline tools.
+
+def _pool(league):
+    pool = [league.player(pid) for pid in list(league.free_agents)]
+    return [p for p in pool if p and not p.retired and p.team is None]
+
+
+def open_round(league, rng, phase, user_team=None):
+    """A round opens: every club lodges its bids on the players it wants. The user's open talks learn their rival."""
+    import negotiations as NG
+    league.set_phase('free_agency'); league.fa_step = phase
+    league.__dict__.setdefault('inbox', [])
+    pool = _pool(league)
+    bids = ai_bids(league, pool, phase, rng, skip_teams=(user_team,) if user_team else ())
+    league.fa_bids = {pid: [o.to_save() for o in offers] for pid, offers in bids.items()}
+    league.fa_bids_phase = phase
+    # what the user can see: the best rival on each player he is talking to
+    for t in NG._threads(league):
+        if t['kind'] == 'fa_offseason' and t['state'] in ('open', 'waiting', 'countered', 'match_requested'):
+            others = bids.get(t['pid'], [])
+            if others:
+                best = max(others, key=lambda b: b.apy); NG.set_rival(league, t['pid'], best.team, best.apy, best.years)
+    return bids
+
+
+def resolve_round(league, rng, phase, user_team=None):
+    """The round closes at the advance: every player with offers signs, waits, or asks for a match; the user's talks
+    get their answers (yes, no, more, match). Returns (signed, waiting, messages)."""
+    import negotiations as NG
+    league.fa_step = phase
+    pool = _pool(league)
+    bids = {pid: [Offer.from_save(d) for d in offers] for pid, offers in (getattr(league, 'fa_bids', None) or {}).items()}
+    if getattr(league, 'fa_bids_phase', None) != phase or not bids:
+        bids = ai_bids(league, pool, phase, rng, skip_teams=(user_team,) if user_team else ())
+    # the user's offers ride alongside the AI's: a player he is bidding on within reach of the best rival waits for
+    # his talk to answer instead of being decided by the AI resolution alone
+    held = []
+    for t in NG._threads(league):
+        if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered', 'match_requested') and t['offers']:
+            p = league.player(t['pid'])
+            if p is None or p not in pool: continue
+            o = t['offers'][-1]; others = bids.get(p.pid, [])
+            if others:
+                best = max(others, key=lambda b: b.apy); NG.set_rival(league, p.pid, best.team, best.apy, best.years)
+                if o['apy'] >= best.apy * 0.97: held.append(p)
+            else:
+                held.append(p)
+    pool_now = [p for p in pool if p not in held]
+    signed, waiting, msgs = resolve_phase(league, pool_now, bids, phase, rng, user_team)
+    waiting = waiting + held
+    for t in NG._threads(league):
+        if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered', 'match_requested'):
+            p = league.player(t['pid'])
+            if p is not None and p.team and p.team != t['team']:
+                t['state'] = 'declined'; NG._post(league, t, f"{p.name} signs with {p.team}", "He took another offer.")
+    NG.resolve(league, fa_step=phase)
+    waiting = [p for p in waiting if p.team is None]
+    for mm in msgs: inbox_add(league, mm)
+    league.free_agents = [p.pid for p in waiting]
+    league.fa_bids = {}; league.fa_bids_phase = None
+    league.__dict__.setdefault('fa_signed', []).extend([(t_, p.pid, o.apy, o.years, phase) for t_, p, o in signed])
+    return signed, waiting, msgs
+
+
+def close_market(league, rng, user_team=None, verbose=False):
+    """The market closes: the user's unanswered talks lapse, the players still worth real money sign one-year deals at
+    a discount with clubs that have room (or wait for camp), rosters fill with genuine depth at the minimum, offer
+    sheets resolve, every club is brought under the cap."""
+    import negotiations as NG
+    league.fa_step = PHASES + 1
+    NG.resolve(league, fa_step=PHASES + 1)
+    for t in NG._threads(league):
+        if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered', 'match_requested'):
+            pp = league.player(t['pid'])
+            t['state'] = 'declined'; NG._post(league, t, f"{pp.name if pp else 'He'} moves on", "The market has closed without a deal.")
+    pool = _pool(league)
+    signed = sign_the_leftovers(league, pool, rng, user_team=user_team)
+    pool = [p for p in pool if p.team is None]
+    fill_out_rosters(league, pool, rng, verbose)
+    resolve_offer_sheets(league, rng, verbose)
+    import contracts as CT
+    CT.enforce(league, rng, verbose)
+    league.free_agents = [p.pid for p in pool if p.team is None]
+    league.fa_bids = {}; league.fa_bids_phase = None
+    return signed
+
+
+REPLACEMENT_GRADE = 78.0            # above this a player is not a body; he is priced
+
+def sign_the_leftovers(league, pool, rng, user_team=None):
+    """April's veterans: anyone above replacement grade still on the market signs a one-year deal at about 70% of his
+    market with the club that has the room and the need, best players first. A player nobody can afford waits for
+    camp rather than signing for the minimum. The user's club never signs anyone here; the page is his."""
+    cap = CAP.get(league.year, 301.2)
+    comps = VAL.pool_from_league(league)
+    out = []
+    for p in sorted([q for q in pool if q.ovr >= REPLACEMENT_GRADE and q.pos not in ('K', 'P', 'LS')], key=lambda q: -q.ovr):
+        v = VAL.value_player(league, p, pool=comps, rng=rng)
+        market = v['apy'] if v else 3.0
+        price = round(max(market * 0.70, 1.5), 2)
+        best = None; best_score = -1e9
+        for abbr, team in league.teams.items():
+            if abbr == user_team: continue
+            if len(team.active()) >= 90: continue
+            if power(league, team, cap) < price * 1.05: continue
+            # the need: how far below him the club's starter at his spot is
+            ps = team.depth.get(p.pos) or []
+            gap = p.ovr - (ps[0].ovr if ps else 60.0)
+            score = gap + 0.15 * power(league, team, cap) + rng.normal(0, 1.5)
+            if gap < -2: continue
+            if score > best_score: best, best_score = team, score
+        if best is None: continue
+        o = Offer(best.abbr, p.pid, price, 1, phase=PHASES + 1)
+        sign(league, p, o, cap); best.sync_cap(); out.append((best.abbr, p, o))
+        league.__dict__.setdefault('fa_signed', []).append((best.abbr, p.pid, o.apy, 1, PHASES + 1))
+    return out

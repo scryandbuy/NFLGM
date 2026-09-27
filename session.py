@@ -106,6 +106,9 @@ class Session:
                 s.post.exit_round[lose] = rnd
             if s.post.year is None and s.post.champion and s.stop[0] == 'offseason': s.post.year = int(L.year) - (1 if int(getattr(L, 'week', 0) or 0) == 0 else 0)
         s.draft = None
+        try: s._open_fa_if_due()
+        except Exception as e:
+            import sys; print('open round on load failed:', e, file=sys.stderr)
         try: s._backfill_history()
         except Exception as e:
             import sys; print('history backfill failed:', e, file=sys.stderr)
@@ -151,7 +154,10 @@ class Session:
         ('New Year: Cap and Contracts', 'step_roll'),
         ('Offseason Waivers', 'step_waivers_1'),
         ('Extensions and Tags', 'step_extensions'),
-        ('Free Agency', 'step_market'),
+        ('Free Agency: Round 1', 'step_fa_1'),
+        ('Free Agency: Round 2', 'step_fa_2'),
+        ('Free Agency: Round 3', 'step_fa_3'),
+        ('Free Agency: Market Closes', 'step_fa_close'),
         ('Offseason Trades', 'step_trades'),
         ('The Spring: Combine and Pro Days', 'step_spring'),
         ('The Draft', 'step_draft'),
@@ -207,6 +213,12 @@ class Session:
             pk = self.draft.current()
             return dict(title='Finish the Draft on Auto', sub=f"or make your pick at {pk.round}.{((pk.selection - 1) % 32) + 1} on Draft Day" if pk else '')
         title, _ = self.OFFSEASON[i]
+        name = self.OFFSEASON[i][1]
+        if name in self.FA_STEPS or name == 'step_fa_close':
+            n = len([x for x in self.L.free_agents if self.L.player(x)])
+            import negotiations as NG
+            mine = sum(1 for t in NG._threads(self.L) if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered', 'match_requested'))
+            return dict(title=('Close the Market' if name == 'step_fa_close' else f"Close Round {self.FA_STEPS[name]}"), sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)} · {n} on the market · {mine} offer{'s' if mine != 1 else ''} out")
         return dict(title=title, sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)}")
 
     ROSTER_MAX, ROSTER_MIN = 53, 46
@@ -243,7 +255,9 @@ class Session:
 
     def _league_log_notes(self):
         try:
-            import league_notes as LN; LN.transactions(self.L, self.L.week or 0)
+            import league_notes as LN
+            fa_now = self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] in (*self.FA_STEPS, 'step_fa_close')
+            LN.transactions(self.L, self.L.week or 0, skip_signings=fa_now)
             import staff as STF_; STF_.resolve_references(self.L)
         except Exception: pass
 
@@ -363,6 +377,9 @@ class Session:
                 return dict(done='The Draft is on the clock', next=self.next_label())
         if i + 1 < len(self.OFFSEASON):
             self.stop = ('offseason', i + 1)
+            try: self._open_fa_if_due()
+            except Exception as e:
+                import sys; print('open round failed:', e, file=sys.stderr)
         else:
             self.stop = ('week', 1); self.runner = None
             try: GW.post_report(self.L, 1)
@@ -680,7 +697,50 @@ class Session:
         EXT.ai_round(L, rng); EXT.notify_user(L)
         TG.run(L, rng); CT.enforce(L, rng)
 
+    # ---- FREE AGENCY AS STAGES. Each round is a stop on the calendar: it opens (the AI clubs' bids are lodged, your
+    # talks show who else is in) when the calendar lands on it, you make your offers on the Free Agency page, and the
+    # Advance resolves it: every player signs, waits, or asks for a match, and your answers land in the inbox. Nothing
+    # signs on the spot in the open market. The close prices the leftovers and fills rosters with depth only.
+    FA_STEPS = {'step_fa_1': 1, 'step_fa_2': 2, 'step_fa_3': 3}
+
+    def _fa_round(self, k):
+        L, rng = self.L, self.rng
+        signed, waiting, msgs = MK.resolve_round(L, rng, k, user_team=self.user_team)
+        # one note for the round: the AI's notable signings, not one message per deal
+        from views import surname
+        big = sorted([(t_, p, o) for t_, p, o in signed if p.ovr >= 85 or o.apy >= 15.0], key=lambda x: -x[2].apy)
+        if big:
+            lines = [f"{p.name} ({p.pos}, {round(p.ovr)}) to {t_} for ${o.apy:.1f}m x {o.years}" for t_, p, o in big[:10]]
+            IB.post(L, 'league', f"Free agency, round {k}: the big signings", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market. " + '; '.join(lines) + ('.' if lines else ''), sender='league', payload=dict(link='personnel:free_agency'))
+        else:
+            IB.post(L, 'league', f"Free agency, round {k}", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market.", sender='league', payload=dict(link='personnel:free_agency'))
+
+    def step_fa_1(self): self._fa_round(1)
+    def step_fa_2(self): self._fa_round(2)
+    def step_fa_3(self): self._fa_round(3)
+
+    def step_fa_close(self):
+        L, rng = self.L, self.rng
+        signed = MK.close_market(L, rng, user_team=self.user_team)
+        n_left = len([x for x in L.free_agents if L.player(x)])
+        big = [f"{p.name} ({p.pos}, {round(p.ovr)}) to {t_} for ${o.apy:.1f}m" for t_, p, o in sorted(signed, key=lambda x: -x[1].ovr)[:8]]
+        IB.post(L, 'league', "The market closes", f"{len(signed)} veterans signed one-year deals as the market closed; {n_left} players remain unsigned into camp. " + ('; '.join(big) + '.' if big else ''), sender='league', payload=dict(link='personnel:free_agency'))
+
+    def _open_fa_if_due(self):
+        """The calendar sits on a free-agency round: open it (once) so the offers can be made before the advance."""
+        if self.stop[0] != 'offseason': return
+        name = self.OFFSEASON[self.stop[1]][1]
+        k = self.FA_STEPS.get(name)
+        if k is None: return
+        L = self.L
+        if getattr(L, 'fa_bids_phase', None) == k and getattr(L, 'fa_bids', None): return
+        bids = MK.open_round(L, self.rng, k, user_team=self.user_team)
+        n = len([x for x in L.free_agents if L.player(x)])
+        contested = sum(1 for pid, offers in bids.items() if len(offers) >= 2)
+        IB.post(L, 'contract', f"Free agency, round {k}, is open", f"{n} players on the market; {len(bids)} have offers from other clubs, {contested} from more than one. Open talks on the Free Agency page to see who else is in on a player, and make your offers before you advance. Nobody signs until the round closes.", sender='front office', payload=dict(link='personnel:free_agency'))
+
     def step_market(self):
+        # kept for tools that call the one-shot market
         L, rng = self.L, self.rng
         L.set_phase('free_agency')
         MK.run(L, rng, user_team=self.user_team)

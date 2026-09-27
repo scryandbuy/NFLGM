@@ -117,6 +117,13 @@ def open_talks(league, pid, kind='extension'):
                  state='open', offers=[], patience=PATIENCE, opened=_clock(league), ask=round(ask, 2), years=years,
                  mood=mood, due=None, counter=None, rival=None, match_rounds=0, broken_until=0)
         _threads(league).append(t)
+    if kind == 'fa_offseason':
+        # a round is open: the agent tells you who else is in, and how much
+        bids = (getattr(league, 'fa_bids', None) or {}).get(pid) or []
+        if bids:
+            best = max(bids, key=lambda b: b['apy'])
+            set_rival(league, pid, best['team'], best['apy'], best['years'])
+            line += f" {len(bids)} other club{'s' if len(bids) != 1 else ''} {'are' if len(bids) != 1 else 'is'} in on him."
     return dict(ok=True, will_talk=True, thread=t['id'], ask=round(ask, 2), years=years, mood=mood, line=line, patience=t['patience'])
 
 
@@ -172,8 +179,10 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     if t['kind'] == 'extension':
         wait = 1 + (2 if s['star'] and s['final_year'] else 0) + (1 if s['morale'] < 35 else 0) - (1 if s['loyalty'] > 0.62 else 0)
         t['due'] = _clock(league) + max(1, wait)
+    elif t['kind'] == 'fa_offseason' and league.phase == 'free_agency':
+        t['due'] = _clock(league)                        # an offer made in an open round is answered when that round closes
     else:
-        t['due'] = _clock(league) + 1                    # the next advance or the next step of the market
+        t['due'] = _clock(league) + 1                    # the next advance
     # an on-the-spot yes, when there is a reason
     if t['kind'] == 'fa_offseason' and apy >= floor and not t.get('rival') and (s['loyalty'] > 0.62 or s['money'] < 0.4):
         return _accept(league, t, offer, how='signed on the spot')

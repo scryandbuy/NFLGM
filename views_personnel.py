@@ -259,7 +259,9 @@ def free_agency(session, league, abbr):
     import negotiations as NG, valuation as VAL
     me = league.teams[abbr]
     rows = []
-    for pid in list(league.free_agents)[:400]:
+    # the best 400 on the market, not the first 400 in list order (that hid stars behind depth)
+    ordered = sorted(list(league.free_agents), key=lambda x: -(league.player(x).ovr if league.player(x) else 0))[:400]
+    for pid in ordered:
         p = league.player(pid)
         if p is None or p.retired: continue
         t = NG.open_for(league, pid)
@@ -281,6 +283,10 @@ def free_agency(session, league, abbr):
     rows.sort(key=lambda r: -r['ovr'])
     phase = league.phase
     step = getattr(league, 'fa_step', None)
+    # the round's lodged bids: how many clubs are in on each player (the numbers stay private; the interest is known)
+    bids = getattr(league, 'fa_bids', None) or {}
+    for r in rows: r['bidders'] = len(bids.get(r['pid'], []) or [])
+    fa_round = getattr(league, 'fa_bids_phase', None)
     threads = [_thread(league, t) for t in NG._threads(league) if t['kind'] in ('fa_offseason', 'fa_inseason') and t.get('team') == abbr and t['state'] not in ('expired', 'void')]
     watch = getattr(league, 'watchlist', None) or set()
     for r in rows: r['watch'] = r['pid'] in watch
@@ -303,7 +309,7 @@ def free_agency(session, league, abbr):
     ps_n = len(PSQ.squad(me))
     return dict(rail=rail(session, league, abbr), rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
                 weeks_left=(19 - int(league.week or 0) if phase == 'regular' else None),
-                in_season=(phase == 'regular'), phase=phase, step=step, threads=threads, feed=feed, positions=sorted({r['pos'] for r in rows}))
+                in_season=(phase == 'regular'), phase=phase, step=step, fa_round=fa_round, threads=threads, feed=feed, positions=sorted({r['pos'] for r in rows}))
 
 
 def _thread(league, t):

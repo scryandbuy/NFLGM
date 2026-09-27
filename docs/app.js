@@ -1068,9 +1068,9 @@ function renderFA(v) {
   const reload = () => renderFA(pyJSON(`SESSION.personnel('free_agency')`));
   const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], DL: ['LEDG', 'DT', 'REDG'], DB: ['CB', 'FS', 'SS'], LB: ['MIKE', 'WILL', 'SAM'] };
   const inSeason = v.in_season;
-  const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Free Agency', el('small', {}, inSeason
+  const left = el('section', { class: 'sheet c7' }, el('h2', {}, v.fa_round ? `Free Agency · Round ${v.fa_round}` : 'Free Agency', el('small', {}, inSeason
     ? `${v.count} Available · Cap Space $${v.cap}m · ${v.weeks_left} week${v.weeks_left === 1 ? '' : 's'} left · Roster ${v.roster} · Practice Squad ${v.ps}`
-    : `${v.count} Available · Cap Space $${v.cap}m${v.top51 ? ' · Top 51' : ''} · Next Year $${v.committed_next}m of $${v.limit_next}m committed`)));
+    : `${v.count} Available · Cap Space $${v.cap}m${v.top51 ? ' · Top 51' : ''} · Next Year $${v.committed_next}m of $${v.limit_next}m committed${v.fa_round ? ' · offers resolve when you advance' : ''}`)));
   const tools = el('div', { class: 'tools' });
   const posChips = el('div', { class: 'chips' }); for (const g of ['All', 'QB', 'OL', 'WR', 'DL', 'DB', 'LB']) posChips.append(el('button', { class: 'chip', 'aria-pressed': String((faPos || 'All') === g), onclick: () => { faPos = g === 'All' ? '' : g; renderFA(v); } }, g));
   const roleChips = el('div', { class: 'chips' }); for (const g of ['Starters', 'Depth']) roleChips.append(el('button', { class: 'chip', 'aria-pressed': String(faRole === g), onclick: () => { faRole = faRole === g ? 'All' : g; renderFA(v); } }, g));
@@ -1093,7 +1093,7 @@ function renderFA(v) {
       if (inSeason) tbl.append(el('tr', {}, who, el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', { class: 'n' }, r.ask_now != null ? `$${r.ask_now.toFixed(2)}m` : '—'),
         el('td', {}, r.thread && r.ask ? el('button', { class: 'btn go', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'His full ask, signed now', onclick: () => { const t = v.threads.find(x => x.id === r.thread); const res = pyJSON(`SESSION.personnel_act('offer', tid=${r.thread}, apy=${t ? t.ask : r.ask}, years=${t ? t.years : r.years}, sign_today=True)`); notify(res); reload(); } }, 'Sign') : ''), el('td', {}, askBtn)));
       else tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'star' + (r.watch ? ' on' : ''), 'data-tip': r.watch ? 'On your watchlist' : 'Add to your watchlist', onclick: () => { pyJSON(`SESSION.personnel_act('watch', pid=${JSON.stringify(r.pid)})`); reload(); } }, '★')), who, el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)),
-        el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', {}, r.interest ? el('span', { class: 'pill ' + ({ 'Match Asked': 'unsettled', Agreed: 'happy', Countered: 'content', Mulling: 'content', Walked: 'unhappy' }[r.interest] || 'content') }, r.interest) : ''), el('td', {}, r.my_offer || el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', {}, askBtn)));
+        el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', {}, r.interest ? el('span', { class: 'pill ' + ({ 'Match Asked': 'unsettled', Agreed: 'happy', Countered: 'content', Mulling: 'content', Walked: 'unhappy' }[r.interest] || 'content') }, r.interest) : '', r.bidders ? el('small', { class: 'count', style: 'display:block', 'data-tip': 'Clubs with an offer lodged on him this round' }, `${r.bidders} club${r.bidders === 1 ? '' : 's'} in`) : ''), el('td', {}, r.my_offer || el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', {}, askBtn)));
     }
     if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '10' }, el('div', { class: 'empty' }, v.rows.length ? 'Nobody matches the filter.' : 'Nobody is on the market.'))));
   };
