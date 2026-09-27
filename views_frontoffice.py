@@ -421,3 +421,102 @@ def act_restructure(league, abbr, pid, amount=None, void_years=0):
     if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
     r = CT.restructure_user(league, pid, amount=(float(amount) if amount is not None else None), void_years=int(void_years or 0))
     return r if isinstance(r, dict) else dict(ok=bool(r))
+
+
+def season_review(session, league, abbr):
+    """The morning after the season ends: the year against what the owner asked for, the seventeen results, the
+    units against the league, the men who exceeded and fell short, next year's money and the men whose deals are
+    up, and the assistants' three notes. Composed once the club is out; readable all offseason."""
+    import gameplan_week as GW, staff as ST, firing_model as FM
+    from views import _owner_mood, CLUB_NAME, club, surname, next_year_cap
+    t = league.teams[abbr]; h = t.hist(); w, l, d = t.record; n = max(1, w + l + d); pct = (w + 0.5 * d) / n
+    exp = float(h.get('expected_pct') or 0.5)
+    exp_words = 'a title run' if exp >= 0.72 else 'the playoffs' if exp >= 0.56 else 'a winning season' if exp >= 0.5 else 'progress' if exp >= 0.4 else 'patience while you rebuild'
+    # the finish: division place, the postseason if any
+    st = {}
+    try:
+        import views_league as VL
+        r = VL._state(session); st = r.standings() if r is not None else {}
+    except Exception: st = {}
+    div_rank = (st.get(abbr) or {}).get('div_rank')
+    exit_ = None
+    post = getattr(session, 'post_live', None) or getattr(session, 'post', None)
+    if post is not None:
+        if getattr(post, 'champion', None) == abbr: exit_ = 'Champions'
+        else:
+            er = (getattr(post, 'exit_round', {}) or {}).get(abbr)
+            exit_ = {'WC': 'Lost in the Wild Card round', 'DIV': 'Lost in the Divisional round', 'CONF': 'Lost the Conference Championship', 'SB': 'Lost the Super Bowl'}.get(er)
+            if exit_ is None and abbr in {x for sd in (getattr(post, 'seeds', {}) or {}).values() for x in sd}: exit_ = 'In the playoffs'
+    if exit_ is None: exit_ = 'Missed the playoffs'
+    gap = pct - exp
+    verdict = ('He got more than he asked for.' if gap >= 0.12 else 'He got what he asked for.' if gap >= -0.05 else 'He got less than he asked for.' if gap >= -0.18 else 'He got a lot less than he asked for.')
+    own = _owner(league, t); mood = _owner_mood(t); sec = FM.job_security(h)
+    owner_line = {
+        'Pleased': f"{own['name']} is pleased. {exp_words.capitalize()} was the ask and you delivered on it; he wants to know what the next step is.",
+        'Settled': f"{own['name']} is settled on the year. {exp_words.capitalize()} was the ask, and {verdict.lower()} He is asking what changes.",
+        'Restless': f"{own['name']} is restless. He asked for {exp_words} and {verdict.lower()} He wants a plan on his desk before the new year.",
+        'Angry': f"{own['name']} is angry. He asked for {exp_words}; {verdict.lower()} Your seat is warm.",
+    }[mood]
+    # the seventeen results
+    timeline = []
+    for (wk, a, hm, ap, hp) in sorted(league.schedule, key=lambda g: g[0]):
+        if wk > 18 or abbr not in (a, hm): continue
+        if ap is None: timeline.append(dict(week=wk, bye=True)); continue
+        mine, theirs = (ap, hp) if a == abbr else (hp, ap)
+        opp = hm if a == abbr else a
+        timeline.append(dict(week=wk, opp=club(opp), away=(a == abbr), mine=mine, theirs=theirs, result=('W' if mine > theirs else 'L' if mine < theirs else 'T')))
+    weeks_played = {x['week'] for x in timeline}
+    for wk in range(1, 19):
+        if wk not in weeks_played: timeline.append(dict(week=wk, bye=True))
+    timeline.sort(key=lambda x: x['week'])
+    # the units against the league (stat-based offense and defense, grade-based subunits)
+    try: sr = ST.unit_ranks(league, league.year).get(abbr, {})
+    except Exception: sr = {}
+    try: ur = GW.unit_ranks(league, t)
+    except Exception: ur = {}
+    ROWS = [('Pass Offense', 'QB'), ('Run Offense', 'backs'), ('Pass Block', 'pass block'), ('Receivers', 'receivers'), ('Pass Rush', 'pass rush'), ('Run Front', 'run front'), ('Corners', 'corners'), ('Safeties', 'safeties'), ('Linebackers', 'linebackers')]
+    units = [dict(label=lab, rank=(ur[k][0] if ur.get(k) else None), of=(ur[k][1] if ur.get(k) else 32)) for lab, k in ROWS]
+    sides = dict(offense=sr.get('oc'), defense=sr.get('dc'), kicking=sr.get('st'))
+    # who exceeded and who fell short: this season's production against the man's grade
+    S = league.stats.get(league.year, {}) or {}
+    import xp as XP
+    scored = []
+    for p in t.active():
+        line = S.get(p.pid)
+        if not line: continue
+        snaps = int(line.get('snaps', 0) or 0)
+        if snaps < 200: continue
+        epa = float(line.get('pass_epa', 0) or 0) + float(line.get('rush_epa', 0) or 0) + float(line.get('rec_epa', 0) or 0) + float(line.get('def_epa', 0) or 0)
+        per = epa / max(1, snaps) * 100.0
+        scored.append((per - 0.02 * (p.ovr - 75), p, per, snaps))
+    scored.sort(key=lambda x: -x[0])
+    def card(p, per, snaps, up):
+        line = S.get(p.pid, {})
+        bits = []
+        if p.pos == 'QB': bits.append(f"{int(line.get('pass_yds', 0))} yds, {int(line.get('pass_td', 0))} TD, {int(line.get('ints', 0))} INT")
+        elif p.pos in ('HB', 'FB'): bits.append(f"{int(line.get('rush_yds', 0))} rush yds, {int(line.get('rush_td', 0))} TD")
+        elif p.pos in ('WR', 'TE'): bits.append(f"{int(line.get('rec', 0))} rec, {int(line.get('rec_yds', 0))} yds, {int(line.get('rec_td', 0))} TD")
+        else: bits.append(f"{int(line.get('tackles', 0))} tkl, {float(line.get('sacks', 0) or 0):.0f} sk, {int(line.get('int_def', 0))} INT")
+        return dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), line=bits[0], up=up)
+    exceeded = [card(p, per, sn, True) for _s, p, per, sn in scored[:3]]
+    short = [card(p, per, sn, False) for _s, p, per, sn in scored[-3:][::-1] if p.ovr >= 78]
+    # next year's money and the men whose deals are up
+    limit_next, committed_next, rollover, dead_next = next_year_cap(league, t)
+    expiring = sorted([p for p in t.active() if p.contract and p.contract.years <= 1], key=lambda p: -p.ovr)
+    pending = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), starter=(p in (t.depth.get(p.pos) or [])[:1])) for p in expiring[:8]]
+    # the assistants' three notes
+    notes = []
+    ranked = [u for u in units if u['rank']]
+    if ranked:
+        worst = max(ranked, key=lambda u: u['rank']); best = min(ranked, key=lambda u: u['rank'])
+        notes.append(f"The {worst['label'].lower()} ranked {worst['rank']}th of {worst['of']}; that is the first place the draft and the market should look.")
+        notes.append(f"The {best['label'].lower()} ranked {best['rank']}{'st' if best['rank'] == 1 else 'nd' if best['rank'] == 2 else 'rd' if best['rank'] == 3 else 'th'}; build around it, and pay to keep it together.")
+    starters_up = [x for x in pending if x['starter']]
+    if starters_up: notes.append(f"{len(starters_up)} starter{'s' if len(starters_up) != 1 else ''} come{'s' if len(starters_up) == 1 else ''} off contract: {', '.join(surname(x['name']) for x in starters_up[:4])}. Decide before the tag window.")
+    else: notes.append("No starter comes off contract; the money can go to the market or an extension.")
+    room = limit_next - committed_next
+    notes.append(f"Next year's room is about ${room:.0f}m against a ${limit_next:.0f}m cap, with ${dead_next:.1f}m of dead money already on the books.")
+    return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, record=f"{w}–{l}" + (f"–{d}" if d else ''), pct=round(pct, 3), expected=exp_words, expected_pct=round(exp, 2),
+                finish=exit_, div_rank=div_rank, division=t.division, owner=dict(name=own['name'], mood=mood, line=owner_line, job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat')),
+                timeline=timeline, units=units, sides=sides, exceeded=exceeded, short=short, cap=dict(limit=round(limit_next, 1), committed=round(committed_next, 1), dead=round(dead_next, 1), rollover=round(rollover, 1), room=round(room, 1)),
+                pending=pending, notes=notes[:3])

@@ -267,6 +267,9 @@ class Session:
             self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs', 0)
             if wk >= WEEKS:
                 self._playoff_prep(0)
+                post = self.post_live
+                if post is not None and self.user_team not in {t for sd in post.seeds.values() for t in sd}:
+                    self._post_review('missed')
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':
             # THE PLAYOFFS, A ROUND AT A TIME, with the whole week around each game. Entering a round (from week 18's
@@ -306,6 +309,8 @@ class Session:
             self.runner.roll_week(wk_)
             IB.expire(self.L, wk_ + 1)
             self.played = False
+            if self.user_team in (getattr(post, 'exit_round', {}) or {}):
+                self._post_review('eliminated')
             if rnd_i + 1 < len(PS.Postseason.ROUNDS):
                 self.stop = ('playoffs', rnd_i + 1)
                 self._playoff_prep(rnd_i + 1)
@@ -327,6 +332,16 @@ class Session:
             try: GW.post_report(self.L, 1)
             except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
+
+    def _post_review(self, how):
+        """The season review lands once, the morning after the club's season ends."""
+        key_ = f"review-{self.L.year}"
+        if any((m.get('payload') or {}).get('key') == key_ for m in getattr(self.L, 'inbox', [])): return
+        try:
+            v = self.frontoffice('season_review')
+            IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the men whose deals are up.", sender='front office', payload=dict(key=key_, link='front_office:review'))
+        except Exception as e:
+            import sys; print('season review failed:', e, file=sys.stderr)
 
     def _playoff_prep(self, rnd_i):
         """The week before a playoff game, for every club: the round's games scheduled, the injury desk's listings and
@@ -368,6 +383,7 @@ class Session:
                 if not any(g[0] == rnd for g in post.games) or (rnd == 'SB' and post.champion is None):
                     post.play_round(rnd, skip=None)
         self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng, post=post)
+        self._post_review('closed')
         try: self.post.seeds_at_close = dict(getattr(post, 'seeds', {}) or {})
         except Exception: self.post.seeds_at_close = {}
         MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
