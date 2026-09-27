@@ -301,6 +301,10 @@ def _accept(league, t, offer, how, quiet=False):
         r = EXT.extend(league, p.pid, offer['apy'], offer['years'], front_load=offer.get('front_load'), agreed=True)
         if r['result'] != 'accepted':
             return dict(ok=False, why=r.get('why'))
+        if getattr(p, 'fa_class', None) == 'tendered':
+            # a tendered restricted free agent signing long term: the tender is replaced and he leaves the market
+            p.fa_class = 'under_contract'; p.tender_team = None
+            if p.pid in league.free_agents: league.free_agents.remove(p.pid)
     else:
         team = league.teams[t['team']]; cap = CAP.get(league.year, 301.2)
         o = MK.Offer(t['team'], p.pid, offer['apy'], offer['years'], promises=offer.get('promises', ()), front_load=offer.get('front_load'))

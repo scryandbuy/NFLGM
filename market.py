@@ -685,6 +685,10 @@ def resolve_round(league, rng, phase, user_team=None):
             else:
                 held.append(p)
     pool_now = [p for p in pool if p not in held]
+    # THE AI CONVERTS TENDERS: a club with a good tendered player and the room signs him long term during the market,
+    # as real clubs do, rather than letting him play the year on the tender
+    converted = convert_tenders(league, rng, phase, user_team=user_team)
+    pool_now = [p for p in pool_now if p not in converted]
     signed, waiting, msgs = resolve_phase(league, pool_now, bids, phase, rng, user_team)
     waiting = waiting + held
     for t in NG._threads(league):
@@ -757,3 +761,28 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
         sign(league, p, o, cap); best.sync_cap(); out.append((best.abbr, p, o))
         league.__dict__.setdefault('fa_signed', []).append((best.abbr, p.pid, o.apy, 1, PHASES + 1))
     return out
+
+
+def convert_tenders(league, rng, phase, user_team=None):
+    """AI clubs sign their better tendered restricted free agents to long-term deals during the market: about a third
+    of them a round for a player graded 76 and up, at his market, when the club has the room. The user's own tendered
+    players are his to extend from the Extensions page."""
+    import extensions as EXT
+    cap = CAP.get(league.year, 301.2)
+    done = []
+    for abbr, team in league.teams.items():
+        if abbr == user_team: continue
+        for p in [q for q in team.active() if getattr(q, 'fa_class', None) == 'tendered' and q.ovr >= 76]:
+            if rng.random() > 0.35: continue
+            try:
+                ask_apy, offer_apy, years, _disc = EXT.terms(league, p, rng)
+                apy = float(offer_apy or ask_apy); years = int(max(2, min(4, years or 3)))
+                if power(league, team, cap) < apy * 1.05: continue
+                r = EXT.extend(league, p.pid, apy, years, agreed=True)
+                if r.get('result') != 'accepted': continue
+                p.fa_class = 'under_contract'; p.tender_team = None
+                if p.pid in league.free_agents: league.free_agents.remove(p.pid)
+                team.sync_cap(); done.append(p)
+            except Exception:
+                continue
+    return done
