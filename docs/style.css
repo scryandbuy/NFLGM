@@ -1315,3 +1315,8 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .ts-row.w .res{color:var(--ok)}.ts-row.l .res{color:var(--danger)}.ts-row.t .res{color:var(--decide)}
 .ts-row .sc{font-family:var(--mono);text-align:right;color:var(--ink-2)}
 .ts-row.box:hover{background:var(--sheet-2)}
+
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--ink)}
+th.sortable.on{color:var(--club-2)}
+th.sortable .arrow{font-size:10px}

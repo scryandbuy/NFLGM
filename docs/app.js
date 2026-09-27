@@ -1368,7 +1368,30 @@ function renderCap(v) {
 
 // ---------------------------------------------------------------- Draft
 const DR = { board: 'Scouting Board', spring: 'The Spring', day: 'Draft Day', picks: 'Picks' };
-let boardPos = 'All', boardFilt = { early: false, late: false, small: false, needs: false }, boardTab = 'class', boardQuery = '', boardSel = null, boardPage = 0, boardSort = 'mine';
+let boardPos = 'All', boardFilt = { early: false, late: false, small: false, needs: false }, boardTab = 'class', boardQuery = '', boardSel = null, boardPage = 0, boardSort = 'rank', boardDir = 1;
+// THE BOARD'S SORT. Every column but Flags sorts; click a head to sort by it, click again to flip. Numbers sort high
+// first, text A to Z, blanks last either way.
+const BOARD_KEYS = {
+  rank: r => (r.my_rank == null ? null : -r.my_rank), name: r => (r.name || '').toLowerCase(), pos: r => r.pos || '', school: r => (r.college || '').toLowerCase(),
+  mine: r => (r.mine == null ? null : +r.mine), scheme: r => (r.scheme_ovr ?? r.mine) == null ? null : +(r.scheme_ovr ?? r.mine),
+  ceiling: r => { const m = String(r.ceiling || '').match(/(\d+)\D+(\d+)/); return m ? +m[2] + (+m[1]) / 1000 : null; },
+  cons: r => (r.cons == null ? null : +r.cons), gap: r => (r.gap == null ? null : +r.gap),
+  proj: r => { const m = String(r.proj_range || '').match(/(\d+)/); return m ? -(+m[1]) : null; },
+};
+const BOARD_TEXT = new Set(['name', 'pos', 'school']);
+function boardSortRows(rows) {
+  const key = BOARD_KEYS[boardSort] || BOARD_KEYS.rank; const text = BOARD_TEXT.has(boardSort);
+  return rows.slice().sort((a, b) => {
+    const ka = key(a), kb = key(b);
+    if (ka == null && kb == null) return 0; if (ka == null) return 1; if (kb == null) return -1;
+    const c = text ? String(ka).localeCompare(String(kb)) : (kb - ka);
+    return (c || ((b.mine ?? 0) - (a.mine ?? 0))) * (text ? -boardDir : boardDir);
+  });
+}
+function boardHead(label, key, cls, tip) {
+  const on = boardSort === key;
+  return el('th', { class: (cls || '') + ' sortable' + (on ? ' on' : ''), 'data-tip': (tip ? tip + '. ' : '') + 'Click to sort' + (on ? ', again to flip' : ''), onclick: () => { if (boardSort === key) boardDir = -boardDir; else { boardSort = key; boardDir = 1; } boardPage = 0; draw(); } }, label, on ? el('span', { class: 'arrow' }, boardDir === 1 ? ' ▼' : ' ▲') : '');
+}
 function drSecond(cur) { secondRow(Object.entries(DR).map(([k, l]) => [l, '#draft/' + k]), '#draft/' + cur); $('#crumb').textContent = 'Draft'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'draft')); }
 function gapCell(g) { if (g == null) return el('span', { class: 'gap' }, '—'); return el('span', { class: 'gap ' + (g > 0 ? 'up' : g < 0 ? 'dn' : '') }, (g > 0 ? '+' : '') + g); }
 function flagTags(fl) { const s = el('span', {}); for (const f of fl || []) s.append(el('span', { class: 'flag ' + ({ medical: 'med', character: 'chr', visit: 'vis', riser: 'up', faller: 'dn', 'senior bowl': 'sr' }[String(f).toLowerCase()] || 'ss') }, String(f))); return s; }
@@ -1399,14 +1422,14 @@ function renderBoard(v) {
   const tbl = el('table', { class: 'tbl' });
   const draw = () => {
     tbl.innerHTML = '';
-    tbl.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Prospect'), el('th', {}, 'Pos'), el('th', {}, 'School'), el('th', { class: 'n', style: 'cursor:pointer' + (boardSort === 'mine' ? ';text-decoration:underline' : ''), 'data-tip': "Your scouts' read. Carries error; a visit tightens it. Click to sort by it", onclick: () => { boardSort = 'mine'; draw(); } }, 'Estimated Overall'), el('th', { class: 'n', style: 'cursor:pointer' + (boardSort === 'scheme' ? ';text-decoration:underline' : ''), 'data-tip': "How he grades in your scheme, on your scouts' read; the league's grade does not move. Click to sort by it", onclick: () => { boardSort = 'scheme'; draw(); } }, 'Scheme Ovr'), el('th', { class: 'n', 'data-tip': 'Where he can grow to. Wide means your scouts are unsure' }, 'Ceiling'), el('th', { class: 'n', 'data-tip': "The league's grade, same scale as yours" }, 'Consensus'), el('th', { class: 'n', 'data-tip': "Yours minus the league's. Positive means the league undervalues him" }, 'Gap'), el('th', { class: 'n', 'data-tip': 'Where the league expects him to go' }, 'Proj.'), el('th', {}, 'Flags'), el('th', {}, '')));
+    tbl.append(el('tr', {}, boardHead('#', 'rank', 'n', 'Your board order'), boardHead('Prospect', 'name', '', ''), boardHead('Pos', 'pos', '', ''), boardHead('School', 'school', '', ''), boardHead('Estimated Overall', 'mine', 'n', "Your scouts' read. Carries error; a visit tightens it"), boardHead('Scheme Ovr', 'scheme', 'n', "How he grades in your scheme, on your scouts' read; the league's grade does not move"), boardHead('Ceiling', 'ceiling', 'n', 'Where he can grow to. Wide means your scouts are unsure'), boardHead('Consensus', 'cons', 'n', "The league's grade, same scale as yours"), boardHead('Gap', 'gap', 'n', "Yours minus the league's. Positive means the league undervalues him"), boardHead('Proj.', 'proj', 'n', 'Where the league expects him to go'), el('th', {}, 'Flags'), el('th', {}, '')));
     const q = boardQuery.trim().toLowerCase(); const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], EDGE: ['LEDG', 'REDG', 'DT'], CB: ['CB', 'FS', 'SS'] };
     const needPos = new Set(v.needs.flatMap(g => NEED_POS[g] || []));
     const rows = v.rows.filter(r => (boardTab !== 'visited' || r.visited) && (boardPos === 'All' || (GROUP[boardPos] || []).includes(r.pos)) && (!boardFilt.needs || needPos.has(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.late || (r.cons_rank != null && r.cons_rank > 96)) && (!boardFilt.small || r.small) && (!q || r.name.toLowerCase().includes(q) || (r.college || '').toLowerCase().includes(q)));
-    if (boardSort === 'scheme') rows.sort((a, b) => ((b.scheme_ovr ?? b.mine ?? 0) - (a.scheme_ovr ?? a.mine ?? 0)) || ((b.mine ?? 0) - (a.mine ?? 0)));
+    const sorted = boardSortRows(rows);
     const PAGE = 100, pages = Math.max(1, Math.ceil(rows.length / PAGE)); if (boardPage >= pages) boardPage = pages - 1; if (boardPage < 0) boardPage = 0;
     pager.innerHTML = ''; pager.append(el('button', { class: 'btn', disabled: boardPage === 0 ? '' : null, onclick: () => { boardPage--; draw(); } }, '‹ Prev'), el('span', { class: 'count' }, `${rows.length ? boardPage * PAGE + 1 : 0}–${Math.min(rows.length, (boardPage + 1) * PAGE)} of ${rows.length}`), el('button', { class: 'btn', disabled: boardPage >= pages - 1 ? '' : null, onclick: () => { boardPage++; draw(); } }, 'Next ›'));
-    const pageRows = rows.slice(boardPage * PAGE, (boardPage + 1) * PAGE);
+    const pageRows = sorted.slice(boardPage * PAGE, (boardPage + 1) * PAGE);
     for (const r of pageRows) tbl.append(el('tr', { class: (r.visited ? 'visited' : '') + (boardSel === r.pid ? ' sel' : ''), style: r.taken ? 'opacity:.4' : '', onclick: e => { if (e.target.closest('button')) return; boardSel = boardSel === r.pid ? null : r.pid; draw(); drawFoot(); } },
       el('td', { class: 'n' }, r.my_rank), el('td', {}, el('button', { class: 'who', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.cls_year}${r.size ? ' · ' + r.size : ''}`)))), el('td', {}, r.pos), el('td', {}, r.college), el('td', { class: 'n' }, ovrCell(r.mine)), el('td', { class: 'n' }, el('span', {}, r.scheme_ovr ?? r.mine), (r.fit || 0) !== 0 ? el('small', { class: 'fit ' + (r.fit > 0.05 ? 'p' : r.fit < -0.05 ? 'm' : 'z'), style: 'display:block;font-size:11.5px' }, (r.fit > 0 ? '+' : '') + r.fit.toFixed(1)) : ''), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons != null ? r.cons : '—'), el('td', { class: 'n' }, gapCell(r.gap)), el('td', { class: 'n' }, r.proj_range), el('td', {}, ...r.words.map(wordTag)),
       el('td', {}, el('div', { style: 'display:flex;gap:4px' }, (v.spring_done || r.visit_locked) ? '' : el('button', { class: 'btn' + (r.visited ? ' go' : ''), style: 'width:auto;padding:2px 8px;font-size:14px', 'data-tip': r.visited ? 'Cancel the visit' : 'Scout this player further', onclick: e => { e.stopPropagation(); const res = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(r.pid)})`); notify(res); reload(); } }, r.visited ? 'Visiting' : 'Visit'),
