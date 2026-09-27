@@ -1617,7 +1617,7 @@ function renderStandings(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('standings');
   const s = el('section', { class: 'sheet c8' }, el('h2', {}, `${v.year || ''} Standings`, el('small', {}, v.past ? 'final' : `Through Week ${v.week ?? '—'} · ${v.games_played} games played`)));
   s.append(yearChips(v, y => renderStandings(pyJSON(`SESSION.league_view('standings', year=${y})`))));
-  if (v.thin) { const t = el('table', { class: 'grid' }, el('thead', {}, el('tr', {}, el('th', {}, 'Team'), el('th', {}, 'Division'), el('th', {}, 'Record'), el('th', {}, 'Pct')))); const tb = el('tbody'); for (const r of v.league_rows) tb.append(el('tr', {}, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', {}, r.division || ''), el('td', { class: 'mono' }, r.record), el('td', { class: 'mono' }, String(r.pct.toFixed(3)).replace(/^0/, '')))); t.append(tb); s.append(t); if (!v.league_rows.length) s.append(el('div', { class: 'empty' }, 'No standings are kept for that season.')); page.append(s); return; }
+  if (v.thin) { const t = el('table', { class: 'grid' }, el('thead', {}, el('tr', {}, el('th', {}, 'Team'), el('th', {}, 'Division'), el('th', {}, 'Record'), el('th', {}, 'Pct')))); const tb = el('tbody'); for (const r of v.league_rows) tb.append(el('tr', {}, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', {}, r.division || ''), el('td', { class: 'mono' }, r.record), el('td', { class: 'mono' }, String(r.pct.toFixed(3)).replace(/^0/, '')))); t.append(tb); s.append(t); if (!v.league_rows.length) s.append(el('div', { class: 'empty' }, 'No standings are kept for that season.')); for (const n of (v.notes || []).filter(Boolean)) s.append(el('div', { class: 'count', style: 'padding:6px 14px' }, n)); page.append(s); return; }
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const k of ['Divisions', 'Conference', 'League']) tabs.append(el('button', { 'aria-pressed': String(standingsView === k), onclick: () => { standingsView = k; renderStandings(v); } }, k)); s.append(tabs);
   const arrow = r => r.arrow > 0 ? el('span', { class: 'arr up' }, `▲${r.arrow}`) : r.arrow < 0 ? el('span', { class: 'arr dn' }, `▼${-r.arrow}`) : el('span', { class: 'arr' }, '–');
   const pd = r => el('td', { class: 'n', style: r.pd > 0 ? 'color:var(--ok)' : r.pd < 0 ? 'color:var(--danger)' : '' }, (r.pd > 0 ? '+' : '') + r.pd);
@@ -1663,6 +1663,7 @@ function renderSchedule(v) {
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, `${v.year || ''} Schedule`, el('small', {}, weekName(v.week))));
   s.append(yearChips(v, y => renderSchedule(pyJSON(`SESSION.league_view('schedule', year=${y})`))));
   if (v.missing) { s.append(el('div', { class: 'empty' }, 'No schedule is kept for that season.')); page.append(s); return; }
+  if (v.note) s.append(el('div', { class: 'count', style: 'padding:4px 14px' }, v.note));
   s.append(el('div', { class: 'tabs', style: 'padding:8px 14px 0' }, el('button', { 'aria-pressed': 'true' }, 'League Schedule'), el('button', { 'aria-pressed': 'false', onclick: () => renderTeamSchedule(pyJSON(`SESSION.league_view('team_schedule')`)) }, 'Team Schedule')));
   const nav = el('div', { class: 'wknav' }, el('span', { class: 'lab' }, 'Week'));
   const wkList = Array.isArray(v.weeks) ? v.weeks : Array.from({ length: v.weeks || 18 }, (_, i) => i + 1);

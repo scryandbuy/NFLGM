@@ -163,6 +163,7 @@ def team_schedule(session, league, abbr, team=None, year=None):
             mine, theirs = (g['hp'], g['ap']) if home else (g['ap'], g['hp'])
             games.append(dict(week=g['week'], home=home, opp=opp, done=g['done'], mine=mine, theirs=theirs, result=(None if not g['done'] else 'W' if mine > theirs else 'L' if mine < theirs else 'T'), opp_rec='', box=False))
         rec = (getattr(league, 'standings_history', {}) or {}).get(yr, {}).get(team)
+        if isinstance(rec, dict): rec = rec.get('record')
         rec_s = (f"{rec[0]}–{rec[1]}" + (f"–{rec[2]}" if len(rec) > 2 and rec[2] else '')) if isinstance(rec, (list, tuple)) else ''
         return dict(rail=rail(session, league, abbr), team=club(team), record=rec_s, games=games, byes=[w for w in range(1, 19) if w not in {g['week'] for g in games}], clubs=[club(c) for c in sorted(league.teams)], year=yr, years=_years(league), past=True, missing=(snap is None))
     games = []
