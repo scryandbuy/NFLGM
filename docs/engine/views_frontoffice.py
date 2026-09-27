@@ -426,7 +426,7 @@ def act_restructure(league, abbr, pid, amount=None, void_years=0):
 def season_review(session, league, abbr):
     """The morning after the season ends: the year against what the owner asked for, the seventeen results, the
     units against the league, the men who exceeded and fell short, next year's money and the men whose deals are
-    up, and the assistants' three notes. Composed once the club is out; readable all offseason."""
+    up. Composed once the club is out; readable all offseason."""
     import gameplan_week as GW, staff as ST, firing_model as FM
     from views import _owner_mood, CLUB_NAME, club, surname, next_year_cap
     t = league.teams[abbr]; h = t.hist(); w, l, d = t.record; n = max(1, w + l + d); pct = (w + 0.5 * d) / n
@@ -453,7 +453,7 @@ def season_review(session, league, abbr):
     own = _owner(league, t); mood = _owner_mood(t); sec = FM.job_security(h)
     owner_line = {
         'Pleased': f"{own['name']} is pleased. {exp_words.capitalize()} was the ask and you delivered on it; he wants to know what the next step is.",
-        'Settled': f"{own['name']} is settled on the year. {exp_words.capitalize()} was the ask, and {verdict.lower()} He is asking what changes.",
+        'Settled': f"{own['name']} can live with the year, but only just. He asked for {exp_words} and {verdict.lower()} He wants to hear what changes.",
         'Restless': f"{own['name']} is restless. He asked for {exp_words} and {verdict.lower()} He wants a plan on his desk before the new year.",
         'Angry': f"{own['name']} is angry. He asked for {exp_words}; {verdict.lower()} Your seat is warm.",
     }[mood]
@@ -504,18 +504,7 @@ def season_review(session, league, abbr):
     limit_next, committed_next, rollover, dead_next = next_year_cap(league, t)
     expiring = sorted([p for p in t.active() if p.contract and p.contract.years <= 1], key=lambda p: -p.ovr)
     pending = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), starter=(p in (t.depth.get(p.pos) or [])[:1])) for p in expiring[:8]]
-    # the assistants' three notes
-    notes = []
-    ranked = [u for u in units if u['rank']]
-    if ranked:
-        worst = max(ranked, key=lambda u: u['rank']); best = min(ranked, key=lambda u: u['rank'])
-        notes.append(f"The {worst['label'].lower()} ranked {worst['rank']}th of {worst['of']}; that is the first place the draft and the market should look.")
-        notes.append(f"The {best['label'].lower()} ranked {best['rank']}{'st' if best['rank'] == 1 else 'nd' if best['rank'] == 2 else 'rd' if best['rank'] == 3 else 'th'}; build around it, and pay to keep it together.")
-    starters_up = [x for x in pending if x['starter']]
-    if starters_up: notes.append(f"{len(starters_up)} starter{'s' if len(starters_up) != 1 else ''} come{'s' if len(starters_up) == 1 else ''} off contract: {', '.join(surname(x['name']) for x in starters_up[:4])}. Decide before the tag window.")
-    else: notes.append("No starter comes off contract; the money can go to the market or an extension.")
     room = limit_next - committed_next
-    notes.append(f"Next year's room is about ${room:.0f}m against a ${limit_next:.0f}m cap, with ${dead_next:.1f}m of dead money already on the books.")
     slot = None
     try:
         import postseason as PS
@@ -524,7 +513,7 @@ def season_review(session, league, abbr):
     return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, record=f"{w}–{l}" + (f"–{d}" if d else ''), pct=round(pct, 3), expected=exp_words, expected_pct=round(exp, 2), slot=slot,
                 finish=exit_, div_rank=div_rank, division=t.division, owner=dict(name=own['name'], mood=mood, line=owner_line, job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat')),
                 timeline=timeline, units=units, sides=sides, exceeded=exceeded, short=short, cap=dict(limit=round(limit_next, 1), committed=round(committed_next, 1), dead=round(dead_next, 1), rollover=round(rollover, 1), room=round(room, 1)),
-                pending=pending, notes=notes[:3])
+                pending=pending)
 
 
 # ============================================================ EXIT INTERVIEWS

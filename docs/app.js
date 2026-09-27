@@ -1674,7 +1674,7 @@ function renderReview(v) {
     el('div', { class: 'rv-kicker' }, `${v.year} · ${v.club.name}`),
     el('div', { class: 'rv-record' }, v.record),
     el('div', { class: 'rv-finish' }, `${v.finish}${v.div_rank ? ` · ${ordn(v.div_rank)} in the ${v.division}` : ''}${v.slot ? ` · pick ${v.slot}` : ''}`),
-    el('div', { class: 'rv-ask' }, 'The owner asked for ', el('b', {}, v.expected), `. You finished at .${String(v.pct.toFixed(3)).slice(2)} against .${String(v.expected_pct.toFixed(3)).slice(2)}.`));
+    el('div', { class: 'rv-ask' }, 'The owner asked for ', el('b', {}, v.expected), `. You finished at .${String(v.pct.toFixed(3)).slice(2)}.`));
   const strip = el('div', { class: 'rv-strip' });
   for (const g of v.timeline) strip.append(g.bye ? el('div', { class: 'rv-g bye', 'data-tip': `Week ${g.week} · Bye` }, '') : el('div', { class: 'rv-g ' + g.result.toLowerCase(), 'data-tip': `Week ${g.week} · ${g.away ? 'at' : 'vs'} ${g.opp.abbr} · ${g.mine}–${g.theirs}` }, g.result));
   left.append(strip);
@@ -1686,7 +1686,7 @@ function renderReview(v) {
   for (const u of v.units) { const r = u.rank || 32; const pct = 100 * (1 - (r - 1) / Math.max(1, u.of - 1)); ub.append(el('div', { class: 'rv-u' }, el('span', { class: 'lab' }, u.label), el('div', { class: 'bar' }, el('i', { style: `width:${pct}%;background:${r <= 8 ? 'var(--ok)' : r >= 24 ? 'var(--danger)' : 'var(--ink-3)'}` })), el('b', { class: r <= 8 ? 'good' : r >= 24 ? 'bad' : '' }, u.rank ? ordn(u.rank) : '—'))); }
   units.append(ub); page.append(units);
   const men = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Players', el('small', {}, 'who rose, who fell')));
-  const cardOf = p => el('div', { class: 'rv-card' + (p.up ? ' up' : ' down'), onclick: () => { location.hash = '#club/player/' + p.pid; }, style: 'cursor:pointer' }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, p.no != null ? p.no : p.pos), el('div', { class: 'body' }, el('div', { class: 'nm' }, p.name, el('small', {}, ` ${p.pos} · ${p.age}`)), el('div', { class: 'ln' }, p.line)), el('div', { class: 'ovr' }, p.ovr));
+  const cardOf = p => el('div', { class: 'rv-card' + (p.up ? ' up' : ' down'), onclick: () => { location.hash = '#club/player/' + p.pid; }, style: 'cursor:pointer' }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, p.no != null ? p.no : p.pos), el('div', { class: 'rv-body' }, el('div', { class: 'nm' }, p.name, el('small', {}, ` ${p.pos} · ${p.age}`)), el('div', { class: 'ln' }, p.line)), el('div', { class: 'rv-ovr' }, p.ovr));
   men.append(el('div', { class: 'h5', style: 'padding:6px 14px 0' }, 'Exceeded the grade')); for (const p of v.exceeded) men.append(cardOf(p));
   if (v.short.length) { men.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Fell short of it')); for (const p of v.short) men.append(cardOf(p)); }
   page.append(men);
@@ -1698,10 +1698,6 @@ function renderReview(v) {
   for (const p of v.pending) money.append(el('div', { class: 'rv-pend' + (p.starter ? ' starter' : ''), onclick: () => { location.hash = '#personnel/extensions'; }, style: 'cursor:pointer' }, el('span', { class: 'pos' }, p.pos), el('span', { class: 'nm' }, p.name, p.starter ? el('small', {}, ' · starter') : ''), el('b', {}, p.ovr), el('span', { class: 'apy' }, `$${p.apy}m`)));
   if (!v.pending.length) money.append(el('div', { class: 'count', style: 'padding:6px 14px' }, 'Nobody comes off contract.'));
   page.append(money);
-  // the assistants
-  const notes = el('section', { class: 'sheet c12 rv-notes' }, el('h2', {}, "The Assistants' Notes"));
-  for (const n of v.notes) notes.append(el('div', { class: 'rv-note' }, el('span', { class: 'q' }, '“'), n));
-  page.append(notes);
 }
 
 // EXIT MEETINGS. A room, one man at a time: his question in his own words, his contract on the table, and your
