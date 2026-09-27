@@ -1640,7 +1640,10 @@ function renderStandings(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('standings');
   const s = el('section', { class: 'sheet c8' }, el('h2', {}, `${v.year || ''} Standings`, el('small', {}, v.past ? 'final' : `Through Week ${v.week ?? '—'} · ${v.games_played} games played`)));
   s.append(yearChips(v, y => renderStandings(pyJSON(`SESSION.league_view('standings', year=${y})`))));
-  if (v.thin) { const t = el('table', { class: 'grid' }, el('thead', {}, el('tr', {}, el('th', {}, 'Team'), el('th', {}, 'Division'), el('th', {}, 'Record'), el('th', {}, 'Pct')))); const tb = el('tbody'); for (const r of v.league_rows) tb.append(el('tr', {}, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', {}, r.division || ''), el('td', { class: 'mono' }, r.record), el('td', { class: 'mono' }, String(r.pct.toFixed(3)).replace(/^0/, '')))); t.append(tb); s.append(t); if (!v.league_rows.length) s.append(el('div', { class: 'empty' }, 'No standings are kept for that season.')); for (const n of (v.notes || []).filter(Boolean)) s.append(el('div', { class: 'count', style: 'padding:6px 14px' }, n)); page.append(s); return; }
+  if (v.thin) {
+    const grid = el('div', { class: 'divgrid' });
+    for (const d of (v.divisions || [])) { const t = el('table', { class: 'grid' }, el('thead', {}, el('tr', {}, el('th', {}, d.name), el('th', { class: 'n' }, 'W–L'), el('th', { class: 'n' }, 'Pct')))); const tb = el('tbody'); for (const r of d.rows) tb.append(el('tr', {}, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n mono' }, r.record), el('td', { class: 'n mono' }, String(r.pct.toFixed(3)).replace(/^0/, '')))); t.append(tb); grid.append(t); }
+    s.append(grid); if (!v.league_rows.length) s.append(el('div', { class: 'empty' }, 'No standings are kept for that season.')); for (const n of (v.notes || []).filter(Boolean)) s.append(el('div', { class: 'count', style: 'padding:6px 14px' }, n)); page.append(s); return; }
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const k of ['Divisions', 'Conference', 'League']) tabs.append(el('button', { 'aria-pressed': String(standingsView === k), onclick: () => { standingsView = k; renderStandings(v); } }, k)); s.append(tabs);
   const arrow = r => r.arrow > 0 ? el('span', { class: 'arr up' }, `▲${r.arrow}`) : r.arrow < 0 ? el('span', { class: 'arr dn' }, `▼${-r.arrow}`) : el('span', { class: 'arr' }, '–');
   const pd = r => el('td', { class: 'n', style: r.pd > 0 ? 'color:var(--ok)' : r.pd < 0 ? 'color:var(--danger)' : '' }, (r.pd > 0 ? '+' : '') + r.pd);
@@ -1754,20 +1757,21 @@ function renderClubSchedule(v, mine) {
   const strip = el('div', { class: 'rv-strip', style: 'padding:6px 14px 0' });
   const byWeek = {}; for (const g of v.games) byWeek[g.week] = g;
   const lastWk = Math.max(18, ...v.games.map(g => g.week));
-  for (let w = 1; w <= lastWk; w++) { const g = byWeek[w]; if (!g) { if (w <= 18) strip.append(el('div', { class: 'rv-g bye', 'data-tip': `Week ${w} · Bye` }, '')); continue; } strip.append(el('div', { class: 'rv-g ' + (g.done ? g.result.toLowerCase() : ''), 'data-tip': `${weekName(w)} · ${g.home ? 'vs' : 'at'} ${g.opp.abbr}${g.done ? ` · ${g.mine}–${g.theirs}` : ''}` }, g.done ? g.result : '')); }
+  const notKept = new Set(v.not_kept || []);
+  for (let w = 1; w <= lastWk; w++) { const g = byWeek[w]; if (!g) { if (w <= 18) strip.append(el('div', { class: 'rv-g bye', 'data-tip': notKept.has(w) ? `Week ${w} · not kept` : `Week ${w} · Bye` }, notKept.has(w) ? '?' : '')); continue; } strip.append(el('div', { class: 'rv-g ' + (g.done ? g.result.toLowerCase() : ''), 'data-tip': `${weekName(w)} · ${g.home ? 'vs' : 'at'} ${g.opp.abbr}${g.done ? ` · ${g.mine}–${g.theirs}` : ''}` }, g.done ? g.result : '')); }
   s.append(strip);
   const list = el('div', { class: 'ts-list' });
   for (const g of v.games) {
     const row = el('div', { class: 'ts-row' + (g.done ? ' ' + g.result.toLowerCase() : '') + (g.box ? ' box' : ''), onclick: g.box ? () => { location.hash = `#gameday/${g.week}`; } : null, style: g.box ? 'cursor:pointer' : '' },
       el('span', { class: 'wk' }, g.week >= 19 ? ({ 19: 'WC', 20: 'DIV', 21: 'CONF', 22: 'SB' })[g.week] : `Wk ${g.week}`),
       el('span', { class: 'ha' }, g.home ? 'vs' : 'at'),
-      el('span', { class: 'str', style: `background:${g.opp.color}` }),
       el('span', { class: 'opp' }, clubLink(g.opp.abbr, g.opp.name), g.opp_rec ? el('small', {}, ` ${g.opp_rec}`) : ''),
       el('b', { class: 'res' }, g.done ? g.result : ''),
       el('span', { class: 'sc' }, g.done ? `${g.mine}–${g.theirs}` : ''));
     list.append(row);
   }
   if (!v.games.length) list.append(el('div', { class: 'empty' }, 'No games yet.'));
+  if (v.not_kept && v.not_kept.length) list.append(el('div', { class: 'count', style: 'padding:8px 10px' }, `Week ${v.not_kept.join(', ')} of this season was not kept in the record.`));
   s.append(list); page.append(s);
 }
 

@@ -453,7 +453,7 @@ class Session:
         weeks = sorted(days)
         snap['schedule'] = dict(weeks=weeks, week=max([w for w in weeks if w <= 18], default=18), games=[g for g in allg if g['week'] == max([w for w in weeks if w <= 18], default=18)], all_games=allg, byes=[], note=(f"Week {', '.join(map(str, missing))} was not kept." if missing else None))
         rows = sorted([dict(club=_club(a), record=f"{r[0]}–{r[1]}" + (f"–{r[2]}" if r[2] else ''), pct=round((r[0] + 0.5 * r[2]) / max(1, sum(r)), 3), division=self.L.teams[a].division) for a, r in rec.items()], key=lambda x: -x['pct'])
-        snap['standings'] = dict(thin=True, league_rows=rows, divisions=[], picture=None, conferences=[], notes=[f"Rebuilt from the season's scores; week {', '.join(map(str, missing))} was not kept, so some records are a game short." if missing else ''], games_played=len([g for g in allg if g['week'] <= 18]), week=18)
+        snap['standings'] = dict(thin=True, league_rows=rows, divisions=VL._thin_divisions(self.L, rows), picture=None, conferences=[], notes=[f"Rebuilt from the season's scores; week {', '.join(map(str, missing))} was not kept, so some records are a game short." if missing else ''], games_played=len([g for g in allg if g['week'] <= 18]), week=18)
         if not (getattr(self.L, 'standings_history', {}) or {}).get(yr):
             self.L.standings_history[yr] = {a: dict(record=list(r), pct=round((r[0] + 0.5 * r[2]) / max(1, sum(r)), 3), made_playoffs=False) for a, r in rec.items()}
         try:
