@@ -42,7 +42,7 @@ def surname(name):
     """The last name, keeping a suffix with it: 'Marvin Mims Jr.' -> 'Mims Jr.'."""
     parts = str(name or '').split()
     if not parts: return ''
-    if parts[-1] in ('Jr.', 'Sr.', 'II', 'III', 'IV', 'V') and len(parts) >= 2: return parts[-2] + ' ' + parts[-1]
+    if parts[-1] in ('Jr.', 'Sr.', 'Jr', 'Sr', 'II', 'III', 'IV', 'V') and len(parts) >= 2: return parts[-2] + ' ' + parts[-1]
     return parts[-1]
 
 
