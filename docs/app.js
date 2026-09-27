@@ -1385,7 +1385,7 @@ function boardSortRows(rows) {
     const ka = key(a), kb = key(b);
     if (ka == null && kb == null) return 0; if (ka == null) return 1; if (kb == null) return -1;
     const c = text ? String(ka).localeCompare(String(kb)) : (kb - ka);
-    return (c || ((b.mine ?? 0) - (a.mine ?? 0))) * (text ? -boardDir : boardDir);
+    return (c || ((b.mine ?? 0) - (a.mine ?? 0))) * boardDir;
   });
 }
 function boardHead(label, key, cls, tip) {
