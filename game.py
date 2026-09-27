@@ -1424,8 +1424,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # The trailing side spends them to get the ball back; the driving side
         # to keep the clock alive. Neither wastes one early.
         used = False; used_by = None
-        if timeouts is not None and secs_in_half < 300:
+        _scored_now = t in ('run', 'complete', 'scramble') and float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01
+        _at_warning = secs_in_half > 120 and secs_in_half - play_seconds(t) <= 120 and not getattr(dr, '_two_min', False)
+        if timeouts is not None and secs_in_half < 300 and not _scored_now and not _at_warning:
             other = 'away' if pos == 'home' else 'home'
+            # nothing to stop after a score (the clock is dead at the whistle) or on the play that reaches the
+            # two-minute warning (the warning stops it for free)
             in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
             # the defense stops the clock in the last three minutes of the GAME when it trails; in the first
             # half only a two-score deficit is worth a timeout to get the ball back before the break
