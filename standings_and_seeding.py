@@ -126,7 +126,7 @@ class Season:
         return sum(self.wpct(o) for o in beaten) / len(beaten) if beaten else 0.0
 
     def sos(self, t):
-        return sum(self.wpct(o) for o in self.opps[t]) / len(self.opps[t])
+        return sum(self.wpct(o) for o in self.opps[t]) / len(self.opps[t]) if self.opps[t] else 0.0     # no games yet (the new year, before Week 1)
 
     def _combined_rank(self, t, pool):
         pf_rank = sorted(pool, key=lambda x: -self.pf[x]).index(t) + 1
