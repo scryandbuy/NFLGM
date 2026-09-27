@@ -311,9 +311,10 @@ def _thread(league, t):
     mood = t.get('mood') or 'open'
     temper = {'eager': 'Eager', 'firm': 'Firm', 'open': 'Open', 'deferring': 'Deferring'}.get(mood, mood.capitalize())
     pat = t.get('patience'); pat_word = ('Patient' if (pat or 0) >= 3 else 'Short on patience' if (pat or 0) <= 1 else 'Measured')
-    answers = ('at the next step of the market' if t['kind'].startswith('fa_offseason') else 'at the next Advance' if t['kind'] == 'fa_inseason' else 'within a week or two')
+    offseason = league.phase in ('offseason', 'free_agency', 'draft')
+    answers = ('at the next step of the market' if t['kind'].startswith('fa_offseason') else 'at the next Advance' if t['kind'] == 'fa_inseason' else 'on the spot' if offseason else 'within a week or two')
     op = t.get('opened')
-    opened = (f"Week {op}" if op is not None and op < 100 else (f"FA step {op - 100}" if op is not None else ''))
+    opened = (f"Week {op}" if op is not None and op < 100 else ('in the offseason' if op == 100 else f"FA step {op - 100}") if op is not None else '')
     return dict(id=t['id'], pid=t['pid'], name=p.name if p else t['pid'], pos=p.pos if p else '', kind=t['kind'], state=t['state'], ask=t.get('ask'), years=t.get('years'), mood=mood, opened=opened,
                 offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=pat, log=t.get('log', []),
                 agent_line=f"The agent is {temper} and {pat_word}. He answers {answers}.")
@@ -461,6 +462,13 @@ def act_withdraw_claim(league, abbr, pid):
 def extensions(session, league, abbr):
     import extensions as EXT, negotiations as NG
     me = league.teams[abbr]
+    # the offseason room answers on the spot: a thread left waiting from before the room existed is answered now
+    if league.phase in ('offseason', 'free_agency', 'draft'):
+        for t in NG._threads(league):
+            if t['kind'] == 'extension' and t.get('team') == abbr and t['state'] == 'waiting' and t.get('offers'):
+                p = league.player(t['pid'])
+                if p is None: t['state'] = 'expired'; continue
+                offer = t['offers'][-1]; NG._answer(league, t, p, offer, t.get('pending_floor') or NG._floor(league, p, t, offer), quiet=True)
     rows = []
     import free_agency as FA_
     for p in sorted(me.active(), key=lambda p: (p.contract.years if p.contract else 0, -p.ovr)):

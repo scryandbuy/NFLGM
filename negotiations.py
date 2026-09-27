@@ -9,7 +9,11 @@ advance the way everything else is.
   withdraw(league, tid)
 
 THE RULES
-  Extensions: a conversation, then the agent gets back to you after a number
+  Extensions, offseason: the whole conversation happens in the room. Every
+  offer is answered on the spot: he takes it, counters, or walks, and you can
+  come back at a counter as many times as his patience lasts. Nothing waits
+  for the advance.
+  Extensions, in season: a conversation, then the agent gets back to you after a number
   of weeks set by the situation: a loyal man being offered the market answers
   within a week; a star in his final year takes two or three and watches the
   market; an unhappy man takes longer. Agents can decline to negotiate in
@@ -132,8 +136,12 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     t['offers'].append(offer)
     _say(t, 'you', f"${float(apy):.1f}m a year over {int(years)}" + (f", {'front' if (front_load or 0.5) >= 0.66 else 'back' if (front_load or 0.5) <= 0.34 else 'even'}-loaded" if front_load is not None else '') + (f", with {', '.join(str(x).replace('_', ' ') for x in promises)}" if promises else '') + '.')
     ask = t['ask']
+    room = (t['kind'] == 'extension' and not s['in_season'])      # the offseason room: he answers here, and a walk is a walk
     # an insult ends it
     if apy < INSULT * ask:
+        if room:
+            t['state'] = 'declined'; _say(t, 'agent', f"That is an insult. ${apy:.1f}m against ${ask:.1f}m is not a negotiation. He will test the market.")
+            return dict(ok=True, state='declined', line=t['log'][-1]['text'])
         t['state'] = 'broken_off'; t['broken_until'] = _clock(league) + BREAK_WEEKS; _say(t, 'agent', 'That is an insult. We are done talking for now.')
         _post(league, t, f"{p.name}'s agent has ended talks", f"An offer of ${apy:.1f}m against an ask of ${ask:.1f}m is not a negotiation. He will not take your calls for {BREAK_WEEKS} weeks.")
         return dict(ok=True, state='broken_off')
@@ -141,6 +149,9 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     if apy < LOWBALL * ask:
         t['patience'] -= 1
         if t['patience'] <= 0:
+            if room:
+                t['state'] = 'declined'; _say(t, 'agent', 'You keep coming in low. He is done here and will see what the market says.')
+                return dict(ok=True, state='declined', line=t['log'][-1]['text'])
             t['state'] = 'broken_off'; t['broken_until'] = _clock(league) + 30; _say(t, 'agent', 'You keep coming in low. He is going to look elsewhere.')
             _post(league, t, f"{p.name}'s agent is done for now", "Three offers under the market. They will revisit it in the offseason.")
             return dict(ok=True, state='broken_off')
@@ -152,6 +163,10 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
             return _accept(league, t, offer, how='signed today')
         _say(t, 'agent', f"To sign today he wants the ask, ${ask:.1f}m." + (" Another club is also talking to him." if t.get('rival') else ''))
         return dict(ok=True, state='open', line=t['log'][-1]['text'])
+    # the offseason room: an extension is answered on the spot, in the conversation, and nothing goes to the inbox
+    if t['kind'] == 'extension' and not s['in_season']:
+        state = _answer(league, t, p, offer, floor, quiet=True)
+        return dict(ok=True, state=state, line=(t['log'][-1]['text'] if t.get('log') else ''), counter=t.get('counter'))
     # when does he answer
     t['state'] = 'waiting'
     if t['kind'] == 'extension':
@@ -209,32 +224,39 @@ def resolve(league, week=None, fa_step=None):
         if p is None or (t['kind'] == 'extension' and p.team != t['team']):
             t['state'] = 'expired'; continue
         offer = t['offers'][-1]; floor = t.get('pending_floor') or _floor(league, p, t, offer)
-        # a rival in the offseason market: the match request
-        rival = t.get('rival')
-        if t['kind'] == 'fa_offseason' and rival and rival['apy'] > offer['apy'] and t['match_rounds'] < MATCH_ROUNDS \
-                and (rival['apy'] - offer['apy']) / rival['apy'] <= 0.12:
-            t['state'] = 'match_requested'; t['match_rounds'] += 1; _say(t, 'agent', f"He has a better offer on the table. Match it and he is yours.")
-            _post(league, t, f"{p.name} asks you to match", f"{league.teams[rival['team']].abbr if rival['team'] in league.teams else rival['team']} has offered ${rival['apy']:.1f}m over {rival['years']} years. He would rather be here. Match it and he signs today.",
-                  payload=dict(rival=rival, thread=t['id'], link=f'negotiation:{t["id"]}'))
-            out.append((t, 'match_requested')); continue
-        if offer['apy'] + 1e-9 >= floor and not (rival and rival['apy'] > offer['apy'] * 1.12):
-            r = _accept(league, t, offer, how='agreed')
-            if not r.get('ok'):
-                # the agent agreed but the deal could not be written (cap, eligibility, a roster spot): the
-                # thread closes with the reason instead of sitting there and failing every week
-                t['state'] = 'declined'; _say(t, 'agent', f"The deal fell through: {r.get('why') or 'it could not be written'}.")
-                _post(league, t, f"{p.name}: the deal fell through", f"He agreed to your terms but the deal could not be written: {r.get('why') or 'it could not be written'}. Open talks again once that is fixed.")
-                out.append((t, 'failed')); continue
-            out.append((t, r['how'])); continue
-        if rival and rival['apy'] > offer['apy'] * 1.12:
-            t['state'] = 'declined'; _say(t, 'agent', 'Another club is well above you and he is going to take it.'); _post(league, t, f"{p.name} says no", f"Another club is well above you and he is going to take it."); out.append((t, 'declined')); continue
-        # a counter: toward the floor, not all the way
-        counter = round(min(t['ask'], floor * (1.0 + 0.03 * max(0, t['patience'] - 1))), 2)    # never above his own ask
-        t['state'] = 'countered'; t['counter'] = dict(apy=counter, years=t['years'], front_load=0.5); _say(t, 'agent', f"Close. He would do it at ${counter:.1f}m a year.")
-        _post(league, t, f"{p.name}'s agent counters at ${counter:.1f}m", f"Over {t['years']} years at the league shape. " + ("He is close." if counter <= offer['apy'] * 1.06 else "There is a gap."),
-              payload=dict(counter=t['counter'], thread=t['id'], link=f'negotiation:{t["id"]}'))
-        out.append((t, 'countered'))
+        out.append((t, _answer(league, t, p, offer, floor)))
     return out
+
+
+def _answer(league, t, p, offer, floor, quiet=False):
+    """The agent's decision on the offer in front of him: match request, yes, no, or a counter. quiet=True is the
+    offseason room, where the answer is spoken in the thread and nothing goes to the inbox. Returns the state."""
+    post = (lambda *a, **k: None) if quiet else (lambda *a, **k: _post(league, t, *a, **k))
+    rival = t.get('rival')
+    if t['kind'] == 'fa_offseason' and rival and rival['apy'] > offer['apy'] and t['match_rounds'] < MATCH_ROUNDS \
+            and (rival['apy'] - offer['apy']) / rival['apy'] <= 0.12:
+        t['state'] = 'match_requested'; t['match_rounds'] += 1; _say(t, 'agent', f"He has a better offer on the table. Match it and he is yours.")
+        post(f"{p.name} asks you to match", f"{league.teams[rival['team']].abbr if rival['team'] in league.teams else rival['team']} has offered ${rival['apy']:.1f}m over {rival['years']} years. He would rather be here. Match it and he signs today.",
+             payload=dict(rival=rival, thread=t['id'], link=f'negotiation:{t["id"]}'))
+        return 'match_requested'
+    if offer['apy'] + 1e-9 >= floor and not (rival and rival['apy'] > offer['apy'] * 1.12):
+        r = _accept(league, t, offer, how='agreed', quiet=quiet)
+        if not r.get('ok'):
+            # the agent agreed but the deal could not be written (cap, eligibility, a roster spot): the
+            # thread closes with the reason instead of sitting there and failing every week
+            t['state'] = 'declined'; _say(t, 'agent', f"The deal fell through: {r.get('why') or 'it could not be written'}.")
+            post(f"{p.name}: the deal fell through", f"He agreed to your terms but the deal could not be written: {r.get('why') or 'it could not be written'}. Open talks again once that is fixed.")
+            return 'failed'
+        return r['how']
+    if rival and rival['apy'] > offer['apy'] * 1.12:
+        t['state'] = 'declined'; _say(t, 'agent', 'Another club is well above you and he is going to take it.'); post(f"{p.name} says no", f"Another club is well above you and he is going to take it.")
+        return 'declined'
+    # a counter: toward the floor, not all the way
+    counter = round(min(t['ask'], floor * (1.0 + 0.03 * max(0, t['patience'] - 1))), 2)    # never above his own ask
+    t['state'] = 'countered'; t['counter'] = dict(apy=counter, years=t['years'], front_load=0.5); _say(t, 'agent', f"Close. He would do it at ${counter:.1f}m a year.")
+    post(f"{p.name}'s agent counters at ${counter:.1f}m", f"Over {t['years']} years at the league shape. " + ("He is close." if counter <= offer['apy'] * 1.06 else "There is a gap."),
+         payload=dict(counter=t['counter'], thread=t['id'], link=f'negotiation:{t["id"]}'))
+    return 'countered'
 
 
 def set_rival(league, pid, team, apy, years):
@@ -257,7 +279,7 @@ def withdraw(league, tid):
     return dict(ok=True)
 
 
-def _accept(league, t, offer, how):
+def _accept(league, t, offer, how, quiet=False):
     import extensions as EXT, market as MK
     from cap_engine import CAP
     p = league.player(t['pid'])
@@ -273,7 +295,7 @@ def _accept(league, t, offer, how):
     t['state'] = 'accepted'; _say(t, 'agent', f"Done. {p.name} is signed.")
     for k in offer.get('promises', []):
         record_promise(league, p.pid, t['team'], k)
-    _post(league, t, (f"{p.name} extended" if t['kind'] == 'extension' else f"{p.name} signs"), f"{offer['years']} years at ${offer['apy']:.1f}m a year, {how}.")
+    if not quiet: _post(league, t, (f"{p.name} extended" if t['kind'] == 'extension' else f"{p.name} signs"), f"{offer['years']} years at ${offer['apy']:.1f}m a year, {how}.")
     return dict(ok=True, state='accepted', how=how)
 
 
