@@ -158,7 +158,6 @@ class Session:
         ('Free Agency: Round 2', 'step_fa_2'),
         ('Free Agency: Round 3', 'step_fa_3'),
         ('Free Agency: Market Closes', 'step_fa_close'),
-        ('Offseason Trades', 'step_trades'),
         ('The Spring: Combine and Pro Days', 'step_spring'),
         ('The Draft', 'step_draft'),
         ('Camp and Next Year\'s Class', 'step_camp'),
@@ -378,6 +377,14 @@ class Session:
             self.draft.auto = True; self.draft.sim_all(); self._draft_over()
         else:
             getattr(self, self.OFFSEASON[i][1])()
+            # TRADES ARE NOT A STEP. The clubs deal with each other whenever the window is open: a light pass at every
+            # offseason stop (a quarter of the league picks up the phone each time), the way the season's weeks carry a
+            # trickle up to the deadline, so the wire shows trades landing all year rather than in one batch
+            try:
+                if self.OFFSEASON[i][1] not in ('step_draft', 'step_cutdown'):
+                    TRD.run(self.L, self.rng, rounds=1, activity=0.25, exclude=(self.user_team,) if self.user_team else ())
+            except Exception as e:
+                import sys; print('offseason trade pass failed:', e, file=sys.stderr)
             self._league_log_notes()
             if self.draft_live():
                 return dict(done='The Draft is on the clock', next=self.next_label())
