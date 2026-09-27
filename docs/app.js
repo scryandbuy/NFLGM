@@ -653,11 +653,11 @@ const TRAIT_META = {
   'grinder': { k: 'work', tip: 'Outworks his rating. Gains XP faster and keeps his condition.' }, 'hard worker': { k: 'work', tip: 'Puts in the time. A little more development than most.' },
   'coasts': { k: 'work-', tip: 'Does the minimum. Develops slower than his talent says he should.' }, 'needs pushing': { k: 'work-', tip: 'Has to be driven. The slowest to improve, and condition slips.' },
   'wants to be paid': { k: 'money', tip: 'Money first. He will hold out for market value and will not take a discount.' }, 'money matters': { k: 'money', tip: 'Wants a fair number. Harder to extend cheaply.' },
-  'not about the money': { k: 'money-', tip: 'Will leave money on the table for the right situation.' }, 'plays for the love of it': { k: 'money-', tip: 'Money is an afterthought. The easiest man on the roster to extend.' },
+  'not about the money': { k: 'money-', tip: 'Will leave money on the table for the right situation.' }, 'plays for the love of it': { k: 'money-', tip: 'Money is an afterthought. The easiest player on the roster to extend.' },
   'loyal': { k: 'loyal', tip: 'Wants to finish here. Likely to take less to stay.' }, 'settled': { k: 'loyal', tip: 'Comfortable where he is. Not looking to leave.' },
   'keeps his options open': { k: 'loyal-', tip: 'Will test the market when his deal is up.' }, 'follows the money': { k: 'loyal-', tip: 'No attachment to the club. Goes to the highest bidder.' },
   'wants the ball': { k: 'amb', tip: 'Needs a big role. Unhappy as a backup or in a rotation.' }, 'ambitious': { k: 'amb', tip: 'Wants to start and to matter. Morale depends on his snaps.' },
-  'team-first': { k: 'amb-', tip: 'Accepts his role. Morale holds even when the snaps drop.' }, 'happy in a role': { k: 'amb-', tip: 'Content wherever you put him. The easiest man to keep happy.' },
+  'team-first': { k: 'amb-', tip: 'Accepts his role. Morale holds even when the snaps drop.' }, 'happy in a role': { k: 'amb-', tip: 'Content wherever you put him. The easiest player to keep happy.' },
   'even-keeled': { k: 'even', tip: 'Nothing about him stands out either way.' },
 };
 let cardTab = 'Overview';
@@ -1684,7 +1684,7 @@ function renderReview(v) {
   const ub = el('div', { class: 'rv-units' });
   for (const u of v.units) { const r = u.rank || 32; const pct = 100 * (1 - (r - 1) / Math.max(1, u.of - 1)); ub.append(el('div', { class: 'rv-u' }, el('span', { class: 'lab' }, u.label), el('div', { class: 'bar' }, el('i', { style: `width:${pct}%;background:${r <= 8 ? 'var(--ok)' : r >= 24 ? 'var(--danger)' : 'var(--ink-3)'}` })), el('b', { class: r <= 8 ? 'good' : r >= 24 ? 'bad' : '' }, u.rank ? ordn(u.rank) : '—'))); }
   units.append(ub); page.append(units);
-  const men = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Men', el('small', {}, 'who rose, who fell')));
+  const men = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Players', el('small', {}, 'who rose, who fell')));
   const cardOf = p => el('div', { class: 'rv-card' + (p.up ? ' up' : ' down'), onclick: () => { location.hash = '#club/player/' + p.pid; }, style: 'cursor:pointer' }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, p.no != null ? p.no : p.pos), el('div', { class: 'body' }, el('div', { class: 'nm' }, p.name, el('small', {}, ` ${p.pos} · ${p.age}`)), el('div', { class: 'ln' }, p.line)), el('div', { class: 'ovr' }, p.ovr));
   men.append(el('div', { class: 'h5', style: 'padding:6px 14px 0' }, 'Exceeded the grade')); for (const p of v.exceeded) men.append(cardOf(p));
   if (v.short.length) { men.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Fell short of it')); for (const p of v.short) men.append(cardOf(p)); }
@@ -1708,7 +1708,7 @@ function renderReview(v) {
 function renderExit(v) {
   renderRail(v.rail); const page = persPage(); foSecond('exit');
   const c1 = v.club.color, c2 = v.club.accent || '#fff';
-  const head = el('section', { class: 'sheet c12 xm-head' }, el('div', { class: 'xm-kicker' }, `${v.year} · Exit Meetings`), el('div', { class: 'xm-title' }, v.open ? `${v.open} ${v.open === 1 ? 'man wants' : 'men want'} a word` : 'The meetings are done'), el('div', { class: 'xm-sub' }, 'Each will remember what you tell him. A promise goes on the ledger; a brush-off goes in his memory.'));
+  const head = el('section', { class: 'sheet c12 xm-head' }, el('div', { class: 'xm-kicker' }, `${v.year} · Exit Meetings`), el('div', { class: 'xm-title' }, v.open ? `${v.open} ${v.open === 1 ? 'player wants' : 'players want'} a word` : 'The meetings are done'), el('div', { class: 'xm-sub' }, 'Each will remember what you tell him. A promise goes on the ledger; a brush-off goes in his memory.'));
   page.append(head);
   if (!v.meetings.length) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, 'Nobody asked for a meeting this year.'))); return; }
   for (const m of v.meetings) {

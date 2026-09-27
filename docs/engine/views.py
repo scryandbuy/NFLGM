@@ -233,8 +233,8 @@ def _win_prob(league, abbr, opp, away):
     """Pregame, from the two rosters' starter strength and home field. The model
     in the game itself is the drive-by-drive one; this is the number on the tile."""
     def strength(t):
-        men = sorted((p.ovr for p in t.active() if p.out_until is None), reverse=True)[:22]
-        return float(np.mean(men)) if men else 70.0
+        players = sorted((p.ovr for p in t.active() if p.out_until is None), reverse=True)[:22]
+        return float(np.mean(players)) if players else 70.0
     a, b = strength(league.teams[abbr]), strength(league.teams[opp])
     edge = (a - b) * 0.22 + (-0.25 if away else 0.25)
     return int(round(100 / (1 + np.exp(-edge))))

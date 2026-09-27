@@ -69,7 +69,7 @@ def _injury_report(league, t, week, results):
 
 
 def returns(league, week):
-    """Wednesday: a man cleared to play again, and where he sits."""
+    """Wednesday: a player cleared to play again, and where he sits."""
     user = getattr(league, 'user_team', None)
     if not user: return
     t = league.teams[user]

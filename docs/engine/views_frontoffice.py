@@ -477,7 +477,7 @@ def season_review(session, league, abbr):
     ROWS = [('Pass Offense', 'QB'), ('Run Offense', 'backs'), ('Pass Block', 'pass block'), ('Receivers', 'receivers'), ('Pass Rush', 'pass rush'), ('Run Front', 'run front'), ('Corners', 'corners'), ('Safeties', 'safeties'), ('Linebackers', 'linebackers')]
     units = [dict(label=lab, rank=(ur[k][0] if ur.get(k) else None), of=(ur[k][1] if ur.get(k) else 32)) for lab, k in ROWS]
     sides = dict(offense=sr.get('oc'), defense=sr.get('dc'), kicking=sr.get('st'))
-    # who exceeded and who fell short: this season's production against the man's grade
+    # who exceeded and who fell short: this season's production against the player's grade
     S = league.stats.get(league.year, {}) or {}
     import xp as XP
     scored = []
@@ -500,7 +500,7 @@ def season_review(session, league, abbr):
         return dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), line=bits[0], up=up)
     exceeded = [card(p, per, sn, True) for _s, p, per, sn in scored[:3]]
     short = [card(p, per, sn, False) for _s, p, per, sn in scored[-3:][::-1] if p.ovr >= 78]
-    # next year's money and the men whose deals are up
+    # next year's money and the players whose deals are up
     limit_next, committed_next, rollover, dead_next = next_year_cap(league, t)
     expiring = sorted([p for p in t.active() if p.contract and p.contract.years <= 1], key=lambda p: -p.ovr)
     pending = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), starter=(p in (t.depth.get(p.pos) or [])[:1])) for p in expiring[:8]]

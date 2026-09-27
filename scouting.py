@@ -40,7 +40,7 @@ def _refresh(view, p):
 
 
 def second_look(view, p, sd, rng, weight=1.0, R=None):
-    """Another read on the man, averaged into the room's skill and ceiling errors. The room's
+    """Another read on the player, averaged into the room's skill and ceiling errors. The room's
     traits scale and lean the new draw the same way they did the first."""
     R = R or dict(skill_mult=1.0, skill_bias=0.0, pot_mult=1.0, pot_bias=0.0)
     n = view.get('reads', 1)

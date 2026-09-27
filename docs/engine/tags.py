@@ -260,7 +260,7 @@ if __name__ == '__main__':
     for a, p, price in sorted(res['tagged'], key=lambda x: -x[2])[:10]:
         print('  %-4s %-22s %-5s age %2.0f ovr %.0f  $%.1fM  (tag #%d)'
               % (a, p.name, p.pos, p.age, p.ovr, price, p.tag_count))
-    print('\ntop men reaching the market:')
+    print('\ntop players reaching the market:')
     mk = sorted(res['market'], key=lambda x: -x[1].ovr)[:8]
     for a, p in mk:
         print('  %-4s %-22s %-5s age %2.0f ovr %.0f' % (a, p.name, p.pos, p.age, p.ovr))
@@ -281,8 +281,8 @@ def user_tag(league, pid):
     p = league.player(pid)
     if p is None or p.team != user: return dict(ok=False, why='not on your roster')
     import free_agency as FA
-    if FA.fa_class(p.accrued, p.contract_years_left) != 'UFA': return dict(ok=False, why='only a man whose deal is up, with four accrued seasons, can be tagged')
-    if p.tag_count >= MAX_TAGS: return dict(ok=False, why='he has been tagged the most a man can be')
+    if FA.fa_class(p.accrued, p.contract_years_left) != 'UFA': return dict(ok=False, why='only a player whose deal is up, with four accrued seasons, can be tagged')
+    if p.tag_count >= MAX_TAGS: return dict(ok=False, why='he has been tagged the most a player can be')
     if getattr(league, 'user_tag_choice', None) not in (None, 'none'): return dict(ok=False, why='you have used your tag this year')
     price = tag_price(p, cap)
     room = power(league, team, cap)

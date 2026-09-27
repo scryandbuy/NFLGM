@@ -174,7 +174,7 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
 
 
 def _street_alternative(league, viewer, p):
-    """The best man the viewing club could have at the target's position without a trade: a free agent (for his
+    """The best player the viewing club could have at the target's position without a trade: a free agent (for his
     asking price) or a man on its own practice squad (for the minimum). Returns (graded overall, yearly cost) or None.
     The street is priced once a week and cached on the league; only the viewer's scheme fit is applied per call."""
     from gm_engine import scheme_fit
@@ -188,8 +188,8 @@ def _street_alternative(league, viewer, p):
             if q is None or q.retired: continue
             by_pos.setdefault(q.pos, []).append(q)
         table = {}
-        for pos, men in by_pos.items():
-            top = sorted(men, key=lambda q: -q.ovr)[:4]
+        for pos, players in by_pos.items():
+            top = sorted(players, key=lambda q: -q.ovr)[:4]
             rows = []
             for q in top:
                 try:

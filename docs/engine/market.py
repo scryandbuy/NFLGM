@@ -61,7 +61,7 @@ CONTENDER_DISCOUNT = 0.06
 MAX_TARGETS = {1: 8, 2: 7, 3: 8}
 
 # How much of next year's obligation a club actually holds back. Not all of
-# it: some of those men will be let go, and some will be cheaper than their
+# it: some of those players will be let go, and some will be cheaper than their
 # current deal. Half is the working figure.
 FORWARD_WEIGHT = 0.5
 
@@ -518,9 +518,9 @@ def run(league, rng, user_team=None, verbose=False):
     for phase in range(1, PHASES + 1):
         league.fa_step = phase
         bids = ai_bids(league, pool, phase, rng, skip_teams=(user_team,) if user_team else ())
-        # the user's live offers do not sign inside the market: the man mulls
+        # the user's live offers do not sign inside the market: the player mulls
         # and answers through his thread (yes, no, counter, or match). The
-        # best rival bid is told to the thread, and a man whose best offer is
+        # best rival bid is told to the thread, and a player whose best offer is
         # the user's holds out of this step's signings so he can answer
         held = []
         for t in NG._threads(league):
@@ -546,7 +546,7 @@ def run(league, rng, user_team=None, verbose=False):
                 if p is not None and p.team and p.team != t['team']:
                     t['state'] = 'declined'; NG._post(league, t, f"{p.name} signs with {p.team}", "He took another offer.")
         NG.resolve(league, fa_step=phase)
-        waiting = [p for p in waiting if p.team is None]    # a man who signed through his thread is off the market
+        waiting = [p for p in waiting if p.team is None]    # a player who signed through his thread is off the market
         for m in msgs:
             inbox_add(league, m)
         all_signed += signed
@@ -598,7 +598,7 @@ if __name__ == '__main__':
     for t, p, o in sorted(signed, key=lambda x: -x[2].apy)[:10]:
         print('  %-4s %-22s %-5s ovr %.0f age %2.0f  $%.1fM x%d (phase %d)'
               % (t, p.name, p.pos, p.ovr, p.age, o.apy, o.years, o.phase))
-    print('\nbest men still unsigned:')
+    print('\nbest players still unsigned:')
     for p in sorted(left, key=lambda x: -x.ovr)[:6]:
         print('  %-22s %-5s ovr %.0f age %2.0f' % (p.name, p.pos, p.ovr, p.age))
     print(f'\ninbox: {len(L.inbox)} messages')

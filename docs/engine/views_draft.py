@@ -132,7 +132,7 @@ def _board_read(league, abbr, rows, ub, needs):
     if needs:
         from views import surname
         g = sorted(needs)[0]; men = [surname(p.name) for p in exp if p.pos in NEED_GROUPS[g]][:2]
-        parts.append(f"{g} is the need" + (f" with {' and '.join(men)} expiring" if men else ''))
+        parts.append(f"{g} is the need" + (f" with {' and '.join(players)} expiring" if men else ''))
     slot = _my_first_slot(league, abbr)
     try: slot_n = int(slot.split('.')[1]) if slot and '.' in slot else 24
     except Exception: slot_n = 24
@@ -320,7 +320,7 @@ def draft_day(session, league, abbr):
     _my_rank(avail); my_board = sorted(avail, key=lambda x: x['my_rank'])[:40]
     # who is on the clock and the next few, with each club's needs
     clock = [dict(sel=q.selection, slot=SLOT(q), team=club(q.owner), mine=(q.owner == abbr), id=f"{q.year}-{q.round}-{q.original}", needs=sorted(_needs(league, league.teams[q.owner]))[:3]) for q in D.picks[D.i:D.i + 8]]
-    # the board as the GM ordered it, the unplaced men after in the scouts' order; Do Not Draft kept out
+    # the board as the GM ordered it, the unplaced players after in the scouts' order; Do Not Draft kept out
     ub = getattr(league, 'user_board', None) or {}; order = [x for x in (ub.get('order') or [])]; dnd = set(ub.get('dnd') or [])
     byid = {x['pid']: x for x in avail}
     my_board = [byid[pid] for pid in order if pid in byid and pid not in dnd] + [x for x in sorted(avail, key=lambda x: x['my_rank']) if x['pid'] not in order and x['pid'] not in dnd]

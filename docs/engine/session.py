@@ -339,7 +339,7 @@ class Session:
         if any((m.get('payload') or {}).get('key') == key_ for m in getattr(self.L, 'inbox', [])): return
         try:
             v = self.frontoffice('season_review')
-            IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the men whose deals are up.", sender='front office', payload=dict(key=key_, link='front_office:review'))
+            IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the players whose deals are up.", sender='front office', payload=dict(key=key_, link='front_office:review'))
         except Exception as e:
             import sys; print('season review failed:', e, file=sys.stderr)
         try:
@@ -348,7 +348,7 @@ class Session:
             if ms:
                 from views import surname
                 names = ', '.join(surname(self.L.player(x['pid']).name) for x in ms if self.L.player(x['pid']))
-                IB.post(self.L, 'exit', f"Exit meetings: {len(ms)} men want a word", f"{names}.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
+                IB.post(self.L, 'exit', f"Exit meetings: {len(ms)} players want a word", f"{names}.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
         except Exception as e:
             import sys; print('exit meetings failed:', e, file=sys.stderr)
 

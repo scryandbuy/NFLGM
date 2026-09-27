@@ -531,7 +531,7 @@ def hire(league, abbr, coach_name, years=3):
 
 
 # ------------------------------------------------------------ the interview
-# Hiring is a conversation before it is a number. In the interview the GM learns the man's
+# Hiring is a conversation before it is a number. In the interview the GM learns the player's
 # traits one question at a time; the moment he is hired, everything shows. Three questions:
 #   coaching (or, for a scout, hits): reveals one coaching trait / one strength
 #   situation (or misses): reveals what he wants / one blind spot
@@ -583,11 +583,11 @@ def _reveal(league, c, st, pool_keys, question):
            'wants': 'He falls for players. Once he likes one, his read on him drifts up.',
            'stopwatch': 'He does not miss on the body: the forty, the size, the combine numbers.',
            'measurables': 'He is a sucker for a workout. Athletes grade high in his room.',
-           'projector': 'He is good on how far a man can grow.',
+           'projector': 'He is good on how far a player can grow.',
            'floor': 'He grades the floor and undersells the ceiling. His boards are full of safe picks.',
            'small_school': 'He has an eye for the small-school player; conference means nothing to him.',
            'big_program': 'He leans toward the big programs and it shows in his grades.',
-           'character': 'His character reads have been reliable; his flags land on the right men.',
+           'character': 'His character reads have been reliable; his flags land on the right players.',
            'tape': 'He trusts the tape and skips the character work.',
            'grinder': 'He watches more players than any room in the league.',
            'narrow': 'His board goes three rounds deep and stops.'}

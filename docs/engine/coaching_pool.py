@@ -73,7 +73,7 @@ def make_candidate(rng, taken=(), background=None):
 
 
 # ------------------------------------------------------------ prestige
-# How a name grows and fades. Per season, on the man in charge.
+# How a name grows and fades. Per season, on the player in charge.
 PRESTIGE = dict(win=0.45, loss=-0.35, playoffs=3.0, missed=-2.0, conf_title=4.0,
                 sb_berth=5.0, sb_win=8.0, coty=5.0, fired=-8.0, decay=0.04)
 
@@ -147,7 +147,7 @@ def top_up(league, rng):
 # ------------------------------------------------------------ the owner
 def roster_fit(team, gm):
     """
-    How the club's two-deep would grade under this man's scheme: mean fit
+    How the club's two-deep would grade under this player's scheme: mean fit
     (points added or lost) and the misfits, each with what he is owed.
     """
     scheme = GE.scheme_of(gm)
@@ -179,7 +179,7 @@ def owner_state(team):
 
 
 def scheme_similarity(a, b):
-    """0..1: how much of what the new man runs is what the club runs. Mixed
+    """0..1: how much of what the new player runs is what the club runs. Mixed
     blocking and multiple fronts are compatible with either answer."""
     if a is None or b is None: return 0.5
     s = 0.0
@@ -191,15 +191,15 @@ def scheme_similarity(a, b):
 
 def owner_hire(league, team, rng, verbose=False):
     """
-    The decision. Returns (hired, reasons) and moves the man out of the pool.
+    The decision. Returns (hired, reasons) and moves the player out of the pool.
     """
     p = pool(league)
     if not p:
         top_up(league, rng)
-    # not the man he just fired
+    # not the player he just fired
     just_fired = getattr(team, '_just_fired', None)
     p_cands = [c for c in p if c is not just_fired] or p
-    # SITTING COORDINATORS with the prestige are candidates too: a man from
+    # SITTING COORDINATORS with the prestige are candidates too: a player from
     # the staff module becomes a head-coaching candidate carrying his name,
     # his prestige and his side of the ball; if hired he leaves a hole
     for co in coordinators_as_candidates(league):
