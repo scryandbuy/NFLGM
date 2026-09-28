@@ -673,12 +673,26 @@ def build_exit_meetings(session, league, abbr):
     return meetings
 
 
+def _club_done(session, league, abbr):
+    """The club's season is over: the league's is, or the regular season is complete and this club is not alive in
+    the playoffs (missed them, or lost). The meetings belong to whichever comes later."""
+    if _season_over(league): return True
+    if league.phase != 'playoffs': return False
+    post = getattr(session, 'post', None)
+    if post is None: return False
+    try:
+        alive = post.alive_now()
+    except Exception:
+        alive = set()
+    return abbr not in alive
+
+
 def exit_interviews(session, league, abbr, year=None):
     from views import club, surname
     from views_league import _years
     t = league.teams[abbr]
     store = getattr(league, 'exit_meetings', {}) or {}
-    cur = int(league.year); over = _season_over(league)
+    cur = int(league.year); over = _club_done(session, league, abbr)
     if not year:
         # default: the latest season that is over; the current year before its season ends is blank
         finished = [y for y in _years(league) if y < cur or (y == cur and over)]

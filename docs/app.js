@@ -257,6 +257,12 @@ function renderPortal(v) {
   })));
   page.append(desk);
 
+  // THE BRACKET, once the playoffs start: the field, live, between the desk and the money
+  if (v.bracket && !v.bracket.missing) {
+    const bk = el('section', { class: 'sheet c12' }, el('h2', {}, `${v.bracket.year || ''} Playoffs`, el('small', {}, v.bracket.champion ? `Champion: ${v.bracket.champion.name}` : v.bracket.live ? 'the bracket, live' : v.bracket.note || 'the field')));
+    bk.append(bracketTree(v.bracket)); page.append(bk);
+  }
+
   // cap, room, front office
   const capG = v.cap.by_group; const total = Object.values(capG).reduce((a, b) => a + b, 0) + v.cap.dead;
   const colors = { QB: '#c8102e', OL: '#e0b400', WR: '#4cc9f0', DL: '#3fb37f', DB: '#8791a0', LB: '#b6bec9', TE: '#5a6472', RB: '#a0603a', ST: '#3a3f47' };
@@ -1971,6 +1977,12 @@ function renderBracket(v) {
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, `${v.year || ''} Playoffs`, el('small', {}, v.champion ? `Champion: ${v.champion.name}` : v.live ? 'the bracket, live' : v.note || 'the field')));
   s.append(yearChips(v, y => renderBracket(pyJSON(`SESSION.league_view('bracket', year=${y})`))));
   if (v.missing) { s.append(el('div', { class: 'empty' }, v.note || 'No bracket is kept for that season.')); page.append(s); return; }
+  s.append(bracketTree(v));
+  page.append(s);
+}
+
+// the bracket itself, so the portal can show it during the playoffs without the page chrome
+function bracketTree(v) {
   // one team's line on a card: seed, stripe, abbreviation, score; the winner carries the marker, the loser dims
   const line = (c, seed, pts, done, won, me, record) => el('div', { class: 'bk-line' + (done ? (won ? ' win' : ' lose') : '') + (me ? ' me' : '') },
     el('span', { class: 'sd' }, seed || ''), el('span', { class: 'str', style: `background:${c.color}` }), el('span', { class: 'ab' }, c.abbr), el('span', { class: 'rec' }, done ? '' : record || ''), el('b', {}, done ? (won ? '▸ ' : '') + pts : ''));
@@ -1999,8 +2011,7 @@ function renderBracket(v) {
       v.champion ? el('div', { class: 'bk-champ', style: `--c1:${v.champion.color};--c2:${v.champion.accent}` }, el('span', {}, v.champion.name), el('small', {}, 'Champions')) : ''));
   tree.append(el('div', { class: 'bk-join j8' }, el('i', {})), sb, el('div', { class: 'bk-join j8 r' }, el('i', {})));
   if (nfc) tree.append(...side(nfc, true));
-  s.append(tree);
-  page.append(s);
+  return tree;
 }
 
 function renderTransactions(v) {

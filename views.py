@@ -128,6 +128,12 @@ def portal(session, league, abbr):
     out['matchup'] = _matchup(session, league, abbr)
     out['desk'] = _desk(league, abbr)
     out['inbox'] = _inbox(league)
+    # the bracket rides on the portal once the playoffs start, through the close (the offseason drops it)
+    if league.phase in ('playoffs', 'playoffs_closed'):
+        try:
+            from views_league import bracket as _bracket
+            b = _bracket(session, league, abbr); b.pop('rail', None); out['bracket'] = b
+        except Exception: out['bracket'] = None
     out['cap'] = _cap(league, t)
     out['room'] = _room(league, t)
     out['front_office'] = _front_office(league, t)
