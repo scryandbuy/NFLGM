@@ -439,7 +439,18 @@ def waivers(session, league, abbr):
             if p: awarded.append(dict(team=club(x['team']), name=p.name, pos=p.pos, frm=x.get('from_team') or '', mine=(x['team'] == abbr)))
         if len(awarded) >= 12: break
     cut_options = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), penalty=round(p.dead_if_cut(0), 1)) for p in sorted(me.active(), key=lambda p: p.ovr)[:12]]
-    return dict(rail=rail(session, league, abbr), rows=rows, claims=mine, awarded=awarded, cut_options=cut_options, priority=[club(a) for a in order], my_priority=(order.index(abbr) + 1 if abbr in order else None),
+    # YOUR OWN PLAYERS ON THE WIRE. Waived, not yet cleared: off your roster, not a free agent, and not claimable by
+    # you, so without this list they were nowhere on any page until the wire ran
+    intent = getattr(league, 'ps_intent', None) or {}
+    outbound = []
+    for e in entries:
+        d = e if isinstance(e, dict) else e.__dict__
+        if d.get('from_team') != abbr: continue
+        p = league.player(d['pid'])
+        if p is None or p.team is not None: continue
+        outbound.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), claims=len(d.get('claims') or []),
+                             intent=('Practice squad if he clears' if intent.get(p.pid) == abbr else 'Released if he clears')))
+    return dict(rail=rail(session, league, abbr), rows=rows, claims=mine, awarded=awarded, outbound=outbound, cut_options=cut_options, priority=[club(a) for a in order], my_priority=(order.index(abbr) + 1 if abbr in order else None),
                 roster=len(me.active()), roster_full=(len(me.active()) >= 53), cap=round(me.cap_space, 1), awards='at the next advance')
 
 

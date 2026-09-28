@@ -236,7 +236,8 @@ class Session:
         k = self.stop[0]
         if k == 'cutdown':
             n = len(self.L.teams[self.user_team].active())
-            return dict(title='Cut-Down Day', sub=(f"Cut to 53 first · you are at {n}" if n > self.ROSTER_MAX else 'The league goes to 53; the cuts hit the wire'), played=False)
+            # the count under the day, red while over the limit and yellow once at or under it
+            return dict(title='Cut-Down Day', sub=f"{n}/{self.ROSTER_MAX}", tone=('danger' if n > self.ROSTER_MAX else 'warn'), played=False)
         if k == 'wire':
             import waivers as WV
             n = sum(1 for e in WV.pending(self.L) if e.get('ahead', None) is None and e.get('from_team') != self.user_team and self.L.player(e['pid']) is not None and self.L.player(e['pid']).team is None)
@@ -372,6 +373,7 @@ class Session:
             self._finish_live()
             self.runner.roll_week(wk)
             IB.expire(self.L, wk + 1)
+            self._ir_ready_notes(wk + 1)
             self.played = False
             self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs', 0)
             if wk >= WEEKS:
@@ -424,6 +426,7 @@ class Session:
             # ROLL INTO THE NEXT ROUND
             self.runner.roll_week(wk_)
             IB.expire(self.L, wk_ + 1)
+            self._ir_ready_notes(wk_ + 1)
             self.played = False
             if self.user_team in (getattr(post, 'exit_round', {}) or {}):
                 self._post_review('eliminated')
@@ -956,6 +959,24 @@ class Session:
         L.set_phase('regular')
 
     # ------------------------------------------------------------ helpers
+    def _ir_ready_notes(self, week):
+        """The week a player on IR becomes eligible to come back (four weeks served, healthy, placed with a return),
+        one note to the GM; once per stint. Without it the only way to know was to open the IR list and count."""
+        t = self.L.teams[self.user_team]
+        for p in list(getattr(t, 'ir', None) or []):
+            if not p.xp_spent.get('_ir_return', False): continue
+            if p.xp_spent.get('_ir_ready_note') == int(p.xp_spent.get('_ir_week', 0) or 0): continue
+            served = int(week or 0) - int(p.xp_spent.get('_ir_week', 0) or 0)
+            healthy = p.out_until is None or int(p.out_until) <= int(week or 0)
+            if served < t.IR_MIN_WEEKS or not healthy: continue
+            p.xp_spent['_ir_ready_note'] = int(p.xp_spent.get('_ir_week', 0) or 0)
+            left = int(t.IR_RETURNS) - int(getattr(t, 'ir_returns_used', 0) or 0)
+            room = 53 - len(t.active())
+            body = (f"{p.name} ({p.pos}, {round(p.ovr)} overall) has served his {t.IR_MIN_WEEKS} weeks on injured reserve and is healthy. "
+                    f"He can be activated to the 53 from the roster page. The club has {left} IR return{'s' if left != 1 else ''} left this season"
+                    + ("." if room > 0 else "; the 53 is full, so a spot has to open first."))
+            IB.post(self.L, 'ir_ready', f"{p.name} is ready to come off IR", body, sender='trainers', payload=dict(pid=p.pid))
+
     def _opponent(self, week):
         for (wk, away, home, ap, hp) in getattr(self.L, 'schedule', []) or []:
             if wk == week and self.user_team in (home, away):

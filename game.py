@@ -682,11 +682,11 @@ def _resolve_live_penalty(dr, pen, out, oc):
     if pen['on_offense']:
         if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
             spot = dr.yardline - gained
-            yards = min(yards, (100.0 - spot) / 2.0); pen['yards'] = round(yards, 1)
+            yards = float(max(0, int(np.floor(min(yards, (100.0 - spot) / 2.0))))); pen['yards'] = yards   # whole yards
             dr.log_pen_after = -yards                 # the offense fouled after the whistle: it walks back
             return 'added'
         # THE DEFENSE DECIDES: the play standing against the down replayed from further back
-        yards = min(yards, float(np.floor((100.0 - dr.yardline) / 2.0))); pen['yards'] = round(yards, 1)
+        yards = float(max(0, int(np.floor(min(yards, (100.0 - dr.yardline) / 2.0))))); pen['yards'] = yards
         ep_stand = _ep_play_stands(dr, out)
         down_e = dr.down + (1 if pen['penalty'] == 'Intentional Grounding' else 0)
         spot_e = min(99.0, dr.yardline + yards)
@@ -700,15 +700,24 @@ def _resolve_live_penalty(dr, pen, out, oc):
         return 'replaced'
     if out.get('touchdown'):
         return None                               # six beats fifteen
+    if pen['penalty'] == 'Defensive Pass Interference':
+        # A SPOT FOUL FOLLOWS THE THROW. The flag was drawn before the play resolved, at a generic 13-yard median,
+        # so a screen could come back with a 20-yard DPI. There is no interference on a throw at or behind the
+        # line (the receiver is not downfield), and downfield the yardage is where the ball was going.
+        if out.get('screen') or (out.get('air') is not None and float(out.get('air') or 0.0) < 1.0):
+            return None
+        if out.get('air') is not None:
+            yards = float(max(1, int(round(float(out['air'])))))
+            pen['yards'] = yards
     if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
         spot = max(1.0, dr.yardline - float(out.get('yards', 0.0) or 0.0))
-        yards = min(yards, (spot - 1.0) / 2.0 if spot - yards < 1 else yards); pen['yards'] = round(yards, 1)
+        yards = float(max(0, int(np.floor(min(yards, (spot - 1.0) / 2.0 if spot - yards < 1 else yards))))); pen['yards'] = yards   # whole yards: half the distance rounds down
         dr.log_pen_after = yards                      # the defense fouled: the offense walks forward
         dr.log_pen_first = bool(pen['auto_first'])
         return 'added'
     # THE OFFENSE DECIDES: the play standing against the penalty enforced
     if pen['penalty'] == 'Defensive Pass Interference':
-        gained_p = min(yards, dr.yardline - 1)                 # a spot foul: in the end zone the ball goes to the 1
+        gained_p = float(max(0, int(np.floor(min(yards, dr.yardline - 1)))))   # a spot foul: in the end zone the ball goes to the 1
         end_zone = gained_p < yards - 0.01
     else:
         gained_p = min(yards, float(np.floor(dr.yardline / 2.0)))   # every other foul: half the distance to the goal, whole yards
@@ -720,7 +729,7 @@ def _resolve_live_penalty(dr, pen, out, oc):
     if ep_stand >= ep_enf:
         return None                               # the play did better: the offense declines
     if end_zone: pen['end_zone'] = True; pen['spot'] = 1
-    pen['yards'] = round(gained_p, 1)
+    pen['yards'] = float(int(gained_p))
     dr.yardline -= gained_p
     if pen_first:
         dr.down, dr.togo = 1, min(10.0, dr.yardline); dr.first_downs += 1
@@ -1295,13 +1304,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if pen['on_offense']:
                 # half the distance to the offense's own goal when the full yardage would reach it
                 walk = max(1.0, float(np.floor(min(float(pen['yards']), (100.0 - dr.yardline) / 2.0))))
-                pen['yards'] = round(walk, 1)
+                pen['yards'] = float(int(walk))
                 dr.yardline = min(99, dr.yardline + walk)
                 dr.togo += walk
             else:
                 # half the distance to the defense's goal
                 gained = max(1.0, float(np.floor(min(float(pen['yards']), dr.yardline / 2.0))))
-                pen['yards'] = round(gained, 1)
+                pen['yards'] = float(int(gained))
                 dr.untimed = True; dr.untimed_at = len(dr.log) + 1     # a half cannot end on this; the penalty entry appended below is the last thing in the log
                 if pen['auto_first']:
                     dr.yardline -= gained; dr.down, dr.togo = 1, min(10, dr.yardline)

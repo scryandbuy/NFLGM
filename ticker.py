@@ -122,7 +122,8 @@ def play_line(league, p, off_abbr, def_abbr):
         import events as E
         yds = abs(float(p.get('yards', 0) or 0)); rule = E.RULE_YARDS.get(p.get('penalty'))
         half = rule is not None and yds < rule - 0.01
-        ydtxt = (f"{yds:g} yards" if yds != 1 else '1 yard') + (', half the distance to the goal' if half else '')
+        yds = int(round(yds))
+        ydtxt = ('half the distance to the goal' if (half and yds == 0) else (f"{yds} yards" if yds != 1 else '1 yard') + (', half the distance to the goal' if half else ''))
         if p.get('end_zone'): ydtxt = 'in the end zone, ball placed at the 1'
         text = f"Penalty, {p.get('penalty', 'flag')} on the {side}, {ydtxt}" + (", automatic first down." if (p.get('auto_first') and not p.get('on_offense')) else '.')
         kind = 'neutral'

@@ -187,7 +187,7 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
     # the rulebook's automatic first down: every defensive foul except the pre-snap fives
     # (offside, neutral zone, encroachment, too many men) and delay-type fouls; never an offensive foul
     AUTO = {'Defensive Pass Interference', 'Defensive Holding', 'Roughing the Passer', 'Illegal Contact', 'Unnecessary Roughness', 'Face Mask', 'Illegal Use of Hands'}
-    return dict(penalty=name, yards=round(float(yds), 1),
+    return dict(penalty=name, yards=float(int(round(float(yds)))),
                 on_offense=bool(on_off),
                 auto_first=(not on_off) and (name in AUTO),
                 # only a dead-ball, pre-snap foul is decided before the snap; holding, OPI, an ineligible man downfield
