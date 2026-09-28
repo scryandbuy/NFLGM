@@ -328,10 +328,13 @@ def unit_ranks(league, year):
         deff[abbr] = d / dn if dn else 0.0
         fga = sum(l.get('fg_att', 0) for l in lines); fgm = sum(l.get('fg_made', 0) for l in lines)
         st[abbr] = (fgm / fga if fga else 0.8) + 0.001 * sum(l.get('punt_net', 0) for l in lines)
+    # a club with no plays on record for the year has no rank: before the season's first game every club
+    # sat at zero and was still numbered 1 to 32 in roster order, so the new season opened on invented ranks
+    played = {abbr for abbr, team in league.teams.items() if any(pid in S for pid in {p.pid for p in team.roster})}
     def rank(d):
-        order = sorted(d, key=lambda a: -d[a]); return {a: i + 1 for i, a in enumerate(order)}
+        order = sorted((a for a in d if a in played), key=lambda a: -d[a]); return {a: i + 1 for i, a in enumerate(order)}
     ro, rd, rs = rank(off), rank(deff), rank(st)
-    return {abbr: {'oc': ro[abbr], 'dc': rd[abbr], 'st': rs[abbr]} for abbr in league.teams}
+    return {abbr: {'oc': ro.get(abbr), 'dc': rd.get(abbr), 'st': rs.get(abbr)} for abbr in league.teams}
 
 
 # ------------------------------------------------------------ the carousel

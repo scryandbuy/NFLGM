@@ -876,6 +876,10 @@ class Session:
         if D is None: return
         if not D.done: D._finish()
         self.L.last_draft = dict(year=D.year, results=[(s, t, p.pid) for s, t, p in D.results], trades=len(D.trades), trade_log=[list(x) for x in D.trades])
+        # the draft cycle's user state ends with the draft: the thirty visits and their timing, and the board
+        # (ranks and do-not-draft) all name players who are now on rosters; left in place they carried into the
+        # next class as visits already 'spoken for' and board entries for drafted players
+        self.L.user_visits = []; self.L.user_visit_week = {}; self.L.user_board = {}
         # THE GEMS AND THE BUSTS, SURFACED. The day after the draft the rookies are on rosters at their true grades,
         # and the league notices the ones it missed and the ones it overrated
         try:

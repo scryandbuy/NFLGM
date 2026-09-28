@@ -1649,7 +1649,7 @@ function renderDraftDay(v) {
 let offersCache = null;
 const gdReveal = {};      // where each game's reveal stands, so leaving the page and coming back holds the place
 
-let picksClub = 'mine', picksYear = null, picksQuery = '';
+let picksClub = 'mine', picksYear = null, picksYearFor = null, picksQuery = '';
 function renderPicks(v) {
   renderRail(v.rail); const page = persPage(); drSecond('picks');
   const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Your Picks', el('small', {}, `${v.years.reduce((a, y) => a + y.picks.length, 0)} picks over ${v.years.length} drafts`), el('button', { class: 'btn', style: 'margin-left:auto;width:auto', 'data-tip': 'Copy the last draft, every pick and trade, as text', onclick: function () { const r = pyJSON(`SESSION.draft_view('draft_text')`); if (!r.ok) { notify(r); return; } copyText(r.text, this); } }, 'Copy Draft'),
@@ -1670,11 +1670,13 @@ function renderPicks(v) {
 function renderDraftResults(v) {
   renderRail(v.rail); const page = persPage(); drSecond('results');
   const s = el('section', { class: 'sheet c12' });
-  if (!picksYear && v.result_years && v.result_years.length) picksYear = v.result_years[0];
+  // the tab opens on the draft the server names (this offseason's if held, else the coming one); the chosen year sticks
+  // only within the same default, so a new season resets it instead of carrying last year's draft forward
+  if (picksYearFor !== v.default_year) { picksYear = v.default_year; picksYearFor = v.default_year; }
   s.append(el('h2', {}, 'Draft Results', el('small', {}, `${v.results.length} drafted players on record`)));
   const tools = el('div', { class: 'tools' });
   const clubs = el('div', { class: 'chips' }); for (const [k, l] of [['mine', v.rail.club.name], ['all', 'All Teams'], ['div', v.my_division]]) clubs.append(el('button', { class: 'chip', 'aria-pressed': String(picksClub === k), onclick: () => { picksClub = k; renderDraftResults(v); } }, l));
-  const yrsChips = el('div', { class: 'chips' }); for (const y of v.result_years) yrsChips.append(el('button', { class: 'chip', 'aria-pressed': String(picksYear === y), onclick: () => { picksYear = y; renderDraftResults(v); } }, y));
+  const yrsChips = el('div', { class: 'chips' }); for (const y of (v.result_years.includes(v.default_year) ? v.result_years : [v.default_year, ...v.result_years])) yrsChips.append(el('button', { class: 'chip', 'aria-pressed': String(picksYear === y), onclick: () => { picksYear = y; renderDraftResults(v); } }, y));
   const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Player', value: picksQuery }); search.oninput = () => { picksQuery = search.value; drawR(); };
   tools.append(clubs, yrsChips, search); s.append(tools);
   const rt = el('table', { class: 'tbl' });
@@ -1683,7 +1685,7 @@ function renderDraftResults(v) {
     const q = picksQuery.trim().toLowerCase();
     const rows = v.results.filter(r => (picksClub === 'all' || (picksClub === 'mine' && r.team && r.team.abbr === v.rail.club.abbr) || (picksClub === 'div' && r.division === v.my_division)) && (!picksYear || r.year === picksYear) && (!q || r.name.toLowerCase().includes(q)));
     for (const r of rows.slice(0, 200)) rt.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.college}${r.team ? ' · ' + r.team.abbr : ''}`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.pick), el('td', { class: 'n' }, r.cons_was != null ? `#${r.cons_was}` : '—'), el('td', { class: 'n' }, ovrCell(r.ovr))));
-    if (!rows.length) rt.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, v.results.length ? 'Nobody matches.' : 'The first class is drafted in the spring.'))));
+    if (!rows.length) rt.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, (picksYear === v.default_year && !v.default_held) ? `The ${v.default_year} draft has not been held yet. Earlier drafts are on the year chips.` : v.results.length ? 'Nobody matches.' : 'The first class is drafted in the spring.'))));
   };
   s.append(rt); drawR(); page.append(s);
 }

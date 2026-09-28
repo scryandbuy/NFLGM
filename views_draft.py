@@ -11,10 +11,36 @@ SLOT = lambda pk: f"{pk.round}.{((pk.selection - 1) % 32) + 1}" if pk.selection 
 
 def coming_season(league):
     """The season whose draft is next. Picks carry the season year (the draft held after the 2026 season is the
-    2027 draft). Before the year rolls that is league.year; once the New Year step has run in the offseason
-    (week 0, or the pool built) the league is a year on but the draft still belongs to the season just played."""
-    rolled = bool(getattr(league, 'draft_pool', None)) or (league.phase in ('offseason', 'free_agency', 'draft') and int(league.week or 0) == 0)
-    return league.year - 1 if rolled else league.year
+    2027 draft). Read off the calendar the season review uses (league.season_closed_year), not a week heuristic:
+    before the New Year step the league year is the season just played, so the coming draft is that year's; after
+    the roll the league is a year on but the draft still belongs to the season just played, until it is held; once
+    held, or in season, the next draft is this year's."""
+    year = int(league.year)
+    closed = getattr(league, 'season_closed_year', None)
+    if closed is not None and int(closed) == year:
+        return year                                                    # pre-roll offseason
+    if league.phase in ('offseason', 'free_agency'):
+        ld = getattr(league, 'last_draft', None)
+        held = ld is not None and int(ld.get('year', -1)) == year - 1
+        return year if held else year - 1                             # post-roll, up to and through the draft
+    return year
+
+
+def spring_year(league):
+    """The league year this offseason's spring is (or will be) tagged with. The spring runs after the New Year
+    roll, so through a post-roll offseason it is league.year, before and after the draft alike; before the roll,
+    and in season, the next spring is a year away."""
+    year = int(league.year)
+    closed = getattr(league, 'season_closed_year', None)
+    pre_roll = closed is not None and int(closed) == year
+    if pre_roll or league.phase not in ('offseason', 'free_agency'):
+        return year + 1
+    return year
+
+
+def _spring_done(league):
+    return any(x.get('year') == spring_year(league) for x in (getattr(league, 'spring_news', None) or []))
+
 
 def _pool(league):
     return list(getattr(league, 'draft_pool', None) or []) or list(getattr(league, 'next_class', None) or [])
@@ -95,7 +121,7 @@ def board(session, league, abbr):
     needs = _needs(league, league.teams[abbr])
     ub = _user_board(league, rows)
     visits = list(getattr(league, 'user_visits', None) or [])
-    spring_done = any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or []))
+    spring_done = _spring_done(league)
     slot = None
     try:
         import postseason as PS
@@ -232,7 +258,7 @@ def prospect_card(session, league, abbr, pid):
                 words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine, medical=(med.get('note') or ('Flagged out of the combine' if med.get('flag') else 'Clean')),
                 on_clock=bool(getattr(session, 'draft', None) is not None and not session.draft.done and session.draft.on_user() and not taken_now),
                 schemes=VC.scheme_rows(seen_ratings, p.pos, VC._club_arch(league, abbr, p.pos)),
-                reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality=words, spring_done=any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or [])),
+                reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality=words, spring_done=_spring_done(league),
                 read=_prospect_read(league, abbr, p, row, view))
 
 
@@ -250,7 +276,7 @@ def _prospect_read(league, abbr, p, row, view):
     if 'Medical' in row['words']: parts.append('the medical is a real concern and the later he goes the more it explains')
     if 'Character' in row['words']: parts.append('the character flag came out of our own visit')
     if 'Small School' in row['words']: parts.append('the small-school tape makes every number here softer')
-    if not row['visited'] and not any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or [])): parts.append('a visit would tighten this read')
+    if not row['visited'] and not _spring_done(league): parts.append('a visit would tighten this read')
     return sentence('. '.join(parts) + '.')
 
 
@@ -270,7 +296,7 @@ def act_visit(session, league, abbr, pid):
 
 def spring(session, league, abbr):
     """The Spring: stock moves by event, your visits with what the second look found, the flags."""
-    news = [x for x in (getattr(league, 'spring_news', None) or []) if x.get('year') == league.year]
+    news = [x for x in (getattr(league, 'spring_news', None) or []) if x.get('year') == spring_year(league)]
     pool = {p.pid: p for p in _pool(league)}
     moves = []
     for x in news:
@@ -530,7 +556,14 @@ def picks(session, league, abbr):
     results.sort(key=lambda r: (-(r['year'] or 0), r['sel'] or 999))
     from views import draft_year
     for g_ in gone: g_['year'] = draft_year(g_['year'])
-    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if ld else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division)
+    # WHICH DRAFT THE RESULTS TAB OPENS ON. The draft held this offseason, if it has been; otherwise the coming
+    # draft, which has no results yet and says so, with the past drafts on the year chips. Without this the tab
+    # opened on last year's draft all through the new season as if it were this year's.
+    closed = getattr(league, 'season_closed_year', None); pre_roll = closed is not None and int(closed) == int(league.year)
+    held_this_offseason = ld is not None and int(ld.get('year', -1)) == int(league.year) - 1 and league.phase in ('offseason', 'free_agency') and not pre_roll
+    default_year = draft_year(ld['year']) if held_this_offseason else draft_year(coming_season(league))
+    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if (ld and held_this_offseason) else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division,
+                default_year=default_year, default_held=held_this_offseason)
 
 
 def _role_word(t, p):
