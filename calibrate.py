@@ -95,6 +95,7 @@ class Collector:
             self.plays_pd.append(d.plays)
             for l in d.log:
                 if not isinstance(l, dict): continue
+                if l.get('nullified'): continue                       # a play wiped by a flag is not an official play: not in the count, not in the per-play rates
                 t = l.get('type')
                 if t in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
                     self.ypp[t].append(l.get('yards', 0) or 0)

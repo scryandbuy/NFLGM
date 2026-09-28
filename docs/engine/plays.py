@@ -85,6 +85,8 @@ SCREEN_SHARE = 0.285
 # completion went to 69.0% against a real 65.0% and mean air yards fell to
 # 4.22 against 5.72 - the screen game was swallowing the passing game.
 SCREEN_RESCUE = 0.07
+SCREEN_FREE_BASE = 5.0      # free yards behind the convoy before first contact, average blocking
+SCREEN_FREE_BLK = 8.0       # ...more behind good linemen, fewer behind bad
 # A second blocker buys the pocket roughly this much more time. Used only to
 # decide who is CHARGED with a rep, never to change the play.
 DOUBLE_TEAM_HELP = 1.45
@@ -966,7 +968,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # traffic. Flat pursuit produced 3.06 overall against a real 5.19.
     pool = deff['db'] + deff['lb']
     n_near = {'short': 3, 'medium': 4, 'deep': 2}[depth]
-    if air <= 0: n_near = 2                       # screen: blockers ahead
+    if air <= 0: n_near = 4                       # screen: two in front of the convoy, two arriving from the back side (two alone made every broken screen a house call)
     tacklers = [pool[rng.integers(0, len(pool))] for _ in range(n_near)]
     if tgt.get('pos') in ('HB', 'FB') and not screen:
         # A BACK'S CATCH is at the line with the underneath defence in front
@@ -996,7 +998,15 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # the longer the step. Tight ends had been gaining 2.8 after the catch against the receivers' 5.4 and a real 4.5
     # to 5, with the ball arriving at the same depth
     te_free = (TE_FREE_BASE + TE_FREE_SEP * float(np.clip(sep_raw, 0.0, 1.0))) if tgt.get('pos') == 'TE' else 0.0
-    yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space, contact_at=min(te_free, room))
+    # A SCREEN IS CAUGHT BEHIND A CONVOY. The linemen and the receivers out front take the first defenders, and
+    # first contact comes yards downfield, not at the catch: real screens gain 8.6 after the catch on a throw of
+    # -2.8. With no free yards the first tackler's win (most of the time) netted the play at -2.5, and the median
+    # screen lost ground. The convoy is as good as the blocking in front of it.
+    scr_free = 0.0
+    if screen:
+        blk = float(np.mean([rate(b, {'run_block_rating': .6, 'awareness_rating': .4}) for b in (off['ol'][:5] or [tgt])]))
+        scr_free = float(np.clip(rng.normal(SCREEN_FREE_BASE + SCREEN_FREE_BLK * (blk - AVG), 2.4), 0.0, 12.0))
+    yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space, contact_at=min(max(te_free, scr_free), room))
     if screen and tacklers:
         # A SCREEN LIVES OR DIES ON THE READ. The pursuers' awareness decides whether the defense rallied:
         # a smart unit kills it for two, a slow one gives up fifteen (about a third either way)
