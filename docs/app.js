@@ -549,10 +549,25 @@ function secondRow(items, current) {
   for (const [label, hash] of items) s.append(el('a', { href: hash, 'aria-current': hash === current ? 'page' : null }, label));
 }
 function pill(word) { return el('span', { class: 'pill ' + word.toLowerCase() }, word); }
+// SCHEMES ON THE CARD: the seven on his side of the ball, coloured by where he plays best (green), worst (red), the
+// rest yellow, gray where the scheme has no effect at his position; the club's own scheme marked
+function schemeBlock(rows) {
+  const box = el('div', { class: 'schemes' }, el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Schemes'));
+  for (const r of rows) box.append(el('div', { class: 'srow-s ' + r.band + (r.mine ? ' mine' : ''), 'data-tip': r.fit == null ? `${r.name} has no effect on his position. ${r.words}` : `${r.name}: ${r.fit > 0 ? '+' : ''}${r.fit} to his grade. ${r.words}` }, el('span', { class: 'nm' }, r.name), r.mine ? el('small', {}, 'yours') : ''));
+  return box;
+}
 // THE DEVELOPMENT TIERS, one look everywhere: Normal (white), Rare (blue), Epic (purple), Legendary (orange-red)
 const DEV_CLASS = { Normal: 'd-normal', Rare: 'd-rare', Epic: 'd-epic', Legendary: 'd-legend', Slow: 'd-slow' };
 const DEV_NAME = { normal: 'Normal', star: 'Rare', superstar: 'Epic', xfactor: 'Legendary', slow: 'Slow', Star: 'Rare', Superstar: 'Epic', 'X-Factor': 'Legendary', Normal: 'Normal', Rare: 'Rare', Epic: 'Epic', Legendary: 'Legendary', Slow: 'Slow' };
 const DEV_TIP = { Normal: 'Earns XP at the ordinary rate', Rare: 'Earns XP faster than most', Epic: 'Earns XP far faster; a franchise piece', Legendary: 'The rarest tier: the fastest growth in the game', Slow: 'Earns XP slower than most' };
+// SCHEMES ON THE CARD: his fit to every scheme on his side, green a very good fit, yellow average, red a very bad
+// fit, gray where the scheme has no effect on his position; your club's scheme marked
+function schemeBlock(rows) {
+  const box = el('div', {}, el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Schemes'));
+  const list = el('div', { class: 'schemes' });
+  for (const r of rows) list.append(el('div', { class: 'sch ' + r.band + (r.mine ? ' mine' : ''), 'data-tip': r.fit == null ? `${r.name}: no effect on his position. ${r.words}` : `${r.name}: ${r.fit > 0 ? '+' : ''}${r.fit} to his grade. ${r.words}` }, el('span', { class: 'nm' }, r.name), r.mine ? el('small', {}, 'yours') : ''));
+  box.append(list); return box;
+}
 function devTag(word, big) { const name = DEV_NAME[word] || 'Normal'; return el('span', { class: 'dev ' + (DEV_CLASS[name] || 'd-normal') + (big ? ' big' : ''), 'data-tip': DEV_TIP[name] || null }, name); }
 function condBar(c) { return el('span', { class: 'cond' }, el('i', { class: c < 60 ? 'low' : c < 80 ? 'mid' : '', style: `width:${c}%` })); }
 function ovrCell(o) { return el('span', { class: 'ovr ' + (o >= 88 ? 't1' : o >= 76 ? 't2' : 't3') }, o); }
@@ -715,6 +730,8 @@ function renderCard(v) {
       rowsOf(c.rows);
       if (c.extra && c.extra.rows && c.extra.rows.length) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
       if (c.title === 'Mental' && v.personality) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Traits')); const tr = el('div', { class: 'traits' }); v.personality.split(',').map(x => x.trim()).filter(Boolean).forEach(w => { const m = TRAIT_META[w] || { k: 'even', tip: 'Nothing about him stands out.' }; tr.append(el('span', { class: 'trait ' + m.k, 'data-tip': m.tip }, w.replace(/\b\w/g, ch => ch.toUpperCase()))); }); box.append(tr); }
+      if (c.title === 'Mental' && v.schemes) box.append(schemeBlock(v.schemes));
+      if (c.title === 'Mental' && v.schemes) box.append(schemeBlock(v.schemes));
       attrs.append(box);
     }
     mid.append(attrs);
@@ -879,6 +896,7 @@ function renderProspectCard(v) {
     const box = el('div', {}, el('div', { class: 'h5', style: 'margin-bottom:4px' }, c.title));
     const rowsOf = rows => { for (const r of rows) box.append(el('div', { class: 'arow ' + r.tier }, el('span', {}, r.label), el('em', {}), el('b', {}, r.v))); };
     rowsOf(c.rows); if (c.extra && c.extra.rows && c.extra.rows.length) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
+    if (c.title === 'Mental' && v.schemes) box.append(schemeBlock(v.schemes));
     attrs.append(box);
   }
   mid.append(attrs);

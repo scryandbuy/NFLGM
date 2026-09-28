@@ -201,6 +201,9 @@ def prospect_card(session, league, abbr, pid):
     if row is None: return dict(error='your scouts have no read on him')
     view = league.scouting[abbr][p.pid]
     e_phys = float(view.get('e_phys', 0.0)); e_skill = float(view.get('e_skill', 0.0))
+    # the whole rating set as your scouts see it, for the scheme rows
+    import xp as XP_
+    seen_ratings = {k: float(max(20.0, min(99.0, float(v_) + (e_phys if (k in XP_.PHYSICAL or k in XP_.TOOLS) else e_skill)))) for k, v_ in p.ratings.items()}
     fam = VC.FAM.get(p.pos, 'DB')
     def col(keys, err):
         rows = []
@@ -228,6 +231,7 @@ def prospect_card(session, league, abbr, pid):
                 small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
                 words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine, medical=(med.get('note') or ('Flagged out of the combine' if med.get('flag') else 'Clean')),
                 on_clock=bool(getattr(session, 'draft', None) is not None and not session.draft.done and session.draft.on_user() and not taken_now),
+                schemes=VC.scheme_rows(seen_ratings, p.pos, VC._club_arch(league, abbr, p.pos)),
                 reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality=words, spring_done=any(x.get('year') == league.year for x in (getattr(league, 'spring_news', None) or [])),
                 read=_prospect_read(league, abbr, p, row, view))
 

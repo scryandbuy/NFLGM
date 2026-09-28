@@ -253,6 +253,7 @@ def card(session, league, pid):
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), morale=morale_word(p), morale_v=round(m.value) if m is not None else None,
                 contract=dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1), by_year=years),
                 interest=interest, cols=cols, grades=grades, personality=words, status=_status(league, p, t) if t else '',
+                schemes=scheme_rows(p.ratings, p.pos, _club_arch(league, getattr(session, 'user_team', None), p.pos)),
                 cond=_cond(session, p), out=p.out_until, season=cur, games=int(S.get('games', 0) or 0), seasons=seasons,
                 market=market, interest_line=interest_line, dev_line=dev_line, morale_line=_morale_line(p),
                 history=_player_history(league, p),
@@ -662,3 +663,59 @@ def regression(session, league, abbr, year=None):
     rows.sort(key=lambda r: (-r['lost'], -r['ovr']))
     n_hit = sum(1 for r in rows if r['lost'] >= 1)
     return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=years or [yr], rows=rows, hit=n_hit, total_lost=sum(r['lost'] for r in rows), empty=(not rec))
+
+
+# ============================================================ SCHEMES ON THE CARD
+OFF_POS = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT', 'K', 'P', 'LS'}     # specialists show the offense's seven, all gray
+
+
+def archetype_keys(entry):
+    """An archetype's engine scheme tags, the same way a club's identity becomes them (gm_engine.scheme_of), from
+    the catalog entry's dials alone."""
+    import gm_engine as GE
+    class _G: pass
+    g = _G()
+    o = entry.get('offence') or {}; d = entry.get('defence') or {}
+    g.off_blocking = o.get('blocking', 'mixed'); g.off_personnel = o.get('personnel', '11'); g.deep = o.get('deep', 0.5)
+    g.play_action = o.get('play_action', 0.5); g.motion = o.get('motion', 0.5); g.pass_lean = o.get('pass_lean', 0.5); g.tempo = o.get('tempo', 0.5)
+    g.def_front = d.get('front', 'multiple'); g.coverage = d.get('coverage', 0.4)
+    return GE.scheme_of(g) or []
+
+
+def scheme_rows(ratings, pos, team_key=None):
+    """WHERE HE PLAYS BEST. His fit to every archetype on his side, in overall points, banded against his own seven:
+    the schemes that suit him most are green, the ones that suit him least red, the rest yellow, and gray where the
+    scheme has no effect on his position. The question the section answers is which schemes this player fits, not
+    how he ranks against other players in a scheme, so the bands are his and every player has a best fit."""
+    import identity_catalog as IC, targets as TG
+    side = 'offence' if pos in OFF_POS else 'defence'
+    rows = []
+    raw = TG.position_score(ratings, pos)
+    for key, entry in IC.ARCHETYPES.items():
+        if entry.get('side') != side: continue
+        tags = [t for t in archetype_keys(entry) if pos in TG.SCHEME_DOMAIN.get(t, ())]
+        if not tags:
+            rows.append(dict(key=key, name=entry['name'], fit=None, band='none', mine=(key == team_key), words=entry.get('words', ''))); continue
+        fit = float(TG.position_score(ratings, pos, tags) - raw)
+        rows.append(dict(key=key, name=entry['name'], fit=round(fit, 1), band='avg', mine=(key == team_key), words=entry.get('words', '')))
+    live = [r for r in rows if r['fit'] is not None]
+    if live:
+        fits = sorted(r['fit'] for r in live); n = len(fits)
+        lo, hi = fits[0], fits[-1]
+        if hi - lo < 0.2:
+            for r in live: r['band'] = 'avg'                     # the schemes barely differ for him
+        else:
+            # near his best is green, near his worst red, the rest yellow; 'near' is a fifth of his own spread
+            tol = max(0.3, 0.2 * (hi - lo))
+            for r in live:
+                r['band'] = 'good' if r['fit'] >= hi - tol else 'bad' if r['fit'] <= lo + tol else 'avg'
+    return rows
+
+
+def _club_arch(league, abbr, pos):
+    """The user's club's chosen archetype on this player's side, if it has one."""
+    try:
+        import views_frontoffice as VF
+        ident = VF.club_identity(league, league.teams[abbr]) or {}
+        return ident.get('offence' if pos in OFF_POS else 'defence')
+    except Exception: return None
