@@ -65,7 +65,7 @@ function renderRail(r) {
   $('#rail').hidden = false;
   const c = $('#crest'); c.textContent = r.club.abbr; c.style.background = r.club.color;
   document.documentElement.style.setProperty('--club', r.club.color); document.documentElement.style.setProperty('--club-2', r.club.accent);
-  $('#clubname').textContent = r.club.name.toUpperCase(); $('#coach').textContent = `${r.coach} · Head Coach and GM`;
+  $('#clubname').textContent = r.club.name.toUpperCase(); $('#coach').textContent = r.coach; $('#coach').setAttribute('data-title', 'Head Coach and GM');
   $('#st-record').textContent = r.record; $('#st-place').textContent = r.place; $('#st-cap').textContent = r.cap; $('#st-prestige').textContent = r.prestige ?? '—';
   $('#st-week').textContent = r.clock.line; $('#st-year').textContent = r.clock.sub + (window.ENGINE_BUILD ? ` · build ${window.ENGINE_BUILD}` : '');
   const badge = $('#badge'); badge.hidden = !r.inbox_unread; badge.textContent = r.inbox_unread;
