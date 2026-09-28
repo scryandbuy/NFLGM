@@ -345,7 +345,9 @@ def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None
         b = float(bonus); yrs = int(years); base_total = max(0.0, float(apy) * yrs - b)
         sh = float(d.get('front_load', 0.5)); weights = [1.0 + (sh - 0.5) * 2 * (1 - 2 * i / max(1, yrs - 1)) for i in range(yrs)] if yrs > 1 else [1.0]
         wsum = sum(weights); hits = [round(base_total * w / wsum + b / yrs, 2) for w in weights]
-    return dict(ok=True, hits=hits, years=[league.year + i for i in range(int(years))], total=round(float(apy) * int(years), 1), year1=(hits[0] if hits else None), dead_if_cut=d.get('dead_if_cut', []))
+    from views import cap_focus
+    start_year = cap_focus(league, t)['year']                          # the season the deal starts: next year from the Super Bowl until the roll
+    return dict(ok=True, hits=hits, years=[start_year + i for i in range(int(years))], total=round(float(apy) * int(years), 1), year1=(hits[0] if hits else None), dead_if_cut=d.get('dead_if_cut', []))
 
 
 def act_open_talks(league, abbr, pid, kind):

@@ -1046,7 +1046,7 @@ function offerForm(t, kind, onDone, preset) {
   const bonus = el('input', { type: 'number', step: '0.5', min: '0', value: start.bonus != null ? String(start.bonus) : String(Math.round((t.ask || 1) * (t.years || 3) * 0.3 * 2) / 2) });
   const shapeChips = el('div', { class: 'chips' }); let shape = 0.5;
   for (const [val, label] of [[0.85, 'Pay It Now'], [0.5, 'League Shape'], [0.15, 'Back-Load']]) shapeChips.append(el('button', { class: 'chip', 'aria-pressed': String(val === shape), onclick: e => { shape = val; shapeChips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); preview(); } }, label));
-  const y1 = el('b', {}, '—'), total = el('b', {}, '—'); const hitsRow = el('div', { class: 'hits' });
+  const y1 = el('b', {}, '—'), total = el('b', {}, '—'); const hitsRow = el('div', { class: 'hits' }); const yearHits = el('div', { class: 'offer year-hits' });
   const preview = () => {
     const r = pyJSON(`SESSION.personnel_act('offer_preview', pid=${JSON.stringify(t.pid)}, apy=${+apy.value || 0}, years=${+yrs.value || 1}, bonus=${+bonus.value || 0}, front_load=${shape})`);
     if (!r.ok) return;
@@ -1056,7 +1056,8 @@ function offerForm(t, kind, onDone, preset) {
     if (sy) sy.textContent = String(+yrs.value || 1);
     if (sa) sa.textContent = `$${apyOf().toFixed(1)}m`;
     { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m total`; }
-    hitsRow.innerHTML = ''; r.hits.forEach((h, i) => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, h / Math.max(...r.hits, 0.1) * 100)}%` })), el('span', {}, r.years[i]), el('b', {}, `$${h.toFixed(1)}m`))));
+    yearHits.innerHTML = ''; r.hits.forEach((h, i) => yearHits.append(el('label', {}, `Year ${i + 1} hit · ${r.years[i]}`, el('b', {}, `$${h.toFixed(1)}m`))));
+    hitsRow.innerHTML = ''; r.hits.forEach((h, i) => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, h / Math.max(...r.hits, 0.1) * 100)}%` })), el('span', {}, `Year ${i + 1} · ${r.years[i]}`), el('b', {}, `$${h.toFixed(1)}m`))));
   };
   salary.onchange = yrs.onchange = bonus.onchange = preview; salary.oninput = yrs.oninput = bonus.oninput = preview;
   const promises = el('div', { class: 'promise' }, el('span', {}, 'Promise:')); const chosen = [];
@@ -1064,12 +1065,10 @@ function offerForm(t, kind, onDone, preset) {
   const breakdown = el('div', { class: 'count', style: 'padding:0 0 6px' });
   f.append(
     el('div', { class: 'offer-summary' },
-      el('div', {}, el('span', {}, 'STRUCTURE'), el('b', {}, 'Custom Contract')),
-      el('div', {}, el('span', {}, 'YEARS'), el('b', { class: 'summary-years' }, String(start.years || t.years || 3))),
-      el('div', {}, el('span', {}, 'AAV'), el('b', { class: 'summary-apy' }, `$${apy.value}m`)),
-      el('div', {}, el('span', {}, 'STATUS'), el('b', { class: 'summary-status' }, preset ? 'Counter' : 'Draft'))
+      el('div', {}, el('span', {}, 'Years'), el('b', { class: 'summary-years' }, String(start.years || t.years || 3))),
+      el('div', {}, el('span', {}, 'Average per year'), el('b', { class: 'summary-apy' }, `$${apy.value}m`))
     ),
-    el('div', { class: 'offer', style: 'grid-template-columns:repeat(5,1fr)' }, el('label', {}, 'Years', yrs), el('label', {}, 'Salary ($m / yr)', salary), el('label', {}, 'Signing Bonus ($m)', bonus), el('label', {}, 'Year 1 Hit', y1), el('label', {}, 'Total', total)), breakdown,
+    el('div', { class: 'offer', style: 'grid-template-columns:repeat(4,1fr)' }, el('label', {}, 'Years', yrs), el('label', {}, 'Salary ($m / yr)', salary), el('label', {}, 'Signing Bonus ($m)', bonus), el('label', {}, 'Total', total)), yearHits, breakdown,
     el('div', { class: 'shape' }, el('span', {}, 'Shape'), shapeChips), hitsRow, promises);
   const acts = el('div', { class: 'acts' });
   acts.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${+apy.value}, years=${+yrs.value}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`); notify(r); onDone(); } }, kind === 'fa_inseason' ? 'Offer (decides at Advance)' : preset ? 'Send Counter' : 'Send Offer'));
@@ -1125,7 +1124,7 @@ function openTalks(t, reload) {
     done ? 'TALKS CLOSED' : 'OPEN NEGOTIATION';
 
   const identity = el('div', { class: 'neg-identity' },
-    el('div', { class: 'neg-avatar' }, (t.name || '?').split(/\s+/).map(x => x[0]).slice(0,2).join('').toUpperCase()),
+    el('div', { class: 'neg-avatar' }, t.pos || ''),
     el('div', { class: 'neg-title' },
       el('div', { class: 'neg-kicker' }, `${t.kind === 'extension' ? 'CONTRACT EXTENSION' : 'FREE AGENCY'} · NEGOTIATION DESK`),
       el('h2', {}, `${t.name} · ${t.pos}`),

@@ -1456,416 +1456,52 @@ h2{letter-spacing:-.01em}
 .popbox .head{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--rule)}
 
 
-/* ===== BLUE NEGOTIATION POPUP (temporary; revert with: git checkout popup-before-blue -- docs/app.js docs/style.css) ===== */
-/* ============================================================
-   NEGOTIATION POPUP — premium visual layer
-   Purely visual: no game logic, data, or existing button behavior changed.
-   No league/team logos or copyrighted marks are used.
-   ============================================================ */
+/* ===== NEGOTIATION POPUP, the club's colors (revert: git checkout popup-before-blue -- docs/app.js docs/style.css) ===== */
+.neg-overlay{background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:18px}
+.negotiation-sheet{position:relative;overflow-y:auto;overflow-x:hidden;border:1px solid var(--rule-2);border-top:3px solid var(--club);background:var(--sheet);box-shadow:0 24px 70px rgba(0,0,0,.55)}
+.neg-topbar{padding:14px 18px 12px;border-bottom:1px solid var(--rule);background:var(--sheet-2)}
+.neg-identity{display:flex;align-items:center;gap:14px}
+.neg-avatar{width:48px;height:48px;display:grid;place-items:center;background:var(--club);color:var(--club-accent,#fff);font-family:var(--display);font-weight:800;font-size:17px;flex:0 0 auto}
+.neg-title{flex:1;min-width:0}
+.neg-kicker{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.neg-title h2{margin:2px 0 0;font-family:var(--display);font-weight:800;font-size:24px;line-height:1.05;color:var(--ink);border:0;padding:0}
+.neg-title small{display:block;margin-top:3px;font-family:var(--text);font-size:13px;color:var(--ink-3)}
+.neg-state{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--club-2);border:1px solid var(--rule-2);padding:5px 10px;white-space:nowrap}
+.neg-close{margin-left:0}
+.negotiation-thread{padding:14px 18px 18px;gap:10px}
+.negotiation-thread .msg{box-sizing:border-box;max-width:100%}
+.cap-strip{border:1px solid var(--rule);background:var(--sheet-2);padding:8px 11px;color:var(--ink-2)}
+.cap-strip b{color:var(--ink)}
+.offer-panel{align-self:stretch;max-width:100%;padding:0;border-color:var(--rule-2);background:var(--board)}
+.offer-panel-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--rule)}
+.offer-panel-head .from{margin:0;font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+.offer-live{font-family:var(--display);font-weight:700;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--club-2);border:1px solid var(--rule-2);padding:3px 8px}
+.offer-panel > .offer,.offer-panel > .offer-summary,.offer-panel > .count,.offer-panel > .shape,.offer-panel > .hits,.offer-panel > .promise,.offer-panel > .acts{margin-left:14px;margin-right:14px}
+.offer-summary{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px;border:1px solid var(--rule);background:var(--sheet-2)}
+.offer-summary > div{padding:8px 12px}
+.offer-summary > div + div{border-left:1px solid var(--rule)}
+.offer-summary span{display:block;font-family:var(--display);font-weight:700;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.offer-summary b{display:block;font-family:var(--display);font-weight:800;font-size:18px;color:var(--ink);margin-top:2px}
+.offer-panel .offer{gap:9px;margin-top:10px}
+.offer-panel .offer label{font-family:var(--display);font-weight:700;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.offer-panel .offer input{background:var(--sheet);border:1px solid var(--rule-2);color:var(--ink)}
+.offer-panel .offer input:focus{outline:2px solid var(--club-2);outline-offset:1px}
+.offer-panel .offer label b{color:var(--ink)}
+.offer-panel .count{padding:10px 0 7px;color:var(--ink-3)}
+.offer-panel .shape{display:flex;align-items:center;gap:10px}
+.offer-panel .shape > span{font-family:var(--display);font-weight:700;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.offer-panel .chip[aria-pressed="true"]{background:var(--club);color:var(--club-accent,#fff);border-color:var(--club)}
+.offer-panel .hits{margin:12px 0 4px}
+.offer-panel .hit .hbar{background:var(--sheet-2);border:1px solid var(--rule)}
+.offer-panel .hit i{background:var(--club-2)}
+.offer-panel .hit span{font-size:12px;color:var(--ink-3);text-align:center;white-space:nowrap}
+.offer-panel .promise{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 0;border-top:1px solid var(--rule)}
+.offer-panel .promise > span{font-family:var(--display);font-weight:700;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.offer-panel .promise .btn[aria-pressed="true"]{background:var(--club);color:var(--club-accent,#fff);border-color:var(--club)}
+.offer-panel .acts{margin:12px 0 14px;display:flex;gap:8px}
+.offer-panel .acts .btn{display:inline-flex;align-items:center;justify-content:center;text-align:center;padding:8px 18px;font-family:var(--display);font-weight:700}
+.offer-panel .acts .btn.go{background:var(--club-2);color:#111}
+@media (max-width:760px){.negotiation-sheet{width:100%;max-height:96vh}.neg-close{margin-left:auto}.offer-panel .offer{grid-template-columns:1fr 1fr}}
 
-.neg-overlay{
-  background:
-    radial-gradient(circle at 50% 0%, rgba(56,189,248,.10), transparent 34%),
-    radial-gradient(circle at 10% 90%, rgba(99,102,241,.08), transparent 30%),
-    rgba(2,6,12,.78) !important;
-  backdrop-filter: blur(7px);
-  -webkit-backdrop-filter: blur(7px);
-  padding:18px;
-}
-
-.negotiation-sheet{
-  position:relative;
-  overflow:auto !important;   /* a long thread still scrolls */
-  border:1px solid rgba(120,170,220,.28) !important;
-  border-radius:12px !important;
-  background:
-    linear-gradient(145deg, rgba(20,28,40,.99), rgba(10,15,23,.99)) !important;
-  box-shadow:
-    0 28px 90px rgba(0,0,0,.62),
-    0 0 0 1px rgba(255,255,255,.025) inset,
-    0 0 55px rgba(42,146,255,.08);
-}
-
-.negotiation-sheet:before{
-  content:"";
-  position:absolute;
-  left:0;right:0;top:0;height:3px;
-  background:linear-gradient(90deg, var(--club-2, #2aa7ff), #7dd3fc, transparent 78%);
-  opacity:.95;
-  z-index:2;
-}
-
-.negotiation-sheet:after{
-  content:"";
-  position:absolute;
-  width:420px;height:420px;
-  right:-210px;top:-260px;
-  border-radius:50%;
-  background:radial-gradient(circle, rgba(42,167,255,.11), transparent 68%);
-  pointer-events:none;
-}
-
-.neg-topbar{
-  position:relative;
-  z-index:3;
-  padding:18px 20px 16px;
-  border-bottom:1px solid rgba(120,170,220,.16);
-  background:
-    linear-gradient(180deg, rgba(29,40,56,.82), rgba(18,25,36,.55));
-}
-
-.neg-identity{
-  display:flex;
-  align-items:center;
-  gap:13px;
-  min-width:0;
-}
-
-.neg-avatar{
-  flex:0 0 52px;
-  width:52px;height:52px;
-  display:grid;place-items:center;
-  border-radius:10px;
-  font-family:var(--display,system-ui);
-  font-weight:900;
-  font-size:18px;
-  letter-spacing:.04em;
-  color:#eef7ff;
-  background:
-    linear-gradient(145deg, rgba(34,142,255,.95), rgba(25,67,116,.8));
-  border:1px solid rgba(125,211,252,.45);
-  box-shadow:0 0 24px rgba(42,167,255,.18), inset 0 1px 0 rgba(255,255,255,.15);
-}
-
-.neg-title{min-width:0;flex:1}
-.neg-kicker{
-  font-size:10.5px;
-  font-weight:800;
-  letter-spacing:.16em;
-  color:#6fbaf1;
-  text-transform:uppercase;
-  margin-bottom:2px;
-}
-.neg-title h2{
-  margin:0;
-  font-size:25px;
-  line-height:1.08;
-  letter-spacing:.01em;
-}
-.neg-title small{
-  display:block;
-  margin-top:4px;
-  color:var(--ink-3,#7f93a9);
-  font-size:12px;
-}
-
-.neg-state{
-  flex:0 0 auto;
-  padding:6px 9px;
-  border:1px solid rgba(91,178,255,.28);
-  border-radius:999px;
-  color:#8fd1ff;
-  background:rgba(42,132,219,.09);
-  font-size:10px;
-  font-weight:800;
-  letter-spacing:.1em;
-  white-space:nowrap;
-}
-
-.neg-close{margin-left:0 !important}
-
-.negotiation-thread{
-  padding:14px 18px 18px !important;
-  gap:10px !important;
-}
-
-.negotiation-thread .msg{
-  border-radius:8px;
-  border-color:rgba(120,160,200,.17);
-  background:
-    linear-gradient(135deg, rgba(31,42,57,.82), rgba(19,27,38,.76));
-  box-shadow:0 5px 20px rgba(0,0,0,.12);
-}
-
-.negotiation-thread .msg.you{
-  border-color:rgba(58,154,239,.27);
-  background:
-    linear-gradient(135deg, rgba(17,48,78,.82), rgba(13,28,46,.82));
-}
-
-.negotiation-thread .msg.match{
-  border-color:rgba(76,201,240,.42);
-  background:
-    linear-gradient(135deg, rgba(27,88,112,.25), rgba(13,42,59,.36));
-  box-shadow:0 0 26px rgba(76,201,240,.06);
-}
-
-.negotiation-thread .msg.note{
-  box-shadow:none;
-  background:transparent;
-}
-
-.negotiation-thread .msg .from{
-  text-transform:uppercase;
-  letter-spacing:.08em;
-  font-size:10px;
-  font-weight:800;
-  color:#6f91b2;
-}
-
-.negotiation-thread .msg .txt{
-  color:#d5e2ef;
-}
-
-.cap-strip{
-  border:1px solid rgba(91,178,255,.16) !important;
-  border-radius:7px !important;
-  padding:8px 11px !important;
-  background:rgba(28,61,91,.16) !important;
-}
-
-.rival-panel{
-  position:relative;
-  overflow:hidden;
-}
-.rival-panel:before{
-  content:"COMPETING OFFER";
-  display:block;
-  color:#70d9ff;
-  font-size:9px;
-  font-weight:900;
-  letter-spacing:.14em;
-  margin-bottom:5px;
-}
-
-.offer-panel{
-  align-self:stretch !important;
-  max-width:100% !important;
-  padding:0 !important;
-  overflow:hidden;
-  border-color:rgba(71,166,255,.36) !important;
-  background:
-    linear-gradient(150deg, rgba(17,42,68,.93), rgba(10,20,33,.96)) !important;
-  box-shadow:
-    0 12px 35px rgba(0,0,0,.22),
-    0 0 35px rgba(42,167,255,.05);
-}
-
-.offer-panel-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding:12px 14px;
-  border-bottom:1px solid rgba(110,170,220,.17);
-  background:rgba(5,13,23,.24);
-}
-
-.offer-panel-head .from{
-  margin:0 !important;
-  color:#f2f8ff !important;
-  font-size:12px !important;
-  letter-spacing:.11em;
-}
-
-.offer-live{
-  font-size:9px;
-  font-weight:900;
-  letter-spacing:.1em;
-  color:#65c9ff;
-  padding:4px 7px;
-  border:1px solid rgba(101,201,255,.23);
-  border-radius:999px;
-  background:rgba(101,201,255,.06);
-}
-
-.offer-panel > .offer,
-.offer-panel > .offer-summary,
-.offer-panel > .count,
-.offer-panel > .shape,
-.offer-panel > .hits,
-.offer-panel > .promise,
-.offer-panel > .acts{
-  margin-left:14px;
-  margin-right:14px;
-}
-
-.offer-summary{
-  display:grid;
-  grid-template-columns:1.5fr 1fr 1fr 1fr;
-  gap:1px;
-  margin-top:13px;
-  border:1px solid rgba(116,165,210,.15);
-  border-radius:7px;
-  overflow:hidden;
-  background:rgba(0,0,0,.18);
-}
-
-.offer-summary > div{
-  padding:9px 10px;
-  background:rgba(255,255,255,.018);
-}
-.offer-summary span{
-  display:block;
-  font-size:8.5px;
-  font-weight:800;
-  letter-spacing:.12em;
-  color:#6f8ba8;
-  margin-bottom:3px;
-}
-.offer-summary b{
-  display:block;
-  font-family:var(--mono,monospace);
-  font-size:14px;
-  color:#eaf5ff;
-}
-
-.offer-panel .offer{
-  gap:9px !important;
-  margin-top:12px;
-}
-.offer-panel .offer label{
-  color:#7795b3;
-  text-transform:uppercase;
-  letter-spacing:.055em;
-  font-size:9.5px;
-  font-weight:800;
-}
-.offer-panel .offer input{
-  margin-top:2px;
-  border-radius:6px;
-  border-color:rgba(112,165,215,.24);
-  background:rgba(4,11,19,.68);
-  min-height:38px;
-  transition:border-color .15s, box-shadow .15s, background .15s;
-}
-.offer-panel .offer input:focus{
-  outline:none;
-  border-color:rgba(71,166,255,.72);
-  background:rgba(5,18,31,.92);
-  box-shadow:0 0 0 2px rgba(71,166,255,.10), 0 0 18px rgba(71,166,255,.07);
-}
-
-.offer-panel .count{
-  padding:10px 0 7px !important;
-  color:#9db4cb;
-  font-size:11px;
-}
-
-.offer-panel .shape{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  flex-wrap:wrap;
-  padding:7px 0 2px;
-}
-.offer-panel .shape > span{
-  color:#718da8;
-  font-size:9px;
-  font-weight:900;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-}
-.offer-panel .chips{margin-left:0;gap:6px}
-.offer-panel .chip{
-  border-radius:999px;
-  padding:5px 10px;
-  border-color:rgba(110,160,210,.23);
-  background:rgba(255,255,255,.02);
-  font-size:11px;
-  transition:all .15s;
-}
-.offer-panel .chip:hover{
-  border-color:rgba(91,178,255,.45);
-  transform:translateY(-1px);
-}
-.offer-panel .chip[aria-pressed="true"]{
-  color:#eef8ff;
-  border-color:rgba(74,173,255,.72);
-  background:linear-gradient(180deg, rgba(45,143,231,.25), rgba(30,89,145,.2));
-  box-shadow:0 0 16px rgba(42,167,255,.08);
-}
-
-.offer-panel .hits{
-  margin-top:11px;
-  padding:9px 0 2px;
-  border-top:1px solid rgba(120,170,220,.11);
-}
-.offer-panel .hit .hbar{
-  border-radius:3px;
-  overflow:hidden;
-  border-color:rgba(120,170,220,.12);
-  background:rgba(255,255,255,.025);
-}
-.offer-panel .hit i{
-  background:linear-gradient(180deg, #55b8ff, #1876c7) !important;
-  box-shadow:0 -2px 12px rgba(55,170,255,.14);
-}
-
-.offer-panel .promise{
-  display:flex;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:6px;
-  padding:10px 0 4px;
-  border-top:1px solid rgba(120,170,220,.11);
-}
-.offer-panel .promise > span{
-  width:100%;
-  color:#718da8;
-  font-size:9px;
-  font-weight:900;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  margin-bottom:1px;
-}
-.offer-panel .promise .btn{
-  border-radius:999px;
-  font-size:10px !important;
-  color:#9bb6cf;
-  border-color:rgba(110,160,210,.2);
-  background:rgba(255,255,255,.02);
-}
-.offer-panel .promise .btn[aria-pressed="true"]{
-  color:#f2f9ff;
-  border-color:rgba(76,201,240,.5);
-  background:rgba(76,201,240,.10);
-}
-
-.offer-panel .acts{
-  margin-top:12px !important;
-  padding:12px 0 14px;
-  border-top:1px solid rgba(120,170,220,.12);
-  align-items:center;
-}
-.offer-panel .acts .btn{
-  min-height:38px;
-  border-radius:6px;
-  font-weight:800;
-}
-.offer-panel .acts .btn.go{
-  min-width:150px;
-  color:#fff;
-  border-color:rgba(80,183,255,.8);
-  background:linear-gradient(180deg, #168df2, #0867bd);
-  box-shadow:0 6px 22px rgba(10,122,220,.22), inset 0 1px 0 rgba(255,255,255,.15);
-}
-.offer-panel .acts .btn.go:hover{
-  filter:brightness(1.08);
-  transform:translateY(-1px);
-}
-
-@media (max-width:760px){
-  .neg-overlay{padding:8px}
-  .negotiation-sheet{width:100% !important;max-height:96vh !important}
-  .neg-topbar{padding:14px}
-  .neg-identity{flex-wrap:wrap}
-  .neg-state{order:4}
-  .neg-close{margin-left:auto !important}
-  .offer-summary{grid-template-columns:1fr 1fr}
-  .offer-panel .offer{grid-template-columns:1fr 1fr !important}
-}
-
-@media (prefers-reduced-motion:reduce){
-  .offer-panel .offer input,.offer-panel .chip,.offer-panel .acts .btn.go{transition:none}
-}
+.offer-panel .year-hits{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-top:4px}
+.offer-panel .year-hits label b{font-family:var(--display);font-weight:800;font-size:17px}
