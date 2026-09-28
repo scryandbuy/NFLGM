@@ -80,6 +80,10 @@ PD_LOOSE = 0.13
 # completions that travel backwards.
 SCREEN_SHARE = 0.285        # (kept for reference) the old behind-the-line share of short throws, all of it called a screen
 SWING_SHARE = 0.26          # swings, flares and checkdowns to the back: the behind-the-line family without the convoy
+DEEP_FREE_BASE = 3.0        # free yards after a deep catch before first contact, at no separation
+DEEP_FREE_SEP = 9.0         # ...plus this much times his separation
+HOUSE_BASE = 0.55           # house-call share once every pursuer is beaten, at even speed
+HOUSE_CHASE = 0.40          # ...more for the faster carrier
 SWING_FREE = 5.0            # free yards in the flat before first contact on a swing
 # Behind-the-line throws complete 78.4% against 71.0% for a short throw, and
 # the difference is that nobody is covering the flat the way they cover a
@@ -373,7 +377,10 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
         # Most runs die early; the whole tail lives here. Mean and tail have to
         # be tuned SEPARATELY - raising the break rate lifts both together and
         # cannot hit 4.52 mean with a 2.46% explosive rate at the same time.
-        if rng.random() < 0.35 + 0.45 * chase_all:
+        # once every pursuer is beaten the ball carrier finishes far more often than not: long touchdowns were 12%
+        # of all touchdowns against a real 30 while explosive plays ran above real, so big plays were being run
+        # down from behind and drives that should end from the 35 were ending at the 12
+        if rng.random() < HOUSE_BASE + HOUSE_CHASE * chase_all:
             gained = yards_to_endzone                          # house call
         else:
             gained += max(1.0, rng.gamma(2.2, 5.0 + 9.0 * chase_all))
@@ -990,6 +997,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     pool = deff['db'] + deff['lb']
     n_near = {'short': 3, 'medium': 4, 'deep': 2}[depth]
     if screen: n_near = 4                         # screen: two in front of the convoy, two arriving from the back side (two alone made every broken screen a house call)
+    if depth == 'deep' and float(sep_raw) >= 0.5: n_near = 1     # a deep catch with separation: the man who had him is behind him, only the safety is left
     tacklers = [pool[rng.integers(0, len(pool))] for _ in range(n_near)]
     if tgt.get('pos') in ('HB', 'FB') and not screen:
         # A BACK'S CATCH is at the line with the underneath defence in front
@@ -1029,6 +1037,12 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         scr_free = float(np.clip(rng.normal(SCREEN_FREE_BASE + SCREEN_FREE_BLK * (blk - AVG), 2.4), 0.0, 12.0))
     elif swing:
         scr_free = float(np.clip(rng.normal(SWING_FREE, 2.0), 0.0, 8.0))     # the flat has room before the first defender arrives, less than a convoy gives
+    elif depth == 'deep':
+        # A DEEP CATCH IS PAST THE MAN WHO HAD HIM. The defender he beat is behind him and the safety is closing from
+        # an angle, so first contact comes yards downfield and the better his separation the later it comes. With
+        # no free yards, long touchdowns were 12% of all touchdowns against a real 30 while explosive plays ran
+        # above real: the big plays were being run down from behind.
+        scr_free = float(np.clip(rng.normal(DEEP_FREE_BASE + DEEP_FREE_SEP * float(np.clip(sep_raw, 0.0, 1.0)), 2.5), 0.0, 18.0))
     yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space, contact_at=min(max(te_free, scr_free), room))
     if screen and tacklers:
         # A SCREEN LIVES OR DIES ON THE READ. The pursuers' awareness decides whether the defense rallied:

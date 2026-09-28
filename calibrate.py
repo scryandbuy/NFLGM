@@ -230,13 +230,27 @@ def run(seasons=1, seed=2026, verbose=True, coaches='random'):
     C = Collector()
     for s in range(seasons):
         ST = {t: G.TeamState(L[t], coach=coaches[t], scheme=sch.get(t)) for t in teams}
-        for wk in range(17):
-            o = list(teams); rng.shuffle(o)
-            for i in range(0, 32, 2):
+        # THE SEASON HAS A BYE. The franchise plays 17 games over 18 weeks and resets condition on the bye; the
+        # register had played 17 straight and its scoring sagged a point and a half over the back half as the
+        # clubs wore down with no rest the real season gives them. Byes fall in weeks 5 to 14: four clubs off in six
+        # of those weeks and two in the other four, every club off once.
+        order = list(teams); rng.shuffle(order)
+        bye_weeks = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]                  # zero-based weeks 5 to 14
+        sizes = [4, 4, 4, 4, 4, 4, 2, 2, 2, 2]; rng.shuffle(sizes)
+        byes = {}; k = 0
+        for wk, n_off in zip(bye_weeks, sizes):
+            byes[wk] = set(order[k:k + n_off]); k += n_off
+        for wk in range(18):
+            off = byes.get(wk, set())
+            o = [t for t in teams if t not in off]; rng.shuffle(o)
+            for i in range(0, len(o), 2):
                 h, a = o[i], o[i + 1]
                 r = G.play_game(L[h], L[a], rng, P.resolve_play, co, cd, P.rate,
                                 home_state=ST[h], away_state=ST[a], week=wk + 1)
                 C.add(r)
+            for t in off:
+                try: ST[t].end_game(rng, bye=True)
+                except Exception: pass
     got = C.report(f'{seasons} season(s) on the REAL 2026 rosters, {"catalog" if use_catalog else "random"} coaches') if verbose else C.got()
     return got
 
