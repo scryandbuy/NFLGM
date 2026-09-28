@@ -753,6 +753,10 @@ class Session:
         honors pay, the morale they lift, the prestige, the almanac, the notes and the sub-tab. Nothing about awards
         happens before this step (the honors had come out after the Wild Card and then again here)."""
         L, rng = self.L, self.rng
+        # THE YEAR TICKS HERE. Every player is a year older from Step 1 on, and every page reads the same number
+        # (the card had shown his season age while the Regression page showed the age he was turning, rounded up)
+        for p in L.players.values():
+            if not p.retired: p.age += 1.0
         self.votes = AW.vote(L, self.post)
         try:
             self.votes['sb_mvp'] = AW.super_bowl_mvp(L, self.post, L.year)
@@ -793,7 +797,7 @@ class Session:
         L, rng = self.L, self.rng
         # regression: every player takes what age takes; your club's before-and-after is kept for the Regression page
         try:
-            RG.run(self.L, self.rng, record_for=self.user_team, tick_age=False)
+            RG.run(self.L, self.rng, record_for=self.user_team)
             rec = (getattr(self.L, 'regression', {}) or {}).get(str(self.L.year), {})
             from views import surname
             hit = sorted([(v['lost'], pid) for pid, v in rec.items() if v['lost'] >= 0.5], reverse=True)
@@ -804,8 +808,6 @@ class Session:
             import sys; print('regression report failed:', e, file=sys.stderr)
         DR.run(L, getattr(self, 'votes', None) or {}, rng)
         RT.run(L, rng); AL.hall_vote(L, L.year)
-        for p in L.players.values():
-            if not p.retired: p.age += 1.0                     # the year's age tick; the decline itself ran the day after the Super Bowl
         try:
             import league_notes as LN; LN.season_end(L, None)          # the Hall class and the retirements, now that they are in
         except Exception as e:

@@ -76,7 +76,7 @@ def run(league, votes, rng, season=None, verbose=False):
         exp = 0.5 + 0.7 * (_pct(np.array([p.ovr for p, _ in rows])) - 0.5)
         for (p, _), pr, ex in zip(rows, prod, exp):
             aw = won.get(p.pid, set())
-            c_up, c_down = PE.trait_move_chances(p.dev, p.age, float(pr), float(ex), aw)
+            c_up, c_down = PE.trait_move_chances(p.dev, p.age - 1.0, float(pr), float(ex), aw)   # the roll is on the season he played; the year ticked at Step 1
             r = rng.random()
             change = None
             if r < c_up and p.dev != PE.DEV_ORDER[-1]:

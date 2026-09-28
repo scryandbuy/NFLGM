@@ -168,20 +168,23 @@ def chance(player, games=0, ovr=None, league_avg_ovr=72.0, snaps=None):
     the signature so callers do not have to change, and so injury history can
     be added here later without another signature churn.
     """
-    h = age_hazard(player.age) * pos_factor(player.pos, player.age)
+    # the hazard table is by the age he played the season at; the year has already ticked at Step 1 by the time
+    # retirements roll at Step 3, so read a year back
+    season_age = float(player.age) - 1.0
+    h = age_hazard(season_age) * pos_factor(player.pos, season_age)
     if ovr is not None:
         # A good player keeps getting paid, and the reasons to stop arrive
         # later for him. Steeper before thirty, shallower after, so an aging
         # star can still go while a young one effectively cannot.
         gap = ovr - league_avg_ovr
-        if player.age < 30:
+        if season_age < 30:
             h *= float(np.clip(1.0 - 0.090 * gap, 0.015, 2.2))
         else:
             h *= float(np.clip(1.0 - 0.045 * gap, 0.15, 2.2))
     # hidden, drawn at creation: some men are finished at 28 and some play to
     # 38, and nothing on their rating sheet says which
     h /= max(0.45, player.longevity)
-    if player.age >= 39:
+    if season_age >= 39:
         h = max(h, 0.45)
     return float(np.clip(h, 0.0, 0.95))
 

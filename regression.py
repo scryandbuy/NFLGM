@@ -196,7 +196,7 @@ def decline(player, rng):
     return before - player.ovr
 
 
-def run(league, rng, verbose=False, record_for=None, tick_age=True):
+def run(league, rng, verbose=False, record_for=None, tick_age=None):   # tick_age is kept for callers; the tick lives at Step 1 now
     """
     Age the league a year and take what age takes. Runs the day after the Super Bowl (session._close_playoffs); the
     year's age tick can be left to the Retirements step (tick_age=False) so retirement hazards read the age they did.
@@ -211,13 +211,11 @@ def run(league, rng, verbose=False, record_for=None, tick_age=True):
             continue
         mine = record_for is not None and p.team == record_for
         before_r = dict(p.ratings) if mine else None; before_o = p.ovr
-        if tick_age: p.age += 1.0
-        else: p.age += 1.0
+        # the year ticked at Step 1 of the offseason; the decline reads the age he now is
         lost = decline(p, rng)
-        if not tick_age: p.age -= 1.0                 # the decline reads the age he is turning; the tick itself waits
         if mine:
             changed = {k: (round(float(before_r[k]), 1), round(float(p.ratings[k]), 1)) for k in p.ratings if abs(float(p.ratings[k]) - float(before_r.get(k, p.ratings[k]))) >= 0.05}
-            rec[p.pid] = dict(before=round(float(before_o), 1), after=round(float(p.ovr), 1), lost=round(float(before_o - p.ovr), 1), attrs=changed, age=round(float(p.age) + (1.0 if not tick_age else 0.0)))
+            rec[p.pid] = dict(before=round(float(before_o), 1), after=round(float(p.ovr), 1), lost=round(float(before_o - p.ovr), 1), attrs=changed, age=int(p.age))    # the same whole-years age every page shows
         if lost:
             moved.append((p, lost))
             league.log('regress', pid=p.pid, pos=p.pos,
