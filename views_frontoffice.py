@@ -430,10 +430,24 @@ def _season_over(league):
     return league.phase in ('playoffs_closed',) or getattr(league, 'season_closed_year', None) == int(league.year)
 
 
+def _club_done(session, league, abbr):
+    """The club's season is over: the league's is, or the regular season is complete and this club is not alive in
+    the playoffs (missed them, or lost). The meetings belong to whichever comes later."""
+    if _season_over(league): return True
+    if league.phase != 'playoffs': return False
+    post = getattr(session, 'post_live', None) or getattr(session, 'post', None)     # post_live holds the bracket while it is being played
+    if post is None: return False
+    try:
+        alive = post.alive_now()
+    except Exception:
+        alive = set()
+    return abbr not in alive
+
+
 def season_review(session, league, abbr, year=None):
     from views_league import _years, _past
     years = _years(league)
-    cur = int(league.year); over = _season_over(league)
+    cur = int(league.year); over = _club_done(session, league, abbr)     # the club's season, not the league's: a club out of the playoffs reviews at week 18
     finished = [y for y in years if y < cur or (y == cur and over)]
     if not year:
         yr = finished[-1] if finished else cur         # default: the latest season that is actually over
@@ -671,20 +685,6 @@ def build_exit_meetings(session, league, abbr):
             break
     store[slot] = meetings
     return meetings
-
-
-def _club_done(session, league, abbr):
-    """The club's season is over: the league's is, or the regular season is complete and this club is not alive in
-    the playoffs (missed them, or lost). The meetings belong to whichever comes later."""
-    if _season_over(league): return True
-    if league.phase != 'playoffs': return False
-    post = getattr(session, 'post', None)
-    if post is None: return False
-    try:
-        alive = post.alive_now()
-    except Exception:
-        alive = set()
-    return abbr not in alive
 
 
 def exit_interviews(session, league, abbr, year=None):
