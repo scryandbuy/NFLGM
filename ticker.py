@@ -40,7 +40,7 @@ def _spot(yardline_100, off_abbr, def_abbr):
 def _down(d, togo, yardline):
     if d is None: return ''
     word = {1: '1st', 2: '2nd', 3: '3rd', 4: '4th'}.get(int(d), str(d))
-    if yardline is not None and togo is not None and togo >= yardline - 0.01: return f"{word} & Goal"
+    if yardline is not None and togo is not None and togo >= yardline - 0.01 and yardline <= 20.5: return f"{word} & Goal"   # past the 20 nobody says goal to go; it reads as the distance
     return f"{word} & {int(round(togo))}" if togo is not None else word
 
 
@@ -48,7 +48,7 @@ def _yards(y):
     y = int(round(y))
     if y > 0: return ('gain', f"{y} yard{'s' if y != 1 else ''}")
     if y == 0: return ('none', "no gain")
-    return ('loss', f"loss of {-y} yard{'s' if -y != 1 else ''}")
+    return ('loss', f"a loss of {-y} yard{'s' if -y != 1 else ''}")
 
 
 def play_line(league, p, off_abbr, def_abbr):

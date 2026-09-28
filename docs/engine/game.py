@@ -139,6 +139,13 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # so a one-point lead and a twenty-point lead are not the same rule.
     played = float(np.clip(1.0 - secs_left / 3600.0, 0.0, 1.0))
     lead_scores = score_diff / 8.0
+    if yardline_100 >= 60 and not chasing:
+        # DEEP IN YOUR OWN END the table's rate is made of clubs that had to: it is the league's average over
+        # every state, and the going from the 12 is nearly all late and behind. Early, or ahead, or tied, it is
+        # a punt. The share of the table's rate that applies rises with the clock and only when behind.
+        urgency = float(np.clip((played - 0.5) / 0.5, 0.0, 1.0)) * (1.0 if score_diff < 0 else 0.25)
+        base_share = 0.65 if ydstogo <= 1 else 0.25 if ydstogo <= 3 else 0.08     # fourth and one is a tactical go anywhere; the long ones are the desperate ones
+        p_go *= base_share + (1.0 - base_share) * urgency
     if lead_scores > 0:
         p_go *= float(np.exp(-0.9 * lead_scores * (1.0 + played)))
     elif lead_scores < 0:
@@ -531,11 +538,19 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     other_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 3
     # each option leaves the other side a different amount of clock: a kick now leaves nearly all of it, a shot
     # then a kick a little less, k quick snaps then a kick less again; the bleed leaves next to nothing
-    residual = {'kick': secs_in_half - 4.0, 'shot': secs_in_half - PLAY_SECS - 4.0, 'play': 4.0, 'kneel': 0.0}   # the drill runs to the gun; only a kick or a shot taken now hands time back
+    residual = {'kick': secs_in_half - 4.0, 'shot': secs_in_half - PLAY_SECS - 4.0, 'play': 4.0, 'kneel': 0.0}   # the drill that gets there runs to the gun; only a kick or a shot taken now hands time back
     lead_after = {'kick': int(round(dr.score_diff)) + 3, 'shot': int(round(dr.score_diff)) + 7, 'play': int(round(dr.score_diff)) + 3, 'kneel': int(round(dr.score_diff))}
+    # THE STALL. A drive that hurries from its own end mostly does not get to a kick: it punts with time left, and
+    # that time is the other side's. The odds of the stall rise with the distance to range; a stalled drive hands
+    # back what its three snaps and a punt leave. A club behind pays none of this: it needs the points.
+    p_stall = float(np.clip((y - 30.0) / 70.0, 0.05, 0.85))
+    stall_left = max(0.0, secs_in_half - PLAY_SECS * 3 - 6.0)
     def cost(opt):
-        if game_end and need > 0 and opt != 'kick': return 0.0    # behind at the end, the touchdown is the game; the clock after it is the other side's problem only if we are still behind
-        return fear * _possession_value(max(0.0, residual.get(opt, 0.0)), other_tos, game_end, lead_after.get(opt, 0))
+        if dr.score_diff < 0: return 0.0                           # behind, the clock is ours to spend
+        if game_end and need > 0 and opt != 'kick': return 0.0
+        c = fear * _possession_value(max(0.0, residual.get(opt, 0.0)), other_tos, game_end, lead_after.get(opt, 0))
+        if opt == 'play': c += fear * p_stall * _possession_value(stall_left, other_tos, game_end, int(round(dr.score_diff)))
+        return c
     net = {k: v - cost(k) for k, v in evs.items()}
     hurry_choice = max(net, key=lambda k: net[k]); hurry_ev = net[hurry_choice]; cost_hurry = cost(hurry_choice)
     # THE BLEED: k slow snaps with the clock running, then the play clock run down and one shot at the end zone
@@ -1792,7 +1807,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         before_clock = secs_in_half
         clock_before = dr.clock
         _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
-        if (t in ('run', 'complete', 'scramble') and float(out.get('yards', 0.0) or 0.0) >= dr.yardline - 0.01) or _fourth_fail:
+        if (t in ('run', 'complete', 'scramble') and (out.get('touchdown') or float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)) or _fourth_fail:
             dr.clock -= 6.0                                    # a touchdown or a change of possession stops the clock at the whistle; no huddle follows it
         else:
             dr.clock -= play_seconds(t, hurry=hurry, timeout=used)
