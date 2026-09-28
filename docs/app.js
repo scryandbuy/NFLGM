@@ -1828,28 +1828,39 @@ function renderRegression(v) {
   $('#crumb').textContent = 'Team'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
   secondRow(clubNav(v.club.abbr, true, null), '#club/regression');
   const s = el('section', { class: 'sheet c12' });
-  s.append(el('div', { class: 'head', style: 'padding:14px' }, crest(v.club, 56), el('div', {}, el('div', { class: 'hname' }, `Going into ${v.year + 1}`), el('div', { class: 'hline' }, v.empty ? 'No regression has been recorded yet; it runs the day after the Super Bowl.' : `${v.hit} player${v.hit === 1 ? '' : 's'} lost a point or more with age · ${v.total_lost} points across the roster`))));
+  s.append(el('div', { class: 'head', style: 'padding:14px' }, crest(v.club, 56), el('div', {}, el('div', { class: 'hname' }, `Going into ${v.year + 1}`), el('div', { class: 'hline' }, v.empty ? 'No regression is recorded for this season yet; it lands the day after the Super Bowl.' : `${v.hit} player${v.hit === 1 ? '' : 's'} lost ground to age, ${v.total_lost} overall points in all`))));
   s.append(yearChips({ year: v.year, years: v.years }, y => renderRegression(pyJSON(`SESSION.club_regression(year=${y})`))));
   if (v.empty) { page.append(s); return; }
-  const list = el('div', { class: 'rg-list' });
-  list.append(el('div', { class: 'rg-row rg-head' }, el('span', {}, ''), el('span', {}, 'Player'), el('span', { class: 'n' }, 'Ovr Now'), el('span', { class: 'n' }, 'Lost'), el('span', {}, '')));
+  // one row a player who lost overall: the four numbers, and a button to the attribute block that shows what age took
+  const tbl = el('table', { class: 'tbl' });
+  tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Ovr Before'), el('th', { class: 'n' }, 'Ovr After'), el('th', { class: 'n' }, 'Regression'), el('th', {}, '')));
+  if (!v.rows.length) tbl.append(el('tr', {}, el('td', { colspan: '6' }, el('div', { class: 'empty' }, 'Nobody on the club lost ground.'))));
   for (const r of v.rows) {
-    const open = regOpen.has(r.pid);
-    const row = el('div', { class: 'rg-row' + (r.lost >= 1 ? ' hit' : '') + (r.gained >= 1 ? ' up' : '') },
-      el('span', { class: 'plate', style: `background:${v.club.color};color:${v.club.accent || '#fff'}` }, r.no != null ? r.no : r.pos),
-      el('span', { class: 'nm', onclick: () => { location.hash = '#club/player/' + r.pid; }, style: 'cursor:pointer' }, r.name, el('small', {}, ` ${r.pos} · ${r.age}${r.still_here ? '' : ' · no longer with the club'}`)),
-      el('b', { class: 'n ovr' }, r.ovr, r.lost >= 1 || r.gained >= 1 ? el('small', {}, ` from ${r.before}`) : ''),
-      el('b', { class: 'n lost' }, r.lost ? `−${r.lost}` : (r.gained ? `+${r.gained}` : '0')),
-      el('button', { class: 'btn', style: 'width:auto;padding:3px 10px;font-size:13.5px', onclick: () => { if (open) regOpen.delete(r.pid); else regOpen.add(r.pid); renderRegression(v); } }, open ? 'Less' : 'See More'));
-    list.append(row);
-    if (open) {
-      const det = el('div', { class: 'rg-detail' });
-      if (!r.attrs.length) det.append(el('div', { class: 'count' }, 'Nothing moved.'));
-      for (const a of r.attrs) det.append(el('div', { class: 'rg-attr' + (a.delta < 0 ? ' down' : ' up') }, el('span', { class: 'lab' }, a.label), el('span', { class: 'mono' }, `${a.before} → ${a.after}`), el('b', {}, (a.delta > 0 ? '+' : '') + a.delta)));
-      list.append(det);
-    }
+    tbl.append(el('tr', {},
+      el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no', style: `background:${v.club.color};color:${v.club.accent || '#fff'}` }, r.no != null ? r.no : r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.age}${r.still_here ? '' : ' · no longer on the club'}`)))),
+      el('td', {}, r.pos), el('td', { class: 'n' }, el('b', {}, r.before)), el('td', { class: 'n' }, el('b', {}, r.after)),
+      el('td', { class: 'n' }, el('b', { style: 'color:var(--danger)' }, r.delta)),
+      el('td', { class: 'acts' }, el('button', { class: 'btn', style: 'width:auto;padding:3px 10px;font-size:13.5px', onclick: () => regressionPopup(v, r) }, 'Attributes'))));
   }
-  s.append(list); page.append(s);
+  s.append(tbl); page.append(s);
+}
+
+// THE ATTRIBUTE BLOCK, alone, with what age took: the card's three columns, the points lost beside each attribute that
+// dropped (and the awareness and recognition he gained), in a popup over the page
+function regressionPopup(v, r) {
+  const back = el('div', { class: 'popback', onclick: e => { if (e.target === back) back.remove(); } });
+  const box = el('div', { class: 'popbox' });
+  box.append(el('div', { class: 'head', style: 'padding:12px 14px' }, el('div', {}, el('div', { class: 'hname' }, r.name, el('small', { style: 'font-weight:500;color:var(--ink-3);margin-left:8px' }, `${r.pos} · ${r.age}`)), el('div', { class: 'hline' }, `Overall ${r.before} → ${r.after}, ${r.delta} going into ${v.year + 1}`)),
+    el('button', { class: 'btn', style: 'margin-left:auto;width:auto;padding:4px 12px', onclick: () => back.remove() }, 'Close')));
+  const attrs = el('div', { class: 'attrs', style: 'padding:0 14px 14px' });
+  for (const c of r.cols) {
+    const col = el('div', {}, el('div', { class: 'h5', style: 'margin-bottom:4px' }, c.title));
+    const rowsOf = rows => { for (const a of rows) { const row = el('div', { class: 'arow ' + a.tier }, el('span', {}, a.label)); if (a.delta != null) row.append(el('em', { class: 'fitd ' + (a.delta < 0 ? 'm' : 'p') }, a.delta > 0 ? `+${a.delta}` : `${a.delta}`)); row.append(el('i', { class: a.tier }), el('b', {}, a.v)); col.append(row); } };
+    rowsOf(c.rows);
+    if (c.extra && c.extra.rows && c.extra.rows.length) { col.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
+    attrs.append(col);
+  }
+  box.append(attrs); back.append(box); document.body.append(back);
 }
 
 // A TEAM'S SCHEDULE, under its own sub-tabs: the season as a strip of results, then one row a week with the

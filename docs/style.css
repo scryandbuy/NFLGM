@@ -1449,3 +1449,8 @@ h2{letter-spacing:-.01em}
 .sch small{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--club-2)}
 .sch.mine .nm{font-weight:700}
 
+
+/* the regression popup: the attribute block alone, over the page */
+.popback{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;display:grid;place-items:center;padding:20px}
+.popbox{background:var(--sheet);border:1px solid var(--rule);border-top:3px solid var(--club);max-width:1100px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.popbox .head{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--rule)}

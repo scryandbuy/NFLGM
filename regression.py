@@ -129,6 +129,7 @@ DEFAULT_PHYS = 0.50
 # Experience is worth something, on the attributes that are mostly head. Small,
 # and it never outruns the physical loss.
 MENTAL_GAIN = 0.40
+MENTAL_GROWS = ('awareness_rating', 'play_recognition_rating')   # the two that grow with age
 
 # Injury and toughness are availability, not ability, and sit outside this
 # entirely - the same reason they sit outside any future XP budget.
@@ -185,11 +186,13 @@ def decline(player, rng):
         v = player.ratings[k]
         if w > 0:
             v *= 1.0 - drop * w * (PHYS_DAMP if k in PHYS_GROUP else 1.0)
-        if w < 0.5:
-            # he knows more than he did, right up until the end, and the more
-            # of an attribute is head the more it keeps growing
+        if k in MENTAL_GROWS:
+            # he knows more than he did, right up until the end: awareness and recognition keep growing with age.
+            # (the gain had applied to every non-physical attribute, so a linebacker's route running rose too)
             v *= 1.0 + MENTAL_GAIN * drop * (1.0 - 2.0 * w)
-        player.ratings[k] = float(np.clip(v, 20.0, 99.0))
+        # the floor never raises an attribute: a rating that sat at 6 (a spot he never plays) stays at 6, it does not
+        # climb to 20 and show as a gain on the Regression page
+        player.ratings[k] = float(np.clip(v, min(20.0, float(player.ratings[k])), 99.0))
     return before - player.ovr
 
 

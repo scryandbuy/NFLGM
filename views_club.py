@@ -141,6 +141,29 @@ def roster(session, league, abbr):
 
 
 # ------------------------------------------------------------ the card
+
+def attr_cols(p, shift=None, shift_name=None, delta=None):
+    """The card's attribute block: three columns (physical, the position's skill group, mental) with the special-teams
+    and run-defense extras where they apply. shift marks the user's scheme; delta (key -> points) marks what age
+    took, for the Regression page's popup."""
+    shift = shift or {}; shift_name = shift_name or {}; delta = delta or {}
+    fam = FAM.get(p.pos, 'DB')
+    def col(keys):
+        out = []
+        for k, lab in keys:
+            v = p.ratings.get(k)
+            if v is None: continue
+            row = dict(key=k, label=lab, v=int(round(float(v))), tier=('hi' if v >= 85 else 'md' if v >= 72 else 'lo'), shift=shift.get(k), scheme=shift_name.get(k))
+            if k in delta: row['delta'] = int(delta[k])
+            out.append(row)
+        return out
+    phys = dict(title='Physical', rows=col(ATTR['phys']), extra=(dict(title='Special Teams', rows=col(ATTR['st'])) if p.pos in ('WR', 'HB', 'CB', 'FS', 'SS') and col(ATTR['st']) else None))
+    if fam == 'DB': skill = dict(title='Coverage', rows=col(ATTR['coverage']), extra=dict(title='Run Defense', rows=col(ATTR['rundef'])))
+    elif fam in ('LB', 'DL'): skill = dict(title=SKILL_TITLE.get(fam, 'Skill'), rows=col([k for k in ATTR[fam] if k[0] not in ('tackle_rating', 'hit_power_rating', 'pursuit_rating', 'block_shed_rating')]), extra=dict(title='Run Defense', rows=col(ATTR['rundef'])))
+    else: skill = dict(title=SKILL_TITLE.get(fam, 'Skill'), rows=col(ATTR.get(fam, ATTR['DB'])), extra=None)
+    return [phys, skill, dict(title='Mental', rows=col(ATTR['mental']), extra=None)]
+
+
 def card(session, league, pid):
     p = league.player(pid)
     if p is None: return dict(error='no such player')
@@ -165,18 +188,7 @@ def card(session, league, pid):
                     shift[k] = shift.get(k, 0.0) + float(v); shift_name[k] = names[TG.SCHEME_SIDE.get(s, 'offence')]
         shift = {k: (1 if v > 0 else -1) for k, v in shift.items() if abs(v) > 1e-9}
     except Exception: pass
-    def col(keys):
-        out = []
-        for k, lab in keys:
-            v = p.ratings.get(k)
-            if v is None: continue
-            out.append(dict(key=k, label=lab, v=int(round(float(v))), tier=('hi' if v >= 85 else 'md' if v >= 72 else 'lo'), shift=shift.get(k), scheme=shift_name.get(k)))
-        return out
-    phys = dict(title='Physical', rows=col(ATTR['phys']), extra=(dict(title='Special Teams', rows=col(ATTR['st'])) if p.pos in ('WR', 'HB', 'CB', 'FS', 'SS') and col(ATTR['st']) else None))
-    if fam == 'DB': skill = dict(title='Coverage', rows=col(ATTR['coverage']), extra=dict(title='Run Defense', rows=col(ATTR['rundef'])))
-    elif fam in ('LB', 'DL'): skill = dict(title=SKILL_TITLE.get(fam, 'Skill'), rows=col([k for k in ATTR[fam] if k[0] not in ('tackle_rating', 'hit_power_rating', 'pursuit_rating', 'block_shed_rating')]), extra=dict(title='Run Defense', rows=col(ATTR['rundef'])))
-    else: skill = dict(title=SKILL_TITLE.get(fam, 'Skill'), rows=col(ATTR.get(fam, ATTR['DB'])), extra=None)
-    cols = [phys, skill, dict(title='Mental', rows=col(ATTR['mental']), extra=None)]
+    cols = attr_cols(p, shift, shift_name)
     # positions: his spot and the family he could move to, with his grade at each
     family = PC.FAMILY.get(p.pos, [])
     grades = [dict(pos=p.pos, ovr=round(p.ovr), mine=True)]
@@ -647,30 +659,28 @@ def act_release_ps(league, abbr, pid):
 
 # ============================================================ REGRESSION
 def regression(session, league, abbr, year=None):
-    """What age took, going into next year: every player on the club with his overall now and the points he lost (zero
-    is fine), and for each the attributes that moved, before and after."""
+    """What age took, going into next year: only the players who lost overall, with the overall before and after and
+    the points lost; for each, his attribute block with the points taken from each attribute (and the awareness and
+    recognition he gained), for the popup."""
     from views import rail, club
     store = getattr(league, 'regression', {}) or {}
     years = sorted(int(k) for k in store)
     yr = int(year) if year else (years[-1] if years else int(league.year))
     rec = store.get(str(yr), {}) or {}
-    labels = {}
-    for grp in ATTR.values():
-        for k, lab in grp: labels[k] = lab
     rows = []
-    t = league.teams[abbr]
     for pid, v in rec.items():
         p = league.player(pid)
         if p is None: continue
-        attrs = []
-        for k, (b, a) in sorted(v.get('attrs', {}).items(), key=lambda kv: (kv[1][1] - kv[1][0])):
-            bi, ai = int(round(b)), int(round(a))
-            if bi == ai: continue                                   # a fraction underneath shows as no change
-            attrs.append(dict(key=k, label=labels.get(k, k.replace('_rating', '').replace('_', ' ').title()), before=bi, after=ai, delta=ai - bi))
-        rows.append(dict(pid=pid, name=p.name, pos=p.pos, age=int(v.get('age', p.age)), no=getattr(p, 'number', None), ovr=round(v['after']), before=round(v['before']), lost=round(max(0.0, v['lost'])), gained=round(max(0.0, -v['lost'])), still_here=(p.team == abbr), attrs=attrs, moved=len([x for x in attrs if x['delta'] < 0])))
-    rows.sort(key=lambda r: (-r['lost'], -r['ovr']))
-    n_hit = sum(1 for r in rows if r['lost'] >= 1)
-    return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=years or [yr], rows=rows, hit=n_hit, total_lost=sum(r['lost'] for r in rows), empty=(not rec))
+        before, after = int(round(v['before'])), int(round(v['after']))
+        if after >= before: continue                                  # the page is about what age took
+        delta = {}
+        for k, (b_, a_) in (v.get('attrs') or {}).items():
+            d = int(round(a_)) - int(round(b_))
+            if d < 0 or (d > 0 and k in ('awareness_rating', 'play_recognition_rating')): delta[k] = d
+        rows.append(dict(pid=pid, name=p.name, pos=p.pos, age=int(v.get('age', p.age)), no=getattr(p, 'number', None), before=before, after=after, delta=after - before,
+                         still_here=(p.team == abbr), cols=attr_cols(p, delta=delta)))
+    rows.sort(key=lambda r: (r['delta'], -r['after']))
+    return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=years or [yr], rows=rows, hit=len(rows), total_lost=-sum(r['delta'] for r in rows), empty=(not rec))
 
 
 # ============================================================ SCHEMES ON THE CARD
