@@ -17,14 +17,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .rail{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--board);border-top:4px solid var(--club);border-bottom:1px solid var(--rule)}
 .rail .in{max-width:1600px;margin:0 auto;padding:0 18px;display:flex;align-items:stretch;height:56px}
 .crest{width:38px;height:38px;background:var(--club);color:#fff;font-family:var(--display);font-weight:800;font-size:17px;display:grid;place-items:center;align-self:center;margin-right:12px;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
-.club{display:flex;align-items:center;padding-right:18px;border-right:1px solid var(--rule);flex:0 0 auto}   /* the club block never gives way: name and coach on one line each */
-.club .name{font-family:var(--display);font-weight:800;font-size:25px;line-height:1;white-space:nowrap}   /* three lines fit the 56px rail: name, coach, title */
-.club .who{color:var(--ink-3);font-size:13px;white-space:nowrap;line-height:1.1;margin-top:2px}
-.club .who::after{content:attr(data-title);display:block;font-size:11px;color:var(--ink-3);opacity:.85;margin-top:1px}   /* the title on its own line under the coach's name keeps the block narrow */
-.rail .in{overflow-x:auto;overflow-y:hidden;scrollbar-width:none}   /* a window too narrow for the header scrolls it sideways instead of crushing a block */
-.rail .in::-webkit-scrollbar{display:none}
-@media (max-width:1500px){.stat span{display:none}.advance small{display:none}.stat{min-width:52px;padding:0 9px}.status{gap:8px}}
-@media (max-width:1280px){nav a{padding:0 9px;font-size:17px}.advance .txt{font-size:19px;max-width:240px}.advance .txt span{max-width:240px}}
+.club{display:flex;align-items:center;padding-right:18px;border-right:1px solid var(--rule)}
+.club .name{font-family:var(--display);font-weight:800;font-size:27.5px;line-height:1}
+.club .who{color:var(--ink-3);font-size:14.5px}
 nav{display:flex}
 nav a{display:flex;align-items:center;padding:0 13px;font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:.02em;color:var(--ink-3);text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-1px}
 nav a:hover{color:var(--ink-2);background:rgba(255,255,255,.03)}
@@ -35,10 +30,7 @@ nav a .badge{margin-left:7px;font-family:var(--text);font-weight:700;font-size:1
 .stat b{font-family:var(--display);font-weight:800;font-size:23px;line-height:1}
 .stat span{font-size:12.5px;color:var(--ink-3);margin-top:2px}
 .advance{display:flex;align-items:center;gap:10px;padding:0 18px;margin-left:10px;background:var(--club-2);color:#111}
-.advance .txt{display:flex;flex-direction:column;align-items:flex-start;line-height:1;font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:.02em;max-width:330px}
-.advance .txt span,.advance .txt small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:330px}   /* the button never squeezes the nav: a long label clips instead */
-.advance{flex:0 0 auto}
-nav a{white-space:nowrap}
+.advance .txt{display:flex;flex-direction:column;align-items:flex-start;line-height:1;font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:.02em}
 .advance small{font-family:var(--text);font-weight:600;font-size:12.5px;margin-top:3px}
 .advance svg{width:22px;height:22px}
 .advance:hover{filter:brightness(1.06)}.advance:active{filter:brightness(.94)}
