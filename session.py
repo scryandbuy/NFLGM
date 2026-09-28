@@ -262,9 +262,11 @@ class Session:
                 return dict(title='Game Day', sub=('Halftime: your adjustments' if lv['halftime_open'] else 'Your playoff game is on; finish it to advance'), played=True, live=True)
             if rnd_i >= 4: return dict(title='Close the Season', sub='the champion is crowned', played=True)
             rnd = PS.Postseason.ROUNDS[rnd_i]; name = PS.Postseason.ROUND_NAMES[rnd]
+            SHORT = {'WC': 'Wild Card', 'DIV': 'Divisional Round', 'CONF': 'Conference Finals', 'SB': 'Super Bowl'}   # the button has one line; 'Conference Championship' broke the header
+            name = SHORT.get(rnd, name)
             post = getattr(self, 'post_live', None); user = self.user_team
             if self.played:
-                nxt = PS.Postseason.ROUND_NAMES[PS.Postseason.ROUNDS[rnd_i + 1]] if rnd_i + 1 < 4 else 'Offseason'
+                nxt = SHORT[PS.Postseason.ROUNDS[rnd_i + 1]] if rnd_i + 1 < 4 else 'Offseason'
                 return dict(title=f'Advance to the {nxt}', sub=f'The {name} is in the books', played=True)
             if post is not None and hasattr(post, 'alive'):
                 alive = {t for a in post.alive.values() for t in a.values()} if rnd != 'SB' else set(post.conf_champs.values())
