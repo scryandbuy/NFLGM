@@ -124,6 +124,10 @@ class Session:
                 L.set_phase('regular')
         except Exception: pass
         try:
+            import personality as _PT
+            _PT.reconcile_all(L)                              # traits that contradict each other in words, from before the reconcile step existed
+        except Exception: pass
+        try:
             # THE DRAFT CYCLE'S USER STATE NAMES PROSPECTS. Visits, their timing and the board that name players who are
             # no longer in the class (drafted, signed, or from a class already gone) are dropped; an older build kept
             # them, so last spring's thirty stayed 'spoken for' against the new class

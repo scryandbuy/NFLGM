@@ -36,9 +36,48 @@ WORDS = {
 }
 
 
+def reconcile(t, rng):
+    """No player carries traits that contradict each other in words. Four independent draws let any pairing land
+    on one player, and about one in six read as a contradiction: a player who keeps his options open or follows
+    the money while not being about the money; a player who coasts or needs pushing while wanting the ball; a
+    player happy in a role who wants every dollar. Each is resolved by moving the trait that makes the smaller
+    change, to a value that reads as consistent, with a little noise so the fixes do not all land on one number."""
+    t = dict(t)
+    # options open / follows the money (loyalty under 42) means money matters at least somewhat
+    if t['loyalty'] < 42 and t['financial_priority'] < 42:
+        t['financial_priority'] = float(np.clip(rng.normal(58, 7), 42, 97))
+    # no effort (work ethic under 42) is not ambitious
+    if t['work_ethic'] < 42 and t['ambition'] >= 58:
+        t['ambition'] = float(np.clip(rng.normal(49, 5), 42, 57))
+    # happy in a role (ambition under 30) does not want every dollar
+    if t['ambition'] < 30 and t['financial_priority'] >= 70:
+        t['financial_priority'] = float(np.clip(rng.normal(60, 5), 42, 69))
+    return t
+
+
+def conflicts(t):
+    """The contradictions reconcile removes, for tests and the load check."""
+    out = []
+    if t['loyalty'] < 42 and t['financial_priority'] < 42: out.append('options open / not about the money')
+    if t['work_ethic'] < 42 and t['ambition'] >= 58: out.append('coasts / ambitious')
+    if t['ambition'] < 30 and t['financial_priority'] >= 70: out.append('happy in a role / wants to be paid')
+    return out
+
+
 def draw(rng, priors=None):
     priors = priors or {}
-    return {k: float(np.clip(rng.normal(MEAN + priors.get(k, 0.0), SD), 3, 97)) for k in TRAITS}
+    return reconcile({k: float(np.clip(rng.normal(MEAN + priors.get(k, 0.0), SD), 3, 97)) for k in TRAITS}, rng)
+
+
+def reconcile_all(league):
+    """Players already in a save: resolve any contradiction once, deterministically from the player id."""
+    n = 0
+    for p in league.players.values():
+        t = getattr(p, 'traits', None)
+        if t and conflicts(t):
+            rng = np.random.default_rng(abs(hash(str(p.pid))) % (2 ** 32))
+            p.traits = reconcile(t, rng); n += 1
+    return n
 
 
 def ensure(p, rng):
