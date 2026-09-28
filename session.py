@@ -680,6 +680,24 @@ class Session:
         self.L.season_closed_year = int(self.L.year)                  # this year's season is over: its review and meetings are its own
         self._post_review('closed')
         self._snapshot_season()
+        # THE DAY AFTER THE SUPER BOWL: practice squad contracts expire (every squad player is a free agent; his club
+        # can sign him back on the market like anyone else), and the offseason heals. A player's weeks left run off
+        # against the thirty weeks to camp; only a long-term injury carries into next season
+        try:
+            import practice_squad as PSQ_, inbox as IB_
+            mine = [p for p in list(PSQ_.squad(self.L.teams[self.user_team]))] if self.user_team else []
+            for t in self.L.teams.values():
+                for p in list(PSQ_.squad(t)): PSQ_.release_from_squad(self.L, t.abbr, p.pid)
+            if mine:
+                IB_.post(self.L, 'club', f"Your practice squad's {len(mine)} players are free agents", f"Practice squad deals expire when the season ends. {', '.join(f'{p.name} ({p.pos})' for p in mine[:8])}{'…' if len(mine) > 8 else ''} are on the market; sign any of them back from Free Agency to the roster or, after camp, to the squad.", sender='assistants', payload=dict(link='fa'))
+            OFFSEASON_WEEKS = 30
+            for p in self.L.players.values():
+                if p.out_until is None: continue
+                left = 8 if int(p.out_until) >= 99 else max(0, int(p.out_until) - 22)     # season-ending IR: the rest of it heals over the summer
+                p.out_until = None if left <= OFFSEASON_WEEKS else int(left - OFFSEASON_WEEKS)
+            PSQ_.reset_season(self.L)
+        except Exception as e:
+            import sys; print('season-end release and healing failed:', e, file=sys.stderr)
         self._ai_exit_meetings([a for a in self.L.teams if f"{a}-{self.L.year}" not in (getattr(self.L, 'exit_meetings', {}) or {})])
         try: self.post.seeds_at_close = dict(getattr(post, 'seeds', {}) or {})
         except Exception: self.post.seeds_at_close = {}
