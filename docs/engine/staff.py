@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 STAFF. Four people on every club besides the head coach:
 
@@ -571,7 +572,7 @@ def interview(league, abbr, name):
     import staff_traits as STR
     c = next((x for x in league.staff_pool if x.name == name), None)
     if c is None: return dict(ok=False, why='not in the pool')
-    STR.ensure(c, np.random.default_rng(abs(hash(c.name)) % (2 ** 32)))
+    STR.ensure(c, np.random.default_rng(stable_seed(c.name)))
     iv = getattr(league, 'interviews', None) or {}
     st = iv.get(name) or dict(name=name, asked=[], log=[], refs_due=None, pending_ref=None)
     iv[name] = st; league.interviews = iv
@@ -597,7 +598,7 @@ def _reveal(league, c, st, pool_keys, question):
         fam_word = {'coaching': 'how he coaches', 'situation': 'what he wants', 'hits': 'his best calls', 'misses': 'where he has been wrong'}[question]
         st['log'].append(dict(who='coach', text=f"You ask about {fam_word}. Nothing he says stands out either way."))
         st['asked'].append(question); return None
-    rng = np.random.default_rng(abs(hash(c.name + question)) % (2 ** 32))
+    rng = np.random.default_rng(stable_seed(c.name + question))
     k = str(rng.choice(cands))
     c.known = list(known | {k})
     SAY = {'mercenary': 'He is plain about the money: he wants to be paid what the job is worth, and he will listen to anyone who pays more.',
@@ -659,7 +660,7 @@ def resolve_references(league):
         st['refs_due'] = None
         c = next((x for x in league.staff_pool if x.name == name), None)
         if c is None: continue
-        rng = np.random.default_rng(abs(hash(name + 'refs')) % (2 ** 32))
+        rng = np.random.default_rng(stable_seed(name + 'refs'))
         known = set(c.known or []); hidden = [k for k in (c.staff_traits or []) if k not in known]
         if hidden and rng.random() >= 1 / 6:
             k = str(rng.choice(hidden)); c.known = list(known | {k})
@@ -680,7 +681,7 @@ def card(coach, revealed_only=False):
     """The card. On your own staff every trait shows; in the pool only the ones the interview has revealed,
     the rest as '?'."""
     import staff_traits as STR
-    STR.ensure(coach, np.random.default_rng(abs(hash(coach.name)) % (2 ** 32)))
+    STR.ensure(coach, np.random.default_rng(stable_seed(coach.name)))
     return dict(name=coach.name, role=ROLE_NAME[coach.role], rating=round(coach.rating), prestige=round(coach.prestige), specialty=coach.specialty,
                 age=coach.age, years=coach.years, salary=coach.salary, ask=ask(coach), hc_candidate=coach.hc_candidate,
                 unit_ranks=coach.unit_ranks[-3:], traits=STR.words(coach, revealed_only=revealed_only), n_traits=len(coach.staff_traits or []))

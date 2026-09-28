@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 VIEWS. One function per page, returning a plain dict the browser renders.
 Nothing here changes the league. The mockups' sample numbers are replaced
@@ -364,7 +365,7 @@ def _desk_detail(league, abbr, m):
         ask = None; years = None
         try:
             import extensions as EXT
-            tm = EXT.terms(league, p, np.random.default_rng(abs(hash(pid)) % (2 ** 32)))
+            tm = EXT.terms(league, p, np.random.default_rng(stable_seed(pid)))
             if tm: ask = round(float(tm['ask']), 1); years = int(tm['years'])
         except Exception: pass
         return dict(pid=pid, ask=ask, ask_years=years, years_left=(p.contract.years if p.contract else 0), line=f"{p.pos}, {round(p.ovr)}, age {int(p.age)}, ${p.apy:.1f}m a year." if p.contract else f"{p.pos}, {round(p.ovr)}, age {int(p.age)}.")

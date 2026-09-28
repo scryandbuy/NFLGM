@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 NEGOTIATIONS. One live thread per man you are talking to, resolved at the
 advance the way everything else is.
@@ -91,11 +92,11 @@ def open_talks(league, pid, kind='extension'):
     if kind == 'extension':
         if not EXT.eligible(p, league):
             return dict(ok=False, why='not eligible: more than two years left, or a rookie deal before his third season')
-        tm = EXT.terms(league, p, np.random.default_rng(abs(hash(pid)) % (2**32)))
+        tm = EXT.terms(league, p, np.random.default_rng(stable_seed(pid)))
         if tm is None:
             return dict(ok=False, why='no market read on him')
         # an agent can decline to talk in season: a star in his final year who is playing well wants the leverage
-        if s['in_season'] and s['star'] and s['final_year'] and s['money'] > 0.55 and s['morale'] >= 40 and (abs(hash(pid)) % 100) < 60:
+        if s['in_season'] and s['star'] and s['final_year'] and s['money'] > 0.55 and s['morale'] >= 40 and (stable_seed(pid) % 100) < 60:
             return dict(ok=True, will_talk=False, mood='deferring', ask=None, years=tm['years'],
                         line=f"{p.name}'s agent says they will talk after the season. He is playing well and they want to see the market first.")
         ask = tm['ask']; years = tm['years']

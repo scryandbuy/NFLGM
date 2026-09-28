@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 PERSONALITY.
 
@@ -75,7 +76,7 @@ def reconcile_all(league):
     for p in league.players.values():
         t = getattr(p, 'traits', None)
         if t and conflicts(t):
-            rng = np.random.default_rng(abs(hash(str(p.pid))) % (2 ** 32))
+            rng = np.random.default_rng(stable_seed(p.pid))
             p.traits = reconcile(t, rng); n += 1
     return n
 

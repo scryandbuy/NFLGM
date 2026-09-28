@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 SESSION. What the browser talks to.
 
@@ -170,7 +171,7 @@ class Session:
             for p in list(getattr(L, 'draft_pool', None) or []) + list(getattr(L, 'next_class', None) or []):
                 if p.pos not in ('QB', 'K', 'P') or p.xp_spent.get('_arm_fixed') == 2: continue
                 key = 'throw_power_rating' if p.pos == 'QB' else 'kick_power_rating'
-                r_ = np.random.default_rng(abs(hash((p.pid, key))) % (2**32))
+                r_ = np.random.default_rng(stable_seed((p.pid, key)))
                 mean = (84.0 if p.pos == 'QB' else 86.0) + 0.35 * (float(p.ovr) - 72.0)
                 p.ratings[key] = float(np.clip(r_.normal(mean, 3.5), 67.0, 99.0))
                 for abbr_, views in (getattr(L, 'scouting', None) or {}).items():

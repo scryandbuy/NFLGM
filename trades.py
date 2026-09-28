@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 THE TRADE MARKET.
 
@@ -126,7 +127,7 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     if viewer is not None:
         from gm_engine import scheme_fit
         fit = scheme_fit(p.ratings, p.pos, viewer)
-        seed = (hash((getattr(viewer, 'abbr', ''), p.pid)) % 10000) / 10000.0
+        seed = (stable_seed((getattr(viewer, 'abbr', ''), p.pid)) % 10000) / 10000.0
         seen = p.ovr + fit + (seed - 0.5) * 2.0 * PERCEPTION_SPREAD
         v = dict(v, apy=v['apy'] * (1.0 + 0.045 * (seen - p.ovr)))
     # THE CAP FACTS OF MOVING HIM. The seller eats every dollar of bonus

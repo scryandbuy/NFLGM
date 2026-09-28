@@ -416,6 +416,7 @@ LAST_KICKOFF = {}
 # timeouts let the half expire. Now the coach prices his options in expected points from where he stands and
 # takes the best one; his kicker's leg sets the kick's range, his passing game against their secondary sets the
 # shot's odds, and his own aggression sets how much he likes the shot when the numbers are close.
+SCORE_STOPS_CLOCK = True    # a scoring play stops the clock at the score (test toggle)
 LEAD_FOURTH = 0.45          # how fast a lead shrinks the fourth-down appetite (0.9 had leaders going on nothing, and the league lost its blowouts)
 STALL_ON = True
 PLAN_WINDOW = 75.0          # seconds left in the half within which the clock, not the downs, is the constraint
@@ -1809,7 +1810,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         before_clock = secs_in_half
         clock_before = dr.clock
         _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
-        if (t in ('run', 'complete', 'scramble') and (out.get('touchdown') or float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)) or _fourth_fail:
+        if (t in ('run', 'complete', 'scramble') and ((out.get('touchdown') and SCORE_STOPS_CLOCK) or float(np.round(float(out.get('yards', 0.0) or 0.0)) if SCORE_STOPS_CLOCK else float(out.get('yards', 0.0) or 0.0)) >= dr.yardline - 0.01)) or _fourth_fail:
             dr.clock -= 6.0                                    # a touchdown or a change of possession stops the clock at the whistle; no huddle follows it
         else:
             dr.clock -= play_seconds(t, hurry=hurry, timeout=used)

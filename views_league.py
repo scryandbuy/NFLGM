@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 LEAGUE VIEWS. Standings, Schedule, Transactions, Stats, Awards, Coaching, Almanac.
 Read-only pages; nothing here changes the league.
@@ -510,7 +511,7 @@ def team_page(session, league, me_abbr, abbr):
     # the block: the men this club would move, in the trade engine's own read
     block = []
     try:
-        rng = np.random.default_rng(abs(hash(abbr + str(league.week))) % (2 ** 32)); pool = VAL.pool_from_league(league)
+        rng = np.random.default_rng(stable_seed(abbr + str(league.week))); pool = VAL.pool_from_league(league)
         sur, needs = TR.surplus_and_needs(league, t, pool, rng)
         import views_personnel as VP
         for x in sur[:8]:

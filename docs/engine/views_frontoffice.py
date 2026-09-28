@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 FRONT OFFICE VIEWS. Owner, Identity, Staff, Cap: what the pages show and what
 their buttons do.
@@ -26,7 +27,7 @@ def _owner(league, t):
     """The owner's name and the year he bought in, drawn once and kept on the club."""
     o = getattr(t, 'owner', None)
     if o is None:
-        rng = np.random.default_rng(hash(t.abbr) % (2 ** 32))
+        rng = np.random.default_rng(stable_seed(t.abbr))
         i = int(rng.integers(len(OWNER_FIRST))); j = int(rng.integers(len(OWNER_LAST)))
         t.owner = o = dict(name=f"{OWNER_FIRST[i]} {OWNER_LAST[j]}", since=int(league.year - rng.integers(3, 35)))
     return o

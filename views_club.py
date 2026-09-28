@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 CLUB VIEWS. What the Roster, Player Card, Depth Chart and Practice Squad pages
 show, as plain dicts, and the actions their buttons call.
@@ -219,7 +220,7 @@ def card(session, league, pid):
     try:
         import extensions as EXT
         if _ext_ok(league, p):
-            tm = EXT.terms(league, p, np.random.default_rng(abs(hash(p.pid)) % (2 ** 32))); ext_ask = round(float(tm['ask']), 1) if tm else None
+            tm = EXT.terms(league, p, np.random.default_rng(stable_seed(p.pid))); ext_ask = round(float(tm['ask']), 1) if tm else None
     except Exception: pass
     # trade interest in words, from the market read
     interest = 'Low'
@@ -517,7 +518,7 @@ def act_auto_xp(league, abbr, pid=None, on=True):
 def act_spend_by_read(league, abbr, pid=None):
     """Spend now, once, by the assistants' read: one man or everyone with XP in the bank."""
     import xp_spend as XS, numpy as np
-    t = league.teams[abbr]; rng = np.random.default_rng(abs(hash(abbr + str(league.week))) % (2 ** 32))
+    t = league.teams[abbr]; rng = np.random.default_rng(stable_seed(abbr + str(league.week)))
     men = [league.player(pid)] if pid else list(t.active())
     n = 0; pts = 0
     for p in men:

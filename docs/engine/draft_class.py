@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 THE DRAFT CLASS, from EA's College Football 27 ratings.
 
@@ -75,7 +76,7 @@ def shape_class(cls, rng=None):
     # DEVELOPMENT BY CLASS RANK. The trait is drawn against where a player sits in the whole class, not among his
     # position: the 200th player draws 200th-of-479 odds whichever position he plays, so a weak position year
     # yields no star traits there and a strong one several, and the late rounds land near all-normal
-    r_ = rng if rng is not None else np.random.default_rng(abs(hash(tuple(sorted(p.pid for p in cls)))) % (2**32))
+    r_ = rng if rng is not None else np.random.default_rng(stable_seed(tuple(sorted(p.pid for p in cls))))
     ranked = sorted([p for p in cls if p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.ovr); n = len(ranked)
     for i, p in enumerate(ranked):
         p.dev = draw_dev(i / max(n - 1, 1), r_, pos=p.pos)

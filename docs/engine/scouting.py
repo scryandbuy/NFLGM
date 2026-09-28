@@ -1,3 +1,4 @@
+from stable import stable_seed
 """
 SCOUTING, the simple version.
 
@@ -68,7 +69,7 @@ def tape(p):
     fades with a room's looks (a visit uncovers part of it) but never entirely."""
     t = p.xp_spent.get('_tape')
     if t is None:
-        r = np.random.default_rng(abs(hash(('tape', p.pid))) % (2**32))
+        r = np.random.default_rng(stable_seed(('tape', p.pid)))
         t = float(np.clip(r.normal(0.0, TAPE_SD), -10.0, 10.0)); p.xp_spent['_tape'] = t
     return float(np.clip(t, -15.0, 15.0))       # the class builder's gems and busts carry up to fifteen
 
