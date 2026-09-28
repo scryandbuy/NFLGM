@@ -64,9 +64,12 @@ def play_line(league, p, off_abbr, def_abbr):
     if t == 'run':
         cls, yd = _yards(p.get('yards', 0))
         who = carrier or 'The back'
-        how = 'up the middle' if p.get('scheme') in ('inside_zone', 'duo', 'power') else 'off the edge' if p.get('scheme') in ('outside_zone', 'toss', 'sweep') else 'inside' if p.get('sneak') else ''
+        how = {'inside_zone': 'up the middle', 'duo': 'between the tackles', 'power': 'behind the pulling guard', 'counter': 'on a counter', 'trap': 'on a trap',
+               'outside_zone': 'off the edge', 'stretch': 'wide on the stretch', 'draw': 'on a draw', 'toss': 'on a toss', 'sweep': 'on a sweep'}.get(p.get('scheme'), 'inside' if p.get('sneak') else '')
         text = f"{who} {'sneaks' if p.get('sneak') else 'runs'}{(' ' + how) if how else ''} for {yd}"
-        if td: text = f"{who} runs it in from the {int(round(p.get('yardline', 1)))}. TOUCHDOWN."; kind = 'score'
+        if td:
+            yl = float(p.get('yardline', 1) or 1); yl_txt = 1 if 0 < yl < 1 else int(round(yl))          # inside the 1 is the 1
+            text = f"{who} runs it in from the {yl_txt}. TOUCHDOWN."; kind = 'score'
         else:
             kind = cls
             if p.get('broken_tackles'): text += f", breaking {int(p['broken_tackles'])} tackle{'s' if p['broken_tackles'] > 1 else ''}"

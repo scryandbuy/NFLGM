@@ -549,10 +549,39 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         evk = ((1.0 - PLAY_BAD) ** k) * max(kv, sv)
         if bleed_ev is None or evk > bleed_ev: bleed_ev, k_bleed, bleed_final = evk, k, ('shot' if sv > kv else 'kick')
     hurry = True; choice = hurry_choice
-    if bleed_ev is not None and bleed_ev >= hurry_ev and bleed_ev >= floor_line:
+    behind = dr.score_diff < 0
+    if not behind and bleed_ev is not None and bleed_ev >= hurry_ev and bleed_ev >= floor_line:
+        # ahead or tied, the clock is worth protecting; behind, every second is the offense's own and it never
+        # waits (a team down two scores once ran the play clock down because every option priced near nothing)
         hurry = False; choice = 'play' if k_bleed > 0 else bleed_final; evs = dict(evs, bleed=bleed_ev)
     if evs.get(choice, 0.0) < floor_line: choice = 'kneel'
     return dict(choice=choice, hurry=hurry, evs={k: round(v, 3) for k, v in evs.items()}, cost_hurry=round(cost_hurry, 3), p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
+
+
+
+def _onside_call(clock, need, my_tos, coach, rng):
+    """Onside or kick deep, priced. The onside comes back about 6% of the time and gives the kicker's side the ball
+    near its own 45 with the clock intact; a miss gives the other side the ball there, in range, and most of the
+    clock. Kicking deep hands them the ball at their 30 and asks the defense for a stop: the ball comes back
+    with whatever the stop leaves, and the timeouts in hand decide how much that is. The coach's aggression
+    weighs the gamble; a club needing two scores counts every possession double. Where the two are close the
+    coach's appetite decides, so the same spot is not the same call for every staff."""
+    if need <= 0: return False
+    c = coach or {}
+    aggr = float(np.clip(0.5 * float(c.get('fourth_down', 0.5)) + 0.5 * float(c.get('adjust_willingness', 0.5)), 0.0, 1.0))
+    p_rec = KICKOFF['onside_recovery']
+    def usable(secs, tos):
+        pr, _ = _possession_odds(secs, tos); return pr / 0.5             # the odds of a usable possession, 0 to 1
+    # DEEP: they have it at their 30; the ball comes back if they stall (about 60% of drives after a kickoff do),
+    # with whatever their three snaps leave on the clock; each timeout in hand keeps about 24 seconds of it
+    burn = 3 * PLAY_SECS_RUN - 24.0 * min(3, my_tos)
+    v_deep = 0.60 * usable(max(0.0, clock - burn - 6.0), my_tos)
+    # ONSIDE: recovered, the ball is near midfield with the clock intact (worth more than a kickoff drive); missed,
+    # they have it in range and the clock, and it comes back only if they stall (about 35% from there)
+    v_rec = 1.25 * usable(clock, my_tos)
+    v_miss = 0.35 * usable(max(0.0, clock - 2 * PLAY_SECS_RUN - 6.0), my_tos)
+    v_onside = (p_rec * v_rec + (1.0 - p_rec) * v_miss) * (0.85 + 0.30 * aggr)   # the gambler likes the gamble
+    return v_onside > v_deep
 
 
 def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None, plan=None, dcoach=None):
@@ -596,7 +625,14 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
             later = 0.65 * PLAY_SECS_RUN + 0.35 * PLAY_SECS                  # a later snap stops the clock itself a third of the time
             after_with = max(0.0, secs_in_half - PLAY_SECS * min(remaining, tos_d) - later * max(0, remaining - tos_d) - 6.0)
             after_without = max(0.0, secs_in_half - PLAY_SECS_RUN - later * (remaining - 1) - 6.0)
-            gain = p_stop * (_possession_value(after_with, max(0, tos_d - min(remaining, tos_d))) - _possession_value(after_without, tos_d))
+            # what the defense gets if the series fails: a possession, worth less when it needs touchdowns (down
+            # two scores a field-goal drive is nearly nothing to it)
+            need_td = 0.35 if dr.score_diff >= 9 else 1.0
+            d_gain = need_td * (_possession_value(after_with, max(0, tos_d - min(remaining, tos_d))) - _possession_value(after_without, tos_d))
+            # ...and what the offense gets if the series lives: the stopped clock is its time too, and it is the one
+            # driving. Past midfield with the clock short, that is most of the value of the stop handed to them.
+            o_gain = 0.6 * (_possession_value(after_with + 12.0, timeouts.left.get(pos, 0)) - _possession_value(after_without + 12.0, timeouts.left.get(pos, 0))) * (1.4 if dr.yardline <= 50 else 0.7)
+            gain = p_stop * d_gain - (1.0 - p_stop) * o_gain
             # ...AGAINST WAITING FOR THIRD DOWN. With snaps still to come, the timeout can be held for the series'
             # last one, where the stop is likelier and every timeout is still in hand; a conversion in between
             # costs nothing. The timeout is spent now only when now beats that.
@@ -604,7 +640,7 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
                 secs_3rd = secs_in_half - PLAY_SECS_RUN - later * (remaining - 2)
                 if secs_3rd > 6:
                     w3 = max(0.0, secs_3rd - PLAY_SECS - 6.0); wo3 = max(0.0, secs_3rd - PLAY_SECS_RUN - 6.0)
-                    gain_later = 0.50 * (_possession_value(w3, tos_d - 1) - _possession_value(wo3, tos_d))
+                    gain_later = 0.50 * need_td * (_possession_value(w3, tos_d - 1) - _possession_value(wo3, tos_d))
                     if gain_later >= gain: gain = 0.0
             if gain * (0.75 + 0.5 * d_aggr) > 0.06:                  # first-half timeouts do not carry past the break; a modest gain is worth one
                 used = timeouts.use(other); used_by = other
@@ -1020,6 +1056,7 @@ def _advance(dr, gained):
             dr.yardline -= gained
             dr.best = min(dr.best, max(0.0, dr.yardline))
             if dr.yardline <= 0:
+                dr.yardline = 0.0                                   # a score ends at the goal line, not past it (the drive total read the overshoot)
                 dr.result, dr.points = 'Touchdown', 6
                 return True
             dr.down, dr.togo = 1, min(10, dr.yardline)
@@ -1031,6 +1068,7 @@ def _advance(dr, gained):
     if dr.yardline <= 0:
         # Six. The try is resolved at the end of run_drive, where the kicker
         # and the play engine are both in scope.
+        dr.yardline = 0.0                                           # the drive ends at the goal line
         dr.result, dr.points = 'Touchdown', 6
         return True
     if dr.yardline >= 100:
@@ -1521,7 +1559,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                        down=dr.down, ydstogo=int(dr.togo))
             else:
                 fam = GP.run_family(pl, rng)
-                oc['scheme'] = ('inside_zone' if fam == 'zone' else 'power')
+                # the plan picks the family; the scheme inside it keeps its variety (the overlay used to flatten
+                # every run to inside zone or power, so every run in the log went up the middle)
+                if fam == 'zone': oc['scheme'] = rng.choice(['inside_zone', 'inside_zone', 'outside_zone', 'stretch', 'draw'])
+                else: oc['scheme'] = rng.choice(['power', 'power', 'duo', 'counter', 'trap'])
 
             # THE CHEATER PLAY. An adjustment vacates something, and that
             # something is the answer: "once a cheater play is used to reset
@@ -2010,7 +2051,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             # the kicking team's 45.
             my_diff = score[pos] - score['away' if pos == 'home' else 'home']
             need_after = int(np.ceil(-my_diff / 8.0)) if my_diff < 0 else 0
-            try_onside = my_diff < 0 and half_done and ((need_after <= 1 and clock < 150) or (need_after == 2 and clock < 300)) and clock > 0
+            try_onside = my_diff < 0 and half_done and clock > 0 and _onside_call(clock, need_after, tos.left.get(pos, 0), (o_st.coach if o_st is not None else None), rng)
             if try_onside:
                 got = rng.random() < KICKOFF['onside_recovery']
                 LAST_KICKOFF['r'] = dict(onside=True, recovered=got, new_yardline=(55.0 if got else 45.0), ret=0.0, returner=None, touchback=False)
