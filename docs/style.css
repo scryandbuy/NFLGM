@@ -17,9 +17,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .rail{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--board);border-top:4px solid var(--club);border-bottom:1px solid var(--rule)}
 .rail .in{max-width:1600px;margin:0 auto;padding:0 18px;display:flex;align-items:stretch;height:56px}
 .crest{width:38px;height:38px;background:var(--club);color:#fff;font-family:var(--display);font-weight:800;font-size:17px;display:grid;place-items:center;align-self:center;margin-right:12px;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
-.club{display:flex;align-items:center;padding-right:18px;border-right:1px solid var(--rule)}
-.club .name{font-family:var(--display);font-weight:800;font-size:27.5px;line-height:1}
-.club .who{color:var(--ink-3);font-size:14.5px}
+.club{display:flex;align-items:center;padding-right:18px;border-right:1px solid var(--rule);flex:0 0 auto}   /* the club block never gives way: name and coach on one line each */
+.club .name{font-family:var(--display);font-weight:800;font-size:27.5px;line-height:1;white-space:nowrap}
+.club .who{color:var(--ink-3);font-size:14.5px;white-space:nowrap}
+.rail .in{overflow-x:auto;overflow-y:hidden;scrollbar-width:none}   /* a window too narrow for the header scrolls it sideways instead of crushing a block */
+.rail .in::-webkit-scrollbar{display:none}
+@media (max-width:1500px){.stat span{display:none}.advance small{display:none}.stat{min-width:52px;padding:0 9px}.status{gap:8px}}
+@media (max-width:1280px){nav a{padding:0 9px;font-size:17px}.advance .txt{font-size:19px;max-width:240px}.advance .txt span{max-width:240px}}
 nav{display:flex}
 nav a{display:flex;align-items:center;padding:0 13px;font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:.02em;color:var(--ink-3);text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-1px}
 nav a:hover{color:var(--ink-2);background:rgba(255,255,255,.03)}
