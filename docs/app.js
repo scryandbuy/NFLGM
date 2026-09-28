@@ -1030,7 +1030,12 @@ function renderTrades(v) {
 }
 
 function offerForm(t, kind, onDone, preset) {
-  const f = el('div', { class: 'msg you' }, el('div', { class: 'from' }, preset ? 'Or Counter' : 'Your Offer'));
+  const f = el('div', { class: 'msg you offer-panel' },
+    el('div', { class: 'offer-panel-head' },
+      el('div', { class: 'from' }, preset ? 'COUNTER PROPOSAL' : 'YOUR OFFER'),
+      el('div', { class: 'offer-live' }, 'LIVE CONTRACT PREVIEW')
+    )
+  );
   const start = preset || {};
   const startYears = Math.max(1, +(start.years || t.years || 3)); const startBonus = start.bonus != null ? +start.bonus : Math.round((t.ask || 1) * (t.years || 3) * 0.3 * 2) / 2;
   const startApy = start.apy != null ? +start.apy : (t.ask ? t.ask * 0.97 : 1.0);
@@ -1044,7 +1049,12 @@ function offerForm(t, kind, onDone, preset) {
   const y1 = el('b', {}, '—'), total = el('b', {}, '—'); const hitsRow = el('div', { class: 'hits' });
   const preview = () => {
     const r = pyJSON(`SESSION.personnel_act('offer_preview', pid=${JSON.stringify(t.pid)}, apy=${+apy.value || 0}, years=${+yrs.value || 1}, bonus=${+bonus.value || 0}, front_load=${shape})`);
-    if (!r.ok) return; y1.textContent = r.year1 != null ? `$${r.year1.toFixed(1)}m` : '—'; total.textContent = `$${r.total}m`;
+    if (!r.ok) return;
+    y1.textContent = r.year1 != null ? `$${r.year1.toFixed(1)}m` : '—';
+    total.textContent = `$${r.total}m`;
+    const sy = f.querySelector('.summary-years'), sa = f.querySelector('.summary-apy');
+    if (sy) sy.textContent = String(+yrs.value || 1);
+    if (sa) sa.textContent = `$${apyOf().toFixed(1)}m`;
     { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m total`; }
     hitsRow.innerHTML = ''; r.hits.forEach((h, i) => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, h / Math.max(...r.hits, 0.1) * 100)}%` })), el('span', {}, r.years[i]), el('b', {}, `$${h.toFixed(1)}m`))));
   };
@@ -1052,7 +1062,14 @@ function offerForm(t, kind, onDone, preset) {
   const promises = el('div', { class: 'promise' }, el('span', {}, 'Promise:')); const chosen = [];
   for (const [k, l] of [['starting_role', 'Named the Starter'], ['captaincy', 'Captaincy'], ['no_trade', 'No Trade'], ['extension_by', 'Extension by a Set Year'], ['no_tag', 'No Franchise Tag']]) promises.append(el('button', { class: 'btn quiet', style: 'padding:2px 8px;font-size:14px', 'aria-pressed': 'false', onclick: e => { const i = chosen.indexOf(k); if (i < 0) chosen.push(k); else chosen.splice(i, 1); e.currentTarget.setAttribute('aria-pressed', String(i < 0)); } }, l));
   const breakdown = el('div', { class: 'count', style: 'padding:0 0 6px' });
-  f.append(el('div', { class: 'offer', style: 'grid-template-columns:repeat(5,1fr)' }, el('label', {}, 'Years', yrs), el('label', {}, 'Salary ($m / yr)', salary), el('label', {}, 'Signing Bonus ($m)', bonus), el('label', {}, 'Year 1 Hit', y1), el('label', {}, 'Total', total)), breakdown,
+  f.append(
+    el('div', { class: 'offer-summary' },
+      el('div', {}, el('span', {}, 'STRUCTURE'), el('b', {}, 'Custom Contract')),
+      el('div', {}, el('span', {}, 'YEARS'), el('b', { class: 'summary-years' }, String(start.years || t.years || 3))),
+      el('div', {}, el('span', {}, 'AAV'), el('b', { class: 'summary-apy' }, `$${apy.value}m`)),
+      el('div', {}, el('span', {}, 'STATUS'), el('b', { class: 'summary-status' }, preset ? 'Counter' : 'Draft'))
+    ),
+    el('div', { class: 'offer', style: 'grid-template-columns:repeat(5,1fr)' }, el('label', {}, 'Years', yrs), el('label', {}, 'Salary ($m / yr)', salary), el('label', {}, 'Signing Bonus ($m)', bonus), el('label', {}, 'Year 1 Hit', y1), el('label', {}, 'Total', total)), breakdown,
     el('div', { class: 'shape' }, el('span', {}, 'Shape'), shapeChips), hitsRow, promises);
   const acts = el('div', { class: 'acts' });
   acts.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${+apy.value}, years=${+yrs.value}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`); notify(r); onDone(); } }, kind === 'fa_inseason' ? 'Offer (decides at Advance)' : preset ? 'Send Counter' : 'Send Offer'));
@@ -1097,25 +1114,51 @@ function openTradeOffer(id, after) {
 }
 
 function openTalks(t, reload) {
-  const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center' });
-  const box = el('section', { class: 'sheet', style: 'width:min(820px,94vw);max-height:88vh;overflow:auto' });
+  const overlay = el('div', { class: 'neg-overlay', style: 'position:fixed;inset:0;z-index:900;display:flex;align-items:center;justify-content:center' });
+  const box = el('section', { class: 'sheet negotiation-sheet', style: 'width:min(980px,95vw);max-height:92vh;overflow:auto' });
   const close = () => { overlay.remove(); reload(); };
   const done = !['open', 'waiting', 'countered', 'match_requested'].includes(t.state);
-  box.append(el('h2', {}, `${t.name} · ${t.pos}`, el('small', {}, t.opened ? `talks opened ${t.opened}` : ''), done ? el('button', { class: 'btn go', style: 'margin-left:auto', onclick: () => { overlay.remove(); reopenTalks(t, reload); } }, 'Open Talks Again') : '', el('button', { class: 'btn quiet', style: done ? '' : 'margin-left:auto', onclick: close }, 'Close')));
-  box.append(threadBox(t, () => { const fresh = pyJSON(`SESSION.personnel(${JSON.stringify(t.kind === 'extension' ? 'extensions' : 'free_agency')})`); const nt = fresh.threads.find(x => x.id === t.id); overlay.remove(); if (nt && !['accepted', 'declined', 'expired', 'broken'].includes(nt.state)) openTalks(nt, reload); else reload(); }));
-  overlay.append(box); document.body.append(overlay);
+
+  const stateLabel = t.state === 'waiting' ? 'AWAITING RESPONSE' :
+    t.state === 'countered' ? 'COUNTER RECEIVED' :
+    t.state === 'match_requested' ? 'COMPETING OFFER' :
+    done ? 'TALKS CLOSED' : 'OPEN NEGOTIATION';
+
+  const identity = el('div', { class: 'neg-identity' },
+    el('div', { class: 'neg-avatar' }, (t.name || '?').split(/\s+/).map(x => x[0]).slice(0,2).join('').toUpperCase()),
+    el('div', { class: 'neg-title' },
+      el('div', { class: 'neg-kicker' }, `${t.kind === 'extension' ? 'CONTRACT EXTENSION' : 'FREE AGENCY'} · NEGOTIATION DESK`),
+      el('h2', {}, `${t.name} · ${t.pos}`),
+      el('small', {}, t.opened ? `Talks opened ${t.opened}` : 'Negotiation opened')
+    ),
+    el('div', { class: 'neg-state' }, stateLabel),
+    done ? el('button', { class: 'btn go', onclick: () => { overlay.remove(); reopenTalks(t, reload); } }, 'Open Talks Again') : '',
+    el('button', { class: 'btn quiet neg-close', onclick: close }, 'Close')
+  );
+
+  box.append(el('div', { class: 'neg-topbar' }, identity));
+  box.append(threadBox(t, () => {
+    const fresh = pyJSON(`SESSION.personnel(${JSON.stringify(t.kind === 'extension' ? 'extensions' : 'free_agency')})`);
+    const nt = fresh.threads.find(x => x.id === t.id);
+    overlay.remove();
+    if (nt && !['accepted', 'declined', 'expired', 'broken'].includes(nt.state)) openTalks(nt, reload);
+    else reload();
+  }));
+
+  overlay.append(box);
+  document.body.append(overlay);
 }
 
 function threadBox(t, onDone) {
-  const box = el('div', { class: 'thread' });
-  if (t.cap) box.append(el('div', { class: 'msg note' }, el('b', {}, `${t.cap.year} cap · `), `$${t.cap.limit}m limit, $${t.cap.committed}m committed, `, el('b', {}, `$${t.cap.space}m of room`), t.cap.next ? ' (next year, the ledger this deal lands on)' : ''));
+  const box = el('div', { class: 'thread negotiation-thread' });
+  if (t.cap) box.append(el('div', { class: 'msg note cap-strip' }, el('b', {}, `${t.cap.year} cap · `), `$${t.cap.limit}m limit, $${t.cap.committed}m committed, `, el('b', {}, `$${t.cap.space}m of room`), t.cap.next ? ' (next year, the ledger this deal lands on)' : ''));
   // the conversation as logged: every line with who said it, then the agent's temperament, then the decision
   const log = t.log && t.log.length ? t.log : [];
   if (!log.length) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, `Agent · Before Any Offer`), el('div', { class: 'txt' }, t.ask ? el('span', {}, `He is asking `, el('b', {}, `$${t.ask}m × ${t.years}`), '.') : 'He would rather wait.')));
   for (const ln of log) box.append(el('div', { class: 'msg' + (ln.who === 'you' ? ' you' : '') }, el('div', { class: 'from' }, ln.who === 'you' ? 'You' : 'Agent'), el('div', { class: 'txt' }, ln.text)));
   if (t.ask && log.length) box.append(el('div', { class: 'msg note' }, el('b', {}, 'Ask · '), `$${t.ask}m × ${t.years}`));
   box.append(el('div', { class: 'msg note' }, t.agent_line || ''));
-  if (t.rival) box.append(el('div', { class: 'msg match' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${t.rival.team} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('match', tid=${t.id})`)); onDone(); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`)); onDone(); } }, 'Let Him Go'))));
+  if (t.rival) box.append(el('div', { class: 'msg match rival-panel' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${t.rival.team} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('match', tid=${t.id})`)); onDone(); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`)); onDone(); } }, 'Let Him Go'))));
   if (t.counter) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, 'Counter'), el('div', { class: 'txt' }, el('b', {}, `$${t.counter.apy}m × ${t.counter.years}`)), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('match_counter', tid=${t.id})`)); onDone(); } }, 'Accept Counter'))));
   if (t.state === 'waiting') box.append(el('div', { class: 'msg note', style: 'display:flex;align-items:center;gap:12px' }, el('span', { style: 'flex:1' }, `Waiting on his answer${t.due ? ' · due ' + t.due : ''}.`), el('button', { class: 'btn quiet', 'data-tip': 'Pull the offer before he answers; the thread closes', onclick: () => { notify(pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`)); onDone(); } }, 'Rescind Offer')));
   else if (['accepted', 'signed'].includes(t.state)) box.append(el('div', { class: 'msg note' }, 'Signed.'));
@@ -1124,6 +1167,7 @@ function threadBox(t, onDone) {
   else box.append(offerForm(t, t.kind, onDone, t.counter ? { apy: t.counter.apy, years: t.counter.years } : null));
   return box;
 }
+
 
 let faPos = '', faCheap = false, faWatch = false, faRookie = false, faRole = 'All', faQuery = '';
 function renderFA(v) {
