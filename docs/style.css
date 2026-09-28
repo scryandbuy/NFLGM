@@ -1427,3 +1427,11 @@ h2{letter-spacing:-.01em}
    games, the championship between the two divisionals */
 .bk-game.bk-slot{align-self:center;height:auto}
 .bk-game.bk-slot.bye{align-self:center}
+
+/* CLUB BADGES. Every crest is a shield wider than it is tall (1.28 to 1), so three letters sit inside it at every
+   size; the height stays what each place set, the width follows. Letters sized to the badge */
+.cr,.crest{width:auto !important;aspect-ratio:1.28/1;padding:0 4px;box-sizing:border-box;line-height:1;letter-spacing:0;white-space:nowrap;overflow:hidden}
+.cr{font-size:min(17px,0.42em + 9px)}
+.pk .cr,.side-h .cr{font-size:12px}
+.onclock .cr,.side .cr{font-size:16px}
+.bigbug .cr{font-size:18px}

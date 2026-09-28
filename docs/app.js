@@ -947,7 +947,7 @@ const PERS = { trades: 'Trades', fa: 'Free Agency', wire: 'Waivers', extensions:
 let tradeState = { other: null, a: [], b: [] };
 function persSecond(cur) { secondRow(Object.entries(PERS).map(([k, l]) => [l, '#personnel/' + k]), '#personnel/' + cur); $('#crumb').textContent = 'Personnel'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'personnel')); }
 function persPage() { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)'; return page; }
-function crest(c, size) { return el('div', { class: 'cr', style: `background:${c.color}${size ? `;width:${size}px;height:${size}px` : ''}` }, c.abbr); }
+function crest(c, size) { return el('div', { class: 'cr', style: `background:${c.color}${size ? `;height:${size}px;font-size:${Math.max(10, Math.round(size * 0.4))}px` : ''}` }, c.abbr); }
 function notify(r) { busy(r.why || r.line || (r.ok ? 'Done.' : 'That did not work.')); setTimeout(() => busy(null), 2600); }
 
 function renderTrades(v) {
