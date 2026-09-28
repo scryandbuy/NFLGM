@@ -325,7 +325,7 @@ def run_firings(league, rng, pool=None, verbose=False, clubs=None):
 
 
 # ============================================================== CLOSE THE YEAR
-def close_season(league, runner, rng, pool=None, verbose=False, post=None):
+def close_season(league, runner, rng, pool=None, verbose=False, post=None, fire=True):
     """Bracket, champion, draft order, firings. Awards are NOT computed. With `post` given (a bracket already
     played round by round), only the closing runs."""
     league.set_phase('playoffs')
@@ -340,7 +340,7 @@ def close_season(league, runner, rng, pool=None, verbose=False, post=None):
                            else post.exit_round.get(abbr))
     order = set_draft_order(league, post)
     league.set_phase('offseason')
-    fired = run_firings(league, rng, pool, verbose)                 # whoever has not rolled yet (the two finalists, or all 32 when the bracket was simmed at once)
+    fired = run_firings(league, rng, pool, verbose) if fire else []   # with fire=False the offseason's Step 2 rolls every club
     earlier = (league.__dict__.get('_fired_this_year', {}) or {}).get(str(league.year), [])
     seen = {a for a, _ in fired}
     fired = fired + [x for x in earlier if x[0] not in seen]

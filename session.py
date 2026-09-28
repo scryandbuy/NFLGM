@@ -390,7 +390,6 @@ class Session:
                     field = {t for sd in post.seeds.values() for t in sd}
                     if self.user_team not in field: self._post_review('missed')
                     self._ai_exit_meetings([a for a in self.L.teams if a not in field])
-                    self._black_monday([a for a in self.L.teams if a not in field])
             return dict(done=f'Week {wk}', next=self.next_label())
         if k == 'playoffs':
             # THE PLAYOFFS, A ROUND AT A TIME, with the whole week around each game. Entering a round (from week 18's
@@ -439,9 +438,6 @@ class Session:
                 self._post_review('eliminated')
             losers = [a for a, r in (getattr(post, 'exit_round', {}) or {}).items() if r == rnd]
             self._ai_exit_meetings(losers)
-            self._black_monday(losers)
-            if rnd == 'WC':
-                self._announce_honors()
             if rnd == 'CONF':
                 self._senior_bowl()
             if rnd_i + 1 < len(PS.Postseason.ROUNDS):
@@ -569,14 +565,15 @@ class Session:
             import sys; print('senior bowl failed:', e, file=sys.stderr)
 
     def _black_monday(self, clubs):
-        """The clubs whose season just ended roll their firings now, and a new head coach comes for his staff,
-        which can mean a request for one of your coordinators while the playoffs go on."""
+        """The clubs roll their firings, and a new head coach comes for his staff, which can mean a request for one of
+        your coordinators. Runs once, at Step 2 of the offseason."""
+        fired = []
         try:
             fired = PS.run_firings(self.L, self.rng, clubs=list(clubs))
             for abbr, bg in fired:
                 t = self.L.teams[abbr]
                 who = (t.gm.name + ' takes over.') if t.gm else ('The search is on; ' + (f"they are waiting on {self.L.pending_hires[abbr]['first']}." if abbr in (getattr(self.L, 'pending_hires', None) or {}) else 'a name is coming.'))
-                IB.post(self.L, 'league', f"{t.abbr} makes a change", f"{CLUB_NAME_.get(abbr, abbr)} moved on from its head coach the morning after its season ended. {who}", sender='league')
+                IB.post(self.L, 'league', f"{t.abbr} makes a change", f"{CLUB_NAME_.get(abbr, abbr)} moved on from its head coach. {who}", sender='league')
             if fired:
                 # the market: the names every searching club is calling, by what their units did
                 import coaching_pool as CP
@@ -590,6 +587,7 @@ class Session:
                     IB.post(self.L, 'league', "The coaching market", f"{len(fired)} club{'s' if len(fired) != 1 else ''} searching. The names every owner is calling: " + '; '.join(lines) + '.', sender='league')
         except Exception as e:
             import sys; print('black monday failed:', e, file=sys.stderr)
+        return fired
 
     def _ai_exit_meetings(self, clubs):
         import views_frontoffice as VF
@@ -620,7 +618,8 @@ class Session:
             limit_next, committed_next, _ro, _dn = next_year_cap(self.L, t)
             if up or two:
                 body = (f"Deals up: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in up[:6])}. " if up else '') + (f"Two years left and worth a look: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in two[:4])}. " if two else '') + f"About ${limit_next - committed_next:.0f}m of room next year."
-                IB.post(self.L, 'contract', "The extension window is open", body, sender='front office', payload=dict(key=f"extwin-{self.L.year}", link='personnel:extensions'))
+                if not any((m.get('payload') or {}).get('key') == f"extwin-{self.L.year}" for m in getattr(self.L, 'inbox', [])):
+                    IB.post(self.L, 'contract', "The extension window is open", body, sender='front office', payload=dict(key=f"extwin-{self.L.year}", link='personnel:extensions'))
         except Exception as e:
             import sys; print('extension window note failed:', e, file=sys.stderr)
         try:
@@ -629,7 +628,8 @@ class Session:
             if ms:
                 from views import surname
                 names = ', '.join(surname(self.L.player(x['pid']).name) for x in ms if self.L.player(x['pid']))
-                IB.post(self.L, 'exit', f"Exit meetings: {len(ms)} players want a word", f"{names}.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
+                if not any((m.get('payload') or {}).get('key') == f"exit-{self.L.year}" for m in getattr(self.L, 'inbox', [])):
+                    IB.post(self.L, 'exit', f"Exit meetings: {len(ms)} players want a word", f"{names}.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
         except Exception as e:
             import sys; print('exit meetings failed:', e, file=sys.stderr)
 
@@ -715,7 +715,8 @@ class Session:
         try: self.runner.finish()                 # records into standings_history and each team's history
         except Exception as e:
             import sys; print('season records failed:', e, file=sys.stderr)
-        self.post, self.order, self.fired = PS.close_season(self.L, self.runner, self.rng, post=post)
+        self.post, self.order, _ = PS.close_season(self.L, self.runner, self.rng, post=post, fire=False)   # firings and hires wait for Step 2
+        self.fired = []
         self.post.year = self.L.year
         self.L.season_closed_year = int(self.L.year)                  # this year's season is over: its review and meetings are its own
         self._post_review('closed')
@@ -744,31 +745,30 @@ class Session:
         MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
         self.post_live = None
         self.stop = ('offseason', 0)
-        # REGRESSION HITS THE DAY AFTER THE SUPER BOWL. Every player takes what age takes; your club's before-and-after
-        # is kept, and the analysis lands in the inbox as the offseason opens
-        try:
-            RG.run(self.L, self.rng, record_for=self.user_team, tick_age=False)
-            rec = (getattr(self.L, 'regression', {}) or {}).get(str(self.L.year), {})
-            from views import surname
-            hit = sorted([(v['lost'], pid) for pid, v in rec.items() if v['lost'] >= 0.5], reverse=True)
-            names = ', '.join(f"{surname(self.L.player(pid).name)} ({self.L.player(pid).pos}, −{lost:.0f})" for lost, pid in hit[:6] if self.L.player(pid))
-            body = (f"{len(hit)} of your players lost ground with age: {names}. " if hit else "None of your players lost ground with age this year. ") + "The full analysis, every player and every attribute, is on the Regression page."
-            IB.post(self.L, 'club', f"Going into {self.L.year + 1}: what age took", body, sender='assistants', payload=dict(link='club:regression'))
-        except Exception as e:
-            import sys; print('regression report failed:', e, file=sys.stderr)
         return dict(done='Playoffs', champion=self.post.champion, next=self.next_label())
 
     # ---- the offseason steps, the same code as franchise.play_year in the same order
     def step_awards(self):
+        """STEP 1: the season's awards, all of it here. The vote on the regular season, the Super Bowl MVP, the XP the
+        honors pay, the morale they lift, the prestige, the almanac, the notes and the sub-tab. Nothing about awards
+        happens before this step (the honors had come out after the Wild Card and then again here)."""
         L, rng = self.L, self.rng
-        if getattr(self, 'votes', None) and L.awards.get(L.year):
-            # the honors came out after the Wild Card; only the Super Bowl MVP is left to add
-            try:
-                self.votes['sb_mvp'] = AW.super_bowl_mvp(L, self.post, L.year)
-                if self.votes['sb_mvp']: L.awards[L.year]['sb_mvp'] = getattr(self.votes['sb_mvp'], 'pid', self.votes['sb_mvp'])
-            except Exception: pass
-        else:
-            self.votes = AW.vote(L, self.post)
+        self.votes = AW.vote(L, self.post)
+        try:
+            self.votes['sb_mvp'] = AW.super_bowl_mvp(L, self.post, L.year)
+            if self.votes['sb_mvp']: L.awards[L.year]['sb_mvp'] = getattr(self.votes['sb_mvp'], 'pid', self.votes['sb_mvp'])
+        except Exception: pass
+        try:
+            import morale as MO
+            XP.pay_awards(L, self.votes)
+            for k, who in self.votes.items():
+                if k in ('coty',) or not who: continue
+                for w in (who if isinstance(who, list) else [who]):
+                    p = L.player(getattr(w, 'pid', w)) if not hasattr(w, 'pid') else w
+                    m = MO.ensure(p) if p is not None else None
+                    if m is not None: m.apply('major_award' if k in ('mvp', 'opoy', 'dpoy', 'oroy', 'droy', 'protector', 'sb_mvp') else 'all_pro' if k == 'all_pro_1' else 'all_pro_2')
+        except Exception as e:
+            import sys; print('award pay failed:', e, file=sys.stderr)
         CP.season_prestige(L, self.post, coty_team=self.votes.get('coty'))
         STF.season_end(L, STF.unit_ranks(L, L.year))
         AL.close_season(L, L.year, self.post, self.votes)
@@ -780,13 +780,29 @@ class Session:
             import league_notes as LN; LN.season_end(L, self.votes)
         except Exception as e:
             import sys; print('league_notes season_end failed:', e, file=sys.stderr)
-        DR.run(L, self.votes, rng)
 
     def step_coaching(self):
-        STF.carousel(self.L, self.rng, new_head_coaches=[a for a, _bg in self.fired])
+        """STEP 2: the coaching carousel, all of it here. Every club rolls its head coach now (none rolled during the
+        playoffs or at the close), the searching clubs hire, and the coordinators and position coaches move."""
+        self.fired = self._black_monday(list(self.L.teams))
+        STF.carousel(self.L, self.rng, new_head_coaches=[a for a, _bg in (self.fired or [])])
 
     def step_retire(self):
+        """STEP 3: retirements and development, all of it here. Age takes what it takes, development traits roll,
+        players retire, the Hall votes, and the year ticks."""
         L, rng = self.L, self.rng
+        # regression: every player takes what age takes; your club's before-and-after is kept for the Regression page
+        try:
+            RG.run(self.L, self.rng, record_for=self.user_team, tick_age=False)
+            rec = (getattr(self.L, 'regression', {}) or {}).get(str(self.L.year), {})
+            from views import surname
+            hit = sorted([(v['lost'], pid) for pid, v in rec.items() if v['lost'] >= 0.5], reverse=True)
+            names = ', '.join(f"{surname(self.L.player(pid).name)} ({self.L.player(pid).pos}, −{lost:.0f})" for lost, pid in hit[:6] if self.L.player(pid))
+            body = (f"{len(hit)} of your players lost ground with age: {names}. " if hit else "None of your players lost ground with age this year. ") + "The full analysis, every player and every attribute, is on the Regression page."
+            IB.post(self.L, 'club', f"Going into {self.L.year + 1}: what age took", body, sender='assistants', payload=dict(link='club:regression'))
+        except Exception as e:
+            import sys; print('regression report failed:', e, file=sys.stderr)
+        DR.run(L, getattr(self, 'votes', None) or {}, rng)
         RT.run(L, rng); AL.hall_vote(L, L.year)
         for p in L.players.values():
             if not p.retired: p.age += 1.0                     # the year's age tick; the decline itself ran the day after the Super Bowl

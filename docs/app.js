@@ -1828,7 +1828,7 @@ function renderRegression(v) {
   $('#crumb').textContent = 'Team'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
   secondRow(clubNav(v.club.abbr, true, null), '#club/regression');
   const s = el('section', { class: 'sheet c12' });
-  s.append(el('div', { class: 'head', style: 'padding:14px' }, crest(v.club, 56), el('div', {}, el('div', { class: 'hname' }, `Going into ${v.year + 1}`), el('div', { class: 'hline' }, v.empty ? 'No regression is recorded for this season yet; it lands the day after the Super Bowl.' : `${v.hit} player${v.hit === 1 ? '' : 's'} lost ground to age, ${v.total_lost} overall points in all`))));
+  s.append(el('div', { class: 'head', style: 'padding:14px' }, crest(v.club, 56), el('div', {}, el('div', { class: 'hname' }, `Going into ${v.year + 1}`), el('div', { class: 'hline' }, v.empty ? 'No regression is recorded for this season yet; it lands at Step 3 of the offseason, Retirements and Development.' : `${v.hit} player${v.hit === 1 ? '' : 's'} lost ground to age, ${v.total_lost} overall points in all`))));
   s.append(yearChips({ year: v.year, years: v.years }, y => renderRegression(pyJSON(`SESSION.club_regression(year=${y})`))));
   if (v.empty) { page.append(s); return; }
   // one row a player who lost overall: the four numbers, and a button to the attribute block that shows what age took
