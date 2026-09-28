@@ -395,7 +395,14 @@ main[hidden]{display:none}
 .ctabs button{padding:9px 14px;font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.02em;color:var(--ink-3);border-bottom:3px solid transparent;margin-bottom:-1px}
 .ctabs button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--club-2)}
 .ctabs .acts{margin-left:auto;display:flex;gap:6px;align-items:center}
-.ctabs .acts .btn{padding:5px 10px;font-size:16px}
+/* the card's actions read like its tabs: same face, same weight, no boxes; the accent stays on the one that matters */
+.ctabs .acts .btn{padding:9px 14px;font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.02em;color:var(--ink-3);background:none;border:0;border-bottom:3px solid transparent;margin-bottom:-1px;border-radius:0}
+.ctabs .acts .btn:hover{color:var(--ink);background:none}
+.ctabs .acts .btn.go{color:var(--club-2);background:none}
+.ctabs .acts .btn.warn{color:var(--danger)}
+.ctabs .acts .btn:disabled{color:var(--ink-4,#5a6270);opacity:1}
+.ctabs .acts select.btn{appearance:auto;-webkit-appearance:menulist;padding-right:6px;color:var(--ink-3);background:transparent}
+.ctabs .acts select.btn option{background:var(--sheet-2);color:var(--ink)}
 .body{display:grid;grid-template-columns:260px 1fr 280px;gap:0}
 @media (max-width:1100px){.body{grid-template-columns:1fr 1fr}.body > div:nth-child(2){grid-column:1/-1;order:-1;border-left:0;border-bottom:1px solid var(--rule)}}
 .body > div{padding:12px 14px}
@@ -1410,3 +1417,8 @@ h2{letter-spacing:-.01em}
 
 .ctrl2{display:flex;flex-wrap:nowrap;gap:8px;align-items:center}
 .ctrl2 .btn{white-space:nowrap}
+
+/* a bracket card sits centred in its span rather than stretched to fill it: the divisional between its two wild card
+   games, the championship between the two divisionals */
+.bk-game.bk-slot{align-self:center;height:auto}
+.bk-game.bk-slot.bye{align-self:center}
