@@ -396,8 +396,7 @@ SCHEME_SIDE = {k: ('defence' if v <= (_FRONT | _COVER | {'SS'}) else 'offence') 
 SCHEME_BITE = 0.5
 
 
-def position_score(player, position, scheme=None):
-    """How good is he AT THIS SPOT, not overall."""
+def _score_raw(player, position, scheme=None):
     w = dict(DEPTH_WEIGHTS.get(position, {'awareness_rating': 1.0}))
     if scheme:
         for s in ([scheme] if isinstance(scheme, str) else scheme):
@@ -410,6 +409,49 @@ def position_score(player, position, scheme=None):
                     w[k] = max(0.0, w[k] + v * SCHEME_BITE)
     tot = sum(w.values()) or 1.0
     return sum(player.get(k, 70.0) * v for k, v in w.items()) / tot
+
+
+_REF = None
+_OFFSET = {}
+
+
+def reference_profile(position):
+    """The league-average player at the spot: the mean of every rating over the seed rosters' active players
+    there. Computed once; a flat profile if the seed is not at hand."""
+    global _REF
+    if _REF is None:
+        _REF = {}
+        try:
+            import pandas as pd, rosters as R
+            S = pd.read_csv(R.SEED, low_memory=False); S = S[S.roster == 'active']
+            cols = [c for c in S.columns if c.endswith('_rating') and c != 'src_rating']
+            for pos, grp in S.groupby('madden_position'):
+                _REF[str(pos)] = {c: float(grp[c].mean()) for c in cols if grp[c].notna().any()}
+        except Exception:
+            _REF = {}
+    return _REF.get(position) or {k: 70.0 for k in DEPTH_WEIGHTS.get(position, {})}
+
+
+def fit_offset(position, scheme):
+    """What the scheme's tags add to or take from the LEAGUE-AVERAGE player at this spot. A tag shifts weight onto
+    attributes that sit systematically above or below the grade at a position (linemen rate higher on strength
+    than on agility almost to a man), so an uncentered scheme grade moved every player at a spot the same way:
+    zero linemen fit any zone offense, every lineman fit a gap one, no corner fit any defense. This is the constant
+    that removes; what is left is how his profile differs from his peers in the direction the scheme cares about."""
+    if not scheme: return 0.0
+    key = (position, tuple(sorted([scheme] if isinstance(scheme, str) else scheme)))
+    if key not in _OFFSET:
+        ref = reference_profile(position)
+        _OFFSET[key] = _score_raw(ref, position, key[1]) - _score_raw(ref, position, None)
+    return _OFFSET[key]
+
+
+def position_score(player, position, scheme=None):
+    """How good is he AT THIS SPOT, not overall. Through a scheme, the grade is centered so the league-average
+    player at the spot reads the same under every scheme (see fit_offset); the order within a spot is untouched."""
+    if not scheme:
+        return _score_raw(player, position, None)
+    return _score_raw(player, position, scheme) - fit_offset(position, scheme)
 
 def order_depth(players, position, scheme=None, unavailable=None):
     """Rank a position group, dropping anyone unavailable."""
