@@ -164,6 +164,12 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
             return dict(ok=True, state='broken_off')
     # what he will take, shape and loyalty and morale included (extensions.py knows the floor logic)
     floor = _floor(league, p, t, offer)
+    # HIS OWN NUMBER IS A YES. An offer that meets the agent's standing counter (his money and his years) is the
+    # deal he asked for: it is signed on the spot, whatever the kind of talk or the time of year. It had gone back
+    # into the queue as a fresh offer and the agent took a week to say yes to his own terms.
+    c = t.get('counter')
+    if c and apy + 1e-9 >= float(c.get('apy', apy)) and int(years) == int(c.get('years', years)):
+        return _accept(league, t, offer, how='counter accepted')
     if sign_today and t['kind'] == 'fa_inseason':
         # today means the ask, no discount; and another club may already have him
         if apy + 1e-9 >= ask and not t.get('rival'):

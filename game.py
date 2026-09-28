@@ -182,14 +182,22 @@ FG_PCT = [(29, .975), (34, .955), (39, .905), (44, .840), (49, .785),
           (54, .720), (99, .590)]
 
 def fg_probability(distance, kicker=None, rate_fn=None, AVG=0.70):
-    base = next(p for d, p in FG_PCT if distance <= d)
+    """The make probability by distance, the kicker's accuracy throughout and his leg from 50 out. The table's
+    55-plus band (59%) is the real rate of the long kicks clubs actually try, which are the ones inside the
+    kicker's range; past his range the ball does not get there, so the tail falls off with his power: an average
+    leg carries to about 60, a big one to the mid 60s, a weak one to the low 50s."""
+    base = next((p for d, p in FG_PCT if distance <= d), FG_PCT[-1][1])   # past the table (a kick from deep in your own end) takes the last band; the range tail below does the rest
+    pwr = AVG
     if kicker is not None and rate_fn is not None:
         acc = rate_fn(kicker, {'kick_acc_rating': .75, 'awareness_rating': .25})
         pwr = rate_fn(kicker, {'kick_power_rating': 1.0})
         base *= 1.0 + 0.16 * (acc - AVG)
         if distance >= 50:                 # power only matters from distance
             base *= 1.0 + 0.55 * (pwr - AVG)
-    return float(np.clip(base, 0.02, 0.995))
+    reach = 57.0 + 26.0 * (pwr - AVG)      # where his leg gives out: 57 for an average kicker, about 63 for the best, 54 for a weak one
+    if distance > 48:
+        base *= 1.0 / (1.0 + np.exp((distance - reach) / 2.0))
+    return float(np.clip(base, 0.005, 0.995))
 
 def attempt_field_goal(yardline_100, kicker, rng, rate_fn):
     dist = yardline_100 + 17               # 10 end zone + 7 snap
@@ -386,7 +394,106 @@ KICKOFF = dict(touchback=.155, return_rate=.799, return_mean=25.0,      # 26.9 d
 LAST_KICKOFF = {}
 
 
-def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None):
+
+# ============================================================ THE END OF A HALF, PRICED
+# What the offense does with the last seconds of a half used to be three fixed yardlines: kick from inside the
+# 37, take a shot from inside the 37, kneel from outside the 45. A club at the 38 with 11 seconds and three
+# timeouts let the half expire. Now the coach prices his options in expected points from where he stands and
+# takes the best one; his kicker's leg sets the kick's range, his passing game against their secondary sets the
+# shot's odds, and his own aggression sets how much he likes the shot when the numbers are close.
+PLAN_WINDOW = 45.0          # seconds left in the half within which the clock, not the downs, is the constraint
+PLAY_SECS = 7.0             # a snap with the clock stopped after it (an incompletion, a timeout, out of bounds)
+PLAY_BAD = 0.08             # one more snap ends in a sack or a turnover this often
+PLAY_INC = 0.32             # ...or an incompletion, which stops the clock and leaves the kick where it was
+PLAY_GAIN = 9.0             # a completion's expected gain in yards
+SHOT_INT = 0.08             # a throw to the end zone is picked off this often
+SHOT_SHORT = 0.15           # ...or caught short of the goal, in bounds
+HAIL_MARY_LINE = 0.21       # expected points below which the offense kneels instead (before the half)
+PLAY_OOB = 0.30             # the share of completions that get out of bounds when the sideline is the point
+
+
+def _shot_td_prob(yardline, offense, defense, rate_fn):
+    """A throw to the end zone from this spot: the odds fall with distance and move with the passing matchup."""
+    base = float(np.clip(0.40 - 0.0080 * float(yardline), 0.03, 0.40))
+    try:
+        qb = offense.get('qb') or {}; wrs = (offense.get('wr') or [])[:3]; dbs = (defense.get('db') or [])[:5]
+        o = 0.5 * rate_fn(qb, {'throw_acc_deep_rating': .6, 'throw_power_rating': .4}) + 0.5 * float(np.mean([rate_fn(w, {'speed_rating': .35, 'spec_catch_rating': .35, 'jump_rating': .3}) for w in wrs])) if wrs else 0.7
+        d = float(np.mean([rate_fn(x, {'zone_cover_rating': .4, 'man_cover_rating': .3, 'speed_rating': .3}) for x in dbs])) if dbs else 0.7
+        base *= float(np.clip(1.0 + 1.5 * (o - d), 0.7, 1.3))
+    except Exception: pass
+    return float(np.clip(base, 0.02, 0.5))
+
+
+def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half, coach=None, yardline=None):
+    """The coach's best option with the seconds left, priced from where he stands: 'kick', 'shot', 'play' (one or
+    more snaps, then decide again), or 'kneel'. Before halftime the price is expected points. At the end of the
+    game it is the game: a field goal is worth nothing down four, a touchdown is the win down six and a coin flip
+    down eight, and with no timeouts a completion in bounds ends it. Returns dict(choice, evs, p_fg, p_td) or None
+    outside the window, or when the side with the ball is ahead at the end of the game (it wants the clock)."""
+    if half_end is None and (dr.quarter < 4 or dr.score_diff > 0): return None
+    if half_end is not None and dr.quarter > 2: return None
+    if secs_in_half > PLAN_WINDOW or secs_in_half <= 0: return None
+    y = float(yardline if yardline is not None else dr.yardline)
+    if y <= 0.5: return None
+    c = coach or {}
+    aggr = float(np.clip(0.5 * float(c.get('fourth_down', 0.5)) + 0.5 * float(c.get('adjust_willingness', 0.5)), 0.0, 1.0))
+    own_tos = timeouts.left.get(pos, 0) if timeouts is not None else 0
+    kicker = offense.get('k') or {}
+    game_end = half_end is None
+    need = max(0, -int(round(dr.score_diff))) if game_end else 0
+    if game_end and need > 8: return None                       # two scores in under a minute: the drill runs as it does
+    # WHAT A SCORE IS WORTH. Points before the half; at the end of the game, the share of a win: a kick wins a tie
+    # and only ties a deficit of three or less, a touchdown wins outright down six or less, needs the kick down
+    # seven and the two-point try down eight
+    if game_end:
+        v_kick = 1.0 if need == 0 else (0.5 if need <= 3 else 0.0)
+        v_td = 1.0 if need <= 6 else (0.94 if need == 7 else 0.48)
+        v_kneel = 0.5 if need == 0 else 0.0                        # the clock runs out: overtime tied, a loss behind
+        floor_line = 0.0                                           # behind, any chance beats none; tied, the kneel's coin flip is the bar
+    else:
+        v_kick, v_td, v_kneel, floor_line = 3.0, 6.95, 0.0, HAIL_MARY_LINE
+    def kick_ev(yy): return v_kick * fg_probability(yy + 17.0, kicker, rate_fn)
+    p_fg = fg_probability(y + 17.0, kicker, rate_fn)
+    p_td = _shot_td_prob(y, offense, defense, rate_fn)
+    evs = {'kneel': v_kneel}
+    if secs_in_half >= 1: evs['kick'] = kick_ev(y)
+    def shot_ev(yy, secs, tos):
+        """A throw to the end zone: the touchdown, or, with time to kick after it, the kick that follows an
+        incompletion (the clock stops) or a catch short of the goal (a timeout stops it); tied at the end of the
+        game, an incompletion still leaves the coin flip."""
+        p = _shot_td_prob(yy, offense, defense, rate_fn)
+        ev = v_td * p * (0.85 + 0.30 * aggr)
+        live = 1.0 - p - SHOT_INT
+        if secs >= PLAY_SECS + 4:
+            ev += live * ((1.0 - SHOT_SHORT) * kick_ev(yy) + SHOT_SHORT * (kick_ev(max(1.0, yy - 15.0)) if tos > 0 else 0.0))
+        elif game_end and need == 0:
+            ev += live * v_kneel
+        return ev
+    if secs_in_half >= 4: evs['shot'] = shot_ev(y, secs_in_half, own_tos)
+    # one snap or several before deciding: a completion gains PLAY_GAIN, an incompletion stops the clock for
+    # nothing, a sack or a turnover ends the attempt. Each snap takes PLAY_SECS with the clock stopped after it; a
+    # completion in bounds keeps the clock running and, with no timeout left and no time to spare, ends the half
+    best_play = None
+    n_max = int((secs_in_half - 4.0) // PLAY_SECS)
+    surv = 1.0; yk = y; sk = secs_in_half; tos_k = own_tos
+    for k in range(1, max(0, min(n_max, own_tos + 3)) + 1):
+        sk -= PLAY_SECS
+        if sk < 3: break
+        p_comp = 1.0 - PLAY_BAD - PLAY_INC
+        if tos_k > 0: tos_k -= 1; surv *= (1.0 - PLAY_BAD)                                  # the timeout stops it after a catch
+        elif sk >= 25: surv *= (1.0 - PLAY_BAD)                                             # enough clock to absorb a catch in bounds
+        else: surv *= (1.0 - PLAY_BAD - p_comp * (1.0 - PLAY_OOB))                          # a catch in bounds ends it; only the sideline saves it
+        yk = max(1.0, yk - PLAY_GAIN * p_comp)
+        terminal = max(kick_ev(yk), shot_ev(yk, sk, tos_k))
+        evk = surv * terminal
+        if best_play is None or evk > best_play: best_play = evk
+    if best_play is not None: evs['play'] = best_play
+    choice = max(evs, key=lambda k: evs[k])
+    if evs[choice] < floor_line: choice = 'kneel'
+    return dict(choice=choice, evs={k: round(v, 3) for k, v in evs.items()}, p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
+
+
+def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None, plan=None):
     """Who spends a timeout after this play, if anyone. The trailing side spends them to get the ball back; the
     driving side to keep the clock alive. Neither wastes one early. Returns (used, used_by).
 
@@ -412,6 +519,8 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None)
             used = timeouts.use(other); used_by = other
         elif ((-8 <= dr.score_diff < 0 and secs_in_half < trail_window) or (dr.score_diff == 0 and secs_in_half < 40)) and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
             used = timeouts.use(pos); used_by = pos                        # one score down inside a minute, or tied at the very end; down two the offense runs the hurry-up and keeps them for the defense
+        elif plan is not None and plan['choice'] != 'kneel' and in_bounds and secs_in_half > 4 and timeouts.left.get(pos, 0) > 0:
+            used = timeouts.use(pos); used_by = pos                        # whatever the score: the clock is running on a spot worth a kick or a shot
     return used, used_by
 
 
@@ -706,6 +815,16 @@ def _resolve_live_penalty(dr, pen, out, oc):
     after the whistle is not a choice; it is added to whatever the play produced.
     """
     import events as E
+    # INTERFERENCE NEEDS A BALL THROWN TO THE RECEIVER DOWNFIELD. The flag is drawn before the play resolves. If
+    # the quarterback was sacked or scrambled, the call became a run, or the throw was a screen or behind the
+    # line, the contact that drew the flag was holding, not interference: the foul is renamed and enforced as
+    # holding (five and an automatic first on the defense, ten on the offense), not thrown away
+    thrown = out.get('type') in ('complete', 'incomplete', 'interception', 'drop')
+    downfield = thrown and not out.get('screen') and (out.get('air') is None or float(out.get('air') or 0.0) >= 1.0)
+    if pen['penalty'] == 'Defensive Pass Interference' and not downfield:
+        pen['penalty'] = 'Defensive Holding'; pen['yards'] = 5.0; pen['auto_first'] = True
+    elif pen['penalty'] == 'Offensive Pass Interference' and not downfield:
+        pen['penalty'] = 'Offensive Holding'; pen['yards'] = 10.0; pen['auto_first'] = False
     yards = float(pen['yards'])
     gained = float(out.get('yards') or 0.0)
     if pen['on_offense']:
@@ -730,11 +849,8 @@ def _resolve_live_penalty(dr, pen, out, oc):
     if out.get('touchdown'):
         return None                               # six beats fifteen
     if pen['penalty'] == 'Defensive Pass Interference':
-        # A SPOT FOUL FOLLOWS THE THROW. The flag was drawn before the play resolved, at a generic 13-yard median,
-        # so a screen could come back with a 20-yard DPI. There is no interference on a throw at or behind the
-        # line (the receiver is not downfield), and downfield the yardage is where the ball was going.
-        if out.get('screen') or (out.get('air') is not None and float(out.get('air') or 0.0) < 1.0):
-            return None
+        # A SPOT FOUL FOLLOWS THE THROW: the yardage is where the ball was going (the flag was drawn before the
+        # play resolved, at a generic 13-yard median, so a screen once came back with a 20-yard DPI)
         if out.get('air') is not None:
             yards = float(max(1, int(round(float(out['air'])))))
             pen['yards'] = yards
@@ -1104,7 +1220,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         secs_left_half = dr.clock - wall
         opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
         clock_dies = secs_left_half <= 3 or (secs_left_half <= 10 and opp_tos == 0)
-        if clock_dies and secs_left_half > 0 and dr.yardline > 45 and dr.score_diff >= 0 and not getattr(dr, '_kneeled', False):
+        _plan0 = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_left_half, coach=(off_state.coach if off_state is not None else None))
+        if clock_dies and secs_left_half > 0 and ((_plan0 is not None and _plan0['choice'] == 'kneel') or (_plan0 is None and dr.yardline > 45 and dr.score_diff >= 0)) and not getattr(dr, '_kneeled', False):
             dr._kneeled = True
             dr.log.append(dict(type='kneel', passer=(offense.get('qb') or {}).get('pid'), down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock))
             dr.plays += 1; dr.clock = wall; dr.result = 'End of half'; break
@@ -1124,8 +1241,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         secs_in_half = dr.clock - half_end if half_end is not None else dr.clock
         no_tos = timeouts is not None and timeouts.left.get(pos, 0) == 0
         clock_kick_time = secs_in_half <= 8 or (secs_in_half <= 22 and no_tos)
-        if ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) \
-                and dr.yardline <= 37 and dr.down < 4 and clock_kick_time:
+        _plan = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None))
+        dr._plan = _plan
+        _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4
+        _kick_old = ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) and dr.yardline <= 37 and dr.down < 4 and clock_kick_time and _plan is None
+        if _kick_by_plan or _kick_old:
             fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
             if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
             dr.clock -= min(dr.clock, play_seconds('field_goal'))
@@ -1181,7 +1301,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         secs_for_call = dr.clock
         if half_end is not None and quarter <= 2 and secs_in_half <= 240 and dr.score_diff <= 0:
             secs_for_call = secs_in_half          # the drive before the break is a two-minute drill for the side not ahead
-        last_shot = (half_end is not None and quarter <= 2 or (quarter >= 4 and -8 <= dr.score_diff <= 0)) and secs_in_half <= 25 and dr.yardline <= 37 and dr.yardline > 1
+        _pl = getattr(dr, '_plan', None)
+        last_shot = (_pl is not None and _pl['choice'] == 'shot') or (_pl is None and (half_end is not None and quarter <= 2 or (quarter >= 4 and -8 <= dr.score_diff <= 0)) and secs_in_half <= 25 and dr.yardline <= 37 and dr.yardline > 1)
+        if _pl is not None and _pl['choice'] in ('shot', 'play') and dr.score_diff > 0 and half_end is not None:
+            secs_for_call = secs_in_half          # a leading offense with a plan before the break is in the drill too, not burning clock
         # THE CLOCK DECIDES THE CALL LATE. Ahead in the last four minutes the offense runs to burn it
         # (a pass on third and long, otherwise the ball stays on the ground); behind, or tied, in the
         # last two minutes of a half it throws, a draw once in a while and a run only on a yard to go.
@@ -1197,11 +1320,22 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             elif dr.score_diff < 0 and half_end is None and dr.clock < 150 * int(np.ceil(-dr.score_diff / 8.0)) + 90:
                 late_lean = 0.5 if dr.togo <= 1 else 2.5          # chasing with little time: lean to the pass, not all of it
         lean_now = dict(olean or {})
+        # the plan's 'play' is a quick throw to move the kick closer, whatever the score: the same drill the trailing side runs
+        if _pl is not None and _pl['choice'] == 'play' and not last_shot: late_lean = max(late_lean, 12.0 if secs_in_half <= 30 else 6.5)
         if last_shot: lean_now['pass_bias'] = float(lean_now.get('pass_bias', 0.0)) + 6.0
         elif late_lean: lean_now['pass_bias'] = float(lean_now.get('pass_bias', 0.0)) + late_lean
         oc = call_off(dr.down, max(1, int(np.ceil(dr.togo))),
                       dr.score_diff, ytg_i, rng, secs_left=secs_for_call,
                       offense=offense, rate_fn=rate_fn, lean=(lean_now if (last_shot or late_lean) else olean))
+        if last_shot and _pl is not None and _pl['choice'] == 'shot':
+            oc['is_pass'] = True; oc['depth'] = 'deep'; oc['concept'] = 'four_verts'; oc['play_action'] = False; oc['plan_depth'] = True   # the plan's shot: everyone to the end zone
+        elif _pl is not None and _pl['choice'] == 'play' and half_end is None and dr.score_diff < 0:
+            # NEEDING A SCORE WITH THE CLOCK DYING, the throws go down the field or to the sideline: no play action
+            # (the fake costs a second the drive does not have), nothing short and in bounds; under fifteen seconds
+            # every throw is a shot at the end zone
+            oc['is_pass'] = True; oc['play_action'] = False; oc['plan_depth'] = True
+            if secs_in_half <= 15: oc['depth'] = 'deep'; oc['concept'] = 'four_verts'
+            elif oc.get('depth') in (None, 'short'): oc['depth'] = 'medium'
         if late_lean >= 6.0 and not oc.get('is_pass') and dr.togo > 1.5:
             # THE TWO-MINUTE DRILL THROWS. The lean left a few percent of runs and the weather's run lean ate into it
             # further; trailing under two minutes with more than a yard to go, a designed run is not a call
@@ -1269,7 +1403,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             oc['plan'] = pl
             oc['travel_willingness'] = float(
                 off_state.coach.get('travel_willingness', 0.5))
-            if oc.get('is_pass'):
+            if oc.get('is_pass') and not oc.get('plan_depth'):        # the end-of-half plan's depth stands when it set one
                 oc['depth'] = GP.depth(pl, rng, yards_to_endzone=ytg_i,
                                        down=dr.down, ydstogo=int(dr.togo))
             else:
@@ -1446,7 +1580,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # off and the trailing offense never got to stop it. The play runs at the drill's pace; the flag stops
                 # the clock; if a side calls a timeout the clock stays stopped, otherwise it restarts on the ready
                 secs_in_half_p = (dr.clock - half_end) if half_end is not None else dr.clock
-                used_p, used_by_p = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None))
+                _plan_p = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half_p - PLAY_SECS, coach=(off_state.coach if off_state is not None else None)) if secs_in_half_p - PLAY_SECS > 4 else None
+                used_p, used_by_p = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p)
                 hurry_p = secs_in_half_p < 120 and dr.score_diff <= 0
                 _tick(dr, play_seconds(t, hurry=hurry_p, timeout=used_p) + (0.0 if used_p else play_seconds('penalty')))
                 dr.clock = float(np.ceil(dr.clock - 1e-9))
@@ -1495,7 +1630,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 
         # ---- timeouts ----
-        used, used_by = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None))
+        _y_after = float(np.clip(dr.yardline - float(out.get('yards', 0.0) or 0.0), 1.0, 99.0))
+        _secs_after = secs_in_half - PLAY_SECS
+        _plan_to = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None), yardline=_y_after) if _secs_after > 4 else None
+        used, used_by = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to)
         hurry = secs_in_half < 120 and dr.score_diff <= 0
         before_clock = secs_in_half
         clock_before = dr.clock
