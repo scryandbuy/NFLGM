@@ -19,8 +19,12 @@ SEED = _p('league_seed_2026.csv')
 RATING_COLS = None
 
 
-def load_league(path=SEED, scheme=None):
-    """Return {team: roster dict} ready for the game loop."""
+def load_league(path=SEED, scheme=None, rigidity=None):
+    """Return {team: roster dict} ready for the game loop. scheme is one tag list for
+    every club, or {team: tags} so each club orders its depth by its own scheme; with a
+    {team: tags} map the players also dress with their fit on their game-day ratings
+    (field_fit), centered league-wide, the way the franchise plays. rigidity is an
+    optional {team: scheme_rigidity} for the fit's scale."""
     global RATING_COLS
     S = pd.read_csv(path, low_memory=False)
     S = S[S.roster == 'active'].copy()
@@ -28,7 +32,20 @@ def load_league(path=SEED, scheme=None):
                    and c != 'src_rating']
     league = {}
     for team, grp in S.groupby('team'):
-        league[team] = build_roster(grp, scheme)
+        league[team] = build_roster(grp, scheme.get(team) if isinstance(scheme, dict) else scheme)
+    if isinstance(scheme, dict):
+        import field_fit as FF
+        rig = rigidity or {}
+        by_pos = {}; plan = []
+        for team, r in league.items():
+            if not r: continue
+            tags = scheme.get(team)
+            for pos, ps in r['depth'].items():
+                for p in ps:
+                    d = FF.deltas(p, pos, tags, rig.get(team, 0.5)); by_pos.setdefault(pos, []).append(d); plan.append((p, pos, d))
+        c = FF.centers(by_pos)
+        for p, pos, d in plan:
+            p.update(FF.shifted(p, pos, d, c))
     return league
 
 

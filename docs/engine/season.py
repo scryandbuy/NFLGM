@@ -161,7 +161,39 @@ class SeasonRunner:
                     for a, v in hits.items(): r[a] = max(1.0, float(r.get(a, 60.0)) + v)
         # game-day elevations from the practice squad dress this week
         rows += [dict(p.ratings, pid=p.pid, pos=p.pos) for p in getattr(t, '_elevated', [])]
-        return R.build_roster_rows(rows, t.scheme, pins=getattr(t, 'depth_pins', None))
+        units = R.build_roster_rows(rows, t.scheme, pins=getattr(t, 'depth_pins', None))
+        # FIT ON THE FIELD: the depth chart is ordered on the card, then every player dresses with his
+        # scheme fit on his game-day ratings (field_fit), centered at the league mean for his spot
+        self._apply_field_fit(rows, t)
+        return units
+
+    def _fit_centers(self):
+        """League mean game-day move on each attribute at each position this week, from every active
+        player through his own club's tags (field_fit.centers)."""
+        key = (int(self.L.year), int(self.week))
+        cache = getattr(self, '_fit_center_cache', None)
+        if cache and cache[0] == key:
+            return cache[1]
+        import field_fit as FF
+        by_pos = {}
+        for t in self.L.teams.values():
+            tags = getattr(t, 'scheme', None); rig = float(getattr(t.gm, 'scheme_rigidity', 0.5)) if getattr(t, 'gm', None) else 0.5
+            for p in t.active():
+                by_pos.setdefault(p.pos, []).append(FF.deltas(p.ratings, p.pos, tags, rig))
+        c = FF.centers(by_pos)
+        self._fit_center_cache = (key, c)
+        return c
+
+    def _apply_field_fit(self, rows, t):
+        import field_fit as FF
+        tags = getattr(t, 'scheme', None)
+        if not tags:
+            return
+        rig = float(getattr(t.gm, 'scheme_rigidity', 0.5)) if getattr(t, 'gm', None) else 0.5
+        centers = self._fit_centers()
+        for r in rows:
+            pos = r.get('pos')
+            r.update(FF.shifted(r, pos, FF.deltas(r, pos, tags, rig), centers))
 
     def refresh(self, abbr):
         self.states[abbr].roster = self._units(abbr)

@@ -154,14 +154,13 @@ def card(session, league, pid):
         import views_frontoffice as VF, identity_catalog as IC
         ident = VF.club_identity(league, user)
         names = {'offence': IC.ARCHETYPES[ident['offence']]['name'], 'defence': IC.ARCHETYPES[ident['defence']]['name']}
-        OFF_KEYS = {'zone', 'gap', 'heavy_te', 'spread_te', 'deep_game', 'quick_game', 'pa_heavy', 'motion_off', 'run_first', 'tempo_off'}
         schemes = getattr(user, 'scheme', None) or {}
         keys = list(schemes.values()) if isinstance(schemes, dict) else ([schemes] if isinstance(schemes, str) else list(schemes))
         for s in keys:
             if p.pos not in TG.SCHEME_DOMAIN.get(s, ()): continue
             for k, v in TG.SCHEME_SHIFT.get(s, {}).items():
                 if k in p.ratings and k in TG.DEPTH_WEIGHTS.get(p.pos, {}):
-                    shift[k] = shift.get(k, 0.0) + float(v); shift_name[k] = names['offence' if s in OFF_KEYS else 'defence']
+                    shift[k] = shift.get(k, 0.0) + float(v); shift_name[k] = names[TG.SCHEME_SIDE.get(s, 'offence')]
         shift = {k: (1 if v > 0 else -1) for k, v in shift.items() if abs(v) > 1e-9}
     except Exception: pass
     def col(keys):
@@ -670,16 +669,17 @@ OFF_POS = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT', 'K', 'P', 
 
 
 def archetype_keys(entry):
-    """An archetype's engine scheme tags, the same way a club's identity becomes them (gm_engine.scheme_of), from
-    the catalog entry's dials alone."""
-    import gm_engine as GE
+    """An archetype's engine scheme tags on its own side, the same way a club's identity becomes them
+    (gm_engine.scheme_of), from the catalog entry's dials alone."""
+    import gm_engine as GE, targets as TG
     class _G: pass
     g = _G()
     o = entry.get('offence') or {}; d = entry.get('defence') or {}
     g.off_blocking = o.get('blocking', 'mixed'); g.off_personnel = o.get('personnel', '11'); g.deep = o.get('deep', 0.5)
     g.play_action = o.get('play_action', 0.5); g.motion = o.get('motion', 0.5); g.pass_lean = o.get('pass_lean', 0.5); g.tempo = o.get('tempo', 0.5)
-    g.def_front = d.get('front', 'multiple'); g.coverage = d.get('coverage', 0.4)
-    return GE.scheme_of(g) or []
+    g.def_front = d.get('front', 'multiple'); g.coverage = d.get('coverage', 0.4); g.box = d.get('box', 0.5); g.blitz = d.get('blitz', 0.4); g.shell = d.get('shell', 0.5)
+    side = entry.get('side')
+    return [k for k in (GE.scheme_of(g) or []) if not side or TG.SCHEME_SIDE.get(k) == side]
 
 
 def scheme_rows(ratings, pos, team_key=None):

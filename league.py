@@ -934,6 +934,13 @@ class League:
             if td.get('cap_base') is not None:
                 t.cap.cap = td['cap_base']
             t.sync_cap()
+            # the scheme keys are derived from the coach's dials, never stored truth: an older save carries
+            # the shorter tag list of the build it was written in, so they are recomputed here
+            if t.gm is not None:
+                try:
+                    from gm_engine import scheme_of
+                    t.scheme = scheme_of(t.gm)
+                except Exception: pass
             L.teams[abbr] = t
         # THE CAP ONLY RISES. A save rolled under the old projection could carry a year where the cap fell; that
         # year is re-based at the median growth over the last real or rolled figure, for every club at once.

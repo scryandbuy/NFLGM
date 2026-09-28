@@ -141,30 +141,39 @@ ROSTER_KEYS = ('youth', 'pick_lens', 'contract_focus', 'risk', 'patience', 'aggr
 
 def scheme_of(gm):
     """
-    The engine's scheme keys (targets.SCHEME_SHIFT) that this man's identity
-    implies: blocking, front, coverage. A 'mixed' blocking scheme or a
-    'multiple' front adds no shift at that spot; a coverage lean that is not
-    clearly man or zone adds none either.
+    The engine's scheme keys (targets.SCHEME_SHIFT) that this identity implies.
+    Every slot always fills, so every position on each side has a real fit to
+    every identity: offense carries a blocking, a passing, a receiver and a
+    quarterback tag; defense a front, a coverage and a rusher tag. The middle
+    of a dial is its own tag rather than nothing. Extras (motion, run first,
+    tempo) still fire from their dials.
     """
     keys = []
-    if gm.off_blocking in ('zone', 'gap'):
-        keys.append(gm.off_blocking)
-    if gm.def_front == '4-3': keys.append('one_gap')
-    elif gm.def_front == '3-4': keys.append('two_gap')
-    if gm.coverage >= 0.5: keys.append('man')
-    elif gm.coverage <= 0.3: keys.append('zone_cov')
-    # a two-tight-end club wants a tight end who blocks; a spread club wants one who runs routes
-    if gm.off_personnel in ('12', '13', '21'): keys.append('heavy_te')
-    elif gm.off_personnel == '11': keys.append('spread_te')
-    # the passing game's leans grade the quarterback, the backs and the receivers
+    # ---- offense
+    blk = getattr(gm, 'off_blocking', 'zone')
+    keys.append(blk if blk in ('zone', 'gap') else 'mixed_block')
     deep = float(getattr(gm, 'deep', 0.5)); pa = float(getattr(gm, 'play_action', 0.5)); mo = float(getattr(gm, 'motion', 0.5)); pl = float(getattr(gm, 'pass_lean', 0.5)); tp = float(getattr(gm, 'tempo', 0.5))
-    if deep >= 0.55: keys.append('deep_game')
-    elif deep <= 0.42: keys.append('quick_game')
-    if pa >= 0.62: keys.append('pa_heavy')
+    keys.append('deep_game' if deep >= 0.55 else 'quick_game' if deep <= 0.42 else 'intermediate_game')
+    # base personnel: the tight end's own tag, and the tag for the receivers, the back and the fullback
+    per = str(getattr(gm, 'off_personnel', '11'))
+    if per in ('12', '13'): keys += ['heavy_te', 'two_wide']
+    elif per == '21':       keys += ['heavy_te', 'two_back']
+    else:                   keys += ['spread_te', 'three_wide']        # 11, 10, multiple
+    keys.append('pa_heavy' if pa >= 0.62 else 'dropback_qb' if pa <= 0.45 else 'balanced_qb')
     if mo >= 0.65: keys.append('motion_off')
     if pl <= 0.45: keys.append('run_first')
     if tp >= 0.62: keys.append('tempo_off')
-    return keys or None
+    # ---- defense
+    front = getattr(gm, 'def_front', '4-3'); box = float(getattr(gm, 'box', 0.5)); cov = float(getattr(gm, 'coverage', 0.4)); bz = float(getattr(gm, 'blitz', 0.4))
+    if front == '4-3':   keys.append('one_gap')
+    elif front == '3-4': keys.append('two_gap')
+    else:                keys.append('bear' if box >= 0.65 else 'multiple_front')
+    keys.append('man' if cov >= 0.5 else 'zone_cov' if cov <= 0.3 else 'match')
+    keys.append('pressure' if bz >= 0.5 else 'rush_four' if bz <= 0.3 else 'sim_pressure')
+    sh = float(getattr(gm, 'shell', 0.5))
+    if sh >= 0.6: keys.append('two_high')
+    elif sh <= 0.35: keys.append('single_high')
+    return keys
 
 
 def scheme_fit(player_ratings, pos, team):

@@ -200,13 +200,18 @@ def run(seasons=1, seed=2026, verbose=True, coaches='random'):
     which is what the franchise plays with."""
     import rosters as R, game as G, plays as P, schemes as S
     rng = np.random.default_rng(seed)
-    L = R.load_league()
-    teams = sorted(L)
-    use_catalog = (coaches == 'catalog'); cat = None
+    use_catalog = (coaches == 'catalog'); cat = None; sch = {}
     if use_catalog:
-        import league as LG, season as SN
+        # the catalog's coaches bring their schemes: each club's depth chart is ordered by
+        # its own tags (targets.SCHEME_SHIFT), the way the franchise plays, so a scheme
+        # change shows on this register
+        import league as LG, season as SN, gm_engine as GE
         LL = LG.build_league(rng=np.random.default_rng(seed))
-        cat = {t: SN.make_coach(LL.teams[t].gm) for t in teams if t in LL.teams}
+        cat = {t: SN.make_coach(LL.teams[t].gm) for t in LL.teams}
+        sch = {t: GE.scheme_of(LL.teams[t].gm) for t in LL.teams}
+        rig = {t: float(getattr(LL.teams[t].gm, 'scheme_rigidity', 0.5)) for t in LL.teams}
+    L = R.load_league(scheme=sch or None, rigidity=(rig if use_catalog else None))
+    teams = sorted(L)
     co = lambda d, di, sd, ytg, r, secs_left=None, **kw: S.call_offense(
         d, di, sd, ytg, r, secs_left=secs_left, **kw)
     cd = lambda oc, d, di, r, ytg=50, **kw: S.call_defense(
@@ -223,7 +228,7 @@ def run(seasons=1, seed=2026, verbose=True, coaches='random'):
 
     C = Collector()
     for s in range(seasons):
-        ST = {t: G.TeamState(L[t], coach=coaches[t]) for t in teams}
+        ST = {t: G.TeamState(L[t], coach=coaches[t], scheme=sch.get(t)) for t in teams}
         for wk in range(17):
             o = list(teams); rng.shuffle(o)
             for i in range(0, 32, 2):

@@ -251,14 +251,33 @@ SCHEME_SHIFT = {
                   'route_run_med_rating': -.15, 'speed_rating': -.10},
     'spread_te': {'route_run_med_rating': +.15, 'catch_rating': +.10, 'speed_rating': +.10,
                   'run_block_rating': -.18, 'pass_block_rating': -.12},
+    # the back and the fullback carry keys of their own here: the line keys
+    # above land on nothing either of them weighs
     'gap':      {'run_block_power_rating': +.26, 'strength_rating': +.16,
-                 'run_block_finesse_rating': -.14, 'agility_rating': -.10},
+                 'run_block_finesse_rating': -.14, 'agility_rating': -.10,
+                 'truck_rating': +.14, 'break_tackle_rating': +.10, 'stiff_arm_rating': +.06, 'juke_move_rating': -.08, 'bcv_rating': -.06,   # HB
+                 'lead_block_rating': +.16, 'impact_block_rating': +.12},                                                                    # FB (impact: OL, TE too)
     'zone':     {'run_block_finesse_rating': +.28, 'agility_rating': +.20,
-                 'run_block_power_rating': -.16, 'strength_rating': -.12},
+                 'run_block_power_rating': -.16, 'strength_rating': -.12,
+                 'bcv_rating': +.14, 'change_of_direction_rating': +.10, 'accel_rating': +.06, 'truck_rating': -.08,                        # HB
+                 'lead_block_rating': -.08, 'impact_block_rating': -.06},                                                                    # FB
+    # a mixed run game wants the smart all-rounder over either specialist
+    'mixed_block': {'awareness_rating': +.14, 'run_block_rating': +.08, 'pass_block_rating': +.06,
+                    'run_block_power_rating': -.06, 'run_block_finesse_rating': -.06,
+                    'lead_block_rating': +.06, 'carry_rating': +.06, 'break_tackle_rating': +.06, 'bcv_rating': +.06},
+    # the linebackers carry pursuit/speed and tackle/hit keys so a front grades them too
     'two_gap':  {'strength_rating': +.24, 'block_shed_rating': +.18,
-                 'finesse_moves_rating': -.14, 'accel_rating': -.10},
+                 'finesse_moves_rating': -.14, 'accel_rating': -.10,
+                 'tackle_rating': +.08, 'hit_power_rating': +.06},
     'one_gap':  {'accel_rating': +.18, 'finesse_moves_rating': +.24,
-                 'strength_rating': -.14},
+                 'strength_rating': -.14,
+                 'pursuit_rating': +.10, 'speed_rating': +.06},
+    # a front that moves asks everyone in it to do everything
+    'multiple_front': {'awareness_rating': +.16, 'block_shed_rating': +.08, 'play_rec_rating': +.08,
+                       'power_moves_rating': +.06, 'finesse_moves_rating': +.06},
+    # cover every lineman, load the box: the strong safety is in the domain
+    'bear':     {'strength_rating': +.20, 'block_shed_rating': +.16, 'power_moves_rating': +.12, 'hit_power_rating': +.10,
+                 'tackle_rating': +.08, 'finesse_moves_rating': -.12, 'speed_rating': -.06},
     # coverage shifts run twice the size of the line's because a back's
     # weights carry both man and zone and the two nearly cancelled: the
     # secondary moved half a point under a scheme while a guard moved five
@@ -266,6 +285,26 @@ SCHEME_SHIFT = {
                  'zone_cover_rating': -.28},
     'zone_cov': {'zone_cover_rating': +.52, 'play_rec_rating': +.40,
                  'man_cover_rating': -.32},
+    # pattern-match: recognition and the transition over raw speed; man skill
+    # still counts because the rules turn to man on the release
+    'match':    {'play_rec_rating': +.40, 'zone_cover_rating': +.28, 'awareness_rating': +.16, 'change_of_direction_rating': +.16,
+                 'man_cover_rating': +.10, 'speed_rating': -.16, 'press_rating': -.10},
+    # THE SHELL, from the safeties dial, on the secondary only. Two high asks
+    # for vision, reading and tackling from everyone on the back end; single
+    # high puts the corners on islands and the strong safety in the box
+    'two_high':    {'zone_cover_rating': +.20, 'play_rec_rating': +.16, 'tackle_rating': +.10,
+                    'press_rating': -.12, 'hit_power_rating': -.08},
+    'single_high': {'speed_rating': +.20, 'press_rating': +.14, 'man_cover_rating': +.10, 'pursuit_rating': +.10,
+                    'hit_power_rating': +.10, 'block_shed_rating': +.06},
+    # THE RUSH. Rush four and the four must win alone while the linebackers drop;
+    # simulated pressure wants a player who can rush from anywhere and drop from
+    # anywhere; a pressure defense wants speed and violence off the edge and the second level
+    'rush_four':    {'power_moves_rating': +.18, 'finesse_moves_rating': +.14, 'block_shed_rating': +.08,
+                     'zone_cover_rating': +.14, 'play_rec_rating': +.10, 'pursuit_rating': +.06, 'hit_power_rating': -.06},
+    'sim_pressure': {'awareness_rating': +.14, 'accel_rating': +.10, 'play_rec_rating': +.08, 'zone_cover_rating': +.08,
+                     'block_shed_rating': +.06, 'finesse_moves_rating': +.06},
+    'pressure':     {'accel_rating': +.16, 'finesse_moves_rating': +.14, 'hit_power_rating': +.12, 'speed_rating': +.10,
+                     'pursuit_rating': +.08, 'block_shed_rating': -.08, 'zone_cover_rating': -.10},
     # THE PASSING GAME'S LEANS. Until these existed the offensive identity graded
     # only linemen and tight ends: a quarterback, a back and a receiver came out
     # the same under every archetype. Each key shifts only what the spot already
@@ -274,6 +313,28 @@ SCHEME_SHIFT = {
                    'speed_rating': +.28, 'route_run_deep_rating': +.32, 'route_run_short_rating': -.18, 'cit_rating': -.10},   # WR, TE, HB (speed)
     'quick_game': {'throw_acc_short_rating': +.36, 'throw_acc_mid_rating': +.20, 'throw_acc_deep_rating': -.16, 'throw_power_rating': -.12,
                    'route_run_short_rating': +.34, 'cit_rating': +.20, 'catch_rating': +.10, 'route_run_deep_rating': -.20, 'speed_rating': -.10},
+    'intermediate_game': {'throw_acc_mid_rating': +.30, 'throw_under_pressure_rating': +.10, 'throw_acc_deep_rating': -.10,     # QB
+                          'route_run_med_rating': +.32, 'cit_rating': +.18, 'route_run_deep_rating': -.10,                      # WR, TE
+                          'catch_rating': +.08, 'awareness_rating': +.10},
+    # THE RECEIVER SLOT, from base personnel. The tight end keeps his own tag
+    # (heavy_te/spread_te); these grade the receivers, the back and the fullback
+    'three_wide': {'release_rating': +.16, 'route_run_short_rating': +.12, 'route_run_med_rating': +.10, 'agility_rating': +.08,
+                   'speed_rating': +.06, 'spec_catch_rating': -.06,                                                              # WR
+                   'catch_rating': +.16, 'pass_block_rating': +.08, 'juke_move_rating': +.06, 'truck_rating': -.08,             # HB
+                   'carry_rating': +.20, 'lead_block_rating': -.10, 'impact_block_rating': -.06},                               # FB
+    'two_wide':   {'speed_rating': +.16, 'route_run_deep_rating': +.14, 'spec_catch_rating': +.10, 'jump_rating': +.08,
+                   'cit_rating': +.08, 'route_run_short_rating': -.10,                                                           # WR
+                   'break_tackle_rating': +.12, 'truck_rating': +.10, 'carry_rating': +.08, 'catch_rating': -.08,               # HB
+                   'lead_block_rating': +.10, 'impact_block_rating': +.10},                                                      # FB
+    'two_back':   {'route_run_deep_rating': +.12, 'speed_rating': +.12, 'cit_rating': +.10, 'spec_catch_rating': +.06,
+                   'route_run_short_rating': -.08,                                                                              # WR
+                   'bcv_rating': +.10, 'break_tackle_rating': +.08, 'catch_rating': +.08, 'juke_move_rating': -.04,             # HB
+                   'lead_block_rating': +.16, 'impact_block_rating': +.12, 'run_block_rating': +.08, 'carry_rating': +.06},     # FB
+    # THE QUARTERBACK SLOT, from the play-action dial
+    'dropback_qb': {'awareness_rating': +.18, 'throw_under_pressure_rating': +.20, 'throw_acc_mid_rating': +.10, 'break_sack_rating': +.08,
+                    'throw_on_run_rating': -.12, 'play_action_rating': -.08},
+    'balanced_qb': {'awareness_rating': +.10, 'play_action_rating': +.10, 'throw_acc_mid_rating': +.10, 'throw_under_pressure_rating': +.08,
+                    'throw_on_run_rating': +.06},
     'pa_heavy':   {'throw_on_run_rating': +.30, 'play_action_rating': +.30, 'throw_under_pressure_rating': +.10,
                    'break_tackle_rating': +.24, 'truck_rating': +.16, 'bcv_rating': +.12},
     'motion_off': {'release_rating': +.30, 'agility_rating': +.20, 'route_run_med_rating': +.14, 'speed_rating': +.10,
@@ -288,28 +349,50 @@ SCHEME_SHIFT = {
 # grades the men who cover. Applied to everyone, a zone-blocking shift put
 # run-block weights on quarterbacks and receivers (defaulting to 70) and
 # graded every starter in the league fifteen points below his rating.
+_OL = {'LT', 'LG', 'C', 'RG', 'RT'}
+_FRONT = {'LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM'}
+_COVER = {'CB', 'FS', 'SS', 'MIKE', 'WILL', 'SAM'}
 SCHEME_DOMAIN = {
     'heavy_te':  {'TE'},
     'spread_te': {'TE'},
-    'gap':      {'LT', 'LG', 'C', 'RG', 'RT', 'TE', 'FB', 'HB'},
-    'zone':     {'LT', 'LG', 'C', 'RG', 'RT', 'TE', 'FB', 'HB'},
-    'one_gap':  {'LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM'},
-    'two_gap':  {'LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM'},
-    'man':      {'CB', 'FS', 'SS', 'MIKE', 'WILL', 'SAM'},
-    'zone_cov': {'CB', 'FS', 'SS', 'MIKE', 'WILL', 'SAM'},
+    'gap':       _OL | {'TE', 'FB', 'HB'},
+    'zone':      _OL | {'TE', 'FB', 'HB'},
+    'mixed_block': _OL | {'TE', 'FB', 'HB'},
+    'one_gap':   _FRONT,
+    'two_gap':   _FRONT,
+    'multiple_front': _FRONT,
+    'bear':      _FRONT | {'SS'},
+    'man':       _COVER,
+    'zone_cov':  _COVER,
+    'match':     _COVER,
+    'two_high':    {'CB', 'FS', 'SS'},
+    'single_high': {'CB', 'FS', 'SS'},
+    'rush_four': _FRONT,
+    'sim_pressure': _FRONT | {'SS'},
+    'pressure':  _FRONT | {'SS'},
     'deep_game':  {'QB', 'WR', 'TE', 'HB'},
     'quick_game': {'QB', 'WR', 'TE', 'HB'},
+    'intermediate_game': {'QB', 'WR', 'TE', 'HB'},
+    'three_wide': {'WR', 'HB', 'FB'},
+    'two_wide':   {'WR', 'HB', 'FB'},
+    'two_back':   {'WR', 'HB', 'FB'},
+    'dropback_qb': {'QB'},
+    'balanced_qb': {'QB'},
     'pa_heavy':   {'QB', 'HB', 'FB'},
     'motion_off': {'WR', 'TE', 'HB'},
     'run_first':  {'QB', 'HB', 'FB'},
     'tempo_off':  {'QB', 'WR'},
 }
+# which side of the ball a tag belongs to, so the card and the Identity page
+# can name the archetype that asks for an attribute without a hardcoded list
+SCHEME_SIDE = {k: ('defence' if v <= (_FRONT | _COVER | {'SS'}) else 'offence') for k, v in SCHEME_DOMAIN.items()}
 
 
-# How hard fit bites on the field. At full strength a 380-pound mauler graded
+# How hard a tag shifts the grade. At full strength a 380-pound mauler graded
 # ten points under his rating in a zone scheme; real but bounded is a few
-# points either way, so a misfit starter still starts and simply plays a
-# little under his card.
+# points either way. This is the front office's grade (depth chart, trades,
+# draft, market, the Fit on the card); the same shifts reach the field through
+# field_fit, which moves the touched attributes on game day.
 SCHEME_BITE = 0.5
 
 
