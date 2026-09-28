@@ -147,7 +147,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         base_share = 0.65 if ydstogo <= 1 else 0.25 if ydstogo <= 3 else 0.08     # fourth and one is a tactical go anywhere; the long ones are the desperate ones
         p_go *= base_share + (1.0 - base_share) * urgency
     if lead_scores > 0:
-        p_go *= float(np.exp(-0.9 * lead_scores * (1.0 + played)))
+        p_go *= float(np.exp(-LEAD_FOURTH * lead_scores * (1.0 + played)))
     elif lead_scores < 0:
         p_go = float(min(0.85, p_go * min(1.4, np.exp(0.2 * (-lead_scores) * (1.0 + played)))))   # a deficit pushes a little; the table already carries the trailing club's fourth downs, and the chase rule takes over late
     if chasing:
@@ -416,6 +416,8 @@ LAST_KICKOFF = {}
 # timeouts let the half expire. Now the coach prices his options in expected points from where he stands and
 # takes the best one; his kicker's leg sets the kick's range, his passing game against their secondary sets the
 # shot's odds, and his own aggression sets how much he likes the shot when the numbers are close.
+LEAD_FOURTH = 0.45          # how fast a lead shrinks the fourth-down appetite (0.9 had leaders going on nothing, and the league lost its blowouts)
+STALL_ON = True
 PLAN_WINDOW = 75.0          # seconds left in the half within which the clock, not the downs, is the constraint
 PLAY_SECS = 7.0             # a snap with the clock stopped after it (an incompletion, a timeout, out of bounds)
 PLAY_SECS_RUN = 38.0        # a snap with the clock running: huddle, snap late in the play clock
@@ -549,7 +551,7 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         if dr.score_diff < 0: return 0.0                           # behind, the clock is ours to spend
         if game_end and need > 0 and opt != 'kick': return 0.0
         c = fear * _possession_value(max(0.0, residual.get(opt, 0.0)), other_tos, game_end, lead_after.get(opt, 0))
-        if opt == 'play': c += fear * p_stall * _possession_value(stall_left, other_tos, game_end, int(round(dr.score_diff)))
+        if opt == 'play' and STALL_ON: c += fear * p_stall * _possession_value(stall_left, other_tos, game_end, int(round(dr.score_diff)))
         return c
     net = {k: v - cost(k) for k, v in evs.items()}
     hurry_choice = max(net, key=lambda k: net[k]); hurry_ev = net[hurry_choice]; cost_hurry = cost(hurry_choice)
