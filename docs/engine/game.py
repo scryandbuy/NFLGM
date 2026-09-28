@@ -386,10 +386,19 @@ KICKOFF = dict(touchback=.155, return_rate=.799, return_mean=25.0,      # 26.9 d
 LAST_KICKOFF = {}
 
 
-def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half):
+def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None):
     """Who spends a timeout after this play, if anyone. The trailing side spends them to get the ball back; the
-    driving side to keep the clock alive. Neither wastes one early. Returns (used, used_by)."""
+    driving side to keep the clock alive. Neither wastes one early. Returns (used, used_by).
+
+    THE TRAILING OFFENSE'S WINDOW IS THE COACH'S. Down one score at the end of a half, an offense holding two or
+    three timeouts starts spending them earlier than one down to its last: from 60 seconds out for the most
+    conservative coach to 100 for the most aggressive (his fourth-down and adjustment dials), and 60 with one left
+    whoever he is. Tied stays at 40: a tie is not worth the last timeout until the very end."""
     used = False; used_by = None
+    c = coach or {}
+    clock_aggr = float(np.clip(0.5 * float(c.get('fourth_down', 0.5)) + 0.5 * float(c.get('adjust_willingness', 0.5)), 0.0, 1.0))
+    own_left = timeouts.left.get(pos, 0) if timeouts is not None else 0
+    trail_window = (60.0 + 40.0 * clock_aggr) if own_left >= 2 else 60.0
     _scored_now = t in ('run', 'complete', 'scramble') and float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01
     _at_warning = secs_in_half > 120 and secs_in_half - play_seconds(t) <= 120 and not getattr(dr, '_two_min', False)
     if timeouts is not None and secs_in_half < 300 and not _scored_now and not _at_warning:
@@ -401,7 +410,7 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half):
         # half only a two-score deficit is worth a timeout to get the ball back before the break
         if dr.score_diff > 0 and in_bounds and timeouts.left.get(other, 0) > 0 and ((half_end is None and secs_in_half < 180) or (half_end is not None and secs_in_half < 90 and dr.score_diff >= 9)):
             used = timeouts.use(other); used_by = other
-        elif ((-8 <= dr.score_diff < 0 and secs_in_half < 60) or (dr.score_diff == 0 and secs_in_half < 40)) and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
+        elif ((-8 <= dr.score_diff < 0 and secs_in_half < trail_window) or (dr.score_diff == 0 and secs_in_half < 40)) and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
             used = timeouts.use(pos); used_by = pos                        # one score down inside a minute, or tied at the very end; down two the offense runs the hurry-up and keeps them for the defense
     return used, used_by
 
@@ -1437,7 +1446,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # off and the trailing offense never got to stop it. The play runs at the drill's pace; the flag stops
                 # the clock; if a side calls a timeout the clock stays stopped, otherwise it restarts on the ready
                 secs_in_half_p = (dr.clock - half_end) if half_end is not None else dr.clock
-                used_p, used_by_p = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p)
+                used_p, used_by_p = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None))
                 hurry_p = secs_in_half_p < 120 and dr.score_diff <= 0
                 _tick(dr, play_seconds(t, hurry=hurry_p, timeout=used_p) + (0.0 if used_p else play_seconds('penalty')))
                 dr.clock = float(np.ceil(dr.clock - 1e-9))
@@ -1486,7 +1495,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 
         # ---- timeouts ----
-        used, used_by = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half)
+        used, used_by = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None))
         hurry = secs_in_half < 120 and dr.score_diff <= 0
         before_clock = secs_in_half
         clock_before = dr.clock
