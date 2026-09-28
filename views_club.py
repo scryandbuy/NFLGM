@@ -9,7 +9,9 @@ GROUPS = [('QB', ['QB']), ('HB', ['HB']), ('FB', ['FB']), ('WR', ['WR']), ('TE',
           ('LEDG', ['LEDG']), ('DT', ['DT']), ('REDG', ['REDG']), ('MIKE', ['MIKE']), ('WILL', ['WILL']), ('SAM', ['SAM']), ('CB', ['CB']), ('FS', ['FS']), ('SS', ['SS']),
           ('K', ['K']), ('P', ['P']), ('LS', ['LS'])]
 OFFENSE = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'}
-DEV_WORD = {'xfactor': 'X-Factor', 'superstar': 'Superstar', 'star': 'Star', 'normal': 'Normal', 'slow': 'Slow'}
+# the development tiers by the names the game shows: Normal, Rare, Epic, Legendary
+DEV_WORD = {'xfactor': 'Legendary', 'superstar': 'Epic', 'star': 'Rare', 'normal': 'Normal', 'slow': 'Slow'}
+DEV_KEY = {'Legendary': 'xfactor', 'Epic': 'superstar', 'Rare': 'star', 'Normal': 'normal', 'Slow': 'slow'}
 
 # attribute groups per position family for the card, in FM's three columns
 ATTR = {

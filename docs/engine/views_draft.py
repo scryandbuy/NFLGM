@@ -591,7 +591,7 @@ def draft_csv(session, league, abbr):
         c = cons.get(pid, {}) or {}
         v = ((getattr(league, 'scouting', None) or {}).get(abbr) or {}).get(pid) or {}
         base = [s, (s - 1) // 32 + 1, f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d}", t, (p.name if p else pid), (p.pos if p else ''), (int(p.age) if p else ''), (p.college if p else ''),
-                c.get('rank', ''), (round(float(c['ovr'])) if c.get('ovr') else ''), (round(float(v['ovr'])) if v.get('ovr') else ''), (round(float(p.ovr)) if p else ''), (getattr(p, 'dev', '') if p else '')]
+                c.get('rank', ''), (round(float(c['ovr'])) if c.get('ovr') else ''), (round(float(v['ovr'])) if v.get('ovr') else ''), (round(float(p.ovr)) if p else ''), (VC.DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), getattr(p, 'dev', '')) if p else '')]
         rows.append(base + [(round(float(p.ratings.get(k, 0))) if p else '') for k in attrs])
     def cell(x):
         x = '' if x is None else str(x)
@@ -619,7 +619,7 @@ def class_csv(session, league, abbr):
     for p in sorted(pool, key=lambda p: -p.ovr):
         c = cons.get(p.pid, {}) or {}; v = views.get(p.pid) or {}
         lo, hi = (p.potential_range or (p.ovr, p.ovr))
-        rows.append([p.name, p.pos, int(p.age), p.college, getattr(p, 'class_year', '') or '', round(float(p.ovr)), round(float(lo)), round(float(hi)), p.dev,
+        rows.append([p.name, p.pos, int(p.age), p.college, getattr(p, 'class_year', '') or '', round(float(p.ovr)), round(float(lo)), round(float(hi)), VC.DEV_WORD.get(str(p.dev).lower(), p.dev),
                      round(float(p.xp_spent.get('_tape', 0) or 0), 1), p.xp_spent.get('_tape_role', ''),
                      c.get('rank', ''), (round(float(c['ovr'])) if c.get('ovr') else ''), (round(float(v['ovr'])) if v.get('ovr') else ''),
                      (round(float(v['pot_lo'])) if v.get('pot_lo') else ''), (round(float(v['pot_hi'])) if v.get('pot_hi') else ''),

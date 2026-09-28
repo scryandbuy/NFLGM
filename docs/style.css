@@ -340,8 +340,13 @@ main[hidden]{display:none}
 .cond i{display:block;height:100%;background:var(--ok)}
 .cond i.mid{background:var(--decide)}.cond i.low{background:var(--danger)}
 .inj{color:var(--danger);font-weight:700;font-size:12.5px}
-.dev{font-size:12.5px;color:var(--ink-3)}
-.dev.star{color:var(--club-2)}
+.dev{font-size:12.5px;font-weight:700;letter-spacing:.02em}
+.dev.d-normal{color:var(--ink)}
+.dev.d-rare{color:#4ea8de}
+.dev.d-epic{color:#a66bff}
+.dev.d-legend{color:#ff6a3d}
+.dev.d-slow{color:var(--ink-3)}
+.dev.big{font-size:inherit}
 .row-act{opacity:0;display:flex;gap:4px}
 .tbl tr:hover .row-act{opacity:1}
 .row-act button{width:26px;height:26px;border:1px solid var(--rule-2);color:var(--ink-2);font-family:var(--mono);font-size:14px}
