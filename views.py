@@ -132,7 +132,7 @@ def portal(session, league, abbr):
     if league.phase in ('playoffs', 'playoffs_closed'):
         try:
             from views_league import bracket as _bracket
-            b = _bracket(session, league, abbr); b.pop('rail', None); out['bracket'] = b
+            out['bracket'] = _bracket(session, league, abbr)          # the drawing reads the rail to mark the club
         except Exception: out['bracket'] = None
     out['cap'] = _cap(league, t)
     out['room'] = _room(league, t)
