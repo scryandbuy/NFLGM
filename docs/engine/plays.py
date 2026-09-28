@@ -169,7 +169,10 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
 
     # the QB's own escapability buys time once someone arrives
     if qb is not None:
-        t_arrive *= 1.0 + 0.55 * (rate(qb, {'break_sack_rating': .6,
+        # escapability enters twice (here as time, below as the sack itself), and the exponential turns a 10% cut
+        # in time into 1.7x the sack odds, so a 39 break-sack quarterback sacked at 3.6x an elite one and 89 times
+        # in 406 dropbacks; real spread between the least and most elusive passers is under 2x
+        t_arrive *= 1.0 + 0.30 * (rate(qb, {'break_sack_rating': .6,
                                             'agility_rating': .25,
                                             'speed_rating': .15}) - AVG)
 
@@ -185,7 +188,7 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
     # was in front of the quarterback.
     p_sack = 25.0 * np.exp(-2.40 * t_arrive)
     if qb is not None:
-        p_sack *= 1.0 - 0.45 * (rate(qb, {'break_sack_rating': 1.0}) - AVG)
+        p_sack *= 1.0 - 0.25 * (rate(qb, {'break_sack_rating': 1.0}) - AVG)
     sack = rng.random() < float(np.clip(p_sack, 0.0, 0.85))
     return dict(time=round(float(t_arrive), 2), pressure=round(pressure, 3),
                 sack=bool(sack), beaten_by=winner.get('pid'),
