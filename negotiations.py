@@ -129,7 +129,7 @@ def open_talks(league, pid, kind='extension'):
 
 
 def _clock(league):
-    return int(league.week or 0) if league.phase not in ('offseason', 'free_agency') else 100 + int(getattr(league, 'fa_step', 0))
+    return int(league.week or 0) if league.phase not in ('offseason', 'free_agency') else 100 + int(getattr(league, 'fa_step', 0) or 0)   # fa_step is None before the market opens
 
 
 # ------------------------------------------------------------ the offer
