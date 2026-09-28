@@ -51,12 +51,12 @@ def logistic(x, k=6.0):
 # Re-solved INSIDE GAMES (refit_clock.py). 3.16 was the bare four-man answer;
 # with the blitz multiplier, simulated-pressure protection error and hot routes
 # all taking time off the clock, attempts were leaving the hand at 2.55s.
-RUSHER_BASE = 3.42          # a step slower once the front rotates: fresher rushers had sacks at 7.25% against a real 6.6
+RUSHER_BASE = 3.591          # a step slower once the front rotates: fresher rushers had sacks at 7.25% against a real 6.6
 BASE_TTT = 2.72          # the league mean the clock must land on
 # how much longer than the average dropback the ball is held, by the route's depth
 DEF_AWR_MEAN = 0.787          # the league's defenders on awareness; every awareness read on defense is centered here so the league total holds
 HOLD_BY_DEPTH = {'screen': -0.55, 'short': -0.22, 'medium': 0.08, 'deep': 0.40}   # deep sacks ran 24% against a real ~10 at 0.50
-SACK_K = 22.6            # solved with the hold so the blend lands on the real 6.6%
+SACK_K = 19.3   # was 22.6: the quarterback escape terms are now centered on the starters' mean instead of handing every starter a discount the base was calibrated around            # solved with the hold so the blend lands on the real 6.6%
 # ESPN's pass block win rate is whether a lineman sustains his block for 2.5
 # seconds or longer. Arbitrary on its face, but it is the industry definition
 # and the one every published number is measured against, so it is used here
@@ -91,6 +91,7 @@ SWING_FREE = 5.0            # free yards in the flat before first contact on a s
 # completion went to 69.0% against a real 65.0% and mean air yards fell to
 # 4.22 against 5.72 - the screen game was swallowing the passing game.
 SCREEN_RESCUE = 0.07
+QB_ESC_PIVOT = 0.82         # the starting quarterbacks' mean on the escape terms; centered here the terms move players, not the league
 INT_BASE = 0.129
 INT_DEPTH = {'short': 0.68, 'medium': 0.86, 'deep': 0.74}   # picks per uncompleted throw, by depth, against the base
 SCREEN_FREE_BASE = 5.0      # free yards behind the convoy before first contact, average blocking
@@ -174,7 +175,7 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
         # in 406 dropbacks; real spread between the least and most elusive passers is under 2x
         t_arrive *= 1.0 + 0.30 * (rate(qb, {'break_sack_rating': .6,
                                             'agility_rating': .25,
-                                            'speed_rating': .15}) - AVG)
+                                            'speed_rating': .15}) - QB_ESC_PIVOT)
 
     pressure = float(np.clip((BASE_TTT - t_arrive) / BASE_TTT, 0.0, 1.0))
     # Sack chance falls off SMOOTHLY with the time available rather than
@@ -188,7 +189,7 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
     # was in front of the quarterback.
     p_sack = 25.0 * np.exp(-2.40 * t_arrive)
     if qb is not None:
-        p_sack *= 1.0 - 0.25 * (rate(qb, {'break_sack_rating': 1.0}) - AVG)
+        p_sack *= 1.0 - 0.25 * (rate(qb, {'break_sack_rating': 1.0}) - QB_ESC_PIVOT)
     sack = rng.random() < float(np.clip(p_sack, 0.0, 0.85))
     return dict(time=round(float(t_arrive), 2), pressure=round(pressure, 3),
                 sack=bool(sack), beaten_by=winner.get('pid'),
@@ -345,7 +346,7 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
             # the elite end of the contest is compressed for runners: a 97 truck beat the first man 60% of the time and
             # the chain multiplied it into 7 yards a carry over 300 carries; real elite backs sit near 5.5. An average
             # back is unchanged (the mean holds), the top of the scale wins more often but not on every defender
-            atk = 0.83 + 0.5 * (atk - 0.83)                 # pivot at the league's starting back, so the middle of the league is untouched (0.6 left the best back at 6.6 a carry over 310)
+            atk = 0.83 + 0.55 * (atk - 0.83)                 # pivot at the league's starting back, so the middle of the league is untouched (0.6 left the best back at 6.6 a carry over 310)
         # 0.52 base difficulty puts an average back's break rate near the real
         # ~18%; the ramp adds difficulty for every man already beaten
         # A receiver catching the ball in space is not a back hitting a pile:
