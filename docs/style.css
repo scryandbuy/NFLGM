@@ -18,8 +18,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .rail .in{max-width:1600px;margin:0 auto;padding:0 18px;display:flex;align-items:stretch;height:56px}
 .crest{width:38px;height:38px;background:var(--club);color:#fff;font-family:var(--display);font-weight:800;font-size:17px;display:grid;place-items:center;align-self:center;margin-right:12px;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
 .club{display:flex;align-items:center;padding-right:18px;border-right:1px solid var(--rule)}
-.club .name{font-family:var(--display);font-weight:800;font-size:27.5px;line-height:1}
-.club .who{color:var(--ink-3);font-size:14.5px}
+.club .name{font-family:var(--display);font-weight:800;font-size:25px;line-height:1}
+.club .who{color:var(--ink-3);font-size:14.5px;line-height:1.1}
+.club .title{color:var(--ink-3);font-size:11.5px;line-height:1.1;margin-top:1px}
 nav{display:flex}
 nav a{display:flex;align-items:center;padding:0 13px;font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:.02em;color:var(--ink-3);text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-1px}
 nav a:hover{color:var(--ink-2);background:rgba(255,255,255,.03)}
