@@ -608,8 +608,8 @@ class League:
                                       phase=self.phase, kind=kind, **detail))
 
     # the numbers a position wears, under the current rules
-    NUMBERS = {'QB': list(range(1, 20)), 'K': list(range(1, 20)) + list(range(90, 100)), 'P': list(range(1, 20)) + list(range(90, 100)), 'LS': list(range(40, 60)),
-               'HB': list(range(0, 50)), 'FB': list(range(20, 50)), 'WR': list(range(0, 50)) + list(range(80, 90)), 'TE': list(range(40, 50)) + list(range(80, 90)),
+    NUMBERS = {'QB': list(range(0, 20)), 'K': list(range(0, 20)) + list(range(90, 100)), 'P': list(range(0, 20)) + list(range(90, 100)), 'LS': list(range(40, 60)),
+               'HB': list(range(0, 50)), 'FB': [0] + list(range(20, 50)), 'WR': list(range(0, 50)) + list(range(80, 90)), 'TE': [0] + list(range(40, 50)) + list(range(80, 90)),
                'LT': list(range(50, 80)), 'LG': list(range(50, 80)), 'C': list(range(50, 80)), 'RG': list(range(50, 80)), 'RT': list(range(50, 80)),
                'LEDG': list(range(50, 60)) + list(range(90, 100)), 'REDG': list(range(50, 60)) + list(range(90, 100)), 'DT': list(range(50, 80)) + list(range(90, 100)),
                'MIKE': list(range(0, 60)), 'WILL': list(range(0, 60)), 'SAM': list(range(0, 60)), 'CB': list(range(0, 50)), 'FS': list(range(0, 50)), 'SS': list(range(0, 50))}

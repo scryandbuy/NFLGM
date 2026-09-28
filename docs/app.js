@@ -195,7 +195,7 @@ function renderPortal(v) {
     const right = el('div', { class: 'm-right' },
       el('div', { class: 'mh' }, 'Assistants Say', el('a', { class: 'more', href: '#gameplan/report' }, 'Full Opponent Report →')),
       el('div', { class: 'say', style: 'padding:0 12px 10px' }, m.say),
-      el('div', { class: 'men-row', style: 'border-top:1px solid var(--rule)' }, ...m.watch.map(w => el('div', {}, el('div', { class: 'lbl' }, 'Players to Watch'), el('button', { class: 'man', onclick: () => { location.hash = '#club/player/' + w.pid; } }, el('div', { class: 'no', style: `background:${m.them.club.color};color:#fff` }, w.no || w.pos), el('div', { class: 'nm' }, w.name.split(' ')[0][0] + '. ' + w.name.split(' ').slice(1).join(' '), el('small', {}, `${w.pos}${w.note ? ' · ' + w.note : ''}`)), el('div', { class: 'ov' }, w.ovr))))));
+      el('div', { class: 'men-row', style: 'border-top:1px solid var(--rule)' }, ...m.watch.map(w => el('div', {}, el('div', { class: 'lbl' }, 'Players to Watch'), el('button', { class: 'man', onclick: () => { location.hash = '#club/player/' + w.pid; } }, el('div', { class: 'no', style: `background:${m.them.club.color};color:#fff` }, jerseyNo(w.no) ?? w.pos), el('div', { class: 'nm' }, w.name.split(' ')[0][0] + '. ' + w.name.split(' ').slice(1).join(' '), el('small', {}, `${w.pos}${w.note ? ' · ' + w.note : ''}`)), el('div', { class: 'ov' }, w.ovr))))));
     match.append(el('div', { class: 'match', style: 'grid-template-columns:1fr 1.1fr' }, left, right));
     match.append(el('div', { class: 'foot' }, el('a', { class: 'btn go', href: '#gameplan' }, 'Set Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn', href: '#club/depth' }, 'Depth Chart'), el('button', { class: 'btn quiet', onclick: e => { const b = document.getElementById('series'); if (b) b.hidden = !b.hidden; } }, 'Series History')));
     match.append(el('div', { id: 'series', class: 'read', hidden: '', style: 'margin:0 14px 12px' }, m.series && m.series.length ? m.series.map(g => `Week ${g.week}: ${g.away} ${g.ap} at ${g.home} ${g.hp}`).join(' · ') : 'The teams have not met this season. Past seasons\' meetings will show here as the almanac fills.'));
@@ -269,7 +269,7 @@ function renderPortal(v) {
   const roomS = sheet('The Room', `${n} Players · Morale`, el('div', { class: 'pad' },
     el('div', { class: 'bar' }, el('i', { style: `width:${100 * rc.Unhappy / n}%;background:var(--danger)` }), el('i', { style: `width:${100 * rc.Unsettled / n}%;background:var(--decide)` }), el('i', { style: `width:${100 * rc.Content / n}%;background:var(--rule-hi)` }), el('i', { style: `width:${100 * rc.Happy / n}%;background:var(--ok)` })),
     el('div', { class: 'leg' }, el('span', {}, el('i', { style: 'background:var(--danger)' }), `Unhappy ${rc.Unhappy}`), el('span', {}, el('i', { style: 'background:var(--decide)' }), `Unsettled ${rc.Unsettled}`), el('span', {}, el('i', { style: 'background:var(--rule-hi)' }), `Content ${rc.Content}`), el('span', {}, el('i', { style: 'background:var(--ok)' }), `Happy ${rc.Happy}`))),
-    el('div', { class: 'plates', style: 'grid-template-columns:1fr;padding-top:2px' }, ...v.room.watch.map(p => el('button', { class: 'man', onclick: () => location.hash = `#club/player/${p.pid}` }, el('div', { class: 'no' }, p.no || p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, p.note)), el('div', { class: 'ovr' }, p.ovr), el('i', { class: 'pin bad' })))),
+    el('div', { class: 'plates', style: 'grid-template-columns:1fr;padding-top:2px' }, ...v.room.watch.map(p => el('button', { class: 'man', onclick: () => location.hash = `#club/player/${p.pid}` }, el('div', { class: 'no' }, jerseyNo(p.no) ?? p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, p.note)), el('div', { class: 'ovr' }, p.ovr), el('i', { class: 'pin bad' })))),
     el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#club' }, 'Roster'), el('a', { class: 'btn', href: '#club/depth' }, 'Depth Chart'), el('a', { class: 'btn quiet', href: '#club/ps' }, 'Practice Squad')));
   roomS.classList.add('c4'); page.append(roomS);
 
@@ -565,7 +565,9 @@ function devTag(word, big) { const name = DEV_NAME[word] || 'Normal'; return el(
 function condBar(c) { return el('span', { class: 'cond' }, el('i', { class: c < 60 ? 'low' : c < 80 ? 'mid' : '', style: `width:${c}%` })); }
 function ovrCell(o) { return el('span', { class: 'ovr ' + (o >= 88 ? 't1' : o >= 76 ? 't2' : 't3') }, o); }
 function fitCell(f) { return el('span', { class: 'fit ' + (f > 0.05 ? 'p' : f < -0.05 ? 'm' : 'z') }, (f > 0 ? '+' : '') + f.toFixed(1)); }
-function who(r) { return el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.no || r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, [r.college, r.season_no ? `${r.season_no}${ord(r.season_no)} season` : null].filter(Boolean).join(' · ')))); }
+// a jersey number of 0 is a number; only a missing one falls through to the position
+function jerseyNo(n) { return (n === null || n === undefined || n === '') ? undefined : n; }
+function who(r) { return el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, jerseyNo(r.no) ?? r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, [r.college, r.season_no ? `${r.season_no}${ord(r.season_no)} season` : null].filter(Boolean).join(' · ')))); }
 
 let rosterSide = 'All', rosterQuery = '', rosterSel = null;
 let viewClub = null;   // null = your own club; an abbreviation = another club's page, read-only
@@ -684,7 +686,7 @@ function renderCard(v) {
   const s = el('section', { class: 'sheet c12' });
   const col = v.team ? v.team.color : 'var(--rule-hi)';
   s.append(el('div', { class: 'head' },
-    el('div', { class: 'jersey', style: `background:${col}` }, v.no || v.pos),
+    el('div', { class: 'jersey', style: `background:${col}` }, jerseyNo(v.no) ?? v.pos),
     el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
       el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.age}${v.size ? ' · ' + v.size : ''}${v.college ? ' · ' + v.college : ''}${v.season_no ? ` · ${v.season_no}${ord(v.season_no)} season` : ''} · ${v.draft}` + (v.team ? ` · ${v.team.name}` : ' · Free agent')),
       el('div', { class: 'hfacts' }, el('div', {}, el('span', {}, 'Contract'), el('b', {}, `$${v.contract.per_year.toFixed(1)}m`, el('small', {}, `per year · ${v.contract.years} yrs`))), el('div', {}, el('span', {}, `Cap Hit ${v.rail.year}`), el('b', {}, `$${v.contract.hit.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Penalty'), el('b', {}, `$${v.contract.penalty.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Trade Interest'), el('b', { style: 'color:var(--ink-2)' }, v.interest)), el('div', {}, el('span', {}, 'Morale'), el('b', { style: 'color:var(--ink-2)' }, v.morale)))),
@@ -932,7 +934,7 @@ function renderDepth(v) {
       const decide = x.pending && mine ? el('span', { style: 'display:inline-flex;gap:3px;margin-top:4px' }, el('button', { class: 'btn go', style: 'padding:1px 8px;font-size:11px', onclick: e => { e.stopPropagation(); notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(x.pid)}, play=True)`)); reload(); } }, 'Play'), el('button', { class: 'btn', style: 'padding:1px 8px;font-size:11px', onclick: e => { e.stopPropagation(); notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(x.pid)}, play=False)`)); reload(); } }, 'Sit')) : null;
       const fitEl = x.flag_word ? el('span', { style: 'display:inline-flex;flex-direction:column;align-items:flex-start;gap:0' }, el('span', { class: 'tag ' + (x.flag === 'out' ? 'out' : 'q') }, x.flag_word), decide || '') : x.elevated ? el('span', { class: 'tag q', 'data-tip': 'Elevated from the practice squad for this game' }, 'Elevated') : x.playing_hurt ? el('span', { class: 'tag q' }, `Playing · ${x.playing_hurt}`) : el('span', { class: 'fit' }, 'Fit ', el('b', { class: fit > 0.05 ? 'up' : fit < -0.05 ? 'dn' : '' }, (fit > 0.05 ? '+' : fit < -0.05 ? '−' : '\u00a0') + Math.abs(fit).toFixed(1)));
       const plate = el('div', { class: 'plate3' + (x.start ? ' start' : '') + (x.flag === 'out' ? ' out' : ''), draggable: mine ? 'true' : 'false', title: x.name },
-        el('div', { class: 'row1' }, el('span', { class: 'no' }, x.no || ''), el('span', { class: 'nm' }, surname(x.name) || x.name)),
+        el('div', { class: 'row1' }, el('span', { class: 'no' }, jerseyNo(x.no) ?? ''), el('span', { class: 'nm' }, surname(x.name) || x.name)),
         el('div', { class: 'row2' }, x.sub ? el('span', { class: 'fit' }, x.sub) : fitEl, el('span', { class: 'ov' }, x.ovr)));
       plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); plate.classList.add('dragging'); });
       plate.addEventListener('dragend', () => plate.classList.remove('dragging'));
@@ -984,7 +986,7 @@ function renderTrades(v) {
     pk.addEventListener('drop', e => { e.preventDefault(); pk.classList.remove('over'); let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; } if (d && d.side === title && !sel.includes(d.id)) { sel.push(d.id); reload(); } });
     for (const id of sel) {
       const p = own.roster.find(r => r.pid === id), k = own.picks.find(r => r.id === id);
-      if (p) pk.append(el('div', { class: 'plate' }, el('div', { class: 'no' }, p.no || p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${p.yrs} Yr${p.yrs === 1 ? '' : 's'} · $${p.hit}m Hit · $${p.penalty}m Penalty`)), el('div', { class: 'ov' }, p.ovr), el('div', { class: 'x', onclick: () => { sel.splice(sel.indexOf(id), 1); reload(); } }, '✕')));
+      if (p) pk.append(el('div', { class: 'plate' }, el('div', { class: 'no' }, jerseyNo(p.no) ?? p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${p.yrs} Yr${p.yrs === 1 ? '' : 's'} · $${p.hit}m Hit · $${p.penalty}m Penalty`)), el('div', { class: 'ov' }, p.ovr), el('div', { class: 'x', onclick: () => { sel.splice(sel.indexOf(id), 1); reload(); } }, '✕')));
       else if (k) pk.append(el('div', { class: 'pkcard' }, el('div', { class: 'rd' }, `R${k.round}`), el('div', { class: 'nm' }, k.words, el('small', {}, `${k.own_words}${k.proj ? ' · ' + k.proj : ''}`)), el('div', { class: 'x', onclick: () => { sel.splice(sel.indexOf(id), 1); reload(); } }, '✕')));
     }
     box.append(pk);
@@ -993,13 +995,13 @@ function renderTrades(v) {
     const drawList = () => {
       list1.innerHTML = '';
       const drag = (elm, id) => { elm.setAttribute('draggable', 'true'); elm.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', JSON.stringify({ id, side: title }))); };
-      if (mode === 'players') for (const p of own.roster) { if (sel.includes(p.pid)) continue; const sur = own.surplus.find(x => x.pid === p.pid); const pl = el('div', { class: 'plate pickable', onclick: () => { sel.push(p.pid); reload(); } }, el('div', { class: 'no' }, p.no || p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${p.yrs} Yr${p.yrs === 1 ? '' : 's'} · $${p.hit}m Hit` + (sur ? ` · ${sur.why}` : ''))), el('div', { class: 'ov' }, p.ovr)); drag(pl, p.pid); list1.append(pl); }
+      if (mode === 'players') for (const p of own.roster) { if (sel.includes(p.pid)) continue; const sur = own.surplus.find(x => x.pid === p.pid); const pl = el('div', { class: 'plate pickable', onclick: () => { sel.push(p.pid); reload(); } }, el('div', { class: 'no' }, jerseyNo(p.no) ?? p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${p.yrs} Yr${p.yrs === 1 ? '' : 's'} · $${p.hit}m Hit` + (sur ? ` · ${sur.why}` : ''))), el('div', { class: 'ov' }, p.ovr)); drag(pl, p.pid); list1.append(pl); }
       else for (const k of own.picks) { if (sel.includes(k.id)) continue; const pc = el('div', { class: 'pkcard pickable', style: 'cursor:pointer', onclick: () => { sel.push(k.id); reload(); } }, el('div', { class: 'rd' }, `R${k.round}`), el('div', { class: 'nm' }, k.words, el('small', {}, `${k.own_words}${k.proj ? ' · ' + k.proj : ''}`)), el('div', {})); drag(pc, k.id); list1.append(pc); }
     };
     for (const [k, l] of [['players', 'Players'], ['picks', title === 'You Send' ? 'Your Picks' : 'Their Picks']]) tabs.append(el('button', { 'aria-pressed': String(mode === k), onclick: e => { mode = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); drawList(); } }, l));
     box.append(tabs, list1); drawList();
     box.append(el('div', { class: 'h5', style: 'margin-top:10px' }, title === 'You Send' ? 'Your Surplus' : 'Their Surplus', el('span', {}, title === 'You Send' ? 'Players the Assistants Would Move' : 'Depth they could spare')));
-    for (const sx of own.surplus.slice(0, 4)) { const p = own.roster.find(r => r.pid === sx.pid); if (!p || sel.includes(p.pid)) continue; box.append(el('div', { class: 'plate pickable', style: 'margin-bottom:4px', onclick: () => { sel.push(p.pid); reload(); } }, el('div', { class: 'no' }, p.no || p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${sx.why}`)), el('div', { class: 'ov' }, p.ovr))); }
+    for (const sx of own.surplus.slice(0, 4)) { const p = own.roster.find(r => r.pid === sx.pid); if (!p || sel.includes(p.pid)) continue; box.append(el('div', { class: 'plate pickable', style: 'margin-bottom:4px', onclick: () => { sel.push(p.pid); reload(); } }, el('div', { class: 'no' }, jerseyNo(p.no) ?? p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${sx.why}`)), el('div', { class: 'ov' }, p.ovr))); }
     if (title !== 'You Send' && own.needs && own.needs.length) box.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Needs'), el('div', { class: 'chips' }, ...own.needs.map(n => el('span', { class: 'chip' }, n))));
     return box;
   };

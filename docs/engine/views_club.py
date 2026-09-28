@@ -2,6 +2,7 @@
 CLUB VIEWS. What the Roster, Player Card, Depth Chart and Practice Squad pages
 show, as plain dicts, and the actions their buttons call.
 """
+from views import jersey
 import numpy as np
 from views import club, money, morale_word, player_plate, rail
 
@@ -64,7 +65,7 @@ def _status(league, p, t):
 
 def _row(session, league, t, p):
     yrs = p.contract.years if p.contract else 0
-    return dict(pid=p.pid, no=getattr(p, 'number', None) or '', name=p.name, pos=p.pos, side=('offense' if p.pos in OFFENSE else 'special' if p.pos in ('K', 'P', 'LS') else 'defense'), age=int(p.age), ovr=round(p.ovr), fit=round(_fit(league, t, p), 1),
+    return dict(pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, side=('offense' if p.pos in OFFENSE else 'special' if p.pos in ('K', 'P', 'LS') else 'defense'), age=int(p.age), ovr=round(p.ovr), fit=round(_fit(league, t, p), 1),
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), cond=_cond(session, p), morale=morale_word(p), yrs=yrs,
                 hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1), status=_status(league, p, t),
                 college=getattr(p, 'college', None) or '', season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
@@ -243,7 +244,7 @@ def card(session, league, pid):
     cur = _season_line(league, p)
     h = getattr(p, 'height', None); size = (f"{h // 12}'{h % 12}\" {getattr(p, 'weight', '') or ''}".strip() if h else '')
     drafted = (f"drafted {p.draft_overall}{_ordn(p.draft_overall)} overall, {p.draft_year}" if getattr(p, 'draft_overall', None) else f"drafted round {p.draft_round}, {p.draft_year}" if getattr(p, 'draft_round', None) else 'undrafted')
-    return dict(rail=rail(session, league, session.user_team), pid=p.pid, no=getattr(p, 'number', None) or '', name=p.name, pos=p.pos, age=int(p.age), size=size,
+    return dict(rail=rail(session, league, session.user_team), pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, age=int(p.age), size=size,
                 team=club(p.team) if p.team else None, college=getattr(p, 'college', None) or '', draft=drafted,
                 role=role, snaps=snaps, missed=missed, pending=pending, market_apy=market_apy, ext_ask=ext_ask, ext_eligible=_ext_ok(league, p),
                 contract_caption=(f"Contract signed {getattr(p.contract, 'signed', league.year)} · {p.contract.years + (len(getattr(p.contract, 'base', [])) - p.contract.years if hasattr(p.contract, 'base') else 0)} yrs · ${round(sum(getattr(p.contract, 'base', [])) + getattr(p.contract, 'annual_proration', 0) * getattr(p.contract, 'proration_years', 0), 1)}m" if p.contract else 'No contract'),

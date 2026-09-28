@@ -33,6 +33,12 @@ STADIUM = {'ARI': 'State Farm Stadium', 'ATL': 'Mercedes-Benz Stadium', 'BAL': '
 SUFFIXES = ('Jr.', 'Sr.', 'St.', 'Dr.', 'Mr.', 'II.', 'III.', 'IV.')
 
 
+def jersey(p):
+    """The number on his back, as text; 0 is a number, only None is blank."""
+    n = getattr(p, 'number', None)
+    return '' if n is None else n
+
+
 def draft_year(y):
     """A pick's year as the league names it: the draft held after the {y} season is the {y+1} draft."""
     return int(y) + 1
@@ -77,7 +83,7 @@ def morale_word(p):
 
 
 def player_plate(p, note=''):
-    return dict(pid=p.pid, no=getattr(p, 'number', None) or '', name=p.name, short=_short(p.name), pos=p.pos, ovr=round(p.ovr), note=note,
+    return dict(pid=p.pid, no=jersey(p), name=p.name, short=_short(p.name), pos=p.pos, ovr=round(p.ovr), note=note,
                 morale=morale_word(p), out=p.out_until is not None)
 
 
@@ -307,7 +313,7 @@ def _watch_notes(league, abbr, opp_abbr, rep):
         elif p.pos in ('WR', 'TE') and p.ovr >= 82: y = int(stat(p, 'rec_yds')); note = f"{y} receiving yards" if y else 'their top target'
         elif p.pos == 'HB' and p.ovr >= 84: y = int(stat(p, 'rush_yds')); note = f"{y} rushing yards" if y else 'their lead back'
         elif p.pos == 'QB' and p.ovr >= 86: note = 'their quarterback'
-        if note: cands.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), note=note, no=getattr(p, 'number', None) or ''))
+        if note: cands.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), note=note, no=jersey(p)))
         if len(cands) >= 2: break
     if len(cands) < 2:
         for s in rep.get('stars', []):
