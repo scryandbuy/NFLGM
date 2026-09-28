@@ -244,14 +244,21 @@ def card(session, league, pid):
     cur = _season_line(league, p)
     h = getattr(p, 'height', None); size = (f"{h // 12}'{h % 12}\" {getattr(p, 'weight', '') or ''}".strip() if h else '')
     drafted = (f"drafted {p.draft_overall}{_ordn(p.draft_overall)} overall, {p.draft_year}" if getattr(p, 'draft_overall', None) else f"drafted round {p.draft_round}, {p.draft_year}" if getattr(p, 'draft_round', None) else 'undrafted')
+    if p.team is None:
+        # A FREE AGENT HAS NO CLUB'S NUMBERS: no contract, no cap hit, no penalty, no trade interest, nothing on the
+        # Contract tab but the market's read of him. A player on the wire still carries his deal for the claiming
+        # club, and the card says so.
+        years = []; interest = ''; interest_line = ''
+        asks = []
     return dict(rail=rail(session, league, session.user_team), pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, age=int(p.age), size=size,
                 team=club(p.team) if p.team else None, college=getattr(p, 'college', None) or '', draft=drafted,
                 role=role, snaps=snaps, missed=missed, pending=pending, market_apy=market_apy, ext_ask=ext_ask, ext_eligible=_ext_ok(league, p),
-                contract_caption=(f"Contract signed {getattr(p.contract, 'signed', league.year)} · {p.contract.years + (len(getattr(p.contract, 'base', [])) - p.contract.years if hasattr(p.contract, 'base') else 0)} yrs · ${round(sum(getattr(p.contract, 'base', [])) + getattr(p.contract, 'annual_proration', 0) * getattr(p.contract, 'proration_years', 0), 1)}m" if p.contract else 'No contract'),
+                contract_caption=('On the wire; a claiming club inherits his deal' if (p.team is None and p.contract) else 'Free agent; no contract' if p.team is None else (f"Contract signed {getattr(p.contract, 'signed', league.year)} · {p.contract.years + (len(getattr(p.contract, 'base', [])) - p.contract.years if hasattr(p.contract, 'base') else 0)} yrs · ${round(sum(getattr(p.contract, 'base', [])) + getattr(p.contract, 'annual_proration', 0) * getattr(p.contract, 'proration_years', 0), 1)}m" if p.contract else 'No contract')),
                 season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
                 ovr=round(p.ovr), fit=round(fit, 1), ceiling=(f"{int(p.potential_range[0])}–{int(p.potential_range[1])}" if getattr(p, 'potential_range', None) else (str(round(p.potential)) if getattr(p, 'potential', None) else '—')),
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), morale=morale_word(p), morale_v=round(m.value) if m is not None else None,
-                contract=dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1), by_year=years),
+                contract=(dict(per_year=0.0, years=0, hit=0.0, penalty=0.0, by_year=[]) if p.team is None else dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1), by_year=years)),
+                free_agent=(p.team is None), on_wire=bool(p.team is None and p.contract is not None),
                 interest=interest, cols=cols, grades=grades, personality=words, status=_status(league, p, t) if t else '',
                 schemes=scheme_rows(p.ratings, p.pos, _club_arch(league, getattr(session, 'user_team', None), p.pos)),
                 cond=_cond(session, p), out=p.out_until, season=cur, games=int(S.get('games', 0) or 0), seasons=seasons,

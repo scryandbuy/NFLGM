@@ -287,6 +287,11 @@ def process(league, rng, week, verbose=False):
                     IB.post(league, 'waiver_notice', f"Claim lost: {p.name} to {abbr}", f"You claimed {p.name} ({p.pos}) and {abbr} held the higher priority. He is theirs.", sender='league')
                 break
         ents.remove(e)
+        # CLEARED AND UNCLAIMED, HE IS A FREE AGENT: the contract he carried on the wire (for a claiming club to
+        # inherit) comes off him. The club that waived him already ate the dead money; left on, the deal showed
+        # on his card as if a club still owed it
+        if p.pid not in done_ids(awarded) and p.team is None:
+            p.contract = None
         # the club that waived him meant him for its practice squad: if nobody claimed, he goes there
         intent = (getattr(league, 'ps_intent', None) or {})
         if intent.get(p.pid):

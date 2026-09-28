@@ -58,7 +58,7 @@ def _injury_report(league, t, week, results):
         d = [q for q in t.depth.get(p.pos, []) if q.out_until is None and q.pid != p.pid]
         nxt = d[0] if d else None
         was_starter = t.depth.get(p.pos, [None])[0] is p or p in t.depth.get(p.pos, [])[:GROUP_STARTERS.get(p.pos, 1)]
-        span = ('the season' if x.get('season_ending') or weeks >= 10 else f"{weeks} week{'s' if weeks != 1 else ''}") if weeks else 'a week'
+        span = ('for the season' if x.get('season_ending') or weeks >= 10 else f"{weeks} week{'s' if weeks != 1 else ''}") if weeks else 'a week'
         kind = str(x.get('injury') or 'injury').replace('_', ' ')
         line = f"{p.name} ({p.pos}) is out {span} ({kind})" 
         if was_starter and nxt is not None: line += f"; {_surname(nxt.name)} ({round(nxt.ovr)}) steps in"
