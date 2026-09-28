@@ -1483,7 +1483,7 @@ h2{letter-spacing:-.01em}
   box-shadow:
     0 28px 90px rgba(0,0,0,.62),
     0 0 0 1px rgba(255,255,255,.025) inset,
-    0 0 55px rgba(42,146,255,.08);
+    0 0 55px color-mix(in srgb, var(--club-2) 8%, transparent);
 }
 
 .negotiation-sheet:before{
@@ -1501,7 +1501,7 @@ h2{letter-spacing:-.01em}
   width:420px;height:420px;
   right:-210px;top:-260px;
   border-radius:50%;
-  background:radial-gradient(circle, rgba(42,167,255,.11), transparent 68%);
+  background:radial-gradient(circle, color-mix(in srgb, var(--club-2) 11%, transparent), transparent 68%);
   pointer-events:none;
 }
 
@@ -1511,7 +1511,7 @@ h2{letter-spacing:-.01em}
   padding:18px 20px 16px;
   border-bottom:1px solid var(--club-2);
   background:
-    linear-gradient(180deg, rgba(29,40,56,.82), rgba(18,25,36,.55));
+    linear-gradient(180deg, color-mix(in srgb, var(--sheet) 82%, transparent), rgba(18,25,36,.55));
 }
 
 .neg-identity{
@@ -1532,9 +1532,9 @@ h2{letter-spacing:-.01em}
   letter-spacing:.04em;
   color:#eef7ff;
   background:
-    linear-gradient(145deg, rgba(34,142,255,.95), rgba(25,67,116,.8));
-  border:1px solid rgba(125,211,252,.45);
-  box-shadow:0 0 24px rgba(42,167,255,.18), inset 0 1px 0 rgba(255,255,255,.15);
+    linear-gradient(145deg, color-mix(in srgb, var(--club-2) 95%, transparent), color-mix(in srgb, var(--club-2) 80%, transparent));
+  border:1px solid color-mix(in srgb, var(--club-2) 45%, transparent);
+  box-shadow:0 0 24px color-mix(in srgb, var(--club-2) 18%, transparent), inset 0 1px 0 rgba(255,255,255,.15);
 }
 
 .neg-title{min-width:0;flex:1}
@@ -1542,7 +1542,7 @@ h2{letter-spacing:-.01em}
   font-size:10.5px;
   font-weight:800;
   letter-spacing:.16em;
-  color:#6fbaf1;
+  color:var(--club-2);
   text-transform:uppercase;
   margin-bottom:2px;
 }
@@ -1555,7 +1555,7 @@ h2{letter-spacing:-.01em}
 .neg-title small{
   display:block;
   margin-top:4px;
-  color:var(--ink-3,#7f93a9);
+  color:var(--ink-3,var(--ink-3));
   font-size:12px;
 }
 
@@ -1564,8 +1564,8 @@ h2{letter-spacing:-.01em}
   padding:6px 9px;
   border:1px solid var(--club-2);
   border-radius:999px;
-  color:#8fd1ff;
-  background:rgba(42,132,219,.09);
+  color:var(--ink);
+  background:color-mix(in srgb, var(--club-2) 9%, transparent);
   font-size:10px;
   font-weight:800;
   letter-spacing:.1em;
@@ -1581,23 +1581,23 @@ h2{letter-spacing:-.01em}
 
 .negotiation-thread .msg{
   border-radius:8px;
-  border-color:rgba(120,160,200,.17);
+  border-color:color-mix(in srgb, var(--ink-3) 17%, transparent);
   background:
-    linear-gradient(135deg, rgba(31,42,57,.82), rgba(19,27,38,.76));
+    linear-gradient(135deg, color-mix(in srgb, var(--sheet) 82%, transparent), rgba(19,27,38,.76));
   box-shadow:0 5px 20px rgba(0,0,0,.12);
 }
 
 .negotiation-thread .msg.you{
-  border-color:rgba(58,154,239,.27);
+  border-color:color-mix(in srgb, var(--club-2) 27%, transparent);
   background:
-    linear-gradient(135deg, rgba(17,48,78,.82), rgba(13,28,46,.82));
+    linear-gradient(135deg, color-mix(in srgb, var(--sheet) 82%, transparent), color-mix(in srgb, var(--board) 82%, transparent));
 }
 
 .negotiation-thread .msg.match{
-  border-color:rgba(76,201,240,.42);
+  border-color:color-mix(in srgb, var(--club-2) 42%, transparent);
   background:
-    linear-gradient(135deg, rgba(27,88,112,.25), rgba(13,42,59,.36));
-  box-shadow:0 0 26px rgba(76,201,240,.06);
+    linear-gradient(135deg, color-mix(in srgb, var(--club-2) 25%, transparent), color-mix(in srgb, var(--board) 36%, transparent));
+  box-shadow:0 0 26px color-mix(in srgb, var(--club-2) 6%, transparent);
 }
 
 .negotiation-thread .msg.note{
@@ -1610,11 +1610,11 @@ h2{letter-spacing:-.01em}
   letter-spacing:.08em;
   font-size:10px;
   font-weight:800;
-  color:#6f91b2;
+  color:var(--ink-3);
 }
 
 .negotiation-thread .msg .txt{
-  color:#d5e2ef;
+  color:var(--ink);
 }
 
 .cap-strip{
@@ -1631,7 +1631,7 @@ h2{letter-spacing:-.01em}
 .rival-panel:before{
   content:"COMPETING OFFER";
   display:block;
-  color:#70d9ff;
+  color:var(--club-2);
   font-size:9px;
   font-weight:900;
   letter-spacing:.14em;
@@ -1648,7 +1648,7 @@ h2{letter-spacing:-.01em}
     linear-gradient(150deg, var(--sheet-2), var(--board)) !important;
   box-shadow:
     0 12px 35px rgba(0,0,0,.22),
-    0 0 35px rgba(42,167,255,.05);
+    0 0 35px color-mix(in srgb, var(--club-2) 5%, transparent);
 }
 
 .offer-panel-head{
@@ -1657,7 +1657,7 @@ h2{letter-spacing:-.01em}
   justify-content:space-between;
   gap:10px;
   padding:12px 14px;
-  border-bottom:1px solid rgba(110,170,220,.17);
+  border-bottom:1px solid color-mix(in srgb, var(--club-2) 17%, transparent);
   background:rgba(5,13,23,.24);
 }
 
@@ -1672,11 +1672,11 @@ h2{letter-spacing:-.01em}
   font-size:9px;
   font-weight:900;
   letter-spacing:.1em;
-  color:#65c9ff;
+  color:var(--club-2);
   padding:4px 7px;
-  border:1px solid rgba(101,201,255,.23);
+  border:1px solid color-mix(in srgb, var(--club-2) 23%, transparent);
   border-radius:999px;
-  background:rgba(101,201,255,.06);
+  background:color-mix(in srgb, var(--club-2) 6%, transparent);
 }
 
 .offer-panel > .offer,
@@ -1695,7 +1695,7 @@ h2{letter-spacing:-.01em}
   grid-template-columns:1.5fr 1fr 1fr 1fr;
   gap:1px;
   margin-top:13px;
-  border:1px solid rgba(116,165,210,.15);
+  border:1px solid color-mix(in srgb, var(--ink-3) 15%, transparent);
   border-radius:7px;
   overflow:hidden;
   background:rgba(0,0,0,.18);
@@ -1710,7 +1710,7 @@ h2{letter-spacing:-.01em}
   font-size:8.5px;
   font-weight:800;
   letter-spacing:.12em;
-  color:#6f8ba8;
+  color:var(--ink-3);
   margin-bottom:3px;
 }
 .offer-summary b{
@@ -1725,7 +1725,7 @@ h2{letter-spacing:-.01em}
   margin-top:12px;
 }
 .offer-panel .offer label{
-  color:#7795b3;
+  color:var(--ink-3);
   text-transform:uppercase;
   letter-spacing:.055em;
   font-size:9.5px;
@@ -1734,7 +1734,7 @@ h2{letter-spacing:-.01em}
 .offer-panel .offer input{
   margin-top:2px;
   border-radius:6px;
-  border-color:rgba(112,165,215,.24);
+  border-color:color-mix(in srgb, var(--club-2) 24%, transparent);
   background:rgba(4,11,19,.68);
   min-height:38px;
   transition:border-color .15s, box-shadow .15s, background .15s;
@@ -1742,13 +1742,13 @@ h2{letter-spacing:-.01em}
 .offer-panel .offer input:focus{
   outline:none;
   border-color:var(--club-2);
-  background:rgba(5,18,31,.92);
+  background:color-mix(in srgb, var(--board) 92%, transparent);
   box-shadow:0 0 0 2px var(--club-2), 0 0 18px var(--club-2);
 }
 
 .offer-panel .count{
   padding:10px 0 7px !important;
-  color:#9db4cb;
+  color:var(--ink-3);
   font-size:11px;
 }
 
@@ -1760,7 +1760,7 @@ h2{letter-spacing:-.01em}
   padding:7px 0 2px;
 }
 .offer-panel .shape > span{
-  color:#718da8;
+  color:var(--ink-3);
   font-size:9px;
   font-weight:900;
   letter-spacing:.12em;
@@ -1770,7 +1770,7 @@ h2{letter-spacing:-.01em}
 .offer-panel .chip{
   border-radius:999px;
   padding:5px 10px;
-  border-color:rgba(110,160,210,.23);
+  border-color:color-mix(in srgb, var(--club-2) 23%, transparent);
   background:rgba(255,255,255,.02);
   font-size:11px;
   transition:all .15s;
@@ -1781,9 +1781,9 @@ h2{letter-spacing:-.01em}
 }
 .offer-panel .chip[aria-pressed="true"]{
   color:#eef8ff;
-  border-color:rgba(74,173,255,.72);
-  background:linear-gradient(180deg, rgba(45,143,231,.25), rgba(30,89,145,.2));
-  box-shadow:0 0 16px rgba(42,167,255,.08);
+  border-color:color-mix(in srgb, var(--club-2) 72%, transparent);
+  background:linear-gradient(180deg, color-mix(in srgb, var(--club-2) 25%, transparent), color-mix(in srgb, var(--club-2) 20%, transparent));
+  box-shadow:0 0 16px color-mix(in srgb, var(--club-2) 8%, transparent);
 }
 
 .offer-panel .hits{
@@ -1799,7 +1799,7 @@ h2{letter-spacing:-.01em}
 }
 .offer-panel .hit i{
   background:linear-gradient(180deg, var(--club-2), var(--club)) !important;
-  box-shadow:0 -2px 12px rgba(55,170,255,.14);
+  box-shadow:0 -2px 12px color-mix(in srgb, var(--club-2) 14%, transparent);
 }
 
 .offer-panel .promise{
@@ -1812,7 +1812,7 @@ h2{letter-spacing:-.01em}
 }
 .offer-panel .promise > span{
   width:100%;
-  color:#718da8;
+  color:var(--ink-3);
   font-size:9px;
   font-weight:900;
   letter-spacing:.12em;
@@ -1822,14 +1822,14 @@ h2{letter-spacing:-.01em}
 .offer-panel .promise .btn{
   border-radius:999px;
   font-size:10px !important;
-  color:#9bb6cf;
-  border-color:rgba(110,160,210,.2);
+  color:var(--ink-3);
+  border-color:color-mix(in srgb, var(--club-2) 20%, transparent);
   background:rgba(255,255,255,.02);
 }
 .offer-panel .promise .btn[aria-pressed="true"]{
   color:#f2f9ff;
-  border-color:rgba(76,201,240,.5);
-  background:rgba(76,201,240,.10);
+  border-color:color-mix(in srgb, var(--club-2) 50%, transparent);
+  background:color-mix(in srgb, var(--club-2) 10%, transparent);
 }
 
 .offer-panel .acts{
@@ -1846,9 +1846,9 @@ h2{letter-spacing:-.01em}
 .offer-panel .acts .btn.go{
   min-width:150px;
   color:#fff;
-  border-color:rgba(80,183,255,.8);
-  background:linear-gradient(180deg, #168df2, #0867bd);
-  box-shadow:0 6px 22px rgba(10,122,220,.22), inset 0 1px 0 rgba(255,255,255,.15);
+  border-color:color-mix(in srgb, var(--club-2) 80%, transparent);
+  background:linear-gradient(180deg, var(--club-2), var(--club-2));
+  box-shadow:0 6px 22px color-mix(in srgb, var(--club-2) 22%, transparent), inset 0 1px 0 rgba(255,255,255,.15);
 }
 .offer-panel .acts .btn.go:hover{
   filter:brightness(1.08);
