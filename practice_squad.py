@@ -40,7 +40,7 @@ WEEKS = 18
 PAY_YOUNG, PAY_VET = 0.01375 * WEEKS, 0.01835 * WEEKS      # $M for the season
 ELEVATIONS_PER_GAME, ELEVATIONS_PER_MAN = 2, 3
 POACH_LOCK_GAMES = 3
-CAMP_UDFA_PER_CLUB = 9   # undrafted men each club brings to camp
+CAMP_UDFA_PER_CLUB = 5   # undrafted players each AI club brings to camp; the rest stay on the market for anyone to sign
 
 
 # ------------------------------------------------------------ state
@@ -232,7 +232,9 @@ def udfa_camp(league, rng, verbose=False):
     udfa = [p for p in udfa if p and p.college and p.draft_round is None and p.draft_year == league.year]
     signed = 0
     order = list(league.teams); rng.shuffle(order)
+    user = getattr(league, 'user_team', None)
     for abbr in order:
+        if abbr == user: continue                      # the user signs whom he wants, from the Free Agency page
         team = league.teams[abbr]
         view = league.scouting.get(abbr, {}) if getattr(league, 'scouting', None) else {}
         need = collections.Counter()
@@ -250,8 +252,22 @@ def udfa_camp(league, rng, verbose=False):
             league.log('udfa_sign', pid=p.pid, team=abbr, bonus=bonus)
             took += 1; signed += 1
     if verbose:
-        print(f'  {signed} undrafted men signed to camp')
+        print(f'  {signed} undrafted players signed to camp')
+    # the rest are on the market, and the GM hears it
+    try:
+        import inbox as IB
+        left = [p for p in udfa if not p.team]
+        if user and left:
+            top = sorted(left, key=lambda p: -p.ovr)[:5]
+            IB.post(league, 'club', f"{len(left)} undrafted rookies are on the market", f"The clubs brought their camp bodies in; {len(left)} undrafted rookies are still unsigned and will sign for the minimum. Your scouts' best of them: " + ', '.join(f"{p.name} ({p.pos}, {round(view_ovr(league, user, p))})" for p in top) + ". Sign anyone to the roster or the practice squad from Free Agency; the Undrafted filter shows them.", sender='assistants', payload=dict(link='fa'))
+    except Exception as e:
+        import sys; print('udfa note failed:', e, file=sys.stderr)
     return signed
+
+
+def view_ovr(league, abbr, p):
+    v = (getattr(league, 'scouting', None) or {}).get(abbr, {}).get(p.pid)
+    return float(v['ovr']) if v and v.get('ovr') else float(p.ovr)
 
 
 def fill_squads(league, rng, verbose=False):

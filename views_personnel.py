@@ -282,7 +282,7 @@ def free_agency(session, league, abbr):
         if out_men: hole = f"Fills the hole at {p.pos} with {__import__('views').surname(out_men[0].name)} out" + (f" to week {out_men[0].out_until}" if isinstance(out_men[0].out_until, int) else '')
         elif len(d) <= 1: hole = f"Only {len(d)} healthy {p.pos} on the roster"
         import practice_squad as PSQ
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0), ps_ok=PSQ.can_add(me, p),
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), rookie=bool(p.college and p.draft_round is None and p.draft_year == league.year), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0), ps_ok=PSQ.can_add(me, p),
                          talks=(t['state'] if t else None), ask=(t['ask'] if t else None), ask_now=ask_now, years=(t['years'] if t else None), thread=(t['id'] if t else None), interest=interest, my_offer=my_offer, hole=hole))
     rows.sort(key=lambda r: -r['ovr'])
     phase = league.phase

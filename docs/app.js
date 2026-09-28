@@ -1097,7 +1097,7 @@ function threadBox(t, onDone) {
   return box;
 }
 
-let faPos = '', faCheap = false, faWatch = false, faRole = 'All', faQuery = '';
+let faPos = '', faCheap = false, faWatch = false, faRookie = false, faRole = 'All', faQuery = '';
 function renderFA(v) {
   renderRail(v.rail); const page = persPage(); persSecond('fa');
   const reload = () => renderFA(pyJSON(`SESSION.personnel('free_agency')`));
@@ -1111,8 +1111,9 @@ function renderFA(v) {
   const roleChips = el('div', { class: 'chips' }); for (const g of ['Starters', 'Depth']) roleChips.append(el('button', { class: 'chip', 'aria-pressed': String(faRole === g), onclick: () => { faRole = faRole === g ? 'All' : g; renderFA(v); } }, g));
   const cheap = el('button', { class: 'chip', 'aria-pressed': String(faCheap), 'data-tip': 'Players asking under $5m a year, or with no ask yet', onclick: () => { faCheap = !faCheap; renderFA(v); } }, 'Under $5m');
   const watchB = el('button', { class: 'chip', 'aria-pressed': String(faWatch), onclick: () => { faWatch = !faWatch; renderFA(v); } }, `Watchlist · ${v.rows.filter(r => r.watch).length}`);
+  const rookieB = el('button', { class: 'chip', 'aria-pressed': String(faRookie), 'data-tip': 'This year\'s undrafted rookies, on the market at the minimum', onclick: () => { faRookie = !faRookie; renderFA(v); } }, `Undrafted · ${v.rows.filter(r => r.rookie).length}`);
   const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Player', value: faQuery }); search.oninput = () => { faQuery = search.value; drawRows(); };
-  tools.append(posChips, roleChips, el('div', { class: 'chips' }, cheap, ...(inSeason ? [] : [watchB])), search);
+  tools.append(posChips, roleChips, el('div', { class: 'chips' }, cheap, ...(inSeason ? [] : [watchB]), ...(v.rows.some(r => r.rookie) ? [rookieB] : [])), search);
   left.append(tools);
   const tbl = el('table', { class: 'tbl' });
   const drawRows = () => {
@@ -1120,7 +1121,7 @@ function renderFA(v) {
     if (inSeason) tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n', 'data-tip': 'How he grades in your scheme' }, 'Fit'), el('th', { 'data-tip': 'His agent\'s number, a year' }, 'Ask'), el('th', { class: 'n', 'data-tip': 'What he costs this year, prorated to the weeks left' }, 'This Year'), el('th', {}, ''), el('th', {}, '')));
     else tbl.append(el('tr', {}, el('th', {}, ''), el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n', 'data-tip': 'How he grades in your scheme' }, 'Fit'), el('th', {}, 'Ask'), el('th', {}, 'Interest'), el('th', {}, 'Your Offer'), el('th', {}, '')));
     const q = faQuery.trim().toLowerCase();
-    const rows = v.rows.filter(r => (!faPos || (GROUP[faPos] || []).includes(r.pos)) && (faRole === 'All' || (faRole === 'Starters') === r.starter) && (!faCheap || r.ask == null || r.ask < 5) && (!faWatch || r.watch) && (!q || r.name.toLowerCase().includes(q)));
+    const rows = v.rows.filter(r => (!faPos || (GROUP[faPos] || []).includes(r.pos)) && (faRole === 'All' || (faRole === 'Starters') === r.starter) && (!faCheap || r.ask == null || r.ask < 5) && (!faWatch || r.watch) && (!faRookie || r.rookie) && (!q || r.name.toLowerCase().includes(q)));
     for (const r of rows) {
       const who = el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, inSeason ? (r.hole || r.pos) : `${r.pos}${r.last ? ' · from ' + r.last : ''}`))));
       const askBtn = el('div', { style: 'display:flex;gap:4px' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const th = v.threads.find(x => x.id === r.thread); if (th) openTalks(th, reload); } }, inSeason ? 'Talks' : 'Offer') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(inSeason ? 'fa_inseason' : 'fa_offseason')})`); if (!res.ok) { notify(res); reload(); return; } const fresh = pyJSON(`SESSION.personnel('free_agency')`); const th = fresh.threads.find(x => x.id === res.thread) || fresh.threads.filter(x => x.pid === r.pid).pop(); renderFA(fresh); if (th) openTalks(th, () => renderFA(pyJSON(`SESSION.personnel('free_agency')`))); } }, 'Ask the Agent'),
