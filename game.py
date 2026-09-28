@@ -466,13 +466,13 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     kicker = offense.get('k') or {}
     game_end = half_end is None
     need = max(0, -int(round(dr.score_diff))) if game_end else 0
-    if game_end and need > 8: return None                       # two scores in under a minute: the drill runs as it does
+    two_scores = game_end and need > 8                          # a touchdown alone does not tie it; it is still the only thing to play for
     # WHAT A SCORE IS WORTH. Points before the half; at the end of the game, the share of a win: a kick wins a tie
     # and only ties a deficit of three or less, a touchdown wins outright down six or less, needs the kick down
     # seven and the two-point try down eight
     if game_end:
         v_kick = 1.0 if need == 0 else (0.5 if need <= 3 else 0.0)
-        v_td = 1.0 if need <= 6 else (0.94 if need == 7 else 0.48)
+        v_td = 1.0 if need <= 6 else (0.94 if need == 7 else 0.48 if need == 8 else 0.02)
         v_kneel = 0.5 if need == 0 else 0.0                        # the clock runs out: overtime tied, a loss behind
         floor_line = 0.0                                           # behind, any chance beats none; tied, the kneel's coin flip is the bar
     else:
@@ -1293,7 +1293,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
         clock_dies = secs_left_half <= 3 or (secs_left_half <= 10 and opp_tos == 0)
         _plan0 = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_left_half, coach=(off_state.coach if off_state is not None else None))
-        if clock_dies and secs_left_half > 0 and ((_plan0 is not None and _plan0['choice'] == 'kneel') or (_plan0 is None and dr.yardline > 45 and dr.score_diff >= 0)) and not getattr(dr, '_kneeled', False):
+        if clock_dies and secs_left_half > 0 and ((_plan0 is not None and _plan0['choice'] == 'kneel') or (_plan0 is None and ((half_end is None and dr.score_diff > 0) or (dr.yardline > 45 and dr.score_diff >= 0)))) and not getattr(dr, '_kneeled', False):
             dr._kneeled = True
             dr.log.append(dict(type='kneel', passer=(offense.get('qb') or {}).get('pid'), down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock))
             dr.plays += 1; dr.clock = wall; dr.result = 'End of half'; break

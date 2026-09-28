@@ -410,7 +410,16 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         # the caller's play-action lean scales the league rate (0.5 neutral):
         # a Shanahan-tree offence at 0.75 uses it about half again as often
         pa_scale = float(np.exp(1.2 * (float(lean.get('play_action', 0.5)) - 0.5)))
-        call['play_action'] = rng.random() < min(0.6, (0.30 if not shotgun else 0.14) * pa_scale)
+        # PLAY ACTION SELLS A RUN, so it lives where a run is a threat: first and second down at manageable
+        # distance. Third or fourth and long draws no defender to the fake, and the last seconds of a half have
+        # no fake in them. It had been drawn flat across every down and distance, so fourth and 34 with five
+        # seconds left got a fake handoff as often as first and ten.
+        if ydstogo >= 15: sit = 0.08
+        elif down <= 1: sit = 1.0                                        # first down at any normal distance: the run is live
+        elif down == 2: sit = 1.0 if ydstogo <= 7 else 0.6 if ydstogo <= 12 else 0.25
+        else: sit = 1.0 if ydstogo <= 2 else 0.5 if ydstogo <= 4 else 0.25 if ydstogo <= 8 else 0.08
+        if secs_left is not None and secs_left <= 20: sit = 0.0
+        call['play_action'] = rng.random() < min(0.6, (0.37 if not shotgun else 0.175) * pa_scale * sit)
         call['screen'] = rng.random() < 0.075 + float(lean.get('screen_boost', 0.0) or 0.0)
         call['rpo'] = rng.random() < 0.057
         # THE CONCEPT IS A CALL, NOT A DRAW. It used to come off a flat

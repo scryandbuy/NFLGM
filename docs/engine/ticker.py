@@ -31,6 +31,7 @@ def _clock(secs):
 def _spot(yardline_100, off_abbr, def_abbr):
     """yardline is yards to the end zone. 60 means own 40."""
     y = int(round(yardline_100))
+    if 0 < yardline_100 < 1.0: y = 1                    # inside the 1 is the 1, never the 0
     if y > 50: return f"{off_abbr} {100 - y}"
     if y == 50: return "50"
     return f"{def_abbr} {y}"
