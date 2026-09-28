@@ -50,7 +50,7 @@ def _cond(session, p):
 
 def _status(league, p, t):
     out = []
-    if p.out_until is not None: out.append(f"Out · Wk {p.out_until}")
+    if p.out_until is not None: out.append('Out · season' if int(p.out_until) >= 99 else f"Out · back Wk {int(p.out_until) + 1}")
     if p.contract and p.contract.years <= 1: out.append('Final Year')
     import extensions as EXT
     try:
@@ -375,7 +375,7 @@ def depth(session, league, abbr, package='Nickel'):
                 if desig in ('questionable', 'doubtful') and (pending or hurt_now or p.out_until is not None): pl['flag'] = desig
                 elif p.out_until is not None: pl['flag'] = 'out'
                 else: pl['flag'] = None
-                weeks_left = (max(0, int(p.out_until) - int(league.week or 0)) if p.out_until is not None and int(p.out_until) < 99 else None)
+                weeks_left = (max(1, int(p.out_until) - int(league.week or 0) + 1) if p.out_until is not None and int(p.out_until) < 99 else None)   # out_until is the last week he misses; this week counts
                 pl['flag_word'] = (('Out · season' if p.out_until is not None and int(p.out_until) >= 99 else f"Out · {weeks_left} wk{'s' if weeks_left != 1 else ''}" if weeks_left else 'Out') if pl['flag'] == 'out' else pl['flag'].capitalize() if pl['flag'] else '')
                 pl['elevated'] = p not in t.roster
                 pl['out_week'] = weeks_left

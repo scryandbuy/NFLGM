@@ -719,7 +719,7 @@ function renderCard(v) {
     const pm = el('div', { class: 'posmap', style: `grid-template-columns:repeat(${Math.min(5, v.grades.length)},1fr)` }); v.grades.forEach(g => pm.append(el('div', { class: g.mine ? 'nat' : 'fam' }, g.pos))); left.append(pm);
     const gr = el('div', { class: 'grades' }); v.grades.forEach(g => gr.append(el('div', {}, el('span', {}, g.pos), el('div', { class: 'bar' }, el('i', { style: `width:${g.ovr}%` })), el('span', { class: 'g' }, `${g.ovr} Ovr`)))); left.append(gr);
     left.append(h5('Status'));
-    left.append(el('div', { class: 'kv' }, el('span', {}, 'Role'), el('span', {}, v.role || '—'), el('span', {}, 'Snaps'), el('span', {}, v.snaps || 'None yet this season'), el('span', {}, 'Health'), el('span', {}, (v.out ? `Out until week ${v.out}` : 'Healthy') + (v.missed ? ` · ${v.missed} game${v.missed === 1 ? '' : 's'} missed` : ' · no games missed')), el('span', {}, 'Condition'), el('span', {}, `${v.cond}%`), el('span', {}, 'Position Change'), el('span', {}, v.pending)));
+    left.append(el('div', { class: 'kv' }, el('span', {}, 'Role'), el('span', {}, v.role || '—'), el('span', {}, 'Snaps'), el('span', {}, v.snaps || 'None yet this season'), el('span', {}, 'Health'), el('span', {}, (v.out ? (v.out >= 99 ? 'Out for the season' : `Out; returns week ${v.out + 1}`) : 'Healthy') + (v.missed ? ` · ${v.missed} game${v.missed === 1 ? '' : 's'} missed` : ' · no games missed')), el('span', {}, 'Condition'), el('span', {}, `${v.cond}%`), el('span', {}, 'Position Change'), el('span', {}, v.pending)));
     const mid = el('div', {});
     mid.append(h5('Attributes'));
     const attrs = el('div', { class: 'attrs' });
