@@ -568,10 +568,20 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         if bleed_ev is None or evk > bleed_ev: bleed_ev, k_bleed, bleed_final = evk, k, ('shot' if sv > kv else 'kick')
     hurry = True; choice = hurry_choice
     behind = dr.score_diff < 0
-    if not behind and bleed_ev is not None and bleed_ev >= hurry_ev and bleed_ev >= floor_line:
+    # THE MODE STICKS. The plan is priced again at every snap and a spot near the boundary flipped between hurrying
+    # and bleeding within one possession (a timeout spent at 0:49, then the play clock run down at 0:43). Once a
+    # possession has chosen, the other way has to beat it by a clear margin: a quarter of its value and a fifth
+    # of a point. A big gain or a turnover moves the prices far more than that, so real changes still register.
+    prev = getattr(dr, '_plan_mode', None)
+    bleed_wins = bleed_ev is not None and bleed_ev >= floor_line and (
+        (bleed_ev >= hurry_ev * 1.25 + 0.2) if prev == 'hurry' else
+        (hurry_ev < bleed_ev * 1.25 + 0.2) if prev == 'bleed' else
+        (bleed_ev >= hurry_ev))
+    if not behind and bleed_wins:
         # ahead or tied, the clock is worth protecting; behind, every second is the offense's own and it never
         # waits (a team down two scores once ran the play clock down because every option priced near nothing)
         hurry = False; choice = 'play' if k_bleed > 0 else bleed_final; evs = dict(evs, bleed=bleed_ev)
+    dr._plan_mode = 'hurry' if hurry else 'bleed'
     if evs.get(choice, 0.0) < floor_line: choice = 'kneel'
     return dict(choice=choice, hurry=hurry, evs={k: round(v, 3) for k, v in evs.items()}, cost_hurry=round(cost_hurry, 3), p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
 
@@ -1631,8 +1641,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # the defense's discipline carries its awareness: the smart unit jumps offside and grabs less
         _dmen = (defense.get('db') or [])[:5] + (defense.get('lb') or [])[:3] + (defense.get('dl') or [])[:4]
         d_awr = float(np.mean([rate_fn(d, {'awareness_rating': 1.0}) for d in _dmen])) if _dmen else 0.70
+        _in_drill = (secs_in_half < 120 and dr.score_diff <= 0) or (getattr(dr, '_plan', None) is not None and dr._plan.get('hurry', False) and dr._plan['choice'] != 'kneel')
         pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'], discipline=float(np.clip(0.70 + 0.8 * (d_awr - 0.787), 0.5, 0.9)),
-                              noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)))
+                              noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)), hurry=_in_drill)
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
             _tick(dr, play_seconds('penalty'))

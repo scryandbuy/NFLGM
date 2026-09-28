@@ -78,7 +78,9 @@ PD_LOOSE = 0.13
 # split says 18.4/(18.4+49.5) of the short bucket, but this engine's depth mix
 # is not the real one - solved instead against the OUTCOME, the 22.3% of
 # completions that travel backwards.
-SCREEN_SHARE = 0.285
+SCREEN_SHARE = 0.285        # (kept for reference) the old behind-the-line share of short throws, all of it called a screen
+SWING_SHARE = 0.26          # swings, flares and checkdowns to the back: the behind-the-line family without the convoy
+SWING_FREE = 5.0            # free yards in the flat before first contact on a swing
 # Behind-the-line throws complete 78.4% against 71.0% for a short throw, and
 # the difference is that nobody is covering the flat the way they cover a
 # route downfield. It has to stay small: at 0.14 with a 36% share, league
@@ -628,9 +630,16 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     #
     # Behind the line is 18.4% of all attempts and short is 49.5%, so a little
     # over a quarter of what this engine calls a short throw is really a screen.
-    screen = (depth == 'short' and not off_call.get('play_action')
-              and rng.random() < SCREEN_SHARE)
     concept = off_call.get('concept', 'curl_flat')
+    # THE SCREEN AND THE SWING. Real clubs throw about 18% of passes at or behind the line, but only a third of
+    # those are designed screens with a convoy in front; the rest are swings, flares and checkdowns to the back
+    # in the flat. The resolver had flagged 28% of all short throws as screens on its own, over the caller's
+    # head, and the log called every one a screen: 11% of attempts read as screens against a real 5 to 6. The
+    # designed screen is now the caller's call; the behind-the-line draw here is the swing.
+    screen = bool(concept == 'screen')
+    if screen: depth = 'short'                     # a called screen is a screen whatever depth the plan redrew
+    swing = (not screen and depth == 'short' and not off_call.get('play_action')
+             and rng.random() < SWING_SHARE)
     # The offence does NOT know the rush count before the snap. Choosing max
     # protect because six are coming let the defence's blitz cancel itself, so
     # the sack rate barely moved from four to six rushers.
@@ -719,7 +728,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         PASS_TRACE.append(dict(path='clock', time=p['time'], hot=bool(hot),
                                sack=bool(p['sack']), rushers=def_call['rushers']))
     if p['sack'] and not hot:
-        return dict(type='sack', yards=round(-min(18.0, rng.gamma(2.0, 3.4)), 1), depth=depth, screen=bool(screen),     # real sacks lose 6 to 8; 18 is the extreme, and the gamma tail once produced a 32-yard sack
+        return dict(type='sack', yards=round(-min(18.0, rng.gamma(2.0, 3.4)), 1), depth=depth, screen=bool(screen), swing=bool(swing),     # real sacks lose 6 to 8; 18 is the extreme, and the gamma tail once produced a 32-yard sack
                     touchdown=False, by=p['beaten_by'], concept=concept,
                     protection=prot_name, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
                     beaten=p.get('beaten'), pressured=True)
@@ -803,6 +812,13 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         pairs, off['qb'], concept, rng, rate, plan=off_call.get('plan'), red_zone=(ytg <= 10))
     if tgt is None:
         tgt, cov, read_kind, sep_raw = receivers[0], deff['db'][0], 'first', 0.42
+    if swing:
+        # the swing is the back's ball: the flat, with the defender who had him arriving first
+        backs = [pr for pr in pairs if pr['receiver'].get('pos') in ('HB', 'FB')]
+        if backs:
+            tgt, cov = backs[0]['receiver'], backs[0].get('defender'); read_kind = 'checkdown'; sep_raw = float(backs[0].get('separation', sep_raw))   # his own matchup decides the catch
+        else:
+            swing = False
 
     if tgt.get('pos') in ('HB', 'FB') and depth != 'short' and not screen:
         depth = 'short'                          # the back's route is a check, a flat, a swing
@@ -898,7 +914,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
 
     if picked:
         return dict(type='interception', yards=0.0, touchdown=False,
-                    depth=depth, in_man=bool(in_man), screen=bool(screen), coverage=def_call.get('coverage') or def_call['shell'],
+                    depth=depth, in_man=bool(in_man), screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
     if not complete:
@@ -912,7 +928,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         if contested:
             broken = rng.random() < PD_CONTESTED
         return dict(type='incomplete', yards=0.0, touchdown=False,
-                    depth=depth, in_man=bool(in_man), screen=bool(screen), coverage=def_call.get('coverage') or def_call['shell'],
+                    depth=depth, in_man=bool(in_man), screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
                     pass_def=(cb.get('pid') if broken and cb else None),
@@ -921,7 +937,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # contested-catch gate again; drops were running at 8.7% against a real ~5%.
     if not resolve_catch(tgt, cb, contested and rng.random() < 0.45, rng):
         return dict(type='drop', yards=0.0, touchdown=False,
-                    depth=depth, in_man=bool(in_man), screen=bool(screen), coverage=def_call.get('coverage') or def_call['shell'],
+                    depth=depth, in_man=bool(in_man), screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
 
@@ -932,7 +948,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # Real air yards ON COMPLETIONS: 5.72 overall, with the bands running
     # -2.76 behind the line, 4.03 short, 11.93 medium, 25.29 deep. The short
     # band includes throws behind the line, which pulled the real mean down.
-    if screen:
+    if screen or swing:
         # Real behind-the-line throws average -3.55 air yards on attempts and
         # -2.76 on completions.
         air = float(np.clip(rng.normal(-3.4, 2.2), -9.0, -0.5))
@@ -950,7 +966,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # A throw to the back of the end zone travels the full remaining distance -
     # it is not clipped short. Clipping it left the YAC chain no room and made
     # scoring from the 15-20 nearly impossible: 1.9% per play against a real 7.0%.
-    if screen:
+    if screen or swing:
         pass                                   # it already travelled backwards
     elif air >= ytg * 0.68 and ytg <= 25:
         air = float(ytg)
@@ -962,7 +978,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     if air >= ytg:
         return dict(type='complete', yards=round(float(ytg), 1),
                     air=round(float(air), 1), yac=0.0, touchdown=True,
-                    in_man=bool(in_man), screen=bool(screen),
+                    in_man=bool(in_man), screen=bool(screen), swing=bool(swing),
                     coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, depth=depth,
                     target=tgt.get('pid'), read=read_kind,
@@ -973,7 +989,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # traffic. Flat pursuit produced 3.06 overall against a real 5.19.
     pool = deff['db'] + deff['lb']
     n_near = {'short': 3, 'medium': 4, 'deep': 2}[depth]
-    if air <= 0: n_near = 4                       # screen: two in front of the convoy, two arriving from the back side (two alone made every broken screen a house call)
+    if screen: n_near = 4                         # screen: two in front of the convoy, two arriving from the back side (two alone made every broken screen a house call)
     tacklers = [pool[rng.integers(0, len(pool))] for _ in range(n_near)]
     if tgt.get('pos') in ('HB', 'FB') and not screen:
         # A BACK'S CATCH is at the line with the underneath defence in front
@@ -1011,6 +1027,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     if screen:
         blk = float(np.mean([rate(b, {'run_block_rating': .6, 'awareness_rating': .4}) for b in (off['ol'][:5] or [tgt])]))
         scr_free = float(np.clip(rng.normal(SCREEN_FREE_BASE + SCREEN_FREE_BLK * (blk - AVG), 2.4), 0.0, 12.0))
+    elif swing:
+        scr_free = float(np.clip(rng.normal(SWING_FREE, 2.0), 0.0, 8.0))     # the flat has room before the first defender arrives, less than a convoy gives
     yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space, contact_at=min(max(te_free, scr_free), room))
     if screen and tacklers:
         # A SCREEN LIVES OR DIES ON THE READ. The pursuers' awareness decides whether the defense rallied:
@@ -1021,7 +1039,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
                 yac=yac['yards'], touchdown=total >= ytg, concept=concept,
-                in_man=bool(in_man), screen=bool(screen),
+                in_man=bool(in_man), screen=bool(screen), swing=bool(swing),
                 coverage=def_call.get('coverage') or def_call['shell'],
                 protection=prot_name, depth=depth, target=tgt.get('pid'),
                 read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))

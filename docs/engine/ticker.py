@@ -78,7 +78,12 @@ def play_line(league, p, off_abbr, def_abbr):
         cls, yd = _yards(p.get('yards', 0))
         pre = 'Play action. ' if p.get('play_action') else ''
         pres = f"Pressure on {passer or 'the quarterback'}. " if p.get('pressured') else ''
-        text = f"{pre}{pres}{passer or 'The quarterback'} to {target or 'his receiver'}" + (" on a screen" if p.get('screen') else '') + f" for {yd}"
+        if p.get('screen'):
+            text = f"{pre}{pres}{passer or 'The quarterback'} to {target or 'his receiver'} on a screen for {yd}"
+        elif p.get('swing'):
+            text = f"{pre}{pres}{passer or 'The quarterback'} {'swings it to' if (p.get('yards', 0) or 0) >= 0 else 'checks down to'} {target or 'his back'} in the flat for {yd}"
+        else:
+            text = f"{pre}{pres}{passer or 'The quarterback'} to {target or 'his receiver'} for {yd}"
         if td: text += f". TOUCHDOWN."; kind = 'score'
         else:
             kind = cls

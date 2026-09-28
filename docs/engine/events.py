@@ -132,7 +132,7 @@ def dpi_yards(rng, air_yards=None):
     return float(np.clip(rng.lognormal(np.log(13.0), 0.62), 1, DPI['max']))
 
 def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
-                  air_yards=None, noise=1.0):
+                  air_yards=None, noise=1.0, hurry=False):
     """
     Returns a penalty or None. discipline is the offending unit's rating on
     0-1; the league rate of 7.03% of plays sits at average discipline.
@@ -162,6 +162,13 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
         for k, i in enumerate(ok):
             if _names[i] in ('False Start', 'Delay of Game'):
                 per_play[k] *= noise
+    if hurry:
+        # A DRILL DOES NOT TAKE A DELAY. An offense racing the clock snaps the ball the moment it is set; the
+        # delay of game is the huddle offense's foul. It had been drawn at the league rate on every snap, so a
+        # club down eleven with 48 seconds lost 23 of them to one on its first snap.
+        for k, i in enumerate(ok):
+            if _names[i] == 'Delay of Game':
+                per_play[k] = 0.0
     p = per_play.sum() * (1.0 + 1.6 * (AVG - discipline))
     if rng.random() >= max(0.0, p):
         return None

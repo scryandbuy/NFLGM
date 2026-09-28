@@ -420,7 +420,9 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         else: sit = 1.0 if ydstogo <= 2 else 0.5 if ydstogo <= 4 else 0.25 if ydstogo <= 8 else 0.08
         if secs_left is not None and secs_left <= 20: sit = 0.0
         call['play_action'] = rng.random() < min(0.6, (0.37 if not shotgun else 0.175) * pa_scale * sit)
-        call['screen'] = rng.random() < 0.075 + float(lean.get('screen_boost', 0.0) or 0.0)
+        # the designed screen: about 5.5% of throws league-wide, and a club's plan can add no more than three points
+        # (a plan that stacked several screen calls had one club throwing a third of its passes on screens)
+        call['screen'] = rng.random() < 0.055 + float(np.clip(float(lean.get('screen_boost', 0.0) or 0.0), -0.03, 0.03))
         call['rpo'] = rng.random() < 0.057
         # THE CONCEPT IS A CALL, NOT A DRAW. It used to come off a flat
         # rng.choice inside a distance bucket, so a quarterback who could not
