@@ -345,7 +345,7 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
             # the elite end of the contest is compressed for runners: a 97 truck beat the first man 60% of the time and
             # the chain multiplied it into 7 yards a carry over 300 carries; real elite backs sit near 5.5. An average
             # back is unchanged (the mean holds), the top of the scale wins more often but not on every defender
-            atk = 0.83 + 0.6 * (atk - 0.83)                 # pivot at the league's starting back, so the middle of the league is untouched
+            atk = 0.83 + 0.5 * (atk - 0.83)                 # pivot at the league's starting back, so the middle of the league is untouched (0.6 left the best back at 6.6 a carry over 310)
         # 0.52 base difficulty puts an average back's break rate near the real
         # ~18%; the ramp adds difficulty for every man already beaten
         # A receiver catching the ball in space is not a back hitting a pile:
