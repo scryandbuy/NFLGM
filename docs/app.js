@@ -731,7 +731,6 @@ function renderCard(v) {
       if (c.extra && c.extra.rows && c.extra.rows.length) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
       if (c.title === 'Mental' && v.personality) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Traits')); const tr = el('div', { class: 'traits' }); v.personality.split(',').map(x => x.trim()).filter(Boolean).forEach(w => { const m = TRAIT_META[w] || { k: 'even', tip: 'Nothing about him stands out.' }; tr.append(el('span', { class: 'trait ' + m.k, 'data-tip': m.tip }, w.replace(/\b\w/g, ch => ch.toUpperCase()))); }); box.append(tr); }
       if (c.title === 'Mental' && v.schemes) box.append(schemeBlock(v.schemes));
-      if (c.title === 'Mental' && v.schemes) box.append(schemeBlock(v.schemes));
       attrs.append(box);
     }
     mid.append(attrs);
