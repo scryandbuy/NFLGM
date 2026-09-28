@@ -242,7 +242,7 @@ def _rec(league, a):
     return f"{w}–{l}" + (f"–{d}" if d else '')
 
 
-TAGS = {'sign': 'Signing', 'release': 'Cut', 'trade': 'Trade', 'draft': 'Draft', 'extension': 'Extension', 'waiver_claim': 'Claim', 'ps_callup': 'Call-Up', 'ir': 'Injured Reserve', 'gm_change': 'Coaching',
+TAGS = {'sign': 'Signing', 'release': 'Cut', 'trade': 'Trade', 'draft': 'Draft', 'extension': 'Extension', 'waiver_claim': 'Claim', 'ps_callup': 'Call-Up', 'ir': 'IR', 'gm_change': 'Coaching',
         'retire': 'Retirement', 'fire': 'Fired', 'hire': 'Hired', 'tag': 'Franchise Tag', 'restructure': 'Restructure', 'position_change': 'Position Change', 'hall_of_fame': 'Hall of Fame',
         'season_end': 'Season', 'inbox_trade': 'Trade', 'staff_hire': 'Staff', 'staff_release': 'Staff', 'staff_extend': 'Staff', 'poach': 'Staff', 'ps_sign': 'Practice Squad', 'ps_release': 'Practice Squad'}
 

@@ -677,9 +677,12 @@ const TRAIT_META = {
   'team-first': { k: 'amb-', tip: 'Accepts his role. Morale holds even when the snaps drop.' }, 'happy in a role': { k: 'amb-', tip: 'Content wherever you put him. The easiest player to keep happy.' },
   'even-keeled': { k: 'even', tip: 'Nothing about him stands out either way.' },
 };
-let cardTab = 'Overview';
+let cardTab = 'Overview', cardPid = null;
 function renderCard(v) {
   if (v.cls_year !== undefined && v.confidence !== undefined) return renderProspectCard(v);
+  // a different player opens on Overview; the chosen tab sticks only while looking at the same player, so a link
+  // from a list (extensions, the roster, a trade) never lands on whichever tab was open on the last card
+  if (v.pid !== cardPid) { cardTab = 'Overview'; cardPid = v.pid; }
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Team'; secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '');
@@ -1734,7 +1737,7 @@ function renderTeam(v) {
 // ---------------------------------------------------------------- League
 const LG = { standings: 'Standings', schedule: 'Schedule', bracket: 'Playoffs', transactions: 'Transactions', stats: 'Stats', awards: 'Awards', coaching: 'Coaching', almanac: 'Almanac' };
 function lgSecond(cur) { secondRow(Object.entries(LG).map(([k, l]) => [l, '#league/' + k]), '#league/' + cur); $('#crumb').textContent = 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'league')); }
-const TAGCLS = { Trade: 'trade', Signing: 'sign', Release: 'cut', Draft: 'draft', Extension: 'contract', Waivers: 'wire', 'Call-Up': 'squad', 'Practice Squad': 'squad', 'Injured Reserve': 'wire', Retirement: 'retire', Fired: 'cut', Hired: 'staff', Staff: 'staff', 'Franchise Tag': 'tagg', Restructure: 'contract', 'Position Change': 'squad', 'Hall of Fame': 'hall', Season: 'season' };
+const TAGCLS = { Trade: 'trade', Signing: 'sign', Release: 'cut', Draft: 'draft', Extension: 'contract', Waivers: 'wire', 'Call-Up': 'squad', 'Practice Squad': 'squad', 'Injured Reserve': 'wire', IR: 'wire', Retirement: 'retire', Fired: 'cut', Hired: 'staff', Staff: 'staff', 'Franchise Tag': 'tagg', Restructure: 'contract', 'Position Change': 'squad', 'Hall of Fame': 'hall', Season: 'season' };
 
 function renderStandings(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('standings');

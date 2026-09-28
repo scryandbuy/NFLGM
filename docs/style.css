@@ -761,7 +761,7 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .game .tm small{color:var(--ink-3);font-size:12.5px}
 .game .note{grid-column:1/-1;font-size:12.5px;color:var(--ink-3);border-top:1px solid var(--rule);padding-top:4px;margin-top:2px}
 .tbl.teamsched th:nth-child(1),.tbl.teamsched td:nth-child(1){width:44px}.tbl.teamsched th:nth-child(3),.tbl.teamsched td:nth-child(3){width:90px}.tbl.teamsched th:nth-child(4),.tbl.teamsched td:nth-child(4){width:110px}.tbl.teamsched th:nth-child(5),.tbl.teamsched td:nth-child(5){width:90px}
-.stripe.bar-only{width:3px;padding:0;overflow:hidden;color:transparent}
+.stripe.bar-only{width:3px;padding:0;overflow:hidden;color:transparent;display:inline-block;margin-right:6px;vertical-align:-2px;height:14px}
 .game:hover{border-color:var(--rule-hi)}
 .game .tm{display:flex;align-items:center;gap:8px;font-size:15px}
 .game .tm.w{color:var(--ink);font-weight:600}.game .tm.l{color:var(--ink-3)}
@@ -773,7 +773,7 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .wknav button{width:34px;height:28px;font-family:var(--display);font-weight:700;font-size:15px;color:var(--ink-3);border:1px solid var(--rule-2)}
 .wknav button[aria-pressed="true"]{background:var(--ink);color:#111;border-color:var(--ink)}
 .wknav .lab{font-size:14px;color:var(--ink-3);margin-right:6px}
-.trow{display:grid;grid-template-columns:110px 96px 1fr auto;gap:12px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--rule);font-size:15.5px}
+.trow{display:grid;grid-template-columns:110px 128px 1fr auto;gap:12px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--rule);font-size:15.5px}
 .trow:last-child{border-bottom:0}
 .trow time{font-family:var(--mono);font-size:12.5px;color:var(--ink-3)}
 .trow .txt b{color:var(--ink);font-weight:600}
@@ -981,7 +981,7 @@ button.btn{line-height:normal;box-sizing:border-box}
 .game .note{grid-column:1 / -1;font-size:13px;color:var(--ink-3);padding-top:4px}
 .aw .code{font-family:var(--display);font-weight:800;font-size:25.5px;color:var(--club-2);letter-spacing:.02em}
 .aw .ln{font-size:14px;color:var(--ink-3);margin-top:4px}
-.trow .tag{font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+.trow .tag{font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bust .meta{font-size:14px;color:var(--ink-3);margin-top:3px}.bust .why{font-size:15px;color:var(--ink-2);margin-top:6px}
 
 .track .knob.ghost{background:transparent;border:2px dashed var(--club-2);opacity:.9}
