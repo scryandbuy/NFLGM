@@ -1077,7 +1077,7 @@ button.btn{line-height:normal;box-sizing:border-box}
 /* one tooltip rule for everything that carries a data-tip; table headers keep their sticky position */
 [data-tip]:not(th){position:relative}
 [data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:6px;background:var(--ink);color:#111;font-family:var(--text);font-weight:500;font-size:14px;line-height:1.35;padding:6px 9px;border-radius:2px;white-space:normal;width:max-content;max-width:260px;text-align:left;z-index:40;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.4)}
-.tbl th[data-tip]:hover::after,.arch div[data-tip]:hover::after,.bars .t[data-tip]:hover::after,.cy .stack i[data-tip]:hover::after,.flag[data-tip]:hover::after{max-width:260px}
+.tbl th[data-tip]:hover::after,.arch div[data-tip]:hover::after,.bars .t[data-tip]:hover::after,.cy .stack i[data-tip]:hover::after,.flag[data-tip]:hover::after{max-width:260px;white-space:normal;width:max-content;line-height:1.35}
 /* the card's attribute rows: room for the archetype's name between the label and the value */
 .attrs .arow{grid-template-columns:1fr minmax(0,112px) 34px}
 .arow em.fitd{grid-column:2;font-size:11px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;padding-right:4px;cursor:help}

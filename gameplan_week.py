@@ -101,8 +101,18 @@ def unit_grades(league, team, healthy_only=True):
     return out
 
 
+def season_underway(league):
+    """Whether a game has been played this season: every club's record is reset to 0-0 at the New Year."""
+    return any(sum(int(x) for x in (t.record or [0, 0, 0])[:3]) > 0 for t in league.teams.values())
+
+
 def unit_ranks(league, team):
+    """Each unit against the league's 31 others, by grade. Hidden until the season's first game has been played,
+    at the start of every year: before that every club shows the same ranks in every new game (same rosters),
+    which read as carried over rather than earned."""
     mine = unit_grades(league, team)
+    if not season_underway(league):
+        return {unit: None for unit in mine}
     allg = {a: unit_grades(league, t) for a, t in league.teams.items()}
     ranks = {}
     for unit, v in mine.items():
