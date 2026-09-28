@@ -2244,7 +2244,16 @@ function renderReport(v) {
 }
 
 // ---------------------------------------------------------------- flow
-function refresh() { view = pyJSON('SESSION.portal()'); renderRail(view.rail); renderPortal(view); }
+function refresh() {
+  // the portal draws what the address says: the inbox (or an open message) when the address is there, the
+  // overview otherwise. It always drew the overview, so after a load or an advance with #portal/inbox in the
+  // address the screen and the address disagreed, and clicking Inbox set the same address and fired nothing
+  if (location.hash.startsWith('#portal/inbox/')) { openMessage(+location.hash.split('/').pop()); return; }
+  if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal_full()'); renderInbox(view); return; }
+  view = pyJSON('SESSION.portal()'); renderRail(view.rail); renderPortal(view);
+}
+// a fresh session starts at the portal overview whatever address the browser kept from last time
+function bootHash() { if (location.hash && location.hash !== '#portal') history.replaceState(null, '', '#portal'); }
 
 async function advance() {
   try { await advanceInner(); }
@@ -2284,8 +2293,8 @@ async function advanceInner() {
   try { await bootEngine(); } catch (e) { say('boot failed: ' + e); return; }
   $('#start').disabled = false;
   const saved = await loadSave(); if (saved) $('#resume').hidden = false;
-  $('#start').onclick = async () => { $('#start').disabled = true; await newGame(team); $('#boot').remove(); refresh(); saveGame(); };
-  $('#resume').onclick = async () => { $('#resume').disabled = true; say('loading your save…', 90); await new Promise(r => setTimeout(r, 30)); py.globals.set('_SAVE', saved); py.runPython(`SESSION = S.Session.load(_SAVE)`); $('#boot').remove(); refresh(); };
+  $('#start').onclick = async () => { $('#start').disabled = true; await newGame(team); $('#boot').remove(); bootHash(); refresh(); saveGame(); };
+  $('#resume').onclick = async () => { $('#resume').disabled = true; say('loading your save…', 90); await new Promise(r => setTimeout(r, 30)); py.globals.set('_SAVE', saved); py.runPython(`SESSION = S.Session.load(_SAVE)`); $('#boot').remove(); bootHash(); refresh(); };
   $('#advance').onclick = advance;
   $('#save').onclick = saveGame;
   // EXPORT AND IMPORT: the save as a file, for a backup or for sending a state to be looked at
@@ -2298,7 +2307,7 @@ async function advanceInner() {
   $('#importfile').onchange = async e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
     const text = await f.text(); busy('Loading the save…');
-    try { py.globals.set('_import_text', text); py.runPython(`import session as S\nSESSION = S.Session.load(_import_text)`); await saveGame(); refresh(); notify({ ok: true, line: 'Save loaded.' }); }
+    try { py.globals.set('_import_text', text); py.runPython(`import session as S\nSESSION = S.Session.load(_import_text)`); await saveGame(); bootHash(); refresh(); notify({ ok: true, line: 'Save loaded.' }); }
     catch (err) { notify({ ok: false, why: 'That file could not be loaded as a save.' }); }
     busy(null); e.target.value = '';
   };
