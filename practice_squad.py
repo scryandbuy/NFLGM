@@ -369,7 +369,58 @@ def keep_groups_whole(league, rng, week):
                     league.log('emergency_sign', pid=best.pid, team=abbr, group=grp)
                     moves.append((abbr, 'emergency', best.pid))
                 short -= 1
+    # THE ROSTER STAYS FULL. A club that put players on injured reserve fell to 47 or 48 and stayed there, and a spot
+    # could lose every healthy body while its group still counted enough: the floors above are by group. Real clubs
+    # fill the same week, from the practice squad first and the street second. AI clubs only; the GM's club is his.
+    for abbr, team in league.teams.items():
+        if abbr == user: continue
+        wk_ = int(week or 0); added = 0
+        def healthy_at(pos):
+            return [p for p in team.active() if p.pos == pos and (p.out_until is None or (int(p.out_until) < 99 and int(p.out_until) - wk_ <= 2))]
+        # 1. a spot with nobody healthy is filled first, whatever the group says
+        for pos, n_start in STARTERS.items():
+            if added >= 2: break
+            if len(healthy_at(pos)) >= n_start: continue
+            grp = GROUP_OF.get(pos, pos)
+            cands = sorted([q for q in squad(team) if q.pos == pos], key=lambda q: -q.ovr)
+            if cands and call_up(league, abbr, cands[0].pid):
+                moves.append((abbr, 'callup', cands[0].pid)); added += 1; continue
+            fa = [league.player(pid) for pid in league.free_agents]
+            fa = [q for q in fa if q and q.pos == pos and q.out_until is None and not q.retired and not shunned(q, abbr, league)]
+            if not fa: continue
+            best = max(fa, key=lambda q: q.ovr)
+            if len(team.active()) >= 53 and room_candidate(league, team, best) is None: continue
+            _make_room(league, abbr, best)
+            mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
+            if best.pid in league.free_agents: league.free_agents.remove(best.pid)
+            best.contract = None
+            league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
+            league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
+            moves.append((abbr, 'sign', best.pid)); added += 1
+        # 2. back to 53: the thinnest group against a normal 53-man shape gets the body
+        while len(team.active()) < 53 and added < 2:
+            counts = collections.Counter(GROUP_OF.get(p.pos, p.pos) for p in team.active() if p.out_until is None or (int(p.out_until) < 99 and int(p.out_until) - wk_ <= 2))
+            need = sorted(((SHAPE[g] - counts.get(g, 0)) / SHAPE[g], g) for g in SHAPE)
+            grp = need[-1][1]
+            cands = sorted([q for q in squad(team) if GROUP_OF.get(q.pos, q.pos) == grp], key=lambda q: -q.ovr)
+            if cands and call_up(league, abbr, cands[0].pid):
+                moves.append((abbr, 'callup', cands[0].pid)); added += 1; continue
+            fa = [league.player(pid) for pid in league.free_agents]
+            fa = [q for q in fa if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and not shunned(q, abbr, league)]
+            if not fa: break
+            best = max(fa, key=lambda q: q.ovr)
+            mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
+            if best.pid in league.free_agents: league.free_agents.remove(best.pid)
+            best.contract = None
+            league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
+            league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
+            moves.append((abbr, 'sign', best.pid)); added += 1
     return moves
+
+
+STARTERS = {'QB': 1, 'HB': 1, 'WR': 3, 'TE': 1, 'LT': 1, 'LG': 1, 'C': 1, 'RG': 1, 'RT': 1, 'LEDG': 1, 'REDG': 1, 'DT': 2,
+            'MIKE': 1, 'WILL': 1, 'CB': 3, 'FS': 1, 'SS': 1, 'K': 1, 'P': 1}
+SHAPE = {'QB': 3, 'HB': 4, 'WR': 6, 'TE': 3, 'OL': 9, 'DL': 9, 'LB': 6, 'DB': 10, 'K': 1, 'P': 1}   # a normal 53 by group (the long snapper rides with the specialists)
 
 
 SWAP_GAP = 3.0                 # the newcomer must grade three points better at the spot
