@@ -386,6 +386,26 @@ KICKOFF = dict(touchback=.155, return_rate=.799, return_mean=25.0,      # 26.9 d
 LAST_KICKOFF = {}
 
 
+def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half):
+    """Who spends a timeout after this play, if anyone. The trailing side spends them to get the ball back; the
+    driving side to keep the clock alive. Neither wastes one early. Returns (used, used_by)."""
+    used = False; used_by = None
+    _scored_now = t in ('run', 'complete', 'scramble') and float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01
+    _at_warning = secs_in_half > 120 and secs_in_half - play_seconds(t) <= 120 and not getattr(dr, '_two_min', False)
+    if timeouts is not None and secs_in_half < 300 and not _scored_now and not _at_warning:
+        other = 'away' if pos == 'home' else 'home'
+        # nothing to stop after a score (the clock is dead at the whistle) or on the play that reaches the
+        # two-minute warning (the warning stops it for free)
+        in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
+        # the defense stops the clock in the last three minutes of the GAME when it trails; in the first
+        # half only a two-score deficit is worth a timeout to get the ball back before the break
+        if dr.score_diff > 0 and in_bounds and timeouts.left.get(other, 0) > 0 and ((half_end is None and secs_in_half < 180) or (half_end is not None and secs_in_half < 90 and dr.score_diff >= 9)):
+            used = timeouts.use(other); used_by = other
+        elif ((-8 <= dr.score_diff < 0 and secs_in_half < 60) or (dr.score_diff == 0 and secs_in_half < 40)) and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
+            used = timeouts.use(pos); used_by = pos                        # one score down inside a minute, or tied at the very end; down two the offense runs the hurry-up and keeps them for the defense
+    return used, used_by
+
+
 def _tick(dr, secs):
     """Take seconds off the clock; a deduction that crosses a quarter's edge stops there (the quarter ends, the next snap is at 15:00)."""
     before = dr.clock
@@ -1412,7 +1432,21 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.plays -= 1
                 out['nullified'] = True
                 dr.log.append(dict(type='penalty', **live_pen))
-                _tick(dr, play_seconds(t) + play_seconds('penalty'))      # the play ran; the clock ran with it, then stopped for the flag
+                # THE CLOCK ON A WIPED PLAY IS THE CLOCK ON ANY PLAY. It had charged a full normal-pace play plus the
+                # flag and skipped the timeout check, so a holding call at 0:48 in a two-minute drill ran 47 seconds
+                # off and the trailing offense never got to stop it. The play runs at the drill's pace; the flag stops
+                # the clock; if a side calls a timeout the clock stays stopped, otherwise it restarts on the ready
+                secs_in_half_p = (dr.clock - half_end) if half_end is not None else dr.clock
+                used_p, used_by_p = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p)
+                hurry_p = secs_in_half_p < 120 and dr.score_diff <= 0
+                _tick(dr, play_seconds(t, hurry=hurry_p, timeout=used_p) + (0.0 if used_p else play_seconds('penalty')))
+                dr.clock = float(np.ceil(dr.clock - 1e-9))
+                if used_p and used_by_p:
+                    dr.log.append(dict(type='timeout', side=used_by_p, side_abbr=(getattr(off_state if used_by_p == pos else def_state, 'abbr', None) or used_by_p.upper()), left=timeouts.left.get(used_by_p, 0), clock=dr.clock))
+                after_p = (dr.clock - half_end) if half_end is not None else dr.clock
+                if secs_in_half_p > 120 >= after_p and not getattr(dr, '_two_min', False):
+                    dr.clock += min(20.0, 120.0 - after_p); dr._two_min = True
+                    dr.log.append(dict(type='two_minute', clock=dr.clock))
                 continue
             if taken == 'added':
                 dr.log.append(dict(type='penalty', **live_pen))
@@ -1452,22 +1486,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 
         # ---- timeouts ----
-        # The trailing side spends them to get the ball back; the driving side
-        # to keep the clock alive. Neither wastes one early.
-        used = False; used_by = None
-        _scored_now = t in ('run', 'complete', 'scramble') and float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01
-        _at_warning = secs_in_half > 120 and secs_in_half - play_seconds(t) <= 120 and not getattr(dr, '_two_min', False)
-        if timeouts is not None and secs_in_half < 300 and not _scored_now and not _at_warning:
-            other = 'away' if pos == 'home' else 'home'
-            # nothing to stop after a score (the clock is dead at the whistle) or on the play that reaches the
-            # two-minute warning (the warning stops it for free)
-            in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
-            # the defense stops the clock in the last three minutes of the GAME when it trails; in the first
-            # half only a two-score deficit is worth a timeout to get the ball back before the break
-            if dr.score_diff > 0 and in_bounds and timeouts.left.get(other, 0) > 0 and ((half_end is None and secs_in_half < 180) or (half_end is not None and secs_in_half < 90 and dr.score_diff >= 9)):
-                used = timeouts.use(other); used_by = other
-            elif ((-8 <= dr.score_diff < 0 and secs_in_half < 60) or (dr.score_diff == 0 and secs_in_half < 40)) and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
-                used = timeouts.use(pos); used_by = pos                        # one score down inside a minute, or tied at the very end; down two the offense runs the hurry-up and keeps them for the defense
+        used, used_by = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half)
         hurry = secs_in_half < 120 and dr.score_diff <= 0
         before_clock = secs_in_half
         clock_before = dr.clock
