@@ -131,10 +131,18 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         # the model's possession bias is worst deep in its own end; there the league's behavior carries more weight
         w_model = 0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.0     # inside your own 25 the model's possession bias has no vote
         p_go = w_model * p_model + (1.0 - w_model) * p_table
-    if score_diff >= 9 and secs_left < 1800:
-        p_go *= 0.25                                     # two scores up in the second half, the punt protects the lead
     else:
         p_go = p_table
+    # THE SCORE AND THE CLOCK. The table averages every score state, so it carries the desperate club's fourth
+    # downs and the comfortable club's alike. A lead shrinks the appetite as it grows and as the clock runs (up
+    # 22 in the fourth quarter, nobody goes on fourth and six from his own 25); a deficit raises it. Continuous,
+    # so a one-point lead and a twenty-point lead are not the same rule.
+    played = float(np.clip(1.0 - secs_left / 3600.0, 0.0, 1.0))
+    lead_scores = score_diff / 8.0
+    if lead_scores > 0:
+        p_go *= float(np.exp(-0.9 * lead_scores * (1.0 + played)))
+    elif lead_scores < 0:
+        p_go = float(min(0.85, p_go * min(1.4, np.exp(0.2 * (-lead_scores) * (1.0 + played)))))   # a deficit pushes a little; the table already carries the trailing club's fourth downs, and the chase rule takes over late
     if chasing:
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
     if score_diff <= -9 and yardline_100 <= 5 and ydstogo <= 5:
@@ -418,10 +426,12 @@ def _possession_odds(secs, tos):
     reaching a kick (a possession that has to travel about forty yards in a handful of snaps) and of a touchdown.
     Nothing with a few seconds; a real possession with half a minute and timeouts."""
     if secs <= 6: return 0.0, 0.0
-    snaps = min(int((secs - 4.0) // PLAY_SECS), int(tos) + 2)                 # stoppages: the timeouts and a couple of incompletions
-    if snaps <= 0: return 0.0, 0.0
-    p_reach = float(np.clip(0.18 * snaps - 0.05 * max(0, 3 - snaps), 0.0, 0.62))
-    p_td = 0.04 * min(snaps, 4) / 4.0
+    # time is the currency and a timeout is worth about a dozen seconds of it; the odds of reaching a kick rise
+    # with the time and level off (a minute and a half with timeouts is about as good as it gets)
+    # timeouts make the time usable: without them a club works the sidelines and spikes; with three it uses all of it
+    secs_eff = float(secs) * (0.75 + 0.25 * min(3, max(0, int(tos))) / 3.0) + 8.0 * max(0, int(tos))
+    p_reach = 0.50 * (1.0 - float(np.exp(-secs_eff / 75.0)))              # a possession from a kickoff with a minute and timeouts reaches a kick about half the time
+    p_td = 0.05 * (1.0 - float(np.exp(-secs_eff / 45.0)))
     return p_reach, p_td
 
 
@@ -489,7 +499,7 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         p = _shot_td_prob(yy, offense, defense, rate_fn)
         ev = v_td * p * (0.85 + 0.30 * aggr)
         live = 1.0 - p - SHOT_INT
-        if secs >= PLAY_SECS + 4:
+        if secs >= 6:                                                # the throw takes four seconds; an incompletion leaves the kick
             ev += live * ((1.0 - SHOT_SHORT) * kick_ev(yy) + SHOT_SHORT * (kick_ev(max(1.0, yy - 15.0)) if tos > 0 else 0.0))
         elif game_end and need == 0:
             ev += live * v_kneel
@@ -521,19 +531,26 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     other_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 3
     # each option leaves the other side a different amount of clock: a kick now leaves nearly all of it, a shot
     # then a kick a little less, k quick snaps then a kick less again; the bleed leaves next to nothing
-    residual = {'kick': secs_in_half - 4.0, 'shot': secs_in_half - PLAY_SECS - 4.0, 'play': secs_in_half - PLAY_SECS * max(1, k_best) - 4.0, 'kneel': 0.0}
+    residual = {'kick': secs_in_half - 4.0, 'shot': secs_in_half - PLAY_SECS - 4.0, 'play': 4.0, 'kneel': 0.0}   # the drill runs to the gun; only a kick or a shot taken now hands time back
     lead_after = {'kick': int(round(dr.score_diff)) + 3, 'shot': int(round(dr.score_diff)) + 7, 'play': int(round(dr.score_diff)) + 3, 'kneel': int(round(dr.score_diff))}
     def cost(opt):
         if game_end and need > 0 and opt != 'kick': return 0.0    # behind at the end, the touchdown is the game; the clock after it is the other side's problem only if we are still behind
         return fear * _possession_value(max(0.0, residual.get(opt, 0.0)), other_tos, game_end, lead_after.get(opt, 0))
     net = {k: v - cost(k) for k, v in evs.items()}
     hurry_choice = max(net, key=lambda k: net[k]); hurry_ev = net[hurry_choice]; cost_hurry = cost(hurry_choice)
-    k_bleed = max(0, int((secs_in_half - 5.0) // PLAY_SECS_RUN))
-    yb = max(1.0, y - PLAY_GAIN * (1.0 - PLAY_BAD - PLAY_INC) * k_bleed)
-    bleed_ev = ((1.0 - PLAY_BAD) ** k_bleed) * max(kick_ev(yb), (v_td * _shot_td_prob(yb, offense, defense, rate_fn) * (0.85 + 0.30 * aggr)) if k_bleed > 0 else 0.0) if 'kick' in evs else None
+    # THE BLEED: k slow snaps with the clock running, then the play clock run down and one shot at the end zone
+    # with a few seconds left, then the kick if it misses; the other side gets nothing back. The best k is taken.
+    bleed_ev = None; k_bleed = 0; bleed_final = 'kick'
+    for k in range(0, 4):
+        rest = secs_in_half - PLAY_SECS_RUN * k
+        if rest < 6: break
+        yk = max(1.0, y - PLAY_GAIN * (1.0 - PLAY_BAD - PLAY_INC) * k)
+        kv, sv = (kick_ev(yk), shot_ev(yk, min(rest, 12.0), own_tos)) if 'kick' in evs else (0.0, 0.0)
+        evk = ((1.0 - PLAY_BAD) ** k) * max(kv, sv)
+        if bleed_ev is None or evk > bleed_ev: bleed_ev, k_bleed, bleed_final = evk, k, ('shot' if sv > kv else 'kick')
     hurry = True; choice = hurry_choice
     if bleed_ev is not None and bleed_ev >= hurry_ev and bleed_ev >= floor_line:
-        hurry = False; choice = 'play' if k_bleed > 0 else 'kick'; evs = dict(evs, bleed=bleed_ev)
+        hurry = False; choice = 'play' if k_bleed > 0 else bleed_final; evs = dict(evs, bleed=bleed_ev)
     if evs.get(choice, 0.0) < floor_line: choice = 'kneel'
     return dict(choice=choice, hurry=hurry, evs={k: round(v, 3) for k, v in evs.items()}, cost_hurry=round(cost_hurry, 3), p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
 
@@ -567,10 +584,29 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
             # ahead is letting the clock run toward a late kick (or is out of the plan's window and moving slowly),
             # and each timeout now is seconds the defense gets after the score. Its coach's appetite sets the bar.
             d_aggr = float(np.clip(0.5 * float((dcoach or {}).get('fourth_down', 0.5)) + 0.5 * float((dcoach or {}).get('adjust_willingness', 0.5)), 0.0, 1.0))
-            after_now = max(0.0, secs_in_half - 4.0)
-            after_run = max(0.0, secs_in_half - PLAY_SECS_RUN * (1 + int((secs_in_half - 5.0) // PLAY_SECS_RUN)) - 4.0)
-            gain = _possession_value(after_now, timeouts.left.get(other, 0) - 1) - _possession_value(after_run, timeouts.left.get(other, 0))
-            if gain * (0.75 + 0.5 * d_aggr) > 0.25:
+            tos_d = timeouts.left.get(other, 0)
+            # THE STOP IS THE POINT. After this play the offense has (4 - down) snaps before it must punt; the
+            # defense gets the ball only if the series fails, and the time it gets is what is left after those
+            # snaps. A timeout now saves one clock-run snap's worth of time; the value is that saving times the
+            # odds of the stop. After a first down the odds are low and the offense has three chances left, so the
+            # timeout waits; on third and long it is worth spending.
+            nd = int(getattr(dr, 'down', 1)); togo = float(getattr(dr, 'togo', 10.0))
+            remaining = max(1, 4 - nd)                          # snaps before the punt, counting the one just run as done
+            p_stop = 0.28 if nd <= 1 else (0.40 if togo >= 4 else 0.25) if nd == 2 else (0.62 if togo >= 7 else 0.48 if togo >= 3 else 0.32)
+            later = 0.65 * PLAY_SECS_RUN + 0.35 * PLAY_SECS                  # a later snap stops the clock itself a third of the time
+            after_with = max(0.0, secs_in_half - PLAY_SECS * min(remaining, tos_d) - later * max(0, remaining - tos_d) - 6.0)
+            after_without = max(0.0, secs_in_half - PLAY_SECS_RUN - later * (remaining - 1) - 6.0)
+            gain = p_stop * (_possession_value(after_with, max(0, tos_d - min(remaining, tos_d))) - _possession_value(after_without, tos_d))
+            # ...AGAINST WAITING FOR THIRD DOWN. With snaps still to come, the timeout can be held for the series'
+            # last one, where the stop is likelier and every timeout is still in hand; a conversion in between
+            # costs nothing. The timeout is spent now only when now beats that.
+            if remaining > 1:
+                secs_3rd = secs_in_half - PLAY_SECS_RUN - later * (remaining - 2)
+                if secs_3rd > 6:
+                    w3 = max(0.0, secs_3rd - PLAY_SECS - 6.0); wo3 = max(0.0, secs_3rd - PLAY_SECS_RUN - 6.0)
+                    gain_later = 0.50 * (_possession_value(w3, tos_d - 1) - _possession_value(wo3, tos_d))
+                    if gain_later >= gain: gain = 0.0
+            if gain * (0.75 + 0.5 * d_aggr) > 0.06:                  # first-half timeouts do not carry past the break; a modest gain is worth one
                 used = timeouts.use(other); used_by = other
         elif (plan is None or plan.get('hurry', True)) and ((-8 <= dr.score_diff < 0 and secs_in_half < trail_window) or (dr.score_diff == 0 and secs_in_half < 40)) and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
             used = timeouts.use(pos); used_by = pos                        # one score down inside a minute, or tied at the very end; down two the offense runs the hurry-up and keeps them for the defense
@@ -1315,7 +1351,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         clock_kick_time = secs_in_half <= 8 or (secs_in_half <= 22 and no_tos)
         _plan = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None))
         dr._plan = _plan
-        _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4 and (_plan.get('hurry', True) or clock_kick_time)
+        if _plan is not None and not _plan.get('hurry', True) and _plan['choice'] in ('kick', 'shot') and secs_in_half > 14 and dr.down < 4:
+            # THE BLEED'S WAIT: the play clock runs down before the last snap, so the shot or the kick comes with a
+            # few seconds left and the other side gets nothing back
+            burn = float(min(PLAY_SECS_RUN - 5.0, secs_in_half - 10.0))
+            _tick(dr, burn); secs_in_half -= burn; clock_kick_time = secs_in_half <= 8 or (secs_in_half <= 22 and timeouts is not None and timeouts.left.get(pos, 0) == 0)
+        _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4 and (_plan.get('hurry', True) or clock_kick_time or secs_in_half <= 14)
         _kick_old = ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) and dr.yardline <= 37 and dr.down < 4 and clock_kick_time and _plan is None
         if _kick_by_plan or _kick_old:
             fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
