@@ -38,6 +38,18 @@ def spring_year(league):
     return year
 
 
+def _held_this_offseason(league):
+    """Whether the draft on record is this offseason's: held after the New Year roll and before the season opens."""
+    ld = getattr(league, 'last_draft', None)
+    closed = getattr(league, 'season_closed_year', None); pre_roll = closed is not None and int(closed) == int(league.year)
+    return ld is not None and int(ld.get('year', -1)) == int(league.year) - 1 and league.phase in ('offseason', 'free_agency') and not pre_roll
+
+
+def draft_year_of(y):
+    from views import draft_year
+    return draft_year(y)
+
+
 def _spring_done(league):
     return any(x.get('year') == spring_year(league) for x in (getattr(league, 'spring_news', None) or []))
 
@@ -387,8 +399,13 @@ def draft_day(session, league, abbr):
     D = getattr(session, 'draft', None)
     r = rail(session, league, abbr)
     if D is None or D.done:
+        # the results shown are this offseason's draft, once it is held; in season and before the roll the page names
+        # the coming draft instead of replaying last year's
         ld = getattr(league, 'last_draft', None)
-        return dict(rail=r, live=False, last=(_results(league, ld) if ld else None), note='The draft is not on. It comes in the offseason after the Spring; you will be on the clock here.')
+        held = _held_this_offseason(league)
+        year_next = draft_year_of(coming_season(league))
+        return dict(rail=r, live=False, last=(_results(league, ld) if (ld and held) else None), year_next=year_next,
+                    note=(f'The {year_next} draft comes in the offseason after the Spring; you will be on the clock here.' if not held else 'The draft is over. The results are below.'))
     pk = D.current()
     results = [dict(sel=s, slot=f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1}", team=club(t), name=p.name, pos=p.pos, cons_rank=(league.consensus.get(p.pid) or {}).get('rank')) for s, t, p in D.results[-12:]][::-1]
     mine_next = [dict(sel=q.selection, slot=SLOT(q), round=q.round) for q in D.picks[D.i:] if q.owner == abbr][:4]
@@ -559,9 +576,8 @@ def picks(session, league, abbr):
     # WHICH DRAFT THE RESULTS TAB OPENS ON. The draft held this offseason, if it has been; otherwise the coming
     # draft, which has no results yet and says so, with the past drafts on the year chips. Without this the tab
     # opened on last year's draft all through the new season as if it were this year's.
-    closed = getattr(league, 'season_closed_year', None); pre_roll = closed is not None and int(closed) == int(league.year)
-    held_this_offseason = ld is not None and int(ld.get('year', -1)) == int(league.year) - 1 and league.phase in ('offseason', 'free_agency') and not pre_roll
-    default_year = draft_year(ld['year']) if held_this_offseason else draft_year(coming_season(league))
+    held_this_offseason = _held_this_offseason(league)
+    default_year = draft_year_of(ld['year']) if held_this_offseason else draft_year_of(coming_season(league))
     return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if (ld and held_this_offseason) else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division,
                 default_year=default_year, default_held=held_this_offseason)
 

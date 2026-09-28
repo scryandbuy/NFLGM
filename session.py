@@ -117,6 +117,37 @@ class Session:
                 s.post.year = int(L.year) - 1; L.season_closed_year = int(L.year) - 1
         s.draft = None
         try:
+            # THE PHASE FOLLOWS THE STOP. A session standing at a week (or in the playoffs) is in season, whatever phase
+            # the league last wrote: a save that reached Week 1 with the phase still reading free_agency made every
+            # draft-cycle page (the Spring, Draft Results, the visits) believe it was the offseason and show last year
+            if s.stop[0] in ('week', 'playoffs') and L.phase in ('offseason', 'free_agency'):
+                L.set_phase('regular')
+        except Exception: pass
+        try:
+            # THE DRAFT CYCLE'S USER STATE NAMES PROSPECTS. Visits, their timing and the board that name players who are
+            # no longer in the class (drafted, signed, or from a class already gone) are dropped; an older build kept
+            # them, so last spring's thirty stayed 'spoken for' against the new class
+            import views_draft as _VD
+            pool = {p.pid for p in _VD._pool(L)}
+            if getattr(L, 'user_visits', None):
+                L.user_visits = [pid for pid in L.user_visits if pid in pool]
+                L.user_visit_week = {k: v for k, v in (getattr(L, 'user_visit_week', None) or {}).items() if k in pool}
+            ub = getattr(L, 'user_board', None) or {}
+            if ub:
+                for key in ('rank', 'ranks', 'order', 'dnd'):
+                    v = ub.get(key)
+                    if isinstance(v, list): ub[key] = [pid for pid in v if pid in pool]
+                    elif isinstance(v, dict): ub[key] = {k: x for k, x in v.items() if k in pool}
+        except Exception: pass
+        try:
+            # a last_draft with no results but a draft on the record is rebuilt from the record, so its page has rows
+            ld = getattr(L, 'last_draft', None)
+            if ld and not ld.get('results'):
+                yr = int(ld.get('year', -1)) + 1
+                rows = sorted(((int(x.get('selection') or 0), x.get('team'), x.get('pid')) for x in L.transactions if x.get('kind') == 'draft' and int(x.get('year', -9)) == yr and x.get('selection')), key=lambda r: r[0])
+                if rows: ld['results'] = rows
+        except Exception: pass
+        try:
             # the current season's exit meetings and review exist only once it has closed; anything filed under the
             # current year before then (an older build wrote meetings on a page view) is removed
             if getattr(L, 'season_closed_year', None) != int(L.year):

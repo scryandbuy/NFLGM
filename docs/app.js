@@ -1582,7 +1582,7 @@ function renderDraftDay(v) {
   renderRail(v.rail); const page = persPage(); drSecond('day');
   const reload = () => renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`));
   if (!v.live) {
-    const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Draft Day'), el('div', { class: 'empty' }, v.note));
+    const s = el('section', { class: 'sheet c12' }, el('h2', {}, v.year_next && !v.last ? `${v.year_next} Draft` : 'Draft Day'), el('div', { class: 'empty' }, v.note));
     if (v.last) { s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, `${v.last.year} Draft Results`, el('small', {}, `${v.last.rows.length} picks · ${v.last.trades} trades`))); const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Pick'), el('th', {}, 'Team'), el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Consensus'))); for (const r of v.last.rows) t.append(el('tr', { style: r.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, r.slot), el('td', {}, stripe(r.team.abbr, r.team.name)), el('td', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name), el('td', {}, r.pos), el('td', { class: 'n' }, r.cons_rank ?? '—'))); s.append(t); }
     page.append(s); return;
   }
