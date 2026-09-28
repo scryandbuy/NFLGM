@@ -1446,11 +1446,3 @@ h2{letter-spacing:-.01em}
 .sch small{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--club-2)}
 .sch.mine .nm{font-weight:700}
 
-/* schemes on the card */
-.schemes .srow-s{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 8px;margin-bottom:3px;background:var(--sheet-2);border-left:3px solid transparent;font-size:14.5px;font-weight:600}
-.schemes .srow-s.good{color:var(--ok);border-left-color:var(--ok)}
-.schemes .srow-s.avg{color:var(--decide);border-left-color:var(--decide)}
-.schemes .srow-s.bad{color:var(--danger);border-left-color:var(--danger)}
-.schemes .srow-s.none{color:var(--ink-3);border-left-color:var(--rule-hi)}
-.schemes .srow-s.mine{outline:1px solid var(--club-2);outline-offset:-1px}
-.schemes .srow-s small{color:var(--ink-3);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase}

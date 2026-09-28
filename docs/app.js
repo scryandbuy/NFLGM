@@ -549,13 +549,6 @@ function secondRow(items, current) {
   for (const [label, hash] of items) s.append(el('a', { href: hash, 'aria-current': hash === current ? 'page' : null }, label));
 }
 function pill(word) { return el('span', { class: 'pill ' + word.toLowerCase() }, word); }
-// SCHEMES ON THE CARD: the seven on his side of the ball, coloured by where he plays best (green), worst (red), the
-// rest yellow, gray where the scheme has no effect at his position; the club's own scheme marked
-function schemeBlock(rows) {
-  const box = el('div', { class: 'schemes' }, el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Schemes'));
-  for (const r of rows) box.append(el('div', { class: 'srow-s ' + r.band + (r.mine ? ' mine' : ''), 'data-tip': r.fit == null ? `${r.name} has no effect on his position. ${r.words}` : `${r.name}: ${r.fit > 0 ? '+' : ''}${r.fit} to his grade. ${r.words}` }, el('span', { class: 'nm' }, r.name), r.mine ? el('small', {}, 'yours') : ''));
-  return box;
-}
 // THE DEVELOPMENT TIERS, one look everywhere: Normal (white), Rare (blue), Epic (purple), Legendary (orange-red)
 const DEV_CLASS = { Normal: 'd-normal', Rare: 'd-rare', Epic: 'd-epic', Legendary: 'd-legend', Slow: 'd-slow' };
 const DEV_NAME = { normal: 'Normal', star: 'Rare', superstar: 'Epic', xfactor: 'Legendary', slow: 'Slow', Star: 'Rare', Superstar: 'Epic', 'X-Factor': 'Legendary', Normal: 'Normal', Rare: 'Rare', Epic: 'Epic', Legendary: 'Legendary', Slow: 'Slow' };
