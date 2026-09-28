@@ -98,6 +98,7 @@ def read_profile(qb, rate_fn, AVG=0.70):
 
 
 # what a coordinator sees when he builds the read order: hands, routes, speed, release, the contested catch
+TE_READ_BONUS = 3.0     # receiving-grade points the tight end reads above his own
 READ_BY_PLAYERS = 0.7     # share of the designed read order that follows the players' quality rather than the formation
 RECV_GRADE = {'catch_rating': 0.20, 'route_run_short_rating': 0.15, 'route_run_med_rating': 0.15, 'speed_rating': 0.22,
               'accel_rating': 0.08, 'release_rating': 0.10, 'cit_rating': 0.10}
@@ -149,7 +150,9 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zon
         r = p['receiver']; pos = r.get('pos')
         try: o = float(rate_fn(r, RECV_GRADE))
         except Exception: o = 70.0
-        return o - (8.0 if pos in ('HB', 'FB') else 0.0)
+        # the tight end reads a step higher than his receiving grade alone says: the middle of the field is his
+        # (the room took 17 to 19% of targets against a real 21)
+        return o - (8.0 if pos in ('HB', 'FB') else 0.0) + (TE_READ_BONUS if pos == 'TE' else 0.0)
     rank = {i: k for k, i in enumerate(sorted(range(n), key=lambda i: -rgrade(pairs[i])))}
     # half the design is the formation (the X and the Z are built to be first), half is who the best players are
     w *= np.array([READ_BY_PLAYERS * 0.76 ** rank[i] + (1.0 - READ_BY_PLAYERS) * 0.76 ** i for i in range(n)], float)

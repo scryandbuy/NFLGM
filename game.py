@@ -1300,12 +1300,23 @@ def field_units(roster, state, rng, is_offense, package=None):
         used, chosen = set(), []
         # a package names exactly the men who play; without one, the default shape
         n_slots = len(group) if key in packaged else NO_PACKAGE_SLOTS.get(key, len(poslist))
+        # WHO THE COACH COMMITS TO. The commitment (a longer stint before a breather) went to the first players in
+        # the group list by rank, and in the receiving group that list runs every receiver before the first tight
+        # end, so the starting tight end sat at rank six with no commitment and came off as readily as a fourth
+        # receiver: tight ends played 70% of snaps and took 62% of their room's targets against a real 80 and 78.
+        # The commitment now goes by role: the first three receivers, the first tight end and the first back.
+        starters, seconds, seen = set(), set(), {}
+        for p in avail:
+            ps = p.get('pos'); k_ = 'WR' if ps == 'WR' else 'TE' if ps == 'TE' else 'HB' if ps in ('HB', 'FB') else ps
+            seen[k_] = seen.get(k_, 0) + 1
+            if seen[k_] <= (3 if k_ == 'WR' else 1 if k_ in ('TE', 'HB') else len(poslist)): starters.add(p.get('pid'))
+            elif seen[k_] <= (4 if k_ == 'WR' else 2 if k_ in ('TE', 'HB') else len(poslist) + 1): seconds.add(p.get('pid'))
         for pos in poslist[:min(len(poslist), len(avail), n_slots)]:
             pick = None
             for rank, p in enumerate(avail):
                 pid = p.get('pid')
                 if pid in used: continue
-                gap = 0.6 if rank < len(poslist) else 0.0
+                gap = 0.6 if pid in starters else (0.3 if pid in seconds else 0.0)
                 if not state.cond.needs_rest(pid, pos, rng,
                                              p.get('stamina_rating', 70.0), gap):
                     pick = p; break

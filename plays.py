@@ -79,7 +79,7 @@ PD_LOOSE = 0.13
 # is not the real one - solved instead against the OUTCOME, the 22.3% of
 # completions that travel backwards.
 SCREEN_SHARE = 0.285        # (kept for reference) the old behind-the-line share of short throws, all of it called a screen
-SWING_SHARE = 0.26          # swings, flares and checkdowns to the back: the behind-the-line family without the convoy
+SWING_SHARE = 0.19          # swings, flares and checkdowns to the back: the behind-the-line family without the convoy
 DEEP_FREE_BASE = 3.0        # free yards after a deep catch before first contact, at no separation
 DEEP_FREE_SEP = 9.0         # ...plus this much times his separation
 HOUSE_BASE = 0.55           # house-call share once every pursuer is beaten, at even speed
