@@ -307,11 +307,13 @@ def free_agency(session, league, abbr):
     if phase in ('offseason', 'free_agency'):
         step_i = 0 if step is None else 1 if step == 1 else 2 if step in (2, 3) else 3
     elif phase == 'preseason': step_i = 4
-    from views import next_year_cap
+    from views import next_year_cap, cap_focus
     limit_next, committed_next, _ro, _dn = next_year_cap(league, me)
+    focus = cap_focus(league, me)
+    for t_ in threads: t_['cap'] = focus
     import practice_squad as PSQ
     ps_n = len(PSQ.squad(me))
-    return dict(rail=rail(session, league, abbr), rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
+    return dict(rail=rail(session, league, abbr), cap_focus=focus, rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
                 weeks_left=(19 - int(league.week or 0) if phase == 'regular' else None),
                 in_season=(phase == 'regular'), phase=phase, step=step, fa_round=fa_round, threads=threads, feed=feed, positions=sorted({r['pos'] for r in rows}))
 
@@ -515,14 +517,16 @@ def extensions(session, league, abbr):
         r['restructurable'] = round(CT.restructure_room(p, cap), 1) if hasattr(CT, 'restructure_room') else 0.0
     tag_open = TG_.user_tag_window(league); choice = getattr(league, 'user_tag_choice', None)
     # before the New Year a man's last season shows as one year left; after it his deal is up (0) and he is a UFA, RFA or ERFA until tagged, tendered or re-signed
-    from views import next_year_cap
+    from views import next_year_cap, cap_focus
     limit_next, committed_next, _ro, _dn = next_year_cap(league, me)
+    focus = cap_focus(league, me)
+    for t_ in threads: t_['cap'] = focus                               # the popup shows the ledger the deal is priced against
     for r in rows:
         st = r.get('talks')
         r['talks_word'] = ({'waiting': 'Waiting', 'countered': 'Countered', 'open': 'Talking', 'accepted': 'Agreed', 'signed': 'Agreed', 'declined': 'Declined', 'broken_off': 'Broke Off'}.get(st, 'Not Started') if st else ('Not Started' if r.get('eligible') else 'After Season' if r.get('yrs', 0) <= 1 else 'Not Eligible'))
         r['ask_word'] = (f"${r['ask']}m × {r['years']}" if r.get('ask') else ('Ask First' if r.get('eligible') else '—'))
         r['tag_line'] = ('Final Year' if r.get('yrs') <= 1 else f"{r.get('yrs')} Yrs Left") + (' · Eligible' if r.get('eligible') and r.get('yrs', 0) > 1 else '')
-    return dict(rail=rail(session, league, abbr), rows=rows, expiring=[r for r in rows if r['yrs'] <= 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1), committed_next=committed_next, limit_next=limit_next,
+    return dict(rail=rail(session, league, abbr), cap_focus=focus, rows=rows, expiring=[r for r in rows if r['yrs'] <= 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1), committed_next=committed_next, limit_next=limit_next,
                 tag=dict(open=tag_open, used=(choice not in (None, 'none')), none=(choice == 'none'), tagged=(league.player(choice).name if choice not in (None, 'none') and league.player(choice) else None)),
                 promise_kinds=[dict(key=k, label=v_['label']) for k, v_ in __import__('negotiation_engine').PROMISES.items()])
 

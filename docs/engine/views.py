@@ -100,7 +100,7 @@ def rail(session, league, abbr):
     div = _division_place(league, abbr)
     nxt = session.next_label(); blocking = session.blocking()
     return dict(club=club(abbr), coach=t.gm.name if t.gm else '', year=league.year, week=league.week,
-                phase=league.phase, record=f"{w}–{l}" + (f"–{d}" if d else ''), place=div, cap=money(t.cap_space), prestige=round(getattr(t.gm, 'prestige', 0)) if t.gm else None,
+                phase=league.phase, record=f"{w}–{l}" + (f"–{d}" if d else ''), place=div, cap=money(cap_focus(league, t)['space']), cap_year=cap_focus(league, t)['year'], cap_next=cap_focus(league, t)['next'], prestige=round(getattr(t.gm, 'prestige', 0)) if t.gm else None,
                 advance=nxt, blocking=blocking, inbox_unread=sum(1 for m in getattr(league, 'inbox', []) if m.get('status') == 'unread'),
                 clock=_clock(league, session))
 
@@ -420,7 +420,8 @@ def _cap(league, t):
         c = CAP.get(yr + i, cap * 1.07 ** i)
         com = sum(p.contract.cap_hit(i) for p in t.roster if p.contract and p.contract.years > i)
         years.append(dict(year=yr + i, cap=round(c, 1), committed=round(com, 1)))
-    return dict(space=money(t.cap_space), cap=round(cap, 1), by_group={g: round(v, 1) for g, v in by.items()}, dead=round(dead, 1), years=years)
+    f = cap_focus(league, t)
+    return dict(space=money(f['space']), cap=round(f['limit'] if f['next'] else cap, 1), focus_year=f['year'], focus_next=f['next'], by_group={g: round(v, 1) for g, v in by.items()}, dead=round(dead, 1), years=years)
 
 
 def _room(league, t):
@@ -546,6 +547,21 @@ def gameday(session, league, abbr, gd=None):
                     home_rec=league.teams[g['home']].record[:2], away_rec=league.teams[g['away']].record[:2])
     return dict(rail=r, empty=False, week=gd['week'], scores=scores, game=game)
 
+
+
+def cap_focus(league, t):
+    """THE CAP THAT MATTERS. In season, this year's. From the Super Bowl until the year rolls at Step 4 of the offseason,
+    next year's: that is the ledger every extension, ask and tag is priced against, and the pages read it as the
+    headline (they had shown the 2027 inputs beside the 2026 space). After the roll, the new year is the current
+    year again. Returns year, limit, committed, space and whether it is next year's ledger."""
+    from cap_engine import CAP
+    pre_roll = league.phase == 'offseason' and getattr(league, 'season_closed_year', None) == int(league.year)
+    if pre_roll:
+        limit, committed, rollover, dead_next = next_year_cap(league, t)
+        return dict(year=int(league.year) + 1, limit=round(limit, 1), committed=round(committed, 1), space=round(limit - committed, 1), next=True)
+    limit = float(CAP.get(league.year, 301.2)) + float(getattr(t.cap, 'rollover', 0.0) or 0.0)
+    space = float(t.cap_space)
+    return dict(year=int(league.year), limit=round(limit, 1), committed=round(limit - space, 1), space=round(space, 1), next=False)
 
 
 def next_year_cap(league, t):

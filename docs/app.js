@@ -66,7 +66,7 @@ function renderRail(r) {
   const c = $('#crest'); c.textContent = r.club.abbr; c.style.background = r.club.color;
   document.documentElement.style.setProperty('--club', r.club.color); document.documentElement.style.setProperty('--club-2', r.club.accent);
   $('#clubname').textContent = r.club.name.toUpperCase(); $('#coach').textContent = r.coach;   // the title has its own line in the markup
-  $('#st-record').textContent = r.record; $('#st-place').textContent = r.place; $('#st-cap').textContent = r.cap; $('#st-prestige').textContent = r.prestige ?? '—';
+  $('#st-record').textContent = r.record; $('#st-place').textContent = r.place; $('#st-cap').textContent = r.cap; const capLab = $('#st-cap').nextElementSibling; if (capLab) capLab.textContent = r.cap_next ? `${r.cap_year} Cap Space` : 'Cap Space'; $('#st-prestige').textContent = r.prestige ?? '—';
   $('#st-week').textContent = r.clock.line; $('#st-year').textContent = r.clock.sub + (window.ENGINE_BUILD ? ` · build ${window.ENGINE_BUILD}` : '');
   const badge = $('#badge'); badge.hidden = !r.inbox_unread; badge.textContent = r.inbox_unread;
   const adv = $('#advance');
@@ -267,7 +267,7 @@ function renderPortal(v) {
   const capG = v.cap.by_group; const total = Object.values(capG).reduce((a, b) => a + b, 0) + v.cap.dead;
   const colors = { QB: '#c8102e', OL: '#e0b400', WR: '#4cc9f0', DL: '#3fb37f', DB: '#8791a0', LB: '#b6bec9', TE: '#5a6472', RB: '#a0603a', ST: '#3a3f47' };
   const stack = el('div', { class: 'stack', style: 'margin-top:10px' }, ...Object.entries(capG).filter(([, x]) => x > 0).map(([g, x]) => el('i', { class: (100 * x / v.cap.cap) < 7 ? 'narrow' : '', style: `width:${100 * x / v.cap.cap}%;background:${colors[g]}`, 'data-tip': `${g}: $${x.toFixed(1)}m` }, el('span', {}, g))), el('i', { style: `width:${100 * v.cap.dead / v.cap.cap}%;background:#3a1216`, 'data-tip': `Dead Money: $${v.cap.dead.toFixed(1)}m` }));
-  const capS = sheet('Cap', `${v.cap.years[0].year} · $${v.cap.cap}m Limit`, el('div', { class: 'pad' }, el('div', { class: 'big' }, v.cap.space, el('span', { class: 'muted', style: 'font-size:16px;font-family:var(--text);font-weight:500' }, ' Space')), stack,
+  const capS = sheet('Cap', `${v.cap.focus_year || v.cap.years[0].year} · $${v.cap.cap}m Limit${v.cap.focus_next ? ' · next year' : ''}`, el('div', { class: 'pad' }, el('div', { class: 'big' }, v.cap.space, el('span', { class: 'muted', style: 'font-size:16px;font-family:var(--text);font-weight:500' }, ' Space')), stack,
     el('div', { class: 'bars', style: 'padding:10px 0 0;grid-template-columns:60px 1fr 118px' }, ...v.cap.years.flatMap(y => [el('div', { class: 'l' }, y.year), el('div', { class: 't' }, el('i', { style: `width:${Math.min(100, 100 * y.committed / y.cap)}%;background:var(--ink-2)` })), el('div', { class: 'v', style: 'white-space:nowrap;text-align:right' }, `$${y.committed}/${y.cap}`)]))),
     el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#frontoffice/cap' }, 'Restructure'), el('a', { class: 'btn', href: '#personnel/extensions' }, 'Extensions'), el('a', { class: 'btn quiet', href: '#frontoffice/cap' }, 'Ledger')));
   capS.classList.add('c4'); page.append(capS);
@@ -1108,6 +1108,7 @@ function openTalks(t, reload) {
 
 function threadBox(t, onDone) {
   const box = el('div', { class: 'thread' });
+  if (t.cap) box.append(el('div', { class: 'msg note' }, el('b', {}, `${t.cap.year} cap · `), `$${t.cap.limit}m limit, $${t.cap.committed}m committed, `, el('b', {}, `$${t.cap.space}m of room`), t.cap.next ? ' (next year, the ledger this deal lands on)' : ''));
   // the conversation as logged: every line with who said it, then the agent's temperament, then the decision
   const log = t.log && t.log.length ? t.log : [];
   if (!log.length) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, `Agent · Before Any Offer`), el('div', { class: 'txt' }, t.ask ? el('span', {}, `He is asking `, el('b', {}, `$${t.ask}m × ${t.years}`), '.') : 'He would rather wait.')));
@@ -1220,7 +1221,7 @@ let wireClaim = null;
 function renderExtensions(v) {
   renderRail(v.rail); const page = persPage(); persSecond('extensions');
   const reload = () => renderExtensions(pyJSON(`SESSION.personnel('extensions')`));
-  const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Extensions', el('small', {}, `Next Year Committed: $${v.committed_next}m of $${v.limit_next}m · Cap $${v.cap}m`)));
+  const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Extensions', el('small', {}, v.cap_focus ? `${v.cap_focus.year} Cap $${v.cap_focus.limit}m · Committed $${v.cap_focus.committed}m · Space $${v.cap_focus.space}m` : `Next Year Committed: $${v.committed_next}m of $${v.limit_next}m`)));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   for (const [k, label, list] of [['expiring', 'Expiring', v.expiring], ['two_left', 'Two Years Left', v.two_left], ['done', 'Done This Year', v.done]]) tabs.append(el('button', { 'aria-pressed': String(extTab === k), onclick: () => { extTab = k; renderExtensions(v); } }, label + ' ', el('em', {}, list.length)));
   left.append(tabs);
