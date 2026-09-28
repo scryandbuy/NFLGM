@@ -32,6 +32,12 @@ def _conf(league, t):
     return (t.division or '').split(' ')[0]
 
 
+def _sb_numeral(league):
+    try:
+        import postseason as PS; return PS.sb_venue(league)['numeral']
+    except Exception: return ''
+
+
 def _wins(t): return t.record[0] + 0.5 * (t.record[2] if len(t.record) > 2 else 0)
 def _played(t): return sum(t.record[:2]) + (t.record[2] if len(t.record) > 2 else 0)
 def _max_wins(t): return _wins(t) + (GAMES - _played(t))
@@ -104,10 +110,17 @@ def big_result(league, week, results):
     _, (hp, ap), th, ta = best
     win, lose = (th, ta) if hp > ap else (ta, th)
     line = f"{win.abbr} beat {lose.abbr} {max(hp, ap)}–{min(hp, ap)}"
-    if me.division in (th.division, ta.division):
+    if int(week) >= 19:
+        # THE PLAYOFFS. Records mean nothing now: the winner moves on, the loser is done
+        NEXT = {19: 'the Divisional Round', 20: 'the Conference Finals', 21: f'Super Bowl {_sb_numeral(league)}', 22: None}
+        nxt = NEXT.get(int(week))
+        line += f". {win.abbr} {'are champions' if nxt is None else 'advance to ' + nxt}; {lose.abbr} are eliminated"
+    elif me.division in (th.division, ta.division):
         rival = th if th.division == me.division else ta
         line += f". {rival.abbr} are {rival.record[0]}–{rival.record[1]} in your division; you are {me.record[0]}–{me.record[1]}"
-    IB.news(league, f"Week {week} around the league: {win.abbr} over {lose.abbr}", line + '.', payload=dict(link='league:schedule'))
+    ROUND_ = {19: 'Wild Card Weekend', 20: 'Divisional Round', 21: 'Conference Finals', 22: 'Super Bowl'}
+    when = ROUND_.get(int(week), f"Week {week}")
+    IB.news(league, f"{when} around the league: {win.abbr} over {lose.abbr}", line + '.', payload=dict(link='league:bracket' if int(week) >= 19 else 'league:schedule'))
 
 
 # ------------------------------------------------------------ the log

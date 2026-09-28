@@ -365,7 +365,7 @@ def keep_groups_whole(league, rng, week):
                     mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
                     if best.pid in league.free_agents: league.free_agents.remove(best.pid)
                     best.contract = None
-                    league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
+                    league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)   # logged once, below, with the reason
                     league.log('emergency_sign', pid=best.pid, team=abbr, group=grp)
                     moves.append((abbr, 'emergency', best.pid))
                 short -= 1
@@ -394,7 +394,7 @@ def keep_groups_whole(league, rng, week):
             mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
             if best.pid in league.free_agents: league.free_agents.remove(best.pid)
             best.contract = None
-            league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
+            league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)   # logged once, below, with the reason
             league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
             moves.append((abbr, 'sign', best.pid)); added += 1
         # 2. back to 53: the thinnest group against a normal 53-man shape gets the body
@@ -412,7 +412,7 @@ def keep_groups_whole(league, rng, week):
             mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
             if best.pid in league.free_agents: league.free_agents.remove(best.pid)
             best.contract = None
-            league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
+            league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)   # logged once, below, with the reason
             league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
             moves.append((abbr, 'sign', best.pid)); added += 1
     return moves

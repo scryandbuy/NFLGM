@@ -688,7 +688,6 @@ class Session:
                      f"{nm(a)}, the {seed_of.get(a, '?')} seed out of the {conf_of.get(a, '')}, finished {rec(a)} and came through {road(a)}.",
                      f"{nm(h)}, the {seed_of.get(h, '?')} seed out of the {conf_of.get(h, '')}, finished {rec(h)} and came through {road(h)}."]
             if user in (h, a): lines.append("You are in it. The game plan is on your desk.")
-            else: lines.append("Your season is over; the game is yours to watch from the bracket.")
             return f"Super Bowl {site['numeral']}: {nm(a)} vs {nm(h)} at {site['stadium']}", ' '.join(lines)
         games = [f"{tag(a)} at {tag(h)}, {STADIUM.get(h, nm(h))}" for c, h, a in ms]
         if mine is not None:

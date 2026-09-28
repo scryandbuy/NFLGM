@@ -101,7 +101,7 @@ function inboxSheet(v) {
       if (inboxFilter === 'league' && r.tag !== 'League') continue;
       if (inboxFilter === 'club' && r.tag === 'League') continue;
       n++;
-      const day = `${r.year} · Week ${r.week}`;
+      const day = `${r.year} · ${weekName(r.week)}`;
       if (day !== lastDay) { list.append(el('div', { class: 'dayh' }, day)); lastDay = day; }
       list.append(el('button', { class: 'row' + (r.unread ? ' unread' : '') + (r.block ? ' block' : ''), onclick: () => openMessage(r.id) }, el('div', {}, el('div', { class: 't' }, r.subject), inboxDense ? '' : el('div', { class: 'f' }, r.body)), el('span', { class: 'tag ' + tagClass(r.tag) }, r.tag)));
     }
@@ -318,7 +318,7 @@ function openMessage(id) {
   const settled = m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60));
   if (m.payload && m.payload.link && !settled) acts.append(el('a', { class: 'btn go', href: linkHash(m.payload.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There'));
   acts.append(el('button', { class: 'btn quiet', onclick: () => refresh() }, 'Back to Portal'));
-  page.append(el('section', { class: 'sheet' }, el('h2', {}, m.subject, el('small', {}, `${m.sender || ''} · ${m.year} Week ${m.week}`)), el('div', { class: 'pad', style: 'max-width:70ch;line-height:1.5;color:var(--ink-2)' }, m.body), acts));
+  page.append(el('section', { class: 'sheet' }, el('h2', {}, m.subject, el('small', {}, `${m.sender || ''} · ${m.year} ${weekName(m.week)}`)), el('div', { class: 'pad', style: 'max-width:70ch;line-height:1.5;color:var(--ink-2)' }, m.body), acts));
 }
 
 
@@ -454,7 +454,7 @@ function renderGameDay(v) {
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
   const copyPbp = el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 10px;font-size:14px', 'data-tip': 'Copy the play-by-play shown so far as text' , onclick: () => {
-    const lines = [`${g.away.abbr} at ${g.home.abbr} · Week ${v.week || ''} ${v.year || ''}`];
+    const lines = [`${g.away.abbr} at ${g.home.abbr} · ${v.week ? weekName(v.week) : ''} ${v.year || ''}`];
     g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
       lines.push(`Q${d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`); for (const p of plays) if (p.text) lines.push(`${p.head ? p.head + ' ' : ''}${p.text}`); });
     copyText(lines.join('\n'), copyPbp); } }, 'Copy');
@@ -1278,7 +1278,7 @@ function foSecond(cur) { secondRow(Object.entries(FO).map(([k, l]) => [l, '#fron
 
 function renderOwner(v) {
   renderRail(v.rail); const page = persPage(); foSecond('owner');
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, v.owner ? v.owner.name : 'Owner', el('small', {}, `${v.owner ? `Owner Since ${v.owner.since} · ` : ''}${v.record} · your year ${v.tenure + 1} in the chair`)));
+  const s = el('section', { class: 'sheet c12' }, el('h2', {}, v.owner ? v.owner.name : 'Owner', el('small', {}, '')));
   const g = el('div', { class: 'ownergrid' });
   const l = el('div', {});
   l.append(el('div', { class: 'facts2', style: 'grid-template-columns:repeat(5,1fr);padding:0' },
