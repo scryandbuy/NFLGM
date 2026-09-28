@@ -1151,6 +1151,28 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
     rating_cols = [c for c in S.columns
                    if c.endswith('_rating') and c != 'src_rating']
 
+    # ROOKIES FILLED BY COMPARABLES. Players the seed had no rating for were given the ratings of comparable
+    # players at their position and age; for a rookie the comparables were established players, so an undrafted
+    # camp body arrived rated like a fourth-year starter (an 80 undrafted quarterback beat out a first-round pick
+    # at the cut-down; the undrafted class averaged 75 against 69 for the rookies Madden rated). Each such rookie
+    # is shifted to the mean of the Madden-rated rookies of his draft status (his round, or undrafted), keeping his
+    # own spread among them. Specialists are left alone.
+    if 'src_rating' in S.columns and 'draft_year' in S.columns:
+        rk = S[(S.draft_year == year) & (~S.madden_position.isin(['K', 'P', 'LS']))]
+        def key_of(r): return ('rd', int(r)) if pd.notna(r) else ('ud',)
+        ref = {}
+        for k, grp in rk[rk.src_rating == 'madden'].groupby(rk[rk.src_rating == 'madden'].draft_round.map(key_of)):
+            if len(grp) >= 5: ref[k] = grp[rating_cols].mean(numeric_only=True)
+        comp = rk[rk.src_rating == 'comparables']
+        if ref and len(comp):
+            for k, grp in comp.groupby(comp.draft_round.map(key_of)):
+                tgt = ref[k] if k in ref else ref.get(('ud',))
+                if tgt is None: continue
+                own = grp[rating_cols].mean(numeric_only=True)
+                for c in rating_cols:
+                    if c in tgt.index and pd.notna(own.get(c)) and pd.notna(tgt.get(c)):
+                        S.loc[grp.index, c] = (tgt[c] + 3.0 + 0.85 * (S.loc[grp.index, c] - own[c])).clip(30, 95)   # +3: the attribute means land a little under the group's overall
+
     # divisions come off the schedule file, which carries them per team
     SCH = pd.read_csv(standings_csv, low_memory=False)
     div = {}
