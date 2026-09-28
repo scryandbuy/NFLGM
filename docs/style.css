@@ -318,7 +318,9 @@ main[hidden]{display:none}
 .tbl th:hover{z-index:21}
 
 /* the roster table */
-.tbl{width:100%;border-collapse:collapse;font-size:15px}
+.tbl{width:100%;border-collapse:collapse;font-size:15px;table-layout:auto}
+.tbl td.acts{width:1%;white-space:nowrap}   /* the action column keeps its width; a wide status word cannot push it out of the tile */
+.talkline .count{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .tbl th{position:sticky;top:var(--sticky-top,93px);background:var(--sheet);z-index:1;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;text-align:center;padding:7px 8px;border-bottom:1px solid var(--rule-2);color:var(--ink-3);white-space:nowrap;cursor:pointer}
 .tbl th:hover{color:var(--ink)}
 .tbl th.sorted{color:var(--ink);box-shadow:inset 0 -2px 0 var(--club-2)}

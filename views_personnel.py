@@ -324,7 +324,8 @@ def _thread(league, t):
     offseason = league.phase in ('offseason', 'free_agency', 'draft')
     answers = ('at the next step of the market' if t['kind'].startswith('fa_offseason') else 'at the next Advance' if t['kind'] == 'fa_inseason' else 'on the spot' if offseason else 'within a week or two')
     op = t.get('opened')
-    opened = (f"Week {op}" if op is not None and op < 100 else ('in the offseason' if op == 100 else f"FA step {op - 100}") if op is not None else '')
+    ROUNDS_ = {19: 'Wild Card', 20: 'Divisional', 21: 'Conf. Finals', 22: 'Super Bowl'}     # the playoffs run as weeks 19 to 22 inside
+    opened = ((f"Week {op}" if op <= 18 else ROUNDS_.get(op, 'the playoffs')) if op is not None and op < 100 else ('the offseason' if op == 100 else f"FA step {op - 100}") if op is not None else '')
     return dict(id=t['id'], pid=t['pid'], name=p.name if p else t['pid'], pos=p.pos if p else '', kind=t['kind'], state=t['state'], ask=t.get('ask'), years=t.get('years'), mood=mood, opened=opened,
                 offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=pat, log=t.get('log', []),
                 agent_line=f"The agent is {temper} and {pat_word}. He answers {answers}.")
@@ -518,7 +519,7 @@ def extensions(session, league, abbr):
     limit_next, committed_next, _ro, _dn = next_year_cap(league, me)
     for r in rows:
         st = r.get('talks')
-        r['talks_word'] = ({'waiting': 'Waiting', 'countered': 'Countered', 'open': 'Talking', 'accepted': 'Agreed', 'signed': 'Agreed', 'declined': 'Declined', 'broken_off': 'Broke Off'}.get(st, 'Not Started') if st else ('Not Started' if r.get('eligible') else 'After the Season' if r.get('yrs', 0) <= 1 else 'Not Yet Eligible'))
+        r['talks_word'] = ({'waiting': 'Waiting', 'countered': 'Countered', 'open': 'Talking', 'accepted': 'Agreed', 'signed': 'Agreed', 'declined': 'Declined', 'broken_off': 'Broke Off'}.get(st, 'Not Started') if st else ('Not Started' if r.get('eligible') else 'After Season' if r.get('yrs', 0) <= 1 else 'Not Eligible'))
         r['ask_word'] = (f"${r['ask']}m × {r['years']}" if r.get('ask') else ('Ask First' if r.get('eligible') else '—'))
         r['tag_line'] = ('Final Year' if r.get('yrs') <= 1 else f"{r.get('yrs')} Yrs Left") + (' · Eligible' if r.get('eligible') and r.get('yrs', 0) > 1 else '')
     return dict(rail=rail(session, league, abbr), rows=rows, expiring=[r for r in rows if r['yrs'] <= 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1), committed_next=committed_next, limit_next=limit_next,
