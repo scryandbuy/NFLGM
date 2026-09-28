@@ -85,6 +85,8 @@ SCREEN_SHARE = 0.285
 # completion went to 69.0% against a real 65.0% and mean air yards fell to
 # 4.22 against 5.72 - the screen game was swallowing the passing game.
 SCREEN_RESCUE = 0.07
+INT_BASE = 0.129
+INT_DEPTH = {'short': 0.68, 'medium': 0.86, 'deep': 0.74}   # picks per uncompleted throw, by depth, against the base
 SCREEN_FREE_BASE = 5.0      # free yards behind the convoy before first contact, average blocking
 SCREEN_FREE_BLK = 8.0       # ...more behind good linemen, fewer behind bad
 # A second blocker buys the pocket roughly this much more time. Used only to
@@ -256,7 +258,10 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # Picks are modelled on the ball that did NOT complete, so the rate per
     # attempt moves with completion. Re-anchored after the completion refit
     # (66% completion left the league at 1.82% against a real 2.10).
-    p_int = (1.0 - separation) * 0.129 * (1.0 + 2.2 * (AVG - acc)) * (1.0 + 0.9 * (float(def_awr) - DEF_AWR_MEAN))   # a smart defender is where the bad ball ends up
+    # THE PICK BY DEPTH. One constant had set the rate at every depth; short throws picked at 2.1% against a real
+    # 1.5 (two thirds of attempts), medium at 2.0 against 2.5, deep at 5.3 against 4.5, and the league sat at 2.8
+    # against 2.1 once the tag map, field fit and the screen convoy changed who was contested where
+    p_int = (1.0 - separation) * INT_BASE * INT_DEPTH[depth] * (1.0 + 2.2 * (AVG - acc)) * (1.0 + 0.9 * (float(def_awr) - DEF_AWR_MEAN))   # a smart defender is where the bad ball ends up
     if rng.random() < max(0.0, p_int):
         return dict(result='interception', contested=True, p=p, base=base)
     return dict(result='incomplete', contested=separation < 0.45, p=p, base=base)
