@@ -24,7 +24,8 @@ _check_imports()
 for m in MODULES: shutil.copy(os.path.join(HERE, m + '.py'), OUT)
 for d in DATA: shutil.copy(os.path.join(HERE, d), OUT)
 import hashlib
-build = hashlib.sha1(b''.join(open(os.path.join(OUT, f), 'rb').read() for f in sorted(os.listdir(OUT)) if f != 'manifest.json')).hexdigest()[:10]
+# the stamp covers the engine AND the shell, so a change to app.js or style.css alone shows in the header too
+build = hashlib.sha1(b''.join(open(os.path.join(OUT, f), 'rb').read() for f in sorted(os.listdir(OUT)) if f != 'manifest.json') + open('docs/app.js', 'rb').read() + open('docs/style.css', 'rb').read()).hexdigest()[:10]
 json.dump(dict(modules=MODULES, data=DATA, build=build), open(os.path.join(OUT, 'manifest.json'), 'w'))
 # the page's own script and stylesheet carry a stamp too, so a new push is never served from a stale cache: the
 # stamp is the hash of app.js and style.css together
