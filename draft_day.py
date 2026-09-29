@@ -34,7 +34,7 @@ PREMIUM_UP = 1.06              # buyers overpay to move up; the market curve alr
 
 
 class Draft:
-    def __init__(self, league, rng, year, user_team=None, auto_pick=False):
+    def __init__(self, league, rng, year, user_team=None, auto_pick=False, level=None, scale=None):
         self.L, self.rng, self.year = league, rng, year
         self.user, self.auto = user_team, auto_pick
         self.picks = sorted((pk for t in league.teams.values() for pk in t.picks
@@ -42,12 +42,13 @@ class Draft:
                             key=lambda pk: pk.selection)
         self.i = 0
         self.taken = set()
-        self.level = DFT.league_starter_level(league)
-        self.scale = DFT.position_scale(league)
+        self.level = dict(level) if level is not None else DFT.league_starter_level(league)
+        self.scale = {pos: tuple(values) for pos, values in scale.items()} if scale is not None else DFT.position_scale(league)
         self.results = []
         self.trades = []
         self.dealt = set()          # frozenset({a, b}) pairs that have traded this draft
         self.last_dealt = None
+        self.trade_targets = {}  # selection -> buyer/player: bind the pick to the negotiated target
         if not getattr(league, 'scouting', None):
             import scouting as SC
             SC.scout(league, rng)
@@ -107,8 +108,11 @@ class Draft:
             p = self.user_pick()
             if p is None: return ('user', pk)
         else:
-            rows = self.board_for(owner)
-            p = rows[0][1]
+            intent = self.trade_targets.get(pk.selection)
+            p = self.L.players.get(intent['pid']) if intent and intent['buyer'] == owner else None
+            if p is None or p.pid in self.taken or p not in self.L.draft_pool:
+                rows = self.board_for(owner)
+                p = rows[0][1]
         self._select(pk, p)
         events.append(('pick', pk.selection, owner, p))
         return events[0] if len(events) == 1 else ('trade_then_pick', *events)
@@ -180,7 +184,7 @@ class Draft:
         surplus, _ = TR.surplus_and_needs(self.L, team, self._pool(), rng if rng is not None else self.rng)
         return picks + list(surplus)
 
-    def _offer_for(self, buyer, seller, pk, premium, slack=1.0, rng=None):
+    def _offer_for(self, buyer, seller, pk, premium, slack=1.0, rng=None, target_player=None):
         """
         Build the cheapest package from the buyer's bank that the SELLER's own
         pricing accepts for pk, at the buyer's premium over the pick's market
@@ -198,6 +202,7 @@ class Draft:
         want = TE.pick_price_dollars(pk.selection) * premium
         bank = sorted(self._bank(buyer, exclude_pick=None, rng=rng), key=lambda x: TE.team_price(x, ctx_a, ta.cap_space, ga, owns=True))
         best = None
+        target_checks = {}
         # Search singles, pairs and triples lazily. Prices are additive, so
         # reject packages outside either club's window before evaluation.
         import itertools
@@ -227,18 +232,41 @@ class Draft:
             offer = dict(a_sends=list(pkg), a_gets=[target])
             r = TE.evaluate(offer, ctx_a, ctx_b, ta.cap_space, tb.cap_space, ga, gb)
             if not r.get('accepted'): continue
+            if target_player is not None:
+                collateral = tuple(sorted(x['pid'] for x in pkg if x['kind'] == 'player'))
+                if collateral not in target_checks:
+                    target_checks[collateral] = self._trade_target_valid(buyer, offer, pk, target_player)
+                if not target_checks[collateral]: continue
             if best is None or paid < best[0]:
                 best = (paid, offer, r)
         if best is None:
             return None, None
         return best[1], best[2]
 
+    def _trade_target_valid(self, buyer, offer, pk, target_player):
+        """The target must remain the buyer's first choice after paying the roster collateral."""
+        if target_player.pid in self.taken or target_player not in self.L.draft_pool:
+            return False
+        import draft_plan
+        roster = draft_plan.projected_players(self.L.teams[buyer])
+        outgoing = {x['pid'] for x in offer['a_sends'] if x['kind'] == 'player'}
+        if not outgoing.issubset({p.pid for p in roster}):
+            return False
+        projected = [p for p in roster if p.pid not in outgoing]
+        rows = DFT.board(self.L, buyer, pk.selection, self.level, self.taken,
+                         self.scale, players=projected)
+        return bool(rows and rows[0][1].pid == target_player.pid)
+
     def _execute(self, buyer, seller, offer, pk, target_player=None):
         if pk is not self.current() or pk.used_on or pk.owner != seller:
+            return None
+        if target_player is not None and not self._trade_target_valid(buyer, offer, pk, target_player):
             return None
         sends = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
         try: self.L.trade(buyer, seller, sends, [pk])
         except ValueError: return None
+        if target_player is not None:
+            self.trade_targets[pk.selection] = dict(buyer=buyer, pid=target_player.pid)
         self.dealt.add(frozenset((seller, buyer))); self.last_dealt = buyer
         desc = [self._label(x) for x in offer['a_sends']]
         self.trades.append((pk.selection, buyer, seller, desc))
@@ -278,7 +306,7 @@ class Draft:
             p, slot = self._target_slot(buyer)
             if p is None or slot is None or slot > q.selection - 2: continue
             if rng.random() > 0.35 + 0.6 * aggr: continue
-            offer, r = self._offer_for(buyer, seller, pk, PREMIUM_UP + 0.08 * aggr)
+            offer, r = self._offer_for(buyer, seller, pk, PREMIUM_UP + 0.08 * aggr, target_player=p)
             if offer is None or not r.get('accepted'): continue
             over = r['b_gain']
             if best is None or over > best[0]:
@@ -317,11 +345,11 @@ class Draft:
             p, slot = self._target_slot(buyer)
             if p is None or slot is None or slot > q.selection - 2: continue
             if q.selection - pk.selection > LOOKAHEAD * (1 + 2 * aggr): continue
-            offer, r = self._offer_for(buyer, self.user, pk, 1.04 + 0.10 * aggr, slack=0.97, rng=preview_rng)
+            offer, r = self._offer_for(buyer, self.user, pk, 1.04 + 0.10 * aggr, slack=0.97, rng=preview_rng, target_player=p)
             if offer is None or not r.get('accepted'): continue
             worth = sum(TE.team_price(x, ctx_u, tu.cap_space, gu, owns=False) for x in offer['a_sends'])
             offers.append(dict(team=buyer, sends=offer['a_sends'], asks=[pk], value=round(worth, 1),
-                               target_pos=p.pos, gm=getattr(gm, 'name', 'gm'),
+                               target_pos=p.pos, target_pid=p.pid, gm=getattr(gm, 'name', 'gm'),
                                summary=[self._label(x) for x in offer['a_sends']]))
         offers.sort(key=lambda o: -o['value'])
         return offers
@@ -335,11 +363,14 @@ class Draft:
         target = self._pick_asset(pk)
         target['draft_target_premium'] = 1.20
         package = dict(a_sends=offer['sends'], a_gets=[target])
+        target_player = self.L.players.get(offer.get('target_pid'))
+        if target_player is None:
+            return None
         r = TE.evaluate(package, buyer.ctx(), seller.ctx(), buyer.cap_space, seller.cap_space,
                         TR.persona(buyer.gm), TR.persona(seller.gm))
         if not r.get('accepted'):
             return None
-        ev = self._execute(offer['team'], self.user, package, pk)
+        ev = self._execute(offer['team'], self.user, package, pk, target_player)
         return ev
 
     def trade_for_pick(self, pk):
@@ -354,11 +385,11 @@ class Draft:
         self.taken.add(p.pid)
         pk.used_on = p.pid
         p.draft_round, p.draft_overall = pk.round, pk.selection
-        p.potential = None
         self.L.sign(p.pid, pk.owner, DFT.rookie_contract(pk.selection, cap))
         self.L.log('draft', pid=p.pid, team=pk.owner, round=pk.round, selection=pk.selection,
                    pos=p.pos, consensus_rank=self.L.consensus[p.pid]['rank'], ovr_then=round(float(p.ovr), 1))
         self.results.append((pk.selection, pk.owner, p))
+        self.trade_targets.pop(pk.selection, None)
         self.i += 1
         if self.done:
             self._finish()
