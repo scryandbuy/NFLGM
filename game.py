@@ -1202,7 +1202,8 @@ def package_units(roster, state, rng, is_offense, package, front_family=None):
         chosen = {p['pid'] for p in dl}
         roster['dl'] = dl + [p for pos in ('LEDG', 'DT', 'REDG')
                             for p in depth.get(pos, ()) if p['pid'] not in chosen]
-        roster['lb'] = [p for pos in ('MIKE', 'WILL', 'SAM') for p in depth.get(pos, ())]
+        roster['lb'] = ([p for pos in ('MIKE', 'WILL', 'SAM') for p in depth.get(pos, ())[:1]] +
+                        [p for pos in ('MIKE', 'WILL', 'SAM') for p in depth.get(pos, ())[1:]])
         roster['db'] = [p for pos in ('CB', 'FS', 'SS') for p in depth.get(pos, ())]
     if not is_offense and roster.get('depth') and (
             family == '3-4' or DR.needs_fallback(roster['depth'], family, package)):
