@@ -89,10 +89,11 @@ def unit_grades(league, team, healthy_only=True):
     """Mean grade of the starters at each unit."""
     from plays import rate as _rate
     out = {}
+    depth = team.depth
     for unit, poss in UNITS.items():
-        men = [p for pos in poss for p in team.depth.get(pos, []) if (p.out_until is None or not healthy_only)]
+        men = [p for pos in poss for p in depth.get(pos, []) if (p.out_until is None or not healthy_only)]
         if unit in ('pass block', 'run block'):
-            men = [team.depth[pos][0] for pos in poss if team.depth.get(pos)]
+            men = [depth[pos][0] for pos in poss if depth.get(pos)]
         else:
             men = sorted(men, key=lambda p: -p.ovr)[:UNIT_N[unit]]
         if not men: out[unit] = None; continue

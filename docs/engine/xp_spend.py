@@ -46,7 +46,7 @@ def _weekly_rate(player):
     """What he has been earning a week this season, from the ledger."""
     led = player.xp_spent.get('_earned', {})
     weeks = max(1, player.xp_spent.get('_weeks', 1))
-    return (led.get('game', 0.0) + led.get('snaps', 0.0)) / weeks
+    return sum(led.get(source, 0.0) for source in ('game', 'snaps', 'roster', 'long_snap')) / weeks
 
 
 def choose_attr(player, gm, rng):

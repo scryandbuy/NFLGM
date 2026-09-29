@@ -32,7 +32,6 @@ exactly when real teams discover the same thing.
 """
 import numpy as np
 
-import roster_construction as RC
 import contracts as CT
 
 ROSTER_LIMIT = 53
@@ -56,6 +55,7 @@ def run(league, rng, verbose=False):
     """
     Every club to 53. Surplus players are released and reach the market.
     """
+    import roster_needs as RN
     cuts, short = [], []
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None) and len(rows_for(team)) <= ROSTER_LIMIT: continue   # the GM cut his own club
@@ -66,9 +66,7 @@ def run(league, rng, verbose=False):
             if len(pool) < ROSTER_LIMIT:
                 short.append((abbr, len(pool)))
             continue
-        keep, counts = RC.allocate(pool, team.ctx(), team.gm,
-                                   limit=ROSTER_LIMIT)
-        kept = {p['pid'] for p in keep}
+        kept = RN.select_cutdown(team, pool, ROSTER_LIMIT)
         for p in list(team.active()):
             if p.pid in kept:
                 continue
@@ -101,6 +99,7 @@ def fill_short(league, rng, verbose=False):
     import min_salary as MS
     from cap_engine import CAP, Contract
     import contract_structure as CS
+    import roster_needs as RN
     cap = CAP.get(league.year, 301.2)
     signed = 0
     pool = [league.player(pid) for pid in list(league.free_agents)]
@@ -112,10 +111,11 @@ def fill_short(league, rng, verbose=False):
         while need > 0 and pool:
             floor = None
             pick = None
-            for p in pool:
+            needs = RN.assess(team)['needs']
+            for p in sorted(pool, key=lambda q: -(q.ovr + 25.0 * needs.get(q.pos, 0.0))):
                 f = MS.minimum_salary(p.accrued, cap)
                 if team.cap_space < f * 1.05:
-                    break
+                    continue
                 # Take the best man who fills a hole rather than simply the
                 # best man. The depth cap has to be the REAL one: a 53-man
                 # roster carries eleven defensive linemen and ten defensive
@@ -140,6 +140,54 @@ def fill_short(league, rng, verbose=False):
         print(f'  {signed} signed to fill out | rosters min {sizes.min()} '
               f'mean {sizes.mean():.0f}')
     return signed
+
+
+def repair_shape(league):
+    """Swap cheap surplus for an uncovered job, even when the 53 is full."""
+    import roster_needs as RN
+    import practice_squad as PSQ
+    import min_salary as MS
+    from cap_engine import CAP, Contract
+
+    cap = CAP.get(league.year, 301.2)
+    fixed = 0
+    for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None):
+            continue
+        for _ in range(3):
+            report = RN.assess(team)
+            uncovered = set(report['uncovered'])
+            floors, _ = RN.roster_floors(team)
+            short_positions = {pos for pos, floor in floors.items()
+                               if report['counts'][pos] < floor}
+            if not (uncovered or short_positions) or len(team.active()) < ROSTER_LIMIT:
+                break
+            sources = {pos for role, eligible in RN.role_slots(team)
+                       if role in uncovered for pos in eligible} | short_positions
+            pool = [league.player(pid) for pid in league.free_agents]
+            pool = [p for p in pool if p and not p.retired and p.pos in sources]
+            candidates = [p for pos in sources for p in
+                          sorted((q for q in pool if q.pos == pos), key=lambda q: -q.ovr)[:4]]
+            outgoing = [q for q in team.active() if not PSQ.protected(team, q, league)
+                        and q.dead_if_cut(0) <= 2.0]
+            best = None
+            for p in candidates:
+                salary = MS.minimum_salary(p.accrued or 0, cap)
+                for q in outgoing:
+                    if team.cap_space + q.cap_hit(0) - q.dead_if_cut(0) < salary * 1.05:
+                        continue
+                    gain = RN.move_gain(team, p, q) - q.dead_if_cut(0)
+                    if gain > 2.5 and (best is None or gain > best[0]):
+                        best = (gain, p, q, salary)
+            if best is None:
+                break
+            _, p, q, salary = best
+            league.release(q.pid)
+            league.sign(p.pid, abbr, Contract(years=1, base=[salary], signing_bonus=0.0,
+                                               signed=league.year))
+            team.sync_cap()
+            fixed += 1
+    return fixed
 
 
 def emergency_fill(league, rng, verbose=False):
@@ -201,6 +249,7 @@ def finalize(league, rng, verbose=False, passes=3):
         total_cut += cuts
         CT.enforce(league, rng, roster_target=ROSTER_LIMIT)
         total_signed += fill_short(league, rng)
+        repair_shape(league)
         # Filling out costs money too, and nothing was re-checking after it -
         # two clubs a year finished over the cap on the last signing.
         CT.enforce(league, rng)

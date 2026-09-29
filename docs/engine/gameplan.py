@@ -198,6 +198,22 @@ def blitzers(plan, rng, down=1, ydstogo=10):
     return 0
 
 
+def defensive_leans(plan):
+    """The defensive plan as one set of leans for the live play caller.
+
+    Blitz rate is the weekly adjustment around the neutral 13.3% rate;
+    blitz lean is the coach's identity. Both need to reach the same coverage
+    decision or a report's 'bring pressure' instruction has no effect.
+    """
+    return dict(coverage=plan.man_rate,
+                shell=getattr(plan, 'shell_lean', 0.5),
+                shell_weights=dict(plan.shell_weights),
+                blitz=float(np.clip(getattr(plan, 'blitz_lean', 0.384)
+                                    + 3.0 * (plan.blitz_rate - 0.133), 0.0, 1.0)),
+                front_pref=list(plan.front_pref),
+                sub_lean=getattr(plan, 'sub_lean', 0.0))
+
+
 # ============================================================ ADJUSTMENT BRIDGE
 # Maps the adjustment engine's structural counters onto gameplan changes, so an
 # adjustment persists instead of patching one call and evaporating.

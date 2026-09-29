@@ -33,9 +33,6 @@ from cap_engine import Contract, CAP
 import min_salary as MS
 
 ROUNDS, PER_ROUND = 7, 32
-STARTERS = {'QB': 1, 'HB': 1, 'FB': 0, 'WR': 3, 'TE': 1, 'LT': 1, 'LG': 1, 'C': 1, 'RG': 1, 'RT': 1,
-            'LEDG': 1, 'REDG': 1, 'DT': 2, 'MIKE': 1, 'WILL': 1, 'SAM': 1, 'CB': 3, 'FS': 1, 'SS': 1,
-            'K': 1, 'P': 1}
 # inside the first hundred picks; fades to 1.0 by pick 160
 PREMIUM = {'QB': 1.22, 'LT': 1.10, 'RT': 1.08, 'LEDG': 1.10, 'REDG': 1.10, 'WR': 1.08, 'DT': 1.06,
            'CB': 1.05, 'TE': 0.96, 'LG': 0.96, 'RG': 0.96, 'C': 0.97, 'FS': 0.94, 'SS': 0.94,
@@ -77,13 +74,15 @@ def premium(pos, selection):
 
 
 def league_starter_level(league):
-    """Average overall of the k-th best man at each spot across the league."""
+    """Average starter at each spot, using each club's actual base package."""
+    import roster_needs as RN
     lv = collections.defaultdict(list)
     for t in league.teams.values():
         d = t.depth
-        for pos, k in STARTERS.items():
+        starters = collections.Counter(sources[0] for _, sources in RN.role_slots(t))
+        for pos, k in starters.items():
             grp = d.get(pos, [])
-            if k and len(grp) >= k: lv[pos].append(grp[k - 1].ovr)
+            if len(grp) >= k: lv[pos].append(grp[k - 1].ovr)
     return {pos: float(np.mean(v)) for pos, v in lv.items() if v}
 
 
@@ -108,16 +107,16 @@ def common_scale(ovr, pos, scale):
 
 
 def needs(team, level):
-    """{pos: gap}: how far this club's starters sit below the league at each spot."""
-    d = team.depth; out = {}
-    for pos, k in STARTERS.items():
-        if not k or pos not in level: continue
-        grp = d.get(pos, [])
-        have = grp[k - 1].ovr if len(grp) >= k else 45.0
-        # a need is being CLEARLY below the league at the spot, not merely
-        # below average - by definition half the league is below average
-        # everywhere, and that had every club drafting quarterbacks
-        out[pos] = float(min(12.0, max(0.0, (level[pos] - 2.5) - have)))
+    """Draft needs from the same coach-aware roster assessment as other moves."""
+    import roster_needs as RN
+    out = {pos: 12.0 * need for pos, need in RN.assess(team)['needs'].items()}
+    starters = collections.Counter(sources[0] for _, sources in RN.role_slots(team))
+    for pos, k in starters.items():
+        if pos not in level:
+            continue
+        group = team.depth.get(pos, [])
+        have = group[k - 1].ovr if len(group) >= k else 45.0
+        out[pos] = max(out[pos], float(min(12.0, max(0.0, level[pos] - 2.5 - have))))
     return out
 
 

@@ -482,7 +482,8 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
                               secs_left, rng)
             call['job'] = job
             call['scheme'] = PC.call_run(offense, job, rate_fn, rng,
-                                         identity=ident_run)
+                                         identity=ident_run,
+                                         family_mix=lean.get('run_scheme_mix'))
         elif yards_to_endzone <= 5 or (ydstogo <= 2 and down >= 3):
             call['scheme'] = rng.choice(['power', 'counter', 'duo', 'trap'])
         elif heavy:
@@ -494,7 +495,12 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     # coaches averages the real 36.5%; a club with no lean plays at the average
     mo_scale = float(np.exp(1.0 * (float(lean.get('motion', MOTION_NEUTRAL) or MOTION_NEUTRAL) - MOTION_NEUTRAL)))
     call['motion'] = rng.random() < min(0.75, 0.365 * mo_scale)
-    call['no_huddle'] = rng.random() < 0.085
+    # The neutral coach keeps the calibrated 8.5% rate. Faster and slower
+    # coordinators move it, and the drive clock reads this choice.
+    tempo = float(np.clip(lean.get('tempo', 0.5), 0.0, 1.0))
+    protect_lead = score_diff > 0 and secs_left is not None and secs_left <= 240
+    call['no_huddle'] = (not protect_lead and rng.random() <
+                         float(np.clip(0.085 * np.exp(2.0 * (tempo - 0.5)), 0.01, 0.25)))
     return call
 
 def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
@@ -514,20 +520,26 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
     decep = (gm.board_trust if gm is not None else 0.5)
     lean = lean or {}
     fp = lean.get('front_pref')
-    families = [DR.front_family(f) for f in (fp or ()) if f in FRONTS and FRONTS[f]['dl'] in (3, 4)]
-    family = str(rng.choice(families)) if families else DR.coach_front(gm)
     pers = defensive_personnel(off_call['personnel'], down, ydstogo, rng, aggr, sub_lean=float(lean.get('sub_lean', 0.0) or 0.0))
-    dl = DR.counts(family, pers)['dl']
-    if fp:
-        cands = [f for f in fp if f in FRONTS and FRONTS[f]['dl'] == dl] or None
+    if pers == 'heavy':
+        cands = [f for f in (fp or ()) if f in FRONTS and FRONTS[f]['dl'] == 5] or ['bear']
     else:
-        cands = None
-    if cands:
-        front = str(rng.choice(cands))
-    else:
-        front = rng.choice(['4-3 over', '4-3 under', 'wide 9'] if dl == 4 else
-                           ['bear'] if dl == 5 else ['3-4 one', '3-4 two', 'tite', 'mint'])
-    if front == 'nickel_even': front = '4-3 over'
+        cands = [f for f in (fp or ()) if f in FRONTS and FRONTS[f]['dl'] in (3, 4)]
+        if not cands:
+            cands = (['3-4 one', '3-4 two', 'tite', 'mint'] if DR.coach_front(gm) == '3-4'
+                     else ['4-3 over', '4-3 under', 'wide 9'])
+    # A multiple-front coordinator chooses from the installed fronts using
+    # the offense's grouping and the situation. The defense has not seen the
+    # actual run/pass call, so this uses only information it could know.
+    off_spec = PERSONNEL_OFF.get(off_call['personnel'], PERSONNEL_OFF['11'])
+    run_threat = float(np.clip(.46 + .5 * off_spec['run_bias']
+                               + (.16 if ydstogo <= 2 else -.10 if ydstogo >= 8 and down >= 3 else 0.0)
+                               + (.12 if yards_to_endzone <= 5 else 0.0), .18, .82))
+    front_scores = np.array([run_threat * FRONTS[f]['run_fit']
+                             + (1.0 - run_threat) * FRONTS[f]['rush'] for f in cands], float)
+    front_weights = np.exp(12.0 * (front_scores - front_scores.max()))
+    front = str(rng.choice(cands, p=front_weights / front_weights.sum()))
+    family = DR.front_family(front)
 
     # real: 0 blitzers 86.7%, 1 on 9.7%, 2 on 3.1%, 3 on 0.47%
     r = rng.random()
@@ -555,17 +567,8 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
         elif r2 < 0.165: rushers = 5          # exchange rusher, not a blitz
         elif r2 < 0.195: rushers = 6
 
-    if blitzers >= 2:
-        shell = rng.choice(['cover_0', 'cover_1', 'cover_3'], p=[.25, .45, .30])
-    elif blitzers == 1:
-        shell = rng.choice(['cover_1', 'cover_3', 'cover_2'], p=[.40, .40, .20])
-    else:
-        shell = rng.choice(['cover_3', 'cover_2', 'cover_4', 'cover_1',
-                            'tampa_2', 'cover_6'], p=[.30, .18, .22, .15, .08, .07])
-
     sim = simulated_pressure(rng, decep)
     if sim['sim']: rushers, blitzers = 4, 0
-    shown, actual, fooled = disguise(shell, decep, rng)
     box = box_count(pers, front, off_call['personnel'], blitzers, rng, yards_to_endzone)
     # rushers tick up near the goal line too: 4.68 inside the 5 vs 4.30 at 21-50
     if yards_to_endzone <= 5 and blitzers == 0 and rng.random() < 0.28:
@@ -583,9 +586,17 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
         rushers += cov['rush_bonus']
         if cov['rush_bonus']:
             blitzers = max(blitzers, cov['rush_bonus'])
-        # the shell is the call's deep structure, not a second independent draw
-        shell = CC.SHELL_OF.get(cov['coverage'], shell)
-        shown, actual, fooled = disguise(shell, decep, rng)
+        # The coverage call supplies the shell; do not draw and discard a
+        # second shell before this roster-aware call.
+        shell = CC.SHELL_OF[cov['coverage']]
+    elif blitzers >= 2:
+        shell = rng.choice(['cover_0', 'cover_1', 'cover_3'], p=[.25, .45, .30])
+    elif blitzers == 1:
+        shell = rng.choice(['cover_1', 'cover_3', 'cover_2'], p=[.40, .40, .20])
+    else:
+        shell = rng.choice(['cover_3', 'cover_2', 'cover_4', 'cover_1',
+                            'tampa_2', 'cover_6'], p=[.30, .18, .22, .15, .08, .07])
+    shown, actual, fooled = disguise(shell, decep, rng)
 
     under = cov['under'] if cov else ('man' if actual in ('cover_0', 'cover_1')
                                       else 'zone')

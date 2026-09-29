@@ -282,7 +282,10 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     Who a club can spare and where it is thin. Surplus is depth behind a
     starter who is clearly better; need is a spot with nobody.
     """
+    import roster_needs as RN
     surplus, needs = [], {}
+    roster_report = RN.assess(team)
+    roster_needs = roster_report['needs']
     league_bar = starter_bar(league)
     depth = team.depth
     by_group = {}
@@ -301,6 +304,9 @@ def surplus_and_needs(league, team, pool, rng, n=3):
         if len(men) >= 3:
             for p in men[2:4]:
                 if men[0].ovr - p.ovr > 3:
+                    remaining = [q for q in team.active() if q.pid != p.pid]
+                    if roster_report['score'] - RN.assess(team, remaining)['score'] > 6.0:
+                        continue  # he is needed for a job this coach actually runs
                     a = player_asset(league, team, p, pool, rng, viewer=team)
                     if a:
                         a['grp'] = grp
@@ -320,7 +326,8 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     for pid_ in (getattr(league, 'free_agents', None) or [])[:400]:
         q_ = league.player(pid_)
         if q_ is not None and not q_.retired and q_.out_until is None: street[q_.pos] = max(street.get(q_.pos, 0.0), q_.ovr)
-    for pos, men in depth.items():
+    for pos in set(depth) | set(RN.POSITIONS):
+        men = depth.get(pos, ())
         # a man out two weeks or less still counts as the club's man at the spot: nobody trades a pick to cover a fortnight
         fit = [p for p in men if p.out_until is None or (int(p.out_until) < 99 and int(p.out_until) - wk_now <= 2)]
         have = max((p.ovr for p in fit), default=0.0)
@@ -329,7 +336,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
         # a hole worth a trade: a real weakness at the premium spots, a gaping one on the interior line, where
         # clubs live with a 72 and sign a veteran rather than pay a pick
         gap = NEED_GAP + (5.0 if pos in ('C', 'LG', 'RG') else 2.0 if pos in ('LT', 'RT', 'SS', 'FS', 'MIKE', 'WILL', 'SAM', 'TE') else 0.0)
-        if have < league_bar.get(pos, 75.0) - gap:
+        if have < league_bar.get(pos, 75.0) - gap or roster_needs.get(pos, 0.0) >= 0.75:
             grp = GRP.get(pos, pos)
             if grp == 'ST': continue                 # a club short a kicker signs one; it does not trade for one
             if grp not in needs or have < needs[grp]:

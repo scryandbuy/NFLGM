@@ -106,7 +106,8 @@ def fourth_zone(yardline_100):
     return 'backed'
 
 def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
-                         aggression=0.5, timeout_edge=0, use_wp=True):
+                         aggression=0.5, timeout_edge=0, use_wp=True,
+                         kicker=None, rate_fn=None):
     """
     go, field_goal or punt.
 
@@ -161,11 +162,17 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     if rng.random() < p_go:
         return 'go'
     # not going: the kick when it is in range and worth something, else the punt
-    limit = 38 if secs_left > 300 or score_diff >= 0 else 44        # a 55-yarder is the ordinary limit; longer only chasing the game late
-    if secs_left < 20: limit = 45                        # the last play of a half
-    if yardline_100 <= limit and fg_matters:
+    # A team's range follows its kicker and the weather. The old fixed yardline
+    # limits made a weak leg try the same long kick as a strong one.
+    distance = yardline_100 + 17
+    kick_chance = fg_probability(distance, kicker, rate_fn)
+    kick_chance *= ENV.kick_mult if distance >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult)
+    minimum = 0.42 if secs_left > 300 or score_diff >= 0 else 0.25
+    if secs_left < 20: minimum = min(minimum, 0.20)
+    in_range = kick_chance >= minimum
+    if in_range and fg_matters:
         return 'field_goal'
-    if yardline_100 <= limit and not fg_matters:
+    if in_range and not fg_matters:
         return 'go'                                      # three points change nothing here; the down is the drive
     return 'punt'
 
@@ -933,6 +940,10 @@ class TeamState:
         self.mem = AD.GameMemory()
         self.last_adjustment = None
         self.seq = {'run_hot': 0.0}
+        # The opener belongs to one game. Keep the coach's script and skill,
+        # but start its sequence again next week (and after a bye).
+        self.script.used = 0
+        self.script.active = True
         # THE OUT LIST WAS NEVER CLEARED. hurt() refuses to roll for a man
         # already on it, so once a player was hurt he stopped being able to be
         # hurt again FOR THE REST OF THE SEASON - and so did everyone else, one
@@ -1181,7 +1192,11 @@ def package_units(roster, state, rng, is_offense, package, front_family=None):
             if chosen is None:
                 continue
             reserves = [p for p in row['reserves'] if p['pid'] not in used_reserves]
-            if reserves and rng.random() < (0.32 if row['group'] == 'dl' else 0.20):
+            role = row['role']
+            rotation = (0.32 if row['group'] == 'dl' else
+                        0.20 if row['group'] == 'lb' else
+                        0.06 if role == 'CB' else 0.02)
+            if reserves and rng.random() < rotation:
                 chosen = reserves[0]
                 used_reserves.add(chosen['pid'])
             out.setdefault(row['group'], []).append(chosen)
@@ -1199,7 +1214,10 @@ def package_units(roster, state, rng, is_offense, package, front_family=None):
         # third corner plays 57% of snaps and not 80%. The dime stays corners.
         if n_cb == 3 and len(saf) >= 3 and rng.random() < 0.34:
             n_cb = 2
-            out['db'] = cbs[:2] + saf[:3]
+            fss = [d for d in saf if d.get('pos') == 'FS']
+            sss = [d for d in saf if d.get('pos') == 'SS']
+            core = fss[:1] + sss[:1]
+            out['db'] = cbs[:2] + (core + [d for d in saf if d not in core])[:3]
         else:
             # a free safety and a strong safety, not the first two in the list (a club with two free safeties was
             # fielding both and its strong safety never played)
@@ -1248,12 +1266,13 @@ def field_units(roster, state, rng, is_offense, package=None, front_family=None)
     """
     if is_offense and package:
         import offense_roles as OR
-        selected = OR.field(roster, package, rng=rng, state=state)
+        depth = OR.roster_depth(roster)
+        selected = OR.field(roster, package, rng=rng, state=state, depth=depth)
         out = dict(roster); out.update(selected)
         rows = selected['offensive_assignments']
         positions = {OR.pid(p): OR.position(p) for role, p in rows}
         if state is not None:
-            all_men = {OR.pid(p): p for men in OR.roster_depth(roster).values() for p in men}
+            all_men = {OR.pid(p): p for men in depth.values() for p in men}
             for pid, p in all_men.items():
                 state.snap(p, OR.position(p), pid in positions)
             transformed = {OR.pid(p): state.state(p, OR.position(p)) for role, p in rows}
@@ -1467,7 +1486,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             # the head coach's appetite, off his identity when he has one
             aggr4 = float(off_state.coach.get('fourth_down', aggression)) if off_state is not None and off_state.coach else aggression
             dec = fourth_down_decision(dr.yardline, dr.togo, dr.score_diff,
-                                       dr.clock, rng, aggr4)
+                                       dr.clock, rng, aggr4,
+                                       kicker=(offense.get('k') or {}), rate_fn=rate_fn)
             if dec == 'field_goal':
                 fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
                 if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
@@ -1509,7 +1529,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             olean = dict(pass_bias=pl0.pass_bias, play_action=min(0.95, pl0.play_action_rate * pa_boost),
                          motion=getattr(pl0, 'motion_rate', 0.365), protection=(pl0.protection if getattr(pl0, 'protection_locked', False) else None),
                          screen_boost=getattr(pl0, 'screen_boost', 0.0), heavy_lean=getattr(pl0, 'heavy_lean', 0.0),
-                         personnel_mix=dict(pl0.personnel_mix), off_personnel=getattr(pl0, 'off_personnel', '11'))
+                         personnel_mix=dict(pl0.personnel_mix), off_personnel=getattr(pl0, 'off_personnel', '11'),
+                         run_scheme_mix=dict(pl0.run_scheme_mix), tempo=pl0.tempo)
         secs_for_call = dr.clock
         if half_end is not None and quarter <= 2 and secs_in_half <= 240 and dr.score_diff <= 0:
             secs_for_call = secs_in_half          # the drive before the break is a two-minute drill for the side not ahead
@@ -1573,9 +1594,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # read by the coverage call itself, so one truth per snap
         dlean = None
         if def_state is not None and def_state.plan is not None:
-            dp0 = def_state.plan
-            dlean = dict(coverage=dp0.man_rate, shell=getattr(dp0, 'shell_lean', 0.5),
-                         blitz=float(np.clip(getattr(dp0, 'blitz_lean', 0.35) + np.log(max(0.001, dp0.blitz_rate) / max(0.001, def_state.base_plan.blitz_rate)) / 1.6, -1.0, 2.0)), front_pref=dp0.front_pref, sub_lean=getattr(dp0, 'sub_lean', 0.0))
+            import gameplan as GP
+            dlean = GP.defensive_leans(def_state.plan)
         dc = call_def(oc, dr.down, max(1, int(np.ceil(dr.togo))), rng, ytg_i,
                       defense=defense, rate_fn=rate_fn, score_diff=dr.score_diff,
                       secs_left=dr.clock, lean=dlean,
@@ -1590,7 +1610,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # with nothing reading the difference.
         try:
             import playcall as PC
-            oc, checked = PC.audible(oc, dc, offense, rate_fn, rng)
+            oc, checked = PC.audible(oc, dc, offense, rate_fn, rng,
+                                     family_mix=(off_state.plan.run_scheme_mix
+                                                 if off_state is not None and off_state.plan is not None else None))
             if checked and late_lean >= 6.0 and not oc.get('is_pass') and dr.togo > 1.5:
                 oc['is_pass'] = True; checked = None          # a light box is no reason to run in the two-minute drill; the check stays a pass
             if checked:
@@ -1618,12 +1640,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if oc.get('is_pass') and not oc.get('plan_depth'):        # the end-of-half plan's depth stands when it set one
                 oc['depth'] = GP.depth(pl, rng, yards_to_endzone=ytg_i,
                                        down=dr.down, ydstogo=int(dr.togo))
-            else:
-                fam = GP.run_family(pl, rng)
-                # the plan picks the family; the scheme inside it keeps its variety (the overlay used to flatten
-                # every run to inside zone or power, so every run in the log went up the middle)
-                if fam == 'zone': oc['scheme'] = rng.choice(['inside_zone', 'inside_zone', 'outside_zone', 'stretch', 'draw'])
-                else: oc['scheme'] = rng.choice(['power', 'power', 'duo', 'counter', 'trap'])
+            # The caller already chose a run from roster fit and the coach's
+            # run-family weights. Replacing it here discarded both decisions.
 
             # THE CHEATER PLAY. An adjustment vacates something, and that
             # something is the answer: "once a cheater play is used to reset
@@ -1637,7 +1655,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     off_state.coach.get('adjust_skill', 0.5)):
                 if ch['call'] == 'run':
                     oc['is_pass'] = False
-                    oc['scheme'] = 'inside_zone'
+                    import playcall as PC
+                    oc['scheme'] = PC.call_run(offense, 'chains', rate_fn, rng,
+                                               family_mix=pl.run_scheme_mix)
                 elif ch['call'] == 'deep':
                     oc['is_pass'] = True; oc['depth'] = 'deep'
                     oc['concept'] = 'four_verts'
@@ -1803,7 +1823,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 secs_in_half_p = (dr.clock - half_end) if half_end is not None else dr.clock
                 _plan_p = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half_p - PLAY_SECS, coach=(off_state.coach if off_state is not None else None)) if secs_in_half_p - PLAY_SECS > 4 else None
                 used_p, used_by_p = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
-                hurry_p = secs_in_half_p < 120 and dr.score_diff <= 0
+                hurry_p = (secs_in_half_p < 120 and dr.score_diff <= 0) or bool(oc.get('no_huddle'))
                 _tick(dr, play_seconds(t, hurry=hurry_p, timeout=used_p, tempo=(off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5)) + (0.0 if used_p else play_seconds('penalty')))
                 dr.clock = float(np.ceil(dr.clock - 1e-9))
                 if used_p and used_by_p:
@@ -1855,7 +1875,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _secs_after = secs_in_half - PLAY_SECS
         _plan_to = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None), yardline=_y_after) if _secs_after > 4 else None
         used, used_by = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
-        hurry = secs_in_half < 120 and dr.score_diff <= 0
+        hurry = (secs_in_half < 120 and dr.score_diff <= 0) or bool(oc.get('no_huddle'))
         before_clock = secs_in_half
         clock_before = dr.clock
         _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)

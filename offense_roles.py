@@ -26,6 +26,16 @@ def base_package(gm):
     return key if key in PACKAGES else '11'
 
 
+def fullback_score(player):
+    """Blocking grade for a fullback role, including an HB or TE fill-in."""
+    ratings = player if isinstance(player, dict) else getattr(player, 'ratings', {})
+    if any(key in ratings for key in ('run_block_rating', 'lead_block_rating', 'impact_block_rating')):
+        import targets as TG
+        return TG.position_score(ratings, 'FB')
+    return float(player.get('ovr', 70.0) if isinstance(player, dict)
+                 else getattr(player, 'ovr', 70.0))
+
+
 def roster_depth(roster):
     """Older callers can still supply the assembled groups without depth."""
     depth = {pos: list(men) for pos, men in (roster.get('depth') or {}).items() if pos in OFFENSE}
@@ -55,6 +65,7 @@ def assign(depth, package, excluded=(), rng=None, state=None):
     used, result = set(), []
 
     def pick(role, sources):
+        slot = sum(assigned_role == role for assigned_role, _ in result)
         candidates, seen = [], set()
         # Preferred position first, then compatible emergency replacements.
         for source in sources:
@@ -67,11 +78,32 @@ def assign(depth, package, excluded=(), rng=None, state=None):
         if not candidates:
             raise ValueError('Cannot field eleven unique healthy offensive players')
         chosen = candidates[0]
+        if role == 'FB' and position(chosen) != 'FB':
+            # A blocking TE can be the better second back. Preserve the lead
+            # TE and receivers needed later in the package when choosing one.
+            remaining = {pos: sum(position(p) == pos and pid(p) not in used
+                                  for p in pools.get(pos, ())) for pos in ('HB', 'TE', 'WR')}
+            spare = [p for p in candidates if position(p) in remaining and
+                     remaining[position(p)] > {'HB': 0, 'TE': spec['TE'],
+                                                'WR': spec['WR']}[position(p)]]
+            if spare:
+                chosen = max(spare, key=fullback_score)
+                candidates = [chosen] + [p for p in candidates if pid(p) != pid(chosen)]
         if state is not None and rng is not None and role != 'QB':
             for rank, p in enumerate(candidates):
                 gap = 0.75 if role == 'HB' and rank == 0 else 0.6 if rank == 0 else 0.3 if rank == 1 else 0.0
-                if not state.cond.needs_rest(pid(p), position(p), rng,
-                                            p.get('stamina_rating', 70.0), gap):
+                needs_rest = state.cond.needs_rest(pid(p), position(p), rng,
+                                                   p.get('stamina_rating', 70.0), gap)
+                # Keep the lead TE in both single- and multiple-TE packages.
+                # In 12 personnel the first slot could otherwise pass over
+                # TE1 while the second slot almost always kept TE2.
+                if needs_rest and rank == 0 and slot == 0 and role == 'TE':
+                    needs_rest = rng.random() >= 0.92
+                # The top two wideouts should not both rotate away so often
+                # that a three-WR package fields its fourth WR on half its snaps.
+                if needs_rest and rank == 0 and slot < 2 and role == 'WR':
+                    needs_rest = rng.random() >= 0.65
+                if not needs_rest:
                     chosen = p; break
         used.add(pid(chosen)); result.append((role, chosen))
 
@@ -89,8 +121,8 @@ def assign(depth, package, excluded=(), rng=None, state=None):
         if rng is not None and role in ('TE', 'WR'):
             n = spec[role]
             own = pools.get(role, [])
-            if ((role == 'WR' and n >= 3 and len(own) > n and rng.random() < .23) or
-                    (role == 'TE' and n == 1 and len(own) > 1 and rng.random() < .15)):
+            if ((role == 'WR' and n >= 3 and len(own) > n and rng.random() < .20) or
+                    (role == 'TE' and n == 1 and len(own) > 1 and rng.random() < .05)):
                 i = n if role == 'WR' else 1
                 own = list(own)
                 own[n - 1], own[i] = own[i], own[n - 1]
@@ -100,8 +132,8 @@ def assign(depth, package, excluded=(), rng=None, state=None):
     return result
 
 
-def field(roster, package, rng=None, state=None):
-    rows = assign(roster_depth(roster), package,
+def field(roster, package, rng=None, state=None, depth=None):
+    rows = assign(depth if depth is not None else roster_depth(roster), package,
                   excluded=(state.out if state is not None else ()), rng=rng, state=state)
     primary = next((p for role, p in rows if role == 'HB'), None)
     return dict(qb=next(p for role, p in rows if role == 'QB'), rb=primary,

@@ -62,6 +62,18 @@ class OffensivePersonnelTests(unittest.TestCase):
         self.assertIn('HB1', [p['pid'] for p in unit['wr']])
         self.assertEqual(len({p['pid'] for p in on_field(unit)}), 11)
 
+    def test_blocking_te_can_fill_fullback_role(self):
+        team = roster(); team['depth']['FB'] = []; team['fullbacks'] = []
+        team['depth']['HB'][1].update(run_block_rating=40, lead_block_rating=40,
+                                     impact_block_rating=40, carry_rating=75)
+        team['depth']['TE'][0].update(run_block_rating=55, lead_block_rating=50,
+                                     impact_block_rating=50, carry_rating=50)
+        team['depth']['TE'][1].update(run_block_rating=90, lead_block_rating=90,
+                                     impact_block_rating=90, carry_rating=60)
+        rows = OR.field(team, '21')['offensive_assignments']
+        self.assertEqual(next(p['pid'] for role, p in rows if role == 'FB'), 'TE1')
+        self.assertEqual(next(p['pid'] for role, p in rows if role == 'TE'), 'TE0')
+
     def test_injuries_and_missing_tight_ends_use_healthy_unique_replacements(self):
         team = roster(); team['depth']['TE'] = []; team['extra_blockers'] = []
         team['wr'] = team['depth']['WR']

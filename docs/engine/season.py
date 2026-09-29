@@ -24,6 +24,9 @@ THREE THINGS THIS HAS TO GET RIGHT:
    retirement, the league so leaderboards and awards can be computed without
    walking 2,114 players.
 """
+import copy
+from dataclasses import asdict
+from collections import defaultdict
 import numpy as np
 
 import game as G
@@ -71,7 +74,7 @@ def make_coach(gm):
     blocking = getattr(gm, 'off_blocking', 'zone')
     run_mix = {'zone': {'zone': .80, 'gap': .20}, 'gap': {'zone': .25, 'gap': .75}}.get(blocking, {'zone': .55, 'gap': .45})
     base = getattr(gm, 'off_personnel', '11')
-    pers = {'11': .595, '12': .195, '21': .070, '13': .030, '10': .075, '22': .025, '00': .010}
+    pers = {'11': .545, '12': .245, '21': .070, '13': .040, '10': .065, '22': .025, '00': .010}
     if base in pers:
         pers[base] += 0.20                    # his base grouping, a fifth more often
         pers = {k: v / sum(pers.values()) for k, v in pers.items()}
@@ -125,6 +128,79 @@ class SeasonRunner:
             self.states[abbr].abbr = abbr
             self._staff_terms(abbr)
         self.week = 0
+
+    @staticmethod
+    def _state_data(st, include_roster=False):
+        """Plain data needed to carry a team's health and replay a live game."""
+        d = dict(cond=dict(st.cond.cond), cond_snaps=dict(st.cond.snaps),
+                 cond_policy=st.cond.policy, jaded=dict(st.jaded),
+                 snaps=dict(st.snaps), last_snaps=dict(getattr(st, 'last_snaps', {}) or {}),
+                 plan=asdict(st.plan), base_plan=asdict(st.base_plan),
+                 script=dict(st.script.__dict__), coach=copy.deepcopy(st.coach),
+                 scheme=copy.deepcopy(st.scheme),
+                 mem=dict(series=st.mem.series, window=st.mem.window,
+                          by_series={str(k): dict(v) for k, v in st.mem.by_series.items()}),
+                 injuries=copy.deepcopy(st.injuries), out=sorted(st.out),
+                 cov_memory=dict(st.cov_memory),
+                 staff_fx=copy.deepcopy(getattr(st, 'staff_fx', {})),
+                 coach_base=copy.deepcopy(getattr(st, 'coach_base', {})),
+                 seq=copy.deepcopy(getattr(st, 'seq', {})),
+                 road_noise=getattr(st, 'road_noise', 1.0),
+                 road_stamina=getattr(st, 'road_stamina', 1.0))
+        if include_roster:
+            d['roster'] = copy.deepcopy(st.roster)
+        return d
+
+    @staticmethod
+    def _restore_state(st, d):
+        import gameplan as GP, adjust as AD
+        if 'roster' in d: st.roster = d['roster']
+        st.cond.cond = dict(d.get('cond') or {})
+        st.cond.snaps = dict(d.get('cond_snaps') or {})
+        st.cond.policy = d.get('cond_policy', st.cond.policy)
+        st.jaded = dict(d.get('jaded') or {})
+        st.snaps = dict(d.get('snaps') or {})
+        st.last_snaps = dict(d.get('last_snaps') or {})
+        if d.get('plan'): st.plan = GP.Gameplan(**d['plan'])
+        if d.get('base_plan'): st.base_plan = GP.Gameplan(**d['base_plan'])
+        if d.get('script'): st.script.__dict__.update(d['script'])
+        if 'coach' in d: st.coach = d['coach']
+        if 'scheme' in d: st.scheme = d['scheme']
+        md = d.get('mem') or {}
+        st.mem = AD.GameMemory(window=md.get('window', 4))
+        st.mem.series = md.get('series', 0)
+        st.mem.by_series = defaultdict(lambda: defaultdict(list),
+                                       {int(k): defaultdict(list, v) for k, v in (md.get('by_series') or {}).items()})
+        st.injuries = list(d.get('injuries') or [])
+        st.out = set(d.get('out') or [])
+        st.cov_memory = dict(d.get('cov_memory') or {})
+        st.staff_fx = d.get('staff_fx') or {}
+        st.coach_base = d.get('coach_base') or {}
+        st.seq = d.get('seq') or {'run_hot': 0.0}
+        st.road_noise = d.get('road_noise', 1.0)
+        st.road_stamina = d.get('road_stamina', 1.0)
+
+    def save_state(self):
+        return dict(week=self.week, listed_week=getattr(self, '_listed_week', None),
+                    after_done=getattr(self, '_after_done', None),
+                    states={a: self._state_data(st) for a, st in self.states.items()},
+                    desks={a: copy.deepcopy(d.__dict__) for a, d in self.desks.items()},
+                    last_played=list(self.last_played),
+                    last_games=[(h, a, r['home'], r['away'], bool(r.get('overtime')))
+                                for h, a, r, _b in self.last_games])
+
+    def load_state(self, data):
+        self.week = data.get('week', self.week)
+        self._listed_week = data.get('listed_week')
+        self._after_done = data.get('after_done')
+        for a, sd in (data.get('states') or {}).items():
+            if a in self.states: self._restore_state(self.states[a], sd)
+        for a, dd in (data.get('desks') or {}).items():
+            if a in self.desks: self.desks[a].__dict__.update(dd)
+        self.last_played = [tuple(row) for row in (data.get('last_played') or [])]
+        self.last_games = []
+        for h, a, hs, away_score, ot in (data.get('last_games') or []):
+            self.last_games.append((h, a, dict(home=hs, away=away_score, overtime=ot), G.StatBook()))
 
     # ---- the field ------------------------------------------------------
     def injury_week(self, week):
@@ -258,30 +334,61 @@ class SeasonRunner:
         return res
 
     # ------------------------------------------------------------ the live game
-    def open_live(self, home, away, week, playoffs=False, on_close=None):
+    def open_live(self, home, away, week, playoffs=False, on_close=None, replay_start=None):
         """The user's game, opened at the opening kick and played on demand. The same preparation as play()
         (hurt players, the week's plans), then the stepped engine held open until Finish."""
-        hr, ar = self.refresh(home), self.refresh(away)
-        if hr is None or ar is None: return None
-        for side in (home, away):
-            desk = self.desks.get(side); st = self.states.get(side)
-            if desk is None or st is None: continue
-            for pid in desk.playing_hurt:
-                hit, _mult = desk.condition_hit(pid)
-                if hit: st.cond.cond[pid] = max(35.0, st.cond.get(pid) - hit)
-        import gameplan_week as GW
-        user = getattr(self.L, 'user_team', None)
-        for me, opp in ((home, away), (away, home)):
-            st = self.states.get(me)
-            if st is None or st.plan is None: continue
-            try:
-                if me == user: GW.user_plan(self.L, st, week)
-                else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
-            except Exception: pass
+        if replay_start is not None:
+            self.rng.bit_generator.state = copy.deepcopy(replay_start['rng'])
+            for side in (home, away):
+                self._restore_state(self.states[side], replay_start['states'][side])
+            hr, ar = self.states[home].roster, self.states[away].roster
+            start = replay_start
+        else:
+            hr, ar = self.refresh(home), self.refresh(away)
+            if hr is None or ar is None: return None
+            for side in (home, away):
+                desk = self.desks.get(side); st = self.states.get(side)
+                if desk is None or st is None: continue
+                for pid in desk.playing_hurt:
+                    hit, _mult = desk.condition_hit(pid)
+                    if hit: st.cond.cond[pid] = max(35.0, st.cond.get(pid) - hit)
+            import gameplan_week as GW
+            user = getattr(self.L, 'user_team', None)
+            for me, opp in ((home, away), (away, home)):
+                st = self.states.get(me)
+                if st is None or st.plan is None: continue
+                try:
+                    if me == user: GW.user_plan(self.L, st, week)
+                    else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
+                except Exception: pass
+            start = dict(rng=copy.deepcopy(self.rng.bit_generator.state),
+                         states={side: self._state_data(self.states[side], include_roster=True)
+                                 for side in (home, away)})
         book = G.StatBook(); self._book = book
         gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book, playoffs=playoffs, venue=self._venue(week, playoffs))
-        self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False, playoffs=playoffs, on_close=on_close)
+        self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False, playoffs=playoffs, on_close=on_close, start=start, actions=[])
         return self.live
+
+    def replay_live(self, actions, saved_rng):
+        """Rebuild the paused generator by repeating its deterministic user actions."""
+        self._replaying_live = True
+        try:
+            for action in actions:
+                if action[0] == 'step':
+                    if len(action) >= 4: self.rng.bit_generator.state = action[2]
+                    self.live_step(action[1])
+                    if len(action) >= 4 and self.rng.bit_generator.state != action[3]:
+                        raise ValueError('Saved live game diverged during replay')
+                elif action[0] == 'half_take': self.half_take(action[1], action[2])
+                else: raise ValueError('Unknown live game action in save')
+            if self.live['done']:
+                raise ValueError('Saved live game ended during replay')
+            # Other GM actions may have consumed RNG between live steps. Keep the
+            # saved stream position while preserving the already-replayed game.
+            self.rng.bit_generator.state = saved_rng
+            self.live['actions'] = list(actions)
+        finally:
+            self._replaying_live = False
 
     def live_step(self, mode='play'):
         """Advance the live game: 'play' one snap, 'drive' to the end of the possession, 'half' to halftime or the
@@ -289,6 +396,9 @@ class SeasonRunner:
         lv = getattr(self, 'live', None)
         if lv is None or lv['done']: return lv
         if lv['halftime_open'] and mode != 'resume': return lv
+        requested_mode = mode
+        rng_before = (copy.deepcopy(self.rng.bit_generator.state)
+                      if not getattr(self, '_replaying_live', False) else None)
         if mode == 'resume': lv['halftime_open'] = False; mode = 'play'
         gen = lv['gen']
         try:
@@ -310,6 +420,9 @@ class SeasonRunner:
         except StopIteration as done:
             lv['res'] = done.value; lv['done'] = True; lv['current'] = None; lv['score'] = {'home': lv['res']['home'], 'away': lv['res']['away']}; lv['at'] = 'final'
             self._close_live()
+        if not getattr(self, '_replaying_live', False):
+            lv['actions'].append(('step', requested_mode, rng_before,
+                                  copy.deepcopy(self.rng.bit_generator.state)))
         return lv
 
     def _halftime_read(self, lv):
@@ -338,6 +451,7 @@ class SeasonRunner:
         ch = r['changes'] if on else {k: (tuple(-x for x in v) if isinstance(v, (tuple, list)) else (-v if isinstance(v, (int, float)) else st.base_plan.__dict__.get(k, v))) for k, v in r['changes'].items()}
         GW.apply_changes(st.plan, st.base_plan, ch); r['taken'] = bool(on)
         lv['half_taken'] = [x['text'] for x in recs if x['taken']]
+        if not getattr(self, '_replaying_live', False): lv['actions'].append(('half_take', i, bool(on)))
         return True
 
     def _close_live(self):
@@ -421,6 +535,29 @@ class SeasonRunner:
                 if p is not None:
                     p.xp += XP.credit(p, XP.event_xp({'snaps': n}) * XP.modifier(p), 'snaps')
 
+            # Every player on the active roster gets a small game-day credit,
+            # including reserves and injured players who still hold a roster
+            # spot. IR is excluded by active(); elevations join the roster.
+            depth = (st.roster or {}).get('depth', {})
+            team = self.L.teams[side]
+            rostered = {p.pid: p for p in team.active()}
+            rostered.update((p.pid, p) for p in (getattr(team, '_elevated', None) or []))
+            for p in rostered.values():
+                p.xp += XP.credit(p, XP.GAME_DAY_XP * XP.modifier(p), 'roster')
+
+            # Kicks and punts are logged as plays but do not go through the
+            # ordinary offensive/defensive snap picker. Credit the first
+            # dressed long snapper from those real attempts and outcomes.
+            long_snappers = depth.get('LS', [])
+            if long_snappers:
+                p = self.L.player(long_snappers[0]['pid'])
+                if p is not None:
+                    line = XP.long_snap_line(res['drives'], 'home' if side == home else 'away')
+                    if line['snaps']:
+                        self.L.record_stats(self.L.year, p.pid, dict(line, games=1),
+                                            postseason=playoffs, game=key)
+                        p.xp += XP.credit(p, XP.long_snap_xp(line) * XP.modifier(p), 'long_snap')
+
         # Injuries come off the RESULT, not off TeamState. play_game calls
         # end_game() on both states before returning, which clears
         # state.injuries - so reading them there always found an empty list
@@ -458,7 +595,10 @@ class SeasonRunner:
             st.coach['adjust_skill'] = min(1.0, float(st.coach_base.get('adjust_skill', 0.5)) + 0.15)
 
     def play_games(self, week):
-        self.L.week_book = {}                                        # this Sunday's lines only
+        completed = any(wk == week and hp is not None for wk, _a, _h, _ap, hp in self.L.schedule)
+        if not completed:
+            self.L.week_book = {}                                    # this Sunday's lines only
+        previous = {(h, a): (res, book) for h, a, res, book in self.last_games} if self.week == week else {}
         for abbr_, desk_ in self.desks.items():
             desk_.resolve_pending(self.L, self.L.teams[abbr_], self.rng); self.refresh(abbr_)
         for abbr in self.states: self._staff_terms(abbr)          # a staff change since last Sunday counts
@@ -467,11 +607,17 @@ class SeasonRunner:
         self.week = week
         if getattr(self, '_listed_week', None) != week:
             self.injury_week(week)                      # a week that was never listed (the first, or a loaded save) lists now
+            self._listed_week = week
         played = []
         self.last_games = []                      # (home, away, res, book) for Game Day
         skip = getattr(self, '_skip_game', None)
         for i, (wk, away, home, ap, hp) in enumerate(self.L.schedule):
-            if wk != week or hp is not None:
+            if wk != week: continue
+            if hp is not None:
+                played.append((home, away, hp, ap))
+                res, book = previous.get((home, away),
+                                         (dict(home=hp, away=ap, overtime=False), G.StatBook()))
+                self.last_games.append((home, away, res, book))
                 continue
             if skip and (home, away) == skip: continue          # the user's game is played live, after these
             res = self.play(home, away, week)
@@ -484,7 +630,6 @@ class SeasonRunner:
         self.week = week
         self.L.week = week
         self.last_played = played
-        self._listed_week = week
         if not skip: self._after_games(week, played)
         return played
 

@@ -70,7 +70,7 @@ ST_VALUE = {'WILL': .85, 'SAM': .90, 'MIKE': .70, 'SS': .85, 'FS': .80,
             'LS': 1.0}
 
 # ---------------------------------------------------------------- allocation
-def slot_value(pos, depth_rank, team, gm, usage=None, waiver_priority=0.5):
+def slot_value(pos, depth_rank, team, gm, usage=None, waiver_priority=0.5, minimums=None):
     """
     What is the NEXT body at this position worth?
     depth_rank: 1 = starter, 2 = first backup, etc.
@@ -81,7 +81,7 @@ def slot_value(pos, depth_rank, team, gm, usage=None, waiver_priority=0.5):
     """
     g = gm.shift(team)
     usage = (usage or DEFAULT_USAGE).get(pos, .2)
-    mn = MINIMUMS.get(pos, 1)
+    mn = (minimums or MINIMUMS).get(pos, 1)
 
     if depth_rank <= mn:
         return 99.0                                   # required; not a choice
@@ -112,12 +112,15 @@ def slot_value(pos, depth_rank, team, gm, usage=None, waiver_priority=0.5):
     v *= (1.0 - 0.45 * waiver_priority)               # first call replaces insurance
     return round(float(v), 3)
 
-def allocate(pool, team, gm, usage=None, waiver_priority=0.5, limit=ROSTER_LIMIT):
+def allocate(pool, team, gm, usage=None, waiver_priority=0.5, limit=ROSTER_LIMIT,
+             minimums=None, group_minimums=None):
     """
     Fill the 53. Minimums first, then the highest marginal slot value, where
     every extra body at a strong position competes against one at a weak one.
     pool: list of dicts with pos and ovr.
     """
+    minimums = minimums or MINIMUMS
+    group_minimums = group_minimums or GROUP_MINIMUMS
     by_pos = {}
     for p in pool: by_pos.setdefault(p['pos'], []).append(p)
     # WHO STAYS AT A SPOT is rating first, but a release costs what it costs: the dead
@@ -133,7 +136,7 @@ def allocate(pool, team, gm, usage=None, waiver_priority=0.5, limit=ROSTER_LIMIT
     roster, counts = [], {}
     taken = {p: 0 for p in by_pos}
     # 1. per-position minimums are not negotiable
-    for pos, m in MINIMUMS.items():
+    for pos, m in minimums.items():
         for i in range(m):
             if len(by_pos.get(pos, [])) > i:
                 roster.append(by_pos[pos][i]); counts[pos] = counts.get(pos, 0) + 1
@@ -141,7 +144,7 @@ def allocate(pool, team, gm, usage=None, waiver_priority=0.5, limit=ROSTER_LIMIT
     # 2. GROUP minimums also bind. Per-position floors sum to only 5 offensive
     #    linemen, but no club carries fewer than 9 - you cannot survive a game
     #    with five. The first build shipped 7-man lines.
-    for grp, need in GROUP_MINIMUMS.items():
+    for grp, need in group_minimums.items():
         have = sum(counts.get(p, 0) for p, gg in GRP.items() if gg == grp)
         while have < need:
             best = None
@@ -160,7 +163,7 @@ def allocate(pool, team, gm, usage=None, waiver_priority=0.5, limit=ROSTER_LIMIT
         for i, m in enumerate(men):
             rank = i + 1
             if rank <= taken.get(pos, 0): continue
-            sv = slot_value(pos, rank, team, gm, usage, waiver_priority)
+            sv = slot_value(pos, rank, team, gm, usage, waiver_priority, minimums)
             cands.append((sv * (0.4 + m['ovr'] / 90.0), pos, m, rank))
     cands.sort(key=lambda x: -x[0])
     for score, pos, m, rank in cands:
