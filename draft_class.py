@@ -61,14 +61,9 @@ PHYSICAL = {'speed_rating', 'accel_rating', 'agility_rating', 'strength_rating',
 TOOLS = {'throw_power_rating', 'kick_power_rating'}
 NOT_RATINGS = {'overall_rating', 'running_style_rating'}
 
-# THE SHAPE OF A CLASS. The rookie distribution both classes were built on
-# is the men who MADE rosters, so its bottom was truncated: the 150th man in
-# a class rated 77 with seven points of headroom against starter bars of
-# 77-81, and picks 151 and later became starters at 19-24% against a real
-# ~10. The real class falls away faster: the 150th man is a fringe roster
-# player, the 250th a camp body. Ranks 1-100 are left alone; from there the
-# curve is pulled down to this target by rank, on the skill attributes.
-SHAPE = [(1, 91.0), (32, 82.0), (64, 79.0), (100, 76.0), (150, 71.0), (250, 65.0), (400, 59.0), (504, 50.0)]
+# Corrected roster rookies anchor each position. draft_balance supplies a
+# position-relative tail so a position's best prospect is not weakened merely
+# because its raw overall scale is lower than another position's.
 
 
 def reshape_ratings(ratings, pos, target):
@@ -102,6 +97,7 @@ def reshape_ratings(ratings, pos, target):
 
 def shape_class(cls, rng=None):
     import numpy as np
+    from draft_balance import tail_target
     # DEVELOPMENT BY CLASS RANK. The trait is drawn against where a player sits in the whole class, not among his
     # position: the 200th player draws 200th-of-479 odds whichever position he plays, so a weak position year
     # yields no star traits there and a strong one several, and the late rounds land near all-normal
@@ -111,19 +107,19 @@ def shape_class(cls, rng=None):
         p.dev = draw_dev(i / max(n - 1, 1), r_, pos=p.pos)
     for p in cls:
         if p.pos in ('K', 'P', 'LS'): p.dev = draw_dev(0.5, r_, pos=p.pos)          # specialists: normal or star, off the class ladder
-    men = sorted([p for p in cls if p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.ovr)
-    xs = np.array([r for r, _ in SHAPE], float); ys = np.array([v for _, v in SHAPE], float)
-    for i, p in enumerate(men):
-        rank = i + 1
-        if rank <= 100: continue
-        target = float(np.interp(rank, xs, ys))
-        before = p.ovr
-        if target >= before: continue
-        p.ratings = reshape_ratings(p.ratings, p.pos, target)
-        delta = p.ovr - before
-        if p.potential_range:
-            lo, hi = p.potential_range
-            p.potential_range = (round(max(p.ovr, lo + delta), 1), round(max(p.ovr + 1, hi + delta), 1))
+    groups = collections.defaultdict(list)
+    for p in sorted(cls, key=lambda p: -p.ovr):
+        groups[p.pos].append(p)
+    for pos, men in groups.items():
+        for i, p in enumerate(men):
+            before = p.ovr
+            target = tail_target(pos, before, i, len(men))
+            if target >= before: continue
+            p.ratings = reshape_ratings(p.ratings, p.pos, target)
+            delta = p.ovr - before
+            if p.potential_range:
+                lo, hi = p.potential_range
+                p.potential_range = (round(max(p.ovr, lo + delta), 1), round(max(p.ovr + 1, hi + delta), 1))
     # THE GEMS AND THE BUSTS. Every class carries two players the league will miss and two it will overrate:
     # two of the genuinely good (true grade in the class's top eighty, off the skill positions' ladder or on it)
     # whose tape reads eight to fifteen points low, so they fall to day three and start in September; and two

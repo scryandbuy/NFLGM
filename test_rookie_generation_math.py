@@ -7,7 +7,7 @@ import pandas as pd
 import draft_class as DC
 import rookie_baseline as RB
 import targets as TG
-from league import build_league
+from league import build_league, Player
 
 
 class RookieBaselineTests(unittest.TestCase):
@@ -43,6 +43,30 @@ class RookieBaselineTests(unittest.TestCase):
 
 
 class RatingTargetTests(unittest.TestCase):
+    def test_tail_uses_position_rank_and_preserves_arms_and_headroom(self):
+        from draft_balance import tail_target
+        players = []
+        for pos, count, rating in [('WR', 110, 83.0), ('TE', 8, 74.0), ('QB', 12, 78.0)]:
+            for i in range(count):
+                ratings = {k: rating - i * .02 for k in TG.DEPTH_WEIGHTS[pos]}
+                ratings['throw_power_rating'] = 96.0
+                p = Player(f'{pos}{i}', f'{pos} {i}', pos, 22, ratings)
+                p.potential_range = (p.ovr + 3, p.ovr + 9)
+                players.append(p)
+        before = {p.pid: (p.ovr, dict(p.ratings)) for p in players}
+        DC.shape_class(players, rng=np.random.default_rng(12))
+        best_te = next(p for p in players if p.pid == 'TE0')
+        self.assertEqual(best_te.ovr, before['TE0'][0])
+        last_qb = next(p for p in players if p.pid == 'QB11')
+        expected = tail_target('QB', before['QB11'][0], 11, 12)
+        self.assertAlmostEqual(last_qb.ovr, expected, places=7)
+        self.assertAlmostEqual(last_qb.potential_range[0] - last_qb.ovr, 3, delta=.051)
+        self.assertAlmostEqual(last_qb.potential_range[1] - last_qb.ovr, 9, delta=.051)
+        for p in players:
+            for key in DC.PHYSICAL | DC.TOOLS:
+                if key in p.ratings:
+                    self.assertEqual(p.ratings[key], before[p.pid][1][key])
+
     def test_lower_targets_hit_actual_overall_at_every_position(self):
         for pos in DC.COUNTS:
             ratings = {key: 82.0 for key in TG.DEPTH_WEIGHTS[pos]}
