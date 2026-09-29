@@ -326,10 +326,24 @@ def two_point_decision(lead_after_td, quarter, secs_left=None,
                       aggression=aggression)
     return r['call'] == 'two'
 
-def attempt_extra_point(kicker, rng, rate_fn, snapper=None):
-    chance = np.clip(fg_probability(33, kicker, rate_fn) + 0.02 * snap_quality(snapper, rate_fn), 0.005, 0.995)
+def attempt_extra_point(kicker, rng, rate_fn, snapper=None, distance=33):
+    import events as E
+    flag = E.special_teams_penalty_check(rng, 'extra_point')
+    if flag and flag['on_offense']:
+        distance += flag['yards']
+    chance = np.clip(fg_probability(distance, kicker, rate_fn) + 0.02 * snap_quality(snapper, rate_fn), 0.005, 0.995)
     made = rng.random() < chance
-    return dict(type='extra_point', distance=33, made=bool(made),
+    if flag and not flag['on_offense']:
+        if made:
+            flag = None                        # keep the point, decline the offside flag
+        else:
+            spot = max(0.5, distance - 18.0)
+            walk = min(flag['yards'], spot / 2.0)
+            flag['yards'] = walk
+            distance -= walk
+            chance = np.clip(fg_probability(distance, kicker, rate_fn) + 0.02 * snap_quality(snapper, rate_fn), 0.005, 0.995)
+            made = rng.random() < chance       # replay the untimed try
+    return dict(type='extra_point', distance=distance, penalty=flag, made=bool(made),
                 points=1 if made else 0)
 
 def offensive_leans(state):
@@ -367,29 +381,44 @@ def apply_defensive_plan(call, state, rng):
 
 
 def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
-                      rate_fn, off_state=None, def_state=None):
+                      rate_fn, off_state=None, def_state=None, start_yardline=2, _retry=False):
     """
     One snap from the two. Deliberately NOT fed to state.observe: the
     adjustment engine reads a rolling four-series window of normal downs, and
     a goal-line try is not one of those.
     """
     import gameplan as GP
-    oc = call_off(1, 2, 0, 2, rng, offense=offense, rate_fn=rate_fn,
+    import events as E
+    flag = None if _retry else E.special_teams_penalty_check(rng, 'two_point')
+    if flag and flag['on_offense']:
+        start_yardline += flag['yards']
+    try_yards = max(1, int(np.ceil(start_yardline)))
+    oc = call_off(1, try_yards, 0, try_yards, rng, offense=offense, rate_fn=rate_fn,
                   lean=offensive_leans(off_state))
     dp = getattr(def_state, 'plan', None)
-    dc = call_def(oc, 1, 2, rng, 2, defense=defense, rate_fn=rate_fn,
+    dc = call_def(oc, 1, try_yards, rng, try_yards, defense=defense, rate_fn=rate_fn,
                   lean=GP.defensive_leans(dp) if dp is not None else None,
                   recent=getattr(def_state, 'cov_memory', None))
-    apply_offensive_plan(oc, off_state, rng, 2, 1, 2)
+    apply_offensive_plan(oc, off_state, rng, try_yards, 1, try_yards)
     apply_defensive_plan(dc, def_state, rng)
     off_f, _ = field_units(offense, off_state, rng, True, oc.get('personnel'))
     def_f, _ = field_units(defense, def_state, rng, False, dc.get('personnel'),
                            front_family=dc.get('front_family'))
     # The package has already selected and recorded the carrier's snap.
-    out = resolve_fn(off_f, def_f, oc, dc, 2, rng)
+    out = resolve_fn(off_f, def_f, oc, dc, try_yards, rng)
     good = out.get('type') in ('run', 'complete', 'scramble') and \
-           float(out.get('yards', 0.0)) >= 2.0
-    return dict(type='two_point', play=out.get('type'), made=bool(good),
+           float(np.round(out.get('yards', 0.0))) >= start_yardline
+    if flag and not flag['on_offense']:
+        if good:
+            flag = None                         # the offense keeps the successful free play
+        else:
+            walk = min(flag['yards'], start_yardline / 2.0)
+            flag['yards'] = walk
+            retry = attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
+                                      rate_fn, off_state, def_state, start_yardline - walk, _retry=True)
+            retry['penalty'] = flag
+            return retry
+    return dict(type='two_point', play=out.get('type'), from_yardline=start_yardline, penalty=flag, made=bool(good),
                 points=2 if good else 0)
 
 # ============================================================ PUNTS
@@ -818,6 +847,14 @@ def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
     for years and never booked, so no kick returner had a line. The result is kept so the drive it
     opens can log the kick as its first play."""
     r = kickoff(returner, rng, rate_fn, from_50=from_50)
+    if not r.get('touchback'):
+        import events as E
+        flag = E.special_teams_penalty_check(rng, 'kickoff', returned=True)
+        if flag:
+            walk = min(flag['yards'], (100.0 - r['new_yardline']) / 2.0)
+            flag['yards'] = walk
+            r['new_yardline'] += walk
+            r['penalty'] = flag
     if book is not None and not r.get('touchback') and returner:
         book.special('kr', returner.get('pid'), ret=r.get('ret', 0.0))
     r['returner'] = (returner or {}).get('pid')
@@ -1064,9 +1101,12 @@ def _ep_play_stands(dr, out):
     touchdown, a turnover, or a failed fourth down handing the ball over."""
     import advanced_stats as AS
     gained = float(np.round(float(out.get('yards') or 0.0)))
-    if out.get('touchdown') or gained >= dr.yardline - 0.01: return float(AS.TD_VALUE)
+    if out.get('touchdown') or float(out.get('yards') or 0.0) >= dr.yardline - 0.01 or gained >= dr.yardline - 0.01: return float(AS.TD_VALUE)
     spot = float(np.clip(dr.yardline - gained, 1.0, 99.0))
-    if out.get('type') == 'interception' or out.get('fumble_lost'):
+    if out.get('type') == 'interception':
+        spot = _interception_spot(dr.yardline, out)
+        return -_ep_state(1, 10, 100.0 - spot)
+    if out.get('fumble_lost'):
         return -_ep_state(1, 10, 100.0 - spot)
     if gained >= dr.togo - 0.01:
         return _ep_state(1, min(10.0, spot), spot)
@@ -1095,27 +1135,42 @@ def _resolve_live_penalty(dr, pen, out, oc):
     downfield = thrown and not out.get('screen') and (out.get('air') is None or float(out.get('air') or 0.0) >= 1.0)
     # FOULS THAT DEPEND ON HOW THE PLAY ENDED. Grounding is a throw away to nobody: it needs an incompletion, and
     # on a completion, a pick or a sack there was no grounding. Ineligible downfield needs a ball thrown at all.
-    if pen['penalty'] == 'Intentional Grounding' and out.get('type') != 'incomplete':
+    if pen['penalty'] == 'Intentional Grounding' and not (out.get('type') == 'incomplete' and out.get('throwaway') and out.get('pressured')):
         return None
     if pen['penalty'] == 'Ineligible Downfield Pass' and not thrown:
         return None
+    if pen['penalty'] in ('Roughing the Passer', 'Illegal Contact') and not thrown:
+        return None
     if pen['penalty'] == 'Defensive Pass Interference' and not downfield:
-        pen['penalty'] = 'Defensive Holding'; pen['yards'] = 5.0; pen['auto_first'] = True
+        pen['penalty'] = 'Defensive Holding'; pen['yards'] = pen['rule_yards'] = 5.0; pen['auto_first'] = True
     elif pen['penalty'] == 'Offensive Pass Interference' and not downfield:
-        pen['penalty'] = 'Offensive Holding'; pen['yards'] = 10.0; pen['auto_first'] = False
+        pen['penalty'] = 'Offensive Holding'; pen['yards'] = pen['rule_yards'] = 10.0; pen['auto_first'] = False
     yards = float(pen['yards'])
     gained = float(out.get('yards') or 0.0)
+    spot_gain = dr.yardline if gained >= dr.yardline - 0.01 else float(np.round(gained))
     if pen['on_offense']:
+        if pen['penalty'] == 'Intentional Grounding':
+            yards = max(yards, float(out.get('throwback', 0.0) or 0.0))
+            pen['yards'] = yards
+            if dr.yardline + float(out.get('throwback', 0.0) or 0.0) >= 100.0:
+                pen['safety'] = True
+                dr.yardline = 100.0
+                dr.result, dr.points = 'Safety', -2
+                return 'replaced'
         if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
-            spot = dr.yardline - gained
-            yards = float(max(0, int(np.floor(min(yards, (100.0 - spot) / 2.0))))); pen['yards'] = yards   # whole yards
+            spot = max(0.0, dr.yardline - spot_gain)
+            if spot <= 0:
+                dr.try_penalty = -yards
+                pen['on_try'] = True
+                return 'added'
+            yards = min(yards, (100.0 - spot) / 2.0); pen['yards'] = yards
             dr.log_pen_after = -yards                 # the offense fouled after the whistle: it walks back
             return 'added'
         # THE DEFENSE DECIDES: the play standing against the down replayed from further back
-        yards = float(max(0, int(np.floor(min(yards, (100.0 - dr.yardline) / 2.0))))); pen['yards'] = yards
+        yards = min(yards, (100.0 - dr.yardline) / 2.0); pen['yards'] = yards
         ep_stand = _ep_play_stands(dr, out)
         down_e = dr.down + (1 if pen['penalty'] == 'Intentional Grounding' else 0)
-        spot_e = min(99.0, dr.yardline + yards)
+        spot_e = dr.yardline + yards
         ep_enf = -_ep_state(1, 10, 100.0 - spot_e) if down_e > 4 else _ep_state(down_e, dr.togo + yards, spot_e)
         if ep_enf >= ep_stand:
             return None                               # the play as it stands is worse for the offense: the defense declines
@@ -1124,8 +1179,12 @@ def _resolve_live_penalty(dr, pen, out, oc):
         if pen['penalty'] == 'Intentional Grounding':
             dr.down += 1                          # loss of down
         return 'replaced'
-    if out.get('touchdown'):
-        return None                               # six beats fifteen
+    if out.get('touchdown') or gained >= dr.yardline - 0.01 or float(np.round(gained)) >= dr.yardline:
+        if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
+            dr.try_penalty = yards
+            pen['on_try'] = True
+            return 'added'
+        return None                               # the play stands; the offense declines the live foul
     if pen['penalty'] == 'Defensive Pass Interference':
         # A SPOT FOUL FOLLOWS THE THROW: the yardage is where the ball was going (the flag was drawn before the
         # play resolved, at a generic 13-yard median, so a screen once came back with a 20-yard DPI)
@@ -1133,26 +1192,26 @@ def _resolve_live_penalty(dr, pen, out, oc):
             yards = float(max(1, int(round(float(out['air'])))))
             pen['yards'] = yards
     if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
-        spot = max(1.0, dr.yardline - float(out.get('yards', 0.0) or 0.0))
-        yards = float(max(0, int(np.floor(min(yards, (spot - 1.0) / 2.0 if spot - yards < 1 else yards))))); pen['yards'] = yards   # whole yards: half the distance rounds down
+        spot = max(0.0, dr.yardline - spot_gain)
+        yards = min(yards, spot / 2.0); pen['yards'] = yards
         dr.log_pen_after = yards                      # the defense fouled: the offense walks forward
         dr.log_pen_first = bool(pen['auto_first'])
         return 'added'
     # THE OFFENSE DECIDES: the play standing against the penalty enforced
     if pen['penalty'] == 'Defensive Pass Interference':
-        gained_p = float(max(0, int(np.floor(min(yards, dr.yardline - 1)))))   # a spot foul: in the end zone the ball goes to the 1
-        end_zone = gained_p < yards - 0.01
+        end_zone = yards >= dr.yardline
+        gained_p = (dr.yardline / 2.0 if dr.yardline < 2 else dr.yardline - 1.0) if end_zone else yards
     else:
-        gained_p = min(yards, float(np.floor(dr.yardline / 2.0)))   # every other foul: half the distance to the goal, whole yards
+        gained_p = min(yards, dr.yardline / 2.0)   # every other foul: half the distance to the goal
         end_zone = False
     pen_first = bool(pen['auto_first']) or gained_p >= dr.togo - 0.01
-    spot_e = max(1.0, dr.yardline - gained_p)
+    spot_e = max(0.5, dr.yardline - gained_p)
     ep_enf = _ep_state(1, min(10.0, spot_e), spot_e) if pen_first else _ep_state(dr.down, dr.togo - gained_p, spot_e)
     ep_stand = _ep_play_stands(dr, out)
     if ep_stand >= ep_enf:
         return None                               # the play did better: the offense declines
-    if end_zone: pen['end_zone'] = True; pen['spot'] = 1
-    pen['yards'] = float(int(gained_p))
+    if end_zone: pen['end_zone'] = True; pen['spot'] = dr.yardline - gained_p
+    pen['yards'] = float(gained_p)
     dr.yardline -= gained_p
     if pen_first:
         dr.down, dr.togo = 1, min(10.0, dr.yardline); dr.first_downs += 1
@@ -1177,25 +1236,83 @@ class Drive:
         self.try_result = None
         self.log = []
 
+def _interception_spot(yardline, out):
+    """The former offense's distance to goal after the catch and return."""
+    caught = float(yardline) - float(out.get('air', 0.0) or 0.0)
+    if caught <= 0:
+        return 20.0                         # defensive touchback in the end zone
+    return float(np.clip(caught + float(out.get('ret', 0.0) or 0.0), 1.0, 99.0))
+
+def _enforce_turnover_penalty(dr, pen):
+    """Walk a dead-ball foul from the turnover's return spot, in the old offense's coordinates."""
+    nominal = float(pen.get('rule_yards', pen['yards']))
+    if pen['on_offense']:
+        walk = min(nominal, (100.0 - dr.yardline) / 2.0)
+        dr.yardline += walk                 # new offense advances toward the old offense's goal
+    else:
+        walk = min(nominal, dr.yardline / 2.0)
+        dr.yardline -= walk                 # new offense is walked back
+    pen['yards'] = walk
+    dr.log_pen_after = 0.0
+    dr.log_pen_first = False
+
+def _kick_presnap_flag(dr, pen):
+    """A pre-snap kick foul keeps the same down and lets the coach decide again."""
+    if not pen or pen.get('phase') != 'pre': return False
+    if pen['on_offense']:
+        walk = min(pen['yards'], (100.0 - dr.yardline) / 2.0)
+        dr.yardline += walk; dr.togo += walk
+    else:
+        walk = min(pen['yards'], dr.yardline / 2.0)
+        dr.yardline -= walk; dr.togo -= walk
+        if dr.togo <= 0:
+            dr.down, dr.togo = 1, min(10.0, dr.yardline)
+            dr.first_downs += 1
+        dr.untimed = True; dr.untimed_at = len(dr.log) + 1
+    pen['yards'] = walk
+    dr.log.append(dict(type='penalty', **pen))
+    return True
+
+def _kick_roughing(dr, pen, kick):
+    """Accept roughing when the failed kick or punt is worse than a first down."""
+    if not pen or pen.get('phase') != 'kick' or kick.get('made') or kick.get('blocked'): return False
+    kick['nullified'] = True
+    dr.log.append(kick)
+    walk = min(pen['yards'], dr.yardline / 2.0)
+    pen['yards'] = walk
+    dr.yardline -= walk
+    dr.down, dr.togo = 1, min(10.0, dr.yardline)
+    dr.first_downs += 1
+    dr.log.append(dict(type='penalty', **pen))
+    return True
+
+def _kick_offside(dr, pen, kick):
+    """The kicking side may keep a made FG or a good punt; otherwise it can replay the down."""
+    if not pen or pen.get('phase') != 'kick_offside' or kick.get('made'):
+        return False
+    walk = min(pen['yards'], dr.yardline / 2.0)
+    if kick.get('type') == 'punt' and not kick.get('blocked') and walk < dr.togo:
+        return False
+    kick['nullified'] = True
+    dr.log.append(kick)
+    dr.yardline -= walk
+    dr.togo -= walk
+    pen['yards'] = walk
+    if dr.togo <= 0:
+        dr.down, dr.togo = 1, min(10.0, dr.yardline)
+        dr.first_downs += 1
+    dr.log.append(dict(type='penalty', **pen))
+    return True
+
 def _advance(dr, gained):
     """Apply yardage, update downs and field position. Whole yards only."""
-    gained = float(np.round(gained))
-    # a dead-ball foul tacked on after the play (see _resolve_live_penalty)
+    raw_gained = float(gained)
+    gained = dr.yardline if raw_gained >= dr.yardline else float(np.round(raw_gained))
+    # Decide the play's down and score before walking off a dead-ball foul.
     after = getattr(dr, 'log_pen_after', 0.0)
-    if after:
-        gained += after
-        dr.log_pen_after = 0.0
-        if getattr(dr, 'log_pen_first', False):
-            dr.log_pen_first = False
-            dr.yardline -= gained
-            dr.best = min(dr.best, max(0.0, dr.yardline))
-            if dr.yardline <= 0:
-                dr.yardline = 0.0                                   # a score ends at the goal line, not past it (the drive total read the overshoot)
-                dr.result, dr.points = 'Touchdown', 6
-                return True
-            dr.down, dr.togo = 1, min(10, dr.yardline)
-            dr.first_downs += 1
-            return False
+    pen_first = getattr(dr, 'log_pen_first', False)
+    dr.log_pen_after = 0.0
+    dr.log_pen_first = False
     dr.yardline -= gained
     dr.togo -= gained
     dr.best = min(dr.best, max(0.0, dr.yardline))
@@ -1213,7 +1330,27 @@ def _advance(dr, gained):
         dr.first_downs += 1
     else:
         dr.down += 1
+    if after:
+        dr.yardline -= after
+        if pen_first and dr.down != 1:
+            dr.down = 1
+            dr.first_downs += 1
+        if dr.down == 1:
+            dr.togo = min(10, dr.yardline)
+        else:
+            dr.togo -= after
+        dr.best = min(dr.best, max(0.0, dr.yardline))
     return False
+
+def _prepare_scoring_play(dr, out):
+    """Give the play log and stat book the distance actually gained before booking the snap."""
+    if out.get('type') not in ('run', 'complete', 'scramble') or out.get('nullified'):
+        return
+    yards = float(out.get('yards', 0.0) or 0.0)
+    scored = yards >= dr.yardline - 0.01 or float(np.round(yards)) >= dr.yardline - 0.01
+    out['touchdown'] = scored
+    if scored:
+        out['yards'] = dr.yardline
 
 # Eleven men a side. QB + RB + 5 OL + 3 WR/TE on offence; 4 DL + 2 LB + 5 DB
 # in nickel, which is the league's base defence. The first build fielded five
@@ -1507,6 +1644,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     ko = LAST_KICKOFF.pop('r', None)
     if ko is not None and abs(float(ko.get('new_yardline', -1)) - float(start_yardline)) < 0.5:
         dr.log.append(dict(type='kickoff', touchback=bool(ko.get('touchback')), new_yardline=float(ko.get('new_yardline', start_yardline)), ret=float(ko.get('ret', 0.0) or 0.0), carrier=ko.get('returner'), clock=clock, onside=bool(ko.get('onside')), recovered=bool(ko.get('recovered')), free_kick=bool(ko.get('free_kick'))))
+        if ko.get('penalty'):
+            dr.log.append(dict(type='penalty', **ko['penalty']))
     # Adjustment happens AFTER EACH SERIES, which is what the coaches describe:
     # "If you wait until halftime to make your adjustments, you're too late."
     for st in (off_state, def_state):
@@ -1585,8 +1724,16 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4 and (_plan.get('hurry', True) or clock_kick_time or secs_in_half <= 14)
         _kick_old = ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) and dr.yardline <= 37 and dr.down < 4 and clock_kick_time and _plan is None
         if _kick_by_plan or _kick_old:
+            flag = E.special_teams_penalty_check(rng, 'field_goal')
+            if _kick_presnap_flag(dr, flag): continue
             fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
                                     snapper=snapper_for(offense, off_state))
+            if _kick_roughing(dr, flag, fg):
+                dr.clock -= play_seconds('field_goal')
+                continue
+            if _kick_offside(dr, flag, fg):
+                dr.clock -= play_seconds('field_goal')
+                continue
             if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
             dr.clock -= min(dr.clock, play_seconds('field_goal'))
             dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
@@ -1599,22 +1746,46 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                        dr.clock, rng, aggr4,
                                        kicker=(offense.get('k') or {}), rate_fn=rate_fn)
             if dec == 'field_goal':
+                flag = E.special_teams_penalty_check(rng, 'field_goal')
+                if _kick_presnap_flag(dr, flag): continue
                 fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
                                         snapper=snapper_for(offense, off_state))
+                if _kick_roughing(dr, flag, fg):
+                    dr.clock -= play_seconds('field_goal')
+                    continue
+                if _kick_offside(dr, flag, fg):
+                    dr.clock -= play_seconds('field_goal')
+                    continue
                 if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
                 dr.clock -= play_seconds('field_goal')
                 dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
                 dr.points = fg['points']; dr.log.append(fg); break
             if dec == 'punt':
+                flag = E.special_teams_penalty_check(rng, 'punt')
+                if _kick_presnap_flag(dr, flag): continue
                 p = punt(dr.yardline, (offense.get('p') or {}),
                          (defense.get('pr') or defense.get('kr') or {}), rng, rate_fn,
                          snapper=snapper_for(offense, off_state))
+                if _kick_roughing(dr, flag, p):
+                    dr.clock -= play_seconds('punt')
+                    continue
+                if _kick_offside(dr, flag, p):
+                    dr.clock -= play_seconds('punt')
+                    continue
+                if p.get('how') == 'return':
+                    return_flag = E.special_teams_penalty_check(rng, 'punt', returned=True, phase='return')
+                    if return_flag:
+                        walk = min(return_flag['yards'], (100.0 - p['new_yardline']) / 2.0)
+                        return_flag['yards'] = walk
+                        p['new_yardline'] += walk
                 if book is not None:
                     book.special('punt', (offense.get('p') or {}).get('pid'), **p)
                     if p.get('how') == 'return' or (p.get('ret') and not p.get('touchback')):
                         book.special('pr', (defense.get('pr') or defense.get('kr') or {}).get('pid'), ret=p.get('ret', 0.0))
                 dr.clock -= play_seconds('punt')
                 dr.result = 'Punt'; dr.log.append(p)
+                if p.get('how') == 'return' and return_flag:
+                    dr.log.append(dict(type='penalty', **return_flag))
                 dr.next_yardline = p['new_yardline']; break
 
         # ---- a real play ----
@@ -1792,14 +1963,14 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             _tick(dr, play_seconds('penalty'))
             if pen['on_offense']:
                 # half the distance to the offense's own goal when the full yardage would reach it
-                walk = max(1.0, float(np.floor(min(float(pen['yards']), (100.0 - dr.yardline) / 2.0))))
-                pen['yards'] = float(int(walk))
-                dr.yardline = min(99, dr.yardline + walk)
+                walk = min(float(pen['yards']), (100.0 - dr.yardline) / 2.0)
+                pen['yards'] = walk
+                dr.yardline += walk
                 dr.togo += walk
             else:
                 # half the distance to the defense's goal
-                gained = max(1.0, float(np.floor(min(float(pen['yards']), dr.yardline / 2.0))))
-                pen['yards'] = float(int(gained))
+                gained = min(float(pen['yards']), dr.yardline / 2.0)
+                pen['yards'] = gained
                 dr.untimed = True; dr.untimed_at = len(dr.log) + 1     # a half cannot end on this; the penalty entry appended below is the last thing in the log
                 if pen['auto_first']:
                     dr.yardline -= gained; dr.down, dr.togo = 1, min(10, dr.yardline)
@@ -1821,6 +1992,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # the back who carries it is the back on the field: the rotation in
         # field_units decides who that is
         out = resolve_fn(off_f, def_f, oc, dc, ytg_i, rng)
+        if live_pen is None and out.get('throwaway') and rng.random() < 0.12:
+            live_pen = dict(penalty='Intentional Grounding', yards=10.0, rule_yards=10.0,
+                            on_offense=True, auto_first=False, nullifies=False)
         # the situation rides with the play, for the ticker and the probes
         if isinstance(out, dict):
             out['down'] = dr.down; out['ydstogo'] = dr.togo; out['yardline'] = dr.yardline; out['clock'] = dr.clock
@@ -1898,8 +2072,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if taken == 'replaced':
                 # accepted in place of the play: the down is replayed and the snap does not count, but the
                 # play-by-play keeps the play it wiped (marked), so a reader sees the pass the flag came on
-                dr.plays -= 1
-                out['nullified'] = True
+                if live_pen['penalty'] == 'Intentional Grounding':
+                    if book is not None: book.record(out, off_f, def_f, rng)
+                else:
+                    dr.plays -= 1
+                    out['nullified'] = True
                 dr.log.append(dict(type='penalty', **live_pen))
                 # THE CLOCK ON A WIPED PLAY IS THE CLOCK ON ANY PLAY. It had charged a full normal-pace play plus the
                 # flag and skipped the timeout check, so a holding call at 0:48 in a two-minute drill ran 47 seconds
@@ -1932,18 +2109,21 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
         # THE BOOK IS WRITTEN HERE, after the flags and the scramble are settled: a play wiped by a penalty or
         # turned into a scramble was being credited as it first resolved
-        if t in ('run', 'complete', 'scramble') and not out.get('nullified') and float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01:
-            out['touchdown'] = True                          # the drive awards whole yards; a 45.6 from the 46 is a touchdown and the book must see it
+        _prepare_scoring_play(dr, out)
         if book is not None: book.record(out, off_f, def_f, rng)
         pending = (out, off_f, def_f, _snap_state)
 
         if t == 'interception':
+            # The ball changes hands at the catch, then travels on the return.
+            dr.yardline = _interception_spot(dr.yardline, out)
+            if live_pen is not None and taken == 'added' and E.PEN_INFO[live_pen['penalty']]['phase'] == 'post':
+                _enforce_turnover_penalty(dr, live_pen)
             dr.clock -= play_seconds('interception'); dr.result = 'Turnover'; break
 
         # fumbles attach to the event that produced them
         ev = {'complete': 'complete_pass', 'run': 'run', 'sack': 'sack',
               'scramble': 'scramble'}.get(t)
-        if ev:
+        if ev and not out.get('touchdown'):
             carrier = offense['qb'] if ev in ('sack', 'scramble') else \
                       ((offense.get('rb') or offense['qb']) if ev == 'run' else offense['wr'][0])
             fum = E.fumble_check(carrier, ev, rng, rate_fn, env_mult=ENV.fumble_mult, rate_mult=(getattr(off_state, 'staff_fx', None) or {}).get('fum_off', 1.0))
@@ -1952,7 +2132,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 if book is not None: book.record_fumble(out)          # the book was written before the ball came out
             if fum and fum['lost']:
                 # the ball comes out where the play ended, not where it started: the gain (or loss) is applied first
-                dr.yardline = float(np.clip(dr.yardline - float(out.get('yards', 0.0) or 0.0), 1.0, 99.0))
+                dr.yardline = float(np.clip(dr.yardline - float(np.round(out.get('yards', 0.0) or 0.0)), 1.0, 99.0))
+                if live_pen is not None and taken == 'added' and E.PEN_INFO[live_pen['penalty']]['phase'] == 'post':
+                    _enforce_turnover_penalty(dr, live_pen)
                 dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
 
         # ---- timeouts ----
@@ -2001,15 +2183,20 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
 
     # ---- the try, once the touchdown is on the board ----
     if dr.result == 'Touchdown':
+        try_penalty = float(getattr(dr, 'try_penalty', 0.0))
+        def try_spot(base):
+            return base + abs(try_penalty) if try_penalty < 0 else base - min(try_penalty, base / 2.0)
         if two_point_decision(dr.score_diff + 6, dr.quarter, dr.clock):
             t = attempt_two_point(offense, defense, rng, resolve_fn, call_off,
-                                  call_def, rate_fn, off_state, def_state)
+                                  call_def, rate_fn, off_state, def_state, start_yardline=try_spot(2))
         else:
             t = attempt_extra_point(offense.get('k') or {}, rng, rate_fn,
-                                    snapper=snapper_for(offense, off_state))
+                                    snapper=snapper_for(offense, off_state), distance=try_spot(15) + 18)
             if book is not None: book.special('xp', (offense.get('k') or {}).get('pid'), **t)
         dr.points += t['points']
         dr.try_result = t
+        if t.get('penalty'):
+            dr.log.append(dict(type='penalty', **t['penalty']))
         dr.log.append(t)
     if pending is not None:
         _o, _off, _def, _st = pending
@@ -2365,8 +2552,9 @@ class StatBook:
             self._get(out['beaten'])['sacks_allowed'] += 1
         if t in ('complete', 'incomplete', 'drop', 'interception'):
             s = self._get(qb); s['pass_att'] += 1
-            wr = out.get('target', off['wr'][0].get('pid', 'WR1'))
-            w = self._get(wr); w['tgt'] += 1
+            wr = out.get('target')
+            w = self._get(wr) if wr else None
+            if w is not None: w['tgt'] += 1
             if t == 'complete':
                 s['pass_cmp'] += 1; s['pass_yds'] += out['yards']
                 w['rec'] += 1; w['rec_yds'] += out['yards']

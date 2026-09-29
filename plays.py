@@ -935,23 +935,31 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
             cb = zone_second
 
     if picked:
+        air = float(np.clip(rng.normal({'short': 5, 'medium': 13, 'deep': 27}.get(depth, 6),
+                                       {'short': 3, 'medium': 5, 'deep': 9}.get(depth, 3)),
+                            -3 if screen else 1, 48))
+        ret = float(np.clip(rng.gamma(2.0, 5.0), 0, 65))
         return dict(type='interception', yards=0.0, touchdown=False,
+                    air=round(air, 1), ret=round(ret, 1),
                     depth=depth, in_man=bool(in_man), screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
     if not complete:
+        throwaway = bool(p['pressure'] >= 0.35 and not screen and rng.random() < 0.18)
         # A PASS DEFENDED is a defender breaking the ball up, not simply an
         # incompletion - a throw into the dirt is nobody's credit. Real rate:
         # 37.5% of incompletions, 11.4% of attempts, with a league leader
         # around 24 in a season. It is the main counting stat a corner has and
         # this engine resolved the event without recording it, so a defensive
         # back had almost no box score at all.
-        broken = (not contested) and rng.random() < PD_LOOSE
-        if contested:
-            broken = rng.random() < PD_CONTESTED
+        broken = False
+        if not throwaway:
+            broken = rng.random() < (PD_CONTESTED if contested else PD_LOOSE)
         return dict(type='incomplete', yards=0.0, touchdown=False,
+                    throwaway=throwaway,
+                    throwback=round(float(max(0.0, rng.normal(6.0, 3.0))), 1) if throwaway else 0.0,
                     depth=depth, in_man=bool(in_man), screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
-                    concept=concept, protection=prot_name, target=tgt.get('pid'),
+                    concept=concept, protection=prot_name, target=None if throwaway else tgt.get('pid'),
                     read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
                     pass_def=(cb.get('pid') if broken and cb else None),
                     pressured=bool(p['pressure'] >= 0.35))
