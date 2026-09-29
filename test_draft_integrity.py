@@ -74,6 +74,66 @@ class DraftIntegrityTests(unittest.TestCase):
         self.assertEqual(len(offer['a_sends']), 3)
         self.assertTrue(result['accepted'])
 
+    def test_next_pick_auto_drafts_only_one_user_selection(self):
+        s = session.Session.load(self.initial)
+        L = s.L
+        L.year = 2027
+        L.phase = 'offseason'
+        L.season_closed_year = 2026
+        s.stop = ('offseason', 11)
+        L.draft_pool, L.next_class = L.next_class, []
+        for i, pk in enumerate([pk for pk in L.teams['KC'].picks if pk.year == 2026][:2], 1):
+            pk.selection = i
+        cpu_pick = next(pk for pk in L.teams['DEN'].picks if pk.year == 2026)
+        cpu_pick.selection = 3
+        s.draft = draft_day.Draft(L, s.rng, 2026, user_team='KC')
+        blocked, preferred = L.draft_pool[:2]
+        L.user_board = dict(order=[blocked.pid, preferred.pid], dnd=[blocked.pid])
+        result = s.draft_act('sim_pick_one')
+        self.assertTrue(result['ok'])
+        self.assertFalse(result['done'])
+        self.assertEqual(len(s.draft.results), 1)
+        self.assertEqual(s.draft.results[0][2].pid, preferred.pid)
+        self.assertTrue(s.draft.on_user())
+        self.assertFalse(s.draft.auto)
+        s = session.Session.load(s.save())
+        self.assertTrue(s.draft.on_user())
+        self.assertFalse(s.draft.auto)
+        self.assertFalse(s.draft_act('sim_round')['ok'])
+        s.draft_act('sim_to_me')
+        self.assertEqual(len(s.draft.results), 1)
+        # With no explicit order left, fall back to scouting, respecting DND.
+        s.L.user_board = dict(order=[], dnd=[blocked.pid])
+        expected = s.draft.user_pick().pid
+        self.assertTrue(s.draft_act('sim_pick_one')['ok'])
+        self.assertEqual(len(s.draft.results), 2)
+        self.assertEqual(s.draft.results[-1][2].pid, expected)
+        self.assertEqual(s.draft.current().owner, 'DEN')
+        with patch.object(s.draft, '_maybe_trade', return_value=None):
+            result = s.draft_act('sim_pick_one')
+        self.assertTrue(result['done'])
+        self.assertEqual(len(s.L.last_draft['results']), 3)
+
+    def test_next_pick_respects_all_do_not_draft_and_final_user_pick(self):
+        s = session.Session.load(self.initial)
+        L = s.L
+        L.year = 2027
+        L.phase = 'offseason'
+        L.season_closed_year = 2026
+        s.stop = ('offseason', 11)
+        L.draft_pool, L.next_class = L.next_class, []
+        pk = next(pk for pk in L.teams['KC'].picks if pk.year == 2026)
+        pk.selection = 1
+        s.draft = draft_day.Draft(L, s.rng, 2026, user_team='KC')
+        L.user_board = dict(order=[], dnd=[p.pid for p in s.draft.available()])
+        self.assertFalse(s.draft_act('sim_pick_one')['ok'])
+        self.assertEqual(len(s.draft.results), 0)
+        self.assertFalse(s.draft.auto)
+        L.user_board = {}
+        result = s.draft_act('sim_pick_one')
+        self.assertTrue(result['done'])
+        self.assertEqual(len(L.last_draft['results']), 1)
+
     def test_live_consensus_and_custom_board_sources(self):
         s = session.Session.load(self.initial)
         L = s.L

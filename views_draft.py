@@ -483,10 +483,11 @@ def act_pick(session, league, abbr, pid):
 
 
 def act_sim_pick_one(session, league, abbr):
-    """Next Pick: one club picks."""
+    """Next Pick: one selection, using the user's board when they own the pick."""
     D = session.draft
     if D is None: return dict(ok=False, why='no draft on')
-    if D.on_user(): return dict(ok=False, why='you are on the clock')
+    if D.done: return dict(ok=False, why='The draft is already over.', done=True)
+    if D.on_user(): return act_auto_pick(session, league, abbr)
     ev = D.sim_pick()
     if D.done: session._draft_over(); return dict(ok=True, line='The draft is over.', done=True)
     return dict(ok=True, line=(f"{ev[1]} take {ev[2].name}." if isinstance(ev, tuple) and len(ev) >= 3 and hasattr(ev[2], 'name') else 'Pick made.') + (' You are on the clock.' if D.on_user() else ''))
@@ -502,7 +503,7 @@ def act_sim_to_me(session, league, abbr):
 
 
 def act_auto_pick(session, league, abbr):
-    """Take the top of your own board at this pick, then sim to your next."""
+    """Take the top eligible player on your board at this pick only."""
     D = session.draft
     if D is None or not D.on_user(): return dict(ok=False, why='not your pick')
     p = D.user_pick()
