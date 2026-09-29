@@ -313,9 +313,11 @@ def fire_and_hire(league, team, rng, verbose=False):
     picks, the club's scheme becomes the new man's."""
     old = team.gm
     if old is not None:
+        league.log('fire', team=team.abbr, coach=old.name, role='hc',
+                   tenure=int(getattr(team, 'tenure', 0) or 0), record=list(team.record))
         old.tenure = 0
         if getattr(old, 'age', 50) >= RETIRE_AGE - 3 and rng.random() < 0.5:
-            league.log('coach_retire', name=old.name)
+            league.log('coach_retire', team=team.abbr, coach=old.name, name=old.name)
         else:
             old.background = 'former head coach'
             old.prestige = float(np.clip(old.prestige + PRESTIGE['fired'], 0, 100))
