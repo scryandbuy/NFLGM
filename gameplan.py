@@ -63,6 +63,7 @@ class Gameplan:
     tempo: float = 0.5                # 0 = grind clock, 1 = no huddle
     target_priority: dict = field(default_factory=dict)   # pid -> weight
     play_action_rate: float = 0.5           # the caller's lean, 0.5 neutral
+    screen_boost: float = 0.0          # weekly screen recommendation; survives copies and saves
     motion_rate: float = 0.581           # the league-average lean (schemes.MOTION_NEUTRAL); a club with no identity plays at the average
     shell_lean: float = 0.5
     zone_aggression: float = 0.5      # underneath zones sit on the quick game (1) or sink (0)
@@ -91,6 +92,16 @@ class Gameplan:
                         for k, v in asdict(self).items() if k != 'changes'})
         g.changes = list(self.changes)
         return g
+
+
+def box_shift(box_bias, rng):
+    """Stochastic rounding: small leans change box frequency, not personnel."""
+    value = float(box_bias) * 4.0
+    if not np.isfinite(value): return 0
+    whole = int(abs(value))
+    fraction = abs(value) - whole
+    extra = int(rng.random() < fraction) if fraction else 0
+    return (whole + extra) * (1 if value >= 0 else -1)
 
 
 def base_plan(coach=None, opponent=None, rng=None):

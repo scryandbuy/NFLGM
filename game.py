@@ -1692,10 +1692,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 if def_state is not None:
                     def_state.last_adjustment = None      # the reset
         if def_state is not None and def_state.plan is not None:
+            import gameplan as GP
             dp = def_state.plan
             # the in-game adjustments that are not part of the call itself
             dc['box'] = int(np.clip(dc.get('box', 6) +
-                                    round(dp.box_bias * 4), 4, 10))
+                                    GP.box_shift(dp.box_bias, rng), 4, 10))
             dc['bracket'] = dp.bracket
             dc['travel'] = dp.travel
             dc['travel_target'] = dp.travel_target

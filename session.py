@@ -1269,9 +1269,15 @@ class Session:
 
     def frontoffice_act(self, action, **kw):
         import views_frontoffice as VF
+        identity_action = action in ('apply_identity', 'set_identity', 'apply_archetype')
+        live = getattr(self.runner, 'live', None) if self.runner else None
+        if identity_action and live and not live.get('done', False):
+            return dict(ok=False, why='Change team identity after the current game finishes.')
         fn = getattr(VF, 'act_' + action, None)
         if fn is None: return dict(ok=False, why='unknown action')
         r = fn(self.L, self.user_team, **kw)
+        if identity_action and isinstance(r, dict) and r.get('ok') and self.runner:
+            self.runner.refresh(self.user_team)
         return r if isinstance(r, dict) else dict(ok=bool(r))
 
     # ---- draft

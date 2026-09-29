@@ -469,6 +469,12 @@ def credit(player, amount, source):
     import personality as PT, staff as ST
     amount = float(amount or 0.0) * PT.xp_mult(player)
     team = getattr(player, '_team_ref', None)
+    # A released player gets no former-team bonus. Resolve stale references
+    # through authoritative ownership when the player has changed clubs.
+    if team is not None:
+        league = getattr(team, 'league', None)
+        if league is not None: team = league.teams.get(player.team)
+        elif getattr(team, 'abbr', None) != player.team: team = None
     if team is not None:
         amount *= ST.xp_mult(team, player)
     if amount:
