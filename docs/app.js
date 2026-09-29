@@ -263,7 +263,7 @@ function renderPortal(v) {
     const left = el('div', { class: 'm-side' }, bug, facts, formRow);
     const right = el('div', { class: 'm-right' },
       el('div', { class: 'mh' }, 'Opponent Watch', el('a', { class: 'more', href: '#gameplan/report' }, 'Scouting Report →')),
-      
+
       el('div', { class: 'men-row', style: 'border-top:1px solid var(--rule)' }, ...m.watch.map(w => el('div', {}, el('div', { class: 'lbl' }, 'Players to Watch'), el('button', { class: 'man', onclick: () => { location.hash = '#club/player/' + w.pid; } }, el('div', { class: 'no', style: `background:${m.them.club.color};color:#fff` }, jerseyNo(w.no) ?? w.pos), el('div', { class: 'nm' }, w.name.split(' ')[0][0] + '. ' + w.name.split(' ').slice(1).join(' '), el('small', {}, `${w.pos}${w.note ? ' · ' + w.note : ''}`)), el('div', { class: 'ov' }, w.ovr))))));
     match.append(el('div', { class: 'match', style: 'grid-template-columns:1fr 1.1fr' }, left, right));
     match.append(el('div', { class: 'foot' }, el('a', { class: 'btn go', href: '#gameplan' }, 'Set Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn', href: '#club/depth' }, 'Depth Chart'), el('button', { class: 'btn quiet', onclick: e => { const b = document.getElementById('series'); if (b) b.hidden = !b.hidden; } }, 'Series History')));
@@ -626,8 +626,8 @@ function renderRoster(v) {
   $('#crumb').textContent = 'Team'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
   secondRow(clubNav(abbr, mine, null), mine ? (clubTab === 'ps' ? '#club/ps' : clubTab === 'ir' ? '#club/ir' : '#club') : (clubTab === 'ps' ? `#club/team/${abbr}/ps` : clubTab === 'ir' ? `#club/team/${abbr}/ir` : `#club/team/${abbr}/roster`));
   const sheet = el('section', { class: 'sheet c12 roster-board' });
-  sheet.style.setProperty('--roster-team', v.rail.club.color || '#203731');
-  sheet.style.setProperty('--roster-accent', v.rail.club.accent || '#d0d8dd');
+  sheet.style.setProperty('--roster-team', teamTheme(v.rail.club).base);
+  sheet.style.setProperty('--roster-accent', teamTheme(v.rail.club).accent);
   const metric = (value, label) => el('div', {}, el('b', {}, value), el('small', {}, label));
   sheet.append(el('header', {class:'roster-hero'},
     el('div', {}, el('div', {class:'roster-team-name'}, v.rail.club.name || abbr), el('h1', {}, 'ROSTER'),
@@ -895,7 +895,7 @@ function openHalftime(g, live, gkey, onClose) {
 
 // Team reports share the same font, restrained surface, and viewed-team palette.
 function reportBoard(team, title, metrics = []) {
-  const board = el('section', { class: 'sheet c12 report-board', style: `--report-team:${team.color || '#203731'};--report-accent:${team.accent || '#ffb612'}` });
+  const board = el('section', { class: 'sheet c12 report-board', style: `--report-team:${teamTheme(team).base};--report-accent:${teamTheme(team).accent}` });
   board.append(el('header', { class: 'report-hero' }, el('div', {}, el('small', {}, team.name), el('h1', {}, title)),
     el('div', { class: 'report-metrics' }, ...metrics.map(([value,label]) => el('div', {}, el('b', {}, value), el('span', {}, label))))));
   return board;
@@ -980,10 +980,10 @@ function renderDepth(v) {
   const reload = () => renderDepth(loadDepth(v.package));
   const s = el('section', { class: 'sheet c12 depth-board' });
   const team = v.rail.club;
-  const color = team.color || '#657580';
-  s.style.setProperty('--depth-team', color);
-  s.style.setProperty('--depth-accent', team.accent || color);
-  s.append(el('header', {class:'depth-hero'}, el('div', {class:'depth-team-name'}, team.name || abbr), el('h1', {}, 'DEPTH CHART.'), el('span', {}, 'Personnel · ' + abbr)));
+  const depthTheme = teamTheme(team);
+  s.style.setProperty('--depth-team', depthTheme.base);
+  s.style.setProperty('--depth-accent', depthTheme.accent);
+  s.append(el('header', {class:'depth-hero'}, el('div', {class:'depth-team-name'}, team.name || abbr), el('h1', {}, 'DEPTH CHART'), el('span', {}, 'Personnel · ' + abbr)));
 
   // the side tabs, then the package
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
@@ -1170,7 +1170,7 @@ function renderTrades(v) {
   tradeState.a=tradeSelection(tradeState.a,v.me);tradeState.b=tradeSelection(tradeState.b,v.them);
   const reload=()=>{const y=window.scrollY;renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));window.scrollTo(0,y);};
   const s=el('section',{class:'sheet c12 trade-board'});applyTeamTheme(s,v.me.club);
-  s.append(el('div',{class:'trade-hero'},el('small',{},v.me.club.name.toUpperCase()),el('h1',{},'TRADES.'),el('span',{},v.can_trade?`Deadline after Week ${v.deadline_week}`:'Closed until the season ends')));
+  s.append(el('div',{class:'trade-hero'},el('small',{},v.me.club.name.toUpperCase()),el('h1',{},'TRADES'),el('span',{},v.can_trade?`Deadline after Week ${v.deadline_week}`:'Closed until the season ends')));
   if(!v.can_trade)s.append(el('div',{class:'banner'},'The trade deadline has passed. Trades reopen after the season.'));
   if(v.draft_live)s.append(el('div',{class:'banner'},`Draft day · pick ${v.draft_live.slot} · ${v.draft_live.team} on the clock. `,el('a',{class:'btn',href:'#draft/day'},'Back to the Draft')));
   s.append(el('div',{class:'trade-columns'},renderTradeSide(v,'a',reload),renderTradeSide(v,'b',reload)));
@@ -1334,7 +1334,7 @@ function finishPersonnel(page, v, kind, left, right, extra = []) {
   const heading = left.querySelector('h2');
   const subtitle = heading?.querySelector('small')?.textContent || '';
   heading?.remove();
-  const title = {fa:'FREE AGENCY.',wire:'WAIVER WIRE.',extensions:'EXTENSIONS.'}[kind];
+  const title = {fa:'FREE AGENCY',wire:'WAIVER WIRE',extensions:'EXTENSIONS'}[kind];
   const metrics = kind === 'fa' ? [[v.count,'Available'],[`$${v.cap}m`,'Cap space'],[`$${v.committed_next}m / $${v.limit_next}m`,'Next year committed']] : kind === 'wire' ? [[v.my_priority ? `${v.my_priority}${ord(v.my_priority)}` : '—','Your priority'],[v.rows.length,'Available'],[v.awards,'Awards']] : v.cap_focus ? [[`$${v.cap_focus.limit}m`,`${v.cap_focus.year} cap`],[`$${v.cap_focus.committed}m`,'Committed'],[`$${v.cap_focus.space}m`,'Cap space']] : [[`$${v.committed_next}m`,'Next year committed'],[`$${v.limit_next}m`,'Next year cap']];
   const hero=el('div',{class:'personnel-hero'},el('div',{},el('small',{},club.name.toUpperCase()),el('h1',{},title),el('p',{},subtitle)));
   const stats=el('div',{class:'personnel-metrics'});
