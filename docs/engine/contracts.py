@@ -169,6 +169,18 @@ def _declining(player):
     return RG.curve_factor(player.pos, player.age + 1) < 0.97
 
 
+def _release_cap_casualty(league, team, player, rng, june1=None):
+    """Called only after cleanup has selected its next release, never to rank it.
+
+    Return True for an actual cut; a successful trade is logged by League.trade.
+    """
+    from trades import shop_cap_casualty
+    if shop_cap_casualty(league, team, player, rng, june1=june1):
+        return False
+    league.release(player.pid, june1=june1)
+    return True
+
+
 def _fix_one(league, team, rng, target):
     """
     Get one club under. Each round the GM weighs the two real moves:
@@ -239,21 +251,21 @@ def _fix_one(league, team, rng, target):
                        enforcement=True)
             continue
         if rel is not None and rel[0] > -1e8:
-            league.release(rel[1].pid)
+            _release_cap_casualty(league, team, rel[1], rng)
             continue
         # --- June 1 on what is left
         j = [p for p in team.active() if p.contract and sensible_release(p, june1=True)[0]]
         if j:
             j.sort(key=lambda p: -savings_if_cut(p, june1=True)[0])
-            league.release(j[0].pid, june1=True)
+            _release_cap_casualty(league, team, j[0], rng, june1=True)
             continue
         return
 
 
 def run(league, rng, verbose=False):
     """
-    Get AI clubs under the cap. Cuts first, then restructures, then June 1
-    designations if a team is still stuck.
+    Get AI clubs under the cap. Restructure keepers, select replaceable cuts,
+    then try June 1 releases if still stuck. Shop each decided cut last.
     """
     cap = CAP.get(league.year, 301.2)
     cuts, restructures = [], []
@@ -318,8 +330,8 @@ def run(league, rng, verbose=False):
                 break
             if score <= 0:
                 break                    # everyone left is worth his money
-            league.release(p.pid)
-            cuts.append((abbr, p, saved))
+            if _release_cap_casualty(league, team, p, rng):
+                cuts.append((abbr, p, saved))
             team.sync_cap()
             need = TARGET_ROOM - team.cap_space
 
@@ -336,10 +348,10 @@ def run(league, rng, verbose=False):
                 rep = replacement_level(team, p.pos)
                 if rep <= 0 or p.ovr - rep > 6:
                     continue
-                league.release(p.pid, june1=True)
-                cuts.append((abbr, p, saved))
-                league.log('june1_cut', pid=p.pid, team=abbr,
-                           saved=round(saved, 2), dead_next=round(dead_next, 2))
+                if _release_cap_casualty(league, team, p, rng, june1=True):
+                    cuts.append((abbr, p, saved))
+                    league.log('june1_cut', pid=p.pid, team=abbr,
+                               saved=round(saved, 2), dead_next=round(dead_next, 2))
                 team.sync_cap()
                 need = TARGET_ROOM - team.cap_space
 
