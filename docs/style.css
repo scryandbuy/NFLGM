@@ -2599,3 +2599,9 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .bk-final .bk-slot{display:grid;grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);gap:10px}
 .bk-final .bk-site{align-self:end;margin:0}.bk-final .bk-game.sb{grid-row:2}
 .bk-final .bk-champ{align-self:start;margin:0}
+/* Cap restructure preview: compact metrics fit the sidebar without nested tile padding. */
+.fo-board #pv .delta{grid-template-columns:repeat(2,minmax(0,1fr))}
+.fo-board #pv .delta>div{min-width:0;padding:12px 8px;border-radius:5px}
+.fo-board #pv .delta .l,.fo-board #pv .delta .v{padding:0;border:0;background:transparent;overflow-wrap:anywhere}
+.fo-board #pv .delta .l{line-height:1.4}
+.fo-board #pv .delta .v{font-size:22px;line-height:1.2;margin-top:8px}
