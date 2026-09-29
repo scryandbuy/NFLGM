@@ -14,7 +14,7 @@ class PlayerCardMarketTest(unittest.TestCase):
         cls.league = league.build_league(rng=np.random.default_rng(2026))
 
     def test_elite_quarterback_card_matches_trade_price(self):
-        player = next(p for p in self.league.players.values() if p.name == 'Lamar Jackson')
+        player = self.league.player('P0210')
         quote = valuation.value_player(self.league, player, side='team')
         label, read = views_club._market_words(self.league, player, quote)
         row = dict(age=player.age, apy=player.apy, ovr=player.ovr,
