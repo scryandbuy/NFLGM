@@ -6,10 +6,10 @@ your position counts, the real rookie curve at each position for the pro
 overall, the seed's headroom rule for the ceiling, dev drawn 65/22/10/3
 tilted to the top of the class.
 
-WHAT VARIES. Class strength. Each year every position's curve moves up or
-down a little (sd 1.5 overall points), and the whole class moves a little
-on top (sd 0.8), so there are strong quarterback years and thin tackle
-years and drafts that are just weak.
+WHAT VARIES. Class strength. Position and class rolls are drawn at standard
+deviations 1.5 and 0.8, then their combined effect is capped and tapered by
+position rank. There can still be strong quarterback years and thin tackle
+years without moving an entire receiver or corner room above starter grade.
 
 WHERE A MAN'S SHAPE COMES FROM. A real attribute profile. The college file
 holds 10,931 real profiles by position; a newgen takes one at his position
@@ -32,6 +32,7 @@ import csv, hashlib, json, math, unicodedata
 from functools import lru_cache
 import targets as TG
 import draft_class as DC
+import draft_balance as DB
 
 STRENGTH_SD_POS, STRENGTH_SD_CLASS = 1.5, 0.8
 
@@ -166,8 +167,9 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
         rk = rookies.get(src, []) if src else []
         if pos in DC.FALLBACK_MEAN: rk = [DC.FALLBACK_MEAN[pos]] * 2
         pos_shift = float(rng.normal(0.0, STRENGTH_SD_POS))
-        strength[pos] = round(class_shift + pos_shift, 1)
-        curve = [c + class_shift + pos_shift for c in DC.target_curve(rk, n)]
+        base_curve = DC.target_curve(rk, n)
+        curve = DB.variation_targets(pos, base_curve, class_shift, pos_shift)
+        strength[pos] = round(curve[0] - base_curve[0], 1)
         # a random real profile at the spot for each slot; the top of the class
         # leans on the better college profiles so shapes stay plausible
         ranked = templates.sort_values('overall_rating', ascending=False)

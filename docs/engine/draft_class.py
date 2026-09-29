@@ -61,18 +61,43 @@ PHYSICAL = {'speed_rating', 'accel_rating', 'agility_rating', 'strength_rating',
 TOOLS = {'throw_power_rating', 'kick_power_rating'}
 NOT_RATINGS = {'overall_rating', 'running_style_rating'}
 
-# THE SHAPE OF A CLASS. The rookie distribution both classes were built on
-# is the men who MADE rosters, so its bottom was truncated: the 150th man in
-# a class rated 77 with seven points of headroom against starter bars of
-# 77-81, and picks 151 and later became starters at 19-24% against a real
-# ~10. The real class falls away faster: the 150th man is a fringe roster
-# player, the 250th a camp body. Ranks 1-100 are left alone; from there the
-# curve is pulled down to this target by rank, on the skill attributes.
-SHAPE = [(1, 91.0), (32, 82.0), (64, 79.0), (100, 76.0), (150, 71.0), (250, 65.0), (400, 59.0), (504, 50.0)]
+# Corrected roster rookies anchor each position. draft_balance supplies a
+# position-relative tail so a position's best prospect is not weakened merely
+# because its raw overall scale is lower than another position's.
+
+
+def reshape_ratings(ratings, pos, target):
+    """Reach the requested overall through skills, preserving physicals/tools.
+
+    The target may be below the floor implied by preserved attributes. In that
+    case use the nearest attainable overall; never weaken innate tools to hide
+    the shortfall. Unrelated/missing attributes cannot stand in for scored ones.
+    """
+    protected = PHYSICAL | TOOLS | NOT_RATINGS
+    mutable = {k for k in ratings if k not in protected}
+    original = dict(ratings)
+
+    def shifted(delta):
+        return {k: max(20.0, min(99.0, v + delta)) if k in mutable else v
+                for k, v in original.items()}
+
+    low, high = -100.0, 100.0
+    if target <= TG.position_score(shifted(low), pos):
+        return shifted(low)
+    if target >= TG.position_score(shifted(high), pos):
+        return shifted(high)
+    for _ in range(40):
+        mid = (low + high) / 2
+        if TG.position_score(shifted(mid), pos) > target:
+            high = mid
+        else:
+            low = mid
+    return shifted((low + high) / 2)
 
 
 def shape_class(cls, rng=None):
     import numpy as np
+    from draft_balance import tail_target
     # DEVELOPMENT BY CLASS RANK. The trait is drawn against where a player sits in the whole class, not among his
     # position: the 200th player draws 200th-of-479 odds whichever position he plays, so a weak position year
     # yields no star traits there and a strong one several, and the late rounds land near all-normal
@@ -82,20 +107,19 @@ def shape_class(cls, rng=None):
         p.dev = draw_dev(i / max(n - 1, 1), r_, pos=p.pos)
     for p in cls:
         if p.pos in ('K', 'P', 'LS'): p.dev = draw_dev(0.5, r_, pos=p.pos)          # specialists: normal or star, off the class ladder
-    men = sorted([p for p in cls if p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.ovr)
-    xs = np.array([r for r, _ in SHAPE], float); ys = np.array([v for _, v in SHAPE], float)
-    for i, p in enumerate(men):
-        rank = i + 1
-        if rank <= 100: continue
-        target = float(np.interp(rank, xs, ys))
-        delta = target - p.ovr
-        if delta >= 0: continue
-        for k in list(p.ratings):
-            if k in PHYSICAL or k in NOT_RATINGS: continue
-            p.ratings[k] = float(np.clip(p.ratings[k] + delta, 20, 99))
-        if p.potential_range:
-            lo, hi = p.potential_range
-            p.potential_range = (round(max(p.ovr, lo + delta), 1), round(max(p.ovr + 1, hi + delta), 1))
+    groups = collections.defaultdict(list)
+    for p in sorted(cls, key=lambda p: -p.ovr):
+        groups[p.pos].append(p)
+    for pos, men in groups.items():
+        for i, p in enumerate(men):
+            before = p.ovr
+            target = tail_target(pos, before, i, len(men))
+            if target >= before: continue
+            p.ratings = reshape_ratings(p.ratings, p.pos, target)
+            delta = p.ovr - before
+            if p.potential_range:
+                lo, hi = p.potential_range
+                p.potential_range = (round(max(p.ovr, lo + delta), 1), round(max(p.ovr + 1, hi + delta), 1))
     # THE GEMS AND THE BUSTS. Every class carries two players the league will miss and two it will overrate:
     # two of the genuinely good (true grade in the class's top eighty, off the skill positions' ladder or on it)
     # whose tape reads eight to fifteen points low, so they fall to day three and start in September; and two
@@ -127,8 +151,9 @@ def load_college(path='cfb27_ratings.csv'):
 
 def rookie_targets(seed_path='league_seed_2026.csv', year=2026):
     """{pos: sorted-desc engine overalls of the real rookie class}."""
-    m = pd.read_csv(seed_path, low_memory=False)
-    m = m[(m.roster == 'active') & (m.draft_year == year)]
+    from rookie_baseline import load_active_seed
+    m = load_active_seed(seed_path, year)
+    m = m[m.draft_year == year]
     rc = [c for c in m.columns if c.endswith('_rating') and c != 'src_rating']
     out = collections.defaultdict(list)
     for _, r in m.iterrows():
@@ -149,9 +174,8 @@ def target_curve(rookies, n, spread_floor=4.0, tail_max=8.0):
     falling at the slope of the bottom third, which is the undrafted tail.
     """
     r = list(rookies)
-    if len(r) < 4:                       # K, P, FB: too few to shape; use mean and a spread
-        mu = float(np.mean(r)) if len(r) >= 2 else 70.0
-        return [mu + 3.0 - 8.0 * i / max(n - 1, 1) for i in range(n)]
+    if not r:                           # No measured baseline at this position.
+        return [73.0 - 8.0 * i / max(n - 1, 1) for i in range(n)]
     k = len(r)
     tail = r[int(k * 2 / 3):]
     slope = (tail[0] - tail[-1]) / max(len(tail) - 1, 1)
