@@ -198,15 +198,19 @@ class Draft:
         want = TE.pick_price_dollars(pk.selection) * premium
         bank = sorted(self._bank(buyer, exclude_pick=None, rng=rng), key=lambda x: TE.team_price(x, ctx_a, ta.cap_space, ga, owns=True))
         best = None
-        # Singles and every pair, without materializing or arbitrarily
-        # truncating the pair list. Both clubs must accept the actual package.
+        # Search singles, pairs and triples lazily. Prices are additive, so
+        # reject packages outside either club's window before evaluation.
         import itertools
-        def total(pkg): return sum(TE.team_price(x, ctx_b, tb.cap_space, gb, owns=False) for x in pkg)
+        buyer_prices = {id(x): TE.team_price(x, ctx_a, ta.cap_space, ga, owns=True) for x in bank}
+        seller_prices = {id(x): TE.team_price(x, ctx_b, tb.cap_space, gb, owns=False) for x in bank}
+        buyer_limit = TE.team_price(target, ctx_a, ta.cap_space, ga, owns=False) - 0.5
+        seller_floor = TE.team_price(target, ctx_b, tb.cap_space, gb, owns=True) + 0.5
         # draft-day deals are mostly THIS year's picks (about three in four
         # real ones); a future pick or a player is the sweetener, so they
         # carry a small handicap in the search, not in the price
         def handicap(pkg): return 1.0 + 0.12 * sum(1 for x in pkg if x['kind'] != 'pick' or x.get('years_out', 0) > 0)
-        for pkg in itertools.chain(((x,) for x in bank), itertools.combinations(bank, 2)):
+        for pkg in itertools.chain(((x,) for x in bank), itertools.combinations(bank, 2),
+                                    itertools.combinations(bank, 3)):
             # NEXT YEAR'S PICK BUYS THE SAME ROUND OR BETTER, this year. A
             # future first goes for a first, a future second for a first or
             # a second. Price alone let a club with nothing left this year
@@ -214,12 +218,15 @@ class Draft:
             if any(x['kind'] == 'pick' and x.get('years_out', 0) > 0 and pk.round > x['obj'].round
                    for x in pkg):
                 continue
-            t = total(pkg)
-            if t < want * slack: continue
+            t = sum(seller_prices[id(x)] for x in pkg)
+            if t < max(want * slack, seller_floor): continue
+            paid = sum(buyer_prices[id(x)] for x in pkg)
+            if paid >= buyer_limit: continue
+            paid *= handicap(pkg)
+            if best is not None and paid >= best[0]: continue
             offer = dict(a_sends=list(pkg), a_gets=[target])
             r = TE.evaluate(offer, ctx_a, ctx_b, ta.cap_space, tb.cap_space, ga, gb)
             if not r.get('accepted'): continue
-            paid = sum(TE.team_price(x, ctx_a, ta.cap_space, ga, owns=True) for x in pkg) * handicap(pkg)
             if best is None or paid < best[0]:
                 best = (paid, offer, r)
         if best is None:

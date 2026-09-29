@@ -56,14 +56,23 @@ class DraftIntegrityTests(unittest.TestCase):
         pk = next(pk for pk in L.teams['KC'].picks if pk.year == 2026)
         pk.selection = 100
         D = draft_day.Draft(L, s.rng, 2026, user_team='KC')
-        buyer_pick = next(x for x in L.teams['DEN'].picks if x.year == 2026)
-        buyer_pick.selection = 2
-        asset = trades.pick_asset(L, buyer_pick)
-        with patch.object(D, '_bank', return_value=[asset]), patch('trade_engine.evaluate', return_value=dict(accepted=False, a_gain=3, b_gain=3)) as evaluate:
+        buyer_picks = [x for x in L.teams['DEN'].picks if x.year == 2026][:3]
+        for i, buyer_pick in enumerate(buyer_picks, 2):
+            buyer_pick.selection = i
+        assets = [trades.pick_asset(L, x) for x in buyer_picks]
+        def price(item, _ctx, _space, _gm, owns=False):
+            if item['obj'] is pk:
+                return 50.0 if owns else 100.0
+            return 10.0 if owns else 20.0
+        with patch.object(D, '_bank', return_value=assets), patch('trade_engine.team_price', side_effect=price), patch('trade_engine.evaluate', return_value=dict(accepted=False, a_gain=3, b_gain=3)) as evaluate:
             offer, result = D._offer_for('DEN', 'KC', pk, 1.0)
         self.assertTrue(evaluate.called)
         self.assertIsNone(offer)
         self.assertIsNone(result)
+        with patch.object(D, '_bank', return_value=assets), patch('trade_engine.team_price', side_effect=price), patch('trade_engine.evaluate', return_value=dict(accepted=True, a_gain=3, b_gain=3)):
+            offer, result = D._offer_for('DEN', 'KC', pk, 1.0)
+        self.assertEqual(len(offer['a_sends']), 3)
+        self.assertTrue(result['accepted'])
 
     def test_auto_board_live_save_and_historical_exports(self):
         s = session.Session.load(self.initial)
