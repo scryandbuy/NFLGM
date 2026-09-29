@@ -164,6 +164,14 @@ def reconcile(league):
                 done = all(mt.get('answer') or league.player(mt.get('pid')) is None for mt in meetings)
             done = done or (year is not None and m.get('year', year) < year)
         elif kind == 'injury_decision':
+            # Legacy listings were posted before the league clock rolled, so
+            # their message week may be one week behind the actual decision.
+            # Their expiry was target + 1; new listings use target for both.
+            stored_week, expiry = m.get('week'), m.get('expires_week')
+            if (isinstance(stored_week, int) and isinstance(expiry, int)
+                    and expiry > stored_week):
+                m['week'] = expiry - 1
+                m['expires_week'] = expiry - 1
             done = ((year is not None and m.get('year', year) != year)
                     or (week is not None and m.get('week', week) < week))
         elif kind == 'offer_sheet':

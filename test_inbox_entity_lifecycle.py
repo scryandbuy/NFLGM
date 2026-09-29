@@ -96,6 +96,30 @@ class DecisionLifecycleTests(unittest.TestCase):
         L.week = 3; IB.reconcile(L)
         self.assertFalse(IB.pending(L, 'injury_decision'))
 
+    def test_legacy_injury_listing_migrates_target_week_before_reconciling(self):
+        L = league(week=2)
+        # Old roll_week posted the week-2 desk while L.week still read 1.
+        m = IB.post(L, 'injury_decision', 'Play or sit?', '',
+                    payload={'pid': 'hurt'}, expires_week=3)
+        m['week'] = 1
+        L.inbox = json.loads(json.dumps(L.inbox))
+        m = L.inbox[0]
+        IB.reconcile(L)
+        self.assertEqual((m['week'], m['expires_week'], m['status']), (2, 2, 'unread'))
+        self.assertTrue(IB.is_decision(m))
+        IB.reconcile(L)  # Migration is idempotent.
+        self.assertEqual(m['status'], 'unread')
+        L.week = 3
+        IB.reconcile(L)
+        self.assertEqual(m['status'], 'done')
+
+    def test_legacy_current_week_injury_listing_still_expires(self):
+        L = league(week=2)
+        m = IB.post(L, 'injury_decision', 'Play or sit?', '', expires_week=2)
+        m['week'] = 1  # Old week-1 listing, target=expiry-1=1.
+        IB.reconcile(L)
+        self.assertEqual((m['week'], m['status']), (1, 'done'))
+
     def test_references_arrive_on_advance_across_year_and_save(self):
         c = ST.Coach('Coach', 'oc', 70, 50, 'Balanced', 45)
         L = league(week=22, staff_pool=[c])
