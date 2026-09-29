@@ -7,6 +7,7 @@ Scores are on the draft board's existing 0..12 need scale.
 from collections import defaultdict
 import gm_engine as GM
 import roster_needs as RN
+from offense_roles import fullback_score
 from cap_engine import CAP
 
 
@@ -70,7 +71,8 @@ def assess(league, abbr, level=None, players=None):
         bar = max(81.0 if pos == 'QB' else 76.0, float(level.get(pos, 0.0)) - 2.5)
         assignments = roles[pos]
         starter = max((12.0 if row['player'] is None else
-                       min(12.0, max(0.0, bar - row['grade']))
+                       min(12.0, max(0.0, bar - (fullback_score(row['player'])
+                                                if row['role'] == 'FB' else row['grade'])))
                        for row in assignments), default=0.0)
         count = report['counts'].get(pos, 0)
         depth = min(12.0, 3.0 * max(0, floors[pos] - count))
@@ -84,9 +86,9 @@ def assess(league, abbr, level=None, players=None):
 
         incumbents = [row['player'] for row in assignments if row['player'] is not None]
         control = [(float(p.ovr), int(getattr(getattr(p, 'contract', None), 'years', 4)),
-                    float(p.age)) for p in incumbents]
+                    float(getattr(p, 'age', 25))) for p in incumbents]
         succession = 12.0 * GM.future_need({'expiring': {pos: control}}, pos, horizon=2)
-        if pos == 'QB' and any(p.age >= 34 for p in incumbents):
+        if pos == 'QB' and any(getattr(p, 'age', 25) >= 34 for p in incumbents):
             succession = max(succession, 8.0)
         exposed = sum(yrs <= 1 or age + 2 >= (34 if pos == 'QB' else 31)
                       for _, yrs, age in control)
@@ -99,7 +101,7 @@ def assess(league, abbr, level=None, players=None):
                 continue
             grade = RN._grade(p, proxy)
             pr = getattr(p, 'potential_range', None)
-            if p.age <= 26 and pr:
+            if getattr(p, 'age', 25) <= 26 and pr:
                 grade += min(6.0, max(0.0, sum(pr) / 2 - p.ovr)) * (.5 + .5 * belief)
             successors.append(max(0.0, min(1.0, (grade - (bar - 8)) / 8)))
         cover = sum(sorted(successors, reverse=True)[:max(1, exposed)]) / max(1, exposed)

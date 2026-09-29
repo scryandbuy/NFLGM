@@ -106,21 +106,12 @@ def common_scale(ovr, pos, scale):
 
 
 def needs(team, level):
-    """Draft needs from the same coach-aware roster assessment as other moves."""
-    if getattr(team, 'league', None) is not None:
-        import draft_plan as DP
-        return {pos: row['need'] for pos, row in
-                DP.assess(team.league, team.abbr, level)['positions'].items()}
-    import roster_needs as RN
-    out = {pos: 12.0 * need for pos, need in RN.assess(team)['needs'].items()}
-    starters = collections.Counter(sources[0] for _, sources in RN.role_slots(team))
-    for pos, k in starters.items():
-        if pos not in level:
-            continue
-        group = team.depth.get(pos, [])
-        have = group[k - 1].ovr if len(group) >= k else 45.0
-        out[pos] = max(out[pos], float(min(12.0, max(0.0, level[pos] - 2.5 - have))))
-    return out
+    """Compatibility accessor; every caller uses the shared draft plan."""
+    from types import SimpleNamespace
+    import draft_plan as DP
+    abbr = getattr(team, 'abbr', 'tool')
+    league = getattr(team, 'league', None) or SimpleNamespace(teams={abbr: team}, year=2026)
+    return {pos: row['need'] for pos, row in DP.assess(league, abbr, level)['positions'].items()}
 
 
 # ============================================================ THE SLOT CURVES
