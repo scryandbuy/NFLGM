@@ -40,7 +40,21 @@ async function bootEngine() {
   say('engine ready.', 84);
 }
 
-function pyJSON(code) { return JSON.parse(py.runPython(`_j(${code})`)); }
+const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_mark_all', 'inbox_read', 'inbox_delete', 'inbox_clear_read']);
+const READ_ONLY_ACTIONS = new Set(['personnel_act:ask', 'personnel_act:gather', 'personnel_act:offer_preview', 'frontoffice_act:restructure_preview', 'draft_act:read_trade_up', 'draft_act:offers']);
+let autosaveQueued = false;
+function queueAutosave() {
+  if (autosaveQueued) return;
+  autosaveQueued = true;
+  queueMicrotask(() => { autosaveQueued = false; void saveGameNotified(); });
+}
+function pyJSON(code) {
+  const result = JSON.parse(py.runPython(`_j(${code})`));
+  const call = code.match(/^SESSION\.([A-Za-z_][A-Za-z_0-9]*)\(\s*(?:'([^']*)'|"([^"]*)")?/);
+  if (call && AUTO_SAVE_METHODS.has(call[1]) && !READ_ONLY_ACTIONS.has(`${call[1]}:${call[2] || call[3] || ''}`)
+      && result !== false && result !== null && result?.ok !== false && !result?.error) queueAutosave();
+  return result;
+}
 
 async function newGame(abbr) {
   $('#bootstatus').textContent = 'Starting your franchise';
@@ -52,13 +66,50 @@ async function newGame(abbr) {
 
 // ---------------------------------------------------------------- save / load (IndexedDB)
 function idb() { return new Promise((res, rej) => { const r = indexedDB.open('nflgm', 1); r.onupgradeneeded = () => r.result.createObjectStore('saves'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
-async function saveGame() {
-  busy('Saving…');
-  const text = py.runPython(`SESSION.save()`);
-  const db = await idb(); await new Promise((res, rej) => { const tx = db.transaction('saves', 'readwrite'); tx.objectStore('saves').put(text, 'main'); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-  busy(null);
+let saveQueue = Promise.resolve();
+function queueSave(kind, value) {
+  const write = async () => {
+    const db = await idb();
+    try {
+      await new Promise((res, rej) => {
+        const tx = db.transaction('saves', 'readwrite');
+        const saves = tx.objectStore('saves');
+        if (kind === 'full') { saves.put(value, 'main'); saves.delete('live_journal'); }
+        else saves.put(value, 'live_journal');
+        tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+      });
+    } finally { db.close(); }
+  };
+  const pending = saveQueue.then(write, write);
+  saveQueue = pending.catch(() => {});
+  return pending;
 }
-async function loadSave() { const db = await idb(); return new Promise(res => { const r = db.transaction('saves').objectStore('saves').get('main'); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); }); }
+function saveGame() {
+  const text = py.runPython(`SESSION.save()`);
+  busy('Saving…');
+  return queueSave('full', text).finally(() => busy(null));
+}
+async function saveGameNotified() {
+  try { await saveGame(); }
+  catch (e) { notify({ ok: false, why: 'The save failed: ' + String(e) }); }
+}
+function saveLiveJournal() {
+  const journal = pyJSON('SESSION.live_journal()');
+  return journal ? queueSave('journal', journal) : Promise.resolve();
+}
+async function saveLiveJournalNotified() {
+  try { await saveLiveJournal(); }
+  catch (e) { notify({ ok: false, why: 'The live game save failed: ' + String(e) }); }
+}
+async function loadSave() {
+  const db = await idb();
+  return new Promise(res => {
+    const tx = db.transaction('saves', 'readonly'); const saves = tx.objectStore('saves');
+    const main = saves.get('main'), journal = saves.get('live_journal');
+    tx.oncomplete = () => { db.close(); res({ text: main.result || null, journal: journal.result || null }); };
+    tx.onerror = () => { db.close(); res({ text: null, journal: null }); };
+  });
+}
 
 function busy(t) { const b = $('#busy'); if (t) { b.textContent = t; b.hidden = false; } else b.hidden = true; }
 
@@ -439,7 +490,7 @@ function renderGameDay(v) {
   const nextPlay = () => { const d = g.drives[shown - 1]; const n = vis(d).length; if (shownPlays == null || shownPlays >= n) { if (shownPlays != null && shownPlays >= n) shownPlays = null; if (shown >= g.drives.length) { shownPlays = null; draw(); return; } shown++; shownPlays = 1; } else shownPlays++; if (shownPlays >= vis(g.drives[shown - 1]).length) shownPlays = null; draw(); };
   const quarterEnd = q => { let i = g.drives.findIndex(d => d.quarter > q); return i < 0 ? g.drives.length : i; };   // how many drives are in through the end of quarter q
   const nextQuarter = () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; const end = quarterEnd(q); shown = (shown >= end) ? quarterEnd(q + 1) : end; draw(); };
-  const step = mode => { const y = window.scrollY; const r = pyJSON(`SESSION.live_step(${JSON.stringify(mode)})`); renderGameDay(r); window.scrollTo(0, y); if (!(r.live && r.live.open)) renderRail(pyJSON('SESSION.portal()').rail); };
+  const step = async mode => { const y = window.scrollY; const r = pyJSON(`SESSION.live_step(${JSON.stringify(mode)})`); renderGameDay(r); window.scrollTo(0, y); if (r.live && r.live.open) await saveLiveJournalNotified(); else { renderRail(pyJSON('SESSION.portal()').rail); await saveGameNotified(); } };
   const ctrl = live ? el('div', { class: 'ctrl2' },
     el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, onclick: () => step('play') }, 'Next Play'),
     el('button', { class: 'btn go', disabled: live.halftime_open ? '' : null, onclick: () => step('drive') }, 'Next Drive'),
@@ -707,7 +758,7 @@ function renderCard(v) {
     el('div', { class: 'jersey', style: `background:${col}` }, jerseyNo(v.no) ?? v.pos),
     el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
       el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.age}${v.size ? ' · ' + v.size : ''}${v.college ? ' · ' + v.college : ''}${v.season_no ? ` · ${v.season_no}${ord(v.season_no)} season` : ''} · ${v.draft}` + (v.team ? ` · ${v.team.name}` : ' · Free agent')),
-      el('div', { class: 'hfacts' }, ...(v.free_agent ? [el('div', {}, el('span', {}, 'Status'), el('b', {}, v.on_wire ? 'On the wire' : 'Free agent')), el('div', {}, el('span', {}, 'Market'), el('b', {}, v.market_apy != null ? `~$${v.market_apy}m per year` : ''))] : [el('div', {}, el('span', {}, 'Contract'), el('b', {}, `$${v.contract.per_year.toFixed(1)}m`, el('small', {}, `per year · ${v.contract.years} yrs`))), el('div', {}, el('span', {}, `Cap Hit ${v.rail.year}`), el('b', {}, `$${v.contract.hit.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Penalty'), el('b', {}, `$${v.contract.penalty.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Trade Interest'), el('b', { style: 'color:var(--ink-2)' }, v.interest))]))),
+      el('div', { class: 'hfacts' }, ...(v.free_agent ? [el('div', {}, el('span', {}, 'Status'), el('b', {}, v.on_wire ? 'On the wire' : 'Free agent')), el('div', {}, el('span', {}, 'Market'), el('b', {}, v.market_apy != null ? `~$${v.market_apy}m per year` : ''))] : [el('div', {}, el('span', {}, `Cap Hit ${v.rail.year}`), el('b', {}, `$${v.contract.hit.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Penalty'), el('b', {}, `$${v.contract.penalty.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Trade Interest'), el('b', { style: 'color:var(--ink-2)' }, v.interest))]))),
     el('div', { class: 'ovrbig' }, el('b', {}, v.ovr), el('span', {}, 'Overall · Scheme Fit ', el('strong', { class: 'fit-change ' + (v.fit >= 0 ? 'positive' : 'negative') }, `${v.fit >= 0 ? '+' : ''}${v.fit.toFixed(1)}`)))));
   // tabs and actions
   const tabs = el('div', { class: 'ctabs' });
@@ -846,7 +897,7 @@ function openHalftime(g, live, gkey, onClose) {
     for (const r of recs) box.append(el('div', { style: 'display:flex;gap:12px;align-items:flex-start;padding:10px 16px;border-top:1px solid var(--rule)' },
       el('span', { class: 'tag ' + (r.side === 'offence' ? 'q' : 'out'), style: 'margin-top:3px' }, r.side === 'offence' ? 'OFFENSE' : 'DEFENSE'),
       el('div', { style: 'flex:1' }, el('div', { style: 'font-weight:700' }, r.text), el('div', { class: 'count' }, r.why)),
-      el('button', { class: 'btn' + (r.taken ? ' go' : ''), style: 'width:auto;padding:4px 12px', onclick: () => { pyJSON(`SESSION.half_take(${r.i}, ${r.taken ? 'False' : 'True'})`); draw(); } }, r.taken ? 'Taken' : 'Take')));
+      el('button', { class: 'btn' + (r.taken ? ' go' : ''), style: 'width:auto;padding:4px 12px', onclick: async () => { pyJSON(`SESSION.half_take(${r.i}, ${r.taken ? 'False' : 'True'})`); draw(); await saveLiveJournalNotified(); } }, r.taken ? 'Taken' : 'Take')));
     box.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { halfConfirmed[gkey] = true; overlay.remove(); onClose(); } }, 'Confirm'), el('button', { class: 'btn quiet', onclick: () => { overlay.remove(); onClose(); } }, 'Close')));
   };
   draw(); overlay.append(box); document.body.append(overlay);
@@ -918,15 +969,17 @@ function renderProspectCard(v) {
   page.append(s);
 }
 
-let depthPkg = 'Nickel', depthSide = 'offense';
+let depthPkg = 'Base', depthSide = 'offense', depthFront = null, depthClub = null;
 function renderDepth(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Team'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
   const mine = v.mine !== false; const abbr = v.club_abbr || v.rail.club.abbr;
+  if (depthClub !== abbr) { depthClub = abbr; depthFront = null; }
   $('#crumb').textContent = mine ? 'Team' : 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === (mine ? 'club' : 'league')));
   secondRow(clubNav(abbr, mine, null), mine ? '#club/depth' : `#league/team/${abbr}/depth`);
-  const reload = () => renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(v.package)}${mine ? '' : ', ' + JSON.stringify(abbr)})`));
+  const loadDepth = p => pyJSON(`SESSION.club_depth(${JSON.stringify(p)}${mine ? '' : ', ' + JSON.stringify(abbr)}${depthFront ? `, front=${JSON.stringify(depthFront)}` : ''})`);
+  const reload = () => renderDepth(loadDepth(v.package));
   const s = el('section', { class: 'sheet c12' });
   // the side tabs, then the package
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
@@ -934,15 +987,27 @@ function renderDepth(v) {
   tabs.append(el('span', { style: 'margin-left:auto' }), clubSelect(abbr, a => { const m = pyJSON('SESSION.club_list()').find(c => c.abbr === a); location.hash = m && m.mine ? '#club/depth' : `#league/team/${a}/depth`; }));
   s.append(tabs);
   if (depthSide === 'defense') {
-    const pk = el('div', { class: 'pkg' }, el('span', {}, 'Package'));
-    for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(p)}${mine ? '' : ', ' + JSON.stringify(abbr)})`)); } }, p));
+    const pk = el('div', { class: 'pkg' }, el('span', {}, `${v.coach_front === 'multiple' ? 'Multiple · ' : ''}${v.defense_shape} · Package`));
+    for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(loadDepth(p)); } }, p));
     pk.append(el('span', { class: 'snaps' }, 'Drag within a column · double-click opens the player'));
     s.append(pk);
+    if (v.available_fronts && v.available_fronts.length) {
+      const fronts = el('div', { class: 'pkg depth-fronts' }, el('span', {}, 'View front'));
+      for (const f of v.available_fronts) fronts.append(el('button', { 'aria-pressed': String(f === v.front), onclick: () => { depthFront = f; renderDepth(loadDepth(v.package)); } }, f));
+      s.append(fronts);
+    }
   }
-  // one column a position, rows aligned across columns, starters lit
+  // Each unit follows the team's front and the selected package.
   const cols = v.sides[depthSide];
-  const chart = el('div', { class: 'chart3', style: `grid-template-columns:repeat(${cols.length},minmax(0,1fr))` });
+  const chart = el('div', { class: 'depth-groups' });
+  const groups = new Map();
   for (const c of cols) {
+    const groupName = depthSide === 'offense' ? (c.group === 'Line' ? 'Offensive Line' : 'Skill Positions') : c.group;
+    if (!groups.has(groupName)) {
+      const grid = el('div', { class: 'depth-unit-grid' });
+      chart.append(el('section', { class: 'depth-unit' }, el('div', { class: 'depth-unit-head' }, groupName), grid));
+      groups.set(groupName, grid);
+    }
     const men = c.slots; const pinned = v.pins[c.pos] && v.pins[c.pos].length;
     const col = el('div', { class: 'dcol' + (pinned ? ' yours' : '') }, el('div', { class: 'pos' }, c.title));
     const move = (i, dir) => { const order = men.map(m => m.pid); [order[i + dir], order[i]] = [order[i], order[i + dir]]; pyJSON(`SESSION.club_act('set_depth', pos=${JSON.stringify(c.pos)}, pids=${JSON.stringify(order)})`); reload(); };
@@ -962,8 +1027,9 @@ function renderDepth(v) {
       col.append(plate);
     });
     if (!men.length) col.append(el('div', { class: 'plate3 none' }, 'Nobody'));
-    chart.append(col);
+    groups.get(groupName).append(col);
   }
+  for (const grid of groups.values()) grid.style.gridTemplateColumns = `repeat(${grid.children.length},minmax(0,1fr))`;
   s.append(chart);
   if (mine) s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', 'data-tip': 'Best overall first at every spot', onclick: () => { pyJSON(`SESSION.club_act('reset_depth')`); reload(); } }, 'Auto-Fill by Rating'), el('button', { class: 'btn', 'data-tip': "Best at the spot in your scheme first, the way the coordinators would set it", onclick: () => { notify(pyJSON(`SESSION.club_act('fill_by_fit')`)); reload(); } }, 'Auto-Fill by Fit'),
     v.assistant && depthSide === 'defense' ? el('span', { class: 'read', style: 'margin:0 0 0 10px;padding:6px 10px;flex:1' }, el('b', {}, 'Assistants: '), v.assistant) : el('span', { class: 'count', style: 'margin-left:auto' }, 'Highlighted players are starters')));
@@ -2356,7 +2422,7 @@ async function advanceInner() {
   else if (r && /^Week \d+ live$/.test(r.done)) { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); }
   else if (r && /^Week \d+ played$/.test(r.done)) { if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#gameday'; }
   else if (r && /^Week \d+$/.test(r.done)) { if (location.hash === '' || location.hash.startsWith('#portal')) refresh(); else if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#portal'; } else if (r && /on the clock/.test(r.done)) { location.hash = '#draft/day'; renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); } else refresh();
-  saveGame();
+  await saveGameNotified();
 }
 
 // ---------------------------------------------------------------- start
@@ -2379,11 +2445,27 @@ async function advanceInner() {
   try { await bootEngine(); } catch (e) { say('boot failed: ' + e); $('#bootstatus').textContent = 'Engine failed to load'; $('#boot .boot-status').classList.add('failed'); return; }
   $('#bootstatus').textContent = 'Engine ready';
   $('#start').disabled = false;
-  const saved = await loadSave(); if (saved) $('#resume').hidden = false;
-  $('#start').onclick = async () => { $('#start').disabled = true; await newGame(team); $('#boot').remove(); bootHash(); refresh(); saveGame(); };
-  $('#resume').onclick = async () => { $('#resume').disabled = true; $('#bootstatus').textContent = 'Loading your save'; say('loading your save…', 90); await new Promise(r => setTimeout(r, 30)); py.globals.set('_SAVE', saved); py.runPython(`SESSION = S.Session.load(_SAVE)`); $('#boot').remove(); bootHash(); refresh(); };
+  const saved = await loadSave(); if (saved.text) $('#resume').hidden = false;
+  $('#start').onclick = async () => { $('#start').disabled = true; await newGame(team); $('#boot').remove(); bootHash(); refresh(); await saveGameNotified(); };
+  $('#resume').onclick = async () => {
+    $('#resume').disabled = true; $('#bootstatus').textContent = 'Loading your save'; say('loading your save…', 90);
+    await new Promise(r => setTimeout(r, 30));
+    py.globals.set('_SAVE', saved.text); py.runPython(`SESSION = S.Session.load(_SAVE)`);
+    let journalError = null;
+    if (saved.journal) {
+      try {
+        py.globals.set('_LIVE_JOURNAL', JSON.stringify(saved.journal));
+        py.runPython(`SESSION.apply_live_journal(json.loads(_LIVE_JOURNAL))`);
+      } catch (e) {
+        journalError = e;
+        py.runPython(`SESSION = S.Session.load(_SAVE)`);
+      }
+    }
+    $('#boot').remove(); bootHash(); refresh();
+    if (journalError) notify({ ok: false, why: 'The latest live plays could not be restored. Your last full save was loaded.' });
+  };
   $('#advance').onclick = advance;
-  $('#save').onclick = saveGame;
+  $('#save').onclick = saveGameNotified;
   // EXPORT AND IMPORT: the save as a file, for a backup or for sending a state to be looked at
   $('#export').onclick = () => {
     const text = py.runPython(`SESSION.save()`); const st = pyJSON(`SESSION.rail_state()`);

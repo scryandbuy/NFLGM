@@ -299,16 +299,56 @@ def _morale_line(p):
 
 
 def _player_history(league, p):
-    """Every logged move that names him: signings, releases, trades, extensions, tags, position changes, elevations."""
+    """Dated moves, XP purchases, and awards for this player."""
     import views_league as VL
-    out = []
+    entries = []
+    def add(year, order, when, line):
+        entries.append((int(year or 0), order, len(entries), dict(when=when, line=line)))
+    if getattr(p, 'draft_year', None) and getattr(p, 'draft_round', None):
+        add(p.draft_year, -1, str(p.draft_year), f"Drafted {p.draft_overall}{_ordn(p.draft_overall)} overall (round {p.draft_round})" if getattr(p, 'draft_overall', None) else f"Drafted, round {p.draft_round}")
     for x in league.transactions:
         if x.get('kind') not in VL.TAGS: continue
+        if x.get('kind') == 'draft' and getattr(p, 'draft_year', None) and getattr(p, 'draft_round', None): continue
         named = x.get('pid') == p.pid or p.pid in [str(a) for a in (x.get('a_sends') or [])] or p.pid in [str(a) for a in (x.get('b_sends') or [])]
         if not named: continue
-        out.append(dict(when=f"{x.get('year')}" + (f" · Wk {x['week']}" if x.get('week') else (' · ' + x['phase']) if x.get('phase') else ''), line=VL._tx_line(league, x)))
-    if getattr(p, 'draft_year', None) and getattr(p, 'draft_round', None): out.insert(0, dict(when=str(p.draft_year), line=f"Drafted {p.draft_overall}{_ordn(p.draft_overall)} overall (round {p.draft_round})" if getattr(p, 'draft_overall', None) else f"Drafted, round {p.draft_round}"))
-    return out[-30:]
+        year = x.get('year') or 0; week = x.get('week') or 0
+        when = f"{year}" + (f" · Wk {week}" if week else (' · ' + x['phase']) if x.get('phase') else '')
+        add(year, int(week) if week else 22, when, VL._tx_line(league, x))
+
+    spent = getattr(p, 'xp_spent', None) or {}
+    purchases = spent.get('_purchases') or []
+    logged = {}; logged_unlocks = 0
+    for purchase in purchases:
+        kind = purchase.get('kind'); attr = purchase.get('attr')
+        if kind == 'buy' and attr: logged[attr] = logged.get(attr, 0) + 1
+        elif kind == 'unlock': logged_unlocks += 1
+        else: continue
+        year = purchase.get('year') or p.draft_year or 0
+        week = purchase.get('week') or 0
+        when = f"{year} · Wk {week}" if week else str(year) if purchase.get('year') else 'Earlier XP'
+        what = 'Ceiling' if kind == 'unlock' else attr.replace('_rating', '').replace('_', ' ').title()
+        cost = purchase.get('cost')
+        source = purchase.get('source')
+        line = f"Progression: +1 {what}" + (f" · {int(round(cost)):,} XP" if cost is not None else '') + (f" · {source}" if source else '')
+        add(year, int(week) if week else 22, when, line)
+    # Older saves retain lifetime purchase counts, but not the dates or XP prices.
+    for attr, count in spent.items():
+        if attr.startswith('_') or not isinstance(count, (int, float)): continue
+        earlier = max(0, int(count) - logged.get(attr, 0))
+        if earlier:
+            what = attr.replace('_rating', '').replace('_', ' ').title()
+            add(p.draft_year or 0, 0, 'Earlier XP', f"Progression: +{earlier} {what} · before purchase history")
+    earlier_unlocks = max(0, int(spent.get('_unlocks', 0) or 0) - logged_unlocks)
+    if earlier_unlocks: add(p.draft_year or 0, 0, 'Earlier XP', f"Progression: +{earlier_unlocks} Ceiling · before purchase history")
+
+    award_names = dict(VL.AWARD_NAMES, all_pro_1='First-Team All-Pro', all_pro_2='Second-Team All-Pro', pro_bowl='Pro Bowl')
+    for year, awards in (getattr(league, 'awards', None) or {}).items():
+        for key, winners in (awards or {}).items():
+            if key == 'coty': continue
+            winners = winners if isinstance(winners, list) else [winners]
+            if p.pid in [str(w) for w in winners]:
+                add(year, 23, f"{year} · Awards", f"Award: {award_names.get(key, key.replace('_', ' ').title())}")
+    return [row for _, _, _, row in sorted(entries, key=lambda e: e[:3])]
 
 
 def _ordn(n):
@@ -322,9 +362,10 @@ def _ext_ok(league, p):
 
 
 # ------------------------------------------------------------ the depth chart
-OFF_BASE = {'11': dict(WR=3, TE=1, HB=1, FB=0), '12': dict(WR=2, TE=2, HB=1, FB=0), '21': dict(WR=2, TE=1, HB=1, FB=1), '13': dict(WR=1, TE=3, HB=1, FB=0), '10': dict(WR=4, TE=0, HB=1, FB=0)}
+import offense_roles as OR
+OFF_BASE = OR.PACKAGES
 PACKAGES = {'Base': dict(WR=2, TE=2, HB=1, LB=3, CB=2, S=2), 'Nickel': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Dime': dict(WR=3, TE=1, HB=1, LB=1, CB=4, S=2),
-            'Goal Line': dict(WR=1, TE=2, HB=1, FB=1, LB=3, CB=2, S=2), 'Third Down': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Two Minute': dict(WR=4, TE=1, HB=1, LB=1, CB=4, S=2)}
+            'Goal Line': dict(WR=1, TE=2, HB=1, FB=1, DT=3, LB=3, CB=2, S=1), 'Third Down': dict(WR=3, TE=1, HB=1, LB=2, CB=3, S=2), 'Two Minute': dict(WR=4, TE=1, HB=1, LB=1, CB=4, S=2)}
 # one column a position, grouped by side; the heading is the position, the group is the caption
 SIDES = {
     'offense': [('QB', 'QB', 'Quarterback'), ('HB', 'HB', 'Backs'), ('FB', 'FB', 'Backs'), ('WR', 'WR', 'Receivers'), ('TE', 'TE', 'Tight Ends'),
@@ -333,6 +374,7 @@ SIDES = {
                 ('CB', 'CB', 'Secondary'), ('FS', 'FS', 'Secondary'), ('SS', 'SS', 'Secondary')],
     'specialists': [('K', 'K', 'Specialists'), ('P', 'P', 'Specialists'), ('LS', 'LS', 'Specialists'), ('KR', 'KR', 'Returners'), ('PR', 'PR', 'Returners')],
 }
+SIDES_OFF_POS = {pos for pos, _, _ in SIDES['offense']}
 # how many start at each position, by package
 def _starters(pos, pk):
     if pos == 'QB': return 1
@@ -341,18 +383,23 @@ def _starters(pos, pk):
     if pos == 'WR': return pk.get('WR', 3)
     if pos == 'TE': return pk.get('TE', 1)
     if pos in ('LT', 'LG', 'C', 'RG', 'RT'): return 1
-    if pos == 'DT': return 2
+    if pos == 'DT': return pk.get('DT', 2)
     if pos in ('LEDG', 'REDG'): return 1
     if pos == 'MIKE': return 1
     if pos == 'WILL': return 1 if pk.get('LB', 2) >= 2 else 0
     if pos == 'SAM': return 1 if pk.get('LB', 2) >= 3 else 0
     if pos == 'CB': return pk.get('CB', 3)
-    if pos in ('FS', 'SS'): return 1
+    if pos == 'FS': return 1
+    if pos == 'SS': return 1 if pk.get('S', 2) >= 2 else 0
     return 1
 
 
-def depth(session, league, abbr, package='Nickel'):
+def depth(session, league, abbr, package='Base', front_override=None):
     t = league.teams[abbr]; d = t.depth
+    import defense_roles as DR
+    front = DR.coach_front(t.gm)
+    if getattr(t.gm, 'def_front', '4-3') == 'multiple' and front_override in ('4-3', '3-4'):
+        front = front_override
     pk = PACKAGES.get(package, PACKAGES['Nickel'])
     desk = (session.runner.desks.get(abbr) if getattr(session, 'runner', None) is not None else None)
     status = getattr(desk, 'status', {}) if desk is not None else {}
@@ -369,15 +416,62 @@ def depth(session, league, abbr, package='Nickel'):
         order = [pid for pid in pins.get(slot, []) if any(p.pid == pid for p in cands)]
         rest = sorted([p for p in cands if p.pid not in order], key=lambda p: -RO.return_score(p))
         return [next(p for p in cands if p.pid == pid) for pid in order] + rest[:max(0, 5 - len(order))]
+    off_depth = {}
+    for canonical, men in d.items():
+        if canonical not in SIDES_OFF_POS:
+            continue
+        ranked = sorted(men, key=lambda p: -TG.position_score(p.ratings, canonical, t.scheme))
+        order = {pid: i for i, pid in enumerate(pins.get(canonical, []))}
+        if order:
+            ranked.sort(key=lambda p: order.get(p.pid, 10**6))
+        off_depth[canonical] = ranked
+    off_rows = OR.assign(off_depth, OR.base_package(t.gm))
+    off_starters = {p.pid for role, p in off_rows}
     sides = {}
     for side, cols_ in SIDES.items():
         cols = []
-        for pos, label, group in cols_:
+        fallback_front = False
+        if side == 'defense' and front == '4-3':
+            static_count = sum(
+                sum(p.pid in lb_choice for p in d.get(pos, [])) if pos in ('MIKE', 'WILL', 'SAM')
+                else min(len(d.get(pos, [])), _starters(pos, pk))
+                for pos, _label, _group in cols_)
+            fallback_front = static_count != 11 or DR.needs_fallback(d, front, package)
+        if side == 'defense' and (front == '3-4' or fallback_front):
+            # Match the game-day roster's scheme grade and canonical pins before
+            # assigning virtual 3-4 jobs. Team.depth itself defaults to OVR.
+            role_depth = {}
+            for canonical, men in d.items():
+                ranked = sorted(men, key=lambda p: -TG.position_score(p.ratings, canonical, t.scheme))
+                if pins.get(canonical):
+                    order = {pid: i for i, pid in enumerate(pins[canonical])}
+                    ranked.sort(key=lambda p: order.get(p.pid, 10**6))
+                role_depth[canonical] = ranked
+            assigned = DR.assign(role_depth, front, package, pins)
+            roles = {}
+            for row in assigned:
+                role = row['role']
+                if role not in roles:
+                    roles[role] = dict(group={'dl': 'Front', 'lb': 'Linebackers', 'db': 'Secondary'}[row['group']],
+                                       starters=[], reserves=row['reserves'])
+                if row['player'] is not None:
+                    roles[role]['starters'].append(row['player'])
+            cols_ = [(role, DR.role_label(role), info['group'],
+                      info['starters'] + info['reserves'], len(info['starters']))
+                     for role, info in roles.items()]
+        else:
+            cols_ = [(pos, label, group, None, None) for pos, label, group in cols_]
+        for pos, label, group, role_men, role_starters in cols_:
             # the offense has no package view: its starters are the club's own base personnel (11, 12, 21 or 13), and the coordinators decide the rest on Sunday
-            men = returners(pos) if pos in ('KR', 'PR') else d.get(pos, []); n_start = 1 if pos in ('KR', 'PR') else _starters(pos, pk if side == 'defense' else OFF_BASE.get(getattr(t.gm, 'off_personnel', '11'), OFF_BASE['11'])); slots = []
+            men = role_men if role_men is not None else returners(pos) if pos in ('KR', 'PR') else off_depth.get(pos, []) if side == 'offense' else d.get(pos, [])
+            n_start = role_starters if role_starters is not None else 1 if pos in ('KR', 'PR') else _starters(pos, pk if side == 'defense' else OFF_BASE.get(getattr(t.gm, 'off_personnel', '11'), OFF_BASE['11']))
+            if side == 'offense': n_start = sum(p.pid in off_starters for p in men)
+            slots = []
             for i, p in enumerate(men):
                 pl = player_plate(p); pl['cond'] = _cond(session, p)
-                if pos in ('MIKE', 'WILL', 'SAM'): pl['start'] = p.pid in lb_choice; pl['why'] = lb_choice.get(p.pid, '')
+                if side == 'offense': pl['start'] = p.pid in off_starters; pl['why'] = ''
+                elif side == 'defense' and (front == '3-4' or fallback_front): pl['start'] = i < n_start; pl['why'] = ''
+                elif pos in ('MIKE', 'WILL', 'SAM'): pl['start'] = p.pid in lb_choice; pl['why'] = lb_choice.get(p.pid, '')
                 else: pl['start'] = i < n_start; pl['why'] = ''
                 pl['slot'] = _slot_label(pos, i)
                 desig = status.get(p.pid)
@@ -406,7 +500,10 @@ def depth(session, league, abbr, package='Nickel'):
             cols.append(dict(pos=pos, title=label, group=group, slots=slots, on_field=n_start))
         sides[side] = cols
     return dict(rail=rail(session, league, abbr), package=package, packages=list(PACKAGES), sides=sides, pins=getattr(t, 'depth_pins', None) or {},
-                assistant=_package_line(package, lbs, lb_choice, pk))
+                front=front, coach_front=getattr(t.gm, 'def_front', '4-3'),
+                available_fronts=(['4-3', '3-4'] if getattr(t.gm, 'def_front', '4-3') == 'multiple' else []),
+                defense_shape=DR.shape_label(front, package),
+                assistant=(None if front == '3-4' else _package_line(package, lbs, lb_choice, pk)))
 
 
 def _package_line(package, lbs, lb_choice, pk):
@@ -500,7 +597,7 @@ def act_buy_point(league, abbr, pid, attr):
     import xp as XP
     p = league.player(pid)
     if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
-    cost = XP.buy(p, attr)
+    cost = XP.buy(p, attr, year=league.year, week=league.week, source='You')
     if cost is None:
         why = ('he is at 99 there' if p.ratings.get(attr, 0) >= 99 else 'that point would take him past his ceiling' if XP.at_ceiling(p, attr) else 'not enough XP')
         return dict(ok=False, why=why)
@@ -511,7 +608,7 @@ def act_unlock_ceiling(league, abbr, pid):
     import xp as XP
     p = league.player(pid)
     if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
-    cost = XP.unlock(p)
+    cost = XP.unlock(p, year=league.year, week=league.week, source='You')
     if cost is None: return dict(ok=False, why=('his ceiling is already 99' if (p.potential or 0) >= 99 else 'not enough XP for the unlock'))
     return dict(ok=True, line=f"Ceiling raised to {round(p.potential)} for {int(round(cost)):,} XP.")
 
@@ -535,7 +632,7 @@ def act_spend_by_read(league, abbr, pid=None):
     n = 0; pts = 0
     for p in men:
         if p is None: continue
-        acts = XS.spend_player(p, t.gm, t, league.week or 0, rng)
+        acts = XS.spend_player(p, t.gm, t, league.week or 0, rng, year=league.year, source='Assistant')
         if acts: n += 1; pts += len(acts)
     return dict(ok=True, line=f"{pts} point{'s' if pts != 1 else ''} bought for {n} player{'s' if n != 1 else ''}.")
 

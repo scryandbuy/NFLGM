@@ -255,7 +255,9 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # man meant cover 0 or cover 1 on a fifth of snaps; with the full call
     # book man is a third of targets and was completing 66% against a real
     # ~60, ABOVE zone, which is backwards.
-    DEPTH_MULT = {'short': 1.66, 'medium': 1.27, 'deep': 0.93}   # re-solved once the safeties field as a free and a strong (a club's two free safeties had been playing and the strong sat)   # re-solved once nickel fields its best cover linebacker   # re-solved with the starters staying in to block, then again once the fourth receiver, second tight end and second back rotate into the pattern
+    # Re-centered after package assignments began fielding eleven distinct
+    # offensive players: the earlier curve completed about two points too many.
+    DEPTH_MULT = {'short': 1.61, 'medium': 1.23, 'deep': 0.90}
     import matchups as M
     base = separation * (1.0 + M.ZONE_SLOPE['acc'] * (acc - AVG)) * outcome_mult
     p = float(np.clip(base * DEPTH_MULT[depth] * (ENV.deep_mult if depth == 'deep' else (1.0 - 0.3 * (1.0 - ENV.deep_mult)) if depth == 'medium' else 1.0), 0.02, 0.97))
@@ -480,7 +482,7 @@ def _likely_tackler(deff, out, rng, pass_play):
     and completions. The engine does not simulate the tackle itself; this is the
     name the ticker gives it, weighted the way real tackle counts fall."""
     yards = float(out.get('yards', 0) or 0)
-    dl = [x for x in (deff.get('dl') or []) if x][:4]; lb = [x for x in (deff.get('lb') or []) if x][:3]; db = [x for x in (deff.get('db') or []) if x][:5]
+    dl = [x for x in (deff.get('dl') or []) if x]; lb = [x for x in (deff.get('lb') or []) if x]; db = [x for x in (deff.get('db') or []) if x]
     if pass_play:
         pools = [(db, 0.62), (lb, 0.30), (dl, 0.08)]
     elif yards <= 2:
@@ -617,7 +619,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     chasers = defenders[len(front):] + defenders[:len(front)]
     # The same wall applies to a run: yards after contact collapse near the
     # goal because there is nowhere to break to.
-    out = resolve_yards_after(off['rb'], chasers, ytg, rng, contact_at=ybc)
+    out = resolve_yards_after(off.get('rb') or off['qb'], chasers, ytg, rng, contact_at=ybc)
     if not out['touchdown']:
         # never turn a score into a non-score: the resolver already decided he
         # reached the end zone, and compression is about the grass in between

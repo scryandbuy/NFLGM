@@ -1070,6 +1070,13 @@ button.btn{line-height:normal;box-sizing:border-box}
 
 /* the depth chart, v5: one column a position, rows aligned, starters lit */
 .chart3{display:grid;gap:12px;padding:16px 18px 18px}
+.depth-groups{display:grid;gap:12px;padding:14px}
+.depth-unit{border:1px solid var(--rule);background:var(--sheet-2);min-width:0}
+.depth-unit-head{font-family:var(--display);font-weight:800;font-size:16px;letter-spacing:.08em;text-transform:uppercase;color:var(--club-2);padding:10px 13px;border-bottom:1px solid var(--rule-hi);background:var(--sheet-3)}
+.depth-unit-grid{display:grid;gap:8px;padding:10px;min-width:0}
+.depth-groups .dcol .pos{font-size:17px}
+.depth-groups .plate3.start{border-top:2px solid var(--club-2);background:linear-gradient(180deg,color-mix(in srgb,var(--club) 28%,var(--sheet-3)),var(--sheet-2))}
+@media(max-width:900px){.depth-unit-grid{grid-template-columns:repeat(auto-fit,minmax(145px,1fr))!important}}
 .dcol{min-width:0;display:flex;flex-direction:column;gap:6px}
 .dcol .pos{font-family:var(--display);font-weight:800;font-size:20.5px;letter-spacing:.08em;color:var(--ink);padding:0 0 6px 2px;border-bottom:2px solid var(--rule-2)}
 .dcol.yours .pos{border-bottom-color:var(--club-2)}
@@ -1910,7 +1917,7 @@ h2{letter-spacing:-.01em}
 .player-card *{box-sizing:border-box}
 .player-card .head{
   display:grid;grid-template-columns:88px minmax(0,1fr) auto;
-  align-items:center;gap:20px;padding:22px 24px;
+  align-items:center;gap:20px;padding:29px 24px;
   background:radial-gradient(ellipse at 82% 0%,color-mix(in srgb,var(--pc-accent) 19%,transparent),transparent 48%),
     linear-gradient(115deg,var(--sheet-2) 0%,var(--sheet) 58%,var(--bg) 100%);
   border-bottom:1px solid var(--rule-2);border-radius:11px 11px 0 0;position:relative;
@@ -1931,7 +1938,7 @@ h2{letter-spacing:-.01em}
 .player-card .head>div:nth-child(2){min-width:0;padding-top:4px}
 .player-card .hline{color:var(--ink-2);font-size:14px;line-height:1.5;margin-top:5px}
 .player-card .hline b{color:var(--pc-accent-ink)}
-.player-card .hfacts{display:flex;flex-wrap:wrap;gap:12px 0;margin-top:16px}
+.player-card .hfacts{display:flex;flex-wrap:wrap;gap:12px 0;margin-top:21px}
 .player-card .hfacts>div{padding:0 16px;border-left:1px solid var(--rule-2);min-width:112px}
 .player-card .hfacts>div:first-child{padding-left:0;border-left:0}
 .player-card .hfacts div span{color:var(--pc-muted);font:700 10px/1.4 var(--text,sans-serif);
@@ -1961,8 +1968,8 @@ h2{letter-spacing:-.01em}
 .player-card .acts .btn.quiet{background:transparent}
 .player-card .acts .btn:disabled{opacity:.48;cursor:not-allowed}
 .player-card .body{display:grid;grid-template-columns:minmax(180px,16%) minmax(0,1fr) minmax(235px,18%);
-  background:var(--pc-bg)}
-.player-card .body>div{min-width:0;padding:18px 16px 20px}
+  background:var(--pc-bg);min-height:490px}
+.player-card .body>div{min-width:0;padding:25px 20px 28px}
 .player-card .body>div+div{border-left:1px solid var(--pc-line)}
 .player-card .body>div:nth-child(2){background:var(--sheet)}
 .player-card .h5{color:var(--pc-accent-ink);letter-spacing:.09em;text-transform:uppercase;font-size:12px;
@@ -1984,7 +1991,7 @@ h2{letter-spacing:-.01em}
 .player-card .attrs>div{min-width:0}
 .player-card .attrs .h5{margin-bottom:7px}
 .player-card .arow{background:var(--sheet-2);border:1px solid var(--rule);border-left:3px solid var(--rule-2);
-  border-radius:3px;min-height:25px;height:auto;color:var(--ink-2);margin-bottom:4px}
+  border-radius:3px;min-height:29px;height:auto;color:var(--ink-2);margin-bottom:5px}
 .player-card .arow.hi{background:color-mix(in srgb,var(--ok) 15%,var(--sheet-2));border-left-color:var(--ok)}
 .player-card .arow.md{background:color-mix(in srgb,var(--pc-accent) 12%,var(--sheet-2));border-left-color:var(--pc-accent)}
 .player-card .arow.lo{background:var(--board);border-left-color:var(--rule-2);color:var(--ink-3)}
@@ -2007,9 +2014,9 @@ h2{letter-spacing:-.01em}
   border-bottom:1px solid var(--rule)}
 .player-card .contract tr.now td{color:var(--pc-accent-ink);background:color-mix(in srgb,var(--pc-accent) 12%,var(--sheet-2));font-weight:700}
 .player-card .body>div:last-child .kv{margin-top:12px !important}
-.player-card .tiles{background:var(--board);border-top:1px solid var(--rule-2);border-radius:0 0 11px 11px;padding:14px;gap:10px}
+.player-card .tiles{background:var(--board);border-top:1px solid var(--rule-2);border-radius:0 0 11px 11px;padding:18px;gap:10px}
 .player-card .tile{background:linear-gradient(145deg,var(--sheet-2),var(--sheet));border:1px solid var(--rule-2);
-  border-radius:8px;min-width:0;min-height:104px;padding:12px 14px;
+  border-radius:8px;min-width:0;min-height:126px;padding:16px;
   box-shadow:inset 0 1px rgba(255,255,255,.04)}
 .player-card .tile .h5{margin-bottom:7px;border-bottom:0;padding:0}
 .player-card .tile .word{color:var(--ink);font-size:25px}
@@ -2017,16 +2024,16 @@ h2{letter-spacing:-.01em}
 .player-card .tile .sub{background:none;border:0;color:var(--pc-muted);line-height:1.35}
 .player-card .tile .cond{background:var(--bg);border-radius:20px;overflow:hidden}
 .player-card .tile .cond i{display:block;height:100%;background:linear-gradient(90deg,var(--pc-accent),var(--ok))}
-.player-card .pad{background:var(--sheet);padding:18px 20px;color:var(--pc-bright)}
+.player-card .pad{background:var(--sheet);padding:24px 24px 30px;color:var(--pc-bright)}
 .player-card .histlist{color:var(--ink-2)}
 .player-card .histlist time{color:var(--pc-muted)}
 .player-card :is(button,select):focus-visible{outline:2px solid var(--pc-accent);outline-offset:2px}
 @media(max-width:1150px){
-  .player-card .head{grid-template-columns:70px minmax(0,1fr) 130px;gap:14px;padding:23px 16px 16px}
+  .player-card .head{grid-template-columns:70px minmax(0,1fr) 130px;gap:14px;padding:27px 16px 20px}
   .player-card .head:before{left:100px}
   .player-card .jersey{width:64px;height:64px}
   .player-card .ovrbig{min-width:0}
-  .player-card .body{grid-template-columns:minmax(180px,23%) minmax(0,1fr)}
+  .player-card .body{grid-template-columns:minmax(180px,23%) minmax(0,1fr);min-height:0}
   .player-card .body>div:nth-child(2){grid-column:auto;order:0;border-bottom:0}
   .player-card .body>div:last-child{grid-column:1 / -1;border-left:0;border-top:1px solid var(--pc-line)}
   .player-card .attrs{grid-template-columns:repeat(2,minmax(0,1fr)) !important}

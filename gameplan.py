@@ -56,6 +56,7 @@ class Gameplan:
     personnel_mix: dict = field(default_factory=lambda: {
         '11': .595, '12': .195, '21': .070, '13': .030,
         '10': .075, '22': .025, '00': .010})
+    off_personnel: str = '11'
     run_scheme_mix: dict = field(default_factory=lambda: {'zone': .62, 'gap': .38})
     protection: str = 'half_slide'
     tempo: float = 0.5                # 0 = grind clock, 1 = no huddle
@@ -114,6 +115,7 @@ def base_plan(coach=None, opponent=None, rng=None):
     g.shell_lean = float(coach.get('shell_lean', 0.5))
     g.zone_aggression = float(coach.get('zone_aggression', 0.5))
     g.blitz_lean = float(coach.get('blitz_lean', 0.384))
+    g.off_personnel = str(coach.get('off_personnel', '11'))
     if 'personnel_mix' in coach: g.personnel_mix = dict(coach['personnel_mix'])
     if 'depth_mix' in coach: g.depth_mix = tuple(coach['depth_mix'])
 
@@ -192,6 +194,22 @@ def blitzers(plan, rng, down=1, ydstogo=10):
     if x < r * 0.96: return 2
     if x < r:        return 3
     return 0
+
+
+def defensive_leans(plan):
+    """The defensive plan as one set of leans for the live play caller.
+
+    Blitz rate is the weekly adjustment around the neutral 13.3% rate;
+    blitz lean is the coach's identity. Both need to reach the same coverage
+    decision or a report's 'bring pressure' instruction has no effect.
+    """
+    return dict(coverage=plan.man_rate,
+                shell=getattr(plan, 'shell_lean', 0.5),
+                shell_weights=dict(plan.shell_weights),
+                blitz=float(np.clip(getattr(plan, 'blitz_lean', 0.384)
+                                    + 3.0 * (plan.blitz_rate - 0.133), 0.0, 1.0)),
+                front_pref=list(plan.front_pref),
+                sub_lean=getattr(plan, 'sub_lean', 0.0))
 
 
 # ============================================================ ADJUSTMENT BRIDGE

@@ -112,7 +112,7 @@ WEEKLY = [
     ('rec', 8, 900),
     ('sacks', 2, 1400), ('sacks', 3, 1300),
     ('tackles', 10, 1100), ('int_def', 1, 1200), ('int_def', 2, 1400),
-    ('fg_made', 3, 900), ('fg_made', 4, 900), ('fg_long', 50, 800),
+    ('fg_made', 3, 300), ('fg_made', 4, 200), ('fg_long', 50, 250),
     ('punt_in20', 3, 800), ('punts', 6, 500),
     ('ff', 1, 900),
     # A LINEMAN CLEARS THIRTY BLOCKS EVERY WEEK HE STARTS, so a threshold
@@ -202,7 +202,11 @@ def modifier(player):
 #
 # The overall wall stays alongside these (a 90 improving is harder than a 70
 # improving), so a player who arrived at 95 pays more than one who was built up.
-LS_FLAT_PER_GAME = 150.0     # a long snapper's game: no line in the book, a flat credit for every game he dresses
+GAME_DAY_XP = 75.0           # every active-roster player on a game day, even with no snaps
+LS_SNAP_XP = 12.0            # field goals, extra points, and punts all need a snap
+LS_FG_MADE_XP = 40.0
+LS_XP_MADE_XP = 12.0
+LS_GOOD_PUNT_XP = 35.0
 BASE_COST = 600.0            # a rookie's first point into a position skill
 PHYSICAL_BASE = 2500.0       # a 21-year-old's first point of speed; see the wall in cost_per_point
 PHYS_ATTR_ESCALATOR = 1.25   # per point already bought into the same physical
@@ -217,6 +221,7 @@ TOOL_OVER_SPEED = 1.4
 # Awareness carries the biggest weight for a quarterback, a centre and a
 # safety and is not a physical; it is buyable by anyone at a premium.
 AWARENESS_MULT = 1.75
+KICK_ACCURACY_MULT = 1.75    # specialists used to buy several accuracy points from two strong games
 
 ESCALATOR = 1.030            # per point ever bought, into anything
 # and the same skill again costs more than a new one: learning has diminishing
@@ -271,8 +276,9 @@ def cost_per_point(player, attr=None):
         if attr == 'strength_rating': wall = wall ** 0.7
         tool = TOOL_OVER_SPEED if attr in TOOLS else 1.0
         return (PHYSICAL_BASE * wall * ovr_scale * ESCALATOR ** points_bought(player) * PHYS_ATTR_ESCALATOR ** same * tool)
+    specialist = KICK_ACCURACY_MULT if player.pos in ('K', 'P') and attr == 'kick_acc_rating' else 1.0
     return (BASE_COST * curve * (1.0 + AGE_SLOPE * years) * ovr_scale * late
-            * ESCALATOR ** points_bought(player) * ATTR_ESCALATOR ** same * phys)
+            * ESCALATOR ** points_bought(player) * ATTR_ESCALATOR ** same * phys * specialist)
 
 
 # ============================================================ THE CEILING
@@ -303,7 +309,13 @@ def unlock_cost(player):
             * (1.0 + AGE_SLOPE * years))
 
 
-def unlock(player):
+def _record_purchase(player, kind, cost, *, attr=None, year=None, week=None, source=None):
+    """Keep dated XP purchases with the player's existing, saved XP ledger."""
+    player.xp_spent.setdefault('_purchases', []).append(dict(
+        kind=kind, attr=attr, cost=round(float(cost), 1), year=year, week=week, source=source))
+
+
+def unlock(player, *, year=None, week=None, source=None):
     """Raise the ceiling one point. Returns the cost, or None."""
     pot = ceiling(player)
     if pot is None or pot >= 99.0:
@@ -314,6 +326,7 @@ def unlock(player):
     player.xp -= cost
     player.potential = min(99.0, pot + 1.0)
     player.xp_spent['_unlocks'] = player.xp_spent.get('_unlocks', 0) + 1
+    _record_purchase(player, 'unlock', cost, year=year, week=week, source=source)
     return cost
 
 
@@ -330,7 +343,7 @@ def at_ceiling(player, attr=None):
     return TG.position_score(trial, player.pos) > pot + 1e-6
 
 
-def buy(player, attr):
+def buy(player, attr, *, year=None, week=None, source=None):
     """
     Spend: one point into one attribute. Returns the cost paid, or None if he
     cannot afford it, the attribute is at 99, or the point would take him
@@ -347,6 +360,7 @@ def buy(player, attr):
     player.ratings[attr] = cur + 1.0
     player.xp_spent[attr] = player.xp_spent.get(attr, 0) + 1
     player.xp_spent['_bought_season'] = player.xp_spent.get('_bought_season', 0) + 1
+    _record_purchase(player, 'buy', cost, attr=attr, year=year, week=week, source=source)
     return cost
 
 
@@ -386,6 +400,39 @@ def weekly_xp(player, line, season=None):
 def game_xp(player, line, season=None):
     """One game: the events plus whatever weekly lines he crossed."""
     return (event_xp(line) + weekly_xp(player, line, season)) * modifier(player)
+
+
+def long_snap_line(drives, side):
+    """Count the special-team snaps and successful plays for one club."""
+    line = dict(snaps=0, ls_fg_made=0, ls_xp_made=0, ls_good_punts=0)
+    for possession, drive in drives:
+        if possession != side:
+            continue
+        for play in drive.log:
+            if not isinstance(play, dict):
+                continue
+            kind = play.get('type')
+            if kind not in ('field_goal', 'extra_point', 'punt'):
+                continue
+            line['snaps'] += 1
+            if kind == 'field_goal' and play.get('made'):
+                line['ls_fg_made'] += 1
+            elif kind == 'extra_point' and play.get('made'):
+                line['ls_xp_made'] += 1
+            elif (kind == 'punt' and not play.get('blocked') and
+                  not play.get('touchback') and
+                  (float(play.get('net', 0) or 0) >= 40 or
+                   float(play.get('new_yardline', 0) or 0) >= 80)):
+                line['ls_good_punts'] += 1
+    return line
+
+
+def long_snap_xp(line):
+    """Raw XP for the specialist who snapped those kicks and punts."""
+    return (LS_SNAP_XP * line.get('snaps', 0) +
+            LS_FG_MADE_XP * line.get('ls_fg_made', 0) +
+            LS_XP_MADE_XP * line.get('ls_xp_made', 0) +
+            LS_GOOD_PUNT_XP * line.get('ls_good_punts', 0))
 
 
 def season_xp(player, line):

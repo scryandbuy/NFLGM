@@ -159,7 +159,7 @@ def identity_plays(off, rate_fn):
     return run, best
 
 
-def call_run(off, job, rate_fn, rng, identity=None, box=6):
+def call_run(off, job, rate_fn, rng, identity=None, box=6, family_mix=None):
     """
     Which run, judged by whether THESE linemen can block it.
 
@@ -177,6 +177,12 @@ def call_run(off, job, rate_fn, rng, identity=None, box=6):
     w = np.exp((fit - fit.max()) / 0.045)
     if identity and identity in pool:
         w[pool.index(identity)] *= 1.8
+    if family_mix:
+        # The coach's blocking identity moves the odds; the line's suitability
+        # still decides which specific run is best for this group.
+        w *= np.array([max(0.02, float(family_mix.get(S.RUN_SCHEMES[s]['family'], 0.02)))
+                       / (0.62 if S.RUN_SCHEMES[s]['family'] == 'zone' else 0.38)
+                       for s in pool])
     if box >= 8:
         # a loaded box makes a gap scheme harder, not easier
         w = w * np.array([0.82 if S.RUN_SCHEMES[s]['family'] == 'gap' else 1.12
@@ -285,7 +291,7 @@ def read_the_look(def_call):
                 lying=bool(def_call.get('fooled')))
 
 
-def audible(off_call, def_call, off, rate_fn, rng, latitude=None):
+def audible(off_call, def_call, off, rate_fn, rng, latitude=None, family_mix=None):
     """
     Change the call at the line, or leave it alone.
 
@@ -312,7 +318,7 @@ def audible(off_call, def_call, off, rate_fn, rng, latitude=None):
         # light box against a pass - take the run they are giving
         call['is_pass'] = False
         call['scheme'] = call_run(off, 'chains', rate_fn, rng,
-                                  box=look['box'])
+                                  box=look['box'], family_mix=family_mix)
         call.pop('concept', None)
         return call, 'pass_to_run'
     if call.get('is_pass') and look['looks_man']:

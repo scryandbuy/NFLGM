@@ -99,6 +99,7 @@ def wants(league, abbr, p, week, market=None):
     does not depend on who is asking, and asking 32 times was most of the
     cost of a season."""
     import gm_surfaces as GS, valuation as VAL, min_salary as MS
+    import roster_needs as RN
     from cap_engine import CAP
     team = league.teams[abbr]
     if team.gm is None or p.pos in ('K', 'P') and any(q.pos == p.pos and q.ovr >= p.ovr for q in team.active()):
@@ -109,7 +110,7 @@ def wants(league, abbr, p, week, market=None):
     # A REAL UPGRADE, or nothing: claims at +1.5 over the k-th man, with the
     # released man going back on the wire, fed a loop that ran 689 claims a
     # season against a real ~150 in season
-    if p.ovr < incumbent + 3.0:
+    if p.ovr < incumbent + 3.0 and RN.move_gain(team, p) < 3.0:
         return False
     if not week:
         # the cut-down wave: a club makes one or two claims, not a dozen
@@ -134,6 +135,7 @@ def wants(league, abbr, p, week, market=None):
 def make_room(league, abbr, p):
     """In season the 53 is full: drop the worst man at his spot who is not locked."""
     import practice_squad as PSQ
+    import roster_needs as RN
     team = league.teams[abbr]
     if len(team.active()) < 53:
         return True
@@ -155,7 +157,13 @@ def make_room(league, abbr, p):
         cands = [q for q in team.active() if ok(q)]
     if not cands:
         return False
-    worst = min(cands, key=lambda q: q.ovr)
+    # Prefer the release that leaves the coach's playable roster strongest.
+    # Searching the bottom few avoids repeatedly scoring an entire roster for
+    # every man on the wire.
+    worst = max(sorted(cands, key=lambda q: q.ovr)[:8],
+                key=lambda q: RN.move_gain(team, p, q))
+    if RN.move_gain(team, p, worst) < 0.0:
+        return False
     league.release(worst.pid)
     return True
 

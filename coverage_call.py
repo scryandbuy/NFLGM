@@ -170,6 +170,9 @@ def available(job, quality, rng):
 TWO_HIGH = {'cover_2', 'two_man', 'tampa_2', 'cover_4', 'cover_6'}
 MAN_CALLS = {'cover_0', 'cover_1', 'cover_1_robber', 'two_man', 'cover_3_mable'}
 BLITZ_CALLS = {'cover_0', 'fire_zone'}
+SHELL_BASE = {'cover_0': .03, 'cover_1': .15, 'cover_2': .18,
+              'cover_3': .30, 'cover_4': .22, 'cover_6': .07,
+              'tampa_2': .08}
 
 
 def call_coverage(down, ydstogo, score_diff, secs_left, off_personnel,
@@ -202,6 +205,15 @@ def call_coverage(down, ydstogo, score_diff, secs_left, off_personnel,
         w *= np.array([(f_man if n in MAN_CALLS else 1.0 / np.sqrt(f_man))
                        * (f_two if n in TWO_HIGH else 1.0 / np.sqrt(f_two))
                        * (f_bl if n in BLITZ_CALLS else 1.0) for n in names])
+        # The plan's specific shell weights are separate from its broad
+        # one-high/two-high identity. An in-game counter can now favor Cover 4
+        # over Cover 2 without changing every two-high call equally.
+        preferred = lean.get('shell_weights') or {}
+        if preferred:
+            w *= np.array([float(np.clip(
+                float(preferred.get(SHELL_OF[n], SHELL_BASE.get(SHELL_OF[n], .03)))
+                / SHELL_BASE.get(SHELL_OF[n], .03), .25, 4.0)) ** .8
+                for n in names])
     w = np.clip(w, 1e-6, None)
 
     name = names[int(rng.choice(len(names), p=w / w.sum()))]

@@ -316,6 +316,7 @@ def keep_groups_whole(league, rng, week):
     """No club dresses without a line. A group below its floor of healthy men
     calls up from the squad, then signs from the pool, at that group."""
     import min_salary as MS
+    import roster_needs as RN
     from cap_engine import CAP, Contract
     moves = []
     user = getattr(league, 'user_team', None)
@@ -375,16 +376,21 @@ def keep_groups_whole(league, rng, week):
     for abbr, team in league.teams.items():
         if abbr == user: continue
         wk_ = int(week or 0); added = 0
-        def healthy_at(pos):
-            return [p for p in team.active() if p.pos == pos and (p.out_until is None or (int(p.out_until) < 99 and int(p.out_until) - wk_ <= 2))]
-        # 1. a spot with nobody healthy is filled first, whatever the group says
-        for pos, n_start in STARTERS.items():
+        floors, group_floors = RN.roster_floors(team)
+        shape = dict(SHAPE, WR=max(SHAPE['WR'], floors['WR']),
+                     TE=max(SHAPE['TE'], floors['TE']),
+                     DL=group_floors['DL'], LB=group_floors['LB'])
+        # 1. Cover this coach's actual roles before adding general depth.
+        current = RN.assess(team, [p for p in team.active() if p.out_until is None
+                                  or (int(p.out_until) < 99 and int(p.out_until) - wk_ <= 2)])
+        for pos in sorted(RN.POSITIONS, key=lambda x: -current['needs'].get(x, 0.0)):
             if added >= 2: break
-            if len(healthy_at(pos)) >= n_start: continue
+            if current['needs'].get(pos, 0.0) < 0.75: break
             grp = GROUP_OF.get(pos, pos)
             cands = sorted([q for q in squad(team) if q.pos == pos], key=lambda q: -q.ovr)
             if cands and call_up(league, abbr, cands[0].pid):
-                moves.append((abbr, 'callup', cands[0].pid)); added += 1; continue
+                moves.append((abbr, 'callup', cands[0].pid)); added += 1
+                current = RN.assess(team); continue
             fa = [league.player(pid) for pid in league.free_agents]
             fa = [q for q in fa if q and q.pos == pos and q.out_until is None and not q.retired and not shunned(q, abbr, league)]
             if not fa: continue
@@ -397,18 +403,31 @@ def keep_groups_whole(league, rng, week):
             league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)   # logged once, below, with the reason
             league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
             moves.append((abbr, 'sign', best.pid)); added += 1
+            current = RN.assess(team)
         # 2. back to 53: the thinnest group against a normal 53-man shape gets the body
         while len(team.active()) < 53 and added < 2:
             counts = collections.Counter(GROUP_OF.get(p.pos, p.pos) for p in team.active() if p.out_until is None or (int(p.out_until) < 99 and int(p.out_until) - wk_ <= 2))
-            need = sorted(((SHAPE[g] - counts.get(g, 0)) / SHAPE[g], g) for g in SHAPE)
-            grp = need[-1][1]
-            cands = sorted([q for q in squad(team) if GROUP_OF.get(q.pos, q.pos) == grp], key=lambda q: -q.ovr)
-            if cands and call_up(league, abbr, cands[0].pid):
-                moves.append((abbr, 'callup', cands[0].pid)); added += 1; continue
-            fa = [league.player(pid) for pid in league.free_agents]
-            fa = [q for q in fa if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and not shunned(q, abbr, league)]
-            if not fa: break
-            best = max(fa, key=lambda q: q.ovr)
+            needs = RN.assess(team)['needs']
+            order = sorted(shape, key=lambda g: ((shape[g] - counts.get(g, 0)) / shape[g]
+                                + max((needs.get(p, 0.0) for p in RN.GROUPS.get(g, (g,))), default=0.0)),
+                           reverse=True)
+            best = None
+            called_up = False
+            for grp in order:
+                cands = sorted([q for q in squad(team) if GROUP_OF.get(q.pos, q.pos) == grp], key=lambda q: -q.ovr)
+                if cands and call_up(league, abbr, cands[0].pid):
+                    moves.append((abbr, 'callup', cands[0].pid)); added += 1
+                    called_up = True
+                    break
+                fa = [league.player(pid) for pid in league.free_agents]
+                fa = [q for q in fa if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and not shunned(q, abbr, league)]
+                if fa:
+                    best = max(fa, key=lambda q: q.ovr + 12.0 * needs.get(q.pos, 0.0))
+                    break
+            if called_up:
+                continue
+            if best is None:
+                break
             mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
             if best.pid in league.free_agents: league.free_agents.remove(best.pid)
             best.contract = None
@@ -418,8 +437,6 @@ def keep_groups_whole(league, rng, week):
     return moves
 
 
-STARTERS = {'QB': 1, 'HB': 1, 'WR': 3, 'TE': 1, 'LT': 1, 'LG': 1, 'C': 1, 'RG': 1, 'RT': 1, 'LEDG': 1, 'REDG': 1, 'DT': 2,
-            'MIKE': 1, 'WILL': 1, 'CB': 3, 'FS': 1, 'SS': 1, 'K': 1, 'P': 1}
 SHAPE = {'QB': 3, 'HB': 4, 'WR': 6, 'TE': 3, 'OL': 9, 'DL': 9, 'LB': 6, 'DB': 10, 'K': 1, 'P': 1}   # a normal 53 by group (the long snapper rides with the specialists)
 
 

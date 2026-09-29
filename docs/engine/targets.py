@@ -471,17 +471,13 @@ def build_depth_chart(roster, scheme=None, unavailable=None):
 # Who is ON THE FIELD by package. This is the piece fatigue alone cannot
 # produce: five DBs play every snap in nickel, so the top five are all
 # starters and the sixth never appears. Real teams sub by package.
-OFF_PACKAGES = {
-    '11': dict(WR=3, TE=1, HB=1), '12': dict(WR=2, TE=2, HB=1),
-    '21': dict(WR=2, TE=1, HB=2), '13': dict(WR=1, TE=3, HB=1),
-    '10': dict(WR=4, TE=0, HB=1), '22': dict(WR=1, TE=2, HB=2),
-    '00': dict(WR=5, TE=0, HB=0),
-}
+import offense_roles as OR
+OFF_PACKAGES = OR.PACKAGES
 DEF_PACKAGES = {
     'base':   dict(CB=2, FS=1, SS=1, LB=3, DL=4),
     'nickel': dict(CB=3, FS=1, SS=1, LB=2, DL=4),
     'dime':   dict(CB=4, FS=1, SS=1, LB=1, DL=4),
-    'heavy':  dict(CB=2, FS=1, SS=0, LB=4, DL=5),
+    'heavy':  dict(CB=2, FS=1, SS=0, LB=3, DL=5),
 }
 
 # ------------------------------------------------------------ the linebackers a package fields
@@ -495,7 +491,7 @@ LB_ROLE = {
     'coverage': {'zone_cover_rating': .26, 'man_cover_rating': .22, 'speed_rating': .20, 'play_rec_rating': .16, 'pursuit_rating': .10, 'accel_rating': .06},
     'run':      {'tackle_rating': .26, 'block_shed_rating': .22, 'hit_power_rating': .18, 'strength_rating': .14, 'pursuit_rating': .12, 'play_rec_rating': .08},
 }
-PACKAGE_LB = {'base': ('every_down', 3), 'nickel': ('coverage', 2), 'dime': ('coverage', 1), 'heavy': ('run', 4), 'goal_line': ('run', 3), 'third_down': ('coverage', 2), 'two_minute': ('coverage', 1)}
+PACKAGE_LB = {'base': ('every_down', 3), 'nickel': ('coverage', 2), 'dime': ('coverage', 1), 'heavy': ('run', 3), 'goal_line': ('run', 3), 'third_down': ('coverage', 2), 'two_minute': ('coverage', 1)}
 
 
 def _role_score(r, role):
@@ -542,6 +538,11 @@ def package_linebackers(men, package, scheme=None, key=lambda m: m):
 
 def field_package(chart, package, side='off'):
     """The eleven men this package puts on the field, in depth order."""
+    if side == 'off':
+        out = {}
+        for role, player in OR.assign(chart, package):
+            out.setdefault(role, []).append(player)
+        return out
     spec = (OFF_PACKAGES if side == 'off' else DEF_PACKAGES).get(package, {})
     out = {}
     for pos, n in spec.items():
