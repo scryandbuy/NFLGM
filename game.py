@@ -119,6 +119,18 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     a rule. The field goal is taken only when three points change the number of scores the club still needs.
     """
     import decisions as DEC
+    distance = yardline_100 + 17
+    kick_chance = fg_probability(distance, kicker, rate_fn)
+    kick_chance *= ENV.kick_mult if distance >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult)
+    minimum = 0.42 if secs_left > 300 or score_diff >= 0 else 0.25
+    if secs_left < 20: minimum = min(minimum, 0.20)
+    in_range = kick_chance >= minimum
+    # With time for one play, a reachable kick ties or wins. The general
+    # desperation rule must not force a conversion that leaves no clock.
+    if secs_left <= 6 and -3 <= score_diff <= 0 and in_range:
+        return 'field_goal'
+    if secs_left <= 6 and score_diff < -3:
+        return 'go'
     need_now = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
     chasing = score_diff < 0 and secs_left < 150 * need_now + 90
     # does a field goal matter? Down 14 it leaves two scores either way; down 10 it makes it one
@@ -126,7 +138,8 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now and -score_diff not in (7, 8) and -(score_diff + 3) not in (7, 8))
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_table = float(np.clip(GO_RATE[band][zone] * (0.55 + 0.60 * aggression), 0.0, 1.0))     # the observed rates already carry an average coach; the personality term sits around them
-    r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100, ydstogo, aggression=aggression, is_home=1) if use_wp else None
+    r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100, ydstogo,
+                       fg_prob=kick_chance, aggression=aggression, is_home=1) if use_wp else None
     if r is not None:
         # the model's edge as a probability: a small edge is a lean, a big one nearly certain, a negative one nearly never
         edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
@@ -157,21 +170,15 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
     if score_diff <= -9 and yardline_100 <= 5 and ydstogo <= 5:
         p_go = max(p_go, 0.85)                           # down two scores at the goal line, the touchdown is the point
-    if secs_left < 120 and score_diff < 0 and yardline_100 > 40:
+    if secs_left < 120 and score_diff < 0 and yardline_100 > 40 and not (in_range and fg_matters):
         p_go = 1.0                                       # a punt down late is the game
     if rng.random() < p_go:
         return 'go'
     # not going: the kick when it is in range and worth something, else the punt
     # A team's range follows its kicker and the weather. The old fixed yardline
     # limits made a weak leg try the same long kick as a strong one.
-    distance = yardline_100 + 17
-    kick_chance = fg_probability(distance, kicker, rate_fn)
-    kick_chance *= ENV.kick_mult if distance >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult)
-    minimum = 0.42 if secs_left > 300 or score_diff >= 0 else 0.25
-    if secs_left < 20: minimum = min(minimum, 0.20)
-    in_range = kick_chance >= minimum
     if in_range and fg_matters:
-        return 'field_goal'
+        return 'field_goal' if r is None or r['wp_fg'] >= r['wp_punt'] else 'punt'
     if in_range and not fg_matters:
         return 'go'                                      # three points change nothing here; the down is the drive
     return 'punt'
