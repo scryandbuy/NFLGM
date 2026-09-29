@@ -1,3 +1,4 @@
+from player_background import home_state
 """
 DRAFT VIEWS. The Scouting Board, Draft Day, and Picks pages, and what their
 buttons do. Prospects are seen through YOUR scouts' eyes; the true rating is
@@ -93,7 +94,7 @@ def _prospect(league, abbr, p, taken=()):
     h = getattr(p, 'height', None); size = (f"{int(h) // 12}'{int(h) % 12}\" {int(getattr(p, 'weight', 0) or 0)}".strip() if h else '')
     rk = c.get('rank') if c else None
     proj_range = (f"{max(1, rk - 4)}–{rk + 4}" if rk and rk <= 224 else '—')
-    return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), college=getattr(p, 'college', None) or '', small=(not SC._power(p)), visited=('visited' in flags or p.pid in (getattr(league, 'user_visits', None) or [])),
+    return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), home_state=home_state(p), small=(not SC._power(p)), visited=('visited' in flags or p.pid in (getattr(league, 'user_visits', None) or [])),
                 cls_year=cls_year, size=size, words=words, proj_range=proj_range, visit_move=visit_move, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
@@ -262,7 +263,7 @@ def prospect_card(session, league, abbr, pid):
     confidence = 'Visited' if ('visited' in (view.get('flags') or []) or p.pid in (getattr(league, 'user_visits', None) or [])) else 'Not visited'
     import personality as PT
     words = PT.words(getattr(p, 'traits', None) or {}) if getattr(p, 'traits', None) and 'Character' in row['words'] else ''
-    return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], fit=row.get('fit', 0.0), scheme_ovr=row.get('scheme_ovr'), college=row['college'], conference=getattr(p, 'conference', None) or '',
+    return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], fit=row.get('fit', 0.0), scheme_ovr=row.get('scheme_ovr'), home_state=row['home_state'],
                 small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
                 words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine,
                 medical=('Concern found at visit' if 'medical' in (view.get('flags') or []) else 'No concern found at visit' if 'visited' in (view.get('flags') or []) else 'Unknown until visit'),
@@ -312,7 +313,7 @@ def spring(session, league, abbr):
     for x in news:
         if x.get('kind') != 'stock': continue
         p = pool.get(x['pid']) or league.player(x['pid'])
-        moves.append(dict(event=x.get('event'), pid=x['pid'], name=x.get('name'), pos=x.get('pos'), college=x.get('college'), frm=x.get('frm'), to=x.get('to'), delta=(x.get('frm') or 0) - (x.get('to') or 0), why=x.get('why', '')))
+        moves.append(dict(event=x.get('event'), pid=x['pid'], name=x.get('name'), pos=x.get('pos'), home_state=home_state(p) if p else x.get('home_state'), frm=x.get('frm'), to=x.get('to'), delta=(x.get('frm') or 0) - (x.get('to') or 0), why=x.get('why', '')))
     # flags your room uncovered at visits this spring, folded into the player's line
     uncovered = {}
     for x in news:
@@ -330,7 +331,7 @@ def spring(session, league, abbr):
         if pid in moved: continue
         p = pool.get(pid) or league.player(pid)
         if p is None: continue
-        flag_lines.append(dict(event='visits', pid=pid, name=p.name, pos=p.pos, college=p.college, frm=None, to=None, delta=0, kind='flag', line=f"Uncovered a {' and a '.join(fl)} flag at the visit."))
+        flag_lines.append(dict(event='visits', pid=pid, name=p.name, pos=p.pos, home_state=home_state(p), frm=None, to=None, delta=0, kind='flag', line=f"Uncovered a {' and a '.join(fl)} flag at the visit."))
     risers = sorted([m for m in moves if m['delta'] > 0], key=lambda m: -m['delta'])[:12]
     fallers = sorted([m for m in moves if m['delta'] < 0], key=lambda m: m['delta'])[:12]
     events = []
@@ -452,7 +453,7 @@ def draft_day(session, league, abbr):
     picks_away = next((j for j, z in enumerate(D.picks[D.i:]) if z.owner == abbr), None)
     return dict(rail=r, live=True, on_user=D.on_user(), current=(dict(sel=pk.selection, slot=SLOT(pk), round=pk.round, team=club(pk.owner), original=pk.original, needs=sorted(_needs(league, league.teams[pk.owner]))[:3]) if pk else None),
                 clock=clock, order=pick_board, results=results, mine_next=mine_next, best=best, board=my_board, has_custom_board=bool(order or dnd), picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades), picks_away=picks_away, read=read,
-                default_pick=(dict(pid=my_board[0]['pid'], name=my_board[0]['name'], pos=my_board[0]['pos'], college=my_board[0]['college']) if my_board else None), my_needs=sorted(_needs(league, league.teams[abbr])))
+                default_pick=(dict(pid=my_board[0]['pid'], name=my_board[0]['name'], pos=my_board[0]['pos'], home_state=my_board[0]['home_state']) if my_board else None), my_needs=sorted(_needs(league, league.teams[abbr])))
 
 
 def _ordd(n):
@@ -571,7 +572,7 @@ def picks(session, league, abbr):
         if p is None: continue
         tm = league.teams.get(p.team) if p.team else None
         role = 'Retired' if p.retired else ('Free Agent' if tm is None else _role_word(tm, p))
-        results.append(dict(pid=p.pid, name=p.name, pos=p.pos, college=getattr(p, 'college', None) or '', year=x.get('year'), pick=f"{x.get('round')}.{((x.get('selection') or 1) - 1) % 32 + 1}", sel=x.get('selection'), team=club(x.get('team')) if x.get('team') in league.teams else None,
+        results.append(dict(pid=p.pid, name=p.name, pos=p.pos, home_state=home_state(p), year=x.get('year'), pick=f"{x.get('round')}.{((x.get('selection') or 1) - 1) % 32 + 1}", sel=x.get('selection'), team=club(x.get('team')) if x.get('team') in league.teams else None,
                             division=(league.teams[x['team']].division if x.get('team') in league.teams else None), ovr=round(p.ovr), drafted_at=(round(float(x['ovr_then'])) if x.get('ovr_then') is not None else None), cons_was=x.get('consensus_rank'), status=role, now=(club(p.team) if p.team in league.teams else None)))
     results.sort(key=lambda r: (-(r['year'] or 0), r['sel'] or 999))
     from views import draft_year
@@ -616,7 +617,7 @@ def draft_text(session, league, abbr):
         mine = f"{round(float(read))}" if read is not None else '—'
         cr = old.get('cons_rank') if old else c.get('rank')
         co = old.get('cons_ovr') if old else c.get('ovr')
-        lines.append(f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d} ({s:3d}) {t:3s} {p.name if p else pid} · {p.pos if p else '?'} · {p.college if p else ''} · consensus #{cr if cr is not None else '—'} ({round(float(co)) if co is not None else '—'}) · your read {mine} · age {int(p.age) if p else '—'}" + (f" · {p.ovr:.0f} ovr now" if p and p.team else ''))
+        lines.append(f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d} ({s:3d}) {t:3s} {p.name if p else pid} · {p.pos if p else '?'} · {home_state(p) if p else ''} · consensus #{cr if cr is not None else '—'} ({round(float(co)) if co is not None else '—'}) · your read {mine} · age {int(p.age) if p else '—'}" + (f" · {p.ovr:.0f} ovr now" if p and p.team else ''))
     if trades:
         lines.append(''); lines.append('Trades on the clock')
         for tr in trades:
@@ -645,7 +646,7 @@ def draft_csv(session, league, abbr):
     import views_club as VC
     for grp in VC.ATTR.values():
         for k, lab in grp: labels[k] = lab
-    head = ['pick', 'round', 'slot', 'team', 'player', 'pos', 'age', 'school', 'consensus_rank', 'consensus_grade', 'your_read', 'overall_now', 'dev'] + [labels.get(k, k.replace('_rating', '')) for k in attrs]
+    head = ['pick', 'round', 'slot', 'team', 'player', 'pos', 'age', 'home_state', 'consensus_rank', 'consensus_grade', 'your_read', 'overall_now', 'dev'] + [labels.get(k, k.replace('_rating', '')) for k in attrs]
     rows = [head]
     for s, t, pid in results:
         p = league.player(pid)
@@ -655,7 +656,7 @@ def draft_csv(session, league, abbr):
         cr = old.get('cons_rank') if old else c.get('rank')
         co = old.get('cons_ovr') if old else c.get('ovr')
         read = old.get('user_ovr') if old else v.get('ovr')
-        base = [s, (s - 1) // 32 + 1, f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d}", t, (p.name if p else pid), (p.pos if p else ''), (int(p.age) if p else ''), (p.college if p else ''),
+        base = [s, (s - 1) // 32 + 1, f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d}", t, (p.name if p else pid), (p.pos if p else ''), (int(p.age) if p else ''), (home_state(p) if p else ''),
                 cr if cr is not None else '', (round(float(co)) if co is not None else ''), (round(float(read)) if read is not None else ''), (round(float(p.ovr)) if p else ''), (VC.DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), getattr(p, 'dev', '')) if p else '')]
         rows.append(base + [(round(float(p.ratings.get(k, 0))) if p else '') for k in attrs])
     def cell(x):
@@ -678,13 +679,13 @@ def class_csv(session, league, abbr):
     for grp in VC.ATTR.values():
         for k, lab in grp: labels[k] = lab
     from views import draft_year
-    head = ['name', 'pos', 'age', 'school', 'class_year', 'true_overall', 'true_ceiling_lo', 'true_ceiling_hi', 'dev', 'tape', 'tape_role',
+    head = ['name', 'pos', 'age', 'home_state', 'class_year', 'true_overall', 'true_ceiling_lo', 'true_ceiling_hi', 'dev', 'tape', 'tape_role',
             'consensus_rank', 'consensus_grade', 'your_read', 'your_ceiling_lo', 'your_ceiling_hi', 'your_certainty', 'flags'] + [labels.get(k, k.replace('_rating', '')) for k in attrs]
     rows = [head]
     for p in sorted(pool, key=lambda p: -p.ovr):
         c = cons.get(p.pid, {}) or {}; v = views.get(p.pid) or {}
         lo, hi = (p.potential_range or (p.ovr, p.ovr))
-        rows.append([p.name, p.pos, int(p.age), p.college, getattr(p, 'class_year', '') or '', round(float(p.ovr)), round(float(lo)), round(float(hi)), VC.DEV_WORD.get(str(p.dev).lower(), p.dev),
+        rows.append([p.name, p.pos, int(p.age), home_state(p), getattr(p, 'class_year', '') or '', round(float(p.ovr)), round(float(lo)), round(float(hi)), VC.DEV_WORD.get(str(p.dev).lower(), p.dev),
                      round(float(p.xp_spent.get('_tape', 0) or 0), 1), p.xp_spent.get('_tape_role', ''),
                      c.get('rank', ''), (round(float(c['ovr'])) if c.get('ovr') else ''), (round(float(v['ovr'])) if v.get('ovr') else ''),
                      (round(float(v['pot_lo'])) if v.get('pot_lo') else ''), (round(float(v['pot_hi'])) if v.get('pot_hi') else ''),

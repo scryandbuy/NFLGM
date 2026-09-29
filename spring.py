@@ -1,3 +1,4 @@
+from player_background import home_state
 """
 THE SPRING. Between the season and the draft, the clubs learn.
 
@@ -49,8 +50,8 @@ def _stock_moves(league, event):
             p = league.player(pid)
             if p is not None and p.pos not in ('K', 'P'):      # specialists bounce on the slot curve; nobody writes about it
                 moves.append((p, pr, r))
-                _log(league, 'stock', event=event, pid=pid, name=p.name, pos=p.pos, college=p.college, frm=pr, to=r,
-                     text=f"{p.name} ({p.pos}, {p.college}) {'rises' if r < pr else 'falls'} from {pr} to {r} after the {event}")
+                _log(league, 'stock', event=event, pid=pid, name=p.name, pos=p.pos, home_state=home_state(p), frm=pr, to=r,
+                     text=f"{p.name} ({p.pos}, {home_state(p)}) {'rises' if r < pr else 'falls'} from {pr} to {r} after the {event}")
     return moves
 
 
@@ -84,7 +85,7 @@ def combine(league, rng):
             SC._refresh(v, p)
     SC.consensus(league)
     for p in []:
-        _log(league, 'medical', pid=p.pid, name=p.name, pos=p.pos, text=f"{p.name} ({p.pos}, {p.college}) has a medical flag out of the combine")
+        _log(league, 'medical', pid=p.pid, name=p.name, pos=p.pos, text=f"{p.name} ({p.pos}, {home_state(p)}) has a medical flag out of the combine")
     return len(invited), _stock_moves(league, 'combine')
 
 
@@ -213,7 +214,7 @@ def _medical(league, abbr, team, p, rng):
     v['flags'] = list(set(v.get('flags', []) + ['medical']))
     SC._refresh(v, p)
     if abbr == getattr(league, 'user_team', None):
-        _log(league, 'flag', event='visit', flag='medical', pid=p.pid, name=p.name, pos=p.pos, college=p.college, text=f"Uncovered a medical flag at the {p.name} visit")
+        _log(league, 'flag', event='visit', flag='medical', pid=p.pid, name=p.name, pos=p.pos, home_state=home_state(p), text=f"Uncovered a medical flag at the {p.name} visit")
 
 
 def _character(league, abbr, team, p, sd, rng):
@@ -229,7 +230,7 @@ def _character(league, abbr, team, p, sd, rng):
         v['adj'] = v.get('adj', 0.0) - 2.0
         v['flags'] = list(set(v.get('flags', []) + ['character']))
         if abbr == getattr(league, 'user_team', None):
-            _log(league, 'flag', event='visit', flag='character', pid=p.pid, name=p.name, pos=p.pos, college=p.college, text=f"Uncovered a character flag at the {p.name} visit")
+            _log(league, 'flag', event='visit', flag='character', pid=p.pid, name=p.name, pos=p.pos, home_state=home_state(p), text=f"Uncovered a character flag at the {p.name} visit")
         SC._refresh(v, p)
 
 

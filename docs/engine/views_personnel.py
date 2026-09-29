@@ -1,3 +1,4 @@
+from player_background import home_state
 """
 PERSONNEL VIEWS. Trades, Free Agency, Waivers, Extensions: what the pages show
 and what their buttons do. Every action goes through the engine's own
@@ -499,7 +500,7 @@ def waivers(session, league, abbr):
         try: fit = round(float(__import__('gm_engine').scheme_fit(p.ratings, p.pos, me)), 1)
         except Exception: fit = 0.0
         frm = d.get('from_team') or d.get('team') or ''
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, college=getattr(p, 'college', None) or '', frm=frm, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1),
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, home_state=home_state(p), frm=frm, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1),
                          yrs=p.contract.years if p.contract else 0, inherited=(f"${p.cap_hit(0):.1f}m · {p.contract.years} Yr{'s' if p.contract.years != 1 else ''}" if p.contract else 'Min'), accrued=int(p.accrued or 0), claimed=(abbr in (d.get('claims') or [])),
                          read=_claim_read(league, me, p, frm, order, abbr)))
     rows.sort(key=lambda r: -r['ovr'])
