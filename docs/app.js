@@ -115,6 +115,8 @@ function busy(t) { const b = $('#busy'); if (t) { b.textContent = t; b.hidden = 
 
 // ---------------------------------------------------------------- the rail
 function renderRail(r) {
+  // Overview owns its full-width page treatment; other routes use their own boards.
+  $('#page').classList.remove('overview-page');
   $('#rail').hidden = false;
   const c = $('#crest'); c.textContent = r.club.abbr; c.style.background = r.club.color;
   personnelRailTeam = r.club; const palette = applyTeamTheme($('#rail'), r.club); document.documentElement.style.setProperty('--club', palette.base); document.documentElement.style.setProperty('--club-2', palette.accent);
@@ -607,7 +609,7 @@ let rosterSide = 'All', rosterQuery = '', rosterSel = null;
 let viewClub = null;   // null = your own club; an abbreviation = another club's page, read-only
 const CLUB_LIST = () => (view && view.rail && view.rail.clubs) ? view.rail.clubs : Object.keys(COLOR).sort().map(a => ({ abbr: a, name: a }));
 function clubSelect(current, onPick) {
-  const sel = el('select', { class: 'btn team-picker', 'aria-label': 'Choose a team', 'data-tip': "Choose any of the 32 teams to view their roster or depth chart" });
+  const sel = el('select', { class: 'btn team-picker', 'aria-label': 'Choose a team', 'data-tip': "Choose any of the 32 teams" });
   const clubs = pyJSON('SESSION.club_list()');
   for (const c of clubs) sel.append(el('option', { value: c.abbr, selected: c.abbr === current ? '' : null }, `${c.name}${c.mine ? ' (User)' : ''}`));
   sel.onchange = () => onPick(sel.value);
@@ -1131,11 +1133,6 @@ function renderTradeSide(v, key, reload) {
   const own = key === 'a' ? v.me : v.them, selected = tradeState[key];
   const box = el('section',{class:'trade-side','data-team':own.club.abbr}); applyTeamTheme(box,own.club);
   const head = el('div',{class:'trade-side-head'},el('h2',{},own.club.name));
-  if (key === 'b') {
-    const select = el('select',{'aria-label':'Trade partner',onchange:e=>{tradeState.other=e.target.value;tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload();}});
-    for(const c of v.clubs) select.append(el('option',{value:c.abbr,selected:c.abbr===v.other.abbr?'':null},c.name));
-    head.append(select);
-  }
   head.append(el('div',{class:'trade-cap'},el('b',{},`$${own.cap.toFixed(1)}m`),el('small',{},'Cap space')));
   const onChange=(asset,remove)=>{
     const i=selected.findIndex(x=>x.kind===asset.kind && String(x.id)===String(asset.id));
@@ -1170,7 +1167,9 @@ function renderTrades(v) {
   tradeState.a=tradeSelection(tradeState.a,v.me);tradeState.b=tradeSelection(tradeState.b,v.them);
   const reload=()=>{const y=window.scrollY;renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));window.scrollTo(0,y);};
   const s=el('section',{class:'sheet c12 trade-board'});applyTeamTheme(s,v.me.club);
-  s.append(el('div',{class:'trade-hero'},el('small',{},v.me.club.name.toUpperCase()),el('h1',{},'TRADES'),el('span',{},v.can_trade?`Deadline after Week ${v.deadline_week}`:'Closed until the season ends')));
+  const partners=el('div',{class:'trade-team-emblems',role:'group','aria-label':'Choose trade partner'});
+  for(const c of v.clubs) partners.append(el('button',{class:'trade-team-emblem',style:`--team-color:${teamTheme(c).base}`,'aria-label':c.name,'aria-pressed':String(c.abbr===v.other.abbr),'data-tip':c.name,onclick:()=>{if(c.abbr===tradeState.other)return;tradeState.other=c.abbr;tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload();}},c.abbr));
+  s.append(el('div',{class:'trade-hero trade-partners'},partners));
   if(!v.can_trade)s.append(el('div',{class:'banner'},'The trade deadline has passed. Trades reopen after the season.'));
   if(v.draft_live)s.append(el('div',{class:'banner'},`Draft day · pick ${v.draft_live.slot} · ${v.draft_live.team} on the clock. `,el('a',{class:'btn',href:'#draft/day'},'Back to the Draft')));
   s.append(el('div',{class:'trade-columns'},renderTradeSide(v,'a',reload),renderTradeSide(v,'b',reload)));
@@ -1234,8 +1233,9 @@ function offerForm(t, kind, onDone, preset) {
 function talkLine(t, reload) {
   const state = { open: 'awaiting your offer', waiting: 'agent deciding', countered: 'countered', match_requested: 'matching', accepted: 'agreed', declined: 'declined', expired: 'expired', broken_off: 'walked away' }[t.state] || t.state;
   const done = !['open', 'waiting', 'countered', 'match_requested'].includes(t.state);
-  return el('div', { class: 'talkline' + (done ? ' done' : ''), onclick: () => openTalks(t, reload) },
-    el('div', { class: 'nm' }, `${t.name} · ${t.pos}`), el('div', { class: 'count' }, `${t.opened ? 'entered ' + t.opened + ' · ' : ''}${state}${t.ask && !done ? ` · asking $${(+t.ask).toFixed(1)}m × ${t.years}` : ''}`), el('span', { class: 'go' }, done ? 'History ›' : 'Open ›'));
+  const ask=t.ask&&!done?`$${(+t.ask).toFixed(1)}m × ${t.years}`:'';
+  return el('button', { class: 'talkline' + (done ? ' done' : ''), 'aria-label':`${done?'History':'Open'}: ${t.name}, ${state}`, 'data-tip':[t.opened?`Opened ${t.opened}`:'',state,ask].filter(Boolean).join(' · '), onclick: () => openTalks(t, reload) },
+    el('span', { class: 'nm' }, t.name, el('small',{},t.pos)), el('span', { class: 'talk-state' }, state, ask?el('small',{},ask):''), el('span', { class: 'go' }, done ? 'History ›' : 'Open ›'));
 }
 // a concluded conversation offers a fresh start; the engine opens a new thread when the agent will take the call
 function reopenTalks(t, reload) {
@@ -2109,6 +2109,10 @@ function leagueFinish(board,page) {
 function renderSchedule(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('schedule');
   const s = leagueBoard(v, 'SCHEDULE', '');
+  const teamPicker=el('select',{class:'btn team-picker','aria-label':'Schedule team',onchange:e=>{if(e.target.value)renderTeamSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(e.target.value)}, year=${Number(v.year)})`));}});
+  teamPicker.append(el('option',{value:''},'All teams'));
+  for(const c of pyJSON('SESSION.club_list()'))teamPicker.append(el('option',{value:c.abbr},`${c.name}${c.mine?' (User)':''}`));
+  s.querySelector('.report-hero').append(el('div',{class:'schedule-team-controls'},teamPicker));
   s.append(leagueYear(v, y => renderSchedule(pyJSON(`SESSION.league_view('schedule', year=${y})`))));
   if (v.missing) { s.append(el('div', { class: 'empty' }, 'No schedule is kept for that season.')); leagueFinish(s,page); return; }
   if (v.note) s.append(el('div', { class: 'count', style: 'padding:4px 14px' }, v.note));
@@ -2197,10 +2201,13 @@ function regressionPopup(v, r) {
 function renderClubSchedule(v, mine) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
-  $('#crumb').textContent = mine ? 'Team' : 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === (mine ? 'club' : 'league')));
+  $('#crumb').textContent = 'Team'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
   secondRow(clubNav(v.team.abbr, mine, null), mine ? '#club/schedule' : `#league/team/${v.team.abbr}/schedule`);
   const s = reportBoard(v.team, 'SCHEDULE', [[v.record || '—', 'RECORD'], [(v.byes || []).join(', ') || '—', 'BYE WEEK']]);
-  s.append(scheduleSeasonPicker(v, y => renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(v.team.abbr)}, year=${y})`), mine)));
+  const teams=pyJSON('SESSION.club_list()');
+  const load=(team,year)=>renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(team)}, year=${Number(year)})`),!!teams.find(c=>c.abbr===team)?.mine);
+  const controls=el('div',{class:'schedule-team-controls'},scheduleSeasonPicker(v,y=>load(v.team.abbr,y)),clubSelect(v.team.abbr,team=>load(team,v.year)));
+  s.querySelector('.report-hero').append(controls);
   if (v.missing) { s.append(el('div', { class: 'empty' }, 'No schedule is kept for that season.')); page.append(s); return; }
   s.append(scheduleContent(v)); page.append(s);
 }
@@ -2244,10 +2251,11 @@ function renderTeamSchedule(v) {
   renderRail(v.rail); const page=persPage(); lgSecond('schedule');
   const s=reportBoard(v.team,'SCHEDULE',[[v.record||'—','RECORD']]);
   const load=(team,year)=>renderTeamSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(team)}, year=${Number(year)})`));
-  const sel=el('select',{class:'btn','aria-label':'Schedule team'});
+  const sel=el('select',{class:'btn team-picker','aria-label':'Schedule team'});
   for(const c of v.clubs) sel.append(el('option',{value:c.abbr,selected:c.abbr===v.team.abbr?'':null},c.name));
   sel.onchange=()=>load(sel.value,v.year);
-  s.append(el('div',{class:'report-controls'},el('button',{class:'btn',onclick:()=>renderSchedule(pyJSON(`SESSION.league_view('schedule', year=${Number(v.year)})`))},'League Schedule'),sel,scheduleSeasonPicker(v,y=>load(v.team.abbr,y))),scheduleContent(v)); page.append(s);
+  s.querySelector('.report-hero').append(el('div',{class:'schedule-team-controls'},scheduleSeasonPicker(v,y=>load(v.team.abbr,y)),sel));
+  s.append(el('div',{class:'report-controls'},el('button',{class:'btn',onclick:()=>renderSchedule(pyJSON(`SESSION.league_view('schedule', year=${Number(v.year)})`))},'League Schedule')),scheduleContent(v)); page.append(s);
 }
 
 let txGroup = 'All', txClub = 'all', txQuery = '', txShown = 60;

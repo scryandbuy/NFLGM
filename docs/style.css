@@ -2497,7 +2497,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 @media(max-width:850px){.overview-hero{padding:24px;align-items:flex-start;flex-direction:column}.overview-phase{text-align:left;max-width:none}.overview-hero h1{font-size:34px}.overview-match .match{grid-template-columns:1fr!important}.overview-status .facts2{grid-template-columns:repeat(2,minmax(0,1fr))!important}.overview-page>.c6{grid-column:span 12}.overview-summaries{grid-template-columns:1fr}.overview-summaries a{border-right:0}.overview-actions .cards{grid-template-columns:1fr}.overview-match .bug .nm{font-size:18px}}
 
 /* Overview finish: one continuous team-colored surface, like the Inbox. */
-#page.overview-page{gap:0;background:#0b1619;border:1px solid var(--rule);border-radius:12px;overflow:hidden;margin-top:18px}
+#page.overview-page{gap:0;padding:0;background:#0b1619;border:1px solid var(--rule);border-radius:12px;overflow:hidden;margin-top:18px}
 #page.overview-page>.sheet{border-radius:0;background:transparent;margin:0;box-shadow:none}
 #page.overview-page .overview-hero{border:0;border-radius:0;padding:38px 34px 34px;background:linear-gradient(105deg,color-mix(in srgb,var(--team-base) 85%,#102021),#0b1619 85%)}
 #page.overview-page .overview-hero h1{font-size:48px;font-family:var(--text);letter-spacing:-.045em}
@@ -2535,3 +2535,21 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 #page.overview-page tr.me{background:color-mix(in srgb,var(--team-base) 40%,transparent);box-shadow:inset 3px 0 var(--team-readable)}
 #page.overview-page .overview-summaries{margin:0;padding:26px 12px;background:#0a1417}
 @media(max-width:850px){#page.overview-page .overview-hero{padding:26px 22px}#page.overview-page .overview-hero h1{font-size:36px}#page.overview-page .overview-phase{padding:0;border:0;max-width:none}#page.overview-page .overview-match .match{padding:14px 22px}#page.overview-page .overview-match .bug{gap:10px;grid-template-columns:1fr!important}#page.overview-page .overview-match .side{justify-content:center}#page.overview-page .overview-match .cards{grid-template-columns:1fr}#page.overview-page .overview-actions .cards{grid-template-columns:1fr}#page.overview-page>.c6+.c6{border-left:0;border-top:1px solid var(--rule)}#page.overview-page .overview-match>h2{flex-wrap:wrap;padding:22px}#page.overview-page .overview-status .facts2{padding:22px}}
+
+/* Overview, depth, schedule and Personnel polish — 2026-09-29. */
+.overview-result strong.good,.overview-result strong.bad{display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:6px;background:#10201c;border:1px solid #ffffff24}
+.overview-result strong.good{color:#6ee7ad}.overview-result strong.bad{color:#ff777e;background:#26171c}
+.depth-board .plate3 .fit,.depth-board .plate3 .fit b{font-size:12px;opacity:1}
+.schedule-team-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-left:auto;flex-wrap:wrap}
+.schedule-team-controls select{margin:0!important}.schedule-team-controls .team-picker{min-width:180px}
+.trade-board .trade-hero.trade-partners{padding:20px 18px;display:block;min-width:0}
+.trade-team-emblems{display:flex;flex-wrap:nowrap;gap:5px;overflow-x:auto;padding:3px;scrollbar-width:thin}
+.trade-team-emblem{flex:1 0 36px;height:43px;min-width:36px;padding:0;border:1px solid #39434f;border-top:3px solid var(--team-color);background:#222831;color:#e5e9ef;font-family:var(--display);font-weight:800;font-size:11px;letter-spacing:.01em}
+.trade-team-emblem:hover,.trade-team-emblem[aria-pressed="true"]{background:color-mix(in srgb,var(--team-color) 26%,#222831);border-color:var(--team-color)}
+.trade-team-emblem[aria-pressed="true"]{outline:2px solid var(--team-readable);outline-offset:1px}
+.personnel-board .talkline{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 64px;align-items:center;gap:10px;width:100%;padding:12px;text-align:left;background:transparent}
+.personnel-board .talkline .nm{font:600 12px/1.4 var(--text);min-width:0;overflow-wrap:anywhere}
+.personnel-board .talkline small{display:block;font:400 10px/1.5 var(--text);color:var(--ink-3)}
+.personnel-board .talkline .talk-state{font:400 11px/1.4 var(--text);color:var(--ink-2);min-width:0}
+.personnel-board .talkline .go{font:600 11px var(--text);white-space:nowrap;margin:0;text-align:right}
+.personnel-board .talkline:hover{background:#ffffff06}
