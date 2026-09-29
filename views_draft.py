@@ -531,6 +531,7 @@ def act_accept_offer(session, league, abbr, i):
     if D is None or not D.on_user() or int(i) >= len(offers): return dict(ok=False, why='that offer is gone')
     o = offers[int(i)]
     ev = D.accept_offer(o)
+    if ev is None: return dict(ok=False, why='The trade no longer fits under the cap')
     session._draft_offers = []
     D.sim_to_user()
     if D.done: session._draft_over(); return dict(ok=True, line='Traded. The draft is over.', done=True)

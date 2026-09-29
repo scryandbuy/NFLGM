@@ -234,9 +234,11 @@ def apply_changes(plan, base, changes):
     for k, v in changes.items():
         if k == 'depth_mix':
             d = np.array(plan.depth_mix, float) + np.array(v, float)
+            if d.shape != (3,) or not np.all(np.isfinite(d)): continue
             d = np.clip(d, 0.05, 0.9); plan.depth_mix = tuple(d / d.sum())
         elif k == 'protection':
             plan.protection = v
+            plan.protection_locked = True
         elif k in ('travel', 'bracket', 'travel_target'):
             setattr(plan, k, v)
         elif k == 'screen_boost':
@@ -245,7 +247,10 @@ def apply_changes(plan, base, changes):
             setattr(plan, k, float(np.clip(getattr(plan, k, 0.0) + v, -1.0, 1.0)))
         elif k in RANGE:
             b = float(getattr(base, k, getattr(plan, k)))
-            setattr(plan, k, float(np.clip(getattr(plan, k) + v, b - RANGE[k], b + RANGE[k])))
+            if not np.isfinite(float(v)): continue
+            lo, hi = b - RANGE[k], b + RANGE[k]
+            if k not in ('pass_bias', 'box_bias'): lo, hi = max(0.0, lo), min(1.0, hi)
+            setattr(plan, k, float(np.clip(getattr(plan, k) + v, lo, hi)))
     return plan
 
 

@@ -320,8 +320,8 @@ def cap_blocks(offer, space_a, space_b, gm_a=None, gm_b=None):
     dead_b = sum(float(x.get('dead_now', x.get('dead', 0)) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
     in_a = sum(float(x.get('inherit', 0) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
     in_b = sum(float(x.get('inherit', 0) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
-    out_a = sum(float(x.get('inherit', 0) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
-    out_b = sum(float(x.get('inherit', 0) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
+    out_a = sum(float(x.get('out_hit', x.get('inherit', 0)) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
+    out_b = sum(float(x.get('out_hit', x.get('inherit', 0)) or 0) for x in offer['a_gets'] if x['kind'] == 'player')
     # after the deal: space + hits shed - hits taken on - dead eaten
     after_a = space_a + out_a - in_a - dead_a
     after_b = space_b + out_b - in_b - dead_b

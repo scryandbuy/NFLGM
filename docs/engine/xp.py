@@ -279,17 +279,21 @@ def cost_per_point(player, attr=None):
 # Potential is a hard ceiling on overall, set on day one. At the ceiling a
 # man keeps earning and can BUY the ceiling up, one overall at a time, then
 # goes back to buying attributes. Under-23s arrive with a range rather than a
-# point; the point is drawn from it the first time it matters, so the same
+# point; the point is drawn from it at creation, so the same
 # prospect turns out differently in different saves.
 UNLOCK_BASE, UNLOCK_FROM, UNLOCK_GROWTH = 5000.0, 80.0, 1.10
 
 
 def ceiling(player, rng=None):
-    """His hard ceiling, resolving a range on first use. None means uncapped."""
+    """Read the fixed ceiling. Viewing a player must never resolve potential."""
+    return player.potential
+
+
+def resolve_potential(player, rng):
+    """Resolve once at creation (or legacy-save migration), never in a view."""
     if player.potential is None and player.potential_range:
         lo, hi = player.potential_range
-        r = rng or np.random.default_rng()
-        player.potential = float(round(r.uniform(lo, hi), 1))
+        player.potential = float(round(rng.uniform(lo, hi), 1))
     return player.potential
 
 
@@ -303,7 +307,13 @@ def unlock_cost(player):
             * (1.0 + AGE_SLOPE * years))
 
 
-def unlock(player):
+def _record_purchase(player, kind, cost, *, attr=None, year=None, week=None, source=None):
+    """Keep dated XP purchases with the player's existing, saved XP ledger."""
+    player.xp_spent.setdefault('_purchases', []).append(dict(
+        kind=kind, attr=attr, cost=round(float(cost), 1), year=year, week=week, source=source))
+
+
+def unlock(player, *, year=None, week=None, source=None):
     """Raise the ceiling one point. Returns the cost, or None."""
     pot = ceiling(player)
     if pot is None or pot >= 99.0:
@@ -314,6 +324,7 @@ def unlock(player):
     player.xp -= cost
     player.potential = min(99.0, pot + 1.0)
     player.xp_spent['_unlocks'] = player.xp_spent.get('_unlocks', 0) + 1
+    _record_purchase(player, 'unlock', cost, year=year, week=week, source=source)
     return cost
 
 
@@ -330,7 +341,7 @@ def at_ceiling(player, attr=None):
     return TG.position_score(trial, player.pos) > pot + 1e-6
 
 
-def buy(player, attr):
+def buy(player, attr, *, year=None, week=None, source=None):
     """
     Spend: one point into one attribute. Returns the cost paid, or None if he
     cannot afford it, the attribute is at 99, or the point would take him
@@ -347,6 +358,7 @@ def buy(player, attr):
     player.ratings[attr] = cur + 1.0
     player.xp_spent[attr] = player.xp_spent.get(attr, 0) + 1
     player.xp_spent['_bought_season'] = player.xp_spent.get('_bought_season', 0) + 1
+    _record_purchase(player, 'buy', cost, attr=attr, year=year, week=week, source=source)
     return cost
 
 

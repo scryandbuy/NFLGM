@@ -85,7 +85,7 @@ def choose_attr(player, gm, rng):
     return keys[int(rng.choice(len(keys), p=p))]
 
 
-def spend_player(player, gm, team, week, rng, verbose=False):
+def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, source='AI'):
     """Spend one man's XP this week. Returns a list of (kind, attr, cost)."""
     out = []
     if player.xp <= 0:
@@ -99,8 +99,8 @@ def spend_player(player, gm, team, week, rng, verbose=False):
     if target:
         if player.age > YOUNG:
             player.xp_spent.pop('_saving_for', None)
-        elif XP.buy(player, target) is not None:
-            out.append(('buy', target, XP.cost_per_point(player, target)))
+        elif (paid := XP.buy(player, target, year=year, week=week, source=source)) is not None:
+            out.append(('buy', target, paid))
             player.xp_spent.pop('_saving_for', None)
         else:
             out.append(('save', target, XP.cost_per_point(player, target) - player.xp))
@@ -112,7 +112,10 @@ def spend_player(player, gm, team, week, rng, verbose=False):
             if cost is None:
                 break
             if player.xp >= cost:
-                XP.unlock(player); out.append(('unlock', None, cost)); continue
+                paid = XP.unlock(player, year=year, week=week, source=source)
+                if paid is None: break
+                out.append(('unlock', None, paid))
+                continue
             # SAVE, or not. Worth it if he could cover it soon and the club
             # cares about later; a contender would rather have nothing than
             # wait, but at the ceiling there is nothing else to buy anyway.
@@ -123,7 +126,7 @@ def spend_player(player, gm, team, week, rng, verbose=False):
         attr = choose_attr(player, gm, rng)
         if attr is None:
             break
-        cost = XP.buy(player, attr)
+        cost = XP.buy(player, attr, year=year, week=week, source=source)
         if cost is None and attr in XP.PHYSICAL:
             # He drew speed and cannot afford it this week. XP arrives at a
             # thousand or two a week and was spent down as it came, so a
@@ -140,7 +143,7 @@ def spend_player(player, gm, team, week, rng, verbose=False):
             cheap = min((k for k in TG.DEPTH_WEIGHTS[player.pos] if player.ratings.get(k, 70) < 99
                          and not (k in XP.PHYSICAL and player.age > YOUNG)),
                         key=lambda k: XP.cost_per_point(player, k), default=None)
-            cost = XP.buy(player, cheap) if cheap else None
+            cost = XP.buy(player, cheap, year=year, week=week, source=source) if cheap else None
             if cost is None:
                 break
             attr = cheap
@@ -159,7 +162,7 @@ def spend_week(league, week, rng, user_team=None, verbose=False):
             p.xp_spent['_weeks'] = p.xp_spent.get('_weeks', 0) + 1
             if abbr == user_team and not p.xp_spent.get('_auto'):
                 continue
-            acts = spend_player(p, gm, team, week, rng)
+            acts = spend_player(p, gm, team, week, rng, year=league.year, source='Assistant' if abbr == user_team else 'AI')
             if acts:
                 log[p.pid] = acts
     return log

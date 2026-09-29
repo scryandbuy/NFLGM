@@ -1,0 +1,21 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const src=fs.readFileSync('docs/app.js','utf8');
+function el(tag,attrs={},...kids){return {tag,attrs,kids,append(...xs){this.kids.push(...xs)}}}
+const ctx={el,weekName:w=>w>=19?'Post '+w:'Wk '+w,clubLink:(a,n)=>el('a',{},n),location:{hash:''},pyJSON:x=>({pid:'p1'}),renderCard:v=>ctx.opened=v};
+vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('function scheduleEntries('),src.indexOf('function renderTeamSchedule(')),ctx);
+const game={week:19,done:true,result:'W',home:true,opp:{abbr:'CHI',name:'Chicago'},mine:24,theirs:20,box:true};
+const v={year:2027,years:[2026,2027],games:[game,{...game,week:1,box:false}],byes:[11],not_kept:[3]};
+assert.deepEqual(Array.from(ctx.scheduleEntries(v),e=>e.week),[1,3,11,19]);
+const content=ctx.scheduleContent(v); const rows=content.kids[1].kids;
+assert.equal(rows.length,4);assert.equal(rows[1].kids[1].kids[0],'Not kept in the record');assert.equal(rows[2].kids[1].kids[0],'Bye');
+rows[3].attrs.onclick({target:{closest:()=>true}});assert.equal(ctx.location.hash,'');
+rows[3].attrs.onclick({target:{closest:()=>false}});assert.equal(ctx.location.hash,'#gameday/19');
+assert.equal(ctx.scheduleContent({missing:true}).kids.length,1);
+let chosen;const sel=ctx.scheduleSeasonPicker(v,y=>chosen=y);sel.value='2026';sel.onchange();assert.equal(chosen,2026);
+assert.equal(ctx.scheduleSeasonPicker({year:2026,years:[2026]},()=>{}).attrs.disabled,'');
+vm.runInContext("let cardPid=null,cardTab='Overview';"+src.slice(src.indexOf('function openPlayer('),src.indexOf('function renderCard(')),ctx);
+ctx.openPlayer('p1','Development');assert.equal(ctx.location.hash,'#club/player/p1');
+vm.runInContext("if (cardPid !== 'p1' || cardTab !== 'Development') throw Error('wrong card target')",ctx);
+ctx.openPlayer('p1','Development');assert.equal(ctx.opened.pid,'p1');
+console.log('Passed: schedule ordering, bye/missing/postseason rows, box links, season selection, explicit and same-player Development navigation');

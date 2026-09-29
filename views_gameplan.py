@@ -11,11 +11,11 @@ import numpy as np
 from views import club, rail, sentence
 
 LEANS = [
-    ('offense', 'pass_bias', 'Pass Lean', 'Run more', 'Pass more', 'Share of early-down calls that are passes'),
-    ('offense', 'play_action_rate', 'Play Action', 'Less', 'More', 'Off the run game'),
-    ('offense', 'motion_rate', 'Motion', 'Still', 'Constant', 'Pre-snap movement rate'),
+    ('offense', 'pass_bias', 'Pass Lean', 'Run more', 'Pass more', 'Adjust the situational tendency to pass'),
+    ('offense', 'play_action_rate', 'Play Action', 'Less', 'More', 'Play-action tendency off the run game'),
+    ('offense', 'motion_rate', 'Motion', 'Still', 'Constant', 'Pre-snap movement tendency'),
     ('offense', 'tempo', 'Tempo', 'Huddle', 'Hurry', 'Huddle · Normal · Hurry'),
-    ('defense', 'blitz_rate', 'Blitz Rate', 'Rush four', 'Send heat', 'Five or more rushers'),
+    ('defense', 'blitz_rate', 'Blitz Rate', 'Rush four', 'Send heat', 'Pressure tendency; actual rate depends on the situation'),
     ('defense', 'man_rate', 'Man Coverage', 'Zone', 'Man', 'Share of coverage snaps in man'),
     ('defense', 'shell_lean', 'Shell', 'Single high', 'Two high', 'Single-High · Two-High'),
     ('defense', 'zone_aggression', 'Zone Aggression', 'Stay home', 'Drive on the throw', 'Drive on the throw or stay home'),
@@ -46,7 +46,11 @@ def _base_plan(session, league, abbr):
 
 
 def _week(session, league):
-    return session.stop[1] if session.stop[0] == 'week' else 1 if session.stop[0] in ('cutdown', 'wire') else None
+    if session.stop[0] == 'week': return session.stop[1]
+    if session.stop[0] in ('cutdown', 'wire'): return 1
+    if session.stop[0] == 'playoffs' and len(session.stop) > 1 and 0 <= session.stop[1] < 4:
+        return 19 + session.stop[1]
+    return None
 
 
 def _saved(league, week):
@@ -87,8 +91,10 @@ def this_week(session, league, abbr):
             if ck in GW.RANGE and isinstance(cv, (int, float)) and not isinstance(cv, bool): ghost[ck] = ghost.get(ck, 0.0) + float(cv)
     for side, k, label, lo, hi, desc in LEANS:
         b = float(getattr(base, k)); rng_ = GW.RANGE[k]; val = float(getattr(plan, k))
+        lower, upper = b-rng_, b+rng_
+        if k not in ('pass_bias', 'box_bias'): lower, upper = max(0.0, lower), min(1.0, upper)
         g = (max(b - rng_, min(b + rng_, val + ghost[k])) if k in ghost else None)
-        leans.append(dict(side=side, key=k, label=label, lo=lo, hi=hi, desc=desc, base=round(b, 3), value=round(val, 3), word=_lean_word(k, val), min=round(b - rng_, 3), max=round(b + rng_, 3), range=rng_,
+        leans.append(dict(side=side, key=k, label=label, lo=lo, hi=hi, desc=desc, base=round(b, 3), value=round(val, 3), word=_lean_word(k, val), min=round(lower, 3), max=round(upper, 3), range=rng_,
                           delta=round(float(changes.get(k, 0.0)), 3) if isinstance(changes.get(k, 0.0), (int, float)) else 0.0, ghost=(round(g, 3) if g is not None else None), ghost_word=(_lean_word(k, g) if g is not None else None)))
     from views import _change_words
     def target_words(s):
@@ -143,79 +149,104 @@ def _merge(changes, add):
     for k, v in add.items():
         if k == 'depth_mix':
             cur = out.get('depth_mix', (0.0, 0.0, 0.0)); out['depth_mix'] = tuple(float(a) + float(b) for a, b in zip(cur, v))
-        elif k in ('protection', 'travel', 'bracket'): out[k] = v
+        elif k in ('protection', 'travel', 'bracket', 'travel_target'): out[k] = v
         elif k == 'screen_boost': out[k] = float(out.get(k, 0.0)) + float(v)
         else: out[k] = float(out.get(k, 0.0)) + float(v)
     return out
 
 
-def act_take(session, league, abbr, i):
+def _parts(league, week):
+    wp = getattr(league, 'user_week_plan', None) or {}
+    if wp.get('year') != league.year or wp.get('week') != week: return {}, {}
+    # Older plans have no provenance; preserve their effective choices as manual.
+    return dict(wp.get('manual', wp.get('changes', {}))), dict(wp.get('suggestions', {}))
+
+
+def _write(league, week, manual, suggestions):
+    import gameplan_week as GW
+    combined = {}
+    for changes in suggestions.values(): combined = _merge(combined, changes)
+    combined.update(manual)  # an explicit GM instruction wins over advice
+    wp = GW.set_user_plan(league, week, combined, taken=list(suggestions))
+    wp.update(manual=manual, suggestions=suggestions)
+
+
+def _suggestion(session, league, abbr, i):
     import gameplan_week as GW
     wk = _week(session, league); opp = session._opponent(wk)
-    rep = GW.opponent_report(league, abbr, opp[0], wk)
-    if int(i) >= len(rep['suggestions']): return dict(ok=False, why='that suggestion is gone')
-    s = rep['suggestions'][int(i)]
-    if s['text'] in _taken(league, wk): return dict(ok=True, line='Already taken.')
-    changes = _merge(_saved(league, wk), s['changes'])
-    GW.set_user_plan(league, wk, changes, taken=_taken(league, wk) + [s['text']])
-    return dict(ok=True, line=f"Taken: {s['text']}.")
+    if opp is None: return None
+    suggestions = GW.opponent_report(league, abbr, opp[0], wk)['suggestions']
+    return suggestions[int(i)] if 0 <= int(i) < len(suggestions) else None
+
+
+def act_take(session, league, abbr, i):
+    wk = _week(session, league); suggestion = _suggestion(session, league, abbr, i)
+    if suggestion is None: return dict(ok=False, why='that suggestion is gone')
+    manual, suggestions = _parts(league, wk)
+    suggestions[suggestion['text']] = dict(suggestion['changes'])
+    _write(league, wk, manual, suggestions)
+    return dict(ok=True, line=f"Taken: {suggestion['text']}.")
 
 
 def act_untake(session, league, abbr, i):
-    import gameplan_week as GW
-    wk = _week(session, league); opp = session._opponent(wk)
-    rep = GW.opponent_report(league, abbr, opp[0], wk)
-    s = rep['suggestions'][int(i)]
-    neg = {k: (tuple(-float(x) for x in v) if isinstance(v, (tuple, list)) else (-float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None)) for k, v in s['changes'].items()}
-    changes = _saved(league, wk)
-    for k, v in neg.items():
-        if v is None: changes.pop(k, None)
-        else: changes = _merge(changes, {k: v})
-    changes = {k: v for k, v in changes.items() if not (isinstance(v, float) and abs(v) < 1e-9) and not (isinstance(v, tuple) and all(abs(x) < 1e-9 for x in v))}
-    GW.set_user_plan(league, wk, changes, taken=[t for t in _taken(league, wk) if t != s['text']])
-    return dict(ok=True, line=f"Put back: {s['text']}.")
+    wk = _week(session, league); suggestion = _suggestion(session, league, abbr, i)
+    if suggestion is None: return dict(ok=False, why='that suggestion is gone')
+    manual, suggestions = _parts(league, wk)
+    suggestions.pop(suggestion['text'], None)
+    _write(league, wk, manual, suggestions)
+    return dict(ok=True, line=f"Put back: {suggestion['text']}.")
 
 
 def act_set_lean(session, league, abbr, key, value):
-    """A slider: the value the user wants, stored as the delta from the coach's base, clamped to the range."""
     import gameplan_week as GW
-    wk = _week(session, league)
-    base = _base_plan(session, league, abbr)
     if key not in GW.RANGE: return dict(ok=False, why='not a lean')
-    b = float(getattr(base, key)); d = float(np.clip(float(value) - b, -GW.RANGE[key], GW.RANGE[key]))
-    changes = _saved(league, wk); changes[key] = d
-    if abs(d) < 1e-9: changes.pop(key, None)
-    GW.set_user_plan(league, wk, changes)
-    return dict(ok=True, value=round(b + d, 3))
+    try: value = float(value)
+    except (TypeError, ValueError): return dict(ok=False, why='Enter a valid number.')
+    if not np.isfinite(value): return dict(ok=False, why='Enter a finite number.')
+    wk = _week(session, league); base = _base_plan(session, league, abbr)
+    b = float(getattr(base, key)); d = float(np.clip(value-b, -GW.RANGE[key], GW.RANGE[key]))
+    manual, suggestions = _parts(league, wk); manual[key] = d
+    _write(league, wk, manual, suggestions)
+    return dict(ok=True, value=round(b+d, 3))
 
 
 def act_set_depth(session, league, abbr, short, medium, deep):
-    import gameplan_week as GW
+    try: want = np.array([float(short), float(medium), float(deep)])
+    except (TypeError, ValueError): return dict(ok=False, why='Enter three valid percentages.')
+    if not np.all(np.isfinite(want)) or np.any(want < 0) or want.sum() <= 0 or not np.isfinite(want.sum()):
+        return dict(ok=False, why='Depth percentages must be nonnegative and total more than zero.')
+    want /= want.sum()
     wk = _week(session, league); base = _base_plan(session, league, abbr)
-    want = np.array([float(short), float(medium), float(deep)]); want = want / want.sum()
-    changes = _saved(league, wk); changes['depth_mix'] = tuple(float(x) for x in (want - np.array(base.depth_mix)))
-    GW.set_user_plan(league, wk, changes); return dict(ok=True)
+    manual, suggestions = _parts(league, wk)
+    manual['depth_mix'] = tuple(float(x) for x in want - np.array(base.depth_mix))
+    _write(league, wk, manual, suggestions)
+    return dict(ok=True)
 
 
 def act_set_decision(session, league, abbr, key, value):
-    import gameplan_week as GW
-    wk = _week(session, league); changes = _saved(league, wk)
+    wk = _week(session, league); manual, suggestions = _parts(league, wk)
     if key == 'protection':
-        if value in PROTECTIONS: changes['protection'] = value
-        else: changes.pop('protection', None)
-    elif key == 'travel': changes['travel'] = bool(value)
-    elif key == 'travel_target':
-        if value: changes['travel_target'] = value; changes['travel'] = True
-        else: changes.pop('travel_target', None)
-    elif key == 'bracket':
-        if value: changes['bracket'] = value
-        else: changes.pop('bracket', None)
-    GW.set_user_plan(league, wk, changes); return dict(ok=True)
+        if value not in PROTECTIONS: return dict(ok=False, why='Unknown protection.')
+        manual[key] = value
+    elif key == 'travel':
+        manual[key] = bool(value)
+        if not value: manual['travel_target'] = None
+    elif key in ('travel_target', 'bracket'):
+        if value:
+            opp = session._opponent(wk)
+            p = league.player(value)
+            if not opp or p is None or p.team != opp[0] or p.pos != 'WR' or p.out_until is not None:
+                return dict(ok=False, why='Choose an available opposing receiver.')
+        manual[key] = value or None
+        if key == 'travel_target': manual['travel'] = bool(value)
+    else: return dict(ok=False, why='Unknown decision.')
+    _write(league, wk, manual, suggestions)
+    return dict(ok=True)
 
 
 def act_reset(session, league, abbr):
-    import gameplan_week as GW
-    wk = _week(session, league); GW.set_user_plan(league, wk, {}, taken=[]); return dict(ok=True, line="Back to the coordinators' plan.")
+    _write(league, _week(session, league), {}, {})
+    return dict(ok=True, line="Back to the coordinators' plan.")
 
 
 # ------------------------------------------------------------ the report

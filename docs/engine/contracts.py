@@ -5,18 +5,8 @@ The offseason step where a club gets under the cap. Nothing in it is new
 machinery - cap_engine has handled proration, dead money, June 1 and the
 conversion since it was written, and had never once been called.
 
-SIMPLE RESTRUCTURES ONLY, by decision. A simple restructure converts base
-salary into signing bonus and spreads it over the years ALREADY on the deal.
-A team can do it unilaterally; the player's consent is not required, and he
-generally wants it anyway - money that might never have been guaranteed gets
-paid immediately. The maximum restructure, which bolts void years onto the
-end, is deliberately not in the game.
-
-That choice removes a real hazard. Void years are placeholders that exist only
-to widen proration, and when the deal voids every remaining prorated dollar
-slams onto that year's cap. Contract still carries a `void` field and nothing
-in the game ever sets it above zero, so no club can quietly borrow against a
-year that never arrives.
+Simple restructures preserve existing allocations. Users may add up to two
+void years; their remaining bonus accelerates when the contract expires.
 
 AVAILABLE TO EVERY GENERAL MANAGER. Restructuring is a mechanic the rules
 allow any club to use, not a personality trait, so nothing here reads a GM
@@ -82,7 +72,7 @@ def restructure_room(player, cap):
     c = player.contract
     if not c or c.years <= 1:
         return 0.0
-    floor = MS.minimum_salary(player.accrued, cap)
+    floor = max(MS.minimum_salary(player.accrued, cap),c.earned_base)
     room, _conv = GM.simple_restructure_room(c.base[0], c.years, floor)
     return room
 
@@ -398,9 +388,12 @@ def restructure_preview(league, pid, amount=None, void_years=0):
     c = p.contract
     if c is None:
         return dict(ok=False, why='no contract')
-    cap = CAP.get(league.year, 301.2)
-    floor = MS.minimum_salary(p.accrued or 0, cap)
-    max_conv = max(0.0, c.base[0] - floor)
+    from cap_accounting import pre_roll
+    index = 1 if pre_roll(league) else 0
+    if c.years <= index: return dict(ok=False, why='No remaining salary to restructure')
+    cap = CAP.get(league.year+index, CAP.get(league.year,301.2)*1.055**index)
+    floor = max(MS.minimum_salary(p.accrued or 0, cap), c.earned_base if index==0 else 0.0)
+    max_conv = max(0.0, c.base[index] - floor)
     conv = max_conv if amount is None else float(min(max(0.0, amount), max_conv))
     if conv <= 0:
         return dict(ok=False, why='nothing above the minimum to convert')
@@ -408,14 +401,15 @@ def restructure_preview(league, pid, amount=None, void_years=0):
     before = [round(c.cap_hit(i), 2) for i in range(c.years)]
     trial = copy.deepcopy(c)
     trial.void = max(trial.void, void_years)
-    trial.restructure(0, amount=conv, min_base=floor)
+    trial.restructure(index, amount=conv, min_base=floor)
     after = [round(trial.cap_hit(i), 2) for i in range(trial.years)]
-    return dict(ok=True, convert=round(conv, 2), max_convert=round(max_conv, 2), void_years=trial.void,
-                saves_now=round(before[0] - after[0], 2),
-                added_later=[round(after[i] - before[i], 2) for i in range(1, c.years)],
+    return dict(ok=True, convert=conv, max_convert=round(max_conv, 3), void_years=trial.void,
+                year_index=index, cap_year=league.year+index, min_base=floor,
+                saves_now=round(before[index] - after[index], 2),
+                added_later=[round(after[i] - before[i], 2) for i in range(index+1, c.years)],
                 proration_years=trial.proration_years,
-                dead_if_cut_next_year=round(trial.remaining_proration(1), 2),
-                dead_at_void=round(trial.annual_proration * max(0, trial.proration_years - trial.years), 2),
+                dead_if_cut_next_year=round(trial.remaining_proration(index+1), 2),
+                dead_at_void=round(trial.remaining_proration(trial.years), 2),
                 hits_before=before, hits_after=after)
 
 
@@ -428,7 +422,7 @@ def restructure_user(league, pid, amount=None, void_years=0):
         return pv
     p = league.player(pid); c = p.contract
     c.void = max(c.void, pv['void_years'])
-    c.restructure(0, amount=pv['convert'], min_base=MS.minimum_salary(p.accrued or 0, CAP.get(league.year, 301.2)))
+    c.restructure(pv['year_index'], amount=pv['convert'], min_base=pv['min_base'])
     league.teams[p.team].sync_cap()
     league.log('restructure', pid=pid, team=p.team, converted=pv['convert'], void_years=c.void, user=True)
     return dict(pv, done=True)

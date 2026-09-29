@@ -69,7 +69,7 @@ def book_play(book, out, off, deff, epa_val):
             if tgt:
                 w = book._get(tgt); w['rec_epa'] += epa_val; w['sep_total'] += float(out.get('separation') or 0.0); w['sep_n'] += 1
     elif t == 'run':
-        rb = out.get('carrier_pid') or off['rb'].get('pid')
+        rb = out.get('carrier_pid') or (off.get('rb') or off['qb']).get('pid')
         s = book._get(rb); s['rush_epa'] += epa_val; s['rush_plays'] += 1
     # the defence: the men on the field share what they allowed, by unit
     for d in (deff.get('dl') or []) + (deff.get('lb') or []) + (deff.get('db') or []):
@@ -121,8 +121,9 @@ def leaders(league, year, metric, min_n=1, top=10, pos=None):
     for pid, line in league.stats.get(year, {}).items():
         p = league.player(pid)
         n = line.get(floor_key, 0) or (line.get('pb_snaps', 0) if floor_key == 'pb_reps' else 0)
-        if p is None or (pos and p.pos not in pos) or n < min_n: continue
+        season_pos = ((getattr(p, 'career', {}) or {}).get(year, {}).get('pos', p.pos) if p is not None and year != league.year else getattr(p, 'pos', None))
+        if p is None or (pos and season_pos not in pos) or n < min_n: continue
         m = line_metrics(line)
         if metric in m: rows.append((p, m[metric], n))
-    rows.sort(key=lambda r: -r[1])
+    rows.sort(key=lambda r: r[1] if metric == 'def_epa_per_play' else -r[1])
     return rows[:top]

@@ -114,10 +114,10 @@ def tag_price(player, cap):
     escalated by how many times this club has already done it.
     """
     positional = FA.tag_value(player.pos, cap)
-    prior = player.apy if player.contract else 0.0
-    base = max(positional, 1.20 * prior)
-    step = TAG_ESCALATOR.get(min(player.tag_count + 1, MAX_TAGS), 1.44)
-    return round(base * step, 3)
+    prior = float(getattr(player, 'xp_spent', {}).get('_prior_salary', 0.0))
+    if player.contract: prior = player.contract.cap_hit(0)
+    step = 1.44 if player.tag_count >= 2 else 1.20
+    return round(max(positional, step * prior), 3)
 
 
 def tender_price(player, cap):

@@ -341,7 +341,10 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
                 waiting.append(p)
                 continue
             best = alt
-        sign(league, p, best, cap)
+        try: sign(league, p, best, cap)
+        except ValueError:
+            waiting.append(p)
+            continue
         league.teams[best.team].sync_cap()
         signed.append((best.team, p, best))
 
@@ -359,10 +362,19 @@ def sign(league, player, offer, cap):
     # for the weeks left, not the full year: real in-season signings are per-week
     # money. The later years are whole.
     wk = int(league.week or 0)
-    if league.phase == 'regular' and 1 <= wk <= 18 and base:
-        base[0] = round(base[0] * (19 - wk) / 18.0, 3)
+    paid = team.cap.paid_week
+    if league.phase == 'regular' and base:
+        base[0] = round(base[0] * (18-paid) / 18.0, 3)
     c = Contract(years=offer.years, base=base,
-                 signing_bonus=st['signing_bonus'], signed=league.year)
+                 signing_bonus=st['signing_bonus'], signed=league.year, pay_start=paid)
+    from cap_accounting import require_room, pre_roll
+    if pre_roll(league):
+        # The displayed cap year is next year until Step 4; no new salary is
+        # charged to the completed season or consumed by its contract advance.
+        c.base.insert(0,0.0); c.rb.insert(0,0.0); c.bonus_schedule.insert(0,0.0)
+        c.years+=1; c.start_offset=1; c.signed=league.year+1
+    require_room(league, team, player.pid, c)
+    if player.team and player.fa_class == 'tendered': _unlist(league, player)
     # the incumbent at his spot who is now behind a man the club just paid
     try:
         import morale as MO
@@ -421,14 +433,14 @@ def resolve_offer_sheets(league, rng, verbose=False):
                >= price * 1.02)
         if can and worth >= price * 0.72:
             o = Offer(msg['team'], p.pid, price, years, phase=3)
-            _unlist(league, p)
-            sign(league, p, o, cap)
+            try: sign(league, p, o, cap)
+            except ValueError: continue
             holder.sync_cap()
             kept.append((msg['team'], p, price))
         elif suitor and power(league, suitor, cap) >= price * 1.05:
             o = Offer(msg['suitor'], p.pid, price, years, phase=3)
-            _unlist(league, p)
-            sign(league, p, o, cap)
+            try: sign(league, p, o, cap)
+            except ValueError: continue
             suitor.sync_cap()
             lost.append((msg['suitor'], p, price))
         msg['resolved'] = True
@@ -443,6 +455,7 @@ def _unlist(league, player):
     t = league.teams.get(player.team)
     if t and player in t.roster:
         t.roster.remove(player)
+        t.sync_cap()
     player.team, player.contract = None, None
     if player.pid not in league.free_agents:
         league.free_agents.append(player.pid)
@@ -506,7 +519,8 @@ def fill_out_rosters(league, pool, rng, verbose=False):
             if len(grp) >= 4:
                 continue                  # already deep here
             o = Offer(abbr, p.pid, round(floor, 3), 1, phase=3)
-            sign(league, p, o, cap)
+            try: sign(league, p, o, cap)
+            except ValueError: continue
             team.sync_cap()
             pool.remove(p)
             need -= 1
@@ -758,7 +772,9 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
             if score > best_score: best, best_score = team, score
         if best is None: continue
         o = Offer(best.abbr, p.pid, price, 1, phase=PHASES + 1)
-        sign(league, p, o, cap); best.sync_cap(); out.append((best.abbr, p, o))
+        try: sign(league, p, o, cap)
+        except ValueError: continue
+        best.sync_cap(); out.append((best.abbr, p, o))
         league.__dict__.setdefault('fa_signed', []).append((best.abbr, p.pid, o.apy, 1, PHASES + 1))
     return out
 

@@ -403,25 +403,27 @@ def _inbox(league, limit=14):
 
 
 def _cap(league, t):
-    from cap_engine import CAP
-    yr = league.year
-    groups = {'QB': ['QB'], 'OL': ['LT', 'LG', 'C', 'RG', 'RT'], 'WR': ['WR'], 'DL': ['LEDG', 'REDG', 'DT'], 'DB': ['CB', 'FS', 'SS'], 'LB': ['MIKE', 'WILL', 'SAM'], 'TE': ['TE'], 'RB': ['HB', 'FB'], 'ST': ['K', 'P']}
-    by = {g: 0.0 for g in groups}
-    for p in t.roster:
-        if p.contract is None: continue
-        hit = p.contract.cap_hit(0)
-        for g, poss in groups.items():
-            if p.pos in poss: by[g] += hit; break
-    cap = CAP.get(yr, 301.2)
-    committed = sum(v for v in by.values())
-    dead = float(getattr(t, 'dead_money', {}).get(yr, 0.0)) if isinstance(getattr(t, 'dead_money', None), dict) else float(getattr(t, 'dead_now', 0.0) or 0.0)
-    years = []
+    from cap_engine import CAP, TOP_51_PHASES
+    from cap_accounting import next_year_ledger
+    t.sync_cap(); yr=league.year
+    groups={'QB':['QB'],'OL':['LT','LG','C','RG','RT'],'WR':['WR'],'DL':['LEDG','REDG','DT'],'DB':['CB','FS','SS'],'LB':['MIKE','WILL','SAM'],'TE':['TE'],'RB':['HB','FB'],'ST':['K','P','LS']}
+    by={g:0.0 for g in groups}
+    ranked=sorted((p for p in t.roster if p.contract),key=lambda p:p.cap_hit(0),reverse=True)
+    for rank,p in enumerate(ranked):
+        c=p.contract
+        hit=c.cap_hit(0) if t.phase not in TOP_51_PHASES or rank<51 else c.bonus_at(0)+c.rb[0]
+        for g,poss in groups.items():
+            if p.pos in poss: by[g]+=hit; break
+    years=[]
     for i in range(3):
-        c = CAP.get(yr + i, cap * 1.07 ** i)
-        com = sum(p.contract.cap_hit(i) for p in t.roster if p.contract and p.contract.years > i)
-        years.append(dict(year=yr + i, cap=round(c, 1), committed=round(com, 1)))
-    f = cap_focus(league, t)
-    return dict(space=money(f['space']), cap=round(f['limit'] if f['next'] else cap, 1), focus_year=f['year'], focus_next=f['next'], by_group={g: round(v, 1) for g, v in by.items()}, dead=round(dead, 1), years=years)
+        if i==0: limit,committed=t.cap.limit,t.cap.charges(t.phase)
+        elif i==1: limit,committed,_,_=next_year_ledger(league,t)
+        else:
+            limit=CAP.get(yr+i,CAP.get(yr,301.2)*1.055**i)
+            committed=sum(p.contract.cap_hit(i) if p.contract.years>i else p.contract.remaining_proration(i) if p.contract.years==i else 0.0 for p in t.roster if p.contract)
+        years.append(dict(year=yr+i,cap=round(limit,1),committed=round(committed,1)))
+    f=cap_focus(league,t)
+    return dict(space=money(f['space']),cap=f['limit'],focus_year=f['year'],focus_next=f['next'],by_group={g:round(v,1) for g,v in by.items()},dead=round(t.cap.dead,1),years=years)
 
 
 def _room(league, t):
@@ -559,7 +561,7 @@ def cap_focus(league, t):
     if pre_roll:
         limit, committed, rollover, dead_next = next_year_cap(league, t)
         return dict(year=int(league.year) + 1, limit=round(limit, 1), committed=round(committed, 1), space=round(limit - committed, 1), next=True)
-    limit = float(CAP.get(league.year, 301.2)) + float(getattr(t.cap, 'rollover', 0.0) or 0.0)
+    limit = float(t.cap.limit)
     space = float(t.cap_space)
     return dict(year=int(league.year), limit=round(limit, 1), committed=round(limit - space, 1), space=round(space, 1), next=False)
 
@@ -569,8 +571,7 @@ def next_year_cap(league, t):
     (unused space carries over), and the money committed against it including the dead money already
     assigned to next year. Returns (limit, committed, rollover, dead_next)."""
     from cap_engine import CAP
-    base = CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.055)
-    rollover = max(0.0, float(t.cap_space)) if hasattr(t, 'cap_space') else 0.0
-    dead_next = float(getattr(t.cap, 'dead_next', 0.0) or 0.0) if hasattr(t, 'cap') else 0.0
-    committed = sum(p.contract.cap_hit(1) for p in t.roster if p.contract and p.contract.years >= 2) + dead_next
+    from cap_accounting import next_year_ledger
+    limit, committed, rollover, dead_next = next_year_ledger(league,t)
+    base = limit-rollover
     return round(base + rollover, 1), round(committed, 1), round(rollover, 1), round(dead_next, 1)

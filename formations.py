@@ -49,7 +49,7 @@ FORMATIONS = {
         ('X', 'R', OUTSIDE), ('Z', 'L', OUTSIDE), ('slot', 'L', SLOT),
         ('slot', 'L', SLOT), ('back', 'C', BACKFIELD)]),
     # a back split out is still 11 personnel - the DEFENCE has to notice
-    'empty':      dict(packages=('11', '10'), weight=0.28, spots=[
+    'empty':      dict(packages=('11', '10', '00'), weight=0.28, spots=[
         ('X', 'L', OUTSIDE), ('Z', 'R', OUTSIDE), ('slot', 'L', SLOT),
         ('slot', 'R', SLOT), ('slot', 'R', SLOT)]),
 

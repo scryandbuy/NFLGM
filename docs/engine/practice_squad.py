@@ -52,7 +52,9 @@ def squad(team):
 
 def ps_charge(team):
     """This club's practice-squad pay for the season, on the cap."""
-    return round(sum(PAY_VET if (p.accrued or 0) > 2 else PAY_YOUNG for p in squad(team)), 3)
+    cap = getattr(team, 'cap', None)
+    remaining = max(0,18-getattr(cap,'paid_week',0))/18
+    return round(getattr(cap,'ps_earned',0.0)+remaining*sum(PAY_VET if (p.accrued or 0) > 2 else PAY_YOUNG for p in squad(team)), 3)
 
 
 def is_young(p):
@@ -91,6 +93,7 @@ def sign_to_squad(league, abbr, pid):
     p.team, p.contract = abbr, None          # paid weekly, no contract object
     p.xp_spent['_ps'] = True
     squad(team).append(p)
+    team.sync_cap()
     league.log('ps_sign', pid=pid, team=abbr)
     return True
 
@@ -100,10 +103,11 @@ def release_from_squad(league, abbr, pid):
     if p in squad(team):
         squad(team).remove(p); p.team = None; p.xp_spent.pop('_ps', None)
         if pid not in league.free_agents: league.free_agents.append(pid)
+        team.sync_cap()
         league.log('ps_release', pid=pid, team=abbr)
 
 
-def call_up(league, abbr, pid, years=1):
+def call_up(league, abbr, pid, years=1, emergency=False):
     """To the 53 at the minimum for his accrued seasons."""
     team = league.teams[abbr]; p = league.player(pid)
     if p not in squad(team): return False
@@ -111,9 +115,16 @@ def call_up(league, abbr, pid, years=1):
     mn = MS.minimum_salary(p.accrued or 0, cap)
     if len(team.active()) >= 53 and league.phase == 'regular' and room_candidate(league, team, p) is None:
         return False                                      # nobody the club would release for him
+    c=Contract(years=years,base=[mn]*years,signed=league.year)
+    c.base[0]*=max(0,18-team.cap.paid_week)/18; c.pay_start=team.cap.paid_week
+    outgoing=room_candidate(league,team,p) if league.phase=='regular' and len(team.active())>=53 else None
+    if not emergency:
+        from cap_accounting import require_room
+        try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None,ps_pid=pid)
+        except ValueError: return False
     squad(team).remove(p); p.xp_spent.pop('_ps', None); p.team = None
     _make_room(league, abbr, p)
-    league.sign(pid, abbr, Contract(years=years, base=[mn] * years, signing_bonus=0.0, signed=league.year), log=False)
+    league.sign(pid, abbr, c, log=False)
     league.log('ps_callup', pid=pid, team=abbr)          # the one line for the move
     return True
 
@@ -175,11 +186,16 @@ def poach(league, abbr, pid, week):
     if src is None or src == abbr or p not in squad(league.teams[src]): return False
     team = league.teams[abbr]
     if len(team.active()) >= 53 and league.phase == 'regular' and room_candidate(league, team, p) is None: return False
-    squad(league.teams[src]).remove(p); p.xp_spent.pop('_ps', None); p.team = None
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
+    c=Contract(years=1,base=[mn*max(0,18-team.cap.paid_week)/18],signed=league.year,pay_start=team.cap.paid_week)
+    outgoing=room_candidate(league,team,p) if league.phase=='regular' and len(team.active())>=53 else None
+    from cap_accounting import require_room
+    try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None)
+    except ValueError: return False
+    squad(league.teams[src]).remove(p); league.teams[src].sync_cap(); p.xp_spent.pop('_ps', None); p.team = None
     _make_room(league, abbr, p)
-    league.sign(pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)
+    league.sign(pid, abbr, c, log=False)
     p.xp_spent['_poach_lock'] = (week or 0) + POACH_LOCK_GAMES
     league.log('ps_poach', pid=pid, team=abbr, source=src, locked_until=(week or 0) + POACH_LOCK_GAMES)
     return True
@@ -197,8 +213,7 @@ def elevate(league, abbr, pids, week, playoffs=False):
         if p not in squad(team): continue
         n = p.xp_spent.get('_elevations', 0)
         if n >= ELEVATIONS_PER_MAN and not playoffs:
-            call_up(league, abbr, pid)              # fourth time: he is signed
-            out.append((pid, 'signed'))
+            if call_up(league, abbr, pid): out.append((pid, 'signed'))
             continue
         p.xp_spent['_elevations'] = n + 1
         team._elevated = getattr(team, '_elevated', []) + [p]
@@ -353,7 +368,7 @@ def keep_groups_whole(league, rng, week):
                 cands = [p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp]
                 if cands:
                     best = max(cands, key=lambda p: p.ovr)
-                    if not call_up(league, abbr, best.pid): break
+                    if not call_up(league, abbr, best.pid, emergency=True): break
                     moves.append((abbr, 'callup', best.pid)); team._moved_week = wk_
                 else:
                     fa = [league.player(pid) for pid in league.free_agents]
@@ -383,7 +398,7 @@ def keep_groups_whole(league, rng, week):
             if len(healthy_at(pos)) >= n_start: continue
             grp = GROUP_OF.get(pos, pos)
             cands = sorted([q for q in squad(team) if q.pos == pos], key=lambda q: -q.ovr)
-            if cands and call_up(league, abbr, cands[0].pid):
+            if cands and call_up(league, abbr, cands[0].pid, emergency=True):
                 moves.append((abbr, 'callup', cands[0].pid)); added += 1; continue
             fa = [league.player(pid) for pid in league.free_agents]
             fa = [q for q in fa if q and q.pos == pos and q.out_until is None and not q.retired and not shunned(q, abbr, league)]
@@ -403,7 +418,7 @@ def keep_groups_whole(league, rng, week):
             need = sorted(((SHAPE[g] - counts.get(g, 0)) / SHAPE[g], g) for g in SHAPE)
             grp = need[-1][1]
             cands = sorted([q for q in squad(team) if GROUP_OF.get(q.pos, q.pos) == grp], key=lambda q: -q.ovr)
-            if cands and call_up(league, abbr, cands[0].pid):
+            if cands and call_up(league, abbr, cands[0].pid, emergency=True):
                 moves.append((abbr, 'callup', cands[0].pid)); added += 1; continue
             fa = [league.player(pid) for pid in league.free_agents]
             fa = [q for q in fa if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and not shunned(q, abbr, league)]

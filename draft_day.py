@@ -212,7 +212,8 @@ class Draft:
 
     def _execute(self, buyer, seller, offer, pk, target_player=None):
         sends = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
-        self.L.trade(buyer, seller, sends, [pk])
+        try: self.L.trade(buyer, seller, sends, [pk])
+        except ValueError: return None
         self.dealt.add(frozenset((seller, buyer))); self.last_dealt = buyer
         desc = [self._label(x) for x in offer['a_sends']]
         self.trades.append((pk.selection, buyer, seller, desc))

@@ -480,7 +480,7 @@ def _likely_tackler(deff, out, rng, pass_play):
     and completions. The engine does not simulate the tackle itself; this is the
     name the ticker gives it, weighted the way real tackle counts fall."""
     yards = float(out.get('yards', 0) or 0)
-    dl = [x for x in (deff.get('dl') or []) if x][:4]; lb = [x for x in (deff.get('lb') or []) if x][:3]; db = [x for x in (deff.get('db') or []) if x][:5]
+    dl = [x for x in (deff.get('dl') or []) if x]; lb = [x for x in (deff.get('lb') or []) if x]; db = [x for x in (deff.get('db') or []) if x]
     if pass_play:
         pools = [(db, 0.62), (lb, 0.30), (dl, 0.08)]
     elif yards <= 2:
@@ -617,7 +617,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     chasers = defenders[len(front):] + defenders[:len(front)]
     # The same wall applies to a run: yards after contact collapse near the
     # goal because there is nowhere to break to.
-    out = resolve_yards_after(off['rb'], chasers, ytg, rng, contact_at=ybc)
+    out = resolve_yards_after(off.get('rb') or off['qb'], chasers, ytg, rng, contact_at=ybc)
     if not out['touchdown']:
         # never turn a score into a non-score: the resolver already decided he
         # reached the end zone, and compression is about the grass in between
@@ -654,11 +654,10 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # The offence does NOT know the rush count before the snap. Choosing max
     # protect because six are coming let the defence's blitz cancel itself, so
     # the sack rate barely moved from four to six rushers.
-    prot_name = S.choose_protection(off_call['personnel'], 4, depth, rng)
+    prot_name = S.choose_protection(off_call['personnel'], 4, depth, rng, preference=off_call.get('protection_pref'))
     # the week's plan can ask for six-man protection: it replaces about half
     # the five-man calls, which is what "protect more" means in practice
-    if off_call.get('protection_pref') == 'six' and prot_name == 'five' and rng.random() < 0.5:
-        prot_name = 'half_slide'
+
     prot = S.protection_math(prot_name, def_call['rushers'])
 
     # WHO STAYS IN. The extra blockers used to be the second tight end and

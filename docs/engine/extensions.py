@@ -82,12 +82,14 @@ def build(p, add_years, apy, cap, gm, league, front_load=None):
     st = CS.structure(apy, add_years, p.pos, cap, gm, front_load=front_load)
     # the old bonus still owed keeps its proration; the new bonus spreads over
     # everything left, up to five years
-    old_prorated_left = old.annual_proration * min(left, old.proration_years) if old.sb else 0.0
     new_years = left + add_years
     base = list(old.base) + list(st['base'])
     rb = list(old.rb) + [0.0] * add_years
-    c = Contract(years=new_years, base=base, signing_bonus=old_prorated_left + st['signing_bonus'],
-                 roster_bonus=rb, signed=league.year)
+    c = Contract(years=new_years, base=base, bonus_schedule=old.bonus_schedule,
+                 roster_bonus=rb, signed=league.year, void_years=max(0,len(old.bonus_schedule)-new_years),
+                 earned_base=old.earned_base, earned_roster=old.earned_roster, pay_start=old.pay_start, start_offset=old.start_offset)
+    from cap_accounting import pre_roll
+    c.add_bonus(st['signing_bonus'], 1 if pre_roll(league) else 0)
     return c
 
 
@@ -127,6 +129,9 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
     if front_load is None and by_ai:
         front_load = CS.choose_shape(team, years)
     c = build(p, years, apy, cap, team.gm, league, front_load=front_load)
+    from cap_accounting import require_room
+    try: require_room(league, team, p.pid, c)
+    except ValueError as e: return dict(result='refused', why=str(e))
     p.contract = c
     team.sync_cap()
     import morale as MO

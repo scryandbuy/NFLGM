@@ -160,17 +160,31 @@ def make_room(league, abbr, p):
     return True
 
 
+def claim_contract(league, p, abbr):
+    import copy, min_salary as MS
+    from cap_engine import CAP, Contract
+    c=copy.deepcopy(p.contract) if p.contract else Contract(1,[MS.minimum_salary(p.accrued or 0,CAP.get(league.year,301.2))])
+    c.sb=0.0
+    paid=league.teams[abbr].cap.paid_week
+    if paid>c.pay_start:
+        c.base[0]*=max(0,18-paid)/max(1,18-c.pay_start)
+    c.pay_start=paid
+    return c
+
+
+def claim_fits(league, entry, abbr):
+    from cap_accounting import require_room
+    p=league.player(entry['pid'])
+    rel=entry.get('release_if_awarded') if abbr==getattr(league,'user_team',None) else None
+    try: require_room(league,league.teams[abbr],p.pid,claim_contract(league,p,abbr),release_pid=rel)
+    except ValueError: return False
+    return True
+
+
 def award(league, entry, abbr):
     p = league.player(entry['pid'])
     if p.pid in league.free_agents: league.free_agents.remove(p.pid)
-    if p.contract is not None:
-        p.contract.sb = 0.0                     # the bonus stayed with the club that paid it
-        c = p.contract
-    else:
-        import min_salary as MS
-        from cap_engine import CAP, Contract
-        mn = MS.minimum_salary(p.accrued or 0, CAP.get(league.year, 301.2))
-        c = Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year)
+    c = claim_contract(league,p,abbr)
     p.team = abbr; p.contract = c
     league.teams[abbr].roster.append(p); league.teams[abbr].sync_cap()
     league.log('waiver_claim', pid=p.pid, team=abbr, from_team=entry['from_team'])
@@ -271,6 +285,9 @@ def process(league, rng, week, verbose=False):
         for abbr in order:
             if abbr == user:
                 if user in e['claims']:
+                    if not claim_fits(league,e,user):
+                        IB.post(league,'waiver_notice',f'Claim failed: {p.name}','The inherited contract does not fit under your cap.',sender='league')
+                        continue
                     # the user named his own man to make room with; only if he did not does the engine pick one
                     rel = e.get('release_if_awarded')
                     if (rel and league.player(rel) is not None and league.player(rel).team == user) or make_room(league, user, p):
@@ -279,7 +296,7 @@ def process(league, rng, week, verbose=False):
                 continue
             import practice_squad as _PSQ
             if _PSQ.shunned(p, abbr, league) or getattr(league.teams[abbr], '_moved_week', None) == week: continue     # released him lately, or moved already this week
-            if wants(league, abbr, p, week, market=market) and make_room(league, abbr, p):
+            if wants(league, abbr, p, week, market=market) and claim_fits(league,e,abbr) and make_room(league, abbr, p):
                 league.teams[abbr]._moved_week = week
                 award(league, e, abbr); awarded.append((p.pid, abbr))
                 if user in e.get('claims', []):

@@ -215,7 +215,9 @@ def run(league, rng, verbose=False, record_for=None, tick_age=None):   # tick_ag
         lost = decline(p, rng)
         if mine:
             changed = {k: (round(float(before_r[k]), 1), round(float(p.ratings[k]), 1)) for k in p.ratings if abs(float(p.ratings[k]) - float(before_r.get(k, p.ratings[k]))) >= 0.05}
-            rec[p.pid] = dict(before=round(float(before_o), 1), after=round(float(p.ovr), 1), lost=round(float(before_o - p.ovr), 1), attrs=changed, age=int(p.age))    # the same whole-years age every page shows
+            rec[p.pid] = dict(before=round(float(before_o), 1), after=round(float(p.ovr), 1), lost=round(float(before_o - p.ovr), 1), attrs=changed, age=int(p.age),
+                                 name=p.name, pos=p.pos, team=p.team, number=getattr(p, 'number', None),
+                                 ratings_before=dict(before_r), ratings_after=dict(p.ratings))    # the same whole-years age every page shows
         if lost:
             moved.append((p, lost))
             league.log('regress', pid=p.pid, pos=p.pos,

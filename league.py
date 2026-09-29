@@ -151,7 +151,7 @@ class Player:
     def apy(self):
         c = self.contract
         if not c or not c.years: return 0.0
-        return round((sum(c.base) + sum(c.rb) + c.sb) / c.years, 3)
+        return round((sum(c.base) + sum(c.rb) + c.sb) / max(1,c.years-c.start_offset), 3)
 
     @property
     def contract_years_left(self):
@@ -178,7 +178,7 @@ class Player:
     # ---- stats -----------------------------------------------------------
     def record_season(self, season, line):
         """His own copy. The league keeps a second copy for leaderboards."""
-        self.career[season] = dict(line, team=self.team)
+        self.career[season] = dict(line, team=self.team, pos=self.pos)
 
     def career_totals(self):
         tot = {}
@@ -372,6 +372,11 @@ class Team:
             # the return slots take anyone who dresses at a return position
             import rosters as RO
             mine = {p.pid for p in self.active() if p.pos in RO.RETURN_POS}
+        elif pos in ('LE', 'RE', 'NT', '34LE', '34RE', 'LOLB', 'ROLB', 'LILB', 'RILB'):
+            import defense_roles as DR
+            eligible = DR.ROLE_SOURCES[pos]
+            mine = {p.pid for p in self.active() if p.pos in eligible} | {
+                q.pid for q in (getattr(self, '_elevated', None) or []) if q.pos in eligible}
         else:
             mine = {p.pid for p in self.active() if p.pos == pos} | {q.pid for q in (getattr(self, '_elevated', None) or []) if q.pos == pos}
         self.depth_pins[pos] = [pid for pid in pids if pid in mine]
@@ -523,7 +528,7 @@ class Team:
                     picks=[asdict(k) for k in self.picks],
                     cap_year=self.cap.year, cap_rollover=self.cap.rollover,
                     cap_dead=self.cap.dead, cap_dead_next=self.cap.dead_next,
-                   cap_base=self.cap.cap)
+                   cap_base=self.cap.cap, cap_earned=self.cap.earned, cap_ps_earned=self.cap.ps_earned, cap_paid_week=self.cap.paid_week)
 
     def __repr__(self):
         w, l, t = self.record
@@ -569,7 +574,10 @@ class League:
         t = self.teams[abbr]
         return R.build_roster_rows([dict(p.ratings, pid=p.pid, pos=p.pos)
                                     for p in t.active()
-                                    if p.out_until is None], t.scheme)
+                                    if p.out_until is None], t.scheme,
+                                   pins=getattr(t, 'depth_pins', None),
+                                   front=getattr(t.gm, 'def_front', '4-3'),
+                                   box=getattr(t.gm, 'box', 0.5))
 
     # ---- stats: on the player AND in a league book ----------------------
     def record_stats(self, season, pid, line, postseason=False, game=None):
@@ -582,6 +590,10 @@ class League:
         """
         if game is not None:
             g = self.game_stats.setdefault(game, {}).setdefault(pid, {})
+            player = self.player(pid)
+            if player is not None:
+                g['team'] = player.team
+                g['pos'] = player.pos
             for k, v in line.items():
                 if isinstance(v, (int, float)): g[k] = g.get(k, 0) + v
         store = self.post_stats if postseason else self.stats
@@ -632,10 +644,15 @@ class League:
             import practice_squad as PSQ
             if p in PSQ.squad(self.teams[p.team]): PSQ.release_from_squad(self, p.team, pid)      # poached off another club's squad
             elif p in self.teams[p.team].roster: self.release(pid, log=False)
+        paid = self.teams[abbr].cap.paid_week
+        if self.phase == 'regular' and contract.pay_start < paid:
+            contract.base[0] *= (18-paid)/max(1,18-contract.pay_start)
+            contract.pay_start = paid
         p.team, p.contract = abbr, contract
         self.teams[abbr].roster.append(p)
         self.assign_number(p, abbr)
         if pid in self.free_agents: self.free_agents.remove(pid)
+        self.teams[abbr].sync_cap()
         if log: self.log('sign', pid=pid, team=abbr, apy=p.apy, years=contract.years)
 
     def post_june1(self):
@@ -657,10 +674,9 @@ class League:
         if t is None: return
         if june1 is None:
             june1 = self.post_june1()
-        dead_now, dead_next, saved = (p.contract.release(0, june1)
-                                      if p.contract else (0.0, 0.0, 0.0))
-        t.cap.dead += dead_now
-        t.cap.dead_next += dead_next
+        from cap_accounting import depart, transfer_contract
+        dead_now, dead_next, saved = depart(self, t, p.contract, june1)
+        if p.contract: p.contract = transfer_contract(p.contract,t.cap.paid_week)
         if p in t.roster: t.roster.remove(p)
         # THE WIRE. A man with fewer than four accrued seasons does not walk
         # straight to the pool: he sits on waivers until the next advance,
@@ -679,7 +695,7 @@ class League:
         t.sync_cap()
         if pid not in self.free_agents: self.free_agents.append(pid)
         if log:
-            self.log('release', pid=pid, team=t.abbr, dead=dead_now, saved=saved, waived=on_wire)
+            self.log('release', pid=pid, team=t.abbr, dead=dead_now, dead_next=dead_next, saved=saved, waived=on_wire)
         return dead_now, dead_next, saved
 
     def trade(self, a, b, a_sends, b_sends):
@@ -690,6 +706,9 @@ class League:
                 p = self.player(item)
                 if p is None or p.team != src or p not in self.teams[src].roster:
                     raise ValueError(f'trade: {item} is not on {src}')
+        from cap_accounting import require_trade_room, settle_week, pre_roll
+        if pre_roll(self): settle_week(self,18)
+        require_trade_room(self,a,b,a_sends,b_sends)
         for item, src, dst in [(x, a, b) for x in a_sends] + \
                               [(x, b, a) for x in b_sends]:
             if isinstance(item, DraftPick):
@@ -714,10 +733,9 @@ class League:
                 # away clean.
                 c = p.contract
                 if c is not None:
-                    dead_now, dead_next, _s = c.release(0, self.post_june1())
-                    self.teams[src].cap.dead += dead_now
-                    self.teams[src].cap.dead_next += dead_next
-                    c.sb = 0.0
+                    from cap_accounting import depart, transfer_contract
+                    dead_now, dead_next, _s = depart(self, self.teams[src], c)
+                    p.contract = transfer_contract(c,self.teams[src].cap.paid_week)
                     self.log('trade_dead', team=src, pid=p.pid, dead=dead_now, dead_next=dead_next)
                 self.teams[src].roster.remove(p)
                 p.team = dst
@@ -784,6 +802,8 @@ class League:
         never moved, and teams finished ninety million over with nothing left
         to cut.
         """
+        from cap_accounting import settle_week
+        settle_week(self,18)
         prev_cap = CAP.get(self.year, 301.2)
         self.year += 1
         new_cap = project_cap(self.year, self.year - 1, prev_cap, rng)
@@ -819,10 +839,11 @@ class League:
             if p.retired or not p.contract:
                 continue
             p.accrued += 1
+            p.xp_spent['_prior_salary'] = p.contract.cap_hit(0)
             if p.contract.advance():
-                # A deal that simply RUNS OUT leaves no dead money: the bonus
-                # was fully prorated across the years he played. That is the
-                # difference between a contract ending and a player being cut.
+                if p.team in self.teams:
+                    self.teams[p.team].cap.dead += p.contract.remaining_proration(0)
+                # Any unallocated void-year bonus accelerates at expiry.
                 #
                 # He STAYS with his club here. A pending free agent still
                 # belongs to his team until the league year opens - that is
@@ -883,6 +904,7 @@ class League:
             awards_paid=getattr(self, 'awards_paid', None) or {},
             history=getattr(self, 'history', None) or {},
             fa_bids=getattr(self, 'fa_bids', None) or {}, fa_bids_phase=getattr(self, 'fa_bids_phase', None), fa_step=getattr(self, 'fa_step', None),
+            user_week_plan=getattr(self, 'user_week_plan', None),
             regression=getattr(self, 'regression', None) or {},
             season_closed_year=getattr(self, 'season_closed_year', None),
             last_draft=getattr(self, 'last_draft', None),
@@ -928,6 +950,12 @@ class League:
             t.cap = TeamCap(td['cap_year'], td['cap_rollover'])
             t.cap.dead = td['cap_dead']
             t.cap.dead_next = td.get('cap_dead_next', 0.0)
+            t.cap.earned = td.get('cap_earned', 0.0)
+            t.cap.ps_earned = td.get('cap_ps_earned', 0.0)
+            t.cap.paid_week = td.get('cap_paid_week', 0)
+            if 'cap_paid_week' not in td:
+                from cap_accounting import migrate_earned
+                migrate_earned(t,d)
             # the solved base has to survive too: cap_engine's table carries
             # 301.0 for 2026 and the real figure is 301.2, and without this a
             # reloaded save drifts 0.2m per team away from its real position
@@ -973,6 +1001,7 @@ class League:
         L.awards_paid = d.get('awards_paid', {}) or {}
         L.history = {str(k): v for k, v in (d.get('history', {}) or {}).items()}
         L.fa_bids = d.get('fa_bids', {}) or {}; L.fa_bids_phase = d.get('fa_bids_phase'); L.fa_step = d.get('fa_step')
+        L.user_week_plan = d.get('user_week_plan')
         L.regression = {str(k): v for k, v in (d.get('regression', {}) or {}).items()}
         L.season_closed_year = d.get('season_closed_year')
         if L.season_closed_year is None and d.get('_post') and (d['_post'] or {}).get('champion') and (d['_post'] or {}).get('year') is not None:
@@ -1092,12 +1121,14 @@ def contract_to_dict(c):
     if c is None: return None
     return dict(years=c.years, base=list(c.base), signing_bonus=c.sb,
                 roster_bonus=list(c.rb), orig_years=getattr(c, 'orig_years', c.years),
-                void_years=c.void, signed=c.signed)
+                void_years=c.void, signed=c.signed, bonus_schedule=list(c.bonus_schedule),
+                earned_base=c.earned_base, earned_roster=c.earned_roster, pay_start=c.pay_start, start_offset=c.start_offset)
 
 
 def contract_from_dict(d):
     if not d:
         return None
+    d = dict(d)
     o = d.pop('orig_years', None)
     c = Contract(**d)
     if o is not None:
@@ -1367,6 +1398,9 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
     for _t in L.teams.values(): _t.league = L
     import staff as ST
     ST.seed(L, rng)
+    import xp as XP
+    for p in L.players.values():
+        XP.resolve_potential(p, rng)
     return L
 
 

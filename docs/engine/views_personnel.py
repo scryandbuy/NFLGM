@@ -125,7 +125,7 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
     # roster counts after
     return dict(verdict=verdict, read=read, my_read=my_read, roster_after=dict(me=len(me.active()) - len([x for x in a_sends if '-' not in str(x)]) + len([x for x in b_sends if '-' not in str(x)]),
                                                                               them=len(them.active()) + len([x for x in a_sends if '-' not in str(x)]) - len([x for x in b_sends if '-' not in str(x)])),
-                cap_after=dict(me=round(me.cap_space - sum(league.player(x).cap_hit(0) for x in b_sends if '-' not in str(x) and league.player(x)) + sum(league.player(x).cap_hit(0) for x in a_sends if '-' not in str(x) and league.player(x)), 1)),
+                cap_after=dict(me=round(__import__('cap_accounting').trade_projection(league,me.abbr,a_sends,b_sends).space(me.phase),1)),
                 would_accept=bool(r.get('accepted', False)) or (g >= 0.5 and not r.get('blocked')))
 
 
@@ -177,7 +177,8 @@ def act_propose(league, abbr, other, a_sends, b_sends):
         import inbox as IB
         IB.post(league, 'trade_done', f"{them.abbr} decline your offer", f"You offered {', '.join(_words(league, a_items))} for {', '.join(_words(league, b_items))}. " + ev['read'], sender=other)
         return dict(ok=True, done=False, why=f"{them.abbr} declines. " + ev['read'])
-    league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
+    try: league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
+    except ValueError as e: return dict(ok=False, done=False, why=str(e))
     import inbox as IB
     IB.post(league, 'trade_done', f"Trade with {other} is done", f"You send {', '.join(_words(league, a_items))} to {other} for {', '.join(_words(league, b_items))}.", sender=other)
     return dict(ok=True, done=True, why=f"Done. {them.abbr} accepts.")

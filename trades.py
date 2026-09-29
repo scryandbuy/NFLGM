@@ -141,7 +141,7 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
         dead = round(dead_now + 0.6 * dead_next, 2)
     else:
         dead_now, dead = 0.0, 0.0
-    inherit = round(c.cap_hit(0) - c.annual_proration, 2) if c else 0.0
+    inherit = round(c.cap_hit(0) - c.annual_proration-c.earned_base-c.earned_roster, 2) if c else 0.0
     # WHAT THE BUYER WOULD ACTUALLY PAY. The bonus was paid by the club that
     # signed him and stays on its books; the buyer carries base and roster
     # bonus for the years left. So the same man is worth MORE to acquire the
@@ -149,7 +149,7 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     # $20m base is, to the buyer, a $20m-a-year player. His own club keeps
     # valuing him on the full contract, which is what it is paying.
     yrs = max(1, int(p.contract_years_left or 1))
-    inherited_apy = (round(sum(c.cap_hit(i) - c.annual_proration for i in range(yrs)) / yrs, 2)
+    inherited_apy = (round(sum(c.cap_hit(i) - c.bonus_at(i) for i in range(yrs)) / yrs, 2)
                      if c else p.apy)
     row = dict(age=p.age, apy=p.apy, ovr=float(seen),
                contract_years_left=p.contract_years_left, madden_position=p.pos)
@@ -170,7 +170,7 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     return dict(kind='player', pid=p.pid, pos=p.pos, age=p.age, apy=p.apy,
                 need=need, trade_value=TE.trade_value(row, v),
                 trade_value_buyer=round(max(0.0, tv_buyer), 2),
-                seen_ovr=round(float(seen), 1), obj=p, dead=dead, dead_now=dead_now,
+                seen_ovr=round(float(seen), 1), obj=p, dead=dead, out_hit=(c.cap_hit(0)-c.earned_base-c.earned_roster if c else 0.0), dead_now=dead_now,
                 inherit=inherit, inherited_apy=inherited_apy)
 
 
@@ -663,7 +663,8 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                         moved.add(x['pid'])
                 out = [x['obj'] if x['kind'] == 'pick' else x['pid']
                        for x in offer['a_sends']]
-                league.trade(a, b, out, [offer['a_gets'][0]['pid']])
+                try: league.trade(a, b, out, [offer['a_gets'][0]['pid']])
+                except ValueError: continue
                 made.append((a, b, offer['a_sends'], offer['a_gets'][0]['obj'],
                              res))
                 ta.sync_cap(); tb.sync_cap()

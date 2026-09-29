@@ -20,7 +20,7 @@ import os
 _D = os.path.dirname(os.path.abspath(__file__))
 def _p(n): return os.path.join(_D, n)
 
-CAP = 301.0
+CAP = 301.2
 
 # tag values: avg of the top-5 cap hits at the position over the prior 5 seasons,
 # as a share of the cap. Derived from OverTheCap season data, then scaled by 0.960

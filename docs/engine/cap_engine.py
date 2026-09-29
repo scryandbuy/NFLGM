@@ -18,7 +18,7 @@ CAP = {
  2011: 120.375, 2012: 120.600, 2013: 123.000, 2014: 133.000, 2015: 143.280,
  2016: 155.270, 2017: 167.000, 2018: 177.200, 2019: 188.200, 2020: 198.200,
  2021: 182.500, 2022: 208.200, 2023: 224.800, 2024: 255.400, 2025: 279.200,
- 2026: 301.000,
+ 2026: 301.200,
 }
 
 # growth fitted to the real series (2011-2026, excluding the 2021 COVID reset)
@@ -41,104 +41,80 @@ def project_cap(year, last_year, last_cap, rng=None, media_years=()):
 MAX_PRORATION_YEARS = 5
 
 class Contract:
+    """Remaining salary plus fixed bonus allocations; no salary guarantees."""
     def __init__(self, years, base, signing_bonus=0.0, roster_bonus=None,
-                 void_years=0, signed=2026, **_ignored):
-        # GUARANTEED MONEY IS CUT FROM THE GAME by decision - too complex for
-        # what it adds. **_ignored swallows guaranteed_years from any older
-        # save or caller rather than exploding on it.
-        #
-        # Nothing about the cap depends on it: dead money comes from SIGNING
-        # BONUS proration, which is untouched. A cut still accelerates the
-        # remaining bonus exactly as before.
-        self.signed  = signed
-        self.years   = years
-        self.base    = list(base)                    # base salary per year
-        self.sb      = signing_bonus
-        self.rb      = list(roster_bonus or [0.0]*years)
-        self.void    = void_years
+                 void_years=0, signed=2026, bonus_schedule=None,
+                 earned_base=0.0, earned_roster=0.0, pay_start=0, start_offset=0, **_ignored):
+        self.signed, self.years, self.void = signed, years, void_years
+        self.base = list(base)
+        self.rb = list(roster_bonus or [0.0]*years)
+        # Legacy saves contain only the remaining balance. Preserve that balance
+        # and today's allocation; unavailable historical tranches are not invented.
+        n = max(1, min(years + void_years, MAX_PRORATION_YEARS))
+        self.bonus_schedule = (list(bonus_schedule) if bonus_schedule is not None
+                               else [float(signing_bonus)/n]*n)
+        self.earned_base, self.earned_roster = earned_base, earned_roster
+        self.pay_start = pay_start
+        self.start_offset = start_offset
 
     @property
-    def proration_years(self):
-        # void years extend proration but never past 5
-        return min(self.years + self.void, MAX_PRORATION_YEARS)
+    def sb(self): return sum(self.bonus_schedule)
+
+    @sb.setter
+    def sb(self, value):
+        # Seed scaling and transfer clearing preserve the existing allocation shape.
+        old = self.sb
+        if old: self.bonus_schedule = [x*float(value)/old for x in self.bonus_schedule]
+        else:
+            n=max(1,min(self.years+self.void,MAX_PRORATION_YEARS))
+            self.bonus_schedule=[float(value)/n]*n
 
     @property
-    def annual_proration(self):
-        return self.sb / self.proration_years if self.sb else 0.0
+    def proration_years(self): return len(self.bonus_schedule)
+
+    @property
+    def annual_proration(self): return self.bonus_at(0)
+
+    def bonus_at(self, i):
+        return self.bonus_schedule[i] if 0 <= i < len(self.bonus_schedule) else 0.0
 
     def cap_hit(self, i):
-        """cap charge in year i (0-indexed)."""
-        p = self.annual_proration if i < self.proration_years else 0.0
-        return self.base[i] + self.rb[i] + p
+        if i >= self.years: return 0.0
+        return self.base[i] + self.rb[i] + self.bonus_at(i)
 
-    def remaining_proration(self, i):
-        """signing-bonus money not yet charged, from year i onward."""
-        left = max(0, self.proration_years - i)
-        return self.annual_proration * left
+    def remaining_proration(self, i): return sum(self.bonus_schedule[max(0,i):])
+
+    def add_bonus(self, amount, start=0):
+        n=max(1,min(self.years-start+self.void,MAX_PRORATION_YEARS))
+        self.bonus_schedule += [0.0]*max(0,start+n-len(self.bonus_schedule))
+        for i in range(start,start+n): self.bonus_schedule[i] += amount/n
+        return n
 
     def advance(self):
-        """
-        One year older. Drops the year just played and leaves the deal on its
-        remaining years.
-
-        NOTHING CALLED THIS, and the consequence was that no contract in the
-        league ever expired. Every club kept every player forever, twenty-seven
-        men reached free agency across the whole league against a real four to
-        six hundred, and the market had nothing in it.
-
-        Returns True when the deal is done and he is a free agent.
-
-        THE BONUS HAS TO COME OFF AS IT IS CHARGED. annual_proration is the
-        remaining bonus over the remaining years, and this used to shorten
-        the years without reducing the bonus - so a $100m bonus over five
-        years charged 20, then 25, then 33, then 50, then 100: $228m of cap
-        for $100m of bonus, and every contract in the league inflated as it
-        aged. That is where the year-two cliffs, the $80m final-year hits
-        and the offseason cap spirals were coming from.
-        """
-        if self.sb and self.proration_years > 0:
-            self.sb = max(0.0, self.sb - self.annual_proration)
+        if self.bonus_schedule: self.bonus_schedule.pop(0)
         self.years -= 1
-        if self.base:
-            self.base.pop(0)
-        if self.rb:
-            self.rb.pop(0)
+        self.start_offset = max(0,self.start_offset-1)
+        if self.base: self.base.pop(0)
+        if self.rb: self.rb.pop(0)
+        self.earned_base=self.earned_roster=0.0
+        self.pay_start=0
         return self.years <= 0
 
-    # ---- transactions ----
     def release(self, i, june1=False):
-        """
-        Returns (dead_money_this_year, dead_money_next_year, cap_saved_this_year).
-        Standard: all remaining proration accelerates into the current year.
-        June 1: this year's proration stays, the rest lands next year.
-        """
-        rest = self.remaining_proration(i)
-        if june1:
-            dead_now, dead_next = self.annual_proration, rest - self.annual_proration
-        else:
-            dead_now, dead_next = rest, 0.0
-        saved = self.cap_hit(i) - dead_now
-        return round(dead_now, 3), round(dead_next, 3), round(saved, 3)
+        rest=self.remaining_proration(i)
+        now=self.bonus_at(i) if june1 else rest
+        nxt=max(0.0,rest-now)
+        earned=(self.earned_base+self.earned_roster) if i==0 else 0.0
+        return round(now,3),round(nxt,3),round(self.cap_hit(i)-now-earned,3)
 
     def restructure(self, i, amount=None, min_base=None):
-        """
-        Convert base salary into signing bonus, prorated over the remaining years
-        (max 5). Lowers this year's hit and raises every later year's.
-
-        The only limit the rules impose is that the team must leave at least the
-        player's MINIMUM BASE SALARY for the year, and that minimum scales with
-        his accrued seasons - 0.795 for a rookie against 1.210 for a ten-year
-        veteran in 2024. This used to leave a flat 1.2 regardless, which
-        overcharged young players and undercharged old ones. Callers pass the
-        real floor; 1.2 remains only as a fallback.
-        """
-        floor = 1.2 if min_base is None else float(min_base)
-        conv = amount if amount is not None else max(0.0, self.base[i] - floor)
-        conv = min(conv, self.base[i])
-        spread = min(self.years - i + self.void, MAX_PRORATION_YEARS)
-        self.base[i] -= conv
-        self.sb += conv
-        return round(conv, 3), spread
+        floor=1.2 if min_base is None else float(min_base)
+        if i==0: floor=max(floor,self.earned_base)
+        maximum=max(0.0,self.base[i]-floor)
+        conv=maximum if amount is None else max(0.0,min(float(amount),maximum))
+        self.base[i]-=conv
+        spread=self.add_bonus(conv,i)
+        return round(conv,3),spread
 
 # ---------------------------------------------------------------- team cap
 TOP_51_PHASES = {'offseason', 'free_agency', 'draft', 'camp'}
@@ -150,6 +126,9 @@ class TeamCap:
         self.rollover = rollover
         self.contracts = []        # (player_id, Contract, year_index)
         self.dead = 0.0
+        self.earned = 0.0         # paid salary on departed contracts
+        self.ps_earned = 0.0
+        self.paid_week = 0
         self.dead_next = 0.0       # June 1 splits and retirements land here, for next year
         self.practice_squad = 0.0  # the squad's weekly pay for the season, while he is on it
 
@@ -157,10 +136,10 @@ class TeamCap:
     def limit(self): return self.cap + self.rollover
 
     def charges(self, phase='season'):
-        hits = sorted((c.cap_hit(i) for _, c, i in self.contracts), reverse=True)
-        if phase in TOP_51_PHASES:
-            hits = hits[:51]                      # only the top 51 count until week 1
-        return sum(hits) + self.dead + (self.practice_squad if phase not in TOP_51_PHASES else 0.0)
+        rows = sorted(self.contracts, key=lambda row: row[1].cap_hit(row[2]), reverse=True)
+        hits = sum(c.cap_hit(i) if phase not in TOP_51_PHASES or n < 51
+                   else c.bonus_at(i) + c.rb[i] for n, (_, c, i) in enumerate(rows))
+        return hits + self.dead + self.earned + self.practice_squad
 
     def space(self, phase='season'):
         return round(self.limit - self.charges(phase), 3)
@@ -173,6 +152,7 @@ class TeamCap:
         unused = max(0.0, self.space('season'))
         nxt = TeamCap(self.year + 1, rollover=unused)
         nxt.dead = self.dead_next
+        nxt.cap = next_year_cap
         return nxt
 
 # ---------------------------------------------------------------- checks

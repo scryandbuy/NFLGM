@@ -266,6 +266,9 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
             out.append(p)
     out.sort(key=lambda p: -p.ovr)
     shape_class(out, rng=rng)
+    import xp as XP
+    for p in out:
+        XP.resolve_potential(p, rng)
     league.draft_pool = out
     for p in out:
         league.players[p.pid] = p

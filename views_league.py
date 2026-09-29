@@ -310,10 +310,12 @@ def transactions(session, league, abbr, n=150):
         if per.get(g, 0) >= n: continue
         per[g] = per.get(g, 0) + 1
         team = x.get('team') or x.get('a') or x.get('buyer') or x.get('to') or ''
+        involved = {x.get(key) for key in ('team','a','b','buyer','seller','to','from_team')}
+        divisions = sorted({league.teams[a].division for a in involved if a in league.teams})
         grp = GROUP_TAG.get(k, 'Other')
         link = ('trade' if k in ('trade', 'inbox_trade') else 'contract' if k in ('extension', 'sign', 'tag', 'restructure') else 'carousel' if k in ('fire', 'hire', 'gm_change') else 'card' if x.get('pid') else None)
-        rows.append(dict(year=x.get('year'), week=x.get('week'), phase=x.get('phase'), kind=k, tag=TAGS.get(k, k), group=grp, line=_tx_line(league, x), mine=(abbr in (x.get('team'), x.get('a'), x.get('b'), x.get('buyer'), x.get('to'), x.get('from_team'))),
-                        pid=x.get('pid'), team=(club(team) if team in league.teams else None), division=(league.teams[team].division if team in league.teams else None), link=link, i=len(rows)))
+        rows.append(dict(year=x.get('year'), week=x.get('week'), phase=x.get('phase'), kind=k, tag=TAGS.get(k, k), group=grp, line=_tx_line(league, x), mine=(abbr in involved),
+                        pid=x.get('pid'), team=(club(team) if team in league.teams else None), division=(league.teams[team].division if team in league.teams else None), divisions=divisions, link=link, i=len(rows)))
     return dict(rail=rail(session, league, abbr), rows=rows, groups=['Trades', 'Signings', 'Cuts', 'Claims', 'Practice Squad', 'Extensions', 'Tags', 'Coaching'], my_division=league.teams[abbr].division)
 
 
@@ -321,15 +323,26 @@ LEADERS = [('Passing Yards', 'pass_yds', 'yds'), ('Passing TD', 'pass_td', 'TD')
            ('Sacks', 'sacks', 'sk'), ('Interceptions', 'int_def', 'INT'), ('Tackles', 'tackles', 'tkl'), ('Passes Defensed', 'pass_def', 'PD'), ('Field Goals', 'fg_made', 'FG'), ('Pressures', 'pressures', 'prs')]
 
 
+def _season_player(league, p, year):
+    """Use saved season identity; never assign old production to a new team."""
+    from types import SimpleNamespace
+    if p is None or int(year) == int(league.year): return p
+    line = (getattr(p, 'career', {}) or {}).get(year, {})
+    return SimpleNamespace(pid=p.pid, name=p.name, pos=line.get('pos', p.pos), team=line.get('team', ''))
+
+
 def stats(session, league, abbr, year=None):
     yr = int(year or league.year)
+    if yr != int(league.year):
+        saved = _past(session, league, abbr, 'stats', yr)
+        if saved is not None: return saved
     book = league.stats.get(yr, {}) or {}
     boxes = []
     for title, key, unit in LEADERS:
         rows = sorted(((pid, v) for pid, v in book.items() if v.get(key, 0) > 0), key=lambda kv: -kv[1].get(key, 0))[:8]
         out = []
         for pid, v in rows:
-            p = league.player(pid)
+            p = _season_player(league, league.player(pid), yr)
             if p is None: continue
             val = v.get(key, 0)
             out.append(dict(pid=pid, name=p.name, pos=p.pos, team=(p.team or ''), v=(round(float(val), 1) if key == 'sacks' else _num(val)), mine=(p.team == abbr)))
@@ -342,9 +355,9 @@ def stats(session, league, abbr, year=None):
         scale = played_share(league, yr)
         try: rows = AS.leaders(league, yr, metric, min_n=max(1, int(floor * scale)), top=8, pos=pos)
         except Exception: rows = []
-        if metric == 'def_epa_per_play': rows = sorted(rows, key=lambda r: r[1])[:8]
         out = []
         for p, val, n in rows:
+            p = _season_player(league, p, yr)
             s = (f"{val:+.2f}" if fmt in ('epa', 'epa_neg') else f"{val:+.1f}" if fmt == 'pct1' else f"{val:.0f}%" if fmt == 'pct' else f"{val:.1f}")
             out.append(dict(pid=p.pid, name=p.name, pos=p.pos, team=(p.team or ''), v=s, n=int(n), mine=(p.team == abbr)))
         unit_word = {'epa_per_dropback': 'dropbacks', 'cpoe': 'attempts', 'epa_per_rush': 'carries', 'rec_epa_per_target': 'targets', 'pass_rush_win_rate': 'rushes', 'pass_block_win_rate': 'blocking snaps', 'separation': 'targets', 'def_epa_per_play': 'plays'}[metric]
@@ -352,10 +365,11 @@ def stats(session, league, abbr, year=None):
     # the position tables: passing, rushing, receiving, defense, blocking; and the team table
     def table(filt, key, cols):
         out = []
-        for pid, ln in sorted(((pid, ln) for pid, ln in book.items() if ln.get(key, 0) > 0), key=lambda kv: -kv[1].get(key, 0))[:40]:
-            p = league.player(pid)
+        for pid, ln in sorted(((pid, ln) for pid, ln in book.items() if ln.get(key, 0) > 0), key=lambda kv: -kv[1].get(key, 0)):
+            p = _season_player(league, league.player(pid), yr)
             if p is None or not filt(p): continue
             out.append(dict(pid=pid, name=p.name, pos=p.pos, team=(p.team or ''), mine=(p.team == abbr), row=[c(ln) for _, c in cols]))
+            if len(out) == 40: break
         return dict(cols=[h for h, _ in cols], rows=out)
     f1 = lambda x: (f"{x:.1f}" if isinstance(x, float) else x)
     tables = dict(
@@ -365,14 +379,28 @@ def stats(session, league, abbr, year=None):
         defense=table(lambda p: p.pos in ('LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM', 'CB', 'FS', 'SS'), 'tackles', [('Tkl', lambda l: int(l.get('tackles', 0))), ('Sacks', lambda l: f1(float(l.get('sacks', 0)))), ('Prs', lambda l: int(l.get('pressures', 0))), ('INT', lambda l: int(l.get('int_def', 0))), ('PD', lambda l: int(l.get('pass_def', 0))), ('FF', lambda l: int(l.get('ff', 0))), ('G', lambda l: int(l.get('games', 0)))]),
         blocking=table(lambda p: p.pos in ('LT', 'LG', 'C', 'RG', 'RT'), 'snaps', [('Snaps', lambda l: int(l.get('snaps', 0))), ('PB Win%', lambda l: (f"{l.get('pb_wins', 0) / l['pb_snaps'] * 100:.0f}%" if l.get('pb_snaps') else '—')), ('RB Win%', lambda l: (f"{l.get('rb_wins', 0) / l['rb_snaps'] * 100:.0f}%" if l.get('rb_snaps') else '—')), ('Sacks Allowed', lambda l: int(l.get('sacks_allowed', 0))), ('Pressures Allowed', lambda l: int(l.get('pressures_allowed', 0))), ('G', lambda l: int(l.get('games', 0)))]))
     team_rows = []
+    game_lines = [line for key, lines in (getattr(league, 'game_stats', {}) or {}).items()
+                  if key.startswith(f'{yr}-') and int(key.split('-')[1]) <= 18 for line in lines.values()]
+    attributed = bool(game_lines) and all(line.get('team') for line in game_lines)
     for t in league.teams.values():
-        pids = {p.pid for p in t.roster}; L_ = [book.get(pid, {}) for pid in pids]
-        pf, pa = _points(league, t.abbr); gp = max(1, sum(t.record))
+        if yr == int(league.year):
+            pids = {p.pid for p in t.roster}; L_ = [book.get(pid, {}) for pid in pids]
+            pf, pa = _points(league, t.abbr); gp = max(1, sum(t.record))
+        else:
+            L_ = [line for pid, line in book.items() if (p := _season_player(league, league.player(pid), yr)) and p.team == t.abbr]
+            games = ((getattr(league, 'history', {}) or {}).get(str(yr), {}).get('schedule') or {}).get('all_games', [])
+            games = [g for g in games if g.get('done') and g['week'] <= 18 and t.abbr in (g['away']['abbr'], g['home']['abbr'])]
+            gp = len(games)
+            pf = sum(g['hp'] if g['home']['abbr'] == t.abbr else g['ap'] for g in games)
+            pa = sum(g['ap'] if g['home']['abbr'] == t.abbr else g['hp'] for g in games)
+            if not gp: continue  # Missing historical scores cannot be reconstructed from today's record.
+        if attributed:
+            L_ = [line for line in game_lines if line['team'] == t.abbr]
         pyds = sum(l.get('pass_yds', 0) for l in L_); ryds = sum(l.get('rush_yds', 0) for l in L_); plays = sum(l.get('pass_plays', 0) + l.get('rush_plays', 0) for l in L_); epa = sum(l.get('pass_epa', 0) + l.get('rush_epa', 0) for l in L_)
         sacks = sum(float(l.get('sacks', 0)) for l in L_); tos = sum(l.get('int_def', 0) for l in L_)
         team_rows.append(dict(club=club(t.abbr), mine=(t.abbr == abbr), pf=round(pf / gp, 1), pa=round(pa / gp, 1), ypg=round((pyds + ryds) / gp), pyds=round(pyds / gp), ryds=round(ryds / gp), epa=(round(epa / plays, 2) if plays else 0.0), sacks=round(sacks, 1), ints=int(tos)))
     team_rows.sort(key=lambda r: -r['pf'])
-    return dict(rail=rail(session, league, abbr), year=yr, years=years, boxes=boxes, advanced=adv, tables=tables, team=team_rows, week=league.week)
+    return dict(rail=rail(session, league, abbr), year=yr, years=years, boxes=boxes, advanced=adv, tables=tables, team=team_rows, week=(league.week if yr == int(league.year) else 18), note=('Historical team totals use retained season affiliations.' if yr != int(league.year) else None))
 
 
 def played_share(league, yr):
@@ -389,23 +417,38 @@ AWARD_NAMES = [('mvp', 'Most Valuable Player'), ('opoy', 'Offensive Player of th
 def awards(session, league, abbr, year=None):
     years = sorted(set(league.awards) | {int(league.year)})
     yr = int(year) if year else (max([y for y in years if y in league.awards], default=int(league.year)))
+    saved = _past(session, league, abbr, 'awards', yr)
+    if saved is not None: return saved
+    historical = yr != int(league.year)
+    archived = ((getattr(league, 'almanac', {}) or {}).get('seasons', {}).get(yr, {}) or {}).get('awards', {})
     a = league.awards.get(yr, {}) or {}
     rows = []
     for k, name in AWARD_NAMES:
         v = a.get(k)
         if not v: continue
         if k == 'coty':
-            t = league.teams.get(v); rows.append(dict(award=name, code='COTY', name=(t.gm.name if t and t.gm else str(v)), team=club(v) if t else None, pos='HC', mine=(v == abbr), line=(f"{t.record[0]}–{t.record[1]} · Prestige {round(getattr(t.gm, 'prestige', 50))}" if t and t.gm else '')))
+            t = league.teams.get(v)
+            coach = t.gm.name if t and t.gm and not historical else None
+            if historical:
+                history = (getattr(league, 'almanac', {}) or {}).get('coaching', {}).get(v, [])
+                matches = [h for h in history if h.get('frm', h.get('from', 9999)) <= yr and (h.get('to') is None or h['to'] >= yr)]
+                coach = matches[-1]['name'] if matches else None
+                kept = archived.get('coty', {})
+                if isinstance(kept, dict) and kept.get('name') != v: coach = kept.get('name') or coach
+            rows.append(dict(award=name, code='COTY', name=coach or 'Coach name not retained', team=club(v) if t else None, pos='HC', mine=(v == abbr), line=(f"{t.record[0]}–{t.record[1]} · Prestige {round(getattr(t.gm, 'prestige', 50))}" if t and t.gm and not historical else '')))
         else:
-            p = league.player(v)
+            p = _season_player(league, league.player(v), yr)
+            kept = archived.get(k, {})
+            if p and historical and isinstance(kept, dict):
+                p.name = kept.get("name") or p.name; p.pos = kept.get("pos") or p.pos; p.team = kept.get("team") or p.team
             if p: rows.append(dict(award=name, code=k.upper().replace('SB_MVP', 'SB MVP'), name=p.name, pos=p.pos, team=(club(p.team) if p.team else None), pid=p.pid, mine=(p.team == abbr), line=(_sb_line(league, p, yr) if k == 'sb_mvp' else _award_line(league, p, yr))))
     def team_list(key):
         out = []
         for pid in a.get(key, []) or []:
-            p = league.player(pid)
+            p = _season_player(league, league.player(pid), yr)
             if p: out.append(dict(pid=pid, name=p.name, pos=p.pos, team=(club(p.team) if p.team else None), mine=(p.team == abbr)))
         return out
-    return dict(rail=rail(session, league, abbr), year=yr, years=years, rows=rows, first=team_list('all_pro_1'), second=team_list('all_pro_2'), pending=(league.year if league.year not in league.awards else None), note=None if a else f"The {league.year} awards are announced at Step 1 of the offseason, after the Super Bowl")
+    return dict(rail=rail(session, league, abbr), year=yr, years=years, rows=rows, first=team_list('all_pro_1'), second=team_list('all_pro_2'), pending=(league.year if league.year not in league.awards else None), note=None if a else f"The {yr} honors are announced after the Wild Card round; Super Bowl MVP follows the final")
 
 
 def _sb_line(league, p, yr):
@@ -447,7 +490,7 @@ def coaching(session, league, abbr):
     pool = []
     for g in CP.pool(league)[:12]:
         hr = getattr(g, 'hc_record', None) or {}
-        pool.append(dict(name=g.name, prestige=round(getattr(g, 'prestige', 50)), background=getattr(g, 'background', ''), seasons=hr.get('seasons', 0), win_pct=hr.get('win_pct'), playoffs=hr.get('playoffs', 0)))
+        pool.append(dict(name=g.name, age=getattr(g, 'age', None), prestige=round(getattr(g, 'prestige', 50)), background=getattr(g, 'background', ''), seasons=hr.get('seasons', 0), win_pct=hr.get('win_pct'), playoffs=hr.get('playoffs', 0)))
     carousel = []
     for x in league.transactions:
         if x.get('kind') == 'gm_change' and x.get('year') in (league.year, league.year - 1):
@@ -601,7 +644,7 @@ def bracket(session, league, abbr, year=None):
     order = {'AFC': 0, 'NFC': 1}; confs.sort(key=lambda c: order.get(c['conf'], 9))
     sb = [game_row('SB', c, h, a, hs, as_) for (r_, c, h, a, hs, as_) in games if r_ == 'SB']
     if not sb and started and champion is None and len(getattr(post, 'conf_champs', {}) or {}) == 2: sb = [game_row('SB', c, h, a) for (c, h, a) in post.matchups('SB')]
-    site = PS.sb_venue(league)
+    site = PS.sb_venue(league, year=yr)
     return dict(rail=rail(session, league, abbr), year=yr, years=_years(league), live=(started and champion is None), started=started, confs=confs, final=(sb[0] if sb else None),
                 champion=(club(champion) if champion else None), site=site, note=(None if started else 'The field as it stands. The bracket is set after Week 18.'))
 

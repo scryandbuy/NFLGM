@@ -227,7 +227,8 @@ def run(league, rng, verbose=False):
             p.retired = True; p.retired_year = league.year
             t = league.teams.get(p.team)
             if t and p in t.roster:
-                t.roster.remove(p)
+                from cap_accounting import settle_week
+                settle_week(league,18)
                 if p.contract:
                     # A retirement is not a release. The signing bonus still
                     # accelerates, but the club keeps no salary obligation.
@@ -236,8 +237,10 @@ def run(league, rng, verbose=False):
                     # left of his bonus accelerates onto NEXT year's books.
                     # Charging release(0) here put it on the finished year,
                     # where the roll then erased it.
-                    dead = p.contract.remaining_proration(1)
-                    t.cap.dead_next += dead
+                    from cap_accounting import depart
+                    depart(league, t, p.contract, june1=True)
+                t.roster.remove(p)
+                t.sync_cap()
             if p.pid in league.free_agents:
                 league.free_agents.remove(p.pid)
             p.team, p.contract = None, None

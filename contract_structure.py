@@ -114,6 +114,9 @@ def structure(apy, years, pos, cap, gm, void_years=0, front_load=None):
     which lowers year 1 and loads the dead money. A patient one keeps base
     salary high, which costs more now and leaves him free to walk away later.
     """
+    if not np.isfinite(apy) or apy <= 0 or int(years) != years or years < 1:
+        raise ValueError('Contract needs a positive annual value and whole years')
+    years=int(years)
     g = gm
     total = apy * years
     t = tier_of(apy, cap)
@@ -141,7 +144,16 @@ def structure(apy, years, pos, cap, gm, void_years=0, front_load=None):
     # third more in year five than the league shape does, at 1 a third less
     curve = curve * (1.0 + (fl - 0.5) * 1.3 * np.linspace(1, -1, years))
     base_total = total - signing
-    base = np.maximum(MIN_BASE, curve / curve.sum() * base_total)
+    # Preserve the agreed cash total. Low-price deals use their APY as the
+    # construction floor; the existing minimum-pay model remains a caller concern.
+    floor = min(MIN_BASE, apy)
+    signing = min(signing, max(0.0, total - floor * years))
+    signing = round(signing, 3)
+    base_total = total - signing
+    base = floor + curve / curve.sum() * max(0.0, base_total - floor * years)
+    base = np.round(base, 3)
+    base[-1] += round(total - signing - float(base.sum()), 3)
+    proration = signing / spread
 
     hits, dead = [], []
     for i in range(years):

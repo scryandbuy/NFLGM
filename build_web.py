@@ -2,8 +2,8 @@ import re
 """Assemble docs/engine from the repo: the modules a session imports and the data they read."""
 import json, os, shutil, sys, importlib
 HERE = os.path.dirname(os.path.abspath(__file__)); OUT = os.path.join(HERE, 'docs', 'engine')
-MODULES = ['halftime', 'staff_traits', 'club_notes', 'league_notes', 'adjust', 'advanced_stats', 'almanac', 'awards', 'cap_engine', 'coaching_pool', 'contract_structure', 'contracts', 'coverage', 'coverage_call', 'cutdown', 'decisions',
-           'dev_roll', 'draft', 'draft_class', 'events', 'extensions', 'firing_model', 'formations', 'franchise', 'free_agency', 'game', 'gameplan', 'gameplan_week', 'gm_engine',
+MODULES = ['halftime', 'staff_traits', 'club_notes', 'league_notes', 'adjust', 'advanced_stats', 'almanac', 'awards', 'cap_engine', 'cap_accounting', 'coaching_pool', 'contract_structure', 'contracts', 'coverage', 'coverage_call', 'cutdown', 'decisions',
+           'dev_roll', 'defense_roles', 'offense_roles', 'draft', 'draft_class', 'events', 'extensions', 'firing_model', 'formations', 'franchise', 'free_agency', 'game', 'gameplan', 'gameplan_week', 'gm_engine',
            'health', 'identity', 'identity_catalog', 'inbox', 'injury_status', 'ir_and_hiring', 'league', 'market', 'matchups', 'min_salary', 'morale', 'morale_system',
            'negotiation_engine', 'negotiations', 'newgens', 'otc_2026', 'personality', 'playcall', 'plays', 'position_change', 'postseason', 'practice_squad', 'progression_engine',
            'regression', 'retirement', 'roster_construction', 'rosters', 'schedule', 'schemes', 'scouting', 'season', 'session', 'spring', 'staff', 'standings_and_seeding', 'tags',
@@ -29,7 +29,7 @@ import hashlib
 def _stamp_bytes(path):
     return open(path, 'rb').read().replace(b'\r\n', b'\n')
 # the stamp covers the engine AND the shell, so a change to app.js or style.css alone shows in the header too
-build = hashlib.sha1(b''.join(_stamp_bytes(os.path.join(OUT, f)) for f in sorted(os.listdir(OUT)) if f != 'manifest.json') + _stamp_bytes('docs/app.js') + _stamp_bytes('docs/style.css')).hexdigest()[:10]
+build = hashlib.sha1(b''.join(_stamp_bytes(os.path.join(OUT, f)) for f in sorted(os.listdir(OUT)) if f != 'manifest.json' and os.path.isfile(os.path.join(OUT, f))) + _stamp_bytes('docs/app.js') + _stamp_bytes('docs/style.css')).hexdigest()[:10]
 json.dump(dict(modules=MODULES, data=DATA, build=build), open(os.path.join(OUT, 'manifest.json'), 'w'))
 # the page's own script and stylesheet carry a stamp too, so a new push is never served from a stale cache: the
 # stamp is the hash of app.js and style.css together

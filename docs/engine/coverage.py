@@ -145,6 +145,11 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
         wr1 = max((a['player'] for a in wide),
                   key=lambda w: rate_fn(w, {'route_run_short_rating': .20, 'route_run_med_rating': .25,
                                             'route_run_deep_rating': .25, 'speed_rating': .30}), default=None)
+    target = def_call.get('travel_target')
+    if target:
+        # A named assignment follows that receiver only while he is on the field.
+        wr1 = next((a['player'] for a in aligned if a['player'].get('pid') == target), None)
+        if wr1 is None: travel = False
     if travel is True and not is_man:
         travel = rng.random() < 0.75            # a zone-match: he still aligns over him most of the time
     if travel is None and cbs and aligned:
@@ -158,6 +163,7 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
     # corners hold a side unless one of them is travelling
     sides = sides or corner_sides(cbs, rng)
     pairs, used = [], set()
+    if travel and cbs and wr1 is not None: used.add(id(cbs[0]))  # reserve the shadow corner
 
     def take(pool, prefer=None):
         for d in pool:
@@ -189,7 +195,7 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
             # the slot draws the NICKEL - a different player with different
             # attributes, not whichever corner happened to be picked; unless
             # the star is in the slot and my best man is following him
-            if travel and cbs and a['player'] is wr1 and id(cbs[0]) not in used:
+            if travel and cbs and a['player'] is wr1:
                 d = cbs[0]; used.add(id(d)); trav = True
             else:
                 pool = [c for c in cbs if id(c) not in used] or safs or cbs

@@ -364,11 +364,23 @@ def cap(session, league, abbr):
             from views import next_year_cap
             limit, _c, rollover, dead_sched = next_year_cap(league, t)
             dead = max(dead, dead_sched)
+        if i > 1:
+            dead += sum(p.contract.remaining_proration(i) for p in t.roster if p.contract and p.contract.years==i)
         committed = sum(by.values()) + dead
+        if i == 0:
+            from cap_engine import TOP_51_PHASES
+            t.sync_cap()
+            by = {g:0.0 for g in GROUPS}
+            ranked = sorted((p for p in t.roster if p.contract),key=lambda p:p.cap_hit(0),reverse=True)
+            for rank,p in enumerate(ranked):
+                hit = p.cap_hit(0) if t.phase not in TOP_51_PHASES or rank<51 else p.contract.bonus_at(0)+p.contract.rb[0]
+                for g,poss in GROUPS.items():
+                    if p.pos in poss: by[g]+=hit; break
+            committed = t.cap.charges(t.phase)
         expiring = sorted([p for p in t.roster if p.contract and p.contract.years == i and p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.cap_hit(0))
         import practice_squad as PSQ
         years.append(dict(year=yr, limit=round(limit, 1), est=(i > 0), rollover=round(rollover, 1), by={g: round(v, 1) for g, v in by.items()}, dead=round(dead, 1), committed=round(committed, 1), space=round(limit - committed, 1), under_contract=n,
-                          ps_charge=(round(PSQ.ps_charge(t), 1) if i == 0 else None), rookie_pool=(None if i == 0 else round(len([k for k in t.picks if k.year == yr and not k.used_on]) * 1.3, 1)),
+                          earned=(round(t.cap.earned,1) if i==0 else 0.0), ps_charge=(round(PSQ.ps_charge(t), 1) if i == 0 else None), rookie_pool=(None if i == 0 else round(len([k for k in t.picks if k.year == yr and not k.used_on]) * 1.3, 1)),
                           expiring_into=[__import__('views').surname(p.name) for p in expiring[:3]], expiring_more=max(0, len(expiring) - 3)))
     # the ledger: every man, three years
     rows = []
@@ -376,7 +388,7 @@ def cap(session, league, abbr):
         if p.contract is None: continue
         c = p.contract
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), yrs=c.years, hits=[round(c.cap_hit(i), 1) if i < c.years else None for i in range(3)], penalty=round(p.dead_if_cut(0), 1),
-                         restructurable=round(CT.restructure_room(p, CAP.get(league.year, 301.2)), 1) if hasattr(CT, 'restructure_room') else 0.0,
+                         restructurable=float(CT.restructure_preview(league,p.pid).get('saves_now',0.0)),
                          tags=[x for x in [('Final Year' if c.years == 1 else None), ('Rookie Deal' if getattr(c, 'rookie', False) else None), ('Big Penalty' if p.dead_if_cut(0) > 2 * c.cap_hit(0) and c.cap_hit(0) > 5 else None)] if x]))
     # dead money detail: every release and trade this year that left a charge, from the log
     dead_rows = []
@@ -392,9 +404,9 @@ def cap(session, league, abbr):
     for p in sorted((p for p in t.roster if p.contract and p.contract.years == 1 and int(p.accrued or 0) >= 4 and p.pos not in ('K', 'P', 'LS')), key=lambda p: -p.ovr):
         try: tag_rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), price=round(TGS.tag_price(p, CAP.get(league.year, 301.2)), 1)))
         except Exception: continue
-    void_carried = round(sum(float(p.contract.annual_proration) * max(0, p.contract.proration_years - p.contract.years) for p in t.roster if p.contract and getattr(p.contract, 'void', 0)), 1)
+    void_carried = round(sum(p.contract.remaining_proration(p.contract.years) for p in t.roster if p.contract and getattr(p.contract, 'void', 0)), 1)
     return dict(rail=rail(session, league, abbr), years=years, rows=rows, cap_space=round(t.cap_space, 1), dead_rows=dead_rows, dead_total=round(float(t.cap.dead), 1), dead_next=round(float(getattr(t.cap, 'dead_next', 0.0) or 0.0), 1), largest=largest,
-                top51=(league.phase != 'regular'), tags=tag_rows[:4], void_carried=void_carried,
+                top51=(t.phase in __import__('cap_engine').TOP_51_PHASES), tags=tag_rows[:4], void_carried=void_carried,
                 june1_rule='Every cut and trade in the offseason is treated as post-June 1: this year\'s proration stays on this year\'s books and the rest lands next year. In season, everything accelerates now.')
 
 
@@ -406,7 +418,7 @@ def act_restructure_preview(league, abbr, pid, amount=None, void_years=0):
     p = league.player(pid); t = league.teams[abbr]
     saves = float(r.get('saves_now', 0)); later = float(sum(r.get('added_later', []) or []))
     expiring = sorted((q for q in t.roster if q.contract and q.contract.years == 1 and q.pid != pid and q.pos not in ('K', 'P', 'LS')), key=lambda q: -q.ovr)
-    buys = f"This buys the room to extend {__import__('views').surname(expiring[0].name)}" if expiring and saves >= 3 else f"This frees ${saves:.1f}m this year"
+    buys = f"This buys the room to extend {__import__('views').surname(expiring[0].name)}" if expiring and saves >= 3 else f"This frees ${saves:.1f}m in {r['cap_year']}"
     yrs_left = p.contract.years
     late = (p.age + yrs_left) >= (37 if p.pos == 'QB' else 33)
     age_note = f"; at {int(p.age)} that is the real price of the move" if late else ''

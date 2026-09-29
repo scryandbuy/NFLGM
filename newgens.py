@@ -110,6 +110,9 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
             out.append(p)
     out.sort(key=lambda p: -p.ovr)
     DC.shape_class(out, rng=rng)
+    import xp as XP
+    for p in out:
+        XP.resolve_potential(p, rng)
     league.next_class = out
     league.class_strength = strength
     for p in out:

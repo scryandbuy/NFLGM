@@ -31,6 +31,12 @@ class Session:
     def __init__(self, league, rng, user_team):
         self.L = league; self.rng = rng; self.user_team = user_team
         self.L.user_team = user_team
+        # Legacy saves may contain unresolved ranges. Clone the stream so this
+        # one-time migration preserves the next live simulation draw.
+        import copy
+        migration_rng = copy.deepcopy(rng)
+        for p in sorted(league.players.values(), key=lambda p: p.pid):
+            XP.resolve_potential(p, migration_rng)
         self.runner = None
         self.post_live = None
         self.post = None; self.order = None; self.fired = []; self.votes = None
@@ -549,7 +555,7 @@ class Session:
         import views_league as VL, views_frontoffice as VF
         yr = str(self.L.year); hist = self.L.__dict__.setdefault('history', {}); snap = hist.setdefault(yr, {})
         for page, fn in (('standings', lambda: VL.standings(self, self.L, self.user_team)), ('schedule', lambda: VL.schedule_snapshot(self, self.L, self.user_team)),
-                         ('bracket', lambda: VL.bracket(self, self.L, self.user_team)), ('review', lambda: VF.season_review(self, self.L, self.user_team))):
+                         ('stats', lambda: VL.stats(self, self.L, self.user_team)), ('bracket', lambda: VL.bracket(self, self.L, self.user_team)), ('review', lambda: VF.season_review(self, self.L, self.user_team))):
             try:
                 d = fn(); d.pop('rail', None); snap[page] = d
             except Exception as e:
@@ -728,6 +734,8 @@ class Session:
         self.L.season_closed_year = int(self.L.year)                  # this year's season is over: its review and meetings are its own
         self._post_review('closed')
         self._snapshot_season()
+        from cap_accounting import settle_week
+        settle_week(self.L,18)
         # THE DAY AFTER THE SUPER BOWL: practice squad contracts expire (every squad player is a free agent; his club
         # can sign him back on the market like anyone else), and the offseason heals. A player's weeks left run off
         # against the thirty weeks to camp; only a long-term injury carries into next season
@@ -783,6 +791,10 @@ class Session:
         CP.season_prestige(L, self.post, coty_team=self.votes.get('coty'))
         STF.season_end(L, STF.unit_ranks(L, L.year))
         AL.close_season(L, L.year, self.post, self.votes)
+        import views_league as VL
+        award_view = VL.awards(self, L, self.user_team)
+        award_view.pop('rail', None)
+        L.__dict__.setdefault('history', {}).setdefault(str(L.year), {})['awards'] = award_view
         XP.close_season(L, self.votes)
         try:
             import club_notes as CN; CN.season_end(L)
@@ -1050,9 +1062,9 @@ class Session:
             import views_draft as VD; return VD.prospect_card(self, self.L, self.user_team, pid)
         return VC.card(self, self.L, pid)
 
-    def club_depth(self, package='Nickel', abbr=None):
+    def club_depth(self, package='Base', abbr=None, front=None, offense=None):
         import views_club as VC
-        v = VC.depth(self, self.L, abbr or self.user_team, package)
+        v = VC.depth(self, self.L, abbr or self.user_team, package, front, offense)
         v['club_abbr'] = abbr or self.user_team; v['mine'] = (abbr or self.user_team) == self.user_team
         return v
 
@@ -1185,19 +1197,26 @@ class Session:
         import views_gameplan as VG
         fn = getattr(VG, 'act_' + name, None)
         if fn is None: return dict(ok=False, why='unknown action')
+        wk = VG._week(self, self.L)
+        if wk is None or self._opponent(wk) is None: return dict(ok=False, why='no game to plan for')
+        live = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if self.played or (live and not live.get('done', False)):
+            return dict(ok=False, why='The game has started; use halftime adjustments.')
         r = fn(self, self.L, self.user_team, **kw)
         return r if isinstance(r, dict) else dict(ok=bool(r))
 
     def plan_take_all(self):
         import views_gameplan as VG
-        wk = self.stop[1] if self.stop[0] == 'week' else None
+        wk = VG._week(self, self.L)
         if wk is None: return dict(ok=False, why='no game this week')
         import gameplan_week as GW
         opp = self._opponent(wk)
         if opp is None: return dict(ok=False, why='bye week')
         rep = GW.opponent_report(self.L, self.user_team, opp[0], wk); n = 0
         for i in range(len(rep['suggestions'])):
-            r = VG.act_take(self, self.L, self.user_team, i); n += int(bool(r.get('ok')))
+            r = self.plan_act('take', i=i)
+            if not r.get('ok'): return r
+            n += 1
         return dict(ok=True, n=n, line=f"Took {n} suggestion{'s' if n != 1 else ''}.")
 
     def inbox_mark_all(self):
