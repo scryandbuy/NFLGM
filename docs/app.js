@@ -2026,10 +2026,10 @@ function renderDraftDay(v) {
   }
   left.append(board);
   // the round pagers sit in the tool row, right of Trade Down
-  const pagers = el('span', { class: 'pagers', style: 'margin-left:auto;display:inline-flex;gap:4px;align-items:center;white-space:nowrap' },
-    el('button', { class: 'btn', style: 'width:34px;padding:4px 0', 'data-tip': 'Previous round', disabled: boardRound <= rounds[0] ? '' : null, onclick: () => { boardRound = Math.max(rounds[0], boardRound - 1); renderDraftDay(v); } }, '‹'),
-    el('span', { class: 'count', style: 'padding:0 6px' }, `Round ${boardRound} of ${rounds[rounds.length - 1]}`),
-    el('button', { class: 'btn', style: 'width:34px;padding:4px 0', 'data-tip': 'Next round', disabled: boardRound >= rounds[rounds.length - 1] ? '' : null, onclick: () => { boardRound = Math.min(rounds[rounds.length - 1], boardRound + 1); renderDraftDay(v); } }, '›'));
+  const pagers = el('span', { class: 'pagers draft-round-pager' },
+    el('button', { class: 'btn draft-round-arrow previous', 'aria-label': 'Previous round', 'data-tip': 'Previous round', disabled: boardRound <= rounds[0] ? '' : null, onclick: () => { boardRound = Math.max(rounds[0], boardRound - 1); renderDraftDay(v); } }, el('span', { class: 'round-chevron', 'aria-hidden': 'true' })),
+    el('span', { class: 'count', 'aria-live': 'polite' }, `Round ${boardRound} of ${rounds[rounds.length - 1]}`),
+    el('button', { class: 'btn draft-round-arrow next', 'aria-label': 'Next round', 'data-tip': 'Next round', disabled: boardRound >= rounds[rounds.length - 1] ? '' : null, onclick: () => { boardRound = Math.min(rounds[rounds.length - 1], boardRound + 1); renderDraftDay(v); } }, el('span', { class: 'round-chevron', 'aria-hidden': 'true' })));
   const toolRow = left.querySelector('.ctrl2'); if (toolRow) toolRow.append(pagers); else left.insertBefore(pagers, board);
   // offers for your pick
   if (v.on_user && offersCache && offersCache.length) {
