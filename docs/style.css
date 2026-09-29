@@ -2416,7 +2416,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .trade-asset:hover {background:rgba(255,255,255,.035);}
 .trade-number {min-width:38px;text-align:center;padding:6px;border:1px solid color-mix(in srgb,var(--team-accent) 35%,transparent);border-radius:6px;background:color-mix(in srgb,var(--team-base) 70%,#101820);font-weight:800;}
 .trade-name {flex:1;min-width:0;font-weight:650;}.trade-name small {display:block;color:var(--ink-3);font-size:12px;font-weight:400;}
-.trade-rating {font-size:23px;}.trade-add {width:32px!important;padding:3px!important;font-size:21px;}
+.trade-rating {font-size:23px;}.trade-add {display:inline-grid;place-items:center;flex:0 0 32px;width:32px!important;min-width:32px;height:32px;padding:0!important;font-size:21px;line-height:1;text-align:center;}
 .trade-notes {display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid var(--trade-rule);margin-top:14px;padding-top:14px;font-size:13px;}
 .trade-notes h3 {text-transform:uppercase;font-size:11px;letter-spacing:1.5px;margin:0 0 8px;color:var(--team-readable);}
 .trade-surplus {display:block;background:none;border:0;padding:3px 0;color:var(--ink);cursor:pointer;text-align:left;}.trade-surplus:disabled {opacity:.4;cursor:default;}
@@ -2575,8 +2575,8 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .schedule-team-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-left:auto;flex-wrap:wrap}
 .schedule-team-controls select{margin:0!important}.schedule-team-controls .team-picker{min-width:180px}
 .trade-board .trade-hero.trade-partners{padding:20px 18px;display:block;min-width:0}
-.trade-team-emblems{display:flex;flex-wrap:nowrap;gap:5px;overflow-x:auto;padding:3px;scrollbar-width:thin}
-.trade-team-emblem{flex:1 0 36px;height:43px;min-width:36px;padding:0;border:1px solid #39434f;border-top:3px solid var(--team-color);background:#222831;color:#e5e9ef;font-family:var(--display);font-weight:800;font-size:11px;letter-spacing:.01em}
+.trade-team-emblems{display:grid;grid-template-columns:repeat(auto-fit,minmax(32px,1fr));gap:5px;padding:3px;min-width:0}
+.trade-team-emblem{height:43px;min-width:0;padding:0;border:1px solid #39434f;border-top:3px solid var(--team-color);background:#222831;color:#e5e9ef;font-family:var(--display);font-weight:800;font-size:11px;letter-spacing:.01em}
 .trade-team-emblem:hover,.trade-team-emblem[aria-pressed="true"]{background:color-mix(in srgb,var(--team-color) 26%,#222831);border-color:var(--team-color)}
 .trade-team-emblem[aria-pressed="true"]{outline:2px solid var(--team-readable);outline-offset:1px}
 .personnel-board .talkline{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 64px;align-items:center;gap:10px;width:100%;padding:12px;text-align:left;background:transparent}
