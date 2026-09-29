@@ -122,11 +122,21 @@ def terms(league, p, rng):
     return dict(ask=ask, offer=t['apy'], years=years, discount=disc)
 
 
-def build(p, add_years, apy, cap, gm, league, front_load=None):
+def build(p, add_years, apy, cap, gm, league, front_load=None, bonus=None):
     """The extended contract: old years kept, new years appended, new bonus prorated from now."""
+    if not 1 <= add_years <= 7 or not np.isfinite(apy) or apy <= 0:
+        raise ValueError('Offer must have a positive salary and one to seven years')
+    if bonus is not None and (not np.isfinite(float(bonus)) or not 0 <= float(bonus) <= apy * add_years):
+        raise ValueError('Signing bonus must be between zero and the total contract value')
     old = p.contract
     left = old.years
     st = CS.structure(apy, add_years, p.pos, cap, gm, front_load=front_load)
+    if bonus is not None:
+        st['signing_bonus'] = float(bonus)
+        base_total = apy * add_years - float(bonus)
+        shape = float(st.get('front_load', 0.5))
+        weights = [1 + (shape - 0.5) * 2 * (1 - 2 * i / max(1, add_years - 1)) for i in range(add_years)]
+        st['base'] = [base_total * w / sum(weights) for w in weights]
     # the old bonus still owed keeps its proration; the new bonus spreads over
     # everything left, up to five years
     new_years = left + add_years
@@ -140,7 +150,7 @@ def build(p, add_years, apy, cap, gm, league, front_load=None):
     return c
 
 
-def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agreed=False):
+def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agreed=False, bonus=None):
     """The offer to the man. Returns dict(result, ...)."""
     rng = rng or np.random.default_rng()
     p = league.player(pid)
@@ -175,9 +185,10 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
     cap = CAP.get(league.year, 301.2)
     if front_load is None and by_ai:
         front_load = CS.choose_shape(team, years)
-    c = build(p, years, apy, cap, team.gm, league, front_load=front_load)
     from cap_accounting import require_room
-    try: require_room(league, team, p.pid, c)
+    try:
+        c = build(p, years, apy, cap, team.gm, league, front_load=front_load, bonus=bonus)
+        require_room(league, team, p.pid, c)
     except ValueError as e: return dict(result='refused', why=str(e))
     p.contract = c
     team.sync_cap()

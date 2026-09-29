@@ -392,7 +392,6 @@ def _thread(league, t):
 
 def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None):
     """What an offer would cost by year: the cap hit each season, the year-one hit, the total."""
-    import contract_structure as CS
     from cap_engine import CAP
     p = league.player(pid); t = league.teams[abbr]
     if p is None: return dict(ok=False, why='no such player')
@@ -402,15 +401,21 @@ def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None
         d = MK.signing_terms(league, p, t, float(apy), int(years), CAP.get(league.year, 301.2), float(front_load) if front_load is not None else None, bonus)
         hits = d['cap_hits']
         return dict(ok=True, hits=hits, years=[d['start_year'] + i for i in range(int(years))], total=round(d['total'], 2), year1=hits[0], cash_this_season=round(d['cash_this_season'], 2), prorated=d['fraction'] < 1, annual_apy=float(apy), dead_if_cut=[])
-    d = CS.structure(float(apy), int(years), p.pos, CAP.get(league.year, 301.2), t.gm, front_load=(float(front_load) if front_load is not None else None))
-    hits = list(d.get('cap_hits', []))
-    if bonus is not None and hits:
-        b = float(bonus); yrs = int(years); base_total = max(0.0, float(apy) * yrs - b)
-        sh = float(d.get('front_load', 0.5)); weights = [1.0 + (sh - 0.5) * 2 * (1 - 2 * i / max(1, yrs - 1)) for i in range(yrs)] if yrs > 1 else [1.0]
-        wsum = sum(weights); hits = [round(base_total * w / wsum + b / yrs, 2) for w in weights]
-    from views import cap_focus
-    start_year = cap_focus(league, t)['year']                          # the season the deal starts: next year from the Super Bowl until the roll
-    return dict(ok=True, hits=hits, years=[start_year + i for i in range(int(years))], total=round(float(apy) * int(years), 1), year1=(hits[0] if hits else None), dead_if_cut=d.get('dead_if_cut', []))
+    import extensions as EXT
+    try:
+        c = EXT.build(p, int(years), float(apy), CAP.get(league.year, 301.2), t.gm, league,
+                      front_load=float(front_load) if front_load is not None else None, bonus=bonus)
+    except ValueError as e:
+        return dict(ok=False, why=str(e))
+    # Contract index zero is still the current league year before the rollover.
+    hits = [round(c.cap_hit(i), 3) for i in range(c.years)]
+    expiry = round(c.remaining_proration(c.years), 3)
+    if expiry: hits.append(expiry)
+    return dict(ok=True, extension=True, existing_years=p.contract.years,
+                hits=hits, years=[league.year + i for i in range(len(hits))],
+                expiry_year=league.year + c.years if expiry else None,
+                total=round(float(apy) * int(years), 2), year1=hits[0],
+                dead_if_cut=[c.release(i, league.post_june1())[0] for i in range(c.years)])
 
 
 def act_open_talks(league, abbr, pid, kind):
