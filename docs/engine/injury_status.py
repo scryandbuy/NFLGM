@@ -173,6 +173,10 @@ class InjuryDesk:
         """
         self.status = {}
         self.playing_hurt = {}
+        self.pending = {}
+        import inbox as IB
+        for message in IB.pending(league, 'injury_decision'):
+            if team.abbr == getattr(league, 'user_team', None): message['status'] = 'done'
         for p in list(team.roster):
             if p.out_until is None:
                 continue
@@ -208,7 +212,8 @@ class InjuryDesk:
                     self.pending[p.pid] = d
                     try:
                         import inbox as IB
-                        IB.post(league, 'injury_decision', f"{p.name}: play or sit?", hurt_words(league, team, p, d), sender='trainers', payload=dict(pid=p.pid, listed=d, link=f'player:{p.pid}'), expires_week=week + 1)
+                        message = IB.post(league, 'injury_decision', f"{p.name}: play or sit?", hurt_words(league, team, p, d), sender='trainers', payload=dict(pid=p.pid, listed=d, link=f'player:{p.pid}'), expires_week=week)
+                        message['week'] = week
                     except Exception: pass
                     continue
                 if self._ai_plays(team, p, d, rng):
@@ -242,6 +247,9 @@ class InjuryDesk:
     def resolve_pending(self, league, team, rng):
         """Sunday morning: whatever the GM left unanswered, the trainers call by the real play rates."""
         for pid, d in list(self.pending.items()):
+            import inbox as IB
+            for message in IB.pending(league, 'injury_decision'):
+                if (message.get('payload') or {}).get('pid') == pid: message['status'] = 'done'
             p = league.player(pid)
             if p is None: self.pending.pop(pid, None); continue
             if will_play(d, rng): self.play_through(league, team, p, d)

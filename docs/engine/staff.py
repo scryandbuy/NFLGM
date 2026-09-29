@@ -309,7 +309,7 @@ def season_end(league, unit_ranks_by_team):
                 league.log('staff_retire', team=abbr, role=role, name=c.name, age=c.age)
                 if abbr == getattr(league, 'user_team', None):
                     import inbox as IB
-                    IB.post(league, 'staff', f"{c.name} is retiring", f"Your {ROLE_NAME[role].lower()} is calling it a career at {c.age}. The job is open.", sender=c.name, payload=dict(role=role, link='front_office:staff'))
+                    IB.post(league, 'staff', f"{c.name} is retiring", f"Your {ROLE_NAME[role].lower()} is calling it a career at {c.age}. The job is open.", sender=c.name, payload=dict(role=role, event='retirement', link='front_office:staff'))
     league.staff_pool = [c for c in getattr(league, 'staff_pool', []) if c.age < 66]
     for c in league.staff_pool:
         c.age += 1; c.prestige = float(np.clip(c.prestige * 0.96 + 2.0, 5, 95))
@@ -449,7 +449,7 @@ def _post_user(league, team, role, coach, kind, cands=None):
     import inbox as IB
     if coach is not None:
         IB.post(league, 'staff', f"{coach.name}'s contract is up", f"Your {ROLE_NAME[role].lower()} ({coach.rating:.0f}, {coach.specialty}) is out of contract. Extend him or let him go to the pool.",
-                sender=coach.name, payload=dict(role=role, link='front_office:staff'))
+                sender=coach.name, payload=dict(role=role, coach=coach.name, link='front_office:staff'))
     else:
         IB.post(league, 'staff', f"You need a {ROLE_NAME[role].lower()}", f"The job is open. {len(cands or [])} candidates are in the pool.", sender='Front office', payload=dict(role=role, link='front_office:staff'))
 
@@ -483,9 +483,10 @@ def answer_poach(league, tid, action, raise_years=0, raise_to=None, rng=None):
     t = next((x for x in (getattr(league, 'poaches', None) or []) if x['id'] == tid), None)
     if t is None or t['state'] != 'open': return dict(ok=False, why='nothing open')
     team = league.teams[t['team']]; c = team.staff.get(t['role'])
-    if c is None or c.name != t['coach']: t['state'] = 'void'; return dict(ok=False, why='he is no longer on your staff')
+    if c is None or c.name != t['coach']: t['state'] = 'void'; __import__('inbox').reconcile(league); return dict(ok=False, why='he is no longer on your staff')
     tr = c.traits or {}; amb = tr.get('ambition', 50) / 100.0; loy = tr.get('loyalty', 50) / 100.0; money = tr.get('financial_priority', 50) / 100.0
     def _complete(take_first):
+        __import__('inbox').reconcile(league)
         club = t.get('pending_club')
         if club and club in (getattr(league, 'pending_hires', None) or {}):
             import coaching_pool as CP
@@ -524,6 +525,7 @@ def finalize_poaches(league):
         if t['state'] == 'open':
             t['state'] = 'let_go'
         out.append(t)
+    __import__('inbox').reconcile(league)
     return out
 
 
@@ -536,6 +538,7 @@ def extend(league, abbr, role, years=3, salary=None):
     if pay + 1e-9 < a: return dict(ok=False, why=f'he asks ${a:.2f}m', ask=a)
     if pay > room(team, without=role) + 1e-9: return dict(ok=False, why=f'over the staff budget: ${room(team, without=role):.2f}m of room', ask=a, room=room(team, without=role))
     c.years = int(years); c.salary = round(pay, 2); league.log('staff_extend', team=abbr, role=role, name=c.name, salary=c.salary)
+    __import__('inbox').reconcile(league)
     return dict(ok=True, name=c.name, years=years, salary=c.salary)
 
 
@@ -544,6 +547,7 @@ def release(league, abbr, role):
     if c is None: return dict(ok=False, why='no one in the job')
     c.team = None; c.years = 0; league.staff_pool.append(c); team.staff[role] = None
     league.log('staff_out', team=abbr, role=role, name=c.name, why='released by the user')
+    __import__('inbox').reconcile(league)
     return dict(ok=True)
 
 
@@ -558,6 +562,7 @@ def hire(league, abbr, coach_name, years=3):
     c.known = list(c.staff_traits or [])                        # yours now: every trait shows
     iv = getattr(league, 'interviews', None) or {}; iv.pop(c.name, None)
     league.log('staff_in', team=abbr, role=c.role, name=c.name, why='hired by the user')
+    __import__('inbox').reconcile(league)
     return dict(ok=True, name=c.name, role=c.role)
 
 
@@ -643,20 +648,22 @@ def interview_ask(league, abbr, name, question):
     elif question == 'hits': _reveal(league, c, st, POS, question)
     elif question == 'misses': _reveal(league, c, st, NEG, question)
     elif question == 'references':
-        st['asked'].append(question); st['refs_due'] = int(league.week or 0) + 1
+        st['asked'].append(question); st['refs_due'] = 'next_advance'
         st['log'].append(dict(who='gm', text='You put in calls to people who have worked with him. The answers come back at the Advance.'))
     else: return dict(ok=False, why='no such question')
     return dict(ok=True, state=_interview_view(league, c, st))
 
 
-def resolve_references(league):
+def resolve_references(league, advanced=False):
     """At the roll: every reference call that is due comes back. One time in six the reference is wrong
     about him: it names a trait he does not have, and the interview shows it as hearsay."""
     import staff_traits as STR
     iv = getattr(league, 'interviews', None) or {}
     wk = int(league.week or 0)
     for name, st in iv.items():
-        if st.get('refs_due') is None or st['refs_due'] > wk: continue
+        due = st.get('refs_due')
+        if due is None: continue
+        if not advanced and (due == 'next_advance' or due > wk): continue
         st['refs_due'] = None
         c = next((x for x in league.staff_pool if x.name == name), None)
         if c is None: continue

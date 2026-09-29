@@ -342,9 +342,6 @@ class Session:
             return dict(title='Finish the Draft on Auto', sub=f"or make your pick at {pk.round}.{((pk.selection - 1) % 32) + 1} on Draft Day" if pk else '')
         title, _ = self.OFFSEASON[i]
         name = self.OFFSEASON[i][1]
-        if name == 'step_waivers_1':
-            WV.notify_user(self.L, WV.pending(self.L), 0, digest=True)
-            return
         if name == 'step_extensions':
             try:
                 sh = TG.user_resign_sheet(self.L)
@@ -361,6 +358,7 @@ class Session:
     ROSTER_MAX, ROSTER_MIN = 53, 46
 
     def blocking(self):
+        import inbox as IB
         IB.reconcile(self.L)
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is not None and not lv['done']:
@@ -964,6 +962,9 @@ class Session:
         """The calendar sits on a free-agency round: open it (once) so the offers can be made before the advance."""
         if self.stop[0] != 'offseason': return
         name = self.OFFSEASON[self.stop[1]][1]
+        if name == 'step_waivers_1':
+            WV.notify_user(self.L, WV.pending(self.L), 0, digest=True)
+            return
         if name == 'step_extensions':
             try: self._resign_card()
             except Exception as e:

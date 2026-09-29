@@ -269,6 +269,8 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
     signed, waiting, messages = [], [], []
 
     for p in list(pool):
+        if pending_offer_sheet(league, p.pid):
+            waiting.append(p); continue
         # Bids were placed together at the start of the round. A club may
         # already have signed an alternative at this spot by the time this
         # player decides, so reconsider the actual roster before accepting.
@@ -337,7 +339,7 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
                 kind='offer_sheet', pid=p.pid, name=p.name, team=holder,
                 suitor=best.team, offer=round(best.apy, 2),
                 years=best.years, days=RFA_MATCH_DAYS, phase=phase,
-                subject=f"Offer sheet: {p.name}", body=f"{best.team} have signed {p.name} ({p.pos}, {round(p.ovr)}) to an offer sheet at ${best.apy:.1f}m a year for {best.years} years. Match it and he stays on your terms; decline and he goes for the compensation.", link=f'player:{p.pid}'))
+                subject=f"Offer sheet: {p.name}", body=f"{best.team} have signed {p.name} ({p.pos}, {round(p.ovr)}) to an offer sheet at ${best.apy:.1f}m a year for {best.years} years. Match the offer and he stays; decline and he leaves with no draft compensation.", link=f'player:{p.pid}'))
             waiting.append(p)
             continue
 
@@ -419,62 +421,99 @@ def sign(league, player, offer, cap, bonus=None):
 
 
 # ============================================================ THE INBOX
-def inbox_add(league, msg):
-    """Free-agency messages go through the same inbox as everything else,
-    keeping their own fields on the top level for resolve_offer_sheets."""
+def pending_offer_sheet(league, pid):
+    return next((m for m in getattr(league, 'inbox', [])
+                 if m.get('kind') == 'offer_sheet' and m.get('pid') == pid
+                 and not m.get('resolved') and m.get('status', 'unread') in ('unread', 'open')), None)
+
+
+def inbox_add(league, msg, rng=None):
+    """Only the incumbent user's sheets enter the human decision inbox.
+
+    CPU incumbents decide immediately; their decisions never depend on a
+    human reading/deleting a message. Historical CPU sheets are drained by
+    resolve_offer_sheets after a load.
+    """
     import inbox as IB
-    league.__dict__.setdefault('inbox', [])
+    if msg.get('kind') == 'offer_sheet':
+        old = pending_offer_sheet(league, msg['pid'])
+        if old is not None: return old
+        if msg.get('team') != getattr(league, 'user_team', None):
+            if rng is None:
+                from stable import stable_seed
+                rng = np.random.default_rng(stable_seed(str(league.year) + msg['pid'] + 'sheet'))
+            result = dict(msg, status='unread')
+            _settle_offer_sheet(league, result, rng)
+            return result
     m = IB.post(league, msg.get('kind', 'note'), msg.get('subject') or msg.get('kind', 'note'),
-                msg.get('body', ''), sender=msg.get('team'), payload=msg)
+                msg.get('body', ''), sender=msg.get('team'), payload=dict(msg))
     m.update({k: v for k, v in msg.items() if k not in ('id', 'status')})
     return m
 
 
+def _settle_offer_sheet(league, msg, rng, action=None):
+    """Settle one sheet atomically through sign's cap check; no compensation."""
+    p = league.player(msg['pid'])
+    holder = league.teams.get(msg['team'])
+    def finish(outcome, destination=None):
+        msg.update(resolved=True, status='done', outcome=outcome)
+        if isinstance(msg.get('payload'), dict): msg['payload']['outcome'] = outcome
+        if p is not None and p.team == msg['team'] and getattr(p, 'fa_class', None) == 'tendered':
+            p.fa_class = 'under_contract'
+        if p is not None: p.tender_team = None
+        return dict(ok=True, outcome=outcome, team=destination)
+    if (p is None or p.retired or holder is None or p.team != msg['team']
+            or getattr(p, 'fa_class', None) != 'tendered'):
+        # A stale request must not alter a player's newer deal/tender.
+        msg.update(resolved=True, status='done', outcome='void')
+        return dict(ok=True, outcome='void')
+    cap = CAP.get(league.year, 301.2)
+    price, years = msg['offer'], msg.get('years', 2)
+    if action is None:
+        value = VAL.value_player(league, p, side='team', rng=rng)
+        worth = value['apy'] if value else price
+        can = power(league, holder, cap) + (p.apy if p.contract else 0.0) >= price * 1.02
+        action = 'match' if can and worth >= price * .72 else 'decline'
+    destination = msg['team'] if action == 'match' else msg['suitor']
+    if destination not in league.teams:
+        return finish('void')
+    try:
+        sign(league, p, Offer(destination, p.pid, price, years, phase=3), cap)
+    except ValueError as exc:
+        if action == 'match' and msg['team'] == getattr(league, 'user_team', None):
+            return dict(ok=False, why=str(exc))  # retain the user's decision
+        if action == 'match':
+            return _settle_offer_sheet(league, msg, rng, action='decline')
+        return finish('void')  # suitor cannot honor it: original tender stands
+    league.teams[destination].sync_cap()
+    return finish('matched' if action == 'match' else 'departed', destination)
+
+
+def answer_offer_sheet(league, msg_id, action, rng=None):
+    """Session/UI API: match or decline an open sheet for the user's player."""
+    if action not in ('match', 'decline'): return dict(ok=False, why='choose match or decline')
+    msg = next((m for m in getattr(league, 'inbox', []) if m.get('id') == msg_id), None)
+    if (not msg or msg.get('kind') != 'offer_sheet' or msg.get('resolved')
+            or msg.get('status') not in ('unread', 'open')
+            or msg.get('team') != getattr(league, 'user_team', None)):
+        return dict(ok=False, why='no open offer sheet for your team')
+    return _settle_offer_sheet(league, msg, rng, action=action)
+
+
 def resolve_offer_sheets(league, rng, verbose=False):
-    """
-    The incumbent matches or lets him go. No draft compensation either way, by
-    decision - the tender buys the right to match and nothing else.
-    """
+    """Resolve legacy CPU sheets; user incumbents retain their match decision."""
     kept, lost = [], []
-    for msg in [m for m in league.inbox if m.get('kind') == 'offer_sheet'
-                and not m.get('resolved')]:
+    for msg in getattr(league, 'inbox', []):
+        if msg.get('kind') != 'offer_sheet': continue
+        if msg.get('resolved'):
+            msg['status'] = 'done'; continue
+        if msg.get('status', 'unread') not in ('unread', 'open'): continue
+        if msg.get('team') == getattr(league, 'user_team', None): continue
+        result = _settle_offer_sheet(league, msg, rng)
         p = league.player(msg['pid'])
-        if p is None or p.retired:
-            msg['resolved'] = True
-            continue
-        holder = league.teams.get(msg['team'])
-        suitor = league.teams.get(msg['suitor'])
-        cap = CAP.get(league.year, 301.2)
-        price, years = msg['offer'], msg.get('years', 2)
-        # he matches if the man is worth the new number to him and he can
-        # carry it
-        v = VAL.value_player(league, p, side='team', rng=rng)
-        worth = v['apy'] if v else price
-        # HE MATCHES UNLESS THE PRICE IS GENUINELY BAD. A tendered man is one
-        # the club already decided it wanted and already has on its cap at the
-        # tender, so the real question is only the difference. At a 0.92 bar
-        # incumbents lost 33 of 45, where the sources are blunt that the vast
-        # majority of offer sheets are matched.
-        gap = max(0.0, price - (p.apy if p.contract else 0.0))
-        can = (holder is not None
-               and power(league, holder, cap) + (p.apy if p.contract else 0.0)
-               >= price * 1.02)
-        if can and worth >= price * 0.72:
-            o = Offer(msg['team'], p.pid, price, years, phase=3)
-            try: sign(league, p, o, cap)
-            except ValueError: continue
-            holder.sync_cap()
-            kept.append((msg['team'], p, price))
-        elif suitor and power(league, suitor, cap) >= price * 1.05:
-            o = Offer(msg['suitor'], p.pid, price, years, phase=3)
-            try: sign(league, p, o, cap)
-            except ValueError: continue
-            suitor.sync_cap()
-            lost.append((msg['suitor'], p, price))
-        msg['resolved'] = True
-        p.tender_team = None
-    if verbose:
-        print(f'  offer sheets: {len(kept)} matched, {len(lost)} lost')
+        if result.get('outcome') == 'matched': kept.append((msg['team'], p, msg['offer']))
+        elif result.get('outcome') == 'departed': lost.append((msg['suitor'], p, msg['offer']))
+    if verbose: print(f'  offer sheets: {len(kept)} matched, {len(lost)} lost')
     return kept, lost
 
 
@@ -497,7 +536,7 @@ def rfa_offer_sheets(league, rng):
     """
     out = []
     for p in league.players.values():
-        if p.fa_class != 'tendered' or p.retired:
+        if p.fa_class != 'tendered' or p.retired or pending_offer_sheet(league, p.pid):
             continue
         # somebody has to want him more than his own club is paying
         v = VAL.value_player(league, p, side='team', rng=rng)
@@ -613,7 +652,7 @@ def run(league, rng, user_team=None, verbose=False):
         NG.resolve(league, fa_step=phase)
         waiting = [p for p in waiting if p.team is None]    # a player who signed through his thread is off the market
         for m in msgs:
-            inbox_add(league, m)
+            inbox_add(league, m, rng)
         all_signed += signed
         pool = waiting
         if verbose:
@@ -715,7 +754,7 @@ def resolve_round(league, rng, phase, user_team=None):
     league.fa_step = phase
     pool = _pool(league)
     bids = {pid: [Offer.from_save(d) for d in offers] for pid, offers in (getattr(league, 'fa_bids', None) or {}).items()}
-    if getattr(league, 'fa_bids_phase', None) != phase or not bids:
+    if getattr(league, 'fa_bids_phase', None) != phase:
         bids = ai_bids(league, pool, phase, rng, skip_teams=(user_team,) if user_team else ())
     # the user's offers ride alongside the AI's: a player he is bidding on within reach of the best rival waits for
     # his talk to answer instead of being decided by the AI resolution alone
@@ -744,7 +783,7 @@ def resolve_round(league, rng, phase, user_team=None):
                 t['state'] = 'declined'; NG._post(league, t, f"{p.name} signs with {p.team}", "He took another offer.")
     NG.resolve(league, fa_step=phase)
     waiting = [p for p in waiting if p.team is None]
-    for mm in msgs: inbox_add(league, mm)
+    for mm in msgs: inbox_add(league, mm, rng)
     league.free_agents = [p.pid for p in waiting]
     league.fa_bids = {}; league.fa_bids_phase = None
     league.__dict__.setdefault('fa_signed', []).extend([(t_, p.pid, o.apy, o.years, phase) for t_, p, o in signed])
@@ -763,7 +802,7 @@ def close_market(league, rng, user_team=None, verbose=False):
             pp = league.player(t['pid'])
             t['state'] = 'declined'; NG._post(league, t, f"{pp.name if pp else 'He'} moves on", "The market has closed without a deal.")
     pool = _pool(league)
-    for p in [q for q in pool if getattr(q, 'fa_class', None) == 'tendered' and q.team]:
+    for p in [q for q in pool if getattr(q, 'fa_class', None) == 'tendered' and q.team and not pending_offer_sheet(league, q.pid)]:
         p.fa_class = 'under_contract'; p.tender_team = None           # the tender stands: he plays the year on it
         if p.pid in league.free_agents: league.free_agents.remove(p.pid)
     pool = [p for p in pool if p.team is None]

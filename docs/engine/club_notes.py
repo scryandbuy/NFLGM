@@ -75,16 +75,16 @@ def returns(league, week):
     t = league.teams[user]
     led = _ledger(league); out_seen = led.setdefault('_out', {})
     # remember who was out last week; anyone now clear is back
-    now_out = {p.pid for p in t.active() if p.out_until is not None}
+    now_out = {p.pid for p in t.roster if not p.retired and p.out_until is not None}
     back = [pid for pid in list(out_seen.keys()) if pid not in now_out]
     for pid in list(out_seen): 
         if pid not in now_out: out_seen.pop(pid, None)
     for pid in now_out: out_seen[pid] = week
     for pid in back:
         p = league.player(pid)
-        if p is None or p.team != t.abbr or not _once(league, f"back-{p.pid}-{league.year}-{week}"): continue
-        d = t.depth.get(p.pos, []); rank = next((i for i, q in enumerate(d) if q.pid == p.pid), None)
-        where = 'back in his starting spot' if rank is not None and rank < GROUP_STARTERS.get(p.pos, 1) else f"listed {['first', 'second', 'third', 'fourth', 'fifth', 'sixth'][min(5, rank or 0)]} at {p.pos} while he was out" if rank is not None else 'back on the roster'
+        if p is None or p.retired or p.team != t.abbr or p.out_until is not None or any(q.pid == pid for q in (getattr(t, 'ir', None) or [])): continue
+        if not _once(league, f"back-{p.pid}-{league.year}-{week}"): continue
+        where = f'available at {p.pos}'
         IB.post(league, 'injury', f"{p.name} cleared to play", f"{p.name} ({p.pos}) is back from his injury and {where}. Set the depth chart if you want him elsewhere.", sender='trainers', payload=dict(link='club:depth'))
 
 
@@ -186,6 +186,8 @@ def season_end(league):
     """The expiring contracts as one batch."""
     user = getattr(league, 'user_team', None)
     if not user: return
+    import inbox_events as IE
+    if IE.seen(league, f"extwin-{league.year}"): return
     t = league.teams[user]
     exp = sorted([p for p in t.active() if p.contract and p.contract.years <= 1], key=lambda p: -p.ovr)
     if not exp or not _once(league, f"expiring-{league.year}"): return

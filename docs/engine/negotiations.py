@@ -340,6 +340,8 @@ def _post(league, t, subject, body, payload=None):
 # ------------------------------------------------------------ the promise ledger
 def record_promise(league, pid, team, kind, year=None, source=None):
     league.promises = getattr(league, 'promises', None) or []
+    existing = next((pr for pr in league.promises if pr.get('status') == 'open' and pr.get('pid') == pid and pr.get('team') == team and pr.get('kind') == kind), None)
+    if existing is not None: return existing
     p = league.player(pid)
     orig = (int(getattr(p.contract, 'signed', 0) or 0), int(p.contract.years)) if p is not None and p.contract is not None else None
     league.promises.append(dict(pid=pid, team=team, kind=kind, made=league.year, year=year or (league.year + 1 if kind == 'extension_by' else None), status='open', source=source, orig=orig))
@@ -349,8 +351,17 @@ def check_promises(league, week):
     """Weekly. A promise not kept is broken, with the hit the morale module defines."""
     import morale_system as MS
     broken = []
-    for pr in getattr(league, 'promises', None) or []:
+    promises = getattr(league, 'promises', None) or []
+    def identity(pr):
+        return (pr.get('pid'), pr.get('team'), pr.get('kind'), pr.get('made'), pr.get('year'))
+    seen = {identity(pr) for pr in promises if pr.get('status') in ('kept', 'broken')}
+    for pr in promises:
         if pr['status'] != 'open': continue
+        key = identity(pr)
+        if key in seen:
+            pr['status'] = 'superseded'
+            continue
+        seen.add(key)
         p = league.player(pr['pid']); team = league.teams.get(pr['team'])
         if p is None or team is None:
             pr['status'] = 'void'; continue

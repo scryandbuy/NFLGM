@@ -139,6 +139,7 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
     if MO.wants_out(p) and p.xp_spent['_request'].get('reason') == 'contract':
         MO.resolve_request(league, pid, 'extension')
     league.log('extension', pid=pid, team=p.team, apy=round(apy, 2), years=years, ai=by_ai, front_load=front_load)
+    __import__('inbox').reconcile(league)
     return dict(result='accepted', apy=round(apy, 2), years=years, contract=c, front_load=front_load)
 
 

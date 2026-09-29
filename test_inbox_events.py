@@ -6,7 +6,7 @@ import inbox as IB, inbox_events as IE, club_notes as CN, league_notes as LN, ne
 
 src=ast.parse(Path('session.py').read_text(encoding='utf-8'))
 cls=next(n for n in src.body if isinstance(n,ast.ClassDef) and n.name=='Session')
-names={'_draft_over','_open_fa_if_due','_black_monday','blocking','_resign_card','inbox_delete','inbox_clear_read','inbox_read','inbox_message'}
+names={'_draft_over','_open_fa_if_due','_black_monday','blocking','_resign_card','inbox_delete','inbox_clear_read','inbox_read','inbox_message','inbox_hurt_action','inbox_offer_sheet','advance','step_waivers_1'}
 ns={'IB':IB,'IE':IE,'MK':N(),'PS':N(),'CLUB_NAME_':{},'TG':N()}
 exec(compile(ast.fix_missing_locations(ast.Module(body=[ast.ClassDef(name='S',bases=[],keywords=[],body=[n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name in names],decorator_list=[])],type_ignores=[])),'session.py','exec'),ns)
 S=ns['S']
@@ -105,6 +105,48 @@ class EventTests(unittest.TestCase):
  def test_awards_consolidated_and_complete(self):
   p=N(pid='p',name='Winner',pos='FB',team='GB');L=league(players={'p':p})
   LN.season_end(L,{'all_pro_1':[p],'all_pro_2':[p],'sb_mvp':p});self.assertEqual(len(L.inbox),2);self.assertIn('Second team',L.inbox[1]['body']);self.assertIn('your team',L.inbox[1]['body']);self.assertIn('Super Bowl MVP',L.inbox[0]['body'])
+
+class SessionIntegrationTests(unittest.TestCase):
+ def test_answered_poach_unblocks_and_can_delete(self):
+  import staff as ST
+  c=N(name='Coach',role='oc',team='GB',traits={})
+  L=league(teams={'GB':N(abbr='GB',staff={'oc':c}),'MIN':N(abbr='MIN')});s=session(L)
+  r=ST.poach_request(L,c,'MIN');self.assertEqual(len(s.blocking()),1)
+  ST.answer_poach(L,r['id'],'block');self.assertEqual(s.blocking(),[])
+  self.assertTrue(s.inbox_delete(L.inbox[0]['id'])['ok'])
+ def test_offer_sheet_blocks_backend_advance_until_answered(self):
+  import market as MK
+  from test_inbox_entity_lifecycle import OfferSheetTests, sheet
+  L,p=OfferSheetTests().fixture();s=session(L);s.next_label=lambda:'Next';m=MK.inbox_add(L,sheet())
+  s._advance=lambda:self.fail('advanced past pending offer sheet')
+  self.assertEqual(s.advance()['done'],'Blocked')
+  with patch.dict(ns,MK=MK):
+   # Verify Session dispatch; the entity lifecycle suite exercises contract changes.
+   with patch.object(MK,'answer_offer_sheet',side_effect=lambda L,mid,action,rng:dict(ok=True,mid=mid,action=action)):
+    result=s.inbox_offer_sheet(m['id'],'match')
+  self.assertEqual(result['action'],'match');self.assertEqual(result['mid'],m['id'])
+ def test_stale_injury_message_cannot_answer_current_pending(self):
+  L=league(week=2);s=session(L);s.runner=N(desks={'GB':N(pending={'p':'questionable'})})
+  m=IB.post(L,'injury_decision','Old','',payload={'pid':'p'},expires_week=2);m['week']=1
+  s.club_act=lambda *a,**k:self.fail('dispatched stale injury')
+  self.assertFalse(s.inbox_hurt_action(m['id'])['ok'])
+ def test_current_injury_message_dispatches(self):
+  L=league(week=2);s=session(L);s.runner=N(desks={'GB':N(pending={'p':'questionable'})})
+  m=IB.post(L,'injury_decision','Current','',payload={'pid':'p'},expires_week=2)
+  s.club_act=lambda action,**kw:dict(ok=True,action=action,**kw)
+  self.assertEqual(s.inbox_hurt_action(m['id'],play=False),dict(ok=True,action='hurt_decision',pid='p',play=False))
+ def test_offseason_waiver_arrival_notifies_before_processing(self):
+  import waivers as WV
+  L=league(waivers=[]);s=session(L);s.OFFSEASON=[('Wire','step_waivers_1')];s.FA_STEPS={}
+  with patch.dict(ns,WV=WV),patch.object(WV,'notify_user') as notify,patch.object(WV,'process') as process:
+   s._open_fa_if_due();notify.assert_called_once();process.assert_not_called()
+   s.step_waivers_1();process.assert_called_once();self.assertEqual(notify.call_count,1)
+ def test_references_only_follow_successful_advance(self):
+  import staff as ST
+  L=league();s=session(L);s._advance=lambda:dict(done='Blocked')
+  with patch.dict(ns,STF=ST),patch.object(ST,'resolve_references') as resolve:
+   s.advance();resolve.assert_not_called()
+   s._advance=lambda:dict(done='Camp');s.advance();resolve.assert_called_once_with(L,advanced=True)
 
 if __name__=='__main__':unittest.main()
 

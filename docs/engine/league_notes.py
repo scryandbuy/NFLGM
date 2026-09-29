@@ -12,6 +12,7 @@ Clinch math is conservative: strict inequalities on wins, so a note is never wro
 club that is in only on a tiebreaker is announced a week later than the league would.
 """
 import inbox as IB
+import inbox_events as IE
 
 GAMES = 17
 CONF_OF = None
@@ -49,29 +50,54 @@ def standings(league, week):
     if week < 13: return
     user = getattr(league, 'user_team', None)
     teams = list(league.teams.values())
+    # Before the last game, use pessimistic bounds: ties can still beat us.
+    # At completion use exactly the same seeding/tiebreakers as the bracket.
+    final = None
+    schedule = getattr(league, 'schedule', []) or []
+    games = [(h, a, hp, ap) for wk, a, h, ap, hp in schedule
+             if wk <= 18 and hp is not None and ap is not None]
+    if week >= 18 and teams and all(_played(t) >= GAMES for t in teams):
+        import standings_and_seeding as SS
+        state = SS.Season.live({t.abbr: t.division for t in teams},
+                              {t.abbr: _conf(league, t) for t in teams}, games, league.year)
+        if all(sum(state.rec[t.abbr]) == _played(t) for t in teams):
+            final = {c: SS.seed_conference(state, c) for c in {_conf(league, t) for t in teams}}
+            div_rank = SS.division_ranks(state)
     for conf in sorted({_conf(league, t) for t in teams}):
         ct = [t for t in teams if _conf(league, t) == conf]
         divs = sorted({t.division for t in ct})
-        # division: a club has clinched when its wins exceed every rival's ceiling
-        for d in divs:
-            dt = [t for t in ct if t.division == d]
-            for t in dt:
-                if all(_wins(t) > _max_wins(o) for o in dt if o is not t) and _once(league, f"div-{league.year}-{t.abbr}"):
-                    _post(league, user, t, f"{t.abbr} clinch the {d}", f"{league.teams[t.abbr].abbr} have clinched the {d} at {t.record[0]}–{t.record[1]}.", mine_subject=f"You clinch the {d}")
-        # a playoff spot: seven make it. A club is in when at most six others can still pass its win total
-        # (a club can pass it only if its ceiling is above the club's wins); out when it cannot reach the seventh-best club's wins
         for t in ct:
             others = [o for o in ct if o is not t]
-            can_pass = sum(1 for o in others if _max_wins(o) > _wins(t))
-            if can_pass <= 6 and _once(league, f"po-{league.year}-{t.abbr}"):
-                _post(league, user, t, f"{t.abbr} clinch a playoff spot", f"{t.abbr} are in the postseason at {t.record[0]}–{t.record[1]}.", mine_subject='You clinch a playoff spot')
-            seventh = sorted((_wins(o) for o in others), reverse=True)[6] if len(others) >= 7 else 0
-            if _max_wins(t) < seventh and _once(league, f"out-{league.year}-{t.abbr}"):
-                _post(league, user, t, f"{t.abbr} eliminated from playoff contention", f"{t.abbr} can no longer reach the postseason at {t.record[0]}–{t.record[1]}.", mine_subject='You are eliminated from playoff contention')
-        # the bye: the 1 seed, when its wins exceed every other club's ceiling
-        for t in ct:
-            if all(_wins(t) > _max_wins(o) for o in ct if o is not t) and _once(league, f"bye-{league.year}-{t.abbr}"):
-                _post(league, user, t, f"{t.abbr} clinch the {conf}'s 1 seed and a bye", f"{t.abbr} have locked the {conf}'s top seed and the first-round bye.", mine_subject='You clinch the 1 seed and a bye')
+            rivals = [o for o in others if o.division == t.division]
+            div_in = bool(rivals) and all(_wins(t) > _max_wins(o) for o in rivals)
+            div_out = any(_wins(o) > _max_wins(t) for o in rivals)
+            # One division winner per division comes out of the wildcard race.
+            possible_ahead = sum(max(0, sum(_max_wins(o) >= _wins(t)
+                                 for o in others if o.division == d) - 1) for d in divs)
+            certain_ahead = sum(max(0, sum(_wins(o) > _max_wins(t)
+                                for o in others if o.division == d) - 1) for d in divs)
+            in_field = div_in or possible_ahead < 3
+            out_field = div_out and certain_ahead >= 3
+            bye = div_in and all(_wins(t) > _max_wins(o) for o in others)
+            if final is not None:
+                seeds = final[conf]
+                div_in = div_rank[t.abbr] == 1
+                in_field = t.abbr in seeds
+                out_field = not in_field
+                bye = bool(seeds) and seeds[0] == t.abbr
+            notices = []
+            for flag, prefix, wording in (
+                (div_in, 'div', f'clinch the {t.division}'),
+                (in_field, 'po', 'clinch a playoff spot'),
+                (out_field and not in_field, 'out', 'are eliminated from playoff contention'),
+                (bye, 'bye', f"clinch the {conf}'s 1 seed and a bye")):
+                if flag and _once(league, f'{prefix}-{league.year}-{t.abbr}'):
+                    notices.append(wording)
+            if notices:
+                subject = (notices[-1] if bye else notices[0])
+                body = f"{t.abbr}: " + '; '.join(notices) + f". Record: {t.record[0]}–{t.record[1]}."
+                _post(league, user, t, f'{t.abbr} {subject}', body,
+                      mine_subject=f'You {subject}')
     # the picture, one week out, for the user if nothing is settled
     if week == GAMES and user:
         me = league.teams[user]
@@ -108,6 +134,10 @@ def big_result(league, week, results):
         if best is None or score > best[0]: best = (score, (hp, ap), th, ta)
     if best is None or not _once(league, f"big-{league.year}-{week}"): return
     _, (hp, ap), th, ta = best
+    if hp == ap:
+        IB.news(league, f'Week {week} around the league: {th.abbr} and {ta.abbr} tie',
+                f'{th.abbr} and {ta.abbr} tied {hp}–{ap}.', payload=dict(link='league:schedule'))
+        return
     win, lose = (th, ta) if hp > ap else (ta, th)
     line = f"{win.abbr} beat {lose.abbr} {max(hp, ap)}–{min(hp, ap)}"
     if int(week) >= 19:
@@ -144,7 +174,7 @@ def transactions(league, week, skip_signings=False):
             p = league.player(x.get('pid'))
             if p is not None: IB.news(league, f"{team} tag {p.name}", f"{team} place the franchise tag on {p.name} ({p.pos}, {round(p.ovr)})" + (f" at ${float(x['price']):.1f}m" if x.get('price') else '') + '.', payload=dict(link=f'player:{p.pid}'))
         elif k == 'gm_change':
-            IB.news(league, f"{team} hire {x.get('hired')}", f"{team} have a new head coach and general manager: {x.get('hired')}" + (f", {x.get('background')}" if x.get('background') else '') + '.', payload=dict(link='league:coaching'))
+            IE.post(league, f"coach-hire-{x.get('year', league.year)}-{team}-{x.get('hired')}", 'league', f"{team} hire {x.get('hired')}", f"{team} have a new head coach and general manager: {x.get('hired')}" + (f", {x.get('background')}" if x.get('background') else '') + '.', payload=dict(link='league:coaching'))
         elif k == 'staff_in' and x.get('why') and 'head' in str(x.get('why')).lower():
             IB.news(league, f"{team} hire {x.get('name')}", f"{team} hire {x.get('name')}: {x.get('why')}.", payload=dict(link='league:coaching'))
 
@@ -159,14 +189,18 @@ def season_end(league, votes):
             if hasattr(v, 'pid'): return f"{v.name} ({v.pos}, {v.team})"
             p = league.player(v) if isinstance(v, str) and v in league.players else None
             return f"{p.name} ({p.pos}, {p.team})" if p else str(v)
-        parts = [f"{label}: {nm(votes.get(k))}" for k, label in (('mvp', 'MVP'), ('opoy', 'Offensive Player of the Year'), ('dpoy', 'Defensive Player of the Year'), ('oroy', 'Offensive Rookie of the Year'), ('droy', 'Defensive Rookie of the Year'), ('protector', 'Protector of the Year'), ('coty', 'Coach of the Year')) if votes.get(k)]
+        parts = [f"{label}: {nm(votes.get(k))}" for k, label in (('mvp', 'MVP'), ('opoy', 'Offensive Player of the Year'), ('dpoy', 'Defensive Player of the Year'), ('oroy', 'Offensive Rookie of the Year'), ('droy', 'Defensive Rookie of the Year'), ('protector', 'Protector of the Year'), ('coty', 'Coach of the Year'), ('sb_mvp', 'Super Bowl MVP')) if votes.get(k)]
         IB.news(league, f"{year} awards", '. '.join(parts) + '.', payload=dict(link='league:awards'))
-        first = votes.get('all_pro_1') or []
-        if first:
-            names = ', '.join(f"{p.name} ({p.pos})" for p in first if hasattr(p, 'name'))
-            IB.news(league, f"{year} All-Pro first team", names + '.', payload=dict(link='league:awards'))
-        mine = [p for p in first if hasattr(p, 'team') and p.team == getattr(league, 'user_team', None)]
-        if mine: IB.post(league, 'result', f"{len(mine)} of yours named All-Pro", ', '.join(f"{p.name} ({p.pos})" for p in mine) + ' made the first team.', sender='league', payload=dict(link='league:awards'))
+        sections = []
+        for key, label in (('all_pro_1', 'First team'), ('all_pro_2', 'Second team')):
+            players = votes.get(key) or []
+            if players:
+                names = ', '.join(f"{p.name} ({p.pos}, {p.team})" +
+                                  (' — your team' if p.team == getattr(league, 'user_team', None) else '')
+                                  for p in players if hasattr(p, 'name'))
+                sections.append(f'{label}: {names}.')
+        if sections:
+            IB.news(league, f'{year} All-Pro teams', ' '.join(sections), payload=dict(link='league:awards'))
     hof = [x for x in league.transactions if x.get('kind') == 'hall_of_fame' and x.get('year') == year]
     if hof and _once(league, f"hof-{year}"):
         IB.news(league, f"Hall of Fame class of {year}", ', '.join(f"{x.get('name')} ({x.get('pos')})" for x in hof) + ' inducted.', payload=dict(link='league:almanac'))
