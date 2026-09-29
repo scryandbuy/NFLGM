@@ -25,6 +25,11 @@ AVG = 0.70
 # tuned by hand. None in normal play; costs nothing.
 PASS_TRACE = None
 
+# Short throws beyond the line were sustaining too many drives after personnel
+# and protection fixes. Keep screens/swings and medium/deep throws on their
+# existing curves; apply this once to either coverage path before its roll.
+SHORT_PASS_COMPLETION = 0.92
+
 def rate(p, weights):
     """Weighted attribute score on 0-1. Missing attributes default to average."""
     return sum(p.get(k, 70) * v for k, v in weights.items()) / 100.0
@@ -365,7 +370,10 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
         # Re-set for runs once defences stopped carrying box adjustments
         # from game to game: with the ratchet gone, explosive runs ran 3.6%
         # against 2.46 and ypc 4.9 against 4.52, all of it after contact
-        base = 0.165 if not in_space else 0.166
+        # Receiving YAC stayed about half a yard high after the completion
+        # correction. Recenter tackle contests in space; the rushing branch
+        # and the rating-based separation between players remain unchanged.
+        base = 0.165 if not in_space else 0.195
         ramp = 0.115 if not in_space else 0.113
         p_break = logistic(edge(atk, wrap) - base - ramp * i, k=7.0)
         if rng.random() > p_break:
@@ -854,6 +862,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
             in_man = True; cov = zone_owner
         elif zone_owner is not None:
             cov = zone_owner
+    if depth == 'short' and not screen and not swing:
+        cmult *= SHORT_PASS_COMPLETION
     if in_man:
         cb = cov
         # Apply the concept and read modifiers to the COMPLETION PROBABILITY,

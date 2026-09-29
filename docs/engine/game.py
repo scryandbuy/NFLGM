@@ -202,23 +202,30 @@ def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
 
 
 
+# Distance anchors, not stepwise bands. Interpolate beyond 34 yards so a
+# fraction of a yard cannot trigger an entire five-yard accuracy penalty.
 FG_PCT = [(29, .975), (34, .955), (39, .905), (44, .840), (49, .785),
-          (54, .720), (99, .590)]
+          (54, .720), (59, .590)]
 
 def fg_probability(distance, kicker=None, rate_fn=None, AVG=0.70):
-    """The make probability by distance, the kicker's accuracy throughout and his leg from 50 out. The table's
-    55-plus band (59%) is the real rate of the long kicks clubs actually try, which are the ones inside the
-    kicker's range; past his range the ball does not get there, so the tail falls off with his power: an average
-    leg carries to about 60, a big one to the mid 60s, a weak one to the low 50s."""
-    base = next((p for d, p in FG_PCT if distance <= d), FG_PCT[-1][1])   # past the table (a kick from deep in your own end) takes the last band; the range tail below does the rest
+    """Smooth distance accuracy, gradual leg-strength influence, then range tail.
+
+    Keep the short-kick/33-yard PAT baseline unchanged. The 59-yard anchor
+    holds beyond the curve; the kicker-specific range tail handles longer
+    attempts without granting an artificial accuracy jump at 50 yards.
+    """
+    if distance <= 34:
+        base = next(p for d, p in FG_PCT if distance <= d)
+    else:
+        base = float(np.interp(distance, [d for d, _ in FG_PCT], [p for _, p in FG_PCT]))
     pwr = AVG
     if kicker is not None and rate_fn is not None:
         acc = rate_fn(kicker, {'kick_acc_rating': .75, 'awareness_rating': .25})
         pwr = rate_fn(kicker, {'kick_power_rating': 1.0})
         base *= 1.0 + 0.16 * (acc - AVG)
-        if distance >= 50:                 # power only matters from distance
-            base *= 1.0 + 0.55 * (pwr - AVG)
-    reach = 57.0 + 26.0 * (pwr - AVG)      # where his leg gives out: 57 for an average kicker, about 63 for the best, 54 for a weak one
+        # Blend in power over 40-52 yards rather than switching it on at 50.
+        base *= 1.0 + 0.55 * (pwr - AVG) * float(np.clip((distance - 40.0) / 12.0, 0.0, 1.0))
+    reach = 57.0 + 26.0 * (pwr - AVG)
     if distance > 48:
         base *= 1.0 / (1.0 + np.exp((distance - reach) / 2.0))
     return float(np.clip(base, 0.005, 0.995))
