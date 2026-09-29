@@ -65,6 +65,8 @@ class Session:
         d = json.loads(text)
         L = LG.League.load(text)
         rng_ = np.random.default_rng(d.get('_seed_state', None))
+        if d.get('_rng_state') is not None:
+            rng_.bit_generator.state = d['_rng_state']
         try:
             L.seed_tenures(np.random.default_rng(int(d.get('_seed_state', 1) or 1) + 7))       # a save where every coach shares one tenure
             if any(getattr(t, 'expected_cached', None) is None for t in L.teams.values()): L.set_expectations()
@@ -153,9 +155,10 @@ class Session:
                 if rows: ld['results'] = rows
         except Exception: pass
         try:
-            # the current season's exit meetings and review exist only once it has closed; anything filed under the
-            # current year before then (an older build wrote meetings on a page view) is removed
-            if getattr(L, 'season_closed_year', None) != int(L.year):
+            # Older builds could file these pages before the club's season ended. An eliminated club's meetings
+            # and review are valid during the playoffs, even while the league season is still open.
+            import views_frontoffice as VF
+            if not VF._club_done(s, L, s.user_team):
                 (getattr(L, 'exit_meetings', None) or {}).pop(str(L.year), None)
                 ((getattr(L, 'history', None) or {}).get(str(L.year)) or {}).pop('review', None)
         except Exception: pass
@@ -200,7 +203,11 @@ class Session:
         if lv is not None and not lv['done']:
             # a half-played game cannot be written down; the save marks it pending and a load reopens it at the kick
             d['_live_pending'] = dict(home=lv['home'], away=lv['away'], week=lv['week'], playoffs=bool(lv.get('playoffs')))
-        d['_stop'] = list(self.stop); d['_seed_state'] = int(self.rng.integers(0, 2**31)); d['_user_team'] = self.user_team
+        d['_stop'] = list(self.stop)
+        d['_rng_state'] = self.rng.bit_generator.state
+        # Keep a seed for older builds without advancing the live generator merely to save the game.
+        d['_seed_state'] = stable_seed(json.dumps(d['_rng_state'], sort_keys=True))
+        d['_user_team'] = self.user_team
         d['_gameday'] = self.gameday
         d['_gamedays'] = getattr(self, 'gamedays', None) or {}
         d['_played'] = bool(getattr(self, 'played', False))
@@ -600,14 +607,14 @@ class Session:
     def _post_review(self, how):
         """The season review lands once, the morning after the club's season ends."""
         key_ = f"review-{self.L.year}"
-        if any((m.get('payload') or {}).get('key') == key_ for m in getattr(self.L, 'inbox', [])): return
-        try:
-            v = self.frontoffice('season_review')
-            slot = PS.provisional_slot(self.L, getattr(self, 'post_live', None) or getattr(self, 'post', None), self.user_team)
-            slot_line = f" You pick {slot}{'st' if slot % 10 == 1 and slot != 11 else 'nd' if slot % 10 == 2 and slot != 12 else 'rd' if slot % 10 == 3 and slot != 13 else 'th'} in the first round." if slot else ''
-            IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the players whose deals are up.{slot_line}", sender='front office', payload=dict(key=key_, link='front_office:review'))
-        except Exception as e:
-            import sys; print('season review failed:', e, file=sys.stderr)
+        if not any((m.get('payload') or {}).get('key') == key_ for m in getattr(self.L, 'inbox', [])):
+            try:
+                v = self.frontoffice('season_review')
+                slot = PS.provisional_slot(self.L, getattr(self, 'post_live', None) or getattr(self, 'post', None), self.user_team)
+                slot_line = f" You pick {slot}{'st' if slot % 10 == 1 and slot != 11 else 'nd' if slot % 10 == 2 and slot != 12 else 'rd' if slot % 10 == 3 and slot != 13 else 'th'} in the first round." if slot else ''
+                IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the players whose deals are up.{slot_line}", sender='front office', payload=dict(key=key_, link='front_office:review'))
+            except Exception as e:
+                import sys; print('season review failed:', e, file=sys.stderr)
         try:
             # THE EXTENSION WINDOW. Your own players are yours to extend from here until the tag period; the note says
             # who is up and what the room is
