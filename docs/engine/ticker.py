@@ -32,7 +32,7 @@ def _spot(yardline_100, off_abbr, def_abbr):
     """yardline is yards to the end zone. 60 means own 40."""
     y = int(round(yardline_100))
     if 0 < yardline_100 < 1.0: y = 1                    # inside the 1 is the 1, never the 0
-    if y > 50: return f"{off_abbr} {100 - y}"
+    if y > 50: return f"{off_abbr} {max(1, 100 - y)}"
     if y == 50: return "50"
     return f"{def_abbr} {y}"
 
@@ -90,7 +90,10 @@ def play_line(league, p, off_abbr, def_abbr):
             text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
     elif t == 'incomplete':
         pd = _nm(league, p.get('pass_def'))
-        text = f"{passer or 'The quarterback'} throws to {target or 'his receiver'}, incomplete" + (f". {pd} breaks it up." if pd else ('. Under pressure.' if p.get('pressured') else '.'))
+        if p.get('throwaway'):
+            text = f"{passer or 'The quarterback'} throws the ball away under pressure."
+        else:
+            text = f"{passer or 'The quarterback'} throws to {target or 'his receiver'}, incomplete" + (f". {pd} breaks it up." if pd else ('. Under pressure.' if p.get('pressured') else '.'))
         kind = 'neutral'
     elif t == 'drop':
         text = f"{passer or 'The quarterback'} to {target or 'his receiver'}, dropped."; kind = 'loss'
@@ -129,12 +132,15 @@ def play_line(league, p, off_abbr, def_abbr):
     elif t == 'penalty':
         side = 'defense' if not p.get('on_offense') else 'offense'
         import events as E
-        yds = abs(float(p.get('yards', 0) or 0)); rule = E.RULE_YARDS.get(p.get('penalty'))
+        yds = abs(float(p.get('yards', 0) or 0)); rule = p.get('rule_yards', E.RULE_YARDS.get(p.get('penalty')))
         half = rule is not None and yds < rule - 0.01
-        yds = int(round(yds))
-        ydtxt = ('half the distance to the goal' if (half and yds == 0) else (f"{yds} yards" if yds != 1 else '1 yard') + (', half the distance to the goal' if half else ''))
-        if p.get('end_zone'): ydtxt = 'in the end zone, ball placed at the 1'
-        text = f"Penalty, {p.get('penalty', 'flag')} on the {side}, {ydtxt}" + (", automatic first down." if (p.get('auto_first') and not p.get('on_offense')) else '.')
+        ydtxt = 'half the distance to the goal' if half else f"{yds:g} yard{'s' if yds != 1 else ''}"
+        if p.get('end_zone'): ydtxt = f"in the end zone, ball placed at the {float(p.get('spot', 1)):g}"
+        if p.get('safety'): ydtxt = 'in the end zone, SAFETY'
+        if p.get('on_try'): ydtxt += ', enforced on the try'
+        ending = (', loss of down.' if p.get('penalty') == 'Intentional Grounding' and not p.get('safety') else
+                  ', automatic first down.' if (p.get('auto_first') and not p.get('on_offense') and not p.get('on_try')) else '.')
+        text = f"Penalty, {p.get('penalty', 'flag')} on the {side}, {ydtxt}" + ending
         kind = 'neutral'
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None

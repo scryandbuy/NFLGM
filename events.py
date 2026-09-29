@@ -147,7 +147,7 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
     # and the chance of ANY flag is the sum of what is eligible on this snap.
     if phase == 'any':
         ok = [i for i, n in enumerate(_names)
-              if PEN_INFO[n]['phase'] != 'pass' or is_pass]
+              if n != 'Intentional Grounding' and (PEN_INFO[n]['phase'] != 'pass' or is_pass)]
     else:
         ok = [i for i, n in enumerate(_names)
               if PEN_INFO[n]['phase'] in ('any', 'post', phase)
@@ -191,12 +191,43 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
         # (the 20 types cover 10.96 of the real 11.88 per game), which skews
         # defensive. These specific fouls go against the defence more often.
         on_off = rng.random() < 0.18
+    if name == 'Illegal Use of Hands' and not on_off:
+        yds = 5.0                         # defensive use of hands is five, offensive is ten
     # the rulebook's automatic first down: every defensive foul except the pre-snap fives
     # (offside, neutral zone, encroachment, too many men) and delay-type fouls; never an offensive foul
     AUTO = {'Defensive Pass Interference', 'Defensive Holding', 'Roughing the Passer', 'Illegal Contact', 'Unnecessary Roughness', 'Face Mask', 'Illegal Use of Hands'}
-    return dict(penalty=name, yards=float(int(round(float(yds)))),
+    return dict(penalty=name, yards=float(int(round(float(yds)))), rule_yards=float(yds),
                 on_offense=bool(on_off),
                 auto_first=(not on_off) and (name in AUTO),
                 # only a dead-ball, pre-snap foul is decided before the snap; holding, OPI, an ineligible man downfield
                 # and a block above the waist happen DURING the play, which runs and is then wiped in the book
                 nullifies=info['phase'] in ('pre',) or name in ('Illegal Formation',))
+
+
+def special_teams_penalty_check(rng, kind, returned=False, phase=None):
+    """Flags on kick snaps and returns, where the scrimmage foul draw does not run."""
+    table = {
+        'punt': [('False Start', .012, True, 'pre', 5, False),
+                 ('Defensive Offside', .006, False, 'kick_offside', 5, False),
+                 ('Roughing the Kicker', .004, False, 'kick', 15, True)],
+        'field_goal': [('False Start', .010, True, 'pre', 5, False),
+                       ('Defensive Offside', .006, False, 'kick_offside', 5, False),
+                       ('Roughing the Kicker', .004, False, 'kick', 15, True)],
+        'extra_point': [('False Start', .008, True, 'pre', 5, False),
+                        ('Defensive Offside', .004, False, 'kick_offside', 5, False)],
+        'kickoff': [('Illegal Block in Back', .018, True, 'return', 10, False)] if returned else [],
+        'two_point': [('False Start', .012, True, 'pre', 5, False),
+                      ('Defensive Offside', .008, False, 'kick_offside', 5, False)],
+    }.get(kind, [])
+    if kind == 'punt' and returned:
+        table.append(('Return Holding', .025, False, 'return', 10, False))
+    if phase is not None:
+        table = [entry for entry in table if entry[3] == phase]
+    roll = rng.random()
+    for name, chance, on_offense, phase, yards, auto_first in table:
+        if roll < chance:
+            return dict(penalty=name, yards=float(yards), rule_yards=float(yards),
+                        on_offense=on_offense, phase=phase, auto_first=auto_first,
+                        nullifies=phase == 'pre')
+        roll -= chance
+    return None
