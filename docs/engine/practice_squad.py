@@ -483,7 +483,7 @@ def roster_review(league, rng, week, user_team=None):
                          and float(getattr(q, 'apy', 0.0) or 0.0) <= MS.minimum_salary(3, cap) + 0.05], key=value)[:5]
         best = None
         for q in bottom:
-            pool = [p for p in fa_all if p.pos == q.pos and not shunned(p, abbr, league)]
+            pool = [p for p in fa_all if p.pid in league.free_agents and p.pos == q.pos and not shunned(p, abbr, league)]
             pool += [p for t2, tm in league.teams.items() if t2 != abbr for p in squad(tm) if p.pos == q.pos and not shunned(p, abbr, league)]
             if not pool: continue
             p = max(pool, key=lambda x: x.ovr + GE.scheme_fit(x.ratings, x.pos, team))
@@ -494,8 +494,14 @@ def roster_review(league, rng, week, user_team=None):
         gain, q, p = best
         mn = MS.minimum_salary(p.accrued or 0, cap)
         if team.cap_space < mn + 0.2: continue
+        # Another club may already have signed a candidate from the review's
+        # cached pool. Validate his current location before releasing our man.
+        is_fa = p.pid in league.free_agents
+        source = league.teams.get(p.team) if p.team else None
+        if not is_fa and (source is None or p not in squad(source)):
+            continue
         league.release(q.pid)
-        if p.pid in league.free_agents:
+        if is_fa:
             league.free_agents.remove(p.pid); p.contract = None
             league.sign(p.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
         else:
