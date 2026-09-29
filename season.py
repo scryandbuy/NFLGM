@@ -89,6 +89,7 @@ def make_coach(gm):
         bracket_willingness=float(np.clip(0.3 + 0.5 * getattr(gm, 'aggression', 0.5), 0.1, 0.9)),
         blitz_lean=float(getattr(gm, 'blitz', 0.35)),
         blitz_rate=0.133,
+        box_bias=(float(getattr(gm, 'box', 0.5)) - 0.5) * 0.5,
         front_pref=fronts,
         run_scheme_mix=run_mix,
         personnel_mix=pers, off_personnel=base,
@@ -223,8 +224,12 @@ class SeasonRunner:
         t = self.L.teams[abbr]
         desk = self.desks.get(abbr)
         import position_change as PC, morale as MO
+        # Elevated men dress under the same health and effective-rating rules.
+        dressed = {p.pid: p for p in t.active()}
+        dressed.update((p.pid, p) for p in getattr(t, '_elevated', [])
+                       if p in (getattr(t, 'practice_squad', None) or []) and not p.retired)
         rows = [dict(MO.effective_ratings_from(PC.effective_ratings(p), p), pid=p.pid, pos=p.pos)
-                for p in t.active()
+                for p in dressed.values()
                 if (desk.available(p, self.week) if desk
                     else p.out_until is None)]
         # a man playing hurt plays with the injury's hit on his ratings this Sunday
@@ -235,8 +240,6 @@ class SeasonRunner:
                 if d:
                     p_ = self.L.player(r['pid']); hits, _risk = IS.hurt_profile(p_, d)
                     for a, v in hits.items(): r[a] = max(1.0, float(r.get(a, 60.0)) + v)
-        # game-day elevations from the practice squad dress this week
-        rows += [dict(p.ratings, pid=p.pid, pos=p.pos) for p in getattr(t, '_elevated', [])]
         units = R.build_roster_rows(rows, t.scheme, pins=getattr(t, 'depth_pins', None),
                                     front=getattr(t.gm, 'def_front', '4-3'),
                                     box=getattr(t.gm, 'box', 0.5))
@@ -765,7 +768,10 @@ class SeasonRunner:
         except Exception as e:
             import sys; print('club_notes weekly failed:', e, file=sys.stderr)
         # the squads: elevations for clubs short of healthy players, the odd poach
-        PSQ.weekly(self.L, self.rng, week, user_team=getattr(self.L, 'user_team', None))
+        # This prepares the NEXT game; week 18 rolls before the calendar
+        # changes phase, but its elevations already belong to the playoffs.
+        PSQ.weekly(self.L, self.rng, week, user_team=getattr(self.L, 'user_team', None),
+                   playoffs=week >= 18)
         try:
             import extensions as EXT
             EXT.in_season_round(self.L, self.rng, week)          # a few clubs extend their expiring starters each week

@@ -679,7 +679,7 @@ function renderRoster(v) {
           const act = (name, extra) => { const res = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, ${extra})`); busy(res.ok ? (res.moves ? res.moves.map(m => `${m.name} ${m.how}`).join(', ') : `${res.name}: done.`) : res.why); setTimeout(() => busy(null), 2200); renderRoster(pyJSON('SESSION.club_roster()')); };
           cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' },
             el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'Sign him to the 53 at the minimum', onclick: () => act('call_up', `pid=${JSON.stringify(r.pid)}`) }, 'Call Up'),
-            el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: r.elevated_now ? '' : null, 'data-tip': `Dress him Sunday and send him back after · ${r.elevations} of ${v.per_man_max} used`, onclick: () => act('elevate', `pids=[${JSON.stringify(r.pid)}]`) }, r.elevated_now ? 'Elevated' : `Elevate · ${r.elevations}/${v.per_man_max}`),
+            el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: r.elevated_now ? '' : null, 'data-tip': v.playoff_elevations ? 'Dress him for this game · unlimited playoff elevations per player' : `Dress him Sunday and send him back after · ${r.elevations} of ${v.per_man_max} used`, onclick: () => act('elevate', `pids=[${JSON.stringify(r.pid)}]`) }, r.elevated_now ? 'Elevated' : v.playoff_elevations ? 'Elevate' : `Elevate · ${r.elevations}/${v.per_man_max}`),
             el('button', { class: 'btn warn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { if (confirm(`Release ${r.name} from the practice squad?`)) act('release_ps', `pid=${JSON.stringify(r.pid)}`); } }, 'Release'))));
         }
         const tr = el('tr', { class: (/^Out/.test(r.status) ? 'out' : '') + (rosterSel === r.pid ? ' sel' : ''), onclick: e => { if (e.target.closest('.row-act') || e.target.closest('.who')) return; rosterSel = rosterSel === r.pid ? null : r.pid; drawRows(); drawFoot(); } }, ...cells);
@@ -693,7 +693,7 @@ function renderRoster(v) {
     foot.innerHTML = '';
     if (!mine) { foot.append(el('span', { class: 'count' }, `${v.count} on the 53 · ${v.practice.length} on the practice squad`)); return; }
     const all = [...v.groups.flatMap(g => g.rows), ...v.practice, ...v.injured]; const r = all.find(x => x.pid === rosterSel);
-    if (!r) { foot.append(el('span', { class: 'count' }, clubTab === 'ps' ? `Elevations this week: ${v.elevations_used} of ${v.elevations_max} · a player's ${v.per_man_max + 1}${ord(v.per_man_max + 1)} elevation signs him to the 53` : 'Click a row to select a player, then act on him here.')); return; }
+    if (!r) { foot.append(el('span', { class: 'count' }, clubTab === 'ps' ? `Elevations this week: ${v.elevations_used} of ${v.elevations_max} · ` + (v.playoff_elevations ? 'unlimited playoff elevations per player' : `a player's ${v.per_man_max + 1}${ord(v.per_man_max + 1)} elevation signs him to the 53`) : 'Click a row to select a player, then act on him here.')); return; }
     foot.append(el('span', { class: 'count' }, el('b', {}, r.name), ` · ${r.pos} · ${r.ovr} · ${r.yrs} yr${r.yrs === 1 ? '' : 's'} · $${r.hit.toFixed(1)}m`),
       el('button', { class: 'btn', style: 'margin-left:auto', onclick: () => { location.hash = '#club/player/' + r.pid; } }, 'Card'),
       el('button', { class: 'btn go', onclick: () => { const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`); notify(res); if (res.ok) location.hash = '#personnel/extensions'; } }, 'Extend'),
@@ -2637,6 +2637,19 @@ const GPN = { week: 'This Week', report: 'Opponent Report' };
 function gpSecond(cur) { secondRow(Object.entries(GPN).map(([k, l]) => [l, '#gameplan/' + k]), '#gameplan/' + cur); $('#crumb').textContent = 'Game Plan'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'gameplan')); }
 const pct = x => Math.round(x * 100);
 
+function gameplanSuggestion(x, reload) {
+  const act = (name, extra = '') => {
+    notify(pyJSON(`SESSION.plan_act('${name}', i=${x.i}${extra})`));
+    reload();
+  };
+  return el('div', { class: 'sug-row' + (x.taken ? ' on' : '') },
+    el('div', { class: 't' }, x.text, el('small', {},
+      `${x.target ? x.target + ' · ' : ''}${x.taken ? 'Accepted · ' : x.skipped ? 'Skipped · ' : ''}${x.why}`)),
+    el('div', { class: 'a', style: 'display:flex;gap:4px' },
+      el('button', { class: x.taken ? 'btn quiet' : 'btn go', onclick: () => act(x.taken ? 'untake' : 'take') }, x.taken ? 'Undo' : 'Accept'),
+      x.taken ? '' : el('button', { class: 'btn quiet', onclick: () => act('skip', `, skip=${x.skipped ? 'False' : 'True'}`) }, x.skipped ? 'Restore' : 'Skip')));
+}
+
 function renderThisWeek(v) {
   renderRail(v.rail); const page = persPage(); gpSecond('week');
   page.className = 'gameplan-page';
@@ -2648,7 +2661,7 @@ function renderThisWeek(v) {
   // suggestions
   const sug = el('div', { class: 'sugs' });
   sug.append(el('div', { class: 'h5' }, "Assistants' Suggestions"));
-  for (const x of v.suggestions) sug.append(el('div', { class: 'sug-row' + (x.taken ? ' on' : '') }, el('div', { class: 't' }, x.text, el('small', {}, `${x.target ? x.target + ' · ' : ''}${x.taken ? 'Accepted · ' : ''}${x.why}`)), el('div', { class: 'a', style: 'display:flex;gap:4px' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); reload(); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); reload(); } }, 'Accept'), x.taken ? '' : el('button', { class: 'btn quiet', 'data-tip': 'Hide it for now', onclick: e => e.currentTarget.closest('.sug-row').remove() }, 'Skip'))));
+  for (const x of v.suggestions) sug.append(gameplanSuggestion(x, reload));
   if (!v.suggestions.length) sug.append(el('div', { class: 'empty' }, 'The report has nothing to add this week; the plan is the coordinators\' own.'));
   else sug.append(el('div', { style: 'display:flex;gap:6px;padding:8px 0 0' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); reload(); } }, 'Accept All'), el('span', { class: 'count', style: 'align-self:center' }, '')));
   s.append(sug);

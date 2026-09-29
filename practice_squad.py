@@ -208,14 +208,16 @@ def locked(p, week):
 def elevate(league, abbr, pids, week, playoffs=False):
     """Game-day elevations: the men play this week and go back after."""
     team = league.teams[abbr]; out = []
-    for pid in pids[:ELEVATIONS_PER_GAME]:
+    for pid in list(dict.fromkeys(pids))[:ELEVATIONS_PER_GAME]:
+        if len(getattr(team, '_elevated', []) or []) >= ELEVATIONS_PER_GAME: break
         p = league.player(pid)
-        if p not in squad(team): continue
+        if p not in squad(team) or p.retired or p.out_until is not None: continue
+        if p in (getattr(team, '_elevated', []) or []): continue
         n = p.xp_spent.get('_elevations', 0)
         if n >= ELEVATIONS_PER_MAN and not playoffs:
             if call_up(league, abbr, pid): out.append((pid, 'signed'))
             continue
-        p.xp_spent['_elevations'] = n + 1
+        if not playoffs: p.xp_spent['_elevations'] = n + 1
         team._elevated = getattr(team, '_elevated', []) + [p]
         out.append((pid, 'elevated'))
     return out
@@ -514,13 +516,14 @@ def roster_review(league, rng, week, user_team=None):
     return moves
 
 
-def weekly(league, rng, week, user_team=None):
+def weekly(league, rng, week, user_team=None, playoffs=None):
     """
     In season, every week: clubs short of healthy players at a group elevate two
     for the game or call one up; and a club with a hole may poach another's
     squad man to its 53 when nothing on its own squad fits. Rare.
     """
     import contracts as CT
+    if playoffs is None: playoffs = league.phase == 'playoffs'
     moves = keep_groups_whole(league, rng, week)
     moves += roster_review(league, rng, week, user_team=user_team)
     for abbr, team in league.teams.items():
@@ -531,10 +534,11 @@ def weekly(league, rng, week, user_team=None):
         short = 46 - len(healthy)
         # groups missing players
         by_pos = collections.Counter(p.pos for p in healthy)
-        want = sorted(squad(team), key=lambda p: -p.ovr)
+        want = sorted((p for p in squad(team) if p.out_until is None and not p.retired), key=lambda p: -p.ovr)
         picks = [p.pid for p in want if by_pos.get(p.pos, 0) < {'QB': 2, 'HB': 2, 'WR': 5, 'TE': 2, 'CB': 4, 'DT': 3}.get(p.pos, 2)][:short]
         if picks:
-            moves += [(abbr, 'elevate', x) for x in elevate(league, abbr, picks, week)]
+            moves += [(abbr, 'elevate', x) for x in elevate(league, abbr, picks, week,
+                                                         playoffs=playoffs)]
         elif abbr != user_team and rng.random() < 0.25:
             # nothing at home fits: look at everyone else's squad for the thinnest spot
             thin = min(by_pos, key=by_pos.get) if by_pos else None

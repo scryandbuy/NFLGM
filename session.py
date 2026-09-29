@@ -1175,7 +1175,10 @@ class Session:
         import views_club as VC
         fn = getattr(VC, 'act_' + name, None)
         if fn is None: return dict(ok=False, why='unknown action')
-        if name == 'elevate': kw['week'] = self.stop[1] if self.stop[0] == 'week' else 1
+        if name == 'elevate':
+            kw['playoffs'] = self.stop[0] == 'playoffs'
+            kw['week'] = (19 + int(self.stop[1]) if kw['playoffs'] else
+                          self.stop[1] if self.stop[0] == 'week' else 1)
         if name == 'hurt_decision': kw['session'] = self
         return fn(self.L, self.user_team, **kw)
 

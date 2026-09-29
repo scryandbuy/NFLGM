@@ -87,7 +87,7 @@ def this_week(session, league, abbr):
     # where the assistants would put each lean, from the suggestions not yet taken (the gold ghost)
     ghost = {}
     for s in rep['suggestions']:
-        if s['text'] in _taken(league, wk): continue
+        if s['text'] in _taken(league, wk) or s['text'] in _skipped(league, wk): continue
         for ck, cv in (s.get('changes') or {}).items():
             if ck in GW.RANGE and isinstance(cv, (int, float)) and not isinstance(cv, bool): ghost[ck] = ghost.get(ck, 0.0) + float(cv)
     for side, k, label, lo, hi, desc in LEANS:
@@ -112,7 +112,7 @@ def this_week(session, league, abbr):
     sugg = []
     for i, s in enumerate(rep['suggestions']):
         taken = s['text'] in _taken(league, wk)
-        sugg.append(dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=sentence(s['text']), why=sentence(s['why']), target=target_words(s), changes={k: (list(v) if isinstance(v, tuple) else v) for k, v in s['changes'].items()}, taken=taken))
+        sugg.append(dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=sentence(s['text']), why=sentence(s['why']), target=target_words(s), changes={k: (list(v) if isinstance(v, tuple) else v) for k, v in s['changes'].items()}, taken=taken, skipped=s['text'] in _skipped(league, wk)))
     bracket = plan.bracket; bp = league.player(bracket) if bracket else None
     their_wrs = [dict(pid=p.pid, name=p.name, ovr=round(p.ovr)) for p in league.teams[opp_abbr].depth.get('WR', [])[:3] if p.out_until is None]
     wr_out = [__import__('views').surname(p.name) for p in league.teams[opp_abbr].depth.get('WR', [])[:2] if p.out_until is not None]
