@@ -409,7 +409,7 @@ def draft_day(session, league, abbr):
     mine_next = [dict(sel=q.selection, slot=SLOT(q), round=q.round) for q in D.picks[D.i:] if q.owner == abbr][:4]
     avail = [r for r in (_prospect(league, abbr, p, D.taken) for p in D.available()) if r]
     avail.sort(key=lambda x: (x['cons_rank'] if x['cons_rank'] is not None else 999))
-    best = avail[:8]
+    best = avail[:40]
     _my_rank(avail); my_board = sorted(avail, key=lambda x: x['my_rank'])[:40]
     # who is on the clock and the next few, with each club's needs
     clock = [dict(sel=q.selection, slot=SLOT(q), team=club(q.owner), mine=(q.owner == abbr), id=f"{q.year}-{q.round}-{q.original}", needs=sorted(_needs(league, league.teams[q.owner]))[:3]) for q in D.picks[D.i:D.i + 8]]
@@ -451,7 +451,7 @@ def draft_day(session, league, abbr):
             read = sentence(f"{surname(top['name'])} is your board's top player and a {top['pos']}" + (f", which is a need" if any(top['pos'] in NEED_GROUPS[g] for g in _needs(league, league.teams[abbr])) else '') + f". The consensus has him {top['cons_rank']}{_ordd(top['cons_rank'])}." if top.get('cons_rank') else f"{surname(top['name'])} is your board's top man.")
     picks_away = next((j for j, z in enumerate(D.picks[D.i:]) if z.owner == abbr), None)
     return dict(rail=r, live=True, on_user=D.on_user(), current=(dict(sel=pk.selection, slot=SLOT(pk), round=pk.round, team=club(pk.owner), original=pk.original, needs=sorted(_needs(league, league.teams[pk.owner]))[:3]) if pk else None),
-                clock=clock, order=pick_board, results=results, mine_next=mine_next, best=best, board=my_board, picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades), picks_away=picks_away, read=read,
+                clock=clock, order=pick_board, results=results, mine_next=mine_next, best=best, board=my_board, has_custom_board=bool(order or dnd), picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades), picks_away=picks_away, read=read,
                 default_pick=(dict(pid=my_board[0]['pid'], name=my_board[0]['name'], pos=my_board[0]['pos'], college=my_board[0]['college']) if my_board else None), my_needs=sorted(_needs(league, league.teams[abbr])))
 
 
