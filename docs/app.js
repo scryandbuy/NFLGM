@@ -1996,7 +1996,6 @@ function renderDraftDay(v) {
     el('button', { class: 'btn', disabled: v.on_user ? '' : null, 'data-tip': 'Sim to the end of this round, or to your pick if it comes first', onclick: () => act('sim_round') }, 'Sim Round'),
     el('button', { class: 'btn quiet', onclick: () => { if (confirm('Run the rest of the draft? Your picks go to the top of your board.')) act('sim_draft'); } }, 'Sim Draft'),
     el('span', { class: 'sep' }),
-    el('button', { class: 'btn', disabled: v.on_user ? '' : null, 'data-tip': 'Ask a team ahead of you what it wants for its pick', onclick: () => { const q = v.clock.find(x => !x.mine && x.sel < (v.mine_next[0] ? v.mine_next[0].sel : Infinity)); if (!q) { notify({ ok: false, why: 'Nobody picks between now and your pick.' }); return; } const rd = pyJSON(`SESSION.draft_act('read_trade_up', target=${JSON.stringify(q.id)})`); if (!rd.ok) { notify(rd); return; } if (confirm(`${rd.line}\n\nSend ${rd.sends.map(x => x.replace(/^(\d+)-(\d+)-(\w+)$/, '$1 R$2 ($3)')).join(', ')} for pick ${rd.slot}?`)) act('trade_up', `target=${JSON.stringify(q.id)}, sends=${JSON.stringify(rd.sends)}`); } }, 'Trade Up'),
     el('button', { class: 'btn', disabled: v.on_user ? null : '', 'data-tip': 'Gather offers for this pick', onclick: () => { const r = pyJSON(`SESSION.draft_act('offers')`); notify(r); if (r.ok) { offersCache = r.offers; reload(); } } }, 'Trade Down')));
   // the picks around the clock
   const nx = el('div', { class: 'picksmade' });
