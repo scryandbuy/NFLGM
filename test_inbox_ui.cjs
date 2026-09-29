@@ -1,0 +1,18 @@
+const fs = require('fs');
+const vm = require('vm');
+const assert = require('node:assert/strict');
+const src = fs.readFileSync('docs/app.js','utf8');
+const calls=[];
+const ctx={Number,JSON,el:(tag,attrs,...children)=>({tag,attrs,children,append(...nodes){this.children.push(...nodes);}}),pyJSON:(code)=>{calls.push(code);return code==='SESSION.portal()'?{rail:{}}:{ok:true,outcome:'matched'};},notify:()=>{},renderRail:()=>{}};
+vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('function linkHash('),src.indexOf('\nfunction renderPortal(')),ctx);
+for(const [link,expected] of [['personnel:free_agency','#personnel/fa'],['fa','#personnel/fa'],['gameplan:7','#gameplan'],['club:player:abc','#club/player/abc'],['player:abc','#club/player/abc'],['league:standings','#league']]) assert.equal(ctx.linkHash(link),expected);
+vm.runInContext(src.slice(src.indexOf('function offerSheetActions('),src.indexOf('\nfunction openMessage(')),ctx);
+let reloads=0;const controls=ctx.offerSheetActions(42,()=>reloads++);
+assert.equal(controls.children.length,2);
+controls.children[0].attrs.onclick();
+controls.children[1].attrs.onclick();
+assert.ok(calls.includes('SESSION.inbox_offer_sheet(42, "match")'));
+assert.ok(calls.includes('SESSION.inbox_offer_sheet(42, "decline")'));
+assert.equal(reloads,2);
+console.log('Inbox links and offer-sheet button dispatch passed.');

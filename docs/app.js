@@ -212,7 +212,8 @@ function renderInbox(v) {
     pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
     pane.append(el('h3', {}, m.subject), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), el('div', { class: 'mbody' }, m.body || ''));
     if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
-    else if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=False)`)); reload(); } }, 'Sit Him'), el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
+    else if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=False)`)); reload(); } }, 'Sit Him'), el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
+    else if (cur.decide && m.kind === 'offer_sheet') pane.append(offerSheetActions(cur.id, reload));
     else if (cur.decide && m.kind === 'roster' && m.link) pane.append(el('div',{class:'acts'},el('a',{class:'btn go',href:linkHash(m.link)},'Manage Roster →'),el('a',{class:'btn quiet',href:'#club/ps'},'View Practice Squad')));
     else if (cur.decide) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { location.hash = `#portal/inbox/${cur.id}`; } }, 'Open the Decision')));
     else if (m.link && !(m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60)))) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn' + (m.kind === 'negotiation' ? ' go' : ''), href: linkHash(m.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There')));
@@ -225,6 +226,9 @@ function linkHash(link) {
   const [a, b] = String(link).split(':');
   const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:regression': '#club/regression', 'club:ps': '#club/ps', 'league:bracket': '#league/bracket', 'front_office:review': '#frontoffice/review', 'front_office:exit': '#frontoffice/exit', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/wire', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
   if (a === 'player') return '#club/player/' + b;
+  if (String(link).startsWith('club:player:')) return '#club/player/' + String(link).split(':')[2];
+  if (a === 'gameplan') return '#gameplan';
+  if (link === 'fa' || link === 'personnel:free_agency') return '#personnel/fa';
   if (a === 'negotiation') { const kind = String(link).split(':')[1] || ''; return kind === 'extension' ? '#personnel/extensions' : kind.startsWith('fa') ? '#personnel/fa' : '#personnel/fa'; }
   return MAP[link] || MAP[a] || '#portal';
 }
@@ -332,6 +336,19 @@ function renderPortal(v) {
 function tagClass(t) { return ({ Trade: 'trade', Contract: 'contract', Wire: 'wire', Squad: 'squad', Game: 'game', Scouting: 'scout', 'Locker Room': 'room', Assistants: 'assist', Owner: 'owner', Staff: 'owner' })[t] || ''; }
 function ord(n) { return n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'; }
 
+function offerSheetActions(id, reload) {
+  const controls = el('div', {class:'acts'});
+  for (const [action, label] of [['match', 'Match Offer'], ['decline', 'Decline Offer']]) {
+    controls.append(el('button', {class:'btn' + (action === 'match' ? ' go' : ''), onclick: () => {
+      const result = pyJSON(`SESSION.inbox_offer_sheet(${Number(id)}, ${JSON.stringify(action)})`);
+      notify(result.ok ? {ok:true, line:result.outcome === 'matched' ? 'Offer matched.' : result.outcome === 'departed' ? 'Offer declined; the player joins the other team.' : 'The offer is no longer valid.'} : result);
+      renderRail(pyJSON('SESSION.portal()').rail);
+      reload();
+    }}, label));
+  }
+  return controls;
+}
+
 function openMessage(id) {
   py.runPython(`SESSION.inbox_read(${Number(id)})`);
   const m = pyJSON(`next(_m for _m in __import__('inbox')._box(SESSION.L) if _m['id'] == ${id})`);
@@ -339,11 +356,12 @@ function openMessage(id) {
   const acts = el('div', { class: 'foot' });
   if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.payload && m.payload.pid) {
     const pid = m.payload.pid;
-    acts.append(el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(pid)}, play=True)`)); location.hash = '#portal/inbox'; } }, 'Play Him'),
-      el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(pid)}, play=False)`)); location.hash = '#portal/inbox'; } }, 'Sit Him'),
+    acts.append(el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=True)`)); location.hash = '#portal/inbox'; } }, 'Play Him'),
+      el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=False)`)); location.hash = '#portal/inbox'; } }, 'Sit Him'),
       el('a', { class: 'btn quiet', href: '#club/player/' + pid }, 'His Card'));
   } else if (m.kind === 'injury_decision') acts.append(el('span', { class: 'count' }, 'Decided.'));
   if (m.kind === 'trade_offer') acts.append(el('button', { class: 'btn go', onclick: () => openTradeOffer(m.id, () => openMessage(m.id)) }, m.status === 'unread' || m.status === 'open' ? 'Open the Offer' : 'See the Offer'));
+  if (m.kind === 'offer_sheet' && ['unread','open'].includes(m.status) && !m.resolved && m.needs_decision !== false) acts.append(offerSheetActions(m.id, () => openMessage(m.id)));
   const settled = m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60));
   if (m.payload && m.payload.link && !settled) acts.append(el('a', { class: 'btn go', href: linkHash(m.payload.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There'));
   acts.append(el('button', { class: 'btn quiet', onclick: () => refresh() }, 'Back to Portal'));

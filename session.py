@@ -22,6 +22,7 @@ import morale as MO, staff as STF, almanac as AL, xp as XP, dev_roll as DR, reti
 import schedule as SCH, contracts as CT, waivers as WV, extensions as EXT, tags as TG, market as MK, trades as TRD
 import draft_class as DC, scouting as SC, spring as SP, draft as DFT, practice_squad as PSQ, cutdown as CD, newgens as NG
 import gameplan_week as GW, inbox as IB, negotiations as NG_
+import inbox_events as IE
 from franchise import prune_pool
 
 WEEKS = 18
@@ -173,6 +174,11 @@ class Session:
                 (getattr(L, 'exit_meetings', None) or {}).pop(str(L.year), None)
                 ((getattr(L, 'history', None) or {}).get(str(L.year)) or {}).pop('review', None)
         except Exception: pass
+        # Drain legacy CPU-only offer sheets without consuming the live RNG.
+        import copy
+        MK.resolve_offer_sheets(L, copy.deepcopy(s.rng))
+        IB.reconcile(L)
+        IE.remember(L)
         try: s._open_fa_if_due()
         except Exception as e:
             import sys; print('open round on load failed:', e, file=sys.stderr)
@@ -336,6 +342,9 @@ class Session:
             return dict(title='Finish the Draft on Auto', sub=f"or make your pick at {pk.round}.{((pk.selection - 1) % 32) + 1} on Draft Day" if pk else '')
         title, _ = self.OFFSEASON[i]
         name = self.OFFSEASON[i][1]
+        if name == 'step_waivers_1':
+            WV.notify_user(self.L, WV.pending(self.L), 0, digest=True)
+            return
         if name == 'step_extensions':
             try:
                 sh = TG.user_resign_sheet(self.L)
@@ -352,6 +361,7 @@ class Session:
     ROSTER_MAX, ROSTER_MIN = 53, 46
 
     def blocking(self):
+        IB.reconcile(self.L)
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is not None and not lv['done']:
             return [dict(id=None, subject='Your game is still being played: finish it first', kind='live', go='#gameday')]
@@ -372,12 +382,14 @@ class Session:
                     existing = self.L.inbox[-1]
                 else:
                     existing['subject'] = subj
+                    existing['body'] = (f'You are carrying {n}. Cut to {self.ROSTER_MAX} before Sunday.' if n > self.ROSTER_MAX else f'You are at {n}; sign to at least {self.ROSTER_MIN} before Sunday.')
+                    existing['payload']['link'] = 'club' if n > self.ROSTER_MAX else 'personnel:fa'
                 out.append(dict(id=existing.get('id'), subject=subj, kind='roster', go=('#club' if n > self.ROSTER_MAX else '#personnel/fa')))
             elif existing is not None:
                 existing['status'] = 'done'
         for m in getattr(self.L, 'inbox', []):
-            if m.get('status') in ('unread', 'open') and m.get('kind') in ('trade_offer', 'match_request', 'staff') and m.get('needs_decision', True):
-                if m.get('kind') == 'trade_offer' or (m.get('payload') or {}).get('poach'):
+            if IB.is_decision(m):
+                if m.get('kind') == 'trade_offer' or (m.get('payload') or {}).get('poach') or (m.get('kind') == 'offer_sheet' and m.get('team') == self.user_team):
                     out.append(dict(id=m.get('id'), subject=m.get('subject'), kind=m.get('kind')))
         return out
 
@@ -386,10 +398,20 @@ class Session:
             import league_notes as LN
             fa_now = self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] in (*self.FA_STEPS, 'step_fa_close')
             LN.transactions(self.L, self.L.week or 0, skip_signings=fa_now)
-            import staff as STF_; STF_.resolve_references(self.L)
         except Exception: pass
 
     def advance(self):
+        # References follow a successful calendar action, not football week numbers.
+        sheets = [b for b in self.blocking() if b['kind'] == 'offer_sheet']
+        if sheets:
+            return dict(done='Blocked', next=self.next_label(), why=sheets[0]['subject'])
+        result = self._advance()
+        if result.get('done') != 'Blocked':
+            STF.resolve_references(self.L, advanced=True)
+            IB.reconcile(self.L)
+        return result
+
+    def _advance(self):
         k = self.stop[0]
         if k == 'cutdown':
             # camp breaks: every club cuts to 53 (yours must already be there), the wire runs, the squads fill
@@ -620,7 +642,7 @@ class Session:
             for abbr, bg in fired:
                 t = self.L.teams[abbr]
                 who = (t.gm.name + ' takes over.') if t.gm else ('The search is on; ' + (f"they are waiting on {self.L.pending_hires[abbr]['first']}." if abbr in (getattr(self.L, 'pending_hires', None) or {}) else 'a name is coming.'))
-                IB.post(self.L, 'league', f"{t.abbr} makes a change", f"{CLUB_NAME_.get(abbr, abbr)} moved on from its head coach. {who}", sender='league')
+                IE.post(self.L, f'coach-hire-{self.L.year}-{abbr}-{t.gm.name}' if t.gm else f'coach-search-{self.L.year}-{abbr}', 'league', f"{t.abbr} makes a change", f"{CLUB_NAME_.get(abbr, abbr)} moved on from its head coach. {who}", sender='league')
             if fired:
                 # the market: the names every searching club is calling, by what their units did
                 import coaching_pool as CP
@@ -631,7 +653,7 @@ class Session:
                 top = sorted(cands, key=hot, reverse=True)[:3]
                 if top:
                     lines = [f"{c.name} ({'OC' if c.role == 'oc' else 'DC'}, {c.team}; his unit ranked {', '.join(str(int(r)) + ('st' if r == 1 else 'nd' if r == 2 else 'rd' if r == 3 else 'th') for r in c.unit_ranks[-2:]) or 'unranked'} the last two years)" for c in top]
-                    IB.post(self.L, 'league', "The coaching market", f"{len(fired)} club{'s' if len(fired) != 1 else ''} searching. The names every owner is calling: " + '; '.join(lines) + '.', sender='league')
+                    IB.post(self.L, 'league', "The coaching market", f"{len(fired)} club{'s' if len(fired) != 1 else ''} making coaching changes. Notable names on the coaching market: " + '; '.join(lines) + '.', sender='league')
         except Exception as e:
             import sys; print('black monday failed:', e, file=sys.stderr)
         return fired
@@ -647,12 +669,12 @@ class Session:
     def _post_review(self, how):
         """The season review lands once, the morning after the club's season ends."""
         key_ = f"review-{self.L.year}"
-        if not any((m.get('payload') or {}).get('key') == key_ for m in getattr(self.L, 'inbox', [])):
+        if not IE.seen(self.L, key_):
             try:
                 v = self.frontoffice('season_review')
                 slot = PS.provisional_slot(self.L, getattr(self, 'post_live', None) or getattr(self, 'post', None), self.user_team)
                 slot_line = f" You pick {slot}{'st' if slot % 10 == 1 and slot != 11 else 'nd' if slot % 10 == 2 and slot != 12 else 'rd' if slot % 10 == 3 and slot != 13 else 'th'} in the first round." if slot else ''
-                IB.post(self.L, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the players whose deals are up.{slot_line}", sender='front office', payload=dict(key=key_, link='front_office:review'))
+                IE.post(self.L, key_, 'review', f"The season, reviewed: {v['record']}, {v['finish'].lower()}", f"{v['owner']['line']} The review is on your desk: the units against the league, who rose and who fell, next year's money and the players whose deals are up.{slot_line}", sender='front office', payload=dict(key=key_, link='front_office:review'))
             except Exception as e:
                 import sys; print('season review failed:', e, file=sys.stderr)
         try:
@@ -665,18 +687,18 @@ class Session:
             limit_next, committed_next, _ro, _dn = next_year_cap(self.L, t)
             if up or two:
                 body = (f"Deals up: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in up[:6])}. " if up else '') + (f"Two years left and worth a look: {', '.join(f'{surname(p.name)} ({p.pos}, {round(p.ovr)})' for p in two[:4])}. " if two else '') + f"About ${limit_next - committed_next:.0f}m of room next year."
-                if not any((m.get('payload') or {}).get('key') == f"extwin-{self.L.year}" for m in getattr(self.L, 'inbox', [])):
-                    IB.post(self.L, 'contract', "The extension window is open", body, sender='front office', payload=dict(key=f"extwin-{self.L.year}", link='personnel:extensions'))
+                if not IE.seen(self.L, f"extwin-{self.L.year}"):
+                    IE.post(self.L, f"extwin-{self.L.year}", 'contract', "The extension window is open", body, sender='front office', payload=dict(key=f"extwin-{self.L.year}", link='personnel:extensions'))
         except Exception as e:
             import sys; print('extension window note failed:', e, file=sys.stderr)
         try:
             import views_frontoffice as VF
-            ms = VF.build_exit_meetings(self, self.L, self.user_team)
+            ms = [m for m in VF.build_exit_meetings(self, self.L, self.user_team) if not m.get("answer")]
             if ms:
                 from views import surname
                 names = ', '.join(surname(self.L.player(x['pid']).name) for x in ms if self.L.player(x['pid']))
-                if not any((m.get('payload') or {}).get('key') == f"exit-{self.L.year}" for m in getattr(self.L, 'inbox', [])):
-                    IB.post(self.L, 'exit', f"Exit meetings: {len(ms)} players want a word", f"{names}.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
+                if not IE.seen(self.L, f"exit-{self.L.year}"):
+                    IE.post(self.L, f"exit-{self.L.year}", 'exit', f"Exit meetings: {len(ms)} players want a word", f"{names}.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
         except Exception as e:
             import sys; print('exit meetings failed:', e, file=sys.stderr)
 
@@ -884,7 +906,7 @@ class Session:
 
     def step_waivers_1(self):
         L, rng = self.L, self.rng
-        WV.notify_user(L, WV.pending(L), 0, digest=True); WV.process(L, rng, 0)
+        WV.process(L, rng, 0)
 
     def step_extensions(self):
         L, rng = self.L, self.rng
@@ -926,7 +948,7 @@ class Session:
         """The calendar sits on Re-sign: one card with your expiring players by class, the tag price on each UFA, tender
         or not on each RFA, the ERFAs kept at the minimum. Decide on the Extensions page; the advance locks it."""
         L = self.L; key_ = f"resign-{L.year}"
-        if any((m.get('payload') or {}).get('key') == key_ for m in getattr(L, 'inbox', [])): return
+        if IE.seen(L, key_): return
         sheet = TG.user_resign_sheet(L)
         from views import surname
         ufa = ', '.join(f"{surname(r['name'])} ({r['pos']}, {r['ovr']}; tag ${r['tag_price']}m)" for r in sheet['ufa'][:8])
@@ -936,7 +958,7 @@ class Session:
         body += (f"Restricted: {rfa}. Tendered at right of first refusal unless you say otherwise; an untendered player goes to the market unrestricted. " if sheet['rfa'] else "")
         body += (f"Exclusive rights, kept at the minimum: {erfa}. " if sheet['erfa'] else "")
         body += f"You can commit about ${sheet['room']}m after the minimums you still owe."
-        IB.post(L, 'contract', "Re-sign: your tag and tenders", body, sender='front office', payload=dict(key=key_, link='personnel:extensions'))
+        IE.post(L, key_, 'contract', "Re-sign: your tag and tenders", body, sender='front office', payload=dict(key=key_, link='personnel:extensions'))
 
     def _open_fa_if_due(self):
         """The calendar sits on a free-agency round: open it (once) so the offers can be made before the advance."""
@@ -950,11 +972,11 @@ class Session:
         k = self.FA_STEPS.get(name)
         if k is None: return
         L = self.L
-        if getattr(L, 'fa_bids_phase', None) == k and getattr(L, 'fa_bids', None): return
+        if getattr(L, 'fa_bids_phase', None) == k: return
         bids = MK.open_round(L, self.rng, k, user_team=self.user_team)
         n = len([x for x in L.free_agents if L.player(x)])
         contested = sum(1 for pid, offers in bids.items() if len(offers) >= 2)
-        IB.post(L, 'contract', f"Free agency, round {k}, is open", f"{n} players on the market; {len(bids)} have offers from other clubs, {contested} from more than one. Open talks on the Free Agency page to see who else is in on a player, and make your offers before you advance. Nobody signs until the round closes.", sender='front office', payload=dict(link='personnel:free_agency'))
+        IE.post(L, f'fa-open-{L.year}-{k}', 'contract', f"Free agency, round {k}, is open", f"{n} players on the market; {len(bids)} have offers from other clubs, {contested} from more than one. Open talks on the Free Agency page to see who else is in on a player, and make your offers before you advance. Nobody signs until the round closes.", sender='front office', payload=dict(link='personnel:free_agency'))
 
     def step_market(self):
         # kept for tools that call the one-shot market
@@ -999,9 +1021,9 @@ class Session:
                 role = p.xp_spent.get('_tape_role')
                 if not role: continue
                 rnd = (s_ - 1) // 32 + 1
-                if role == 'gem' and rnd >= 3:
-                    IB.news(self.L, f"{t_} may have found one: {p.name} at pick {s_}", f"{p.name} ({p.pos}, {p.college}) went {s_}th, in round {rnd}, and the first look at him in a pro building says the league had him badly wrong. He grades {round(p.ovr)}, a starter's number. {t_} got a day-three pick that plays like a top-forty one.")
-                elif role == 'bust' and rnd <= 2:
+                if t_ != self.user_team and role == 'gem' and rnd >= 3:
+                    IB.news(self.L, f"{t_} may have found one: {p.name} at pick {s_}", f"{p.name} ({p.pos}, {p.college}) went {s_}th, in round {rnd}, and the first look at him in a pro building says the league had him badly wrong. He grades {round(p.ovr)}, a starter's number. {t_} got a round-{rnd} pick that plays like a top-forty one.")
+                elif t_ != self.user_team and role == 'bust' and rnd <= 2:
                     IB.news(self.L, f"Questions at {t_} about {p.name}, the {s_}th pick", f"{p.name} ({p.pos}, {p.college}) was taken {s_}th, in round {rnd}, and the first look at him in a pro building has the room wondering what it saw on tape. He grades {round(p.ovr)}. The league had him at {round(float((self.L.consensus.get(p.pid) or {}).get('ovr', 0) or 0))}; the tape was wrong.")
                 if t_ == self.user_team:
                     if role == 'gem': IB.post(self.L, 'club', f"Your scouts on {p.name}: better than anyone thought", f"The first sessions with {p.name} ({p.pos}) say the whole league missed him. He grades {round(p.ovr)} today, not the {round(float((self.L.consensus.get(p.pid) or {}).get('ovr', 0) or 0))} the consensus carried. You have a starter on a round-{rnd} contract.", sender='assistants', payload=dict(link=f'player:{p.pid}'))
@@ -1255,39 +1277,71 @@ class Session:
         return dict(ok=True, n=n, line=f"Took {n} suggestion{'s' if n != 1 else ''}.")
 
     def inbox_mark_all(self):
+        import inbox as IB
+        IB.reconcile(self.L)
         n = 0
         for m in getattr(self.L, 'inbox', []):
             if m.get('status') == 'unread': m['status'] = 'open'; n += 1
         return dict(ok=True, n=n)
 
     def inbox_read(self, mid):
+        import inbox as IB
+        IB.reconcile(self.L)
         for m in getattr(self.L, 'inbox', []):
             if m['id'] == int(mid) and m.get('status') == 'unread': m['status'] = 'open'
         return dict(ok=True)
 
     def inbox_delete(self, mid):
+        import inbox as IB
+        IB.reconcile(self.L)
         import views
+        import inbox_events as IE
+        IE.remember(self.L)
         msg = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
-        if msg and msg.get('status') in ('unread', 'open') and msg.get('kind') in views.DECIDE_KINDS:
+        if msg and IB.is_decision(msg):
             return dict(ok=False, why='Resolve this decision before deleting it.')
         box = getattr(self.L, 'inbox', [])
         self.L.inbox = [m for m in box if m['id'] != int(mid)]
         return dict(ok=True)
 
     def inbox_clear_read(self):
+        import inbox as IB
+        IB.reconcile(self.L)
         import views
+        import inbox_events as IE
+        IE.remember(self.L)
         box = getattr(self.L, 'inbox', [])
-        keep = [m for m in box if m.get('status') == 'unread' or (m.get('status') in ('unread', 'open') and m.get('kind') in views.DECIDE_KINDS)]
+        keep = [m for m in box if m.get('status') == 'unread' or IB.is_decision(m)]
         n = len(box) - len(keep); self.L.inbox = keep
         return dict(ok=True, n=n)
 
     def inbox_message(self, mid):
+        import inbox as IB
+        IB.reconcile(self.L)
         import views
         m = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
         if m is None: return dict(error='no such message')
         pl = m.get('payload') or {}
         return dict(id=m['id'], status=m.get('status'), subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'),
-                    **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=(m.get('status') in ('unread', 'open') and m.get('kind') in views.DECIDE_KINDS))
+                    **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=IB.is_decision(m))
+
+    def inbox_hurt_action(self, mid, play=True):
+        IB.reconcile(self.L)
+        m = next((m for m in self.L.inbox if m['id'] == int(mid)), None)
+        if not m or m.get('kind') != 'injury_decision' or not IB.is_decision(m):
+            return dict(ok=False, why='This injury decision is no longer open.')
+        pid = (m.get('payload') or {}).get('pid')
+        desk = getattr(self.runner, 'desks', {}).get(self.user_team) if self.runner else None
+        if desk is None or pid not in desk.pending:
+            m['status'] = 'done'
+            return dict(ok=False, why='The trainers have already resolved this decision.')
+        return self.club_act('hurt_decision', pid=pid, play=play)
+
+    def inbox_offer_sheet(self, mid, action):
+        IB.reconcile(self.L)
+        result = MK.answer_offer_sheet(self.L, int(mid), action, rng=self.rng)
+        IB.reconcile(self.L)
+        return result
 
     def portal_full(self):
         """The Portal view with every inbox message (the Portal itself keeps the recent fourteen)."""
