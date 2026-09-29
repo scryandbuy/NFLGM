@@ -129,6 +129,8 @@ class Franchise:
         log['top_pick'] = order[0]
         log['fired'] = len(fired)
 
+        RG.tick_ages(L)
+
         votes = AW.vote(L, post)
         CP.season_prestige(L, post, coty_team=votes.get('coty'))
         # THE STAFF: unit ranks land on the coordinators, prestige moves,
@@ -148,7 +150,7 @@ class Franchise:
 
         log['retired'] = len(RT.run(L, rng))
         log['hall'] = [p.name for p, _ in AL.hall_vote(L, L.year)]
-        RG.run(L, rng)
+        RG.run(L, rng, tick_age=False)
 
         L.roll_year(rng)
         # NEXT YEAR'S SLATE. The real 2026 schedule was loaded once and never

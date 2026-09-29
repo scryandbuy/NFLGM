@@ -129,7 +129,7 @@ DEFAULT_PHYS = 0.50
 # Experience is worth something, on the attributes that are mostly head. Small,
 # and it never outruns the physical loss.
 MENTAL_GAIN = 0.40
-MENTAL_GROWS = ('awareness_rating', 'play_recognition_rating')   # the two that grow with age
+MENTAL_GROWS = ('awareness_rating', 'play_rec_rating')   # the two that grow with age
 
 # Injury and toughness are availability, not ability, and sit outside this
 # entirely - the same reason they sit outside any future XP budget.
@@ -145,13 +145,21 @@ def curve_factor(pos, age):
     tbl = c.get('curve') or {}
     if not tbl:
         return 1.0
-    a = int(round(age))
+    # The UI and player card display the completed whole years of age.
+    a = int(age)
     ks = sorted(int(k) for k in tbl)
     if a < ks[0]:
         a = ks[0]
     elif a > ks[-1]:
+        # The measured quarterback curve ends at 36 while its last value is
+        # above one. Clamping that value made older QBs and specialists
+        # immune to aging for the rest of their careers.
+        if POS_GROUP.get(pos) == 'QB':
+            rate = 0.025 if pos == 'QB' else 0.015
+            return max(0.75, 1.0 - rate * (a - ks[-1]))
         a = ks[-1]
-    return float(tbl[str(a)])
+    factor = float(tbl[str(a)])
+    return max(1.0, factor) if a <= plateau_end(pos) else factor
 
 
 def plateau_end(pos):
@@ -196,18 +204,31 @@ def decline(player, rng):
     return before - player.ovr
 
 
-def run(league, rng, verbose=False, record_for=None, tick_age=None):   # tick_age is kept for callers; the tick lives at Step 1 now
+def tick_ages(league):
+    """Advance all living players once at the beginning of an offseason."""
+    for p in league.players.values():
+        if not p.retired:
+            p.age += 1.0
+
+
+def run(league, rng, verbose=False, record_for=None, tick_age=True):
     """
-    Age the league a year and take what age takes. Runs the day after the Super Bowl (session._close_playoffs); the
-    year's age tick can be left to the Retirements step (tick_age=False) so retirement hazards read the age they did.
+    Take what age takes during the offseason. Standalone callers tick ages
+    here; Session and Franchise tick earlier and pass tick_age=False.
 
     record_for: a club whose players' before-and-after is written to league.regression[year] for the Regression
     page: every player, overall before and after, and each attribute that moved.
     """
     moved = []
     rec = {}
+    if tick_age:
+        tick_ages(league)
+    # The coming class has already been generated and scouted for its draft.
+    # Aging its true ratings here changed prospects behind every room's read.
+    prospect_ids = {p.pid for p in (getattr(league, 'next_class', None) or [])}
+    prospect_ids.update(p.pid for p in (getattr(league, 'draft_pool', None) or []))
     for p in league.players.values():
-        if p.retired:
+        if p.retired or p.pid in prospect_ids:
             continue
         mine = record_for is not None and p.team == record_for
         before_r = dict(p.ratings) if mine else None; before_o = p.ovr
@@ -218,7 +239,7 @@ def run(league, rng, verbose=False, record_for=None, tick_age=None):   # tick_ag
             rec[p.pid] = dict(before=round(float(before_o), 1), after=round(float(p.ovr), 1), lost=round(float(before_o - p.ovr), 1), attrs=changed, age=int(p.age),
                                  name=p.name, pos=p.pos, team=p.team, number=getattr(p, 'number', None),
                                  ratings_before=dict(before_r), ratings_after=dict(p.ratings))    # the same whole-years age every page shows
-        if lost:
+        if lost > 1e-6:
             moved.append((p, lost))
             league.log('regress', pid=p.pid, pos=p.pos,
                        age=round(p.age, 1), lost=round(lost, 2))

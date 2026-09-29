@@ -796,7 +796,7 @@ def regression(session, league, abbr, year=None):
         delta = {}
         for k, (b_, a_) in (v.get('attrs') or {}).items():
             d = int(round(a_)) - int(round(b_))
-            if d < 0 or (d > 0 and k in ('awareness_rating', 'play_recognition_rating')): delta[k] = d
+            if d: delta[k] = d
         from types import SimpleNamespace
         # Legacy records kept only changed attributes: show those historical
         # values, never substitute the player's current ratings.
@@ -804,12 +804,13 @@ def regression(session, league, abbr, year=None):
         if ratings is None:
             ratings = {k: a for k, (b, a) in (v.get('attrs') or {}).items()}
         historical = SimpleNamespace(pos=v.get('pos', p.pos if p else 'UNK'), ratings=ratings)
+        cols = attr_cols(historical, delta=delta)
         rows.append(dict(pid=pid, name=v.get('name', p.name if p else str(pid)), pos=historical.pos,
                          age=int(v.get('age', p.age if p else 0)), no=v.get('number', getattr(p, 'number', None)),
                          before=before, after=after, delta=after-before,
                          still_here=bool(p and p.team == abbr and not p.retired),
                          available=p is not None, partial='ratings_after' not in v,
-                         cols=attr_cols(historical, delta=delta)))
+                         cols=cols))
 
     rows.sort(key=lambda r: (r['delta'], -r['after']))
     return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=years or [yr], rows=rows, hit=len(rows), total_lost=-sum(r['delta'] for r in rows), empty=(not rec))

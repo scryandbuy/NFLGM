@@ -2224,7 +2224,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 /* Team development and schedule reports */
 .report-board{--report-team:#203731;--report-accent:#ffb612;min-width:0;padding:24px;border:1px solid #ffffff13;border-radius:10px;background:radial-gradient(ellipse at 15% 0,color-mix(in srgb,var(--report-team) 35%,transparent),transparent 65%),#0c161b;font-family:var(--text)}
 .report-hero{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:8px 0 25px}
-.report-hero small,.reg-detail>small{color:var(--report-accent);text-transform:uppercase;letter-spacing:1.4px;font-size:11px;font-weight:650}
+.report-hero small{color:var(--report-accent);text-transform:uppercase;letter-spacing:1.4px;font-size:11px;font-weight:650}
 .report-hero h1{font:800 38px/1.15 var(--text);letter-spacing:-1px;margin:7px 0 0;color:#edf3f5}
 .report-metrics{display:flex;gap:28px}.report-metrics>div{padding-left:25px;border-left:1px solid #ffffff16;text-align:right}.report-metrics b{display:block;font-size:27px;font-weight:750}.report-metrics span{display:block;font-size:10px;letter-spacing:1px;color:#a8bdc7;margin-top:6px}
 .report-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:13px 0;border-top:1px solid #ffffff13;border-bottom:1px solid #ffffff13;margin-bottom:18px;background:transparent}
@@ -2240,10 +2240,28 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .report-board .report-ready td{background:color-mix(in srgb,var(--report-accent) 5%,transparent)}
 .report-board .report-selected td{background:color-mix(in srgb,var(--report-accent) 13%,transparent)}
 .report-board .report-selected td:first-child{box-shadow:inset 3px 0 var(--report-accent)}
-.reg-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:25px;align-items:start}.reg-detail{padding:20px;border:1px solid #ffffff19;border-radius:8px;background:#ffffff02}.reg-detail h3{font:700 21px var(--text);margin:10px 0}.reg-overall{display:flex;align-items:center;justify-content:space-between;font-size:27px;font-weight:750;padding:10px 0 18px}.reg-overall span{font-size:14px;color:var(--danger)}.reg-attribute{display:grid;grid-template-columns:1fr auto 30px;gap:14px;padding:12px 0;border-top:1px solid #ffffff12;font-size:12px}.reg-detail .btn{margin-top:18px}.loss{color:var(--danger)}.gain{color:var(--ok)}
+.reg-popbox{--reg-accent:var(--club);max-width:780px;border-top-color:var(--reg-accent);border-radius:8px;max-height:min(82vh,760px);font-family:var(--text)}
+.reg-pop-head{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:20px;padding:20px;border-bottom:1px solid var(--rule)}
+.reg-pop-head small{color:var(--reg-accent);font-size:11px;font-weight:750;letter-spacing:1.4px}
+.reg-pop-head h2{margin:5px 0 4px;font:800 27px/1.1 var(--text)}
+.reg-pop-head p{margin:0;color:var(--ink-2);font-size:12px}
+.reg-pop-score{min-width:130px;text-align:right;font-variant-numeric:tabular-nums}
+.reg-pop-score span{display:block;color:var(--ink-3);font-size:10px;letter-spacing:1px}
+.reg-pop-score strong{display:block;font:750 25px var(--text);white-space:nowrap}
+.reg-pop-score b{font-size:12px}
+.reg-popbox .btn{width:auto;align-self:start;padding:5px 12px;font-size:12px}
+.reg-change-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:18px 20px 22px}
+.reg-change-group{min-width:0;border:1px solid var(--rule);border-radius:6px;padding:12px;background:var(--sheet-2)}
+.reg-change-group h3{margin:0 0 8px;color:var(--reg-accent);font:750 11px var(--text);letter-spacing:1px;text-transform:uppercase}
+.reg-change-row{display:grid;grid-template-columns:minmax(0,1fr) auto 26px;align-items:center;gap:10px;min-height:31px;border-top:1px solid var(--rule);font-size:12px;font-variant-numeric:tabular-nums}
+.reg-change-row span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reg-change-values{color:var(--ink-2);white-space:nowrap}
+.reg-change-row b{text-align:right}
+.reg-pop-note{padding:0 20px;color:var(--ink-2);font-size:12px}.loss{color:var(--danger)}.gain{color:var(--ok)}
 .schedule-strip{display:flex;flex-wrap:wrap;gap:5px;padding:12px 0 25px;overflow:visible;min-width:0;max-width:100%}.schedule-strip .rv-g{box-sizing:border-box;flex:1 0 40px;min-width:0;height:49px;border-radius:5px;display:flex;flex-direction:column;justify-content:center;align-items:center;font:600 10px var(--text);background:#ffffff06;border:1px solid #ffffff14}.schedule-strip small{font-size:9px;font-weight:400;color:#9db3bf;margin-bottom:7px}.schedule-strip .bye{color:var(--report-accent);background:color-mix(in srgb,var(--report-accent) 8%,transparent)}
 .schedule-columns{columns:2;column-gap:35px;padding:0}.schedule-columns .ts-row{break-inside:avoid;display:flex;align-items:center;gap:13px;min-height:68px;padding:12px 0;border-bottom:1px solid #ffffff13;font:400 13px var(--text)}.schedule-columns .wk{width:54px;flex:none;background:#ffffff04;border-radius:5px;padding:11px 4px;text-align:center;color:#a6bdc9;font-size:11px}.schedule-columns .ha{width:18px;color:#91aab8;font-size:11px}.schedule-columns .opp{flex:1;min-width:0}.schedule-columns .opp small{display:block;font-size:10px;color:#94acb9;margin-top:5px}.schedule-columns .res{font-size:10px;color:#94acb9}.schedule-columns .sc{font-weight:700}.schedule-columns .bye .opp{color:var(--report-accent)}
-@media(max-width:1100px){.reg-layout{grid-template-columns:1fr}.report-table-scroll .tbl{min-width:750px}.report-hero{flex-wrap:wrap}.report-metrics>div:first-child{padding-left:0;border:0}}
+@media(max-width:1100px){.report-table-scroll .tbl{min-width:750px}.report-hero{flex-wrap:wrap}.report-metrics>div:first-child{padding-left:0;border:0}}
+@media(max-width:620px){.reg-pop-head{grid-template-columns:minmax(0,1fr) auto;gap:10px}.reg-pop-score{grid-column:1 / -1;grid-row:2;text-align:left}.reg-pop-head .btn{grid-column:2;grid-row:1}.reg-change-grid{grid-template-columns:1fr;padding:12px}.reg-pop-head h2{font-size:22px}}
 @media(max-width:750px){.report-board{padding:16px 12px}.report-hero h1{font-size:29px}.schedule-columns{columns:1}.report-metrics b{font-size:22px}}
 
 .report-board select.btn{display:inline-block;width:110px!important;min-width:110px;max-width:240px;margin-left:0!important}

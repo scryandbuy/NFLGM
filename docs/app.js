@@ -2240,9 +2240,8 @@ function renderSchedule(v) {
   if(v.byes?.length && v.week <= 18) s.append(el('div',{class:'league-byes'},el('b',{},'BYE WEEK'),...v.byes.map(c=>clubLink(c.abbr,c.name)))); leagueFinish(s,page);
 }
 
-// REGRESSION: what age took going into next year. Every player, his overall now and the points he lost, with a
-// See More on each that opens every attribute that moved, before and after, down in red and up in green.
-let regOpen = new Set();
+// REGRESSION: the season's losses stay in the table; each player's rating
+// changes open in a compact card above the page.
 function renderRegression(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
@@ -2251,52 +2250,51 @@ function renderRegression(v) {
   const s = reportBoard(v.club, 'REGRESSION', [[v.hit, 'PLAYERS DECLINED'], [v.total_lost ? `-${v.total_lost}` : '0', 'OVERALL POINTS']]);
   s.append(el('div', { class: 'report-controls' }, scheduleSeasonPicker(v, y => renderRegression(pyJSON(`SESSION.club_regression(year=${y})`))), el('span', { class: 'count' }, `Going into ${v.year + 1}`)));
   if (v.empty) { s.append(el('div', { class: 'empty' }, 'Regression is recorded during Retirements and Development.')); page.append(s); return; }
-  const detail = el('aside', { class: 'reg-detail' });
-  const select = r => {
-    detail.replaceChildren(el('small', {}, 'ATTRIBUTE CHANGES'), el('h3', {}, r.name), el('div', { class: 'reg-overall' }, `${r.before} \u2192 ${r.after}`, el('span', {}, `${r.delta} OVR`)));
-    if (r.partial) detail.append(el('p', { class: 'count' }, 'This older record contains only attributes that changed.'));
-    let count = 0;
-    for (const col of r.cols) for (const attr of [...col.rows, ...(col.extra?.rows || [])]) {
-      if (!attr.delta) continue;
-      count++;
-      detail.append(el('div', { class: 'reg-attribute' }, el('span', {}, attr.label), el('span', {}, `${attr.v - attr.delta} \u2192 ${attr.v}`), el('b', { class: attr.delta < 0 ? 'loss' : 'gain' }, attr.delta > 0 ? `+${attr.delta}` : attr.delta)));
-    }
-    if (!count) detail.append(el('p', { class: 'count' }, 'No whole-point attribute changes recorded.'));
-    detail.append(el('button', { class: 'btn', onclick: () => regressionPopup(v,r) }, 'All Attributes'));
-    for (const row of tbl.querySelectorAll('tr[data-pid]')) row.classList.toggle('report-selected', row.dataset.pid === r.pid);
-  };
-  // one row a player who lost overall: the four numbers, and a button to the attribute block that shows what age took
+  // One row per player who lost overall; details open above the page.
   const tbl = el('table', { class: 'tbl' });
   tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Ovr Before'), el('th', { class: 'n' }, 'Ovr After'), el('th', { class: 'n' }, 'Regression'), el('th', {}, '')));
   if (!v.rows.length) tbl.append(el('tr', {}, el('td', { colspan: '6' }, el('div', { class: 'empty' }, 'Nobody on the club lost ground.'))));
   for (const r of v.rows) {
-    tbl.append(el('tr', { 'data-pid': r.pid },
+    tbl.append(el('tr', {},
       el('td', {}, el('button', { class: 'who', disabled: r.available === false ? '' : null, onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no', style: `background:${v.club.color};color:${v.club.accent || '#fff'}` }, r.no != null ? r.no : r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.age}${r.still_here ? '' : ' · no longer on the club'}`)))),
       el('td', {}, r.pos), el('td', { class: 'n' }, el('b', {}, r.before)), el('td', { class: 'n' }, el('b', {}, r.after)),
       el('td', { class: 'n' }, el('b', { style: 'color:var(--danger)' }, r.delta)),
-      el('td', { class: 'acts' }, el('button', { class: 'btn', style: 'width:auto;padding:3px 10px;font-size:13.5px', onclick: () => select(r) }, 'View Changes'))));
+      el('td', { class: 'acts' }, el('button', { class: 'btn', style: 'width:auto;padding:3px 10px;font-size:13.5px', onclick: () => regressionPopup(v, r) }, 'View Changes'))));
   }
-  s.append(el('div', { class: 'reg-layout' }, el('div', { class: 'report-table-scroll' }, tbl), detail)); page.append(s);
-  if (v.rows.length) select(v.rows[0]); else detail.append(el('p', { class: 'count' }, 'No decline recorded.'));
+  s.append(el('div', { class: 'report-table-scroll' }, tbl)); page.append(s);
 }
 
-// THE ATTRIBUTE BLOCK, alone, with what age took: the card's three columns, the points lost beside each attribute that
-// dropped (and the awareness and recognition he gained), in a popup over the page
+// A compact player-style card showing only ratings that changed with age.
 function regressionPopup(v, r) {
-  const back = el('div', { class: 'popback', onclick: e => { if (e.target === back) back.remove(); } });
-  const box = el('div', { class: 'popbox' });
-  box.append(el('div', { class: 'head', style: 'padding:12px 14px' }, el('div', {}, el('div', { class: 'hname' }, r.name, el('small', { style: 'font-weight:500;color:var(--ink-3);margin-left:8px' }, `${r.pos} · ${r.age}`)), el('div', { class: 'hline' }, `Overall ${r.before} → ${r.after}, ${r.delta} going into ${v.year + 1}`)),
-    el('button', { class: 'btn', style: 'margin-left:auto;width:auto;padding:4px 12px', onclick: () => back.remove() }, 'Close')));
-  if (r.partial) box.append(el('p', { class: 'count' }, 'This older record contains only attributes that changed.'));
-  const attrs = el('div', { class: 'attrs', style: 'padding:0 14px 14px' });
-  for (const c of r.cols) {
-    const col = el('div', {}, el('div', { class: 'h5', style: 'margin-bottom:4px' }, c.title));
-    const rowsOf = rows => { for (const a of rows) { const row = el('div', { class: 'arow ' + a.tier }, el('span', {}, a.label)); if (a.delta != null) row.append(el('em', { class: 'fitd ' + (a.delta < 0 ? 'm' : 'p') }, a.delta > 0 ? `+${a.delta}` : `${a.delta}`)); row.append(el('i', { class: a.tier }), el('b', {}, a.v)); col.append(row); } };
-    rowsOf(c.rows);
-    if (c.extra && c.extra.rows && c.extra.rows.length) { col.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
-    attrs.append(col);
+  const back = el('div', { class: 'popback reg-popback', onclick: e => { if (e.target === back) back.remove(); } });
+  const box = el('section', { class: 'popbox reg-popbox', role: 'dialog', 'aria-modal': 'true', 'aria-label': `${r.name} rating changes`, style: `--reg-accent:${teamTheme(v.club).accent}` });
+  const close = el('button', { class: 'btn', type: 'button', onclick: () => back.remove() }, 'Close');
+  box.append(el('header', { class: 'reg-pop-head' },
+    el('div', {}, el('small', {}, `${v.club.name} · REGRESSION`), el('h2', {}, r.name.toUpperCase()), el('p', {}, `${r.pos} · Age ${r.age} · Going into ${v.year + 1}`)),
+    el('div', { class: 'reg-pop-score' }, el('span', {}, 'OVERALL'), el('strong', {}, `${r.before} → ${r.after}`), el('b', { class: r.delta < 0 ? 'loss' : 'gain' }, `${r.delta > 0 ? '+' : ''}${r.delta} OVR`)), close));
+  if (r.partial) box.append(el('p', { class: 'reg-pop-note' }, 'This older record contains only ratings that changed.'));
+  const groups = [], seen = new Set();
+  const addGroup = (title, rows) => {
+    const changed = rows.filter(a => a.delta && !seen.has(a.key));
+    for (const a of changed) seen.add(a.key);
+    if (changed.length) groups.push({ title, rows: changed });
+  };
+  for (const c of r.cols || []) {
+    addGroup(c.title, c.rows || []);
+    if (c.extra) addGroup(c.extra.title, c.extra.rows || []);
   }
-  box.append(attrs); back.append(box); document.body.append(back);
+  const grid = el('div', { class: 'reg-change-grid' });
+  for (const group of groups) {
+    const section = el('section', { class: 'reg-change-group' }, el('h3', {}, group.title));
+    for (const a of group.rows) section.append(el('div', { class: 'reg-change-row' },
+      el('span', {}, a.label), el('span', { class: 'reg-change-values' }, `${a.v - a.delta} → ${a.v}`),
+      el('b', { class: a.delta < 0 ? 'loss' : 'gain' }, `${a.delta > 0 ? '+' : ''}${a.delta}`)));
+    grid.append(section);
+  }
+  box.append(groups.length ? grid : el('p', { class: 'reg-pop-note' }, 'No whole-point rating changes were recorded.'));
+  back.append(box); document.body.append(back);
+  back.tabIndex = -1; back.focus();
+  back.addEventListener('keydown', e => { if (e.key === 'Escape') back.remove(); });
 }
 
 // A TEAM'S SCHEDULE, under its own sub-tabs: the season as a strip of results, then one row a week with the

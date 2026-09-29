@@ -860,8 +860,7 @@ class Session:
         L, rng = self.L, self.rng
         # THE YEAR TICKS HERE. Every player is a year older from Step 1 on, and every page reads the same number
         # (the card had shown his season age while the Regression page showed the age he was turning, rounded up)
-        for p in L.players.values():
-            if not p.retired: p.age += 1.0
+        RG.tick_ages(L)
         self.votes = AW.vote(L, self.post)
         try:
             self.votes['sb_mvp'] = AW.super_bowl_mvp(L, self.post, L.year)
@@ -906,7 +905,7 @@ class Session:
         L, rng = self.L, self.rng
         # regression: every player takes what age takes; your club's before-and-after is kept for the Regression page
         try:
-            RG.run(self.L, self.rng, record_for=self.user_team)
+            RG.run(self.L, self.rng, record_for=self.user_team, tick_age=False)
             rec = (getattr(self.L, 'regression', {}) or {}).get(str(self.L.year), {})
             from views import surname
             hit = sorted([(v['lost'], pid) for pid, v in rec.items() if v['lost'] >= 0.5], reverse=True)
