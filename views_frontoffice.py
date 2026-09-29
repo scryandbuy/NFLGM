@@ -285,8 +285,8 @@ def staff(session, league, abbr):
     cards = []
     for role in ('oc', 'dc', 'st', 'scout'):
         c = (getattr(t, 'staff', None) or {}).get(role)
-        if c is None: cards.append(dict(role=role, role_name=ST.ROLE_NAME.get(role, role), empty=True)); continue
-        cd = ST.card(c); cd.update(role_key=role, disgruntled=bool(getattr(c, 'disgruntled', False)), extend_ask=round(ST.ask(c), 2)); cards.append(cd)
+        if c is None: cards.append(dict(role=role, role_key=role, role_name=ST.ROLE_NAME.get(role, role), empty=True)); continue
+        cd = ST.card(c); cd.update(role_key=role, disgruntled=bool(getattr(c, 'disgruntled', False)), extend_ask=round(ST.ask(c), 2), offer_room=round(ST.room(t, without=role), 2)); cards.append(cd)
     pools = {}
     for role in ('oc', 'dc', 'st', 'scout'):
         pools[role] = [dict(ST.card(c, revealed_only=True), role_key=role, background=(('Head-coaching candidate' if getattr(c, 'hc_candidate', False) else 'Coordinator' if role != 'scout' else 'Scout') + (f" · {c.specialty}" if getattr(c, 'specialty', None) else ''))) for c in ST.pool_for(league, role)[:8]]
@@ -304,12 +304,18 @@ def staff(session, league, abbr):
                             read=({'go': 'He leans toward going. A raise may move him; blocking him keeps him but not the coach he was.', 'torn': 'He is torn. A real raise would likely keep him; blocking him is a last resort.', 'stay': 'He wants to stay. A modest raise closes it.'}[p.get('lean', 'torn')]),
                             block_read=f"he stays through {league.year + int(c.years)}, coaches worse for the year, and leaves when his contract ends. {league.teams[p['to']].abbr} hires someone else."))
     return dict(rail=rail(session, league, abbr), cards=cards, pools=pools, poaches=poaches,
-                budget=dict(total=round(ST.budget(t), 1), payroll=round(ST.payroll(t), 1), available=round(ST.room(t), 1), head_coach=dict(name=(t.gm.name if t.gm else None), salary=round(ST.hc_pay(t.gm), 1) if t.gm else 0.0)),
+                budget=dict(total=round(ST.budget(t), 1), payroll=round(ST.payroll(t), 1), available=round(ST.room(t), 1), offer_room=round(ST.room(t), 2), head_coach=dict(name=(t.gm.name if t.gm else None), salary=round(ST.hc_pay(t.gm), 1) if t.gm else 0.0)),
                 offseason=(league.phase != 'regular'))
 
 
 def act_staff_extend(league, abbr, role, years=3, salary=None):
     import staff as ST
+    import math
+    try:
+        if int(years) != float(years) or not 1 <= int(years) <= 5: raise ValueError
+        if salary is not None and (not math.isfinite(float(salary)) or float(salary) <= 0): raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        return dict(ok=False, why='Choose 1–5 years and a positive annual salary.')
     r = ST.extend(league, abbr, role, years=int(years), salary=(float(salary) if salary is not None else None))
     return r if isinstance(r, dict) else dict(ok=bool(r))
 
@@ -326,6 +332,10 @@ def act_staff_interview(league, abbr, name, question=None):
 
 def act_staff_hire(league, abbr, name, years=3):
     import staff as ST
+    try:
+        if int(years) != float(years) or not 1 <= int(years) <= 5: raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        return dict(ok=False, why='Choose a contract length of 1–5 years.')
     r = ST.hire(league, abbr, name, years=int(years)); return r if isinstance(r, dict) else dict(ok=bool(r))
 
 
@@ -342,8 +352,12 @@ def cap(session, league, abbr):
     from cap_engine import CAP
     import contracts as CT
     t = league.teams[abbr]
+    # CAP: the closed season stays in the engine until Step 4; show the upcoming ledger now.
+    from cap_accounting import pre_roll
+    offset = int(pre_roll(league))
+    indices = range(offset, offset + 3)
     years = []
-    for i in range(3):
+    for i in indices:
         yr = league.year + i; by = {g: 0.0 for g in GROUPS}; n = 0
         for p in t.roster:
             if p.contract is None or i >= p.contract.years: continue
@@ -379,23 +393,31 @@ def cap(session, league, abbr):
             committed = t.cap.charges(t.phase)
         expiring = sorted([p for p in t.roster if p.contract and p.contract.years == i and p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.cap_hit(0))
         import practice_squad as PSQ
-        years.append(dict(year=yr, limit=round(limit, 1), est=(i > 0), rollover=round(rollover, 1), by={g: round(v, 1) for g, v in by.items()}, dead=round(dead, 1), committed=round(committed, 1), space=round(limit - committed, 1), under_contract=n,
+        years.append(dict(year=yr, current=(i == 0), limit=round(limit, 1), est=(i > 0), rollover=round(rollover, 1), by={g: round(v, 1) for g, v in by.items()}, dead=round(dead, 1), committed=round(committed, 1), space=round(limit - committed, 1), under_contract=n,
                           earned=(round(t.cap.earned,1) if i==0 else 0.0), ps_charge=(round(PSQ.ps_charge(t), 1) if i == 0 else None), rookie_pool=(None if i == 0 else round(len([k for k in t.picks if k.year == yr and not k.used_on]) * 1.3, 1)),
                           expiring_into=[__import__('views').surname(p.name) for p in expiring[:3]], expiring_more=max(0, len(expiring) - 3)))
     # the ledger: every man, three years
     rows = []
-    for p in sorted(t.roster, key=lambda p: -p.cap_hit(0)):
+    for p in sorted(t.roster, key=lambda p: -p.cap_hit(offset)):
         if p.contract is None: continue
         c = p.contract
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), yrs=c.years, hits=[round(c.cap_hit(i), 1) if i < c.years else None for i in range(3)], penalty=round(p.dead_if_cut(0), 1),
+        penalty = c.release(0, league.post_june1())[offset]
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), yrs=max(0, c.years-offset), hits=[round(c.cap_hit(i), 1) if i < c.years else None for i in indices], penalty=round(penalty, 1),
                          restructurable=float(CT.restructure_preview(league,p.pid).get('saves_now',0.0)),
-                         tags=[x for x in [('Final Year' if c.years == 1 else None), ('Rookie Deal' if getattr(c, 'rookie', False) else None), ('Big Penalty' if p.dead_if_cut(0) > 2 * c.cap_hit(0) and c.cap_hit(0) > 5 else None)] if x]))
-    # dead money detail: every release and trade this year that left a charge, from the log
+                         tags=[x for x in [('Expiring' if c.years <= offset else 'Final Year' if c.years-offset == 1 else None), ('Rookie Deal' if getattr(c, 'rookie', False) else None), ('Big Penalty' if penalty > 2 * c.cap_hit(offset) and c.cap_hit(offset) > 5 else None)] if x]))
+    # CAP: align recorded departure charges with the first visible year.
     dead_rows = []
+    focus_year = league.year + offset
     for x in league.transactions:
-        if x.get('year') != league.year or x.get('team') != abbr or x.get('kind') not in ('release', 'trade_dead'): continue
-        if not x.get('dead'): continue
-        p = league.player(x.get('pid')); dead_rows.append(dict(name=(p.name if p else x.get('pid')), pos=(p.pos if p else ''), how=('released' if x['kind'] == 'release' else 'traded'), week=x.get('week'), dead=round(float(x['dead']), 1), dead_next=round(float(x.get('dead_next', 0) or 0), 1)))
+        if x.get('team') != abbr or x.get('kind') not in ('release', 'trade_dead'): continue
+        charges = {x.get('year'): float(x.get('dead', 0) or 0),
+                   (x.get('year') or 0)+1: float(x.get('dead_next', 0) or 0)}
+        now, nxt = charges.get(focus_year, 0), charges.get(focus_year+1, 0)
+        if not (now or nxt): continue
+        p = league.player(x.get('pid'))
+        dead_rows.append(dict(name=(p.name if p else x.get('pid')), pos=(p.pos if p else ''),
+                             how=('released' if x['kind'] == 'release' else 'traded'), week=x.get('week'),
+                             dead=round(now, 1), dead_next=round(nxt, 1)))
     dead_rows.sort(key=lambda r: -r['dead'])
     largest = [dict(pid=r['pid'], name=r['name'], pos=r['pos'], hit=r['hits'][0], share=round(r['hits'][0] / years[0]['limit'] * 100, 1)) for r in rows[:8] if r['hits'][0]]
     # tags and tools: the franchise tag by position on the men whose deals are up, void years carried, the June 1 rule
@@ -405,8 +427,8 @@ def cap(session, league, abbr):
         try: tag_rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), price=round(TGS.tag_price(p, CAP.get(league.year, 301.2)), 1)))
         except Exception: continue
     void_carried = round(sum(p.contract.remaining_proration(p.contract.years) for p in t.roster if p.contract and getattr(p.contract, 'void', 0)), 1)
-    return dict(rail=rail(session, league, abbr), years=years, rows=rows, cap_space=round(t.cap_space, 1), dead_rows=dead_rows, dead_total=round(float(t.cap.dead), 1), dead_next=round(float(getattr(t.cap, 'dead_next', 0.0) or 0.0), 1), largest=largest,
-                top51=(t.phase in __import__('cap_engine').TOP_51_PHASES), tags=tag_rows[:4], void_carried=void_carried,
+    return dict(rail=rail(session, league, abbr), years=years, rows=rows, cap_space=years[0]['space'], dead_rows=dead_rows, dead_total=years[0]['dead'], dead_next=years[1]['dead'], largest=largest,
+                top51=(not offset and t.phase in __import__('cap_engine').TOP_51_PHASES), pre_roll=bool(offset), tag_year=league.year+1, tags=tag_rows[:4], void_carried=void_carried,
                 june1_rule='Every cut and trade in the offseason is treated as post-June 1: this year\'s proration stays on this year\'s books and the rest lands next year. In season, everything accelerates now.')
 
 
@@ -419,12 +441,12 @@ def act_restructure_preview(league, abbr, pid, amount=None, void_years=0):
     saves = float(r.get('saves_now', 0)); later = float(sum(r.get('added_later', []) or []))
     expiring = sorted((q for q in t.roster if q.contract and q.contract.years == 1 and q.pid != pid and q.pos not in ('K', 'P', 'LS')), key=lambda q: -q.ovr)
     buys = f"This buys the room to extend {__import__('views').surname(expiring[0].name)}" if expiring and saves >= 3 else f"This frees ${saves:.1f}m in {r['cap_year']}"
-    yrs_left = p.contract.years
+    yrs_left = p.contract.years - r.get('year_index', 0)
     late = (p.age + yrs_left) >= (37 if p.pos == 'QB' else 33)
     age_note = f"; at {int(p.age)} that is the real price of the move" if late else ''
     cost = f"The cost is ${later:.1f}m in years {__import__('views').surname(p.name)} may not be on the roster{age_note}." if late else f"The cost is ${later:.1f}m added across his remaining {yrs_left - 1} years, which he is likely to play."
     r['say'] = f"{buys}. {cost}"
-    r['player'] = dict(name=p.name, pos=p.pos, age=int(p.age), hit=round(p.cap_hit(0), 1), yrs=yrs_left, ovr=round(p.ovr))
+    r['player'] = dict(name=p.name, pos=p.pos, age=int(p.age), hit=round(p.cap_hit(r.get('year_index', 0)), 1), yrs=yrs_left, ovr=round(p.ovr))
     return r
 
 

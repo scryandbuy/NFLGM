@@ -1552,6 +1552,7 @@ function foSecond(cur) { secondRow(Object.entries(FO).map(([k, l]) => [l, '#fron
 
 function foBoard(v, title, metrics = []) {
   const board = reportBoard(v.rail.club, title, metrics);
+  board.querySelector('h1')?.setAttribute('tabindex', '-1');
   board.classList.add('fo-board');
   return board;
 }
@@ -1575,7 +1576,7 @@ function renderOwner(v) {
   s.append(budget,el('div',{class:'bar fo-budget'},el('i',{style:`width:${Math.max(0,Math.min(100,v.staff_budget.payroll/Math.max(1,v.staff_budget.total)*100))}%`})),el('p',{class:'count'},'Payroll includes the head coach.'),el('div',{class:'h5'},'SEASON REVIEWS'));
   for(const x of v.reviews) s.append(el('div',{class:'fo-history'},el('b',{},x.year),el('span',{},`${x.record || ''} · ${x.line || ''}`)));
   if(!v.reviews.length) s.append(el('p',{class:'count'},'Reviews appear after each season.'));
-  s.append(el('a',{class:'btn',href:'#frontoffice/review'},'View Season Review')); page.append(s);
+  s.append(el('a',{class:'btn fo-review-link',href:'#frontoffice/review'},'View Season Review')); page.append(s);
 }
 
 let idPreview = null, restructureFor = null;
@@ -1618,30 +1619,114 @@ function renderIdentity(v) {
 
 // the staff's trait chips: want traits gold, coaching traits green, a scout's strengths green and blind spots red, unknown gray
 function staffTraits(c) {
-  const box = el('div', { class: 'traits', style: 'gap:4px' });
+  const box = el('div', { class: 'traits fo-staff-traits' });
   if (!c.traits || !c.traits.length) { box.append(el('span', { class: 'trait even' }, 'None')); return box; }
-  for (const t of c.traits) box.append(el('span', { class: 'trait ' + ({ want: 'money', coach: 'work', pos: 'work', neg: 'unhappy-t', unknown: 'unknown' }[t.fam] || 'even'), 'data-tip': t.tip }, t.name));
+  for (const t of c.traits) box.append(el('span', { class: 'trait ' + ({ want: 'money', coach: 'work', pos: 'work', neg: 'unhappy-t', unknown: 'unknown' }[t.fam] || 'even'), 'data-tip': t.tip, tabindex: '0' }, t.name));
   return box;
 }
 
-let interviewOpen = null;
-// the interview thread on a pool card: three questions, then Offer or Pass
-function interviewPanel(c, role, reload) {
-  const st = pyJSON(`SESSION.frontoffice_act('staff_interview', name=${JSON.stringify(c.name)})`).state;
-  const box = el('div', { class: 'thread', style: 'margin-top:10px;padding:0' });
-  const log = el('div', { class: 'thread', style: 'padding:0;font-size:13px' });
-  for (const m of st.log) log.append(el('div', { class: 'msg' + (m.who === 'gm' ? ' you' : '') + (m.trait ? ' match' : '') }, m.text));
-  box.append(log);
-  const ask = q => { const r = pyJSON(`SESSION.frontoffice_act('staff_interview', name=${JSON.stringify(c.name)}, question=${JSON.stringify(q)})`); if (!r.ok) notify(r); reload(); };
-  const qs = role === 'scout' ? [['hits', 'Ask about his hits', 'One of his strengths, in his words'], ['misses', 'Ask about his misses', 'One of his blind spots'], ['references', 'Ask his references', 'One more trait, at the Advance; a reference can be wrong']]
-                             : [['coaching', 'Ask about his coaching', 'One coaching trait, in his words'], ['situation', 'Ask about his situation', 'What he wants from you; a Mercenary hears you are shopping'], ['references', 'Ask his references', 'One more trait, at the Advance; a reference can be wrong']];
-  const row = el('div', { class: 'acts', style: 'flex-wrap:wrap' });
-  for (const [k, label, tip] of qs) row.append(el('button', { class: 'btn', disabled: st.asked.includes(k) ? '' : null, 'data-tip': tip, onclick: () => ask(k) }, st.asked.includes(k) ? (k === 'references' && st.refs_due ? 'Calls out' : 'Asked') : label));
-  box.append(row);
-  box.append(el('div', { class: 'read', style: 'margin-top:6px' }, st.all_known ? 'You know everything he is.' : `${st.n_hidden} trait${st.n_hidden === 1 ? '' : 's'} you have not learned. Offer at $${(+st.ask).toFixed(1)}m or keep asking.`));
-  return box;
+// STAFF / OWNER / CAP: viewport tooltips stay outside scrolling cards and dialogs.
+let foTip = null, foTipAnchor = null;
+function hideFoTip() {
+  if (foTip) foTip.remove();
+  if (foTipAnchor) {
+    const ids=(foTipAnchor.getAttribute('aria-describedby') || '').split(' ').filter(x=>x && x!=='fo-tooltip');
+    if (ids.length) foTipAnchor.setAttribute('aria-describedby',ids.join(' ')); else foTipAnchor.removeAttribute('aria-describedby');
+  }
+  foTip=null; foTipAnchor=null;
+}
+function showFoTip(e) {
+  const target = e.target.closest?.('[data-tip]');
+  if (!target?.closest('.fo-board, .fo-coach-dialog') || !target.dataset.tip) return;
+  hideFoTip();
+  foTipAnchor=target;
+  foTip = el('div', {class:'fo-tooltip', id:'fo-tooltip', role:'tooltip'}, target.dataset.tip);
+  target.setAttribute('aria-describedby',`${target.getAttribute('aria-describedby') || ''} fo-tooltip`.trim());
+  // A native dialog occupies the top layer; its fixed tooltip must live there too.
+  (target.closest('dialog') || document.body).append(foTip);
+  const r = target.getBoundingClientRect(), box = foTip.getBoundingClientRect();
+  foTip.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth-box.width-8))}px`;
+  foTip.style.top = `${Math.max(8, r.bottom+8+box.height <= window.innerHeight-8 ? r.bottom+8 : r.top-box.height-8)}px`;
+}
+document.addEventListener('mouseover', showFoTip);
+document.addEventListener('focusin', showFoTip);
+document.addEventListener('mouseout', e => { if (foTipAnchor?.contains(e.target) && !foTipAnchor.contains(e.relatedTarget) && document.activeElement!==foTipAnchor) hideFoTip(); });
+document.addEventListener('focusout', hideFoTip);
+document.addEventListener('scroll', hideFoTip, true);
+window.addEventListener('resize', hideFoTip);
+window.addEventListener('hashchange', hideFoTip);
+
+// STAFF: an offer is submitted only from the dialog, using the existing engine actions.
+function openStaffTalk(c, v, mode, reload) {
+  const owned = mode === 'extend';
+  let state = null;
+  if (!owned) {
+    const r = pyJSON(`SESSION.frontoffice_act('staff_interview', name=${JSON.stringify(c.name)})`);
+    if (!r.ok) { notify(r); return; }
+    state = r.state;
+  }
+  hideFoTip();
+  const dialog = el('dialog', {class:'sheet negotiation-sheet fo-coach-dialog', 'aria-labelledby':'fo-coach-title'});
+  applyTeamTheme(dialog, v.rail.club);
+  const palette = teamTheme(v.rail.club);
+  dialog.style.setProperty('--club', palette.base);
+  dialog.style.setProperty('--club-2', palette.accent);
+  const close = () => dialog.close();
+  const closeButton = el('button', {class:'btn quiet neg-close', onclick:close}, 'Close');
+  dialog.append(el('div', {class:'neg-topbar'}, el('div', {class:'neg-identity'},
+    el('div', {class:'neg-avatar'}, c.role_key.toUpperCase()),
+    el('div', {class:'neg-title'}, el('div', {class:'neg-kicker'}, owned ? 'STAFF EXTENSION' : 'STAFF INTERVIEW'),
+      el('h2', {id:'fo-coach-title'}, c.name), el('small', {}, `${c.role} · ${c.specialty || 'Generalist'} · Age ${c.age}`)), closeButton)));
+  const body = el('div', {class:'fo-coach-body'}); dialog.append(body);
+  const years = el('input', {type:'number',min:'1',max:'5',step:'1',value:String(owned ? Math.max(3,c.years) : 3)});
+  const salary = el('input', {type:'number',min:'0.01',step:'0.01',value:String(c.extend_ask || c.ask)});
+  const response = el('div', {class:'read', role:'status', 'aria-live':'polite'});
+  const draw = () => {
+    body.replaceChildren();
+    const ask = owned ? +c.extend_ask : +state.ask;
+    const room = owned ? +c.offer_room : +(v.budget.offer_room ?? v.budget.available);
+    const incumbent = v.cards.find(x => x.role_key === c.role_key && !x.empty);
+    const unavailable = !owned && (!v.offseason ? 'Hiring opens in the offseason.' : incumbent ? `The ${c.role} job is filled by ${incumbent.name}. Release the incumbent from Current Staff before offering this job.` : ask > room+1e-9 ? 'His asking salary exceeds the available staff budget.' : '');
+    body.append(el('div', {class:'fo-coach-summary'},
+      el('div', {}, el('small', {}, 'RATING'), el('b', {}, c.rating)),
+      el('div', {}, el('small', {}, 'PRESTIGE'), el('b', {}, c.prestige)),
+      el('div', {}, el('small', {}, 'ANNUAL ASK'), el('b', {}, `$${ask.toFixed(2)}m`)),
+      el('div', {}, el('small', {}, 'BUDGET FOR THIS JOB'), el('b', {}, `$${room.toFixed(2)}m`))));
+    if (owned) body.append(el('p', {class:'count'}, `Current deal: $${(+c.salary).toFixed(2)}m per year · ${c.years} years remaining. A new offer replaces the remaining term.`));
+    body.append(staffTraits(owned ? c : {traits:state.traits}));
+    if (!owned) {
+      const log = el('div', {class:'thread negotiation-thread fo-interview-log', 'aria-live':'polite'});
+      for (const m of state.log) log.append(el('div', {class:'msg'+(m.who==='gm'?' you':'')}, el('div', {class:'from'}, m.who==='gm'?'You':c.name), el('div', {class:'txt'}, m.text)));
+      body.append(log);
+      const questions = c.role_key==='scout' ? [['hits','Ask about strengths'],['misses','Ask about blind spots'],['references','Ask for references']] : [['coaching','Ask about coaching'],['situation','Ask about his priorities'],['references','Ask for references']];
+      const actions = el('div', {class:'acts'});
+      for (const [key,label] of questions) actions.append(el('button', {class:'btn', disabled:state.asked.includes(key)?'':null, onclick:() => {
+        const r = pyJSON(`SESSION.frontoffice_act('staff_interview', name=${JSON.stringify(c.name)}, question=${JSON.stringify(key)})`);
+        if (!r.ok) { response.textContent=r.why || 'Unable to ask that question.'; return; }
+        state=r.state; draw();
+      }}, state.asked.includes(key) ? key==='references' && state.refs_due ? 'References pending' : 'Asked' : label));
+      body.append(actions, el('p', {class:'count'}, state.all_known ? 'All traits revealed.' : `${state.n_hidden} trait${state.n_hidden===1?'':'s'} still unknown.${state.refs_due ? ' References return after advancing.' : ''}`));
+    }
+    const form = el('form', {class:'offer-panel fo-coach-offer', onsubmit:e => {
+      e.preventDefault();
+      if (unavailable || !form.reportValidity()) return;
+      const code = owned ? `SESSION.frontoffice_act('staff_extend', role=${JSON.stringify(c.role_key)}, years=${+years.value}, salary=${+salary.value})` : `SESSION.frontoffice_act('staff_hire', name=${JSON.stringify(c.name)}, years=${+years.value})`;
+      const r=pyJSON(code);
+      if (r.ok) { notify({ok:true,line:owned ? `${c.name} extended.` : `${c.name} hired.`}); close(); }
+      else response.textContent=r.why || 'The offer was declined.';
+    }});
+    years.required=true; salary.required=true;
+    form.append(el('div', {class:'offer'}, el('label', {}, 'Contract years', years),
+      owned ? el('label', {}, 'Annual salary ($m)', salary) : el('div', {class:'fo-coach-ask'}, `Offer at his ask: $${ask.toFixed(2)}m per year`)));
+    if (unavailable) form.append(el('p', {class:'count'}, unavailable));
+    form.append(response, el('div', {class:'acts'}, el('button', {class:'btn go',type:'submit',disabled:unavailable?'':null}, owned ? 'Submit Extension' : 'Offer Contract'), el('button', {class:'btn quiet',type:'button',onclick:close}, owned ? 'Cancel' : 'Leave Interview')));
+    body.append(form);
+  };
+  dialog.addEventListener('close', () => { hideFoTip(); dialog.remove(); reload(); document.querySelector('.fo-board h1')?.focus(); });
+  draw(); document.body.append(dialog); dialog.showModal(); closeButton.focus();
 }
 
+let foStaffRole = 'oc';
 function renderStaff(v) {
   renderRail(v.rail); const page = persPage(); foSecond('staff');
   const reload = () => renderStaff(pyJSON(`SESSION.frontoffice('staff')`));
@@ -1653,8 +1738,8 @@ function renderStaff(v) {
     const card = el('div', { class: 'scard' }, el('div', { class: 'role' }, c.role + (c.hc_candidate ? ' · Head-Coaching Candidate' : '') + (c.disgruntled ? ' · Disgruntled' : '')), el('div', { class: 'nm' }, c.name),
       el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Specialty'), el('span', {}, c.specialty || '—'), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Contract'), el('span', {}, `$${(+c.salary).toFixed(1)}m · Expires ${v.rail.year + c.years}`), el('span', {}, 'Asks'), el('span', {}, `$${(+c.extend_ask).toFixed(1)}m`), el('span', {}, `${c.role.replace(' Coordinator', '')} Rank`), el('span', {}, (c.unit_ranks || []).length ? c.unit_ranks.map(r => `${r}${ord(r)}`).join(' · ') : '—'), el('span', {}, 'Traits'), staffTraits(c)));
     const acts = el('div', { class: 'acts' });
-    acts.append(el('button', { class: 'btn', 'data-tip': `Three more years at his ask, $${(+c.extend_ask).toFixed(1)}m`, onclick: () => { notify(pyJSON(`SESSION.frontoffice_act('staff_extend', role=${JSON.stringify(c.role_key)}, years=3, salary=${c.extend_ask})`)); reload(); } }, 'Extend'));
-    if (v.offseason) acts.append(el('button', { class: 'btn warn', onclick: () => { if (confirm(`Release ${c.name}? You owe what is left on his deal.`)) { notify(pyJSON(`SESSION.frontoffice_act('staff_release', role=${JSON.stringify(c.role_key)})`)); reload(); } } }, 'Release'));
+    acts.append(el('button', { class: 'btn', onclick: () => openStaffTalk(c, v, 'extend', reload) }, 'Extend'));
+    if (v.offseason) acts.append(el('button', { class: 'btn warn', onclick: () => { if (confirm(`Release ${c.name} from your staff?`)) { notify(pyJSON(`SESSION.frontoffice_act('staff_release', role=${JSON.stringify(c.role_key)})`)); reload(); } } }, 'Release'));
     card.append(acts); grid.append(card);
   }
   s.append(grid);
@@ -1673,16 +1758,14 @@ function renderStaff(v) {
     box.append(el('div', { class: 'msg note' }, el('b', {}, 'If you block him: '), p.block_read));
     s.append(box);
   }
-  s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'The Pool', el('small', {}, v.offseason ? 'Hire Into an Open Job · Greyed Where He Does Not Fit What You Have Available' : 'hiring reopens after the season')));
-  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); const list = el('div', { class: 'pad' }); let role = 'oc';
-  const draw = () => { list.innerHTML = ''; const cur = v.cards.find(x => x.role_key === role); const room = v.budget.available + (cur && !cur.empty ? +cur.salary : 0); const grid2 = el('div', { class: 'staffgrid', style: 'grid-template-columns:repeat(4,1fr);padding:0' });
-    for (const c of v.pools[role]) { const fits = +c.ask <= room + 1e-9; const card = el('div', { class: 'scard', style: fits ? '' : 'opacity:.45' }, el('div', { class: 'nm' }, c.name), el('div', { class: 'role', style: 'text-transform:none;letter-spacing:0' }, c.background), el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Asks'), el('span', {}, `$${(+c.ask).toFixed(1)}m`), el('span', {}, 'Traits'), staffTraits(c)),
-        el('div', { class: 'acts' }, el('button', { class: 'btn go', 'data-tip': 'Sit down with him: learn his traits before you decide', onclick: () => { interviewOpen = interviewOpen === c.name ? null : c.name; draw(); } }, interviewOpen === c.name ? 'Close' : 'Interview'),
-          el('button', { class: 'btn', disabled: v.offseason && fits ? null : '', 'data-tip': v.offseason ? (fits ? 'Three years at his ask; replaces the sitting coach' : 'Over what you have available') : 'Offseason only', onclick: () => { notify(pyJSON(`SESSION.frontoffice_act('staff_hire', name=${JSON.stringify(c.name)})`)); interviewOpen = null; renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); } }, 'Offer')));
-      if (interviewOpen === c.name) card.append(interviewPanel(c, role, () => renderStaff(pyJSON(`SESSION.frontoffice('staff')`))));
+  s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'The Pool', el('small', {}, v.offseason ? 'Interview Candidates · Hire Into an Open Job' : 'hiring reopens after the season')));
+  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); const list = el('div', { class: 'pad' }); let role = foStaffRole;
+  const draw = () => { list.innerHTML = ''; const grid2 = el('div', { class: 'staffgrid', style: 'grid-template-columns:repeat(4,1fr);padding:0' });
+    for (const c of v.pools[role]) { const card = el('div', { class: 'scard' }, el('div', { class: 'nm' }, c.name), el('div', { class: 'role', style: 'text-transform:none;letter-spacing:0' }, c.background), el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Asks'), el('span', {}, `$${(+c.ask).toFixed(1)}m`), el('span', {}, 'Traits'), staffTraits(c)),
+        el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openStaffTalk(c, v, 'interview', reload) }, 'Interview')));
       grid2.append(card); }
     list.append(grid2); };
-  for (const [k, l] of [['oc', 'Offensive Coordinators'], ['dc', 'Defensive Coordinators'], ['st', 'Special Teams'], ['scout', 'Head Scouts']]) tabs.append(el('button', { 'aria-pressed': String(role === k), onclick: e => { role = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, l));
+  for (const [k, l] of [['oc', 'Offensive Coordinators'], ['dc', 'Defensive Coordinators'], ['st', 'Special Teams'], ['scout', 'Head Scouts']]) tabs.append(el('button', { 'aria-pressed': String(role === k), onclick: e => { role = k; foStaffRole = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, l));
   s.append(tabs, list); draw(); page.append(s);
 }
 
@@ -1696,10 +1779,10 @@ function renderCap(v) {
   v.years.forEach((y, i) => {
     const st = el('div', { class: 'stack' }); for (const [g, val] of Object.entries(y.by)) if (val > 0) st.append(el('i', { style: `width:${(val / y.limit * 100).toFixed(1)}%;background:${COL[g]}`, 'data-tip': `${g} $${val}m` })); if (y.dead > 0) st.append(el('i', { style: `width:${(y.dead / y.limit * 100).toFixed(1)}%;background:#3a424c`, 'data-tip': `Penalty $${y.dead}m` }));
     const kv = el('div', { class: 'kv' }, el('span', {}, 'Committed'), el('span', {}, `$${y.committed}m`), el('span', {}, 'Penalty'), el('span', {}, `$${y.dead}m`));
-    if (i === 0) kv.append(el('span', {}, 'Paid to Departed Players'), el('span', {}, `$${y.earned || 0}m`), el('span', {}, 'Practice Squad'), el('span', {}, `$${y.ps_charge}m`), el('span', {}, 'Rookie Pool'), el('span', {}, '—'));
+    if (y.current) kv.append(el('span', {}, 'Paid to Departed Players'), el('span', {}, `$${y.earned || 0}m`), el('span', {}, 'Practice Squad'), el('span', {}, `$${y.ps_charge}m`), el('span', {}, 'Rookie Pool'), el('span', {}, '—'));
     else kv.append(el('span', {}, 'Expiring Into It'), el('span', {}, y.expiring_into.length ? y.expiring_into.join(', ') + (y.expiring_more ? `, ${y.expiring_more} more` : '') : 'Nobody'), el('span', {}, 'Rookie Pool'), el('span', {}, `$${y.rookie_pool}m est.`));
     kv.append(el('span', {}, 'Under Contract'), el('span', {}, `${y.under_contract} players`));
-    yrs.append(el('div', { class: 'cy' }, el('h4', {}, `${y.year}${i === 0 ? ' Now' : ''}`, el('small', { 'data-tip': y.rollover ? `League cap plus $${y.rollover}m you have unspent now, which carries over` : null }, `Limit $${y.limit}m${y.rollover ? ` incl. $${y.rollover}m rollover` : y.est ? ' est.' : ''}`)), el('div', { class: 'big' + (y.space < 0 ? ' neg' : '') }, `${y.space < 0 ? '−' : ''}$${Math.abs(y.space).toFixed(1)}m`), el('div', { style: 'font-size:12.5px;color:var(--ink-3)' }, 'space'), st, kv));
+    yrs.append(el('div', { class: 'cy' }, el('h4', {}, `${y.year}${y.current ? ' Now' : i === 0 ? ' Upcoming' : ''}`, el('small', { 'data-tip': y.rollover ? `League cap plus $${y.rollover}m you have unspent now, which carries over` : null }, `Limit $${y.limit}m${y.rollover ? ` incl. $${y.rollover}m rollover` : y.est ? ' est.' : ''}`)), el('div', { class: 'big' + (y.space < 0 ? ' neg' : '') }, `${y.space < 0 ? '−' : ''}$${Math.abs(y.space).toFixed(1)}m`), el('div', { style: 'font-size:12.5px;color:var(--ink-3)' }, 'space'), st, kv));
   });
   s.append(yrs);
   const two = el('div', { class: 'restr' });
@@ -1718,7 +1801,7 @@ function renderCap(v) {
     drawD(p);
   };
   // tags and tools
-  pvBox.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Tags and Tools', el('span', {}, `${v.years[0].year + 1} Offseason`)));
+  pvBox.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Tags and Tools', el('span', {}, `${v.tag_year} Offseason`)));
   const tt = el('div', { class: 'kv' });
   for (const t of v.tags) tt.append(el('span', {}, `Franchise Tag · ${t.pos}`), el('span', {}, `$${t.price}m · `, el('span', { style: 'cursor:pointer;text-decoration:underline dotted', onclick: () => { location.hash = '#club/player/' + t.pid; } }, surname(t.name))));
   if (!v.tags.length) tt.append(el('span', {}, 'Franchise Tag'), el('span', {}, 'No unrestricted free agent to tag next offseason'));
@@ -1726,11 +1809,11 @@ function renderCap(v) {
   pvBox.append(tt);
   pvBox.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Largest Hits', el('span', {}, String(v.years[0].year))));
   for (const r of v.largest) pvBox.append(el('div', { class: 'fitrow', style: 'grid-template-columns:1fr 1fr 60px' }, el('span', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, `${r.name} · ${r.pos}`), el('div', { class: 'bar', style: 'height:8px' }, el('i', { style: `width:${Math.min(100, r.share * 4)}%;background:var(--club)` })), el('span', { class: 'v' }, `$${r.hit.toFixed(1)}m`)));
-  pvBox.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Penalty Detail', el('span', {}, `$${v.dead_total}m this year · $${v.dead_next}m next`)));
-  if (v.dead_rows.length) { const dt = el('table', { class: 'stab' }); dt.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'How'), el('th', {}, 'This Year'), el('th', {}, 'Next Year'))); for (const r of v.dead_rows) dt.append(el('tr', {}, el('td', {}, `${r.name} · ${r.pos}`), el('td', {}, r.how + (r.week ? ` wk ${r.week}` : '')), el('td', {}, `$${r.dead.toFixed(1)}m`), el('td', {}, r.dead_next ? `$${r.dead_next.toFixed(1)}m` : '—'))); pvBox.append(dt); }
+  pvBox.append(el('div', { class: 'h5', style: 'margin-top:14px' }, 'Penalty Detail', el('span', {}, `$${v.dead_total}m in ${v.years[0].year} · $${v.dead_next}m in ${v.years[1].year}`)));
+  if (v.dead_rows.length) { const dt = el('table', { class: 'stab' }); dt.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'How'), el('th', {}, String(v.years[0].year)), el('th', {}, String(v.years[1].year)))); for (const r of v.dead_rows) dt.append(el('tr', {}, el('td', {}, `${r.name} · ${r.pos}`), el('td', {}, r.how + (r.week ? ` wk ${r.week}` : '')), el('td', {}, `$${r.dead.toFixed(1)}m`), el('td', {}, r.dead_next ? `$${r.dead_next.toFixed(1)}m` : '—'))); pvBox.append(dt); }
   else pvBox.append(el('div', { class: 'empty' }, v.dead_total ? 'Charges carried in from before this season.' : 'No penalty on the books.'));
   const ledger = el('div', {}, el('div', { class: 'h5' }, 'Ledger'));
-  const tbl = el('table', { class: 'tbl' }); tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), ...v.years.map(y => el('th', { class: 'n' }, String(y.year))), el('th', { class: 'n', 'data-tip': 'Dead cap if cut this year' }, 'Penalty'), el('th', { class: 'n' }, 'Yrs'), el('th', {}, ''), el('th', {}, '')));
+  const tbl = el('table', { class: 'tbl' }); tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), ...v.years.map(y => el('th', { class: 'n' }, String(y.year))), el('th', { class: 'n', 'data-tip': `Charge in ${v.years[0].year} if released now` }, 'Penalty'), el('th', { class: 'n' }, 'Yrs'), el('th', {}, ''), el('th', {}, '')));
   for (const r of v.rows) tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.pos), ...r.hits.map(h => el('td', { class: 'n' }, h == null ? '—' : `$${h.toFixed(1)}m`)), el('td', { class: 'n' }, `$${r.penalty.toFixed(1)}m`), el('td', { class: 'n' }, r.yrs), el('td', {}, ...r.tags.map(t => el('span', { class: 'badge-sm', style: 'margin-right:4px' }, t))),
     el('td', {}, r.restructurable > 0.5 ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => openPreview(r) }, 'Restructure') : '')));
   ledger.append(el('div',{class:'report-table-scroll'},tbl), el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#personnel/extensions' }, 'Extensions')));

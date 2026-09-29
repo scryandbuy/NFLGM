@@ -2553,3 +2553,32 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .personnel-board .talkline .talk-state{font:400 11px/1.4 var(--text);color:var(--ink-2);min-width:0}
 .personnel-board .talkline .go{font:600 11px var(--text);white-space:nowrap;margin:0;text-align:right}
 .personnel-board .talkline:hover{background:#ffffff06}
+/* OWNER / STAFF / CAP polish: scoped to Front Office. */
+.fo-board .fo-review-link{display:inline-flex;justify-self:start;width:max-content;max-width:100%;margin-top:24px;padding:6px 13px;border-radius:20px;font:600 12px var(--text)}
+.fo-board .scard{display:flex;flex-direction:column}
+.fo-board .scard>.acts{margin-top:auto;padding-top:20px}
+.fo-board .scard>.kv{margin-bottom:16px}
+.fo-board .scard .role{min-height:36px}
+.fo-board .scard .nm{min-height:48px}
+.fo-staff-traits{display:flex;flex-wrap:nowrap!important;gap:4px;min-width:0;overflow-x:auto;align-items:center;padding:3px 0 7px}
+.fo-staff-traits .trait{flex:none;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.fo-board .kv>.fo-staff-traits{grid-column:1/-1}
+.fo-board [data-tip]:hover::after,.fo-coach-dialog [data-tip]:hover::after{display:none!important}
+.fo-tooltip{position:fixed;z-index:1200;max-width:min(280px,calc(100vw - 16px));padding:9px 12px;border:1px solid var(--rule-hi);border-radius:5px;background:var(--ink);color:#111;font:500 14px/1.45 var(--text);box-shadow:0 6px 22px #0006;pointer-events:none;overflow-wrap:anywhere;box-sizing:border-box}
+.fo-coach-dialog{width:min(920px,95vw);max-height:92vh;padding:0;margin:auto;color:var(--ink);font-family:var(--text)}
+.fo-coach-dialog::backdrop{background:#000b;backdrop-filter:blur(7px)}
+.fo-coach-body{padding:24px;display:grid;gap:18px}
+.fo-coach-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;padding-bottom:20px;border-bottom:1px solid var(--rule)}
+.fo-coach-summary small{display:block;font:600 10px var(--text);color:var(--ink-3);letter-spacing:.07em}
+.fo-coach-summary b{display:block;font-size:26px;margin-top:8px}
+.fo-coach-body .count{margin:0;color:var(--ink-3);font-size:13px}
+.fo-coach-body .acts{display:flex;gap:8px;flex-wrap:wrap}
+.fo-coach-body .btn{width:auto}
+.fo-coach-body .fo-interview-log{max-height:260px;overflow:auto;padding:0}
+.fo-coach-offer{margin:0!important;padding:18px!important}
+.fo-coach-offer .offer{display:grid!important;grid-template-columns:1fr 1fr!important;gap:16px}
+.fo-coach-ask{align-self:center;color:var(--club-2);font-weight:700}
+.fo-coach-offer .read:empty{display:none}
+@media(max-width:600px){.fo-coach-body{padding:16px}.fo-coach-summary{grid-template-columns:1fr 1fr}.fo-coach-offer .offer{grid-template-columns:1fr!important}}
+
+.fo-coach-dialog .btn.go{color:var(--team-ink)!important}
