@@ -1619,7 +1619,7 @@ function renderIdentity(v) {
   if (!mis.length) mbox.append(el('div', { class: 'empty' }, 'Nobody grades badly in this identity.'));
   s.append(mbox);
   s.append(el('div', { class: 'read', style: 'margin:0 14px 12px' }, el('b', {}, 'Assistants: '), el('span', {}, pv ? pv.say : v.say)));
-  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn', disabled: mis.length ? null : '', onclick: () => { tradeState = { other: tradeState.other, a: [mis[0].pid], b: [], keep: true }; location.hash = '#personnel/trades'; } }, 'Trade Block a Misfit'), el('button', { class: 'btn quiet', onclick: e => { const h = document.getElementById('idhist'); h.hidden = !h.hidden; } }, 'Identity History')));
+  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn quiet', onclick: () => { const h = document.getElementById('idhist'); h.hidden = !h.hidden; } }, 'Identity History')));
   const h = el('div', { class: 'histlist', id: 'idhist', hidden: '', style: 'margin:0 14px 14px' }); for (const x of v.history.slice().reverse()) h.append(el('div', {}, el('time', {}, `${x.year} W${x.week ?? 0}`), el('span', {}, x.change))); if (!v.history.length) h.append(el('div', {}, el('time', {}, '—'), el('span', {}, 'The identity you inherited.')));
   s.append(h); page.append(s);
 }
