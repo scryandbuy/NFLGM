@@ -2004,7 +2004,7 @@ function renderDraftDay(v) {
   const cur = v.current;
   const left = el('section', { class: 'sheet c8 draft-surface draft-clock' });
   // the clock
-  left.append(el('div', { class: 'clockhead' }, crest(cur.team, 44), el('div', {}, el('div', { class: 'big' }, v.on_user ? 'You Are On the Clock' : `${cur.team.name} Is On the Clock`), el('div', { class: 'sub' }, `Round ${cur.round} · Pick ${cur.sel}` + (cur.needs && cur.needs.length ? ` · Needs ${cur.needs.join(', ')}` : ''))),
+  left.append(el('div', { class: 'clockhead' }, el('div', { class: 'draft-clock-emblem', role: 'img', 'aria-label': cur.team.name, style: `--clock-team:${teamTheme(cur.team).base};--clock-accent:${teamTheme(cur.team).accent}` }, cur.team.abbr), el('div', {}, el('div', { class: 'big' }, v.on_user ? 'You Are On the Clock' : `${cur.team.name} Is On the Clock`), el('div', { class: 'sub' }, `Round ${cur.round} · Pick ${cur.sel}` + (cur.needs && cur.needs.length ? ` · Needs ${cur.needs.join(', ')}` : ''))),
     el('div', { class: 'yours' }, v.mine_next.length ? el('div', {}, el('div', { class: 'big', style: 'font-size:20.5px' }, `You Pick ${v.mine_next[0].sel}${ord(v.mine_next[0].sel)}`), el('div', { class: 'sub' }, v.on_user ? 'Now' : v.picks_away === 1 ? 'One Pick Away' : v.picks_away != null ? `${['Two', 'Three', 'Four', 'Five', 'Six', 'Seven'][v.picks_away - 2] || v.picks_away} Picks Away` : '')) : el('div', { class: 'sub' }, 'No picks left'))));
   left.append(el('div', { class: 'ctrl2', style: 'padding:0 14px 10px' },
     el('button', { class: 'btn', disabled: v.on_user ? '' : null, onclick: () => act('sim_pick_one') }, 'Next Pick'),

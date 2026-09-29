@@ -2668,6 +2668,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .draft-spring .sprow{display:grid;grid-template-columns:70px minmax(0,1fr);gap:16px;align-items:start;padding:14px 5px;border-bottom:1px solid #ffffff12;font:400 13px/1.5 var(--text)}
 .draft-spring .sprow .flag{width:max-content;margin:0}
 .draft-clock .clockhead{background:linear-gradient(105deg,color-mix(in srgb,var(--team-base) 43%,#10191e),#10191e);border-bottom:1px solid #ffffff1a;padding:24px}
+.draft-clock-emblem{width:54px;height:54px;flex:0 0 54px;display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--clock-team) 45%,#57646b);border-top:3px solid var(--clock-accent);border-radius:8px;background:color-mix(in srgb,var(--clock-team) 65%,#10191e);color:#fff;font:800 18px/1 var(--text);letter-spacing:.02em;box-shadow:inset 0 1px 0 #ffffff08}
 .draft-clock .clockhead .big{font:800 25px var(--text);letter-spacing:-.025em}.draft-clock .clockhead .sub{font:400 12px var(--text);color:#a7bec8;margin-top:5px}
 .draft-clock .ctrl2{padding:16px 20px!important;flex-wrap:wrap}
 .draft-round-pager{margin-left:auto;display:inline-flex;gap:8px;align-items:center;white-space:nowrap}
