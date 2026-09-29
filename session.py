@@ -63,6 +63,7 @@ class Session:
         SC.scout(L, rng)
         s = cls(L, rng, team)
         s.stop = ('cutdown',)
+        for t in L.teams.values(): t.phase = 'season'
         try: GW.post_report(L, 1)
         except Exception: pass
         return s
@@ -83,7 +84,8 @@ class Session:
         s.votes = s._recorded_votes()
         if d.get('_week_book') is not None: L.week_book = d['_week_book']
         s.stop = tuple(d.get('_stop', ['week', 1]))
-        if s.stop[0] == 'wire':
+        if (s.stop[0] in ('cutdown', 'wire') or
+                (s.stop[0] == 'offseason' and s.OFFSEASON[s.stop[1]][1] == 'step_cutdown')):
             for t in L.teams.values(): t.phase = 'season'
         s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
         if d.get('_runner_state'):
@@ -419,6 +421,16 @@ class Session:
                 out.append(dict(id=existing.get('id'), subject=subj, kind='roster', go=('#club' if n > self.ROSTER_MAX else '#personnel/fa')))
             elif existing is not None:
                 existing['status'] = 'done'
+        team = self.L.teams.get(self.user_team)
+        if team is not None and getattr(team, 'cap', None) is not None:
+            team.sync_cap()
+            # Cutdown must fit all contracts before its full-roster ledger
+            # takes effect; earlier offseason stops retain top-51 accounting.
+            cap_phase = 'season' if offseason_cutdown or self.stop[0] in ('cutdown', 'wire') else team.phase
+            over = team.cap.charges(cap_phase) - team.cap.limit
+            if over > .0005:
+                out.append(dict(id=None, kind='cap', go='#frontoffice/cap',
+                                subject=f'You are ${over:.2f}m over the cap: restructure or release players before advancing'))
         for m in getattr(self.L, 'inbox', []):
             if IB.is_decision(m):
                 if m.get('kind') == 'trade_offer' or (m.get('payload') or {}).get('poach') or (m.get('kind') == 'offer_sheet' and m.get('team') == self.user_team):
@@ -434,9 +446,9 @@ class Session:
 
     def advance(self):
         # References follow a successful calendar action, not football week numbers.
-        sheets = [b for b in self.blocking() if b['kind'] == 'offer_sheet']
-        if sheets:
-            return dict(done='Blocked', next=self.next_label(), why=sheets[0]['subject'])
+        blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap')]
+        if blocks:
+            return dict(done='Blocked', next=self.next_label(), why=blocks[0]['subject'])
         result = self._advance()
         if result.get('done') != 'Blocked':
             STF.resolve_references(self.L, advanced=True)
@@ -1010,6 +1022,9 @@ class Session:
         if self.stop[0] != 'offseason': return
         self._skip_empty_offseason_waivers()
         name = self.OFFSEASON[self.stop[1]][1]
+        if name == 'step_cutdown':
+            for t in self.L.teams.values(): t.phase = 'season'
+            return
         if name == 'step_waivers_1':
             WV.notify_user(self.L, WV.pending(self.L), 0, digest=True)
             return

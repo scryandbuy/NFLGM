@@ -2783,7 +2783,7 @@ async function advanceInner() {
   // a block stops the click: a roster over 53 or under 46 sends you to fix it; a decision opens it
   const blocks = pyJSON('SESSION.blocking()');
   if (blocks.length && blocks[0].kind === 'live') { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); return; }
-  if (blocks.length) { const b = blocks[0]; notify({ ok: false, why: `Blocked: ${b.subject}. ${b.kind === 'roster' ? 'Fix the roster first.' : 'Answer it (or decline) to advance.'}` }); busy(`Blocked: ${b.subject}`); setTimeout(() => busy(null), 4000); renderRail(pyJSON('SESSION.portal()').rail); if (b.go) location.hash = b.go; else if (b.id != null) location.hash = `#portal/inbox/${b.id}`; return; }
+  if (blocks.length) { const b = blocks[0]; notify({ ok: false, why: `Blocked: ${b.subject}. ${b.kind === 'cap' ? 'Open Cap to choose your contract moves.' : b.kind === 'roster' ? 'Fix the roster first.' : 'Answer it (or decline) to advance.'}` }); busy(`Blocked: ${b.subject}`); setTimeout(() => busy(null), 4000); renderRail(pyJSON('SESSION.portal()').rail); if (b.go) location.hash = b.go; else if (b.id != null) location.hash = `#portal/inbox/${b.id}`; return; }
   const adv = $('#advance'); adv.disabled = true; const wasSim = /^Sim Week/.test(view.rail.advance.title); busy(view.rail.advance.title + '…');
   await new Promise(r => setTimeout(r, 30));
   let r = null;

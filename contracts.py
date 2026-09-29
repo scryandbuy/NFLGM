@@ -121,7 +121,7 @@ def enforce(league, rng, verbose=False, target=0.5, roster_target=None):
     twenty-first man and with nothing forcing it to free up the room.
     """
     """
-    THE BACKSTOP. No club ends a phase over the cap.
+    THE AI BACKSTOP. The user must fix his own cap before advancing.
 
     An AI general manager never makes a decision without the cap in it, but
     decisions still compound - a team signs three men it could each afford and
@@ -139,6 +139,8 @@ def enforce(league, rng, verbose=False, target=0.5, roster_target=None):
     floor = MS.minimum_salary(2, cap)
     stuck = []
     for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None):
+            continue  # The user's cap decisions are enforced by the calendar gate.
         team.sync_cap()
         need = target
         if roster_target:
@@ -185,6 +187,8 @@ def _fix_one(league, team, rng, target):
     The old version reworked one deal per pass for three passes and then
     started cutting, which is how Seattle went from $73m over to 25 men.
     """
+    if team.abbr == getattr(league, 'user_team', None):
+        return
     import min_salary as MS
     cap = CAP.get(league.year, 301.2)
     depth = getattr(team.gm, 'restructure_depth', 0.5) if team.gm else 0.5
@@ -248,13 +252,15 @@ def _fix_one(league, team, rng, target):
 
 def run(league, rng, verbose=False):
     """
-    Get every club under the cap. Cuts first, then restructures, then June 1
+    Get AI clubs under the cap. Cuts first, then restructures, then June 1
     designations if a team is still stuck.
     """
     cap = CAP.get(league.year, 301.2)
     cuts, restructures = [], []
 
     for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None):
+            continue
         team.sync_cap()
         need = TARGET_ROOM - team.cap_space
         if need <= 0:
