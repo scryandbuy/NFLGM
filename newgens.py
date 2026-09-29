@@ -18,15 +18,18 @@ does it, physicals moving at the square root of the scale. Nothing is
 invented about how a corner's ratings hang together. Height and weight ride
 along.
 
-NAMES. Drawn from a pool of 7,000 first names and 8,000 surnames built from
-both seeds, first and last drawn independently, so they read like a real
-class and no name belongs to a real man.
+NAMES. First names and surnames are drawn independently from the renamed
+seeds. Current players and a draft class cannot share a full name. A generated
+name can return after fifteen years, at most twice in a forty-year window.
+The history travels with the save; original source full names stay excluded.
 
 WHEN. The class for NEXT year's draft is generated in the offseason right
 after this year's draft, and scouted then, so it is on the scouting tab
 through the preseason and the season that follows.
 """
 import numpy as np, pandas as pd, collections
+import csv, hashlib, json, math, unicodedata
+from functools import lru_cache
 import targets as TG
 import draft_class as DC
 
@@ -50,25 +53,97 @@ def _name_pools(cfb_path='cfb27_ratings.csv', seed_path='league_seed_2026.csv'):
     return first, last
 
 
-_POOLS = None
+NAME_REUSE_GAP = 15
+NAME_REUSE_WINDOW = 40
+NAME_REUSE_LIMIT = 2
 
 
-_REAL = None
+def normalize_name(value):
+    """Treat case, accents, punctuation and spacing variants as one name."""
+    return ''.join(c for c in unicodedata.normalize('NFKD', str(value)).casefold() if c.isalnum())
 
 
-def name(rng):
-    """An invented name that is not any real man's in either seed."""
-    global _POOLS, _REAL
-    if _POOLS is None:
-        _POOLS = _name_pools()
-        c = pd.read_csv('cfb27_ratings.csv', low_memory=False, usecols=['first_name', 'last_name'])
-        _REAL = set((c.first_name + ' ' + c.last_name).dropna())
-    first, last = _POOLS
-    for _ in range(20):
-        n = f"{first[int(rng.integers(len(first)))]} {last[int(rng.integers(len(last)))]}"
-        if n not in _REAL:
-            return n
-    return n
+def name_history(league):
+    """Merge saved reservations with known players; also upgrades older saves.
+
+    Player IDs distinguish legitimate repeats without counting a player again
+    whenever a new class is created or a save is loaded. Removed players remain
+    in the saved history, so deletion cannot bypass the reuse limits.
+    """
+    history = {normalize_name(key): {str(pid): int(year) for pid, year in people.items()}
+               for key, people in getattr(league, 'player_name_history', {}).items()}
+    for p in league.players.values():
+        key = normalize_name(p.name)
+        year = getattr(p, 'draft_year', None) or getattr(p, 'entry_year', None) or league.year
+        history.setdefault(key, {}).setdefault(str(p.pid), int(year))
+    return history
+
+
+@lru_cache(maxsize=8)
+def _name_catalog(cfb_path='cfb27_ratings.csv'):
+    first, last = _name_pools(cfb_path=cfb_path)
+    # Hashes retain the original-source exclusion after source names are replaced.
+    with open('original_player_name_hashes.json', encoding='utf-8') as handle:
+        blocked = set(json.load(handle))
+    for path in (cfb_path, 'league_seed_2026.csv', 'free_agent_pool.csv'):
+        with open(path, encoding='utf-8-sig', newline='') as handle:
+            for row in csv.DictReader(handle):
+                full = row.get('full_name') or (row.get('first_name', '') + ' ' + row.get('last_name', ''))
+                blocked.add(hashlib.sha256(normalize_name(full).encode()).hexdigest())
+    return first, last, blocked
+
+
+class NameAllocator:
+    """One class's allocator: reserve immediately, persist history, never return a collision."""
+    def __init__(self, league, draft_year, cfb_path='cfb27_ratings.csv'):
+        self.league, self.year = league, int(draft_year)
+        self.first, self.last, self.blocked = _name_catalog(cfb_path)
+        if not self.first or not self.last:
+            raise ValueError('Newgen name pools are empty')
+        self.history = league.player_name_history = name_history(league)
+        self.current = {normalize_name(p.name) for p in league.players.values() if not p.retired}
+        # A coprime stride visits every unique pair once. This is a bounded
+        # fallback when repeated random draws collide, not an unchecked last try.
+        self.unique_first = sorted({normalize_name(n): n for n in self.first}.values())
+        self.unique_last = sorted({normalize_name(n): n for n in self.last}.values())
+        self.capacity = len(self.unique_first) * len(self.unique_last)
+        self.stride = max(1, int(self.capacity * .61803398875))
+        while math.gcd(self.stride, self.capacity) != 1:
+            self.stride += 1
+
+    def available(self, value):
+        key = normalize_name(value)
+        if key in self.current or hashlib.sha256(key.encode()).hexdigest() in self.blocked:
+            return False
+        years = list(self.history.get(key, {}).values())
+        return (not years or (self.year - max(years) >= NAME_REUSE_GAP
+                and sum(y > self.year - NAME_REUSE_WINDOW for y in years) < NAME_REUSE_LIMIT))
+
+    def reserve(self, value, pid):
+        key = normalize_name(value)
+        self.current.add(key)
+        self.history.setdefault(key, {})[str(pid)] = self.year
+        return value
+
+    def draw(self, rng, pid):
+        # Exactly two simulation RNG draws per name, including collisions.
+        value = f'{self.first[int(rng.integers(len(self.first)))]} {self.last[int(rng.integers(len(self.last)))]}'
+        if self.available(value):
+            return self.reserve(value, pid)
+        cursor = int(getattr(self.league, 'newgen_name_cursor', 0))
+        for _ in range(self.capacity):
+            index = (cursor * self.stride) % self.capacity
+            cursor += 1
+            self.league.newgen_name_cursor = cursor
+            first, last = divmod(index, len(self.unique_last))
+            value = f'{self.unique_first[first]} {self.unique_last[last]}'
+            if self.available(value):
+                return self.reserve(value, pid)
+        raise RuntimeError('No eligible newgen names remain; expand the name pools')
+
+
+def name(rng, league, draft_year, pid, allocator=None):
+    return (allocator or NameAllocator(league, draft_year)).draw(rng, pid)
 
 
 def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
@@ -77,6 +152,7 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
     college = DC.load_college(cfb_path)
     college = college[college.school_year.isin(DC.CLASS_AGE)]
     rookies = DC.rookie_targets()
+    names = NameAllocator(league, draft_year, cfb_path)
     class_shift = float(rng.normal(0.0, STRENGTH_SD_CLASS))
     out = []; strength = {}
     for pos, n in DC.COUNTS.items():
@@ -100,7 +176,8 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
             row = ranked.iloc[int(rng.integers(lo, max(lo + 1, hi)))]
             ratings, _ = DC.convert(row, pos, curve[i])
             age = (22.0 if rng.random() < 0.68 else 21.0) + float(rng.uniform(0.1, 0.9))
-            p = LG.Player(f"N{draft_year}{pos}{i:03d}", name(rng), pos, age, ratings,
+            pid = f"N{draft_year}{pos}{i:03d}"
+            p = LG.Player(pid, name(rng, league, draft_year, pid, names), pos, age, ratings,
                           dev=DC.draw_dev(i / max(n - 1, 1), rng, pos=pos),
                           draft_year=draft_year, entry_year=draft_year)
             headroom = rng.uniform(2.0, 4.5) + max(0.0, 28.0 - age) * rng.uniform(0.35, 1.15)
