@@ -2006,12 +2006,14 @@ h2{letter-spacing:-.01em}
   padding-left:7px;padding-right:7px}
 .player-card .schemes .sch.mine{outline:1px solid var(--pc-accent);outline-offset:-1px}
 .player-card .contract,.player-card .stab{width:100%;border-collapse:collapse;font-size:12px}
+.player-card .contract{table-layout:fixed}
 .player-card .contract th,.player-card .stab th{color:var(--ink-3);font-size:10px;letter-spacing:.06em;
   text-transform:uppercase;text-align:left;padding:7px 4px;border-bottom:1px solid var(--rule-2)}
 .player-card .contract th{text-align:right}
 .player-card .contract th:first-child{text-align:left}
 .player-card .contract td,.player-card .stab td{padding:8px 4px;color:var(--ink-2);
   border-bottom:1px solid var(--rule)}
+.player-card .contract td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .player-card .contract tr.now td{color:var(--pc-accent-ink);background:color-mix(in srgb,var(--pc-accent) 12%,var(--sheet-2));font-weight:700}
 .player-card .body>div:last-child .kv{margin-top:12px !important}
 .player-card .tiles{background:var(--board);border-top:1px solid var(--rule-2);border-radius:0 0 11px 11px;padding:18px;gap:10px}

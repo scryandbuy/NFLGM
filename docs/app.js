@@ -187,10 +187,10 @@ function renderInbox(v) {
   const cur = rows.find(r => r.id === mailSel) || null;
   const messageTools = el('div',{class:'inbox-message-tools'},
     el('button', { class: 'btn', disabled: cur && cur.unread ? null : '', onclick: () => { pyJSON(`SESSION.inbox_read(${cur.id})`); reload(); } }, 'Mark Read'),
-    el('button', { class: 'btn', disabled: cur && !cur.decide ? null : '', 'data-tip': 'Remove this message', onclick: () => { notify(pyJSON(`SESSION.inbox_delete(${cur.id})`)); mailSel = null; reload(); } }, 'Delete'));
+    el('button', { class: 'btn', disabled: cur && !cur.decide ? null : '', title: 'Remove this message', onclick: () => { notify(pyJSON(`SESSION.inbox_delete(${cur.id})`)); mailSel = null; reload(); } }, 'Delete'));
   tools.append(el('span',{class:'inbox-tool-space'}),
     el('button', { class: 'btn quiet', onclick: () => { pyJSON('SESSION.inbox_mark_all()'); reload(); } }, 'Mark All Read'),
-    el('button', { class: 'btn quiet', 'data-tip': 'Remove every read message that needs no decision', onclick: () => { if (confirm('Clear every read message that needs no decision?')) { pyJSON('SESSION.inbox_clear_read()'); mailSel = null; reload(); } } }, 'Clear Read'));
+    el('button', { class: 'btn quiet', title: 'Remove every read message that needs no decision', onclick: () => { if (confirm('Clear every read message that needs no decision?')) { pyJSON('SESSION.inbox_clear_read()'); mailSel = null; reload(); } } }, 'Clear Read'));
   s.append(tools);
   const box = el('div', { class: 'mailbox' });
   const list = el('div', { class: 'list' });
@@ -745,7 +745,7 @@ function renderCard(v) {
     el('div', { class: 'jersey', style: `background:${col}` }, jerseyNo(v.no) ?? v.pos),
     el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
       el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.age}${v.size ? ' · ' + v.size : ''}${v.college ? ' · ' + v.college : ''}${v.season_no ? ` · ${v.season_no}${ord(v.season_no)} season` : ''} · ${v.draft}` + (v.team ? ` · ${v.team.name}` : ' · Free agent')),
-      el('div', { class: 'hfacts' }, ...(v.free_agent ? [el('div', {}, el('span', {}, 'Status'), el('b', {}, v.on_wire ? 'On the wire' : 'Free agent')), el('div', {}, el('span', {}, 'Market'), el('b', {}, v.market_apy != null ? `~$${v.market_apy}m per year` : ''))] : [el('div', {}, el('span', {}, `Cap Hit ${v.rail.year}`), el('b', {}, `$${v.contract.hit.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Penalty'), el('b', { title: cutPenaltyText(v.contract) }, `$${v.contract.penalty.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Trade Interest'), el('b', { style: 'color:var(--ink-2)' }, v.interest))]))),
+      el('div', { class: 'hfacts' }, ...(v.free_agent ? [el('div', {}, el('span', {}, 'Status'), el('b', {}, v.on_wire ? 'On the wire' : 'Free agent')), el('div', {}, el('span', {}, 'Market'), el('b', {}, v.market_apy != null ? `~$${v.market_apy}m per year` : ''))] : [el('div', {}, el('span', {}, `Cap Hit ${v.rail.year}`), el('b', {}, `$${v.contract.hit.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Penalty'), el('b', { title: cutPenaltyText(v.contract) }, `$${v.contract.penalty.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Trade Value'), el('b', { style: 'color:var(--ink-2)' }, v.interest))]))),
     el('div', { class: 'ovrbig' }, el('b', {}, v.ovr), el('span', {}, 'Overall · Scheme Fit ', el('strong', { class: 'fit-change ' + (v.fit >= 0 ? 'positive' : 'negative') }, `${v.fit >= 0 ? '+' : ''}${v.fit.toFixed(1)}`)))));
   // tabs and actions
   const tabs = el('div', { class: 'ctabs' });
@@ -766,6 +766,17 @@ function renderCard(v) {
   acts.append(el('button', { class: 'btn quiet', onclick: () => history.back() }, 'Back'));
   tabs.append(acts); s.append(tabs);
   const h5 = (t, sub) => el('div', { class: 'h5' }, t, sub ? el('span', {}, sub) : '');
+  const contractTable = style => {
+    const ct = el('table', { class: 'contract', style: style || '' });
+    ct.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Base'), el('th', {}, 'Bonus'), el('th', {}, 'Cap Hit'), el('th', {}, 'Penalty')));
+    v.contract.by_year.forEach((y, i) => ct.append(el('tr', { class: i === 0 ? 'now' : '' },
+      el('td', {}, y.year), el('td', {}, y.base != null ? `$${y.base.toFixed(1)}m` : '—'),
+      el('td', {}, y.bonus != null ? `$${y.bonus.toFixed(1)}m` : '—'),
+      el('td', {}, `$${y.hit.toFixed(1)}m`),
+      el('td', { title: y.penalty != null ? cutPenaltyText(y, y.year) : '' },
+        y.penalty != null ? `$${y.penalty.toFixed(1)}m` : '—'))));
+    return ct;
+  };
   if (cardTab === 'Overview') {
     const left = el('div', {});
     left.append(h5('Positions'));
@@ -787,7 +798,7 @@ function renderCard(v) {
     mid.append(attrs);
     const right = el('div', {});
     right.append(h5('Contract'));
-    if (v.contract.by_year.length) { const ct = el('table', { class: 'contract' }); ct.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Base'), el('th', {}, 'Bonus'), el('th', {}, 'Cap Hit'), el('th', {}, 'Penalty'))); v.contract.by_year.forEach((y, i) => ct.append(el('tr', { class: i === 0 ? 'now' : '' }, el('td', {}, y.year), el('td', {}, y.base != null ? `$${y.base.toFixed(1)}m` : '—'), el('td', {}, y.bonus != null ? `$${y.bonus.toFixed(1)}m` : '—'), el('td', {}, `$${y.hit.toFixed(1)}m`), el('td', { title: y.penalty != null ? cutPenaltyText(y, y.year) : '' }, y.penalty != null ? `$${y.penalty.toFixed(1)}m${y.penalty_next ? ` + $${y.penalty_next.toFixed(1)}m next yr` : ''}` : '—')))); right.append(ct); }
+    if (v.contract.by_year.length) right.append(contractTable());
     right.append(el('div', { class: 'kv', style: 'margin-top:8px' }, el('span', {}, 'Market'), el('span', {}, v.market_apy != null ? `About $${v.market_apy}m per year` : '—'), el('span', {}, 'Extension'), el('span', {}, v.ext_eligible ? `Eligible${v.ext_ask != null ? ` · agent's ask ~$${v.ext_ask}m` : ''}` : 'Not yet eligible')));
     if (!v.free_agent) right.append(h5('Trade Value', "the scout's read"), el('div', { class: 'kv' }, el('span', {}, 'Market'), el('span', {}, v.market), el('span', {}, 'Interest'), el('span', {}, v.interest_line)));
     s.append(el('div', { class: 'body' }, left, mid, right));
@@ -799,7 +810,7 @@ function renderCard(v) {
     s.append(tiles);
   } else if (cardTab === 'Contract') {
     const box = el('div', { class: 'pad' }, h5('Contract'));
-    if (v.contract.by_year.length) { const ct = el('table', { class: 'contract', style: 'max-width:620px' }); ct.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Base'), el('th', {}, 'Bonus'), el('th', {}, 'Cap Hit'), el('th', {}, 'Penalty'))); v.contract.by_year.forEach((y, i) => ct.append(el('tr', { class: i === 0 ? 'now' : '' }, el('td', {}, y.year), el('td', {}, y.base != null ? `$${y.base.toFixed(1)}m` : '—'), el('td', {}, y.bonus != null ? `$${y.bonus.toFixed(1)}m` : '—'), el('td', {}, `$${y.hit.toFixed(1)}m`), el('td', { title: y.penalty != null ? cutPenaltyText(y, y.year) : '' }, y.penalty != null ? `$${y.penalty.toFixed(1)}m${y.penalty_next ? ` + $${y.penalty_next.toFixed(1)}m next yr` : ''}` : '—')))); box.append(ct); }
+    if (v.contract.by_year.length) box.append(contractTable('max-width:620px'));
     else box.append(el('div', { class: 'empty' }, 'No contract on file.'));
     box.append(el('div', { class: 'kv', style: 'margin-top:12px;max-width:620px' }, el('span', {}, 'Market'), el('span', {}, v.market_apy != null ? `About $${v.market_apy}m per year` : '—'), el('span', {}, 'Extension'), el('span', {}, v.ext_eligible ? `Eligible${v.ext_ask != null ? ` · agent's ask ~$${v.ext_ask}m` : ''}` : 'Not yet eligible'), el('span', {}, 'Penalty if cut now'), el('span', {}, cutPenaltyText(v.contract))));
     s.append(box);
@@ -2042,7 +2053,7 @@ let picksClub = 'mine', picksYear = null, picksYearFor = null, picksQuery = '';
 function renderPicks(v) {
   renderRail(v.rail); const page = persPage(); drSecond('picks');
   page.className = 'draft-page';
-  featureHero(page, v.rail.club, `Draft / ${v.rail.year}`, 'YOUR PICKS', 'What you own, what you moved, and where you pick next.', [[v.years.reduce((a, y) => a + y.picks.length, 0), 'Picks held'], [v.years.length, 'Drafts']]);
+  featureHero(page, v.rail.club, `Draft / ${v.rail.year}`, 'YOUR PICKS', 'What you own and where you pick next.', [[v.years.reduce((a, y) => a + y.picks.length, 0), 'Picks held'], [v.years.length, 'Drafts']]);
   const s = el('section', { class: 'sheet c12 draft-surface draft-picks' }, el('h2', {}, 'Your Picks', el('small', {}, `${v.years.reduce((a, y) => a + y.picks.length, 0)} picks over ${v.years.length} drafts`), el('button', { class: 'btn', style: 'margin-left:auto;width:auto', 'data-tip': 'Copy the last draft, every pick and trade, as text', onclick: function () { const r = pyJSON(`SESSION.draft_view('draft_text')`); if (!r.ok) { notify(r); return; } copyText(r.text, this); } }, 'Copy Draft'),
     el('button', { class: 'btn', style: 'width:auto', 'data-tip': 'Download the last draft as a spreadsheet: every pick with every attribute of every player', onclick: () => { const r = pyJSON(`SESSION.draft_view('draft_csv')`); if (!r.ok) { notify(r); return; } const blob = new Blob([r.text], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = r.name; document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); } }, 'Download Draft'),
     el('button', { class: 'btn', style: 'width:auto', 'data-tip': "Download the coming class as a spreadsheet: every prospect's true numbers beside your room's read", onclick: () => { const r = pyJSON(`SESSION.draft_view('class_csv')`); if (!r.ok) { notify(r); return; } const blob = new Blob([r.text], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = r.name; document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); } }, 'Download Class')));
@@ -2050,7 +2061,6 @@ function renderPicks(v) {
   for (const y of v.years) {
     const box = el('div', { class: 'ybox' }, el('h4', {}, y.this_draft ? `${y.year} Draft · this season's` : `${y.year} Draft`));
     for (const p of y.picks) box.append(el('div', { class: 'pkrow' }, el('span', { class: 'rd' }, `R${p.round}`), el('div', { class: 'nm' }, p.slot + (p.frm ? ` (From ${p.frm})` : ''), el('small', {}, p.note || ''))));
-    for (const g of v.gone.filter(g => g.year === y.year)) box.append(el('div', { class: 'pkrow gone' }, el('span', { class: 'rd' }, `R${g.round}`), el('div', { class: 'nm' }, `${g.round}${ord(g.round)} · To ${g.holder.name}`, el('small', {}, g.note || ''))));
     yrs.append(box);
   }
   s.append(yrs);

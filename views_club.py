@@ -234,27 +234,23 @@ def card(session, league, pid):
     tr = getattr(p, 'transition', None)
     pending = f"Learning {tr.get('to')} · {tr.get('games_left')} games left" if tr and tr.get('games_left', 0) > 0 else 'None pending'
     # the market and the extension ask
-    market_apy = None; ext_ask = None
+    market_apy = None; market_quote = None; ext_ask = None
     try:
         import valuation as VAL
-        mv = VAL.value_player(league, p, side='buyer'); market_apy = round(float(mv['apy']), 1) if mv and mv.get('apy') else None
+        # Pin the comp window so revisiting a card does not redraw its market.
+        market_quote = VAL.value_player(league, p, side='team')
+        market_apy = round(float(market_quote['apy']), 1) if market_quote and market_quote.get('apy') else None
     except Exception: pass
     try:
         import extensions as EXT
         if _ext_ok(league, p):
             tm = EXT.terms(league, p, np.random.default_rng(stable_seed(p.pid))); ext_ask = round(float(tm['ask']), 1) if tm else None
     except Exception: pass
-    # trade interest in words, from the market read
-    interest = 'Low'
-    try:
-        import valuation as VAL
-        v = VAL.value_player(league, p, side='buyer')
-        if v and v.get('apy'): interest = 'High' if p.ovr >= 84 and p.age <= 29 else 'Moderate' if p.ovr >= 76 else 'Low'
-    except Exception: pass
+    # The card's pick range must use the same player/pick prices as Trades.
+    interest, market = _market_words(league, p, market_quote)
     S = league.stats.get(league.year, {}).get(p.pid, {}) or {}
     m = getattr(p, 'morale', None)
     # trade value in the scout's words: what the market would pay, and who has asked
-    market = _market_words(league, p, interest)
     asks = [x for x in getattr(league, 'inbox', []) if x.get('kind') == 'trade_offer' and (x.get('payload') or {}).get('gets') and p.pid in [str(a) for a in (x.get('payload') or {}).get('gets', [])]]
     interest_line = (f"{len(asks)} club{'s' if len(asks) != 1 else ''} have asked about him this season." if asks else 'No club has called about him this season.')
     # development: the season's movement and the XP he holds
@@ -293,12 +289,39 @@ def card(session, league, pid):
                              hurt=(p.out_until is not None), on_ir=(t is not None and any(q.pid == p.pid for q in (getattr(t, 'ir', None) or [])))))
 
 
-def _market_words(league, p, interest):
-    role = 'a starter' if p.ovr >= 78 else 'a rotation piece' if p.ovr >= 72 else 'a depth player'
-    age = 'in his prime' if 25 <= p.age <= 29 else 'still coming' if p.age < 25 else 'on the back half' if p.age <= 32 else 'near the end'
-    deal = 'on a fair deal' if p.contract and p.apy <= max(1.5, p.ovr / 10) else 'on a heavy deal' if p.contract else 'without a contract'
-    price = {'High': 'Clubs with a hole at the spot would pay a first-round pick and more.', 'Moderate': 'A second- or third-round pick is the range.', 'Low': 'A late pick, or a swap of depth.'}[interest]
-    return f"{role.capitalize()} {age} {deal}. {price}"
+def _market_words(league, p, quote):
+    """A scout-sized summary of the same dollar prices the trade engine uses."""
+    if not quote or not quote.get('apy') or not p.contract:
+        return '—', 'No trade market read available.'
+    import trade_engine as TE
+    cap = float(getattr(getattr(league.teams.get(p.team), 'cap', None), 'cap', TE.CAP))
+    row = dict(age=p.age, apy=p.apy, ovr=p.ovr,
+               contract_years_left=p.contract_years_left, madden_position=p.pos)
+    value = TE.trade_value(row, quote, cap=cap)
+    first = TE.pick_price_dollars(16, cap=cap)
+    late_first = TE.pick_price_dollars(32, cap=cap)
+    second = TE.pick_price_dollars(48, cap=cap)
+    third = TE.pick_price_dollars(80, cap=cap)
+    if value >= 2 * first:
+        label, price = 'Multiple 1sts', 'A package built around multiple first-round picks is the range.'
+    elif value >= first:
+        label, price = '1st +', 'A first-round pick plus another asset is the range.'
+    elif value >= late_first:
+        label, price = '1st', 'A first-round pick is in range.'
+    elif value >= second:
+        label, price = '2nd', 'A second-round pick is in range.'
+    elif value >= third:
+        label, price = '3rd', 'A third-round pick is in range.'
+    elif value > 0:
+        label, price = 'Late pick', 'A later pick or a depth swap is the range.'
+    else:
+        label, price = 'Salary offset', 'His contract may need a salary offset to move.'
+    role = 'an elite starter' if p.ovr >= 88 else 'a starter' if p.ovr >= 78 else 'a rotation piece' if p.ovr >= 72 else 'a depth player'
+    age = int(p.age)
+    stage = 'still coming' if age < 25 else 'in his prime' if age <= 29 else 'on the back half' if age <= 32 else 'near the end'
+    ratio = p.apy / max(float(quote['apy']), 0.1)
+    deal = 'on a favorable deal' if ratio < 0.80 else 'on a market-level deal' if ratio <= 1.15 else 'on a costly deal'
+    return label, f"{role.capitalize()} {stage} {deal}. {price}"
 
 
 def _morale_line(p):

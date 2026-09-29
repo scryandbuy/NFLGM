@@ -561,15 +561,6 @@ def picks(session, league, abbr):
         elif pk.original == abbr: note = '' if not proj or pk.selection else f"Projected {max(1, proj - 2)}{_ordd(max(1, proj - 2))}–{min(32, proj + 2)}{_ordd(min(32, proj + 2))}"
         else: note = ''
         years.setdefault(pk.year, []).append(dict(round=pk.round, slot=(SLOT(pk) if pk.selection else (f"{pk.round}.{proj}" if proj and pk.year == coming_season(league) else f"{pk.round}{_ordd(pk.round)}")), original=pk.original, own=(pk.original == abbr), via=(None if pk.original == abbr else club(pk.original)), frm=(None if pk.original == abbr else pk.original), note=note))
-    # picks of ours held by others
-    gone = []
-    for other, ot in league.teams.items():
-        if other == abbr: continue
-        for pk in ot.picks:
-            if pk.original == abbr and not pk.used_on:
-                prov = (getattr(league, 'pick_provenance', None) or {}).get(f"{pk.year}-{pk.round}-{pk.original}")
-                gone.append(dict(year=pk.year, round=pk.round, slot=SLOT(pk), holder=club(other), note=f"To {club(other)['name']}" + (f" · {prov['how']}" if prov else '')))
-    gone.sort(key=lambda g: (g['year'], g['round']))
     ld = getattr(league, 'last_draft', None)
     # draft results across years: every drafted man on record with where he was taken, what he was and is, and his role now
     results = []
@@ -583,13 +574,12 @@ def picks(session, league, abbr):
                             division=(league.teams[x['team']].division if x.get('team') in league.teams else None), ovr=round(p.ovr), drafted_at=(round(float(x['ovr_then'])) if x.get('ovr_then') is not None else None), cons_was=x.get('consensus_rank'), status=role, now=(club(p.team) if p.team in league.teams else None)))
     results.sort(key=lambda r: (-(r['year'] or 0), r['sel'] or 999))
     from views import draft_year
-    for g_ in gone: g_['year'] = draft_year(g_['year'])
     # WHICH DRAFT THE RESULTS TAB OPENS ON. The draft held this offseason, if it has been; otherwise the coming
     # draft, which has no results yet and says so, with the past drafts on the year chips. Without this the tab
     # opened on last year's draft all through the new season as if it were this year's.
     held_this_offseason = _held_this_offseason(league)
     default_year = draft_year_of(ld['year']) if held_this_offseason else draft_year_of(coming_season(league))
-    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], gone=gone, last=(_results(league, ld) if (ld and held_this_offseason) else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division,
+    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], last=(_results(league, ld) if (ld and held_this_offseason) else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division,
                 default_year=default_year, default_held=held_this_offseason)
 
 
