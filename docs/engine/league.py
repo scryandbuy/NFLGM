@@ -702,7 +702,10 @@ class League:
         """a_sends / b_sends: lists of pid or DraftPick. Refuses, rather than
         half-executes, if any man is not where the deal says he is."""
         for item, src in [(x, a) for x in a_sends] + [(x, b) for x in b_sends]:
-            if not isinstance(item, DraftPick):
+            if isinstance(item, DraftPick):
+                if item.owner != src or item.used_on or not any(q is item for q in self.teams[src].picks):
+                    raise ValueError(f'trade: pick is no longer available from {src}')
+            else:
                 p = self.player(item)
                 if p is None or p.team != src or p not in self.teams[src].roster:
                     raise ValueError(f'trade: {item} is not on {src}')

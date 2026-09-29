@@ -43,6 +43,53 @@ def eligible(p, league):
     return True
 
 
+def rookie_option_price(league, p):
+    """The fixed fifth-year salary for an eligible first-round rookie."""
+    if (p is None or p.team is None or p.contract is None or p.draft_round != 1
+            or p.contract.years != 1 or p.draft_year is None
+            or league.year != p.draft_year + 3
+            or p.xp_spent.get('_fifth_year_option')):
+        return None
+    import tags as TAG
+    cap = CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.07)
+    return round(0.8 * TAG.tag_price(p, cap), 3)
+
+
+def exercise_rookie_option(league, pid, by_ai=False):
+    p = league.player(pid)
+    price = rookie_option_price(league, p)
+    if price is None:
+        return dict(ok=False, why='the fifth-year option is not available')
+    team = league.teams[p.team]
+    if price > next_year_room(team, CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.07)):
+        return dict(ok=False, why='the fifth-year salary will not fit next year’s cap')
+    p.contract.years += 1
+    p.contract.base.append(price)
+    p.contract.rb.append(0.0)
+    p.xp_spent['_fifth_year_option'] = league.year
+    team.sync_cap()
+    league.log('rookie_option', pid=p.pid, team=p.team, price=price, ai=by_ai)
+    return dict(ok=True, price=price, line=f"{p.name}'s fifth-year option is exercised at ${price:.1f}m.")
+
+
+def ai_rookie_options(league):
+    """AI clubs keep valuable first-rounders when the option fits the books."""
+    import valuation as VAL
+    done = []
+    for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None):
+            continue
+        for p in team.active():
+            price = rookie_option_price(league, p)
+            if price is None or p.ovr < 74:
+                continue
+            value = VAL.value_player(league, p, side='buyer')
+            if value and float(value.get('apy', 0)) >= price * 0.8:
+                if exercise_rookie_option(league, p.pid, by_ai=True)['ok']:
+                    done.append((abbr, p.pid, price))
+    return done
+
+
 def honors_premium(league, p):
     """An agent prices the hardware: a major award in the last two seasons adds 12%, a first-team All-Pro 6%, a
     second team 3%, the best two counted, capped at 20%."""

@@ -207,9 +207,13 @@ class Session:
             import sys; print('history backfill failed:', e, file=sys.stderr)
         if d.get('_draft_live'):
             import draft_day as DD
-            s.draft = DD.Draft(s.L, s.rng, d['_draft_live']['year'], user_team=s.user_team, auto_pick=False)
-            s.draft.taken = set(pid for pid in d['_draft_live']['taken'] if pid in s.L.players)
-            s.draft.results = [(sel, t, s.L.players[pid]) for sel, t, pid in d['_draft_live']['results'] if pid in s.L.players]
+            live = d['_draft_live']
+            s.draft = DD.Draft(s.L, s.rng, live['year'], user_team=s.user_team, auto_pick=live.get('auto', False))
+            s.draft.taken = set(pid for pid in live['taken'] if pid in s.L.players)
+            s.draft.results = [(sel, t, s.L.players[pid]) for sel, t, pid in live['results'] if pid in s.L.players]
+            s.draft.trades = [tuple(x) for x in live.get('trades', [])]
+            s.draft.dealt = {frozenset(x) for x in live.get('dealt', [])}
+            s.draft.last_dealt = live.get('last_dealt')
         return s
 
     def save(self):
@@ -246,7 +250,12 @@ class Session:
             p = self.post
             d['_post'] = dict(champion=p.champion, year=getattr(p, 'year', None), finalists=dict(p.finalists or {}), games=[list(g) for g in (p.games or [])],
                               seeds=(getattr(p, 'seeds_at_close', None) if getattr(p, 'seeds_at_close', None) is not None else (p.r.seeds() if getattr(p, 'r', None) is not None else {})))
-        d['_draft_live'] = dict(year=self.draft.year, taken=sorted(self.draft.taken), results=[(sel, t, p.pid) for sel, t, p in self.draft.results]) if self.draft_live() else None
+        d['_draft_live'] = (dict(year=self.draft.year, taken=sorted(self.draft.taken),
+                                 results=[(sel, t, p.pid) for sel, t, p in self.draft.results],
+                                 trades=[list(x) for x in self.draft.trades],
+                                 dealt=[sorted(x) for x in self.draft.dealt],
+                                 last_dealt=self.draft.last_dealt, auto=self.draft.auto)
+                            if self.draft_live() else None)
         return json.dumps(d, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
 
     def live_journal(self):
@@ -515,7 +524,11 @@ class Session:
             return self._close_playoffs()
         i = self.stop[1]
         if self.draft_live():
-            self.draft.auto = True; self.draft.sim_all(); self._draft_over()
+            self.draft.auto = True; self.draft.sim_all()
+            if not self.draft.done:
+                self.draft.auto = False
+                return dict(done='Your draft board has no eligible player', next=self.next_label())
+            self._draft_over()
         else:
             getattr(self, self.OFFSEASON[i][1])()
             # TRADES ARE NOT A STEP. The clubs deal with each other whenever the window is open: a light pass at every
@@ -910,7 +923,7 @@ class Session:
         L, rng = self.L, self.rng
         MO.check_resolutions(L, week=None); MO.clear_free_agents(L); prune_pool(L, rng)
         MO.offseason_requests(L, rng); MO.offseason_reset(L); MO.offseason_contracts(L, rng)
-        EXT.ai_round(L, rng); EXT.notify_user(L)
+        EXT.ai_rookie_options(L); EXT.ai_round(L, rng); EXT.notify_user(L)
         TG.run(L, rng); CT.enforce(L, rng)
 
     # ---- FREE AGENCY AS STAGES. Each round is a stop on the calendar: it opens (the AI clubs' bids are lodged, your
@@ -1009,7 +1022,14 @@ class Session:
         D = self.draft
         if D is None: return
         if not D.done: D._finish()
-        self.L.last_draft = dict(year=D.year, results=[(s, t, p.pid) for s, t, p in D.results], trades=len(D.trades), trade_log=[list(x) for x in D.trades])
+        user_views = (getattr(self.L, 'scouting', None) or {}).get(self.user_team, {})
+        consensus = getattr(self.L, 'consensus', None) or {}
+        snapshot = {p.pid: dict(cons_rank=(consensus.get(p.pid) or {}).get('rank'),
+                                cons_ovr=(consensus.get(p.pid) or {}).get('ovr'),
+                                user_ovr=(user_views.get(p.pid) or {}).get('ovr'))
+                    for _, _, p in D.results}
+        self.L.last_draft = dict(year=D.year, results=[(s, t, p.pid) for s, t, p in D.results],
+                                 trades=len(D.trades), trade_log=[list(x) for x in D.trades], scouting=snapshot)
         # the draft cycle's user state ends with the draft: the thirty visits and their timing, and the board
         # (ranks and do-not-draft) all name players who are now on rosters; left in place they carried into the
         # next class as visits already 'spoken for' and board entries for drafted players

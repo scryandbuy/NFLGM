@@ -80,7 +80,9 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
     class_shift = float(rng.normal(0.0, STRENGTH_SD_CLASS))
     out = []; strength = {}
     for pos, n in DC.COUNTS.items():
-        templates = college[college.pos == pos]
+        # The college data has no LS position; centers provide the snapping,
+        # awareness and blocking profile for new long snappers.
+        templates = college[college.pos == ('C' if pos == 'LS' else pos)]
         if templates.empty:
             continue
         n = min(n, len(templates))

@@ -33,7 +33,7 @@ import targets as TG
 COUNTS = {'QB': 30, 'HB': 30, 'WR': 30, 'TE': 30, 'LEDG': 30, 'REDG': 30, 'DT': 30,
           'MIKE': 30, 'WILL': 30, 'SAM': 30, 'CB': 30,
           'LT': 20, 'LG': 20, 'C': 20, 'RG': 20, 'RT': 20, 'FS': 20, 'SS': 20,
-          'K': 3, 'P': 3, 'FB': 3}          # a real class carries a handful of each; the rest come undrafted
+          'K': 3, 'P': 3, 'LS': 3, 'FB': 3}  # specialist depth enters mostly as undrafted rookies
 POS_MAP = {'LE': 'LEDG', 'RE': 'REDG', 'MLB': 'MIKE', 'ROLB': 'WILL', 'LOLB': 'SAM'}
 ATTR_MAP = {
     'acceleration_rating': 'accel_rating', 'b_c_vision_rating': 'bcv_rating',
@@ -82,7 +82,7 @@ def shape_class(cls, rng=None):
         p.dev = draw_dev(i / max(n - 1, 1), r_, pos=p.pos)
     for p in cls:
         if p.pos in ('K', 'P', 'LS'): p.dev = draw_dev(0.5, r_, pos=p.pos)          # specialists: normal or star, off the class ladder
-    men = sorted([p for p in cls if p.pos not in ('K', 'P')], key=lambda p: -p.ovr)
+    men = sorted([p for p in cls if p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.ovr)
     xs = np.array([r for r, _ in SHAPE], float); ys = np.array([v for _, v in SHAPE], float)
     for i, p in enumerate(men):
         rank = i + 1
@@ -243,7 +243,10 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
     year = draft_year or (league.year + 1)
     out = []
     for pos, n in COUNTS.items():
-        grp = d[d.pos == pos].sort_values('overall_rating', ascending=False).head(n)
+        # The college file has no long-snapper label. Use the next centers as
+        # distinct specialist profiles, then rate them on the LS scale.
+        source = d[d.pos == ('C' if pos == 'LS' else pos)].sort_values('overall_rating', ascending=False)
+        grp = source.iloc[COUNTS['C']:COUNTS['C'] + n] if pos == 'LS' else source.head(n)
         src = PROXY.get(pos, pos)
         rk = rookies.get(src, []) if src else []
         if pos in FALLBACK_MEAN: rk = [FALLBACK_MEAN[pos]] * 2
@@ -251,7 +254,7 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
         for i, (_, row) in enumerate(grp.iterrows()):
             ratings, college_ovr = convert(row, pos, curve[i])
             age = CLASS_AGE[row.school_year] + float(rng.uniform(0.1, 0.9))
-            p = LG.Player(f"C{int(row['id'])}", f"{row.first_name} {row.last_name}".strip(), pos,
+            p = LG.Player(f"C{int(row['id'])}{'LS' if pos == 'LS' else ''}", f"{row.first_name} {row.last_name}".strip(), pos,
                           age, ratings, dev=draw_dev(i / max(n - 1, 1), rng, pos=pos),
                           draft_year=year, entry_year=year)
             # the seed's own headroom rule, on the engine's overall

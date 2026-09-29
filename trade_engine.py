@@ -277,6 +277,10 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
         v = pick_belief_dollars(asset['pick'], asset.get('years_out', 0),
                                 lens=g['pick_lens'])
         v *= max(0.75, WINDOW_PICK_BIAS[wdw] * (1.25 - 0.45*g['aggression']))
+        # On the clock a buyer may value this exact selection above an
+        # interchangeable chart pick because his target will be gone later.
+        if not owns:
+            v *= float(asset.get('draft_target_premium', 1.0))
         return v
     # the owner values him on the full contract he is paying; a buyer on the
     # base and roster bonus he would inherit, the bonus having been paid

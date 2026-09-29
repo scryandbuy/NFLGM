@@ -110,8 +110,11 @@ def second_look(view, p, sd, rng, weight=1.0, R=None, team=None):
     n = view.get('reads', 1)
     view['cert'] = float(np.clip(float(view.get('cert', CERT_START_TOP) or 0.0) + cert_gain(team, weight), 0.0, CERT_MAX))
     draw_s = float(rng.normal(0.0, sd * (1 - PHYS_SHARE) ** 0.5)) * R['skill_mult'] + R['skill_bias']; draw_p = float(rng.normal(0.0, sd * CEILING_MULT)) * R['pot_mult'] + R['pot_bias']
-    view['e_skill'] = (view['e_skill'] * n + draw_s * weight) / (n + weight)
-    view['e_pot'] = float(np.clip((view['e_pot'] * n + draw_p * weight) / (n + weight), -POT_ERR_CAP, POT_ERR_CAP))
+    # _refresh derives the displayed errors from these baselines. Update the
+    # baselines with the new evidence; changing e_skill/e_pot directly would
+    # be discarded by _refresh on this very call.
+    view['e_skill0'] = (float(view.get('e_skill0', view['e_skill'])) * n + draw_s * weight) / (n + weight)
+    view['e_pot0'] = float(np.clip((float(view.get('e_pot0', view['e_pot'])) * n + draw_p * weight) / (n + weight), -POT_ERR_CAP, POT_ERR_CAP))
     view['reads'] = n + weight
     _refresh(view, p)
 
@@ -234,7 +237,7 @@ def _rank(league, pool, cons):
         ps.sort(key=lambda p: -grade_of[p.pid])
         for i, p in enumerate(ps):
             by_rank = DRAFT.expected_slot(p.pos, i)
-            if p.pos in ('K', 'P', 'FB'):
+            if p.pos in ('K', 'P', 'LS', 'FB'):
                 slot[p.pid] = by_rank
             else:
                 slot[p.pid] = 0.5 * by_rank + 0.5 * DRAFT.grade_slot(grade_of[p.pid], grades_desc)

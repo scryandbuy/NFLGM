@@ -231,8 +231,17 @@ def through_buyer_eyes(asset, buyer, seller):
 
 
 def pick_asset(league, pk, need=False):
+    # Picks name the season that earned them. The league has already rolled
+    # forward when that season's draft is held, so the upcoming pick can be
+    # one season behind league.year throughout the pre-draft offseason.
+    base_year = int(league.year)
+    closed = getattr(league, 'season_closed_year', None)
+    last = getattr(league, 'last_draft', None) or {}
+    if (league.phase in ('offseason', 'free_agency') and closed is not None
+            and int(closed) == base_year - 1 and int(last.get('year', -1)) < base_year - 1):
+        base_year -= 1
     return dict(kind='pick', pick=pk.selection or (pk.round - 1) * 32 + 16,
-                years_out=max(0, pk.year - league.year), need=need,
+                years_out=max(0, pk.year - base_year), need=need,
                 age=22, apy=0.0, trade_value=0.0, obj=pk)
 
 

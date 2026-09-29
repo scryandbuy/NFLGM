@@ -97,6 +97,8 @@ def senior_bowl(league, rng):
     pool = _pool(league); cons = league.consensus or {}
     seniors = [p for p in pool if p.age >= 22.0]
     invited = sorted(seniors, key=lambda p: cons.get(p.pid, {}).get('rank', 9999))[:SENIOR_BOWL]
+    for p in invited:
+        p.xp_spent['_senior_bowl'] = league.year
     looks = 0
     for abbr, team in league.teams.items():
         sd = SC.error_sd(team.gm, team)
@@ -164,7 +166,7 @@ def visits(league, rng):
 
 def _medical(league, abbr, team, p, rng):
     """A visit uncovers a medical risk: the room's doctors read the injury history and the room marks him down."""
-    if p.pos in ('K', 'P'): return                         # durability is not a draft question on a specialist
+    if p.pos in ('K', 'P', 'LS'): return                     # durability is not a draft question on a specialist
     med = getattr(p, 'medical', None)
     inj = float(p.ratings.get('injury_rating', 80))
     cut = float((med or {}).get('cut', 70.0))
@@ -202,7 +204,11 @@ def run_spring(league, rng, verbose=False):
     league.spring_news = []
     if not getattr(league, 'consensus', None): SC.consensus(league)
     n_c, m_c = combine(league, rng)
-    n_s, m_s = senior_bowl(league, rng)
+    # The interactive calendar already staged the Senior Bowl after the
+    # conference championships. The one-shot franchise runner reaches it here.
+    pool = _pool(league)
+    already_held = any(p.xp_spent.get('_senior_bowl') in (league.year, league.year - 1) for p in pool)
+    n_s, m_s = (0, []) if already_held else senior_bowl(league, rng)
     n_p, m_p = pro_days(league, rng)
     n_v, m_v = visits(league, rng)
     out = dict(combine=n_c, senior_bowl_looks=n_s, pro_day_looks=n_p, visit_looks=n_v,

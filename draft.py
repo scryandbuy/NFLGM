@@ -7,11 +7,10 @@ read each GM builds a board the way the research says rooms do:
   - present versus ceiling: dev_belief weights the ceiling up, a hot seat
     weights the present up (career concerns bend the draft toward the near
     term)
-  - position: premium spots (QB above all, then tackle, edge, receiver,
-    interior DL, corner) carry a bonus inside the first hundred picks that
-    fades after; backs, linebackers, safeties and interior line are
-    discounted there. Need matters most at the discounted spots and least
-    at the premium ones, which is the real pattern
+  - position: the position slot curves give quarterbacks, tackles, edges,
+    receivers and corners earlier expected selections than specialists and
+    low-demand spots; a whole-class grade check stops weak position groups
+    from being pulled up by their within-position rank alone
   - need: the gap between his starters at a spot and the league's, weighted
     by how far he is from a pure best-available drafter (board_trust) and by
     how much having a need inflates a player for him (need_inflation)
@@ -21,10 +20,9 @@ read each GM builds a board the way the research says rooms do:
 
 Picks run in the order postseason.set_draft_order wrote onto the pick
 objects, seven rounds, the owner of the pick choosing. A pick has a slotted
-four-year deal by selection. Whoever is left is an undrafted free agent and
-goes to the pool cut-down fills from.
-
-Not here yet: draft-day pick trades. Clubs pick in place.
+four-year deal by selection; first-round contracts carry an exercisable
+fifth-year option. Whoever is left is an undrafted free agent and goes to
+the pool cut-down fills from. Draft-day trades live in draft_day.py.
 """
 import numpy as np, collections
 import targets as TG
@@ -38,7 +36,7 @@ PREMIUM = {'QB': 1.22, 'LT': 1.10, 'RT': 1.08, 'LEDG': 1.10, 'REDG': 1.10, 'WR':
            'CB': 1.05, 'TE': 0.96, 'LG': 0.96, 'RG': 0.96, 'C': 0.97, 'FS': 0.94, 'SS': 0.94,
            'MIKE': 0.92, 'WILL': 0.92, 'SAM': 0.92, 'HB': 0.90, 'FB': 0.70, 'K': 0.60, 'P': 0.60}
 # a club does not draft a third quarterback in round two, or a kicker when it has one
-POS_CAP_EARLY = {'QB': 1, 'K': 1, 'P': 1, 'FB': 1}
+POS_CAP_EARLY = {'QB': 1, 'K': 1, 'P': 1, 'LS': 1, 'FB': 1}
 
 # the slotted scale, share of the cap (2026 real: pick 1 about 3.5%, pick 32
 # about 1.1%, round 2 0.85 down to 0.55, round 3 about 0.4, rounds 4-7 near
@@ -140,7 +138,7 @@ SLOT = {
     'LB':   [22, 40, 60, 80, 100, 125, 150, 175, 200, 225, 250],
     'S':    [25, 45, 65, 85, 105, 130, 155, 180, 205, 230],
     'CB':   [7, 14, 22, 32, 44, 56, 70, 85, 100, 120, 140, 165, 190, 215, 240],
-    'K':    [150, 200, 240], 'P': [160, 210, 245], 'FB': [230, 250],
+    'K':    [150, 200, 240], 'P': [160, 210, 245], 'LS': [235, 265, 300], 'FB': [230, 250],
 }
 SLOT_GROUP = {'LT': 'T', 'RT': 'T', 'LG': 'IOL', 'RG': 'IOL', 'C': 'IOL',
               'LEDG': 'EDGE', 'REDG': 'EDGE', 'MIKE': 'LB', 'WILL': 'LB', 'SAM': 'LB',
@@ -211,9 +209,10 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None):
     def grade(p, v):
         return (1 - w_pot) * v['ovr'] + w_pot * (v['pot_lo'] + v['pot_hi']) / 2
     # the club grades him for what it runs; the room's board stays raw
-    from gm_engine import scheme_fit
-    my_grade = {p.pid: grade(p, mine[p.pid]) + scheme_fit(p.ratings, p.pos, team) for p in left}
+    my_grade = {p.pid: grade(p, mine[p.pid]) + SC.scheme_fit_view(league, abbr, p, mine[p.pid]) for p in left}
     cons_grade = {p.pid: 0.6 * cons[p.pid]['ovr'] + 0.4 * cons[p.pid]['pot'] for p in left}
+    my_grades_desc = sorted(my_grade.values())
+    cons_grades_desc = sorted(cons_grade.values())
     # rank within position group, mine and the room's, then blend the ranks
     groups = collections.defaultdict(list)
     for p in left: groups[SLOT_GROUP.get(p.pos, p.pos)].append(p)
@@ -229,11 +228,18 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None):
         gone = sum(1 for pid in taken if SLOT_GROUP.get(league.players[pid].pos, league.players[pid].pos) == g)
         for p in ps:
             r = trust * my_rank[p.pid] + (1 - trust) * cons_rank[p.pid]
-            slot = expected_slot(p.pos, gone + r)
+            position_slot = expected_slot(p.pos, gone + r)
+            if p.pos in ('K', 'P', 'LS', 'FB'):
+                slot = position_slot
+            else:
+                class_slot = (trust * grade_slot(my_grade[p.pid], my_grades_desc)
+                              + (1 - trust) * grade_slot(cons_grade[p.pid], cons_grades_desc))
+                slot = 0.5 * position_slot + 0.5 * class_slot
             # NEED pulls him up the board: a 12-point hole is worth about 30
             # slots to a pure-need drafter, a few to a board man
             gap = need.get(p.pos, 0.0)
-            slot -= gap * (0.6 + 2.0 * (1 - trust)) * (0.5 + inflate)
+            need_pull = gap * (0.6 + 2.0 * (1 - trust)) * (0.5 + inflate)
+            slot -= min(18.0 if selection <= 100 else 32.0, max(0.0, need_pull))
             # a hot seat wants the older, readier man
             slot -= heat * (p.age - 21.5) * 6.0
             if p.pos in POS_CAP_EARLY and len(d.get(p.pos, [])) >= POS_CAP_EARLY[p.pos]:

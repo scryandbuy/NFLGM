@@ -70,8 +70,6 @@ def _prospect(league, abbr, p, taken=()):
     scheme_ovr = round(float(v['ovr']) + fit)
     comb = getattr(p, 'combine', None) or {}
     flags = list(v.get('flags') or [])
-    med = getattr(p, 'medical', None)
-    if med and isinstance(med, dict) and med.get('flag'): flags.append(med['flag'])
     import scouting as SC
     # the words the board shows for what the room knows
     words = []
@@ -80,12 +78,12 @@ def _prospect(league, abbr, p, taken=()):
     visit_move = None
     if pre and 'visited' in flags:
         visit_move = dict(mine_from=round(float(pre.get('ovr', 0) or 0)), ceiling_from=f"{round(float(pre.get('lo', 0) or 0))}–{round(float(pre.get('hi', 0) or 0))}", rank_from=pre.get('rank'))
-    if p.xp_spent.get('_senior_bowl') == league.year: words.append('Senior Bowl')
+    if p.xp_spent.get('_senior_bowl') in (league.year, league.year - 1): words.append('Senior Bowl')
     _when = getattr(league, 'user_visit_week', None) or {}
     visit_locked = bool(p.pid in (getattr(league, 'user_visits', None) or []) and _when.get(p.pid) != f"{league.year}-{league.week}-{league.phase}")
     if getattr(p, 'age', 22) >= 22 and any(x.get('pid') == p.pid and x.get('event') == 'Senior Bowl' for x in (getattr(league, 'spring_news', None) or [])): words.append('Sr. Bowl')
     if 'character' in flags: words.append('Character')
-    if 'medical' in flags or (med and isinstance(med, dict) and med.get('flag')): words.append('Medical')
+    if 'medical' in flags: words.append('Medical')
     if not SC._power(p): words.append('Small School')
     if getattr(p, 'age', 22) < 21.5: words.append('Underclassman')
     mv = next((x for x in reversed(getattr(league, 'spring_news', None) or []) if x.get('pid') == p.pid and x.get('kind') == 'stock'), None)
@@ -258,7 +256,6 @@ def prospect_card(session, league, abbr, pid):
     mental = dict(title='Mental', rows=col(VC.ATTR['mental'], e_skill), extra=None)
     comb = getattr(p, 'combine', None) or {}
     combine = [dict(label=l, v=(f"{comb[k]:.2f}" if k in ('forty', 'shuttle') and comb.get(k) is not None else (f"{comb[k]:.1f}\"" if k == 'vertical' and comb.get(k) is not None else (str(comb[k]) if comb.get(k) is not None else '—')))) for k, l in (('forty', 'Forty'), ('vertical', 'Vertical'), ('bench', 'Bench'), ('shuttle', 'Shuttle'))]
-    med = getattr(p, 'medical', None) or {}
     ub = getattr(league, 'user_board', None) or {}
     on_board = (ub.get('order') or []).index(p.pid) + 1 if p.pid in (ub.get('order') or []) else None
     reads = int(view.get('reads', 1) or 1)
@@ -267,7 +264,8 @@ def prospect_card(session, league, abbr, pid):
     words = PT.words(getattr(p, 'traits', None) or {}) if getattr(p, 'traits', None) and 'Character' in row['words'] else ''
     return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], fit=row.get('fit', 0.0), scheme_ovr=row.get('scheme_ovr'), college=row['college'], conference=getattr(p, 'conference', None) or '',
                 small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
-                words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine, medical=(med.get('note') or ('Flagged out of the combine' if med.get('flag') else 'Clean')),
+                words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine,
+                medical=('Concern found at visit' if 'medical' in (view.get('flags') or []) else 'No concern found at visit' if 'visited' in (view.get('flags') or []) else 'Unknown until visit'),
                 on_clock=bool(getattr(session, 'draft', None) is not None and not session.draft.done and session.draft.on_user() and not taken_now),
                 schemes=VC.scheme_rows(seen_ratings, p.pos, VC._club_arch(league, abbr, p.pos)),
                 reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality=words, spring_done=_spring_done(league),
@@ -369,16 +367,16 @@ def act_sim_round(session, league, abbr):
 
 def act_trade_up(session, league, abbr, target, sends):
     """Buy a pick ahead of yours: the target pick (id) for the picks you send (ids), priced by its owner."""
-    import views_personnel as VP
     D = session.draft
     if D is None: return dict(ok=False, why='no draft on')
     pk = None
     for q in D.picks[D.i:]:
         if f"{q.year}-{q.round}-{q.original}" == target: pk = q; break
     if pk is None or pk.owner == abbr: return dict(ok=False, why='that pick is not on the board')
-    r = VP.act_propose(league, abbr, pk.owner, list(sends), [target])
+    seller = pk.owner
+    r = session.personnel_act('propose', other=seller, a_sends=list(sends), b_sends=[target])
     if r.get('done'):
-        return dict(ok=True, done=False, line=f"Traded up to {SLOT(pk)} with {pk.owner}." + (' You are on the clock.' if D.on_user() else ''))
+        return dict(ok=True, done=False, line=f"Traded up to {SLOT(pk)} with {seller}." + (' You are on the clock.' if D.on_user() else ''))
     return dict(ok=True, done=False, line=r.get('why', 'They passed.'))
 
 
@@ -465,7 +463,11 @@ def _results(league, ld):
     out = []
     for s, t, pid in ld['results']:
         p = league.player(pid)
-        out.append(dict(sel=s, slot=f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1}", team=club(t), name=(p.name if p else pid), pos=(p.pos if p else ''), mine=(t == getattr(league, 'user_team', None))))
+        snap = (ld.get('scouting') or {}).get(pid) or {}
+        rank = snap.get('cons_rank') or ((getattr(league, 'consensus', None) or {}).get(pid) or {}).get('rank')
+        out.append(dict(sel=s, slot=f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1}", team=club(t), pid=pid,
+                        name=(p.name if p else pid), pos=(p.pos if p else ''), cons_rank=rank,
+                        mine=(t == getattr(league, 'user_team', None))))
     return dict(year=__import__('views').draft_year(ld['year']), rows=out, trades=ld.get('trades', 0))
 
 
@@ -474,6 +476,7 @@ def act_pick(session, league, abbr, pid):
     if D is None or not D.on_user(): return dict(ok=False, why='not your pick')
     try: ev = D.make_pick(pid)
     except ValueError as e: return dict(ok=False, why=str(e))
+    session._draft_offers = []
     p = ev[3]; line = f"You take {p.name}, {p.pos}, at {ev[1]}."
     if D.done: session._draft_over(); return dict(ok=True, line=line + ' The draft is over.', done=True)
     return dict(ok=True, line=line, done=False)
@@ -502,8 +505,8 @@ def act_auto_pick(session, league, abbr):
     """Take the top of your own board at this pick, then sim to your next."""
     D = session.draft
     if D is None or not D.on_user(): return dict(ok=False, why='not your pick')
-    rows = D.board_for(abbr)
-    return act_pick(session, league, abbr, rows[0][1].pid)
+    p = D.user_pick()
+    return act_pick(session, league, abbr, p.pid) if p else dict(ok=False, why='Every available prospect is on Do Not Draft')
 
 
 def act_sim_draft(session, league, abbr):
@@ -513,7 +516,11 @@ def act_sim_draft(session, league, abbr):
 def act_finish_auto(session, league, abbr):
     D = session.draft
     if D is None: return dict(ok=False, why='no draft on')
-    D.auto = True; D.sim_all(); session._draft_over()
+    D.auto = True; D.sim_all()
+    if not D.done:
+        D.auto = False
+        return dict(ok=False, why='Every available prospect is on Do Not Draft; choose a player to continue')
+    session._draft_over()
     return dict(ok=True, line='The rest of the draft ran on auto.', done=True)
 
 
@@ -528,10 +535,13 @@ def act_offers(session, league, abbr):
 
 def act_accept_offer(session, league, abbr, i):
     D = session.draft; offers = getattr(session, '_draft_offers', None) or []
-    if D is None or not D.on_user() or int(i) >= len(offers): return dict(ok=False, why='that offer is gone')
+    if D is None or not D.on_user() or not 0 <= int(i) < len(offers): return dict(ok=False, why='that offer is gone')
     o = offers[int(i)]
+    if o['asks'][0] is not D.current() or o['asks'][0].used_on:
+        session._draft_offers = []
+        return dict(ok=False, why='that offer was for an earlier pick')
     ev = D.accept_offer(o)
-    if ev is None: return dict(ok=False, why='The trade no longer fits under the cap')
+    if ev is None: return dict(ok=False, why='The offer is no longer available on these terms')
     session._draft_offers = []
     D.sim_to_user()
     if D.done: session._draft_over(); return dict(ok=True, line='Traded. The draft is over.', done=True)
@@ -597,20 +607,25 @@ def draft_text(session, league, abbr):
     D = getattr(session, 'draft', None)
     rows = []
     if D is not None and not D.done:
-        results = list(getattr(D, 'results', [])); trades = list(getattr(D, 'trades', [])); year = D.year
+        results = [(s, t, p.pid) for s, t, p in D.results]; trades = list(D.trades); year = D.year
     elif ld:
         results = [tuple(x) for x in ld.get('results', [])]; trades = ld.get('trade_log', []) or []; year = ld['year']
     else:
         return dict(ok=False, text='', why='no draft has been run yet')
     cons = getattr(league, 'consensus', None) or {}
+    snapshot = (ld or {}).get('scouting') or {} if D is None or D.done else {}
     from views import draft_year
     lines = [f"{draft_year(year)} Draft"]
     for s, t, pid in results:
         p = league.player(pid)
         c = cons.get(pid, {}) or {}
+        old = snapshot.get(pid) or {}
         v = ((getattr(league, 'scouting', None) or {}).get(abbr) or {}).get(pid) or {}
-        mine = f"{round(float(v.get('ovr')))}" if v.get('ovr') else '—'
-        lines.append(f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d} ({s:3d}) {t:3s} {p.name if p else pid} · {p.pos if p else '?'} · {p.college if p else ''} · consensus #{c.get('rank', '—')} ({round(float(c.get('ovr', 0) or 0)) if c.get('ovr') else '—'}) · your read {mine} · age {int(p.age) if p else '—'}" + (f" · {p.ovr:.0f} ovr now" if p and p.team else ''))
+        read = old.get('user_ovr') if old else v.get('ovr')
+        mine = f"{round(float(read))}" if read is not None else '—'
+        cr = old.get('cons_rank') if old else c.get('rank')
+        co = old.get('cons_ovr') if old else c.get('ovr')
+        lines.append(f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d} ({s:3d}) {t:3s} {p.name if p else pid} · {p.pos if p else '?'} · {p.college if p else ''} · consensus #{cr if cr is not None else '—'} ({round(float(co)) if co is not None else '—'}) · your read {mine} · age {int(p.age) if p else '—'}" + (f" · {p.ovr:.0f} ovr now" if p and p.team else ''))
     if trades:
         lines.append(''); lines.append('Trades on the clock')
         for tr in trades:
@@ -626,12 +641,13 @@ def draft_csv(session, league, abbr):
     ld = getattr(league, 'last_draft', None)
     D = getattr(session, 'draft', None)
     if D is not None and not D.done:
-        results = list(getattr(D, 'results', [])); year = D.year
+        results = [(s, t, p.pid) for s, t, p in D.results]; year = D.year
     elif ld:
         results = [tuple(x) for x in ld.get('results', [])]; year = ld['year']
     else:
         return dict(ok=False, why='no draft has been run yet')
     cons = getattr(league, 'consensus', None) or {}
+    snapshot = (ld or {}).get('scouting') or {} if D is None or D.done else {}
     from views import draft_year
     attrs = sorted({k for _s, _t, pid in results for k in ((league.player(pid).ratings if league.player(pid) else {}) or {}) if k.endswith('_rating')})
     labels = {}
@@ -643,9 +659,13 @@ def draft_csv(session, league, abbr):
     for s, t, pid in results:
         p = league.player(pid)
         c = cons.get(pid, {}) or {}
+        old = snapshot.get(pid) or {}
         v = ((getattr(league, 'scouting', None) or {}).get(abbr) or {}).get(pid) or {}
+        cr = old.get('cons_rank') if old else c.get('rank')
+        co = old.get('cons_ovr') if old else c.get('ovr')
+        read = old.get('user_ovr') if old else v.get('ovr')
         base = [s, (s - 1) // 32 + 1, f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d}", t, (p.name if p else pid), (p.pos if p else ''), (int(p.age) if p else ''), (p.college if p else ''),
-                c.get('rank', ''), (round(float(c['ovr'])) if c.get('ovr') else ''), (round(float(v['ovr'])) if v.get('ovr') else ''), (round(float(p.ovr)) if p else ''), (VC.DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), getattr(p, 'dev', '')) if p else '')]
+                cr if cr is not None else '', (round(float(co)) if co is not None else ''), (round(float(read)) if read is not None else ''), (round(float(p.ovr)) if p else ''), (VC.DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), getattr(p, 'dev', '')) if p else '')]
         rows.append(base + [(round(float(p.ratings.get(k, 0))) if p else '') for k in attrs])
     def cell(x):
         x = '' if x is None else str(x)

@@ -5,8 +5,8 @@ The draft is a state the interface steps through: sim_pick, sim_to_user,
 sim_round, sim_all, make_pick. Nothing happens until a button is pressed.
 When an AI club is on the clock it first decides whether to move, then picks
 off its own board (draft.board). When the user's club is on the clock the
-draft stops and waits, unless auto-pick is on, in which case the AI picks
-for the user off the CONSENSUS board and the club's needs.
+draft stops and waits, unless auto-pick is on, in which case the user's
+saved board and scouts' order determine the pick.
 
 TRADES ON THE CLOCK, rarely. Real drafts see 15 to 25 pick trades out of
 257, most in the first three rounds. A club picking a little later whose
@@ -22,7 +22,6 @@ personality, or the user goes to the trade tab with any pick pre-loaded
 (trade_for_pick). Outside the draft, clubs may come to the user unprompted;
 that lives in the trade window, not here.
 """
-import numpy as np, collections
 import draft as DFT
 import trade_engine as TE
 
@@ -32,12 +31,6 @@ _MARKET = {int(k): v for k, v in json.load(open(os.path.join(os.path.dirname(os.
 TRADE_GATE = {1: 0.40, 2: 0.30, 3: 0.22, 4: 0.08, 5: 0.05, 6: 0.04, 7: 0.04}
 LOOKAHEAD = 12                 # how many slots down a buyer can come from
 PREMIUM_UP = 1.06              # buyers overpay to move up; the market curve already carries most of it
-
-
-class _ConsensusGM:
-    """What the AI drafts with for the user: the room's board and the club's
-    needs, no private read, no personality."""
-    board_trust = 0.0; dev_belief = 0.5; need_inflation = 0.5; job_security = 0.7
 
 
 class Draft:
@@ -79,6 +72,22 @@ class Draft:
         sel = pk.selection if pk else 1
         return DFT.board(self.L, abbr, sel, self.level, self.taken, self.scale, gm=gm)
 
+    def user_pick(self):
+        """The first eligible man on Your Board, then the room's remaining order."""
+        import views_draft as VD
+        ub = getattr(self.L, 'user_board', None) or {}
+        dnd = set(ub.get('dnd') or [])
+        available = {p.pid: p for p in self.available() if p.pid not in dnd}
+        for pid in ub.get('order') or []:
+            if pid in available:
+                return available[pid]
+        if not available:
+            return None
+        rows = [VD._prospect(self.L, self.user, p) for p in available.values()]
+        rows = [r for r in rows if r is not None]
+        VD._my_rank(rows)
+        return available[min(rows, key=lambda r: r['my_rank'])['pid']] if rows else None
+
     # ------------------------------------------------------------ the buttons
     def sim_pick(self):
         """One selection. Returns ('user',) when it is the user's turn and
@@ -95,10 +104,11 @@ class Draft:
             if tr: events.append(tr)
         owner = pk.owner
         if owner == self.user:
-            rows = self.board_for(owner, gm=_ConsensusGM())
+            p = self.user_pick()
+            if p is None: return ('user', pk)
         else:
             rows = self.board_for(owner)
-        p = rows[0][1]
+            p = rows[0][1]
         self._select(pk, p)
         events.append(('pick', pk.selection, owner, p))
         return events[0] if len(events) == 1 else ('trade_then_pick', *events)
@@ -160,17 +170,17 @@ class Draft:
         import trades as TR
         return TR.pick_asset(self.L, pk)
 
-    def _bank(self, abbr, exclude_pick=None):
+    def _bank(self, abbr, exclude_pick=None, rng=None):
         """What this club can put into a package: its remaining picks this
         year and the picks after, and its surplus players."""
         import trades as TR
         team = self.L.teams[abbr]
         picks = [self._pick_asset(x) for x in team.picks if not x.used_on and x is not exclude_pick
                  and (x.year > self.year or (x.selection or 0) > (self.current().selection if self.current() else 0))]
-        surplus, _ = TR.surplus_and_needs(self.L, team, self._pool(), self.rng)
+        surplus, _ = TR.surplus_and_needs(self.L, team, self._pool(), rng if rng is not None else self.rng)
         return picks + list(surplus)
 
-    def _offer_for(self, buyer, seller, pk, premium, slack=1.0):
+    def _offer_for(self, buyer, seller, pk, premium, slack=1.0, rng=None):
         """
         Build the cheapest package from the buyer's bank that the SELLER's own
         pricing accepts for pk, at the buyer's premium over the pick's market
@@ -181,19 +191,22 @@ class Draft:
         ga, gb = TR.persona(ta.gm), TR.persona(tb.gm)
         ctx_a, ctx_b = ta.ctx(), tb.ctx()
         target = self._pick_asset(pk)
+        # This buyer has a player he expects to lose before its own pick.
+        # The trade engine prices that concrete opportunity for the buyer;
+        # the seller still prices the pick at its ordinary chart value.
+        target['draft_target_premium'] = 1.20
         want = TE.pick_price_dollars(pk.selection) * premium
-        bank = sorted(self._bank(buyer, exclude_pick=None), key=lambda x: TE.team_price(x, ctx_a, ta.cap_space, ga, owns=True))
+        bank = sorted(self._bank(buyer, exclude_pick=None, rng=rng), key=lambda x: TE.team_price(x, ctx_a, ta.cap_space, ga, owns=True))
         best = None
-        # the single cheapest asset that covers it, then pairs, then triples
+        # Singles and every pair, without materializing or arbitrarily
+        # truncating the pair list. Both clubs must accept the actual package.
+        import itertools
         def total(pkg): return sum(TE.team_price(x, ctx_b, tb.cap_space, gb, owns=False) for x in pkg)
         # draft-day deals are mostly THIS year's picks (about three in four
         # real ones); a future pick or a player is the sweetener, so they
         # carry a small handicap in the search, not in the price
         def handicap(pkg): return 1.0 + 0.12 * sum(1 for x in pkg if x['kind'] != 'pick' or x.get('years_out', 0) > 0)
-        singles = [[x] for x in bank]
-        pairs = [[x, y] for i, x in enumerate(bank) for y in bank[i + 1:]]
-        for pkg in singles + pairs[:400]:
-            if pkg[0]['kind'] == 'pick' and pkg[0]['obj'] is pk: continue
+        for pkg in itertools.chain(((x,) for x in bank), itertools.combinations(bank, 2)):
             # NEXT YEAR'S PICK BUYS THE SAME ROUND OR BETTER, this year. A
             # future first goes for a first, a future second for a first or
             # a second. Price alone let a club with nothing left this year
@@ -202,15 +215,20 @@ class Draft:
                    for x in pkg):
                 continue
             t = total(pkg)
-            if t >= want * slack and (best is None or t * handicap(pkg) < best[0]):
-                best = (t * handicap(pkg), pkg)
+            if t < want * slack: continue
+            offer = dict(a_sends=list(pkg), a_gets=[target])
+            r = TE.evaluate(offer, ctx_a, ctx_b, ta.cap_space, tb.cap_space, ga, gb)
+            if not r.get('accepted'): continue
+            paid = sum(TE.team_price(x, ctx_a, ta.cap_space, ga, owns=True) for x in pkg) * handicap(pkg)
+            if best is None or paid < best[0]:
+                best = (paid, offer, r)
         if best is None:
             return None, None
-        offer = dict(a_sends=best[1], a_gets=[target])
-        r = TE.evaluate(offer, ctx_a, ctx_b, ta.cap_space, tb.cap_space, ga, gb)
-        return offer, r
+        return best[1], best[2]
 
     def _execute(self, buyer, seller, offer, pk, target_player=None):
+        if pk is not self.current() or pk.used_on or pk.owner != seller:
+            return None
         sends = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
         try: self.L.trade(buyer, seller, sends, [pk])
         except ValueError: return None
@@ -254,7 +272,7 @@ class Draft:
             if p is None or slot is None or slot > q.selection - 2: continue
             if rng.random() > 0.35 + 0.6 * aggr: continue
             offer, r = self._offer_for(buyer, seller, pk, PREMIUM_UP + 0.08 * aggr)
-            if offer is None or r.get('blocked'): continue
+            if offer is None or not r.get('accepted'): continue
             over = r['b_gain']
             if best is None or over > best[0]:
                 best = (over, buyer, offer, p)
@@ -277,6 +295,8 @@ class Draft:
         bank and personality. Ranked by what the offer is worth to the user.
         """
         import trades as TR
+        import copy
+        preview_rng = copy.deepcopy(self.rng)
         offers = []
         tu = self.L.teams[self.user]; gu = TE.GM_ARCHETYPES['balanced']; ctx_u = tu.ctx()
         later = [q for q in self.picks[self.i:] if q.selection > pk.selection and q.owner not in (self.user, None)]
@@ -290,8 +310,8 @@ class Draft:
             p, slot = self._target_slot(buyer)
             if p is None or slot is None or slot > q.selection - 2: continue
             if q.selection - pk.selection > LOOKAHEAD * (1 + 2 * aggr): continue
-            offer, r = self._offer_for(buyer, self.user, pk, 1.04 + 0.10 * aggr, slack=0.97)
-            if offer is None or r.get('blocked'): continue
+            offer, r = self._offer_for(buyer, self.user, pk, 1.04 + 0.10 * aggr, slack=0.97, rng=preview_rng)
+            if offer is None or not r.get('accepted'): continue
             worth = sum(TE.team_price(x, ctx_u, tu.cap_space, gu, owns=False) for x in offer['a_sends'])
             offers.append(dict(team=buyer, sends=offer['a_sends'], asks=[pk], value=round(worth, 1),
                                target_pos=p.pos, gm=getattr(gm, 'name', 'gm'),
@@ -301,7 +321,18 @@ class Draft:
 
     def accept_offer(self, offer):
         pk = offer['asks'][0]
-        ev = self._execute(offer['team'], self.user, dict(a_sends=offer['sends'], a_gets=[self._pick_asset(pk)]), pk)
+        if pk is not self.current() or pk.used_on:
+            return None
+        import trades as TR
+        buyer, seller = self.L.teams[offer['team']], self.L.teams[self.user]
+        target = self._pick_asset(pk)
+        target['draft_target_premium'] = 1.20
+        package = dict(a_sends=offer['sends'], a_gets=[target])
+        r = TE.evaluate(package, buyer.ctx(), seller.ctx(), buyer.cap_space, seller.cap_space,
+                        TR.persona(buyer.gm), TR.persona(seller.gm))
+        if not r.get('accepted'):
+            return None
+        ev = self._execute(offer['team'], self.user, package, pk)
         return ev
 
     def trade_for_pick(self, pk):

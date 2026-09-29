@@ -566,6 +566,7 @@ def extensions(session, league, abbr):
         t = NG.open_for(league, p.pid, 'extension')
         cls = FA_.fa_class(p.accrued, p.contract_years_left) if yrs == 0 else None
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), yrs=yrs, fa_class=cls, hit=round(p.cap_hit(0), 1) if p.contract else 0.0, morale=morale_word(p),
+                         rookie_option=EXT.rookie_option_price(league, p),
                          eligible=bool(EXT.eligible(p, league)), talks=(t['state'] if t else None), thread=(t['id'] if t else None), ask=(t['ask'] if t else None), years=(t['years'] if t else None), mood=(t.get('mood') if t else None)))
     threads = [_thread(league, t) for t in NG._threads(league) if t['kind'] == 'extension' and t.get('team') == abbr and t['state'] not in ('expired', 'void')]
     promises = [dict(pid=pr['pid'], name=(league.player(pr['pid']).name if league.player(pr['pid']) else pr['pid']), kind=pr['kind'], made=pr['made'], status=pr['status']) for pr in (getattr(league, 'promises', None) or []) if pr.get('team') == abbr]
@@ -574,9 +575,9 @@ def extensions(session, league, abbr):
     cap = CAP.get(league.year, 301.2)
     done = []
     for x in reversed(league.transactions[-600:]):
-        if x.get('kind') in ('extension', 'franchise_tag') and x.get('team') == abbr and x.get('year') == league.year:
+        if x.get('kind') in ('extension', 'franchise_tag', 'rookie_option') and x.get('team') == abbr and x.get('year') == league.year:
             p = league.player(x.get('pid'))
-            if p: done.append(dict(pid=p.pid, name=p.name, pos=p.pos, kind=('tagged' if x['kind'] == 'franchise_tag' else 'extended'), years=x.get('years'), apy=(round(float(x.get('apy') or x.get('price') or 0), 1))))
+            if p: done.append(dict(pid=p.pid, name=p.name, pos=p.pos, kind=('tagged' if x['kind'] == 'franchise_tag' else 'option exercised' if x['kind'] == 'rookie_option' else 'extended'), years=x.get('years'), apy=(round(float(x.get('apy') or x.get('price') or 0), 1))))
     for r in rows:
         p = league.player(r['pid']); r['tag_price'] = round(TG_.tag_price(p, cap), 1) if r['yrs'] <= 1 else None
         r['restructurable'] = round(CT.restructure_room(p, cap), 1) if hasattr(CT, 'restructure_room') else 0.0
@@ -594,6 +595,14 @@ def extensions(session, league, abbr):
     return dict(rail=rail(session, league, abbr), cap_focus=focus, rows=rows, expiring=[r for r in rows if r['yrs'] <= 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1), committed_next=committed_next, limit_next=limit_next,
                 tag=dict(open=tag_open, used=(choice not in (None, 'none')), none=(choice == 'none'), tagged=(league.player(choice).name if choice not in (None, 'none') and league.player(choice) else None)),
                 promise_kinds=[dict(key=k, label=v_['label']) for k, v_ in __import__('negotiation_engine').PROMISES.items()])
+
+
+def act_rookie_option(league, abbr, pid):
+    p = league.player(pid)
+    if p is None or p.team != abbr:
+        return dict(ok=False, why='player is not on your team')
+    import extensions as EXT
+    return EXT.exercise_rookie_option(league, pid)
 
 
 def act_tag(league, abbr, pid):
