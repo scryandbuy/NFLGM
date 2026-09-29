@@ -243,17 +243,39 @@ footer{max-width:1600px;margin:0 auto 36px;padding:0 18px;color:var(--ink-3);fon
 .m-side .bars{height:100%;align-content:space-evenly}
 
 /* app additions */
-#boot{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;z-index:50;color:var(--ink-2)}
-#boot .box{width:min(560px,90vw);background:var(--sheet);border:1px solid var(--rule);padding:22px 24px}
-#boot h1{font-family:var(--display);font-weight:800;font-size:39px;line-height:1;margin-bottom:6px}
-#boot .bar{height:8px;background:var(--sheet-3);border:1px solid var(--rule-2);margin:14px 0 8px}
-#boot .bar i{display:block;height:100%;background:var(--club-2);width:0;transition:width .3s}
-#boot .line{font-family:var(--mono);font-size:14px;color:var(--ink-3);min-height:18px}
-#boot .pick{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin:14px 0}
-#boot .pick button{height:40px;font-family:var(--display);font-weight:800;font-size:15px;color:#fff;border:2px solid transparent;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%);opacity:.85}
-#boot .pick button:hover{opacity:1}
-#boot .pick button[aria-pressed="true"]{outline:2px solid var(--club-2);outline-offset:1px;opacity:1}
-#boot .go{display:flex;gap:8px;align-items:center;margin-top:8px}
+#boot{position:fixed;inset:0;z-index:50;overflow:auto;background:var(--bg);display:grid;place-items:center;padding:24px;color:var(--ink);--boot-primary:#c8102e;--boot-accent:#ffb81c}
+#boot .boot-shell{width:min(1080px,100%);min-height:650px;background:#101318;border:1px solid #363e48}
+#boot .boot-top{display:flex;align-items:center;justify-content:space-between;gap:18px;min-height:79px;padding:20px 26px;border-bottom:1px solid #303741}
+#boot .boot-name-slot{width:230px;height:38px}
+#boot .boot-status{display:flex;align-items:center;gap:8px;color:#aeb8c4;font-size:12px}
+#boot .boot-status i{width:7px;height:7px;flex:none;border-radius:50%;background:var(--ok)}
+#boot .boot-status.failed i{background:var(--danger)}
+#boot .boot-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(350px,.98fr);min-height:570px}
+#boot .boot-spotlight{padding:38px 35px 27px;display:flex;flex-direction:column;justify-content:space-between;background:radial-gradient(circle at 85% 14%,color-mix(in srgb,var(--boot-accent) 14%,transparent),transparent 44%),linear-gradient(145deg,#20252d,#15191f 62%)}
+#boot .boot-eyebrow{color:#9aa6b4;font-size:11px;font-weight:700;letter-spacing:.17em;text-transform:uppercase}
+#boot h1{font-family:var(--display);font-size:clamp(34px,4vw,53px);line-height:1.03;letter-spacing:-.045em;max-width:480px;margin:14px 0 12px}
+#boot .boot-spotlight p{color:#b4bdc8;max-width:400px;font-size:14px;line-height:1.55}
+#boot .boot-selected{display:flex;align-items:center;gap:17px;padding:17px 0;border-top:1px solid #404751;border-bottom:1px solid #404751}
+#boot .boot-selected-code{display:grid;place-items:center;min-width:68px;height:68px;background:var(--boot-primary);color:var(--boot-primary-ink);font-size:24px;font-weight:800;border-bottom:4px solid var(--boot-accent)}
+#boot .boot-selected b{display:block;font-size:24px;letter-spacing:-.03em;margin-top:3px}
+#boot .boot-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:21px}
+#boot .boot-action{border:1px solid #53606d;background:transparent;color:#e1e6ed;padding:12px 15px;font-family:var(--display);font-weight:700;font-size:13px;min-height:42px}
+#boot .boot-action.primary{border-color:var(--boot-accent);background:var(--boot-accent);color:var(--boot-action-ink)}
+#boot .boot-action:hover{filter:brightness(1.12)}
+#boot .boot-action:disabled{opacity:.55;cursor:wait}
+#boot .boot-picker{padding:26px 24px;background:#181d24}
+#boot .boot-picker-head{margin-bottom:17px}
+#boot .boot-picker-head h2{font-family:var(--display);font-size:22px;letter-spacing:-.03em;margin-top:4px}
+#boot .boot-pick{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:7px}
+#boot .boot-pick button{height:43px;min-width:0;padding:0;border:1px solid #39434f;border-top:3px solid var(--team-color);background:#222831;color:#e5e9ef;font-family:var(--display);font-weight:800;font-size:11px;letter-spacing:.01em}
+#boot .boot-pick button:hover,#boot .boot-pick button[aria-pressed="true"]{background:color-mix(in srgb,var(--team-color) 26%,#222831);border-color:var(--team-color)}
+#boot .boot-pick button[aria-pressed="true"]{outline:2px solid var(--boot-accent);outline-offset:1px}
+#boot .boot-progress{margin-top:24px;padding-top:17px;border-top:1px solid #343d47}
+#boot .boot-bar{height:6px;background:#2b313a;overflow:hidden}
+#boot .boot-bar i{display:block;height:100%;background:var(--boot-accent);width:0;transition:width .3s}
+#boot .boot-line{font-size:12px;color:#a5b0bd;min-height:18px;margin-top:8px;overflow-wrap:anywhere}
+@media(max-width:820px){#boot{display:block}#boot .boot-shell{min-height:0;margin:auto}#boot .boot-layout{grid-template-columns:1fr}#boot .boot-spotlight{min-height:390px}}
+@media(max-width:480px){#boot{padding:0}#boot .boot-shell{border:0}#boot .boot-top{padding:15px;min-height:68px}#boot .boot-name-slot{flex:1;width:auto;min-width:0}#boot .boot-status{font-size:11px}#boot .boot-spotlight{padding:27px 20px;min-height:360px}#boot .boot-picker{padding:20px 14px}#boot .boot-pick{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .advance:disabled{opacity:.6;cursor:wait}
 .empty{padding:16px 12px;color:var(--ink-3);font-size:15px}
 .wk.t{background:var(--rule-hi);color:#111}

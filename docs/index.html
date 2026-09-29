@@ -6,21 +6,24 @@
 <title>NFL GM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=36d14350bc">
+<link rel="stylesheet" href="style.css?v=074ed92506">
 </head>
 <body>
 
 <div id="boot">
-  <div class="box">
-    <h1>NFL GM</h1>
-    <div class="muted" style="font-size:13px">A franchise, run from the front office. Pick your club.</div>
-    <div class="pick" id="pick"></div>
-    <div class="go">
-      <button class="btn go" id="start" disabled>Start a Franchise</button>
-      <button class="btn quiet" id="resume" hidden>Resume Saved Game</button>
+  <div class="boot-shell">
+    <div class="boot-top"><div class="boot-name-slot" aria-hidden="true"></div><div class="boot-status"><i aria-hidden="true"></i><span id="bootstatus">Engine loading in background</span></div></div>
+    <div class="boot-layout">
+      <div class="boot-spotlight">
+        <div><div class="boot-eyebrow">A new season begins here</div><h1>Build your next chapter.</h1><p>Choose the team you will run. The decisions, roster, and future are yours.</p></div>
+        <div class="boot-bottom"><div class="boot-selected"><div class="boot-selected-code" id="selectedcode">KC</div><div><div class="boot-eyebrow">Your team</div><b id="selectedname">Kansas City</b></div></div><div class="boot-actions"><button class="boot-action primary" id="start" disabled>Start a Franchise</button><button class="boot-action" id="resume" hidden>Resume Saved Game</button></div></div>
+      </div>
+      <div class="boot-picker">
+        <div class="boot-picker-head"><div class="boot-eyebrow">32 teams · one front office</div><h2>Choose your team</h2></div>
+        <div class="boot-pick" id="pick" role="group" aria-label="Choose your team"></div>
+        <div class="boot-progress"><div class="boot-bar" role="progressbar" aria-label="Engine loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bootbar"></i></div><div class="boot-line" id="bootline" role="status">loading…</div></div>
+      </div>
     </div>
-    <div class="bar"><i id="bootbar"></i></div>
-    <div class="line" id="bootline">loading…</div>
   </div>
 </div>
 
@@ -51,6 +54,6 @@
 <main id="page" hidden></main>
 <div class="busy" id="busy" hidden>Working…</div>
 
-<script type="module" src="app.js?v=36d14350bc"></script>
+<script type="module" src="app.js?v=074ed92506"></script>
 </body>
 </html>

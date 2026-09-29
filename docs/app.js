@@ -3,6 +3,7 @@
 const ENGINE = 'engine/';
 const CLUBS = ['ARI','ATL','BAL','BUF','CAR','CHI','CIN','CLE','DAL','DEN','DET','GB','HOU','IND','JAX','KC','LV','LAC','LA','MIA','MIN','NE','NO','NYG','NYJ','PHI','PIT','SF','SEA','TB','TEN','WAS'];
 const COLOR = {ARI:'#97233f',ATL:'#a71930',BAL:'#241773',BUF:'#00338d',CAR:'#0085ca',CHI:'#0b162a',CIN:'#fb4f14',CLE:'#311d00',DAL:'#003594',DEN:'#fb4f14',DET:'#0076b6',GB:'#203731',HOU:'#03202f',IND:'#002c5f',JAX:'#006778',KC:'#c8102e',LV:'#000000',LAC:'#0080c6',LA:'#003594',MIA:'#008e97',MIN:'#4f2683',NE:'#002244',NO:'#d3bc8d',NYG:'#0b2265',NYJ:'#125740',PHI:'#004c54',PIT:'#ffb612',SF:'#aa0000',SEA:'#002244',TB:'#d50a0a',TEN:'#0c2340',WAS:'#5a1414'};
+const BOOT_TEAM = {ARI:['Arizona','#ffb612'],ATL:['Atlanta','#a71930'],BAL:['Baltimore','#9e7c0c'],BUF:['Buffalo','#c60c30'],CAR:['Carolina','#bfc0bf'],CHI:['Chicago','#c83803'],CIN:['Cincinnati','#fb4f14'],CLE:['Cleveland','#ff3c00'],DAL:['Dallas','#869397'],DEN:['Denver','#fb4f14'],DET:['Detroit','#b0b7bc'],GB:['Green Bay','#ffb612'],HOU:['Houston','#a71930'],IND:['Indianapolis','#e5e8ed'],JAX:['Jacksonville','#d7a22a'],KC:['Kansas City','#ffb81c'],LV:['Las Vegas','#a5acaf'],LAC:['Los Angeles Chargers','#ffc20e'],LA:['Los Angeles Rams','#ffa300'],MIA:['Miami','#fc4c02'],MIN:['Minnesota','#ffc62f'],NE:['New England','#c60c30'],NO:['New Orleans','#d3bc8d'],NYG:['New York Giants','#a71930'],NYJ:['New York Jets','#d9e2dd'],PHI:['Philadelphia','#a5acaf'],PIT:['Pittsburgh','#ffb612'],SF:['San Francisco','#b3995d'],SEA:['Seattle','#69be28'],TB:['Tampa Bay','#ff7900'],TEN:['Tennessee','#4b92db'],WAS:['Washington','#ffb612']};
 
 const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k === 'html') e.innerHTML = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v !== null && v !== undefined) e.setAttribute(k, v); } for (const k of kids) if (k !== null && k !== undefined) e.append(k.nodeType ? k : document.createTextNode(String(k))); return e; };
@@ -12,7 +13,7 @@ let py = null, team = 'KC', view = null;
 
 // ---------------------------------------------------------------- boot
 const boot = { bar: $('#bootbar'), line: $('#bootline') };
-const say = (t, pct) => { boot.line.textContent = t; if (pct != null) boot.bar.style.width = pct + '%'; };
+const say = (t, pct) => { boot.line.textContent = t; if (pct != null) { boot.bar.style.width = pct + '%'; boot.bar.parentElement.setAttribute('aria-valuenow', String(pct)); } };
 
 async function bootEngine() {
   say('booting Python…', 4);
@@ -42,6 +43,7 @@ async function bootEngine() {
 function pyJSON(code) { return JSON.parse(py.runPython(`_j(${code})`)); }
 
 async function newGame(abbr) {
+  $('#bootstatus').textContent = 'Starting your franchise';
   say(`building the league for ${abbr}… (about a minute the first time)`, 88);
   await new Promise(r => setTimeout(r, 30));
   py.runPython(`SESSION = S.Session.new(${JSON.stringify(abbr)})`);
@@ -2356,12 +2358,26 @@ async function advanceInner() {
 // ---------------------------------------------------------------- start
 (async function main() {
   const pick = $('#pick');
-  for (const c of CLUBS) pick.append(el('button', { style: `background:${COLOR[c]}${c === 'PIT' || c === 'NO' ? ';color:#111' : ''}`, 'aria-pressed': String(c === team), onclick: e => { team = c; pick.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); } }, c));
-  try { await bootEngine(); } catch (e) { say('boot failed: ' + e); return; }
+  function selectBootTeam(abbr) {
+    team = abbr;
+    const bootScreen = $('#boot');
+    const inkFor = hex => { const n = parseInt(hex.slice(1), 16); return (((n >> 16) & 255) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 > 145 ? '#111' : '#fff'; };
+    bootScreen.style.setProperty('--boot-primary', COLOR[abbr]);
+    bootScreen.style.setProperty('--boot-accent', BOOT_TEAM[abbr][1]);
+    bootScreen.style.setProperty('--boot-primary-ink', inkFor(COLOR[abbr]));
+    bootScreen.style.setProperty('--boot-action-ink', inkFor(BOOT_TEAM[abbr][1]));
+    $('#selectedcode').textContent = abbr;
+    $('#selectedname').textContent = BOOT_TEAM[abbr][0];
+    pick.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.abbr === abbr)));
+  }
+  for (const c of CLUBS) pick.append(el('button', { style: `--team-color:${COLOR[c]}`, 'data-abbr': c, 'aria-label': `Select ${BOOT_TEAM[c][0]}`, 'aria-pressed': String(c === team), onclick: () => selectBootTeam(c) }, c));
+  selectBootTeam(team);
+  try { await bootEngine(); } catch (e) { say('boot failed: ' + e); $('#bootstatus').textContent = 'Engine failed to load'; $('#boot .boot-status').classList.add('failed'); return; }
+  $('#bootstatus').textContent = 'Engine ready';
   $('#start').disabled = false;
   const saved = await loadSave(); if (saved) $('#resume').hidden = false;
   $('#start').onclick = async () => { $('#start').disabled = true; await newGame(team); $('#boot').remove(); bootHash(); refresh(); saveGame(); };
-  $('#resume').onclick = async () => { $('#resume').disabled = true; say('loading your save…', 90); await new Promise(r => setTimeout(r, 30)); py.globals.set('_SAVE', saved); py.runPython(`SESSION = S.Session.load(_SAVE)`); $('#boot').remove(); bootHash(); refresh(); };
+  $('#resume').onclick = async () => { $('#resume').disabled = true; $('#bootstatus').textContent = 'Loading your save'; say('loading your save…', 90); await new Promise(r => setTimeout(r, 30)); py.globals.set('_SAVE', saved); py.runPython(`SESSION = S.Session.load(_SAVE)`); $('#boot').remove(); bootHash(); refresh(); };
   $('#advance').onclick = advance;
   $('#save').onclick = saveGame;
   // EXPORT AND IMPORT: the save as a file, for a backup or for sending a state to be looked at

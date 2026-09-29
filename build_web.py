@@ -24,13 +24,17 @@ _check_imports()
 for m in MODULES: shutil.copy(os.path.join(HERE, m + '.py'), OUT)
 for d in DATA: shutil.copy(os.path.join(HERE, d), OUT)
 import hashlib
+# Git may check out text with CRLF on Windows. Hash normalized bytes so running
+# the build on either platform gives the same cache stamp for the same content.
+def _stamp_bytes(path):
+    return open(path, 'rb').read().replace(b'\r\n', b'\n')
 # the stamp covers the engine AND the shell, so a change to app.js or style.css alone shows in the header too
-build = hashlib.sha1(b''.join(open(os.path.join(OUT, f), 'rb').read() for f in sorted(os.listdir(OUT)) if f != 'manifest.json') + open('docs/app.js', 'rb').read() + open('docs/style.css', 'rb').read()).hexdigest()[:10]
+build = hashlib.sha1(b''.join(_stamp_bytes(os.path.join(OUT, f)) for f in sorted(os.listdir(OUT)) if f != 'manifest.json') + _stamp_bytes('docs/app.js') + _stamp_bytes('docs/style.css')).hexdigest()[:10]
 json.dump(dict(modules=MODULES, data=DATA, build=build), open(os.path.join(OUT, 'manifest.json'), 'w'))
 # the page's own script and stylesheet carry a stamp too, so a new push is never served from a stale cache: the
 # stamp is the hash of app.js and style.css together
 import re as _re
-_ui = hashlib.sha1(open('docs/app.js', 'rb').read() + open('docs/style.css', 'rb').read()).hexdigest()[:10]
+_ui = hashlib.sha1(_stamp_bytes('docs/app.js') + _stamp_bytes('docs/style.css')).hexdigest()[:10]
 _html = open('docs/index.html').read()
 _html = _re.sub(r'app\.js\?v=[0-9a-f]+', f'app.js?v={_ui}', _html)
 _html = _re.sub(r'style\.css\?v=[0-9a-f]+', f'style.css?v={_ui}', _html)
