@@ -416,7 +416,19 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
     status = getattr(desk, 'status', {}) if desk is not None else {}
     # the linebackers this package fields, and why
     import targets as TG
-    lbs = [p for pos_ in ('MIKE', 'WILL', 'SAM') for p in d.get(pos_, []) if p.out_until is None]
+    pins = getattr(t, 'depth_pins', None) or {}
+    def_depth = {}
+    for canonical, men in d.items():
+        ranked = sorted(men, key=lambda p: -TG.position_score(p.ratings, canonical, t.scheme))
+        order = {pid: i for i, pid in enumerate(pins.get(canonical, []))}
+        if order: ranked.sort(key=lambda p: order.get(p.pid, 10**6))
+        def_depth[canonical] = ranked
+    unavailable = {p.pid for men in d.values() for p in men
+                   if not (desk.available(p, league.week) if desk else p.out_until is None)}
+    state = session.runner.states.get(abbr) if getattr(session, 'runner', None) is not None else None
+    unavailable.update(getattr(state, 'out', ()) or ())
+    available_depth = DR.available_depth(def_depth, unavailable)
+    lbs = [p for pos_ in ('MIKE', 'WILL', 'SAM') for p in available_depth.get(pos_, [])]
     pkg_key = package.lower().replace(' ', '_')
     lb_choice = {p.pid: why for p, why in TG.package_linebackers(lbs, pkg_key, scheme=getattr(t, 'scheme', None), key=lambda q: q.ratings)}
     import rosters as RO
@@ -445,21 +457,12 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
         fallback_front = False
         if side == 'defense' and front == '4-3':
             static_count = sum(
-                sum(p.pid in lb_choice for p in d.get(pos, [])) if pos in ('MIKE', 'WILL', 'SAM')
-                else min(len(d.get(pos, [])), _starters(pos, pk))
+                sum(p.pid in lb_choice for p in available_depth.get(pos, [])) if pos in ('MIKE', 'WILL', 'SAM')
+                else min(len(available_depth.get(pos, [])), _starters(pos, pk))
                 for pos, _label, _group in cols_)
-            fallback_front = static_count != 11 or DR.needs_fallback(d, front, package)
+            fallback_front = static_count != 11 or DR.needs_fallback(available_depth, front, package)
         if side == 'defense' and (front == '3-4' or fallback_front):
-            # Match the game-day roster's scheme grade and canonical pins before
-            # assigning virtual 3-4 jobs. Team.depth itself defaults to OVR.
-            role_depth = {}
-            for canonical, men in d.items():
-                ranked = sorted(men, key=lambda p: -TG.position_score(p.ratings, canonical, t.scheme))
-                if pins.get(canonical):
-                    order = {pid: i for i, pid in enumerate(pins[canonical])}
-                    ranked.sort(key=lambda p: order.get(p.pid, 10**6))
-                role_depth[canonical] = ranked
-            assigned = DR.assign(role_depth, front, package, pins)
+            assigned = DR.assign(available_depth, front, package, pins)
             roles = {}
             for row in assigned:
                 role = row['role']
@@ -469,21 +472,28 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
                 if row['player'] is not None:
                     roles[role]['starters'].append(row['player'])
             cols_ = [(role, DR.role_label(role), info['group'],
-                      info['starters'] + info['reserves'], len(info['starters']))
+                      info['starters'] + info['reserves'] +
+                      [p for p in DR.role_candidates(def_depth, role, pins) if p.pid in unavailable],
+                      len(info['starters']))
                      for role, info in roles.items()]
         else:
             cols_ = [(pos, label, group, None, None) for pos, label, group in cols_]
         for pos, label, group, role_men, role_starters in cols_:
             # Offensive highlights use the selected package; the coach's base remains unchanged.
-            men = role_men if role_men is not None else returners(pos) if pos in ('KR', 'PR') else off_depth.get(pos, []) if side == 'offense' else d.get(pos, [])
+            men = role_men if role_men is not None else returners(pos) if pos in ('KR', 'PR') else off_depth.get(pos, []) if side == 'offense' else def_depth.get(pos, [])
             n_start = role_starters if role_starters is not None else 1 if pos in ('KR', 'PR') else _starters(pos, pk if side == 'defense' else OFF_BASE.get(getattr(t.gm, 'off_personnel', '11'), OFF_BASE['11']))
             if side == 'offense': n_start = sum(p.pid in off_starters for p in men)
+            defensive_starters = {p.pid for p in available_depth.get(pos, [])[:n_start]}
+            if side == 'defense' and not (front == '3-4' or fallback_front):
+                if pos in ('MIKE', 'WILL', 'SAM'):
+                    defensive_starters = {p.pid for p in men if p.pid in lb_choice}
+                n_start = len(defensive_starters)
             slots = []
             for i, p in enumerate(men):
                 pl = player_plate(p); pl['cond'] = _cond(session, p)
                 if side == 'offense': pl['start'] = p.pid in off_starters; pl['why'] = ''
                 elif side == 'defense' and (front == '3-4' or fallback_front): pl['start'] = i < n_start; pl['why'] = ''
-                elif pos in ('MIKE', 'WILL', 'SAM'): pl['start'] = p.pid in lb_choice; pl['why'] = lb_choice.get(p.pid, '')
+                elif side == 'defense': pl['start'] = p.pid in defensive_starters; pl['why'] = lb_choice.get(p.pid, '')
                 else: pl['start'] = i < n_start; pl['why'] = ''
                 pl['slot'] = _slot_label(pos, i)
                 desig = status.get(p.pid)

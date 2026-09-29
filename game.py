@@ -1188,11 +1188,24 @@ def package_units(roster, state, rng, is_offense, package, front_family=None):
     out = {}
     family = front_family or roster.get('front_family', '4-3')
     import defense_roles as DR
+    family = DR.front_family(family)
+    if not is_offense and roster.get('depth'):
+        # Select from canonical, available depth for THIS call. Cached dl/lb
+        # groups may describe a different front, or still contain a man hurt
+        # earlier in the game. Keep reserves until package selection is done.
+        unavailable = state.out if state is not None else ()
+        depth = DR.available_depth(roster['depth'], unavailable)
+        roster = dict(roster, depth=depth)
+        assignments = DR.assign(depth, family, package, roster.get('depth_pins'))
+        dl = [row['player'] for row in assignments
+              if row['group'] == 'dl' and row['player'] is not None]
+        chosen = {p['pid'] for p in dl}
+        roster['dl'] = dl + [p for pos in ('LEDG', 'DT', 'REDG')
+                            for p in depth.get(pos, ()) if p['pid'] not in chosen]
+        roster['lb'] = [p for pos in ('MIKE', 'WILL', 'SAM') for p in depth.get(pos, ())]
+        roster['db'] = [p for pos in ('CB', 'FS', 'SS') for p in depth.get(pos, ())]
     if not is_offense and roster.get('depth') and (
             family == '3-4' or DR.needs_fallback(roster['depth'], family, package)):
-        assignments = DR.assign(roster['depth'], family, package,
-                                roster.get('depth_pins'),
-                                excluded=(state.out if state is not None else ()))
         used_reserves = set()
         for row in assignments:
             chosen = row['player']
