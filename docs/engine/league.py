@@ -977,6 +977,8 @@ class League:
                     t.scheme = scheme_of(t.gm)
                 except Exception: pass
             L.teams[abbr] = t
+        # Restore the cap calculation along with the calendar phase.
+        L.set_phase(L.phase)
         # THE CAP ONLY RISES. A save rolled under the old projection could carry a year where the cap fell; that
         # year is re-based at the median growth over the last real or rolled figure, for every club at once.
         prev = CAP.get(L.year - 1)

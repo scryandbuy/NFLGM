@@ -80,6 +80,11 @@ def sign_to_squad(league, abbr, pid):
     team = league.teams[abbr]; p = league.player(pid)
     if p is None or not can_add(team, p):
         return False
+    # Squad pay counts too. Validate before releasing a roster player or
+    # removing him from the wire/free-agent pool.
+    from cap_accounting import require_squad_room
+    try: require_squad_room(league, team, p)
+    except ValueError: return False
     if p.team and p.team in league.teams and p in league.teams[p.team].roster:
         league.release(pid, log=False)
     if pid in league.free_agents: league.free_agents.remove(pid)

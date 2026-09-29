@@ -83,6 +83,8 @@ class Session:
         s.votes = s._recorded_votes()
         if d.get('_week_book') is not None: L.week_book = d['_week_book']
         s.stop = tuple(d.get('_stop', ['week', 1]))
+        if s.stop[0] == 'wire':
+            for t in L.teams.values(): t.phase = 'season'
         s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
         if d.get('_runner_state'):
             s.runner = SN.SeasonRunner(s.L, s.rng)
@@ -398,7 +400,9 @@ class Session:
         # THE ROSTER RULE. A club plays with 53 at most and 46 at least; the game will not
         # run a week, or leave camp, until yours is legal. A new franchise starts in camp at
         # 68 and cuts to 53 before week 1, the way every club does.
-        if self.stop[0] in ('week', 'cutdown', 'wire') and not getattr(self, 'played', False):
+        offseason_cutdown = (self.stop[0] == 'offseason'
+                             and self.OFFSEASON[self.stop[1]][1] == 'step_cutdown')
+        if offseason_cutdown or (self.stop[0] in ('week', 'cutdown', 'wire') and not getattr(self, 'played', False)):
             n = len(self.L.teams[self.user_team].active())
             import inbox as IB
             key_ = f"roster-{self.L.year}-{self.stop[1] if len(self.stop) > 1 else 0}"
@@ -440,6 +444,9 @@ class Session:
         return result
 
     def _advance(self):
+        if self._skip_empty_offseason_waivers():
+            self._open_fa_if_due()
+            return dict(done='No offseason waivers to resolve', next=self.next_label())
         k = self.stop[0]
         if k == 'cutdown':
             # camp breaks: every club cuts to 53 (yours must already be there), the wire runs, the squads fill
@@ -449,7 +456,8 @@ class Session:
             self.stop = ('wire',); self.played = False
             return dict(done='Cutdown', next=self.next_label())
         if k == 'wire':
-            self.step_clear_wire()
+            if self.step_clear_wire() is False:
+                return dict(done='Cap compliance cuts are on waivers', next=self.next_label())
             self.stop = ('week', 1); self.played = False
             return dict(done='Camp', next=self.next_label())
         if k == 'week':
@@ -544,6 +552,10 @@ class Session:
             self.stop = ('playoffs', 4)
             return self._close_playoffs()
         i = self.stop[1]
+        if self.OFFSEASON[i][1] == 'step_cutdown':
+            roster_blocks = [b for b in self.blocking() if b['kind'] == 'roster']
+            if roster_blocks:
+                return dict(done='Blocked', next=self.next_label(), why=roster_blocks[0]['subject'])
         if self.draft_live():
             self.draft.auto = True; self.draft.sim_all()
             if not self.draft.done:
@@ -996,6 +1008,7 @@ class Session:
     def _open_fa_if_due(self):
         """The calendar sits on a free-agency round: open it (once) so the offers can be made before the advance."""
         if self.stop[0] != 'offseason': return
+        self._skip_empty_offseason_waivers()
         name = self.OFFSEASON[self.stop[1]][1]
         if name == 'step_waivers_1':
             WV.notify_user(self.L, WV.pending(self.L), 0, digest=True)
@@ -1013,6 +1026,15 @@ class Session:
         n = len([x for x in L.free_agents if L.player(x)])
         contested = sum(1 for pid, offers in bids.items() if len(offers) >= 2)
         IE.post(L, f'fa-open-{L.year}-{k}', 'contract', f"Free agency, round {k}, is open", f"{n} players on the market; {len(bids)} have offers from other clubs, {contested} from more than one. Open talks on the Free Agency page to see who else is in on a player, and make your offers before you advance. Nobody signs until the round closes.", sender='front office', payload=dict(link='personnel:free_agency'))
+
+    def _skip_empty_offseason_waivers(self):
+        """Keep saved calendar indices stable, but omit an empty claim window."""
+        if (self.stop[0] == 'offseason'
+                and self.OFFSEASON[self.stop[1]][1] == 'step_waivers_1'
+                and not WV.pending(self.L)):
+            self.stop = ('offseason', self.stop[1] + 1)
+            return True
+        return False
 
     def step_market(self):
         # kept for tools that call the one-shot market
@@ -1035,6 +1057,14 @@ class Session:
         """The draft with you at the buttons. Sims to your first pick and stops; Draft Day
         takes it from there, and an Advance from the Portal finishes it on auto."""
         import draft_day as DD
+        # Older saves can still sit on Draft after its final UI pick. Do not
+        # reopen an empty draft and overwrite its results/scouting snapshot.
+        last = getattr(self.L, 'last_draft', None) or {}
+        year = self.L.year - 1
+        if (last.get('year') == year and not any(
+                pk.year == year and pk.selection and not pk.used_on
+                for t in self.L.teams.values() for pk in t.picks)):
+            return
         self.draft = DD.Draft(self.L, self.rng, self.L.year - 1, user_team=self.user_team, auto_pick=False)
         # nothing is picked until you say so: the draft opens on pick one and the tools at the top move it
         if self.draft.done:
@@ -1074,6 +1104,8 @@ class Session:
         except Exception as e:
             import sys; print('gem/bust notes failed:', e, file=sys.stderr)
         self.draft = None
+        if self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] == 'step_draft':
+            self.stop = ('offseason', self.stop[1] + 1)
 
     def draft_live(self):
         return self.draft is not None and not self.draft.done
@@ -1090,6 +1122,9 @@ class Session:
         for t in L.teams.values():
             for p in list(PSQ.squad(t)): PSQ.release_from_squad(L, t.abbr, p.pid)
         PSQ.reset_season(L)
+        # Budget all 53 contracts before the final wire. League.phase stays
+        # offseason so these releases retain the game's post-June 1 split.
+        for t in L.teams.values(): t.phase = 'season'
         CD.finalize(L, rng)
         # the cuts are on the wire; the GM reads it and claims before it clears (the next step)
         WV.notify_user(L, WV.pending(L), 0, digest=True)
@@ -1097,6 +1132,14 @@ class Session:
     def step_clear_wire(self):
         """Cut-down waivers clear: claims awarded by priority, the squads fill, the undrafted pile is settled, the season opens."""
         L, rng = self.L, self.rng
+        for t in L.teams.values(): t.phase = 'season'
+        # Legacy saves may have cut down using only top-51 charges. Repair
+        # their cap now, preserving a claim opportunity for any new cuts.
+        before = {e['pid'] for e in WV.pending(L)}
+        CT.enforce(L, rng, target=0.0)
+        if any(e['pid'] not in before for e in WV.pending(L)):
+            WV.notify_user(L, WV.pending(L), 0, digest=True)
+            return False
         WV.process(L, rng, 0)
         PSQ.fill_squads(L, rng)
         from franchise import clear_undrafted

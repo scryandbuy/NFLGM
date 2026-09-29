@@ -2,14 +2,15 @@ import ast, copy, json, unittest
 from pathlib import Path
 from types import SimpleNamespace as N
 from unittest.mock import patch
-import inbox as IB, inbox_events as IE, club_notes as CN, league_notes as LN, negotiations as NG
+import inbox as IB, inbox_events as IE, club_notes as CN, league_notes as LN, negotiations as NG, waivers as WV
 
 src=ast.parse(Path('session.py').read_text(encoding='utf-8'))
 cls=next(n for n in src.body if isinstance(n,ast.ClassDef) and n.name=='Session')
-names={'_draft_over','_open_fa_if_due','_black_monday','blocking','_resign_card','inbox_delete','inbox_clear_read','inbox_read','inbox_message','inbox_hurt_action','inbox_offer_sheet','advance','step_waivers_1'}
-ns={'IB':IB,'IE':IE,'MK':N(),'PS':N(),'CLUB_NAME_':{},'TG':N()}
+names={'_draft_over','_open_fa_if_due','_skip_empty_offseason_waivers','_black_monday','blocking','_resign_card','inbox_delete','inbox_clear_read','inbox_read','inbox_message','inbox_hurt_action','inbox_offer_sheet','advance','step_waivers_1'}
+ns={'IB':IB,'IE':IE,'MK':N(),'PS':N(),'CLUB_NAME_':{},'TG':N(),'WV':WV}
 exec(compile(ast.fix_missing_locations(ast.Module(body=[ast.ClassDef(name='S',bases=[],keywords=[],body=[n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name in names],decorator_list=[])],type_ignores=[])),'session.py','exec'),ns)
 S=ns['S']
+S.OFFSEASON=ast.literal_eval(next(n.value for n in cls.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='OFFSEASON' for t in n.targets)))
 def league(**kw):
  d=dict(year=2026,week=1,inbox=[],teams={},players={},transactions=[],user_team='GB',notes_sent={},league_notes_sent={},log=lambda *a,**k:None)
  d.update(kw); L=N(**d); L.player=lambda pid:L.players.get(pid); return L
@@ -137,7 +138,7 @@ class SessionIntegrationTests(unittest.TestCase):
   self.assertEqual(s.inbox_hurt_action(m['id'],play=False),dict(ok=True,action='hurt_decision',pid='p',play=False))
  def test_offseason_waiver_arrival_notifies_before_processing(self):
   import waivers as WV
-  L=league(waivers=[]);s=session(L);s.OFFSEASON=[('Wire','step_waivers_1')];s.FA_STEPS={}
+  L=league(waivers=[dict(pid='p')]);s=session(L);s.stop=('offseason',4);s.FA_STEPS={}
   with patch.dict(ns,WV=WV),patch.object(WV,'notify_user') as notify,patch.object(WV,'process') as process:
    s._open_fa_if_due();notify.assert_called_once();process.assert_not_called()
    s.step_waivers_1();process.assert_called_once();self.assertEqual(notify.call_count,1)

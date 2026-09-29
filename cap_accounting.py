@@ -84,6 +84,22 @@ def require_room(league, team, pid, contract, release_pid=None, ps_pid=None):
             raise ValueError('Not enough cap space next year for this contract')
 
 
+def require_squad_room(league, team, player):
+    import practice_squad as PS
+    team.sync_cap()
+    trial = copy.copy(team.cap)
+    trial.contracts = list(team.cap.contracts)
+    if player in team.roster and player.contract:
+        c = player.contract
+        trial.contracts = [x for x in trial.contracts if x[0] != player.pid]
+        trial.dead += c.release(0, league.post_june1())[0]
+        trial.earned += c.earned_base + c.earned_roster
+    trial.practice_squad += max(0, 18-team.cap.paid_week)/18 * (
+        PS.PAY_VET if (player.accrued or 0) > 2 else PS.PAY_YOUNG)
+    if trial.charges(team.phase) > trial.limit + .0005:
+        raise ValueError('Not enough cap space for practice-squad pay')
+
+
 def next_year_ledger(league, team):
     team.sync_cap()
     base=CAP.get(league.year+1,CAP.get(league.year,301.2)*1.055)

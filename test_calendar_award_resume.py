@@ -21,16 +21,22 @@ class CalendarAwardResumeTests(unittest.TestCase):
         original = self.fresh()
         original.L.set_phase('free_agency')
         original.L.week = 22
+        # The user must make his own cuts before every year's cutdown.
+        for p in list(original.L.teams['GB'].active())[53:]:
+            original.L.release(p.pid)
         original.stop = ('offseason', len(original.OFFSEASON) - 1)
         original.advance()
         self.assertEqual(original.stop, ('wire',))
         self.assertEqual(original.L.week, 0)
         self.assertTrue(original.L.post_june1())
+        self.assertTrue(all(t.phase == 'season' for t in original.L.teams.values()))
         pending = {e['pid'] for e in WV.pending(original.L)}
         self.assertTrue(pending)
         resumed = SS.Session.load(original.save())
         self.assertEqual(resumed.stop, ('wire',))
         self.assertTrue(resumed.L.post_june1())
+        self.assertEqual({a:t.cap_space for a,t in original.L.teams.items()},
+                         {a:t.cap_space for a,t in resumed.L.teams.items()})
         self.assertEqual(original.next_label(), resumed.next_label())
         self.assertEqual(original.rng.bit_generator.state, resumed.rng.bit_generator.state)
 
@@ -40,6 +46,7 @@ class CalendarAwardResumeTests(unittest.TestCase):
             self.assertEqual(s.L.phase, 'regular')
             self.assertEqual(s.L.week, 0)
             self.assertFalse(s.L.post_june1())
+            self.assertTrue(all(t.cap_space >= -0.01 for t in s.L.teams.values()))
             self.assertFalse(pending & {e['pid'] for e in WV.pending(s.L)})
             self.assertGreater(sum(len(PSQ.squad(t)) for t in s.L.teams.values()), 0)
         self.assertEqual(original.rng.bit_generator.state, resumed.rng.bit_generator.state)
