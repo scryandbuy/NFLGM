@@ -2363,9 +2363,9 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 @media(max-width:900px){.league-coach-move{grid-template-columns:56px minmax(120px,1fr) 90px minmax(140px,1fr)}.league-coach-move .detail{grid-column:2/-1}}
 @media(max-width:600px){.league-coach-move{grid-template-columns:48px 1fr 88px;gap:8px}.league-coach-move .person{grid-column:2/-1}.league-coach-move .detail{grid-column:2/-1}}
 .league-playoffs{margin:24px 0 12px;border:1px solid var(--league-rule);border-radius:10px;background:radial-gradient(ellipse at 50% 18%,color-mix(in srgb,var(--report-accent) 10%,#0b151d),#0b151d 72%);overflow:hidden}
-.league-playoffs .bk-tree{min-width:1780px;min-height:700px;padding:46px 26px 30px}
+.league-playoffs .bk-tree{min-width:1520px;min-height:700px;padding:46px 26px 30px}
 .league-playoffs .bk-col::before{top:-30px;font-size:14px;color:var(--ink-2)}
-.league-playoffs .bk-line{padding:10px 12px}.league-playoffs .bk-line .ab,.league-playoffs .bk-line b{font-size:25px}
+.league-playoffs .bk-line{padding:10px}.league-playoffs .bk-line .ab,.league-playoffs .bk-line b{font-size:22px}
 .league-playoffs .bk-game .foot{padding:7px 12px}.league-playoffs .bk-site{font-size:14px}
 @media(max-width:1300px){.league-coach-layout{grid-template-columns:1fr}.league-coach-detail{display:grid;grid-template-columns:1fr 1fr;gap:10px}.league-games{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:800px){.league-board .leaders,.league-board .two,.league-games,.league-awards{grid-template-columns:1fr}.league-transactions .trow{grid-template-columns:1fr auto}.league-transactions .txt{grid-column:1/-1}.league-awards .aw:first-child,.league-awards .aw:last-child{grid-column:auto}.league-coach-detail{display:block}.league-year-tools{margin-left:0}}
@@ -2594,3 +2594,8 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 @media(max-width:600px){.fo-coach-body{padding:16px}.fo-coach-summary{grid-template-columns:1fr 1fr}.fo-coach-offer .offer{grid-template-columns:1fr!important}}
 
 .fo-coach-dialog .btn.go{color:var(--team-ink)!important}
+
+/* Keep the final matchup itself on the conference centerline, regardless of labels. */
+.bk-final .bk-slot{display:grid;grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);gap:10px}
+.bk-final .bk-site{align-self:end;margin:0}.bk-final .bk-game.sb{grid-row:2}
+.bk-final .bk-champ{align-self:start;margin:0}
