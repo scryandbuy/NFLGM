@@ -12,6 +12,7 @@ cd = lambda oc, d, di, r, ytg=50, **kw: S.call_defense(oc, d, di, r, yards_to_en
 ST = {t: G.TeamState(L[t], coach=coaches[t], scheme=schemes[t]) for t in teams}
 # per game: each man's snaps as a share of his team's offensive or defensive plays, by depth slot at his position group
 share = collections.defaultdict(list); tgt_share = collections.defaultdict(list)
+back_share = collections.defaultdict(list); pooled_third = collections.defaultdict(list)
 front_share = collections.defaultdict(list)
 OFF = {'QB': ['QB'], 'RB': ['HB', 'FB'], 'WR': ['WR'], 'TE': ['TE'], 'OL': ['LT', 'LG', 'C', 'RG', 'RT']}
 DEF = {'EDGE': ['LEDG', 'REDG'], 'IDL': ['DT'], 'LB': ['MIKE', 'WILL', 'SAM'],
@@ -39,6 +40,9 @@ for wk in range(4):
             off_plays = sum(1 for pos, d in r['drives'] if (pos == 'home') == (abbr == h) for pl in d.log if is_play(pl))
             def_plays = sum(1 for pos, d in r['drives'] if (pos == 'home') != (abbr == h) for pl in d.log if is_play(pl))
             tg = collections.Counter(pl.get('target') for pos, d in r['drives'] if (pos == 'home') == (abbr == h) for pl in d.log if is_play(pl) and pl.get('type') in ('complete', 'incomplete', 'drop', 'interception')); team_tgts = sum(tg.values())
+            own_back_rank = {man['pid']: f'{pos}{rank}'
+                             for pos in ('HB', 'FB')
+                             for rank, man in enumerate(units['depth'].get(pos, ()), 1)}
             for gname, poss in list(OFF.items()) + list(DEF.items()):
                 men = by_depth(units, poss, schemes[abbr])
                 denom = off_plays if gname in OFF else def_plays
@@ -46,6 +50,14 @@ for wk in range(4):
                     sn = snaps.get(m['pid'], 0)
                     share[(gname, k)].append(sn / max(1, denom))
                     if gname in ('WR', 'TE', 'RB'): tgt_share[(gname, k)].append(tg.get(m['pid'], 0) / max(1, team_tgts))
+                    if gname == 'RB' and k == 3:
+                        pooled_third[own_back_rank.get(m['pid'], '?')].append(sn / max(1, denom))
+            package = str(getattr(LL.teams[abbr].gm, 'off_personnel', '11'))
+            for pos in ('HB', 'FB'):
+                for rank, man in enumerate(units['depth'].get(pos, ())[:4], 1):
+                    value = snaps.get(man['pid'], 0) / max(1, off_plays)
+                    back_share[(pos, rank, 'all')].append(value)
+                    back_share[(pos, rank, 'two-back' if package in ('21', '22') else 'other')].append(value)
             role_counts = collections.Counter()
             for row in DR.assign(units['depth'], units['front_family'], 'base'):
                 role = DR.role_label(row['role'])
@@ -64,9 +76,25 @@ for g in list(OFF) + list(DEF):
     for k in range(1, 7):
         v = share.get((g, k))
         if not v: break
-        line.append(f"{g}{k} {np.mean(v)*100:4.0f}%{(' [' + REAL[(g, k)] + ']') if (g, k) in REAL else ''}")
+        # The pooled RB order interleaves HB and FB depth. Compare the
+        # reference backfield shares with HB ranks in the split below.
+        reference = '' if g == 'RB' else (' [' + REAL[(g, k)] + ']' if (g, k) in REAL else '')
+        line.append(f'{g}{k} {np.mean(v)*100:4.0f}%{reference}')
     print('  ' + ' | '.join(line))
 print('target share of team targets:', ' | '.join(f"{g}{k} {np.mean(v)*100:.0f}%" for (g, k), v in sorted(tgt_share.items()) if k <= 5))
+print('Back snaps separated by saved position and coach base package (mean share of team offensive plays):')
+for category in ('all', 'two-back', 'other'):
+    parts = []
+    for pos in ('HB', 'FB'):
+        for rank in range(1, 5):
+            values = back_share.get((pos, rank, category))
+            if values:
+                parts.append(f'{pos}{rank} {np.mean(values)*100:.1f}% (n={len(values)})')
+    print(f'  {category}: ' + ' | '.join(parts))
+print('Reference RB depth bands: RB1 55-65%, RB2 25-35%, RB3 5-12%; compare only after matching HB/FB ranking rules.')
+print('Pooled RB3 saved positions:', ' | '.join(
+    f'{pos} {np.mean(values)*100:.1f}% (n={len(values)})'
+    for pos, values in sorted(pooled_third.items())))
 print('Base-chart defensive starters by front (share of all defensive plays; no front-specific reference ranges):')
 for front in ('4-3', '3-4'):
     roles = (('LEDG', 'DT1', 'DT2', 'REDG', 'MIKE', 'WILL', 'SAM', 'CB1', 'CB2', 'FS', 'SS')
