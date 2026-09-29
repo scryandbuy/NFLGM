@@ -7,7 +7,7 @@ const ctx={Number,JSON,el:(tag,attrs,...children)=>({tag,attrs,children,append(.
 vm.createContext(ctx);
 vm.runInContext(src.slice(src.indexOf('function linkHash('),src.indexOf('\nfunction renderPortal(')),ctx);
 for(const [link,expected] of [['personnel:free_agency','#personnel/fa'],['fa','#personnel/fa'],['gameplan:7','#gameplan'],['club:player:abc','#club/player/abc'],['player:abc','#club/player/abc'],['league:standings','#league']]) assert.equal(ctx.linkHash(link),expected);
-vm.runInContext(src.slice(src.indexOf('function offerSheetActions('),src.indexOf('\nfunction openMessage(')),ctx);
+vm.runInContext(src.slice(src.indexOf('function offerSheetActions('),src.indexOf('// ---------------------------------------------------------------- Game Day')),ctx);
 let reloads=0;const controls=ctx.offerSheetActions(42,()=>reloads++);
 assert.equal(controls.children.length,2);
 controls.children[0].attrs.onclick();
