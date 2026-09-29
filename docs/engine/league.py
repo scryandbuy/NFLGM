@@ -551,6 +551,8 @@ class League:
         self.phase = 'preseason'
         self.week = 0
         self.players = {}                 # pid -> Player, INCLUDING retired
+        self.player_name_history = {}     # normalized name -> {player ID: entry year}
+        self.newgen_name_cursor = 0        # deterministic name-collision fallback
         self.teams = {}                   # abbr -> Team
         self.free_agents = []             # pid
         self.schedule = []                # (week, away, home, away_pts, home_pts)
@@ -881,9 +883,11 @@ class League:
 
     # ---- persistence -----------------------------------------------------
     def to_dict(self):
+        from newgens import name_history
         return dict(
             version=1, year=self.year, phase=self.phase, week=self.week,
             players={pid: p.to_dict() for pid, p in self.players.items()},
+            player_name_history=name_history(self), newgen_name_cursor=self.newgen_name_cursor,
             teams={a: t.to_dict() for a, t in self.teams.items()},
             free_agents=self.free_agents, schedule=self.schedule,
             stats=self.stats, post_stats=self.post_stats,
@@ -941,6 +945,10 @@ class League:
         L.phase, L.week = d['phase'], d['week']
         L.players = {pid: Player.from_dict(pd)
                      for pid, pd in d['players'].items()}
+        from newgens import name_history
+        L.player_name_history = d.get('player_name_history', {})
+        L.player_name_history = name_history(L)
+        L.newgen_name_cursor = int(d.get('newgen_name_cursor', 0))
         for abbr, td in d['teams'].items():
             t = Team(abbr, td['division'], td['conf'], d['year'],
                      scheme=td.get('scheme'))
