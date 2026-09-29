@@ -786,6 +786,7 @@ def exit_answer(session, league, abbr, pid, key):
         said = "Right." if mt['kind'] != 'wants_out' else "Then we'll do this the other way."
     mt['answer'] = key; mt['said'] = said
     import inbox as IB
+    IB.reconcile(league)
     IB.post(league, 'club', f"{p.name}, after the meeting", f"You told him: {opt['label'].lower()}. He said: \"{said}\"", sender=surname(p.name))
     return dict(ok=True, said=said)
 

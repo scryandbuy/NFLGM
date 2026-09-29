@@ -22,7 +22,8 @@ NICK = {'ARI': 'Cardinals', 'ATL': 'Falcons', 'BAL': 'Ravens', 'BUF': 'Bills', '
 INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 'contract': 'Contract', 'contract_year': 'Contract', 'negotiation': 'Contract', 'waiver': 'Wire', 'waivers': 'Wire', 'wire': 'Wire',
              'squad': 'Squad', 'practice_squad': 'Squad', 'game': 'Game', 'result': 'Game', 'scouting': 'Scouting', 'spring': 'Scouting', 'morale': 'Locker Room', 'trade_request': 'Locker Room',
              'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad', 'league': 'League', 'trade_done': 'Trade', 'waiver_notice': 'Wire', 'waiver_digest': 'Wire', 'injury_decision': 'Trainers', 'ir_ready': 'Trainers', 'injury': 'Trainers', 'roster': 'Roster', 'review': 'Season Review', 'exit': 'Exit Meetings'}
-DECIDE_KINDS = {'trade_offer', 'match_request', 'staff', 'gameplan', 'game_plan', 'offer_sheet', 'contract_year', 'injury_decision', 'roster', 'exit'}
+from inbox import is_decision, DECISION_KINDS
+DECIDE_KINDS = DECISION_KINDS | {'staff'}
 
 
 STADIUM = {'ARI': 'State Farm Stadium', 'ATL': 'Mercedes-Benz Stadium', 'BAL': 'M&T Bank Stadium', 'BUF': 'Highmark Stadium', 'CAR': 'Bank of America Stadium', 'CHI': 'Soldier Field', 'CIN': 'Paycor Stadium', 'CLE': 'Huntington Bank Field',
@@ -340,7 +341,7 @@ def _desk(league, abbr):
     cards = []
     for m in getattr(league, 'inbox', []):
         if m.get('status') not in ('unread', 'open'): continue
-        if m.get('kind') in DECIDE_KINDS:
+        if is_decision(m):
             card = dict(id=m['id'], kind=INBOX_TAG.get(m['kind'], m['kind']), raw_kind=m['kind'], subject=m['subject'], body=m['body'][:220], payload=_payload(m.get('payload') or {}), expires=m.get('expires_week'))
             card.update(_desk_detail(league, abbr, m))
             cards.append(card)
@@ -396,17 +397,17 @@ def _payload(pl):
     return out
 
 
-BLOCK_KINDS = {'roster', 'trade_offer', 'match_request', 'staff'}
+BLOCK_KINDS = {'roster', 'trade_offer', 'match_request', 'staff', 'offer_sheet'}
 
 
 def _inbox(league, limit=14):
     box = getattr(league, 'inbox', []) or []
     rows = []
     for m in (sorted(box, key=lambda m: -m['id'])[:limit] if limit else sorted(box, key=lambda m: -m['id'])):
-        rows.append(dict(id=m['id'], subject=m['subject'], body=(m.get('body') or '')[:140], tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), decide=(m.get('status') in ('unread', 'open') and m.get('kind') in DECIDE_KINDS),
-                         block=(m.get('status') in ('unread', 'open') and m.get('kind') in BLOCK_KINDS and (m.get('kind') != 'trade_offer' or True)),
+        rows.append(dict(id=m['id'], subject=m['subject'], body=(m.get('body') or '')[:140], tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), decide=(is_decision(m)),
+                         block=(is_decision(m) and (m.get('kind') in ('roster', 'trade_offer', 'offer_sheet') or bool((m.get('payload') or {}).get('poach')))),
                          kind=m.get('kind'), unread=m.get('status') == 'unread', week=m.get('week'), year=m.get('year'), sender=m.get('sender'), **{'from': m.get('sender')}, when=(f"Wk {m.get('week')}" if m.get('week') else str(m.get('year') or ''))))
-    return dict(rows=rows, total=len(box), unread=sum(1 for m in box if m.get('status') == 'unread'), decide=sum(1 for m in box if m.get('status') in ('unread', 'open') and m.get('kind') in DECIDE_KINDS))
+    return dict(rows=rows, total=len(box), unread=sum(1 for m in box if m.get('status') == 'unread'), decide=sum(1 for m in box if is_decision(m)))
 
 
 def _cap(league, t):

@@ -100,3 +100,81 @@ def decline(league, msg_id):
 def news(league, subject, body, payload=None):
     """A league-wide item: something that happened elsewhere and the GM should know. Read-only, tagged for the League filter."""
     return post(league, 'league', subject, body, sender='league', payload=payload)
+
+
+DECISION_KINDS = {'trade_offer', 'match_request', 'gameplan', 'game_plan',
+                  'offer_sheet', 'contract_year', 'injury_decision', 'roster', 'exit'}
+
+
+def is_decision(message):
+    """Whether this particular message still represents an action."""
+    if message.get('status', 'unread') not in ('unread', 'open'):
+        return False
+    if message.get('resolved') or message.get('needs_decision') is False:
+        return False
+    kind = message.get('kind')
+    if kind == 'staff':
+        payload = message.get('payload') or {}
+        return (payload.get('event') != 'retirement'
+                and not message.get('subject', '').endswith(' is retiring')
+                and bool(payload.get('poach') or payload.get('role')))
+    return kind in DECISION_KINDS
+
+
+def reconcile(league):
+    """Repair legacy/stale mail from durable entity state; never perform its action.
+
+    Session calls this after loading and before exposing or blocking on mail.
+    Producers/actions also call it when their entity changes.
+    """
+    closed = 0
+    user = getattr(league, 'user_team', None)
+    team = getattr(league, 'teams', {}).get(user)
+    year, week = getattr(league, 'year', None), getattr(league, 'week', None)
+    for m in _box(league):
+        if m.get('status', 'unread') not in ('unread', 'open'):
+            continue
+        pl = m.get('payload') or {}
+        kind = m.get('kind')
+        done = bool(m.get('resolved'))
+        if kind == 'staff':
+            if pl.get('poach'):
+                request = next((r for r in getattr(league, 'poaches', []) or []
+                                if r['id'] == pl['poach']), None)
+                done = request is None or request.get('state') != 'open'
+            elif pl.get('event') == 'retirement' or m.get('subject', '').endswith(' is retiring'):
+                m['needs_decision'] = False
+            elif pl.get('role') and team is not None:
+                coach = (getattr(team, 'staff', {}) or {}).get(pl['role'])
+                # Both a vacancy and an expired deal are settled by an employed,
+                # contracted coach in the slot, including a replacement hire.
+                done = coach is not None and coach.years > 0
+                if pl.get('coach') or m.get('subject', '').endswith("'s contract is up"):
+                    done = done or coach is None or (pl.get('coach') and coach.name != pl['coach'])
+                done = done or (year is not None and m.get('year', year) < year)
+            else:
+                m['needs_decision'] = False
+        elif kind == 'contract_year':
+            p = league.player(pl.get('pid')) if pl.get('pid') else None
+            done = (p is None or p.team != user or not p.contract or p.contract.years != 1
+                    or (year is not None and m.get('year', year) < year))
+        elif kind == 'exit':
+            meetings = (getattr(league, 'exit_meetings', {}) or {}).get(str(m.get('year', year)))
+            if meetings is not None:
+                done = all(mt.get('answer') or league.player(mt.get('pid')) is None for mt in meetings)
+            done = done or (year is not None and m.get('year', year) < year)
+        elif kind == 'injury_decision':
+            done = ((year is not None and m.get('year', year) != year)
+                    or (week is not None and m.get('week', week) < week))
+        elif kind == 'offer_sheet':
+            # Old saves may contain CPU-only requests in the shared inbox.
+            if m.get('team', pl.get('team')) != user:
+                m['needs_decision'] = False
+            p = league.player(m.get('pid', pl.get('pid')))
+            done = done or p is None or getattr(p, 'retired', False)
+            if p is not None:
+                done = done or p.team != m.get('team', pl.get('team')) or getattr(p, 'fa_class', None) != 'tendered'
+        if done:
+            m['status'] = 'done'
+            closed += 1
+    return closed

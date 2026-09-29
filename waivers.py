@@ -278,9 +278,14 @@ def process(league, rng, week, verbose=False):
     order = priority(league, week)
     user = getattr(league, 'user_team', None)
     awarded = []
+    # Snapshot only availability messages. New result mail stays unread.
+    notices = [m for m in IB.pending(league) if m.get('kind') == 'waiver_digest'
+               or (m.get('kind') == 'waiver_notice' and (m.get('payload') or {}).get('pid'))]
+    processed = {e['pid'] for e in ents}
     import valuation as VAL
     pool = VAL.pool_from_league(league) if ents else None
     for e in list(ents):
+        user_failed = False
         p = league.player(e['pid'])
         if p is None or p.retired or p.team is not None:
             if p is not None and user in e.get('claims', []) and p.team is not None:
@@ -294,20 +299,22 @@ def process(league, rng, week, verbose=False):
             if abbr == user:
                 if user in e['claims']:
                     if not claim_fits(league,e,user):
+                        user_failed = True
                         IB.post(league,'waiver_notice',f'Claim failed: {p.name}','The inherited contract does not fit under your cap.',sender='league')
                         continue
                     # the user named his own man to make room with; only if he did not does the engine pick one
                     rel = e.get('release_if_awarded')
                     if (rel and league.player(rel) is not None and league.player(rel).team == user) or make_room(league, user, p):
                         award(league, e, user); awarded.append((p.pid, user)); break
-                    IB.post(league, 'waiver_notice', f"Claim failed: {p.name}", f"Your claim on {p.name} ({p.pos}) could not be processed: no roster spot could be opened for him. He stays on the wire.", sender='league')
+                    user_failed = True
+                    IB.post(league, 'waiver_notice', f"Claim failed: {p.name}", f"Your claim on {p.name} ({p.pos}) could not be processed: no roster spot could be opened for him. The claim window has closed; he may join another club or clear to free agency.", sender='league')
                 continue
             import practice_squad as _PSQ
             if _PSQ.shunned(p, abbr, league) or getattr(league.teams[abbr], '_moved_week', None) == week: continue     # released him lately, or moved already this week
             if wants(league, abbr, p, week, market=market) and claim_fits(league,e,abbr) and make_room(league, abbr, p):
                 league.teams[abbr]._moved_week = week
                 award(league, e, abbr); awarded.append((p.pid, abbr))
-                if user in e.get('claims', []):
+                if user in e.get('claims', []) and not user_failed:
                     import inbox as IB
                     IB.post(league, 'waiver_notice', f"Claim lost: {p.name} to {abbr}", f"You claimed {p.name} ({p.pos}) and {abbr} held the higher priority. He is theirs.", sender='league')
                 break
@@ -328,11 +335,11 @@ def process(league, rng, week, verbose=False):
             elif PSQ.sign_to_squad(league, club, p.pid):          # sign_to_squad logs the move
                 if club == user: IB.post(league, 'waiver_notice', f"{p.name} cleared to the practice squad", f"{p.name} cleared waivers and is on your practice squad.", sender='assistants')
             elif club == user: IB.post(league, 'waiver_notice', f"{p.name} cleared, no room on the squad", f"{p.name} cleared waivers but the squad had no room for him under its rules; he is a free agent.", sender='assistants')
-    # close the notices
-    done = {pid for pid, _ in awarded}
-    for m in IB.pending(league, 'waiver_notice'):
-        if m['payload'].get('pid') in done or True:
-            m['status'] = 'expired' if m['payload'].get('pid') not in done else 'closed'
+    # Close availability for this batch, including its digest, never results.
+    for m in notices:
+        pl = m.get('payload') or {}
+        if m.get('kind') == 'waiver_digest' or pl.get('pid') in processed:
+            m['status'] = 'closed'
     if verbose and awarded:
         print(f'  waivers: {len(awarded)} claimed')
     return awarded
