@@ -42,6 +42,41 @@ class LeagueViews(unittest.TestCase):
         self.assertEqual(next(r['name'] for r in v['rows'] if r['code']=='COTY'),'Original')
         self.L.almanac={}
         self.assertEqual(next(r['name'] for r in V.awards(None,self.L,'GB',2026)['rows'] if r['code']=='COTY'),'Coach name not retained')
+    def test_second_team_fullback_is_kept_in_awards_view(self):
+        self.player('first_fb','FB',dict(snaps=200),team='GB')
+        self.player('second_fb','FB',dict(snaps=150),team='MIN')
+        self.players['second_fb'].career[2026]['team']='MIN'
+        self.L.awards={2026:dict(all_pro_1=['first_fb'],all_pro_2=['second_fb'])}
+        second=V.awards(None,self.L,'GB',2026)['second']
+        self.assertEqual([(r['pid'],r['pos'],r['team']['abbr']) for r in second],
+                         [('second_fb','FB','MIN')])
+    def test_staff_exit_reason_is_reported_accurately(self):
+        self.assertEqual(V._staff_departure_action('new head coach brought his own'),'Replaced')
+        self.assertEqual(V._staff_departure_action('unit bottom-eight two years running'),'Fired')
+        self.assertEqual(V._staff_departure_action('contract up, walked'),'Departed')
+        self.assertEqual(V._staff_departure_action('hired as head coach by MIA'),'Promoted')
+    def test_head_coach_exit_and_hire_survive_save_and_reach_carousel(self):
+        import copy
+        import numpy as np
+        import coaching_pool as CP
+        import league as LG
+        L=LG.build_league(rng=np.random.default_rng(11))
+        t=L.teams['MIA']; old=t.gm.name
+        hired=copy.deepcopy(t.gm); hired.name='New Coach'; hired.age=45
+        with patch.object(CP,'owner_hire',return_value=(hired,{})), patch('position_change.convert_misfits',return_value=[]):
+            CP.fire_and_hire(L,t,np.random.default_rng(12))
+        coach_moves=[x for x in L.transactions if x.get('team')=='MIA' and x.get('kind') in ('fire','gm_change')]
+        self.assertEqual([(x['kind'],x.get('coach') or x.get('hired')) for x in coach_moves],
+                         [('fire',old),('gm_change','New Coach')])
+        L.log('staff_out',team='MIA',role='oc',name='Former OC',why='released by the user')
+        L.log('staff_in',team='MIA',role='oc',name='New OC',why='hired by the user')
+        loaded=LG.League.load(L.save())
+        rows=[x for x in V.coaching(None,loaded,'GB')['carousel'] if x['club']['abbr']=='MIA']
+        self.assertEqual([(x['action'],x['person']) for x in rows[:4]],
+                         [('Hired','New OC'),('Released','Former OC'),
+                          ('Hired','New Coach'),('Fired',old)])
+        tx=[x for x in V.transactions(None,loaded,'GB')['rows'] if x['team'] and x['team']['abbr']=='MIA']
+        self.assertTrue({'staff_in','staff_out','fire','gm_change'}.issubset({x['kind'] for x in tx}))
     def test_snapshots_preferred(self):
         self.L.history={'2026':{'stats':dict(team=[{'kept':True}]),'awards':dict(rows=[{'name':'Original'}])}}
         self.assertEqual(V.stats(None,self.L,'GB',2026)['team'],[{'kept':True}])

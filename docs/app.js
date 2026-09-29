@@ -2420,7 +2420,8 @@ function renderBracket(v) {
   const s = leagueBoard(v, 'PLAYOFFS', v.champion ? `Champion: ${v.champion.name}` : v.live ? 'Live postseason' : v.note || '');
   s.append(leagueYear(v, y => renderBracket(pyJSON(`SESSION.league_view('bracket', year=${y})`))));
   if (v.missing) { s.append(el('div', { class: 'empty' }, v.note || 'No bracket is kept for that season.')); leagueFinish(s,page); return; }
-  s.append(leagueBracket(v),el('p',{class:'league-note'},'Division winners seed 1–4. Top seed receives a bye. Divisional round reseeds.'));
+  s.append(el('div', { class: 'league-playoffs' }, bracketTree(v)),
+    el('p',{class:'league-note'},'Division winners seed 1–4. Top seed receives a bye. Divisional round reseeds.'));
   leagueFinish(s,page);
 }
 
@@ -2429,12 +2430,12 @@ function bracketTree(v) {
   // one team's line on a card: seed, stripe, abbreviation, score; the winner carries the marker, the loser dims
   const line = (c, seed, pts, done, won, me, record) => el('div', { class: 'bk-line' + (done ? (won ? ' win' : ' lose') : '') + (me ? ' me' : '') },
     el('span', { class: 'sd' }, seed || ''), el('span', { class: 'str', style: `background:${c.color}` }), el('span', { class: 'ab' }, c.abbr), el('span', { class: 'rec' }, done ? '' : record || ''), el('b', {}, done ? (won ? '▸ ' : '') + pts : ''));
-  const gameCard = (g, cls) => g ? el('div', { class: 'bk-game ' + (cls || '') + (g.me ? ' mine' : '') + (g.done ? ' done' : '') },
+  const gameCard = (g, cls) => g ? el('div', { class: 'bk-game ' + (cls || '') + (g.me ? ' mine' : '') + (g.done ? ' done' : ''), style: `--match-accent:${g.done ? (g.winner === g.home.abbr ? g.home.accent : g.away.accent) : g.home.accent};--match-base:${g.done ? (g.winner === g.home.abbr ? g.home.color : g.away.color) : g.home.color}` },
     line(g.away, g.away_seed, g.as_, g.done, g.winner === g.away.abbr, g.away.abbr === v.rail.club.abbr, g.away_record),
     line(g.home, g.home_seed, g.hs, g.done, g.winner === g.home.abbr, g.home.abbr === v.rail.club.abbr, g.home_record),
     el('div', { class: 'foot' }, g.done ? 'Final' : g.round === 'SB' ? '' : `at ${g.home.name}`, g.round === 'SB' ? '' : el('span', {}, g.stadium || '')))
     : el('div', { class: 'bk-game tbd ' + (cls || '') }, el('div', { class: 'bk-line' }, el('span', { class: 'sd' }, ''), el('span', { class: 'str' }), el('span', { class: 'ab' }, 'TBD')), el('div', { class: 'bk-line' }, el('span', { class: 'sd' }, ''), el('span', { class: 'str' }), el('span', { class: 'ab' }, 'TBD')), el('div', { class: 'foot' }, 'to be decided'));
-  const byeCard = (b, cls) => b ? el('div', { class: 'bk-game bye ' + cls + (b.me ? ' mine' : '') }, line(b.club, 1, null, false, false, b.me, null), el('div', { class: 'foot' }, 'First-round bye')) : el('div', { class: cls });
+  const byeCard = (b, cls) => b ? el('div', { class: 'bk-game bye ' + cls + (b.me ? ' mine' : ''), style: `--match-accent:${b.club.accent};--match-base:${b.club.color}` }, line(b.club, 1, null, false, false, b.me, null), el('div', { class: 'foot' }, 'First-round bye')) : el('div', { class: cls });
   const tree = el('div', { class: 'bk-tree' });
   const side = (c, flip) => {
     // three wild card games plus the bye in one column; two divisional games; the championship. Rows are the tree's
@@ -2454,29 +2455,7 @@ function bracketTree(v) {
       v.champion ? el('div', { class: 'bk-champ', style: `--c1:${v.champion.color};--c2:${v.champion.accent}` }, el('span', {}, v.champion.name), el('small', {}, 'Champions')) : ''));
   tree.append(el('div', { class: 'bk-join j8' }, el('i', {})), sb, el('div', { class: 'bk-join j8 r' }, el('i', {})));
   if (nfc) tree.append(...side(nfc, true));
-  return tree;
-}
-
-function leagueBracket(v) {
-  const board=el('div',{class:'league-bracket'});
-  const row=(c,seed,score)=>el('div',{class:'league-bracket-row'},el('small',{},seed || ''),el('i',{style:`background:${c?.color || '#60717b'}`}),el('span',{},c?.name || 'TBD'),el('b',{},score ?? ''));
-  const game=g=>g ? el('div',{class:'league-match'+(g.me?' mine':'')},row(g.away,g.away_seed,g.as_),row(g.home,g.home_seed,g.hs),el('small',{},g.done?'Final':'Upcoming')) : el('div',{class:'league-match tbd'},row(null),row(null));
-  const conf=c=>{
-    const panel=el('section',{class:'league-conference'},el('h2',{},c.conf));
-    if(c.bye)panel.append(el('div',{class:'league-bye'},row(c.bye.club,1),el('small',{},'First-round bye')));
-    const rounds=el('div',{class:'league-rounds'});
-    for(const [title,games,count] of [['Wild Card',c.wc,3],['Divisional',c.div,2],['Conference',[c.conf_game],1]]){
-      const col=el('div',{class:'league-round'},el('h3',{},title));
-      if(title==='Divisional')col.append(el('small',{},'Reseeded after Wild Card'));
-      const matches=el('div',{class:'league-round-games'});for(let i=0;i<count;i++)matches.append(game(games[i]));col.append(matches);rounds.append(col);
-    }
-    panel.append(rounds);return panel;
-  };
-  const afc=v.confs.find(c=>c.conf==='AFC'),nfc=v.confs.find(c=>c.conf==='NFC');
-  if(afc)board.append(conf(afc));
-  const final=el('section',{class:'league-final'},el('div',{class:'h5'},`SUPER BOWL ${v.site?.numeral || ''}`),el('p',{},v.site?.city || 'Neutral site'));
-  if(v.final)final.append(game(v.final));else final.append(el('div',{class:'league-final-placeholder'},el('b',{},'AFC champion'),el('small',{},'vs'),el('b',{},'NFC champion')));
-  if(v.champion)final.append(el('h2',{},v.champion.name),el('small',{},'Champions'));board.append(final);if(nfc)board.append(conf(nfc));return board;
+  return el('div', { class: 'bk-scroll' }, tree);
 }
 
 function renderTransactions(v) {
@@ -2544,7 +2523,7 @@ function renderAwards(v) {
   s.append(leagueYear(v,y=>renderAwards(pyJSON(`SESSION.league_view('awards', year=${y})`))));
   if (v.note && !v.rows.length) { s.append(el('div', { class: 'empty' }, v.note)); leagueFinish(s,page); return; }
   const grid = el('div', { class: 'league-awards' });
-  for (const r of v.rows) grid.append(el('div', { class: 'aw' + (r.mine ? ' mine' : ''), style: r.mine ? 'border-color:var(--club)' : '' }, el('div', { class: 'code' }, r.code || ''), el('div', { class: 'a' }, r.award), el('div', { class: 'nm', style: r.pid ? 'cursor:pointer' : '', onclick: () => { if (r.pid) location.hash = '#club/player/' + r.pid; } }, r.name), el('div', { class: 'tm' }, r.team ? clubLink(r.team.abbr, r.team.name) : ''), el('div', { class: 'ln' }, `${r.pos ? r.pos + ' · ' : ''}${r.line || ''}`)));
+  for (const r of v.rows) grid.append(el('div', { class: 'aw' + (r.mine ? ' mine' : ''), style: `--award-accent:${r.team?.accent || '#71909f'};--award-base:${r.team?.color || '#22323d'}` }, el('div', { class: 'code' }, r.code || ''), el('div', { class: 'a' }, r.award), el('div', { class: 'nm', style: r.pid ? 'cursor:pointer' : '', onclick: () => { if (r.pid) location.hash = '#club/player/' + r.pid; } }, r.name), el('div', { class: 'tm' }, r.team ? clubLink(r.team.abbr, r.team.name) : ''), el('div', { class: 'ln' }, `${r.pos ? r.pos + ' · ' : ''}${r.line || ''}`)));
   s.append(grid);
   const apTabs=el('div',{class:'tabs'}); s.append(apTabs);
   for (const [title, list] of [['All-Pro First Team', v.first], ['All-Pro Second Team', v.second]]) {
@@ -2554,9 +2533,14 @@ function renderAwards(v) {
     if(!selected) continue;
     const two = el('div', { class: 'two ap-two' });
     for (const side of ['Offense', 'Defense']) {
-      const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, side), el('th', {}, 'Player'), el('th', {}, 'Team')));
+      const t = el('table', { class: 'tbl league-allpro' }); t.append(el('tr', {}, el('th', {}, side), el('th', {}, 'Player'), el('th', {}, 'Team')));
       const isOff = p => ['QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT', 'K', 'P'].includes(p);
-      for (const x of list.filter(x => isOff(x.pos) === (side === 'Offense'))) t.append(el('tr', { style: x.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, x.pos), el('td', {}, el('span', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.name)), el('td', {}, x.team ? clubLink(x.team.abbr, x.team.name) : '')));
+      const players = list.filter(x => isOff(x.pos) === (side === 'Offense'));
+      if (side === 'Offense' && title === 'All-Pro Second Team' && !players.some(x => x.pos === 'FB')) {
+        const hb = players.findIndex(x => x.pos === 'HB');
+        players.splice(hb < 0 ? 0 : hb + 1, 0, { pos: 'FB', name: 'No eligible selection', empty: true });
+      }
+      for (const x of players) t.append(el('tr', { class: x.mine ? 'mine' : '' }, el('td', {}, x.pos), el('td', {}, x.empty ? el('span', { class: 'league-allpro-empty' }, x.name) : el('button', { class: 'league-allpro-player', onclick: () => { location.hash = '#club/player/' + x.pid; } }, x.name)), el('td', { class: 'team-cell' }, x.team ? clubLink(x.team.abbr, x.team.name) : '')));
       two.append(t);
     }
     s.append(two);
@@ -2586,10 +2570,15 @@ function renderCoaching(v) {
     if (!v.pool.length) t.append(el('tr', {}, el('td', { colspan: '4' }, el('div', { class: 'empty' }, 'The pool fills as the season ends.'))));
     s.append(t);
   } else {
-    const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Year'), el('th', {}, 'Team'), el('th', {}, 'Hired'), el('th', {}, 'Background'), el('th', { class: 'n' }, 'After')));
-    for (const c of v.carousel) t.append(el('tr', {}, el('td', {}, c.year), el('td', {}, clubLink(c.club.abbr, c.club.name)), el('td', {}, c.hired), el('td', {}, c.background || ''), el('td', { class: 'n' }, c.win_pct != null ? `.${String(Math.round(c.win_pct * 1000)).padStart(3, '0')}` : '')));
-    if (!v.carousel.length) t.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'No changes this offseason.'))));
-    s.append(t);
+    const moves = el('div', { class: 'league-coach-moves' });
+    for (const c of v.carousel) moves.append(el('div', { class: 'league-coach-move', style: `--coach-color:${c.club.accent || '#71909f'};--coach-base:${c.club.color || '#22323d'}` },
+      el('span', { class: 'year' }, String(c.year)),
+      el('div', { class: 'club' }, clubLink(c.club.abbr, c.club.name)),
+      el('span', { class: 'action' }, c.action),
+      el('div', { class: 'person' }, el('b', {}, c.person), el('small', {}, c.role)),
+      el('span', { class: 'detail' }, c.detail || '')));
+    if (!v.carousel.length) moves.append(el('div', { class: 'empty' }, 'No coaching changes this offseason.'));
+    s.append(moves);
   }
   leagueFinish(s,page);
 }
