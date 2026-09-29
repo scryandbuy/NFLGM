@@ -80,6 +80,7 @@ class Session:
         except Exception as e:
             import sys; print('tenure/expectation seed failed:', e, file=sys.stderr)
         s = cls(L, rng_, d.get('_user_team'))
+        s.votes = s._recorded_votes()
         if d.get('_week_book') is not None: L.week_book = d['_week_book']
         s.stop = tuple(d.get('_stop', ['week', 1]))
         s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
@@ -215,6 +216,26 @@ class Session:
             s.draft.dealt = {frozenset(x) for x in live.get('dealt', [])}
             s.draft.last_dealt = live.get('last_dealt')
         return s
+
+    def _recorded_votes(self):
+        """Rehydrate this season's ballot without voting again or consuming RNG.
+
+        League.awards already persists the results. Development expects Player
+        objects, while the saved ledger contains IDs (except COTY, a team).
+        """
+        awards = getattr(self.L, 'awards', {}) or {}
+        recorded = awards.get(self.L.year, awards.get(str(self.L.year)))
+        if recorded is None:
+            return None
+        votes = {}
+        for key, winner in recorded.items():
+            if key == 'coty':
+                votes[key] = winner
+            elif isinstance(winner, list):
+                votes[key] = [p for pid in winner if (p := self.L.player(pid)) is not None]
+            else:
+                votes[key] = self.L.player(winner) if winner is not None else None
+        return votes
 
     def save(self):
         d = json.loads(self.L.save())
@@ -548,7 +569,9 @@ class Session:
             except Exception as e:
                 import sys; print('open round failed:', e, file=sys.stderr)
         else:
-            self.stop = ('week', 1); self.runner = None
+            # Every year's cutdown gets the same claim window as initial camp.
+            # Clearing that wire fills squads and enters the regular phase.
+            self.stop = ('wire',); self.runner = None; self.played = False
             try: GW.post_report(self.L, 1)
             except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
@@ -1062,6 +1085,9 @@ class Session:
 
     def step_cutdown(self):
         L, rng = self.L, self.rng
+        # The previous postseason's week must not leak into the new wire,
+        # injury/claim dates or the first regular-season decision window.
+        L.week = 0
         for t in L.teams.values():
             for p in list(PSQ.squad(t)): PSQ.release_from_squad(L, t.abbr, p.pid)
         PSQ.reset_season(L)

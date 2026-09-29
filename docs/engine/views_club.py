@@ -64,11 +64,21 @@ def _status(league, p, t):
     return ' · '.join(out)
 
 
+def _cut_penalty(league, p):
+    now, later, _ = p.contract.release(0, league.post_june1()) if p.contract else (0, 0, 0)
+    return dict(penalty=round(now, 1), penalty_next=round(later, 1))
+
+
+def _cut_penalty_line(penalty):
+    return (f"Penalty ${penalty['penalty']:.1f}m this year"
+            + (f" and ${penalty['penalty_next']:.1f}m next year" if penalty['penalty_next'] else '') + '.')
+
+
 def _row(session, league, t, p):
     yrs = p.contract.years if p.contract else 0
     return dict(pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, side=('offense' if p.pos in OFFENSE else 'special' if p.pos in ('K', 'P', 'LS') else 'defense'), age=int(p.age), ovr=round(p.ovr), fit=round(_fit(league, t, p), 1),
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), cond=_cond(session, p), morale=morale_word(p), yrs=yrs,
-                hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1), status=_status(league, p, t),
+                hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), status=_status(league, p, t),
                 college=getattr(p, 'college', None) or '', season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
                 # ratings view
                 pot=(round(p.potential) if getattr(p, 'potential', None) else None), pot_range=list(getattr(p, 'potential_range', None) or []) or None,
@@ -201,7 +211,7 @@ def card(session, league, pid):
     if p.contract:
         c = p.contract
         for i in range(c.years):
-            try: years.append(dict(year=league.year + i, base=round(c.base[i] + c.rb[i], 1), bonus=round(c.bonus_at(i), 1), hit=round(c.cap_hit(i), 1), penalty=round(c.release(i)[0], 1)))
+            try: years.append(dict(year=league.year + i, base=round(c.base[i] + c.rb[i], 1), bonus=round(c.bonus_at(i), 1), hit=round(c.cap_hit(i), 1), penalty=round(c.release(i, league.post_june1())[0], 1), penalty_next=round(c.release(i, league.post_june1())[1], 1)))
             except Exception: years.append(dict(year=league.year + i, hit=round(c.cap_hit(i), 1)))
     if p.pos == 'CB':
         try:
@@ -271,7 +281,7 @@ def card(session, league, pid):
                 season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
                 ovr=round(p.ovr), fit=round(fit, 1), ceiling=(f"{int(p.potential_range[0])}–{int(p.potential_range[1])}" if getattr(p, 'potential_range', None) else (str(round(p.potential)) if getattr(p, 'potential', None) else '—')),
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), morale=morale_word(p), morale_v=round(m.value) if m is not None else None,
-                contract=(dict(per_year=0.0, years=0, hit=0.0, penalty=0.0, by_year=[]) if p.team is None else dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1), by_year=years)),
+                contract=(dict(per_year=0.0, years=0, hit=0.0, penalty=0.0, penalty_next=0.0, by_year=[]) if p.team is None else dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), by_year=years)),
                 free_agent=(p.team is None), on_wire=bool(p.team is None and p.contract is not None),
                 interest=interest, cols=cols, grades=grades, personality=words, status=_status(league, p, t) if t else '',
                 schemes=scheme_rows(p.ratings, p.pos, _club_arch(league, getattr(session, 'user_team', None), p.pos)),
@@ -701,16 +711,17 @@ def act_to_squad(league, abbr, pid):
     t = league.teams[abbr]; p = league.player(pid)
     if p is None or p not in t.roster: return dict(ok=False, why='not on your roster')
     if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most, one specialist)'))
-    dead = round(float(p.dead_if_cut(0)), 1)
+    penalty = _cut_penalty(league, p)
+    penalty_line = _cut_penalty_line(penalty)
     if int(p.accrued or 0) >= 4:
         league.release(pid)
         PSQ.sign_to_squad(league, abbr, pid)
-        return dict(ok=True, line=f"{p.name} to the practice squad. Penalty ${dead}m.", now=True)
+        return dict(ok=True, line=f"{p.name} to the practice squad. {penalty_line}", now=True, **penalty)
     league.release(pid)
     intent = dict(getattr(league, 'ps_intent', None) or {}); intent[pid] = abbr; league.ps_intent = intent
     import inbox as IB
-    IB.post(league, 'waiver_notice', f"{p.name} waived for the practice squad", f"{p.name} ({p.pos}) has been waived and goes through waivers. If no club claims him by the Advance he is assigned to your practice squad; if a club claims him, he is theirs. Penalty ${dead}m against this year's cap.", sender='assistants')
-    return dict(ok=True, line=f"{p.name} waived. If he clears at the Advance he joins your practice squad. Penalty ${dead}m.", now=False)
+    IB.post(league, 'waiver_notice', f"{p.name} waived for the practice squad", f"{p.name} ({p.pos}) has been waived and goes through waivers. If no club claims him by the Advance he is assigned to your practice squad; if a club claims him, he is theirs. {penalty_line}", sender='assistants')
+    return dict(ok=True, line=f"{p.name} waived. If he clears at the Advance he joins your practice squad. {penalty_line}", now=False, **penalty)
 
 
 def act_reset_depth(league, abbr, pos=None):
@@ -723,9 +734,9 @@ def act_reset_depth(league, abbr, pos=None):
 def act_cut(league, abbr, pid):
     p = league.player(pid)
     if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
-    pen = round(p.dead_if_cut(0), 1)
+    penalty = _cut_penalty(league, p)
     league.release(pid)
-    return dict(ok=True, name=p.name, penalty=pen)
+    return dict(ok=True, name=p.name, **penalty)
 
 
 def act_position_change(league, abbr, pid, new_pos):
