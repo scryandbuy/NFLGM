@@ -74,6 +74,38 @@ class DraftIntegrityTests(unittest.TestCase):
         self.assertEqual(len(offer['a_sends']), 3)
         self.assertTrue(result['accepted'])
 
+    def test_live_consensus_and_custom_board_sources(self):
+        s = session.Session.load(self.initial)
+        L = s.L
+        L.year = 2027
+        L.phase = 'offseason'
+        L.season_closed_year = 2026
+        L.draft_pool, L.next_class = L.next_class, []
+        for i, pk in enumerate((pk for pk in L.teams['KC'].picks if pk.year == 2026), 1):
+            pk.selection = i
+        s.draft = draft_day.Draft(L, s.rng, 2026, user_team='KC')
+        first = views_draft.draft_day(s, L, 'KC')
+        self.assertFalse(first['has_custom_board'])
+        self.assertEqual(len(first['best']), 40)
+        ranks = [r['cons_rank'] for r in first['best']]
+        self.assertEqual(ranks, sorted(ranks))
+        excluded, preferred = first['best'][0]['pid'], first['best'][10]['pid']
+        L.user_board = dict(order=[preferred], dnd=[excluded])
+        custom = views_draft.draft_day(s, L, 'KC')
+        self.assertTrue(custom['has_custom_board'])
+        self.assertEqual(custom['board'][0]['pid'], preferred)
+        self.assertNotIn(excluded, [r['pid'] for r in custom['board']])
+        self.assertEqual(custom['best'][0]['pid'], excluded)
+        self.assertEqual([r['pid'] for r in custom['best']], [r['pid'] for r in first['best']])
+        resumed = session.Session.load(s.save())
+        saved = views_draft.draft_day(resumed, resumed.L, 'KC')
+        self.assertTrue(saved['has_custom_board'])
+        self.assertEqual(saved['board'][0]['pid'], preferred)
+        resumed.draft.make_pick(preferred)
+        picked = views_draft.draft_day(resumed, resumed.L, 'KC')
+        for source in ('best', 'board'):
+            self.assertNotIn(preferred, [r['pid'] for r in picked[source]])
+
     def test_auto_board_live_save_and_historical_exports(self):
         s = session.Session.load(self.initial)
         L = s.L

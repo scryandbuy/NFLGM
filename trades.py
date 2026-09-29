@@ -567,6 +567,122 @@ IN_SEASON_ACTIVITY = {w: 0.04 for w in range(1, 7)}
 IN_SEASON_ACTIVITY.update({7: 0.15, 8: 0.35, 9: 0.60})
 
 
+def shop_cap_casualty(league, seller, player, rng, june1=None):
+    """Last chance for ONE player already selected for release by contracts.
+
+    Never selects a casualty or searches the seller's roster. Picks only:
+    receiving salary would undermine the already-decided cap move. Buyers
+    retain their roster, contract and price checks. Only an over-cap seller
+    may take less than its normal ask, because its alternative is this cut.
+    """
+    from itertools import combinations
+    import roster_needs as RN
+    import cap_accounting as CA
+    from contracts import TARGET_ROOM
+
+    user = getattr(league, 'user_team', None)
+    if (seller.abbr == user or player.team != seller.abbr
+            or player not in seller.active() or not player.contract
+            or player.out_until is not None):
+        return False
+    offseason = league.phase in ('offseason', 'free_agency')
+    if not offseason and not (league.phase == 'regular'
+                              and int(league.week or 0) <= TRADE_DEADLINE_WEEK):
+        return False
+    if CA.pre_roll(league):
+        CA.settle_week(league, 18)
+    seller.sync_cap()
+    before = seller.cap.charges(seller.phase)
+    trial = CA.trade_projection(league, seller.abbr, [player.pid], [])
+    relief = before - trial.charges(seller.phase)
+    # The emergency June-1 release can differ from a regular-season trade.
+    # Do not trade if it would free less room than the cut already selected.
+    cut_now, _, _ = player.contract.release(
+        0, league.post_june1() if june1 is None else june1)
+    trade_now, _, _ = player.contract.release(0, league.post_june1())
+    if relief <= .0005 or trade_now > cut_now + .0005:
+        return False
+    forced = before > seller.cap.limit + .0005
+    pool = VAL.pool_from_league(league)
+    own = player_asset(league, seller, player, pool, rng, viewer=seller)
+    if own is None:
+        return False
+    ctx_s, gm_s = seller.ctx(), persona(seller.gm)
+    ask = TE.team_price(own, ctx_s, seller.cap_space, gm_s, owns=True)
+    bids = []
+    for abbr, buyer in sorted(league.teams.items()):
+        if abbr in (seller.abbr, user):
+            continue
+        buyer.sync_cap()
+        # Accounting phase becomes 'season' at cutdown, even while the
+        # calendar still says offseason. Never force a buyer to cut a man.
+        limit = 90 if offseason and buyer.phase != 'season' else 53
+        if len(buyer.active()) >= limit or RN.move_gain(buyer, player) <= .5:
+            continue
+        target = player_asset(league, seller, player, pool, rng,
+                              need=True, viewer=buyer)
+        if target is None or not _can_absorb(league, buyer, target, buyer.cap_space):
+            continue
+        projection = CA.trade_projection(league, abbr, [], [player.pid])
+        # Keep the same cushion cleanup seeks; otherwise a later team in
+        # that very cleanup pass could buy him and immediately cut him again.
+        if projection.space(buyer.phase) < TARGET_ROOM - .0005:
+            continue
+        try:
+            CA.require_trade_room(league, seller.abbr, abbr, [player.pid], [])
+        except ValueError:
+            continue
+        ctx_b, gm_b = buyer.ctx(), persona(buyer.gm)
+        # A clear buyer gain and the ordinary market ceiling are required;
+        # cap desperation never persuades the buyer to overpay.
+        budget = TE.team_price(target, ctx_b, buyer.cap_space, gm_b) - .5
+        premium = 1.25 if TE.window(ctx_b) in ('contending', 'win_now') else 1.10
+        ceiling = max(0.0, float(target['trade_value']),
+                      float(target['trade_value_buyer'])) * premium + .35
+        bank = []
+        for pk in buyer.picks:
+            asset = pick_asset(league, pk)
+            # pick_asset handles the game's previous-season draft labels.
+            if (pk.owner != abbr or pk.used_on is not None
+                    or pk.year > league.year + 2
+                    or pk.year < league.year - (1 if offseason else 0)):
+                continue
+            if pk.year < league.year and (
+                    getattr(league, 'season_closed_year', None) != league.year - 1
+                    or int((getattr(league, 'last_draft', None) or {}).get('year', -1)) >= pk.year):
+                continue
+            cost = TE.team_price(asset, ctx_b, buyer.cap_space, gm_b, owns=True)
+            market = TE.pick_value_dollars(asset['pick'], asset['years_out'])
+            value = TE.team_price(asset, ctx_s, seller.cap_space, gm_s)
+            if 0 < cost <= budget and 0 < market <= ceiling:
+                bank.append((pk, cost, market, value))
+        best = None
+        # Compare every affordable picks-only package (same five-asset limit
+        # as ordinary negotiations), then compare buyers. No first low bid.
+        for count in range(1, min(MAX_PACKAGE, len(bank)) + 1):
+            for package in combinations(bank, count):
+                cost = sum(x[1] for x in package)
+                market = sum(x[2] for x in package)
+                value = sum(x[3] for x in package)
+                if cost > budget or market > ceiling or (not forced and value <= ask + .9):
+                    continue
+                rank = (value, market, -count)
+                if best is None or rank > best[0]:
+                    best = (rank, [x[0] for x in package])
+        if best is not None:
+            bids.append((best[0], abbr, best[1]))
+    for rank, abbr, picks in sorted(bids, key=lambda bid: bid[0], reverse=True):
+        try:
+            league.trade(seller.abbr, abbr, [player.pid], picks)
+        except ValueError:
+            continue
+        league.log('cap_casualty_trade', team=seller.abbr, buyer=abbr,
+                   pid=player.pid, relief=round(relief, 3),
+                   discounted=rank[0] <= ask + .9)
+        return True
+    return False
+
+
 def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_to_user=True):
     """
     Clubs shop their surplus. A deal goes through only when both sides price

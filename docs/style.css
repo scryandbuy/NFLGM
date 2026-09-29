@@ -2661,15 +2661,24 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .draft-surface .tbl tr:hover td{background:#ffffff06}
 .draft-surface .tbl tr.sel td{background:color-mix(in srgb,var(--team-accent) 10%,#10191e)}
 .draft-surface .who .nm{font:650 13px var(--text)}.draft-surface .who small{font:400 10px var(--text);color:#91a6b1}
-.draft-surface .no{border-radius:5px;clip-path:none;background:color-mix(in srgb,var(--team-base) 72%,#253d42);border:1px solid #ffffff1d}
+.draft-surface .no{border-radius:5px;clip-path:none;background:color-mix(in srgb,var(--team-base) 72%,#253d42);color:#fff;border:1px solid #ffffff1d}
 .draft-surface .grp td{color:var(--team-readable);font:700 11px var(--text);letter-spacing:.08em;background:color-mix(in srgb,var(--team-base) 18%,#10191e)}
 .draft-surface .foot{padding:16px 20px;background:#0d171b}
 .draft-spring .pad{padding:14px 22px}
 .draft-spring .sprow{display:grid;grid-template-columns:70px minmax(0,1fr);gap:16px;align-items:start;padding:14px 5px;border-bottom:1px solid #ffffff12;font:400 13px/1.5 var(--text)}
 .draft-spring .sprow .flag{width:max-content;margin:0}
 .draft-clock .clockhead{background:linear-gradient(105deg,color-mix(in srgb,var(--team-base) 43%,#10191e),#10191e);border-bottom:1px solid #ffffff1a;padding:24px}
+.draft-clock-emblem{width:54px;height:54px;flex:0 0 54px;display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--clock-team) 45%,#57646b);border-top:3px solid var(--clock-accent);border-radius:8px;background:color-mix(in srgb,var(--clock-team) 65%,#10191e);color:#fff;font:800 18px/1 var(--text);letter-spacing:.02em;box-shadow:inset 0 1px 0 #ffffff08}
 .draft-clock .clockhead .big{font:800 25px var(--text);letter-spacing:-.025em}.draft-clock .clockhead .sub{font:400 12px var(--text);color:#a7bec8;margin-top:5px}
 .draft-clock .ctrl2{padding:16px 20px!important;flex-wrap:wrap}
+.draft-round-pager{margin-left:auto;display:inline-flex;gap:8px;align-items:center;white-space:nowrap}
+.draft-round-pager .count{font-variant-numeric:tabular-nums}
+.draft-round-pager .btn.draft-round-arrow{width:24px;height:24px;min-width:24px;flex:0 0 24px;padding:0;display:inline-flex;align-items:center;justify-content:center;gap:0;border:1px solid transparent;border-radius:50%;background:transparent;line-height:1}
+.draft-round-arrow .round-chevron{display:block;width:6px;height:6px;border-top:1.5px solid currentColor;border-right:1.5px solid currentColor;transform:translateX(-1.5px) rotate(45deg)}
+.draft-round-arrow.previous .round-chevron{transform:translateX(1.5px) rotate(-135deg)}
+.draft-round-pager .draft-round-arrow:hover:not(:disabled){background:#ffffff0d;border-color:#ffffff24}
+.draft-round-pager .draft-round-arrow:focus-visible{outline:2px solid var(--team-accent);outline-offset:2px}
+.draft-round-pager .draft-round-arrow:disabled{opacity:.3;cursor:default}
 .draft-clock .picksmade{padding:8px 20px}.draft-clock .pk{border-bottom:1px solid #ffffff13;padding:9px}
 .draft-clock .pk.now{background:color-mix(in srgb,var(--team-accent) 10%,#10191e);box-shadow:inset 3px 0 var(--team-accent)}
 .draft-clock .pk.next{background:color-mix(in srgb,var(--team-accent) 7%,#10191e);border-left-color:var(--team-accent)}
@@ -2771,3 +2780,9 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .team-profile-aside .foot{padding:16px;gap:7px}
 @media(max-width:1100px){.feature-hero{align-items:start;flex-direction:column}.feature-hero-facts{border-left:0;border-top:1px solid #ffffff24;padding-top:14px;width:100%}.feature-hero-facts>div:first-child{padding-left:0}.draft-intel{grid-template-columns:1fr 1fr}.draft-intel>div:last-child{grid-column:1/-1;border-top:1px solid #ffffff16}.plan-report .tendgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.plan-report .two{display:grid;grid-template-columns:1fr}}
 @media(max-width:700px){.feature-hero,.team-profile-hero{padding:24px 20px}.feature-hero-facts>div{min-width:0;flex:1;padding:4px 12px}.feature-hero-facts strong{font-size:23px}.draft-intel,.team-profile-metrics{grid-template-columns:1fr 1fr}.draft-intel>div:nth-child(2){border-right:0}.draft-intel>div:last-child{grid-column:1/-1}.team-profile-hero{align-items:start;flex-direction:column}.team-profile-metrics>div:nth-child(2){border-right:0}.team-profile-metrics>div:nth-child(-n+2){border-bottom:1px solid #ffffff17}.team-profile-intro .crest{width:52px;height:52px;font-size:16px}.team-profile-detail{grid-template-columns:1fr}.team-profile-main .kv{grid-template-columns:120px 1fr}.gameday-page .bigbug{grid-template-columns:1fr!important;gap:14px;padding:20px}.gameday-page .bigbug .side{justify-content:space-between}.gameday-page .bigbug .mid{order:2}.game-preview .facts2{grid-template-columns:1fr!important;padding:18px 20px!important}.game-preview .facts2 div{text-align:left!important}.game-preview .read{margin:14px 20px!important}.game-preview .foot{padding:18px 20px}.plan-matchup{align-items:start;flex-direction:column;padding:22px}.plan-report .tendgrid{grid-template-columns:1fr 1fr;padding:0 16px 18px}.plan-report .two,.plan-report .cards{padding-left:16px;padding-right:16px}.plan-week .sugs,.plan-week .decide{padding-left:16px;padding-right:16px}.gameplan-surface .plan{margin:0}.gameplan-surface .plan>div{padding:6px 16px 18px}.gameplan-surface .lean{grid-template-columns:minmax(95px,125px) minmax(80px,1fr) 50px}.draft-board .filt-pos .find,.draft-results .find{min-width:100%;margin-left:0}}
+
+/* Draft Day: choose the ranking source without changing the saved board. */
+.draft-available h2{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.draft-board-source{max-width:100%;margin-left:auto;padding:6px 24px 6px 9px;border:1px solid #ffffff26;border-radius:5px;background:#101b20;color:var(--ink);font:600 12px var(--text)}
+.draft-board-source:focus-visible{outline:2px solid var(--team-accent);outline-offset:2px}
+.draft-board-note{margin:0;padding:10px 20px;color:var(--ink-3);font:400 12px/1.5 var(--text);border-bottom:1px solid #ffffff14}
