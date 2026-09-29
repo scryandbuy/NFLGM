@@ -49,6 +49,16 @@ class GameplanWiringTests(unittest.TestCase):
    self.assertEqual(19,self.s.plan_view('this_week')['week']); self.assertTrue(self.s.plan_take_all()['ok'])
    self.s.stop=('playoffs',1); self.assertTrue(self.s.plan_view('this_week')['off']); self.assertFalse(self.s.plan_take_all()['ok'])
   finally:self.s.L.schedule=old
+ def test_report_before_unit_rankings_exist(self):
+  view=self.s.plan_view('report')
+  self.assertFalse(view['off'])
+  self.assertEqual(8,len(view['unit_table']))
+  self.assertTrue(any(row['mine'] is None or row['theirs'] is None for row in view['unit_table']))
+  if view['suggestions']:
+   self.assertTrue(self.s.plan_act('skip',i=view['suggestions'][0]['i'],skip=True)['ok'])
+   self.assertTrue(self.s.plan_view('report')['suggestions'][0]['skipped'])
+   self.assertTrue(self.s.plan_act('skip',i=view['suggestions'][0]['i'],skip=False)['ok'])
+   self.assertFalse(self.s.plan_view('report')['suggestions'][0]['skipped'])
  def test_protection(self):
   for key,expected in [('half_slide','half_slide'),('full_slide','six_slide'),('six','six_bob'),('empty','five')]:
    self.assertEqual(expected,schemes.choose_protection('11',4,'medium',np.random.default_rng(1),preference=key))
