@@ -348,19 +348,29 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
     return signed, waiting, messages
 
 
-def sign(league, player, offer, cap):
-    """Put him under contract. Structure comes from the same builder the rest
-    of the game uses, so a free agent deal looks like any other."""
+def signing_terms(league, player, team, apy, years, cap, front_load=None, bonus=None):
+    """Shared FA preview and signing calculation; only base salary is time-prorated."""
     import contract_structure as CS
-    team = league.teams[offer.team]
-    st = CS.structure(offer.apy, offer.years, player.pos, cap, team.gm, front_load=offer.front_load)
-    base = list(st['base'])
-    # IN SEASON THE FIRST YEAR IS PRORATED. A deal signed in week 10 pays and counts
-    # for the weeks left, not the full year: real in-season signings are per-week
-    # money. The later years are whole.
+    years = int(years)
+    st = CS.structure(float(apy), years, player.pos, cap, team.gm, front_load=front_load)
+    base = list(st['base']); sb = float(st['signing_bonus'])
+    if bonus is not None:
+        sb = max(0.0, float(bonus)); total_base = max(0.0, float(apy) * years - sb)
+        sh = float(st.get('front_load', 0.5))
+        weights = [1.0 + (sh - 0.5) * 2 * (1 - 2 * i / max(1, years - 1)) for i in range(years)] if years > 1 else [1.0]
+        base = [total_base * w / sum(weights) for w in weights]
     wk = int(league.week or 0)
-    if league.phase == 'regular' and 1 <= wk <= 18 and base:
-        base[0] = round(base[0] * (19 - wk) / 18.0, 3)
+    fraction = (19 - wk) / 18.0 if league.phase == 'regular' and 1 <= wk <= 18 else 1.0
+    if base: base[0] = round(base[0] * fraction, 3)
+    return dict(base=base, signing_bonus=sb, fraction=fraction,
+                cash_this_season=round(base[0] + sb, 3),
+                cap_hits=[round(x + sb / years, 3) for x in base], total=round(sum(base) + sb, 3))
+
+
+def sign(league, player, offer, cap, bonus=None):
+    team = league.teams[offer.team]
+    st = signing_terms(league, player, team, offer.apy, offer.years, cap, offer.front_load, bonus)
+    base = st['base']
     c = Contract(years=offer.years, base=base,
                  signing_bonus=st['signing_bonus'], signed=league.year)
     # the incumbent at his spot who is now behind a man the club just paid

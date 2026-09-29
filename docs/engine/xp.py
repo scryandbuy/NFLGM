@@ -303,7 +303,13 @@ def unlock_cost(player):
             * (1.0 + AGE_SLOPE * years))
 
 
-def unlock(player):
+def _record_purchase(player, kind, cost, *, attr=None, year=None, week=None, source=None):
+    """Keep dated XP purchases with the player's existing, saved XP ledger."""
+    player.xp_spent.setdefault('_purchases', []).append(dict(
+        kind=kind, attr=attr, cost=round(float(cost), 1), year=year, week=week, source=source))
+
+
+def unlock(player, *, year=None, week=None, source=None):
     """Raise the ceiling one point. Returns the cost, or None."""
     pot = ceiling(player)
     if pot is None or pot >= 99.0:
@@ -314,6 +320,7 @@ def unlock(player):
     player.xp -= cost
     player.potential = min(99.0, pot + 1.0)
     player.xp_spent['_unlocks'] = player.xp_spent.get('_unlocks', 0) + 1
+    _record_purchase(player, 'unlock', cost, year=year, week=week, source=source)
     return cost
 
 
@@ -330,7 +337,7 @@ def at_ceiling(player, attr=None):
     return TG.position_score(trial, player.pos) > pot + 1e-6
 
 
-def buy(player, attr):
+def buy(player, attr, *, year=None, week=None, source=None):
     """
     Spend: one point into one attribute. Returns the cost paid, or None if he
     cannot afford it, the attribute is at 99, or the point would take him
@@ -347,6 +354,7 @@ def buy(player, attr):
     player.ratings[attr] = cur + 1.0
     player.xp_spent[attr] = player.xp_spent.get(attr, 0) + 1
     player.xp_spent['_bought_season'] = player.xp_spent.get('_bought_season', 0) + 1
+    _record_purchase(player, 'buy', cost, attr=attr, year=year, week=week, source=source)
     return cost
 
 

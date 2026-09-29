@@ -88,7 +88,7 @@ def make_coach(gm):
         blitz_rate=0.133,
         front_pref=fronts,
         run_scheme_mix=run_mix,
-        personnel_mix=pers,
+        personnel_mix=pers, off_personnel=base,
         depth_mix=depth_mix,
         pass_bias=float(getattr(gm, 'pass_lean', 0.5) - 0.5) * 0.25,   # x4 in log-odds inside pass_rate
         play_action_rate=float(getattr(gm, 'play_action', 0.5)),
@@ -161,7 +161,9 @@ class SeasonRunner:
                     for a, v in hits.items(): r[a] = max(1.0, float(r.get(a, 60.0)) + v)
         # game-day elevations from the practice squad dress this week
         rows += [dict(p.ratings, pid=p.pid, pos=p.pos) for p in getattr(t, '_elevated', [])]
-        units = R.build_roster_rows(rows, t.scheme, pins=getattr(t, 'depth_pins', None))
+        units = R.build_roster_rows(rows, t.scheme, pins=getattr(t, 'depth_pins', None),
+                                    front=getattr(t.gm, 'def_front', '4-3'),
+                                    box=getattr(t.gm, 'box', 0.5))
         # FIT ON THE FIELD: the depth chart is ordered on the card, then every player dresses with his
         # scheme fit on his game-day ratings (field_fit), centered at the league mean for his spot
         self._apply_field_fit(rows, t)

@@ -149,15 +149,36 @@ def _merge(changes, add):
     return out
 
 
+def _skipped(league, week):
+    wp = getattr(league, 'user_week_plan', None) or {}
+    return list(wp.get('skipped', [])) if wp.get('year') == league.year and wp.get('week') == week else []
+
+
+def act_skip(session, league, abbr, i, skip=True):
+    import gameplan_week as GW
+    wk = _week(session, league); opp = session._opponent(wk)
+    if wk is None or opp is None: return dict(ok=False, why='no game this week')
+    suggestions = GW.opponent_report(league, abbr, opp[0], wk)['suggestions']
+    if not 0 <= int(i) < len(suggestions): return dict(ok=False, why='that suggestion is gone')
+    text = suggestions[int(i)]['text']; skipped = _skipped(league, wk)
+    if skip and text not in skipped: skipped.append(text)
+    if not skip: skipped = [x for x in skipped if x != text]
+    GW.set_user_plan(league, wk, _saved(league, wk), taken=_taken(league, wk))
+    league.user_week_plan['skipped'] = skipped
+    return dict(ok=True)
+
+
 def act_take(session, league, abbr, i):
     import gameplan_week as GW
     wk = _week(session, league); opp = session._opponent(wk)
     rep = GW.opponent_report(league, abbr, opp[0], wk)
-    if int(i) >= len(rep['suggestions']): return dict(ok=False, why='that suggestion is gone')
+    if not 0 <= int(i) < len(rep['suggestions']): return dict(ok=False, why='that suggestion is gone')
     s = rep['suggestions'][int(i)]
     if s['text'] in _taken(league, wk): return dict(ok=True, line='Already taken.')
+    skipped = [x for x in _skipped(league, wk) if x != s['text']]
     changes = _merge(_saved(league, wk), s['changes'])
     GW.set_user_plan(league, wk, changes, taken=_taken(league, wk) + [s['text']])
+    league.user_week_plan['skipped'] = skipped
     return dict(ok=True, line=f"Taken: {s['text']}.")
 
 

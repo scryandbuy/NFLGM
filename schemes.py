@@ -10,6 +10,7 @@ Every rate is from real data: FTN charting of 96,256 plays (2023-24) for scheme
 usage, and six seasons of play-by-play for the effects.
 """
 import numpy as np
+import defense_roles as DR
 
 # ============================================================ PERSONNEL
 # offence: first digit RB, second TE, remainder WR
@@ -27,7 +28,7 @@ PERSONNEL_DEF = {
     'base':   dict(db=4, lb=3, dl=4, box_bonus=+1.0, cover_penalty=0.10),
     'nickel': dict(db=5, lb=2, dl=4, box_bonus= 0.0, cover_penalty=0.00),
     'dime':   dict(db=6, lb=1, dl=4, box_bonus=-1.0, cover_penalty=-0.06),
-    'heavy':  dict(db=3, lb=4, dl=5, box_bonus=+2.0, cover_penalty=0.22),
+    'heavy':  dict(db=3, lb=3, dl=5, box_bonus=+2.0, cover_penalty=0.22),
 }
 
 def defensive_personnel(off_pers, down, ydstogo, rng, gm_aggr=0.5, sub_lean=0.0):
@@ -100,7 +101,8 @@ def box_count(def_pers, front, off_pers, blitzers, rng, yards_to_endzone=50):
     # whole front seven put the sim at 6.15 there and suppressed the run
     # league-wide; ends are widened out of the box and linebackers are often
     # walked out against spread personnel.
-    b = FRONTS[front]['dl'] * 0.74 + PERSONNEL_DEF[def_pers]['lb'] * 0.62
+    personnel = DR.counts(DR.front_family(front), def_pers)
+    b = personnel['dl'] * 0.74 + personnel['lb'] * 0.62
     b += PERSONNEL_DEF[def_pers]['box_bonus'] * 0.34
     b += 0.45 * PERSONNEL_OFF.get(off_pers, PERSONNEL_OFF['11'])['te']
     b += 0.34 * PERSONNEL_OFF.get(off_pers, PERSONNEL_OFF['11'])['rb']
@@ -355,6 +357,11 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     ident = None
     ident_run = ident_pass = None
     base = {k: v['rate'] for k, v in PERSONNEL_OFF.items()}
+    preferred = lean.get('personnel_mix')
+    if isinstance(preferred, dict):
+        mix = {k: max(0.0, float(preferred.get(k, 0.0))) for k in base}
+        if sum(mix.values()) > 0:
+            base = mix
     if offense is not None and rate_fn is not None:
         import identity as ID
         ident = ID.read_identity(offense, rate_fn)
@@ -400,7 +407,10 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         if rng.random() < p_sneak:
             call['sneak'] = True
             call['shotgun'] = False
-            call['personnel'] = pers if pers in ('12', '13', '21', '22') else '13'
+            pers = pers if pers in ('12', '13', '21', '22') else '13'
+            call['personnel'] = pers
+            call['formation'] = FM.choose_formation(pers, rng, down=down, ydstogo=ydstogo,
+                                                    score_diff=score_diff, secs_left=secs_left)
 
     if is_pass:
         # real rates: play action 10.2%, screen 4.4%, RPO 3.3%
@@ -499,9 +509,11 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
     aggr = gm.aggression if gm is not None else 0.5
     decep = (gm.board_trust if gm is not None else 0.5)
     lean = lean or {}
-    pers = defensive_personnel(off_call['personnel'], down, ydstogo, rng, aggr, sub_lean=float(lean.get('sub_lean', 0.0) or 0.0))
-    dl = PERSONNEL_DEF[pers]['dl']
     fp = lean.get('front_pref')
+    families = [DR.front_family(f) for f in (fp or ()) if f in FRONTS and FRONTS[f]['dl'] in (3, 4)]
+    family = str(rng.choice(families)) if families else DR.coach_front(gm)
+    pers = defensive_personnel(off_call['personnel'], down, ydstogo, rng, aggr, sub_lean=float(lean.get('sub_lean', 0.0) or 0.0))
+    dl = DR.counts(family, pers)['dl']
     if fp:
         cands = [f for f in fp if f in FRONTS and FRONTS[f]['dl'] == dl] or None
     else:
@@ -509,8 +521,8 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
     if cands:
         front = str(rng.choice(cands))
     else:
-        front = rng.choice(['4-3 over', '4-3 under', 'nickel_even'] if dl == 4 else
-                           ['3-4 one', '3-4 two', 'tite', 'mint'])
+        front = rng.choice(['4-3 over', '4-3 under', 'wide 9'] if dl == 4 else
+                           ['bear'] if dl == 5 else ['3-4 one', '3-4 two', 'tite', 'mint'])
     if front == 'nickel_even': front = '4-3 over'
 
     # real: 0 blitzers 86.7%, 1 on 9.7%, 2 on 3.1%, 3 on 0.47%
@@ -573,7 +585,8 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
 
     under = cov['under'] if cov else ('man' if actual in ('cover_0', 'cover_1')
                                       else 'zone')
-    return dict(personnel=pers, front=front, rushers=rushers, blitzers=blitzers,
+    return dict(personnel=pers, front=front, front_family=family,
+                rushers=rushers, blitzers=blitzers,
                 shell=actual, shown_shell=shown, fooled=fooled, box=box,
                 sim_pressure=sim['sim'], protection_error=sim['protection_error'],
                 coverage=(cov['coverage'] if cov else actual),

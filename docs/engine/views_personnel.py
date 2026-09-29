@@ -45,7 +45,29 @@ def _plate(league, p, note=''):
     return pl
 
 
+def _trade_ids(league, abbr, items):
+    """Accept typed UI assets and legacy links; resolve real ownership, never ID punctuation."""
+    result = []
+    for item in items:
+        typed = isinstance(item, dict)
+        ident = item.get('id') if typed else item
+        kind = item.get('kind') if typed else None
+        player = league.player(ident)
+        pick = _find_pick(league, abbr, ident)
+        actual = 'player' if player is not None and player.team == abbr else 'pick' if pick is not None else None
+        if actual is None or (typed and kind != actual):
+            raise ValueError('Trade asset is unavailable or has the wrong type')
+        if ident not in result: result.append(ident)
+    return result
+
+
+def _trade_player(league, ident):
+    return league.player(ident) is not None
+
+
 def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
+    a_sends = _trade_ids(league, abbr, a_sends)
+    b_sends = _trade_ids(league, other or ('DEN' if abbr != 'DEN' else 'KC'), b_sends)
     import trades as TR, valuation as VAL
     me = league.teams[abbr]; other = other or ('DEN' if abbr != 'DEN' else 'KC'); them = league.teams[other]
     rng = _rng(league, 3); pool = VAL.pool_from_league(league)
@@ -67,7 +89,7 @@ def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
                           picks=[_pick_row(league, pk) for pk in sorted(them.picks, key=lambda k: (k.year, k.round)) if not pk.used_on and pk.year <= league.year + 2],
                           surplus=[dict(pid=x['pid'], why=_surplus_why(league, them, x)) for x in their_surplus], needs=sorted(their_needs),
                           coach=them.gm.name if them.gm else '', prestige=round(getattr(them.gm, 'prestige', 50)) if them.gm else None),
-                package=pkg, can_trade=can_trade, deadline_week=TR.TRADE_DEADLINE_WEEK, balance=f"{len([x for x in a_sends if '-' not in str(x)])} for {len([x for x in b_sends if '-' not in str(x)])}",
+                package=pkg, can_trade=can_trade, deadline_week=TR.TRADE_DEADLINE_WEEK, balance=f"{len([x for x in a_sends if _trade_player(league, x)])} for {len([x for x in b_sends if _trade_player(league, x)])}",
                 note=None if can_trade else 'The trade deadline has passed. Trades reopen after the season.')
 
 
@@ -76,7 +98,7 @@ def _assets(league, abbr, items, pool, rng, viewer):
     import trades as TR
     out = []
     for it in items:
-        pk = _find_pick(league, abbr, it) if '-' in str(it) else None
+        pk = _find_pick(league, abbr, it)
         if pk is not None: out.append(TR.pick_asset(league, pk)); continue
         p = league.player(it)
         if p is None or p.team != abbr: continue
@@ -86,6 +108,8 @@ def _assets(league, abbr, items, pool, rng, viewer):
 
 def _evaluate(league, abbr, other, a_sends, b_sends):
     """Both clubs price the package. Returns the read in words, never the dollars."""
+    a_sends = _trade_ids(league, abbr, a_sends)
+    b_sends = _trade_ids(league, other, b_sends)
     import trades as TR, trade_engine as TE, valuation as VAL
     me, them = league.teams[abbr], league.teams[other]
     rng = _rng(league, 5); pool = VAL.pool_from_league(league)
@@ -113,7 +137,7 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
         fill = fills[0] if fills else (adds[0] if adds else None)
         if fill: extra.append(f"If you want more, {__import__('views').surname(fill.name)} would balance it" + (' and fills a spot you need.' if fills else '.'))
     for pid in a_sends:
-        if '-' in str(pid): continue
+        if not _trade_player(league, pid): continue
         p = league.player(pid)
         if p is None: continue
         d = me.depth.get(p.pos, []); nxt = next((q for q in d if q.pid != pid and q.out_until is None), None)
@@ -123,9 +147,9 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
         else: extra.append(f"Nobody is behind {__import__('views').surname(p.name)} at {p.pos}.")
     read = read + (' ' + ' '.join(extra) if extra else '')
     # roster counts after
-    return dict(verdict=verdict, read=read, my_read=my_read, roster_after=dict(me=len(me.active()) - len([x for x in a_sends if '-' not in str(x)]) + len([x for x in b_sends if '-' not in str(x)]),
-                                                                              them=len(them.active()) + len([x for x in a_sends if '-' not in str(x)]) - len([x for x in b_sends if '-' not in str(x)])),
-                cap_after=dict(me=round(me.cap_space - sum(league.player(x).cap_hit(0) for x in b_sends if '-' not in str(x) and league.player(x)) + sum(league.player(x).cap_hit(0) for x in a_sends if '-' not in str(x) and league.player(x)), 1)),
+    return dict(verdict=verdict, read=read, my_read=my_read, roster_after=dict(me=len(me.active()) - len([x for x in a_sends if _trade_player(league, x)]) + len([x for x in b_sends if _trade_player(league, x)]),
+                                                                              them=len(them.active()) + len([x for x in a_sends if _trade_player(league, x)]) - len([x for x in b_sends if _trade_player(league, x)])),
+                cap_after=dict(me=round(me.cap_space - sum(league.player(x).cap_hit(0) for x in b_sends if _trade_player(league, x) and league.player(x)) + sum(league.player(x).cap_hit(0) for x in a_sends if _trade_player(league, x) and league.player(x)), 1)),
                 would_accept=bool(r.get('accepted', False)) or (g >= 0.5 and not r.get('blocked')))
 
 
@@ -162,6 +186,8 @@ def _surplus_why(league, t, x):
 
 
 def act_propose(league, abbr, other, a_sends, b_sends):
+    a_sends = _trade_ids(league, abbr, a_sends)
+    b_sends = _trade_ids(league, other, b_sends)
     import trades as TR
     ev = _evaluate(league, abbr, other, list(a_sends), list(b_sends))
     if ev['verdict'] == 'blocked': return dict(ok=False, done=False, why=ev['read'])
@@ -171,7 +197,7 @@ def act_propose(league, abbr, other, a_sends, b_sends):
     import trade_engine as TE, valuation as VAL
     pool = VAL.pool_from_league(league); me = league.teams[abbr]
     r = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, TR.persona(me.gm), TR.persona(them.gm))
-    a_items = [(_find_pick(league, abbr, x) if '-' in str(x) else x) for x in a_sends]; b_items = [(_find_pick(league, other, x) if '-' in str(x) else x) for x in b_sends]
+    a_items = [(x if _trade_player(league, x) else _find_pick(league, abbr, x)) for x in a_sends]; b_items = [(x if _trade_player(league, x) else _find_pick(league, other, x)) for x in b_sends]
     yes = TR.will_accept(r['b_gain'], rng, TR.persona(them.gm)['aggression'], selling=True)
     if not yes:
         import inbox as IB
@@ -184,29 +210,59 @@ def act_propose(league, abbr, other, a_sends, b_sends):
 
 
 def act_ask(league, abbr, other, a_sends, b_sends):
-    """What would it take: add their cheapest asks from your picks until they would take it."""
+    """Find a verified seller-acceptable package, without mutating the offer."""
+    a_sends = _trade_ids(league, abbr, a_sends)
+    b_sends = _trade_ids(league, other, b_sends)
     import trades as TR, trade_engine as TE, valuation as VAL
-    me, them = league.teams[abbr], league.teams[other]; rng = _rng(league, 13); pool = VAL.pool_from_league(league)
-    ga, gb = TR.persona(me.gm), TR.persona(them.gm)
-    a = list(a_sends); adds = []
-    picks = [pk for pk in sorted(me.picks, key=lambda k: (k.year, k.round)) if not pk.used_on and f"{pk.year}-{pk.round}-{pk.original}" not in a]
-    picks.sort(key=lambda k: (-k.round, k.year))          # cheapest first
-    for _ in range(4):
-        r = TE.evaluate(dict(a_sends=_assets(league, abbr, a, pool, rng, viewer=them), a_gets=_assets(league, other, list(b_sends), pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
-        if r.get('blocked'): return dict(ok=False, adds=[], line=f"It does not work on the cap: {r['blocked']}.", why=f"It does not work on the cap: {r['blocked']}.")
-        if r['b_gain'] >= 0.5: break
-        best = None
-        for pk in picks:
-            pid = f"{pk.year}-{pk.round}-{pk.original}"
-            if pid in a: continue
-            r2 = TE.evaluate(dict(a_sends=_assets(league, abbr, a + [pid], pool, rng, viewer=them), a_gets=_assets(league, other, list(b_sends), pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
-            if r2['b_gain'] >= 0.5 and (best is None or pk.round > best[0].round): best = (pk, pid, r2)
-            if best is None or (r2['b_gain'] < 0.5 and r2['b_gain'] > (best[2]['b_gain'] if best else -99) and best[2]['b_gain'] < 0.5): best = best or (pk, pid, r2)
-        if best is None: break
-        a.append(best[1]); adds.append(_pick_row(league, best[0]))
-    r = TE.evaluate(dict(a_sends=_assets(league, abbr, a, pool, rng, viewer=them), a_gets=_assets(league, other, list(b_sends), pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
-    if r['b_gain'] < 0.5: return dict(ok=True, adds=[x['id'] for x in adds], line=f"{them.abbr} would want more than your picks can add. Put a player in.")
-    return dict(ok=True, adds=[x['id'] for x in adds], line=(f"{them.abbr} would do it if you add " + ', '.join(x['label'] for x in adds) + '.') if adds else f"{them.abbr} would take it as it is.")
+    me, them = league.teams[abbr], league.teams[other]
+    if not b_sends: return dict(ok=False, adds=[], why='Select something you want from them first.')
+    pool = VAL.pool_from_league(league); ga, gb = TR.persona(me.gm), TR.persona(them.gm)
+    # Match Propose's valuation seed and value existing players only once.
+    rng = _rng(league, 11)
+    outgoing = _assets(league, abbr, a_sends, pool, rng, viewer=them)
+    incoming = _assets(league, other, b_sends, pool, rng, viewer=me)
+    def evaluate(extra):
+        return TE.evaluate(dict(a_sends=outgoing + extra, a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
+    initial = evaluate([])
+    if initial.get('blocked'):
+        return dict(ok=False, adds=[], why=f"The trade is blocked: {initial['blocked']}.")
+    # Selling GMs accept deterministically above 0.9, not at the old 0.5 preview threshold.
+    if initial['b_gain'] > 0.9: return dict(ok=True, adds=[], line=f"{other} would take it as it is.")
+    candidates = []
+    for pk in me.picks:
+        pid = f"{pk.year}-{pk.round}-{pk.original}"
+        if not pk.used_on and pid not in a_sends:
+            asset = TR.pick_asset(league, pk)
+            if asset is not None: candidates.append((pk, pid, asset))
+    candidates.sort(key=lambda x: (x[0].year, x[0].round, x[1]))
+    # Bounded beam search explores combinations instead of repeatedly taking the first late pick.
+    frontier = [()]; best = None
+    for size in range(1, min(4, len(candidates)) + 1):
+        pending = []
+        for prefix in frontier:
+            for i in range(prefix[-1] + 1 if prefix else 0, len(candidates)):
+                package = prefix + (i,)
+                result = evaluate([candidates[j][2] for j in package])
+                if result.get('blocked'): continue
+                cost = initial['a_gain'] - result['a_gain']
+                if result['b_gain'] > 0.9:
+                    key = (cost, size, package)
+                    if best is None or key < best[0]: best = (key, package)
+                else:
+                    pending.append((max(0, 0.91 - result['b_gain']), cost, package))
+        pending.sort()
+        frontier = [row[2] for row in pending[:64]]
+        if not frontier: break
+    if best is None:
+        return dict(ok=False, adds=[], why=f"{other} could not find an acceptable package of up to four additional picks. Add a player or change the target.")
+    chosen = [candidates[i] for i in best[1]]
+    # Reprice the complete offer exactly as Propose will, then verify the final package.
+    rng = _rng(league, 11)
+    final = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends + [x[1] for x in chosen], pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
+    if final.get('blocked') or final['b_gain'] <= 0.9:
+        return dict(ok=False, adds=[], why='No acceptable counteroffer was found. Your offer has not changed.')
+    labels = [_pick_row(league, x[0])['label'] for x in chosen]
+    return dict(ok=True, adds=[x[1] for x in chosen], line=f"{other} would do it if you add " + ', '.join(labels) + '.')
 
 
 def act_gather(league, abbr, pid):
@@ -253,7 +309,7 @@ def act_gather(league, abbr, pid):
             words = [(_pick_row(league, it)['label'] if kind == 'pick' else f"{league.player(it).name} ({league.player(it).pos}, {round(league.player(it).ovr)})") for kind, it in pkg]
             ids = [(f"{it.year}-{it.round}-{it.original}" if kind == 'pick' else it) for kind, it in pkg]
             first_round = min((it.round for kind, it in pkg if kind == 'pick'), default=8)
-            offers.append(dict(club=club(other), words=words, ids=ids, gain=r['a_gain'], first_round=first_round, n=len(pkg)))
+            offers.append(dict(club=club(other), words=words, ids=ids, assets=[dict(kind=kind, id=ident) for (kind, _), ident in zip(pkg, ids)], gain=r['a_gain'], first_round=first_round, n=len(pkg)))
     offers.sort(key=lambda o: -o['gain'])
     return dict(ok=True, name=p.name, offers=offers, line=(f"{len(offers)} club{'s' if len(offers) != 1 else ''} would deal for {p.name}." if offers else f"No club would give anything for {p.name} right now."))
 
@@ -339,6 +395,11 @@ def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None
     from cap_engine import CAP
     p = league.player(pid); t = league.teams[abbr]
     if p is None: return dict(ok=False, why='no such player')
+    if p.contract is None or getattr(p, 'on_ps', False):
+        import market as MK
+        d = MK.signing_terms(league, p, t, float(apy), int(years), CAP.get(league.year, 301.2), float(front_load) if front_load is not None else None, bonus)
+        hits = d['cap_hits']
+        return dict(ok=True, hits=hits, years=[league.year + i for i in range(int(years))], total=round(d['total'], 2), year1=hits[0], cash_this_season=round(d['cash_this_season'], 2), prorated=d['fraction'] < 1, annual_apy=float(apy), dead_if_cut=[])
     d = CS.structure(float(apy), int(years), p.pos, CAP.get(league.year, 301.2), t.gm, front_load=(float(front_load) if front_load is not None else None))
     hits = list(d.get('cap_hits', []))
     if bonus is not None and hits:

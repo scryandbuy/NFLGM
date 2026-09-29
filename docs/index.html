@@ -6,7 +6,7 @@
 <title>NFL GM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=b9eec21528">
+<link rel="stylesheet" href="style.css?v=10c1cd8463">
 </head>
 <body>
 
@@ -28,12 +28,10 @@
 </div>
 
 <header class="rail" id="rail" hidden>
-  <div class="in">
+  <div class="in rail-identity">
     <div class="hist"><button aria-label="Back" id="back">‹</button><button aria-label="Forward" disabled>›</button></div>
     <div class="club"><div class="crest" id="crest">KC</div><div><div class="name" id="clubname">—</div><div class="who" id="coach">—</div><div class="title" id="coachtitle">Head Coach and GM</div></div></div>
-    <nav id="nav">
-      <a href="#portal" data-page="portal" aria-current="page">Portal <span class="badge" id="badge" hidden>0</span></a><a href="#club" data-page="club">Team</a><a href="#personnel" data-page="personnel">Personnel</a><a href="#draft" data-page="draft">Draft</a><a href="#league" data-page="league">League</a><a href="#gameplan" data-page="gameplan">Game Plan</a><a href="#gameday" data-page="gameday">Game Day</a><a href="#frontoffice" data-page="frontoffice">Front Office</a>
-    </nav>
+
     <div class="status">
       <div class="stat"><b id="st-record">0–0</b><span id="st-place">—</span></div>
       <div class="stat"><b id="st-cap">—</b><span>Cap Space</span></div>
@@ -42,11 +40,14 @@
     </div>
     <button class="advance" id="advance"><div class="txt"><span id="adv-title">Advance</span><small id="adv-sub"></small></div><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 5l10 7-10 7z"/></svg></button>
   </div>
+  <div class="rail-navigation"><div class="in">    <nav id="nav">
+      <a href="#portal" data-page="portal" aria-current="page">Portal <span class="badge" id="badge" hidden>0</span></a><a href="#club" data-page="club">Team</a><a href="#personnel" data-page="personnel">Personnel</a><a href="#draft" data-page="draft">Draft</a><a href="#league" data-page="league">League</a><a href="#gameplan" data-page="gameplan">Game Plan</a><a href="#gameday" data-page="gameday">Game Day</a><a href="#frontoffice" data-page="frontoffice">Front Office</a>
+    </nav><div class="rail-utilities"><button class="kbd" id="save" aria-label="Save" data-tip="Save to this browser">Save</button><button class="kbd" id="export" aria-label="Export" data-tip="Export the save as a file">Export</button><button class="kbd" id="import" aria-label="Import" data-tip="Import a save file">Import</button><input type="file" id="importfile" accept=".json,application/json" hidden>      <details class="quick-menu"><summary>Quick Links</summary><div class="quick-links"><a href="#club">Roster</a><a href="#club/depth">Depth Chart</a><a href="#frontoffice/cap">Cap</a><a href="#personnel/wire">Wire</a><a href="#league">Standings</a></div></details></div></div></div>
   <div class="sub">
     <div class="in">
       <div class="crumb" id="crumb">Portal</div>
       <div class="second" id="second"></div>
-      <div class="quick"><span>Quick</span><a href="#club">Roster</a><a href="#club/depth">Depth Chart</a><a href="#frontoffice/cap">Cap</a><a href="#personnel/wire">Wire</a><a href="#league">Standings</a><button class="kbd" id="save" data-tip="Save to this browser">⇩</button><button class="kbd" id="export" data-tip="Export the save as a file">⤓</button><button class="kbd" id="import" data-tip="Import a save file">⤒</button><input type="file" id="importfile" accept=".json,application/json" hidden></div>
+
     </div>
   </div>
 </header>
@@ -54,6 +55,6 @@
 <main id="page" hidden></main>
 <div class="busy" id="busy" hidden>Working…</div>
 
-<script type="module" src="app.js?v=b9eec21528"></script>
+<script type="module" src="app.js?v=10c1cd8463"></script>
 </body>
 </html>

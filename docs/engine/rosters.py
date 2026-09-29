@@ -14,6 +14,7 @@ import os
 _D = os.path.dirname(os.path.abspath(__file__))
 def _p(n): return os.path.join(_D, n)
 import targets as TG
+import defense_roles as DR
 
 SEED = _p('league_seed_2026.csv')
 RATING_COLS = None
@@ -59,7 +60,7 @@ def _player(row):
     return p
 
 
-def build_roster_rows(rows, scheme=None, pins=None):
+def build_roster_rows(rows, scheme=None, pins=None, front=None, box=0.5):
     """
     Same thing from a LIST OF PLAYER DICTS rather than a dataframe group.
 
@@ -77,10 +78,10 @@ def build_roster_rows(rows, scheme=None, pins=None):
             # the user's order at this spot: the men he named first, in his order, then the rest by the engine's grade
             order = {pid: i for i, pid in enumerate(pins[pos])}
             by_pos[pos] = sorted(by_pos[pos], key=lambda x: order.get(x.get('pid'), 10**6))
-    return _assemble(by_pos, pins=pins)
+    return _assemble(by_pos, pins=pins, front=front, box=box, scheme=scheme)
 
 
-def build_roster(grp, scheme=None):
+def build_roster(grp, scheme=None, front=None, box=0.5):
     """
     A real team. Position groups ordered by position-specific rating, so the
     depth chart reflects who is actually best AT THAT SPOT rather than a blended
@@ -90,10 +91,10 @@ def build_roster(grp, scheme=None):
     for pos, g in grp.groupby('madden_position'):
         by_pos[pos] = TG.order_depth([_player(r) for _, r in g.iterrows()], pos,
                                      scheme)
-    return _assemble(by_pos)
+    return _assemble(by_pos, front=front, box=box, scheme=scheme)
 
 
-def _assemble(by_pos, pins=None):
+def _assemble(by_pos, pins=None, front=None, box=0.5, scheme=None):
     rows = [p for men in by_pos.values() for p in men]
     """Position groups -> the eleven-man shape the engine takes."""
     def take(pos, n=None):
@@ -109,16 +110,25 @@ def _assemble(by_pos, pins=None):
           take('RT', 1))
     ol += [p for pos in ('LT', 'LG', 'C', 'RG', 'RT')
            for p in take(pos)[1:]]
-    dl = take('LEDG', 1) + take('DT', 2) + take('REDG', 1)
-    # the depth behind the four: two tackles start, so the tackle depth begins at the third.
-    # Skipping only one put the second starting tackle in the list twice, and the front's
-    # rotation kept subbing him in for the first: 82% of snaps to the other man's 50.
-    dl += take('LEDG')[1:] + take('DT')[2:] + take('REDG')[1:]
-    # the two every-down linebackers first, the SAM third, then the depth. Concatenating
-    # every MIKE, then every WILL, put a club's second MIKE on the field in nickel and
-    # left the WILL and SAM watching, since nickel walks the first two men in the list
-    lb = take('MIKE', 1) + take('WILL', 1) + take('SAM', 1)
-    lb += [p for pos in ('MIKE', 'WILL', 'SAM') for p in take(pos)[1:]]
+    if front is None:
+        front = '3-4' if scheme and 'two_gap' in scheme else '4-3'
+    if front == 'multiple':
+        front = '3-4' if float(box) >= 0.5 else '4-3'
+    front = DR.front_family(front)
+    if front == '3-4':
+        assignments = DR.assign(by_pos, front, 'base', pins)
+        dl = [row['player'] for row in assignments if row['group'] == 'dl' and row['player']]
+        lb = [row['player'] for row in assignments if row['group'] == 'lb' and row['player']]
+        selected = {p['pid'] for p in dl + lb}
+        dl += [p for p in take('DT') if p['pid'] not in selected]
+        lb += [p for pos in ('LEDG', 'REDG', 'MIKE', 'WILL', 'SAM')
+               for p in take(pos) if p['pid'] not in selected]
+    else:
+        dl = take('LEDG', 1) + take('DT', 2) + take('REDG', 1)
+        # The depth behind the four starts after both starting tackles.
+        dl += take('LEDG')[1:] + take('DT')[2:] + take('REDG')[1:]
+        lb = take('MIKE', 1) + take('WILL', 1) + take('SAM', 1)
+        lb += [p for pos in ('MIKE', 'WILL', 'SAM') for p in take(pos)[1:]]
     db = take('CB') + take('FS') + take('SS')
 
     if not qbs or not ol or not db:
@@ -131,7 +141,7 @@ def _assemble(by_pos, pins=None):
         hbs = (take('WR')[-1:] or take('TE')[-1:] or qbs[-1:])
     return dict(
         qb=qbs[0], qbs=qbs[1:],
-        rb=(hbs[0] if hbs else None), backs=hbs,
+        rb=(hbs[0] if hbs else None), backs=hbs, fullbacks=take('FB'),
         # the pattern: three receivers, the tight end and the back
         # the whole receiving corps and every tight end: the package picks who dresses for the snap
         wr=(wrs[:6] + tes[:3] + hbs[:1]),
@@ -141,7 +151,7 @@ def _assemble(by_pos, pins=None):
         p=(take('P', 1) or [None])[0],
         kr=_returner(rows, pins, 'KR'),
         pr=_returner(rows, pins, 'PR'),
-        depth=by_pos,
+        depth=by_pos, front_family=front, depth_pins=pins or {},
     )
 
 

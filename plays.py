@@ -480,7 +480,7 @@ def _likely_tackler(deff, out, rng, pass_play):
     and completions. The engine does not simulate the tackle itself; this is the
     name the ticker gives it, weighted the way real tackle counts fall."""
     yards = float(out.get('yards', 0) or 0)
-    dl = [x for x in (deff.get('dl') or []) if x][:4]; lb = [x for x in (deff.get('lb') or []) if x][:3]; db = [x for x in (deff.get('db') or []) if x][:5]
+    dl = [x for x in (deff.get('dl') or []) if x]; lb = [x for x in (deff.get('lb') or []) if x]; db = [x for x in (deff.get('db') or []) if x]
     if pass_play:
         pools = [(db, 0.62), (lb, 0.30), (dl, 0.08)]
     elif yards <= 2:
@@ -617,7 +617,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     chasers = defenders[len(front):] + defenders[:len(front)]
     # The same wall applies to a run: yards after contact collapse near the
     # goal because there is nowhere to break to.
-    out = resolve_yards_after(off['rb'], chasers, ytg, rng, contact_at=ybc)
+    out = resolve_yards_after(off.get('rb') or off['qb'], chasers, ytg, rng, contact_at=ybc)
     if not out['touchdown']:
         # never turn a score into a non-score: the resolver already decided he
         # reached the end zone, and compression is about the grass in between

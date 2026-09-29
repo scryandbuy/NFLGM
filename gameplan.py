@@ -56,6 +56,7 @@ class Gameplan:
     personnel_mix: dict = field(default_factory=lambda: {
         '11': .595, '12': .195, '21': .070, '13': .030,
         '10': .075, '22': .025, '00': .010})
+    off_personnel: str = '11'
     run_scheme_mix: dict = field(default_factory=lambda: {'zone': .62, 'gap': .38})
     protection: str = 'half_slide'
     tempo: float = 0.5                # 0 = grind clock, 1 = no huddle
@@ -114,6 +115,7 @@ def base_plan(coach=None, opponent=None, rng=None):
     g.shell_lean = float(coach.get('shell_lean', 0.5))
     g.zone_aggression = float(coach.get('zone_aggression', 0.5))
     g.blitz_lean = float(coach.get('blitz_lean', 0.384))
+    g.off_personnel = str(coach.get('off_personnel', '11'))
     if 'personnel_mix' in coach: g.personnel_mix = dict(coach['personnel_mix'])
     if 'depth_mix' in coach: g.depth_mix = tuple(coach['depth_mix'])
 

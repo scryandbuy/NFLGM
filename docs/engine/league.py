@@ -372,6 +372,11 @@ class Team:
             # the return slots take anyone who dresses at a return position
             import rosters as RO
             mine = {p.pid for p in self.active() if p.pos in RO.RETURN_POS}
+        elif pos in ('LE', 'RE', 'NT', '34LE', '34RE', 'LOLB', 'ROLB', 'LILB', 'RILB'):
+            import defense_roles as DR
+            eligible = DR.ROLE_SOURCES[pos]
+            mine = {p.pid for p in self.active() if p.pos in eligible} | {
+                q.pid for q in (getattr(self, '_elevated', None) or []) if q.pos in eligible}
         else:
             mine = {p.pid for p in self.active() if p.pos == pos} | {q.pid for q in (getattr(self, '_elevated', None) or []) if q.pos == pos}
         self.depth_pins[pos] = [pid for pid in pids if pid in mine]
@@ -569,7 +574,10 @@ class League:
         t = self.teams[abbr]
         return R.build_roster_rows([dict(p.ratings, pid=p.pid, pos=p.pos)
                                     for p in t.active()
-                                    if p.out_until is None], t.scheme)
+                                    if p.out_until is None], t.scheme,
+                                   pins=getattr(t, 'depth_pins', None),
+                                   front=getattr(t.gm, 'def_front', '4-3'),
+                                   box=getattr(t.gm, 'box', 0.5))
 
     # ---- stats: on the player AND in a league book ----------------------
     def record_stats(self, season, pid, line, postseason=False, game=None):

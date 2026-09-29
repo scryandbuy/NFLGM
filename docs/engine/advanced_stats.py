@@ -69,7 +69,7 @@ def book_play(book, out, off, deff, epa_val):
             if tgt:
                 w = book._get(tgt); w['rec_epa'] += epa_val; w['sep_total'] += float(out.get('separation') or 0.0); w['sep_n'] += 1
     elif t == 'run':
-        rb = out.get('carrier_pid') or off['rb'].get('pid')
+        rb = out.get('carrier_pid') or (off.get('rb') or off['qb']).get('pid')
         s = book._get(rb); s['rush_epa'] += epa_val; s['rush_plays'] += 1
     # the defence: the men on the field share what they allowed, by unit
     for d in (deff.get('dl') or []) + (deff.get('lb') or []) + (deff.get('db') or []):
