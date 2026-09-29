@@ -119,6 +119,18 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     a rule. The field goal is taken only when three points change the number of scores the club still needs.
     """
     import decisions as DEC
+    distance = yardline_100 + 17
+    kick_chance = fg_probability(distance, kicker, rate_fn)
+    kick_chance *= ENV.kick_mult if distance >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult)
+    minimum = 0.42 if secs_left > 300 or score_diff >= 0 else 0.25
+    if secs_left < 20: minimum = min(minimum, 0.20)
+    in_range = kick_chance >= minimum
+    # With time for one play, a reachable kick ties or wins. The general
+    # desperation rule must not force a conversion that leaves no clock.
+    if secs_left <= 6 and -3 <= score_diff <= 0 and in_range:
+        return 'field_goal'
+    if secs_left <= 6 and score_diff < -3:
+        return 'go'
     need_now = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
     chasing = score_diff < 0 and secs_left < 150 * need_now + 90
     # does a field goal matter? Down 14 it leaves two scores either way; down 10 it makes it one
@@ -126,7 +138,8 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now and -score_diff not in (7, 8) and -(score_diff + 3) not in (7, 8))
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_table = float(np.clip(GO_RATE[band][zone] * (0.55 + 0.60 * aggression), 0.0, 1.0))     # the observed rates already carry an average coach; the personality term sits around them
-    r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100, ydstogo, aggression=aggression, is_home=1) if use_wp else None
+    r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100, ydstogo,
+                       fg_prob=kick_chance, aggression=aggression, is_home=1) if use_wp else None
     if r is not None:
         # the model's edge as a probability: a small edge is a lean, a big one nearly certain, a negative one nearly never
         edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
@@ -157,21 +170,15 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
     if score_diff <= -9 and yardline_100 <= 5 and ydstogo <= 5:
         p_go = max(p_go, 0.85)                           # down two scores at the goal line, the touchdown is the point
-    if secs_left < 120 and score_diff < 0 and yardline_100 > 40:
+    if secs_left < 120 and score_diff < 0 and yardline_100 > 40 and not (in_range and fg_matters):
         p_go = 1.0                                       # a punt down late is the game
     if rng.random() < p_go:
         return 'go'
     # not going: the kick when it is in range and worth something, else the punt
     # A team's range follows its kicker and the weather. The old fixed yardline
     # limits made a weak leg try the same long kick as a strong one.
-    distance = yardline_100 + 17
-    kick_chance = fg_probability(distance, kicker, rate_fn)
-    kick_chance *= ENV.kick_mult if distance >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult)
-    minimum = 0.42 if secs_left > 300 or score_diff >= 0 else 0.25
-    if secs_left < 20: minimum = min(minimum, 0.20)
-    in_range = kick_chance >= minimum
     if in_range and fg_matters:
-        return 'field_goal'
+        return 'field_goal' if r is None or r['wp_fg'] >= r['wp_punt'] else 'punt'
     if in_range and not fg_matters:
         return 'go'                                      # three points change nothing here; the down is the drive
     return 'punt'
@@ -199,6 +206,21 @@ def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
     r['returner'] = (returner or {}).get('pid')
     LAST_KICKOFF['r'] = r
     return r
+
+
+def kickoff_clock(clock, kick):
+    """Run the game clock during a live kickoff return, stopping at period end.
+
+    Touchbacks never start the clock. The kick that crosses halftime ends the
+    half before the receiving offense can begin a possession.
+    """
+    if kick.get('touchback') or clock <= 0:
+        return clock
+    after = clock - play_seconds('kickoff')
+    for edge in (2700.0, 1800.0, 900.0, 0.0):
+        if clock > edge >= after:
+            return edge
+    return float(max(0.0, np.floor(after + 0.5)))
 
 
 
@@ -2031,8 +2053,10 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
     pos = first
     had = {'home': False, 'away': False}
     drives = []
-    start = kickoff_booked(returner_for(home if pos == 'home' else away, home_state if pos == 'home' else away_state, rate_fn),
-                           rng, rate_fn, book)['new_yardline']
+    kick = kickoff_booked(returner_for(home if pos == 'home' else away, home_state if pos == 'home' else away_state, rate_fn),
+                          rng, rate_fn, book)
+    start = kick['new_yardline']
+    clock = kickoff_clock(clock, kick)
 
     while clock > 0:
         off = home if pos == 'home' else away
@@ -2068,7 +2092,9 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
                 return score, drives, 'decided'
 
         if dr.result in ('Touchdown', 'Field goal'):
-            start = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)['new_yardline']
+            kick = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)
+            start = kick['new_yardline']
+            clock = kickoff_clock(clock, kick)
         elif dr.result == 'Punt':
             start = getattr(dr, 'next_yardline', 75)
         elif dr.result in ('Turnover', 'Turnover on downs'):
@@ -2103,7 +2129,9 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
     pos = 'away'                                   # away receives first
-    start = kickoff_booked(returner_for(away, away_state, rate_fn), rng, rate_fn, book)['new_yardline']    # the RECEIVING side's man returns it
+    kick = kickoff_booked(returner_for(away, away_state, rate_fn), rng, rate_fn, book)    # the RECEIVING side's man returns it
+    start = kick['new_yardline']
+    clock = kickoff_clock(clock, kick)
 
     tos = Timeouts()
     half_done = False
@@ -2154,6 +2182,20 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
                 if rng.random() < min(0.8, p_br):
                     st.plan.bracket = srt[0].get('pid')
     while clock > 0:
+        if not half_done and clock <= HALF:
+            # A kickoff return can itself use the final seconds of the half.
+            # There is no empty offensive drive after that return.
+            tos.halftime()
+            half_done = True
+            yield ('halftime', dict(score))
+            ENV.turn(rng, home_abbr); _P.ENV = ENV
+            pos = 'home'
+            kick = kickoff_booked(returner_for(home, home_state, rate_fn), rng, rate_fn, book)
+            start = kick['new_yardline']
+            clock = kickoff_clock(HALF, kick)
+            quarter = 3
+            continue
+        quarter = min(4, int((GAME - clock) // QUARTER) + 1)
         off = home if pos == 'home' else away
         deff = away if pos == 'home' else home
         sd = score[pos] - score['away' if pos == 'home' else 'home']
@@ -2179,19 +2221,8 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             score['away' if pos == 'home' else 'home'] += 2
         yield ('drive', pos, dr, dict(score))
 
-        # ---- HALFTIME ----
-        # The side that KICKED OFF to open the game receives the second half,
-        # which is why a club can go into the break with the ball and come out
-        # of it with the ball again. The engine had no concept of a half, so
-        # that swing did not exist at all.
-        if not half_done and clock <= GAME / 2:
-            tos.halftime()
-            half_done = True
-            yield ('halftime', dict(score))          # the live game stops here: the GM's halftime adjustments apply to what follows
-            ENV.turn(rng, home_abbr); _P.ENV = ENV
-            pos = 'home'                            # away received the opener, so home receives now
-            start = kickoff_booked(returner_for(home, home_state, rate_fn), rng, rate_fn, book)['new_yardline']
-            continue
+        if not half_done and clock <= HALF:
+            continue                      # the next loop opens the second half
 
         # where the next possession starts
         onside_kept = False
@@ -2206,10 +2237,13 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             if try_onside:
                 got = rng.random() < KICKOFF['onside_recovery']
                 LAST_KICKOFF['r'] = dict(onside=True, recovered=got, new_yardline=(55.0 if got else 45.0), ret=0.0, returner=None, touchback=False)
+                clock = kickoff_clock(clock, LAST_KICKOFF['r'])
                 if got: onside_kept = True; start = 55.0                 # the kicking side has it around its own 45
                 else: start = 45.0                                       # the receiving side takes over at the kicking team's 45
             else:
-                start = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)['new_yardline']
+                kick = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)
+                start = kick['new_yardline']
+                clock = kickoff_clock(clock, kick)
         elif dr.result == 'Punt':
             start = getattr(dr, 'next_yardline', 75)
         elif dr.result in ('Turnover', 'Turnover on downs'):
@@ -2220,6 +2254,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             # the free kick: the side that gave it up punts from its 20 and the scoring side takes over around its own 40
             start = float(np.clip(rng.normal(60.0, 6.0), 45.0, 75.0))
             LAST_KICKOFF['r'] = dict(free_kick=True, new_yardline=start, ret=0.0, returner=None, touchback=False)
+            clock = kickoff_clock(clock, LAST_KICKOFF['r'])
         else:
             start = 75
         if not onside_kept:

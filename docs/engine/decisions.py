@@ -163,7 +163,7 @@ def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
     if fg_prob is None:
         fg_prob = float(np.clip(1.02 - 0.0095 * max(0, dist - 20), 0.02, 0.985))
     wp_made = _flip(score_diff + 3, seconds_left - 6, 25, is_home=is_home)
-    wp_miss = _flip(score_diff, seconds_left - 6, max(1, yardline_100 - 8),
+    wp_miss = _flip(score_diff, seconds_left - 6, min(99, yardline_100 + 8),
                     is_home=is_home)
     wp_fg = fg_prob * wp_made + (1 - fg_prob) * wp_miss
     if dist > 65:
