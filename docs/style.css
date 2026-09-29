@@ -2661,7 +2661,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .draft-surface .tbl tr:hover td{background:#ffffff06}
 .draft-surface .tbl tr.sel td{background:color-mix(in srgb,var(--team-accent) 10%,#10191e)}
 .draft-surface .who .nm{font:650 13px var(--text)}.draft-surface .who small{font:400 10px var(--text);color:#91a6b1}
-.draft-surface .no{border-radius:5px;clip-path:none;background:color-mix(in srgb,var(--team-base) 72%,#253d42);border:1px solid #ffffff1d}
+.draft-surface .no{border-radius:5px;clip-path:none;background:color-mix(in srgb,var(--team-base) 72%,#253d42);color:#fff;border:1px solid #ffffff1d}
 .draft-surface .grp td{color:var(--team-readable);font:700 11px var(--text);letter-spacing:.08em;background:color-mix(in srgb,var(--team-base) 18%,#10191e)}
 .draft-surface .foot{padding:16px 20px;background:#0d171b}
 .draft-spring .pad{padding:14px 22px}
