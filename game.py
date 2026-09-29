@@ -895,7 +895,7 @@ class TeamState:
         self.mem = AD.GameMemory()
         # Walsh's opener, run before the defence can counter. Off-script
         # performance is measurably worse for some callers: Shanahan's 2022
-        # 49ers had +0.32 passing EPA on script and -0.10 off it.
+        # San Francisco had +0.32 passing EPA on script and -0.10 off it.
         self.script = AD.Script(length=int((coach or {}).get('script_length', 15)),
                                 off_script_skill=float((coach or {}).get(
                                     'off_script_skill', 0.5)))

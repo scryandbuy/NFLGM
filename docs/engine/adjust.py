@@ -26,7 +26,7 @@ WHAT THE COACHES SAY:
   contingency planning. The fewer decisions to be made during the game, the
   better." Coaches come off script when a SITUATION demands it, usually third
   down, not when a play counter runs out.
-  Off-script is measurably worse for some coaches: Shanahan's 2022 49ers had
+  Off-script is measurably worse for some coaches: Shanahan's 2022 San Francisco club had
   +0.32 passing EPA on script and -0.10 off it.
 
   THE CHEATER PLAY. When a defence cheats to stop something, the offence
@@ -40,7 +40,7 @@ WHAT THE COACHES SAY:
 
   BOTH ERRORS ARE REAL. O'Brien threw on 75% of first downs against one of the
   worst run defences in football, averaged 2.5 yards and scored three points.
-  Carroll's Raiders had four carries in a half, their fewest since 2008.
+  Carroll's Las Vegas club had four carries in a half, their fewest since 2008.
   Abandoning what works is as damaging as failing to adjust.
 
 WHAT FM26 CONTRIBUTES:

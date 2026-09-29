@@ -1357,7 +1357,7 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
     # Two corrections come from the real data and could not have been reasoned
     # to. Dead money: the build carried none, and Miami alone is 182.6m, about
     # 60% of its cap, owed to men who are not on the roster. And every real
-    # team is cap compliant on day one - the tightest is the Rams at 3.27m -
+    # team is cap compliant on day one - the tightest is Los Angeles at 3.27m -
     # so a seed producing 17 teams over the cap was simply wrong.
     for abbr, t in L.teams.items():
         row = OTC.team_cap(abbr)

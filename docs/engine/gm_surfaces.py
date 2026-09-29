@@ -103,7 +103,7 @@ def deadline_posture(team, gm, week=9):
 
 def asking_price_multiplier(gm, team, posture):
     """
-    Sellers sit on assets. The Jets were described as "stubborn" with their
+    Sellers sit on assets. New Jersey was described as "stubborn" with its
     asking prices in a season they plainly should have sold.
     """
     g = gm.shift(team)
@@ -158,7 +158,7 @@ def ps_poach_cost(player, val, gm, team):
     return round(float(val['apy'] - roster_cost - forced_active * (1.0 - g.aggression)), 2)
 
 # ================================================================ trade then cut
-# "The 49ers couldn't find any takers on Ahmad Brooks before letting him go."
+# "San Francisco couldn't find any takers on Ahmad Brooks before letting him go."
 # A cut is the FALLBACK when the trade market says zero.
 def disposal_path(player, val, gm, team, market_interest):
     """

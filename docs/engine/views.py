@@ -13,12 +13,9 @@ CLUB_COLOR = {'ARI': '#97233f', 'ATL': '#a71930', 'BAL': '#241773', 'BUF': '#003
 CLUB_ACCENT = {'KC': '#ffb612', 'PIT': '#101820', 'NO': '#101820', 'LV': '#a5acaf'}
 CLUB_NAME = {'ARI': 'Arizona', 'ATL': 'Atlanta', 'BAL': 'Baltimore', 'BUF': 'Buffalo', 'CAR': 'Carolina', 'CHI': 'Chicago', 'CIN': 'Cincinnati', 'CLE': 'Cleveland',
              'DAL': 'Dallas', 'DEN': 'Denver', 'DET': 'Detroit', 'GB': 'Green Bay', 'HOU': 'Houston', 'IND': 'Indianapolis', 'JAX': 'Jacksonville', 'KC': 'Kansas City',
-             'LV': 'Las Vegas', 'LAC': 'LA Chargers', 'LA': 'LA Rams', 'MIA': 'Miami', 'MIN': 'Minnesota', 'NE': 'New England', 'NO': 'New Orleans', 'NYG': 'NY Giants',
-             'NYJ': 'NY Jets', 'PHI': 'Philadelphia', 'PIT': 'Pittsburgh', 'SF': 'San Francisco', 'SEA': 'Seattle', 'TB': 'Tampa Bay', 'TEN': 'Tennessee', 'WAS': 'Washington'}
-NICK = {'ARI': 'Cardinals', 'ATL': 'Falcons', 'BAL': 'Ravens', 'BUF': 'Bills', 'CAR': 'Panthers', 'CHI': 'Bears', 'CIN': 'Bengals', 'CLE': 'Browns', 'DAL': 'Cowboys',
-        'DEN': 'Broncos', 'DET': 'Lions', 'GB': 'Packers', 'HOU': 'Texans', 'IND': 'Colts', 'JAX': 'Jaguars', 'KC': 'Chiefs', 'LV': 'Raiders', 'LAC': 'Chargers', 'LA': 'Rams',
-        'MIA': 'Dolphins', 'MIN': 'Vikings', 'NE': 'Patriots', 'NO': 'Saints', 'NYG': 'Giants', 'NYJ': 'Jets', 'PHI': 'Eagles', 'PIT': 'Steelers', 'SF': '49ers', 'SEA': 'Seahawks',
-        'TB': 'Buccaneers', 'TEN': 'Titans', 'WAS': 'Commanders'}
+             'LV': 'Las Vegas', 'LAC': 'California', 'LA': 'Los Angeles', 'MIA': 'Miami', 'MIN': 'Minnesota', 'NE': 'New England', 'NO': 'New Orleans', 'NYG': 'New York',
+             'NYJ': 'New Jersey', 'PHI': 'Philadelphia', 'PIT': 'Pittsburgh', 'SF': 'San Francisco', 'SEA': 'Seattle', 'TB': 'Tampa Bay', 'TEN': 'Tennessee', 'WAS': 'Washington'}
+CLUB_DISPLAY_ABBR = {'LAC': 'CA', 'NYG': 'NY', 'NYJ': 'NJ'}
 INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 'contract': 'Contract', 'contract_year': 'Contract', 'negotiation': 'Contract', 'waiver': 'Wire', 'waivers': 'Wire', 'wire': 'Wire',
              'squad': 'Squad', 'practice_squad': 'Squad', 'game': 'Game', 'result': 'Game', 'scouting': 'Scouting', 'spring': 'Scouting', 'morale': 'Locker Room', 'trade_request': 'Locker Room',
              'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad', 'league': 'League', 'trade_done': 'Trade', 'waiver_notice': 'Wire', 'waiver_digest': 'Wire', 'injury_decision': 'Trainers', 'ir_ready': 'Trainers', 'injury': 'Trainers', 'roster': 'Roster', 'review': 'Season Review', 'exit': 'Exit Meetings'}
@@ -70,7 +67,8 @@ def sentence(text):
 
 
 def club(abbr):
-    return dict(abbr=abbr, name=CLUB_NAME.get(abbr, abbr), nick=NICK.get(abbr, abbr).upper(), color=CLUB_COLOR.get(abbr, '#555'), accent=CLUB_ACCENT.get(abbr, '#ffb612'))
+    name = CLUB_NAME.get(abbr, abbr)
+    return dict(abbr=abbr, display_abbr=CLUB_DISPLAY_ABBR.get(abbr, abbr), name=name, nick=name.upper(), color=CLUB_COLOR.get(abbr, '#555'), accent=CLUB_ACCENT.get(abbr, '#ffb612'))
 
 
 def money(x):

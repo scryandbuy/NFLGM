@@ -20,10 +20,10 @@ TWO THINGS THIS FIXED THAT NOTHING ELSE WOULD HAVE:
 
 1. DEAD MONEY. The build carried none, and it is enormous - Miami at 182.6m is
    roughly 60% of its entire cap, paid to men who are not on the roster. No
-   amount of tuning contract structure reaches a Dolphins roster spending
+   amount of tuning contract structure reaches a Miami roster spending
    116.9m on active players without knowing why.
 
-2. EVERY TEAM IS COMPLIANT. The tightest is the Rams at 3.27m. There is no
+2. EVERY TEAM IS COMPLIANT. The tightest is Los Angeles at 3.27m. There is no
    real team starting the year over the cap, so a seed that produces 17 of
    them is wrong, not realistic.
 
@@ -73,7 +73,7 @@ OTC_2026 = {
 # Future base caps, also from OTC. cap_engine projects beyond these.
 FUTURE_CAP = {2027: 327.000, 2028: 352.000}
 
-# The seed uses LA for the Rams; OTC's table is keyed the same way here.
+# The seed uses LA for Los Angeles; OTC's table is keyed the same way here.
 ALIASES = {'LAR': 'LA', 'STL': 'LA', 'OAK': 'LV', 'SD': 'LAC', 'WSH': 'WAS'}
 
 
