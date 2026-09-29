@@ -273,7 +273,33 @@ class SeasonRunner:
             pos = r.get('pos')
             r.update(FF.shifted(r, pos, FF.deltas(r, pos, tags, rig), centers))
 
+    def refresh_identity(self, abbr):
+        """Replace cached coaching identity between games without resetting health."""
+        live = getattr(self, 'live', None)
+        if live and not live.get('done', False): return False
+        import gameplan as GP, gameplan_week as GW, json
+        t = self.L.teams[abbr]; st = self.states[abbr]
+        coach = make_coach(t.gm)
+        # Save JSON turns tuples into lists; that alone is not an identity change.
+        if (json.dumps(getattr(st, 'coach_base', None), sort_keys=True) == json.dumps(coach, sort_keys=True)
+                and st.scheme == t.scheme):
+            return False
+        st.coach_base = copy.deepcopy(coach)
+        st.coach = copy.deepcopy(coach)
+        st.scheme = copy.deepcopy(t.scheme)
+        st.base_plan = GP.base_plan(coach)
+        st.plan = st.base_plan.copy()
+        st.script.off_script_skill = coach.get('off_script_skill', .5)
+        self._fit_center_cache = None
+        if abbr == getattr(self.L, 'user_team', None):
+            wp = getattr(self.L, 'user_week_plan', None) or {}
+            if wp.get('year') == self.L.year and wp.get('week', -1) >= self.week:
+                GW.user_plan(self.L, st, wp['week'])
+        self._staff_terms(abbr)
+        return True
+
     def refresh(self, abbr):
+        self.refresh_identity(abbr)
         self.states[abbr].roster = self._units(abbr)
         r = self.states[abbr].roster
         # the special teams coordinator rides on the kicker's dict into the game
@@ -316,6 +342,7 @@ class SeasonRunner:
         for me, opp in ((home, away), (away, home)):
             st = self.states.get(me)
             if st is None or st.plan is None: continue
+            st.plan = st.base_plan.copy()
             try:
                 if me == user: GW.user_plan(self.L, st, week)
                 else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
@@ -357,6 +384,7 @@ class SeasonRunner:
             for me, opp in ((home, away), (away, home)):
                 st = self.states.get(me)
                 if st is None or st.plan is None: continue
+                st.plan = st.base_plan.copy()
                 try:
                     if me == user: GW.user_plan(self.L, st, week)
                     else: GW.ai_plan(self.L, st, me, opp, week, self.rng)

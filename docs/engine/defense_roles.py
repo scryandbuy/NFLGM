@@ -89,6 +89,14 @@ def role_label(role):
     return {'LE': 'LEDG', 'RE': 'REDG', '34LE': 'LEDG', '34RE': 'REDG'}.get(role, role)
 
 
+def available_depth(depth, excluded=()):
+    """Keep canonical ordering while excluding unavailable IDs in views/snaps."""
+    excluded = set(excluded)
+    return {pos: [p for p in men
+                  if (p.get('pid') if isinstance(p, dict) else p.pid) not in excluded]
+            for pos, men in depth.items()}
+
+
 def role_candidates(depth, role, pins=None, excluded=()):
     """Eligible players in the user's role order, then canonical depth order."""
     excluded = set(excluded)

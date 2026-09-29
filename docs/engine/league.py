@@ -492,6 +492,10 @@ class Team:
 
     def sync_cap(self, year_index=0):
         """Rebuild the cap ledger from who is actually under contract."""
+        # All roster moves, construction and loading pass through here. XP must
+        # see the current staff before the next game or weekly training credit.
+        for p in self.roster + self.practice_squad:
+            if p.team == self.abbr: p._team_ref = self
         self.cap.contracts = [(p.pid, p.contract, year_index)
                               for p in self.roster if p.contract]
         try:

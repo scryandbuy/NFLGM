@@ -19,7 +19,7 @@ LEANS = [
     ('defense', 'man_rate', 'Man Coverage', 'Zone', 'Man', 'Share of coverage snaps in man'),
     ('defense', 'shell_lean', 'Shell', 'Single high', 'Two high', 'Single-High · Two-High'),
     ('defense', 'zone_aggression', 'Zone Aggression', 'Stay home', 'Drive on the throw', 'Drive on the throw or stay home'),
-    ('defense', 'box_bias', 'Box', 'Light', 'Loaded', 'Players near the line against the run'),
+    ('defense', 'box_bias', 'Box', 'Light', 'Loaded', 'Average extra defenders near the line relative to the situational call; actual box varies by snap'),
 ]
 
 
@@ -30,7 +30,7 @@ def _lean_word(k, val):
     if k == 'tempo': return 'Huddle' if val < 0.4 else 'Hurry' if val > 0.6 else 'Normal'
     if k == 'shell_lean': return '1-Hi' if val < 0.42 else '2-Hi' if val > 0.58 else 'Mixed'
     if k == 'zone_aggression': return str(round(val * 100))
-    if k == 'box_bias': return str(round(7 + val * 2))
+    if k == 'box_bias': return 'Situational' if not val else f'{val * 4:+.2f} avg'
     return f"{val:.2f}"
 DEPTH_LABELS = ('Short', 'Medium', 'Deep')
 PROTECTIONS = ['half_slide', 'full_slide', 'six', 'empty']
@@ -40,6 +40,7 @@ PROT_WORDS = {'half_slide': 'Half slide', 'full_slide': 'Full slide', 'six': 'Si
 def _base_plan(session, league, abbr):
     import gameplan as GP, season as SN
     r = getattr(session, 'runner', None)
+    if r is not None: r.refresh_identity(abbr)
     st = r.states.get(abbr) if r is not None else None
     if st is not None and getattr(st, 'base_plan', None) is not None: return st.base_plan
     return GP.base_plan(SN.make_coach(league.teams[abbr].gm))
