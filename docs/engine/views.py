@@ -127,13 +127,19 @@ def portal(session, league, abbr):
     out = dict(rail=rail(session, league, abbr))
     out['matchup'] = _matchup(session, league, abbr)
     out['desk'] = _desk(league, abbr)
+    out['desk_total'] = len(out['desk'])
+    out['team_status'] = dict(active=len(t.active()), limit=session.ROSTER_MAX, unavailable=sum(p.out_until is not None for p in t.active()))
+    out['phase_title'] = session.next_label().get('title', league.phase.replace('_', ' ').title())
     out['inbox'] = _inbox(league)
     # the bracket rides on the portal once the playoffs start, through the close (the offseason drops it)
     if league.phase in ('playoffs', 'playoffs_closed'):
         try:
             from views_league import bracket as _bracket
             out['bracket'] = _bracket(session, league, abbr)          # the drawing reads the rail to mark the club
-        except Exception: out['bracket'] = None
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).exception('Overview bracket failed')
+            out['bracket'] = dict(missing=True, error=True, note='The playoff bracket could not be loaded. Try reopening the page.')
     out['cap'] = _cap(league, t)
     out['room'] = _room(league, t)
     out['front_office'] = _front_office(league, t)
@@ -236,7 +242,7 @@ def _matchup(session, league, abbr):
             ours=[dict(label='Passing Game', mine=rk(M, 'QB'), theirs=rk(U, 'corners')), dict(label='Running Game', mine=rk(M, 'backs') or rk(M, 'run block'), theirs=rk(U, 'run front')), dict(label='Pass Protection', mine=rk(M, 'pass block'), theirs=rk(U, 'pass rush'))],
             theirs=[dict(label='Passing Game', mine=rk(U, 'QB'), theirs=rk(M, 'corners')), dict(label='Running Game', mine=rk(U, 'backs') or rk(U, 'run block'), theirs=rk(M, 'run front')), dict(label='Pass Protection', mine=rk(U, 'pass block'), theirs=rk(M, 'pass rush'))],
             ours_extra=ours_extra, theirs_extra=theirs_extra,
-            suggestions=[dict(i=i, side=('Offense' if s['side'] == 'offence' else 'Defense'), text=sentence(s['text']), why=sentence(s['why']), change=_change_words(s['changes'])) for i, s in enumerate(rep['suggestions'])],
+            suggestions=[dict(i=i, skipped=(s['text'] in __import__('views_gameplan')._skipped(league, wk)), side=('Offense' if s['side'] == 'offence' else 'Defense'), text=sentence(s['text']), why=sentence(s['why']), change=_change_words(s['changes'])) for i, s in enumerate(rep['suggestions'])],
             taken=[i for i, s in enumerate(rep['suggestions']) if s['text'] in ((getattr(league, 'user_week_plan', None) or {}).get('taken', []) if (getattr(league, 'user_week_plan', None) or {}).get('week') == wk else [])])
     # this season's earlier meeting, if any
     series = [dict(week=g[0], home=g[2], away=g[1], hp=g[4], ap=g[3]) for g in league.schedule if g[3] is not None and {g[1], g[2]} == {abbr, opp_abbr}]
@@ -338,7 +344,8 @@ def _desk(league, abbr):
             card = dict(id=m['id'], kind=INBOX_TAG.get(m['kind'], m['kind']), raw_kind=m['kind'], subject=m['subject'], body=m['body'][:220], payload=_payload(m.get('payload') or {}), expires=m.get('expires_week'))
             card.update(_desk_detail(league, abbr, m))
             cards.append(card)
-    return cards[:4]
+    cards.sort(key=lambda c: (c['raw_kind'] not in BLOCK_KINDS, c.get('expires') if c.get('expires') is not None else float('inf'), -c['id']))
+    return cards
 
 
 def _asset_words(league, a):

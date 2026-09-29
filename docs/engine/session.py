@@ -79,25 +79,30 @@ class Session:
         except Exception as e:
             import sys; print('tenure/expectation seed failed:', e, file=sys.stderr)
         s = cls(L, rng_, d.get('_user_team'))
+        if d.get('_week_book') is not None: L.week_book = d['_week_book']
         s.stop = tuple(d.get('_stop', ['week', 1]))
         s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
+        if d.get('_runner_state'):
+            s.runner = SN.SeasonRunner(s.L, s.rng)
+            s.runner.load_state(d['_runner_state'])
         if d.get('_post_live'):
-            import season as SN
             if s.runner is None: s.runner = SN.SeasonRunner(s.L, s.rng)
             s.post_live = PS.Postseason.from_dict(s.runner, d['_post_live'])
         lp = d.get('_live_pending')
         if lp and s.played and (s.stop[0] == 'week' or (s.stop[0] == 'playoffs' and lp.get('playoffs'))):
-            import season as SN
             if s.runner is None: s.runner = SN.SeasonRunner(s.L, s.rng)
-            s.runner.week = lp['week']; s.runner.last_games = []; s.runner.last_played = []
+            s.runner.week = lp['week']
             if lp.get('playoffs') and getattr(s, 'post_live', None) is not None:
                 post = s.post_live
                 held = getattr(post, 'held', None)
                 rnd, conf = (held[0], held[1]) if held else (PS.Postseason.ROUNDS[max(0, min(3, int(s.stop[1]) - 1))] if len(s.stop) > 1 else 'WC', 'NFL')
                 def _close(res, _c=conf, _h=lp['home'], _a=lp['away'], _r=rnd): post.record(_r, _c, _h, _a, res); post.held = None
-                s.runner.open_live(lp['home'], lp['away'], lp['week'], playoffs=True, on_close=_close)
+                s.runner.open_live(lp['home'], lp['away'], lp['week'], playoffs=True, on_close=_close,
+                                   replay_start=lp.get('start'))
             else:
-                s.runner.open_live(lp['home'], lp['away'], lp['week'])
+                s.runner.open_live(lp['home'], lp['away'], lp['week'], replay_start=lp.get('start'))
+            if lp.get('start'):
+                s.runner.replay_live(lp.get('actions') or [], d['_rng_state'])
         s.standings = d.get('_standings'); s.order = d.get('_order'); s.fired = [tuple(x) if isinstance(x, list) else x for x in (d.get('_fired') or [])]
         if d.get('_post'):
             class _Post:            # the shape awards, prestige and the almanac read
@@ -203,12 +208,18 @@ class Session:
 
     def save(self):
         d = json.loads(self.L.save())
+        if getattr(self.L, 'week_book', None) is not None:
+            d['_week_book'] = self.L.week_book
+        if self.runner is not None:
+            d['_runner_state'] = self.runner.save_state()
         if getattr(self, 'post_live', None) is not None:
             d['_post_live'] = self.post_live.to_dict()
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is not None and not lv['done']:
-            # a half-played game cannot be written down; the save marks it pending and a load reopens it at the kick
-            d['_live_pending'] = dict(home=lv['home'], away=lv['away'], week=lv['week'], playoffs=bool(lv.get('playoffs')))
+            # A generator is not serializable. Replay the same decisions from its opening state on load.
+            d['_live_pending'] = dict(home=lv['home'], away=lv['away'], week=lv['week'],
+                                      playoffs=bool(lv.get('playoffs')), start=lv['start'],
+                                      actions=lv['actions'])
         d['_stop'] = list(self.stop)
         d['_rng_state'] = self.rng.bit_generator.state
         # Keep a seed for older builds without advancing the live generator merely to save the game.
@@ -231,6 +242,29 @@ class Session:
                               seeds=(getattr(p, 'seeds_at_close', None) if getattr(p, 'seeds_at_close', None) is not None else (p.r.seeds() if getattr(p, 'r', None) is not None else {})))
         d['_draft_live'] = dict(year=self.draft.year, taken=sorted(self.draft.taken), results=[(sel, t, p.pid) for sel, t, p in self.draft.results]) if self.draft_live() else None
         return json.dumps(d, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
+
+    def live_journal(self):
+        """Small autosave between full saves while the user's game is open."""
+        lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if lv is None or lv['done']: return None
+        return dict(home=lv['home'], away=lv['away'], week=lv['week'],
+                    actions=lv['actions'], rng_state=self.rng.bit_generator.state)
+
+    def apply_live_journal(self, journal):
+        lv = getattr(self.runner, 'live', None) if self.runner is not None else None
+        if not journal or lv is None or lv['done']:
+            return False
+        if (lv['home'], lv['away'], lv['week']) != (journal.get('home'), journal.get('away'), journal.get('week')):
+            return False
+        actions = journal.get('actions') or []
+        base = lv['actions']
+        if len(actions) < len(base): return False
+        if json.dumps(actions[:len(base)], sort_keys=True) != json.dumps(base, sort_keys=True):
+            raise ValueError('Live game journal does not match the saved game')
+        if len(actions) > len(base):
+            self.runner.replay_live(actions[len(base):], journal['rng_state'])
+            lv['actions'] = list(actions)
+        return True
 
     # ------------------------------------------------------------ the calendar
     OFFSEASON = [
@@ -1095,10 +1129,10 @@ class Session:
                 other = kw.get('other'); moved = []
                 for side, items in (('to_me', kw.get('b_sends', [])), ('from_me', kw.get('a_sends', []))):
                     for x in items:
-                        if '-' in str(x):
-                            yr, rnd, orig = str(x).split('-')[:3]
-                            pk = next((q for q in D.picks if q.year == int(yr) and q.round == int(rnd) and q.original == orig), None)
-                            if pk is not None and pk.year == D.year: moved.append((pk, side))
+                        ident = x.get('id') if isinstance(x, dict) else x
+                        if isinstance(x, dict) and x.get('kind') != 'pick': continue
+                        pk = next((q for q in D.picks if f"{q.year}-{q.round}-{q.original}" == str(ident)), None)
+                        if pk is not None and pk.year == D.year: moved.append((pk, side))
                 for pk, side in moved:
                     buyer, seller = (self.user_team, other) if side == 'to_me' else (other, self.user_team)
                     D.trades.append((pk.selection, buyer, seller, ['a package from the Trades tab']))
@@ -1214,6 +1248,7 @@ class Session:
         if opp is None: return dict(ok=False, why='bye week')
         rep = GW.opponent_report(self.L, self.user_team, opp[0], wk); n = 0
         for i in range(len(rep['suggestions'])):
+            if rep['suggestions'][i]['text'] in VG._skipped(self.L, wk): continue
             r = self.plan_act('take', i=i)
             if not r.get('ok'): return r
             n += 1
@@ -1222,15 +1257,19 @@ class Session:
     def inbox_mark_all(self):
         n = 0
         for m in getattr(self.L, 'inbox', []):
-            if m.get('status') == 'unread': m['status'] = 'read'; n += 1
+            if m.get('status') == 'unread': m['status'] = 'open'; n += 1
         return dict(ok=True, n=n)
 
     def inbox_read(self, mid):
         for m in getattr(self.L, 'inbox', []):
-            if m['id'] == int(mid) and m.get('status') == 'unread': m['status'] = 'read'
+            if m['id'] == int(mid) and m.get('status') == 'unread': m['status'] = 'open'
         return dict(ok=True)
 
     def inbox_delete(self, mid):
+        import views
+        msg = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
+        if msg and msg.get('status') in ('unread', 'open') and msg.get('kind') in views.DECIDE_KINDS:
+            return dict(ok=False, why='Resolve this decision before deleting it.')
         box = getattr(self.L, 'inbox', [])
         self.L.inbox = [m for m in box if m['id'] != int(mid)]
         return dict(ok=True)
@@ -1247,7 +1286,7 @@ class Session:
         m = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
         if m is None: return dict(error='no such message')
         pl = m.get('payload') or {}
-        return dict(id=m['id'], subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'),
+        return dict(id=m['id'], status=m.get('status'), subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'),
                     **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=(m.get('status') in ('unread', 'open') and m.get('kind') in views.DECIDE_KINDS))
 
     def portal_full(self):

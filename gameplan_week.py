@@ -289,7 +289,7 @@ def set_user_plan(league, week, changes, taken=None):
     and the report suggestions taken, by their text, so the pages can mark them."""
     prev = getattr(league, 'user_week_plan', None) or {}
     keep = list(prev.get('taken', [])) if (prev.get('week') == week and prev.get('year') == league.year) else []
-    league.user_week_plan = dict(year=league.year, week=week, changes=dict(changes), taken=(list(taken) if taken is not None else keep))
+    league.user_week_plan = dict(year=league.year, week=week, changes=dict(changes), taken=(list(taken) if taken is not None else keep), skipped=(list(prev.get('skipped', [])) if prev.get('week') == week and prev.get('year') == league.year else []))
     return league.user_week_plan
 
 

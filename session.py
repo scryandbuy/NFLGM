@@ -1129,10 +1129,10 @@ class Session:
                 other = kw.get('other'); moved = []
                 for side, items in (('to_me', kw.get('b_sends', [])), ('from_me', kw.get('a_sends', []))):
                     for x in items:
-                        if '-' in str(x):
-                            yr, rnd, orig = str(x).split('-')[:3]
-                            pk = next((q for q in D.picks if q.year == int(yr) and q.round == int(rnd) and q.original == orig), None)
-                            if pk is not None and pk.year == D.year: moved.append((pk, side))
+                        ident = x.get('id') if isinstance(x, dict) else x
+                        if isinstance(x, dict) and x.get('kind') != 'pick': continue
+                        pk = next((q for q in D.picks if f"{q.year}-{q.round}-{q.original}" == str(ident)), None)
+                        if pk is not None and pk.year == D.year: moved.append((pk, side))
                 for pk, side in moved:
                     buyer, seller = (self.user_team, other) if side == 'to_me' else (other, self.user_team)
                     D.trades.append((pk.selection, buyer, seller, ['a package from the Trades tab']))
@@ -1248,6 +1248,7 @@ class Session:
         if opp is None: return dict(ok=False, why='bye week')
         rep = GW.opponent_report(self.L, self.user_team, opp[0], wk); n = 0
         for i in range(len(rep['suggestions'])):
+            if rep['suggestions'][i]['text'] in VG._skipped(self.L, wk): continue
             r = self.plan_act('take', i=i)
             if not r.get('ok'): return r
             n += 1
@@ -1256,15 +1257,19 @@ class Session:
     def inbox_mark_all(self):
         n = 0
         for m in getattr(self.L, 'inbox', []):
-            if m.get('status') == 'unread': m['status'] = 'read'; n += 1
+            if m.get('status') == 'unread': m['status'] = 'open'; n += 1
         return dict(ok=True, n=n)
 
     def inbox_read(self, mid):
         for m in getattr(self.L, 'inbox', []):
-            if m['id'] == int(mid) and m.get('status') == 'unread': m['status'] = 'read'
+            if m['id'] == int(mid) and m.get('status') == 'unread': m['status'] = 'open'
         return dict(ok=True)
 
     def inbox_delete(self, mid):
+        import views
+        msg = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
+        if msg and msg.get('status') in ('unread', 'open') and msg.get('kind') in views.DECIDE_KINDS:
+            return dict(ok=False, why='Resolve this decision before deleting it.')
         box = getattr(self.L, 'inbox', [])
         self.L.inbox = [m for m in box if m['id'] != int(mid)]
         return dict(ok=True)
@@ -1281,7 +1286,7 @@ class Session:
         m = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
         if m is None: return dict(error='no such message')
         pl = m.get('payload') or {}
-        return dict(id=m['id'], subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'),
+        return dict(id=m['id'], status=m.get('status'), subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'),
                     **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=(m.get('status') in ('unread', 'open') and m.get('kind') in views.DECIDE_KINDS))
 
     def portal_full(self):

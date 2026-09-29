@@ -182,6 +182,7 @@ def power(league, team, cap, years=1):
 
 def ai_bids(league, pool, phase, rng, skip_teams=()):
     import contract_structure as CS
+    import roster_needs as RN
     """
     Every club looks at the market and commits one bid per player it wants.
     The number comes from its own valuation of him, not from a league price -
@@ -198,19 +199,19 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
         room = power(league, team, cap)
         if room <= 2.0:
             continue
+        roster_needs = RN.assess(team)['needs']
         cand = []
         from gm_engine import scheme_fit
         for p in pool:
             grp = team.by_pos(p.pos)
             best = grp[0].ovr if grp else 0.0
-            depth = len(grp)
             # HIM IN OUR SCHEME. A club shops for the men who fit what it
             # runs, and pays them as it sees them.
             fit = scheme_fit(p.ratings, p.pos, team)
             # need: thin at the spot, or he is an upgrade on what is there
             upgrade = (p.ovr + fit - best) / 12.0
-            need = (1.0 if depth == 0 else np.clip(0.9 - 0.25 * depth, 0, 1))
-            want = 0.55 * need + 0.45 * np.clip(upgrade, -1, 1)
+            need = roster_needs.get(p.pos, 0.0)
+            want = 0.60 * need + 0.40 * np.clip(upgrade, -1, 1)
             if want <= 0.12:
                 continue
             v = VAL.value_player(league, p, side='team', pool=comps, rng=rng)
@@ -239,10 +240,14 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
         # he pursues the men he wants most, and only as many as he can carry
         cand.sort(key=lambda x: -x[0])
         spend = 0.0
+        targets = 0
         for want, p, bid, years in cand[:MAX_TARGETS[phase] * 2]:
+            if targets >= MAX_TARGETS[phase]:
+                break
             if spend + bid > room * 0.80:
                 continue
             spend += bid
+            targets += 1
             # the club shapes the deal to its own books: tight now and open
             # later means back-load it, and the reverse means pay it now
             out.setdefault(p.pid, []).append(
@@ -259,11 +264,16 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
     club he wants and asks them to match.
     """
     cap = CAP.get(league.year, 301.2)
+    import roster_needs as RN
     comps = VAL.pool_from_league(league)
     signed, waiting, messages = [], [], []
 
     for p in list(pool):
-        mine = offers.get(p.pid) or []
+        # Bids were placed together at the start of the round. A club may
+        # already have signed an alternative at this spot by the time this
+        # player decides, so reconsider the actual roster before accepting.
+        mine = [o for o in (offers.get(p.pid) or [])
+                if o.team == user_team or RN.move_gain(league.teams[o.team], p) > 1.0]
         if not mine:
             waiting.append(p)
             continue
@@ -351,20 +361,38 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
     return signed, waiting, messages
 
 
-def sign(league, player, offer, cap):
-    """Put him under contract. Structure comes from the same builder the rest
-    of the game uses, so a free agent deal looks like any other."""
+def signing_terms(league, player, team, apy, years, cap, front_load=None, bonus=None):
+    """Shared FA preview and signing calculation; only base salary is time-prorated."""
     import contract_structure as CS
-    team = league.teams[offer.team]
-    st = CS.structure(offer.apy, offer.years, player.pos, cap, team.gm, front_load=offer.front_load)
-    base = list(st['base'])
-    # IN SEASON THE FIRST YEAR IS PRORATED. A deal signed in week 10 pays and counts
-    # for the weeks left, not the full year: real in-season signings are per-week
-    # money. The later years are whole.
+    years = int(years)
+    if not 1 <= years <= 7 or not np.isfinite(float(apy)) or float(apy) <= 0:
+        raise ValueError('Offer must have a positive salary and one to seven years')
+    if bonus is not None and (not np.isfinite(float(bonus)) or not 0 <= float(bonus) <= float(apy) * years):
+        raise ValueError('Signing bonus must be between zero and the total contract value')
+    st = CS.structure(float(apy), years, player.pos, cap, team.gm, front_load=front_load)
+    base = list(st['base']); sb = float(st['signing_bonus'])
+    if bonus is not None:
+        sb = max(0.0, float(bonus)); total_base = max(0.0, float(apy) * years - sb)
+        sh = float(st.get('front_load', 0.5))
+        weights = [1.0 + (sh - 0.5) * 2 * (1 - 2 * i / max(1, years - 1)) for i in range(years)] if years > 1 else [1.0]
+        base = [total_base * w / sum(weights) for w in weights]
     wk = int(league.week or 0)
+    paid = getattr(getattr(team, 'cap', None), 'paid_week', max(0, min(18, wk - 1)))
+    fraction = (18 - paid) / 18.0 if league.phase in ('regular', 'playoffs', 'playoffs_closed') else 1.0
+    if base: base[0] = round(base[0] * fraction, 3)
+    preview = Contract(years=years, base=base, signing_bonus=sb)
+    from cap_accounting import pre_roll
+    start_year = league.year + int(pre_roll(league))
+    return dict(base=base, signing_bonus=sb, fraction=fraction, start_year=start_year,
+                cash_this_season=round(base[0] + sb, 3),
+                cap_hits=[round(preview.cap_hit(i), 3) for i in range(years)], total=round(sum(base) + sb, 3))
+
+
+def sign(league, player, offer, cap, bonus=None):
+    team = league.teams[offer.team]
+    st = signing_terms(league, player, team, offer.apy, offer.years, cap, offer.front_load, bonus)
+    base = st['base']
     paid = team.cap.paid_week
-    if league.phase == 'regular' and base:
-        base[0] = round(base[0] * (18-paid) / 18.0, 3)
     c = Contract(years=offer.years, base=base,
                  signing_bonus=st['signing_bonus'], signed=league.year, pay_start=paid)
     from cap_accounting import require_room, pre_roll
@@ -499,6 +527,8 @@ def fill_out_rosters(league, pool, rng, verbose=False):
     with clubs carrying thirty players.
     """
     import min_salary as MS
+    import roster_needs as RN
+    from cutdown import POS_CAP
     cap = CAP.get(league.year, 301.2)
     signed = 0
     for abbr, team in league.teams.items():
@@ -507,7 +537,9 @@ def fill_out_rosters(league, pool, rng, verbose=False):
             continue
         # best available who will play for the minimum, his own position; never a player who should be paid
         # scarcity first
-        avail = sorted([q for q in pool if q.ovr < REPLACEMENT_GRADE or q.pos in ('K', 'P', 'LS')], key=lambda p: -p.ovr)
+        avail = [q for q in pool if q.ovr < REPLACEMENT_GRADE or q.pos in ('K', 'P', 'LS')]
+        roster_needs = RN.assess(team)['needs']
+        avail.sort(key=lambda p: -(p.ovr + 20.0 * roster_needs.get(p.pos, 0.0)))
         for p in list(avail):
             if need <= 0:
                 break
@@ -516,7 +548,7 @@ def fill_out_rosters(league, pool, rng, verbose=False):
             if team.cap_space < floor * 1.05:
                 break
             grp = team.by_pos(p.pos)
-            if len(grp) >= 4:
+            if len(grp) >= POS_CAP.get(p.pos, 4):
                 continue                  # already deep here
             o = Offer(abbr, p.pid, round(floor, 3), 1, phase=3)
             try: sign(league, p, o, cap)
@@ -754,6 +786,8 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
     camp rather than signing for the minimum. The user's club never signs anyone here; the page is his."""
     cap = CAP.get(league.year, 301.2)
     comps = VAL.pool_from_league(league)
+    import roster_needs as RN
+    needs_by_team = {abbr: RN.assess(team)['needs'] for abbr, team in league.teams.items()}
     out = []
     for p in sorted([q for q in pool if q.ovr >= REPLACEMENT_GRADE and q.pos not in ('K', 'P', 'LS')], key=lambda q: -q.ovr):
         v = VAL.value_player(league, p, pool=comps, rng=rng)
@@ -767,7 +801,7 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
             # the need: how far below him the club's starter at his spot is
             ps = team.depth.get(p.pos) or []
             gap = p.ovr - (ps[0].ovr if ps else 60.0)
-            score = gap + 0.15 * power(league, team, cap) + rng.normal(0, 1.5)
+            score = gap + 10.0 * needs_by_team[abbr].get(p.pos, 0.0) + 0.15 * power(league, team, cap) + rng.normal(0, 1.5)
             if gap < -2: continue
             if score > best_score: best, best_score = team, score
         if best is None: continue
@@ -775,6 +809,7 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
         try: sign(league, p, o, cap)
         except ValueError: continue
         best.sync_cap(); out.append((best.abbr, p, o))
+        needs_by_team[best.abbr] = RN.assess(best)['needs']
         league.__dict__.setdefault('fa_signed', []).append((best.abbr, p.pid, o.apy, 1, PHASES + 1))
     return out
 

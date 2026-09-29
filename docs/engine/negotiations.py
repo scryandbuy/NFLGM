@@ -53,6 +53,10 @@ SIGN_TODAY_PREMIUM = 0.00     # he signs today at the ask, no discount; nothing 
 def _threads(league):
     if not hasattr(league, 'negotiations') or league.negotiations is None:
         league.negotiations = []
+    for t in league.negotiations:
+        if t.get('kind') == 'fa_inseason' and t.get('state') not in ('accepted', 'declined', 'expired', 'void'):
+            t['years'] = 1
+            if t.get('counter'): t['counter']['years'] = 1
     return league.negotiations
 
 
@@ -103,7 +107,7 @@ def open_talks(league, pid, kind='extension'):
     else:
         v = VAL.value_player(league, p, side='agent', rng=None)
         if not v: return dict(ok=False, why='no market read on him')
-        ask, years = v['apy'], int(np.clip(v['years'], 1, 4))
+        ask, years = v['apy'], (1 if kind == 'fa_inseason' else int(np.clip(v['years'], 1, 4)))
         # a Recruiter over his position: he wants to play for that coach, and the ask comes down a little
         import staff as ST
         _pull, ask_mult = ST.recruit_pull(league.teams[league.user_team], p.pos)
@@ -269,8 +273,8 @@ def _answer(league, t, p, offer, floor, quiet=False):
         return 'declined'
     # a counter: toward the floor, not all the way
     counter = round(min(t['ask'], floor * (1.0 + 0.03 * max(0, t['patience'] - 1))), 2)    # never above his own ask
-    t['state'] = 'countered'; t['counter'] = dict(apy=counter, years=t['years'], front_load=0.5); _say(t, 'agent', f"Close. He would do it at ${counter:.1f}m a year.")
-    post(f"{p.name}'s agent counters at ${counter:.1f}m", f"Over {t['years']} years at the league shape. " + ("He is close." if counter <= offer['apy'] * 1.06 else "There is a gap."),
+    t['state'] = 'countered'; t['counter'] = dict(apy=counter, years=(1 if t['kind'] == 'fa_inseason' else t['years']), front_load=0.5); _say(t, 'agent', f"Close. He would do it at ${counter:.1f}m a year.")
+    post(f"{p.name}'s agent counters at ${counter:.1f}m", f"Over {t['counter']['years']} year(s) at the league shape. " + ("He is close." if counter <= offer['apy'] * 1.06 else "There is a gap."),
          payload=dict(counter=t['counter'], thread=t['id'], link=f'negotiation:{t["id"]}'))
     return 'countered'
 
@@ -315,7 +319,7 @@ def _accept(league, t, offer, how, quiet=False):
     else:
         team = league.teams[t['team']]; cap = CAP.get(league.year, 301.2)
         o = MK.Offer(t['team'], p.pid, offer['apy'], offer['years'], promises=offer.get('promises', ()), front_load=offer.get('front_load'))
-        try: MK.sign(league, p, o, cap); team.sync_cap()
+        try: MK.sign(league, p, o, cap, bonus=offer.get('bonus')); team.sync_cap()
         except Exception as e: return dict(ok=False, why=str(e)[:120] or 'the contract could not be written')
     t['state'] = 'accepted'; _say(t, 'agent', f"Done. {p.name} is signed.")
     for k in offer.get('promises', []):

@@ -117,7 +117,7 @@ function busy(t) { const b = $('#busy'); if (t) { b.textContent = t; b.hidden = 
 function renderRail(r) {
   $('#rail').hidden = false;
   const c = $('#crest'); c.textContent = r.club.abbr; c.style.background = r.club.color;
-  document.documentElement.style.setProperty('--club', r.club.color); document.documentElement.style.setProperty('--club-2', r.club.accent);
+  personnelRailTeam = r.club; const palette = applyTeamTheme($('#rail'), r.club); document.documentElement.style.setProperty('--club', palette.base); document.documentElement.style.setProperty('--club-2', palette.accent);
   $('#clubname').textContent = r.club.name.toUpperCase(); $('#coach').textContent = r.coach;   // the title has its own line in the markup
   $('#st-record').textContent = r.record; $('#st-place').textContent = r.place; $('#st-cap').textContent = r.cap; const capLab = $('#st-cap').nextElementSibling; if (capLab) capLab.textContent = r.cap_next ? `${r.cap_year} Cap Space` : 'Cap Space'; $('#st-prestige').textContent = r.prestige ?? '—';
   $('#st-week').textContent = r.clock.line; $('#st-year').textContent = r.clock.sub + (window.ENGINE_BUILD ? ` · build ${window.ENGINE_BUILD}` : '');
@@ -178,43 +178,50 @@ function renderInbox(v) {
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Portal'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'portal'));
   document.body.classList.remove('no-second');
-  $('#second').innerHTML = `<a href="#portal">Overview</a><a aria-current="page" href="#portal/inbox">Inbox <em>${v.inbox.total}</em></a><a href="#league/schedule">Calendar</a><a href="#league/transactions">News</a><a href="#frontoffice">Owner</a>`;
+  $('#second').innerHTML = `<a href="#portal">Overview</a><a aria-current="page" href="#portal/inbox">Inbox <em>${v.inbox.total}</em></a>`;
   const reload = () => renderInbox(pyJSON('SESSION.portal_full()'));
-  const s = el('section', { class: 'sheet c12' }, el('h2', {}, 'Inbox', el('small', {}, `${v.inbox.total} Messages · ${v.inbox.decide} Need a Decision · ${v.inbox.unread} Unread`)));
+  const s = el('section', { class: 'sheet c12 inbox-board' });
+  applyTeamTheme(s, v.rail.club || {});
+  const metrics = el('div', {class:'inbox-metrics'});
+  for (const [n,label] of [[v.inbox.total,'Messages'],[v.inbox.decide,'Need a Decision'],[v.inbox.unread,'Unread']]) metrics.append(el('div',{},el('strong',{},String(n)),el('span',{},label)));
+  s.append(el('div',{class:'inbox-hero'},el('div',{},el('div',{class:'inbox-eyebrow'},v.rail.club.name || v.rail.club.abbr),el('h1',{},'INBOX')),metrics));
   // the filters and the page-level actions
   const tools = el('div', { class: 'mailtools' });
-  for (const [k, label, count] of [['all', 'All', v.inbox.total], ['club', 'Your Team', v.inbox.rows.filter(r => r.tag !== 'League').length], ['league', 'League', v.inbox.rows.filter(r => r.tag === 'League').length], ['decide', 'Decide', v.inbox.decide], ['unread', 'Unread', v.inbox.unread]])
-    tools.append(el('button', { class: 'chip', 'aria-pressed': String(inboxFilter === k), onclick: () => { inboxFilter = k; renderInbox(v); } }, `${label} `, el('em', {}, count)));
-  const rows = v.inbox.rows.filter(r => (inboxFilter !== 'decide' || r.decide) && (inboxFilter !== 'unread' || r.unread) && (inboxFilter !== 'league' || r.tag === 'League') && (inboxFilter !== 'club' || r.tag !== 'League'));
+  for (const [k, label, count] of [['all', 'All', v.inbox.total], ['club', 'Your Team', v.inbox.rows.filter(r => r.tag !== 'League').length], ['league', 'League', v.inbox.rows.filter(r => r.tag === 'League').length], ['decide', 'Needs Decision', v.inbox.decide], ['unread', 'Unread', v.inbox.unread]])
+    tools.append(el('button', { class: 'chip', 'aria-pressed': String(inboxFilter === k), onclick: () => { inboxFilter = k; mailSel = null; renderInbox(v); } }, `${label} `, el('em', {}, count)));
+  const rows = v.inbox.rows.filter(r => (inboxFilter !== 'decide' || r.decide) && (inboxFilter !== 'unread' || r.unread || r.id === mailSel) && (inboxFilter !== 'league' || r.tag === 'League') && (inboxFilter !== 'club' || r.tag !== 'League'));
   if (mailSel == null || !rows.some(r => r.id === mailSel)) mailSel = rows.length ? rows[0].id : null;
   const cur = rows.find(r => r.id === mailSel) || null;
-  tools.append(el('span', { style: 'width:1px;background:var(--rule-2);height:22px;margin:0 6px' }),
+  const messageTools = el('div',{class:'inbox-message-tools'},
     el('button', { class: 'btn', disabled: cur && cur.unread ? null : '', onclick: () => { pyJSON(`SESSION.inbox_read(${cur.id})`); reload(); } }, 'Mark Read'),
-    el('button', { class: 'btn', disabled: cur ? null : '', 'data-tip': 'Remove this message', onclick: () => { pyJSON(`SESSION.inbox_delete(${cur.id})`); mailSel = null; reload(); } }, 'Delete'),
+    el('button', { class: 'btn', disabled: cur && !cur.decide ? null : '', 'data-tip': 'Remove this message', onclick: () => { notify(pyJSON(`SESSION.inbox_delete(${cur.id})`)); mailSel = null; reload(); } }, 'Delete'));
+  tools.append(el('span',{class:'inbox-tool-space'}),
     el('button', { class: 'btn quiet', onclick: () => { pyJSON('SESSION.inbox_mark_all()'); reload(); } }, 'Mark All Read'),
-    el('button', { class: 'btn quiet', 'data-tip': 'Remove every read message that needs no decision', onclick: () => { if (confirm('Clear every read message that needs no decision?')) { pyJSON('SESSION.inbox_clear_read()'); mailSel = null; reload(); } } }, 'Clear Read'),
-    el('span', { class: 'count' }, `${rows.length} shown`));
+    el('button', { class: 'btn quiet', 'data-tip': 'Remove every read message that needs no decision', onclick: () => { if (confirm('Clear every read message that needs no decision?')) { pyJSON('SESSION.inbox_clear_read()'); mailSel = null; reload(); } } }, 'Clear Read'));
   s.append(tools);
   const box = el('div', { class: 'mailbox' });
   const list = el('div', { class: 'list' });
-  for (const r of rows) list.append(el('div', { class: 'row' + (r.unread ? ' unread' : '') + (r.block ? ' block' : '') + (r.id === mailSel ? ' sel' : ''), onclick: () => { mailSel = r.id; if (r.unread) pyJSON(`SESSION.inbox_read(${r.id})`); const keepList = list.scrollTop, keepPage = window.scrollY; renderInbox(pyJSON('SESSION.portal_full()')); const nl = document.querySelector('.mailbox .list'); if (nl) nl.scrollTop = keepList; window.scrollTo(0, keepPage); } },
-    el('span', { class: 'dot' }), el('div', { style: 'min-width:0' }, el('div', { class: 'subj' }, r.subject), el('div', { class: 'from' }, `${r.tag}${r.from ? ' · ' + r.from : ''}`)), el('span', { class: 'meta' }, r.when || '')));
+  for (const r of rows) list.append(el('button', { type:'button', 'aria-pressed':String(r.id === mailSel), class: 'row' + (r.unread ? ' unread' : '') + (r.block ? ' block' : '') + (r.id === mailSel ? ' sel' : ''), onclick: () => { mailSel = r.id; if (r.unread) pyJSON(`SESSION.inbox_read(${r.id})`); const keepList = list.scrollTop, keepPage = window.scrollY; renderInbox(pyJSON('SESSION.portal_full()')); const nl = document.querySelector('.mailbox .list'); if (nl) nl.scrollTop = keepList; window.scrollTo(0, keepPage); } },
+    el('span', { class: 'dot' }), el('div', { style: 'min-width:0' }, el('div',{class:'inbox-label' + (r.block ? ' urgent' : '')},r.block ? 'Action Required' : r.decide ? 'Decision' : r.tag), el('div', { class: 'subj' }, r.subject), el('div',{class:'inbox-preview'},r.body), el('div', { class: 'from' }, `${r.tag}${r.from ? ' · ' + r.from : ''}`)), el('span', { class: 'meta' }, r.when || '')));
   if (!rows.length) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : inboxFilter === 'league' ? 'Nothing from around the league yet.' : 'All read.'));
   const pane = el('div', { class: 'pane' });
   if (cur) {
     const m = pyJSON(`SESSION.inbox_message(${cur.id})`);
+    pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
     pane.append(el('h3', {}, m.subject), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), el('div', { class: 'mbody' }, m.body || ''));
     if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
-    else if (m.kind === 'injury_decision' && m.status !== 'done' && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=False)`)); reload(); } }, 'Sit Him'), el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
+    else if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(m.pid)}, play=False)`)); reload(); } }, 'Sit Him'), el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
+    else if (cur.decide && m.kind === 'roster' && m.link) pane.append(el('div',{class:'acts'},el('a',{class:'btn go',href:linkHash(m.link)},'Manage Roster →'),el('a',{class:'btn quiet',href:'#club/ps'},'View Practice Squad')));
     else if (cur.decide) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { location.hash = `#portal/inbox/${cur.id}`; } }, 'Open the Decision')));
     else if (m.link && !(m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60)))) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn' + (m.kind === 'negotiation' ? ' go' : ''), href: linkHash(m.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There')));
+    if (cur.decide) pane.append(el('div',{class:'inbox-decision-note'},'This decision stays open until it is resolved.'));
   } else pane.append(el('div', { class: 'empty' }, 'Select a message.'));
   box.append(list, pane); s.append(box); page.append(s);
 }
 function linkHash(link) {
   if (!link) return '#portal';
   const [a, b] = String(link).split(':');
-  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:regression': '#club/regression', 'club:ps': '#club/ps', 'league:bracket': '#league/bracket', 'front_office:review': '#frontoffice/review', 'front_office:exit': '#frontoffice/exit', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/waivers', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
+  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:regression': '#club/regression', 'club:ps': '#club/ps', 'league:bracket': '#league/bracket', 'front_office:review': '#frontoffice/review', 'front_office:exit': '#frontoffice/exit', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/wire', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
   if (a === 'player') return '#club/player/' + b;
   if (a === 'negotiation') { const kind = String(link).split(':')[1] || ''; return kind === 'extension' ? '#personnel/extensions' : kind.startsWith('fa') ? '#personnel/fa' : '#personnel/fa'; }
   return MAP[link] || MAP[a] || '#portal';
@@ -222,22 +229,30 @@ function linkHash(link) {
 
 function renderPortal(v) {
   const page = $('#page'); page.hidden = false; page.innerHTML = '';
-  page.className = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
+  page.className = 'overview-page'; applyTeamTheme(page, v.rail.club); page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Portal';
+  $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'portal'));
   document.body.classList.remove('no-second');
-  $('#second').innerHTML = `<a aria-current="page" href="#portal">Overview</a><a href="#portal/inbox">Inbox <em>${v.inbox.total}</em></a><a href="#league/schedule">Calendar</a><a href="#league/transactions">News</a><a href="#frontoffice/owner">Owner</a>`;
+  $('#second').innerHTML = `<a aria-current="page" href="#portal">Overview</a><a href="#portal/inbox">Inbox <em>${v.inbox.total}</em></a>`;
 
   // the matchup
   const m = v.matchup;
-  const match = el('section', { class: 'sheet c12' });
-  if (!m) match.append(el('h2', {}, 'Offseason'), el('div', { class: 'empty' }, 'The season is over. The Advance button walks the offseason one step at a time.'));
-  else if (m.bye) match.append(el('h2', {}, `Week ${m.week}`, el('small', {}, 'Bye Week')), el('div', { class: 'empty' }, 'No game this week.'));
+  const match = el('section', { class: 'sheet c12 overview-match' });
+  if (!m) {
+    const bk=v.bracket;
+    const games=bk && !bk.missing ? [...bk.confs.flatMap(c=>[...c.wc,...c.div,...(c.conf_game?[c.conf_game]:[])]),...(bk.final?[bk.final]:[])] : [];
+    const next=games.find(g=>g.me && !g.done);
+    const title=bk ? (bk.champion ? 'Season Complete' : 'Playoffs') : (v.phase_title || 'Offseason');
+    const summary=next ? `Next playoff game: ${next.away.name} at ${next.home.name}` : bk?.champion ? `${bk.champion.name} are the champions` : bk ? 'Follow the current round and your team’s progress in the bracket below.' : 'Complete the current offseason step, then use Advance to continue.';
+    match.append(el('h2',{},title),el('div',{class:'pad'},summary));
+  }
+  else if (m.bye) match.append(el('h2', {}, `${v.rail.clock.line === 'Camp' ? 'Opening Game · ' : 'Next Game · '}Week ${m.week}`, el('small', {}, 'Bye Week')), el('div', { class: 'empty' }, 'No game this week.'));
   else {
-    match.append(el('h2', {}, `Week ${m.week} ${m.away ? 'at' : 'vs'} ${esc(m.them.club.name)}`, el('small', {}, m.header || m.forecast || '')));
+    match.append(el('h2', {}, `${v.rail.clock.line === 'Camp' ? 'Opening Game · ' : 'Next Game · '}Week ${m.week} ${m.away ? 'at' : 'vs'} ${esc(m.them.club.name)}`, el('small', {}, m.header || m.forecast || '')));
     const side = (c, right) => el('div', { class: 'side', style: right ? 'flex-direction:row-reverse;text-align:right' : '' }, el('div', { class: 'cr', style: `background:${c.club.color}` }, c.club.abbr), el('div', {}, el('div', { class: 'nm' }, c.club.nick), el('div', { class: 'rec' }, `${c.record} · ${c.place}`)));
     const bug = el('div', { class: 'bug', style: 'grid-template-columns:auto 1fr auto;padding:12px 12px 4px' },
       side(m.me, false),
-      el('div', { class: 'mid' }, el('div', { class: 'lbl' }, 'Win Probability'), el('div', { class: 'wp' }, `${m.wp}%`),
+      el('div', { class: 'mid' }, el('div', { class: 'lbl' }, 'Estimated Win Chance'), el('div', { class: 'wp' }, `${m.wp}%`),
         el('div', { class: 'wpbar' }, el('i', { style: `width:${m.wp}%;background:${m.me.club.color}` }), el('i', { style: `width:${100 - m.wp}%;background:${m.them.club.color}` })),
         el('div', { class: 'lbl', style: 'margin-top:6px;text-transform:none;letter-spacing:0' }, m.line || '')),
       side(m.them, true));
@@ -247,8 +262,8 @@ function renderPortal(v) {
     const formRow = el('div', { class: 'form-row' }, el('div', {}, el('div', { class: 'lbl' }, `${m.me.club.nick} Last Five`), formDots(m.form.me, true)), el('div', {}, el('div', { class: 'lbl' }, `${m.them.club.nick} Last Five`), formDots(m.form.them, true)));
     const left = el('div', { class: 'm-side' }, bug, facts, formRow);
     const right = el('div', { class: 'm-right' },
-      el('div', { class: 'mh' }, 'Assistants Say', el('a', { class: 'more', href: '#gameplan/report' }, 'Full Opponent Report →')),
-      el('div', { class: 'say', style: 'padding:0 12px 10px' }, m.say),
+      el('div', { class: 'mh' }, 'Opponent Watch', el('a', { class: 'more', href: '#gameplan/report' }, 'Scouting Report →')),
+      
       el('div', { class: 'men-row', style: 'border-top:1px solid var(--rule)' }, ...m.watch.map(w => el('div', {}, el('div', { class: 'lbl' }, 'Players to Watch'), el('button', { class: 'man', onclick: () => { location.hash = '#club/player/' + w.pid; } }, el('div', { class: 'no', style: `background:${m.them.club.color};color:#fff` }, jerseyNo(w.no) ?? w.pos), el('div', { class: 'nm' }, w.name.split(' ')[0][0] + '. ' + w.name.split(' ').slice(1).join(' '), el('small', {}, `${w.pos}${w.note ? ' · ' + w.note : ''}`)), el('div', { class: 'ov' }, w.ovr))))));
     match.append(el('div', { class: 'match', style: 'grid-template-columns:1fr 1.1fr' }, left, right));
     match.append(el('div', { class: 'foot' }, el('a', { class: 'btn go', href: '#gameplan' }, 'Set Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn', href: '#club/depth' }, 'Depth Chart'), el('button', { class: 'btn quiet', onclick: e => { const b = document.getElementById('series'); if (b) b.hidden = !b.hidden; } }, 'Series History')));
@@ -256,36 +271,8 @@ function renderPortal(v) {
   }
   page.append(match);
 
-  // when we have the ball, when they do; what we would do
-  if (m && !m.bye && m.panels) {
-    const P = m.panels;
-    const rkCell = r => el('span', { class: 'rk ' + (r == null ? '' : r <= 8 ? 'good' : r >= 24 ? 'bad' : 'mid-rk') }, r == null ? '—' : `${r}${ord(r)}`);
-    const panel = (title, rows, extra, leftHead, rightHead) => {
-      const s = el('section', { class: 'sheet c6' }, el('h2', {}, title));
-      const box = el('div', { class: 'sides' }, el('div', { class: 'side-row head', style: 'display:grid;grid-template-columns:1.4fr 1fr 34px 1fr' }, el('span', { class: 'lab', style: 'grid-column:1' }, 'Rank of'), el('span', { class: 'colhead', style: 'grid-column:2' }, leftHead.toUpperCase()), el('span', { class: 'mid', style: 'grid-column:3' }, 'vs'), el('span', { class: 'colhead', style: 'grid-column:4' }, rightHead.toUpperCase())));
-      for (const r of rows) box.append(el('div', { class: 'side-row' }, el('span', { class: 'lab' }, r.label), rkCell(r.mine), el('span', { class: 'mid' }, 'vs'), rkCell(r.theirs)));
-      (extra || []).forEach((t, i) => box.append(el('div', { class: 'side-row' + (i === 0 ? ' sep' : '') }, el('span', { class: 'lab' }, t.label, t.sub ? el('em', {}, t.sub) : ''), el('span', { class: 'rk', style: 'font-size:17px' }, t.left), el('span', { class: 'mid' }, 'vs'), el('span', { class: 'rk', style: 'font-size:17px' }, t.right))));
-      s.append(box); return s;
-    };
-    page.append(panel(`When ${m.me.club.name} Has the Ball`, P.ours, P.ours_extra, `${m.me.club.abbr} Offense`, `${m.them.club.abbr} Defense`));
-    page.append(panel(`When ${m.them.club.name} Has the Ball`, P.theirs, P.theirs_extra, `${m.them.club.abbr} Offense`, `${m.me.club.abbr} Defense`));
-    const wwd = el('section', { class: 'sheet c12' }, el('h2', {}, 'What We Would Do', el('small', {}, P.suggestions.length ? `${P.taken.length} of ${P.suggestions.length} taken` : 'the assistants have nothing to add this week')));
-    if (P.suggestions.length) {
-      const cards = el('div', { class: 'cards', style: 'grid-template-columns:repeat(3,1fr)' });
-      for (const sg of P.suggestions) {
-        const on = P.taken.includes(sg.i);
-        cards.append(el('div', { class: 'card', style: `--k:${sg.side === 'Offense' ? 'var(--ok)' : 'var(--live)'};opacity:${on ? '.75' : '1'}` },
-          el('div', { class: 'h' }, el('div', { class: 'k' }, sg.side + (on ? ' · accepted' : '')), el('div', { class: 's' }, sg.text)), el('div', { class: 'b' }, sg.why),
-          el('div', { class: 'b', style: 'margin-top:6px' }, el('span', { class: 'lbl', style: 'font-size:12.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em' }, 'Plan Change '), el('span', { style: 'font-family:var(--mono);font-size:14px' }, sg.change || '—')),
-          el('div', { class: 'a' }, on ? el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.plan_act('untake', i=${sg.i})`); refresh(); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { pyJSON(`SESSION.plan_act('take', i=${sg.i})`); refresh(); } }, 'Accept'), on ? '' : el('button', { class: 'btn quiet', onclick: e => e.currentTarget.closest('.card').remove() }, 'Skip'))));
-      }
-      wwd.append(cards, el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); location.hash = '#gameplan/week'; } }, 'Accept All and Open Game Plan'), el('a', { class: 'btn', href: '#gameplan/week' }, 'Open Game Plan')));
-    }
-    page.append(wwd);
-  }
-
   // on your desk: the card by kind, with the decision on it
-  const desk = el('section', { class: 'sheet c12' }, el('h2', {}, 'On Your Desk', el('small', {}, `${v.desk.length} waiting`)));
+  const desk = el('section', { class: 'sheet c12' }, el('h2', {}, 'Action Required', el('small', {}, `${v.desk_total ?? v.desk.length} waiting`)));
   if (!v.desk.length) desk.append(el('div', { class: 'empty' }, 'Nothing needs you before the next advance.'));
   else desk.append(el('div', { class: 'cards' }, ...v.desk.map(c => {
     const card = el('div', { class: 'card', style: `--k:${c.kind === 'Trade' ? 'var(--live)' : c.kind === 'Contract' ? 'var(--club-2)' : 'var(--decide)'}` });
@@ -301,44 +288,25 @@ function renderPortal(v) {
       card.append(el('div', { class: 'h' }, el('div', { class: 'k' }, 'Contracts · Final Year'), el('div', { class: 's' }, c.subject)),
         el('div', { class: 'facts2', style: 'grid-template-columns:1fr 1fr;padding:6px 0' }, el('div', {}, el('span', {}, 'Agent Asks'), el('b', {}, c.ask != null ? `$${c.ask.toFixed(1)}m` : 'Ask him')), el('div', {}, el('span', {}, 'Years Left'), el('b', {}, c.years_left ?? '—'))),
         el('div', { class: 'b' }, c.line || c.body),
-        el('div', { class: 'a' }, el('button', { class: 'btn go', onclick: () => { pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(c.pid)}, kind='extension')`); location.hash = '#personnel/extensions'; } }, 'Negotiate'), el('button', { class: 'btn quiet', onclick: () => { pyJSON(`__import__('inbox').read(SESSION.L, ${c.id}); [setattr(_m, 'x', 0) for _m in []]`); pyJSON(`[_m.__setitem__('status', 'read') for _m in __import__('inbox')._box(SESSION.L) if _m['id'] == ${c.id}]`); refresh(); } }, 'Later')));
+        el('div', { class: 'a' }, el('button', { class: 'btn go', onclick: () => { pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(c.pid)}, kind='extension')`); location.hash = '#personnel/extensions'; } }, 'Negotiate'), el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.inbox_read(${c.id})`); notify({ok:true,line:'Kept in your inbox for later.'}); location.hash = '#portal/inbox'; refresh(); } }, 'Later')));
     } else {
       card.append(el('div', { class: 'h' }, el('div', { class: 'k' }, c.kind), el('div', { class: 's' }, c.subject)), el('div', { class: 'b' }, c.body),
         el('div', { class: 'a', style: 'display:flex;gap:6px' }, el('button', { class: 'btn', onclick: () => location.hash = `#portal/inbox/${c.id}` }, 'Open'), deskAction(c.kind)));
     }
     return card;
   })));
-  page.append(desk);
+  desk.classList.add('overview-actions'); page.prepend(desk);
+  const hero=el('section',{class:'overview-hero c12'},el('div',{},el('div',{class:'inbox-eyebrow'},v.rail.club.name),el('h1',{},'OVERVIEW'),el('p',{},`${v.rail.clock.line} · ${v.rail.year}`)),el('div',{class:'overview-phase'},el('strong',{},v.phase_title || v.rail.advance.title),el('span',{},v.rail.advance.sub || '')));
+  page.prepend(hero);
+  if(v.team_status) { const t=v.team_status; const status=el('section',{class:'sheet c12 pad overview-status'},el('h2',{},'Team Status'),el('div',{class:'facts2',style:'grid-template-columns:repeat(4,1fr)'},...[[`${t.active}/${t.limit}`,'Active roster'],[v.rail.cap,'Cap space'],[t.unavailable,'Unavailable'],[v.desk_total ?? v.desk.length,'Pending decisions']].map(([value,label])=>el('div',{},el('span',{},label),el('b',{},String(value)))))); match.after(status); }
 
   // THE BRACKET, once the playoffs start: the field, live, between the desk and the money
   if (v.bracket && !v.bracket.missing) {
     const bk = el('section', { class: 'sheet c12' }, el('h2', {}, `${v.bracket.year || ''} Playoffs`, el('small', {}, v.bracket.champion ? `Champion: ${v.bracket.champion.name}` : v.bracket.live ? 'the bracket, live' : v.bracket.note || 'the field')));
-    bk.append(bracketTree(v.bracket)); page.append(bk);
+    bk.append(bracketTree(v.bracket)); match.after(bk);
   }
 
-  // cap, room, front office
-  const capG = v.cap.by_group; const total = Object.values(capG).reduce((a, b) => a + b, 0) + v.cap.dead;
-  const colors = { QB: '#c8102e', OL: '#e0b400', WR: '#4cc9f0', DL: '#3fb37f', DB: '#8791a0', LB: '#b6bec9', TE: '#5a6472', RB: '#a0603a', ST: '#3a3f47' };
-  const stack = el('div', { class: 'stack', style: 'margin-top:10px' }, ...Object.entries(capG).filter(([, x]) => x > 0).map(([g, x]) => el('i', { class: (100 * x / v.cap.cap) < 7 ? 'narrow' : '', style: `width:${100 * x / v.cap.cap}%;background:${colors[g]}`, 'data-tip': `${g}: $${x.toFixed(1)}m` }, el('span', {}, g))), el('i', { style: `width:${100 * v.cap.dead / v.cap.cap}%;background:#3a1216`, 'data-tip': `Dead Money: $${v.cap.dead.toFixed(1)}m` }));
-  const capS = sheet('Cap', `${v.cap.focus_year || v.cap.years[0].year} · $${v.cap.cap}m Limit${v.cap.focus_next ? ' · next year' : ''}`, el('div', { class: 'pad' }, el('div', { class: 'big' }, v.cap.space, el('span', { class: 'muted', style: 'font-size:16px;font-family:var(--text);font-weight:500' }, ' Space')), stack,
-    el('div', { class: 'bars', style: 'padding:10px 0 0;grid-template-columns:60px 1fr 118px' }, ...v.cap.years.flatMap(y => [el('div', { class: 'l' }, y.year), el('div', { class: 't' }, el('i', { style: `width:${Math.min(100, 100 * y.committed / y.cap)}%;background:var(--ink-2)` })), el('div', { class: 'v', style: 'white-space:nowrap;text-align:right' }, `$${y.committed}/${y.cap}`)]))),
-    el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#frontoffice/cap' }, 'Restructure'), el('a', { class: 'btn', href: '#personnel/extensions' }, 'Extensions'), el('a', { class: 'btn quiet', href: '#frontoffice/cap' }, 'Ledger')));
-  capS.classList.add('c4'); page.append(capS);
-
-  const rc = v.room.counts; const n = Object.values(rc).reduce((a, b) => a + b, 0) || 1;
-  const roomS = sheet('The Room', `${n} Players · Morale`, el('div', { class: 'pad' },
-    el('div', { class: 'bar' }, el('i', { style: `width:${100 * rc.Unhappy / n}%;background:var(--danger)` }), el('i', { style: `width:${100 * rc.Unsettled / n}%;background:var(--decide)` }), el('i', { style: `width:${100 * rc.Content / n}%;background:var(--rule-hi)` }), el('i', { style: `width:${100 * rc.Happy / n}%;background:var(--ok)` })),
-    el('div', { class: 'leg' }, el('span', {}, el('i', { style: 'background:var(--danger)' }), `Unhappy ${rc.Unhappy}`), el('span', {}, el('i', { style: 'background:var(--decide)' }), `Unsettled ${rc.Unsettled}`), el('span', {}, el('i', { style: 'background:var(--rule-hi)' }), `Content ${rc.Content}`), el('span', {}, el('i', { style: 'background:var(--ok)' }), `Happy ${rc.Happy}`))),
-    el('div', { class: 'plates', style: 'grid-template-columns:1fr;padding-top:2px' }, ...v.room.watch.map(p => el('button', { class: 'man', onclick: () => location.hash = `#club/player/${p.pid}` }, el('div', { class: 'no' }, jerseyNo(p.no) ?? p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, p.note)), el('div', { class: 'ovr' }, p.ovr), el('i', { class: 'pin bad' })))),
-    el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#club' }, 'Roster'), el('a', { class: 'btn', href: '#club/depth' }, 'Depth Chart'), el('a', { class: 'btn quiet', href: '#club/ps' }, 'Practice Squad')));
-  roomS.classList.add('c4'); page.append(roomS);
-
-  const fo = v.front_office;
-  const foS = sheet('Front Office', `${v.owner_name || 'Owner'} · You`, el('div', { class: 'pad' },
-    el('div', { class: 'big', style: 'font-size:30px' }, fo.owner_mood), el('div', { class: 'muted', style: 'font-size:15px;margin:2px 0 10px' }, fo.expects || ''),
-    el('div', { class: 'kv' }, el('span', {}, 'Your Prestige'), el('b', {}, fo.prestige ?? '—'), el('span', {}, 'Job Security'), el('b', { style: fo.job === 'Hot Seat' ? 'color:var(--danger)' : fo.job === 'Warming' ? 'color:var(--decide)' : '' }, fo.job), el('span', {}, 'Scouting'), el('b', {}, fo.scouting_rank ? `${fo.scouting_rank}${ord(fo.scouting_rank)}` : '—'))),
-    el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#frontoffice/identity' }, 'Coaching Identity'), el('a', { class: 'btn', href: '#draft' }, 'Scouting Board'), el('a', { class: 'btn quiet', href: '#league/almanac' }, 'Almanac')));
-  foS.classList.add('c4'); page.append(foS);
+  if(v.bracket?.error) match.after(el('section',{class:'sheet c12 pad',role:'alert'},v.bracket.note));
 
   // standings and season
   const st = v.standings;
@@ -347,21 +315,27 @@ function renderPortal(v) {
   const stS = sheet(st.division, '', table, el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#league' }, 'Full Standings')));
   stS.classList.add('c6'); page.append(stS);
 
-  const strip = el('div', { class: 'strip' }, ...v.season.games.map(g => g.bye ? el('div', { class: 'wk bye' }, '—', el('small', {}, 'bye')) : el('div', { class: 'wk' + (g.result ? ' ' + g.result.toLowerCase() : '') + ((view.rail.advance.title.match(/Week (\d+)/) || [])[1] == g.week ? ' now' : ''), 'data-tip': g.score ? `${g.home ? 'vs' : 'at'} ${g.opp} · ${g.score}` : null }, g.result || g.week, el('small', {}, `${g.home ? '' : '@'}${g.opp}`))));
-  const nums = v.season.numbers || {}; const numRow = el('div', { class: 'facts2', style: 'grid-template-columns:repeat(4,1fr);padding:8px 0 0' }, el('div', {}, el('span', {}, 'Points For'), el('b', {}, nums.pf ?? '—')), el('div', {}, el('span', {}, 'Points Against'), el('b', {}, nums.pa ?? '—')), el('div', {}, el('span', {}, 'EPA per Play'), el('b', {}, nums.epa != null ? (nums.epa >= 0 ? '+' : '') + nums.epa.toFixed(2) : '—')), el('div', {}, el('span', {}, 'Pass Rush Win'), el('b', {}, nums.prw != null ? `${nums.prw}%` : '—')));
-  const seS = sheet('The Season', view.rail.record, strip, numRow, el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#league/schedule' }, 'Schedule'), el('a', { class: 'btn', href: '#league/stats' }, 'Stats'), el('a', { class: 'btn quiet', href: '#league' }, 'Playoff Picture')));
+  const recent=v.season.games.filter(g=>g.result).slice(-5).reverse();
+  const results=el('div',{class:'overview-results'},...(recent.length ? recent.map(g=>el('a',{href:'#league/schedule',class:'overview-result'},el('strong',{class:g.result==='W'?'good':g.result==='L'?'bad':''},g.result),el('span',{},`Week ${g.week} · ${g.home?'vs':'at'} ${g.opp}`),el('b',{},g.score))) : [el('div',{class:'empty'},'No results yet. Season statistics available after Week 1.')]));
+  const seS = sheet('Recent Results', v.rail.record, results, el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#league/schedule' }, 'Schedule'), el('a', { class: 'btn', href: '#league/stats' }, 'Stats'), el('a', { class: 'btn quiet', href: '#league' }, 'Playoff Picture')));
   seS.classList.add('c6'); page.append(seS);
+  const room=v.room.counts;
+  const summaries=el('section',{class:'overview-summaries c12'},
+    el('a',{href:'#frontoffice/cap'},el('span',{},'CAP OUTLOOK'),el('strong',{},v.cap.space+' available'),el('small',{},'View contracts and future commitments →')),
+    el('a',{href:'#club'},el('span',{},'LOCKER ROOM'),el('strong',{},`${room.Unhappy + room.Unsettled} players unsettled or unhappy`),el('small',{},'Review your roster →')),
+    el('a',{href:'#frontoffice/owner'},el('span',{},'OWNER & JOB SECURITY'),el('strong',{},v.front_office.job),el('small',{},v.front_office.expects || v.front_office.owner_mood)));
+  page.append(summaries);
 }
 
 function tagClass(t) { return ({ Trade: 'trade', Contract: 'contract', Wire: 'wire', Squad: 'squad', Game: 'game', Scouting: 'scout', 'Locker Room': 'room', Assistants: 'assist', Owner: 'owner', Staff: 'owner' })[t] || ''; }
 function ord(n) { return n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'; }
 
 function openMessage(id) {
-  py.runPython(`import inbox as IB\nfor _m in IB._box(SESSION.L):\n    if _m['id'] == ${id} and _m['status'] == 'unread': _m['status'] = 'read'`);
+  py.runPython(`SESSION.inbox_read(${Number(id)})`);
   const m = pyJSON(`next(_m for _m in __import__('inbox')._box(SESSION.L) if _m['id'] == ${id})`);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr';
   const acts = el('div', { class: 'foot' });
-  if (m.kind === 'injury_decision' && m.status !== 'done' && m.payload && m.payload.pid) {
+  if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.payload && m.payload.pid) {
     const pid = m.payload.pid;
     acts.append(el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(pid)}, play=True)`)); location.hash = '#portal/inbox'; } }, 'Play Him'),
       el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(pid)}, play=False)`)); location.hash = '#portal/inbox'; } }, 'Sit Him'),
@@ -762,7 +736,8 @@ function renderCard(v) {
   $('#crumb').textContent = 'Team'; secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '');
   if (v.error) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, v.error))); return; }
   const s = el('section', { class: 'sheet c12 player-card' });
-  const cardColor = v.team ? v.team.color : '#8791a0';
+  applyTeamTheme(s, v.team || {});
+  const cardColor = teamTheme(v.team || {}).accent;
   s.style.setProperty('--pc-accent', cardColor);
   const rgb = parseInt(cardColor.slice(1), 16);
   const brightness = (((rgb >> 16) & 255) * 299 + ((rgb >> 8) & 255) * 587 + (rgb & 255) * 114) / 1000;
@@ -1020,11 +995,6 @@ function renderDepth(v) {
     const pk = el('div', {class:'pkg'}, el('span', {}, 'Personnel'));
     for (const p of v.offense_packages || []) pk.append(el('button', {'aria-pressed':String(p === v.offense_package), onclick:()=>{depthOffense=p; reload();}}, `${p} · ${p === v.offense_base ? 'Base' : labels[p]}`));
     s.append(pk);
-    if (v.available_fronts && v.available_fronts.length) {
-      const fronts = el('div', { class: 'pkg depth-fronts' }, el('span', {}, 'View front'));
-      for (const f of v.available_fronts) fronts.append(el('button', { 'aria-pressed': String(f === v.front), onclick: () => { depthFront = f; renderDepth(loadDepth(v.package)); } }, f));
-      s.append(fronts);
-    }
   }
   if (depthSide === 'defense') {
     const pk = el('div', { class: 'pkg' }, el('span', {}, `${v.coach_front === 'multiple' ? 'Multiple · ' : ''}${v.defense_shape} · Package`));
@@ -1086,61 +1056,130 @@ function persPage() { const page = $('#page'); page.innerHTML = ''; page.style.g
 function crest(c, size) { return el('div', { class: 'cr', style: `background:${c.color}${size ? `;height:${size}px;font-size:${Math.max(10, Math.round(size * 0.4))}px` : ''}` }, c.abbr); }
 function notify(r) { busy(r.why || r.line || (r.ok ? 'Done.' : 'That did not work.')); setTimeout(() => busy(null), 2600); }
 
-function renderTrades(v) {
-  renderRail(v.rail); const page = persPage(); persSecond('trades');
-  tradeState.other = v.other.abbr;
-  const s = el('section', { class: 'sheet c12' });
-  if (!v.can_trade) page.append(el('div', { class: 'banner c12' }, el('b', {}, 'The trade deadline has passed.'), ' Trades reopen after the season. You can still look at every team and read offers, but nothing can be sent or received until then.'));
-  if (v.draft_live) page.append(el('div', { class: 'banner c12', style: 'background:var(--sheet-2)' }, el('b', {}, `Draft day · pick ${v.draft_live.slot} is on the clock (${v.draft_live.team}).`), ' A trade here moves the pick in the order at once; players and picks both sides, and the offseason\'s post-June 1 rule applies. ', el('a', { class: 'btn go', href: '#draft/day', style: 'width:auto;display:inline-block;margin-left:8px' }, 'Back to the Draft')));
-  s.append(el('h2', {}, 'Trades', el('small', {}, v.can_trade ? (v.draft_live ? 'the draft is on' : `Deadline after Week ${v.deadline_week}`) : 'Closed until the season ends')));
-  const strip = el('div', { class: 'clubs' });
-  for (const c of v.clubs) strip.append(el('button', { class: 'cl', style: `background:${c.color}`, 'aria-pressed': String(c.abbr === v.other.abbr), 'data-tip': c.name, onclick: () => { tradeState = { other: c.abbr, a: [], b: [] }; renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(c.abbr)})`)); } }, c.abbr));
-  s.append(strip);
-  const reload = () => renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));
-  const side = (own, list, picks, sel, title) => {
-    const box = el('div', {});
-    box.append(el('div', { class: 'side-h' }, crest(own.club), el('b', {}, title === 'You Send' ? 'You Send' : `${own.club.nick.charAt(0) + own.club.nick.slice(1).toLowerCase()} Sends`), el('span', {}, title === 'You Send' ? (v.package ? `Cap After: $${v.package.cap_after.me}m` : `Cap $${own.cap.toFixed(1)}m`) : `Their Cap: $${own.cap.toFixed(1)}m`)));
-    const sn = el('div', { class: 'read', style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px' });
-    sn.append(el('div', {}, el('div', { class: 'h5' }, own === v.me ? 'Your Surplus' : 'Their Surplus'), ...(own.surplus.length ? own.surplus.map(x => { const p = own.roster.find(r => r.pid === x.pid); return p ? el('div', { style: 'font-size:14.5px;cursor:pointer', onclick: () => { if (!sel.includes(p.pid)) { sel.push(p.pid); reload(); } } }, `${p.short} · ${p.pos} · ${p.ovr}`, el('small', { style: 'color:var(--ink-3)' }, ` ${x.why}`)) : ''; }) : [el('div', { style: 'font-size:14.5px;color:var(--ink-3)' }, 'Nothing spare.')])));
-    sn.append(el('div', {}, el('div', { class: 'h5' }, own === v.me ? 'Your Needs' : 'Their Needs'), el('div', { style: 'font-size:14.5px' }, own.needs && own.needs.length ? own.needs.join(' · ') : 'None pressing')));
-    box.append(sn);
-    const pk = el('div', { class: 'pkgbox' });
-    if (!sel.length) pk.append(el('div', { class: 'empty' }, 'Drag a plate or a pick here, or pick from the list below'));
-    pk.addEventListener('dragover', e => { e.preventDefault(); pk.classList.add('over'); }); pk.addEventListener('dragleave', () => pk.classList.remove('over'));
-    pk.addEventListener('drop', e => { e.preventDefault(); pk.classList.remove('over'); let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; } if (d && d.side === title && !sel.includes(d.id)) { sel.push(d.id); reload(); } });
-    for (const id of sel) {
-      const p = own.roster.find(r => r.pid === id), k = own.picks.find(r => r.id === id);
-      if (p) pk.append(el('div', { class: 'plate' }, el('div', { class: 'no' }, jerseyNo(p.no) ?? p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${p.yrs} Yr${p.yrs === 1 ? '' : 's'} · $${p.hit}m Hit · $${p.penalty}m Penalty`)), el('div', { class: 'ov' }, p.ovr), el('div', { class: 'x', onclick: () => { sel.splice(sel.indexOf(id), 1); reload(); } }, '✕')));
-      else if (k) pk.append(el('div', { class: 'pkcard' }, el('div', { class: 'rd' }, `R${k.round}`), el('div', { class: 'nm' }, k.words, el('small', {}, `${k.own_words}${k.proj ? ' · ' + k.proj : ''}`)), el('div', { class: 'x', onclick: () => { sel.splice(sel.indexOf(id), 1); reload(); } }, '✕')));
-    }
-    box.append(pk);
-    // pickers
-    const tabs = el('div', { class: 'tabs', style: 'margin:10px 0 6px' }); const list1 = el('div', { class: 'rows' }); let mode = 'players';
-    const drawList = () => {
-      list1.innerHTML = '';
-      const drag = (elm, id) => { elm.setAttribute('draggable', 'true'); elm.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', JSON.stringify({ id, side: title }))); };
-      if (mode === 'players') for (const p of own.roster) { if (sel.includes(p.pid)) continue; const sur = own.surplus.find(x => x.pid === p.pid); const pl = el('div', { class: 'plate pickable', onclick: () => { sel.push(p.pid); reload(); } }, el('div', { class: 'no' }, jerseyNo(p.no) ?? p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${p.yrs} Yr${p.yrs === 1 ? '' : 's'} · $${p.hit}m Hit` + (sur ? ` · ${sur.why}` : ''))), el('div', { class: 'ov' }, p.ovr)); drag(pl, p.pid); list1.append(pl); }
-      else for (const k of own.picks) { if (sel.includes(k.id)) continue; const pc = el('div', { class: 'pkcard pickable', style: 'cursor:pointer', onclick: () => { sel.push(k.id); reload(); } }, el('div', { class: 'rd' }, `R${k.round}`), el('div', { class: 'nm' }, k.words, el('small', {}, `${k.own_words}${k.proj ? ' · ' + k.proj : ''}`)), el('div', {})); drag(pc, k.id); list1.append(pc); }
-    };
-    for (const [k, l] of [['players', 'Players'], ['picks', title === 'You Send' ? 'Your Picks' : 'Their Picks']]) tabs.append(el('button', { 'aria-pressed': String(mode === k), onclick: e => { mode = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); drawList(); } }, l));
-    box.append(tabs, list1); drawList();
-    box.append(el('div', { class: 'h5', style: 'margin-top:10px' }, title === 'You Send' ? 'Your Surplus' : 'Their Surplus', el('span', {}, title === 'You Send' ? 'Players the Assistants Would Move' : 'Depth they could spare')));
-    for (const sx of own.surplus.slice(0, 4)) { const p = own.roster.find(r => r.pid === sx.pid); if (!p || sel.includes(p.pid)) continue; box.append(el('div', { class: 'plate pickable', style: 'margin-bottom:4px', onclick: () => { sel.push(p.pid); reload(); } }, el('div', { class: 'no' }, jerseyNo(p.no) ?? p.pos), el('div', { class: 'nm' }, p.short, el('small', {}, `${p.pos} · ${sx.why}`)), el('div', { class: 'ov' }, p.ovr))); }
-    if (title !== 'You Send' && own.needs && own.needs.length) box.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Needs'), el('div', { class: 'chips' }, ...own.needs.map(n => el('span', { class: 'chip' }, n))));
-    return box;
+// Each team owns its panel palette; shared by trades, cards and negotiations.
+let personnelRailTeam = null;
+function teamTheme(team = {}) {
+  const abbr = team.abbr;
+  const base = ({DEN:'#002244', CIN:'#101820', PIT:'#101820', NO:'#101820'})[abbr] || team.color || COLOR[abbr] || '#303842';
+  const accent = BOOT_TEAM[abbr]?.[1] || team.accent || '#c8d2dc';
+  const n = parseInt(accent.replace('#', ''), 16);
+  const bright = (((n >> 16) & 255) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000;
+  return {base, accent, ink: bright > 145 ? '#111820' : '#fff', readable: bright > 145 ? accent : `color-mix(in srgb, ${accent} 65%, white)`};
+}
+function applyTeamTheme(node, team) {
+  const t = teamTheme(team);
+  for (const [k, value] of Object.entries(t)) node.style.setProperty('--team-' + k, value);
+  return t;
+}
+function tradeSelection(items, own) {
+  // Old draft/roster/counter links may still pass IDs. Resolve membership, not punctuation.
+  const result = [];
+  for (const item of items || []) {
+    const id = typeof item === 'object' ? item.id : item;
+    const kind = typeof item === 'object' ? item.kind : own.roster.some(p => String(p.pid) === String(id)) ? 'player' : 'pick';
+    const found = kind === 'player' ? own.roster.some(p => String(p.pid) === String(id)) : kind === 'pick' && own.picks.some(p => String(p.id) === String(id));
+    if (found && !result.some(x => x.kind === kind && String(x.id) === String(id))) result.push({kind, id});
+  }
+  return result;
+}
+function tradePickerState(key) {
+  tradeState.pickers ||= {};
+  return tradeState.pickers[key] ||= {mode:'players', query:'', scroll:0};
+}
+function tradeAssetRow(own, asset, remove, onChange, side) {
+  const p = asset.kind === 'player' ? own.roster.find(p => String(p.pid) === String(asset.id)) : own.picks.find(p => String(p.id) === String(asset.id));
+  if (!p) return '';
+  const name = asset.kind === 'player' ? p.short : p.words;
+  const row = el('div', {class:'trade-asset' + (remove ? ' selected' : ''), draggable: remove ? null : 'true'},
+    el('span', {class:'trade-number'}, asset.kind === 'player' ? (jerseyNo(p.no) ?? p.pos) : `R${p.round}`),
+    el('div', {class:'trade-name'}, name, el('small', {}, asset.kind === 'player' ? `${p.pos} · ${p.yrs} yrs · $${p.hit}m hit${remove ? ` · $${p.penalty}m penalty` : ''}` : `${p.own_words}${p.proj ? ' · ' + p.proj : ''}`)),
+    el('b', {class:'trade-rating'}, asset.kind === 'player' ? p.ovr : ''),
+    el('button', {class:'btn trade-add', 'aria-label':`${remove ? 'Remove' : 'Add'} ${name}`, onclick:() => onChange(asset, remove)}, remove ? '×' : '+'));
+  if (!remove) row.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', JSON.stringify({side, asset})));
+  return row;
+}
+function renderTradePackage(own, selected, onChange, side) {
+  const box = el('div', {class:'trade-package', 'aria-label':'Selected trade assets'});
+  if (!selected.length) box.append(el('div', {class:'empty'}, '+ Add players or picks below'));
+  for (const asset of selected) box.append(tradeAssetRow(own, asset, true, onChange, side));
+  box.addEventListener('dragover', e => {e.preventDefault(); box.classList.add('over');});
+  box.addEventListener('dragleave', () => box.classList.remove('over'));
+  box.addEventListener('drop', e => {
+    e.preventDefault(); box.classList.remove('over');
+    let data; try {data = JSON.parse(e.dataTransfer.getData('text/plain'));} catch (_) {return;}
+    if (data.side === side && tradeSelection([data.asset], own).length) onChange(data.asset, false);
+  });
+  return box;
+}
+function renderTradePicker(own, selected, ui, onChange, side) {
+  const wrap = el('div', {class:'trade-picker'}), tabs = el('div', {class:'trade-picker-tools'}), rows = el('div', {class:'trade-rows'});
+  const draw = () => {
+    rows.replaceChildren();
+    const pool = ui.mode === 'players' ? own.roster.map(p => ({kind:'player', id:p.pid, text:`${p.short} ${p.name || ''} ${p.pos}`})) : own.picks.map(p => ({kind:'pick',id:p.id,text:`${p.words} ${p.own_words} ${p.proj || ''}`}));
+    for (const a of pool) if (!selected.some(x => x.kind === a.kind && String(x.id) === String(a.id)) && a.text.toLowerCase().includes(ui.query.toLowerCase())) rows.append(tradeAssetRow(own, {kind:a.kind,id:a.id}, false, onChange, side));
+    if (!rows.children.length) rows.append(el('div', {class:'empty'}, 'No matching assets.'));
+    rows.scrollTop = ui.scroll;
   };
-  const two = el('div', { class: 'two' }, side(v.me, v.me.roster, v.me.picks, tradeState.a, 'You Send'), side(v.them, v.them.roster, v.them.picks, tradeState.b, 'You Get'));
-  // the read and the buttons sit above the pickers, so the deal is in view without scrolling
-  const foot = el('div', { class: 'foot', style: 'flex-wrap:wrap;gap:10px;border-top:0;border-bottom:1px solid var(--rule)' });
-  if (v.package) foot.append(el('div', { class: 'read ' + v.package.verdict, style: 'flex:1 1 100%' }, el('b', {}, `${v.them.club.abbr}: ${{ fair: 'Fair.', short: 'A touch short.', far: 'Well short.', overpay: 'An overpay.', blocked: 'Blocked.' }[v.package.verdict] || ''} `), v.package.read, el('br'), el('span', { style: 'color:var(--ink-3)' }, v.package.my_read + ` Roster after: ${v.package.roster_after.me}. Cap after: $${v.package.cap_after.me}m.`)));
-  const can = v.can_trade && (tradeState.a.length || tradeState.b.length);
-  foot.append(el('button', { class: 'btn go', disabled: can ? null : '', onclick: () => { const r = pyJSON(`SESSION.personnel_act('propose', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`); notify(r); if (r.done) { tradeState.a = []; tradeState.b = []; } reload(); } }, 'Propose'),
-    el('button', { class: 'btn', disabled: v.can_trade && tradeState.b.length ? null : '', 'data-tip': 'Ask what it would take from your picks', onclick: () => { const r = pyJSON(`SESSION.personnel_act('ask', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`); notify(r); if (r.adds) for (const id of r.adds) if (!tradeState.a.includes(id)) tradeState.a.push(id); reload(); } }, 'Ask What They Want'),
-    el('button', { class: 'btn', disabled: v.can_trade && tradeState.a.length === 1 && !tradeState.a[0].includes('-') ? null : '', 'data-tip': 'Shop the one player you send to every team', onclick: () => { const r = pyJSON(`SESSION.personnel_act('gather', pid=${JSON.stringify(tradeState.a[0])})`); const box = $('#gather'); box.innerHTML = ''; box.append(el('b', {}, r.line)); const list = el('div', { style: 'max-height:320px;overflow-y:auto;margin-top:6px;padding-right:6px' }); for (const o of r.offers) list.append(el('div', { style: 'display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule)' }, crest(o.club, 26), el('span', {}, `${o.club.name} offer `, el('b', {}, o.words.join(' and '))), el('button', { class: 'btn', style: 'margin-left:auto;padding:3px 8px;font-size:14px', onclick: () => { tradeState = { other: o.club.abbr, a: [tradeState.a[0]], b: o.ids }; reload(); } }, 'Open'))); box.append(list); } }, 'Gather Offers'),
-    el('button', { class: 'btn quiet', onclick: () => { tradeState.a = []; tradeState.b = []; reload(); } }, 'Clear'));
-  foot.append(el('span', { class: 'count', style: 'margin-left:auto' }, (v.note || (v.can_trade ? `Deadline after Week ${v.deadline_week}` : '')) + ` · ${v.balance}`));
-  s.append(foot, two, el('div', { class: 'read', id: 'gather', style: 'margin:0 14px 14px' }, 'Send one player and Gather Offers to see what the league would give.'));
-  page.append(s);
+  for (const [key,label] of [['players','Players'],['picks',side === 'a' ? 'Your Picks' : 'Their Picks']]) tabs.append(el('button',{class:'btn','aria-pressed':String(ui.mode === key),onclick:e => {ui.mode=key;ui.scroll=0;tabs.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===e.currentTarget)));draw();}},label));
+  tabs.append(el('input',{type:'search',placeholder:'Find a player or pick…',value:ui.query,'aria-label':`Search ${own.club.name} assets`,oninput:e=>{ui.query=e.target.value;ui.scroll=0;draw();}}));
+  rows.addEventListener('scroll',()=>{ui.scroll=rows.scrollTop;});
+  wrap.append(tabs, rows); draw();
+  requestAnimationFrame(()=>{if(rows.isConnected) rows.scrollTop=ui.scroll;});
+  return wrap;
+}
+function renderTradeSide(v, key, reload) {
+  const own = key === 'a' ? v.me : v.them, selected = tradeState[key];
+  const box = el('section',{class:'trade-side','data-team':own.club.abbr}); applyTeamTheme(box,own.club);
+  const head = el('div',{class:'trade-side-head'},el('h2',{},own.club.name));
+  if (key === 'b') {
+    const select = el('select',{'aria-label':'Trade partner',onchange:e=>{tradeState.other=e.target.value;tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload();}});
+    for(const c of v.clubs) select.append(el('option',{value:c.abbr,selected:c.abbr===v.other.abbr?'':null},c.name));
+    head.append(select);
+  }
+  head.append(el('div',{class:'trade-cap'},el('b',{},`$${own.cap.toFixed(1)}m`),el('small',{},'Cap space')));
+  const onChange=(asset,remove)=>{
+    const i=selected.findIndex(x=>x.kind===asset.kind && String(x.id)===String(asset.id));
+    if(remove && i>=0) selected.splice(i,1); else if(!remove && i<0) selected.push(asset);
+    tradeState.offers=null; reload();
+  };
+  box.append(head,el('div',{class:'trade-label'},key==='a'?'YOU SEND':'YOU RECEIVE'),renderTradePackage(own,selected,onChange,key),renderTradePicker(own,selected,tradePickerState(own.club.abbr),onChange,key));
+  const notes=el('div',{class:'trade-notes'},el('div',{},el('h3',{},'Team needs'),el('span',{},own.needs.length?own.needs.join(' · '):'None pressing')));
+  const surplus=el('div',{},el('h3',{},'Surplus players'));
+  for(const x of own.surplus.slice(0,4)) {
+    const p=own.roster.find(p=>p.pid===x.pid); if(!p) continue;
+    surplus.append(el('button',{class:'trade-surplus',disabled:selected.some(a=>a.kind==='player'&&a.id===p.pid)?'':null,'data-tip':x.why,onclick:()=>onChange({kind:'player',id:p.pid},false)},p.short));
+  }
+  if(!own.surplus.length) surplus.append(el('span',{},'Nothing spare.'));
+  notes.append(surplus); box.append(notes); return box;
+}
+function renderTradeSummary(v,reload) {
+  const summary=el('div',{class:'trade-summary'});
+  if(v.package) summary.append(el('div',{class:'trade-verdict '+v.package.verdict},el('b',{},`${v.them.club.abbr}: ${v.package.verdict.toUpperCase()}. `),v.package.read,el('small',{},`${v.package.my_read} Your roster after: ${v.package.roster_after.me} · Your cap after: $${v.package.cap_after.me}m`)));
+  const args=()=>`other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)}`;
+  const can=v.can_trade&&(tradeState.a.length||tradeState.b.length);
+  const actions=el('div',{class:'trade-actions'},el('span',{},`${tradeState.a.length} assets sent · ${tradeState.b.length} received`),
+    el('button',{class:'btn go',disabled:can?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('propose', ${args()})`);notify(r);if(r.done){tradeState.a=[];tradeState.b=[];}tradeState.offers=null;reload();}},'Propose'),
+    el('button',{class:'btn',disabled:v.can_trade&&tradeState.b.length?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('ask', ${args()})`);notify(r);if(!r.ok)return;tradeState.a=tradeSelection([...tradeState.a,...(r.adds||[]).map(id=>({kind:'pick',id}))],v.me);tradeState.offers=null;reload();}},'Ask What They Want'),
+    el('button',{class:'btn',disabled:v.can_trade&&tradeState.a.length===1&&tradeState.a[0].kind==='player'?null:'',onclick:()=>{const pid=tradeState.a[0].id;const r=pyJSON(`SESSION.personnel_act('gather', pid=${JSON.stringify(pid)})`);notify(r);tradeState.offers={...r,pid};reload();}},'Gather Offers'),
+    el('button',{class:'btn quiet',onclick:()=>{tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload();}},'Clear'));
+  summary.append(actions);return summary;
+}
+function renderTrades(v) {
+  renderRail(v.rail); const page=persPage();persSecond('trades');
+  tradeState.other=v.other.abbr;
+  tradeState.a=tradeSelection(tradeState.a,v.me);tradeState.b=tradeSelection(tradeState.b,v.them);
+  const reload=()=>{const y=window.scrollY;renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));window.scrollTo(0,y);};
+  const s=el('section',{class:'sheet c12 trade-board'});applyTeamTheme(s,v.me.club);
+  s.append(el('div',{class:'trade-hero'},el('small',{},v.me.club.name.toUpperCase()),el('h1',{},'TRADES.'),el('span',{},v.can_trade?`Deadline after Week ${v.deadline_week}`:'Closed until the season ends')));
+  if(!v.can_trade)s.append(el('div',{class:'banner'},'The trade deadline has passed. Trades reopen after the season.'));
+  if(v.draft_live)s.append(el('div',{class:'banner'},`Draft day · pick ${v.draft_live.slot} · ${v.draft_live.team} on the clock. `,el('a',{class:'btn',href:'#draft/day'},'Back to the Draft')));
+  s.append(el('div',{class:'trade-columns'},renderTradeSide(v,'a',reload),renderTradeSide(v,'b',reload)));
+  if(tradeState.offers){
+    const r=tradeState.offers, list=el('div',{class:'trade-offers'},el('h3',{},r.line||r.why||'Offers'));
+    for(const o of r.offers||[])list.append(el('div',{class:'trade-offer'},crest(o.club,26),el('span',{},`${o.club.name}: ${o.words.join(' and ')}`),el('button',{class:'btn',onclick:()=>{tradeState.other=o.club.abbr;tradeState.a=[{kind:'player',id:r.pid}];tradeState.b=o.assets||o.ids;tradeState.offers=null;reload();}},'Open')));
+    s.append(list);
+  }
+  s.append(renderTradeSummary(v,reload));page.append(s);
 }
 
 function offerForm(t, kind, onDone, preset) {
@@ -1169,7 +1208,7 @@ function offerForm(t, kind, onDone, preset) {
     const sy = f.querySelector('.summary-years'), sa = f.querySelector('.summary-apy');
     if (sy) sy.textContent = String(+yrs.value || 1);
     if (sa) sa.textContent = `$${apyOf().toFixed(1)}m`;
-    { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m total`; }
+    { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m annualized total`; if (r.prorated) breakdown.textContent = `${n === 1 ? 'Remainder of this season' : n + ' seasons'} · $${apyOf().toFixed(1)}m annual rate · $${r.cash_this_season.toFixed(2)}m cash this season (including signing bonus) · $${r.year1.toFixed(2)}m current cap hit`; }
     yearHits.innerHTML = ''; r.hits.forEach((h, i) => yearHits.append(el('label', {}, `Year ${i + 1} hit · ${r.years[i]}`, el('b', {}, `$${h.toFixed(1)}m`))));
     hitsRow.innerHTML = ''; r.hits.forEach((h, i) => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, h / Math.max(...r.hits, 0.1) * 100)}%` })), el('span', {}, `Year ${i + 1} · ${r.years[i]}`), el('b', {}, `$${h.toFixed(1)}m`))));
   };
@@ -1229,6 +1268,9 @@ function openTradeOffer(id, after) {
 function openTalks(t, reload) {
   const overlay = el('div', { class: 'neg-overlay', style: 'position:fixed;inset:0;z-index:900;display:flex;align-items:center;justify-content:center' });
   const box = el('section', { class: 'sheet negotiation-sheet', style: 'width:min(980px,95vw);max-height:92vh;overflow:auto' });
+  applyTeamTheme(box, personnelRailTeam || {});
+  box.style.setProperty('--club', teamTheme(personnelRailTeam || {}).base);
+  box.style.setProperty('--club-2', teamTheme(personnelRailTeam || {}).accent);
   const close = () => { overlay.remove(); reload(); };
   const done = !['open', 'waiting', 'countered', 'match_requested'].includes(t.state);
 
@@ -1282,6 +1324,77 @@ function threadBox(t, onDone) {
 }
 
 
+// Common Personnel presentation; original action buttons retain their engine handlers.
+const personnelSelected = {fa:null, extensions:null};
+function finishPersonnel(page, v, kind, left, right, extra = []) {
+  const club = v.rail.club, board = el('section',{class:`sheet c12 personnel-board personnel-${kind}`});
+  applyTeamTheme(board, club);
+  board.style.setProperty('--club', teamTheme(club).base);
+  board.style.setProperty('--club-2', teamTheme(club).accent);
+  const heading = left.querySelector('h2');
+  const subtitle = heading?.querySelector('small')?.textContent || '';
+  heading?.remove();
+  const title = {fa:'FREE AGENCY.',wire:'WAIVER WIRE.',extensions:'EXTENSIONS.'}[kind];
+  const metrics = kind === 'fa' ? [[v.count,'Available'],[`$${v.cap}m`,'Cap space'],[`$${v.committed_next}m / $${v.limit_next}m`,'Next year committed']] : kind === 'wire' ? [[v.my_priority ? `${v.my_priority}${ord(v.my_priority)}` : '—','Your priority'],[v.rows.length,'Available'],[v.awards,'Awards']] : v.cap_focus ? [[`$${v.cap_focus.limit}m`,`${v.cap_focus.year} cap`],[`$${v.cap_focus.committed}m`,'Committed'],[`$${v.cap_focus.space}m`,'Cap space']] : [[`$${v.committed_next}m`,'Next year committed'],[`$${v.limit_next}m`,'Next year cap']];
+  const hero=el('div',{class:'personnel-hero'},el('div',{},el('small',{},club.name.toUpperCase()),el('h1',{},title),el('p',{},subtitle)));
+  const stats=el('div',{class:'personnel-metrics'});
+  for(const [value,label] of metrics) stats.append(el('div',{},el('b',{},value),el('small',{},label)));
+  hero.append(stats);board.append(hero);
+  left.className='personnel-main'; right.className='personnel-aside';
+  const grid=el('div',{class:'personnel-columns'},left,right);board.append(grid);
+  // Preserve seasonal content (tags/tenders) and the FA transaction feed.
+  for(const item of extra){item.classList.add('personnel-extra');item.style.order='';board.append(item);}
+  const existing=[...page.children].filter(node=>node!==left&&node!==right&&!extra.includes(node));
+  for(const item of existing){item.classList.add('personnel-extra');board.append(item);}
+  page.replaceChildren(board);
+  for(const table of left.querySelectorAll(':scope > table')) {
+    const wrap=el('div',{class:'personnel-table-scroll'});table.before(wrap);wrap.append(table);
+  }
+  if(kind==='wire') {
+    right.append(el('div',{class:'personnel-help'},el('h3',{},'How claims work'),el('p',{},'Claims are awarded at the next advance. Your priority determines who gets the player.')));
+    left.querySelector('.foot')?.append(el('a',{class:'btn',href:'#club'},'View Roster'));
+    if(!v.rows.length&&wireTab==='wire'){
+      const empty=left.querySelector('.empty');
+      if(empty){empty.classList.add('personnel-wire-empty');empty.replaceChildren(el('div',{class:'personnel-empty-symbol','aria-hidden':'true'},'◇'),el('h3',{},'The wire is clear.'),el('p',{},'Players placed on waivers will appear here.'),el('a',{class:'btn',href:'#personnel/fa'},'Browse Free Agency'));}
+    }
+    return;
+  }
+  const detail=el('div',{class:'personnel-detail'});right.prepend(detail);
+  const table=left.querySelector('table'); table.classList.add('personnel-player-table');
+  const source=kind==='fa'?v.rows:(v[extTab]||[]);
+  let previous=null;
+  const drawSelection=(row,record)=>{
+    if(previous) {previous.cell.append(...previous.actions);previous.row.classList.remove('personnel-selected');previous.row.setAttribute('aria-selected','false');}
+    detail.replaceChildren();personnelSelected[kind]=record.pid;
+    row.classList.add('personnel-selected');row.setAttribute('aria-selected','true');
+    const cell=row.lastElementChild;
+    const actions=[...cell.children];
+    const actionArea=el('div',{class:'personnel-detail-actions'},...actions);
+    const name=el('div',{class:'personnel-detail-name'},el('span',{class:'personnel-position'},record.pos),el('div',{},el('h2',{},record.name),el('p',{},`${record.pos} · ${record.age} · ${record.ovr} OVR`)));
+    detail.append(name,el('p',{class:'personnel-detail-status'},kind==='extensions'?`${record.tag_line || ''} · $${record.hit.toFixed(1)}m cap hit`:record.thread?'Negotiation in progress':'No talks started'),actionArea,el('a',{class:'btn quiet',href:'#club/player/'+record.pid},'Open Player'));
+    previous={row,cell,actions};
+  };
+  const bindRows=()=>{
+    previous=null;detail.replaceChildren();let first=null, selected=null;
+    for(const row of table.querySelectorAll('tr')){
+      const who=row.querySelector('button.who');if(!who)continue;
+      const name=who.querySelector('.nm')?.firstChild?.textContent;
+      const record=source.find(r=>r.name===name);if(!record)continue;
+      row.tabIndex=0;row.setAttribute('aria-label',`Select ${record.name}`);
+      row.setAttribute('aria-selected','false');
+      row.addEventListener('click',e=>{if(!e.target.closest('button,a'))drawSelection(row,record);});
+      row.addEventListener('keydown',e=>{if(e.target===row&&(e.key==='Enter'||e.key===' ')){e.preventDefault();drawSelection(row,record);}});
+      if(!first)first=[row,record];if(record.pid===personnelSelected[kind])selected=[row,record];
+    }
+    if(selected||first)drawSelection(...(selected||first));
+    else detail.append(el('div',{class:'empty'},'Select a player to view available actions.'));
+  };
+  bindRows();
+  // Free-agency search redraws only the table, so refresh its detail selection afterward.
+  const search=left.querySelector('input[type=search]');
+  if(search)search.addEventListener('input',bindRows);
+}
+
 let faPos = '', faCheap = false, faWatch = false, faRookie = false, faRole = 'All', faQuery = '';
 function renderFA(v) {
   renderRail(v.rail); const page = persPage(); persSecond('fa');
@@ -1326,6 +1439,7 @@ function renderFA(v) {
   const feedSheet = el('section', { class: 'sheet c4', style: 'order:2' }, el('h2', {}, 'Around the League Today', el('small', {}, 'latest signings')));
   const fd = el('div', { class: 'feed' }); for (const f of v.feed) fd.append(el('div', {}, el('span', {}, stripe(f.team.abbr)), el('span', {}, `${f.team.name} ${f.kind === 'signs' ? 'signed' : 'extended'} `, el('b', {}, f.name), `, ${f.pos}${f.years ? `, ${f.years} year${f.years === 1 ? '' : 's'}` : ''}${f.apy ? ` at $${f.apy}m a year` : ''}`), el('time', {}, f.week ? `Wk ${f.week}` : ''))); if (!v.feed.length) fd.append(el('div', { class: 'empty' }, 'Quiet so far.')); feedSheet.append(fd);
   page.append(right, feedSheet);
+  finishPersonnel(page, v, 'fa', left, right, [feedSheet]);
 }
 
 let wireTab = 'wire';
@@ -1349,7 +1463,7 @@ function renderWire(v) {
     for (const r of rows) tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos}${r.college ? ' · ' + r.college : ''}`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, r.frm), el('td', {}, r.inherited), el('td', { class: 'n' }, `$${r.penalty.toFixed(1)}m`), el('td', { class: 'n' }, r.accrued),
       el('td', {}, r.claimed ? el('span', { class: 'badge-sm' }, 'Claimed') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { wireClaim = r.pid; renderWire(v); } }, 'Claim'))));
   }
-  if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '10' }, el('div', { class: 'empty' }, wireTab === 'wire' ? 'The wire is clear.' : wireTab === 'claims' ? 'No claims in.' : 'Nothing awarded yet this week.'))));
+  if (!rows.length && wireTab !== 'outbound') tbl.append(el('tr', {}, el('td', { colspan: '10' }, el('div', { class: 'empty' }, wireTab === 'wire' ? 'The wire is clear.' : wireTab === 'claims' ? 'No claims in.' : 'Nothing awarded yet this week.'))));
   left.append(tbl);
   left.append(el('div', { class: 'foot' }, el('span', { class: 'count' }, v.roster_full ? `A claim needs a roster spot: you are at ${v.roster}` : `Roster ${v.roster} · a claim fills the open spot`)));
   page.append(left);
@@ -1372,6 +1486,7 @@ function renderWire(v) {
   const pr = el('div', { class: 'pad' }); const mine = v.my_priority || 0;
   v.priority.forEach((c, i) => { const me = c.abbr === v.rail.club.abbr; if (i < 3 || me || i >= v.priority.length - 1) pr.append(el('div', { class: 'prio' + (me ? ' me' : '') }, el('span', { class: 'p' }, i + 1), stripe(c.abbr, c.name))); else if (i === 3) pr.append(el('div', { class: 'prio', style: 'color:var(--ink-3)' }, el('span', { class: 'p' }, '…'), `${Math.max(0, mine - 5)} more`)); });
   right.append(pr); page.append(right);
+  finishPersonnel(page, v, 'wire', left, right);
 }
 let wireClaim = null;
 
@@ -1385,7 +1500,7 @@ function renderExtensions(v) {
   const rows = v[extTab] || [];
   const tbl = el('table', { class: 'tbl' }); tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', {}, 'Morale'), el('th', { class: 'n' }, 'Cap Hit'), el('th', {}, 'Ask'), el('th', {}, 'Talks'), el('th', {}, '')));
   for (const r of rows) tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.tag_line || ''}${r.fa_class ? ' · ' + r.fa_class : ''}`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', {}, pill(r.morale)), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', {}, r.ask_word), el('td', { class: 'talks' }, r.talks_word),
-    el('td', { class: 'acts' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { document.getElementById('th-' + r.thread)?.scrollIntoView(); } }, 'Open Talks') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: r.eligible ? null : '', onclick: () => { notify(pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`)); reload(); } }, 'Ask the Agent'))));
+    el('td', { class: 'acts' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const th = v.threads.find(t => t.id === r.thread); if (th) openTalks(th, reload); } }, 'Open Talks') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: r.eligible ? null : '', onclick: () => { const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`); if (!res.ok) { notify(res); reload(); return; } const fresh = pyJSON(`SESSION.personnel('extensions')`); const th = fresh.threads.find(t => t.id === res.thread) || fresh.threads.filter(t => t.pid === r.pid).pop(); renderExtensions(fresh); if (th) openTalks(th, reload); } }, 'Ask the Agent'))));
   if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '9' }, el('div', { class: 'empty' }, 'Nobody here.'))));
   left.append(tbl);
   const foot = el('div', { class: 'foot' });
@@ -1427,6 +1542,7 @@ function renderExtensions(v) {
   { const live_ = ['open', 'waiting', 'countered', 'match_requested']; const ths = [...v.threads].sort((a, b) => (live_.includes(b.state) ? 1 : 0) - (live_.includes(a.state) ? 1 : 0) || b.id - a.id); for (const t of ths) right.append(talkLine(t, reload)); }
   if (!v.threads.length) right.append(el('div', { class: 'empty' }, 'Ask an agent to hear his number. Offers are answered in one to three weeks by situation.'));
   page.append(right);
+  finishPersonnel(page, v, 'extensions', left, right);
 }
 let extTab = 'expiring';
 
@@ -2519,7 +2635,7 @@ function renderReport(v) {
   const cards = el('div', { class: 'cards' });
   for (const x of v.suggestions) cards.append(el('div', { class: 'card', style: `--k:${x.side === 'offense' ? 'var(--ok)' : 'var(--live)'};opacity:${x.taken ? '.75' : '1'}` }, el('div', { class: 'h' }, el('div', { class: 'k' }, x.side.charAt(0).toUpperCase() + x.side.slice(1) + (x.taken ? ' · accepted' : '')), el('div', { class: 's' }, x.text)), el('div', { class: 'b' }, x.why),
     el('div', { class: 'b', style: 'margin-top:6px' }, el('span', { style: 'font-size:12.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em' }, 'Plan Change '), el('span', { style: 'font-family:var(--mono);font-size:14px' }, x.change || '—')),
-    el('div', { class: 'a' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Accept'), x.taken ? '' : el('button', { class: 'btn quiet', onclick: e => e.currentTarget.closest('.card').remove() }, 'Skip'))));
+    el('div', { class: 'a' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Accept'), x.taken ? '' : el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('skip', i=${sg.i}, skip=${sg.skipped ? 'False' : 'True'})`)); refresh(); } }, sg.skipped ? 'Restore' : 'Skip'))));
   if (!v.suggestions.length) cards.append(el('div', { class: 'empty' }, 'Nothing to add this week.'));
   s.append(cards, el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); location.hash = '#gameplan/week'; } }, "Accept All and Open This Week's Plan"), el('a', { class: 'btn', href: '#gameplan/week' }, "Back to This Week's Plan")));
   page.append(s);
@@ -2560,7 +2676,7 @@ async function advanceInner() {
   catch (e) { adv.disabled = false; throw e; }
   adv.disabled = false;
   if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
-  else if (r && r.done === 'Cutdown') { location.hash = '#personnel/waivers'; renderWire(pyJSON(`SESSION.personnel('waivers')`)); }
+  else if (r && r.done === 'Cutdown') { location.hash = '#personnel/wire'; renderWire(pyJSON(`SESSION.personnel('waivers')`)); }
   else if (r && r.done === 'Camp') { location.hash = '#portal'; refresh(); }
   else if (r && /^Week \d+ live$/.test(r.done)) { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); }
   else if (r && /^Week \d+ played$/.test(r.done)) { if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#gameday'; }
@@ -2609,6 +2725,7 @@ async function advanceInner() {
   };
   $('#advance').onclick = advance;
   $('#save').onclick = saveGameNotified;
+  document.querySelector('.quick-menu').addEventListener('click', e => { if (e.target.closest('a')) e.currentTarget.open = false; });
   // EXPORT AND IMPORT: the save as a file, for a backup or for sending a state to be looked at
   $('#export').onclick = () => {
     const text = py.runPython(`SESSION.save()`); const st = pyJSON(`SESSION.rail_state()`);
@@ -2626,5 +2743,5 @@ async function advanceInner() {
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
   window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal_full()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
-    else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
+    else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();

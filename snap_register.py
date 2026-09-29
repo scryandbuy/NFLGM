@@ -69,9 +69,9 @@ for g in list(OFF) + list(DEF):
 print('target share of team targets:', ' | '.join(f"{g}{k} {np.mean(v)*100:.0f}%" for (g, k), v in sorted(tgt_share.items()) if k <= 5))
 print('Base-chart defensive starters by front (share of all defensive plays; no front-specific reference ranges):')
 for front in ('4-3', '3-4'):
-    roles = (('LE', 'DT1', 'DT2', 'RE', 'MIKE', 'WILL', 'SAM', 'CB1', 'CB2', 'FS', 'SS')
+    roles = (('LEDG', 'DT1', 'DT2', 'REDG', 'MIKE', 'WILL', 'SAM', 'CB1', 'CB2', 'FS', 'SS')
              if front == '4-3' else
-             ('LE', 'NT', 'RE', 'LOLB', 'LILB', 'RILB', 'ROLB', 'CB1', 'CB2', 'FS', 'SS'))
+             ('LEDG', 'NT', 'REDG', 'LOLB', 'LILB', 'RILB', 'ROLB', 'CB1', 'CB2', 'FS', 'SS'))
     for start in (0, 4, 7):
         segment = roles[start:(4 if start == 0 else 7 if start == 4 else 11)]
         line = [f'{role} {np.mean(front_share[(front, role)])*100:.0f}%'
