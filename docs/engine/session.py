@@ -213,12 +213,15 @@ class Session:
         if d.get('_draft_live'):
             import draft_day as DD
             live = d['_draft_live']
-            s.draft = DD.Draft(s.L, s.rng, live['year'], user_team=s.user_team, auto_pick=live.get('auto', False))
+            s.draft = DD.Draft(s.L, s.rng, live['year'], user_team=s.user_team, auto_pick=live.get('auto', False),
+                               level=live.get('level'), scale=live.get('scale'))
             s.draft.taken = set(pid for pid in live['taken'] if pid in s.L.players)
             s.draft.results = [(sel, t, s.L.players[pid]) for sel, t, pid in live['results'] if pid in s.L.players]
             s.draft.trades = [tuple(x) for x in live.get('trades', [])]
             s.draft.dealt = {frozenset(x) for x in live.get('dealt', [])}
             s.draft.last_dealt = live.get('last_dealt')
+            s.draft.trade_targets = {int(sel): dict(intent) for sel, intent in live.get('trade_targets', {}).items()
+                                     if intent.get('pid') in s.L.players and intent.get('buyer') in s.L.teams}
         return s
 
     def _recorded_votes(self):
@@ -279,7 +282,8 @@ class Session:
                                  results=[(sel, t, p.pid) for sel, t, p in self.draft.results],
                                  trades=[list(x) for x in self.draft.trades],
                                  dealt=[sorted(x) for x in self.draft.dealt],
-                                 last_dealt=self.draft.last_dealt, auto=self.draft.auto)
+                                 last_dealt=self.draft.last_dealt, auto=self.draft.auto,
+                                 level=self.draft.level, scale=self.draft.scale, trade_targets=self.draft.trade_targets)
                             if self.draft_live() else None)
         return json.dumps(d, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
 

@@ -22,6 +22,7 @@ or more spots are the spring's stories, kept on league.spring_news.
 """
 import numpy as np, collections
 import scouting as SC
+import draft_plan as DP
 
 COMBINE_INVITES = 330
 SENIOR_BOWL = 110
@@ -87,8 +88,8 @@ def combine(league, rng):
     return len(invited), _stock_moves(league, 'combine')
 
 
-def _attends(team, p, base, rng):
-    need = len([q for q in team.depth.get(p.pos, []) if q.out_until is None]) < 2
+def _attends(team, p, base, rng, plan):
+    need = plan['positions'][p.pos]['need'] > .5
     budget = float(getattr(team.gm, 'scouting', 0.5))
     return rng.random() < base * (1.35 if need else 0.8) * (0.7 + 0.6 * budget)
 
@@ -102,8 +103,9 @@ def senior_bowl(league, rng):
     looks = 0
     for abbr, team in league.teams.items():
         sd = SC.error_sd(team.gm, team)
+        plan = DP.assess(league, abbr)
         for p in invited:
-            if _attends(team, p, 0.55, rng):
+            if _attends(team, p, 0.55, rng, plan):
                 SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.8, rng, R=SC.room(team), team=team); looks += 1
                 _character(league, abbr, team, p, sd, rng)
     SC.consensus(league)
@@ -113,12 +115,15 @@ def senior_bowl(league, rng):
 def pro_days(league, rng):
     pool = _pool(league); cons = league.consensus or {}
     looks = 0
+    import draft as DFT
+    level = DFT.league_starter_level(league)
     for abbr, team in league.teams.items():
         sd = SC.error_sd(team.gm, team)
         # a room's scouts are at most of the pro days: every position where the club is thin, and half the rest
-        needs = [pos for pos, ps in team.depth.items() if len([q for q in ps if q.out_until is None]) < 3]
+        needs = DP.assess(league, abbr, level)['positions']
         R = SC.room(team)
-        cands = sorted([p for p in pool if p.pos in needs or rng.random() < 0.5], key=lambda p: cons.get(p.pid, {}).get('rank', 9999))
+        cands = sorted([p for p in pool if needs[p.pos]['need'] > .5 or rng.random() < 0.5],
+                       key=lambda p: (-needs[p.pos]['need'], cons.get(p.pid, {}).get('rank', 9999)))
         if not R['day3_reads']: cands = [p for p in cands if cons.get(p.pid, {}).get('rank', 9999) <= 150]
         for p in cands[:int(PRO_DAY_LOOKS * R['looks_mult'])]:
             SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.75, rng, R=R, team=team); looks += 1     # a controlled workout: a good look
@@ -126,30 +131,59 @@ def pro_days(league, rng):
     return looks, _stock_moves(league, 'pro days')
 
 
+def _pick_windows(league, abbr):
+    """Every owned selection gets a scouting window, including acquired picks."""
+    picks = [pk for pk in league.teams[abbr].picks
+             if pk.year == league.year - 1 and not pk.used_on and pk.owner == abbr]
+    if not picks:
+        # A club without a pick can still investigate a possible trade-in.
+        return [(40, 120, 80)]
+    slots = sorted(int(pk.selection or ((pk.round - 1) * 32 + 16)) for pk in picks)
+    return [(max(1, slot - 12), min(260, slot + 20), slot) for slot in slots]
+
+
 def _pick_range(league, abbr):
-    picks = [pk for pk in league.teams[abbr].picks if pk.year == league.year - 1 and not pk.used_on]
-    if not picks: return (40, 120)
-    order = getattr(league, 'draft_order', None)
-    rounds = sorted(pk.round for pk in picks)
-    lo = (rounds[0] - 1) * 32 + 1
-    return (max(1, lo - 20), min(260, lo + 60))
+    """Compatibility envelope; selection uses individual windows, not this span."""
+    windows = _pick_windows(league, abbr)
+    return min(lo for lo, _, _ in windows), max(hi for _, hi, _ in windows)
+
+
+def _visit_targets(league, abbr, pool, plan):
+    cons = league.consensus or {}
+    queues = []
+    for lo, hi, slot in _pick_windows(league, abbr):
+        choices = [p for p in pool if lo <= cons.get(p.pid, {}).get('rank', 9999) <= hi]
+        choices.sort(key=lambda p: (-plan['positions'][p.pos]['need'],
+                                    abs(cons[p.pid]['rank'] - slot), cons[p.pid]['rank']))
+        queues.append(choices)
+    chosen, seen = [], set()
+    # Distribute finite visits across owned picks, rather than exhausting all
+    # thirty on the earliest round. Overlapping windows never duplicate a visit.
+    while len(chosen) < VISITS:
+        added = False
+        for queue in queues:
+            while queue and queue[0].pid in seen:
+                queue.pop(0)
+            if queue and len(chosen) < VISITS:
+                p = queue.pop(0); chosen.append(p); seen.add(p.pid); added = True
+        if not added:
+            break
+    return chosen
 
 
 def visits(league, rng):
     """The thirty. The AI picks men around its pick range at its needs; the user names his own."""
     pool = _pool(league); cons = league.consensus or {}
     user = getattr(league, 'user_team', None); looks = 0
+    import draft as DFT
+    level = DFT.league_starter_level(league)
     for abbr, team in league.teams.items():
         sd = SC.error_sd(team.gm, team)
         if abbr == user:
             chosen = [league.player(pid) for pid in (getattr(league, 'user_visits', None) or [])[:VISITS]]
             chosen = [p for p in chosen if p is not None]
         else:
-            lo, hi = _pick_range(league, abbr)
-            needs = [pos for pos, ps in team.depth.items() if len([q for q in ps if q.out_until is None]) < 2]
-            ranked = [p for p in pool if lo <= cons.get(p.pid, {}).get('rank', 9999) <= hi]
-            ranked.sort(key=lambda p: (0 if p.pos in needs else 1, cons.get(p.pid, {}).get('rank', 9999)))
-            chosen = ranked[:VISITS]
+            chosen = _visit_targets(league, abbr, pool, DP.assess(league, abbr, level))
         for p in chosen:
             v = league.scouting[abbr].get(p.pid)
             if v is None: continue
@@ -173,7 +207,7 @@ def _medical(league, abbr, team, p, rng):
     if inj > cut: return
     v = league.scouting[abbr].get(p.pid)
     if v is None or 'medical' in v.get('flags', []): return
-    fear = 1.0 - float(getattr(team.gm, 'aggression', 0.5))
+    fear = 1.0 - float(getattr(team.gm, 'risk', 0.5))
     # a flag costs a round or two, not six: at most three grade points on this room's board
     v['adj'] = v.get('adj', 0.0) - min(3.0, (1.0 + 1.5 * fear) * max(0.5, (cut - inj) / 8.0 + 0.5))
     v['flags'] = list(set(v.get('flags', []) + ['medical']))
