@@ -693,7 +693,8 @@ function renderCard(v) {
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Team'; secondRow([['Roster', '#club'], ['Depth Chart', '#club/depth'], ['Practice Squad', '#club/ps']], '');
   if (v.error) { page.append(el('section', { class: 'sheet c12' }, el('div', { class: 'empty' }, v.error))); return; }
-  const s = el('section', { class: 'sheet c12' });
+  const s = el('section', { class: 'sheet c12 player-card' });
+  if (v.team) s.style.setProperty('--pc-accent', v.team.accent);
   const col = v.team ? v.team.color : 'var(--rule-hi)';
   s.append(el('div', { class: 'head' },
     el('div', { class: 'jersey', style: `background:${col}` }, jerseyNo(v.no) ?? v.pos),
