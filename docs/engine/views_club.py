@@ -145,7 +145,7 @@ def roster(session, league, abbr):
         ps.append(r)
     injured = [_row(session, league, t, p) for p in t.active() if p.out_until is not None]
     return dict(rail=rail(session, league, abbr), groups=groups, count=len(t.active()), cap_total=__import__('views').cap_focus(league,t)['committed'],
-                practice=ps, injured=injured, ps_charge=round(PSQ.ps_charge(t), 1), elevations_used=len(getattr(t, '_elevated', []) or []), elevations_max=PSQ.ELEVATIONS_PER_GAME, per_man_max=PSQ.ELEVATIONS_PER_MAN,
+                practice=ps, injured=injured, ps_charge=round(PSQ.ps_charge(t), 1), elevations_used=len(getattr(t, '_elevated', []) or []), elevations_max=PSQ.ELEVATIONS_PER_GAME, per_man_max=PSQ.ELEVATIONS_PER_MAN, playoff_elevations=session.stop[0] == 'playoffs',
                 ir=[dict(_row(session, league, t, p), ir_week=int(p.xp_spent.get('_ir_week', 0) or 0), returnable=bool(p.xp_spent.get('_ir_return', False)), can_activate=bool(t.activate_from_ir.__doc__) and (league.week or 0) - int(p.xp_spent.get('_ir_week', 0) or 0) >= t.IR_MIN_WEEKS and (p.out_until is None or int(p.out_until) <= (league.week or 0)) and bool(p.xp_spent.get('_ir_return', False))) for p in (getattr(t, 'ir', None) or [])],
                 ir_returns_left=t.IR_RETURNS - int(getattr(t, 'ir_returns_used', 0) or 0), week=league.week)
 
@@ -764,11 +764,11 @@ def act_call_up(league, abbr, pid):
     return dict(ok=ok, name=p.name if p else pid, why=None if ok else 'he is not on your practice squad')
 
 
-def act_elevate(league, abbr, pids, week):
+def act_elevate(league, abbr, pids, week, playoffs=False):
     import practice_squad as PSQ
     t = league.teams[abbr]; already = len(getattr(t, '_elevated', []) or [])
     if already + len(pids) > PSQ.ELEVATIONS_PER_GAME: return dict(ok=False, why=f'only {PSQ.ELEVATIONS_PER_GAME} elevations a game')
-    out = PSQ.elevate(league, abbr, list(pids), week)
+    out = PSQ.elevate(league, abbr, list(pids), week, playoffs=playoffs)
     return dict(ok=bool(out), moves=[dict(name=league.player(pid).name, how=how) for pid, how in out], why=None if out else 'nobody eligible')
 
 

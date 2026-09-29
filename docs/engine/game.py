@@ -230,13 +230,35 @@ def fg_probability(distance, kicker=None, rate_fn=None, AVG=0.70):
         base *= 1.0 / (1.0 + np.exp((distance - reach) / 2.0))
     return float(np.clip(base, 0.005, 0.995))
 
-def attempt_field_goal(yardline_100, kicker, rng, rate_fn):
+def snapper_for(roster, state=None):
+    """First available snapper in depth order, else an emergency center."""
+    depth = roster.get('depth') or {}
+    out = getattr(state, 'out', set())
+    for pos in ('LS', 'C'):
+        for player in depth.get(pos, []):
+            if player.get('pid') not in out: return player
+    return None
+
+
+def snap_quality(snapper, rate_fn):
+    """Small reliability edge from the existing LS grade; 70 is neutral.
+
+    Missing context stays neutral for standalone callers. Real rosters use
+    their ordered LS depth, with a center as the emergency fallback.
+    """
+    if snapper is None: return 0.0
+    import targets as TG
+    return float(np.clip(rate_fn(snapper, TG.DEPTH_WEIGHTS['LS']) - 0.70, -0.5, 0.3))
+
+
+def attempt_field_goal(yardline_100, kicker, rng, rate_fn, snapper=None):
     dist = yardline_100 + 17               # 10 end zone + 7 snap
     p_make = fg_probability(dist, kicker, rate_fn) * (ENV.kick_mult if dist >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult))
     # the special teams coordinator: a good one keeps the kicker near his number, a poor one adds variance either way
     kn = float(kicker.get('st_noise', 1.0)) if isinstance(kicker, dict) else 1.0
     if kn != 1.0:
         p_make = float(np.clip(0.5 + (p_make - 0.5) / kn, 0.02, 0.99))
+    p_make = float(np.clip(p_make + 0.02 * snap_quality(snapper, rate_fn), 0.005, 0.995))
     made = rng.random() < p_make
     return dict(type='field_goal', distance=dist, made=made,
                 points=3 if made else 0)
@@ -282,10 +304,45 @@ def two_point_decision(lead_after_td, quarter, secs_left=None,
                       aggression=aggression)
     return r['call'] == 'two'
 
-def attempt_extra_point(kicker, rng, rate_fn):
-    made = rng.random() < fg_probability(33, kicker, rate_fn)
+def attempt_extra_point(kicker, rng, rate_fn, snapper=None):
+    chance = np.clip(fg_probability(33, kicker, rate_fn) + 0.02 * snap_quality(snapper, rate_fn), 0.005, 0.995)
+    made = rng.random() < chance
     return dict(type='extra_point', distance=33, made=bool(made),
                 points=1 if made else 0)
+
+def offensive_leans(state):
+    """The same caller inputs for normal downs and conversion attempts."""
+    pl = getattr(state, 'plan', None)
+    if pl is None: return None
+    seq = getattr(state, 'seq', None) or {'run_hot': 0.0}
+    pa_boost = float(np.clip(1.0 + 0.55 * min(seq['run_hot'], 3.0) / 3.0, 0.85, 1.55))
+    return dict(pass_bias=pl.pass_bias, play_action=min(0.95, pl.play_action_rate * pa_boost),
+                motion=pl.motion_rate, protection=(pl.protection if pl.protection_locked else None),
+                screen_boost=pl.screen_boost, heavy_lean=pl.heavy_lean,
+                personnel_mix=dict(pl.personnel_mix), off_personnel=pl.off_personnel,
+                run_scheme_mix=dict(pl.run_scheme_mix), tempo=pl.tempo)
+
+
+def apply_offensive_plan(call, state, rng, yards, down, togo):
+    pl = getattr(state, 'plan', None)
+    if pl is None: return
+    import gameplan as GP
+    call['plan'] = pl
+    call['travel_willingness'] = float(state.coach.get('travel_willingness', 0.5))
+    if call.get('is_pass') and not call.get('plan_depth'):
+        call['depth'] = GP.depth(pl, rng, yards_to_endzone=yards, down=down, ydstogo=togo)
+
+
+def apply_defensive_plan(call, state, rng):
+    pl = getattr(state, 'plan', None)
+    if pl is None: return
+    import gameplan as GP
+    call['box'] = int(np.clip(call.get('box', 6) + GP.box_shift(pl.box_bias, rng), 4, 10))
+    call['bracket'] = pl.bracket
+    call['travel'] = pl.travel
+    call['travel_target'] = pl.travel_target
+    call['zone_aggression'] = pl.zone_aggression
+
 
 def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
                       rate_fn, off_state=None, def_state=None):
@@ -294,8 +351,15 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
     adjustment engine reads a rolling four-series window of normal downs, and
     a goal-line try is not one of those.
     """
-    oc = call_off(1, 2, 0, 2, rng)
-    dc = call_def(oc, 1, 2, rng, 2)
+    import gameplan as GP
+    oc = call_off(1, 2, 0, 2, rng, offense=offense, rate_fn=rate_fn,
+                  lean=offensive_leans(off_state))
+    dp = getattr(def_state, 'plan', None)
+    dc = call_def(oc, 1, 2, rng, 2, defense=defense, rate_fn=rate_fn,
+                  lean=GP.defensive_leans(dp) if dp is not None else None,
+                  recent=getattr(def_state, 'cov_memory', None))
+    apply_offensive_plan(oc, off_state, rng, 2, 1, 2)
+    apply_defensive_plan(dc, def_state, rng)
     off_f, _ = field_units(offense, off_state, rng, True, oc.get('personnel'))
     def_f, _ = field_units(defense, def_state, rng, False, dc.get('personnel'),
                            front_family=dc.get('front_family'))
@@ -326,7 +390,7 @@ PUNT = dict(gross=50.2, sd=7.4, blocked=.0043,        # gross up from 48.6 once 
             # toward the goal; gunners down it unless it gets there first
             roll_mean=6.0, roll_sd=4.0)
 
-def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70):
+def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70, snapper=None):
     """
     The punter READS THE FIELD, and so does the returner.
 
@@ -341,18 +405,20 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70):
     it, return it, or let it bounce and hope for the touchback. Every real
     touchback is one of those decisions going the kicking team's way.
     """
-    if rng.random() < PUNT['blocked']:
+    quality = snap_quality(snapper, rate_fn)
+    spread = 1.0 - 0.5 * quality
+    if rng.random() < PUNT['blocked'] * (1.0 - 1.5 * quality):
         return dict(type='punt', blocked=True, net=0, origin=yardline_100,
                     new_yardline=100 - yardline_100)
     pwr = rate_fn(punter, {'kick_power_rating': .70, 'kick_acc_rating': .30})
     acc = rate_fn(punter, {'kick_acc_rating': 1.0})
-    full = min(68.0, rng.normal(PUNT['full'] * (1.0 + 0.30 * (pwr - AVG)) * ENV.punt_mult, PUNT['sd']))     # 68 is a season-long league high
+    full = min(68.0, rng.normal(PUNT['full'] * (1.0 + 0.30 * (pwr - AVG)) * ENV.punt_mult, PUNT['sd'] * spread))     # 68 is a season-long league high
     pooch = False
     if yardline_100 - full < PUNT['aim']:
         # a full swing goes into or through the end zone: drop it short.
         # Accuracy decides how close to the spot he actually lands it.
         pooch = True
-        miss = rng.normal(0.0, PUNT['aim_sd'] * (1.0 - 0.6 * (acc - AVG)))
+        miss = rng.normal(0.0, PUNT['aim_sd'] * (1.0 - 0.6 * (acc - AVG)) * spread)
         gross = max(15.0, yardline_100 - PUNT['aim'] + miss)
     else:
         gross = full
@@ -1497,7 +1563,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4 and (_plan.get('hurry', True) or clock_kick_time or secs_in_half <= 14)
         _kick_old = ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) and dr.yardline <= 37 and dr.down < 4 and clock_kick_time and _plan is None
         if _kick_by_plan or _kick_old:
-            fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
+            fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
+                                    snapper=snapper_for(offense, off_state))
             if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
             dr.clock -= min(dr.clock, play_seconds('field_goal'))
             dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
@@ -1510,14 +1577,16 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                        dr.clock, rng, aggr4,
                                        kicker=(offense.get('k') or {}), rate_fn=rate_fn)
             if dec == 'field_goal':
-                fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn)
+                fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
+                                        snapper=snapper_for(offense, off_state))
                 if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
                 dr.clock -= play_seconds('field_goal')
                 dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
                 dr.points = fg['points']; dr.log.append(fg); break
             if dec == 'punt':
                 p = punt(dr.yardline, (offense.get('p') or {}),
-                         (defense.get('pr') or defense.get('kr') or {}), rng, rate_fn)
+                         (defense.get('pr') or defense.get('kr') or {}), rng, rate_fn,
+                         snapper=snapper_for(offense, off_state))
                 if book is not None:
                     book.special('punt', (offense.get('p') or {}).get('pid'), **p)
                     if p.get('how') == 'return' or (p.get('ret') and not p.get('touchback')):
@@ -1537,21 +1606,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         ytg_i = max(1, int(np.ceil(dr.yardline)))
         # THE PLAY CALLER'S IDENTITY: pass lean, play-action rate, motion
         # and deep-ball appetite from the plan go into the call
-        olean = None
-        if off_state is not None and off_state.plan is not None:
-            pl0 = off_state.plan
-            # SEQUENCING. A coordinator sets plays up: play action comes off a
-            # run game that is working (a decayed count of runs of four or
-            # more), and the ball finds the receiver who is winning his
-            # matchups (target_priority, read by select_target). Both decay
-            # within the game so an early stretch does not run the afternoon.
-            seq = getattr(off_state, 'seq', None) or {'run_hot': 0.0}
-            pa_boost = float(np.clip(1.0 + 0.55 * min(seq['run_hot'], 3.0) / 3.0, 0.85, 1.55))
-            olean = dict(pass_bias=pl0.pass_bias, play_action=min(0.95, pl0.play_action_rate * pa_boost),
-                         motion=getattr(pl0, 'motion_rate', 0.365), protection=(pl0.protection if getattr(pl0, 'protection_locked', False) else None),
-                         screen_boost=getattr(pl0, 'screen_boost', 0.0), heavy_lean=getattr(pl0, 'heavy_lean', 0.0),
-                         personnel_mix=dict(pl0.personnel_mix), off_personnel=getattr(pl0, 'off_personnel', '11'),
-                         run_scheme_mix=dict(pl0.run_scheme_mix), tempo=pl0.tempo)
+        olean = offensive_leans(off_state)
         secs_for_call = dr.clock
         if half_end is not None and quarter <= 2 and secs_in_half <= 240 and dr.score_diff <= 0:
             secs_for_call = secs_in_half          # the drive before the break is a two-minute drill for the side not ahead
@@ -1655,12 +1710,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             import gameplan as GP
             pl = off_state.plan
             # Personnel was selected before the defense answered the call.
-            oc['plan'] = pl
-            oc['travel_willingness'] = float(
-                off_state.coach.get('travel_willingness', 0.5))
-            if oc.get('is_pass') and not oc.get('plan_depth'):        # the end-of-half plan's depth stands when it set one
-                oc['depth'] = GP.depth(pl, rng, yards_to_endzone=ytg_i,
-                                       down=dr.down, ydstogo=int(dr.togo))
+            apply_offensive_plan(oc, off_state, rng, ytg_i, dr.down, int(dr.togo))
             # The caller already chose a run from roster fit and the coach's
             # run-family weights. Replacing it here discarded both decisions.
 
@@ -1691,16 +1741,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.cheaters = getattr(dr, 'cheaters', []) + [ch['call']]
                 if def_state is not None:
                     def_state.last_adjustment = None      # the reset
-        if def_state is not None and def_state.plan is not None:
-            import gameplan as GP
-            dp = def_state.plan
-            # the in-game adjustments that are not part of the call itself
-            dc['box'] = int(np.clip(dc.get('box', 6) +
-                                    GP.box_shift(dp.box_bias, rng), 4, 10))
-            dc['bracket'] = dp.bracket
-            dc['travel'] = dp.travel
-            dc['travel_target'] = dp.travel_target
-            dc['zone_aggression'] = dp.zone_aggression
+        apply_defensive_plan(dc, def_state, rng)
 
         # Penalties. A pre-snap foul or a nullifying one (holding, OPI) wipes
         # the snap. EVERYTHING ELSE WAS BEING THROWN AWAY: the draw below
@@ -1942,7 +1983,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             t = attempt_two_point(offense, defense, rng, resolve_fn, call_off,
                                   call_def, rate_fn, off_state, def_state)
         else:
-            t = attempt_extra_point(offense.get('k') or {}, rng, rate_fn)
+            t = attempt_extra_point(offense.get('k') or {}, rng, rate_fn,
+                                    snapper=snapper_for(offense, off_state))
             if book is not None: book.special('xp', (offense.get('k') or {}).get('pid'), **t)
         dr.points += t['points']
         dr.try_result = t

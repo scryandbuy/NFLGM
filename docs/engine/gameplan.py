@@ -120,6 +120,7 @@ def base_plan(coach=None, opponent=None, rng=None):
     g.front_pref = list(coach.get('front_pref', g.front_pref))
     g.man_rate = float(coach.get('man_rate', g.man_rate))
     g.blitz_rate = float(coach.get('blitz_rate', g.blitz_rate))
+    g.box_bias = float(coach.get('box_bias', g.box_bias))
     g.tempo = float(coach.get('tempo', g.tempo))
     g.pass_bias = float(coach.get('pass_bias', 0.0))
     g.play_action_rate = float(coach.get('play_action_rate', g.play_action_rate))
