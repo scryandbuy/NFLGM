@@ -3,7 +3,7 @@ import re
 import json, os, shutil, sys, importlib
 HERE = os.path.dirname(os.path.abspath(__file__)); OUT = os.path.join(HERE, 'docs', 'engine')
 MODULES = ['halftime', 'staff_traits', 'club_notes', 'league_notes', 'adjust', 'advanced_stats', 'almanac', 'awards', 'cap_engine', 'cap_accounting', 'coaching_pool', 'contract_structure', 'contracts', 'coverage', 'coverage_call', 'cutdown', 'decisions',
-           'dev_roll', 'defense_roles', 'offense_roles', 'draft', 'draft_class', 'events', 'extensions', 'firing_model', 'formations', 'franchise', 'free_agency', 'game', 'gameplan', 'gameplan_week', 'gm_engine',
+           'dev_roll', 'defense_roles', 'offense_roles', 'draft', 'draft_plan', 'draft_class', 'events', 'extensions', 'firing_model', 'formations', 'franchise', 'free_agency', 'game', 'gameplan', 'gameplan_week', 'gm_engine',
            'health', 'identity', 'identity_catalog', 'inbox', 'inbox_events', 'injury_status', 'ir_and_hiring', 'league', 'market', 'matchups', 'min_salary', 'morale', 'morale_system',
            'negotiation_engine', 'negotiations', 'newgens', 'otc_2026', 'personality', 'playcall', 'plays', 'position_change', 'postseason', 'practice_squad', 'progression_engine',
            'regression', 'retirement', 'roster_construction', 'roster_needs', 'rosters', 'schedule', 'schemes', 'scouting', 'season', 'session', 'spring', 'staff', 'standings_and_seeding', 'tags',

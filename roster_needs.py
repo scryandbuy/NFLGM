@@ -89,7 +89,7 @@ def roster_floors(team):
     return floors, groups
 
 
-def assess(team, players=None):
+def assess(team, players=None, strict_roles=False):
     """Return need (0..1) by saved position and uncovered starting jobs.
 
     This is a roster assessment, not a transaction: cap and dead money belong
@@ -106,6 +106,7 @@ def assess(team, players=None):
     used = set()
     needs = {pos: 0.0 for pos in POSITIONS}
     uncovered = []
+    assignments = []
     quality = 0.0
     slots = role_slots(team)
     offense_pids = ()
@@ -117,6 +118,11 @@ def assess(team, players=None):
     except ValueError:
         pass
     by_pid = {p.pid: p for p in players}
+    if strict_roles and any(by_pid[pid].pos not in slots[i][1]
+                            for i, pid in enumerate(offense_pids)):
+        # Game-day emergency assignments can put a receiver at QB. Draft
+        # planning must leave that job open and retain him for his own role.
+        offense_pids = ()
     for index, (role, sources) in enumerate(slots):
         if index < len(offense_pids):
             chosen = by_pid[offense_pids[index]]
@@ -125,6 +131,7 @@ def assess(team, players=None):
             choices = [(p, source) for source in sources for p in by_pos.get(source, ())
                        if p.pid not in used]
         if not choices:
+            assignments.append(dict(role=role, sources=sources, player=None, grade=None))
             uncovered.append(role)
             needs[sources[0]] = 1.0
             quality -= 20.0
@@ -142,6 +149,7 @@ def assess(team, players=None):
         used.add(player.pid)
         role_grade = OR.fullback_score(player) if role == 'FB' else grades[player.pid]
         grade = role_grade - (0.0 if source == sources[0] else 3.0)
+        assignments.append(dict(role=role, sources=sources, player=player, grade=grade))
         quality += min(grade, 90.0) - 75.0
         bar = 81.0 if role == 'QB' else 76.0
         weakness = max(0.0, min(0.65, (bar - grade) / 18.0))
@@ -161,7 +169,7 @@ def assess(team, players=None):
                 needs[pos] = max(needs[pos], min(0.75, 0.2 + 0.13 * short))
             quality -= 3.0 * short
     return {'needs': needs, 'uncovered': uncovered, 'score': quality,
-            'counts': counts, 'front': front}
+            'counts': counts, 'front': front, 'assignments': assignments}
 
 
 def move_gain(team, arrival, departure=None):

@@ -74,9 +74,10 @@ def premium(pos, selection):
 def league_starter_level(league):
     """Average starter at each spot, using each club's actual base package."""
     import roster_needs as RN
+    import draft_plan as DP
     lv = collections.defaultdict(list)
     for t in league.teams.values():
-        d = t.depth
+        d = DP._Roster(t, DP.projected_players(t)).depth
         starters = collections.Counter(sources[0] for _, sources in RN.role_slots(t))
         for pos, k in starters.items():
             grp = d.get(pos, [])
@@ -106,6 +107,10 @@ def common_scale(ovr, pos, scale):
 
 def needs(team, level):
     """Draft needs from the same coach-aware roster assessment as other moves."""
+    if getattr(team, 'league', None) is not None:
+        import draft_plan as DP
+        return {pos: row['need'] for pos, row in
+                DP.assess(team.league, team.abbr, level)['positions'].items()}
     import roster_needs as RN
     out = {pos: 12.0 * need for pos, need in RN.assess(team)['needs'].items()}
     starters = collections.Counter(sources[0] for _, sources in RN.role_slots(team))
@@ -183,7 +188,7 @@ def _chart():
     return f
 
 
-def board(league, abbr, selection, level, taken, scale=None, gm=None):
+def board(league, abbr, selection, level, taken, scale=None, gm=None, players=None):
     """
     This club's board right now: [(value, player)], best first.
 
@@ -200,9 +205,11 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None):
     team = league.teams[abbr]; gm = gm if gm is not None else team.gm
     trust = float(getattr(gm, 'board_trust', 0.5)); belief = float(getattr(gm, 'dev_belief', 0.5))
     inflate = float(getattr(gm, 'need_inflation', 0.5)); heat = 1.0 - float(getattr(gm, 'job_security', 0.6))
-    need = needs(team, level)
+    import draft_plan as DP
+    plan = DP.assess(league, abbr, level, players=players)
+    need = {pos: row['need'] for pos, row in plan['positions'].items()}
     mine = league.scouting[abbr]; cons = league.consensus
-    d = team.depth
+    d = DP._Roster(team, plan['players']).depth
     w_pot = min(0.5, 0.30 + 0.25 * belief * (1.0 - 0.8 * heat))     # the ceiling is at most half the grade; a believer had been buying 60% ceiling
     # my grade and the room's grade on every man left
     left = [p for p in league.draft_pool if p.pid not in taken]
@@ -246,10 +253,11 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None):
                 # a quarterback hole: a starter four or more under the
                 # league's, or one who is 34 and past it, or none at all
                 if p.pos == 'QB':
-                    starter = d.get('QB', [None])[0]
-                    hole = gap >= 4.0 or (starter is not None and starter.age >= 34)
+                    position = plan['positions']['QB']
+                    hole = position['starter'] >= 4.0 or position['future'] >= 6.0
                 else:
-                    hole = gap > 0
+                    position = plan['positions'][p.pos]
+                    hole = position['starter'] > 0 or position['future'] >= 6.0
                 if not hole:
                     # no club drafts a second kicker, a second punter or a
                     # backup quarterback on day one or two; late, a cheap
