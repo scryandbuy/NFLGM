@@ -334,7 +334,7 @@ def _morale_line(p):
 
 
 def _player_history(league, p):
-    """Dated moves, XP purchases, and awards for this player."""
+    """Dated moves, XP purchases, regression, and awards for this player."""
     import views_league as VL
     entries = []
     def add(year, order, when, line):
@@ -342,6 +342,22 @@ def _player_history(league, p):
     if getattr(p, 'draft_year', None) and getattr(p, 'draft_round', None):
         add(p.draft_year, -1, str(p.draft_year), f"Drafted {p.draft_overall}{_ordn(p.draft_overall)} overall (round {p.draft_round})" if getattr(p, 'draft_overall', None) else f"Drafted, round {p.draft_round}")
     for x in league.transactions:
+        if x.get('kind') == 'regress' and x.get('pid') == p.pid:
+            year = x.get('year') or 0
+            # Older saves only logged total OVR loss. Use a saved report when
+            # available, never reconstruct historical ratings from today's card.
+            report = (getattr(league, 'regression', None) or {}).get(str(year), {}).get(p.pid, {})
+            before, after = x.get('before', report.get('before')), x.get('after', report.get('after'))
+            line = f"Regression: -{float(x.get('lost', 0)):g} OVR"
+            if before is not None and after is not None:
+                line += f" ({float(before):g} → {float(after):g})"
+            for attr, (b, a) in (x.get('attrs', report.get('attrs', {})) or {}).items():
+                delta = round(float(a) - float(b), 1)
+                if delta:
+                    label = attr.replace('_rating', '').replace('_', ' ').title()
+                    line += f" · {label} {delta:+g}"
+            add(year, 24, f"{year} · Offseason", line)
+            continue
         if x.get('kind') not in VL.TAGS: continue
         if x.get('kind') == 'draft' and getattr(p, 'draft_year', None) and getattr(p, 'draft_round', None): continue
         named = x.get('pid') == p.pid or p.pid in [str(a) for a in (x.get('a_sends') or [])] or p.pid in [str(a) for a in (x.get('b_sends') or [])]

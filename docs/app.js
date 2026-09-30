@@ -1396,7 +1396,7 @@ function openTalks(t, reload) {
     const fresh = pyJSON(`SESSION.personnel(${JSON.stringify(t.kind === 'extension' ? 'extensions' : 'free_agency')})`);
     const nt = fresh.threads.find(x => x.id === t.id);
     overlay.remove();
-    if (nt && !['accepted', 'declined', 'expired', 'broken'].includes(nt.state)) openTalks(nt, reload);
+    if (nt && ['open', 'waiting', 'countered', 'match_requested'].includes(nt.state)) openTalks(nt, reload);
     else reload();
   }));
 
@@ -1413,13 +1413,18 @@ function threadBox(t, onDone) {
   for (const ln of log) box.append(el('div', { class: 'msg' + (ln.who === 'you' ? ' you' : '') }, el('div', { class: 'from' }, ln.who === 'you' ? 'You' : 'Agent'), el('div', { class: 'txt' }, ln.text)));
   if (t.ask && log.length) box.append(el('div', { class: 'msg note' }, el('b', {}, 'Ask · '), `$${t.ask}m × ${t.years}`));
   box.append(el('div', { class: 'msg note' }, t.agent_line || ''));
-  if (t.rival) box.append(el('div', { class: 'msg match rival-panel' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${t.rival.team} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('match', tid=${t.id})`)); onDone(); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`)); onDone(); } }, 'Let Him Go'))));
-  if (t.counter) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, 'Counter'), el('div', { class: 'txt' }, el('b', {}, `$${t.counter.apy}m × ${t.counter.years}`)), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('match_counter', tid=${t.id})`)); onDone(); } }, 'Accept Counter'))));
-  if (t.state === 'waiting') box.append(el('div', { class: 'msg note', style: 'display:flex;align-items:center;gap:12px' }, el('span', { style: 'flex:1' }, `Waiting on his answer${t.due ? ' · due ' + t.due : ''}.`), el('button', { class: 'btn quiet', 'data-tip': 'Pull the offer before he answers; the thread closes', onclick: () => { notify(pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`)); onDone(); } }, 'Rescind Offer')));
+  const matching=t.state==='match_requested' && !!t.rival;
+  const countered=t.state==='countered' && !!t.counter;
+  const feedback=el('div',{class:'msg note',role:'alert',hidden:true});
+  const act=action=>{const r=pyJSON(`SESSION.personnel_act('${action}', tid=${t.id})`);notify(r);if(r.ok)onDone();else{feedback.hidden=false;feedback.textContent=r.why||'The decision could not be completed.';}};
+  if (matching) box.append(el('div', { class: 'msg match rival-panel' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${t.rival.team} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { act('match'); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { act('withdraw'); } }, 'Let Him Go'))));
+  if (countered) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, 'Counter'), el('div', { class: 'txt' }, el('b', {}, `$${t.counter.apy}m × ${t.counter.years}`)), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { act('match_counter'); } }, 'Accept Counter'))));
+  if (t.state === 'waiting') box.append(el('div', { class: 'msg note', style: 'display:flex;align-items:center;gap:12px' }, el('span', { style: 'flex:1' }, `Waiting on his answer${t.due ? ' · due ' + t.due : ''}.`), el('button', { class: 'btn quiet', 'data-tip': 'Pull the offer before he answers; the thread closes', onclick: () => { act('withdraw'); } }, 'Rescind Offer')));
   else if (['accepted', 'signed'].includes(t.state)) box.append(el('div', { class: 'msg note' }, 'Signed.'));
   else if (t.state === 'broken_off') box.append(el('div', { class: 'msg note' }, 'He has broken off talks.'));
   else if (t.state === 'declined') box.append(el('div', { class: 'msg note' }, 'He declined.'));
-  else box.append(offerForm(t, t.kind, onDone, t.counter ? { apy: t.counter.apy, years: t.counter.years } : null));
+  else if (!matching && ['open','countered'].includes(t.state)) box.append(offerForm(t, t.kind, onDone, countered ? { apy: t.counter.apy, years: t.counter.years } : null));
+  box.append(feedback);
   return box;
 }
 
