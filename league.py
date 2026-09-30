@@ -43,6 +43,7 @@ from cap_engine import Contract, TeamCap, CAP, project_cap, BASE_GROWTH
 from gm_engine import GM, make_gm
 import contract_structure as CS
 import otc_2026 as OTC
+import player_background as PB
 
 # Attributes that describe how AVAILABLE a man is, not how good he is. Kept out
 # of any future ability budget for the reason in the docstring.
@@ -70,7 +71,7 @@ class Player:
                  'injury_history', 'career', 'seasons', 'retired',
                  'tag_count', 'tagged_year', 'fa_class', 'tender_team',
                  # the draft: where he came from and how the college game rated him
-                 'college', 'college_ovr', 'height', 'weight',
+                 'college', 'home_state', 'college_ovr', 'height', 'weight',
                  # a position change he is still learning: frm, to, penalty, games_left, games_total
                  'transition',
                  # personality: work_ethic, financial_priority, loyalty, ambition (hidden)
@@ -115,6 +116,7 @@ class Player:
         self.fa_class = None          # UFA / RFA / ERFA, set each offseason
         self.tender_team = None       # who holds the right to match him
         self.college = None
+        self.home_state = PB.state_for(self.pid)
         self.college_ovr = None
         self.height = None
         self.weight = None
@@ -204,6 +206,7 @@ class Player:
         p.contract = contract_from_dict(d.get('contract'))
         p.morale = morale_from_dict(d.get('morale'))
         p.career = {int(k): v for k, v in (d.get('career') or {}).items()}
+        PB.restore_background(p)
         return p
 
     def __repr__(self):
@@ -941,6 +944,7 @@ class League:
     @classmethod
     def load(cls, blob):
         d = json.loads(blob) if isinstance(blob, str) else blob
+        d = PB.migrate_saved_backgrounds(d)
         L = cls(d['year'])
         L.phase, L.week = d['phase'], d['week']
         L.players = {pid: Player.from_dict(pd)
@@ -1300,7 +1304,7 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         if pd.notna(r.get('height')): p.height = int(r.height)
         if pd.notna(r.get('weight')): p.weight = int(r.weight)
         if pd.notna(r.get('jersey_number')): p.number = int(r.jersey_number)
-        if pd.notna(r.get('college')) and not getattr(p, 'college', None): p.college = str(r.college)
+        if pd.notna(r.get('college')): p.college = p.home_state
         L.players[p.pid] = p
         if r.team in L.teams:
             L.teams[r.team].roster.append(p)
@@ -1341,7 +1345,7 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
             if pd.notna(r.get('height_inches')): p.height = int(r.height_inches)
             if pd.notna(r.get('weight_lbs')): p.weight = int(r.weight_lbs)
             if pd.notna(r.get('jersey_num')): p.number = int(r.jersey_num)
-            if pd.notna(r.get('college')): p.college = str(r.college)
+            if pd.notna(r.get('college')): p.college = p.home_state
             p.last_team = None
             L.players[pid] = p; L.free_agents.append(pid); n_fa += 1
 
