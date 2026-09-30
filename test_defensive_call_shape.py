@@ -40,6 +40,11 @@ class DefensiveCallShapeTests(unittest.TestCase):
                     self.assertEqual(call['personnel'], package)
                     self.assertEqual(DR.counts(call['front_family'], package), counts)
                     self.assertEqual(sum(counts.values()), 11)
+                    if family == '3-4' and package in ('nickel', 'dime'):
+                        self.assertEqual(call['front'], '3-4 sub')
+                        self.assertEqual(SC.FRONTS[call['front']]['dl'], 4)
+                    if family == '3-4' and package == 'base':
+                        self.assertEqual(SC.FRONTS[call['front']]['dl'], 3)
 
 
 if __name__ == '__main__':

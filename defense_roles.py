@@ -35,7 +35,7 @@ def coach_front(gm):
 
 
 def front_family(front):
-    if front in ('3-4', '3-4 one', '3-4 two', 'tite', 'mint'):
+    if front in ('3-4', '3-4 one', '3-4 two', '3-4 sub', 'tite', 'mint'):
         return '3-4'
     return '4-3'
 

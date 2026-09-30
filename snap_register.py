@@ -97,9 +97,9 @@ print('Pooled RB3 saved positions:', ' | '.join(
     for pos, values in sorted(pooled_third.items())))
 print('Base-chart defensive starters by front (share of all defensive plays; no front-specific reference ranges):')
 for front in ('4-3', '3-4'):
-    roles = (('LEDG', 'DT1', 'DT2', 'REDG', 'MIKE', 'WILL', 'SAM', 'CB1', 'CB2', 'FS', 'SS')
+    roles = (('LEDG', 'DT1', 'DT2', 'REDG', 'MLB', 'WILL', 'SAM', 'CB1', 'CB2', 'FS', 'SS')
              if front == '4-3' else
-             ('LEDG', 'NT', 'REDG', 'LOLB', 'LILB', 'RILB', 'ROLB', 'CB1', 'CB2', 'FS', 'SS'))
+             ('LE', 'NT', 'RE', 'LOLB', 'LILB', 'RILB', 'ROLB', 'CB1', 'CB2', 'FS', 'SS'))
     for start in (0, 4, 7):
         segment = roles[start:(4 if start == 0 else 7 if start == 4 else 11)]
         line = [f'{role} {np.mean(front_share[(front, role)])*100:.0f}%'

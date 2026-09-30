@@ -57,6 +57,9 @@ FRONTS = {
     '4-3 under': dict(dl=4, gap='one', edge_set='weak',   run_fit=1.02, rush=0.98),
     '3-4 one':   dict(dl=3, gap='one', edge_set='both',   run_fit=0.96, rush=1.04),
     '3-4 two':   dict(dl=3, gap='two', edge_set='both',   run_fit=1.06, rush=0.90),
+    # Standard odd-coach nickel/dime: two interior defenders and both edges
+    # on the rush line. The three-interior tite/mint look is a base call.
+    '3-4 sub':   dict(dl=4, gap='one', edge_set='both',   run_fit=1.00, rush=1.02),
     'tite':      dict(dl=3, gap='two', edge_set='both',   run_fit=1.10, rush=0.86),
     'bear':      dict(dl=5, gap='one', edge_set='both',   run_fit=1.14, rush=1.06),
     'wide 9':    dict(dl=4, gap='one', edge_set='both',   run_fit=0.90, rush=1.10),
@@ -73,6 +76,7 @@ FRONT_VS_SCHEME = {
     '4-3 over':  {'zone': 1.00, 'gap': 1.00},
     '4-3 under': {'zone': 0.98, 'gap': 1.02},
     '3-4 one':   {'zone': 1.02, 'gap': 1.00},
+    '3-4 sub':   {'zone': 1.00, 'gap': 1.00},
 }
 
 def goal_line_box_bonus(yards_to_endzone):
@@ -525,12 +529,16 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
     if pers == 'heavy':
         cands = [f for f in (fp or ()) if f in FRONTS and FRONTS[f]['dl'] == 5] or ['bear']
     else:
-        # A 3-4 coach still uses four aligned rush-front players in standard
-        # nickel and dime. The front's base down-lineman count cannot decide
-        # whether the installed call is legal for those subpackages.
-        cands = [f for f in (fp or ()) if f in FRONTS and f != 'bear']
+        # Standard nickel/dime use two interior defenders and both edges even
+        # for odd-front coaches. Map installed odd base fronts to a truthful
+        # four-man subfront; tite/mint retain their three interiors in Base.
+        cands = []
+        for f in (fp or ()):
+            if f not in FRONTS or f == 'bear': continue
+            selected = '3-4 sub' if pers in ('nickel', 'dime') and DR.front_family(f) == '3-4' else f
+            if selected not in cands: cands.append(selected)
         if not cands:
-            cands = (['3-4 one', '3-4 two', 'tite', 'mint'] if DR.coach_front(gm) == '3-4'
+            cands = ((['3-4 sub'] if pers in ('nickel', 'dime') else ['3-4 one', '3-4 two', 'tite', 'mint']) if DR.coach_front(gm) == '3-4'
                      else ['4-3 over', '4-3 under', 'wide 9'])
     # A multiple-front coordinator chooses from the installed fronts using
     # the offense's grouping and the situation. The defense has not seen the

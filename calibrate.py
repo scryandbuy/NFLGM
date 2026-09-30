@@ -46,7 +46,6 @@ TARGETS = [
     ('air_yards',               5.72, 1.00, 'plays base_air'),
     ('yac',                     5.19, 0.80, 'plays.resolve_yards_after in_space'),
     ('yards_per_dropback',      6.18, 0.60, 'emergent'),
-    ('time_to_throw',           2.72, 0.15, 'plays.RUSHER_BASE'),         # seconds, on attempts
     # ---- running ----
     ('run_ypc',                 4.52, 0.35, 'plays._run_play'),
     ('run_explosive_pct',       2.46, 0.80, 'plays.resolve_yards_after'),
@@ -69,6 +68,11 @@ TARGETS = [
     ('punt_gross',             47.20, 2.00, 'game.PUNT'),
     ('kickoff_touchback_pct',  15.50, 3.00, 'game.KICKOFF'),
 ]
+
+# The current `ttt` event is the fastest rusher's arrival/protection window,
+# not the quarterback's observed release time. Keep the saved result key for
+# continuity, but do not score it against an NFL time-to-throw target.
+DIAGNOSTICS = [('time_to_throw', 'protection-time proxy; QB release is not modeled')]
 
 
 class Collector:
@@ -175,6 +179,9 @@ class Collector:
             v = got.get(name, float('nan')); d = v - real; ok = abs(d) <= tol
             if not ok: bad += 1
             print(f'  {name:26s} {v:8.2f} {real:8.2f} {d:+8.2f}  {"ok" if ok else "OFF":4s} {ctrl}')
+        for name, reason in DIAGNOSTICS:
+            v = got.get(name, float('nan'))
+            print(f'  {name:26s} {v:8.2f} {"-":>8s} {"-":>8s}  {"diag":4s} {reason}')
         print(f'\n  {len(TARGETS)-bad}/{len(TARGETS)} within tolerance')
         return got
 
