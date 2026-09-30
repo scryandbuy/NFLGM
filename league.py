@@ -972,6 +972,7 @@ class League:
             history=getattr(self, 'history', None) or {},
             fa_bids=getattr(self, 'fa_bids', None) or {}, fa_bids_phase=getattr(self, 'fa_bids_phase', None), fa_step=getattr(self, 'fa_step', None),
             user_week_plan=getattr(self, 'user_week_plan', None),
+            practice_state=getattr(self, 'practice_state', None),
             regression=getattr(self, 'regression', None) or {},
             season_closed_year=getattr(self, 'season_closed_year', None),
             last_draft=getattr(self, 'last_draft', None),
@@ -1076,6 +1077,7 @@ class League:
         L.history = {str(k): v for k, v in (d.get('history', {}) or {}).items()}
         L.fa_bids = d.get('fa_bids', {}) or {}; L.fa_bids_phase = d.get('fa_bids_phase'); L.fa_step = d.get('fa_step')
         L.user_week_plan = d.get('user_week_plan')
+        L.practice_state = d.get('practice_state') or {}
         L.regression = {str(k): v for k, v in (d.get('regression', {}) or {}).items()}
         L.season_closed_year = d.get('season_closed_year')
         if L.season_closed_year is None and d.get('_post') and (d['_post'] or {}).get('champion') and (d['_post'] or {}).get('year') is not None:

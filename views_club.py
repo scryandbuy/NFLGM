@@ -635,6 +635,7 @@ def development(session, league, abbr, pid):
     uc = XP.unlock_cost(p)
     return dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), bank=int(round(float(p.xp or 0))), ceiling=(int(round(pot)) if pot is not None else None),
                 room=(max(0, int(round(pot)) - int(round(p.ovr))) if pot is not None else None), unlock_cost=(int(round(uc)) if uc else None), unlock_ok=(uc is not None and p.xp >= uc and (pot or 0) < 99),
+                practice_earned=round(float((p.xp_spent.get('_earned') or {}).get('practice',0))),
                 bought=int(XP.points_bought(p)), unlocks=int(p.xp_spent.get('_unlocks', 0) or 0), auto=bool(p.xp_spent.get('_auto', False)), dev=modifier_word(p), rows=rows)
 
 

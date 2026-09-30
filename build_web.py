@@ -8,7 +8,7 @@ MODULES = ['halftime', 'staff_traits', 'club_notes', 'league_notes', 'adjust', '
            'negotiation_engine', 'negotiations', 'newgens', 'otc_2026', 'offer_reservations', 'personality', 'player_background', 'player_roles', 'playcall', 'plays', 'position_change', 'postseason', 'practice_squad', 'progression_engine',
            'regression', 'retirement', 'rookie_baseline', 'roster_construction', 'roster_needs', 'rosters', 'schedule', 'schemes', 'scouting', 'season', 'session', 'spring', 'staff', 'standings_and_seeding', 'tags',
            'targets', 'field_fit', 'stable', 'ticker', 'gameday', 'gm_surfaces', 'draft_day', 'views_club', 'views_personnel', 'views_frontoffice', 'views_draft', 'views_league', 'views_gameplan', 'trade_engine', 'trades', 'valuation', 'views', 'waivers', 'weather', 'xp', 'xp_spend', 'zones']
-MODULES.append('game_recap')
+MODULES.extend(['game_recap', 'practice', 'practice_integration'])
 DATA = ['newgen_shape.json', 'league_seed_2026.csv', 'schedule_2026.csv', 'cfb27_ratings.csv', 'aging_curves.json', 'pick_values.json', 'wp_model.json', 'production_scores.json', 'free_agent_pool.csv', 'original_player_name_hashes.json']
 os.makedirs(OUT, exist_ok=True)
 def _check_imports():

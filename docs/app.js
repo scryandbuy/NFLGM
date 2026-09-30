@@ -43,7 +43,7 @@ async function bootEngine() {
 }
 
 function cutPenaltyText(v, year) { return `$${v.penalty.toFixed(1)}m ${year == null ? 'this year' : year}${v.penalty_next ? ` + $${v.penalty_next.toFixed(1)}m ${year == null ? 'next year' : year + 1}` : ''}`; }
-const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_offer_sheet', 'inbox_hurt_action', 'inbox_mark_all', 'inbox_read', 'inbox_delete', 'inbox_clear_read']);
+const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'practice_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_offer_sheet', 'inbox_hurt_action', 'inbox_mark_all', 'inbox_read', 'inbox_delete', 'inbox_clear_read']);
 const READ_ONLY_ACTIONS = new Set(['personnel_act:ask', 'personnel_act:gather', 'personnel_act:offer_preview', 'frontoffice_act:restructure_preview', 'draft_act:read_trade_up', 'draft_act:offers']);
 let autosaveQueued = false;
 let autosaveFrame = null, autosaveTimer = null;
@@ -251,7 +251,7 @@ function linkHash(link) {
   const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:regression': '#club/regression', 'club:ps': '#club/ps', 'league:bracket': '#league/bracket', 'front_office:review': '#frontoffice/review', 'front_office:exit': '#frontoffice/exit', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/wire', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'personnel:retain': '#personnel/retain', 'draft:board': '#draft/board' };
   if (a === 'player') return '#club/player/' + b;
   if (String(link).startsWith('club:player:')) return '#club/player/' + String(link).split(':')[2];
-  if (a === 'gameplan') return '#gameplan';
+  if (a === 'gameplan') return b === 'practice' ? '#gameplan/practice' : '#gameplan';
   if (link === 'fa' || link === 'personnel:free_agency') return '#personnel/fa';
   if (a === 'negotiation') { const kind = String(link).split(':')[1] || ''; return kind === 'extension' ? '#personnel/extensions' : kind.startsWith('fa') ? '#personnel/fa' : '#personnel/fa'; }
   return MAP[link] || MAP[a] || '#portal';
@@ -870,7 +870,7 @@ function developmentPanel(pid, reload) {
   if (d.error) { box.append(el('div', { class: 'empty' }, d.error)); return box; }
   const act = (name, extra) => { const r = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, pid=${JSON.stringify(pid)}${extra ? ', ' + extra : ''})`); notify(r); reload(); };
   box.append(el('div', { class: 'tiles', style: 'grid-template-columns:repeat(4,1fr);margin-bottom:12px' },
-    el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'XP Banked'), el('div', { class: 'word' }, d.bank.toLocaleString()), el('div', { class: 'sub' }, `earning ${d.dev} · ${d.bought} points bought in his career`)),
+    el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'XP Banked'), el('div', { class: 'word' }, d.bank.toLocaleString()), el('div', { class: 'sub' }, `earning ${d.dev} · ${d.bought} points bought in his career`), el('div', {class:'sub'}, `Practice earned: ${(d.practice_earned || 0).toLocaleString()} XP in his career`)),
     el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Ceiling'), el('div', { class: 'word' }, d.ceiling != null ? d.ceiling : '—'), el('div', { class: 'sub' }, d.room != null ? `${d.room} above his ${d.ovr}` : 'uncapped')),
     el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Raise the Ceiling'), el('div', { class: 'word', style: 'font-size:18px' }, d.unlock_cost != null ? `${d.unlock_cost.toLocaleString()} XP` : '—'), el('div', { class: 'sub' }, el('button', { class: 'btn' + (d.unlock_ok ? ' go' : ''), disabled: d.unlock_ok ? null : '', style: 'padding:3px 10px;font-size:13px;margin-top:4px', 'data-tip': 'Raises his ceiling one point', onclick: () => act('unlock_ceiling') }, 'Unlock +1'))),
     el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Auto-Spend'), el('div', { class: 'word', style: 'font-size:18px' }, d.auto ? 'On' : 'Off'), el('div', { class: 'sub' }, el('button', { class: 'btn', style: 'padding:3px 10px;font-size:13px;margin-top:4px', 'data-tip': 'The assistants spend his XP weekly', onclick: () => act('auto_xp', `on=${d.auto ? 'False' : 'True'}`) }, d.auto ? 'Turn Off' : 'Turn On'), ' ', el('button', { class: 'btn quiet', style: 'padding:3px 10px;font-size:13px;margin-top:4px', 'data-tip': 'Spend his bank now, once', onclick: () => act('spend_by_read') }, 'Spend by Read')))));
@@ -2833,9 +2833,85 @@ function renderAlmanac(v) {
 }
 
 // ---------------------------------------------------------------- Game Plan
-const GPN = { week: 'This Week', report: 'Opponent Report' };
+const GPN = { week: 'This Week', practice: 'Practice', report: 'Opponent Report' };
 function gpSecond(cur) { secondRow(Object.entries(GPN).map(([k, l]) => [l, '#gameplan/' + k]), '#gameplan/' + cur); $('#crumb').textContent = 'Game Plan'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'gameplan')); }
 const pct = x => Math.round(x * 100);
+
+
+let practiceSaving = false, practiceSaveRequired = false;
+function practiceFocus(plan, pid, checked) {
+  const focus = plan.focus || [];
+  if (checked && !focus.includes(pid) && focus.length >= 3) return false;
+  plan.focus = checked ? [...new Set([...focus, pid])] : focus.filter(id => id !== pid);
+  return true;
+}
+async function practiceCommand(action, plan, enabled) {
+  if (practiceSaving) return false;
+  practiceSaving = true;
+  try {
+    const args = action === 'auto' ? `, enabled=${enabled ? 'True' : 'False'}` : action === 'save' ? `, plan_json=${JSON.stringify(JSON.stringify(plan))}` : '';
+    if (action !== 'retry') {
+      const result = pyJSON(`SESSION.practice_act('${action}'${args})`);
+      if (result?.ok === false || result?.error) { notify(result); return false; }
+    }
+    practiceSaveRequired = true;
+    await saveGame();
+    practiceSaveRequired = false;
+    return true;
+  } catch (error) {
+    notify({ok:false, why:'Practice could not be saved. Retry Save before advancing. ' + String(error)});
+    return false;
+  } finally { practiceSaving = false; }
+}
+function renderPractice(v) {
+  renderRail(v.rail); const page = persPage(); gpSecond('practice'); page.className = 'gameplan-page practice-page';
+  featureHero(page, v.rail.club, `Week ${v.week || '—'} / Preparation`, 'PRACTICE', 'Balance preparation, development, and recovery.', [[v.completed ? 'Complete' : v.eligible ? 'Ready' : 'Inactive', 'This week']]);
+  const surface = el('section', {class:'sheet c12 gameplan-surface practice-surface'}); page.append(surface);
+  const reload = () => renderPractice(pyJSON('SESSION.practice_view()'));
+  const plan = JSON.parse(JSON.stringify(v.plan || {units:{},individual:{},focus:[]})); plan.units ||= {}; plan.individual ||= {}; plan.focus ||= [];
+  const locked = !v.eligible || v.completed;
+  const select = (options, value, change) => {
+    const control = el('select', {disabled:locked ? '' : null, onchange:e => change(e.target.value)});
+    for (const [key,label] of options) control.append(el('option', {value:key, selected:key === value ? '' : null}, label));
+    return control;
+  };
+  const management = el('input', {type:'checkbox', checked:v.auto ? '' : null, onchange:async e => { e.target.disabled = true; await practiceCommand('auto', null, e.target.checked); reload(); }});
+  surface.append(el('div', {class:'practice-management'}, el('label', {}, management, ' Let assistants manage practice'), el('span', {class:'count'}, 'The same workload and development limits apply.')));
+  if (v.note) surface.append(el('p', {class:'practice-note'}, v.note));
+  if (!locked) {
+    const units = el('div', {class:'practice-units'});
+    for (const [unit,label] of [['offense','Offense'],['defense','Defense'],['special','Special teams']]) {
+      const settings = plan.units[unit] ||= {intensity:'standard',reps:'balanced'};
+      units.append(el('div', {}, el('h3', {}, label), el('label', {}, 'Intensity', select([['recovery','Recovery'],['light','Light'],['standard','Standard'],['hard','Hard']], settings.intensity, value => settings.intensity = value)), el('label', {}, 'Reps', select([['starters','Starter emphasis'],['balanced','Balanced'],['development','Development emphasis']], settings.reps, value => settings.reps = value))));
+    }
+    surface.append(units);
+    surface.append(el('p', {class:'practice-note'}, 'Save your plan to update the forecast. Practice is only resolved when you run it.'));
+    const table = el('table', {class:'tbl practice-players'}, el('thead', {}, el('tr', {}, ...['Player','Position','Condition','Fatigue','Workload','Focus (up to 3)'].map(label => el('th', {}, label)))));
+    const body = el('tbody'); table.append(body);
+    for (const player of v.players || []) {
+      const focus = el('input', {type:'checkbox', 'aria-label':`Focus on ${player.name}`, checked:plan.focus.includes(player.pid) ? '' : null, onchange:e => { if (!practiceFocus(plan, player.pid, e.target.checked)) { e.target.checked = false; notify({ok:false,why:'Choose up to three focus players.'}); } }});
+      body.append(el('tr', {}, el('td', {}, el('strong', {}, player.name), player.injured ? el('small', {}, 'Injured · restricted work') : null), el('td', {}, player.pos), el('td', {}, player.condition ?? '—'), el('td', {}, player.jaded ?? '—'), el('td', {}, select([['follow','Follow unit'],['limited','Limited'],['rest','Rest']], plan.individual[player.pid] || 'follow', value => { if (value === 'follow') delete plan.individual[player.pid]; else plan.individual[player.pid] = value; })), el('td', {}, focus)));
+    }
+    surface.append(el('details', {class:'practice-detail'}, el('summary', {}, 'Individual workloads & focus players'), el('div', {class:'practice-table-wrap'}, table)));
+  }
+  const report = v.completed ? v.result : v.preview;
+  if (report) {
+    const recap = el('div', {class:'practice-report'}, el('h3', {}, v.completed ? 'Practice report' : 'Saved plan forecast'));
+    if (report.note) recap.append(el('p', {}, report.note));
+    for (const line of report.summary || []) recap.append(el('p', {}, line));
+    const metrics = el('div', {class:'practice-metrics'});
+    for (const metric of report.metrics || []) metrics.append(el('div', {}, el('strong', {}, metric.value), el('span', {}, metric.label)));
+    recap.append(metrics); surface.append(recap);
+  }
+  const actions = el('div', {class:'foot practice-actions'});
+  if (practiceSaveRequired) actions.append(el('button', {class:'btn go', onclick:async () => { await practiceCommand('retry'); reload(); }}, 'Retry Save'));
+  if (!locked) {
+    actions.append(el('button', {class:'btn', onclick:async e => { e.target.disabled = true; await practiceCommand('save', plan); reload(); }}, 'Save Plan & Preview'));
+    actions.append(el('button', {class:'btn go', onclick:async e => { e.target.disabled = true; if (await practiceCommand('save', plan)) await practiceCommand('run'); reload(); }}, 'Run Practice'));
+  }
+  actions.append(el('a', {class:'btn', href:'#gameplan/week'}, 'Game Plan'), el('a', {class:'btn', href:'#club/depth'}, 'Depth Chart'));
+  surface.append(actions);
+}
 
 function gameplanSuggestion(x, reload) {
   const act = (name, extra = '') => {
@@ -2970,6 +3046,7 @@ async function advance() {
 }
 
 async function advanceInner() {
+  if (practiceSaving || practiceSaveRequired) { notify({ok:false, why:'Save your practice results before advancing. Open Practice and retry the save.'}); location.hash = '#gameplan/practice'; return; }
   // a block stops the click: a roster over 53 or under 46 sends you to fix it; a decision opens it
   const blocks = pyJSON('SESSION.blocking()');
   if (blocks.length && blocks[0].kind === 'live') { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); return; }
@@ -2981,6 +3058,7 @@ async function advanceInner() {
   catch (e) { adv.disabled = false; throw e; }
   adv.disabled = false;
   if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
+  else if (r && r.done === 'Practice complete') { practiceSaveRequired = true; try { await saveGame(); practiceSaveRequired = false; } finally { location.hash = '#gameplan/practice'; renderPractice(pyJSON('SESSION.practice_view()')); } return; }
   else if (r && r.done === 'Cutdown') { location.hash = '#personnel/wire'; renderWire(pyJSON(`SESSION.personnel('waivers')`)); }
   else if (r && r.done === 'Camp') { location.hash = '#portal'; refresh(); }
   else if (r && /^Week \d+ live$/.test(r.done)) { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); }
@@ -3069,6 +3147,6 @@ async function advanceInner() {
   };
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
-  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.inbox_view()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
+  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.inbox_view()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'practice') renderPractice(pyJSON('SESSION.practice_view()')); else if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
     else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'retain') renderRetain(pyJSON(`SESSION.personnel('retain')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; tradeState.counter_id = null; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();

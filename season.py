@@ -160,13 +160,15 @@ class SeasonRunner(StandingsView):
             self.states[abbr] = G.TeamState(self._units(abbr), coach=coach,
                                             scheme=t.scheme)
             self.states[abbr].abbr = abbr
+            self.states[abbr].defer_recovery = True
             self._staff_terms(abbr)
         self.week = 0
 
     @staticmethod
     def _state_data(st, include_roster=False):
         """Plain data needed to carry a team's health and replay a live game."""
-        d = dict(cond=dict(st.cond.cond), cond_snaps=dict(st.cond.snaps),
+        d = dict(defer_recovery=getattr(st, "defer_recovery", False),
+                 cond=dict(st.cond.cond), cond_snaps=dict(st.cond.snaps),
                  cond_policy=st.cond.policy, jaded=dict(st.jaded),
                  snaps=dict(st.snaps), last_snaps=dict(getattr(st, 'last_snaps', {}) or {}),
                  plan=asdict(st.plan), base_plan=asdict(st.base_plan),
@@ -188,6 +190,7 @@ class SeasonRunner(StandingsView):
     @staticmethod
     def _restore_state(st, d):
         import gameplan as GP, adjust as AD
+        st.defer_recovery = d.get('defer_recovery', True)
         if 'roster' in d: st.roster = d['roster']
         st.cond.cond = dict(d.get('cond') or {})
         st.cond.snaps = dict(d.get('cond_snaps') or {})
@@ -336,6 +339,8 @@ class SeasonRunner(StandingsView):
         return True
 
     def refresh(self, abbr):
+        import practice_integration as PI
+        PI.restore_transfers(self, abbr)
         self.refresh_identity(abbr)
         self.states[abbr].roster = self._units(abbr)
         r = self.states[abbr].roster
@@ -354,7 +359,12 @@ class SeasonRunner(StandingsView):
             return PS.sb_venue(self.L)['abbr']
         except Exception: return None
 
+    def prepare_practice(self, week, clubs=None):
+        import practice_integration as PI
+        return PI.prepare(self, week, clubs)
+
     def play(self, home, away, week, playoffs=False):
+        self.prepare_practice(week, (home, away))
         hr, ar = self.refresh(home), self.refresh(away)
         if hr is None or ar is None:          # a roster too thin to field
             return None
@@ -411,6 +421,7 @@ class SeasonRunner(StandingsView):
             hr, ar = self.states[home].roster, self.states[away].roster
             start = replay_start
         else:
+            self.prepare_practice(week, (home, away))
             hr, ar = self.refresh(home), self.refresh(away)
             if hr is None or ar is None: return None
             for side in (home, away):
@@ -559,6 +570,8 @@ class SeasonRunner(StandingsView):
     def _record(self, home, away, week, res, book, playoffs=False):
         import gameplan_week as GW
         GW.record_game(self.L, home, away, res)
+        import practice_integration as PI
+        PI.record_health(self, (home, away))
         H, A = self.L.teams[home], self.L.teams[away]
         if playoffs:
             pass                      # postseason does not touch the record
@@ -669,6 +682,7 @@ class SeasonRunner(StandingsView):
             st.coach['adjust_skill'] = min(1.0, float(st.coach_base.get('adjust_skill', 0.5)) + 0.15)
 
     def play_games(self, week):
+        self.prepare_practice(week)
         completed = any(wk == week and hp is not None for wk, _a, _h, _ap, hp in self.L.schedule)
         if not completed:
             self.L.week_book = {}                                    # this Sunday's lines only
@@ -754,7 +768,7 @@ class SeasonRunner(StandingsView):
         # A BYE WEEK RESTORES. A club that did not play this week recovers to full and sheds some of the season's wear
         played_clubs = {h for h, _a, _hs, _as in played} | {a for _h, a, _hs, _as in played}
         for abbr, st in self.states.items():
-            if abbr not in played_clubs and 1 <= int(week) <= 18:
+            if abbr not in played_clubs and 1 <= int(week) <= 18 and not getattr(st, 'defer_recovery', False):
                 try: st.end_game(self.rng, bye=True)
                 except Exception: pass
         snaps = {}

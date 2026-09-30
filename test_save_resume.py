@@ -125,6 +125,7 @@ class SaveResumeTest(unittest.TestCase):
         runner._listed_week = 1
         runner.last_games = []
         runner._after_games = lambda _week, _played: None
+        runner.prepare_practice = lambda _week, clubs=None: None  # this fixture isolates interrupted score recording
         calls = 0
         def interrupted(_home, _away, _week):
             nonlocal calls

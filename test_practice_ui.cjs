@@ -1,0 +1,26 @@
+const fs=require('fs'), vm=require('vm'), assert=require('node:assert/strict');
+const source=fs.readFileSync('docs/app.js','utf8');
+let resolveSave, fail=false, calls=[];
+const ctx={pyJSON:code=>{calls.push(code);return {ok:true}},saveGame:()=>new Promise((resolve,reject)=>{resolveSave=()=>fail?reject(Error('disk full')):resolve()}),notify(){}};
+vm.createContext(ctx);
+vm.runInContext(source.slice(source.indexOf('let practiceSaving'),source.indexOf('function renderPractice')),ctx);
+(async()=>{
+ const plan={focus:['a','b','c']};
+ assert.equal(ctx.practiceFocus(plan,'d',true),false);
+ assert.deepEqual(plan.focus,['a','b','c']);
+ assert.equal(ctx.practiceFocus(plan,'b',false),true);
+ assert.equal(ctx.practiceFocus(plan,'d',true),true);
+ const pending=ctx.practiceCommand('run');
+ assert.equal(vm.runInContext('practiceSaving && practiceSaveRequired',ctx),true);
+ assert.equal(await ctx.practiceCommand('run'),false); assert.equal(calls.length,1);
+ resolveSave(); assert.equal(await pending,true);
+ assert.equal(vm.runInContext('practiceSaving || practiceSaveRequired',ctx),false);
+ fail=true; const failed=ctx.practiceCommand('run');resolveSave();assert.equal(await failed,false);
+ assert.equal(vm.runInContext('practiceSaveRequired',ctx),true);
+ fail=false;const retry=ctx.practiceCommand('retry');resolveSave();assert.equal(await retry,true);
+ assert.equal(calls.length,2,'Retry saves without rerunning practice');
+ assert.equal(vm.runInContext('practiceSaveRequired',ctx),false);
+ assert.ok(source.includes("sub === 'practice') renderPractice"));
+ assert.ok(source.includes("r.done === 'Practice complete'"));
+ console.log('Practice: focus limit, concurrent run guard, save failure and retry persistence verified.');
+})().catch(e=>{console.error(e);process.exitCode=1});

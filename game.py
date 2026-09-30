@@ -1100,7 +1100,9 @@ class TeamState:
         # December comes back at 90 to 95, and plays the next game a little slower and a little more breakable
         ended = dict(self.cond.cond)
         self.cond.reset_game()
-        if not bye:
+        if getattr(self, "defer_recovery", False):
+            self.cond.cond = ended
+        elif not bye:
             for pid, c in ended.items():
                 self.cond.cond[pid] = H.recover_between_games(float(c), natural_fitness=fitness.get(pid, 70.0), days_rest=7,
                                                               jadedness=self.jaded.get(pid, 0.0))
