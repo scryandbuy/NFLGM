@@ -231,18 +231,19 @@ def run(league, rng, verbose=False, record_for=None, tick_age=True):
         if p.retired or p.pid in prospect_ids:
             continue
         mine = record_for is not None and p.team == record_for
-        before_r = dict(p.ratings) if mine else None; before_o = p.ovr
+        before_r = dict(p.ratings); before_o = p.ovr
         # the year ticked at Step 1 of the offseason; the decline reads the age he now is
         lost = decline(p, rng)
+        changed = {k: (round(float(before_r[k]), 1), round(float(p.ratings[k]), 1)) for k in p.ratings if round(float(before_r[k]), 1) != round(float(p.ratings[k]), 1)}
         if mine:
-            changed = {k: (round(float(before_r[k]), 1), round(float(p.ratings[k]), 1)) for k in p.ratings if abs(float(p.ratings[k]) - float(before_r.get(k, p.ratings[k]))) >= 0.05}
             rec[p.pid] = dict(before=round(float(before_o), 1), after=round(float(p.ovr), 1), lost=round(float(before_o - p.ovr), 1), attrs=changed, age=int(p.age),
                                  name=p.name, pos=p.pos, team=p.team, number=getattr(p, 'number', None),
                                  ratings_before=dict(before_r), ratings_after=dict(p.ratings))    # the same whole-years age every page shows
         if lost > 1e-6:
             moved.append((p, lost))
             league.log('regress', pid=p.pid, pos=p.pos,
-                       age=round(p.age, 1), lost=round(lost, 2))
+                       age=round(p.age, 1), lost=round(lost, 2),
+                       before=round(float(before_o), 1), after=round(float(p.ovr), 1), attrs=changed)
     if record_for is not None:
         league.__dict__.setdefault('regression', {})[str(league.year)] = rec
     if verbose and moved:

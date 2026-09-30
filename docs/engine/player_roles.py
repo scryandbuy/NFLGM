@@ -36,7 +36,7 @@ def fa_positions(player, team_or_gm):
         ratings = _get(player, 'ratings', player)
         weight = _get(player, 'weight', _get(player, 'weight_lbs'))
         strength = _get(ratings, 'strength_rating')
-        shedding = _get(ratings, 'block_shedding_rating')
+        shedding = _get(ratings, 'block_shed_rating', _get(ratings, 'block_shedding_rating'))
         power = float(_get(ratings, 'power_moves_rating', 70) or 70)
         finesse = float(_get(ratings, 'finesse_moves_rating', 70) or 70)
         if weight is None and strength is None and shedding is None:

@@ -334,7 +334,7 @@ def _morale_line(p):
 
 
 def _player_history(league, p):
-    """Dated moves, XP purchases, and awards for this player."""
+    """Dated moves, XP purchases, regression, and awards for this player."""
     import views_league as VL
     entries = []
     def add(year, order, when, line):
@@ -342,6 +342,22 @@ def _player_history(league, p):
     if getattr(p, 'draft_year', None) and getattr(p, 'draft_round', None):
         add(p.draft_year, -1, str(p.draft_year), f"Drafted {p.draft_overall}{_ordn(p.draft_overall)} overall (round {p.draft_round})" if getattr(p, 'draft_overall', None) else f"Drafted, round {p.draft_round}")
     for x in league.transactions:
+        if x.get('kind') == 'regress' and x.get('pid') == p.pid:
+            year = x.get('year') or 0
+            # Older saves only logged total OVR loss. Use a saved report when
+            # available, never reconstruct historical ratings from today's card.
+            report = (getattr(league, 'regression', None) or {}).get(str(year), {}).get(p.pid, {})
+            before, after = x.get('before', report.get('before')), x.get('after', report.get('after'))
+            line = f"Regression: -{float(x.get('lost', 0)):g} OVR"
+            if before is not None and after is not None:
+                line += f" ({float(before):g} → {float(after):g})"
+            for attr, (b, a) in (x.get('attrs', report.get('attrs', {})) or {}).items():
+                delta = round(float(a) - float(b), 1)
+                if delta:
+                    label = attr.replace('_rating', '').replace('_', ' ').title()
+                    line += f" · {label} {delta:+g}"
+            add(year, 24, f"{year} · Offseason", line)
+            continue
         if x.get('kind') not in VL.TAGS: continue
         if x.get('kind') == 'draft' and getattr(p, 'draft_year', None) and getattr(p, 'draft_round', None): continue
         named = x.get('pid') == p.pid or p.pid in [str(a) for a in (x.get('a_sends') or [])] or p.pid in [str(a) for a in (x.get('b_sends') or [])]
@@ -478,14 +494,7 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
     sides = {}
     for side, cols_ in SIDES.items():
         cols = []
-        fallback_front = False
-        if side == 'defense' and front == '4-3':
-            static_count = sum(
-                sum(p.pid in lb_choice for p in available_depth.get(pos, [])) if pos in ('MIKE', 'WILL', 'SAM')
-                else min(len(available_depth.get(pos, [])), _starters(pos, pk))
-                for pos, _label, _group in cols_)
-            fallback_front = static_count != 11 or DR.needs_fallback(available_depth, front, package)
-        if side == 'defense' and (front == '3-4' or fallback_front):
+        if side == 'defense':
             assigned = DR.assign(available_depth, front, package, pins)
             roles = {}
             for row in assigned:
@@ -495,7 +504,8 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
                                        starters=[], reserves=row['reserves'])
                 if row['player'] is not None:
                     roles[role]['starters'].append(row['player'])
-            cols_ = [(role, DR.role_label(role), info['group'],
+            cols_ = [({'LE': 'LEDG', 'RE': 'REDG'}.get(role, role) if front == '4-3' else role,
+                      DR.role_label(role, front), info['group'],
                       info['starters'] + info['reserves'] +
                       [p for p in DR.role_candidates(def_depth, role, pins) if p.pid in unavailable],
                       len(info['starters']))
@@ -507,17 +517,11 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
             men = role_men if role_men is not None else returners(pos) if pos in ('KR', 'PR') else off_depth.get(pos, []) if side == 'offense' else def_depth.get(pos, [])
             n_start = role_starters if role_starters is not None else 1 if pos in ('KR', 'PR') else _starters(pos, pk if side == 'defense' else OFF_BASE.get(getattr(t.gm, 'off_personnel', '11'), OFF_BASE['11']))
             if side == 'offense': n_start = sum(p.pid in off_starters for p in men)
-            defensive_starters = {p.pid for p in available_depth.get(pos, [])[:n_start]}
-            if side == 'defense' and not (front == '3-4' or fallback_front):
-                if pos in ('MIKE', 'WILL', 'SAM'):
-                    defensive_starters = {p.pid for p in men if p.pid in lb_choice}
-                n_start = len(defensive_starters)
             slots = []
             for i, p in enumerate(men):
                 pl = player_plate(p); pl['cond'] = _cond(session, p)
                 if side == 'offense': pl['start'] = p.pid in off_starters; pl['why'] = ''
-                elif side == 'defense' and (front == '3-4' or fallback_front): pl['start'] = i < n_start; pl['why'] = ''
-                elif side == 'defense': pl['start'] = p.pid in defensive_starters; pl['why'] = lb_choice.get(p.pid, '')
+                elif side == 'defense': pl['start'] = i < n_start; pl['why'] = lb_choice.get(p.pid, '')
                 else: pl['start'] = i < n_start; pl['why'] = ''
                 pl['slot'] = _slot_label(pos, i)
                 desig = status.get(p.pid)

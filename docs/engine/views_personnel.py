@@ -527,7 +527,7 @@ def act_watch(league, abbr, pid):
 def act_match_counter(league, abbr, tid):
     import negotiations as NG
     t = NG.find(league, tid)
-    if not t or not t.get('counter'): return dict(ok=False, why='no counter on the table')
+    if not t or t['state'] != 'countered' or not t.get('counter'): return dict(ok=False, why='no counter on the table')
     c = t['counter']; return NG.make_offer(league, tid, c['apy'], c['years'], front_load=c.get('front_load'))
 
 

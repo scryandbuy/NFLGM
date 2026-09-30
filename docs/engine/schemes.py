@@ -23,12 +23,13 @@ PERSONNEL_OFF = {
     '22': dict(rb=2, te=2, wr=1, rate=.025, run_bias=+0.48, protect=7),
     '00': dict(rb=0, te=0, wr=5, rate=.010, run_bias=-0.45, protect=5),
 }
-# defence answers personnel. Nickel is now the base defence in the NFL.
+# Defence answers personnel. The bodies in each package come from
+# defense_roles.shape(front, package), since odd and even fronts differ.
 PERSONNEL_DEF = {
-    'base':   dict(db=4, lb=3, dl=4, box_bonus=+1.0, cover_penalty=0.10),
-    'nickel': dict(db=5, lb=2, dl=4, box_bonus= 0.0, cover_penalty=0.00),
-    'dime':   dict(db=6, lb=1, dl=4, box_bonus=-1.0, cover_penalty=-0.06),
-    'heavy':  dict(db=3, lb=3, dl=5, box_bonus=+2.0, cover_penalty=0.22),
+    'base':   dict(box_bonus=+1.0, cover_penalty=0.10),
+    'nickel': dict(box_bonus= 0.0, cover_penalty=0.00),
+    'dime':   dict(box_bonus=-1.0, cover_penalty=-0.06),
+    'heavy':  dict(box_bonus=+2.0, cover_penalty=0.22),
 }
 
 def defensive_personnel(off_pers, down, ydstogo, rng, gm_aggr=0.5, sub_lean=0.0):
@@ -56,6 +57,9 @@ FRONTS = {
     '4-3 under': dict(dl=4, gap='one', edge_set='weak',   run_fit=1.02, rush=0.98),
     '3-4 one':   dict(dl=3, gap='one', edge_set='both',   run_fit=0.96, rush=1.04),
     '3-4 two':   dict(dl=3, gap='two', edge_set='both',   run_fit=1.06, rush=0.90),
+    # Standard odd-coach nickel/dime: two interior defenders and both edges
+    # on the rush line. The three-interior tite/mint look is a base call.
+    '3-4 sub':   dict(dl=4, gap='one', edge_set='both',   run_fit=1.00, rush=1.02),
     'tite':      dict(dl=3, gap='two', edge_set='both',   run_fit=1.10, rush=0.86),
     'bear':      dict(dl=5, gap='one', edge_set='both',   run_fit=1.14, rush=1.06),
     'wide 9':    dict(dl=4, gap='one', edge_set='both',   run_fit=0.90, rush=1.10),
@@ -72,6 +76,7 @@ FRONT_VS_SCHEME = {
     '4-3 over':  {'zone': 1.00, 'gap': 1.00},
     '4-3 under': {'zone': 0.98, 'gap': 1.02},
     '3-4 one':   {'zone': 1.02, 'gap': 1.00},
+    '3-4 sub':   {'zone': 1.00, 'gap': 1.00},
 }
 
 def goal_line_box_bonus(yards_to_endzone):
@@ -524,9 +529,16 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
     if pers == 'heavy':
         cands = [f for f in (fp or ()) if f in FRONTS and FRONTS[f]['dl'] == 5] or ['bear']
     else:
-        cands = [f for f in (fp or ()) if f in FRONTS and FRONTS[f]['dl'] in (3, 4)]
+        # Standard nickel/dime use two interior defenders and both edges even
+        # for odd-front coaches. Map installed odd base fronts to a truthful
+        # four-man subfront; tite/mint retain their three interiors in Base.
+        cands = []
+        for f in (fp or ()):
+            if f not in FRONTS or f == 'bear': continue
+            selected = '3-4 sub' if pers in ('nickel', 'dime') and DR.front_family(f) == '3-4' else f
+            if selected not in cands: cands.append(selected)
         if not cands:
-            cands = (['3-4 one', '3-4 two', 'tite', 'mint'] if DR.coach_front(gm) == '3-4'
+            cands = ((['3-4 sub'] if pers in ('nickel', 'dime') else ['3-4 one', '3-4 two', 'tite', 'mint']) if DR.coach_front(gm) == '3-4'
                      else ['4-3 over', '4-3 under', 'wide 9'])
     # A multiple-front coordinator chooses from the installed fronts using
     # the offense's grouping and the situation. The defense has not seen the
@@ -539,7 +551,14 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
                              + (1.0 - run_threat) * FRONTS[f]['rush'] for f in cands], float)
     front_weights = np.exp(12.0 * (front_scores - front_scores.max()))
     front = str(rng.choice(cands, p=front_weights / front_weights.sum()))
-    family = DR.front_family(front)
+    if pers == 'heavy':
+        # Bear is the five-man goal-line alignment for either coaching family.
+        # A caller may supply an installed front list without a GM object.
+        installed = next((DR.front_family(f) for f in (fp or ())
+                          if f in FRONTS and f != 'bear'), None)
+        family = DR.coach_front(gm) if gm is not None else installed or DR.front_family(front)
+    else:
+        family = DR.front_family(front)
 
     # real: 0 blitzers 86.7%, 1 on 9.7%, 2 on 3.1%, 3 on 0.47%
     r = rng.random()

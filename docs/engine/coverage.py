@@ -126,11 +126,16 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
     matchup. In zone the 'defender' is the nearest man to the window rather
     than an assignment, which the zone resolver then uses.
     """
-    cbs = [d for d in defense.get('db', []) if d.get('pos', 'CB') == 'CB'] \
-          or defense.get('db', [])[:3]
-    safs = [d for d in defense.get('db', []) if d.get('pos') in ('FS', 'SS')] \
-           or defense.get('db', [])[3:5] or defense.get('db', [])[-2:]
-    lbs = defense.get('lb', [])
+    from defensive_rush import player_key, assignments
+    rows = assignments(defense, def_call)
+    cbs = [a['player'] for a in rows if a['alignment'].startswith('corner_') or a['alignment'] == 'slot']
+    safs = [a['player'] for a in rows if a['alignment'].startswith('deep_')]
+    lbs = [a['player'] for a in rows if a['player'] not in cbs+safs]
+    # The shadow corner is chosen by ability, independently of alignment.
+    cbs.sort(key=lambda d: (-rate_fn(d, {'man_cover_rating':.55,'speed_rating':.25,'press_rating':.20}), player_key(d)))
+    # Receiver/zone sides use the offense's viewpoint; alignments use defense's.
+    assigned_sides = {('R' if a['alignment']=='corner_left' else 'L'):a['player']
+                      for a in rows if a['alignment'] in ('corner_left','corner_right')}
     # MAN OR ZONE IS NOT ONE ANSWER FOR THE WHOLE DEFENCE. A split-field call
     # plays one principle to each side, which is what cover 6 and mable ARE,
     # so every pairing carries its own.
@@ -161,13 +166,15 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
                  if wr1 is not None else False
 
     # corners hold a side unless one of them is travelling
-    sides = sides or corner_sides(cbs, rng)
+    sides = sides or assigned_sides or corner_sides(cbs, rng)
+    live_ids = {player_key(a['player']) for a in rows}
+    sides = {side:p for side,p in sides.items() if p and player_key(p) in live_ids}
     pairs, used = [], set()
-    if travel and cbs and wr1 is not None: used.add(id(cbs[0]))  # reserve the shadow corner
+    if travel and cbs and wr1 is not None: used.add(player_key(cbs[0]))  # reserve the shadow corner
 
     def take(pool, prefer=None):
         for d in pool:
-            pid = id(d)
+            pid = player_key(d)
             if pid not in used:
                 used.add(pid); return d
         return pool[-1] if pool else None
@@ -175,17 +182,19 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
     for a in aligned:
         spot = a['spot']
         if spot in ('X', 'Z'):
-            if travel and cbs and a['player'] is wr1:
+            if travel and cbs and player_key(a['player']) == player_key(wr1):
                 d = cbs[0]                      # my best man follows him
-                used.add(id(d))
+                used.add(player_key(d))
                 trav = True
             else:
                 # whoever holds that side of the field
                 d = sides.get(a['side'], cbs[0] if cbs else None)
-                if d is not None and id(d) in used:
-                    d = take([c for c in cbs if id(c) not in used] or cbs)
+                if d is not None and player_key(d) in used:
+                    d = take([c for c in cbs if player_key(c) not in used] or cbs or lbs or safs)
                 elif d is not None:
-                    used.add(id(d))
+                    used.add(player_key(d))
+                else:
+                    d = take(lbs or safs or cbs)
                 trav = False
             pairs.append(dict(receiver=a['player'], defender=d, spot=spot, side=a.get('side', 'C'),
                               travelled=trav, kind='cb',
@@ -195,10 +204,10 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
             # the slot draws the NICKEL - a different player with different
             # attributes, not whichever corner happened to be picked; unless
             # the star is in the slot and my best man is following him
-            if travel and cbs and a['player'] is wr1:
-                d = cbs[0]; used.add(id(d)); trav = True
+            if travel and cbs and player_key(a['player']) == player_key(wr1):
+                d = cbs[0]; used.add(player_key(d)); trav = True
             else:
-                pool = [c for c in cbs if id(c) not in used] or safs or cbs
+                pool = [c for c in cbs if player_key(c) not in used] or safs or lbs or cbs
                 d = take(pool); trav = False
             pairs.append(dict(receiver=a['player'], defender=d, spot=spot, side=a.get('side', 'C'),
                               travelled=trav, kind='nickel',
@@ -215,7 +224,7 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
                               man=(CC.under_for_side(
                                   {'under': under}, a.get('side')) == 'man')))
         else:                                   # back out of the backfield
-            pool = [l for l in lbs if id(l) not in used] or lbs or safs
+            pool = [l for l in lbs if player_key(l) not in used] or lbs or safs or cbs
             d = take(pool)
             pairs.append(dict(receiver=a['player'], defender=d, spot=spot, side=a.get('side', 'C'),
                               travelled=False, kind='lb',
