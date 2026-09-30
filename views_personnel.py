@@ -578,6 +578,15 @@ def act_withdraw_claim(league, abbr, pid):
 
 
 # ============================================================ EXTENSIONS
+def retain(session, league, abbr):
+    import tags as TG, extensions as EXT
+    sheet = TG.user_resign_sheet(league)
+    sheet['ufa'] = [r for r in sheet['ufa'] if not r['tagged']]
+    for row in sheet['ufa']:
+        row['eligible'] = EXT.eligible(league.player(row['pid']), league)
+    return dict(rail=rail(session, league, abbr), **sheet)
+
+
 def extensions(session, league, abbr):
     import extensions as EXT, negotiations as NG
     me = league.teams[abbr]

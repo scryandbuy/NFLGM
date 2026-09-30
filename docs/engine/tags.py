@@ -142,6 +142,15 @@ def power(league, team, cap):
     return team.spending_power(cap, MS.minimum_salary(2, cap))
 
 
+def pending_tender_cost(league, exclude=None):
+    if not user_tag_window(league): return 0.0
+    cap = CAP.get(league.year, 301.2)
+    chosen = set(getattr(league, 'user_tenders', None) or [])
+    return sum(tender_price(p, cap) for p in league.teams[league.user_team].active()
+               if p.pid in chosen and p.pid != exclude
+               and FA.fa_class(p.accrued, p.contract_years_left) == 'RFA')
+
+
 def run(league, rng, verbose=False):
     """
     Tag, tender, and let everyone else reach the market. Called after cuts and
@@ -187,7 +196,7 @@ def run(league, rng, verbose=False):
         # ---- restricted men ---------------------------------------------
         for p in [x for x in groups['RFA'] if x.pid in roster]:
             price = tender_price(p, cap)
-            if is_user and p.pid in set(getattr(league, 'user_no_tender', None) or []):
+            if is_user and p.pid not in set(getattr(league, 'user_tenders', None) or []):
                 p.fa_class = 'UFA'; to_market.append((abbr, p)); continue        # the user chose not to tender him: unrestricted
             if price > power(league, team, cap):
                 to_market.append((abbr, p))     # cannot afford to keep him
@@ -279,8 +288,11 @@ def user_tag(league, pid):
     """The user places his one tag from the Extensions page, in the offseason before the tag step.
     Same price, same rules as the AI's; 'none' tells the AI not to tag for him."""
     from cap_engine import CAP
+    if not user_tag_window(league): return dict(ok=False, why='The tag window is closed.')
     user = getattr(league, 'user_team', None); team = league.teams[user]; cap = CAP.get(league.year, 301.2)
     if pid in (None, 'none'):
+        if getattr(league, 'user_tag_choice', None) not in (None, 'none'):
+            return dict(ok=False, why='You have already used your tag.')
         league.user_tag_choice = 'none'; return dict(ok=True, line='No tag this year. The AI will not place one for you.')
     p = league.player(pid)
     if p is None or p.team != user: return dict(ok=False, why='not on your roster')
@@ -289,7 +301,7 @@ def user_tag(league, pid):
     if p.tag_count >= MAX_TAGS: return dict(ok=False, why='he has been tagged the most a player can be')
     if getattr(league, 'user_tag_choice', None) not in (None, 'none'): return dict(ok=False, why='you have used your tag this year')
     price = tag_price(p, cap)
-    room = power(league, team, cap)
+    room = power(league, team, cap) - pending_tender_cost(league)
     if price > room: return dict(ok=False, why=f"the tag costs ${price:.1f}m and after the minimums for the bodies you still owe you can commit ${max(0.0, room):.1f}m; clear room first")
     p.contract = _one_year(price, league.year); p.tag_count += 1; p.tagged_year = league.year; p.fa_class = 'tagged'
     league.user_tag_choice = p.pid; team.sync_cap()
@@ -299,7 +311,7 @@ def user_tag(league, pid):
 
 def user_tag_window(league):
     """Whether the user can still tag: the offseason, before the Extensions and Tags step has run."""
-    return league.phase != 'regular' and not getattr(league, 'tags_done_year', None) == league.year
+    return league.phase == 'offseason' and getattr(league, 'tags_done_year', None) != league.year
 
 
 # ============================================================ THE USER'S RE-SIGN CARD
@@ -310,7 +322,7 @@ def user_resign_sheet(league):
     import free_agency as FA, min_salary as MS
     user = getattr(league, 'user_team', None); team = league.teams[user]; cap = CAP.get(league.year, 301.2)
     ufa, rfa, erfa = [], [], []
-    no_tender = set(getattr(league, 'user_no_tender', None) or [])
+    chosen = set(getattr(league, 'user_tenders', None) or [])
     choice = getattr(league, 'user_tag_choice', None)
     for p in team.active():
         if p.fa_class == 'tagged' and choice != p.pid: continue
@@ -319,14 +331,14 @@ def user_resign_sheet(league):
         if cls == 'under_contract' and choice != p.pid: continue
         row = dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), accrued=int(p.accrued or 0), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1))
         if cls == 'UFA' or choice == p.pid:
-            row.update(tag_price=round(tag_price(p, cap), 1), tagged=(choice == p.pid), can_tag=(p.tag_count < MAX_TAGS or choice == p.pid))
+            row.update(tag_price=tag_price(p, cap), tagged=(choice == p.pid), can_tag=(p.tag_count < MAX_TAGS or choice == p.pid))
             ufa.append(row)
         elif cls == 'RFA':
-            row.update(tender_price=round(tender_price(p, cap), 1), tender=(p.pid not in no_tender)); rfa.append(row)
+            row.update(tender_price=round(tender_price(p, cap), 3), tender=(p.pid in chosen)); rfa.append(row)
         else:
             row.update(min_price=round(MS.minimum_salary(int(p.accrued or 0), cap), 2)); erfa.append(row)
     ufa.sort(key=lambda r: -r['ovr']); rfa.sort(key=lambda r: -r['ovr']); erfa.sort(key=lambda r: -r['ovr'])
-    return dict(ufa=ufa, rfa=rfa, erfa=erfa, tag_choice=choice, tag_used=(choice not in (None, 'none')), room=round(power(league, team, cap), 1), cap_space=round(team.cap_space, 1),
+    return dict(ufa=ufa, rfa=rfa, erfa=erfa, tag_choice=choice, tag_used=(choice not in (None, 'none')), room=round(power(league, team, cap)-pending_tender_cost(league), 3), pending_tenders=round(pending_tender_cost(league), 3), cap_space=round(team.cap_space, 1),
                 open=user_tag_window(league), tags_done=(getattr(league, 'tags_done_year', None) == league.year))
 
 
@@ -335,6 +347,17 @@ def user_tender(league, pid, tender=True):
     p = league.player(pid); user = getattr(league, 'user_team', None)
     if p is None or p.team != user: return dict(ok=False, why='not on your roster')
     if not user_tag_window(league): return dict(ok=False, why='the tenders are placed; the step has run')
+    if FA.fa_class(p.accrued, p.contract_years_left) != 'RFA':
+        return dict(ok=False, why='Only an expiring restricted free agent can be tendered.')
+    chosen = set(getattr(league, 'user_tenders', None) or [])
+    if tender:
+        cap = CAP.get(league.year, 301.2)
+        room = power(league, league.teams[user], cap) - pending_tender_cost(league, exclude=pid)
+        if tender_price(p, cap) > room:
+            return dict(ok=False, why='Clear cap room before committing this tender.')
+        chosen.add(pid)
+    else: chosen.discard(pid)
+    league.user_tenders = sorted(chosen)
     s = set(getattr(league, 'user_no_tender', None) or [])
     if tender: s.discard(pid)
     else: s.add(pid)

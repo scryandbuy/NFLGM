@@ -2733,7 +2733,38 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .game-scoreboard .linescore th,.game-scoreboard .linescore td{padding:5px 16px;font:600 12px var(--text)}
 .game-scoreboard .wpchart{padding:8px 28px 18px}
 .game-feed .ctrl2{padding:15px 20px;flex-wrap:wrap}
-.game-feed .ticker{padding:18px 24px;max-height:570px;font:400 13px/1.75 var(--text)}
+.game-feed .ticker{padding:18px 24px;max-height:400px;font:400 13px/1.75 var(--text)}
+
+/* Retention uses the same per-team palette as player cards and negotiations. */
+.retain-board .personnel-hero{padding-bottom:24px}
+.retain-board .btn.go,.retain-tag-dialog .btn.go{background:var(--team-accent);border-color:var(--team-accent);color:var(--team-ink)}
+.retain-filters{display:flex;gap:8px;padding:0 25px 18px}
+.retain-filters .btn{min-width:82px;width:auto;padding:9px 22px}
+.retain-filters .btn[aria-pressed=true]{color:var(--team-readable);border-color:var(--team-accent);background:color-mix(in srgb,var(--team-accent) 13%,transparent)}
+.retain-section{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:14px 25px;border-block:1px solid var(--pers-rule);font-size:12px;color:var(--ink-3)}
+.retain-section b{color:var(--team-readable);text-transform:uppercase;letter-spacing:.7px}
+.retain-table-wrap{padding:0 25px 12px}
+.retain-board .retain-table{table-layout:fixed}
+.retain-board .retain-table th:first-child{width:34%}
+.retain-board .retain-table th:nth-child(2){width:8%}
+.retain-board .retain-table th:nth-child(3),.retain-board .retain-table th:nth-child(4){width:7%}
+.retain-board .retain-table th:nth-child(5),.retain-board .retain-table th:nth-child(6){width:22%}
+.retain-board .retain-table th{position:static;background:transparent;padding:17px 12px}
+.retain-board .retain-table td{padding:18px 12px}
+.retain-board .retain-table .retain-action{text-align:center;padding-inline:22px}
+.retain-board .retain-table .retain-action .btn{display:inline-flex;justify-content:center;align-items:center;min-width:116px;width:auto;padding:9px 15px;font:700 13px var(--text)!important;white-space:nowrap}
+.retain-board .retain-table .retain-action+.retain-action{border-left:1px solid var(--pers-rule)}
+.retain-pending{display:flex;align-items:center;flex-direction:column;gap:5px;color:var(--team-readable);font-size:12px}
+.retain-pending small{color:var(--ink-3)}
+.retain-board .retain-pending .btn{min-width:0;padding:3px 8px;font-size:11px!important}
+.retain-foot{padding:0 25px 18px;color:var(--ink-3);font-size:12px}
+.retain-tag-dialog{color:var(--ink);background:var(--sheet);border:1px solid var(--rule);border-top:3px solid var(--team-accent);border-radius:8px;width:min(440px,calc(100vw - 28px));padding:0;font-family:var(--text)}
+.retain-tag-dialog::backdrop{background:#05090dbb}
+.retain-dialog-body{padding:26px}.retain-dialog-body>small{color:var(--team-readable);font-weight:700;letter-spacing:1px;font-size:11px}
+.retain-dialog-body h2{font:900 28px var(--text);padding:8px 0 20px;border:0;background:none}.retain-dialog-body h3{font-size:19px;margin:0}.retain-dialog-body p{color:var(--ink-3);font-size:13px}
+.retain-tag-price{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:20px 0;padding:18px 0;border-block:1px solid var(--rule)}.retain-tag-price b{font-size:32px}
+.retain-dialog-actions{display:flex;justify-content:flex-end;gap:12px;padding:18px 26px;border-top:1px solid var(--rule)}.retain-dialog-actions .btn{width:auto}
+@media(max-width:800px){.retain-table-wrap{overflow-x:auto}.retain-board .retain-table{min-width:680px}.retain-board .retain-table .retain-action{padding-inline:16px}.retain-table-wrap,.retain-section,.retain-filters{padding-inline:16px}}
 .game-feed .ticker .drive{font:700 11px var(--text);letter-spacing:.1em;color:var(--team-readable);padding:11px 0 5px}
 .game-feed .ticker .score{color:var(--team-readable)}
 .game-feed .ticker .pl{padding:4px 8px;border-left:2px solid transparent}

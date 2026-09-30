@@ -11,7 +11,7 @@ function run(code, result) {
   while (queued.length) queued.shift()();
   return saves - before;
 }
-for (const call of ["SESSION.inbox_offer_sheet(42, 'match')", "SESSION.inbox_offer_sheet(42, 'decline')", "SESSION.inbox_hurt_action(42, 'ir')", "SESSION.club_act('cut', pid='p')", "SESSION.trade_offer_answer(42, 'counter')", "SESSION.trade_offer_answer(42, 'accept')", "SESSION.trade_offer_answer(42, 'decline')", "SESSION.personnel_act('save_trade_counter', msg_id=42)"]) {
+for (const call of ["SESSION.resign_act('tender', pid='p')", "SESSION.resign_act('tag', pid='p')", "SESSION.inbox_offer_sheet(42, 'match')", "SESSION.inbox_offer_sheet(42, 'decline')", "SESSION.inbox_hurt_action(42, 'ir')", "SESSION.club_act('cut', pid='p')", "SESSION.trade_offer_answer(42, 'counter')", "SESSION.trade_offer_answer(42, 'accept')", "SESSION.trade_offer_answer(42, 'decline')", "SESSION.personnel_act('save_trade_counter', msg_id=42)"]) {
   assert.equal(run(call, {ok:true}), 1, call);
   assert.equal(run(call, {ok:false, why:'stale'}), 0, call);
 }

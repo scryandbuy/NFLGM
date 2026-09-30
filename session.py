@@ -404,6 +404,12 @@ class Session:
             return [dict(id=None, subject='Your game is still being played: finish it first', kind='live', go='#gameday')]
         """Decisions that must be made before the next stop. Empty list = nothing blocks."""
         out = []
+        if self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] == 'step_extensions':
+            pending = TG.pending_tender_cost(self.L)
+            room = TG.power(self.L, self.L.teams[self.user_team], TG.CAP.get(self.L.year, 301.2))
+            if pending > 0 and pending > room + .0005:
+                out.append(dict(id=None, kind='cap', go='#personnel/retain',
+                                subject='Your pending tenders no longer fit: clear cap space or withdraw a tender.'))
         # THE ROSTER RULE. A club plays with 53 at most and 46 at least; the game will not
         # run a week, or leave camp, until yours is legal. A new franchise starts in camp at
         # 68 and cuts to 53 before week 1, the way every club does.
@@ -952,6 +958,8 @@ class Session:
 
     def step_roll(self):
         self.L.user_tag_choice = None          # a new year, a new tag
+        self.L.user_tenders = []
+        self.L.user_no_tender = []
         L, rng = self.L, self.rng
         L.roll_year(rng)
         (getattr(L, 'exit_meetings', None) or {}).pop(str(L.year), None)          # the new year has no meetings yet
@@ -1017,10 +1025,10 @@ class Session:
         rfa = ', '.join(f"{surname(r['name'])} ({r['pos']}, {r['ovr']}; tender ${r['tender_price']}m)" for r in sheet['rfa'][:8])
         erfa = ', '.join(f"{surname(r['name'])} ({r['pos']})" for r in sheet['erfa'][:8])
         body = (f"Unrestricted: {ufa}. One franchise tag, or none; anyone you do not tag or re-sign goes to the market when you advance. " if sheet['ufa'] else "No unrestricted free agents. ")
-        body += (f"Restricted: {rfa}. Tendered at right of first refusal unless you say otherwise; an untendered player goes to the market unrestricted. " if sheet['rfa'] else "")
+        body += (f"Restricted: {rfa}. Choose Tender in Retain Players to keep matching rights; an untendered player goes to the market unrestricted. " if sheet['rfa'] else "")
         body += (f"Exclusive rights, kept at the minimum: {erfa}. " if sheet['erfa'] else "")
         body += f"You can commit about ${sheet['room']}m after the minimums you still owe."
-        IE.post(L, key_, 'contract', "Re-sign: your tag and tenders", body, sender='front office', payload=dict(key=key_, link='personnel:extensions'))
+        IE.post(L, key_, 'contract', "Re-sign: your tag and tenders", body, sender='front office', payload=dict(key=key_, link='personnel:retain'))
 
     def _open_fa_if_due(self):
         """The calendar sits on a free-agency round: open it (once) so the offers can be made before the advance."""
@@ -1332,6 +1340,7 @@ class Session:
         elif action == 'untag': r = TG.untag(self.L, pid)
         elif action == 'no_tag': r = TG.user_tag(self.L, 'none')
         else: r = dict(ok=False, why='unknown action')
+        if r.get('ok'): self.save_dirty = True
         return r
 
     def exit_answer(self, pid, key):

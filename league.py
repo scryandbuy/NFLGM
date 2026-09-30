@@ -922,7 +922,7 @@ class League:
             regression=getattr(self, 'regression', None) or {},
             season_closed_year=getattr(self, 'season_closed_year', None),
             last_draft=getattr(self, 'last_draft', None),
-            user_tag_choice=getattr(self, 'user_tag_choice', None), tags_done_year=getattr(self, 'tags_done_year', None), user_no_tender=list(getattr(self, 'user_no_tender', None) or []), watchlist=sorted(getattr(self, 'watchlist', set()) or []),
+            user_tag_choice=getattr(self, 'user_tag_choice', None), tags_done_year=getattr(self, 'tags_done_year', None), user_no_tender=list(getattr(self, 'user_no_tender', None) or []), user_tenders=list(getattr(self, 'user_tenders', None) or []), watchlist=sorted(getattr(self, 'watchlist', set()) or []),
             promises=getattr(self, 'promises', None) or [],
             exit_meetings=getattr(self, 'exit_meetings', None) or {},
             tendencies={str(y): {a: dict(c) for a, c in T.items()} for y, T in getattr(self, 'tendencies', {}).items()},
@@ -1033,6 +1033,10 @@ class League:
         L.last_draft = d.get('last_draft')
         L.user_tag_choice = d.get('user_tag_choice'); L.tags_done_year = d.get('tags_done_year'); L.watchlist = set(d.get('watchlist') or [])
         L.user_no_tender = list(d.get('user_no_tender', []) or [])
+        # Preserve the old default-tender selections in saves made before the explicit Tender action.
+        L.user_tenders = list(d.get('user_tenders') or []) if 'user_tenders' in d else [
+            p.pid for p in L.players.values() if p.team == d.get('_user_team') and p.team is not None
+            and p.accrued == 3 and p.contract_years_left == 0 and p.pid not in L.user_no_tender]
         if L.negotiations:
             import negotiations as _NG, itertools as _it
             _NG._ids = _it.count(max(t['id'] for t in L.negotiations) + 1)

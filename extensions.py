@@ -36,7 +36,7 @@ CERTAINTY_DISCOUNT = 0.07
 
 def eligible(p, league):
     c = p.contract
-    if c is None or c.years > 2:
+    if p.team is None or (c is None and (league.phase != 'offseason' or getattr(league, 'tags_done_year', None) == league.year)) or (c is not None and c.years > 2):
         return False
     if p.draft_year and (league.year - p.draft_year) < 3 and p.draft_round is not None:
         return False
@@ -112,8 +112,9 @@ def terms(league, p, rng):
     if not a or not t:
         return None
     import personality as PT
-    star = p.ovr >= 88 and p.contract.years <= 1
-    disc = 0.0 if star else CERTAINTY_DISCOUNT * (1.0 if p.contract.years <= 1 else 1.4)
+    left = p.contract.years if p.contract else 0
+    star = p.ovr >= 88 and left <= 1
+    disc = 0.0 if star else CERTAINTY_DISCOUNT * (1.0 if left <= 1 else 1.4)
     disc = disc * PT.certainty_discount_mult(p) + PT.extension_discount(p)    # money and loyalty
     disc = float(np.clip(disc, -0.05, 0.25))
     ask = a['apy'] * PT.ask_mult(p) * honors_premium(league, p)
@@ -128,7 +129,7 @@ def build(p, add_years, apy, cap, gm, league, front_load=None, bonus=None):
         raise ValueError('Offer must have a positive salary and one to seven years')
     if bonus is not None and (not np.isfinite(float(bonus)) or not 0 <= float(bonus) <= apy * add_years):
         raise ValueError('Signing bonus must be between zero and the total contract value')
-    old = p.contract
+    old = p.contract if p.contract is not None else Contract(0, [])
     left = old.years
     st = CS.structure(apy, add_years, p.pos, cap, gm, front_load=front_load)
     if bonus is not None:

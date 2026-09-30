@@ -220,7 +220,7 @@ function renderInbox(v) {
 function linkHash(link) {
   if (!link) return '#portal';
   const [a, b] = String(link).split(':');
-  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:regression': '#club/regression', 'club:ps': '#club/ps', 'league:bracket': '#league/bracket', 'front_office:review': '#frontoffice/review', 'front_office:exit': '#frontoffice/exit', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/wire', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'draft:board': '#draft/board' };
+  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:regression': '#club/regression', 'club:ps': '#club/ps', 'league:bracket': '#league/bracket', 'front_office:review': '#frontoffice/review', 'front_office:exit': '#frontoffice/exit', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/wire', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'personnel:retain': '#personnel/retain', 'draft:board': '#draft/board' };
   if (a === 'player') return '#club/player/' + b;
   if (String(link).startsWith('club:player:')) return '#club/player/' + String(link).split(':')[2];
   if (a === 'gameplan') return '#gameplan';
@@ -1087,7 +1087,7 @@ function renderDepth(v) {
 }
 
 // ---------------------------------------------------------------- Personnel
-const PERS = { trades: 'Trades', fa: 'Free Agency', wire: 'Waivers', extensions: 'Extensions' };
+const PERS = { trades: 'Trades', fa: 'Free Agency', wire: 'Waivers', retain: 'Retain Players', extensions: 'Extensions' };
 let tradeState = { other: null, a: [], b: [] };
 function persSecond(cur) { secondRow(Object.entries(PERS).map(([k, l]) => [l, '#personnel/' + k]), '#personnel/' + cur); $('#crumb').textContent = 'Personnel'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'personnel')); }
 function persPage() { const page = $('#page'); page.innerHTML = ''; page.className = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)'; return page; }
@@ -1562,6 +1562,52 @@ function renderWire(v) {
 }
 let wireClaim = null;
 
+let retainTab = 'rfa', pendingExtensionPid = null;
+function renderRetain(v) {
+  renderRail(v.rail); const page=persPage(); persSecond('retain');
+  const rfa=retainTab==='rfa', club=v.rail.club;
+  const reload=()=>renderRetain(pyJSON("SESSION.personnel('retain')"));
+  const board=el('section',{class:'sheet c12 personnel-board retain-board'});
+  applyTeamTheme(board,club);
+  const money=n=>`$${Number(n).toFixed(3).replace(/0+$/,'').replace(/\.$/,'')}m`;
+  const hero=el('div',{class:'personnel-hero'},el('div',{},el('small',{},club.name.toUpperCase()),el('h1',{},'RETAIN PLAYERS'),el('p',{},rfa?'Preserve your rights to restricted free agents.':'Keep your unrestricted free agents with a tag or a long-term deal.')));
+  const metrics=el('div',{class:'personnel-metrics'},el('div',{},el('b',{},money(v.cap_space)),el('small',{},'Cap space')));
+  metrics.append(rfa?el('div',{},el('b',{},money(v.pending_tenders)),el('small',{},'Pending tenders')):el('div',{},el('b',{},v.tag_used?'0 / 1':'1 / 1'),el('small',{},'Tag available')));
+  hero.append(metrics);board.append(hero);
+  const filters=el('div',{class:'retain-filters'});
+  for(const key of ['rfa','ufa']) filters.append(el('button',{class:'btn',type:'button','aria-pressed':String(retainTab===key),onclick:()=>{retainTab=key;reload();}},key.toUpperCase()));
+  board.append(filters);
+  const rows=v[retainTab]||[];
+  board.append(el('div',{class:'retain-section'},el('b',{},`${rfa?'Restricted':'Unrestricted'} free agents · ${rows.length} players`),el('span',{},v.open?(rfa?'One-year tender offers':'Expiring contracts'):'Retention window closed')));
+  const table=el('table',{class:'tbl retain-table','aria-label':rfa?'Restricted free agents':'Unrestricted free agents'});
+  const headings=rfa?['Player','Pos','Age','OVR','Tender offer','Tender']:['Player','Pos','Age','OVR','Franchise tag','Extension'];
+  const cls=i=>i>=4?(rfa&&i===4?'n retain-amount':'retain-action'):i===2||i===3?'n':'';
+  table.append(el('thead',{},el('tr',{},...headings.map((label,i)=>el('th',{scope:'col',class:cls(i)},label)))));
+  const body=el('tbody');
+  const act=(action,pid)=>{const result=pyJSON(`SESSION.resign_act(${JSON.stringify(action)},pid=${JSON.stringify(pid)})`);notify(result);reload();};
+  const confirmTag=r=>{
+    const dialog=el('dialog',{class:'retain-tag-dialog','aria-labelledby':'retain-tag-title'});applyTeamTheme(dialog,club);
+    const cancel=el('button',{class:'btn',onclick:()=>dialog.close()},'Cancel');
+    dialog.append(el('div',{class:'retain-dialog-body'},el('small',{},`${club.name.toUpperCase()} · FRANCHISE TAG`),el('h2',{id:'retain-tag-title'},'Apply franchise tag?'),el('h3',{},r.name),el('p',{},`${r.pos} · Age ${r.age} · ${r.ovr} OVR`),el('div',{class:'retain-tag-price'},el('span',{},'One-year tag'),el('b',{},money(r.tag_price))),el('p',{},'This uses your available tag. The player moves to Extensions, where you can negotiate a long-term deal.')),el('div',{class:'retain-dialog-actions'},cancel,el('button',{class:'btn go',onclick:()=>{dialog.close();act('tag',r.pid);}},'Confirm tag')));
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();cancel.focus();
+  };
+  for(const r of rows){
+    const cells=[el('button',{class:'who',onclick:()=>{location.hash='#club/player/'+r.pid;}},el('div',{class:'no'},r.pos),el('div',{class:'nm'},r.name)),r.pos,r.age,ovrCell(r.ovr)];
+    if(rfa){
+      cells.push(money(r.tender_price),r.tender?el('div',{class:'retain-pending'},el('b',{},'Tender pending'),el('small',{},'Activates on Advance'),el('button',{class:'btn quiet',disabled:v.open?null:'',onclick:()=>act('no_tender',r.pid)},'Withdraw')):el('button',{class:'btn go',disabled:v.open?null:'',onclick:()=>act('tender',r.pid)},'Tender'));
+    }else{
+      const can=v.open&&!v.tag_used&&r.can_tag;
+      cells.push(el('button',{class:'btn',disabled:can?null:'','data-tip':can?null:v.tag_used?'Your tag has been used.':!v.open?'The tag window is closed.':'Tag limit reached.',onclick:()=>confirmTag(r)},v.tag_used?'Tag used':'Franchise tag'),el('button',{class:'btn go',disabled:r.eligible?null:'',onclick:()=>{pendingExtensionPid=r.pid;location.hash='#personnel/extensions';}},'Extension'));
+    }
+    body.append(el('tr',{},...cells.map((value,i)=>el('td',{class:cls(i),'data-label':headings[i]},value))));
+  }
+  if(!rows.length) body.append(el('tr',{},el('td',{colspan:6},el('div',{class:'empty'},v.open?`No ${retainTab.toUpperCase()}s awaiting a retention decision.`:'Retain Players opens during the offseason before free agency.'))));
+  table.append(body);board.append(el('div',{class:'retain-table-wrap'},table));
+  board.append(el('div',{class:'retain-foot'},rfa?'Chosen tenders activate when Tags and Tenders is advanced. Matching rights remain active through the offer-sheet window.':'Franchise-tag costs appear before confirmation. Extension opens the existing contract negotiation.'));
+  if(rfa&&v.erfa.length)board.append(el('div',{class:'retain-foot'},`${v.erfa.length} exclusive-rights player${v.erfa.length===1?'':'s'} will be retained automatically at the minimum when affordable.`));
+  page.append(board);
+}
+
 function renderExtensions(v) {
   renderRail(v.rail); const page = persPage(); persSecond('extensions');
   const reload = () => renderExtensions(pyJSON(`SESSION.personnel('extensions')`));
@@ -1580,30 +1626,6 @@ function renderExtensions(v) {
   if (v.tag && v.tag.tagged && !v.tag.open) foot.append(el('span', { class: 'count' }, `Franchise tag placed on ${v.tag.tagged}`));
   else if (v.tag && v.tag.none && !v.tag.open) foot.append(el('span', { class: 'count' }, 'No tag this year'));
   left.append(foot);
-  // RE-SIGN: TAGS AND TENDERS. In the window (the offseason, before the step runs) your expiring players by class:
-  // one tag or none on the unrestricted, tender or not on the restricted, the exclusive-rights players kept.
-  if (v.tag && v.tag.open) {
-    let sh = null; try { sh = pyJSON('SESSION.resign_sheet()'); } catch (_) { sh = null; }
-    if (sh && (sh.ufa.length || sh.rfa.length || sh.erfa.length)) {
-      const rs = el('section', { class: 'sheet c12 rs' }, el('h2', {}, 'Re-sign: Tags and Tenders', el('small', {}, `${sh.ufa.length} unrestricted · ${sh.rfa.length} restricted · ${sh.erfa.length} exclusive rights · you can commit about $${sh.room}m`)));
-      const act = (a, pid) => { const r = pyJSON(`SESSION.resign_act(${JSON.stringify(a)}, pid=${JSON.stringify(pid)})`); notify(r); reload(); };
-      const cols = el('div', { class: 'rs-cols' });
-      const col = (title, sub) => { const c = el('div', { class: 'rs-col' }, el('div', { class: 'h5' }, title, el('span', {}, sub))); cols.append(c); return c; };
-      const cU = col('Unrestricted', 'one tag, or none; the rest go to the market');
-      for (const r of sh.ufa) cU.append(el('div', { class: 'rs-row' + (r.tagged ? ' on' : '') }, el('span', { class: 'pos' }, r.pos), el('span', { class: 'nm', onclick: () => { location.hash = '#club/player/' + r.pid; }, style: 'cursor:pointer' }, r.name, el('small', {}, ` ${r.age} · ${r.ovr}`)), el('span', { class: 'price' }, `tag $${r.tag_price}m`),
-        r.tagged ? el('button', { class: 'btn', onclick: () => act('untag', r.pid) }, 'Remove Tag') : (sh.tag_used || sh.tag_choice === 'none' || !r.can_tag) ? el('span', { class: 'count' }, sh.tag_used ? 'tag used' : (sh.tag_choice === 'none' ? 'no tag' : 'ineligible')) : el('button', { class: 'btn go', onclick: () => act('tag', r.pid) }, 'Tag')));
-      if (!sh.ufa.length) cU.append(el('div', { class: 'empty' }, 'None.'));
-      else if (!sh.tag_used) cU.append(el('div', { class: 'rs-foot' }, sh.tag_choice === 'none' ? el('span', { class: 'count' }, 'No tag this year.') : el('button', { class: 'btn', onclick: () => act('no_tag', null) }, 'No Tag This Year')));
-      const cR = col('Restricted', 'right of first refusal; untendered goes unrestricted');
-      for (const r of sh.rfa) cR.append(el('div', { class: 'rs-row' + (r.tender ? ' on' : ' off') }, el('span', { class: 'pos' }, r.pos), el('span', { class: 'nm', onclick: () => { location.hash = '#club/player/' + r.pid; }, style: 'cursor:pointer' }, r.name, el('small', {}, ` ${r.age} · ${r.ovr}`)), el('span', { class: 'price' }, `tender $${r.tender_price}m`),
-        r.tender ? el('button', { class: 'btn', onclick: () => act('no_tender', r.pid) }, 'No Tender') : el('button', { class: 'btn go', onclick: () => act('tender', r.pid) }, 'Tender')));
-      if (!sh.rfa.length) cR.append(el('div', { class: 'empty' }, 'None.'));
-      const cE = col('Exclusive Rights', 'kept at the minimum');
-      for (const r of sh.erfa) cE.append(el('div', { class: 'rs-row on' }, el('span', { class: 'pos' }, r.pos), el('span', { class: 'nm', onclick: () => { location.hash = '#club/player/' + r.pid; }, style: 'cursor:pointer' }, r.name, el('small', {}, ` ${r.age} · ${r.ovr}`)), el('span', { class: 'price' }, `$${r.min_price}m`), el('span', { class: 'count' }, 'kept')));
-      if (!sh.erfa.length) cE.append(el('div', { class: 'empty' }, 'None.'));
-      rs.append(cols); page.append(rs);
-    }
-  }
   left.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'Promises', el('small', {}, 'What You Have Told Your Players')));
   const pt = el('table', { class: 'tbl' }); pt.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Promise'), el('th', {}, 'Made'), el('th', {}, 'Checked'), el('th', {}, 'Status')));
   for (const p of v.promises) pt.append(el('tr', {}, el('td', {}, p.name), el('td', {}, (v.promise_kinds && v.promise_kinds[p.kind]) || p.kind.replace(/_/g, ' ')), el('td', {}, p.made), el('td', {}, p.checked || (p.kind === 'starting_role' ? 'Week 4' : p.kind === 'extension_by' ? 'Offseason' : 'Ongoing')), el('td', {}, el('span', { class: 'pill ' + (p.status === 'kept' ? 'happy' : p.status === 'broken' ? 'unhappy' : 'content') }, p.status.charAt(0).toUpperCase() + p.status.slice(1)))));
@@ -1615,6 +1637,14 @@ function renderExtensions(v) {
   if (!v.threads.length) right.append(el('div', { class: 'empty' }, 'Ask an agent to hear his number. Offers are answered in one to three weeks by situation.'));
   page.append(right);
   finishPersonnel(page, v, 'extensions', left, right);
+  if(pendingExtensionPid){
+    const pid=pendingExtensionPid;pendingExtensionPid=null;
+    const result=pyJSON(`SESSION.personnel_act('open_talks',pid=${JSON.stringify(pid)},kind='extension')`);
+    if(!result.ok){notify(result);return;}
+    const fresh=pyJSON("SESSION.personnel('extensions')");
+    const thread=fresh.threads.find(t=>t.id===result.thread)||fresh.threads.filter(t=>t.pid===pid).pop();
+    renderExtensions(fresh);if(thread)openTalks(thread,reload);else notify(result);
+  }
 }
 let extTab = 'expiring';
 
@@ -2965,5 +2995,5 @@ async function advanceInner() {
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
   window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal_full()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
-    else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; tradeState.counter_id = null; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
+    else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'retain') renderRetain(pyJSON(`SESSION.personnel('retain')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; tradeState.counter_id = null; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();
