@@ -37,6 +37,65 @@ class State:
 
 
 class DefensiveAssignmentTests(unittest.TestCase):
+    def test_package_shapes_keep_two_edges_and_eleven_jobs(self):
+        for front in ('4-3', '3-4'):
+            for package in ('base', 'nickel', 'dime', 'heavy'):
+                rows = DR.role_slots(front, package)
+                self.assertEqual(len(rows), 11)
+                self.assertEqual(sum(r['alignment'].endswith('_edge') for r in rows), 2)
+                expected = 3 if package == 'heavy' or (front == '3-4' and package == 'base') else 2
+                self.assertEqual(sum(r['alignment'] in ('left_interior','right_interior','nose') for r in rows), expected)
+                if package in ('nickel', 'dime'):
+                    self.assertEqual(DR.counts(front, package)['dl'], 4)
+
+    def test_metadata_uses_final_health_adjusted_players_and_original_roles(self):
+        class Tired(State):
+            def __init__(self):
+                super().__init__({'REDG0'})
+                self.cond.needs_rest = lambda pid, *args: pid == 'LEDG0'
+            def state(self, p, pos): return dict(p, strength_rating=51)
+        for package in ('base','nickel','dime','heavy'):
+            roster=rosters._assemble(depth(),front='3-4')
+            state=Tired()
+            unit,positions=game.field_units(roster,state,NoRotation(),False,package,'3-4')
+            self.assertNotIn('REDG0',positions)
+            self.assertNotIn('LEDG0',positions)
+            self.assertEqual(len(positions),11)
+            for row in unit['defensive_assignments']:
+                p=row['player']
+                self.assertTrue(any(p is q for q in unit[row['group']]))
+                self.assertEqual(p['strength_rating'],51)
+                self.assertEqual(state.snaps[p['pid']],1)
+            edge=next(r for r in unit['defensive_assignments'] if r['alignment']=='left_edge')
+            self.assertEqual(edge['player']['pid'],'LEDG1')
+            self.assertNotIn('strength_rating',roster['depth']['LEDG'][1])
+
+    def test_no_state_path_still_selects_called_package_and_preserves_pins(self):
+        roster=rosters._assemble(depth(),front='3-4',pins={'LOLB':['LEDG1']})
+        unit,positions=game.field_units(roster,None,NoRotation(),False,'dime','3-4')
+        self.assertEqual(len(positions),11)
+        self.assertEqual(len(unit['db']),6)
+        self.assertEqual(next(r['player']['pid'] for r in unit['defensive_assignments']
+                              if r['role']=='LOLB'),'LEDG1')
+
+    def test_nose_selection_matches_physical_recruiting_role(self):
+        chart=depth()
+        chart['DT'][0].update(weight=285,strength_rating=75,finesse_moves_rating=90)
+        chart['DT'][1].update(weight=330,strength_rating=93,block_shed_rating=90)
+        rows=DR.assign(chart,'3-4','base')
+        self.assertEqual(next(r['player']['pid'] for r in rows if r['role']=='NT'),'DT1')
+        self.assertEqual(next(r['player']['pid'] for r in rows if r['role']=='34LE'),'DT0')
+        pinned=DR.assign(chart,'3-4','base',pins={'NT':['DT0']})
+        self.assertEqual(next(r['player']['pid'] for r in pinned if r['role']=='NT'),'DT0')
+
+    def test_depleted_position_uses_unique_healthy_emergency_defenders(self):
+        chart=depth(); chart['DT']=[]; chart['FS']=[]
+        for package in ('base','nickel','dime','heavy'):
+            roster=rosters._assemble(chart,front='3-4')
+            unit,positions=game.field_units(roster,State(),NoRotation(),False,package,'3-4')
+            self.assertEqual(len(positions),11)
+            self.assertEqual(len({r['player']['pid'] for r in unit['defensive_assignments']}),11)
+
     def test_injuries_replace_starters_in_every_package_and_front(self):
         for front in ('4-3', '3-4'):
             roster = rosters._assemble(depth(), front=front)
@@ -118,6 +177,22 @@ class DefensiveChartAvailabilityTests(unittest.TestCase):
         s.runner.states['GB'].out.add(pid)
         view=VC.depth(s,s.L,'GB')
         self.assertNotIn(pid,{p['pid'] for col in view['sides']['defense'] for p in col['slots'] if p['start']})
+
+    def test_all_teams_both_fronts_all_packages_and_reload(self):
+        s=Session.load(self.baseline)
+        s.runner=season.SeasonRunner(s.L,s.rng)
+        for abbr in s.L.teams:
+            roster=s.runner._units(abbr)
+            for front in ('4-3','3-4'):
+                for package in ('base','nickel','dime','heavy'):
+                    with self.subTest(team=abbr,front=front,package=package):
+                        unit,positions=game.field_units(roster,State(),NoRotation(),False,package,front)
+                        self.assertEqual(len(positions),11)
+                        self.assertEqual(sum(len(unit[k]) for k in ('dl','lb','db')),11)
+                        self.assertEqual(len(unit['defensive_assignments']),11)
+        s.L.teams['GB'].depth_pins={'LOLB':[s.L.teams['GB'].depth['LEDG'][0].pid]}
+        loaded=Session.load(s.save())
+        self.assertEqual(loaded.L.teams['GB'].depth_pins,s.L.teams['GB'].depth_pins)
 
     def test_full_game_keeps_eleven_when_eligible_healthy_depth_exists(self):
         s=Session.load(self.baseline)

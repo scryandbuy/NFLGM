@@ -1461,107 +1461,12 @@ POS_KEY = {'WR': 'wr', 'TE': 'wr', 'HB': 'wr', 'CB': 'db', 'FS': 'db',
            'SS': 'db', 'LB': 'lb', 'DL': 'dl'}
 
 def package_units(roster, state, rng, is_offense, package, front_family=None):
-    """
-    Which men the PACKAGE puts on the field. This is the piece fatigue alone
-    cannot produce: five DBs play every snap in nickel, so without packages the
-    top five are permanently starters and the sixth never appears.
-    """
-    import targets as TG
-    spec = (TG.OFF_PACKAGES if is_offense else TG.DEF_PACKAGES).get(package)
-    if not spec:
-        return None
-    out = {}
-    family = front_family or roster.get('front_family', '4-3')
-    import defense_roles as DR
-    family = DR.front_family(family)
-    if not is_offense and roster.get('depth'):
-        # Select from canonical, available depth for THIS call. Cached dl/lb
-        # groups may describe a different front, or still contain a man hurt
-        # earlier in the game. Keep reserves until package selection is done.
-        unavailable = state.out if state is not None else ()
-        depth = DR.available_depth(roster['depth'], unavailable)
-        roster = dict(roster, depth=depth)
-        assignments = DR.assign(depth, family, package, roster.get('depth_pins'))
-        dl = [row['player'] for row in assignments
-              if row['group'] == 'dl' and row['player'] is not None]
-        chosen = {p['pid'] for p in dl}
-        roster['dl'] = dl + [p for pos in ('LEDG', 'DT', 'REDG')
-                            for p in depth.get(pos, ()) if p['pid'] not in chosen]
-        roster['lb'] = ([p for pos in ('MIKE', 'WILL', 'SAM') for p in depth.get(pos, ())[:1]] +
-                        [p for pos in ('MIKE', 'WILL', 'SAM') for p in depth.get(pos, ())[1:]])
-        roster['db'] = [p for pos in ('CB', 'FS', 'SS') for p in depth.get(pos, ())]
-    if not is_offense and roster.get('depth') and (
-            family == '3-4' or DR.needs_fallback(roster['depth'], family, package)):
-        used_reserves = set()
-        for row in assignments:
-            chosen = row['player']
-            if chosen is None:
-                continue
-            reserves = [p for p in row['reserves'] if p['pid'] not in used_reserves]
-            role = row['role']
-            rotation = (0.32 if row['group'] == 'dl' else
-                        0.20 if row['group'] == 'lb' else
-                        0.06 if role == 'CB' else 0.02)
-            if reserves and rng.random() < rotation:
-                chosen = reserves[0]
-                used_reserves.add(chosen['pid'])
-            out.setdefault(row['group'], []).append(chosen)
-        return out
+    """Select the called personnel and preserve each defender's on-field job."""
     if is_offense:
         import offense_roles as OR
-        return OR.field(roster, package, rng=rng, state=state)
-    else:
-        db = list(roster.get('db', []))
-        cbs = [d for d in db if d.get('pos') == 'CB']
-        saf = [d for d in db if d.get('pos') in ('FS', 'SS')]
-        n_cb = spec.get('CB', 3)
-        # BIG NICKEL. The fifth defensive back is a third safety about a
-        # third of the time in the real league, which is most of why the
-        # third corner plays 57% of snaps and not 80%. The dime stays corners.
-        if n_cb == 3 and len(saf) >= 3 and rng.random() < 0.34:
-            n_cb = 2
-            fss = [d for d in saf if d.get('pos') == 'FS']
-            sss = [d for d in saf if d.get('pos') == 'SS']
-            core = fss[:1] + sss[:1]
-            out['db'] = cbs[:2] + (core + [d for d in saf if d not in core])[:3]
-        else:
-            # a free safety and a strong safety, not the first two in the list (a club with two free safeties was
-            # fielding both and its strong safety never played)
-            fss = [d for d in saf if d.get('pos') == 'FS']; sss = [d for d in saf if d.get('pos') == 'SS']
-            pick = fss[:spec.get('FS', 1)] + sss[:spec.get('SS', 1)]
-            for d in saf:
-                if len(pick) >= spec.get('FS', 1) + spec.get('SS', 1): break
-                if d not in pick: pick.append(d)
-            out['db'] = cbs[:n_cb] + pick
-        # the linebackers are the coordinator's call by the package's job, not the first N in the list
-        lbs = [m for m in roster.get('lb', []) if m.get('pid') not in (state.out if state is not None else set())]
-        chosen = TG.package_linebackers(lbs, package, scheme=None, key=lambda m: m)
-        out['lb'] = [m for m, why in chosen][:spec.get('LB', 2)] or list(roster.get('lb', []))[:spec.get('LB', 2)]
-        # THE FRONT ROTATES. Fatigue alone left the starting four at 92-94% of snaps;
-        # real edges play 65-80% and interior linemen 55-70%, with the third edge at
-        # 30-45% and the third and fourth tackles at 30-45 and 15-30. Each slot rotates
-        # to the next man at its spot on a draw, with the interior turning over more.
-        dl = list(roster.get('dl', [])); n_dl = spec.get('DL', 4)
-        starters = dl[:n_dl]; depth = dl[n_dl:]
-        def same_spot(a, b):
-            ea = a.get('pos') in ('LEDG', 'REDG'); eb = b.get('pos') in ('LEDG', 'REDG'); return ea == eb
-        fielded, used = [], set()
-        # the starters are asked in a random order, so with one backup at the spot both
-        # starters share the rest rather than the first-listed (the best) man taking it all
-        order = list(range(len(starters))); rng.shuffle(order); fielded = [None] * len(starters)
-        for idx in order:
-            st_ = starters[idx]
-            edge = st_.get('pos') in ('LEDG', 'REDG')
-            p_rot = 0.30 if edge else 0.32
-            subs = [d for d in depth if same_spot(d, st_) and d.get('pid') not in used]
-            if subs and rng.random() < p_rot:
-                # the first backup takes most of the rotation, the second a share
-                pick = subs[0] if (len(subs) == 1 or rng.random() < (0.78 if edge else 0.68)) else subs[1]
-                fielded[idx] = pick; used.add(pick.get('pid'))
-            else:
-                fielded[idx] = st_; used.add(st_.get('pid'))
-        out['dl'] = fielded
-    return out
+        return OR.field(roster, package, rng=rng, state=state) if str(package) in OR.PACKAGES else None
+    import defense_roles as DR
+    return DR.field(roster, package, front_family, rng=rng, state=state)
 
 
 def field_units(roster, state, rng, is_offense, package=None, front_family=None):
@@ -1570,6 +1475,13 @@ def field_units(roster, state, rng, is_offense, package=None, front_family=None)
     injuries. Anyone not selected recovers. This is where rotation actually
     happens - the depth chart is walked until someone is fresh enough.
     """
+    if not is_offense:
+        import defense_roles as DR
+        selected = DR.field(roster, package or 'nickel', front_family, rng=rng, state=state)
+        out = dict(roster); out.update(selected)
+        positions = {DR.pid(row['player']): DR.position(row['player'])
+                     for row in selected['defensive_assignments']}
+        return out, positions
     if is_offense and package:
         import offense_roles as OR
         depth = OR.roster_depth(roster)
