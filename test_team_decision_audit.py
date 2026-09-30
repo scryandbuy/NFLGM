@@ -3,7 +3,6 @@ import copy
 import unittest
 from collections import defaultdict
 
-import numpy as np
 import cutdown
 import roster_needs as RN
 from session import Session
