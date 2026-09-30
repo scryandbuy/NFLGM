@@ -277,6 +277,61 @@ def package_trade_targets(team, assets, baseline=None, cache=None, minimum=UPGRA
     return sorted(ranked, key=lambda a: (-a['package_gain'], -a.get('seen_ovr', 0), a['pid']))
 
 
+def street_alternative(league, team, target, baseline, cache, comps):
+    """A comparable affordable FA must leave a real reason to spend picks.
+
+    Cache only within one roster decision. Test the target AFTER the possible
+    signing, so another hole at the same broad position cannot block a trade.
+    """
+    import roster_needs as RN
+    import market as MK
+    from cap_engine import CAP
+    from offer_reservations import held, raw_room
+    player = target['obj']
+    if player.contract is None:
+        return False
+    pos = player.pos
+    group = frozenset(('CB', 'FS', 'SS')) if pos in ('CB', 'FS', 'SS') else frozenset(
+        p for p in RN.POSITIONS if GRP.get(p,p) == GRP.get(pos,pos))
+    key = tuple(sorted(group))
+    if key not in cache:
+        candidates = [league.player(pid) for pid in league.free_agents[:400]]
+        candidates = [p for p in candidates if p is not None and p.team is None
+                      and not p.retired and p.out_until is None and p.pos in group
+                      and not MK.pending_offer_sheet(league, p.pid)]
+        gains = RN.candidate_gains(team, candidates, baseline=baseline)
+        cache[key] = [(p, gains[p.pid]) for p in sorted(candidates,
+                      key=lambda p: -gains[p.pid])[:6]]
+    cap = CAP.get(league.year, 301.2)
+    for candidate, gain in cache[key]:
+        if candidate.team is not None or candidate.pid not in league.free_agents:
+            continue
+        if gain < target['package_gain'] - UPGRADE_GAP:
+            continue
+        quote_key = ('quote', candidate.pid)
+        if quote_key not in cache:
+            cache[quote_key] = VAL.value_player(league, candidate, side='agent', pool=comps)
+        quote = cache[quote_key]
+        if not quote:
+            continue
+        years = 1 if league.phase in ('regular','playoffs','playoffs_closed') else int(quote['years'])
+        # Extra years or a much dearer FA are not equivalent contract terms.
+        if years != player.contract_years_left or quote['apy'] > player.apy * 1.05:
+            continue
+        if MK.power(league, team, cap, years) < quote['apy'] * 1.05:
+            continue
+        terms = MK.signing_terms(league, candidate, team, quote['apy'], years, cap)
+        room = raw_room(league, team) - held(league, team.abbr, exclude_pid=candidate.pid)
+        if terms['cap_hits'][0] > min(room, target.get('inherit', player.apy)) + .0005:
+            continue
+        report_key = ('report', candidate.pid)
+        if report_key not in cache:
+            cache[report_key] = RN.assess(team, list(baseline['players']) + [candidate])
+        if RN.move_gain(team, player, baseline=cache[report_key]) <= UPGRADE_GAP:
+            return True
+    return False
+
+
 def package_trade_hole(report):
     """The group with the most actual package weakness, for occasional star pursuits."""
     needs = report['package_needs']
@@ -733,7 +788,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             continue
         sn = {b: surplus_and_needs(league, league.teams[b], pool, rng) for b in teams}
         import roster_needs as RN
-        target_reports, target_gains = {}, {}
+        target_reports, target_gains, street_cache = {}, {}, {}
         for a in active:
             ta = league.teams[a]
             sa, _ = sn[a]
@@ -776,6 +831,8 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                         if x['pid'] not in moved:
                             want_a.append(x)
                 want_a = package_trade_targets(ta, want_a, target_reports[a], gain_cache)
+                want_a = [x for x in want_a if not street_alternative(
+                    league, ta, x, target_reports[a], street_cache.setdefault(a, {}), pool)]
                 if not want_a:
                     continue
                 target = want_a[0]
@@ -820,6 +877,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 ta.sync_cap(); tb.sync_cap()
                 for changed in (a,b):
                     target_reports.pop(changed, None); target_gains.pop(changed, None)
+                    street_cache.pop(changed, None)
                 cap_space[a], cap_space[b] = ta.cap_space, tb.cap_space
                 break
 
@@ -865,6 +923,8 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             if hole and rng.random() < chase:
                 candidates.extend(stars_at(league, tu, pool, rng, hole, viewer=ta))
             want = package_trade_targets(ta, candidates, report)
+            alternatives = {}
+            want = [x for x in want if not street_alternative(league, ta, x, report, alternatives, pool)]
             if not want:
                 continue
             target = dict(want[0]); target['need'] = True
