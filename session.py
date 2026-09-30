@@ -349,7 +349,7 @@ class Session:
             if getattr(self, 'played', False):
                 lv = getattr(self.runner, 'live', None) if self.runner is not None else None
                 if lv is not None and not lv['done']:
-                    return dict(title='Game Day', sub=('Halftime: your adjustments' if lv['halftime_open'] else 'Your game is on; finish it to advance'), played=True, live=True)
+                    return dict(title='Game Day', sub=(('Overtime: your adjustments' if lv.get('adjustment_period') == 'overtime' else 'Halftime: your adjustments') if lv['halftime_open'] else 'Your game is on; finish it to advance'), played=True, live=True)
                 return dict(title=(f"Advance to Week {wk + 1}" if wk < WEEKS else 'Advance to the Playoffs'), sub=(f"Week {wk} is in the books"), played=True)
             if self._practice_pending():
                 return dict(title='Run Practice', sub=f'Week {wk} preparation', played=False)
@@ -358,7 +358,7 @@ class Session:
             rnd_i = int(self.stop[1]) if len(self.stop) > 1 else 0
             lv = getattr(self.runner, 'live', None) if self.runner is not None else None
             if lv is not None and not lv['done']:
-                return dict(title='Game Day', sub=('Halftime: your adjustments' if lv['halftime_open'] else 'Your playoff game is on; finish it to advance'), played=True, live=True)
+                return dict(title='Game Day', sub=(('Overtime: your adjustments' if lv.get('adjustment_period') == 'overtime' else 'Halftime: your adjustments') if lv['halftime_open'] else 'Your playoff game is on; finish it to advance'), played=True, live=True)
             if rnd_i >= 4: return dict(title='Close the Season', sub='the champion is crowned', played=True)
             rnd = PS.Postseason.ROUNDS[rnd_i]; name = PS.Postseason.ROUND_NAMES[rnd]
             SHORT = {'WC': 'Wild Card', 'DIV': 'Divisional Round', 'CONF': 'Conference Finals', 'SB': 'Super Bowl'}   # the button has one line; 'Conference Championship' broke the header
@@ -1488,7 +1488,7 @@ class Session:
         m = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
         if m is None: return dict(error='no such message')
         pl = m.get('payload') or {}
-        return dict(id=m['id'], status=m.get('status'), subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'),
+        return dict(id=m['id'], status=m.get('status'), subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'), recap=pl.get('recap'),
                     **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=IB.is_decision(m))
 
     def inbox_hurt_action(self, mid, play=True):
@@ -1546,7 +1546,7 @@ class Session:
     def live_state(self):
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is None: return None
-        return dict(open=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], score=lv['score'], home=lv['home'], away=lv['away'])
+        return dict(open=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], adjustment_period=lv.get('adjustment_period'), score=lv['score'], home=lv['home'], away=lv['away'])
 
     def live_step(self, mode='play'):
         """Move the live game: 'play', 'drive', 'half', 'finish', or 'resume' from halftime. Returns Game Day."""
@@ -1560,15 +1560,14 @@ class Session:
 
     def half_take(self, i, on=True):
         ok = self.runner.half_take(int(i), bool(on)) if self.runner is not None else False
-        return self.gameday_view() if ok else dict(ok=False, why='no halftime recommendation to take')
+        return self.gameday_view() if ok else dict(ok=False, why='no break recommendation to take')
 
     def _finish_live(self):
         """A save or an advance with a game still open plays it out first."""
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is None or lv['done']: return False
-        if lv['halftime_open']: self.runner.live_step('resume')
-        self.runner.live_step('finish')
-        if lv['halftime_open']: self.runner.live_step('resume'); self.runner.live_step('finish')
+        while not lv['done']:
+            self.runner.live_step('resume' if lv['halftime_open'] else 'finish')
         self._capture_gameday(lv['week'])
         return True
 
@@ -1581,7 +1580,7 @@ class Session:
             others = [(h, a, r, b) for (h, a, r, b) in getattr(self.runner, 'last_games', [])]
             gd = GD.capture(self.L, others + [(lv['home'], lv['away'], partial, lv['book'])], self.user_team)
             v = views.gameday(self, self.L, self.user_team, gd=gd)
-            v['live'] = dict(open=True, at=lv['at'], halftime_open=lv['halftime_open'], score={'home': partial['home'], 'away': partial['away']}, recs=[dict(i=r['i'], side=r['side'], text=r['text'], why=r['why'], taken=r['taken']) for r in (lv.get('half_recs') or [])])
+            v['live'] = dict(open=True, at=lv['at'], halftime_open=lv['halftime_open'], adjustment_period=lv.get('adjustment_period'), score={'home': partial['home'], 'away': partial['away']}, recs=[dict(i=r['i'], side=r['side'], text=r['text'], why=r['why'], taken=r['taken']) for r in (lv.get('ot_recs' if lv.get('adjustment_period') == 'overtime' else 'half_recs') or [])])
             return v
         if week is not None:
             gd = (getattr(self, 'gamedays', None) or {}).get(f"{year or self.L.year}-{int(week)}")

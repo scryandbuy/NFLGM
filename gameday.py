@@ -11,6 +11,7 @@ browser replays it play by play; the engine has already decided everything.
                                      losses as "a loss of N yards"
 """
 import numpy as np
+import ticker
 
 
 def _name(league, pid, short=True):
@@ -23,9 +24,7 @@ def _name(league, pid, short=True):
 
 def _spot(yardline, off_abbr, def_abbr):
     """yardline is distance to the goal (100 = own goal line)."""
-    y = int(round(yardline))
-    if y == 50: return '50'
-    return f"{off_abbr} {100 - y}" if y > 50 else f"{def_abbr} {y}"
+    return ticker._spot(yardline, off_abbr, def_abbr)
 
 
 def _clock(sec):
@@ -59,6 +58,7 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
         parts = pp.name.split(); return parts[-2] + ' ' + parts[-1] if parts[-1] in ('Jr.', 'Sr.', 'II', 'III', 'IV') and len(parts) > 1 else parts[-1]
     ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
               td=bool(q.get('touchdown') or q.get('td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')), nullified=bool(q.get('nullified')))
+    ln['scoring_side'] = q.get('scoring_side') or ('defense' if q.get('blocked') and q.get('recovery') == 'receiving' else 'offense')
     return ln
 
 
@@ -101,7 +101,9 @@ def capture(league, played, user):
                 plays.append(write_play(league, dict(type='period', quarter=start_quarter), qb, off_abbr, def_abbr))
             for p in dr.log:
                 if not isinstance(p, dict): continue
-                line = write_play(league, p, qb, off_abbr, def_abbr, rb_pid=rb)
+                play_pos = p.get('possession', pos)
+                play_off, play_def = (home, away) if play_pos == 'home' else (away, home)
+                line = write_play(league, p, qb, play_off, play_def, rb_pid=rb)
                 line['quarter'] = (5 if start_quarter >= 5 else
                                    p.get('quarter') or (min(4, int((3600 - float(p['clock'])) // 900) + 1)
                                                        if p.get('clock') is not None else
@@ -112,13 +114,12 @@ def capture(league, played, user):
             if pts > 0:
                 if pos == 'home': hs += pts
                 else: as_ += pts
-            elif pts < 0:                                   # a safety: two points to the DEFENSE
-                if pos == 'home': as_ += 2
-                else: hs += 2
+            elif pts < 0:
+                if pos == 'home': as_ += abs(pts)
+                else: hs += abs(pts)
             start = float(getattr(dr, 'start', 75)); end = float(getattr(dr, 'yardline', start))
-            res_word = dr.result
-            if res_word == 'End of half' and getattr(dr, 'quarter', 0) >= 4: res_word = 'End of game'
-            drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=round(start - end, 1), first_downs=int(getattr(dr, 'first_downs', 0) or 0),
+            res_word = ticker.drive_result(dr, res.get('overtime', False))
+            drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), start_label=ticker._spot(start, off_abbr, def_abbr), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=round(start - end, 1), first_downs=int(getattr(dr, 'first_downs', 0) or 0),
                                result=res_word, points=pts, quarter=start_quarter, scoring_quarter=scoring_quarter(dr), clock=_clock(getattr(dr, 'clock', 0)),
                                score=f"{hs}–{as_}", plays=plays))
             diff = (hs - as_) if me_home else (as_ - hs)
@@ -206,9 +207,7 @@ def capture(league, played, user):
             how = {'Touchdown': 'after a touchdown', 'Field goal': 'after a field goal', 'Punt': 'after a punt', 'Turnover': 'after a turnover', 'Turnover on downs': 'after a stop on fourth down', 'Missed field goal': 'after a missed field goal'}.get(prev_result, 'to open' if i == 0 else '')
             if i and d['quarter'] >= 5 and drives[i - 1]['quarter'] < 5: how = 'to open overtime'
             elif i and d['quarter'] == 3 and drives[i - 1]['quarter'] <= 2: how = 'to open the second half'
-            spot = d.get('start', 50); side = d['off'] if spot <= 50 else (away if d['off'] == home else home)
-            yard = int(round(spot if spot <= 50 else 100 - spot))
-            d['head'] = f"Drive {d['n']} · {d['off']} · Started at the {side} {yard} {how}".rstrip() + f" · {d['plays_n']} play{'s' if d['plays_n'] != 1 else ''}, {int(round(d['yards']))} yard{'s' if int(round(d['yards'])) != 1 else ''}" + (f", {str(d['result']).lower()}" if d.get('result') else '')
+            d['head'] = f"Drive {d['n']} · {d['off']} · Started at the {d['start_label']} {how}".rstrip() + f" · {d['plays_n']} play{'s' if d['plays_n'] != 1 else ''}, {int(round(d['yards']))} yard{'s' if int(round(d['yards'])) != 1 else ''}" + (f", {str(d['result']).lower()}" if d.get('result') else '')
             prev_result = d.get('result')
         out['game'] = dict(home=home, away=away, hs=res['home'], as_=res['away'], ot=bool(res.get('overtime')), me=user, opp=opp, me_home=me_home,
                            drives=drives, wp=wp, box=box, env=res.get('env', {}), team_stats=team_stats, reads=reads, quarters=quarters)

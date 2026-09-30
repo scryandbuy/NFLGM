@@ -31,7 +31,7 @@ def _clock(secs):
 def _spot(yardline_100, off_abbr, def_abbr):
     """yardline is yards to the end zone. 60 means own 40."""
     y = int(round(yardline_100))
-    if 0 < yardline_100 < 1.0: y = 1                    # inside the 1 is the 1, never the 0
+    if 0 < yardline_100 < 1.0: return f"inside the {def_abbr} 1"
     if y > 50: return f"{off_abbr} {max(1, 100 - y)}"
     if y == 50: return "50"
     return f"{def_abbr} {y}"
@@ -58,6 +58,8 @@ def play_line(league, p, off_abbr, def_abbr):
     if p.get('down') is not None:
         q, ck = _clock(p.get('clock', 0))
         head = f"{_down(p.get('down'), p.get('ydstogo'), p.get('yardline'))} · {_spot(p.get('yardline', 50), off_abbr, def_abbr)} · {ck}"
+    elif p.get('clock') is not None and t == 'kickoff':
+        head = _clock(p['clock'])[1]
     carrier = _nm(league, p.get('carrier')); passer = _nm(league, p.get('passer')); target = _nm(league, p.get('target')); tackler = _nm(league, p.get('tackler'))
     td = bool(p.get('touchdown'))
     kind = 'neutral'; text = ''
@@ -68,8 +70,9 @@ def play_line(league, p, off_abbr, def_abbr):
                'outside_zone': 'off the edge', 'stretch': 'wide on the stretch', 'draw': 'on a draw', 'toss': 'on a toss', 'sweep': 'on a sweep'}.get(p.get('scheme'), 'inside' if p.get('sneak') else '')
         text = f"{who} {'sneaks' if p.get('sneak') else 'runs'}{(' ' + how) if how else ''} for {yd}"
         if td:
-            yl = float(p.get('yardline', 1) or 1); yl_txt = 1 if 0 < yl < 1 else int(round(yl))          # inside the 1 is the 1
-            text = f"{who} runs it in from the {yl_txt}. TOUCHDOWN."; kind = 'score'
+            yl = float(p.get('yardline', 1) or 1)
+            origin = 'inside the 1' if 0 < yl < 1 else f'the {int(round(yl))}'
+            text = f"{who} runs it in from {origin}. TOUCHDOWN."; kind = 'score'
         else:
             kind = cls
             if p.get('broken_tackles'): text += f", breaking {int(p['broken_tackles'])} tackle{'s' if p['broken_tackles'] > 1 else ''}"
@@ -108,14 +111,33 @@ def play_line(league, p, off_abbr, def_abbr):
         else: kind = cls
     elif t == 'interception':
         by = _nm(league, p.get('by') or p.get('pass_def'))
-        text = f"{passer or 'The quarterback'} throws to {target or 'his receiver'}, INTERCEPTED by {by or 'the defense'}" + (f", returned {int(round(p.get('ret', 0)))} yards." if p.get('ret') else '.')
+        touchback = p.get('touchback')
+        if touchback is None and p.get('yardline') is not None and p.get('air') is not None:
+            caught = float(p['yardline']) - float(p['air'])
+            touchback = caught <= 0 and caught + float(p.get('ret', 0) or 0) <= 0
+        text = f"{passer or 'The quarterback'} throws to {target or 'his receiver'}, INTERCEPTED by {by or 'the defense'}" + (", touchback." if touchback else f", returned {int(round(p.get('ret', 0)))} yards." if p.get('ret') else '.')
         kind = 'turnover'
     elif t == 'fumble':
         who = carrier or target or passer or 'The ball carrier'
         text = f"{who} fumbles" + (". Recovered by the defense." if p.get('lost', True) else ". Recovered by the offense.")
         kind = 'turnover' if p.get('lost', True) else 'loss'
     elif t == 'punt':
-        if p.get('blocked'): text = "Punt BLOCKED."; kind = 'turnover'
+        if p.get('blocked'):
+            text = 'Punt BLOCKED.'; kind = 'turnover'
+            if p.get('dead_end_line'):
+                text += ' The ball goes out through the kicking team’s end zone.'
+            elif p.get('recovery'):
+                team = off_abbr if p['recovery'] == 'kicking' else def_abbr
+                name = _nm(league, p.get('recoverer'))
+                spot = _spot(p['recovery_spot'], off_abbr, def_abbr) if 0 < p['recovery_spot'] < 100 else 'the end zone'
+                text += f" Recovered by {name + ' (' + team + ')' if name else team} at {spot}."
+                if p.get('advance') and not p.get('touchdown') and not p.get('safety'):
+                    text += f" Advanced to {_spot(p['end_spot'], off_abbr, def_abbr)}."
+                if p.get('touchdown'):
+                    text += f' TOUCHDOWN, {team}.'; kind = 'score'
+                elif not p.get('safety'):
+                    text += f' {off_abbr} keeps possession with a first down.' if p.get('retained') else f' {def_abbr} takes possession.'
+                    if p.get('retained'): kind = 'special'
         else:
             _ny = p.get('new_yardline')
             _down_spot = _spot(100.0 - float(_ny), off_abbr, def_abbr) if _ny is not None else None
@@ -133,7 +155,7 @@ def play_line(league, p, off_abbr, def_abbr):
         side = 'defense' if not p.get('on_offense') else 'offense'
         import events as E
         yds = abs(float(p.get('yards', 0) or 0)); rule = p.get('rule_yards', E.RULE_YARDS.get(p.get('penalty')))
-        half = rule is not None and yds < rule - 0.01
+        half = p.get('penalty') != 'Defensive Pass Interference' and rule is not None and yds < rule - 0.01
         ydtxt = 'half the distance to the goal' if half else f"{yds:g} yard{'s' if yds != 1 else ''}"
         if p.get('end_zone'): ydtxt = f"in the end zone, ball placed at the {float(p.get('spot', 1)):g}"
         if p.get('safety'): ydtxt = 'in the end zone, SAFETY'
@@ -155,6 +177,8 @@ def play_line(league, p, off_abbr, def_abbr):
             text = f"Onside kick, {'RECOVERED by the kicking team' if p.get('recovered') else 'recovered by ' + off_abbr} at the {spot}."; kind = 'turnover' if p.get('recovered') else 'special'
         else:
             text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {spot}." if who else f", returned to the {spot}.")); kind = 'special'
+        if p.get('ends_period'):
+            text += ' Time expires in ' + ('the first half.' if p.get('quarter') == 2 else 'overtime.' if p.get('quarter', 0) >= 5 else 'regulation.')
     elif t == 'injury':
         who = _nm(league, p.get('pid')) or 'A player'
         wk = int(p.get('weeks') or 0)
@@ -172,6 +196,11 @@ def play_line(league, p, off_abbr, def_abbr):
         if not text: return None
     else:
         return None
+    if t in ('run', 'complete', 'scramble') and not td and not p.get('nullified') and p.get('yardline') is not None:
+        spot, gain = float(p['yardline']), float(p.get('yards', 0) or 0)
+        remaining = spot - round(gain)
+        if gain > 0 and gain < spot and 0 < remaining < 1:
+            text += ' Stopped just short of the goal line.'
     if p.get('nullified'):
         text = (text.rstrip('.') + '. No play; flag on the field.') if text else 'No play; flag on the field.'; kind = 'neutral'
     if p.get('fumble'):
@@ -187,12 +216,22 @@ def _result_word(r):
             'Missed FG': 'missed field goal', 'End of half': 'end of half', 'End of game': 'end of game', 'Turnover on downs': 'turnover on downs', 'Safety': 'safety'}.get(r, str(r).lower() if r else '')
 
 
+def drive_result(dr, overtime=False):
+    """Distinguish the regulation boundary from the actual end of a game."""
+    if dr.result == 'End of half' and getattr(dr, 'quarter', 0) >= 4:
+        return 'End of regulation' if dr.quarter == 4 and overtime else 'End of game'
+    return dr.result
+
+
 def write_game(league, res, home, away):
     """The whole game as drives: header, lines, and the numbers the drive chart needs."""
     out = []
     for i, (pos, dr) in enumerate(res['drives']):
         off = home if pos == 'home' else away; deff = away if pos == 'home' else home
-        lines = [x for x in (play_line(league, p, off, deff) for p in dr.log if isinstance(p, dict)) if x]
+        lines = [x for x in (play_line(league, p,
+                 home if p.get('possession', pos) == 'home' else away,
+                 away if p.get('possession', pos) == 'home' else home)
+                 for p in dr.log if isinstance(p, dict)) if x]
         real = [p for p in dr.log if isinstance(p, dict) and not p.get('nullified') and p.get('type') in ('run', 'complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble', 'kneel', 'spike', 'punt', 'field_goal')]
         yards = sum(float(p.get('yards', 0) or 0) for p in real if p.get('type') in ('run', 'complete', 'sack', 'scramble'))
         q = int(getattr(dr, 'quarter', 1) or 1)
@@ -201,7 +240,8 @@ def write_game(league, res, home, away):
         if real:
             c0 = real[0].get('clock'); c1 = real[-1].get('clock')
             if c0 is not None and c1 is not None: secs = max(0.0, float(c0) - float(c1))
-        header = f"Drive {i + 1} · {off} · Q{q} · Started at the {_spot(start, off, deff)} · {len(real)} play{'s' if len(real) != 1 else ''}, {int(round(yards))} yard{'s' if int(round(yards)) != 1 else ''}" + (f", {int(secs // 60)}:{int(secs % 60):02d}" if secs else '') + (f" · {_result_word(dr.result)}" if dr.result else '')
-        out.append(dict(index=i + 1, team=off, quarter=q, start=round(100 - start, 1), end=round(100 - end, 1), result=dr.result, points=int(getattr(dr, 'points', 0) or 0),
+        result = drive_result(dr, res.get('overtime', False))
+        header = f"Drive {i + 1} · {off} · Q{q} · Started at the {_spot(start, off, deff)} · {len(real)} play{'s' if len(real) != 1 else ''}, {int(round(yards))} yard{'s' if int(round(yards)) != 1 else ''}" + (f", {int(secs // 60)}:{int(secs % 60):02d}" if secs else '') + (f" · {_result_word(result)}" if result else '')
+        out.append(dict(index=i + 1, team=off, quarter=q, start=round(100 - start, 1), end=round(100 - end, 1), result=result, points=int(getattr(dr, 'points', 0) or 0),
                         header=header, lines=lines))
     return out

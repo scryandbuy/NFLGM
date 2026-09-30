@@ -9,7 +9,7 @@ import numpy as np
 SCRIM = ('run', 'scramble', 'complete', 'incomplete', 'drop', 'interception', 'sack')
 
 
-def first_half(drives, me_side):
+def first_half(drives, me_side, legacy=False):
     """Totals for one side from the drive logs so far. me_side is 'home' or 'away'."""
     def fresh(): return dict(runs=0, run_yds=0.0, passes=0, pass_yds=0.0, cmp=0, sacks=0, pressures=0, screens=0, screen_yds=0.0,
                              deep=0, deep_cmp=0, deep_yds=0.0, int=0, fum=0, third=0, third_conv=0, blitz_faced=0, blitz_yds=0.0,
@@ -22,12 +22,14 @@ def first_half(drives, me_side):
             ty = p.get('type')
             if ty not in SCRIM or p.get('nullified'): continue
             y = float(p.get('yards', 0.0) or 0.0); t['snaps'] += 1
-            if ty in ('run', 'scramble'): t['runs'] += 1; t['run_yds'] += y
+            if (ty in ('run', 'scramble') if legacy else ty == 'run' and not p.get('is_pass')):
+                t['runs'] += 1; t['run_yds'] += y
             else:
                 t['passes'] += 1
-                if ty == 'complete': t['cmp'] += 1; t['pass_yds'] += y
-                if ty == 'sack': t['sacks'] += 1; t['pass_yds'] += y
-                if p.get('pressured'): t['pressures'] += 1
+                if not legacy or ty in ('complete', 'sack'): t['pass_yds'] += y
+                if ty == 'complete': t['cmp'] += 1
+                if ty == 'sack': t['sacks'] += 1
+                if p.get('pressured') and (legacy or ty != 'sack'): t['pressures'] += 1
                 if p.get('screen'): t['screens'] += 1; t['screen_yds'] += y
                 if (p.get('depth') or '') == 'deep' or float(p.get('air', 0) or 0) >= 20:
                     t['deep'] += 1
@@ -43,9 +45,9 @@ def first_half(drives, me_side):
     return me, them
 
 
-def recommendations(league, me_abbr, opp_abbr, drives, me_side, score, plan, base):
+def recommendations(league, me_abbr, opp_abbr, drives, me_side, score, plan, base, period='halftime', legacy=False):
     """What the assistants would change at the break. Returns a list of dict(side, text, why, changes)."""
-    me, them = first_half(drives, me_side)
+    me, them = first_half(drives, me_side, legacy=legacy)
     out = []
     def sug(side, text, why, changes): out.append(dict(side=side, text=text, why=why, changes=changes))
     ypc = me['run_yds'] / me['runs'] if me['runs'] >= 6 else None
@@ -92,4 +94,7 @@ def recommendations(league, me_abbr, opp_abbr, drives, me_side, score, plan, bas
         sug('offence', 'We are down two scores: pick up the tempo, throw to move', f"down {-tx} at the half", {'tempo': +0.2, 'pass_bias': +0.05})
     if tx >= 14 and (ypc is None or ypc >= 3.5):
         sug('offence', 'Up two scores: shorten the game, run it', f"up {tx} at the half", {'tempo': -0.2, 'pass_bias': -0.05, 'heavy_lean': +0.3})
+    if period == 'overtime':
+        for suggestion in out:
+            suggestion['why'] = suggestion['why'].replace('in the half', 'in regulation').replace('at the half', 'after regulation')
     return out[:6]

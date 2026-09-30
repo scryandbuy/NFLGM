@@ -417,9 +417,11 @@ class SeasonRunner(StandingsView):
         if replay_start is not None:
             self.rng.bit_generator.state = copy.deepcopy(replay_start['rng'])
             for side in (home, away):
-                self._restore_state(self.states[side], replay_start['states'][side])
+                # Replayed states mutate during play; keep the kickoff snapshot frozen
+                # so another save/reload (including the OT break) can replay it again.
+                self._restore_state(self.states[side], copy.deepcopy(replay_start['states'][side]))
             hr, ar = self.states[home].roster, self.states[away].roster
-            start = replay_start
+            start = copy.deepcopy(replay_start)
         else:
             self.prepare_practice(week, (home, away))
             hr, ar = self.refresh(home), self.refresh(away)
@@ -440,14 +442,14 @@ class SeasonRunner(StandingsView):
                     if me == user: GW.user_plan(self.L, st, week)
                     else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
                 except Exception: pass
-            start = dict(rng=copy.deepcopy(self.rng.bit_generator.state),
+            start = dict(adjustment_version=2, rng=copy.deepcopy(self.rng.bit_generator.state),
                          states={side: self._state_data(self.states[side], include_roster=True)
                                   for side in (home, away)})
             import game_recap as GR
             if user in (home, away): start['pregame_review'] = GR.capture(self.L, self.states[user], week)
         book = G.StatBook(); self._book = book
         gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book, playoffs=playoffs, venue=self._venue(week, playoffs))
-        self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False, playoffs=playoffs, on_close=on_close, start=start, actions=[])
+        self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False, adjustment_period=None, playoffs=playoffs, on_close=on_close, start=start, actions=[])
         return self.live
 
     def replay_live(self, actions, saved_rng):
@@ -473,7 +475,7 @@ class SeasonRunner(StandingsView):
 
     def live_step(self, mode='play'):
         """Advance the live game: 'play' one snap, 'drive' to the end of the possession, 'half' to halftime or the
-        end, 'finish' to the end. Halftime is a stop the GM must release (mode 'resume')."""
+        end, 'finish' to the next break/end. Both halftime and overtime require 'resume'."""
         lv = getattr(self, 'live', None)
         if lv is None or lv['done']: return lv
         if lv['halftime_open'] and mode != 'resume': return lv
@@ -493,11 +495,12 @@ class SeasonRunner(StandingsView):
                     _k, pos, dr, score = ev; lv['drives'].append((pos, dr)); lv['current'] = None; lv['score'] = dict(score); lv['at'] = 'drive'; lv['pos'] = 'away' if pos == 'home' else 'home'
                     if mode == 'drive': break          # in play mode the end of a drive rides with its last play; the next click is the next snap
                 elif kind == 'halftime':
-                    lv['score'] = dict(ev[1]); lv['halftime_open'] = True; lv['at'] = 'halftime'; lv['pos'] = 'home'
+                    lv['score'] = dict(ev[1]); lv['halftime_open'] = True; lv['at'] = 'halftime'; lv['adjustment_period'] = 'halftime'; lv['pos'] = 'home'
                     self._halftime_read(lv); break
                 elif kind == 'overtime':
-                    lv['score'] = dict(ev[1]); lv['at'] = 'overtime'
-                    if mode in ('play', 'drive', 'half'): break
+                    lv['score'] = dict(ev[1]); lv['at'] = 'overtime'; lv['halftime_open'] = True
+                    lv['adjustment_period'] = 'overtime'
+                    self._halftime_read(lv); break
         except StopIteration as done:
             lv['res'] = done.value; lv['done'] = True; lv['current'] = None; lv['score'] = {'home': lv['res']['home'], 'away': lv['res']['away']}; lv['at'] = 'final'
             self._close_live()
@@ -507,30 +510,40 @@ class SeasonRunner(StandingsView):
         return lv
 
     def _halftime_read(self, lv):
-        """The assistants' halftime recommendations for the user's club, from the half as played."""
+        """Read the completed half or regulation for the active adjustment window."""
         import halftime as HT
         user = getattr(self.L, 'user_team', None)
         me_side = 'home' if lv['home'] == user else 'away'
         opp = lv['away'] if me_side == 'home' else lv['home']
         st = self.states.get(user)
-        if st is None or st.plan is None: lv['half_recs'] = []; return
-        try: recs = HT.recommendations(self.L, user, opp, lv['drives'], me_side, lv['score'], st.plan, st.base_plan)
+        period = lv.get('adjustment_period') or 'halftime'
+        rec_key = 'ot_recs' if period == 'overtime' else 'half_recs'
+        if st is None or st.plan is None: lv[rec_key] = []; return
+        lv['adjustment_base'] = st.plan.copy()
+        try: recs = HT.recommendations(self.L, user, opp, lv['drives'], me_side, lv['score'], st.plan, st.base_plan, period=period, legacy=lv['start'].get('adjustment_version', 1) < 2)
         except Exception as e:
             import sys; print('halftime read failed:', e, file=sys.stderr); recs = []
         for i, r in enumerate(recs): r['i'] = i; r['taken'] = False
-        lv['half_recs'] = recs
+        lv[rec_key] = recs
 
     def half_take(self, i, on=True):
-        """Accept (or withdraw) one halftime recommendation; the plan the second half reads changes now."""
+        """Accept/withdraw a choice at the current break; preserve the plan entering that break."""
         import gameplan_week as GW
         lv = getattr(self, 'live', None)
         if lv is None or not lv['halftime_open']: return False
-        recs = lv.get('half_recs') or []
+        recs = lv.get('ot_recs' if lv.get('adjustment_period') == 'overtime' else 'half_recs') or []
         if i < 0 or i >= len(recs): return False
         r = recs[i]; user = getattr(self.L, 'user_team', None); st = self.states.get(user)
         if r['taken'] == bool(on) or st is None: return True
-        ch = r['changes'] if on else {k: (tuple(-x for x in v) if isinstance(v, (tuple, list)) else (-v if isinstance(v, (int, float)) else st.base_plan.__dict__.get(k, v))) for k, v in r['changes'].items()}
-        GW.apply_changes(st.plan, st.base_plan, ch); r['taken'] = bool(on)
+        if lv['start'].get('adjustment_version', 1) < 2:
+            # Preserve the action semantics of saves created before reversible break choices.
+            ch = r['changes'] if on else {k: (tuple(-x for x in v) if isinstance(v, (tuple, list)) else (-v if isinstance(v, (int, float)) else st.base_plan.__dict__.get(k, v))) for k, v in r['changes'].items()}
+            GW.apply_changes(st.plan, st.base_plan, ch); r['taken'] = bool(on)
+        else:
+            r['taken'] = bool(on)
+            st.plan = lv['adjustment_base'].copy()
+            for accepted in recs:
+                if accepted['taken']: GW.apply_changes(st.plan, st.base_plan, accepted['changes'])
         lv['half_taken'] = [x['text'] for x in recs if x['taken']]
         if not getattr(self, '_replaying_live', False): lv['actions'].append(('half_take', i, bool(on)))
         return True
@@ -539,7 +552,8 @@ class SeasonRunner(StandingsView):
         """The live game is over: recorded exactly as a simmed game, and the week's after-game steps run."""
         lv = self.live; res = lv['res']; home, away, week = lv['home'], lv['away'], lv['week']
         res['coaching_review'] = dict(pregame=copy.deepcopy(lv['start'].get('pregame_review')),
-            halftime=[copy.deepcopy(r) for r in lv.get('half_recs', []) if r.get('taken')])
+            halftime=[copy.deepcopy(r) for r in lv.get('half_recs', []) if r.get('taken')],
+            overtime=[copy.deepcopy(r) for r in lv.get('ot_recs', []) if r.get('taken')])
         if lv.get('playoffs'):
             # a playoff game: the stats book, but no standings; the bracket takes the result
             self._record(home, away, week, res, lv['book'], True)
@@ -564,8 +578,8 @@ class SeasonRunner(StandingsView):
             # the points of a drive that has scored show with the scoring play, before the drive's own event lands
             pts = int(getattr(lv['current'], 'points', 0) or 0)
             if pts > 0: score[lv['pos']] += pts
-            elif pts < 0: score['away' if lv['pos'] == 'home' else 'home'] += 2
-        return dict(home=score['home'], away=score['away'], drives=drives, overtime=(lv['at'] == 'overtime' or (lv['res'] or {}).get('overtime')), env=(lv['res'] or {}).get('env'), live=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], half_recs=lv.get('half_recs') or [])
+            elif pts < 0: score['away' if lv['pos'] == 'home' else 'home'] += abs(pts)
+        return dict(home=score['home'], away=score['away'], drives=drives, overtime=(lv['at'] == 'overtime' or (lv['res'] or {}).get('overtime')), env=(lv['res'] or {}).get('env'), live=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], half_recs=lv.get('ot_recs' if lv.get('adjustment_period') == 'overtime' else 'half_recs') or [], adjustment_period=lv.get('adjustment_period'))
 
     def _record(self, home, away, week, res, book, playoffs=False):
         import gameplan_week as GW

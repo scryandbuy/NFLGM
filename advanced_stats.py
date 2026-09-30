@@ -83,8 +83,12 @@ def book_play(book, out, off, deff, epa_val):
 
 def book_special(book, dr, last, offense):
     """The punt or the kick: from the fourth-down state to what it produced."""
-    before = ep(4, dr.togo, dr.yardline)
-    if dr.result == 'Field goal':
+    before = ep(4, last.get('ydstogo', dr.togo), last.get('yardline', dr.yardline))
+    if last.get('blocked'):
+        pid = (offense.get('p') or {}).get('pid')
+        value = dr.points if dr.points else ep(1, dr.togo, dr.yardline) if last.get('retained') else -ep(1, 10, last['new_yardline'])
+        v = value - before
+    elif dr.result == 'Field goal':
         v = 3.0 - before; pid = (offense.get('k') or {}).get('pid')
     elif dr.result == 'Missed field goal':
         v = -ep(1, 10, 100.0 - max(20.0, dr.yardline + 7.0)) - before; pid = (offense.get('k') or {}).get('pid')

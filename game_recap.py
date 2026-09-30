@@ -14,6 +14,10 @@ def capture(league, state, week):
     changes = {k: copy.deepcopy(v) for k, v in wp.get('changes', {}).items()
                if hasattr(state.plan, k)}
     return dict(changes=changes, taken=list(wp.get('taken', [])),
+                recommendations=[dict(text=text,
+                                      changes=copy.deepcopy({k:v for k,v in ch.items() if k not in wp.get('manual', {})}),
+                                      overridden=[k for k in ch if k in wp.get('manual', {})])
+                                 for text, ch in wp.get('suggestions', {}).items()],
                 installed={k: copy.deepcopy(getattr(state.plan, k)) for k in changes})
 
 
@@ -27,8 +31,10 @@ def plays(res, side, half=None):
             if p.get('type') == 'period': q = p.get('quarter', q)
             if p.get('type') not in SCRIMMAGE or p.get('nullified'): continue
             # Play clock is seconds remaining in regulation; overtime is separate.
-            period = 3 if q > 4 else (1 if p.get('clock', 1801 if q <= 2 else 1800) > 1800 else 2)
-            if half is None or half == period: out.append(p)
+            pq = p.get('quarter', q)
+            period = 3 if pq > 4 else (1 if p.get('clock', 1801 if pq <= 2 else 1800) > 1800 else 2)
+            if half is None or half == period or (half == 'after_break' and period in (2, 3)):
+                out.append(p)
     return out
 
 
@@ -56,6 +62,7 @@ def evidence(rows, kind):
     if kind == 'third': return f"{s['converted']}/{s['third']} third downs converted"
     predicates = {'screens': lambda p:p.get('screen'), 'deep':lambda p:p.get('depth')=='deep' or float(p.get('air',0) or 0)>=20,
                   'blitz':lambda p:p.get('blitz'), 'shell':lambda p:p.get('shell') in TWO_HIGH,
+                  'single shell':lambda p:p.get('shell') and p.get('shell') not in TWO_HIGH,
                   'coverage':lambda p:p.get('in_man'), 'motion':lambda p:p.get('motion'),
                   'play action':lambda p:p.get('play_action'),
                   'matchup':lambda p:p.get('travelled') or p.get('bracketed')}
@@ -115,61 +122,159 @@ def strengths(me, them):
             pct=s['converted']/s['third']; line=f"{'They' if defense else 'We'} converted {s['converted']}/{s['third']} third downs."
             (good if (pct<=.25 if defense else pct>=.5) else bad if (pct>=.5 if defense else pct<=.25) else []).append(line)
         if s['turnovers']:
-            (good if defense else bad).append(f"{'We took the ball away' if defense else 'We gave the ball away'} {s['turnovers']} time(s).")
+            (good if defense else bad).append(f"{'We took the ball away' if defense else 'We gave the ball away'} {s['turnovers']} time{'s' if s['turnovers'] != 1 else ''}.")
     return good[:3],bad[:3]
 
 
+def assessment(rows, kind, defense=False):
+    """A football outcome judgment, never an estimate of an adjustment's causal effect."""
+    predicates = {
+        'deep': lambda p: p.get('depth') == 'deep' or float(p.get('air', 0) or 0) >= 20,
+        'screens': lambda p: p.get('screen'), 'play action': lambda p: p.get('play_action'),
+        'motion': lambda p: p.get('motion'), 'blitz': lambda p: p.get('blitz'),
+        'shell': lambda p: p.get('shell') in TWO_HIGH,
+        'single shell': lambda p: p.get('shell') and p.get('shell') not in TWO_HIGH,
+        'matchup': lambda p: p.get('travelled') or p.get('bracketed')}
+    picked = [p for p in rows if predicates[kind](p)] if kind in predicates else rows
+    s = stats(picked)
+    n, total, low, high, unit = s['snaps'], s['yards'], 4.5, 6.0, 'yards per play'
+    if kind == 'run': n, total, low, high, unit = s['runs'], s['run_yards'], 3.5, 4.5, 'yards per designed run'
+    elif kind == 'passing': n, total, low, high, unit = s['passes'], s['pass_yards'], 5.0, 7.0, 'net yards per dropback'
+    elif kind == 'deep': low, high = 6.0, 9.0
+    elif kind == 'protection':
+        n, total, low, high, unit = s['passes'], s['pressure'] * 100, 20., 35., '% of dropbacks under pressure or sacked'
+    minimum = 8 if kind in ('passing', 'protection', 'mix') else 5
+    if not n: return 'ungraded', 'No relevant plays were logged, so this choice has no on-field result to assess.'
+    value = total / n
+    detail = f"{value:.1f} {unit} across {n} plays"
+    if kind == 'protection': detail += f"; {s['sacks']} sack{'s' if s['sacks'] != 1 else ''}"
+    if n < minimum: return 'limited', f"Too little evidence for a firm verdict: {detail}."
+    lower_better = defense or kind == 'protection'
+    good = value <= low if lower_better else value >= high
+    bad = value >= high if lower_better else value <= low
+    # A productive average must not hide giveaways on the selected calls.
+    if not defense and s['turnovers']:
+        detail += f"; {s['turnovers']} turnover" + ('s' if s['turnovers'] != 1 else '')
+        if good: return 'mixed', f"Mixed results: productive yardage came with lost possessions ({detail})."
+    if good:
+        return 'positive', (f"Held up well: the opponent was limited to {detail}." if defense else f"Paid off on the field: {detail}.")
+    if bad:
+        return 'negative', (f"Did not hold up: the opponent produced {detail}." if defense else f"Struggled on the field: {detail}.")
+    return 'mixed', f"Mixed results: {detail}, without a clear statistical edge."
+
+
+def assess_choice(changes, own, against, before=None):
+    findings = []
+    for label, side, metric in groups(changes):
+        if metric == 'mix' and 'pass_bias' in changes:
+            metric = 'run' if changes['pass_bias'] < 0 else 'passing'
+        if metric == 'deep' and changes.get('depth_mix', (0, 0, 0))[2] <= 0:
+            metric = 'passing'
+        if metric == 'shell' and changes.get('shell_lean', 0) < 0: metric = 'single shell'
+        if metric == 'blitz' and changes.get('blitz_lean', 0) < 0: metric = 'passing'
+        if metric in ('screens', 'play action', 'motion'):
+            key = {'screens':'screen_boost', 'play action':'play_action_rate', 'motion':'motion_rate'}[metric]
+            if changes.get(key, 0) < 0: metric = 'passing' if metric != 'motion' else 'mix'
+        rows = own if side == 'off' else against
+        verdict, line = assessment(rows, metric, side == 'def')
+        if before is not None:
+            previous = before[0 if side == 'off' else 1]
+            earlier, _ = assessment(previous, metric, side == 'def')
+            comparison = {('positive', 'negative'): 'The favorable early results did not carry over.',
+                          ('negative', 'positive'): 'Results improved from the earlier struggles.',
+                          ('positive', 'positive'): 'The early success continued after the break.',
+                          ('negative', 'negative'): 'The earlier problem persisted.'}.get((earlier, verdict))
+            if comparison: line += ' ' + comparison
+            line += ' Before the adjustment: ' + evidence(previous, metric) + '.'
+        findings.append(dict(label=label, verdict=verdict, text=line))
+    return findings
+
+
+def conclusion(findings):
+    grades = {x['verdict'] for x in findings}
+    if not grades or grades <= {'limited', 'ungraded'}:
+        return 'Not enough relevant plays for a firm verdict on these choices.'
+    if 'negative' in grades and ('positive' in grades or 'mixed' in grades):
+        return 'A mixed return: some parts of the plan held up, while others struggled.'
+    if 'negative' in grades: return 'The evaluated parts of the plan struggled; the intended payoff did not show up in those results.'
+    if 'positive' in grades and 'mixed' not in grades:
+        return 'The evaluated parts of the plan delivered favorable results.'
+    return 'The results were mixed, with no consistent advantage across the evaluated choices.'
+
+
+def review_choices(pre, own, against, before=None):
+    findings = []
+    for rec in pre:
+        items = assess_choice(rec.get('changes', {}), own, against, before)
+        summary = conclusion(items)
+        if rec.get('overridden'):
+            summary = (summary + ' ' if items else '') + 'Your manual settings replaced ' + ', '.join(k.replace('_', ' ') for k in rec['overridden']) + '; those choices are reviewed under Your saved plan.'
+        findings.append(dict(title=rec['text'], conclusion=summary, findings=items))
+    return findings
+
+
 def post(league, home, away, week, res, playoffs=False):
-    user=getattr(league,'user_team',None)
-    if user not in (home,away): return None
-    side='home' if user==home else 'away'; other='away' if side=='home' else 'home'
-    opp=away if side=='home' else home
-    key=f'game-recap-{league.year}-{week}-{home}-{away}-{int(playoffs)}'
-    if IE.seen(league,key): return None
-    own=plays(res,side); against=plays(res,other)
-    me,them=stats(own),stats(against); good,bad=strengths(me,them)
-    ours,theirs=int(res[side]),int(res[other]); outcome='Win' if ours>theirs else 'Loss' if ours<theirs else 'Tie'
-    sections=[f"{outcome}, {ours}–{theirs} against {opp}. We gained {me['yards']:.0f} scrimmage yards and allowed {them['yards']:.0f}; turnovers {me['turnovers']} committed, {them['turnovers']} forced.",
-              'WHAT WENT WELL\n'+('\n'.join(good) or 'No clear statistical strength stood out in the recorded scrimmage plays.'),
-              'WHAT NEEDS WORK\n'+('\n'.join(bad) or 'No clear statistical weakness stood out in the recorded scrimmage plays.')]
-    kicks=[p for pos,d in res.get('drives',[]) if pos==side for p in getattr(d,'log',[])
-           if p.get('type')=='field_goal' and not p.get('nullified')]
-    if kicks: sections.append(f"SPECIAL TEAMS\nWe made {sum(bool(p.get('made')) for p in kicks)}/{len(kicks)} field goals.")
-    context=res.get('coaching_review') or {}
-    pre=context.get('pregame')
-    lines=[]
-    if pre is None: lines=['The kickoff plan was not recorded for this game.']
-    elif not pre.get('changes'): lines=['You kept the base weekly plan; no pregame overrides were applied.']
+    user = getattr(league, 'user_team', None)
+    if user not in (home, away): return None
+    side = 'home' if user == home else 'away'; other = 'away' if side == 'home' else 'home'
+    opp = away if side == 'home' else home
+    key = f'game-recap-{league.year}-{week}-{home}-{away}-{int(playoffs)}'
+    if IE.seen(league, key): return None
+    own, against = plays(res, side), plays(res, other)
+    me, them = stats(own), stats(against); good, bad = strengths(me, them)
+    ours, theirs = int(res[side]), int(res[other])
+    outcome = 'Win' if ours > theirs else 'Loss' if ours < theirs else 'Tie'
+    ot_own, ot_against = plays(res, side, 3), plays(res, other, 3)
+    has_ot = bool(res.get('overtime') or ot_own or ot_against)
+    intro = (f"{outcome}, {ours}–{theirs} against {opp}{' in overtime' if has_ot else ''}. "
+             f"We gained {me['yards']:.0f} scrimmage yards and allowed {them['yards']:.0f}; "
+             f"turnovers {me['turnovers']} committed, {them['turnovers']} forced.")
+    sections = []
+    def add(title, lines=None, reviews=None):
+        sections.append(dict(title=title, lines=lines or [], reviews=reviews or []))
+    add('What went well', good or ['No clear statistical strength stood out in the recorded scrimmage plays.'])
+    add('What needs work', bad or ['No clear statistical weakness stood out in the recorded scrimmage plays.'])
+    kicks = [p for pos, d in res.get('drives', []) if pos == side for p in getattr(d, 'log', [])
+             if p.get('type') == 'field_goal' and not p.get('nullified')]
+    if kicks: add('Special teams', [f"We made {sum(bool(p.get('made')) for p in kicks)}/{len(kicks)} field goals."])
+    context = res.get('coaching_review') or {}; pre = context.get('pregame')
+    if pre is None: add('Pregame plan', ['The kickoff plan was not recorded for this game.'])
+    elif not pre.get('changes'): add('Pregame plan', ['You kept the base weekly plan; no pregame overrides were applied.'])
     else:
-        if pre.get('taken'): lines.append('Accepted advice: '+'; '.join(pre['taken'])+'.')
-        if choices(pre['changes']): lines.append('Your plan: '+choices(pre['changes'])+'.')
-        for label,s,metric in groups(pre['changes']):
-            lines.append(f"{label} ({'our offense' if s=='off' else 'opponent offense'}): {evidence(own if s=='off' else against,metric)}.")
-    sections.append('PREGAME PLAN\n'+'\n'.join(lines))
-    taken=context.get('halftime',[]); lines=[]
-    if not taken: lines=['No halftime recommendations were accepted.']
+        recs = list(pre.get('recommendations') or [])
+        covered = {k for r in recs for k in r.get('changes', {})}
+        remaining = {k:v for k,v in pre['changes'].items() if k not in covered}
+        if remaining: recs.append(dict(text='Your saved plan', changes=remaining))
+        reviews = review_choices(recs, own, against)
+        lines = ['Your plan: ' + choices(pre['changes']) + '.',
+                 'Game-wide results' + (' including overtime.' if has_ot else '.')]
+        if pre.get('taken') and not pre.get('recommendations'):
+            lines.insert(0, 'Accepted advice: ' + '; '.join(pre['taken']) + '.')
+        add('Pregame plan', lines, reviews)
+    taken = context.get('halftime', [])
+    if not taken: add('Halftime adjustments', ['No halftime recommendations were accepted.'])
     else:
-        lines.append('Accepted at the break: '+'; '.join(r['text'] for r in taken)+'.')
-        changes={k:v for r in taken for k,v in r.get('changes',{}).items()}
-        for label,s,metric in groups(changes):
-            target=side if s=='off' else other
-            before,after=plays(res,target,1),plays(res,target,2)
-            if not before or not after: lines.append(f'{label}: not enough logged plays in both halves to compare.')
-            else: lines.append(f"{label}: first half {evidence(before,metric)}; second half {evidence(after,metric)}.")
-        for target,label in ((side,'Our offensive'),(other,'Their offensive')):
-            first,second=stats(plays(res,target,1)),stats(plays(res,target,2))
-            if min(first['snaps'],second['snaps'])>=8:
-                delta=second['yards']/second['snaps']-first['yards']/first['snaps']
-                trend='improved' if delta>.5 else 'fell' if delta<-.5 else 'was broadly unchanged'
-                lines.append(f"{label} efficiency {trend} after the break ({rate(first['yards'],first['snaps'])} to {rate(second['yards'],second['snaps'])} yards per play).")
-        lines.append('Half comparisons exclude overtime. These are observed results, not proof of cause; opponent adjustments and game situation also mattered.')
-    sections.append('HALFTIME ADJUSTMENTS\n'+'\n'.join(lines))
-    if pre and pre.get('changes') and not taken:
-        sections.append('Plan results describe what happened with those choices; they do not isolate their effect from execution or the opponent.')
-    coach=(getattr(league.teams[user],'staff',None) or {}).get('oc')
-    name=getattr(coach,'name',None)
-    msg=IE.post(league,key,'result',f"Assistant review: {user} {ours}–{theirs} {opp}", '\n\n'.join(sections),
-                sender=f'{name} · Offensive coordinator' if name else 'Assistant coaches',
-                payload=dict(link=f'gameday:{week}',game_key=key,coaching_review=context))
-    if msg: msg['week']=week
+        after = (plays(res, side, 'after_break'), plays(res, other, 'after_break'))
+        before = (plays(res, side, 1), plays(res, other, 1))
+        add('Halftime adjustments', ['Results after halftime' + (' include overtime.' if has_ot else '.')],
+            review_choices(taken, *after, before=before))
+    if has_ot:
+        lines = [f"Overtime offense: {evidence(ot_own, 'mix')}. Opponent offense: {evidence(ot_against, 'mix')}."]
+        taken = context.get('overtime', [])
+        if not taken: lines.append('No overtime recommendations were accepted; the existing plan carried forward.')
+        add('Overtime adjustments', lines, review_choices(taken, ot_own, ot_against))
+    # Keep plain text for previews, exports and old clients; the inbox renders the same structured report.
+    body = [intro]
+    for section in sections:
+        lines = [section['title'].upper()] + section['lines']
+        for review in section['reviews']:
+            lines.extend([review['title'] + ' — ' + review['conclusion']])
+            lines.extend(x['label'] + ': ' + x['text'] for x in review['findings'])
+        body.append('\n'.join(lines))
+    coach = (getattr(league.teams[user], 'staff', None) or {}).get('oc'); name = getattr(coach, 'name', None)
+    msg = IE.post(league, key, 'result', f"Assistant review: {user} {ours}–{theirs} {opp}", '\n\n'.join(body),
+                  sender=f'{name} · Offensive coordinator' if name else 'Assistant coaches',
+                  payload=dict(link=f'gameday:{week}', game_key=key, coaching_review=context,
+                               recap=dict(intro=intro, sections=sections)))
+    if msg: msg['week'] = week
     return msg

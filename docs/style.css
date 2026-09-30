@@ -2859,3 +2859,18 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 
 /* Weekly preparation shares the team palette and theme typography. */
 .practice-surface{padding:0;overflow:hidden}.practice-management{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:22px 26px;border-bottom:1px solid #ffffff16}.practice-management label{font-weight:650}.practice-page input[type=checkbox]{accent-color:var(--team-accent);width:16px;height:16px;vertical-align:middle}.practice-units{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;padding:24px 26px}.practice-units h3,.practice-report h3{color:var(--team-readable);font:700 13px var(--text);text-transform:uppercase;letter-spacing:.06em;margin:0 0 18px}.practice-units label{display:grid;grid-template-columns:65px minmax(0,1fr);align-items:center;gap:10px;margin:12px 0;color:var(--ink-3);font:500 13px var(--text)}.practice-page select{width:100%;padding:9px;background:#101b20;border:1px solid #ffffff26;border-radius:5px;color:var(--ink);font:500 13px var(--text)}.practice-note{padding:0 26px;color:var(--ink-3);font:400 13px/1.6 var(--text)}.practice-detail{margin:24px 26px;border-block:1px solid #ffffff16}.practice-detail summary{padding:18px 0;cursor:pointer;color:var(--team-readable);font-weight:650}.practice-table-wrap{overflow-x:auto}.practice-players{width:100%;font:400 13px var(--text)}.practice-players th{text-align:left;white-space:nowrap}.practice-players td{padding:10px 8px}.practice-players small{display:block;color:var(--ink-3)}.practice-report{padding:24px 26px;border-top:1px solid #ffffff16}.practice-report p{font:400 14px/1.6 var(--text)}.practice-metrics{display:flex;flex-wrap:wrap;gap:26px}.practice-metrics strong{display:block;font-size:22px}.practice-metrics span{color:var(--ink-3);font-size:12px}.practice-actions{padding:20px 26px;display:flex;gap:10px;flex-wrap:wrap}@media(max-width:900px){.practice-units{grid-template-columns:1fr}.practice-management{flex-direction:column}}
+
+/* Assistant game review: inherited team palette and existing theme typography. */
+.inbox-board .pane .coaching-recap{white-space:normal;line-height:1.65;max-width:960px}
+.coaching-recap .recap-intro{font-size:17px;color:var(--ink);padding-bottom:22px;border-bottom:1px solid var(--rule)}
+.coaching-recap .recap-section{margin:28px 0}
+.coaching-recap .recap-section h4{margin:0 0 16px;padding:10px 14px;border-left:3px solid var(--team-accent,var(--club-2));border-radius:0 6px 6px 0;background:linear-gradient(90deg,color-mix(in srgb,var(--team-accent,var(--club-2)) 12%,transparent),transparent);color:var(--team-readable,var(--club-2));font:800 17px var(--display);letter-spacing:.065em;text-transform:uppercase}
+.coaching-recap .recap-section>p{margin:8px 0;color:var(--ink-2)}
+.coaching-recap .recap-choice{padding:16px 0;border-bottom:1px solid var(--rule)}
+.coaching-recap .recap-choice h5{font:700 16px var(--display);margin:0 0 5px;color:var(--ink)}
+.coaching-recap .recap-conclusion{margin:0 0 12px;color:var(--ink-2)}
+.coaching-recap .recap-finding{margin:9px 0;padding-left:13px;border-left:2px solid var(--rule)}
+.coaching-recap .recap-finding.positive{border-color:var(--ok)}
+.coaching-recap .recap-finding.negative{border-color:var(--danger)}
+.coaching-recap .recap-finding.mixed{border-color:var(--team-accent,var(--club-2))}
+.coaching-recap .recap-finding b{font-weight:700;color:var(--ink)}

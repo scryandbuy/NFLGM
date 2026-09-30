@@ -333,6 +333,14 @@ def _morale_line(p):
     return 'Steady since camp'
 
 
+def _regression_overalls(record):
+    """The report and history show only a drop in the displayed whole OVR."""
+    if record.get('before') is None or record.get('after') is None:
+        return None
+    before, after = int(round(record['before'])), int(round(record['after']))
+    return (before, after) if after < before else None
+
+
 def _player_history(league, p):
     """Dated moves, XP purchases, regression, and awards for this player."""
     import views_league as VL
@@ -347,7 +355,11 @@ def _player_history(league, p):
             # Older saves only logged total OVR loss. Use a saved report when
             # available, never reconstruct historical ratings from today's card.
             report = (getattr(league, 'regression', None) or {}).get(str(year), {}).get(p.pid, {})
-            before, after = x.get('before', report.get('before')), x.get('after', report.get('after'))
+            # The saved report is the Regression tab's source of truth. CPU
+            # players also carry the same before/after snapshots on their event.
+            before, after = report.get('before', x.get('before')), report.get('after', x.get('after'))
+            if _regression_overalls(dict(before=before, after=after)) is None:
+                continue
             line = f"Regression: -{float(x.get('lost', 0)):g} OVR"
             if before is not None and after is not None:
                 line += f" ({float(before):g} → {float(after):g})"
@@ -820,8 +832,9 @@ def regression(session, league, abbr, year=None):
     rows = []
     for pid, v in rec.items():
         p = league.player(pid)
-        before, after = int(round(v['before'])), int(round(v['after']))
-        if after >= before: continue                                  # the page is about what age took
+        overalls = _regression_overalls(v)
+        if overalls is None: continue
+        before, after = overalls
         delta = {}
         for k, (b_, a_) in (v.get('attrs') or {}).items():
             d = int(round(a_)) - int(round(b_))

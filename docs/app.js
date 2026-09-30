@@ -195,6 +195,33 @@ function openInboxMessage(id) {
   renderInbox(view);
 }
 
+function renderRecapBody(message) {
+  let report = message.recap;
+  // Older saved reviews retain their section design without inventing new analysis.
+  if (!report && message.kind === 'result' && (message.body || '').includes('PREGAME PLAN\n')) {
+    const chunks = message.body.replace('These are observed results, not proof of cause; opponent adjustments and game situation also mattered.', '').replace('Plan results describe what happened with those choices; they do not isolate their effect from execution or the opponent.', '').trim().split('\n\n');
+    report = {intro: chunks.shift(), sections: chunks.map(chunk => {
+      const lines = chunk.split('\n'); return {title: lines.shift(), lines, reviews: []};
+    })};
+  }
+  if (!report) return el('div', {class:'mbody'}, message.body || '');
+  const body = el('div', {class:'mbody coaching-recap'}, el('p', {class:'recap-intro'}, report.intro));
+  for (const section of report.sections || []) {
+    const panel = el('section', {class:'recap-section'}, el('h4', {}, section.title));
+    for (const line of section.lines || []) panel.append(el('p', {}, line));
+    for (const review of section.reviews || []) {
+      const choice = el('article', {class:'recap-choice'}, el('h5', {}, review.title), el('p', {class:'recap-conclusion'}, review.conclusion));
+      for (const finding of review.findings || []) {
+        const verdict = ['positive','negative','mixed','limited','ungraded'].includes(finding.verdict) ? finding.verdict : 'ungraded';
+        choice.append(el('p', {class:`recap-finding ${verdict}`}, el('b', {}, finding.label + ' · '), finding.text));
+      }
+      panel.append(choice);
+    }
+    body.append(panel);
+  }
+  return body;
+}
+
 function renderInbox(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.className = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
@@ -230,7 +257,7 @@ function renderInbox(v) {
   if (cur) {
     const m = pyJSON(`SESSION.inbox_message(${cur.id})`);
     pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
-    pane.append(el('h3', {}, m.subject), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), el('div', { class: 'mbody' }, m.body || ''));
+    pane.append(el('h3', {}, m.subject), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), renderRecapBody(m));
     if (m.kind === 'trade_offer') pane.append(el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openTradeOffer(cur.id, reload) }, cur.decide ? 'Open Trade Offer' : 'View Trade Offer')));
     else if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
     else if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=False)`)); reload(); } }, 'Sit Him'), el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
@@ -428,7 +455,7 @@ function renderGameDay(v) {
     const atBreak = shownPlays == null && shown < g.drives.length && g.drives[shown].quarter > currentQuarter;
     let hs = g.hs, as_ = g.as_;
     if (live) { hs = live.score.home; as_ = live.score.away; }
-    else if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { const add = (n, toOff) => { if ((d.off === g.home.abbr) === toOff) hs += n; else as_ += n; }; for (const p of revealed) { if (p.type === 'field_goal' && p.made) add(3, true); else if (p.td) add(6, true); else if (p.type === 'extra_point' && p.made !== false) add(1, true); else if (p.type === 'two_point' && p.made) add(2, true); else if (p.safety) add(2, false); } } }
+    else if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { const add = (n, toOff) => { if ((d.off === g.home.abbr) === toOff) hs += n; else as_ += n; }; for (const p of revealed) { const points = replayPlayPoints(p); if (points) add(Math.abs(points), points > 0); } } }
     const lastPlay = revealed.length ? revealed[revealed.length - 1] : null;
     const headParts = lastPlay && lastPlay.head ? lastPlay.head.split(' · ') : [];
     const clock = atBreak ? '0:00' : (headParts.length >= 3 ? headParts[headParts.length - 1] : '');
@@ -480,7 +507,7 @@ function renderGameDay(v) {
         const line = el('div', { class: 'pl ' + p.kind }); if (p.head) line.append(el('span', { class: 'dn' }, p.head), '  '); line.append(p.text); body.append(line);
       }
     });
-    tick.querySelector('h2 small').textContent = live ? (live.halftime_open ? 'Halftime' : `Live · drive ${g.drives.length}`) : (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
+    tick.querySelector('h2 small').textContent = live ? (live.halftime_open ? (live.adjustment_period === 'overtime' ? 'Overtime adjustments' : 'Halftime') : `Live · drive ${g.drives.length}`) : (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
     body.scrollTop = body.scrollHeight;
     gdReveal[gkey] = { shown, shownPlays };
     drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays); drawRead(shown >= g.drives.length && shownPlays == null); drawWp(shown, shownPlays);
@@ -515,12 +542,15 @@ function renderGameDay(v) {
     copyText(lines.join('\n'), copyPbp); } }, 'Copy');
   tick.append(el('h2', {}, 'Play by Play', el('small', {}, ''), copyPbp), ctrl);
   if (live && live.halftime_open) {
-    const confirmed = !!halfConfirmed[gkey];
+    const overtime = live.adjustment_period === 'overtime';
+    const breakKey = `${gkey}-${overtime ? 'overtime' : 'halftime'}`;
+    const confirmed = !!halfConfirmed[breakKey];
+    const breakLabel = overtime ? 'Overtime' : 'Halftime';
     const card = el('div', { class: 'read', style: 'margin:0 14px 10px;padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap' });
-    card.append(el('b', {}, `Halftime · ${showAbbr(g.away.abbr)} ${live.score.away}, ${showAbbr(g.home.abbr)} ${live.score.home}`),
-      el('button', { class: 'btn' + (confirmed ? '' : ' go'), onclick: () => openHalftime(g, live, gkey, () => { const y = window.scrollY; renderGameDay(pyJSON('SESSION.gameday_view()')); window.scrollTo(0, y); }) }, confirmed ? 'Halftime Adjustments · confirmed' : 'Halftime Adjustments'),
-      el('span', { class: 'count' }, confirmed ? 'Adjustments confirmed.' : 'Review the adjustments and confirm to unlock the second half.'),
-      el('button', { class: 'btn go', style: 'margin-left:auto', disabled: confirmed ? null : '', 'data-tip': confirmed ? null : 'Confirm the halftime adjustments first', onclick: () => step('resume') }, 'Start the Second Half'));
+    card.append(el('b', {}, `${breakLabel} · ${showAbbr(g.away.abbr)} ${live.score.away}, ${showAbbr(g.home.abbr)} ${live.score.home}`),
+      el('button', { class: 'btn' + (confirmed ? '' : ' go'), onclick: () => openHalftime(g, live, breakKey, () => { const y = window.scrollY; renderGameDay(pyJSON('SESSION.gameday_view()')); window.scrollTo(0, y); }) }, `${breakLabel} Adjustments${confirmed ? ' · confirmed' : ''}`),
+      el('span', { class: 'count' }, confirmed ? 'Adjustments confirmed.' : `Review the adjustments and confirm to unlock ${overtime ? 'overtime' : 'the second half'}.`),
+      el('button', { class: 'btn go', style: 'margin-left:auto', disabled: confirmed ? null : '', 'data-tip': confirmed ? null : `Confirm the ${breakLabel.toLowerCase()} adjustments first`, onclick: () => step('resume') }, overtime ? 'Start Overtime' : 'Start the Second Half'));
     tick.append(card);
   }
   tick.append(body);
@@ -584,7 +614,7 @@ function renderGameDay(v) {
           if (['run', 'scramble'].includes(p.type)) { t.plays++; t.yards += y; t.rush_yds += y; }
           else if (['complete', 'incomplete', 'drop', 'interception', 'sack'].includes(p.type)) { t.plays++; if (p.type === 'complete') { t.yards += y; t.pass_yds += y; } if (p.type === 'sack') { t.yards += y; t.pass_yds += y; t.sacks_allowed++; } if (p.type === 'interception') t.turnovers++; }
           else if (p.type === 'penalty') t.penalties++;
-          if (p.kind === 'turnover' && p.type !== 'interception' && !p.safety) t.turnovers++;
+          if (p.kind === 'turnover' && !['interception', 'punt'].includes(p.type) && !p.safety) t.turnovers++;
           // third and fourth down: converted when the next scrimmage snap is a first down, or the play scored
           if (SCRIM.includes(p.type) && (p.down === 3 || p.down === 4)) { const next = plays.slice(k + 1).find(q => q.down != null && SCRIM.includes(q.type)); const conv = p.td || (next && next.down === 1) || (!next && !partial && /Touchdown/.test(d.result || '')); if (p.down === 3) { t._3a++; if (conv) t._3c++; } else { t._4a++; if (conv) t._4c++; } }
         });
@@ -940,16 +970,17 @@ async function copyText(text, btn) {
   if (btn) { const was = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = was; }, 1400); }
 }
 
-// halftime adjustments: a popup with the assistants' read of the half; Take applies to the second half; Confirm unlocks it
+// Each break has its own confirmation; halftime approval cannot unlock overtime.
 const halfConfirmed = {};
 function openHalftime(g, live, gkey, onClose) {
+  const overtime = live.adjustment_period === 'overtime';
   const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center' });
   const box = el('section', { class: 'sheet', style: 'width:min(760px,92vw);max-height:84vh;overflow:auto' });
   const draw = () => {
     box.innerHTML = '';
     const v = pyJSON('SESSION.gameday_view()'); const recs = (v.live && v.live.recs) || [];
-    box.append(el('h2', {}, 'Halftime Adjustments', el('small', {}, `${showAbbr(g.away.abbr)} ${live.score.away} · ${showAbbr(g.home.abbr)} ${live.score.home}`)));
-    box.append(el('div', { class: 'pad', style: 'color:var(--ink-2)' }, recs.length ? "The assistants' read of the half, on top of your plan and the pregame changes you took. Take what you want; the second half plays what you take." : 'The assistants have nothing to change at the break. Your plan carries into the second half as it stands.'));
+    box.append(el('h2', {}, overtime ? 'Overtime Adjustments' : 'Halftime Adjustments', el('small', {}, `${showAbbr(g.away.abbr)} ${live.score.away} · ${showAbbr(g.home.abbr)} ${live.score.home}`)));
+    box.append(el('div', { class: 'pad', style: 'color:var(--ink-2)' }, recs.length ? (overtime ? "The assistants' read of regulation. Choose any changes before the overtime kickoff; your existing plan carries forward unless you adjust it." : "The assistants' read of the half. Choose any changes before the second-half kickoff.") : `The assistants have nothing to change at the break. Your plan carries into ${overtime ? 'overtime' : 'the second half'} as it stands.`));
     for (const r of recs) box.append(el('div', { style: 'display:flex;gap:12px;align-items:flex-start;padding:10px 16px;border-top:1px solid var(--rule)' },
       el('span', { class: 'tag ' + (r.side === 'offence' ? 'q' : 'out'), style: 'margin-top:3px' }, r.side === 'offence' ? 'OFFENSE' : 'DEFENSE'),
       el('div', { style: 'flex:1' }, el('div', { style: 'font-weight:700' }, r.text), el('div', { class: 'count' }, r.why)),
@@ -3150,3 +3181,15 @@ async function advanceInner() {
   window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.inbox_view()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'practice') renderPractice(pyJSON('SESSION.practice_view()')); else if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
     else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'retain') renderRetain(pyJSON(`SESSION.personnel('retain')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; tradeState.counter_id = null; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();
+
+// Signed points relative to the drive offense, including blocked-punt scores.
+function replayPlayPoints(play) {
+  if (play.nullified) return 0;
+  if (play.safety) return -2;
+  const sign = play.scoring_side === 'defense' ? -1 : 1;
+  if (play.td) return 6 * sign;
+  if (play.type === 'field_goal' && play.made) return 3 * sign;
+  if (play.type === 'extra_point' && play.made !== false) return sign;
+  if (play.type === 'two_point' && play.made) return 2 * sign;
+  return 0;
+}
