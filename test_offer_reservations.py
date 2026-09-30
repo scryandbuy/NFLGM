@@ -69,6 +69,16 @@ class OfferReservationTests(unittest.TestCase):
         self.assertEqual(OR.held(self.league, 'GB'), 0)
         self.assertAlmostEqual(OR.available(self.league, 'GB'), before, places=2)
 
+    def test_immediate_signing_cannot_spend_another_live_offers_room(self):
+        first_hit = OR.held(self.league, 'GB')
+        next_hit = OR.offer_hit(self.league, self.team, self.other,
+                                dict(apy=20.0, years=3, bonus=None, front_load=0.5))
+        self.team.cap.cap = first_hit + next_hit - 0.1
+        with self.assertRaisesRegex(ValueError, 'Not enough cap space'):
+            MK.sign(self.league, self.other, MK.Offer('GB', self.other.pid, 20.0, 3,
+                                                      front_load=0.5), 301.2)
+        self.assertIsNone(self.other.team)
+
     def test_next_year_focus_uses_the_same_reservation(self):
         self.league.set_phase('offseason')
         self.league.season_closed_year = self.league.year

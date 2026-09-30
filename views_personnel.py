@@ -343,6 +343,7 @@ def act_gather(league, abbr, pid):
 # ============================================================ FREE AGENCY
 def free_agency(session, league, abbr):
     import negotiations as NG, valuation as VAL
+    import player_roles as PR
     me = league.teams[abbr]
     rows = []
     # the best 400 on the market, not the first 400 in list order (that hid stars behind depth)
@@ -350,6 +351,8 @@ def free_agency(session, league, abbr):
     for pid in ordered:
         p = league.player(pid)
         if p is None or p.retired: continue
+        display_pos = PR.fa_position(p, me)
+        filter_positions = list(PR.fa_positions(p, me))
         t = NG.open_for(league, pid)
         mine = [o for o in (t.get('offers') or [])] if t else []
         my_offer = (f"${mine[-1]['apy']:.1f}m × {mine[-1]['years']}" if mine else None)
@@ -361,10 +364,11 @@ def free_agency(session, league, abbr):
         hole = None
         d = me.depth.get(p.pos, [])
         out_men = [q for q in d[:2] if q.out_until is not None]
-        if out_men: hole = f"Fills the hole at {p.pos} with {__import__('views').surname(out_men[0].name)} out" + (f" to week {out_men[0].out_until}" if isinstance(out_men[0].out_until, int) else '')
-        elif len(d) <= 1: hole = f"Only {len(d)} healthy {p.pos} on the roster"
+        if out_men: hole = f"Fills the hole at {display_pos} with {__import__('views').surname(out_men[0].name)} out" + (f" to week {out_men[0].out_until}" if isinstance(out_men[0].out_until, int) else '')
+        elif len(d) <= 1: hole = f"Only {len(d)} healthy {display_pos} on the roster"
         import practice_squad as PSQ
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), rookie=bool(p.college and p.draft_round is None and p.draft_year == league.year), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0), ps_ok=PSQ.can_add(me, p),
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, display_pos=display_pos, filter_positions=filter_positions,
+                         age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), rookie=bool(p.college and p.draft_round is None and p.draft_year == league.year), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0), ps_ok=PSQ.can_add(me, p),
                          talks=(t['state'] if t else None), ask=(t['ask'] if t else None), ask_now=ask_now, years=(t['years'] if t else None), thread=(t['id'] if t else None), interest=interest, my_offer=my_offer, hole=hole))
     rows.sort(key=lambda r: -r['ovr'])
     phase = league.phase
@@ -399,7 +403,8 @@ def free_agency(session, league, abbr):
     ps_n = len(PSQ.squad(me))
     return dict(rail=rail(session, league, abbr), cap_focus=focus, rows=rows[:300], count=len(rows), cap=focus['space'], pending_offers=outstanding, roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
                 weeks_left=(19 - int(league.week or 0) if phase == 'regular' else None),
-                in_season=(phase == 'regular'), phase=phase, step=step, fa_round=fa_round, threads=threads, feed=feed, positions=sorted({r['pos'] for r in rows}))
+                in_season=(phase == 'regular'), phase=phase, step=step, fa_round=fa_round, threads=threads, feed=feed,
+                positions=sorted({r['pos'] for r in rows}), position_filters=PR.fa_position_filters(me))
 
 
 def _thread(league, t):
