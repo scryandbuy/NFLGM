@@ -1171,7 +1171,7 @@ function renderTradeSide(v, key, reload) {
   const onChange=(asset,remove)=>{
     const i=selected.findIndex(x=>x.kind===asset.kind && String(x.id)===String(asset.id));
     if(remove && i>=0) selected.splice(i,1); else if(!remove && i<0) selected.push(asset);
-    tradeState.offers=null; reload();
+    tradeState.offers=null; reload(true);
   };
   box.append(head,el('div',{class:'trade-label'},key==='a'?'YOU SEND':'YOU RECEIVE'),renderTradePackage(own,selected,onChange,key),renderTradePicker(own,selected,tradePickerState(own.club.abbr),onChange,key));
   const notes=el('div',{class:'trade-notes'},el('div',{},el('h3',{},'Team needs'),el('span',{},own.needs.length?own.needs.join(' · '):'None pressing')));
@@ -1189,27 +1189,27 @@ function renderTradeSummary(v,reload) {
   const args=()=>`other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)}`;
   const can=v.can_trade&&(tradeState.a.length||tradeState.b.length);
   const actions=el('div',{class:'trade-actions'},el('span',{},`${tradeState.a.length} assets sent · ${tradeState.b.length} received`),
-    el('button',{class:'btn go',disabled:can?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('propose', ${args()})`);notify(r);if(r.done){tradeState.a=[];tradeState.b=[];}tradeState.offers=null;reload();}},'Propose'),
-    el('button',{class:'btn',disabled:v.can_trade&&tradeState.b.length?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('ask', ${args()})`);notify(r);if(!r.ok)return;tradeState.a=tradeSelection([...tradeState.a,...(r.adds||[]).map(id=>({kind:'pick',id}))],v.me);tradeState.offers=null;reload();}},'Ask What They Want'),
+    el('button',{class:'btn go',disabled:can?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('propose', ${args()}${tradeState.counter_id != null ? ', counter_id='+Number(tradeState.counter_id) : ''})`);notify(r);if(r.done){tradeState.a=[];tradeState.b=[];tradeState.counter_id=null;}tradeState.offers=null;reload();}},'Propose'),
+    el('button',{class:'btn',disabled:v.can_trade&&tradeState.b.length?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('ask', ${args()})`);notify(r);if(!r.ok)return;tradeState.a=tradeSelection([...tradeState.a,...(r.adds||[]).map(id=>({kind:'pick',id}))],v.me);tradeState.offers=null;reload(true);}},'Ask What They Want'),
     el('button',{class:'btn',disabled:v.can_trade&&tradeState.a.length===1&&tradeState.a[0].kind==='player'?null:'',onclick:()=>{const pid=tradeState.a[0].id;const r=pyJSON(`SESSION.personnel_act('gather', pid=${JSON.stringify(pid)})`);notify(r);tradeState.offers={...r,pid};reload();}},'Gather Offers'),
-    el('button',{class:'btn quiet',onclick:()=>{tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload();}},'Clear'));
+    el('button',{class:'btn quiet',onclick:()=>{tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload(true);}},'Clear'));
   summary.append(actions);return summary;
 }
 function renderTrades(v) {
   renderRail(v.rail); const page=persPage();persSecond('trades');
   tradeState.other=v.other.abbr;
   tradeState.a=tradeSelection(tradeState.a,v.me);tradeState.b=tradeSelection(tradeState.b,v.them);
-  const reload=()=>{const y=window.scrollY;renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));window.scrollTo(0,y);};
+  const reload=(persist=false)=>{if(persist && tradeState.counter_id != null){const r=pyJSON(`SESSION.personnel_act('save_trade_counter', msg_id=${Number(tradeState.counter_id)}, other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`);if(!r.ok)notify(r);}const y=window.scrollY;renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));window.scrollTo(0,y);};
   const s=el('section',{class:'sheet c12 trade-board'});applyTeamTheme(s,v.me.club);
   const partners=el('div',{class:'trade-team-emblems',role:'group','aria-label':'Choose trade partner'});
-  for(const c of v.clubs) partners.append(el('button',{class:'trade-team-emblem',style:`--team-color:${teamTheme(c).base}`,'aria-label':c.name,'aria-pressed':String(c.abbr===v.other.abbr),'data-tip':c.name,onclick:()=>{if(c.abbr===tradeState.other)return;tradeState.other=c.abbr;tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload();}},showAbbr(c.abbr)));
+  for(const c of v.clubs) partners.append(el('button',{class:'trade-team-emblem',style:`--team-color:${teamTheme(c).base}`,'aria-label':c.name,'aria-pressed':String(c.abbr===v.other.abbr),'data-tip':c.name,onclick:()=>{if(c.abbr===tradeState.other)return;tradeState.counter_id=null;tradeState.other=c.abbr;tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload();}},showAbbr(c.abbr)));
   s.append(el('div',{class:'trade-hero trade-partners'},partners));
   if(!v.can_trade)s.append(el('div',{class:'banner'},'The trade deadline has passed. Trades reopen after the season.'));
   if(v.draft_live)s.append(el('div',{class:'banner'},`Draft day · pick ${v.draft_live.slot} · ${showAbbr(v.draft_live.team)} on the clock. `,el('a',{class:'btn',href:'#draft/day'},'Back to the Draft')));
   s.append(el('div',{class:'trade-columns'},renderTradeSide(v,'a',reload),renderTradeSide(v,'b',reload)));
   if(tradeState.offers){
     const r=tradeState.offers, list=el('div',{class:'trade-offers'},el('h3',{},r.line||r.why||'Offers'));
-    for(const o of r.offers||[])list.append(el('div',{class:'trade-offer'},crest(o.club,26),el('span',{},`${o.club.name}: ${o.words.join(' and ')}`),el('button',{class:'btn',onclick:()=>{tradeState.other=o.club.abbr;tradeState.a=[{kind:'player',id:r.pid}];tradeState.b=o.assets||o.ids;tradeState.offers=null;reload();}},'Open')));
+    for(const o of r.offers||[])list.append(el('div',{class:'trade-offer'},crest(o.club,26),el('span',{},`${o.club.name}: ${o.words.join(' and ')}`),el('button',{class:'btn',onclick:()=>{tradeState.counter_id=null;tradeState.other=o.club.abbr;tradeState.a=[{kind:'player',id:r.pid}];tradeState.b=o.assets||o.ids;tradeState.offers=null;reload();}},'Open')));
     s.append(list);
   }
   s.append(renderTradeSummary(v,reload));page.append(s);
@@ -1286,19 +1286,53 @@ function reopenTalks(t, reload) {
 function openTradeOffer(id, after) {
   const v = pyJSON(`SESSION.trade_offer_view(${JSON.stringify(id)})`);
   if (!v.ok) { notify(v); return; }
-  const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center' });
-  const box = el('section', { class: 'sheet', style: 'width:min(760px,94vw);max-height:88vh;overflow:auto' });
+  const overlay = el('div', { class: 'neg-overlay trade-offer-overlay' });
+  const box = el('section', { class: 'sheet negotiation-sheet trade-offer-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': `Trade offer from ${v.buyer.name}` });
+  const theme = applyTeamTheme(box, v.buyer);
+  box.style.setProperty('--club', theme.base); box.style.setProperty('--club-2', theme.accent);
   const close = () => { overlay.remove(); if (after) after(); };
-  box.append(el('h2', {}, `Trade Offer · ${v.buyer.name}`, el('small', {}, v.expires ? `expires after week ${v.expires}` : ''), el('button', { class: 'btn quiet', style: 'margin-left:auto;width:auto', onclick: close }, 'Close')));
-  const side = (title, items, color) => { const c = el('div', { class: 'to-side' }, el('div', { class: 'h5' }, title)); for (const x of items) c.append(el('div', { class: 'to-item' + (x.gone ? ' gone' : '') }, el('span', { class: 'str', style: `background:${color}` }), el('span', { class: 'nm' }, x.label, x.kind === 'player' ? el('small', {}, ` ${x.pos} · ${x.age} · ${x.ovr} ovr · $${x.apy}m`) : ''), x.gone ? el('small', { class: 'count' }, 'no longer theirs') : '')); if (!items.length) c.append(el('div', { class: 'count' }, 'Nothing')); return c; };
-  box.append(el('div', { class: 'to-grid' }, side(`${showAbbr(v.buyer.abbr)} send`, v.they, v.buyer.color), side('You send', v.you, 'var(--club-2)')));
-  box.append(el('div', { class: 'read', style: 'margin:0 14px 10px' }, v.read || ''));
-  if (v.open) box.append(el('div', { class: 'acts', style: 'padding:0 14px 14px;display:flex;gap:8px' },
-    el('button', { class: 'btn go', style: 'width:auto', onclick: () => { const r = pyJSON(`SESSION.trade_offer_answer(${JSON.stringify(id)}, 'accept')`); notify(r); close(); } }, 'Accept'),
-    el('button', { class: 'btn quiet', style: 'width:auto', onclick: () => { const r = pyJSON(`SESSION.trade_offer_answer(${JSON.stringify(id)}, 'decline')`); notify(r); close(); } }, 'Decline'),
-    el('button', { class: 'btn', style: 'width:auto', onclick: () => { tradeState = { other: v.buyer.abbr, a: v.you.map(x => String(x.id)), b: v.they.map(x => String(x.id)), keep: true }; overlay.remove(); location.hash = '#personnel/trades'; } }, 'Counter')));
-  else box.append(el('div', { class: 'count', style: 'padding:0 14px 14px' }, `This offer is ${v.status}.`));
-  overlay.append(box); document.body.append(overlay);
+  const answer = action => {
+    const r = pyJSON(`SESSION.trade_offer_answer(${JSON.stringify(id)}, ${JSON.stringify(action)})`);
+    notify(r);
+    if (!r.ok) return;
+    overlay.remove();
+    renderRail(pyJSON('SESSION.portal()').rail);
+    if (action === 'counter') {
+      tradeState = { other: r.counter.other, a: r.counter.a, b: r.counter.b, counter_id: id, keep: true };
+      if (location.hash === '#personnel/trades') {
+        renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));
+      } else location.hash = '#personnel/trades';
+    } else if (after) after();
+  };
+  box.append(el('div', { class: 'neg-topbar' }, el('div', { class: 'neg-identity' },
+    el('div', { class: 'neg-avatar trade-offer-avatar' }, showAbbr(v.buyer.abbr)),
+    el('div', { class: 'neg-title' }, el('div', { class: 'neg-kicker' }, 'INCOMING TRADE OFFER'),
+      el('h2', {}, v.buyer.name), el('small', {}, v.expires != null ? `Expires after Week ${v.expires}` : 'Trade desk')),
+    el('button', { class: 'btn quiet neg-close', onclick: close }, 'Close'))));
+  const side = (title, items, team) => {
+    const c = el('section', { class: 'trade-offer-side' }, el('h3', {}, title), el('small', { class: 'trade-offer-team' }, team.name));
+    applyTeamTheme(c, team);
+    for (const x of items) c.append(el('div', { class: 'trade-offer-asset' + (x.gone ? ' gone' : '') },
+      el('span', { class: 'trade-offer-position' }, x.kind === 'pick' ? 'PICK' : x.pos || '—'),
+      el('div', { class: 'nm' }, x.label, el('small', {}, x.gone ? 'No longer available' : x.kind === 'player' ? `Age ${x.age} · $${x.apy}m per year` : 'Draft capital')),
+      x.kind === 'player' ? el('b', {}, `${x.ovr} OVR`) : ''));
+    if (!items.length) c.append(el('div', { class: 'empty' }, 'No assets'));
+    return c;
+  };
+  box.append(el('div', { class: 'trade-offer-columns' }, side('YOU RECEIVE', v.they, v.buyer), side('YOU SEND', v.you, v.me)));
+  if (v.read) box.append(el('div', { class: 'trade-offer-read' }, el('h3', {}, 'Front office assessment'), el('p', {}, v.read)));
+  const actions = el('div', { class: 'trade-offer-actions' });
+  if (v.open) actions.append(
+    el('button', { class: 'btn go', onclick: () => answer('accept') }, 'Accept'),
+    el('button', { class: 'btn', onclick: () => answer('counter') }, 'Counter'),
+    el('button', { class: 'btn quiet', onclick: () => answer('decline') }, 'Decline'));
+  else {
+    actions.append(el('span', {}, `Original offer: ${v.status}.`));
+    if (v.status === 'countered' && ['draft', 'declined'].includes(v.counter?.state))
+      actions.append(el('button', { class: 'btn go', onclick: () => answer('counter') }, 'Continue Counter'));
+    else if (v.counter) actions.append(el('span', {}, `Counter: ${v.counter.state}.`));
+  }
+  box.append(actions); overlay.append(box); document.body.append(overlay);
 }
 
 function openTalks(t, reload) {
@@ -2929,5 +2963,5 @@ async function advanceInner() {
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
   window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.portal_full()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
-    else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
+    else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; tradeState.counter_id = null; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();

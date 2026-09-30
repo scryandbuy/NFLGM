@@ -1303,7 +1303,7 @@ class Session:
             ev = VP._evaluate(self.L, self.user_team, buyer, [x['id'] for x in you], [x['id'] for x in they])
             read = (ev.get('my_read', '') + ' ' + ev.get('read', '')).strip()
         except Exception: pass
-        return dict(ok=True, id=m['id'], buyer=club(buyer), they=they, you=you, gap=gap, read=read, status=m.get('status'), expires=m.get('expires_week'), open=(m.get('status') in ('unread', 'open')))
+        return dict(ok=True, id=m['id'], buyer=club(buyer), me=club(self.user_team), they=they, you=you, gap=gap, read=read, status=m.get('status'), expires=m.get('expires_week'), open=(m.get('status') in ('unread', 'open')), counter=pl.get('counter'))
 
     def trade_offer_answer(self, msg_id, action):
         import inbox as IB
@@ -1311,7 +1311,15 @@ class Session:
             try: IB.accept(self.L, int(msg_id), self.user_team); return dict(ok=True, line='Trade accepted.')
             except Exception as e: return dict(ok=False, why=str(e)[:120] or 'the offer could not be completed')
         if action == 'decline':
+            m = next((m for m in self.L.inbox if m.get('id') == int(msg_id)), None)
+            if not m or m.get('kind') != 'trade_offer' or m.get('status') not in ('unread', 'open'):
+                return dict(ok=False, why='No open offer with that id.')
             IB.decline(self.L, int(msg_id)); return dict(ok=True, line='Offer declined.')
+        if action == 'counter':
+            try:
+                draft = IB.counter(self.L, int(msg_id), self.user_team)
+                return dict(ok=True, line='Counter opened. The original offer is closed.', counter=draft)
+            except ValueError as e: return dict(ok=False, why=str(e))
         return dict(ok=False, why='unknown action')
 
     def resign_sheet(self):

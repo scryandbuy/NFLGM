@@ -543,7 +543,7 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
                 pl['fit'] = round(_fit(league, t, p), 1)
                 if pos in ('KR', 'PR'): pl['sub'] = f"{p.pos} · return {round(RO.return_score(p))}"
                 slots.append(pl)
-            cols.append(dict(pos=pos, title=label, group=group, slots=slots, on_field=n_start))
+            cols.append(dict(pos=pos, title=(DR.role_label(pos, front) if side == 'defense' else label), group=group, slots=slots, on_field=n_start))
         sides[side] = cols
     return dict(rail=rail(session, league, abbr), package=package, packages=list(PACKAGES), sides=sides, pins=getattr(t, 'depth_pins', None) or {},
                 offense_package=off_package, offense_base=OR.base_package(t.gm), offense_packages=list(OR.PACKAGES),

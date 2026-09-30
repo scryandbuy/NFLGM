@@ -85,8 +85,16 @@ def needs_fallback(depth, front, package):
     return any(len(depth.get(pos, ())) < amount for pos, amount in required.items())
 
 
-def role_label(role):
-    return {'LE': 'LEDG', 'RE': 'REDG', '34LE': 'LEDG', '34RE': 'REDG'}.get(role, role)
+def role_label(role, front=None):
+    """Display the job in this front while keeping canonical roster/pin keys."""
+    odd = front_family(front) == '3-4' if front is not None else role in ('34LE', '34RE')
+    if role in ('LE', 'LEDG', '34LE'):
+        return 'LE' if odd else 'LEDG'
+    if role in ('RE', 'REDG', '34RE'):
+        return 'RE' if odd else 'REDG'
+    if role == 'MIKE' and not odd:
+        return 'MLB'
+    return role
 
 
 def available_depth(depth, excluded=()):

@@ -1402,6 +1402,25 @@ th.sortable .arrow{font-size:10px}
 .bk-final .bk-site{padding:0 4px}
 
 /* trade offer popup */
+.trade-offer-overlay{position:fixed;inset:0;z-index:900;display:grid;place-items:center;padding:16px}
+.trade-offer-sheet{width:min(940px,95vw);max-height:90vh}
+.trade-offer-sheet .trade-offer-avatar{background:color-mix(in srgb,var(--team-base) 65%,#091316);color:#fff;border-color:var(--team-accent)}
+.trade-offer-columns{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:24px}
+.trade-offer-side{min-width:0;background:linear-gradient(140deg,color-mix(in srgb,var(--team-base) 36%,#10191c),#10191c);padding:18px;border-radius:9px;border-top:2px solid var(--team-accent)}
+.trade-offer-side h3,.trade-offer-read h3{margin:0;font-size:12px;letter-spacing:.08em;color:var(--team-readable)}
+.trade-offer-team{display:block;margin:5px 0 16px;color:var(--ink-2)}
+.trade-offer-asset{display:flex;align-items:center;gap:10px;padding:13px 0;border-top:1px solid var(--rule);min-width:0}
+.trade-offer-asset .nm{flex:1;min-width:0;font-weight:700;overflow-wrap:anywhere}
+.trade-offer-asset small{display:block;font-size:12px;font-weight:400;color:var(--ink-2);margin-top:4px}
+.trade-offer-asset b{font-size:14px;white-space:nowrap}
+.trade-offer-position{display:grid;place-items:center;flex:none;width:42px;height:34px;border-radius:6px;background:color-mix(in srgb,var(--team-base) 65%,#091316);color:#fff;font-size:12px;font-weight:800}
+.trade-offer-asset.gone{opacity:.55}
+.trade-offer-read{margin:0 24px 24px;line-height:1.5}
+.trade-offer-read p{margin:8px 0 0;color:var(--ink-2);font-size:14px}
+.trade-offer-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:18px 24px;border-top:1px solid var(--rule)}
+.trade-offer-actions .btn{width:auto;min-width:100px;justify-content:center;text-align:center}
+.trade-offer-actions .go{background:var(--team-accent);color:var(--team-ink);border-color:var(--team-accent)}
+@media(max-width:680px){.trade-offer-columns{grid-template-columns:1fr;padding:16px;gap:14px}.trade-offer-sheet .neg-identity{flex-wrap:wrap}.trade-offer-asset b{font-size:12px}.trade-offer-read{margin:0 16px 16px}}
 .to-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:6px 14px 10px}
 .to-side{border:1px solid var(--rule);background:var(--sheet-2);padding:8px 10px}
 .to-item{display:grid;grid-template-columns:4px 1fr auto;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule);font-size:15px}

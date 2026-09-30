@@ -64,7 +64,7 @@ def post_trade_offer(league, buyer, user_team, sends, gets, why, expires_week):
     body = (f"{league.teams[buyer].name if hasattr(league.teams[buyer], 'name') else buyer} would like "
             f"{names}. {why}")
     return post(league, 'trade_offer', f'Trade offer from {buyer} for {names}', body, sender=buyer,
-                payload=dict(buyer=buyer, sends=[key(x) for x in sends], gets=list(gets)),
+                payload=dict(buyer=buyer, user_team=user_team, sends=[key(x) for x in sends], gets=list(gets)),
                 expires_week=expires_week)
 
 
@@ -72,7 +72,7 @@ def _resolve(league, x, owner):
     if isinstance(x, str):
         return x
     for pk in league.teams[owner].picks:
-        if pk.year == x['year'] and pk.round == x['round'] and pk.original == x['original']:
+        if pk.year == x['year'] and pk.round == x['round'] and pk.original == x['original'] and not pk.used_on and pk.owner == owner:
             return pk
     raise ValueError('pick no longer held')
 
@@ -82,6 +82,8 @@ def accept(league, msg_id, user_team):
     if m is None or m['kind'] != 'trade_offer' or m['status'] not in ('unread', 'open'):
         raise ValueError('no open offer with that id')
     p = m['payload']
+    if p.get('user_team', user_team) != user_team or p['buyer'] == user_team:
+        raise ValueError('this offer belongs to another team')
     sends = [_resolve(league, x, p['buyer']) for x in p['sends']]
     league.trade(p['buyer'], user_team, sends, p['gets'])
     m['status'] = 'accepted'
@@ -95,6 +97,28 @@ def decline(league, msg_id):
     if m is not None and m['status'] in ('unread', 'open'):
         m['status'] = 'declined'
     return m
+
+
+def counter(league, msg_id, user_team):
+    """Resolve the original offer and retain a resumable, typed counter draft."""
+    m = next((m for m in _box(league) if m['id'] == msg_id), None)
+    if not m or m.get('kind') != 'trade_offer' or m.get('status') not in ('unread', 'open', 'countered'):
+        raise ValueError('no open offer to counter')
+    pl = m['payload']
+    if pl.get('user_team', user_team) != user_team or pl['buyer'] == user_team:
+        raise ValueError('this offer belongs to another team')
+    if m['status'] == 'countered':
+        draft = pl.get('counter')
+        if not draft or draft.get('state') not in ('draft', 'declined'):
+            raise ValueError('this counter is already closed')
+        return draft
+    def asset(x):
+        return dict(kind='player', id=x) if isinstance(x, str) else dict(kind='pick', id=f"{x['year']}-{x['round']}-{x['original']}")
+    draft = dict(other=pl['buyer'], a=[asset(x) for x in pl['gets']],
+                 b=[asset(x) for x in pl['sends']], state='draft')
+    pl['counter'] = draft
+    m['status'] = 'countered'
+    return draft
 
 
 def news(league, subject, body, payload=None):

@@ -339,6 +339,7 @@ def fire_and_hire(league, team, rng, verbose=False):
         hired.salary = round(float(getattr(hired, '_hc_ask', 0.0) or (STF_.HC_PAY_BASE + STF_.HC_PAY_PER_PRESTIGE * getattr(hired, 'prestige', 20.0))), 2)
     except Exception: pass
     team.gm = hired
+    team.identity = None             # the incoming coach installs his own identity
     team.scheme = GE.scheme_of(hired)
     team.tenure = 0
     import position_change as PC
@@ -372,6 +373,7 @@ def complete_pending_hire(league, club_abbr, rng, take_first):
     hired.tenure = 0
     hired.job_security = float(np.clip(rng.normal(.78, .10), .45, .97))
     team.gm = hired; team.scheme = GE.scheme_of(hired); team.tenure = 0
+    team.identity = None             # discard the outgoing coach's selected labels
     league.log('gm_change', team=team.abbr, hired=hired.name, background=hired.background, win_pct=round(team.win_pct, 3), after_search=True)
     return hired
 

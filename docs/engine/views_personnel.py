@@ -186,7 +186,31 @@ def _surplus_why(league, t, x):
     return ' · '.join(words) or 'Depth behind a starter'
 
 
-def act_propose(league, abbr, other, a_sends, b_sends):
+def act_save_trade_counter(league, abbr, msg_id, other, a_sends, b_sends):
+    import inbox as IB
+    m = next((m for m in IB._box(league) if m['id'] == int(msg_id)), None)
+    pl = (m or {}).get('payload') or {}
+    draft = pl.get('counter') or {}
+    if (not m or m.get('kind') != 'trade_offer' or m.get('status') != 'countered'
+            or pl.get('user_team', abbr) != abbr or pl.get('buyer') != other
+            or draft.get('state') not in ('draft', 'declined')):
+        return dict(ok=False, why='This counter is no longer available.')
+    try:
+        a = _trade_ids(league, abbr, a_sends); b = _trade_ids(league, other, b_sends)
+    except ValueError as e:
+        return dict(ok=False, why=str(e))
+    def typed(ids):
+        return [dict(kind='player' if _trade_player(league, x) else 'pick', id=x) for x in ids]
+    draft.update(a=typed(a), b=typed(b), state='draft')
+    return dict(ok=True)
+
+
+def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
+    counter = None
+    if counter_id is not None:
+        saved = act_save_trade_counter(league, abbr, counter_id, other, a_sends, b_sends)
+        if not saved['ok']: return dict(**saved, done=False)
+        counter = next(m for m in league.inbox if m['id'] == int(counter_id))['payload']['counter']
     a_sends = _trade_ids(league, abbr, a_sends)
     b_sends = _trade_ids(league, other, b_sends)
     import trades as TR
@@ -201,11 +225,11 @@ def act_propose(league, abbr, other, a_sends, b_sends):
     a_items = [(x if _trade_player(league, x) else _find_pick(league, abbr, x)) for x in a_sends]; b_items = [(x if _trade_player(league, x) else _find_pick(league, other, x)) for x in b_sends]
     yes = TR.will_accept(r['b_gain'], rng, TR.persona(them.gm)['aggression'], selling=True)
     if not yes:
-        import inbox as IB
-        IB.post(league, 'trade_done', f"{them.abbr} decline your offer", f"You offered {', '.join(_words(league, a_items))} for {', '.join(_words(league, b_items))}. " + ev['read'], sender=other)
+        if counter is not None: counter['state'] = 'declined'
         return dict(ok=True, done=False, why=f"{them.abbr} declines. " + ev['read'])
     try: league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
     except ValueError as e: return dict(ok=False, done=False, why=str(e))
+    if counter is not None: counter['state'] = 'accepted'
     import inbox as IB
     IB.post(league, 'trade_done', f"Trade with {other} is done", f"You send {', '.join(_words(league, a_items))} to {other} for {', '.join(_words(league, b_items))}.", sender=other)
     return dict(ok=True, done=True, why=f"Done. {them.abbr} accepts.")
