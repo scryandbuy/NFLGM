@@ -26,6 +26,42 @@ def base_package(gm):
     return key if key in PACKAGES else '11'
 
 
+def package_weights(gm=None):
+    """Normal-situation mix shared by coaching and roster planning.
+
+    The installed base is the plurality, not a promise to use it every down.
+    The play caller still adjusts these weights for personnel and situation.
+    A fresh mapping prevents callers from changing the shared defaults.
+    """
+    keys = ('11', '12', '13', '21', '22', '10', '00')
+    mixes = {
+        '11': (.62, .20, .035, .065, .02, .05, .01),
+        '12': (.30, .50, .10, .04, .035, .02, .005),
+        '13': (.18, .28, .46, .025, .04, .01, .005),
+        '21': (.25, .10, .025, .50, .10, .02, .005),
+        '22': (.10, .16, .035, .23, .46, .01, .005),
+        '10': (.29, .10, .015, .025, .01, .52, .04),
+        '00': (.18, .04, .005, .01, .005, .25, .51),
+    }
+    return dict(zip(keys, mixes[base_package(gm)]))
+
+
+def role_grade(player, role, package='11', slot=0):
+    """Grade the job actually performed; extra heavy-package TEs must block."""
+    if role == 'FB':
+        return fullback_score(player)
+    overall = float(player.get('ovr', 70) if isinstance(player, dict)
+                    else getattr(player, 'ovr', 70))
+    if role != 'TE' or str(package) not in ('12', '13', '22') or slot == 0:
+        return overall
+    ratings = player.get('ratings', player) if isinstance(player, dict) else getattr(player, 'ratings', {})
+    def mean(keys):
+        return sum(float(ratings.get(key, overall)) for key in keys) / len(keys)
+    blocking = mean(('run_block_rating', 'impact_block_rating', 'strength_rating'))
+    receiving = mean(('catch_rating', 'route_run_short_rating', 'cit_rating'))
+    return .55 * overall + .30 * blocking + .15 * receiving
+
+
 def fullback_score(player):
     """Blocking grade for a fullback role, including an HB or TE fill-in."""
     ratings = player if isinstance(player, dict) else getattr(player, 'ratings', {})
@@ -78,6 +114,11 @@ def assign(depth, package, excluded=(), rng=None, state=None):
         if not candidates:
             raise ValueError('Cannot field eleven unique healthy offensive players')
         chosen = candidates[0]
+        if role == 'TE' and slot > 0 and str(package) in ('12', '13', '22'):
+            own = [p for p in candidates if position(p) == 'TE']
+            if own:
+                chosen = max(own, key=lambda p: role_grade(p, role, package, slot))
+                candidates = [chosen] + [p for p in candidates if pid(p) != pid(chosen)]
         if role == 'FB' and position(chosen) != 'FB':
             # A blocking TE can be the better second back. Preserve the lead
             # TE and receivers needed later in the package when choosing one.

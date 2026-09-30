@@ -212,7 +212,7 @@ ARCHETYPES = {
  'power_gap':       dict(name='Power Gap',            side='offence', words='Gap runs from heavy sets, pulls and doubles, shots off the run.',
                          offence=dict(blocking='gap', personnel='21', pass_lean=.40, play_action=.6, motion=.45, tempo=.4, deep=.5, fourth_down=.6)),
  'air_raid':        dict(name='Air Raid',             side='offence', words='Four wide, tempo, throw it sixty percent of the time.',
-                         offence=dict(blocking='zone', personnel='11', pass_lean=.64, play_action=.3, motion=.5, tempo=.75, deep=.6, fourth_down=.55)),
+                         offence=dict(blocking='zone', personnel='10', pass_lean=.64, play_action=.3, motion=.5, tempo=.75, deep=.6, fourth_down=.55)),
  'heavy_12':        dict(name='Heavy 12',             side='offence', words='Two tight ends as the base, run first, play action to the seams.',
                          offence=dict(blocking='mixed', personnel='12', pass_lean=.45, play_action=.65, motion=.45, tempo=.4, deep=.45, fourth_down=.5)),
  'shanahan_zone':   dict(name='Motion Zone',          side='offence', words='Wide zone married to constant motion and bootlegs; the back sets the table.',

@@ -74,10 +74,8 @@ def make_coach(gm):
     blocking = getattr(gm, 'off_blocking', 'zone')
     run_mix = {'zone': {'zone': .80, 'gap': .20}, 'gap': {'zone': .25, 'gap': .75}}.get(blocking, {'zone': .55, 'gap': .45})
     base = getattr(gm, 'off_personnel', '11')
-    pers = {'11': .545, '12': .245, '21': .070, '13': .040, '10': .065, '22': .025, '00': .010}
-    if base in pers:
-        pers[base] += 0.20                    # his base grouping, a fifth more often
-        pers = {k: v / sum(pers.values()) for k, v in pers.items()}
+    import offense_roles as OR
+    pers = OR.package_weights(gm)
     deep = float(getattr(gm, 'deep', 0.5))
     depth_mix = (0.62 - 0.12 * (deep - 0.5), 0.24, 0.14 + 0.12 * (deep - 0.5))
     return dict(

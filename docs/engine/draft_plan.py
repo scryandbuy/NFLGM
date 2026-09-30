@@ -7,7 +7,6 @@ Scores are on the draft board's existing 0..12 need scale.
 from collections import defaultdict
 import gm_engine as GM
 import roster_needs as RN
-from offense_roles import fullback_score
 from cap_engine import CAP
 
 
@@ -70,10 +69,20 @@ def assess(league, abbr, level=None, players=None):
     for pos in RN.POSITIONS:
         bar = max(81.0 if pos == 'QB' else 76.0, float(level.get(pos, 0.0)) - 2.5)
         assignments = roles[pos]
-        starter = max((12.0 if row['player'] is None else
-                       min(12.0, max(0.0, bar - (fullback_score(row['player'])
-                                                if row['role'] == 'FB' else row['grade'])))
-                       for row in assignments), default=0.0)
+        # Worst hole at this position within each package, averaged by usage.
+        # Taking the maximum over all packages treats an occasional TE3 as
+        # just as urgent as the every-down quarterback.
+        package_gaps = {}
+        for row in report['package_assignments']:
+            if row['sources'][0] != pos:
+                continue
+            key = row['variant']
+            gap = 12.0 if row['player'] is None else min(12.0, max(0.0, bar - row['grade']))
+            package_gaps[key] = max(package_gaps.get(key, 0.0), gap * row['weight'])
+        starter = min(12.0, sum(package_gaps.values()))
+        if pos in ('K', 'P', 'LS'):
+            starter = max((12.0 if row['player'] is None else min(12.0, max(0.0, bar-row['grade']))
+                           for row in assignments), default=0.0)
         count = report['counts'].get(pos, 0)
         depth = min(12.0, 3.0 * max(0, floors[pos] - count))
         for group, minimum in group_floors.items():
@@ -115,6 +124,9 @@ def assess(league, abbr, level=None, players=None):
                        and p.contract.years > 1), default=0.0)
         contract = min(6.0, 60.0 * savings / max(limit, 1.0) * pressure)
         future = max(succession, contract)
+        exposure = min(1.0, report['package_demand'].get(pos, 0.0) / max(1, len(assignments)))
+        if pos not in ('K', 'P', 'LS'):
+            future *= exposure
         need = max(starter, .6 * depth, .75 * future)
         positions[pos] = dict(starter=round(starter, 4), depth=round(depth, 4),
                               succession=round(succession, 4), contract=round(contract, 4),
@@ -123,4 +135,28 @@ def assess(league, abbr, level=None, players=None):
                               expiring=sum(yrs <= 1 for _, yrs, _ in control))
     return dict(positions=positions, players=men, assignments=report['assignments'],
                 roster_score=report['score'], committed_next=committed,
-                cap_pressure=pressure)
+                cap_pressure=pressure, package_demand=report['package_demand'],
+                _roster_report=report, _roster=proxy)
+
+
+def prospect_gains(league, abbr, prospects, plan, grades):
+    """Evaluate the scouting room's player, including its attribute uncertainty."""
+    from types import SimpleNamespace
+    import scouting as SC
+    import xp as XP
+    seen = []
+    for p in prospects:
+        view = league.scouting[abbr][p.pid]
+        e_phys, e_skill = float(view.get('e_phys', 0) or 0), float(view.get('e_skill', 0) or 0)
+        fade = max(SC.TAPE_FLOOR, 1.0 - .25 * (float(view.get('reads', 1) or 1) - 1))
+        if 'visited' in (view.get('flags') or []):
+            fade = min(fade, .25 if p.xp_spent.get('_tape_role') else .5)
+        e_skill += SC.tape(p) * fade
+        growth = min(6.0, max(0.0, grades[p.pid] - float(view['ovr'])))
+        ratings = {k: min(99.0, max(30.0, float(v) + growth +
+                    (e_phys if k in XP.PHYSICAL or k in XP.TOOLS else e_skill)))
+                   for k, v in p.ratings.items()}
+        seen.append(SimpleNamespace(pid=p.pid, pos=p.pos, ratings=ratings,
+                                    ovr=float(view['ovr'])+growth, out_until=None,
+                                    weight=getattr(p, 'weight', None)))
+    return RN.candidate_gains(plan['_roster'], seen, baseline=plan['_roster_report'])
