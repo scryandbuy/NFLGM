@@ -68,7 +68,8 @@ def select_rush(defense, call):
     if cov in ('cover_3','cover_3_mable','cover_4'):
         deep += corners[:2]
     elif cov == 'cover_6':
-        deep += corners[:1]
+        # zones.cover_6 puts the outside quarter on offensive left.
+        deep += [a for a in corners if a['alignment'] == 'corner_right']
     protected = {player_key(a['player']) for a in deep}
     drops = {str(x) for x in call.get('dropper_ids', [])}
     eligible = [a for a in rows if player_key(a['player']) not in protected | drops]

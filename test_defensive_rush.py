@@ -26,6 +26,18 @@ def call(front='3-4', package='base', count=4, **kw):
 
 
 class RushTests(unittest.TestCase):
+    def test_coverage_sides_use_offensive_viewpoint(self):
+        import zones
+        d=unit('4-3','nickel')
+        c=dict(call('4-3','nickel'),coverage='cover_6')
+        aligned=[dict(player=dict(pid=s,pos='WR'),spot=spot,side=s) for s,spot in [('L','X'),('R','Z')]]
+        pairs,_=C.assign_coverage(aligned,d,c,np.random.default_rng(1),P.rate,travel=False)
+        self.assertEqual({p['side']:p['defender']['pid'] for p in pairs},{'L':'CBR','R':'CBL'})
+        owners=zones.owners('cover_6',pairs[0]['_unit'],[],P.rate)
+        self.assertEqual(owners['deep_L']['pid'],'CBR')
+        rush=R.select_rush(d,dict(c,rushers=7,blitzer_ids=['CBR']))
+        self.assertNotIn('CBR',{p['pid'] for p in rush['rushers']})
+
     def test_run_front_includes_edges_and_is_order_independent(self):
         from unittest.mock import patch
         d=unit(); c=dict(call(),front='3-4 one',box=7)

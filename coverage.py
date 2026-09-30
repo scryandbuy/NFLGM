@@ -133,7 +133,8 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
     lbs = [a['player'] for a in rows if a['player'] not in cbs+safs]
     # The shadow corner is chosen by ability, independently of alignment.
     cbs.sort(key=lambda d: (-rate_fn(d, {'man_cover_rating':.55,'speed_rating':.25,'press_rating':.20}), player_key(d)))
-    assigned_sides = {('L' if a['alignment']=='corner_left' else 'R'):a['player']
+    # Receiver/zone sides use the offense's viewpoint; alignments use defense's.
+    assigned_sides = {('R' if a['alignment']=='corner_left' else 'L'):a['player']
                       for a in rows if a['alignment'] in ('corner_left','corner_right')}
     # MAN OR ZONE IS NOT ONE ANSWER FOR THE WHOLE DEFENCE. A split-field call
     # plays one principle to each side, which is what cover 6 and mable ARE,
