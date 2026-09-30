@@ -862,17 +862,43 @@ function yearChips(v, load) {
   return row;
 }
 
-// HOVERS STAY ON THE PAGE. When the pointer enters anything with a data-tip, the element is classed by where it sits:
-// near the right edge the tip hangs from the right, near the left from the left, in the bottom of the window it opens
-// upward. The CSS does the rest.
+// One viewport-level tooltip avoids clipping and keeps the note beside the hovered control.
+const floatingTip = el('div', { id: 'floating-tooltip', role: 'tooltip' });
+document.body.append(floatingTip);
+let tipTarget = null;
+function placeTip(x, y) {
+  if (!tipTarget) return;
+  const pad = 8, gap = 14, w = floatingTip.offsetWidth, h = floatingTip.offsetHeight;
+  let left = x + gap, top = y + gap;
+  if (left + w > window.innerWidth - pad) left = x - w - gap;
+  if (top + h > window.innerHeight - pad) top = y - h - gap;
+  floatingTip.style.left = `${Math.max(pad, Math.min(left, window.innerWidth - w - pad))}px`;
+  floatingTip.style.top = `${Math.max(pad, Math.min(top, window.innerHeight - h - pad))}px`;
+}
+function showTip(target, x, y) {
+  const message = target?.getAttribute('data-tip');
+  if (!message) { hideTip(); return; }
+  tipTarget = target;
+  floatingTip.textContent = message;
+  floatingTip.classList.add('visible');
+  placeTip(x, y);
+}
+function hideTip() { tipTarget = null; floatingTip.classList.remove('visible'); }
 document.addEventListener('mouseover', e => {
-  const t = e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
-  if (!t) return;
-  const r = t.getBoundingClientRect(); const W = window.innerWidth, H = window.innerHeight;
-  t.classList.toggle('tip-right', r.left + r.width / 2 > W - 160);
-  t.classList.toggle('tip-left', r.left + r.width / 2 < 160);
-  t.classList.toggle('tip-up', r.bottom > H - 120);
+  const target = e.target?.closest?.('[data-tip]');
+  if (target) showTip(target, e.clientX, e.clientY);
 }, true);
+document.addEventListener('mousemove', e => { if (tipTarget) placeTip(e.clientX, e.clientY); }, true);
+document.addEventListener('mouseout', e => {
+  if (tipTarget && !tipTarget.contains(e.relatedTarget)) hideTip();
+}, true);
+document.addEventListener('focusin', e => {
+  const target = e.target?.closest?.('[data-tip]');
+  if (target) { const r = target.getBoundingClientRect(); showTip(target, r.left + r.width / 2, r.bottom); }
+}, true);
+document.addEventListener('focusout', e => { if (tipTarget && !tipTarget.contains(e.relatedTarget)) hideTip(); }, true);
+window.addEventListener('scroll', hideTip, true);
+window.addEventListener('resize', hideTip);
 
 // weeks 19 to 22 are the playoff rounds
 function weekName(w) { return ({ 19: 'Wild Card', 20: 'Divisional Round', 21: 'Conference Championship', 22: 'Super Bowl' })[w] || `Week ${w}`; }
@@ -1215,9 +1241,11 @@ function offerForm(t, kind, onDone, preset) {
     const sy = f.querySelector('.summary-years'), sa = f.querySelector('.summary-apy');
     if (sy) sy.textContent = String(+yrs.value || 1);
     if (sa) sa.textContent = `$${apyOf().toFixed(1)}m`;
-    { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m annualized total`; if (r.extension) breakdown.textContent += ` · ${r.existing_years} existing year${r.existing_years === 1 ? '' : 's'} retained; cap hits below include the existing deal and extension`; if (r.prorated) breakdown.textContent = `${n === 1 ? 'Remainder of this season' : n + ' seasons'} · $${apyOf().toFixed(1)}m annual rate · $${r.cash_this_season.toFixed(2)}m cash this season (including signing bonus) · $${r.year1.toFixed(2)}m current cap hit`; }
-    yearHits.innerHTML = ''; r.hits.forEach((h, i) => yearHits.append(el('label', {}, `${r.years[i] === r.expiry_year ? 'Void charge' : 'Cap hit'} · ${r.years[i]}`, el('b', {}, `$${h.toFixed(1)}m`))));
-    hitsRow.innerHTML = ''; r.hits.forEach((h, i) => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, h / Math.max(...r.hits, 0.1) * 100)}%` })), el('span', {}, `${r.years[i] === r.expiry_year ? 'Void charge · ' : ''}${r.years[i]}`), el('b', {}, `$${h.toFixed(1)}m`))));
+    { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m annualized total`; if (r.extension) breakdown.textContent += ` · ${r.existing_years} existing year${r.existing_years === 1 ? '' : 's'} retained; future cap hits below include the existing deal and extension`; if (r.prorated) breakdown.textContent = `${n === 1 ? 'Remainder of this season' : n + ' seasons'} · $${apyOf().toFixed(1)}m annual rate · $${r.cash_this_season.toFixed(2)}m cash this season (including signing bonus) · $${r.year1.toFixed(2)}m current cap hit`; }
+    const visibleHits = r.hits.map((hit, i) => ({ hit, year: r.years[i], void: r.years[i] === r.expiry_year })).filter((_, i) => !r.extension || i > 0);
+    const highestHit = Math.max(0.1, ...visibleHits.map(x => x.hit));
+    yearHits.innerHTML = ''; visibleHits.forEach(x => yearHits.append(el('label', {}, `${x.void ? 'Void charge' : 'Cap hit'} · ${x.year}`, el('b', {}, `$${x.hit.toFixed(1)}m`))));
+    hitsRow.innerHTML = ''; visibleHits.forEach(x => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, x.hit / highestHit * 100)}%` })), el('span', {}, `${x.void ? 'Void charge · ' : ''}${x.year}`), el('b', {}, `$${x.hit.toFixed(1)}m`))));
   };
   salary.onchange = yrs.onchange = bonus.onchange = preview; salary.oninput = yrs.oninput = bonus.oninput = preview;
   const promises = el('div', { class: 'promise' }, el('span', {}, 'Promise:')); const chosen = [];
