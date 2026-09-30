@@ -395,8 +395,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
         if len(men) >= 3:
             for p in men[2:4]:
                 if men[0].ovr - p.ovr > 3:
-                    remaining = [q for q in team.active() if q.pid != p.pid]
-                    if roster_report['score'] - RN.assess(team, remaining)['score'] > 6.0:
+                    if RN.departure_loss(team, p, baseline=roster_report) > 6.0:
                         continue  # he is needed for a job this coach actually runs
                     a = player_asset(league, team, p, pool, rng, viewer=team)
                     if a:

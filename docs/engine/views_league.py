@@ -9,13 +9,12 @@ DIVS = ['AFC East', 'AFC North', 'AFC South', 'AFC West', 'NFC East', 'NFC North
 
 
 def _state(session):
-    """The season runner, or a stand-in built on the league when none is live (after a load, between phases), so
-    standings and seeds always compute; the picture used to fall back to a three-club 'in the hunt' list."""
+    """Use a live runner or the same standings rules without building simulation rosters."""
     r = getattr(session, 'runner', None)
     if r is None:
         try:
-            import season as SN, numpy as np
-            r = SN.SeasonRunner(session.L, np.random.default_rng(0)); r.week = int(getattr(session.L, 'week', 0) or 0)
+            import season as SN
+            r = SN.StandingsView(session.L)
         except Exception: r = None
     return r
 

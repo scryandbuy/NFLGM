@@ -351,6 +351,24 @@ def move_gain(team, arrival, departure=None, baseline=None):
     return depth_score + sum(scores.values()) - before['score']
 
 
+def departure_loss(team, departure, baseline=None):
+    """Exact removal score using one caller-owned, current roster snapshot.
+
+    Reuse player/role grades, but allocate every package again: emergency
+    replacements can cross positions, and removing a back can change the
+    offensive personnel mix. Nothing is cached beyond this assessment.
+    """
+    before = assess(team) if baseline is None else baseline
+    players = [p for p in before['players'] if p.pid != departure.pid]
+    grades = before['_grades']
+    role_grades = dict(before['_role_grades'])
+    rows = _package_rows(team, players, grades, before['_profile'], role_grades)
+    depth_score, _ = _depth_accounting(team, players, grades)
+    scores = {side: _quality([row for row in rows if row['side'] == side])
+              for side in ('offense', 'defense')}
+    return before['score'] - (depth_score + sum(scores.values()))
+
+
 def candidate_gains(team, players, baseline=None):
     """Evaluate a candidate pool against one explicit, short-lived snapshot."""
     baseline = assess(team) if baseline is None else baseline

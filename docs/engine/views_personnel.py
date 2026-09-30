@@ -345,6 +345,7 @@ def free_agency(session, league, abbr):
     import negotiations as NG, valuation as VAL
     import player_roles as PR
     me = league.teams[abbr]
+    depth = me.depth
     rows = []
     # the best 400 on the market, not the first 400 in list order (that hid stars behind depth)
     ordered = sorted(list(league.free_agents), key=lambda x: -(league.player(x).ovr if league.player(x) else 0))[:400]
@@ -362,7 +363,7 @@ def free_agency(session, league, abbr):
         wk = int(league.week or 0); prorate = ((19 - wk) / 18.0) if (league.phase == 'regular' and 1 <= wk <= 18) else 1.0
         ask_now = (round(float(t['ask']) * prorate, 2) if t and t.get('ask') else None)
         hole = None
-        d = me.depth.get(p.pos, [])
+        d = depth.get(p.pos, [])
         out_men = [q for q in d[:2] if q.out_until is not None]
         if out_men: hole = f"Fills the hole at {display_pos} with {__import__('views').surname(out_men[0].name)} out" + (f" to week {out_men[0].out_until}" if isinstance(out_men[0].out_until, int) else '')
         elif len(d) <= 1: hole = f"Only {len(d)} healthy {display_pos} on the roster"

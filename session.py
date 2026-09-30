@@ -72,7 +72,7 @@ class Session:
     @classmethod
     def load(cls, text):
         d = json.loads(text)
-        L = LG.League.load(text)
+        L = LG.League.load(d)
         rng_ = np.random.default_rng(d.get('_seed_state', None))
         if d.get('_rng_state') is not None:
             rng_.bit_generator.state = d['_rng_state']
@@ -246,7 +246,9 @@ class Session:
         return votes
 
     def save(self):
-        d = json.loads(self.L.save())
+        # Build the snapshot once; the final encoder handles the league's
+        # numpy values and sets without an intermediate JSON round trip.
+        d = self.L.to_dict()
         if getattr(self.L, 'week_book', None) is not None:
             d['_week_book'] = self.L.week_book
         if self.runner is not None:
@@ -286,7 +288,7 @@ class Session:
                                  last_dealt=self.draft.last_dealt, auto=self.draft.auto,
                                  level=self.draft.level, scale=self.draft.scale, trade_targets=self.draft.trade_targets)
                             if self.draft_live() else None)
-        return json.dumps(d, default=lambda o: o.item() if hasattr(o, 'item') else str(o))
+        return json.dumps(d, default=LG._session_json_default)
 
     def live_journal(self):
         """Small autosave between full saves while the user's game is open."""
@@ -1492,6 +1494,12 @@ class Session:
         result = MK.answer_offer_sheet(self.L, int(mid), action, rng=self.rng)
         IB.reconcile(self.L)
         return result
+
+    def inbox_view(self):
+        """Only the header and full inbox needed by the mailbox screen."""
+        import views
+        return dict(rail=views.rail(self, self.L, self.user_team),
+                    inbox=views._inbox(self.L, limit=None))
 
     def portal_full(self):
         """The Portal view with every inbox message (the Portal itself keeps the recent fourteen)."""

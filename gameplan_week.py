@@ -107,14 +107,16 @@ def season_underway(league):
     return any(sum(int(x) for x in (t.record or [0, 0, 0])[:3]) > 0 for t in league.teams.values())
 
 
-def unit_ranks(league, team):
+def unit_ranks(league, team, all_grades=None):
     """Each unit against the league's 31 others, by grade. Hidden until the season's first game has been played,
     at the start of every year: before that every club shows the same ranks in every new game (same rosters),
     which read as carried over rather than earned."""
-    mine = unit_grades(league, team)
     if not season_underway(league):
-        return {unit: None for unit in mine}
-    allg = {a: unit_grades(league, t) for a, t in league.teams.items()}
+        return {unit: None for unit in UNITS}
+    allg = all_grades if all_grades is not None else {a: unit_grades(league, t) for a, t in league.teams.items()}
+    mine = allg.get(team.abbr)
+    if mine is None:
+        mine = unit_grades(league, team)
     ranks = {}
     for unit, v in mine.items():
         if v is None: ranks[unit] = None; continue
@@ -128,7 +130,9 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
     import weather as W
     me, opp = league.teams[me_abbr], league.teams[opp_abbr]
     tr = tendencies(league, opp_abbr); tm = tendencies(league, me_abbr)
-    ur_opp, ur_me = unit_ranks(league, opp), unit_ranks(league, me)
+    # This snapshot lasts only for this report: roster changes are visible next time.
+    all_grades = {a: unit_grades(league, t) for a, t in league.teams.items()} if season_underway(league) else None
+    ur_opp, ur_me = unit_ranks(league, opp, all_grades), unit_ranks(league, me, all_grades)
     n = len(league.teams)
     def rank_word(r): return 'elite' if r <= 5 else 'strong' if r <= 11 else 'average' if r <= 21 else 'weak' if r <= 27 else 'the worst in the league'
     strengths, weaknesses, suggestions = [], [], []

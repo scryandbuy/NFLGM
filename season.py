@@ -101,7 +101,42 @@ def make_coach(gm):
         off_script_skill=float(np.clip(gm.patience, .1, .9)))
 
 
-class SeasonRunner:
+class StandingsView:
+    """Read current results using the same tiebreakers, without simulation state."""
+
+    def __init__(self, league):
+        self.L = league
+
+    # ---- standings ------------------------------------------------------
+    def completed(self):
+        """(home, away, home_pts, away_pts) for every finished game."""
+        return [(h, a, hp, ap) for _wk, a, h, ap, hp in self.L.schedule
+                if hp is not None and _wk <= 18]                 # playoff games sit in the schedule (weeks 19-22) but never count in the standings
+
+    def season_state(self):
+        """The tiebreaker engine, fed from live results instead of history."""
+        div = {a: t.division for a, t in self.L.teams.items()}
+        conf = {a: t.conf for a, t in self.L.teams.items()}
+        return SS.Season.live(div, conf, self.completed(), self.L.year)
+
+    def standings(self):
+        S_ = self.season_state()
+        ranks = SS.division_ranks(S_)
+        out = {}
+        for abbr, t in self.L.teams.items():
+            w, l, tie = t.record
+            out[abbr] = dict(w=w, l=l, t=tie, pct=round(S_.wpct(abbr), 3),
+                             div=t.division, div_rank=ranks.get(abbr),
+                             pf=S_.pf[abbr], pa=S_.pa[abbr])
+        return out
+
+    def seeds(self):
+        S_ = self.season_state()
+        return {c: SS.seed_conference(S_, c) for c in sorted(set(
+            t.conf for t in self.L.teams.values()))}
+
+
+class SeasonRunner(StandingsView):
     """
     Runs one regular season on a live League.
 
@@ -806,34 +841,6 @@ class SeasonRunner:
                 print(f'  week {wk:2d}: {len(got)} games')
         self.finish()
         return self.standings()
-
-    # ---- standings ------------------------------------------------------
-    def completed(self):
-        """(home, away, home_pts, away_pts) for every finished game."""
-        return [(h, a, hp, ap) for _wk, a, h, ap, hp in self.L.schedule
-                if hp is not None and _wk <= 18]                 # playoff games sit in the schedule (weeks 19-22) but never count in the standings
-
-    def season_state(self):
-        """The tiebreaker engine, fed from live results instead of history."""
-        div = {a: t.division for a, t in self.L.teams.items()}
-        conf = {a: t.conf for a, t in self.L.teams.items()}
-        return SS.Season.live(div, conf, self.completed(), self.L.year)
-
-    def standings(self):
-        S_ = self.season_state()
-        ranks = SS.division_ranks(S_)
-        out = {}
-        for abbr, t in self.L.teams.items():
-            w, l, tie = t.record
-            out[abbr] = dict(w=w, l=l, t=tie, pct=round(S_.wpct(abbr), 3),
-                             div=t.division, div_rank=ranks.get(abbr),
-                             pf=S_.pf[abbr], pa=S_.pa[abbr])
-        return out
-
-    def seeds(self):
-        S_ = self.season_state()
-        return {c: SS.seed_conference(S_, c) for c in sorted(set(
-            t.conf for t in self.L.teams.values()))}
 
     def finish(self):
         """Close the year out: records into history, health rolled forward."""

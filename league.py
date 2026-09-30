@@ -1195,6 +1195,14 @@ def _json_default(o):
     raise TypeError(f'not serialisable: {type(o)}')
 
 
+def _session_json_default(o):
+    """League encoding plus the existing session-only scalar fallback."""
+    try:
+        return _json_default(o)
+    except TypeError:
+        return o.item() if hasattr(o, 'item') else str(o)
+
+
 def contract_to_dict(c):
     if c is None: return None
     return dict(years=c.years, base=list(c.base), signing_bonus=c.sb,
