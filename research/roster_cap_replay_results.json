@@ -1,0 +1,2209 @@
+[
+  {
+    "path": "C:/Users/HP/Documents/Codex/2026-09-28/rev/outputs/team-study-93031/checkpoint_2027.json",
+    "before": {
+      "ARI": {
+        "size": 53,
+        "cap": 4.885
+      },
+      "ATL": {
+        "size": 53,
+        "cap": 1.115
+      },
+      "BAL": {
+        "size": 53,
+        "cap": 6.141
+      },
+      "BUF": {
+        "size": 53,
+        "cap": 5.299
+      },
+      "CAR": {
+        "size": 53,
+        "cap": 0.556
+      },
+      "CHI": {
+        "size": 53,
+        "cap": 10.299
+      },
+      "CIN": {
+        "size": 53,
+        "cap": 6.624
+      },
+      "CLE": {
+        "size": 53,
+        "cap": 31.465
+      },
+      "DAL": {
+        "size": 53,
+        "cap": 20.421
+      },
+      "DEN": {
+        "size": 23,
+        "cap": -0.791
+      },
+      "DET": {
+        "size": 53,
+        "cap": 24.997
+      },
+      "GB": {
+        "size": 53,
+        "cap": 17.492
+      },
+      "HOU": {
+        "size": 53,
+        "cap": 7.988
+      },
+      "IND": {
+        "size": 53,
+        "cap": 16.755
+      },
+      "JAX": {
+        "size": 53,
+        "cap": 3.939
+      },
+      "KC": {
+        "size": 50,
+        "cap": 0.042
+      },
+      "LA": {
+        "size": 53,
+        "cap": 0.713
+      },
+      "LAC": {
+        "size": 53,
+        "cap": 22.74
+      },
+      "LV": {
+        "size": 53,
+        "cap": 1.593
+      },
+      "MIA": {
+        "size": 53,
+        "cap": 8.917
+      },
+      "MIN": {
+        "size": 53,
+        "cap": 1.063
+      },
+      "NE": {
+        "size": 53,
+        "cap": 1.339
+      },
+      "NO": {
+        "size": 38,
+        "cap": 0.418
+      },
+      "NYG": {
+        "size": 53,
+        "cap": 0.585
+      },
+      "NYJ": {
+        "size": 53,
+        "cap": 2.934
+      },
+      "PHI": {
+        "size": 53,
+        "cap": 2.137
+      },
+      "PIT": {
+        "size": 53,
+        "cap": 5.18
+      },
+      "SEA": {
+        "size": 53,
+        "cap": 6.235
+      },
+      "SF": {
+        "size": 53,
+        "cap": 9.877
+      },
+      "TB": {
+        "size": 53,
+        "cap": 12.311
+      },
+      "TEN": {
+        "size": 53,
+        "cap": 7.13
+      },
+      "WAS": {
+        "size": 53,
+        "cap": 4.457
+      }
+    },
+    "after": {
+      "ARI": {
+        "size": 53,
+        "cap": 4.885
+      },
+      "ATL": {
+        "size": 53,
+        "cap": 1.115
+      },
+      "BAL": {
+        "size": 53,
+        "cap": 6.141
+      },
+      "BUF": {
+        "size": 53,
+        "cap": 5.299
+      },
+      "CAR": {
+        "size": 53,
+        "cap": 0.556
+      },
+      "CHI": {
+        "size": 53,
+        "cap": 10.299
+      },
+      "CIN": {
+        "size": 53,
+        "cap": 6.624
+      },
+      "CLE": {
+        "size": 53,
+        "cap": 31.465
+      },
+      "DAL": {
+        "size": 53,
+        "cap": 20.421
+      },
+      "DEN": {
+        "size": 53,
+        "cap": 0.054
+      },
+      "DET": {
+        "size": 53,
+        "cap": 24.997
+      },
+      "GB": {
+        "size": 53,
+        "cap": 17.492
+      },
+      "HOU": {
+        "size": 53,
+        "cap": 7.988
+      },
+      "IND": {
+        "size": 53,
+        "cap": 16.755
+      },
+      "JAX": {
+        "size": 53,
+        "cap": 3.939
+      },
+      "KC": {
+        "size": 53,
+        "cap": 0.055
+      },
+      "LA": {
+        "size": 53,
+        "cap": 0.713
+      },
+      "LAC": {
+        "size": 53,
+        "cap": 22.74
+      },
+      "LV": {
+        "size": 53,
+        "cap": 1.593
+      },
+      "MIA": {
+        "size": 53,
+        "cap": 8.917
+      },
+      "MIN": {
+        "size": 53,
+        "cap": 1.063
+      },
+      "NE": {
+        "size": 53,
+        "cap": 1.339
+      },
+      "NO": {
+        "size": 53,
+        "cap": 0.026
+      },
+      "NYG": {
+        "size": 53,
+        "cap": 0.585
+      },
+      "NYJ": {
+        "size": 53,
+        "cap": 2.934
+      },
+      "PHI": {
+        "size": 53,
+        "cap": 2.137
+      },
+      "PIT": {
+        "size": 53,
+        "cap": 5.18
+      },
+      "SEA": {
+        "size": 53,
+        "cap": 6.235
+      },
+      "SF": {
+        "size": 53,
+        "cap": 9.877
+      },
+      "TB": {
+        "size": 53,
+        "cap": 12.311
+      },
+      "TEN": {
+        "size": 53,
+        "cap": 7.13
+      },
+      "WAS": {
+        "size": 53,
+        "cap": 4.457
+      }
+    },
+    "problems": [],
+    "repair_moves": [
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0728",
+        "team": "DEN",
+        "freed": 9.44,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0774",
+        "team": "DEN",
+        "freed": 6.62,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0754",
+        "team": "DEN",
+        "freed": 4.23,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0771",
+        "team": "DEN",
+        "freed": 3.15,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0735",
+        "team": "DEN",
+        "freed": 2.91,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0793",
+        "team": "DEN",
+        "freed": 2.55,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0725",
+        "team": "DEN",
+        "freed": 1.07,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0744",
+        "team": "DEN",
+        "freed": 0.45,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P0775",
+        "team": "DEN",
+        "dead": 2.654,
+        "dead_next": 0.0,
+        "saved": 1.98,
+        "waived": false
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P0789",
+        "team": "DEN",
+        "dead": 3.352,
+        "dead_next": 3.352,
+        "saved": 1.877,
+        "waived": false
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P0738",
+        "team": "DEN",
+        "dead": 4.898,
+        "dead_next": 0.0,
+        "saved": 4.334,
+        "waived": false
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P0784",
+        "team": "DEN",
+        "dead": 3.166,
+        "dead_next": 3.166,
+        "saved": 1.782,
+        "waived": false
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P0736",
+        "team": "DEN",
+        "dead": 7.263,
+        "dead_next": 0.0,
+        "saved": 6.814,
+        "waived": false
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P1212",
+        "team": "KC",
+        "freed": 3.83,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P1855",
+        "team": "NO",
+        "freed": 3.04,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P1847",
+        "team": "NO",
+        "freed": 1.87,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P1802",
+        "team": "NO",
+        "freed": 1.63,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0254",
+        "team": "NO",
+        "freed": 1.24,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P1817",
+        "team": "NO",
+        "freed": 0.96,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P1804",
+        "team": "NO",
+        "freed": 0.68,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P1481",
+        "team": "NO",
+        "freed": 0.57,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P1856",
+        "team": "NO",
+        "freed": 0.41,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P1853",
+        "team": "NO",
+        "freed": 0.41,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P1813",
+        "team": "NO",
+        "dead": 8.772,
+        "dead_next": 0.0,
+        "saved": 7.117,
+        "waived": false
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P1666",
+        "team": "NO",
+        "dead": 9.903,
+        "dead_next": 0.0,
+        "saved": 4.877,
+        "waived": false
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "ps_poach",
+        "pid": "P0767",
+        "team": "DEN",
+        "source": "TEN",
+        "locked_until": 3
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0736",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1860",
+        "team": "DEN",
+        "apy": 1.328,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0080",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1367",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0738",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "FA23043",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "ps_poach",
+        "pid": "C22429LS",
+        "team": "DEN",
+        "source": "BAL",
+        "locked_until": 3
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1666",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1813",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0672",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0789",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1832",
+        "team": "DEN",
+        "apy": 1.328,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0402",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0784",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0498",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0740",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1868",
+        "team": "DEN",
+        "apy": 1.328,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1538",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0775",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1377",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0152",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0663",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "C912",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2137",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1201",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1404",
+        "team": "DEN",
+        "apy": 1.143,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0632",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2179",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2389",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0999",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1810",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1983",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1519",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1691",
+        "team": "DEN",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1099",
+        "team": "KC",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2429",
+        "team": "KC",
+        "apy": 1.328,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "FA10245",
+        "team": "KC",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0079",
+        "team": "NO",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1444",
+        "team": "NO",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0769",
+        "team": "NO",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1385",
+        "team": "NO",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2205",
+        "team": "NO",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "FA20978",
+        "team": "NO",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1073",
+        "team": "NO",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1226",
+        "team": "NO",
+        "apy": 1.328,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0553",
+        "team": "NO",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1484",
+        "team": "NO",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0978",
+        "team": "NO",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "ps_callup",
+        "pid": "C22171",
+        "team": "NO"
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1651",
+        "team": "NO",
+        "apy": 1.143,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "FA10186",
+        "team": "NO",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0214",
+        "team": "NO",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "C20273",
+        "team": "NO",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1767",
+        "team": "NO",
+        "apy": 1.028,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "position_change",
+        "pid": "P2592",
+        "team": "WAS",
+        "frm": "TE",
+        "to": "LS",
+        "penalty": 5.0,
+        "games": 16
+      }
+    ],
+    "wire_attempts": 1,
+    "wire_phase": "regular",
+    "wire_problems": []
+  },
+  {
+    "path": "C:/Users/HP/Documents/Codex/2026-09-28/rev/outputs/team-study-93030/checkpoint_2027.json",
+    "before": {
+      "ARI": {
+        "size": 53,
+        "cap": 9.619
+      },
+      "ATL": {
+        "size": 53,
+        "cap": 4.29
+      },
+      "BAL": {
+        "size": 53,
+        "cap": 15.809
+      },
+      "BUF": {
+        "size": 53,
+        "cap": 8.483
+      },
+      "CAR": {
+        "size": 53,
+        "cap": 4.782
+      },
+      "CHI": {
+        "size": 53,
+        "cap": 3.131
+      },
+      "CIN": {
+        "size": 53,
+        "cap": 14.637
+      },
+      "CLE": {
+        "size": 53,
+        "cap": 17.949
+      },
+      "DAL": {
+        "size": 53,
+        "cap": 16.313
+      },
+      "DEN": {
+        "size": 36,
+        "cap": 0.021
+      },
+      "DET": {
+        "size": 53,
+        "cap": 11.68
+      },
+      "GB": {
+        "size": 53,
+        "cap": 20.116
+      },
+      "HOU": {
+        "size": 53,
+        "cap": 13.159
+      },
+      "IND": {
+        "size": 53,
+        "cap": 11.394
+      },
+      "JAX": {
+        "size": 53,
+        "cap": 16.19
+      },
+      "KC": {
+        "size": 53,
+        "cap": 12.236
+      },
+      "LA": {
+        "size": 53,
+        "cap": 1.818
+      },
+      "LAC": {
+        "size": 53,
+        "cap": 29.39
+      },
+      "LV": {
+        "size": 53,
+        "cap": 0.651
+      },
+      "MIA": {
+        "size": 53,
+        "cap": 1.052
+      },
+      "MIN": {
+        "size": 53,
+        "cap": 3.477
+      },
+      "NE": {
+        "size": 53,
+        "cap": 1.53
+      },
+      "NO": {
+        "size": 53,
+        "cap": 2.333
+      },
+      "NYG": {
+        "size": 53,
+        "cap": 5.41
+      },
+      "NYJ": {
+        "size": 53,
+        "cap": 23.743
+      },
+      "PHI": {
+        "size": 53,
+        "cap": 12.746
+      },
+      "PIT": {
+        "size": 53,
+        "cap": 8.268
+      },
+      "SEA": {
+        "size": 53,
+        "cap": 7.124
+      },
+      "SF": {
+        "size": 53,
+        "cap": 8.398
+      },
+      "TB": {
+        "size": 53,
+        "cap": 6.842
+      },
+      "TEN": {
+        "size": 53,
+        "cap": 1.789
+      },
+      "WAS": {
+        "size": 53,
+        "cap": 9.489
+      }
+    },
+    "after": {
+      "ARI": {
+        "size": 53,
+        "cap": 9.619
+      },
+      "ATL": {
+        "size": 53,
+        "cap": 4.29
+      },
+      "BAL": {
+        "size": 53,
+        "cap": 15.809
+      },
+      "BUF": {
+        "size": 53,
+        "cap": 8.483
+      },
+      "CAR": {
+        "size": 53,
+        "cap": 4.782
+      },
+      "CHI": {
+        "size": 53,
+        "cap": 3.131
+      },
+      "CIN": {
+        "size": 53,
+        "cap": 14.637
+      },
+      "CLE": {
+        "size": 53,
+        "cap": 17.949
+      },
+      "DAL": {
+        "size": 53,
+        "cap": 16.313
+      },
+      "DEN": {
+        "size": 53,
+        "cap": 0.005
+      },
+      "DET": {
+        "size": 53,
+        "cap": 11.68
+      },
+      "GB": {
+        "size": 53,
+        "cap": 20.116
+      },
+      "HOU": {
+        "size": 53,
+        "cap": 13.159
+      },
+      "IND": {
+        "size": 53,
+        "cap": 11.394
+      },
+      "JAX": {
+        "size": 53,
+        "cap": 16.19
+      },
+      "KC": {
+        "size": 53,
+        "cap": 12.236
+      },
+      "LA": {
+        "size": 53,
+        "cap": 1.818
+      },
+      "LAC": {
+        "size": 53,
+        "cap": 29.39
+      },
+      "LV": {
+        "size": 53,
+        "cap": 0.651
+      },
+      "MIA": {
+        "size": 53,
+        "cap": 1.052
+      },
+      "MIN": {
+        "size": 53,
+        "cap": 3.477
+      },
+      "NE": {
+        "size": 53,
+        "cap": 1.53
+      },
+      "NO": {
+        "size": 53,
+        "cap": 2.333
+      },
+      "NYG": {
+        "size": 53,
+        "cap": 5.41
+      },
+      "NYJ": {
+        "size": 53,
+        "cap": 23.743
+      },
+      "PHI": {
+        "size": 53,
+        "cap": 12.746
+      },
+      "PIT": {
+        "size": 53,
+        "cap": 8.268
+      },
+      "SEA": {
+        "size": 53,
+        "cap": 7.124
+      },
+      "SF": {
+        "size": 53,
+        "cap": 8.398
+      },
+      "TB": {
+        "size": 53,
+        "cap": 6.842
+      },
+      "TEN": {
+        "size": 53,
+        "cap": 1.789
+      },
+      "WAS": {
+        "size": 53,
+        "cap": 9.489
+      }
+    },
+    "problems": [],
+    "repair_moves": [
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0728",
+        "team": "DEN",
+        "freed": 9.44,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0771",
+        "team": "DEN",
+        "freed": 3.15,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0735",
+        "team": "DEN",
+        "freed": 2.91,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0793",
+        "team": "DEN",
+        "freed": 2.55,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "restructure",
+        "pid": "P0725",
+        "team": "DEN",
+        "freed": 1.07,
+        "enforcement": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P0784",
+        "team": "DEN",
+        "dead": 3.166,
+        "dead_next": 3.166,
+        "saved": 1.782,
+        "waived": false
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P0768",
+        "team": "DEN",
+        "dead": 2.6,
+        "dead_next": 0.0,
+        "saved": 1.925,
+        "waived": true
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P0754",
+        "team": "DEN",
+        "dead": 7.542,
+        "dead_next": 0.0,
+        "saved": 7.106,
+        "waived": false
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2153",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1444",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1644",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0079",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0498",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0754",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "FA1448",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0505",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0784",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1538",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0648",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0762",
+        "team": "DEN",
+        "apy": 1.653,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0872",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0746",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P0365",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2258",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2428",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2019",
+        "team": "DEN",
+        "apy": 1.464,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1335",
+        "team": "DEN",
+        "apy": 1.328,
+        "years": 1
+      },
+      {
+        "year": 2027,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P1286",
+        "team": "DEN",
+        "apy": 1.328,
+        "years": 1
+      }
+    ],
+    "wire_attempts": 1,
+    "wire_phase": "regular",
+    "wire_problems": []
+  },
+  {
+    "path": "C:/Users/HP/Documents/Codex/2026-09-28/rev/outputs/team-study-93030/checkpoint_2028.json",
+    "before": {
+      "ARI": {
+        "size": 53,
+        "cap": 47.516
+      },
+      "ATL": {
+        "size": 53,
+        "cap": 13.887
+      },
+      "BAL": {
+        "size": 53,
+        "cap": 4.978
+      },
+      "BUF": {
+        "size": 53,
+        "cap": 13.28
+      },
+      "CAR": {
+        "size": 53,
+        "cap": 11.981
+      },
+      "CHI": {
+        "size": 53,
+        "cap": 22.71
+      },
+      "CIN": {
+        "size": 53,
+        "cap": 2.052
+      },
+      "CLE": {
+        "size": 53,
+        "cap": 16.684
+      },
+      "DAL": {
+        "size": 53,
+        "cap": 8.451
+      },
+      "DEN": {
+        "size": 53,
+        "cap": 27.484
+      },
+      "DET": {
+        "size": 53,
+        "cap": 2.941
+      },
+      "GB": {
+        "size": 53,
+        "cap": 1.569
+      },
+      "HOU": {
+        "size": 53,
+        "cap": 0.548
+      },
+      "IND": {
+        "size": 53,
+        "cap": 21.323
+      },
+      "JAX": {
+        "size": 53,
+        "cap": 16.268
+      },
+      "KC": {
+        "size": 53,
+        "cap": 4.71
+      },
+      "LA": {
+        "size": 53,
+        "cap": 3.47
+      },
+      "LAC": {
+        "size": 53,
+        "cap": 11.52
+      },
+      "LV": {
+        "size": 53,
+        "cap": 2.268
+      },
+      "MIA": {
+        "size": 53,
+        "cap": 11.412
+      },
+      "MIN": {
+        "size": 53,
+        "cap": 4.098
+      },
+      "NE": {
+        "size": 53,
+        "cap": 19.342
+      },
+      "NO": {
+        "size": 53,
+        "cap": 2.068
+      },
+      "NYG": {
+        "size": 53,
+        "cap": 11.183
+      },
+      "NYJ": {
+        "size": 53,
+        "cap": 10.383
+      },
+      "PHI": {
+        "size": 53,
+        "cap": 4.672
+      },
+      "PIT": {
+        "size": 53,
+        "cap": 1.984
+      },
+      "SEA": {
+        "size": 53,
+        "cap": 5.584
+      },
+      "SF": {
+        "size": 53,
+        "cap": 6.048
+      },
+      "TB": {
+        "size": 53,
+        "cap": 19.921
+      },
+      "TEN": {
+        "size": 53,
+        "cap": 1.105
+      },
+      "WAS": {
+        "size": 53,
+        "cap": 16.938
+      }
+    },
+    "after": {
+      "ARI": {
+        "size": 53,
+        "cap": 47.516
+      },
+      "ATL": {
+        "size": 53,
+        "cap": 13.887
+      },
+      "BAL": {
+        "size": 53,
+        "cap": 4.978
+      },
+      "BUF": {
+        "size": 53,
+        "cap": 13.28
+      },
+      "CAR": {
+        "size": 53,
+        "cap": 11.981
+      },
+      "CHI": {
+        "size": 53,
+        "cap": 22.71
+      },
+      "CIN": {
+        "size": 53,
+        "cap": 2.052
+      },
+      "CLE": {
+        "size": 53,
+        "cap": 16.684
+      },
+      "DAL": {
+        "size": 53,
+        "cap": 8.451
+      },
+      "DEN": {
+        "size": 53,
+        "cap": 27.484
+      },
+      "DET": {
+        "size": 53,
+        "cap": 2.941
+      },
+      "GB": {
+        "size": 53,
+        "cap": 1.569
+      },
+      "HOU": {
+        "size": 53,
+        "cap": 0.548
+      },
+      "IND": {
+        "size": 53,
+        "cap": 21.323
+      },
+      "JAX": {
+        "size": 53,
+        "cap": 16.268
+      },
+      "KC": {
+        "size": 53,
+        "cap": 4.71
+      },
+      "LA": {
+        "size": 53,
+        "cap": 3.47
+      },
+      "LAC": {
+        "size": 53,
+        "cap": 11.52
+      },
+      "LV": {
+        "size": 53,
+        "cap": 2.268
+      },
+      "MIA": {
+        "size": 53,
+        "cap": 11.412
+      },
+      "MIN": {
+        "size": 53,
+        "cap": 4.098
+      },
+      "NE": {
+        "size": 53,
+        "cap": 19.342
+      },
+      "NO": {
+        "size": 53,
+        "cap": 2.068
+      },
+      "NYG": {
+        "size": 53,
+        "cap": 11.183
+      },
+      "NYJ": {
+        "size": 53,
+        "cap": 10.383
+      },
+      "PHI": {
+        "size": 53,
+        "cap": 4.672
+      },
+      "PIT": {
+        "size": 53,
+        "cap": 1.984
+      },
+      "SEA": {
+        "size": 53,
+        "cap": 5.584
+      },
+      "SF": {
+        "size": 53,
+        "cap": 6.048
+      },
+      "TB": {
+        "size": 53,
+        "cap": 19.921
+      },
+      "TEN": {
+        "size": 53,
+        "cap": 1.105
+      },
+      "WAS": {
+        "size": 53,
+        "cap": 19.04
+      }
+    },
+    "problems": [],
+    "repair_moves": [
+      {
+        "year": 2028,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "release",
+        "pid": "P0854",
+        "team": "WAS",
+        "dead": 0.0,
+        "dead_next": 0.0,
+        "saved": 3.71,
+        "waived": true
+      },
+      {
+        "year": 2028,
+        "week": 0,
+        "phase": "offseason",
+        "kind": "sign",
+        "pid": "P2234",
+        "team": "WAS",
+        "apy": 1.608,
+        "years": 1
+      }
+    ],
+    "wire_attempts": 1,
+    "wire_phase": "regular",
+    "wire_problems": []
+  },
+  {
+    "path": "C:/Users/HP/Documents/Codex/2026-09-28/rev/outputs/team-study-93030/checkpoint_2029.json",
+    "before": {
+      "ARI": {
+        "size": 53,
+        "cap": 18.117
+      },
+      "ATL": {
+        "size": 53,
+        "cap": 45.205
+      },
+      "BAL": {
+        "size": 53,
+        "cap": 16.54
+      },
+      "BUF": {
+        "size": 53,
+        "cap": 42.905
+      },
+      "CAR": {
+        "size": 53,
+        "cap": 0.764
+      },
+      "CHI": {
+        "size": 53,
+        "cap": 19.207
+      },
+      "CIN": {
+        "size": 53,
+        "cap": 23.495
+      },
+      "CLE": {
+        "size": 53,
+        "cap": 7.941
+      },
+      "DAL": {
+        "size": 53,
+        "cap": 17.685
+      },
+      "DEN": {
+        "size": 53,
+        "cap": 36.84
+      },
+      "DET": {
+        "size": 53,
+        "cap": 12.446
+      },
+      "GB": {
+        "size": 53,
+        "cap": 12.254
+      },
+      "HOU": {
+        "size": 53,
+        "cap": 29.157
+      },
+      "IND": {
+        "size": 53,
+        "cap": 16.622
+      },
+      "JAX": {
+        "size": 53,
+        "cap": 4.359
+      },
+      "KC": {
+        "size": 53,
+        "cap": 33.047
+      },
+      "LA": {
+        "size": 53,
+        "cap": 11.86
+      },
+      "LAC": {
+        "size": 53,
+        "cap": 6.053
+      },
+      "LV": {
+        "size": 53,
+        "cap": 7.752
+      },
+      "MIA": {
+        "size": 53,
+        "cap": 14.397
+      },
+      "MIN": {
+        "size": 53,
+        "cap": 26.599
+      },
+      "NE": {
+        "size": 53,
+        "cap": 14.853
+      },
+      "NO": {
+        "size": 53,
+        "cap": 24.368
+      },
+      "NYG": {
+        "size": 53,
+        "cap": 18.935
+      },
+      "NYJ": {
+        "size": 53,
+        "cap": 30.498
+      },
+      "PHI": {
+        "size": 53,
+        "cap": 8.047
+      },
+      "PIT": {
+        "size": 53,
+        "cap": 29.097
+      },
+      "SEA": {
+        "size": 53,
+        "cap": 6.223
+      },
+      "SF": {
+        "size": 53,
+        "cap": 13.718
+      },
+      "TB": {
+        "size": 53,
+        "cap": 20.847
+      },
+      "TEN": {
+        "size": 53,
+        "cap": 39.009
+      },
+      "WAS": {
+        "size": 53,
+        "cap": 1.009
+      }
+    },
+    "after": {
+      "ARI": {
+        "size": 53,
+        "cap": 18.117
+      },
+      "ATL": {
+        "size": 53,
+        "cap": 45.205
+      },
+      "BAL": {
+        "size": 53,
+        "cap": 16.54
+      },
+      "BUF": {
+        "size": 53,
+        "cap": 42.905
+      },
+      "CAR": {
+        "size": 53,
+        "cap": 0.764
+      },
+      "CHI": {
+        "size": 53,
+        "cap": 19.207
+      },
+      "CIN": {
+        "size": 53,
+        "cap": 23.495
+      },
+      "CLE": {
+        "size": 53,
+        "cap": 7.941
+      },
+      "DAL": {
+        "size": 53,
+        "cap": 17.685
+      },
+      "DEN": {
+        "size": 53,
+        "cap": 36.84
+      },
+      "DET": {
+        "size": 53,
+        "cap": 12.446
+      },
+      "GB": {
+        "size": 53,
+        "cap": 12.254
+      },
+      "HOU": {
+        "size": 53,
+        "cap": 29.157
+      },
+      "IND": {
+        "size": 53,
+        "cap": 16.622
+      },
+      "JAX": {
+        "size": 53,
+        "cap": 4.359
+      },
+      "KC": {
+        "size": 53,
+        "cap": 33.047
+      },
+      "LA": {
+        "size": 53,
+        "cap": 11.86
+      },
+      "LAC": {
+        "size": 53,
+        "cap": 6.053
+      },
+      "LV": {
+        "size": 53,
+        "cap": 7.752
+      },
+      "MIA": {
+        "size": 53,
+        "cap": 14.397
+      },
+      "MIN": {
+        "size": 53,
+        "cap": 26.599
+      },
+      "NE": {
+        "size": 53,
+        "cap": 14.853
+      },
+      "NO": {
+        "size": 53,
+        "cap": 24.368
+      },
+      "NYG": {
+        "size": 53,
+        "cap": 18.935
+      },
+      "NYJ": {
+        "size": 53,
+        "cap": 30.498
+      },
+      "PHI": {
+        "size": 53,
+        "cap": 8.047
+      },
+      "PIT": {
+        "size": 53,
+        "cap": 29.097
+      },
+      "SEA": {
+        "size": 53,
+        "cap": 6.223
+      },
+      "SF": {
+        "size": 53,
+        "cap": 13.718
+      },
+      "TB": {
+        "size": 53,
+        "cap": 20.847
+      },
+      "TEN": {
+        "size": 53,
+        "cap": 39.009
+      },
+      "WAS": {
+        "size": 53,
+        "cap": 1.009
+      }
+    },
+    "problems": [],
+    "repair_moves": [],
+    "wire_attempts": 1,
+    "wire_phase": "regular",
+    "wire_problems": []
+  }
+]

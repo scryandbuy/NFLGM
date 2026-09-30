@@ -480,6 +480,8 @@ class Session:
             return dict(done='Cutdown', next=self.next_label())
         if k == 'wire':
             if self.step_clear_wire() is False:
+                if getattr(self, '_cpu_roster_block', None):
+                    return dict(done='Blocked', next=self.next_label(), why=self._cpu_roster_block)
                 return dict(done='Cap compliance cuts are on waivers', next=self.next_label())
             self.stop = ('week', 1); self.played = False
             return dict(done='Camp', next=self.next_label())
@@ -1160,15 +1162,28 @@ class Session:
     def step_clear_wire(self):
         """Cut-down waivers clear: claims awarded by priority, the squads fill, the undrafted pile is settled, the season opens."""
         L, rng = self.L, self.rng
+        self._cpu_roster_block = None
         for t in L.teams.values(): t.phase = 'season'
         # Legacy saves may have cut down using only top-51 charges. Repair
         # their cap now, preserving a claim opportunity for any new cuts.
         before = {e['pid'] for e in WV.pending(L)}
-        CT.enforce(L, rng, target=0.0)
+        CD.finalize(L, rng)
         if any(e['pid'] not in before for e in WV.pending(L)):
             WV.notify_user(L, WV.pending(L), 0, digest=True)
             return False
         WV.process(L, rng, 0)
+        before = {e['pid'] for e in WV.pending(L)}
+        CD.finalize(L, rng)
+        if any(e['pid'] not in before for e in WV.pending(L)):
+            WV.notify_user(L, WV.pending(L), 0, digest=True)
+            return False
+        problems = CD.violations(L)
+        if problems:
+            self._cpu_roster_block = 'CPU roster repair needed before Week 1: ' + '; '.join(
+                f"{p['team']} ({p['size']} players, ${p['cap']:.2f}m cap space"
+                + (', missing ' + ', '.join(p['missing']) if p['missing'] else '') + ')'
+                for p in problems)
+            return False
         PSQ.fill_squads(L, rng)
         from franchise import clear_undrafted
         clear_undrafted(L, rng)

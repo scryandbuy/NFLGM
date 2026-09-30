@@ -1,0 +1,84 @@
+CPU ROSTER / CAP RECOVERY -- September 30, 2026
+
+Base: 21b781e plus (3)'s commitment planning commit 86bd2c4,
+locally cherry-picked as 1ba677e. Integrate ONLY the subsequent recovery commit.
+No bundle, push, or generated browser build.
+
+OWNERSHIP
+Production changes: contracts.py, cutdown.py, practice_squad.py, session.py.
+Trade atomicity and pending coaching offers remain integration owner's work.
+
+CHANGES
+- Recompute minimum replacement funding after every cap move. A final-gate
+  release must save more than the cost of filling the new roster vacancy.
+- Price lost players using the shared package/role assessment plus the bounded
+  rookie-retention hook. A large dead charge is not an automatic veto when a
+  cut has genuine net savings; all actual charges remain booked.
+- Final recovery can exceed the GM's preferred restructure appetite on existing
+  contracts; no additional contract years or void years are manufactured.
+  Convert only the amount needed, using the contract's actual proration rules.
+- Shop only the already-selected casualty, preserving the existing last-chance
+  trade policy. User rosters/contracts are not automatically cleaned up.
+- Finalization budgets every contract, fills roles before discretionary depth,
+  reserves funding for remaining vacancies, and excludes unresolved waivers.
+- An unavailable specialist may be recruited legally from another team's PS.
+  If no LS is available anywhere, a reserve C/TE with sufficient existing LS
+  ability may use the normal position-change engine and learning penalty.
+  No future draft prospects, retirees, generated emergency players, or rating
+  edits are used. Existing starting assignments must remain covered.
+- After final waiver claims, recheck 53 players, legal cap, and required roles.
+  New compliance cuts still receive a user claim opportunity. An impossible
+  legacy state blocks opening Week 1 with a specific explanation.
+- Emergency PS call-ups and automatic street signings must pass the same cap
+  preflight as other additions, before releasing anyone or changing ownership.
+  Pay is prorated for remaining weeks. Healthy cheaper candidates are considered
+  when the preferred veteran is unaffordable. Injured PS players cannot fill a
+  healthy roster vacancy.
+
+GAME RULES PRESERVED
+Temporary post-draft over-cap states are allowed; the hard gate is final camp.
+All offseason departures retain the game's post-June 1 treatment.
+Practice-squad pay remains outside the cap.
+No automatic user cuts or restructures. Legal user vacancies remain their choice.
+
+SAVED-SNAPSHOT REPLAYS
+audit_roster_cap_recovery.py accepts output JSON then native checkpoint paths.
+Exact results: research/roster_cap_replay_results.json.
+Snapshots come from the completed, unchanged ef4620a study, not fresh seasons.
+
+93031 / 2027:
+  DEN 23 -> 53, cap -0.791 -> +0.054 million
+  NO  38 -> 53, cap +0.418 -> +0.026 million
+  KC  50 -> 53, cap +0.042 -> +0.055 million
+  DEN legally recruits PS P and LS; WAS converts a reserve TE to LS.
+93030 / 2027:
+  DEN 36 -> 53, cap +0.021 -> +0.005 million
+93030 / 2028:
+  All 32 remain 53/cap-legal; WAS missing LS repaired through an affordable swap.
+93030 / 2029:
+  All 32 already valid; no repair transactions and no size/cap changes.
+
+All four finalizations cover every RN starting role. All four also pass the
+actual Session.step_clear_wire path, enter regular season in one call, and
+remain 53/cap-legal/role-complete after claims and PS filling.
+These are saved-state recovery and calendar-boundary replays, not full-season
+or exact reconstructed pre-FA replays. They do not prove future behavior rates.
+
+VALIDATION
+87 distinct focused tests passed across:
+test_roster_cap_recovery, test_ps_decision_audit,
+test_cutdown_user_control_audit, test_cap_accounting,
+test_practice_squad_review, test_cap_casualty_trades,
+test_offseason_calendar, test_calendar_award_resume.
+One old test explicitly expected an emergency cap exemption; updated it to
+require atomic refusal. A non-final casualty-shopping fallback regression was
+caught and corrected; the existing cap-casualty suite then passed unchanged.
+git diff --check passed.
+
+INTEGRATION NOTE
+franchise.py's batch path finalizes before WV.process, then fills PS. It should
+also verify final roles/cap after claims, like Session now does. Main integration
+owner was notified; that file is outside this assignment's edit ownership.
+The MIA paired-safety pre-FA interpretation remains corrected: complementary
+FS/SS starters, not proven redundant bids. No full native pre-FA state exists;
+the recovery replays do not claim to reproduce that entire historic offseason.

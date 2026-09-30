@@ -201,14 +201,15 @@ class CapAccountingTests(unittest.TestCase):
         self.assertEqual(L.teams['GB'].cap.dead,0)
         self.assertFalse(any(x['kind']=='release' for x in L.transactions))
 
-    def test_ps_callup_refusal_is_atomic_emergency_still_allowed(self):
+    def test_ps_callup_refusal_is_atomic_including_emergencies(self):
         L=fixture(); p=player(L,team=None); L.free_agents.append(p.pid)
         self.assertTrue(PS.sign_to_squad(L,'GB',p.pid))
         L.teams['GB'].cap.cap=.5
         self.assertFalse(PS.call_up(L,'GB',p.pid))
         self.assertIn(p,PS.squad(L.teams['GB'])); self.assertIsNone(p.contract)
-        self.assertTrue(PS.call_up(L,'GB',p.pid,emergency=True))
-        self.assertLess(L.teams['GB'].cap_space,0)
+        self.assertFalse(PS.call_up(L,'GB',p.pid,emergency=True))
+        self.assertIn(p,PS.squad(L.teams['GB'])); self.assertIsNone(p.contract)
+        self.assertAlmostEqual(L.teams['GB'].cap_space,.5)
 
     def test_waiver_contract_keeps_only_remaining_pay(self):
         import waivers

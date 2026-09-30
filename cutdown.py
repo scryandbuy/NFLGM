@@ -78,7 +78,7 @@ def run(league, rng, verbose=False):
     # Cutting accelerates signing bonus, so a club can go over doing it - and
     # it must end with room for the men it still owes, not merely a positive
     # number.
-    CT.enforce(league, rng, verbose, roster_target=ROSTER_LIMIT)
+    CT.enforce(league, rng, verbose, target=0.0, roster_target=ROSTER_LIMIT)
 
     if verbose:
         sizes = np.array([len(t.active()) for t in league.teams.values()])
@@ -89,188 +89,179 @@ def run(league, rng, verbose=False):
     return cuts, short
 
 
-def fill_short(league, rng, verbose=False):
-    """
-    A club under the limit signs minimum bodies until it is whole.
-
-    This is the other half of cut-down and it has to run AFTER it, because the
-    men one club releases are exactly who another club is short of. Free
-    agency leaves 500-600 players unsigned; nobody should be fielding 40.
-    """
-    import min_salary as MS
-    from cap_engine import CAP, Contract
-    import contract_structure as CS
+def _sources(team, report):
     import roster_needs as RN
-    cap = CAP.get(league.year, 301.2)
-    signed = 0
-    pool = [league.player(pid) for pid in list(league.free_agents)]
-    pool = [p for p in pool if p and not p.retired]
-    pool.sort(key=lambda p: -p.ovr)
+    return {pos for role, eligible in RN.role_slots(team)
+            if role in report['uncovered'] for pos in eligible}
 
+
+def _replacement_pool(league, team, sources):
+    import practice_squad as PS
+    pool = PS.available_free_agents(league) + [p for p in PS.squad(team)
+            if not p.retired and p.out_until is None]
+    # Search other squads for an otherwise unavailable starting role, not
+    # simply to churn another club's developmental depth into our bench.
+    absent = sources - {p.pos for p in pool}
+    pool += [p for other in league.teams.values() if other is not team
+             for p in PS.squad(other) if p.pos in absent
+             and not p.retired and p.out_until is None]
+    return pool
+
+
+def _sign_replacement(league, team, player, contract):
+    import practice_squad as PS
+    if player.team == team.abbr:
+        return PS.call_up(league, team.abbr, player.pid)
+    if player.team:
+        return PS.poach(league, team.abbr, player.pid, league.week)
+    league.sign(player.pid, team.abbr, contract)
+    return True
+
+
+def _convert_long_snapper(league, team, report):
+    """Last resort: train a reserve center/TE using the normal position tax.
+
+    A legacy league can have fewer nonretired long snappers than clubs. Keep
+    every required assignment and use existing ability, never create a player
+    or alter his ratings to make the numbers fit.
+    """
+    import copy
+    import roster_needs as RN
+    import position_change as PC
+    if 'LS' not in report['uncovered']: return False
+    used = {row['player'].pid for row in report['package_assignments']
+            if row['player'] is not None and row['weight'] >= .1}
+    candidates = []
+    for p in team.active():
+        if p.pos not in ('C', 'TE') or p.pid in used or p.out_until is not None: continue
+        if p.score_at('LS') - PC.COST['different'][0] < 50: continue
+        trial = copy.copy(p)
+        trial.pos = 'LS'
+        after = RN.assess(team, [trial if q is p else q for q in team.active()])
+        if len(after['uncovered']) >= len(report['uncovered']): continue
+        candidates.append((after['score'] - RN.retention_value(team, p), p))
+    if not candidates: return False
+    _, p = max(candidates, key=lambda item: item[0])
+    PC.change_position(league, p.pid, 'LS')
+    return True
+
+
+def fill_short(league, rng, verbose=False):
+    """Fund every vacant spot; cover starting jobs before optional depth."""
+    import roster_needs as RN
+    import practice_squad as PS
+    import min_salary as MS
+    from cap_engine import CAP
+    from cap_accounting import require_room
+    signed = 0
     for abbr, team in league.teams.items():
-        if abbr == getattr(league, 'user_team', None):
-            continue
-        need = ROSTER_LIMIT - len(team.active())
-        while need > 0 and pool:
-            floor = None
+        if abbr == getattr(league, 'user_team', None): continue
+        while len(team.active()) < ROSTER_LIMIT:
+            report = RN.assess(team)
+            sources = _sources(team, report)
+            pool = _replacement_pool(league, team, sources)
+            pool = [p for p in pool if len(team.by_pos(p.pos)) < POS_CAP.get(p.pos, 4)]
+            pool.sort(key=lambda p: (p.pos in sources,
+                      p.ovr + 25 * report['needs'].get(p.pos, 0)), reverse=True)
+            remaining = ROSTER_LIMIT - len(team.active()) - 1
+            # Reserve a rookie minimum for each remaining spot. The cap
+            # recovery pass uses a larger two-year minimum as its funding goal.
+            reserve = remaining * MS.minimum_salary(0, CAP.get(league.year, 301.2)) * max(0,18-team.cap.paid_week)/18
             pick = None
-            needs = RN.assess(team)['needs']
-            for p in sorted(pool, key=lambda q: -(q.ovr + 25.0 * needs.get(q.pos, 0.0))):
-                f = MS.minimum_salary(p.accrued, cap)
-                if team.cap_space < f * 1.05:
-                    continue
-                # Take the best man who fills a hole rather than simply the
-                # best man. The depth cap has to be the REAL one: a 53-man
-                # roster carries eleven defensive linemen and ten defensive
-                # backs, so capping every position at five left clubs unable
-                # to fill and stuck at twenty players.
-                if len(team.by_pos(p.pos)) >= POS_CAP.get(p.pos, 4):
-                    continue
-                pick, floor = p, f
+            for p in pool:
+                contract = PS.minimum_contract(league, team, p)
+                if team.cap_space - contract.cap_hit(0) + .0005 < reserve: continue
+                try: require_room(league, team, p.pid, contract)
+                except ValueError: continue
+                pick = p
                 break
-            if pick is None:
-                break
-            st = CS.structure(floor, 1, pick.pos, cap, team.gm)
-            c = Contract(years=1, base=st['base'],
-                         signing_bonus=st['signing_bonus'], signed=league.year)
-            league.sign(pick.pid, abbr, c)
-            pool.remove(pick)
+            if pick is None: break
+            if not _sign_replacement(league, team, pick, contract): break
             team.sync_cap()
-            need -= 1
             signed += 1
-    if verbose:
-        sizes = np.array([len(t.active()) for t in league.teams.values()])
-        print(f'  {signed} signed to fill out | rosters min {sizes.min()} '
-              f'mean {sizes.mean():.0f}')
     return signed
 
 
 def repair_shape(league):
-    """Swap cheap surplus for an uncovered job, even when the 53 is full."""
+    """Swap genuine surplus for a missing job without creating another hole."""
     import roster_needs as RN
-    import practice_squad as PSQ
-    import min_salary as MS
-    from cap_engine import CAP, Contract
-
-    cap = CAP.get(league.year, 301.2)
+    import practice_squad as PS
+    from cap_accounting import require_room
     fixed = 0
     for abbr, team in league.teams.items():
-        if abbr == getattr(league, 'user_team', None):
-            continue
-        for _ in range(3):
+        if abbr == getattr(league, 'user_team', None): continue
+        for _ in range(ROSTER_LIMIT):
             report = RN.assess(team)
-            uncovered = set(report['uncovered'])
-            floors, _ = RN.roster_floors(team)
-            short_positions = {pos for pos, floor in floors.items()
-                               if report['counts'][pos] < floor}
-            if not (uncovered or short_positions) or len(team.active()) < ROSTER_LIMIT:
-                break
-            sources = {pos for role, eligible in RN.role_slots(team)
-                       if role in uncovered for pos in eligible} | short_positions
-            pool = [league.player(pid) for pid in league.free_agents]
-            pool = [p for p in pool if p and not p.retired and p.pos in sources]
-            candidates = [p for pos in sources for p in
-                          sorted((q for q in pool if q.pos == pos), key=lambda q: -q.ovr)[:4]]
-            outgoing = [q for q in team.active() if not PSQ.protected(team, q, league)
-                        and q.dead_if_cut(0) <= 2.0]
+            if not report['uncovered'] or len(team.active()) != ROSTER_LIMIT: break
+            sources = _sources(team, report)
+            pool = _replacement_pool(league, team, sources)
+            if not any(p.pos == 'LS' for p in pool) and _convert_long_snapper(league, team, report):
+                fixed += 1
+                continue
+            candidates = [p for pos in sorted(sources) for p in sorted(
+                (q for q in pool if q.pos == pos), key=lambda q: -q.ovr)[:4]]
             best = None
             for p in candidates:
-                salary = MS.minimum_salary(p.accrued or 0, cap)
-                for q in outgoing:
-                    if team.cap_space + q.cap_hit(0) - q.dead_if_cut(0) < salary * 1.05:
-                        continue
-                    gain = RN.move_gain(team, p, q) - q.dead_if_cut(0)
-                    if gain > 2.5 and (best is None or gain > best[0]):
-                        best = (gain, p, q, salary)
-            if best is None:
-                break
-            _, p, q, salary = best
+                contract = PS.minimum_contract(league, team, p)
+                for q in team.active():
+                    if PS.locked(q, league.week): continue
+                    saved, dead, _ = CT.savings_if_cut(q, league.post_june1())
+                    if team.cap_space + saved - contract.cap_hit(0) < -.0005: continue
+                    try: require_room(league, team, p.pid, contract, release_pid=q.pid)
+                    except ValueError: continue
+                    after = RN.assess(team, [r for r in team.active() if r is not q] + [p])
+                    if len(after['uncovered']) >= len(report['uncovered']): continue
+                    gain = after['score'] - report['score'] - dead - RN.retention_value(team, q)
+                    key = (-len(after['uncovered']), gain)
+                    if best is None or key > best[0]: best = (key, p, q, contract)
+            if best is None: break
+            _, p, q, contract = best
             league.release(q.pid)
-            league.sign(p.pid, abbr, Contract(years=1, base=[salary], signing_bonus=0.0,
-                                               signed=league.year))
+            if not _sign_replacement(league, team, p, contract):
+                raise RuntimeError('Validated roster replacement became unavailable')
             team.sync_cap()
             fixed += 1
     return fixed
 
 
-def emergency_fill(league, rng, verbose=False):
-    """
-    THE LAST GASP. A club that has restructured and released everything it
-    sensibly can and still cannot pay a minimum salary does not forfeit: it
-    signs league-minimum bodies until it can field a roster, cap or no cap,
-    and the overage is logged. The real league would never let a game go
-    unplayed for this; the club pays for it in the years that follow.
-    """
-    import min_salary as MS
-    from cap_engine import CAP, Contract
-    import contract_structure as CS
-    cap = CAP.get(league.year, 301.2)
-    pool = [league.player(pid) for pid in list(league.free_agents)]
-    pool = [p for p in pool if p and not p.retired]
-    pool.sort(key=lambda p: -p.ovr)
-    signed = 0
+def violations(league):
+    """Final CPU season-opening constraints, independent of the user's choices."""
+    import roster_needs as RN
+    problems = []
     for abbr, team in league.teams.items():
-        if abbr == getattr(league, 'user_team', None):
-            continue
-        need = ROSTER_LIMIT - len(team.active())
-        if need <= 0:
-            continue
-        before = team.cap_space
-        while need > 0 and pool:
-            # the holes first, then the best man left
-            pick = next((p for p in pool
-                         if len(team.by_pos(p.pos)) < POS_CAP.get(p.pos, 4)), pool[0])
-            floor = MS.minimum_salary(pick.accrued, cap)
-            st = CS.structure(floor, 1, pick.pos, cap, team.gm)
-            league.sign(pick.pid, abbr, Contract(years=1, base=st['base'],
-                                                 signing_bonus=st['signing_bonus'],
-                                                 signed=league.year))
-            pool.remove(pick); team.sync_cap()
-            need -= 1; signed += 1
+        if abbr == getattr(league, 'user_team', None): continue
         team.sync_cap()
-        league.log('emergency_fill', team=abbr, signed=ROSTER_LIMIT - len(team.active()) + signed,
-                   space_before=round(before, 2), space_after=round(team.cap_space, 2))
-        if verbose:
-            print(f'  EMERGENCY: {abbr} filled to {len(team.active())} at the minimum, '
-                  f'cap space {before:.1f} -> {team.cap_space:.1f}')
-    return signed
+        missing = RN.assess(team)['uncovered']
+        if len(team.active()) != ROSTER_LIMIT or team.cap_space < -.0005 or missing:
+            problems.append(dict(team=abbr, size=len(team.active()),
+                                 cap=round(team.cap_space, 3), missing=list(missing)))
+    return problems
+
+
+def emergency_fill(league, rng, verbose=False):
+    """Compatibility entry point: urgency never waives cap accounting."""
+    CT.enforce(league, rng, roster_target=ROSTER_LIMIT, target=0.0)
+    return fill_short(league, rng, verbose)
 
 
 def finalize(league, rng, verbose=False, passes=3):
-    """
-    Cut, free up room, fill, repeat.
+    """Resolve roster size, replacement funding and starting roles together.
 
-    One pass is not enough and the reason is circular: a club cannot sign its
-    52nd man until it has cut somebody, and it cannot know who to cut until it
-    has seen who it can sign. Cutting also accelerates dead money, which can
-    take away the room the signing needed. Three passes settles it.
+    Leave an impossible state visible for the calendar gate; never manufacture
+    cap room or sign replacements on an unfunded emergency exception.
     """
+    # Batch and interactive callers must both price all 53, while the league
+    # calendar still controls the offseason post-June 1 departure treatment.
+    for team in league.teams.values(): team.phase = 'season'
     total_cut, total_signed = [], 0
-    for i in range(passes):
-        # Cut down to 53 FIRST: the bottom of the roster is cheap to release
-        # and the room it frees is room compliance does not have to find by
-        # reworking or releasing men who matter.
-        cuts, short = run(league, rng)
+    for _ in range(passes):
+        cuts, _ = run(league, rng)
         total_cut += cuts
-        CT.enforce(league, rng, roster_target=ROSTER_LIMIT)
         total_signed += fill_short(league, rng)
         repair_shape(league)
-        # Filling out costs money too, and nothing was re-checking after it -
-        # two clubs a year finished over the cap on the last signing.
-        CT.enforce(league, rng)
-        sizes = [len(t.active()) for abbr, t in league.teams.items()
-                 if abbr != getattr(league, 'user_team', None)]
-        if not sizes or (min(sizes) >= ROSTER_LIMIT and max(sizes) <= ROSTER_LIMIT):
-            break
-    total_signed += emergency_fill(league, rng, verbose)
+        if not violations(league): break
     if verbose:
-        import numpy as _np
-        sizes = _np.array([len(t.active()) for t in league.teams.values()])
-        sp = _np.array([t.cap_space for t in league.teams.values()])
-        print(f'  {len(total_cut)} cut, {total_signed} signed | rosters min '
-              f'{sizes.min()} mean {sizes.mean():.0f} max {sizes.max()} | '
-              f'{(sizes < ROSTER_LIMIT).sum()} short | over the cap '
-              f'{(sp < 0).sum()}')
+        print(f'  {len(total_cut)} cut, {total_signed} signed; unresolved: {violations(league)}')
     return total_cut, total_signed
 
 
