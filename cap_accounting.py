@@ -75,7 +75,8 @@ def require_room(league, team, pid, contract, release_pid=None, ps_pid=None):
         if p in PS.squad(team):
             trial.practice_squad-=max(0,18-team.cap.paid_week)/18*(PS.PAY_VET if (p.accrued or 0)>2 else PS.PAY_YOUNG)
     after=trial.charges(team.phase)
-    if after + pending > team.cap.limit + .0005 and after > before + .0005:
+    pending_now = 0.0 if pre_roll(league) else pending
+    if after + pending_now > team.cap.limit + .0005 and after > before + .0005:
         raise ValueError('Not enough cap space for this contract')
     if pre_roll(league):
         old=next((p.contract for p in team.roster if p.pid==pid),None)
@@ -99,7 +100,8 @@ def require_squad_room(league, team, player):
         trial.earned += c.earned_base + c.earned_roster
     trial.practice_squad += max(0, 18-team.cap.paid_week)/18 * (
         PS.PAY_VET if (player.accrued or 0) > 2 else PS.PAY_YOUNG)
-    if trial.charges(team.phase) + held(league, team.abbr, exclude_pid=player.pid) > trial.limit + .0005:
+    pending_now = 0.0 if pre_roll(league) else held(league, team.abbr, exclude_pid=player.pid)
+    if trial.charges(team.phase) + pending_now > trial.limit + .0005:
         raise ValueError('Not enough cap space for practice-squad pay')
 
 
@@ -138,7 +140,8 @@ def require_trade_room(league, a, b, a_sends, b_sends):
         trial=trade_projection(league,abbr,outgoing,incoming)
         after=trial.charges(team.phase)
         pending = held(league, abbr)
-        if after+pending>trial.limit+.0005 and after>team.cap.charges(team.phase)+.0005:
+        pending_now = 0.0 if pre_roll(league) else pending
+        if after+pending_now>trial.limit+.0005 and after>team.cap.charges(team.phase)+.0005:
             raise ValueError(f'{abbr} cannot fit this trade under the cap')
         if pre_roll(league):
             base=CAP.get(league.year+1,CAP.get(league.year,301.2)*1.055)
