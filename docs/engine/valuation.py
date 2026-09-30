@@ -348,17 +348,31 @@ def live_production(league, player, season=None):
     return float(np.clip(np.mean([mine > v for v in peers]), 0.0, 1.0))
 
 
+def _league_cap(league, year):
+    from cap_engine import CAP
+    return float(getattr(league, 'cap_history', {}).get(year, CAP.get(year, CAP[2026])))
+
+
+def _signed_cap(league, player):
+    # Day-one veteran deals seed the 2026 market. Later deals retain the
+    # cap share from the year this franchise actually signed them.
+    priced = getattr(player.contract, 'market_cap', None)
+    if priced:
+        return float(priced)
+    signed = max(2026, int(getattr(player.contract, 'signed', 2026) or 2026))
+    return _league_cap(league, signed)
+
+
+def _current_pay(league, player, year):
+    return float(player.apy) * _league_cap(league, year) / _signed_cap(league, player)
+
+
 def pool_from_league(league, season=None):
     """
     The comp pool, built from THIS league's signed contracts. Everyone under
     contract counts; the market is whatever this league has actually paid.
     """
-    cap = 301.2
-    try:
-        from cap_engine import CAP as _C
-        cap = _C.get(season or league.year, cap)
-    except Exception:
-        pass
+    cap = _league_cap(league, season or league.year)
     rows = []
     for p in league.players.values():
         if p.retired or not p.contract or not p.team:
@@ -369,7 +383,7 @@ def pool_from_league(league, season=None):
         prod = live_production(league, p, season)
         rows.append(dict(
             full_name=p.name, grp=GRP.get(p.pos, 'LB'), madden_position=p.pos,
-            ovr=p.ovr, age=p.age, apy=apy, cappct=apy / cap,
+            ovr=p.ovr, age=p.age, apy=apy, cappct=apy / _signed_cap(league, p),
             yrs=getattr(p.contract, 'orig_years', p.contract.years),
             contract_age=max(0, (season or league.year) - p.contract.signed),
             pick=p.draft_overall,
@@ -384,12 +398,7 @@ def value_player(league, player, side=None, rng=None, pool=None, season=None, ex
     Value a live Player. `side` pins the comp window: 'agent' argues two years
     of signings, 'team' argues five, and None rolls between them.
     """
-    cap = 301.2
-    try:
-        from cap_engine import CAP as _C
-        cap = _C.get(season or league.year, cap)
-    except Exception:
-        pass
+    cap = _league_cap(league, season or league.year)
     pool = pool if pool is not None else pool_from_league(league, season)
     if not len(pool):
         return None
@@ -407,7 +416,7 @@ def value_player(league, player, side=None, rng=None, pool=None, season=None, ex
     # $40m deal, Gardner at $16m on $26m. The market at the top is set by the
     # top: from the position's 95th percentile up, the number blends toward
     # the mean of the three biggest deals at his position in this league.
-    top = _market_top(league, player.pos)
+    top = _market_top(league, player.pos, season)
     if top is not None:
         p95, pmax, top3 = top
         if pmax > p95 and player.ovr > p95:
@@ -418,7 +427,7 @@ def value_player(league, player, side=None, rng=None, pool=None, season=None, ex
     # top-ten player was anchored below what the top ten earn (a starting quarterback at 60% of market, the next
     # tier of stars at 80-85%). His rank by grade among the position's paid veterans maps to the pay at that rank
     # on the league's own contracts, and the value blends toward it, hardest at the very top.
-    anchor = _rank_anchor(league, player)
+    anchor = _rank_anchor(league, player, season)
     if anchor is not None:
         rank, apy_at_rank, n_paid = anchor
         w = 0.85 if rank <= 5 else 0.75 if rank <= 10 else 0.65 if rank <= 16 else 0.5 if rank <= 24 else 0.3 if rank <= 40 else 0.0
@@ -442,15 +451,16 @@ def value_player(league, player, side=None, rng=None, pool=None, season=None, ex
 _RA_CACHE = {}
 
 
-def _rank_anchor(league, player):
+def _rank_anchor(league, player, season=None):
     """(his rank by grade among the position's paid veterans, the APY paid at that rank, how many are paid).
     'Paid' means a veteran contract: rookie deals are excluded, since they say nothing about the market. Both ladders
     run over the same set, so a grade rank maps to a pay rank."""
-    key = (id(league), league.year, player.pos)
+    year = season or league.year
+    key = (id(league), year, _league_cap(league, year), player.pos)
     if key not in _RA_CACHE:
         men = [p for t in league.teams.values() for p in t.active() if p.pos == player.pos and p.contract is not None]
         paid = [p for p in men if p.apy and not (p.draft_year and (league.year - int(p.draft_year)) < 4 and p.draft_round is not None)]
-        pays = sorted((float(p.apy) for p in paid), reverse=True)
+        pays = sorted((_current_pay(league, p, year) for p in paid), reverse=True)
         grades = sorted((float(p.ovr) for p in paid), reverse=True)
         _RA_CACHE[key] = (grades, pays)
     grades, pays = _RA_CACHE[key]
@@ -463,16 +473,17 @@ def _rank_anchor(league, player):
 _MT_CACHE = {}
 
 
-def _market_top(league, pos):
+def _market_top(league, pos, season=None):
     """(95th-percentile overall at the spot, the max, mean of the three biggest APYs), cached per league-year."""
-    key = (id(league), league.year, pos)
+    year = season or league.year
+    key = (id(league), year, _league_cap(league, year), pos)
     if key in _MT_CACHE:
         return _MT_CACHE[key]
     men = [p for t in league.teams.values() for p in t.active() if p.pos == pos]
     if len(men) < 12:
         _MT_CACHE[key] = None; return None
     ovrs = np.array([p.ovr for p in men])
-    apys = sorted((p.apy for p in men if p.apy), reverse=True)[:3]
+    apys = sorted((_current_pay(league, p, year) for p in men if p.apy), reverse=True)[:3]
     if len(apys) < 3:
         _MT_CACHE[key] = None; return None
     out = (float(np.percentile(ovrs, 95)), float(ovrs.max()), float(np.mean(apys)))

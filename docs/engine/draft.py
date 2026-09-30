@@ -50,12 +50,12 @@ def slot_apy(selection, cap):
     return round(cap * pct / 100, 3)
 
 
-def rookie_contract(selection, cap):
+def rookie_contract(selection, cap, signed=2026):
     apy = slot_apy(selection, cap)
     mn = MS.minimum_salary(0, cap)
     base = [mn] * 4
     sb = max(0.0, round(apy * 4 - mn * 4, 3))
-    return Contract(years=4, base=base, signing_bonus=sb)
+    return Contract(years=4, base=base, signing_bonus=sb, signed=signed)
 
 
 PREMIUM_SCALE = 60.0      # (PREMIUM - 1) x this, in common-scale points: QB +13, tackle +6, edge +6, back -6, LB -4.8, kicker -24
