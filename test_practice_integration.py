@@ -81,10 +81,13 @@ class PracticeIntegrationTests(unittest.TestCase):
         runner=NS(L=league,seeds=lambda:seeds,
                   play=lambda *a,**k:dict(home=21,away=14))
         runner.prepare_practice=lambda w:counts.append((w,sum(PI.eligible(league,a,w) for a in teams)))
+        available=[]
+        runner.require_available=lambda a,w,**kw:available.append((a,w))
         post=Postseason(runner)
         self.assertIsNotNone(post.run())
         self.assertEqual(counts,[(19,14),(20,8),(21,4),(22,2)])
         self.assertEqual(len(post.games),13)
+        self.assertEqual(len(available),26)
         self.assertFalse(PI.eligible(league,post.champion,22))
 
     def test_real_plan_preview_run_and_replay(self):

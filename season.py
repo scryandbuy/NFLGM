@@ -261,14 +261,10 @@ class SeasonRunner(StandingsView):
         desk = self.desks.get(abbr)
         import position_change as PC, morale as MO
         # Elevated men dress under the same health and effective-rating rules.
-        dressed = {p.pid: p for p in t.active()}
-        dressed.update((p.pid, p) for p in getattr(t, '_elevated', [])
-                       if p in (getattr(t, 'practice_squad', None) or []) and not p.retired)
+        import game_availability as GA
         rows = [dict(MO.effective_ratings_from(PC.effective_ratings(p), p),
                      pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None))
-                for p in dressed.values()
-                if (desk.available(p, self.week) if desk
-                    else p.out_until is None)]
+                for p in GA.dressed(t, desk, self.week)]
         # a man playing hurt plays with the injury's hit on his ratings this Sunday
         if desk is not None and desk.playing_hurt:
             import injury_status as IS
@@ -363,11 +359,18 @@ class SeasonRunner(StandingsView):
         import practice_integration as PI
         return PI.prepare(self, week, clubs)
 
+    def require_available(self, abbr, week, playoffs=False):
+        import game_availability as GA
+        GA.ensure(self.L, self.L.teams[abbr], self.desks.get(abbr), week, playoffs)
+        roster = self.refresh(abbr)
+        if roster is None:
+            raise GA.FieldabilityError(f'Week {week}: {abbr} has no valid game roster')
+        return roster
+
     def play(self, home, away, week, playoffs=False):
         self.prepare_practice(week, (home, away))
-        hr, ar = self.refresh(home), self.refresh(away)
-        if hr is None or ar is None:          # a roster too thin to field
-            return None
+        hr = self.require_available(home, week, playoffs)
+        ar = self.require_available(away, week, playoffs)
         # A man playing hurt does not start the game fresh. Condition drives
         # injury risk on a violently nonlinear curve, so this is also what
         # makes him likelier to break down again - the cost of playing him is
@@ -424,8 +427,8 @@ class SeasonRunner(StandingsView):
             start = copy.deepcopy(replay_start)
         else:
             self.prepare_practice(week, (home, away))
-            hr, ar = self.refresh(home), self.refresh(away)
-            if hr is None or ar is None: return None
+            hr = self.require_available(home, week, playoffs)
+            ar = self.require_available(away, week, playoffs)
             for side in (home, away):
                 desk = self.desks.get(side); st = self.states.get(side)
                 if desk is None or st is None: continue
@@ -724,7 +727,8 @@ class SeasonRunner(StandingsView):
             if skip and (home, away) == skip: continue          # the user's game is played live, after these
             res = self.play(home, away, week)
             if res is None:
-                continue
+                from game_availability import FieldabilityError
+                raise FieldabilityError(f'Week {week}: {away} at {home} returned no result')
             self.last_games.append((home, away, res, self._book))
             self.L.schedule[i] = (wk, away, home, res['away'], res['home'])
             played.append((home, away, res['home'], res['away']))
@@ -738,6 +742,10 @@ class SeasonRunner(StandingsView):
     def _after_games(self, week, played):
         """Once every game of the week is in (the user's live game included): expired injuries clear, playing-hurt
         flares roll, and the week's club and league notes post. Runs once a week."""
+        # Direct/live callers may finish one game before the rest of the slate.
+        # Never settle the whole week early; roll_week rejects unfinished games.
+        if any(w == week and (ap is None or hp is None)
+               for w, a, h, ap, hp in self.L.schedule): return played
         if getattr(self, '_after_done', None) == week: return
         self._after_done = week
         from cap_accounting import settle_week
@@ -764,6 +772,8 @@ class SeasonRunner(StandingsView):
     def roll_week(self, week, played=None):
         """The week after Sunday: XP spent, morale, agents, promises, next week's report,
         the wire, the squads, the trade window. Called by Advance once the games are in."""
+        from game_availability import require_scores
+        require_scores(self.L, week)
         if played is None: played = getattr(self, 'last_played', []) or []
         self.week = week
         self.L.week = week

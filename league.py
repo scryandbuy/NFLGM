@@ -529,6 +529,8 @@ class Team:
                     gm=(asdict(self.gm) if self.gm else None),
                     roster=[p.pid for p in self.roster],
                     practice_squad=[p.pid for p in self.practice_squad],
+                    elevated=[p.pid for p in (getattr(self, '_elevated', None) or [])
+                              if p in self.practice_squad and not p.retired],
                     owner_patience=self.owner_patience, owner_acumen=self.owner_acumen,
                     owner_star_pull=getattr(self, 'owner_star_pull', 0.5), owner_spend=getattr(self, 'owner_spend', 0.5), depth_pins=getattr(self, 'depth_pins', None) or {}, identity_history=getattr(self, 'identity_history', None) or [], owner=getattr(self, 'owner', None), misfit_keep=getattr(self, 'misfit_keep', None) or [], identity=getattr(self, 'identity', None),
                     ir=[p.pid for p in self.ir], ir_returns_used=int(getattr(self, 'ir_returns_used', 0) or 0),
@@ -1021,6 +1023,8 @@ class League:
             t.roster = [L.players[p] for p in td['roster'] if p in L.players]
             t.practice_squad = [L.players[p] for p in td['practice_squad']
                                 if p in L.players]
+            t._elevated = [p for p in t.practice_squad if p.pid in (td.get('elevated') or [])
+                           and not p.retired and p.team == abbr][:2]
             t.ir = [L.players[p] for p in td['ir'] if p in L.players]; t.ir_returns_used = int(td.get('ir_returns_used', 0) or 0)
             t.owner_patience = td.get('owner_patience', 0.5); t.owner_acumen = td.get('owner_acumen', 0.5); t.owner_star_pull = td.get('owner_star_pull', 0.5); t.owner_spend = td.get('owner_spend', 0.5); t.depth_pins = td.get('depth_pins') or {}; t.identity_history = td.get('identity_history') or []; t.owner = td.get('owner'); t.misfit_keep = td.get('misfit_keep') or []; t.identity = td.get('identity')
             t.picks = [DraftPick(**k) for k in td['picks']]

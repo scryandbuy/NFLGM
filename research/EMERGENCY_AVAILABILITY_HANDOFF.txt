@@ -1,0 +1,23 @@
+EMERGENCY GAME AVAILABILITY — Review code changes (2), 2026-09-30
+Base: 4c9665f; branch codex/emergency-fieldability-20260930
+
+Changes
+- One health eligibility function shared by engine roster assembly and final kickoff checks.
+- CPU only: fill an actual mandatory game-day hole. Prefer an eligible temporary own-squad elevation; otherwise a legal minimum signing/call-up, with other squads as last resort.
+- At 53, release only healthy, unprotected surplus. Preserve current base starters, all QBs, injured men, recent signings, protected early picks/dead money and poach locks.
+- Preview complete departure cost, paid salary, held offers and incoming minimum. Use only as much existing-contract conversion as necessary; never add contract years or waive the cap.
+- User roster moves remain user decisions. Unresolved fieldability returns an actionable Blocked result; no silent regular-season skips or invented playoff wins.
+- A partial week cannot settle/roll. Finished games survive retries; playoff retries use scheduled pairings instead of rebuilding from an already changed bracket.
+- Own-squad elevations survive saves, keep their use counts, and clear on season reset.
+
+Evidence
+- 14 focused tests: actual pending waivers, injury eligibility, own/other squad acquisition, three-use regular-season limit and unlimited playoff use, cap/earned-pay conservation, no automatic user moves, preserved recent signings/core starters, safe failed funding, missing results/retry, playoff retry, save/load elevations and reset.
+- Existing 51 save/resume/cap/roster-recovery tests and 9 practice-integration tests pass (74 distinct tests total).
+- Supplied 2028 Week1 save replayed Weeks2–18: all272 regular-season results populated, all32 records exactly agree with scores, save/load/retry at Week2 causes no duplicate transactions. Report: outputs/emergency-fieldability-20260930/native-season-replay.json.
+- Full replay ran before final extra protections (core starter veto, older-deal last-resort funding, new-season elevation clearing). The only emergency move was NE Week2: existing contract P1735 restructured by1.107m, QB C19070 signed at1.108m; 53 players and0.001m cap remain. A final-code Week2 replay checks that exact path again and writes final-guards-week2.json. No scoring/practice tuning.
+
+Integration
+- Source changes only, no bundle and no generated web build committed. build_web.py includes the new module; rebuild after cherry-pick.
+- season.py overlaps prior OT work only at fresh play/open_live preflight and roster assembly. Preserve the newer OT replay state/copy logic.
+- test_practice_integration.py adds the new availability method to its playoff runner stub and verifies26 club checks for13 games. Actual practice behavior unchanged.
+- Old saves whose earlier games were already skipped are not retroactively resimulated. The saved audit fixture predates the first skip. Any current incomplete slate blocks instead of silently advancing.

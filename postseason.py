@@ -84,7 +84,8 @@ class Postseason:
         # regular-season record.
         res = self.r.play(home, away, week, playoffs=True)
         if res is None:
-            return home
+            from game_availability import FieldabilityError
+            raise FieldabilityError(f'Week {week}: {away} at {home} returned no playoff result')
         self.games.append((rnd, conf, home, away, res['home'], res['away']))
         win = home if res['home'] >= res['away'] else away
         lose = away if win == home else home
@@ -167,12 +168,27 @@ class Postseason:
         Returns the skipped matchup as (conf, home, away) or None."""
         week = week if week is not None else 19 + self.ROUNDS.index(rnd)
         self.r.prepare_practice(week)
+        # Use the scheduled round on retries: eliminating an earlier loser
+        # changes alive/matchups and used to duplicate or lose playoff games.
+        scheduled = [(h, a) for w, a, h, ap, hp in self.L.schedule if w == week]
+        if not scheduled:
+            self.schedule_round(rnd)
+            scheduled = [(h, a) for w, a, h, ap, hp in self.L.schedule if w == week]
+        finished = {(h, a) for r, c, h, a, hp, ap in self.games if r == rnd}
+        pending = [(h, a) for h, a in scheduled if (h, a) not in finished]
+        # Check the whole round, including the held live game, before recording
+        # a winner. Temporary elevations and acquisitions are idempotent.
+        for home, away in pending:
+            for side in (home, away): self.r.require_available(side, week, playoffs=True)
         held = None
-        for conf, home, away in self.matchups(rnd):
+        for home, away in pending:
+            conf = 'NFL' if rnd == 'SB' else next(c for c, teams in self.seeds.items() if home in teams)
             if skip is not None and skip in (home, away):
                 held = (conf, home, away); continue
             res = self.r.play(home, away, week, playoffs=True)
-            if res is None: res = dict(home=1, away=0)
+            if res is None:
+                from game_availability import FieldabilityError
+                raise FieldabilityError(f'Week {week}: {away} at {home} returned no playoff result')
             self.record(rnd, conf, home, away, res)
         return held
 
