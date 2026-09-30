@@ -358,7 +358,8 @@ def candidate_gains(team, players, baseline=None):
 
 
 def lineup_strength(team, players):
-    """Grade the actual base-package starters selected by the game."""
+    """Protect a playable base lineup, then compare the full package mix."""
+    players = list(players)
     import targets as TG
     depth = {pos: [] for pos in POSITIONS}
     for player in players:
@@ -367,17 +368,17 @@ def lineup_strength(team, players):
         group.sort(key=lambda player: -TG.position_score(player.ratings, pos,
                                                           getattr(team, 'scheme', None)))
     try:
-        offense = OR.assign(depth, OR.base_package(getattr(team, 'gm', None)))
-        offense_grade = sum(OR.fullback_score(p) if role == 'FB' else p.ovr
-                            for role, p in offense)
+        OR.assign(depth, OR.base_package(getattr(team, 'gm', None)))
         missing = 0
     except ValueError:
-        offense_grade, missing = 0.0, 1
+        missing = 1
     defense = DR.assign(depth, DR.coach_front(getattr(team, 'gm', None)), 'base')
-    defense_grade = sum(row['player'].ovr for row in defense if row['player'])
     missing += sum(row['player'] is None for row in defense)
     missing += sum(not depth[pos] for pos in ('K', 'P', 'LS'))
-    return missing, offense_grade + defense_grade
+    # The cutdown's final comparison must not undo a package-aware exchange
+    # merely because WR4/TE2/CB4 does not belong to the displayed base chart.
+    report = assess(team, players)
+    return missing, _quality(report['package_assignments']) + 22 * 75.0
 
 
 def select_cutdown(team, rows, limit=53):

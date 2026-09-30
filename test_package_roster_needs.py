@@ -1,6 +1,5 @@
 """Personnel choices must value deployment, including ordinary subpackages."""
 import copy
-import time
 import unittest
 from collections import defaultdict
 from types import SimpleNamespace
@@ -108,6 +107,15 @@ class PackageRosterTests(unittest.TestCase):
             self.assertAlmostEqual(RN.move_gain(t,arrival,departure,baseline),expected)
         self.assertAlmostEqual(RN.move_gain(t,player('QB','weak',40),baseline=baseline),0)
         self.assertEqual(RN.candidate_gains(t,[player('QB','weak',40)],baseline), {'QB-weak':0})
+
+    def test_cutdown_strength_does_not_ignore_subpackage_upgrades(self):
+        t=team('11')
+        for p in t.roster:
+            if p.pos=='WR':p.ovr=90 if int(p.pid[-1])<3 else 55
+        before_missing,before=RN.lineup_strength(t,t.roster)
+        after_missing,after=RN.lineup_strength(t,t.roster+[player('WR','new',80)])
+        self.assertEqual(before_missing,after_missing)
+        self.assertGreater(after,before)
 
 
 if __name__=='__main__': unittest.main()
