@@ -334,12 +334,15 @@ TE_FREE_BASE, TE_FREE_SEP = 1.0, 2.2      # a tight end's step at the catch: fir
 
 
 def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
-                        already=0.0, contact_at=0.0, in_space=False):
+                        already=0.0, contact_at=0.0, in_space=False, gain_scale=1.0):
     """
     Walks the carrier through pursuers one at a time. Each is a contest he can
     win; clearing them all is a touchdown from wherever he is.
     """
-    gained = contact_at
+    # Field congestion changes distance gained before the next tackle. Apply
+    # it before checking the goal line, while pursuers can still stop the play.
+    # A runner who has beaten every pursuer and wins the final chase scores.
+    gained = contact_at * gain_scale
     elus = rate(carrier, YAC['carrier']['elusive'])
     powr = rate(carrier, YAC['carrier']['power'])
     brk = rate(carrier, YAC['carrier']['breakaway'])
@@ -383,12 +386,12 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
         ramp = 0.115 if not in_space else 0.113
         p_break = logistic(edge(atk, wrap) - base - ramp * i, k=7.0)
         if rng.random() > p_break:
-            gained += max(0.0, rng.normal(0.9, 0.8))          # brought down
+            gained += max(0.0, rng.normal(0.9, 0.8)) * gain_scale  # brought down
             break
         broken += 1
         chase = logistic(edge(brk, rate(t, YAC['tackler']['angle'])), k=5.5)
         gained += max(0.3, rng.gamma(1.7, (1.50 if not in_space else 1.95)
-                                      + (4.6 if not in_space else 5.4) * chase))     # runs a touch tighter (scrambles count as runs now), receivers in space a touch looser     # re-solved with the free and strong safety pairing on the field (YAC had settled at 4.4 against 5.19)
+                                      + (4.6 if not in_space else 5.4) * chase)) * gain_scale
     else:
         # Every pursuer beaten. Rare by construction now, and even then the
         # secondary still has to be outrun.
@@ -403,7 +406,7 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
         if rng.random() < HOUSE_BASE + HOUSE_CHASE * chase_all:
             gained = yards_to_endzone                          # house call
         else:
-            gained += max(1.0, rng.gamma(2.2, 5.0 + 9.0 * chase_all))
+            gained += max(1.0, rng.gamma(2.2, 5.0 + 9.0 * chase_all)) * gain_scale
 
     gained = min(gained, yards_to_endzone)
     return dict(yards=round(float(gained), 1), broken_tackles=broken,
@@ -1085,13 +1088,14 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         # no free yards, long touchdowns were 12% of all touchdowns against a real 30 while explosive plays ran
         # above real: the big plays were being run down from behind.
         scr_free = float(np.clip(rng.normal(DEEP_FREE_BASE + DEEP_FREE_SEP * float(np.clip(sep_raw, 0.0, 1.0)), 2.5), 0.0, 18.0))
-    yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space, contact_at=min(max(te_free, scr_free), room))
+    gain_scale = _compression(room)
     if screen and tacklers:
         # A SCREEN LIVES OR DIES ON THE READ. The pursuers' awareness decides whether the defense rallied:
         # a smart unit kills it for two, a slow one gives up fifteen (about a third either way)
         awr = float(np.mean([rate(t_, {'awareness_rating': 1.0}) for t_ in tacklers[:3]]))
-        yac['yards'] = max(0.0, yac['yards'] * float(np.clip(1.0 - 1.8 * (awr - DEF_AWR_MEAN), 0.55, 1.45)))
-    yac['yards'] = round(yac['yards'] * _compression(room), 1)
+        gain_scale *= float(np.clip(1.0 - 1.8 * (awr - DEF_AWR_MEAN), 0.55, 1.45))
+    yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space,
+                              contact_at=min(max(te_free, scr_free), room), gain_scale=gain_scale)
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
                 yac=yac['yards'], touchdown=total >= ytg, concept=concept,
