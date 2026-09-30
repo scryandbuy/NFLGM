@@ -182,6 +182,11 @@ def power(league, team, cap, years=1):
     return base - owed * min(1.0, (years - 1) / 3.0) * FORWARD_WEIGHT
 
 
+def recruit_priority(gain):
+    """How much this signing helps the packages we actually put on the field."""
+    return float(np.clip(float(gain) / 12.0, 0.0, 1.5))
+
+
 def ai_bids(league, pool, phase, rng, skip_teams=()):
     import contract_structure as CS
     import roster_needs as RN
@@ -201,19 +206,17 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
         room = power(league, team, cap)
         if room <= 2.0:
             continue
-        roster_needs = RN.assess(team)['needs']
+        report = RN.assess(team)
+        gains = RN.candidate_gains(team, pool, baseline=report)
         cand = []
         from gm_engine import scheme_fit
         for p in pool:
-            grp = team.by_pos(p.pos)
-            best = grp[0].ovr if grp else 0.0
             # HIM IN OUR SCHEME. A club shops for the men who fit what it
             # runs, and pays them as it sees them.
             fit = scheme_fit(p.ratings, p.pos, team)
-            # need: thin at the spot, or he is an upgrade on what is there
-            upgrade = (p.ovr + fit - best) / 12.0
-            need = roster_needs.get(p.pos, 0.0)
-            want = 0.60 * need + 0.40 * np.clip(upgrade, -1, 1)
+            # Marginal package gain includes WR3/TE2 and defensive role fit.
+            # A rare package cannot claim the value of a full-time vacancy.
+            want = recruit_priority(gains.get(p.pid, 0.0))
             if want <= 0.12:
                 continue
             v = VAL.value_player(league, p, side='team', pool=comps, rng=rng)
@@ -230,6 +233,9 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
                 if keeper is not None and p.ovr <= keeper.ovr + 1.0:
                     years_want = 1        # worth having now, not worth a future
             bid = v['apy'] * PHASE_LEVEL[phase] * (1.0 + 0.045 * fit)
+            # Limited rotation/depth help gets a bounded discount; full-time
+            # improvement earns the normal quote, before the urgency premium.
+            bid *= 0.85 + 0.15 * min(1.0, want)
             # a club that wants him badly pays over its own number
             bid *= 1.0 + 0.22 * max(0.0, want - 0.5)
             bid = min(bid, power(league, team, cap, years_want) * 0.65)

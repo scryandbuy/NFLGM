@@ -198,7 +198,6 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
     inflate = float(getattr(gm, 'need_inflation', 0.5)); heat = 1.0 - float(getattr(gm, 'job_security', 0.6))
     import draft_plan as DP
     plan = DP.assess(league, abbr, level, players=players)
-    need = {pos: row['need'] for pos, row in plan['positions'].items()}
     mine = league.scouting[abbr]; cons = league.consensus
     d = DP._Roster(team, plan['players']).depth
     w_pot = min(0.5, 0.30 + 0.25 * belief * (1.0 - 0.8 * heat))     # the ceiling is at most half the grade; a believer had been buying 60% ceiling
@@ -208,6 +207,14 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
         return (1 - w_pot) * v['ovr'] + w_pot * (v['pot_lo'] + v['pot_hi']) / 2
     # the club grades him for what it runs; the room's board stays raw
     my_grade = {p.pid: grade(p, mine[p.pid]) + SC.scheme_fit_view(league, abbr, p, mine[p.pid]) for p in left}
+    # Bound expensive package reassignment while retaining the best options
+    # at every position, even when their global grade is outside the top 60.
+    shortlist = {p.pid: p for p in sorted(left, key=lambda p: -my_grade[p.pid])[:60]}
+    for pos in {p.pos for p in left}:
+        for p in sorted((p for p in left if p.pos == pos), key=lambda p: -my_grade[p.pid])[:2]:
+            shortlist[p.pid] = p
+    gains = DP.prospect_gains(league, abbr, list(shortlist.values()), plan,
+                             {p.pid: grade(p, mine[p.pid]) for p in shortlist.values()})
     cons_grade = {p.pid: 0.6 * cons[p.pid]['ovr'] + 0.4 * cons[p.pid]['pot'] for p in left}
     my_grades_desc = sorted(my_grade.values())
     cons_grades_desc = sorted(cons_grade.values())
@@ -235,7 +242,11 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
                 slot = 0.5 * position_slot + 0.5 * class_slot
             # NEED pulls him up the board: a 12-point hole is worth about 30
             # slots to a pure-need drafter, a few to a board man
-            gap = need.get(p.pos, 0.0)
+            position = plan['positions'][p.pos]
+            # Talent already affects the grade: only add urgency for an actual
+            # package weakness, retaining reserve depth and succession needs.
+            gap = max(min(position['starter'], max(0.0, gains.get(p.pid, 0.0))),
+                      .6 * position['depth'], .75 * position['future'])
             need_pull = gap * (0.6 + 2.0 * (1 - trust)) * (0.5 + inflate)
             slot -= min(18.0 if selection <= 100 else 32.0, max(0.0, need_pull))
             # a hot seat wants the older, readier man
@@ -262,7 +273,8 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
             if selection <= 100 and gap > 0 and any(league.players[pid].pos == p.pos and league.players[pid].team == abbr and (league.players[pid].draft_overall or 999) <= 96 for pid in taken):
                 slot += gap * (0.6 + 2.0 * (1 - trust)) * (0.5 + inflate) + 40.0
             rows.append((slot_value(max(1.0, slot)), p))
-    rows.sort(key=lambda r: -r[0])
+    rows.sort(key=lambda r: (-r[0], -gains.get(r[1].pid, 0.0)
+                             if plan['positions'][r[1].pos]['starter'] > 0 else 0.0))
     return rows
 
 

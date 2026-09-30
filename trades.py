@@ -263,6 +263,30 @@ NEED_GAP = 4.0
 # trade at all. A lateral move costs assets and changes nothing.
 UPGRADE_GAP = 2.0
 
+
+def package_trade_targets(team, assets, baseline=None, cache=None, minimum=UPGRADE_GAP):
+    """Rank available players by marginal gain in this buyer's package mix."""
+    import roster_needs as RN
+    baseline = RN.assess(team) if baseline is None else baseline
+    cache = {} if cache is None else cache
+    unique = {a['pid']: a for a in assets if a.get('obj') is not None}
+    missing = [a['obj'] for pid, a in unique.items() if pid not in cache]
+    cache.update(RN.candidate_gains(team, missing, baseline=baseline))
+    ranked = [dict(a, package_gain=cache[pid]) for pid, a in unique.items()
+              if cache[pid] > minimum]
+    return sorted(ranked, key=lambda a: (-a['package_gain'], -a.get('seen_ovr', 0), a['pid']))
+
+
+def package_trade_hole(report):
+    """The group with the most actual package weakness, for occasional star pursuits."""
+    needs = report['package_needs']
+    eligible = {pos: need for pos, need in needs.items()
+                if GRP.get(pos, pos) != 'ST' and need > .10}
+    if not eligible:
+        return None
+    pos = max(eligible, key=eligible.get)
+    return GRP.get(pos, pos)
+
 _BAR_CACHE = {}
 
 
@@ -708,13 +732,17 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
         if not active:
             continue
         sn = {b: surplus_and_needs(league, league.teams[b], pool, rng) for b in teams}
+        import roster_needs as RN
+        target_reports, target_gains = {}, {}
         for a in active:
             ta = league.teams[a]
-            sa, na = sn[a]
+            sa, _ = sn[a]
             if not sa:
                 continue
             ga = persona(ta.gm)
             ctx_a = ta.ctx()
+            if a not in target_reports: target_reports[a] = RN.assess(ta)
+            gain_cache = target_gains.setdefault(a, {})
             for b in teams:
                 if b == a:
                     continue
@@ -733,10 +761,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 # sit behind its own 74, which nobody does.
                 # the seller's surplus, seen through the BUYER's scheme
                 sb_seen = [through_buyer_eyes(x, ta, tb) for x in sb]
-                want_a = [x for x in sb_seen
-                          if x['pid'] not in moved
-                          and x.get('grp') in na
-                          and x.get('seen_ovr', 0) > na[x['grp']] + UPGRADE_GAP]
+                want_a = [x for x in sb_seen if x['pid'] not in moved]
                 # NOT ONLY SURPLUS. A club that is good everywhere but one
                 # spot goes and gets someone's starter there and pays for
                 # him. Contenders do it most, aggressive GMs do it most, and
@@ -745,21 +770,14 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 # what keeps it rare, not a rule.
                 wdw_a = TE.window(ctx_a)
                 chase = (0.35 if wdw_a in ('contending', 'win_now') else 0.10) * (0.5 + ga['aggression'])
-                if na and rng.random() < chase:
-                    hole = min(na, key=na.get)                  # his thinnest group
+                hole = package_trade_hole(target_reports[a])
+                if hole and rng.random() < chase:
                     for x in stars_at(league, tb, pool, rng, hole, viewer=ta):
-                        if x['pid'] not in moved and x.get('seen_ovr', 0) > na[hole] + UPGRADE_GAP + 3:
+                        if x['pid'] not in moved:
                             want_a.append(x)
-                # A MAN WHO ASKED OUT is known to be available: every buyer
-                # with a hole at his group sees him, no roll
-                import morale as MO
-                for x in sb_seen:
-                    if x.get('wants_out') and x['pid'] not in moved and x.get('grp') in na \
-                            and x.get('seen_ovr', 0) > na[x['grp']] + UPGRADE_GAP and not any(y['pid'] == x['pid'] for y in want_a):
-                        want_a.append(x)
+                want_a = package_trade_targets(ta, want_a, target_reports[a], gain_cache)
                 if not want_a:
                     continue
-                want_a.sort(key=lambda x: -x.get('seen_ovr', 0))
                 target = want_a[0]
                 target['need'] = True
                 # SWEETEN UNTIL HE TAKES IT. A single cheapest-pick offer came
@@ -800,6 +818,8 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 made.append((a, b, offer['a_sends'], offer['a_gets'][0]['obj'],
                              res))
                 ta.sync_cap(); tb.sync_cap()
+                for changed in (a,b):
+                    target_reports.pop(changed, None); target_gains.pop(changed, None)
                 cap_space[a], cap_space[b] = ta.cap_space, tb.cap_space
                 break
 
@@ -833,21 +853,20 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             if a in live or not su:
                 continue
             ta = league.teams[a]
-            sa, na = surplus_and_needs(league, ta, pool, rng)
+            sa, _ = surplus_and_needs(league, ta, pool, rng)
             ga, ctx_a = persona(ta.gm), ta.ctx()
             su_seen = [through_buyer_eyes(x, ta, tu) for x in su]
-            want = [x for x in su_seen if x.get('grp') in na
-                    and x.get('seen_ovr', 0) > na[x['grp']] + UPGRADE_GAP]
+            import roster_needs as RN
+            report = RN.assess(ta)
+            candidates = list(su_seen)
             wdw_a = TE.window(ctx_a)
             chase = (0.35 if wdw_a in ('contending', 'win_now') else 0.10) * (0.5 + ga['aggression'])
-            if na and rng.random() < chase:
-                hole = min(na, key=na.get)
-                for x in stars_at(league, tu, pool, rng, hole, viewer=ta):
-                    if x.get('seen_ovr', 0) > na[hole] + UPGRADE_GAP + 3:
-                        want.append(x)
+            hole = package_trade_hole(report)
+            if hole and rng.random() < chase:
+                candidates.extend(stars_at(league, tu, pool, rng, hole, viewer=ta))
+            want = package_trade_targets(ta, candidates, report)
             if not want:
                 continue
-            want.sort(key=lambda x: -x.get('seen_ovr', 0))
             target = dict(want[0]); target['need'] = True
             if not _can_absorb(league, ta, target, cap_space[a]):
                 continue
