@@ -12,7 +12,9 @@ UNITS = ('offense', 'defense', 'special')
 INTENSITIES = {'recovery': (.0, .0, .045), 'light': (.55, .35, .006),
                'standard': (1., 1., .0), 'hard': (1.20, 2.7, -.018)}
 OFFENSE = {'QB','HB','FB','WR','TE','LT','LG','C','RG','RT'}
-WEEKLY_XP_PER_PLAYER = 12.0
+# Calibrated to the mixed assistant policy, preserving the prior light-heavy
+# season allowance instead of increasing development when coaches train normally.
+WEEKLY_XP_PER_PLAYER = 8.0
 MAX_PLAYER_XP = 24.0
 # About 0.04 incidents/team/week at standard; much less than game exposure.
 BASE_INJURY_RISK = .0007

@@ -56,7 +56,7 @@ class PracticeTests(unittest.TestCase):
         l,r,ps=setup();q=plan('hard');q['focus']=[p.pid for p in ps[:10]]
         l.practice_state={'auto':{'A':True},'completed':{'2023:1':{}},'participants':{'2023:1':{}}}
         v=P.resolve(l,r,'A',1,q)
-        self.assertLessEqual(sum(p.xp for p in ps),len(ps)*12*1.2+.01)
+        self.assertLessEqual(sum(p.xp for p in ps),len(ps)*P.WEEKLY_XP_PER_PLAYER*1.2+.01)
         self.assertLessEqual(max(p.xp for p in ps),24);self.assertEqual(len(v['plan']['focus']),3)
         self.assertNotIn('2023:1',l.practice_state['completed']);self.assertTrue(l.practice_state['auto']['A'])
     def test_new_season_ignores_prior_health_and_snaps(self):
@@ -128,7 +128,7 @@ class PracticeTests(unittest.TestCase):
         target=ps[0];q['focus']=[target.pid]
         focused=P.preview(l,r,'A',4,q)
         self.assertGreater(focused['players'][0]['xp'],baseline['players'][0]['xp'])
-        self.assertLessEqual(focused['totals']['xp'],len(ps)*12+.01)
+        self.assertLessEqual(focused['totals']['xp'],len(ps)*P.WEEKLY_XP_PER_PLAYER+.01)
         self.assertLessEqual(max(x['xp'] for x in focused['players']),24)
         q['individual']={target.pid:'rest'}
         row=P.preview(l,r,'A',4,q)['players'][0]
@@ -167,6 +167,9 @@ class PracticeTests(unittest.TestCase):
         self.assertGreater(results['hard'][5],results['standard'][5])
         self.assertGreater(results['adaptive'][5],.02)
         self.assertLess(results['adaptive'][5],.35)
+        # Mixed preparation must not buy a large development increase over the
+        # old assistant's almost-every-week light allowance (12 * .55 per man).
+        self.assertLess(results['adaptive'][0],66*18*12*.55*1.10)
         self.assertLess(results['hard'][0],results['standard'][0]*1.21)
         self.assertLess(results['standard'][3],17*(75+3*60)*.05)
         self.assertGreater(results['standard'][4],results['standard'][3]*2)
