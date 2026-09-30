@@ -46,6 +46,52 @@ def package_weights(gm=None):
     return dict(zip(keys, mixes[base_package(gm)]))
 
 
+# A fixed set of ordinary situations for roster planning. The play caller
+# still makes the actual choice on each snap; these shares only estimate how
+# often a job is available when the GM compares players.
+_PLANNING_SITUATIONS = (
+    (1, 10, 50, 0, None, .35),
+    (2, 6, 45, 0, None, .23),
+    (2, 15, 60, 0, None, .10),
+    (3, 2, 30, 0, None, .10),
+    (3, 9, 40, 0, None, .14),
+    (1, 3, 4, 0, None, .04),
+    (2, 10, 50, -7, 90, .02),
+    (2, 4, 50, 7, 90, .02),
+)
+
+
+def expected_package_weights(gm, depth):
+    """Expected calls for a projected roster, with the coach's intent retained.
+
+    Use the same roster and situational adjustments as the game caller. Half
+    the estimate uses neutral roster strengths so a missing TE or fourth WR
+    remains a recruiting need instead of making that package disappear.
+    ``depth`` contains projected player dictionaries ordered by team fit.
+    """
+    import identity as ID
+    from plays import rate
+
+    base = package_weights(gm)
+    backs = depth.get('HB') or depth.get('FB') or []
+    offensive_line = [depth[pos][0] for pos in OL if depth.get(pos)]
+    projected = dict(qb=(depth.get('QB') or [None])[0],
+                     rb=backs[0] if backs else None, backs=backs,
+                     ol=offensive_line,
+                     wr=(depth.get('WR') or [])[:6] + (depth.get('TE') or [])[:3] + backs[:1])
+    identity = ID.read_identity(projected, rate)
+    adjusted = ID.personnel_weights(identity, base)
+    estimate = dict.fromkeys(base, 0.0)
+    for down, distance, yards_to_endzone, score_diff, seconds_left, share in _PLANNING_SITUATIONS:
+        for source in (base, adjusted):
+            situational = ID.situational_weights(source, down, distance,
+                                                 yards_to_endzone, score_diff, seconds_left)
+            total = sum(situational.values())
+            for package, weight in situational.items():
+                estimate[package] += .5 * share * weight / total
+    return estimate
+
+
 def role_grade(player, role, package='11', slot=0):
     """Grade the job actually performed; extra heavy-package TEs must block."""
     if role == 'FB':

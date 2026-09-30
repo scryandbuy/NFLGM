@@ -33,6 +33,50 @@ class PackageRosterTests(unittest.TestCase):
             self.assertLess(weights[package], .7)
             weights['11'] = 99
             self.assertLess(OR.package_weights(gm)['11'], 1)
+            projected = OR.expected_package_weights(gm, {})
+            self.assertAlmostEqual(sum(projected.values()), 1)
+            self.assertEqual(max(projected, key=projected.get), package)
+
+    def test_expected_calls_follow_roster_strength_without_erasing_coach_intent(self):
+        gm = SimpleNamespace(off_personnel='12')
+        depth = {pos: [dict(pos=pos, run_block_rating=82, run_block_power_rating=82,
+                            run_block_finesse_rating=82, strength_rating=82)] for pos in OR.OL}
+        depth.update(QB=[dict(pos='QB')], HB=[dict(pos='HB')],
+                     WR=[dict(pos='WR', route_run_med_rating=85, catch_rating=85,
+                              speed_rating=85, release_rating=85) for _ in range(3)])
+        def tight_ends(level):
+            return [dict(pos='TE', catch_rating=level, run_block_rating=level,
+                         route_run_short_rating=level, speed_rating=level) for _ in range(2)]
+        depth['TE'] = tight_ends(50)
+        weak = OR.expected_package_weights(gm, depth)
+        depth['TE'] = tight_ends(95)
+        strong = OR.expected_package_weights(gm, depth)
+        self.assertAlmostEqual(sum(weak.values()), 1)
+        self.assertAlmostEqual(sum(strong.values()), 1)
+        self.assertGreater(strong['12'], weak['12'])
+        self.assertGreater(strong['22'], weak['22'])
+        # The team still plans to recruit for two-TE sets while its TEs are weak.
+        self.assertGreater(weak['12'], .3)
+
+    def test_candidate_gain_includes_its_effect_on_future_package_calls(self):
+        t = team('12')
+        for p in t.roster:
+            if p.pos == 'TE':
+                p.ovr = 70
+                p.ratings = dict(catch_rating=50, run_block_rating=50,
+                                 route_run_short_rating=50, speed_rating=50)
+        arrival = player('TE', 'better', 85)
+        arrival.ratings = dict(catch_rating=95, run_block_rating=95,
+                               route_run_short_rating=95, speed_rating=95)
+        before = RN.assess(t)
+        after = RN.assess(t, t.roster + [arrival])
+        before_twelve = next(row['weight'] for row in before['package_assignments']
+                             if row['variant'] == 'offense:12')
+        after_twelve = next(row['weight'] for row in after['package_assignments']
+                            if row['variant'] == 'offense:12')
+        self.assertGreater(after_twelve, before_twelve)
+        self.assertAlmostEqual(RN.move_gain(t, arrival, baseline=before),
+                               after['score'] - before['score'])
 
     def test_air_raid_values_fourth_receiver_more_than_eleven(self):
         t = team()

@@ -248,7 +248,7 @@ def _package_rows(team, players, grades, profile, role_grades, side=None):
     depth = _planning_depth(players, grades)
     out = []
     if side in (None, 'offense'):
-        for package, weight in OR.package_weights(gm).items():
+        for package, weight in OR.expected_package_weights(gm, depth).items():
             for row in _offensive_rows(depth, package):
                 p = row['player']
                 grade = None
