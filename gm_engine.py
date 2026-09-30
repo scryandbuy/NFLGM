@@ -83,7 +83,7 @@ class GM:
                                    # truth: 1 = the best room in the league, 0 = the worst
     # --- what he runs (identity_catalog axes; the coach and the GM are one man) ---
     off_blocking:   str = 'zone'    # 'zone' | 'gap' | 'mixed'
-    off_personnel:  str = '11'      # base grouping: '11' | '12' | '13' | '21' | 'multiple'
+    off_personnel:  str = '11'      # base grouping: 10/11/12/13/21/22 (00 in passing situations)
     pass_lean:      float = 0.50    # run-heavy .. pass-heavy
     play_action:    float = 0.50
     motion:         float = 0.50

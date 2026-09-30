@@ -11,7 +11,7 @@ from views import club, money, morale_word, player_plate, rail
 LEANS_OFF = [('pass_lean', 'Pass / Run', 'Run first', 'Pass first'), ('play_action', 'Play Action', 'Rare', 'Often'), ('motion', 'Motion', 'Still', 'Constant'),
              ('tempo', 'Tempo', 'Huddle', 'Fast'), ('deep', 'Depth of Target', 'Short game', 'Shots'), ('fourth_down', 'Fourth Down', 'Punt', 'Go for it')]
 LEANS_DEF = [('coverage', 'Coverage', 'Zone', 'Man'), ('shell', 'Safeties', 'Single high', 'Two high'), ('blitz', 'Blitz', 'Rush four', 'Send heat'), ('box', 'Box', 'Light', 'Loaded')]
-CHOICES = [('off_blocking', 'Run Blocking', ['zone', 'gap', 'mixed']), ('off_personnel', 'Base Personnel', ['11', '12', '21', '13']), ('def_front', 'Front', ['4-3', '3-4', 'multiple'])]
+CHOICES = [('off_blocking', 'Run Blocking', ['zone', 'gap', 'mixed']), ('off_personnel', 'Base Personnel', ['11', '12', '21', '13', '10']), ('def_front', 'Front', ['4-3', '3-4', 'multiple'])]
 
 
 def _gm(league, abbr):
@@ -122,10 +122,17 @@ def _lean_rows(gm_leans, scheme_leans):
 def _fit_table(league, t, gm_like):
     """Every starter's grade at his spot under a GM's identity, by group; and each man's fit."""
     import gm_engine as GE, targets as TG
+    import offense_roles as OR, defense_roles as DR
     keys = GE.scheme_of(gm_like) or []
+    offense = OR.PACKAGES[OR.base_package(gm_like)]
+    defense = DR.shape(DR.coach_front(gm_like), 'base')
+    starters_by_group = dict(FIT_N, WR=offense['WR'], TE=offense['TE'],
+                             DT=sum(role in ('DT', 'NT', '34LE', '34RE') for role in defense['dl']),
+                             LB=sum(role in ('MIKE', 'WILL', 'SAM', 'LILB', 'RILB')
+                                    for role in defense['lb']))
     rows = []; men = []
     for g, poss in FIT_GROUPS:
-        starters = sorted((p for p in t.active() if p.pos in poss), key=lambda p: -p.ovr)[:FIT_N[g]]
+        starters = sorted((p for p in t.active() if p.pos in poss), key=lambda p: -p.ovr)[:starters_by_group[g]]
         fits = []
         for p in starters:
             try: base = float(TG.position_score(p.ratings, p.pos, None)); here = float(TG.position_score(p.ratings, p.pos, keys)); f = here - base
