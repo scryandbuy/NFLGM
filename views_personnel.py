@@ -392,10 +392,12 @@ def free_agency(session, league, abbr):
     from views import next_year_cap, cap_focus
     limit_next, committed_next, _ro, _dn = next_year_cap(league, me)
     focus = cap_focus(league, me)
+    from offer_reservations import pending_offers
+    outstanding = pending_offers(league, abbr)
     for t_ in threads: t_['cap'] = focus
     import practice_squad as PSQ
     ps_n = len(PSQ.squad(me))
-    return dict(rail=rail(session, league, abbr), cap_focus=focus, rows=rows[:300], count=len(rows), cap=round(me.cap_space, 1), roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
+    return dict(rail=rail(session, league, abbr), cap_focus=focus, rows=rows[:300], count=len(rows), cap=focus['space'], pending_offers=outstanding, roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
                 weeks_left=(19 - int(league.week or 0) if phase == 'regular' else None),
                 in_season=(phase == 'regular'), phase=phase, step=step, fa_round=fa_round, threads=threads, feed=feed, positions=sorted({r['pos'] for r in rows}))
 
@@ -450,11 +452,27 @@ def act_open_talks(league, abbr, pid, kind):
 
 def act_offer(league, abbr, tid, apy, years, bonus=None, front_load=None, promises=(), sign_today=False):
     import negotiations as NG
+    from offer_reservations import check_offer
+    thread = NG.find(league, tid)
+    if thread is None or thread.get('team') != abbr:
+        return dict(ok=False, why='no such negotiation')
+    why = check_offer(league, abbr, thread, apy, years, bonus, front_load)
+    if why:
+        return dict(ok=False, why=why)
     return NG.make_offer(league, tid, float(apy), int(years), bonus=bonus, front_load=front_load, promises=list(promises), sign_today=sign_today)
 
 
 def act_match(league, abbr, tid):
     import negotiations as NG
+    from offer_reservations import check_offer
+    thread = NG.find(league, tid)
+    if thread is None or thread.get('team') != abbr:
+        return dict(ok=False, why='no such negotiation')
+    rival = thread.get('rival') or {}
+    if thread.get('state') == 'match_requested' and rival:
+        why = check_offer(league, abbr, thread, rival['apy'], rival['years'], front_load=0.5)
+        if why:
+            return dict(ok=False, why=why)
     return NG.match(league, tid)
 
 

@@ -385,7 +385,7 @@ class Session:
             try:
                 sh = TG.user_resign_sheet(self.L)
                 tag_s = ('tag placed' if sh['tag_used'] else ('no tag' if sh['tag_choice'] == 'none' else 'no tag yet'))
-                return dict(title='Lock Tags and Tenders', sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)} · {len(sh['ufa'])} unrestricted, {len(sh['rfa'])} restricted · {tag_s}")
+                return dict(title='Franchise Tag and Re-Sign', sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)} · {len(sh['ufa'])} unrestricted, {len(sh['rfa'])} restricted · {tag_s}")
             except Exception: pass
         if name in self.FA_STEPS or name == 'step_fa_close':
             n = len([x for x in self.L.free_agents if self.L.player(x)])
