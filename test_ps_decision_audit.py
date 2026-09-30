@@ -6,6 +6,7 @@ import waivers as W
 import practice_squad as PS
 import views_club as VC
 from test_cap_accounting import fixture, player
+from cap_engine import Contract
 
 
 class PSDecisionAudit(unittest.TestCase):
@@ -75,9 +76,9 @@ class PSDecisionAudit(unittest.TestCase):
         PS.call_up(league,'GB',p.pid)
         self.assertLessEqual(len(league.teams['GB'].active()),53)
 
-    def test_veteran_squad_move_reports_cap_failure_without_cut(self):
+    def test_squad_move_with_dead_cap_failure_does_not_cut(self):
         league=fixture(); team=league.teams['GB']; team.cap.cap=.1; team.cap.rollover=0
-        p=player(league); p.accrued=5
+        p=player(league,contract=Contract(3,[.5]*3,signing_bonus=6)); p.accrued=5
         result=VC.act_to_squad(league,'GB',p.pid)
         self.assertFalse(result['ok'])
         self.assertIn(p,team.roster)

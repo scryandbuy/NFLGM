@@ -753,7 +753,7 @@ def act_to_squad(league, abbr, pid):
     penalty_line = _cut_penalty_line(penalty)
     if int(p.accrued or 0) >= 4:
         if not PSQ.sign_to_squad(league, abbr, pid):
-            return dict(ok=False, why='Cannot move him to the practice squad: check eligibility and cap space.')
+            return dict(ok=False, why='Cannot move him to the practice squad: releasing his contract would exceed the cap.')
         return dict(ok=True, line=f"{p.name} to the practice squad. {penalty_line}", now=True, **penalty)
     league.release(pid)
     intent = dict(getattr(league, 'ps_intent', None) or {}); intent[pid] = abbr; league.ps_intent = intent

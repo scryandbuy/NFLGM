@@ -33,23 +33,24 @@ class CapAccountingTests(unittest.TestCase):
         loaded.set_phase('regular')
         self.assertAlmostEqual(loaded.teams['GB'].cap_space,before-4)
 
-    def test_practice_squad_cannot_spend_past_cap(self):
+    def test_practice_squad_pay_is_outside_cap_even_after_reload(self):
         L=fixture(); t=L.teams['GB']; t.cap.cap=.1; t.cap.rollover=0
         p=player(L,team=None); L.free_agents.append(p.pid)
-        before=L.save()
-        self.assertFalse(PS.sign_to_squad(L,'GB',p.pid))
-        self.assertEqual(before,L.save())
-        t.cap.cap=1
         self.assertTrue(PS.sign_to_squad(L,'GB',p.pid))
-        self.assertAlmostEqual(t.cap_space,round(1-PS.PAY_VET,3))
+        self.assertAlmostEqual(t.cap_space,.1)
+        settle_week(L,9)
+        self.assertGreater(t.cap.ps_earned,0)
+        self.assertAlmostEqual(t.cap_space,.1)
+        loaded=League.load(L.save())
+        self.assertAlmostEqual(loaded.teams['GB'].cap_space,.1)
 
     def test_roster_to_squad_budget_counts_release_savings_and_dead_money(self):
         from cap_accounting import require_squad_room
-        L=fixture(); L.set_phase('offseason'); t=L.teams['GB']
-        t.cap.cap=2; t.cap.rollover=0
-        p=player(L,contract=Contract(2,[3,3],signing_bonus=2))
+        L=fixture(); t=L.teams['GB']
+        t.cap.cap=7; t.cap.rollover=0
+        p=player(L,contract=Contract(3,[.5]*3,signing_bonus=6))
         require_squad_room(L,t,p)
-        t.cap.cap=.5
+        t.cap.cap=5
         with self.assertRaises(ValueError): require_squad_room(L,t,p)
 
     def test_five_year_max_survives_advance(self):
@@ -139,9 +140,11 @@ class CapAccountingTests(unittest.TestCase):
         PS.sign_to_squad(L,'GB','ps'); settle_week(L,9)
         PS.release_from_squad(L,'GB','ps')
         self.assertAlmostEqual(t.cap.ps_earned,.12375)
-        self.assertEqual(t.cap.practice_squad,.124)
+        self.assertEqual(t.cap.practice_squad,0)
+        self.assertEqual(t.cap.charges(),0)
         PS.sign_to_squad(L,'GB','ps'); settle_week(L,18)
         self.assertAlmostEqual(t.cap.ps_earned,.2475)
+        self.assertEqual(t.cap.charges(),0)
 
     def test_save_preserves_new_ledger_and_load_does_not_mutate_input(self):
         L=fixture(); p=player(L,contract=Contract(2,[18,18],signing_bonus=20))

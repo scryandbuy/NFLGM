@@ -130,7 +130,7 @@ class TeamCap:
         self.ps_earned = 0.0
         self.paid_week = 0
         self.dead_next = 0.0       # June 1 splits and retirements land here, for next year
-        self.practice_squad = 0.0  # the squad's weekly pay for the season, while he is on it
+        self.practice_squad = 0.0  # legacy save field; squad pay is outside the cap
 
     @property
     def limit(self): return self.cap + self.rollover
@@ -139,7 +139,7 @@ class TeamCap:
         rows = sorted(self.contracts, key=lambda row: row[1].cap_hit(row[2]), reverse=True)
         hits = sum(c.cap_hit(i) if phase not in TOP_51_PHASES or n < 51
                    else c.bonus_at(i) + c.rb[i] for n, (_, c, i) in enumerate(rows))
-        return hits + self.dead + self.earned + self.practice_squad
+        return hits + self.dead + self.earned
 
     def space(self, phase='season'):
         return round(self.limit - self.charges(phase), 3)

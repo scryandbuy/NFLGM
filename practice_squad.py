@@ -1,14 +1,14 @@
 """
-THE PRACTICE SQUAD, on the real rules (CBA Article 33, 2026).
+THE PRACTICE SQUAD, with game-specific cap treatment.
 
 SIZE AND WHO. Sixteen men. Ten of the sixteen must have two or fewer
 accrued seasons; up to six can have any amount of experience. (The 17th
 International Pathway spot is not modelled.)
 
-PAY, ON THE CAP. Fixed weekly: $13,750 for two or fewer accrued seasons,
-$18,350 for veterans, times eighteen weeks. Practice squad pay counts
-against the cap while he is on it; no bonuses, no guarantees. Called up, he
-signs an active-roster deal at the minimum for his accrued seasons.
+PAY. Fixed weekly: $13,750 for two or fewer accrued seasons,
+$18,350 for veterans, times eighteen weeks. The game tracks this pay outside
+the salary cap. Called up, he signs an active-roster deal at the minimum for
+his accrued seasons.
 
 ELEVATIONS. Up to two practice-squad men can be elevated for a game, each
 man up to three times a season; a fourth time he has to be signed to the
@@ -51,10 +51,8 @@ def squad(team):
 
 
 def ps_charge(team):
-    """This club's practice-squad pay for the season, on the cap."""
-    cap = getattr(team, 'cap', None)
-    remaining = max(0,18-getattr(cap,'paid_week',0))/18
-    return round(getattr(cap,'ps_earned',0.0)+remaining*sum(PAY_VET if (p.accrued or 0) > 2 else PAY_YOUNG for p in squad(team)), 3)
+    """Practice-squad pay is tracked separately and has no cap charge."""
+    return 0.0
 
 
 def is_young(p):
@@ -82,8 +80,7 @@ def sign_to_squad(league, abbr, pid):
             or p in squad(team) or p in (getattr(team, 'ir', None) or [])
             or not can_add(team, p)):
         return False
-    # Squad pay counts too. Validate before releasing a roster player or
-    # removing him from the wire/free-agent pool.
+    # A roster demotion can still accelerate contract bonuses into dead cap.
     from cap_accounting import require_squad_room
     try: require_squad_room(league, team, p)
     except ValueError: return False
@@ -128,7 +125,7 @@ def call_up(league, abbr, pid, years=1, emergency=False):
     outgoing=room_candidate(league,team,p) if full else None
     if not emergency:
         from cap_accounting import require_room
-        try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None,ps_pid=pid)
+        try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None)
         except ValueError: return False
     squad(team).remove(p); p.xp_spent.pop('_ps', None); p.team = None
     _make_room(league, abbr, p)

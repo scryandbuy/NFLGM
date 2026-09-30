@@ -717,7 +717,7 @@ function renderRoster(v) {
         tbl.append(tr);
       }
     }
-    count.textContent = `${shown} of ${v.count} on the roster · Cap $${v.cap_total.toFixed(1)}m` + (v.practice.length ? ` · Practice Squad $${v.ps_charge}m` : '');
+    count.textContent = `${shown} of ${v.count} on the roster · Cap $${v.cap_total.toFixed(1)}m`;
   };
   const foot = el('div', { class: 'foot roster-actions' });
   const drawFoot = () => {
@@ -1937,7 +1937,7 @@ function renderCap(v) {
   v.years.forEach((y, i) => {
     const st = el('div', { class: 'stack' }); for (const [g, val] of Object.entries(y.by)) if (val > 0) st.append(el('i', { style: `width:${(val / y.limit * 100).toFixed(1)}%;background:${COL[g]}`, 'data-tip': `${g} $${val}m` })); if (y.dead > 0) st.append(el('i', { style: `width:${(y.dead / y.limit * 100).toFixed(1)}%;background:#3a424c`, 'data-tip': `Penalty $${y.dead}m` }));
     const kv = el('div', { class: 'kv' }, el('span', {}, 'Committed'), el('span', {}, `$${y.committed}m`), el('span', {}, 'Penalty'), el('span', {}, `$${y.dead}m`));
-    if (y.current) kv.append(el('span', {}, 'Paid to Departed Players'), el('span', {}, `$${y.earned || 0}m`), el('span', {}, 'Practice Squad'), el('span', {}, `$${y.ps_charge}m`), el('span', {}, 'Rookie Pool'), el('span', {}, '—'));
+    if (y.current) kv.append(el('span', {}, 'Paid to Departed Players'), el('span', {}, `$${y.earned || 0}m`), el('span', {}, 'Rookie Pool'), el('span', {}, '—'));
     else kv.append(el('span', {}, 'Expiring Into It'), el('span', {}, y.expiring_into.length ? y.expiring_into.join(', ') + (y.expiring_more ? `, ${y.expiring_more} more` : '') : 'Nobody'), el('span', {}, 'Rookie Pool'), el('span', {}, `$${y.rookie_pool}m est.`));
     kv.append(el('span', {}, 'Under Contract'), el('span', {}, `${y.under_contract} players`));
     yrs.append(el('div', { class: 'cy' }, el('h4', {}, `${y.year}${i === 0 ? ' Now' : ''}`, el('small', { 'data-tip': y.rollover ? `League cap plus $${y.rollover}m you have unspent now, which carries over` : null }, `Limit $${y.limit}m${y.rollover ? ` incl. $${y.rollover}m rollover` : y.est ? ' est.' : ''}`)), el('div', { class: 'big' + (y.space < 0 ? ' neg' : '') }, `${y.space < 0 ? '−' : ''}$${Math.abs(y.space).toFixed(1)}m`), el('div', { style: 'font-size:12.5px;color:var(--ink-3)' }, 'space'), st, kv));

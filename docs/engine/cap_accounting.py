@@ -54,7 +54,7 @@ def transfer_contract(contract, paid_week):
     return c
 
 
-def require_room(league, team, pid, contract, release_pid=None, ps_pid=None):
+def require_room(league, team, pid, contract, release_pid=None):
     """Validate an ordinary deal before mutation; emergency fills bypass this helper."""
     from offer_reservations import held
     pending = held(league, team.abbr, exclude_pid=pid)
@@ -69,11 +69,6 @@ def require_room(league, team, pid, contract, release_pid=None, ps_pid=None):
             trial.contracts=[x for x in trial.contracts if x[0]!=release_pid]
             trial.dead+=c.release(0,league.post_june1())[0]
             trial.earned+=c.earned_base+c.earned_roster
-    if ps_pid:
-        import practice_squad as PS
-        p=league.player(ps_pid)
-        if p in PS.squad(team):
-            trial.practice_squad-=max(0,18-team.cap.paid_week)/18*(PS.PAY_VET if (p.accrued or 0)>2 else PS.PAY_YOUNG)
     after=trial.charges(team.phase)
     pending_now = 0.0 if pre_roll(league) else pending
     if after + pending_now > team.cap.limit + .0005 and after > before + .0005:
@@ -88,21 +83,21 @@ def require_room(league, team, pid, contract, release_pid=None, ps_pid=None):
 
 
 def require_squad_room(league, team, player):
-    import practice_squad as PS
     from offer_reservations import held
+    if player not in team.roster or not player.contract:
+        return  # Squad pay does not use cap room.
     team.sync_cap()
+    before = team.cap.charges(team.phase)
     trial = copy.copy(team.cap)
     trial.contracts = list(team.cap.contracts)
-    if player in team.roster and player.contract:
-        c = player.contract
-        trial.contracts = [x for x in trial.contracts if x[0] != player.pid]
-        trial.dead += c.release(0, league.post_june1())[0]
-        trial.earned += c.earned_base + c.earned_roster
-    trial.practice_squad += max(0, 18-team.cap.paid_week)/18 * (
-        PS.PAY_VET if (player.accrued or 0) > 2 else PS.PAY_YOUNG)
+    c = player.contract
+    trial.contracts = [x for x in trial.contracts if x[0] != player.pid]
+    trial.dead += c.release(0, league.post_june1())[0]
+    trial.earned += c.earned_base + c.earned_roster
     pending_now = 0.0 if pre_roll(league) else held(league, team.abbr, exclude_pid=player.pid)
-    if trial.charges(team.phase) + pending_now > trial.limit + .0005:
-        raise ValueError('Not enough cap space for practice-squad pay')
+    after = trial.charges(team.phase)
+    if after + pending_now > trial.limit + .0005 and after > before + .0005:
+        raise ValueError('Not enough cap space for this release')
 
 
 def next_year_ledger(league, team):
