@@ -300,14 +300,17 @@ def street_alternative(league, team, target, baseline, cache, comps):
                       and not p.retired and p.out_until is None and p.pos in group
                       and not MK.pending_offer_sheet(league, p.pid)]
         gains = RN.candidate_gains(team, candidates, baseline=baseline)
+        # Keep affordable alternatives even when stronger, expensive players
+        # lead the list. Quotes are cached and post-signing reports are built
+        # only after contract and cap checks pass.
         cache[key] = [(p, gains[p.pid]) for p in sorted(candidates,
-                      key=lambda p: -gains[p.pid])[:6]]
+                      key=lambda p: -gains[p.pid])]
     cap = CAP.get(league.year, 301.2)
     for candidate, gain in cache[key]:
         if candidate.team is not None or candidate.pid not in league.free_agents:
             continue
         if gain < target['package_gain'] - UPGRADE_GAP:
-            continue
+            break  # the remaining candidates have still less package value
         quote_key = ('quote', candidate.pid)
         if quote_key not in cache:
             cache[quote_key] = VAL.value_player(league, candidate, side='agent', pool=comps)

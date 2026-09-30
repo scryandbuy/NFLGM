@@ -117,6 +117,23 @@ class TransactionPackageAuditTests(unittest.TestCase):
         with patch.object(trades.VAL,'value_player',return_value={'apy':1,'years':1}):
             self.assertFalse(trades.street_alternative(L,t,target,report,{},{}))
 
+    def test_expensive_leaders_cannot_hide_an_affordable_seventh_option(self):
+        from cap_engine import Contract
+        L,t,wr,te,qb=offense_fixture('10');wr.contract=Contract(1,[1]);wr.team='DEN'
+        expensive=[prospect(L,'WR',f'expensive-{i}') for i in range(6)]
+        for p in expensive:set_grade(p,88)
+        affordable=prospect(L,'WR','affordable-seventh')
+        L.free_agents=[p.pid for p in expensive]+[affordable.pid]
+        baseline=RN.assess(t)
+        target=dict(obj=wr,package_gain=RN.move_gain(t,wr,baseline=baseline),inherit=1)
+        cache={}
+        with patch.object(trades.VAL,'value_player',side_effect=lambda L,p,**kwargs:
+                          {'apy':1 if p.pid==affordable.pid else 30,'years':1}) as quote:
+            self.assertTrue(trades.street_alternative(L,t,target,baseline,cache,{}))
+            self.assertTrue(trades.street_alternative(L,t,target,baseline,cache,{}))
+        self.assertEqual(quote.call_count,7)
+        self.assertEqual([key for key in cache if key[0]=='report'],[('report',affordable.pid)])
+
     def test_sign_boundary_rejects_stale_contract_but_accepts_a_live_tender(self):
         from cap_engine import CAP
         L,t,wr,te,qb=offense_fixture('12');L.free_agents=[te.pid]
