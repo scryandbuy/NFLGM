@@ -6,12 +6,12 @@ assigns those players to different on-field jobs without changing saves.
 
 
 ROLE_SOURCES = {
-    'LE': ('LEDG', 'REDG', 'DT'), 'DT': ('DT', 'LEDG', 'REDG'),
-    'RE': ('REDG', 'LEDG', 'DT'),
+    'LE': ('LEDG', 'REDG'), 'DT': ('DT',),
+    'RE': ('REDG', 'LEDG'),
     'MIKE': ('MIKE', 'WILL', 'SAM'), 'WILL': ('WILL', 'SAM', 'MIKE'),
     'SAM': ('SAM', 'WILL', 'MIKE'),
-    'NT': ('DT',), '34LE': ('DT', 'LEDG'), '34RE': ('DT', 'REDG'),
-    'LOLB': ('LEDG', 'REDG', 'SAM'), 'ROLB': ('REDG', 'LEDG', 'SAM'),
+    'NT': ('DT',), '34LE': ('DT',), '34RE': ('DT',),
+    'LOLB': ('LEDG', 'REDG'), 'ROLB': ('REDG', 'LEDG'),
     'LILB': ('MIKE', 'WILL', 'SAM'), 'RILB': ('WILL', 'MIKE', 'SAM'),
     'CB': ('CB',), 'FS': ('FS', 'SS'), 'SS': ('SS', 'FS'),
     'SLOT': ('SS', 'FS', 'CB'),

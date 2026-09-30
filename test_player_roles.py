@@ -41,6 +41,11 @@ class FreeAgentRoleTests(unittest.TestCase):
         self.assertIn(R.fa_position(end, '3-4'), ('LE', 'RE'))
         self.assertNotIn('NT', R.fa_positions(end, '3-4'))
 
+    def test_actual_shedding_attribute_drives_nose_profile(self):
+        p=NS(pos='DT',pid='real-attribute',weight=302,ratings={
+            'strength_rating':86,'block_shed_rating':90,'power_moves_rating':75})
+        self.assertEqual(R.fa_position(p,'3-4'),'NT')
+
 
 if __name__ == '__main__':
     unittest.main()

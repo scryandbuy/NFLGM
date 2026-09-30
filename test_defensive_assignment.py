@@ -96,6 +96,27 @@ class DefensiveAssignmentTests(unittest.TestCase):
             self.assertEqual(len(positions),11)
             self.assertEqual(len({r['player']['pid'] for r in unit['defensive_assignments']}),11)
 
+    def test_routine_rotation_does_not_borrow_unrelated_positions(self):
+        chart=depth(); chart['LEDG']=chart['LEDG'][:1]; chart['REDG']=chart['REDG'][:1]
+        chart['DT']=chart['DT'][:3]
+        class Rotate(NoRotation):
+            def random(self): return 0
+        for front in ('4-3','3-4'):
+            roster=rosters._assemble(chart,front=front)
+            for package in ('base','nickel','dime','heavy'):
+                unit,_=game.field_units(roster,State(),Rotate(),False,package,front)
+                for row in unit['defensive_assignments']:
+                    if row['alignment'].endswith('_edge'):
+                        self.assertIn(row['player']['pos'],('LEDG','REDG'))
+                    elif row['alignment'] in ('left_interior','right_interior','nose'):
+                        self.assertEqual(row['player']['pos'],'DT')
+
+    def test_insufficient_healthy_defenders_cannot_reintroduce_injured_players(self):
+        roster=rosters._assemble(depth(),front='3-4')
+        all_defenders=[p['pid'] for pos,men in roster['depth'].items() if pos in DR.DEFENSE for p in men]
+        with self.assertRaisesRegex(ValueError,'eleven unique healthy'):
+            game.field_units(roster,State(all_defenders[10:]),NoRotation(),False,'base','3-4')
+
     def test_injuries_replace_starters_in_every_package_and_front(self):
         for front in ('4-3', '3-4'):
             roster = rosters._assemble(depth(), front=front)
