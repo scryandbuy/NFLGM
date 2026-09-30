@@ -105,7 +105,7 @@ SCREEN_FREE_BLK = 8.0       # ...more behind good linemen, fewer behind bad
 # decide who is CHARGED with a rep, never to change the play.
 DOUBLE_TEAM_HELP = 1.45
 
-def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
+def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=None):
     """
     Returns time available, whether a sack happened, and pressure 0-1.
     Each rusher races his blocker; the FASTEST win sets the clock.
@@ -113,9 +113,16 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
     rusher on his way into the route: the rusher's clock slows by the
     chipper's block, and the chipper's route arrives late.
     """
+    import defensive_rush as DRUSH
+    if assignments is None:
+        inferred = DRUSH.assignments({'dl':rushers})
+        by_id = {DRUSH.player_key(a['player']):a for a in inferred}
+        assignments = [by_id[DRUSH.player_key(r)] for r in rushers]
+    matched = DRUSH.protection_pairs(blockers, assignments)
     wins = []
-    for i, r in enumerate(rushers):
-        b = blockers[i] if i < len(blockers) else None
+    for i in sorted(range(len(rushers)), key=lambda i: (assignments[i]['alignment'], DRUSH.player_key(rushers[i]))):
+        r = rushers[i]
+        b = matched[i]
         pw = rate(r, PASS_RUSH['rusher']['power'])
         fn = rate(r, PASS_RUSH['rusher']['finesse'])
         move = 'power' if pw >= fn else 'finesse'
@@ -134,6 +141,9 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
         t = RUSHER_BASE * (1.0 - 0.35 * e) * rng.lognormal(0.0, 0.26)
         wins.append((max(0.35, t), move, r, b))
 
+    if not wins:
+        return dict(time=6.0, pressure=0.0, sack=False, beaten_by=None, beaten=None,
+                    move=None, pb_reps=[(b.get('pid'),True) for b in blockers], pr_reps=[])
     t_arrive, move, winner, loser = min(wins, key=lambda x: x[0])
 
     # EVERY rep, not just the one that ended the play. The resolver already
@@ -141,12 +151,8 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
     # fastest, so the per-man result was being computed and thrown away.
     # A pass block win is ESPN's definition: the blocker sustains for 2.5
     # seconds or longer.
-    # EVERY BLOCKER ON THE FIELD HAS A REP, not just the ones a rusher was
-    # assigned to. The loop above pairs rusher i with blocker i, so against a
-    # four-man rush only linemen 0-3 were ever recorded - and the line is
-    # ordered LT, LG, C, RG, RT, which meant the RIGHT TACKLE never got a
-    # pass-block rep in his life. Lane Johnson finished a 17-game season with
-    # 1,076 snaps and 67 recorded reps; 205 of 365 linemen had none at all.
+    # Every blocker gets a rep, including the free interior helper after
+    # alignment-based protection matching assigns both tackles to the edges.
     #
     # A lineman nobody rushed still blocked: he wins by default, because
     # nobody beat him. That is what five blockers against four rushers means.
@@ -156,10 +162,10 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None):
     # best-in-league 95.6%, because he was handed a free rep on every four-man
     # rush. He now shares the rep of the man being doubled: they both win it or
     # they both lose it, which is what a double team actually is.
-    engaged = {id(b) for _t, _m, _r, b in wins if b}
+    engaged = {DRUSH.player_key(b) for _t, _m, _r, b in wins if b}
     reps = [(b.get('pid'), t >= PBW_THRESHOLD) for t, _m, _r, b in wins if b]
     rush_reps = [(r.get('pid'), t < PBW_THRESHOLD) for t, _m, r, b in wins if b and r is not None]
-    spare = [b for b in blockers if id(b) not in engaged]
+    spare = sorted((b for b in blockers if DRUSH.player_key(b) not in engaged), key=DRUSH.player_key)
     if spare and wins:
         # He helps on the man getting there quickest, and a DOUBLED rusher is
         # beaten less often - so the pair are credited against a longer clock,
@@ -527,7 +533,7 @@ def _sneak(off, deff, off_call, def_call, ytg, rng):
     """
     ol = off['ol'][:5]; qb = off['qb']
     interior = [ol[i] for i in (1, 2, 3) if i < len(ol)] or ol
-    front = deff['dl'][:S.FRONTS[def_call['front']]['dl']] or deff['dl']
+    front = deff['dl']
     inside = sorted(front, key=lambda d: -d.get('strength_rating', 70))[:3] + deff['lb'][:1]
     push = push_capable(off)
     o_str = np.mean([x.get('strength_rating', 70) for x in interior]) * 0.7 + qb.get('strength_rating', 60) * 0.3
@@ -580,7 +586,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # Taking the max of both erased the whole distinction between them.
     key = 'finesse' if fam == 'zone' else 'power'
     blockers = off['ol'][:5]
-    front = deff['dl'][:S.FRONTS[def_call['front']]['dl']]
+    front = deff['dl']
     defenders = front + deff['lb'] + deff['db']
 
     wins = [edge(rate(b, RUN_BLOCK['blocker'][key]),
@@ -695,7 +701,12 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         extras += [x for x in off.get('extra_blockers', []) if x not in extras][:n_extra - len(extras)]
     blockers = off['ol'][:5] + extras
     kept_in = {id(x) for x in extras}
-    rushers = (deff['dl'] + deff['lb'])[:def_call['rushers']]
+    import defensive_rush as DRUSH
+    rush_plan = DRUSH.select_rush(deff, def_call)
+    rushers = rush_plan['rushers']
+    def_call = dict(def_call, rushers=len(rushers))
+    prot = S.protection_math(prot_name, len(rushers))
+    matched = DRUSH.protection_pairs(blockers, rush_plan['assignments'])
     # THE CHIP. On a five-man protection with a good blocking tight end or
     # back releasing, he chips the edge rusher who most out-rates his tackle
     # on the way into his route, about a fifth of the time and more when that
@@ -704,14 +715,14 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     if n_extra == 0 and rushers and len(off['ol']) >= 5:
         cands = [x for x in (te1, back) if x is not None and x.get('pass_block_rating', 60) >= 55]
         if cands:
-            edge_i = [i for i, r in enumerate(rushers[:4]) if r.get('pos') in ('LEDG', 'REDG')]
+            edge_i = [i for i, a in enumerate(rush_plan['assignments']) if a['alignment'] in DRUSH.EDGES and matched[i] is not None]
             if edge_i:
-                worst = max(edge_i, key=lambda i: rate(rushers[i], PASS_RUSH['rusher']['finesse']) - rate(off['ol'][min(i, 4)], PASS_RUSH['blocker']['finesse']))
-                threat = rate(rushers[worst], PASS_RUSH['rusher']['finesse']) - rate(off['ol'][min(worst, 4)], PASS_RUSH['blocker']['finesse'])
+                worst = max(edge_i, key=lambda i: rate(rushers[i], PASS_RUSH['rusher']['finesse']) - rate(matched[i], PASS_RUSH['blocker']['finesse']))
+                threat = rate(rushers[worst], PASS_RUSH['rusher']['finesse']) - rate(matched[worst], PASS_RUSH['blocker']['finesse'])
                 if rng.random() < float(np.clip(0.30 + 2.5 * threat, 0.08, 0.7)):
                     chip = (max(cands, key=lambda x: x.get('pass_block_rating', 60)), worst)
 
-    p = resolve_protection(blockers, rushers, rng, qb=off['qb'], chip=chip)
+    p = resolve_protection(blockers, rushers, rng, qb=off['qb'], chip=chip, assignments=rush_plan['assignments'])
     # A protection scheme is worth real time against a blitz, and a simulated
     # pressure makes the line set for a front that never comes.
     if def_call['rushers'] >= 5:
@@ -799,16 +810,9 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # and because the pools never changed, the same corner drew the same
     # receiver on every play of every game.
     #
-    # The rush decision already exists and is already calibrated: call_defense
-    # picks blitzers at the real rates and separates a five-man rush from a
-    # blitz. It was simply never read here. Now the rushers come off the top
-    # and whoever is left is the coverage - so rushing three leaves eight to
-    # drop and blitzing a slot corner forces somebody else onto that receiver.
-    rusher_ids = {id(x) for x in rushers}
-    in_coverage = dict(deff)
-    in_coverage['lb'] = [x for x in deff['lb'] if id(x) not in rusher_ids]
-    in_coverage['dl'] = [x for x in deff['dl'] if id(x) not in rusher_ids]
-    in_coverage['db'] = list(deff['db'])
+    # Use the selected rush's complement across ALL groups, including dropped
+    # linemen and defensive-back blitzes. Stable player IDs survive health copies.
+    in_coverage = rush_plan['coverage']
     global LAST_TRAVEL
     pairs, travelled = CV.assign_coverage(
         aligned, in_coverage, def_call, rng, rate,
@@ -831,7 +835,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     tgt, cov, read_kind, sep_raw = TG.select_target(
         pairs, off['qb'], concept, rng, rate, plan=off_call.get('plan'), red_zone=(ytg <= 10))
     if tgt is None:
-        tgt, cov, read_kind, sep_raw = receivers[0], deff['db'][0], 'first', 0.42
+        defenders = in_coverage['db'] + in_coverage['lb'] + in_coverage['dl']
+        tgt, cov, read_kind, sep_raw = receivers[0], (defenders[0] if defenders else None), 'first', 0.42
     if swing:
         # the swing is the back's ball: the flat, with the defender who had him arriving first
         backs = [pr for pr in pairs if pr['receiver'].get('pos') in ('HB', 'FB')]
