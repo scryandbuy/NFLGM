@@ -58,7 +58,8 @@ def run(league, rng, verbose=False):
     import roster_needs as RN
     cuts, short = [], []
     for abbr, team in league.teams.items():
-        if abbr == getattr(league, 'user_team', None) and len(rows_for(team)) <= ROSTER_LIMIT: continue   # the GM cut his own club
+        # Session.blocking requires the user to make his own roster moves.
+        if abbr == getattr(league, 'user_team', None): continue
         pool = rows_for(team)
         if len(pool) <= ROSTER_LIMIT:
             # Not a cut-down problem - he is SHORT, which free agency should
@@ -107,6 +108,8 @@ def fill_short(league, rng, verbose=False):
     pool.sort(key=lambda p: -p.ovr)
 
     for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None):
+            continue
         need = ROSTER_LIMIT - len(team.active())
         while need > 0 and pool:
             floor = None
@@ -207,6 +210,8 @@ def emergency_fill(league, rng, verbose=False):
     pool.sort(key=lambda p: -p.ovr)
     signed = 0
     for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None):
+            continue
         need = ROSTER_LIMIT - len(team.active())
         if need <= 0:
             continue
@@ -253,8 +258,9 @@ def finalize(league, rng, verbose=False, passes=3):
         # Filling out costs money too, and nothing was re-checking after it -
         # two clubs a year finished over the cap on the last signing.
         CT.enforce(league, rng)
-        sizes = [len(t.active()) for t in league.teams.values()]
-        if min(sizes) >= ROSTER_LIMIT and max(sizes) <= ROSTER_LIMIT:
+        sizes = [len(t.active()) for abbr, t in league.teams.items()
+                 if abbr != getattr(league, 'user_team', None)]
+        if not sizes or (min(sizes) >= ROSTER_LIMIT and max(sizes) <= ROSTER_LIMIT):
             break
     total_signed += emergency_fill(league, rng, verbose)
     if verbose:

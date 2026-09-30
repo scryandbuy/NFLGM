@@ -752,8 +752,8 @@ def act_to_squad(league, abbr, pid):
     penalty = _cut_penalty(league, p)
     penalty_line = _cut_penalty_line(penalty)
     if int(p.accrued or 0) >= 4:
-        league.release(pid)
-        PSQ.sign_to_squad(league, abbr, pid)
+        if not PSQ.sign_to_squad(league, abbr, pid):
+            return dict(ok=False, why='Cannot move him to the practice squad: check eligibility and cap space.')
         return dict(ok=True, line=f"{p.name} to the practice squad. {penalty_line}", now=True, **penalty)
     league.release(pid)
     intent = dict(getattr(league, 'ps_intent', None) or {}); intent[pid] = abbr; league.ps_intent = intent
@@ -789,7 +789,7 @@ def act_position_change(league, abbr, pid, new_pos):
 def act_call_up(league, abbr, pid):
     import practice_squad as PSQ
     p = league.player(pid); ok = bool(PSQ.call_up(league, abbr, pid))
-    return dict(ok=ok, name=p.name if p else pid, why=None if ok else 'he is not on your practice squad')
+    return dict(ok=ok, name=p.name if p else pid, why=None if ok else 'Call-up unavailable: check squad eligibility, cap space, and open a roster spot if you have 53 active players.')
 
 
 def act_elevate(league, abbr, pids, week, playoffs=False):

@@ -182,6 +182,14 @@ def power(league, team, cap, years=1):
     return base - owed * min(1.0, (years - 1) / 3.0) * FORWARD_WEIGHT
 
 
+def available_for_signing(player):
+    """Ordinary FAs and live tenders only; stale offers cannot move contracts."""
+    return (not getattr(player, 'retired', False)
+            and (not player.team or
+                 (getattr(player, 'fa_class', None) == 'tendered'
+                  and getattr(player, 'tender_team', None) in (None, player.team))))
+
+
 def recruit_priority(gain):
     """How much this signing helps the packages we actually put on the field."""
     return float(np.clip(float(gain) / 12.0, 0.0, 1.5))
@@ -278,6 +286,8 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
     signed, waiting, messages = [], [], []
 
     for p in list(pool):
+        if not available_for_signing(p):
+            continue
         if pending_offer_sheet(league, p.pid):
             waiting.append(p); continue
         # Bids were placed together at the start of the round. A club may
@@ -400,6 +410,8 @@ def signing_terms(league, player, team, apy, years, cap, front_load=None, bonus=
 
 
 def sign(league, player, offer, cap, bonus=None):
+    if not available_for_signing(player):
+        raise ValueError('This player is no longer available as a free agent')
     team = league.teams[offer.team]
     st = signing_terms(league, player, team, offer.apy, offer.years, cap, offer.front_load, bonus)
     base = st['base']
