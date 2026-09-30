@@ -9,11 +9,11 @@ const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k === 'html') e.innerHTML = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v !== null && v !== undefined) e.setAttribute(k, v); } for (const k of kids) if (k !== null && k !== undefined) e.append(k.nodeType ? k : document.createTextNode(String(k))); return e; };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-let py = null, team = 'KC', view = null;
+let py = null, team = null, view = null;
 
 // ---------------------------------------------------------------- boot
 const boot = { bar: $('#bootbar'), line: $('#bootline') };
-const say = (t, pct) => { boot.line.textContent = t; if (pct != null) { boot.bar.style.width = pct + '%'; boot.bar.parentElement.setAttribute('aria-valuenow', String(pct)); } };
+const say = (t, pct) => { boot.line.closest('.boot-progress').hidden = false; boot.line.textContent = t; if (pct != null) { boot.bar.style.width = pct + '%'; boot.bar.parentElement.setAttribute('aria-valuenow', String(pct)); } };
 
 async function bootEngine() {
   say('booting Python…', 4);
@@ -58,7 +58,6 @@ function pyJSON(code) {
 }
 
 async function newGame(abbr) {
-  $('#bootstatus').textContent = 'Starting your franchise';
   say(`building the league for ${abbr}… (about a minute the first time)`, 88);
   await new Promise(r => setTimeout(r, 30));
   py.runPython(`SESSION = S.Session.new(${JSON.stringify(abbr)})`);
@@ -2822,7 +2821,15 @@ async function advanceInner() {
 // ---------------------------------------------------------------- start
 (async function main() {
   const pick = $('#pick');
+  let engineReady = false, entering = false;
+  let saved = { text: null };
+  function updateBootActions() {
+    $('#start').disabled = !engineReady || !team || entering;
+    $('#resume').disabled = !engineReady || !saved.text || entering;
+    pick.querySelectorAll('button').forEach(b => { b.disabled = entering; });
+  }
   function selectBootTeam(abbr) {
+    if (entering || !CLUBS.includes(abbr)) return;
     team = abbr;
     const bootScreen = $('#boot');
     const inkFor = hex => { const n = parseInt(hex.slice(1), 16); return (((n >> 16) & 255) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 > 145 ? '#111' : '#fff'; };
@@ -2832,17 +2839,27 @@ async function advanceInner() {
     bootScreen.style.setProperty('--boot-action-ink', inkFor(BOOT_TEAM[abbr][1]));
     $('#selectedcode').textContent = abbr;
     $('#selectedname').textContent = BOOT_TEAM[abbr][0];
+    $('#boot .boot-selected').hidden = false;
     pick.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.abbr === abbr)));
+    updateBootActions();
   }
   for (const c of CLUBS) pick.append(el('button', { style: `--team-color:${COLOR[c]}`, 'data-abbr': c, 'aria-label': `Select ${BOOT_TEAM[c][0]}`, 'aria-pressed': String(c === team), onclick: () => selectBootTeam(c) }, c));
-  selectBootTeam(team);
-  try { await bootEngine(); } catch (e) { say('boot failed: ' + e); $('#bootstatus').textContent = 'Engine failed to load'; $('#boot .boot-status').classList.add('failed'); return; }
-  $('#bootstatus').textContent = 'Engine ready';
-  $('#start').disabled = false;
-  const saved = await loadSave(); if (saved.text) $('#resume').hidden = false;
-  $('#start').onclick = async () => { $('#start').disabled = true; await newGame(team); $('#boot').remove(); bootHash(); refresh(); await saveGameNotified(); };
+  try { await bootEngine(); } catch (e) { say('The game could not load. Reload to try again. ' + e); $('#boot').classList.add('failed'); return; }
+  engineReady = true;
+  try { saved = await loadSave(); boot.line.closest('.boot-progress').hidden = true; }
+  catch (e) { say('Browser saves are unavailable. You can start a new franchise and export it.'); }
+  updateBootActions();
+  $('#start').onclick = async () => {
+    if (!engineReady || !team || entering) return;
+    entering = true; updateBootActions();
+    try { await newGame(team); }
+    catch (e) { entering = false; updateBootActions(); say('Could not start the franchise. Try again. ' + e); return; }
+    $('#boot').remove(); bootHash(); refresh(); await saveGameNotified();
+  };
   $('#resume').onclick = async () => {
-    $('#resume').disabled = true; $('#bootstatus').textContent = 'Loading your save'; say('loading your save…', 90);
+    if (!engineReady || !saved.text || entering) return;
+    entering = true; updateBootActions(); say('Loading your save…', 90);
+    try {
     await new Promise(r => setTimeout(r, 30));
     py.globals.set('_SAVE', saved.text); py.runPython(`SESSION = S.Session.load(_SAVE)`);
     let journalError = null;
@@ -2857,6 +2874,10 @@ async function advanceInner() {
     }
     $('#boot').remove(); bootHash(); refresh();
     if (journalError) notify({ ok: false, why: 'The latest live plays could not be restored. Your last full save was loaded.' });
+    } catch (e) {
+      if (!$('#boot')) throw e;
+      entering = false; updateBootActions(); say('Could not load this save. You can retry or choose a team to start a new franchise. ' + e);
+    }
   };
   $('#advance').onclick = advance;
   $('#save').onclick = saveGameNotified;

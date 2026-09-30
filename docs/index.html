@@ -3,27 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>NFL GM</title>
+<title>Franchise Dynasty Football Sim</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=b7feee7103">
+<link rel="stylesheet" href="style.css?v=1b78acf0c2">
 </head>
 <body>
 
 <div id="boot">
   <div class="boot-shell">
-    <div class="boot-top"><div class="boot-name-slot" aria-hidden="true"></div><div class="boot-status"><i aria-hidden="true"></i><span id="bootstatus">Engine loading in background</span></div></div>
-    <div class="boot-layout">
-      <div class="boot-spotlight">
-        <div><div class="boot-eyebrow">A new season begins here</div><h1>Build your next chapter.</h1><p>Choose the team you will run. The decisions, roster, and future are yours.</p></div>
-        <div class="boot-bottom"><div class="boot-selected"><div class="boot-selected-code" id="selectedcode">KC</div><div><div class="boot-eyebrow">Your team</div><b id="selectedname">Kansas City</b></div></div><div class="boot-actions"><button class="boot-action primary" id="start" disabled>Start a Franchise</button><button class="boot-action" id="resume" hidden>Resume Saved Game</button></div></div>
+    <section class="boot-hero" aria-label="Franchise Dynasty Football Sim">
+      <h1><span>Franchise</span><span>Dynasty</span><span class="boot-title-sub">Football Sim</span></h1>
+      <p class="boot-tagline">Build a team.<br>Define an era.</p>
+    </section>
+    <section class="boot-picker" aria-labelledby="boot-picker-title">
+      <div class="boot-picker-head">
+        <h2 id="boot-picker-title">Choose your team</h2>
+        <div class="boot-selected" hidden aria-live="polite"><span class="boot-selected-code" id="selectedcode"></span><b id="selectedname"></b></div>
+        <div class="boot-actions"><button class="boot-action primary" id="start" disabled>Start a Franchise</button><button class="boot-action" id="resume" disabled>Resume Saved Game</button></div>
       </div>
-      <div class="boot-picker">
-        <div class="boot-picker-head"><div class="boot-eyebrow">32 teams · one front office</div><h2>Choose your team</h2></div>
-        <div class="boot-pick" id="pick" role="group" aria-label="Choose your team"></div>
-        <div class="boot-progress"><div class="boot-bar" role="progressbar" aria-label="Engine loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bootbar"></i></div><div class="boot-line" id="bootline" role="status">loading…</div></div>
-      </div>
-    </div>
+      <div class="boot-pick" id="pick" role="group" aria-label="Choose your team"></div>
+      <div class="boot-progress"><div class="boot-bar" role="progressbar" aria-label="Loading game" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bootbar"></i></div><div class="boot-line" id="bootline" role="status" aria-live="polite">Loading game…</div></div>
+    </section>
   </div>
 </div>
 
@@ -55,6 +56,6 @@
 <main id="page" hidden></main>
 <div class="busy" id="busy" hidden>Working…</div>
 
-<script type="module" src="app.js?v=b7feee7103"></script>
+<script type="module" src="app.js?v=1b78acf0c2"></script>
 </body>
 </html>
