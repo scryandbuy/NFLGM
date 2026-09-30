@@ -92,7 +92,7 @@ def club_identity(league, t):
     for side in ('offence', 'defence'):
         k = ident.get(side)
         if k in IC.ARCHETYPE_ALIASES: k = IC.ARCHETYPE_ALIASES[k]; changed = True
-        if k not in IC.ARCHETYPES: k = IC.nearest_archetype(t.gm, side); changed = True
+        if IC.ARCHETYPES.get(k, {}).get('side') != side: k = IC.nearest_archetype(t.gm, side); changed = True
         ident[side] = k
     if changed: t.identity = ident
     return ident
@@ -253,7 +253,7 @@ def act_apply_identity(league, abbr, key):
 
 def act_set_identity(league, abbr, changes):
     """Confirm the leans. Writes the GM's leans, recomputes the scheme keys, records the change."""
-    import gm_engine as GE
+    import gm_engine as GE, identity_catalog as IC
     t = league.teams[abbr]; gm = t.gm
     before = _leans(gm); applied = {}
     for k, v in changes.items():
@@ -263,18 +263,26 @@ def act_set_identity(league, abbr, changes):
         elif k in before:
             setattr(gm, k, float(min(1.0, max(0.0, float(v))))); applied[k] = round(float(getattr(gm, k)), 2)
     t.scheme = GE.scheme_of(gm)
+    ident = club_identity(league, t)
+    for side in ('offence', 'defence'):
+        fields = { {'blocking': 'off_blocking', 'personnel': 'off_personnel', 'front': 'def_front'}.get(k, k)
+                   for a in IC.side_archetypes(side).values() for k in a[side] }
+        if fields.intersection(applied):
+            ident[side] = IC.nearest_archetype(gm, side)
+    t.identity = ident
     t.identity_history = (getattr(t, 'identity_history', None) or []) + [dict(year=league.year, week=league.week, change=', '.join(f"{k} {before[k]}→{applied[k]}" for k in applied))]
     return dict(ok=True, applied=applied, keys=t.scheme or [])
 
 
 def act_apply_archetype(league, abbr, key):
     import identity_catalog as IC
+    key = IC.ARCHETYPE_ALIASES.get(key, key)
     a = IC.ARCHETYPES.get(key)
     if not a: return dict(ok=False, why='no such archetype')
-    changes = {}
-    for side in a.values():
-        for k, v in side.items():
-            changes[{'blocking': 'off_blocking', 'personnel': 'off_personnel', 'front': 'def_front'}.get(k, k)] = v
+    if a.get('side'):
+        return act_apply_identity(league, abbr, key)
+    # Keep older roster-only presets on their existing lean-setting path.
+    changes = {k: v for group in a.values() if isinstance(group, dict) for k, v in group.items()}
     return act_set_identity(league, abbr, changes)
 
 

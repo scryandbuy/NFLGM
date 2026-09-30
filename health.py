@@ -199,7 +199,12 @@ INJURIES_PER_TEAM_WEEK = 2.51
 # both sides): the register counts injury EVENTS (about 2.65 a team a game, many of them a week
 # or less and played through as Questionable); the men actually missing a game land at 1.2 a
 # team a game, which is the number the GM decided on.
-_RULED_OUT_SHARE = 0.0146
+# Gameplay adjustment: 30% fewer new injuries than the prior calibrated
+# setting. This scales occurrence only; type, recovery duration, durability,
+# condition, workload and playing-hurt consequences retain their distributions.
+# The targeted register at the previous setting measured 1.20 events/team/game;
+# the new aim is roughly 0.85, allowing healthy depth to last longer.
+_RULED_OUT_SHARE = 0.01022
 
 def condition_injury_multiplier(condition):
     """
