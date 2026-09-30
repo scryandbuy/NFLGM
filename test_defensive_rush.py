@@ -26,6 +26,37 @@ def call(front='3-4', package='base', count=4, **kw):
 
 
 class RushTests(unittest.TestCase):
+    def test_run_front_includes_edges_and_is_order_independent(self):
+        from unittest.mock import patch
+        d=unit(); c=dict(call(),front='3-4 one',box=7)
+        off=dict(ol=[dict(pid=p,pos=p) for p in ('LT','LG','C','RG','RT')],qb=dict(pid='Q'),rb=dict(pid='H'))
+        original=R.protection_pairs
+        with patch.object(R,'protection_pairs',wraps=original) as pairs:
+            a=P._run_play(off,d,dict(scheme='inside_zone'),c,50,np.random.default_rng(4))
+            self.assertEqual(len(pairs.call_args.args[1]),5)
+        perm=copy.deepcopy(d)
+        for group in (*R.GROUPS,'defensive_assignments'):perm[group].reverse()
+        b=P._run_play(dict(off,ol=off['ol'][::-1]),perm,dict(scheme='inside_zone'),c,50,np.random.default_rng(4))
+        self.assertEqual(a,b)
+        self.assertEqual(len({pid for pid,_ in a['rb_reps']}),5)
+        weak=copy.deepcopy(d); strong=copy.deepcopy(d)
+        for defense,rating in ((weak,30),(strong,99)):
+            for p in defense['lb']:
+                if p['pid'] in ('LOLB','ROLB'):
+                    p.update(block_shed_rating=rating,strength_rating=rating,tackle_rating=rating,pursuit_rating=rating)
+        lo=P._run_play(off,weak,dict(scheme='inside_zone'),c,50,np.random.default_rng(4))
+        hi=P._run_play(off,strong,dict(scheme='inside_zone'),c,50,np.random.default_rng(4))
+        self.assertLess(hi['ybc'],lo['ybc'])
+
+    def test_sneak_uses_inside_not_edge_linebacker(self):
+        d=unit(); c=dict(call(),box=7)
+        off=dict(ol=[dict(pid=p,pos=p) for p in ('LT','LG','C','RG','RT')],qb=dict(pid='Q'),wr=[])
+        changed=copy.deepcopy(d)
+        for p in changed['lb']:
+            if p['pid'] in ('LOLB','ROLB'):p.update(strength_rating=1,block_shed_rating=1)
+        for seed in range(40):
+            self.assertEqual(P._sneak(off,d,{},c,1,np.random.default_rng(seed)),P._sneak(off,changed,{},c,1,np.random.default_rng(seed)))
+
     def test_base34_both_edges_at_five_and_better_edge_at_four(self):
         d=unit(); next(p for p in d['lb'] if p['pid']=='ROLB')['power_moves_rating']=99
         four=R.select_rush(d,call()); five=R.select_rush(d,call(count=5))

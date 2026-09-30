@@ -532,9 +532,14 @@ def _sneak(off, deff, off_call, def_call, ytg, rng):
     ~87%, and the spread is about 10 points either way for a big edge.
     """
     ol = off['ol'][:5]; qb = off['qb']
-    interior = [ol[i] for i in (1, 2, 3) if i < len(ol)] or ol
-    front = deff['dl']
-    inside = sorted(front, key=lambda d: -d.get('strength_rating', 70))[:3] + deff['lb'][:1]
+    interior = [p for p in ol if p.get('pos') in ('LG', 'C', 'RG')] or ol
+    import defensive_rush as DRUSH
+    roles = DRUSH.assignments(deff, def_call)
+    inside = [a['player'] for a in roles if a['alignment'] in DRUSH.INTERIOR]
+    linebackers = sorted((a for a in roles if a['alignment'].startswith('offball_')),
+                         key=lambda a: (a['alignment'] != 'offball_middle', DRUSH.player_key(a['player'])))
+    inside += [a['player'] for a in linebackers[:1]]
+    if not inside: inside = deff['dl'] or deff['lb'] or deff['db']
     push = push_capable(off)
     o_str = np.mean([x.get('strength_rating', 70) for x in interior]) * 0.7 + qb.get('strength_rating', 60) * 0.3
     d_str = np.mean([x.get('strength_rating', 70) * 0.6 + x.get('block_shed_rating', 70) * 0.4 for x in inside])
@@ -586,12 +591,20 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # Taking the max of both erased the whole distinction between them.
     key = 'finesse' if fam == 'zone' else 'power'
     blockers = off['ol'][:5]
-    front = deff['dl']
-    defenders = front + deff['lb'] + deff['db']
+    import defensive_rush as DRUSH
+    roles = DRUSH.assignments(deff, def_call)
+    front_roles = [a for a in roles if a['alignment'] in DRUSH.EDGES + DRUSH.INTERIOR]
+    front = [a['player'] for a in front_roles]
+    front_ids = {DRUSH.player_key(p) for p in front}
+    second_level = sorted((a for a in roles if DRUSH.player_key(a['player']) not in front_ids),
+                          key=lambda a: (not a['alignment'].startswith('offball_'), a['alignment'], DRUSH.player_key(a['player'])))
+    defenders = front + [a['player'] for a in second_level]
+    matched = DRUSH.protection_pairs(blockers, front_roles)
+    contests = [(b, a['player']) for b, a in zip(matched, front_roles) if b is not None]
 
     wins = [edge(rate(b, RUN_BLOCK['blocker'][key]),
                  rate(d, RUN_BLOCK['defender']['shed']))
-            for b, d in zip(blockers, front)]
+            for b, d in contests]
     push = float(np.mean(wins)) if wins else 0.0
     # Same as protection: the per-blocker result already exists and was only
     # ever averaged away. A run block win is beating the man across from you,
@@ -602,14 +615,15 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # A win is beating your man, and the line wins about 71% of them (ESPN
     # RBWR): the deterministic edge is the mean, and the rep itself is a
     # draw around it, so a slightly out-rated blocker still wins his share
-    rb_reps = [(b.get('pid'), (w + rng.normal(0.0, 0.10)) > RBW_THRESHOLD) for b, w in zip(blockers, wins)]
+    rb_reps = [(b.get('pid'), (w + rng.normal(0.0, 0.10)) > RBW_THRESHOLD) for (b, _), w in zip(contests, wins)]
     # Same in the run game: a surplus blocker is doubling or pulling, not
     # standing free, so he shares the result of the block that mattered most
     # rather than banking an automatic win.
     if len(blockers) > len(wins) and wins:
         # An extra man at the point of attack usually means that block holds.
         shared = max(wins) > -0.04
-        rb_reps += [(b.get('pid'), shared) for b in blockers[len(wins):]]
+        engaged = {DRUSH.player_key(b) for b, _ in contests}
+        rb_reps += [(b.get('pid'), shared) for b in blockers if DRUSH.player_key(b) not in engaged]
     fill = np.mean([rate(d, RUN_BLOCK['defender']['fill']) for d in defenders[:7]])
 
     # Slopes cut from 9.0 and 3.2: yards per carry ALLOWED varied across
