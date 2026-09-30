@@ -1,0 +1,36 @@
+import copy
+import unittest
+from types import SimpleNamespace as NS
+import player_roles as R
+
+
+class FreeAgentRoleTests(unittest.TestCase):
+    def test_edge_switches_front_without_becoming_coverage_or_interior_player(self):
+        p = NS(pos='REDG', name='Micah Parsons', ratings={'finesse_moves_rating': 96})
+        before = copy.deepcopy(p.__dict__)
+        self.assertEqual(R.fa_position(p, NS(gm=NS(def_front='3-4'))), 'ROLB')
+        self.assertEqual(set(R.fa_positions(p, '3-4')), {'LOLB', 'ROLB'})
+        self.assertEqual(R.fa_position(p, '4-3'), 'REDG')
+        self.assertEqual(p.__dict__, before)
+
+    def test_interior_and_offball_roles_are_separate(self):
+        self.assertEqual(set(R.fa_positions({'pos': 'DT'}, '3-4')), {'LE', 'NT', 'RE'})
+        for pos in ('MIKE', 'WILL', 'SAM'):
+            self.assertEqual(set(R.fa_positions({'pos': pos}, '3-4')), {'LILB', 'RILB'})
+        self.assertEqual(R.fa_positions({'pos': 'MIKE'}, '4-3'), ('MLB',))
+
+    def test_group_payload_and_multiple_front_follow_coach_chart(self):
+        for box, expected in ((.7, 'NT'), (.3, 'DT')):
+            filters = R.fa_position_filters({'gm': {'def_front': 'multiple', 'box': box}})
+            self.assertEqual([g['group'] for g in filters], ['OL', 'DL', 'LB', 'DB'])
+            self.assertIn(expected, [p['key'] for p in filters[1]['positions']])
+            self.assertEqual([p['key'] for p in filters[0]['positions']], ['LT', 'LG', 'C', 'RG', 'RT'])
+
+    def test_other_positions_and_saved_player_dicts_are_unchanged(self):
+        for pos in ('QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT', 'CB', 'FS', 'SS', 'K', 'P', 'LS'):
+            for front in ('4-3', '3-4'):
+                self.assertEqual(R.fa_positions({'pos': pos}, front), (pos,))
+
+
+if __name__ == '__main__':
+    unittest.main()
