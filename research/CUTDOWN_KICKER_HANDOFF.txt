@@ -1,0 +1,27 @@
+CUTDOWN KICKER RECOVERY — Review code changes (2), 2026-09-30
+Branch: codex/cutdown-availability-20260930
+Base: fcebd76 (412553d plus receiving-pursuit fix)
+
+Exact reproduction
+PYTHONHASHSEED=0, audit_score_balance.py --franchise --seasons 2 --seed 93034.
+The reproduced2026 season matched the original scoring totals and completed272games. The next cutdown blocked at ('wire',): TB53players,$9.118m room,missingK.
+Full captured save: outputs/cutdown-repair-93034/reproduction.json.blocked-save.json.
+
+Cause
+No kicker in free agency or any practice squad. There were32 signed kickers on31 teams: CAR held both its89.4 starter and an83.95 rookie. Future2028 prospects correctly were not free agents. Existing routine trade logic excludes specialists; a direct normal negotiation for the spare CARkicker also declined. This is an allocation/market-shortage edge, not a lack of cap space.
+
+Narrow repair
+After ordinary kicker acquisition fails, cutdown.repair_shape may cross-train an eligible real punter. Existing own reserves take priority; otherwise use ordinary free-agent/PS acquisition, normal minimum contract and a vetted surplus release. The base starters, allQBs, injured/protected/locked players and recent signings cannot be cut; the starting punter cannot be converted. Actual post-transition accuracy>=65,power>=70,andKOVR>=70 are required. position_change applies the existing learning penalty without altering underlying ratings. Native kicker options take priority. No forced trades, prospect-pool bypass, invented players, cap exception, or user-team moves.
+
+Native validation
+repair-validation.json in the same output directory.
+TB releases surplusP0205 through waivers; signs existing free-agent punterP1413 at$1.711m and converts him toK. Existing ratings unchanged; effectiveKOVR82.75 after5point learning penalty. StartingP C22062 remains. TB finishes53/$8.680m room and all32teams passCD.violations.
+First step_clear_wire preserves the new waiver claim opportunity; second clears to regular season. Save/reload and repeated repair produce no duplicate transactions. Native TBvsATLWeek1 game completes32–34. No playerIDs were created, and no underlying ratings changed during repair/calendar clearing.
+
+Tests
+8 new tests cover real-skill conversion, existing starting punter, nativeKpriority, poor accuracy rejection, injured/pending-waiver/future-prospect exclusion, unaffordable no-op, user no-op, own-reserve preference, and save/retry persistence.
+Together with existing roster recovery and cap accounting:53 distinct tests.
+
+Integration
+Only cutdown.py, test_cutdown_kicker.py and this handoff belong to the fix. Rebuild web engine after cherry-pick. The copied score harness belongs to(3)'s separate report commit, not this fix.
+This is a cutdown fallback when a suitable punter exists. It intentionally still blocks if no qualified legal player exists. Draft class sizes, ratings, retirement and scoring were not retuned.

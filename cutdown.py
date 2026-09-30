@@ -146,6 +146,76 @@ def _convert_long_snapper(league, team, report):
     return True
 
 
+def _cross_train_kicker(league, team, report):
+    """A depleted kicker market can use a real punter with place-kicking skill.
+
+    Use the normal position-change penalty, contracts and waivers. Never take
+    another team's active player or a future draft prospect out of his pool.
+    The existing starting punter must still have a job after this move.
+    """
+    import copy
+    from types import SimpleNamespace
+    import roster_needs as RN
+    import practice_squad as PS
+    import position_change as PC
+    from cap_accounting import require_room
+    if team.abbr == getattr(league, 'user_team', None) or 'K' not in report['uncovered']:
+        return False
+    if any(p.pos == 'K' for p in _replacement_pool(league, team, {'K'})):
+        return False  # Exhaust normal kicker signings/poaches first.
+    active = team.active()
+    starters = {row['player'].pid for row in report['assignments'] if row['player'] is not None}
+    recent = {row.get('pid') for row in league.transactions
+              if row.get('year') == league.year and row.get('team') == team.abbr
+              and row.get('kind') in ('sign', 'ps_callup', 'ps_poach')
+              and 0 <= int(league.week or 0) - int(row.get('week') or 0) <= 3}
+    pool = [p for p in active + _replacement_pool(league, team, {'P'})
+            if p.pos == 'P' and not p.retired and p.out_until is None]
+    best = None
+    for p in pool:
+        if p in active and p.pid in starters:
+            continue
+        trial = copy.copy(p)
+        trial.team = team.abbr
+        proxy = SimpleNamespace(player=lambda pid: trial, teams=league.teams)
+        PC.change_position(proxy, p.pid, 'K', log=False)
+        ratings = PC.effective_ratings(trial)
+        # Require actual accuracy/power, including the learning penalty. A
+        # strong leg alone cannot qualify a punter to fill the kicker slot.
+        if (ratings.get('kick_acc_rating', 0) < 65
+                or ratings.get('kick_power_rating', 0) < 70 or trial.ovr < 70):
+            continue
+        contract = None if p in active else PS.minimum_contract(league, team, p)
+        departures = [None] if p in active else [q for q in active
+            if q.pid not in starters and q.pid not in recent and q.pos != 'QB'
+            and q.out_until is None and not PS.locked(q, league.week)
+            and not PS.protected(team, q, league)]
+        for q in departures:
+            after = RN.assess(team, [trial if r is p else r for r in active if r is not q]
+                              + ([] if p in active else [trial]))
+            if (len(after['uncovered']) >= len(report['uncovered'])
+                    or set(after['uncovered']) - set(report['uncovered'])):
+                continue
+            dead = 0.0
+            if contract is not None:
+                saved, dead, _ = CT.savings_if_cut(q, league.post_june1())
+                if team.cap_space + saved - contract.cap_hit(0) < -.0005: continue
+                try: require_room(league, team, p.pid, contract, release_pid=q.pid)
+                except ValueError: continue
+            loss = (RN.departure_loss(team, q, report) + RN.retention_value(team, q)) if q else 0.0
+            key = (p in active, trial.ovr, -loss-dead)
+            if best is None or key > best[0]: best = (key, p, q, contract)
+    if best is None: return False
+    _, p, q, contract = best
+    if q:
+        league.release(q.pid)
+        if not _sign_replacement(league, team, p, contract):
+            raise RuntimeError('Validated kicker replacement became unavailable')
+    PC.change_position(league, p.pid, 'K')
+    team.sync_cap()
+    return True
+
+
 def fill_short(league, rng, verbose=False):
     """Fund every vacant spot; cover starting jobs before optional depth."""
     import roster_needs as RN
@@ -214,7 +284,11 @@ def repair_shape(league):
                     gain = after['score'] - report['score'] - dead - RN.retention_value(team, q)
                     key = (-len(after['uncovered']), gain)
                     if best is None or key > best[0]: best = (key, p, q, contract)
-            if best is None: break
+            if best is None:
+                if _cross_train_kicker(league, team, report):
+                    fixed += 1
+                    continue
+                break
             _, p, q, contract = best
             league.release(q.pid)
             if not _sign_replacement(league, team, p, contract):
