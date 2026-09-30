@@ -146,7 +146,7 @@ class ElevationTests(unittest.TestCase):
             r._units('GB')
         position.assert_called_once_with(self.p)
         morale.assert_called_once_with({'speed_rating':62}, self.p)
-        self.assertEqual(build.call_args.args[0], [{'speed_rating':57,'pid':self.p.pid,'pos':'WR'}])
+        self.assertEqual(build.call_args.args[0], [{'speed_rating':57,'pid':self.p.pid,'pos':'WR','weight':None}])
 
     def test_playoff_elevation_remains_temporary_after_three_regular_elevations(self):
         self.p.xp_spent['_elevations'] = 3

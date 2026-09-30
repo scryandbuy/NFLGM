@@ -1,11 +1,51 @@
 """Audit regressions: failures identify unsafe transaction boundaries."""
 import unittest
+from unittest.mock import patch
+import numpy as np
+import waivers as W
 import practice_squad as PS
 import views_club as VC
 from test_cap_accounting import fixture, player
 
 
 class PSDecisionAudit(unittest.TestCase):
+    def test_failed_poach_preserves_source_and_user_roster(self):
+        league=fixture(); league.user_team='GB'
+        for i in range(53): player(league,pid=str(i))
+        p=player(league,pid='poach',team='MIN')
+        league.teams['MIN'].roster.remove(p); PS.squad(league.teams['MIN']).append(p)
+        before={x.pid for x in league.teams['GB'].roster}
+        self.assertFalse(PS.poach(league,'GB',p.pid,1))
+        self.assertEqual({x.pid for x in league.teams['GB'].roster},before)
+        self.assertIn(p,PS.squad(league.teams['MIN']))
+        self.assertEqual(p.team,'MIN')
+        league.teams['GB'].roster.pop(); league.teams['GB'].cap.cap=.01
+        self.assertFalse(PS.poach(league,'GB',p.pid,1))
+        self.assertIn(p,PS.squad(league.teams['MIN']))
+        self.assertEqual(p.team,'MIN')
+
+    def test_waiver_claim_only_releases_explicit_user_choice(self):
+        for chosen in (None,'0'):
+            league=fixture(); league.user_team='GB'
+            for i in range(53): player(league,pid=str(i))
+            p=player(league,pid='claim',team=None)
+            league.free_agents.append(p.pid)
+            entry=dict(pid=p.pid,from_team='MIN',claims=['GB'])
+            if chosen: entry['release_if_awarded']=chosen
+            league.waivers=[entry]
+            before={x.pid for x in league.teams['GB'].roster}
+            with patch.object(W,'priority',return_value=['GB']), patch('valuation.pool_from_league',return_value=None), patch('valuation.value_player',return_value={'value':1}):
+                result=W.process(league,np.random.default_rng(7),1)
+            after={x.pid for x in league.teams['GB'].roster}
+            if chosen:
+                self.assertEqual(result,[(p.pid,'GB')])
+                self.assertEqual(before-after,{chosen})
+                self.assertEqual(len(after),53)
+            else:
+                self.assertEqual(result,[])
+                self.assertEqual(after,before)
+                self.assertIsNone(p.team)
+
     def test_retired_free_agent_cannot_join_squad(self):
         league=fixture(); p=player(league,team=None); p.retired=True
         league.free_agents.append(p.pid)

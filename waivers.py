@@ -139,6 +139,8 @@ def make_room(league, abbr, p):
     team = league.teams[abbr]
     if len(team.active()) < 53:
         return True
+    if abbr == getattr(league, 'user_team', None):
+        return False  # Only an explicitly named release may open the user's spot.
     # THE MAN WHO GOES IS WORSE THAN THE MAN WHO COMES, AND CHEAP TO CUT. It used to
     # drop the worst man at the exact spot, and when the only other man at the spot
     # was the starter, the starter went: San Francisco released Trent Williams (91,
@@ -302,9 +304,10 @@ def process(league, rng, week, verbose=False):
                         user_failed = True
                         IB.post(league,'waiver_notice',f'Claim failed: {p.name}','The inherited contract does not fit under your cap.',sender='league')
                         continue
-                    # the user named his own man to make room with; only if he did not does the engine pick one
+                    # Only the user's explicitly named active player may be cut.
                     rel = e.get('release_if_awarded')
-                    if (rel and league.player(rel) is not None and league.player(rel).team == user) or make_room(league, user, p):
+                    active = league.teams[user].active()
+                    if len(active) < 53 or (len(active) == 53 and rel and league.player(rel) in active):
                         award(league, e, user); awarded.append((p.pid, user)); break
                     user_failed = True
                     IB.post(league, 'waiver_notice', f"Claim failed: {p.name}", f"Your claim on {p.name} ({p.pos}) could not be processed: no roster spot could be opened for him. The claim window has closed; he may join another club or clear to free agency.", sender='league')

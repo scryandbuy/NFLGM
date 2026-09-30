@@ -78,7 +78,9 @@ def can_add(team, p):
 # ------------------------------------------------------------ moves
 def sign_to_squad(league, abbr, pid):
     team = league.teams[abbr]; p = league.player(pid)
-    if p is None or not can_add(team, p):
+    if (p is None or p.retired or (p.team is not None and p.team != abbr)
+            or p in squad(team) or p in (getattr(team, 'ir', None) or [])
+            or not can_add(team, p)):
         return False
     # Squad pay counts too. Validate before releasing a roster player or
     # removing him from the wire/free-agent pool.
@@ -115,14 +117,15 @@ def release_from_squad(league, abbr, pid):
 def call_up(league, abbr, pid, years=1, emergency=False):
     """To the 53 at the minimum for his accrued seasons."""
     team = league.teams[abbr]; p = league.player(pid)
-    if p not in squad(team): return False
+    if p not in squad(team) or p.retired or p.team != abbr: return False
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
-    if len(team.active()) >= 53 and league.phase == 'regular' and room_candidate(league, team, p) is None:
+    full = len(team.active()) >= 53 and league.phase in ('regular', 'playoffs')
+    if full and (abbr == getattr(league, 'user_team', None) or room_candidate(league, team, p) is None):
         return False                                      # nobody the club would release for him
     c=Contract(years=years,base=[mn]*years,signed=league.year)
     c.base[0]*=max(0,18-team.cap.paid_week)/18; c.pay_start=team.cap.paid_week
-    outgoing=room_candidate(league,team,p) if league.phase=='regular' and len(team.active())>=53 else None
+    outgoing=room_candidate(league,team,p) if full else None
     if not emergency:
         from cap_accounting import require_room
         try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None,ps_pid=pid)
@@ -176,8 +179,9 @@ def _make_room(league, abbr, p):
     else. That is where the in-season wire comes from. Returns False when no acceptable man exists, and the move
     that needed the spot does not happen."""
     team = league.teams[abbr]
-    if league.phase != 'regular' or len(team.active()) < 53:
+    if league.phase not in ('regular', 'playoffs') or len(team.active()) < 53:
         return True
+    if abbr == getattr(league, 'user_team', None): return False
     q = room_candidate(league, team, p)
     if q is None: return False
     league.release(q.pid)
@@ -187,14 +191,16 @@ def _make_room(league, abbr, p):
 def poach(league, abbr, pid, week):
     """Sign another club's practice-squad man to your 53. Locked for three games."""
     p = league.player(pid)
+    if p is None or p.retired: return False
     src = p.team
-    if src is None or src == abbr or p not in squad(league.teams[src]): return False
+    if src not in league.teams or src == abbr or p not in squad(league.teams[src]): return False
     team = league.teams[abbr]
-    if len(team.active()) >= 53 and league.phase == 'regular' and room_candidate(league, team, p) is None: return False
+    full = len(team.active()) >= 53 and league.phase in ('regular', 'playoffs')
+    if full and (abbr == getattr(league, 'user_team', None) or room_candidate(league, team, p) is None): return False
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
     c=Contract(years=1,base=[mn*max(0,18-team.cap.paid_week)/18],signed=league.year,pay_start=team.cap.paid_week)
-    outgoing=room_candidate(league,team,p) if league.phase=='regular' and len(team.active())>=53 else None
+    outgoing=room_candidate(league,team,p) if full else None
     from cap_accounting import require_room
     try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None)
     except ValueError: return False
