@@ -266,6 +266,29 @@ def wants_out(p):
     return bool(isinstance(p.xp_spent, dict) and p.xp_spent.get('_request'))
 
 
+def pay_concern(league, p):
+    """A current pay complaint, including inbox notes from saves before the marker existed."""
+    spent = p.xp_spent if isinstance(p.xp_spent, dict) else {}
+    request = spent.get('_request') or {}
+    if request.get('reason') == 'contract' or spent.get('_contract_concern'):
+        return True
+    if status(p, league.teams.get(p.team)) == 'settled':
+        return False
+    if getattr(p.morale, '_contract_drag', 0) < -4:
+        return True
+    last_complaint = last_resolution = -1
+    for i, message in enumerate(getattr(league, 'inbox', None) or []):
+        payload = message.get('payload') or {}
+        if payload.get('pid') != p.pid and payload.get('link') != f'player:{p.pid}':
+            continue
+        body = (message.get('body') or '').lower()
+        if message.get('kind') in ('morale', 'trade_request') and 'underpaid' in body:
+            last_complaint = i
+        if message.get('kind') == 'negotiation' and 'concern about being underpaid is resolved' in body:
+            last_resolution = i
+    return last_complaint > last_resolution
+
+
 def resolve_request(league, pid, how):
     """Cleared by a trade, a starting job or an extension; a fresh start lifts him."""
     p = league.player(pid)
