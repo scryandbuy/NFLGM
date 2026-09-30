@@ -37,7 +37,10 @@ def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=
     s = SEC.get(result, 25.0)
     if clock_stopped: s = min(s, 8.0)
     if not clock_stopped and not hurry and not timeout and result in ('complete', 'run', 'scramble', 'sack'):
-        s = 6.0 + max(0.0, s - 6.0) * (1.0 - 0.6 * (float(np.clip(tempo, 0, 1)) - 0.5))
+        # The old pace depended on charging time for penalty administration.
+        # Put ordinary huddle time on running plays instead. This is the interval
+        # AFTER this snap, bounded by the 40-second play clock plus live action.
+        s = 6.0 + min(40.0, max(0.0, s - 6.0 + 2.0) * (1.0 - 0.6 * (float(np.clip(tempo, 0, 1)) - 0.5)))
     if hurry: s *= 0.65     # a two-minute drill runs about 17 seconds a snap against 25 to 27 at the normal pace
     if timeout: s = min(s, 6.0)     # the clock stops the moment it is called
     return float(s)
@@ -840,6 +843,43 @@ def _tick(dr, secs):
     dr.clock = float(np.ceil(dr.clock - 1e-9))                          # whole seconds
 
 
+def _penalty_ready_clock(dr, pen, half_end=None, *, before_snap=False,
+                         was_running=False, result=None, hurry=False, tempo=0.5,
+                         timeout=False, live_start=None):
+    """Charge only the legal ready-to-snap interval, never flag administration.
+
+    Rule 4-3-2(e) retains the preceding clock status outside late-half exceptions;
+    Rule 4-6-2 resets the play clock to 25. A pre-snap flag resets that interval,
+    so a running clock may consume another interval after enforcement.
+    """
+    dr.clock_running = False
+    dr.runoff_charged = 0.0
+    dr.play_clock = 25.0
+    wall = half_end if half_end is not None else 0.0
+    secs = dr.clock - wall
+    period_ended = live_start is not None and any(
+        live_start > edge >= dr.clock for edge in (2700.0, 1800.0, 900.0, 0.0))
+    runs = was_running if before_snap else result in ('run', 'complete', 'scramble', 'sack')
+    # Fourth-period offensive pre-snap fouls start on the snap even before 5:00.
+    late = secs <= (120.0 if dr.quarter <= 2 else 300.0)
+    if (not runs or timeout or late or period_ended or dr.result is not None
+            or (before_snap and pen['on_offense'] and dr.quarter >= 4)):
+        return
+    start = dr.clock
+    ready = min(dr.play_clock, max(0.0, play_seconds(
+        result or 'run', hurry=hurry, tempo=tempo) - 6.0))
+    # A warning interrupts ready-for-play runoff, but never erases live action.
+    if not getattr(dr, '_two_min', False) and secs > 120:
+        ready = min(ready, secs - 120.0)
+    _tick(dr, ready)
+    dr.clock = max(wall, dr.clock)
+    pen['ready_seconds'] = start - dr.clock
+    dr.runoff_charged = start - dr.clock
+    boundary = any(start > edge >= dr.clock for edge in (2700.0, 1800.0, 900.0, 0.0))
+    warning = secs > 120 and dr.clock - wall <= 120
+    dr.clock_running = not boundary and not warning
+
+
 def returner_for(ros, state, rate_fn, kind='kr'):
     """The club's return man for this kick: the charted one unless he is hurt or out, then the best healthy
     man among the return positions. A hurt returner kept returning kicks because the slot was fixed at kickoff."""
@@ -1240,6 +1280,7 @@ class Drive:
         self.start_quarter = quarter
         self.clock_running = False
         self.runoff_charged = 0.0
+        self.play_clock = 40.0
         self.score_diff = score_diff
         self.rng = rng
         self.plays, self.first_downs = 0, 0
@@ -1269,9 +1310,11 @@ def _enforce_turnover_penalty(dr, pen):
     dr.log_pen_after = 0.0
     dr.log_pen_first = False
 
-def _kick_presnap_flag(dr, pen):
+def _kick_presnap_flag(dr, pen, half_end=None):
     """A pre-snap kick foul keeps the same down and lets the coach decide again."""
     if not pen or pen.get('phase') != 'pre': return False
+    clock_before = dr.clock
+    _penalty_ready_clock(dr, pen, half_end, before_snap=True, was_running=dr.clock_running)
     if pen['on_offense']:
         walk = min(pen['yards'], (100.0 - dr.yardline) / 2.0)
         dr.yardline += walk; dr.togo += walk
@@ -1283,7 +1326,11 @@ def _kick_presnap_flag(dr, pen):
             dr.first_downs += 1
         dr.untimed = True; dr.untimed_at = len(dr.log) + 1
     pen['yards'] = walk
-    dr.log.append(dict(type='penalty', **pen))
+    dr.log.append(dict(type='penalty', timing='before_snap', clock=clock_before, **pen))
+    wall = half_end if half_end is not None else 0.0
+    if clock_before - wall > 120 >= dr.clock - wall and not getattr(dr, '_two_min', False):
+        dr._two_min = True
+        dr.log.append(dict(type='two_minute', clock=dr.clock))
     return True
 
 def _kick_roughing(dr, pen, kick):
@@ -1739,14 +1786,14 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if dr.clock_running and _plan is not None and not _plan.get('hurry', True) and _plan['choice'] in ('kick', 'shot') and secs_in_half > 14 and dr.down < 4:
             # THE BLEED'S WAIT: the play clock runs down before the last snap, so the shot or the kick comes with a
             # few seconds left and the other side gets nothing back
-            burn = float(min(max(0.0, PLAY_SECS_RUN - 5.0 - dr.runoff_charged), secs_in_half - 10.0))
+            burn = float(min(max(0.0, min(PLAY_SECS_RUN - 5.0, dr.play_clock) - dr.runoff_charged), secs_in_half - 10.0))
             _tick(dr, burn); secs_in_half -= burn; clock_kick_time = secs_in_half <= 8 or (secs_in_half <= 22 and timeouts is not None and timeouts.left.get(pos, 0) == 0)
             dr.runoff_charged += burn
         _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4 and (_plan.get('hurry', True) or clock_kick_time or secs_in_half <= 14)
         _kick_old = ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) and dr.yardline <= 37 and dr.down < 4 and clock_kick_time and _plan is None
         if _kick_by_plan or _kick_old:
             flag = E.special_teams_penalty_check(rng, 'field_goal')
-            if _kick_presnap_flag(dr, flag): continue
+            if _kick_presnap_flag(dr, flag, half_end): continue
             fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
                                     snapper=snapper_for(offense, off_state))
             if _kick_roughing(dr, flag, fg):
@@ -1769,7 +1816,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                        must_score=must_score)
             if dec == 'field_goal':
                 flag = E.special_teams_penalty_check(rng, 'field_goal')
-                if _kick_presnap_flag(dr, flag): continue
+                if _kick_presnap_flag(dr, flag, half_end): continue
                 fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
                                         snapper=snapper_for(offense, off_state))
                 if _kick_roughing(dr, flag, fg):
@@ -1784,7 +1831,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.points = fg['points']; dr.log.append(fg); break
             if dec == 'punt':
                 flag = E.special_teams_penalty_check(rng, 'punt')
-                if _kick_presnap_flag(dr, flag): continue
+                if _kick_presnap_flag(dr, flag, half_end): continue
                 p = punt(dr.yardline, (offense.get('p') or {}),
                          (defense.get('pr') or defense.get('kr') or {}), rng, rate_fn,
                          snapper=snapper_for(offense, off_state))
@@ -1982,10 +2029,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                               noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)), hurry=_in_drill)
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
-            # Administration is not elapsed game time. The previous snap has
-            # already paid its between-play runoff; a dead-ball foul adds none.
-            dr.clock_running = False
-            dr.runoff_charged = 0.0
+            penalty_clock = dr.clock
+            _penalty_ready_clock(dr, pen, half_end, before_snap=True,
+                was_running=dr.clock_running, hurry=_in_drill,
+                tempo=(off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5))
             if pen['on_offense']:
                 # half the distance to the offense's own goal when the full yardage would reach it
                 walk = min(float(pen['yards']), (100.0 - dr.yardline) / 2.0)
@@ -2004,7 +2051,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     dr.yardline -= gained; dr.togo -= gained
                     if dr.togo <= 0:
                         dr.down, dr.togo = 1, min(10, dr.yardline); dr.first_downs += 1
-            dr.log.append(dict(type='penalty', timing='before_snap', clock=dr.clock, **pen))
+            dr.log.append(dict(type='penalty', timing='before_snap', clock=penalty_clock, **pen))
+            if penalty_clock - wall > 120 >= dr.clock - wall and not getattr(dr, '_two_min', False):
+                dr._two_min = True
+                dr.log.append(dict(type='two_minute', clock=dr.clock))
             continue
 
         # field the units for THIS snap - condition, injuries and rotation
@@ -2102,28 +2152,33 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 else:
                     dr.plays -= 1
                     out['nullified'] = True
-                dr.log.append(dict(type='penalty', **live_pen))
-                # THE CLOCK ON A WIPED PLAY IS THE CLOCK ON ANY PLAY. It had charged a full normal-pace play plus the
-                # flag and skipped the timeout check, so a holding call at 0:48 in a two-minute drill ran 47 seconds
-                # off and the trailing offense never got to stop it. The play runs at the drill's pace; the flag stops
-                # the clock; if a side calls a timeout the clock stays stopped, otherwise it restarts on the ready
+                penalty_entry = dict(type='penalty', **live_pen)
+                dr.log.append(penalty_entry)
+                # A wiped snap consumes live time, followed by ready-for-play
+                # runoff only when the clock is legally allowed to restart.
                 secs_in_half_p = (dr.clock - half_end) if half_end is not None else dr.clock
                 _plan_p = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half_p - PLAY_SECS, coach=(off_state.coach if off_state is not None else None)) if secs_in_half_p - PLAY_SECS > 4 else None
-                used_p, used_by_p = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
+                # No timeout is needed when the enforced foul already starts on
+                # the snap. Keep timeout inventory for subsequent live downs.
+                late_penalty = secs_in_half_p - 6.0 <= (120.0 if dr.quarter <= 2 else 300.0)
+                used_p, used_by_p = (False, None) if late_penalty else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
                 hurry_p = (secs_in_half_p < 120 and dr.score_diff <= 0) or bool(oc.get('no_huddle'))
+                live_start = dr.clock
                 _tick(dr, min(6.0, play_seconds(t, hurry=hurry_p, timeout=used_p)))
-                dr.clock_running = False
-                dr.runoff_charged = 0.0
+                _penalty_ready_clock(dr, penalty_entry, half_end, result=t,
+                    hurry=hurry_p, timeout=used_p, live_start=live_start,
+                    tempo=(off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5))
                 dr.clock = float(np.ceil(dr.clock - 1e-9))
                 if used_p and used_by_p:
                     dr.log.append(dict(type='timeout', side=used_by_p, side_abbr=(getattr(off_state if used_by_p == pos else def_state, 'abbr', None) or used_by_p.upper()), left=timeouts.left.get(used_by_p, 0), clock=dr.clock))
                 after_p = (dr.clock - half_end) if half_end is not None else dr.clock
                 if secs_in_half_p > 120 >= after_p and not getattr(dr, '_two_min', False):
-                    dr.clock += min(20.0, 120.0 - after_p); dr._two_min = True
+                    dr._two_min = True
                     dr.log.append(dict(type='two_minute', clock=dr.clock))
                 continue
             if taken == 'added':
-                dr.log.append(dict(type='penalty', **live_pen))
+                penalty_entry = dict(type='penalty', **live_pen)
+                dr.log.append(penalty_entry)
 
         # a collapsed pocket is not automatically a sack - a mobile QB runs
         if t == 'sack':
@@ -2168,26 +2223,36 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _y_after = float(np.clip(dr.yardline - float(out.get('yards', 0.0) or 0.0), 1.0, 99.0))
         _secs_after = secs_in_half - PLAY_SECS
         _plan_to = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None), yardline=_y_after) if _secs_after > 4 else None
-        used, used_by = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
+        added_penalty = live_pen is not None and taken == 'added'
+        late_penalty = added_penalty and secs_in_half - 6.0 <= (120.0 if dr.quarter <= 2 else 300.0)
+        used, used_by = (False, None) if late_penalty else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
         hurry = (secs_in_half < 120 and dr.score_diff <= 0) or bool(oc.get('no_huddle'))
         before_clock = secs_in_half
         clock_before = dr.clock
         _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
         if (t in ('run', 'complete', 'scramble') and ((out.get('touchdown') and SCORE_STOPS_CLOCK) or float(np.round(float(out.get('yards', 0.0) or 0.0)) if SCORE_STOPS_CLOCK else float(out.get('yards', 0.0) or 0.0)) >= dr.yardline - 0.01)) or _fourth_fail:
             dr.clock -= 6.0                                    # a touchdown or a change of possession stops the clock at the whistle; no huddle follows it
+        elif added_penalty:
+            _tick(dr, 6.0)
+            _penalty_ready_clock(dr, penalty_entry, half_end, result=t, hurry=hurry,
+                timeout=used, live_start=clock_before,
+                tempo=(off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5))
         else:
             dr.clock -= play_seconds(t, hurry=hurry, timeout=used, tempo=(off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5))
         for edge in (2700.0, 900.0):
             if clock_before > edge >= dr.clock: dr.clock = float(edge)   # the quarter ends with this play; no huddle runs into the next one
         dr.clock = float(np.ceil(dr.clock - 1e-9))                          # the clock is whole seconds; a fraction left is a second
-        dr.clock_running = t in ('run', 'complete', 'scramble', 'sack') and not used and not out.get('touchdown')
-        dr.runoff_charged = max(0.0, clock_before - dr.clock - 6.0) if dr.clock_running else 0.0
+        if not added_penalty:
+            dr.clock_running = t in ('run', 'complete', 'scramble', 'sack') and not used and not out.get('touchdown')
+            dr.play_clock = 40.0
+            dr.runoff_charged = max(0.0, clock_before - dr.clock - 6.0) if dr.clock_running else 0.0
         after_clock = dr.clock - half_end if half_end is not None else dr.clock
         if used and used_by:
             dr.log.append(dict(type='timeout', side=used_by, side_abbr=(getattr(off_state if used_by == pos else def_state, 'abbr', None) or used_by.upper()), left=timeouts.left.get(used_by, 0), clock=dr.clock))
         if before_clock > 120 >= after_clock and not getattr(dr, '_two_min', False):
             # the two-minute warning: the clock stops at 2:00, so the runoff this play would have taken past it is given back
-            dr.clock += min(20.0, 120.0 - after_clock); dr._two_min = True
+            if not added_penalty: dr.clock += min(20.0, 120.0 - after_clock)
+            dr._two_min = True
             dr.log.append(dict(type='two_minute', clock=dr.clock))
             dr.clock_running = False
             dr.runoff_charged = 0.0
