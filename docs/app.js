@@ -58,7 +58,7 @@ function flushAutosave() {
   cancelAutosaveSchedule();
   // Capture immediately, even if an earlier IndexedDB write is still pending.
   // queueSave preserves snapshot write order; pagehide must not defer capture.
-  return saveGameNotified();
+  return saveGameNotified(true);
 }
 function queueAutosave() {
   if (autosaveQueued) return;
@@ -112,15 +112,15 @@ function queueSave(kind, value) {
   saveQueue = pending.catch(() => {});
   return pending;
 }
-function saveGame() {
+function saveGame(silent = false) {
   autosaveQueued = false;
   cancelAutosaveSchedule();
   const text = py.runPython(`SESSION.save()`);
-  busy('Saving…');
-  return queueSave('full', text).finally(() => busy(null));
+  if (!silent) busy('Saving…');
+  return queueSave('full', text).finally(() => { if (!silent) busy(null); });
 }
-async function saveGameNotified() {
-  try { await saveGame(); }
+async function saveGameNotified(silent = false) {
+  try { await saveGame(silent); }
   catch (e) { notify({ ok: false, why: 'The save failed: ' + String(e) }); }
 }
 function saveLiveJournal() {
@@ -868,7 +868,7 @@ function developmentPanel(pid, reload) {
   const d = pyJSON(`SESSION.development(${JSON.stringify(pid)})`);
   const box = el('div', { class: 'pad' });
   if (d.error) { box.append(el('div', { class: 'empty' }, d.error)); return box; }
-  const act = (name, extra) => { const r = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, pid=${JSON.stringify(pid)}${extra ? ', ' + extra : ''})`); notify(r); reload(); };
+  const act = (name, extra) => { const r = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, pid=${JSON.stringify(pid)}${extra ? ', ' + extra : ''})`); if (!r.ok) notify(r); reload(); };
   box.append(el('div', { class: 'tiles', style: 'grid-template-columns:repeat(4,1fr);margin-bottom:12px' },
     el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'XP Banked'), el('div', { class: 'word' }, d.bank.toLocaleString()), el('div', { class: 'sub' }, `earning ${d.dev} · ${d.bought} points bought in his career`), el('div', {class:'sub'}, `Practice earned: ${(d.practice_earned || 0).toLocaleString()} XP in his career`)),
     el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Ceiling'), el('div', { class: 'word' }, d.ceiling != null ? d.ceiling : '—'), el('div', { class: 'sub' }, d.room != null ? `${d.room} above his ${d.ovr}` : 'uncapped')),
@@ -976,12 +976,12 @@ function renderProgression(v) {
   const reload = () => renderProgression(pyJSON('SESSION.progression()'));
   const s = reportBoard(v.rail.club, 'PROGRESSION', [[v.bank_total.toLocaleString(), 'XP BANKED'], [v.idle, 'READY TO SPEND']]);
   s.append(el('div', { class: 'tools report-controls' }, el('button', { class: 'btn' + (v.auto_all ? ' go' : ''), 'data-tip': 'Every player, spent weekly by the assistants', onclick: () => { notify(pyJSON(`SESSION.club_act('auto_xp', on=${v.auto_all ? 'False' : 'True'})`)); reload(); } }, v.auto_all ? 'Auto-Spend: On for All' : 'Turn Auto-Spend On for All'),
-    el('button', { class: 'btn', 'data-tip': 'Spend every bank now, once', onclick: () => { notify(pyJSON(`SESSION.club_act('spend_by_read')`)); reload(); } }, 'Spend All by Read'),
+    el('button', { class: 'btn', 'data-tip': 'Spend every bank now, once', onclick: () => { const r = pyJSON(`SESSION.club_act('spend_by_read')`); if (!r.ok) notify(r); reload(); } }, 'Spend All by Read'),
     el('span', { class: 'count', style: 'margin-left:auto' }, 'Open a player for his Development tab')));
   const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n' }, 'Ceiling'), el('th', { class: 'n', 'data-tip': 'Overall left under his ceiling' }, 'Room'), el('th', { class: 'n' }, 'XP Banked'), el('th', { class: 'n', 'data-tip': 'The cheapest next point' }, 'Next Point'), el('th', { class: 'n' }, 'Bought This Year'), el('th', {}, 'Auto'), el('th', {}, '')));
   for (const r of v.rows) t.append(el('tr', { class: r.can_buy && !r.auto ? 'report-ready' : '' }, el('td', {}, el('button', { class: 'who', onclick: () => { openPlayer(r.pid, 'Development'); } }, el('div', { class: 'no' }, r.no ?? r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `earning ${r.dev} · ${r.career} bought in his career`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.ceiling ?? '—'), el('td', { class: 'n' }, r.room != null ? r.room : '—'), el('td', { class: 'n' }, r.bank.toLocaleString()), el('td', { class: 'n' }, r.cheapest ? r.cheapest.toLocaleString() : '—'), el('td', { class: 'n' }, r.bought),
     el('td', {}, el('button', { class: 'btn' + (r.auto ? ' go' : ' quiet'), style: 'padding:3px 8px;font-size:13px', onclick: () => { pyJSON(`SESSION.club_act('auto_xp', pid=${JSON.stringify(r.pid)}, on=${r.auto ? 'False' : 'True'})`); reload(); } }, r.auto ? 'On' : 'Off')),
-    el('td', {}, el('button', { class: 'btn', style: 'padding:3px 8px;font-size:13px', disabled: r.can_buy ? null : '', 'data-tip': 'Spend his bank now by the read', onclick: () => { notify(pyJSON(`SESSION.club_act('spend_by_read', pid=${JSON.stringify(r.pid)})`)); reload(); } }, 'Spend'))));
+    el('td', {}, el('button', { class: 'btn', style: 'padding:3px 8px;font-size:13px', disabled: r.can_buy ? null : '', 'data-tip': 'Spend his bank now by the read', onclick: () => { const result = pyJSON(`SESSION.club_act('spend_by_read', pid=${JSON.stringify(r.pid)})`); if (!result.ok) notify(result); reload(); } }, 'Spend'))));
   s.append(el('div', { class: 'report-table-scroll' }, t)); page.append(s);
 }
 
