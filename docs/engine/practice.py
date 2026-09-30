@@ -8,7 +8,8 @@ import health as H
 import xp as XP
 
 UNITS = ('offense', 'defense', 'special')
-INTENSITIES = {'recovery': (.0, .0, .045), 'light': (.55, .35, .025),
+# Light work offsets part of a typical starter's game fatigue, not all of it.
+INTENSITIES = {'recovery': (.0, .0, .045), 'light': (.55, .35, .006),
                'standard': (1., 1., .0), 'hard': (1.20, 2.7, -.018)}
 OFFENSE = {'QB','HB','FB','WR','TE','LT','LG','C','RG','RT'}
 WEEKLY_XP_PER_PLAYER = 12.0
@@ -53,21 +54,70 @@ def _starters(team, depth):
     selected.update(depth[pos][0].pid for pos in ('K','P','LS') if depth.get(pos))
     return selected
 
+def _fitness(p):
+    return (.6*float(p.ratings.get('injury_rating',80) or 80)+
+            .4*float(p.ratings.get('tough_rating',80) or 80))
+
+
 def recommend_plan(league, runner, abbr, week, *, bye=False):
     players = _roster(league,abbr)
-    units = {}
+    team = league.teams[abbr]
+    starters = _starters(team,team.depth)
+    st = runner.states.get(abbr) if runner else None
+    snaps = (getattr(st,'last_snaps',None) or {}) if week != 1 else {}
+    schedule = getattr(league,'schedule',[])
+    previous_bye = bool(schedule) and week > 1 and not any(w == week-1 and abbr in (a,h)
+        for w,a,h,ap,hp in schedule)
+    # Judge the coming practice week, not the condition immediately after Sunday.
+    # One exhausted player should receive protection without resting his whole unit.
+    units, individual, reasons = {}, {}, []
+    candidates = []
     for unit in UNITS:
-        health = [_health(league,runner,abbr,p) for p in players if _unit(p)==unit]
-        worn = any(c < 72 or j > .36 for c,j,_ in health)
-        units[unit] = dict(intensity='recovery' if bye else 'light' if worn else 'standard',
-                           reps='development' if worn or bye else 'balanced')
-    individual = {p.pid:'rest' for p in players if _rehab(runner,abbr,p) or
-                  _health(league,runner,abbr,p)[0] < 60}
-    return dict(units=units, individual=individual, focus=[])
+        members = [p for p in players if _unit(p)==unit]
+        healthy = []
+        for p in members:
+            c,j,saved = _health(league,runner,abbr,p)
+            projected = H.recover_between_games(c,_fitness(p),7,j)
+            if _rehab(runner,abbr,p) or c < 55 or j > .65:
+                individual[p.pid] = 'rest'
+                continue
+            if projected < 92 or j > .35 or snaps.get(p.pid,0) >= 75:
+                individual[p.pid] = 'limited'
+            healthy.append((p,projected,j,saved))
+        regulars = [row for row in healthy if row[0].pid in starters or snaps.get(row[0].pid,0)>=30]
+        exposed = regulars or healthy
+        # Typical game loads build hundredths per week. Waiting for the UI's
+        # severe-fatigue bands made a lighter week effectively unreachable.
+        fatigue_limit = .06 if week > 18 else .08
+        tired = sum(c < 95 or j > fatigue_limit for p,c,j,_ in exposed)/max(1,len(exposed))
+        depleted = (len(members)-len(healthy))/max(1,len(members))
+        young = [p for p,_,_,_ in healthy if p.age <= 25 and
+                 p.pid not in starters and snaps.get(p.pid,0)<30 and p.pid not in individual]
+        fresh = bool(healthy) and all(c >= 98.5 and j < .06 and
+                    not (s.get('last_key')==f'{league.year}:{week-1}' and s.get('hard_streak',0))
+                    for _,c,j,s in healthy)
+        if bye:
+            intensity,reason = 'recovery','Bye week: recover before the next game.'
+        elif tired >= .30 or depleted >= .25:
+            intensity,reason = 'light','Several regulars need a lighter week.'
+        elif week <= 18 and (week == 1 or previous_bye) and fresh and depleted == 0 and len(young) >= max(2,len(members)*.35):
+            intensity,reason = 'hard','Fresh unit after a break, with young depth to develop.'
+        else:
+            intensity,reason = 'standard','Normal preparation; protect tired players individually.'
+        reps = 'development' if bye or intensity=='light' or (week<=18 and len(young)>=len(members)*.30) else 'balanced'
+        units[unit] = dict(intensity=intensity,reps=reps)
+        reasons.append(f'{unit.title()}: {reason}')
+        candidates.extend(young)
+    # Coaching attention redistributes the existing budget; it never creates XP.
+    candidates.sort(key=lambda p:(-XP.modifier(p),p.age,p.pid))
+    return dict(units=units,individual=individual,
+                focus=[] if bye else [p.pid for p in candidates[:3]],reasons=reasons)
 
 def _plan(league,runner,abbr,week,plan,bye):
     base = recommend_plan(league,runner,abbr,week,bye=bye)
     if not isinstance(plan,dict): return base
+    # Automatic advice cannot describe a manually overridden plan.
+    base.pop('reasons',None)
     for unit in UNITS:
         row = plan.get('units',{}).get(unit,{})
         if row.get('intensity') in INTENSITIES: base['units'][unit]['intensity']=row['intensity']
@@ -102,8 +152,9 @@ def preview(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=F
         reps = (1.25 if starter else .65) if settings['reps']=='starters' else (.55 if starter else 1.25) if settings['reps']=='development' else 1.
         if mode=='limited': reps *= .35
         if mode=='rest' or rehab or duplicate: reps=0.
-        fitness=.6*float(p.ratings.get('injury_rating',80) or 80)+.4*float(p.ratings.get('tough_rating',80) or 80)
+        fitness=_fitness(p)
         after_j=max(0.,min(1.,j-shed + (.018*reps if intensity=='hard' else 0.)))
+        if mode=='limited': after_j=max(0.,after_j-.008)
         if bye and not recovery_done: after_j=H.update_jadedness(after_j,0,fitness,bye=True)
         if mode=='rest' or rehab: after_j=max(0.,j-(.12 if bye and not recovery_done else .04))
         recovered=c if recovery_done else H.recover_between_games(c,fitness,7,after_j)

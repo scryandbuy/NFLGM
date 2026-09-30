@@ -469,7 +469,13 @@ class Session:
         blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap')]
         if blocks:
             return dict(done='Blocked', next=self.next_label(), why=blocks[0]['subject'])
-        result = self._advance()
+        from game_availability import FieldabilityError
+        try:
+            result = self._advance()
+        except FieldabilityError as exc:
+            # Keep completed scores and the calendar position for a safe retry.
+            if self.runner is not None: self.runner._skip_game = None
+            return dict(done='Blocked', next=self.next_label(), why=str(exc))
         if result.get('done') != 'Blocked':
             STF.resolve_references(self.L, advanced=True)
             IB.reconcile(self.L)
