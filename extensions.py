@@ -28,6 +28,7 @@ import numpy as np
 from cap_engine import Contract, CAP, MAX_PRORATION_YEARS
 import contract_structure as CS
 import valuation as VAL
+import contract_terms as CT
 
 MAX_PER_CLUB = 6                 # a ceiling, not a target; the per-player chance sets the number
 AGE_LIMIT = {'QB': 36, 'K': 38, 'P': 38}
@@ -106,9 +107,9 @@ def honors_premium(league, p):
 
 
 def terms(league, p, rng):
-    """(ask_apy, offer_apy, years_wanted, discount)."""
-    a = VAL.value_player(league, p, side='agent', rng=rng)
-    t = VAL.value_player(league, p, side='team', rng=rng)
+    """Return the agent ask, team offer, requested new years and discount."""
+    a = VAL.value_player(league, p, side='agent', rng=rng, extension=True)
+    t = VAL.value_player(league, p, side='team', rng=rng, extension=True)
     if not a or not t:
         return None
     import personality as PT
@@ -118,14 +119,13 @@ def terms(league, p, rng):
     disc = disc * PT.certainty_discount_mult(p) + PT.extension_discount(p)    # money and loyalty
     disc = float(np.clip(disc, -0.05, 0.25))
     ask = a['apy'] * PT.ask_mult(p) * honors_premium(league, p)
-    years = int(np.clip(a['years'], 1, 5))
-    if p.age >= 30: years = min(years, 3)
+    years = int(np.clip(a['years'], 1, CT.MAX_OFFER_YEARS))
     return dict(ask=ask, offer=t['apy'], years=years, discount=disc)
 
 
 def build(p, add_years, apy, cap, gm, league, front_load=None, bonus=None):
     """The extended contract: old years kept, new years appended, new bonus prorated from now."""
-    if not 1 <= add_years <= 7 or not np.isfinite(apy) or apy <= 0:
+    if not 1 <= add_years <= CT.MAX_OFFER_YEARS or not np.isfinite(apy) or apy <= 0:
         raise ValueError('Offer must have a positive salary and one to seven years')
     if bonus is not None and (not np.isfinite(float(bonus)) or not 0 <= float(bonus) <= apy * add_years):
         raise ValueError('Signing bonus must be between zero and the total contract value')
@@ -175,6 +175,7 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
         floor *= 1.0 + ne['demand_premium']
         if not ne['will_discount']: floor = max(floor, tm['ask'] * (1.0 + ne['demand_premium']) * (1.0 - 0.02))
     team = league.teams[p.team]
+    floor *= CT.term_premium(years, tm['years'])
     # a number the agent has already agreed to in talks is not re-priced here: the negotiation set the
     # floor with the same morale and shape terms, and a second floor that disagreed by a few cents made
     # an agreed deal 'fall through' and left the thread failing every week
@@ -208,10 +209,40 @@ def next_year_room(team, cap_next):
     return cap_next - committed - team.cap.dead_next
 
 
+def can_afford_extension(league, team, player, apy, years):
+    """Compare each projected annual cap charge with that year's budget.
+
+    Total multi-year cash is not a one-year cap charge. Preserve current-year
+    validation in extend(), and avoid double counting the replaced contract.
+    """
+    cap = CAP.get(league.year, 301.2)
+    try:
+        preview = build(player, years, apy, cap, team.gm, league,
+                        front_load=CS.choose_shape(team, years))
+    except ValueError:
+        return False
+    from cap_accounting import next_year_ledger
+    limit_next, committed_next, _, _ = next_year_ledger(league, team)
+    def charge(contract, index):
+        if contract is None: return 0.0
+        if index < contract.years: return contract.cap_hit(index)
+        return contract.remaining_proration(index) if index == contract.years else 0.0
+    for i in range(1, preview.years + 1):
+        if i == 1:
+            limit, committed = limit_next, committed_next
+        else:
+            limit = CAP.get(league.year + i, cap * 1.055 ** i)
+            committed = sum(charge(p.contract, i) for p in team.roster)
+        old = charge(player.contract, i)
+        new = charge(preview, i)
+        if committed - old + new > limit + .0005 and new > old + .0005:
+            return False
+    return True
+
+
 def ai_round(league, rng, verbose=False):
     """Every club keeps who it can, before the market."""
     from gm_engine import scheme_fit
-    cap = CAP.get(league.year, 301.2); cap_next = CAP.get(league.year + 1, cap * 1.07)
     done = []
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None) or team.gm is None:
@@ -229,7 +260,6 @@ def ai_round(league, rng, verbose=False):
         import draft as DFT
         scale = DFT.position_scale(league)
         cands.sort(key=lambda x: (x[0], -DFT.common_scale(x[2].ovr, x[2].pos, scale)))
-        room = next_year_room(team, cap_next)
         n = 0
         for rank, _o, p in cands:
             if n >= MAX_PER_CLUB: break
@@ -248,11 +278,11 @@ def ai_round(league, rng, verbose=False):
             want = 1.0 - 0.06 * rank - 0.10 * max(0.0, gm.youth - 0.5) * (p.age >= 28)
             offer = tm['offer'] * (1.0 + 0.12 * want)
             if offer < floor: continue
-            if offer * tm['years'] > room + offer * 0.35:       # cannot carry him next year
+            if not can_afford_extension(league, team, p, min(offer, tm['ask']), tm['years']):
                 continue
             res = extend(league, p.pid, round(min(offer, tm['ask']), 2), tm['years'], rng, by_ai=True)
             if res['result'] == 'accepted':
-                room -= offer; n += 1; done.append((abbr, p.name, p.pos, round(p.ovr), res['apy'], res['years']))
+                n += 1; done.append((abbr, p.name, p.pos, round(p.ovr), res['apy'], res['years']))
     if verbose:
         print(f'  {len(done)} extensions')
     return done
@@ -275,7 +305,6 @@ def in_season_round(league, rng, week):
         if wk >= 18 and abbr in alive: continue
         # the eliminated clubs work it harder: the window is short and the market is coming
         if rng.random() > (0.085 if wk <= 17 else 0.16): continue
-        cap = CAP.get(league.year, 301.2); cap_next = CAP.get(league.year + 1, cap * 1.07)
         cands = [p for pos, ps in team.depth.items() for p in ps[:1] if eligible(p, league) and p.age <= AGE_LIMIT.get(p.pos, 31) and p.ovr >= 76]
         if not cands: continue
         p = max(cands, key=lambda q: q.ovr)
@@ -283,7 +312,7 @@ def in_season_round(league, rng, week):
         if tm is None: continue
         offer = tm['offer'] * 1.04
         if offer < tm['ask'] * (1.0 - tm['discount']): continue
-        if offer * tm['years'] > next_year_room(team, cap_next) + offer * 0.35: continue
+        if not can_afford_extension(league, team, p, min(offer, tm['ask']), tm['years']): continue
         res = extend(league, p.pid, round(min(offer, tm['ask']), 2), tm['years'], rng, by_ai=True)
         if res.get('result') == 'accepted': done.append((abbr, p.name, p.pos, res['apy'], res['years']))
     return done

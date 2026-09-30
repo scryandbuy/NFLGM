@@ -379,7 +379,7 @@ def pool_from_league(league, season=None):
     return pd.DataFrame(rows)
 
 
-def value_player(league, player, side=None, rng=None, pool=None, season=None):
+def value_player(league, player, side=None, rng=None, pool=None, season=None, extension=False):
     """
     Value a live Player. `side` pins the comp window: 'agent' argues two years
     of signings, 'team' argues five, and None rolls between them.
@@ -433,6 +433,9 @@ def value_player(league, player, side=None, rng=None, pool=None, season=None):
         for k in ('apy', 'apy_low', 'apy_high'):
             out[k] = round(min(out[k], cap_apy * (1.0 if k != 'apy_high' else 1.1)), 2)
     out['cap_pct'] = round(out['apy'] / cap * 100, 3)
+    import contract_terms as CT
+    out['years'] = CT.preferred_years(player, season or league.year, out['apy'], cap,
+                                     extension=extension, comp_years=out['years'])
     return out
 
 

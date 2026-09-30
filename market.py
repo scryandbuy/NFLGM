@@ -131,11 +131,13 @@ def profile_for(league, player, rng):
     return prof
 
 
-def utility_of(league, player, offer, prof, market_apy):
+def utility_of(league, player, offer, prof, market_apy, preferred_term=None):
+    from contract_terms import preferred_years
     team = league.teams[offer.team]
     ctx = team_context(league, team, player)
     row = dict(age=player.age, ovr=player.ovr, madden_position=player.pos,
                financial_priority=(getattr(player, 'traits', None) or {}).get('financial_priority', 50))
+    row['preferred_years'] = preferred_term or preferred_years(player, league.year, market_apy, CAP.get(league.year, 301.2))
     u = NE.utility(offer.as_dict(), row, prof, ctx, market_apy)
     # the contender thumb: small, and only sometimes
     u += CONTENDER_DISCOUNT * ctx['contender'] * prof['w'].get('winning', 0.1) * 3.0
@@ -217,7 +219,8 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
             v = VAL.value_player(league, p, side='team', pool=comps, rng=rng)
             if not v:
                 continue
-            years_want = int(np.clip(v['years'], 1, 5))
+            from contract_terms import MAX_OFFER_YEARS
+            years_want = int(np.clip(v['years'], 1, MAX_OFFER_YEARS))
             # COMMITTING LONG TO HIM MEANS LOSING ONE OF YOUR OWN. A multi-year
             # deal is paid for out of the same room that would have re-signed a
             # pending free agent, so he has to be better than the man who walks
@@ -282,7 +285,7 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
         prof = profile_for(league, p, rng)
         v = VAL.value_player(league, p, pool=comps, rng=rng)
         market = v['apy'] if v else 3.0
-        scored = sorted(((utility_of(league, p, o, prof, market), o)
+        scored = sorted(((utility_of(league, p, o, prof, market, v['years'] if v else None), o)
                          for o in mine), key=lambda x: -x[0])
         best_u, best = scored[0]
 
@@ -865,10 +868,13 @@ def convert_tenders(league, rng, phase, user_team=None):
         for p in [q for q in team.active() if getattr(q, 'fa_class', None) == 'tendered' and q.ovr >= 76]:
             if rng.random() > 0.35: continue
             try:
-                ask_apy, offer_apy, years, _disc = EXT.terms(league, p, rng)
-                apy = float(offer_apy or ask_apy); years = int(max(2, min(4, years or 3)))
+                tm = EXT.terms(league, p, rng)
+                if tm is None: continue
+                apy = max(float(tm['offer']), float(tm['ask']) * (1.0 - tm['discount']))
+                years = int(tm['years'])
                 if power(league, team, cap) < apy * 1.05: continue
-                r = EXT.extend(league, p.pid, apy, years, agreed=True)
+                if not EXT.can_afford_extension(league, team, p, apy, years): continue
+                r = EXT.extend(league, p.pid, apy, years, by_ai=True)
                 if r.get('result') != 'accepted': continue
                 p.fa_class = 'under_contract'; p.tender_team = None
                 if p.pid in league.free_agents: league.free_agents.remove(p.pid)

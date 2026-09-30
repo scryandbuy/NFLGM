@@ -4,6 +4,7 @@ These are primary football jobs, not the depth chart's emergency fallbacks.
 A rush edge is not advertised as an interior end or an off-ball linebacker.
 """
 import defense_roles as DR
+from stable import stable_seed
 
 
 def _get(value, name, default=None):
@@ -32,7 +33,22 @@ def fa_positions(player, team_or_gm):
         roles = ('LOLB', 'ROLB') if odd else ('LEDG', 'REDG')
         return roles if pos == 'LEDG' else roles[::-1]
     if odd and pos == 'DT':
-        return ('NT', 'LE', 'RE')
+        ratings = _get(player, 'ratings', player)
+        weight = _get(player, 'weight', _get(player, 'weight_lbs'))
+        strength = _get(ratings, 'strength_rating')
+        shedding = _get(ratings, 'block_shedding_rating')
+        power = float(_get(ratings, 'power_moves_rating', 70) or 70)
+        finesse = float(_get(ratings, 'finesse_moves_rating', 70) or 70)
+        if weight is None and strength is None and shedding is None:
+            return ('NT', 'LE', 'RE')  # legacy records without any profile
+        strength, shedding = float(strength or 70), float(shedding or 70)
+        mass = float(weight or 305)
+        anchor = .55 * strength + .45 * shedding
+        nose = mass >= 315 or (mass >= 300 and anchor >= max(power, finesse) + 5)
+        can_nose = mass >= 305 or (mass >= 295 and strength >= 85 and shedding >= 78)
+        # Side is interchangeable for recruiting; keep the label stable across loads.
+        ends = ('LE', 'RE') if stable_seed(_get(player, 'pid', _get(player, 'name', ''))) % 2 == 0 else ('RE', 'LE')
+        return ('NT',) + ends if nose else ends + (('NT',) if can_nose else ())
     if odd and pos in ('MIKE', 'WILL', 'SAM'):
         return ('LILB', 'RILB') if pos == 'MIKE' else ('RILB', 'LILB')
     return ('MLB' if pos == 'MIKE' else pos,)

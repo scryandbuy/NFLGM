@@ -31,6 +31,16 @@ class FreeAgentRoleTests(unittest.TestCase):
             for front in ('4-3', '3-4'):
                 self.assertEqual(R.fa_positions({'pos': pos}, front), (pos,))
 
+    def test_interior_profile_distinguishes_nose_from_penetrating_end(self):
+        nose = NS(pos='DT', pid='nose', weight=330, ratings={'strength_rating': 92})
+        end = NS(pos='DT', pid='end', weight=285, ratings={'strength_rating': 75, 'finesse_moves_rating': 90})
+        anchor = NS(pos='DT', pid='anchor', weight=302, ratings={
+            'strength_rating': 91, 'block_shedding_rating': 90, 'power_moves_rating': 75})
+        self.assertEqual(R.fa_position(nose, '3-4'), 'NT')
+        self.assertEqual(R.fa_position(anchor, '3-4'), 'NT')
+        self.assertIn(R.fa_position(end, '3-4'), ('LE', 'RE'))
+        self.assertNotIn('NT', R.fa_positions(end, '3-4'))
+
 
 if __name__ == '__main__':
     unittest.main()
