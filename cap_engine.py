@@ -30,7 +30,9 @@ MEDIA_BUMP    = 0.055      # they add this on top (1998, 2006, 2022, 2024 patter
 
 def project_cap(year, last_year, last_cap, rng=None, media_years=()):
     """Advance the cap one year. Real values are used wherever we have them. The cap only ever rises."""
-    if year in CAP and not np.isnan(CAP[year]): return CAP[year]
+    # Only published years are fixed. Projected entries can belong to a
+    # different loaded franchise and must not override this league's draw.
+    if year <= 2026 and year in CAP and not np.isnan(CAP[year]): return CAP[year]
     rng = rng or np.random.default_rng()
     g = max(MIN_GROWTH, float(rng.normal(BASE_GROWTH, GROWTH_SD)))
     if year in media_years or (year - 2024) % MEDIA_CYCLE == 0:
@@ -44,8 +46,10 @@ class Contract:
     """Remaining salary plus fixed bonus allocations; no salary guarantees."""
     def __init__(self, years, base, signing_bonus=0.0, roster_bonus=None,
                  void_years=0, signed=2026, bonus_schedule=None,
-                 earned_base=0.0, earned_roster=0.0, pay_start=0, start_offset=0, **_ignored):
+                 earned_base=0.0, earned_roster=0.0, pay_start=0, start_offset=0,
+                 market_cap=None, **_ignored):
         self.signed, self.years, self.void = signed, years, void_years
+        self.market_cap = market_cap
         self.base = list(base)
         self.rb = list(roster_bonus or [0.0]*years)
         # Legacy saves contain only the remaining balance. Preserve that balance

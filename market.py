@@ -475,7 +475,8 @@ def sign(league, player, offer, cap, bonus=None):
     base = st['base']
     paid = team.cap.paid_week
     c = Contract(years=offer.years, base=base,
-                 signing_bonus=st['signing_bonus'], signed=league.year, pay_start=paid)
+                 signing_bonus=st['signing_bonus'], signed=league.year, pay_start=paid,
+                 market_cap=cap)
     from cap_accounting import require_room, pre_roll
     if pre_roll(league):
         # The displayed cap year is next year until Step 4; no new salary is

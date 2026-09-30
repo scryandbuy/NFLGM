@@ -551,6 +551,7 @@ class League:
 
     def __init__(self, year=2026):
         self.year = year
+        self.cap_history = {2026: CAP[2026]}
         self.phase = 'preseason'
         self.week = 0
         self.players = {}                 # pid -> Player, INCLUDING retired
@@ -869,10 +870,11 @@ class League:
         """
         from cap_accounting import settle_week
         settle_week(self,18)
-        prev_cap = CAP.get(self.year, 301.2)
+        prev_cap = self.cap_history.get(self.year, CAP.get(self.year, 301.2))
         self.year += 1
         new_cap = project_cap(self.year, self.year - 1, prev_cap, rng)
         CAP[self.year] = new_cap
+        self.cap_history[self.year] = new_cap
         for t in self.teams.values():
             # unused space carries over, which is real and is why a club can
             # spend more than the base cap
@@ -942,6 +944,7 @@ class League:
         from newgens import name_history
         return dict(
             version=1, year=self.year, phase=self.phase, week=self.week,
+            cap_history={str(y): cap for y, cap in self.cap_history.items()},
             players={pid: p.to_dict() for pid, p in self.players.items()},
             player_name_history=name_history(self), newgen_name_cursor=self.newgen_name_cursor,
             teams={a: t.to_dict() for a, t in self.teams.items()},
@@ -1000,6 +1003,7 @@ class League:
         d = json.loads(blob) if isinstance(blob, str) else blob
         d = PB.migrate_saved_backgrounds(d)
         L = cls(d['year'])
+        saved_caps = {int(y): float(cap) for y, cap in (d.get('cap_history') or {}).items()}
         L.phase, L.week = d['phase'], d['week']
         L.players = {pid: Player.from_dict(pd)
                      for pid, pd in d['players'].items()}
@@ -1047,15 +1051,31 @@ class League:
         L.set_phase(L.phase)
         # THE CAP ONLY RISES. A save rolled under the old projection could carry a year where the cap fell; that
         # year is re-based at the median growth over the last real or rolled figure, for every club at once.
-        prev = CAP.get(L.year - 1)
         bases = [t.cap.cap for t in L.teams.values() if getattr(t, 'cap', None) is not None]
+        # Older saves recorded only the current cap. Interpolate their missing
+        # years between the published 2026 cap and the saved current cap;
+        # those historical projections cannot be recovered exactly.
+        if bases and L.year > 2026:
+            saved_caps[L.year] = max(bases)
+            if L.year - 1 not in saved_caps:
+                ratio = (saved_caps[L.year] / CAP[2026]) ** (1 / (L.year - 2026))
+                for y in range(2027, L.year):
+                    saved_caps.setdefault(y, round(CAP[2026] * ratio ** (y - 2026), 3))
+        L.cap_history.update(saved_caps)
+        prev = L.cap_history.get(L.year - 1)
         if prev and bases and max(bases) < prev - 1e-6:
             fixed = round(prev * (1 + BASE_GROWTH), 3)
             for t in L.teams.values():
                 t.cap.cap = fixed; t.sync_cap()
-            CAP[L.year] = fixed
-        elif bases and L.year not in CAP:
-            CAP[L.year] = max(bases)             # the module table forgets a rolled year between sessions; the save remembers it
+            L.cap_history[L.year] = fixed
+        elif bases:
+            L.cap_history[L.year] = max(bases)
+        # CAP is still used by modules outside League. Replace stale projected
+        # values from any previously loaded game with this save's history.
+        for y in list(CAP):
+            if y > 2026:
+                del CAP[y]
+        CAP.update({y: cap for y, cap in L.cap_history.items() if y > 2026})
         L.free_agents = d['free_agents']
         L.coach_pool = [GM(**g) for g in d.get('coach_pool', [])]
         L.draft_pool = [L.players[p] for p in d.get('draft_pool', []) if p in L.players]
@@ -1210,7 +1230,8 @@ def contract_to_dict(c):
     return dict(years=c.years, base=list(c.base), signing_bonus=c.sb,
                 roster_bonus=list(c.rb), orig_years=getattr(c, 'orig_years', c.years),
                 void_years=c.void, signed=c.signed, bonus_schedule=list(c.bonus_schedule),
-                earned_base=c.earned_base, earned_roster=c.earned_roster, pay_start=c.pay_start, start_offset=c.start_offset)
+                earned_base=c.earned_base, earned_roster=c.earned_roster, pay_start=c.pay_start,
+                start_offset=c.start_offset, market_cap=getattr(c, 'market_cap', None))
 
 
 def contract_from_dict(d):
