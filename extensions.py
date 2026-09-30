@@ -189,19 +189,25 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
     if front_load is None and by_ai:
         front_load = CS.choose_shape(team, years)
     from cap_accounting import require_room
+    import morale as MO
+    pay_concern = MO.pay_concern(league, p)
     try:
         c = build(p, years, apy, cap, team.gm, league, front_load=front_load, bonus=bonus)
         require_room(league, team, p.pid, c)
     except ValueError as e: return dict(result='refused', why=str(e))
     p.contract = c
     team.sync_cap()
-    import morale as MO
     MO.shock(league, pid, 'extension_signed')
     if MO.wants_out(p) and p.xp_spent['_request'].get('reason') == 'contract':
         MO.resolve_request(league, pid, 'extension')
+    if pay_concern:
+        p.xp_spent.pop('_contract_concern', None)
+        if p.morale is not None:
+            p.morale._contract_drag = 0.0
     league.log('extension', pid=pid, team=p.team, apy=round(apy, 2), years=years, ai=by_ai, front_load=front_load)
     __import__('inbox').reconcile(league)
-    return dict(result='accepted', apy=round(apy, 2), years=years, contract=c, front_load=front_load)
+    return dict(result='accepted', apy=round(apy, 2), years=years, contract=c,
+                front_load=front_load, pay_concern_resolved=pay_concern)
 
 
 def next_year_room(team, cap_next):

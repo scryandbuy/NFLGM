@@ -335,10 +335,12 @@ def _accept(league, t, offer, how, quiet=False):
     import extensions as EXT, market as MK
     from cap_engine import CAP
     p = league.player(t['pid'])
+    pay_concern_resolved = False
     if t['kind'] == 'extension':
         r = EXT.extend(league, p.pid, offer['apy'], offer['years'], front_load=offer.get('front_load'), agreed=True, bonus=offer.get('bonus'))
         if r['result'] != 'accepted':
             return dict(ok=False, why=r.get('why'))
+        pay_concern_resolved = r.get('pay_concern_resolved', False)
         if getattr(p, 'fa_class', None) == 'tendered':
             # a tendered restricted free agent signing long term: the tender is replaced and he leaves the market
             p.fa_class = 'under_contract'; p.tender_team = None
@@ -351,7 +353,11 @@ def _accept(league, t, offer, how, quiet=False):
     t['state'] = 'accepted'; t['counter'] = None; t['due'] = None; _say(t, 'agent', f"Done. {p.name} is signed.")
     for k in offer.get('promises', []):
         record_promise(league, p.pid, t['team'], k)
-    if not quiet: _post(league, t, (f"{p.name} extended" if t['kind'] == 'extension' else f"{p.name} signs"), f"{offer['years']} years at ${offer['apy']:.1f}m a year, {how}.")
+    if not quiet or pay_concern_resolved:
+        body = f"{offer['years']} years at ${offer['apy']:.1f}m a year, {how}."
+        if pay_concern_resolved:
+            body += f" {p.name} is pleased with his new salary. His concern about being underpaid is resolved."
+        _post(league, t, (f"{p.name} extended" if t['kind'] == 'extension' else f"{p.name} signs"), body)
     return dict(ok=True, state='accepted', how=how)
 
 
