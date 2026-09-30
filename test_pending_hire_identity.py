@@ -51,6 +51,29 @@ class PendingHireIdentityTests(unittest.TestCase):
         convert.assert_called_once()
         self.assertEqual(league.transactions[-1]['conversions'], 1)
 
+    def test_saved_second_coordinator_keeps_identity_when_first_is_blocked(self):
+        league = fixture()
+        first = Coach('Mira Vale', 'dc', 85, 60, 'coverage disguise', 42, team='GB')
+        second = Coach('Sol Ferris', 'oc', 82, 58, 'wide zone', 44, team='GB')
+        league.teams['GB'].staff = {'dc': first, 'oc': second}
+        evaluated = GM(name=second.name, off_personnel='12', pass_lean=.714,
+                       off_blocking='zone', def_front='multiple')
+        league.pending_hires = {'MIN': dict(first=first.name, first_from=['GB', 'dc'],
+                                           second=second.name, second_from=['GB', 'oc'],
+                                           second_gm=asdict(evaluated),
+                                           second_hc_ask=6.75, year=league.year)}
+        league = League.load(league.save())
+
+        with patch.object(CP, 'make_candidate', side_effect=AssertionError('coach rerolled')), \
+                patch('position_change.convert_misfits', return_value=[]):
+            hired = CP.complete_pending_hire(league, 'MIN', __import__('numpy').random.default_rng(9), False)
+
+        self.assertEqual((hired.name, hired.off_personnel, hired.pass_lean),
+                         (second.name, '12', .714))
+        self.assertEqual(hired.salary, 6.75)
+        self.assertIsNone(league.teams['GB'].staff['oc'])
+        self.assertEqual(league.teams['GB'].staff['dc'].name, first.name)
+
 
 if __name__ == '__main__':
     unittest.main()
