@@ -95,6 +95,9 @@ class Session:
         if d.get('_post_live'):
             if s.runner is None: s.runner = SN.SeasonRunner(s.L, s.rng)
             s.post_live = PS.Postseason.from_dict(s.runner, d['_post_live'])
+        import practice_integration as PI
+        PI.migrate(self=s, saved=d)
+        if s.post_live is not None: s.L._post_ref = s.post_live
         lp = d.get('_live_pending')
         if lp and s.played and (s.stop[0] == 'week' or (s.stop[0] == 'playoffs' and lp.get('playoffs'))):
             if s.runner is None: s.runner = SN.SeasonRunner(s.L, s.rng)
@@ -348,6 +351,8 @@ class Session:
                 if lv is not None and not lv['done']:
                     return dict(title='Game Day', sub=('Halftime: your adjustments' if lv['halftime_open'] else 'Your game is on; finish it to advance'), played=True, live=True)
                 return dict(title=(f"Advance to Week {wk + 1}" if wk < WEEKS else 'Advance to the Playoffs'), sub=(f"Week {wk} is in the books"), played=True)
+            if self._practice_pending():
+                return dict(title='Run Practice', sub=f'Week {wk} preparation', played=False)
             return dict(title=f"Sim Week {wk}", sub=(f"{'at' if opp and opp[1] else 'vs'} {opp[0]}" if opp else 'Bye Week'), played=False)
         if k == 'playoffs':
             rnd_i = int(self.stop[1]) if len(self.stop) > 1 else 0
@@ -362,6 +367,8 @@ class Session:
             if self.played:
                 nxt = SHORT[PS.Postseason.ROUNDS[rnd_i + 1]] if rnd_i + 1 < 4 else 'Offseason'
                 return dict(title=f'Advance to the {nxt}', sub=f'The {name} is in the books', played=True)
+            if self._practice_pending():
+                return dict(title='Run Practice', sub=f'{name} preparation', played=False)
             if post is not None and hasattr(post, 'alive'):
                 alive = {t for a in post.alive.values() for t in a.values()} if rnd != 'SB' else set(post.conf_champs.values())
                 if user in alive:
@@ -492,6 +499,9 @@ class Session:
             if self.runner is None:
                 self.runner = SN.SeasonRunner(self.L, self.rng)
             if not getattr(self, 'played', False):
+                if self._practice_pending():
+                    self.practice_act('run')
+                    return dict(done='Practice complete', next=self.next_label())
                 # SUNDAY: the games are played and Game Day shows them. The week does not roll
                 # until Advance, so the GM can read the box score, work the wire and the
                 # inbox, and still be in this week.
@@ -546,6 +556,10 @@ class Session:
                 self.played = False                       # a save from before the round flow: this round has not been played
                 self._playoff_prep(rnd_i)
             if not self.played:
+                if self._practice_pending():
+                    self.practice_act('run')
+                    return dict(done='Practice complete', next=self.next_label())
+                self.runner.prepare_practice(wk_)
                 # PLAY THE ROUND
                 user = self.user_team
                 self.runner.last_games = []; self.runner.last_played = []
@@ -1494,6 +1508,18 @@ class Session:
         result = MK.answer_offer_sheet(self.L, int(mid), action, rng=self.rng)
         IB.reconcile(self.L)
         return result
+
+    def _practice_pending(self):
+        import practice_integration as PI
+        return PI.pending(self)
+
+    def practice_view(self):
+        import practice_integration as PI
+        return PI.view(self)
+
+    def practice_act(self, action, plan_json=None, enabled=None):
+        import practice_integration as PI
+        return PI.action(self, action, plan_json, enabled)
 
     def inbox_view(self):
         """Only the header and full inbox needed by the mailbox screen."""

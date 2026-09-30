@@ -70,6 +70,7 @@ class Postseason:
     def __init__(self, runner):
         self.r = runner
         self.L = runner.L
+        self.L._post_ref = self
         self.games = []          # (round, conf, home, away, home_pts, away_pts)
         self.champion = None
         self.finalists = {}      # conf -> team
@@ -165,6 +166,7 @@ class Postseason:
         """Play every game of the round except the one involving `skip` (the user's club, played live).
         Returns the skipped matchup as (conf, home, away) or None."""
         week = week if week is not None else 19 + self.ROUNDS.index(rnd)
+        self.r.prepare_practice(week)
         held = None
         for conf, home, away in self.matchups(rnd):
             if skip is not None and skip in (home, away):
@@ -189,49 +191,11 @@ class Postseason:
         return p
 
     def run(self, verbose=False):
-        seeds = self.r.seeds()
-        week = 19
-        conf_champs = {}
-        for conf, sd in seeds.items():
-            alive = {i + 1: t for i, t in enumerate(sd)}
-
-            # wild card: the 1 seed sits out
-            winners = {}
-            for hi, lo in SS.wc_matchups(sd):
-                w = self._play('WC', conf, alive[hi], alive[lo], week)
-                winners[w] = min(hi, lo) if w == alive[min(hi, lo)] else max(hi, lo)
-            # seed numbers of everyone still alive, 1 seed included
-            left = {1: alive[1]}
-            for t, s in winners.items():
-                left[s] = t
-
-            # divisional: RESEEDED. The top seed always draws the worst
-            # survivor, which is the whole point of earning the bye.
-            order = sorted(left)
-            top, rest = order[0], order[1:]
-            pairs = [(top, rest[-1]), (rest[0], rest[1])]
-            semis = {}
-            for hi, lo in pairs:
-                w = self._play('DIV', conf, left[hi], left[lo], week + 1)
-                semis[w] = hi if w == left[hi] else lo
-
-            # conference championship
-            a, b = sorted(semis, key=lambda t: semis[t])
-            champ = self._play('CONF', conf, a, b, week + 2)
-            conf_champs[conf] = champ
-            self.finalists[conf] = champ
-            if verbose:
-                print(f'  {conf} champion: {champ}')
-
-        # the Super Bowl: a neutral site (sb_venue). 'Home' is nominal, the better record, for the box score only.
-        cs = list(conf_champs.values())
-        if len(cs) == 2:
-            a, b = sorted(cs, key=lambda t: -self.L.teams[t].win_pct)
-            self.champion = self._play('SB', 'NFL', a, b, week + 3)
-            if verbose:
-                print(f'  champion: {self.champion}')
-        elif cs:
-            self.champion = cs[0]
+        self.start()
+        for i, rnd in enumerate(self.ROUNDS):
+            self.schedule_round(rnd)
+            self.play_round(rnd, week=19 + i)
+            if verbose: print(f'  {self.ROUND_NAMES[rnd]} complete')
         return self.champion
 
 
