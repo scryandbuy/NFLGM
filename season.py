@@ -350,12 +350,15 @@ class SeasonRunner:
                 else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
             except Exception:
                 pass
+        import game_recap as GR
+        review = GR.capture(self.L, self.states[user], week) if user in (home, away) else None
         book = G.StatBook()
         self._book = book
         res = G.play_game(hr, ar, self.rng, P.resolve_play, self.co, self.cd,
                           P.rate, home_state=self.states[home],
                           away_state=self.states[away], week=week, book=book,
                           playoffs=playoffs, venue=self._venue(week, playoffs))
+        if review is not None: res['coaching_review'] = dict(pregame=review, halftime=[])
         self._record(home, away, week, res, book, playoffs)
         if playoffs:
             self.last_games.append((home, away, res, book))
@@ -393,7 +396,9 @@ class SeasonRunner:
                 except Exception: pass
             start = dict(rng=copy.deepcopy(self.rng.bit_generator.state),
                          states={side: self._state_data(self.states[side], include_roster=True)
-                                 for side in (home, away)})
+                                  for side in (home, away)})
+            import game_recap as GR
+            if user in (home, away): start['pregame_review'] = GR.capture(self.L, self.states[user], week)
         book = G.StatBook(); self._book = book
         gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book, playoffs=playoffs, venue=self._venue(week, playoffs))
         self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False, playoffs=playoffs, on_close=on_close, start=start, actions=[])
@@ -487,6 +492,8 @@ class SeasonRunner:
     def _close_live(self):
         """The live game is over: recorded exactly as a simmed game, and the week's after-game steps run."""
         lv = self.live; res = lv['res']; home, away, week = lv['home'], lv['away'], lv['week']
+        res['coaching_review'] = dict(pregame=copy.deepcopy(lv['start'].get('pregame_review')),
+            halftime=[copy.deepcopy(r) for r in lv.get('half_recs', []) if r.get('taken')])
         if lv.get('playoffs'):
             # a playoff game: the stats book, but no standings; the bracket takes the result
             self._record(home, away, week, res, lv['book'], True)
@@ -604,6 +611,8 @@ class SeasonRunner:
                                          season_ending=inj['season_ending']))
             self.L.log('injury', pid=p.pid, team=p.team, weeks=weeks,
                        injury=inj['kind'])
+        import game_recap as GR
+        GR.post(self.L, home, away, week, res, playoffs)
         return res
 
     # ---- one week -------------------------------------------------------

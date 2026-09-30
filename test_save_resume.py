@@ -40,6 +40,11 @@ class SaveResumeTest(unittest.TestCase):
         resumed._finish_live()
         self.assertEqual(runner.live['score'], resumed.runner.live['score'])
         self.assertEqual(runner.live['book'].p, resumed.runner.live['book'].p)
+        reviews = lambda s: [m for m in s.L.inbox if (m.get('payload') or {}).get('game_key','').startswith('game-recap-')]
+        self.assertEqual(len(reviews(original)), 1)
+        self.assertEqual(reviews(original)[0]['body'], reviews(resumed)[0]['body'])
+        if runner.live.get('half_taken'):
+            self.assertIn(runner.live['half_taken'][0], reviews(original)[0]['body'])
 
     def test_live_journal_appends_to_existing_saved_actions(self):
         original = self.fresh_session()
