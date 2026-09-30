@@ -381,9 +381,47 @@ def lineup_strength(team, players):
     return missing, _quality(report['package_assignments']) + 22 * 75.0
 
 
+def retention_value(team, player, players=None):
+    """Bounded value of keeping a controlled young successor off waivers.
+
+    This is a planning preference, never a roster/cap exemption. Use the
+    visible potential range, not the hidden ceiling. A weak early pick can
+    still lose his place to a useful veteran or a required position.
+    """
+    age = float(getattr(player, 'age', 30))
+    accrued = int(getattr(player, 'accrued', 3) or 0)
+    contract = getattr(player, 'contract', None)
+    years = int(getattr(contract, 'years', 0) or 0)
+    if age > 26 or accrued > 2 or years < 2:
+        return 0.0
+    readiness = max(0.0, min(1.0, (float(player.ovr) - 60.0) / 18.0))
+    visible = getattr(player, 'potential_range', None)
+    growth = min(6.0, max(0.0, sum(visible) / 2 - player.ovr)) if visible else 0.0
+    belief = float(getattr(getattr(team, 'gm', None), 'dev_belief', .5))
+    # Ready young players are unlikely to be safely stashed. Early draft
+    # investment supplies modest patience, rather than permanent protection.
+    rd = getattr(player, 'draft_round', None)
+    investment = max(0.0, (5 - int(rd)) / 4) if rd else 0.0
+    exposure = readiness * (1.0 + investment) / (1.0 + .5 * accrued)
+    men = list(team.active() if players is None else players)
+    incumbents = [q for q in men if q.pid != player.pid and q.pos == player.pos
+                  and q.ovr >= player.ovr]
+    succession = any(getattr(q, 'age', 25) >= (33 if player.pos == 'QB' else 29)
+                     or getattr(getattr(q, 'contract', None), 'years', 3) <= 1
+                     for q in incumbents)
+    return min(6.0, readiness * growth * (.35 + .25 * belief)
+               + exposure + (1.0 if succession else 0.0) * readiness)
+
+
 def select_cutdown(team, rows, limit=53):
     """Choose 53 with coach-aware depth and a playable-lineup safeguard."""
     import roster_construction as RC
+    raw_rows = rows
+    by_pid = {p.pid: p for p in team.active()}
+    retention = {pid: retention_value(team, p) for pid, p in by_pid.items()}
+    # Only the allocation proxy changes; displayed ratings and game grades
+    # are untouched. Carry the same preference through the final safeguard.
+    rows = [dict(row, ovr=row['ovr'] + retention.get(row['pid'], 0.0)) for row in rows]
     floors, group_floors = roster_floors(team)
     selected, _ = RC.allocate(rows, team.ctx(), team.gm, limit=limit,
                               minimums=floors, group_minimums=group_floors)
@@ -391,7 +429,7 @@ def select_cutdown(team, rows, limit=53):
     pool = [p for p in team.active() if p.pid in row_ids]
     selected_ids = improve_cutdown(team, (row['pid'] for row in selected),
                                     limit=limit, available=pool)
-    baseline, _ = RC.allocate(rows, team.ctx(), team.gm, limit=limit)
+    baseline, _ = RC.allocate(raw_rows, team.ctx(), team.gm, limit=limit)
     baseline_ids = {row['pid'] for row in baseline}
 
     def chosen(ids):
@@ -406,6 +444,8 @@ def select_cutdown(team, rows, limit=53):
     new, old = chosen(selected_ids), chosen(baseline_ids)
     new_missing, new_grade = lineup_strength(team, new)
     old_missing, old_grade = lineup_strength(team, old)
+    new_grade += sum(retention[p.pid] for p in new)
+    old_grade += sum(retention[p.pid] for p in old)
     # A reserve-depth floor is valuable, but it must not cost a substantially
     # stronger starter. An uncovered job always takes precedence.
     if (old_missing < new_missing or
@@ -423,6 +463,7 @@ def improve_cutdown(team, keep_ids, limit=53, available=None):
     if len(keep_ids) != limit:
         return keep_ids
     floors, group_floors = roster_floors(team)
+    retention = {p.pid: retention_value(team, p, pool) for p in pool}
 
     def shortage(players):
         counts = Counter(p.pos for p in players)
@@ -435,19 +476,21 @@ def improve_cutdown(team, keep_ids, limit=53, available=None):
         base = assess(team, kept)['score']
         missing = shortage(kept)
         best = None
-        arrivals = [(assess(team, kept + [p])['score'] - base, p)
+        arrivals = [(assess(team, kept + [p])['score'] - base + retention[p.pid], p)
                     for p in pool if p.pid not in keep_ids]
         arrivals = [p for gain, p in sorted(arrivals, key=lambda row: -row[0])[:8]
                     if gain > 1.0]
         departures = sorted(kept,
-                            key=lambda p: base - assess(team, [q for q in kept if q.pid != p.pid])['score'])[:16]
+                            key=lambda p: base - assess(team, [q for q in kept if q.pid != p.pid])['score']
+                            + retention[p.pid])[:16]
         for arrival in arrivals:
             for departure in departures:
                 proposed = [p for p in kept if p.pid != departure.pid] + [arrival]
                 if shortage(proposed) > missing:
                     continue
                 dead_delta = max(0.0, departure.dead_if_cut(0) - arrival.dead_if_cut(0))
-                gain = assess(team, proposed)['score'] - base - 0.5 * dead_delta
+                gain = (assess(team, proposed)['score'] - base - 0.5 * dead_delta
+                        + retention[arrival.pid] - retention[departure.pid])
                 if gain > 2.0 and (best is None or gain > best[0]):
                     best = (gain, arrival.pid, departure.pid)
         if best is None:

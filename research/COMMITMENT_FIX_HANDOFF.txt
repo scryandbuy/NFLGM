@@ -1,0 +1,45 @@
+FA COMMITMENT / ROOKIE RETENTION HANDOFF -- September 30, 2026
+
+Base: 21b781e
+Checkout: C:/Users/HP/Documents/Codex/2026-09-28/rev/work/nflgm-fa-rookie-planning
+Branch: codex/fa-rookie-planning-20260930
+Existing nflgm-vision-audit checkout preserved unchanged during this task.
+
+PRODUCTION FILES
+market.py
+- CPU offers retain the marginal package gain used to price the bid, including save/load.
+- Before each decision, recompute that gain after earlier signings. Shrinking value lowers an unsigned offer; no remaining role withdraws it.
+- Check actual shaped first-year cap cost against spending power after roster completion/future retention reserves.
+- Refresh rival bids for user offers awaiting an answer; preserve existing counter/match stages and never automatically reprice the user's offer.
+- Legacy saved bids without a gain snapshot remain readable and still receive role and funding checks.
+
+roster_needs.py
+- retention_value(team, player, players=None) returns0..6 additive planning points.
+- Only young, controlled players qualify; readiness, visible development range, early draft investment and aging/expiring incumbents affect value.
+- No hidden ceiling, hard draft-round protection, or cap exemption. This is a bounded heuristic, not an estimated NFL probability.
+- Carry the preference through initial allocation, marginal swaps and final lineup safeguard. Original raw-rating allocation remains an independent fallback for playable lineup checks.
+- Integration: cap cleanup may use this hook as soft release cost/tiebreak among feasible choices; it must not override required roles, legal cap, or funded final roster.
+
+VALIDATION
+57 tests passed:
+python -m unittest test_commitment_planning test_package_roster_needs test_roster_needs test_draft_planning test_draft_runtime -q (44)
+python -m unittest test_offer_reservations test_negotiation_stages test_fa_position_view -q (13)
+Existing unclosed-file ResourceWarnings in draft data loaders did not fail tests.
+
+Replays: audit_commitment_replay.py STUDY_OUTPUT_ROOT OUTPUT_JSON
+Recorded results: research/commitment_replay_results.json
+- Ten observed R2 first-camp cuts replayed from stage ownership and final native checkpoints.
+- Nine selected for53 after change; TB2029 TE63.289 still cut.
+- All three original organization losses retained at this selection step.
+- All selections53. No added missing jobs. SF2029 and WAS2027 each already had one missing job before and after, requiring downstream roster repair.
+- Immediate package-quality change across affected teams ranged0 to-1.613 total weighted grade points. The preference trades a small immediate benefit for controlled depth/succession.
+- This is not a full same-seed offseason or cap-gate replay. Stage snapshots lack full contracts; released contracts are reconstructed from hit, years and observed dead charges. Replay refuses changed player grades. Downstream cap cleanup and claims can still change outcomes.
+
+MIA CORRECTION
+The two SS acquisitions are complementary in the actual role plan, not proven duplicate purchases: Works FS weight1.0; Thompkins SS weight0.972578125. Initial roster score48.705230162, after Thompkins64.644673131, Works marginal gain17.0590930875. Normal53 selection also retained both in the reconstructed camp roster. Trace later cap cleanup, owned by(2), for the unwanted release.
+The role-based pending-bid replay changes Works29.10 ->24.50 while still allowing his offer. Cap budget was isolated for that role test; it does not claim an exact historical round outcome.
+
+RESEARCH
+Extended research/nfl_roster_behavior_2022_2026.txt from previous work without changing the old checkout. The report corrects MIA interpretation, preserves the seven same-team PS versus three organization-loss distinction, and adds sourced trade compensation evidence. No matched league denominator establishes that the simulated aggregate fresh-signing cut rate is unrealistic. User offseason post-June1 and PS-cap-exempt rules preserved; temporary post-draft overcap is allowed, with final gate compliance the criterion.
+
+No bundle, push, or generated browser build performed. Integration owner rebuilds once combined with cap work.

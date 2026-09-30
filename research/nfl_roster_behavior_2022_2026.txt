@@ -1,0 +1,133 @@
+NFL ROSTER CONSTRUCTION: 2022-2026 EVIDENCE FOR THE SIMULATION AUDIT
+Prepared September 30, 2026 | Research only; no production changes
+
+SCOPE AND LIMITS
+
+This is a sourced review of five offseason markets, not a complete player-contract census. The 2026 evidence is a current snapshot; its regular season is unfinished. Selected team cases establish that a behavior occurs, not its league-wide frequency. No matched league denominator was established for contracts worth at least $4m APY signed and terminated in the same offseason. Therefore the simulation's reported 1.6%-4.8% rates cannot responsibly be called excessive from these examples alone.
+
+Honor the user's game rules: offseason departures receive post-June 1 treatment, and practice-squad pay is cap-exempt. The recommendations below concern decision quality within those rules.
+
+1. ACQUISITION VOLUME AND SPENDING
+
+2022: The NFL's free-agency movement table records 193 unrestricted veteran free agents changing teams. This is a defined movement category, not all contracts, street free agents, or retained players.
+2024: The same record-book series records 218. These two numbers are useful acquisition-volume anchors, not measures of payroll or a complete five-year trend.
+Source: NFL 2025 Record & Fact Book, free-agency movement table:
+https://static.clubs.nfl.com/image/upload/saints/bvaqvsl0fwdhlxu6wnw2.pdf
+
+2023: OTC's March 29 snapshot reported average added annual contract value of $31.7m per team (median $30.2m). Chicago added 11 players at approximately $74.8m combined APY; Houston added 16 at approximately $63.9m. These are early-market additions, not final camp rosters. APY is not first-year cap expenditure or cash.
+https://overthecap.com/2023-free-agency-recap
+
+2025: AP, attributing contract figures to Spotrac, reported New England signed 19 unrestricted free agents for more than $364m total contract value and nearly $175m fully guaranteed. This is an aggressive-spending example, not the typical team. The team's January planning article described substantial cap capacity and needs across several position groups.
+https://apnews.com/article/04e345041045d83dde810406fa60c0da
+https://www.patriots.com/news/2025-new-england-patriots-offseason-primer
+
+2026: OTC's live table, retrieved September 30, lists Tennessee with 20 qualifying contracts/$318.7m total value/$129.8m first-year cash; Las Vegas 15/$308.2m/$121.5m. The page describes coverage as contracts signed after the preceding Super Bowl above $1.215m APY. Treat this as a dynamic, thresholded contract snapshot, potentially including retention, not external acquisitions alone or an audited final market census.
+https://overthecap.com/free-agency-spending
+
+Comparison: Separate outside acquisitions, own-player retention, one-year depth, and major commitments. Normalize price by contemporary cap share and guarantees. A $4m cutoff is a counting rule, not a universal definition of expensive. Rebuilding teams with funding and vacancies need different acquisition distributions from established contenders.
+
+2. POSITIONAL OVERLAP IS NOT AUTOMATICALLY WASTE
+
+Green Bay signed Xavier McKinney and drafted three safeties in 2024. Its camp reporting described Javon Bullard and Evan Williams competing alongside McKinney; subsequent reporting explains Bullard's safety/nickel use. Multiple players carrying the same position label can cover complementary assignments and development horizons.
+https://www.packers.com/news/safety-competition-fully-up-and-running-for-packers
+https://www.packers.com/news/countdown-to-camp-safety-has-become-packers-strength-2025
+
+Atlanta's 2024 quarterback review describes the Cousins/Penix sequence: a major veteran commitment plus a first-round successor, followed by a late-season change of starter. It demonstrates deliberate overlapping investment, while not establishing that the decision was efficient. The veteran was evaluated in games rather than immediately discarded before the season.
+https://www.atlantafalcons.com/news/2024-falcons-quarterback-position-review-michael-penix-jr-kirk-cousins
+
+Minnesota added Jonathan Allen and Javon Hargrave for its 2025 defensive front and released both in March 2026. An acquisition followed by a full season and reassessment belongs in a different category from signing and cutting before any regular-season participation.
+https://www.vikings.com/news/javon-hargrave-jonathan-allen-brian-flores-defensive-line
+https://www.vikings.com/news/jonathan-allen-javon-hargrave-defensive-linemen-released-contract-2026
+
+Comparison: Value projected snaps, package roles, versatility, injuries and succession. Recalculate needs after every accepted signing and reserve money/roles for outstanding offers. A rapid sign/cut sequence merits investigation, but two costly SS deals can fill complementary roles. The MIA replay below confirms that distinction in this simulation.
+
+3. NEW SIGNINGS CAN BE CUT; THE COMMITMENT AND REASON MATTER
+
+Buffalo's official 2022 ledger records O.J. Howard's March one-year signing and August release. This is a documented fresh-signing cut, not evidence of its frequency.
+https://www.buffalobills.com/team/transactions/2022
+
+Houston signed Marlon Mack in April 2022, drafted Dameon Pierce, and released Mack at cutdown. Caserio then discussed retaining Mack on the practice squad. Counting only the active-roster cut would misclassify the organization's continued use of him.
+https://www.houstontexans.com/team/transactions/2022
+https://www.houstontexans.com/news/seven-things-we-learned-from-gm-nick-caserio-s-press-conference
+
+Green Bay's 2025 roster announcement records that March signing Mecole Hardman was released while six receivers were kept. Camp competition can legitimately remove a recent addition.
+https://www.packers.com/news/green-bay-packers-keep-11-defensive-backs-heres-initial-2025-roster
+
+Buffalo's March 2024 release of established veterans, including Jordan Poyer and Mitch Morse, illustrates turnover of an existing core. Longstanding contracts becoming expendable must be distinguished from freshly incurred commitments. A transaction announcement alone cannot quantify how much decline, role change, or cap pressure caused a cut.
+https://www.buffalobills.com/news/buffalo-bills-release-five-players-including-jordan-poyer-mitch-morse-and-siran-neal
+
+Comparison: Log the original intended role, replacement arrival, changed information, usable trade offers, savings and remaining guarantees. Do not categorically forbid fresh-signing cuts or penalize all dead money. Do flag expensive unused commitments with no material change in circumstances. This review does not establish an empirical numerical target for that flag.
+
+4. DRAFT RETENTION: SELECTED TEAM COHORTS, NOT A LEAGUE RATE
+
+Team/year | Draft class | On initial 53 | Other classification
+Las Vegas 2023 | 9 | 9 | All nine retained on initial roster
+Green Bay 2024 | 11 | 9 | Two cuts, both seventh-rounders
+Green Bay 2025 | 8 | 6 | Two on PUP; all eight retained
+Baltimore 2025 | 11 | 7* | Three reserve-list placements; one seventh-round cut
+
+*Baltimore's count is derived from its 11-player class minus two injured-reserve rookies, one NFI rookie and the waived seventh-rounder. It is not four performance cuts.
+Sources:
+https://www.raiders.com/news/how-the-2023-las-vegas-raiders-roster-was-built-53-man-nfl-transactions
+https://www.packers.com/news/green-bay-packers-initial-2024-season-roster-breakdown
+https://www.packers.com/news/green-bay-packers-keep-11-defensive-backs-heres-initial-2025-roster
+https://www.baltimoreravens.com/news/ravens-roster-cuts-53-takeaways-2025
+
+Baltimore's 2025 pre-draft press conference discusses draft capital as both roster replenishment and trade currency; not every selection is assured an initial roster spot.
+https://www.baltimoreravens.com/news/transcripts-pre-draft-press-conference-4-15-25
+
+Comparison: Report outcomes by round at initial 53, Week 1, and season end. Separate active, injured reserve/PUP/NFI, same-team PS, trade, other-team claim, and unsigned. Investigate every first-camp R1/R2 cut, but do not infer a zero-tolerance rule or league frequency from these selected cases. The simulator's 224 selections are not directly comparable with NFL totals that include compensatory picks. Repeated seeds sharing a draft class are not independent prospect populations.
+
+5. TRADES, DEPTH AND THE PRACTICE SQUAD
+
+Green Bay acquired Malik Willis for a seventh-round pick near 2024 cutdown. A late pick can be an appropriate market price for a roster adjustment; draft-round size alone cannot validate or invalidate a trade proposal.
+https://www.packers.com/news/green-bay-packers-initial-2024-season-roster-breakdown
+
+Carolina claimed six players after 2024 cutdown, illustrating substantial last-stage repair. Its long-term planning discussion also emphasized the limited number of contracts extending beyond that season.
+https://www.panthers.com/news/panthers-claim-six-new-players-off-waivers
+https://www.panthers.com/news/thinking-long-term-while-retooling-a-roster-a-delicate-balance
+
+Green Bay's 2026 initial roster carried six receivers, seven defensive linemen and ten offensive linemen. Such counts are scheme- and roster-specific examples, not universal positional quotas.
+https://www.packers.com/news/packers-keep-six-receivers-seven-defensive-linemen-here-s-the-initial-2026-roster
+
+NFL roster rules distinguish the 53-player active/inactive roster from game-day availability and temporary practice-squad elevations, which can produce 54/55-player rosters. Therefore a reported count of 54 requires checking its classification before calling it illegal.
+https://operations.nfl.com/calendar-events/nfl-free-agency/contract-language
+
+Comparison: Shop expendable players when a plausible buyer exists, but allow no market and a release. Include acquiring-team cap room, needed role, age, contract and replacement alternatives. Preserve functional backups, multiple-receiver/DB packages and specialists rather than maximizing an overall-rating total. A practice-squad return is continued development/depth, not equivalent to leaving the organization.
+
+6. FUND THE ENTIRE ROSTER PLAN
+
+OTC's 2025 transition-to-regular-season cap review describes teams requiring further cap adjustments as regular-season accounting takes effect. Available headline cap space is not a license to spend every remaining dollar on one acquisition.
+https://overthecap.com/regular-season-salary-cap-is-now-live
+
+Recommended simulation accounting, a design inference rather than an empirically measured NFL formula:
+Spendable capacity = projected cap room minus accepted/pending commitments, net rookie additions, required roster completion costs, and an injury-replacement allowance. Evaluate future years as well as the immediate hit. Use a configurable reserve derived from the game's own salary/replacement costs; this research establishes no universal dollar buffer. Do not deduct PS salaries under the user's cap exemption.
+
+PRIORITY COMPARISONS FOR THE EXISTING STUDY
+
+A. First fix budget/roster feasibility where observed: cleanup leaving 23-38 active, subsequent cap-bypassing refills, and ordinary roster additions beyond the allowed limit. Check legal elevations separately. The user permits temporary post-draft over-cap states pending normal cuts/restructures; the final roster/cap gate is the compliance criterion, not every intermediate offseason snapshot.
+B. Trace the MIA three-year SS signings as a transaction sequence. The replay below confirms both remain useful starters; investigate why later cap cleanup treats the first as disposable rather than forcing rejection of a complementary acquisition.
+C. Review R2 first-camp cuts individually, including injury and PS outcomes. Selected real cohorts justify scrutiny, not a manufactured league baseline.
+D. Track current contract commitments, replacement funding and remaining-season/future-year consequences before every signing, trade and cut.
+E. Publish separate churn rates for one-year depth, larger guaranteed/multiyear deals, extensions and rookies. Match calendar windows, cap-share thresholds and organization-retention definitions before comparing with real data.
+
+Simulation figures supplied by Review code changes (2), not independently recomputed here: FA-phase >=$4m APY same-offseason cuts 6/124, 2/122 and 2/128; most one-year, with noted MIA three-year and CLE two-year exceptions. These cohorts may include own-player re-signings. Expensive unexplained sequences warrant tracing and fixing where the decision fails its role or funding plan; this report does not prove every observed cut or the aggregate rate unrealistic.
+
+FINAL STUDY UPDATE (supplied by Review code changes (2), September 30)
+
+The completed baseline covered 1,140 games. Across four cohorts, ten second-round rookies were cut at their first camp; seven returned to the same team's practice squad and three left the organization: CLE's 2028 DT went to LV's active roster, CAR's 2029 SAM went to ATL's active roster, and SF's 2029 HB went to SEA's practice squad. The proper concern for the seven retained players is exposure to waiver claims and whether that risk was justified, not organizational abandonment. These counts are study observations, not a matched league-rate comparison.
+
+The final 2029 cohort added 14 same-offseason cuts out of 198 qualifying FA contracts (7.07%), all one-year deals. No league-rate abnormality is established by that percentage alone. The final two primary offseasons reached 53 players with legal cap totals, and all tracked roles were filled in 2029. Earlier failures therefore should be reported with their specific seed/year, not portrayed as universal outcomes throughout the study. These final observations were supplied by the study owner and were not independently recomputed for this research report.
+
+CORRECTION FROM DECISION REPLAY (September 30)
+
+The MIA SS pair is NOT established as redundant spending. Reconstructing the pre-FA roster using step_extensions ownership and final-checkpoint player ratings reproduced the observed package scores exactly: 48.70523 before Thompkins, 64.64467 after him, and a further 17.05909 after Works. Thompkins initially fills FS; with both players, Works occupies FS at weight1.0 and Thompkins SS at weight0.973. The original FS loses the starting assignment. Both signings therefore have complementary immediate roles. This overrides earlier wording describing MIA as an expensive redundant pair. The later cut still warrants tracing cap cleanup and continuity of the role plan, but is not itself proof that the second acquisition lacked a purpose.
+
+Reconstructing MIA's camp roster also retained both safeties in the ordinary53 selection. This points the investigation toward the later cap cleanup decision. Reconstruction uses stage ownership plus the final native checkpoint and restored contract terms; no full native pre-FA checkpoint exists, so this is a decision replay, not an identical full-offseason replay.
+
+ADDITIONAL TRADE EVIDENCE
+
+Tennessee's official 2024 draft preview confirms fifth- and sixth-round picks received in its 2023 Kevin Byard transaction, alongside other late-pick exchanges for roster additions. This supports testing plausible buyers and salary obligations rather than assuming late-round compensation is intrinsically implausible. The record documents compensation; it does not alone prove cap necessity, attempted alternative trades, or a league-wide success rate for shopping cap casualties.
+https://www.tennesseetitans.com/news/2024-titans-draft-preview-how-to-watch-and-listen
+
+The source-backed practical expectation remains continuity: evaluate the actual combined assignments and cap plan after every move, reserve the cost of the final roster, and distinguish a deliberate complementary addition from an accidental bid made obsolete by another signing. Do not tune the game to reject all same-position acquisitions, and do not infer motives or league frequencies absent adequate evidence.

@@ -1,0 +1,332 @@
+{
+  "rookies": [
+    {
+      "seed": 93030,
+      "year": 2027,
+      "team": "SF",
+      "pid": "C7642",
+      "name": "Michael Suchanic",
+      "pos": "HB",
+      "ovr": 76.818,
+      "retention": 5.162,
+      "selected_before": false,
+      "selected_after": true,
+      "size": 53,
+      "missing_before": 0,
+      "missing": 0,
+      "quality_change": -0.326,
+      "observed_destination": {
+        "team": "SF",
+        "status": "PS"
+      },
+      "incoming": [
+        "C20581",
+        "C758",
+        "C7642"
+      ],
+      "outgoing": [
+        "P1565",
+        "P2305",
+        "P2319"
+      ]
+    },
+    {
+      "seed": 93030,
+      "year": 2028,
+      "team": "CLE",
+      "pid": "N2028DT009",
+      "name": "Jackson Brooking",
+      "pos": "DT",
+      "ovr": 75.039,
+      "retention": 4.804,
+      "selected_before": false,
+      "selected_after": true,
+      "size": 53,
+      "missing_before": 0,
+      "missing": 0,
+      "quality_change": 0.0,
+      "observed_destination": {
+        "team": "LV",
+        "status": "active"
+      },
+      "incoming": [
+        "N2028DT009",
+        "N2028HB016",
+        "N2028RG010"
+      ],
+      "outgoing": [
+        "P0587",
+        "P0644",
+        "P1319"
+      ]
+    },
+    {
+      "seed": 93030,
+      "year": 2028,
+      "team": "JAX",
+      "pid": "N2028QB013",
+      "name": "Nolan Palmer",
+      "pos": "QB",
+      "ovr": 69.706,
+      "retention": 2.561,
+      "selected_before": false,
+      "selected_after": true,
+      "size": 53,
+      "missing_before": 0,
+      "missing": 0,
+      "quality_change": 0.0,
+      "observed_destination": {
+        "team": "JAX",
+        "status": "PS"
+      },
+      "incoming": [
+        "FA9988",
+        "N2028QB013",
+        "P1236"
+      ],
+      "outgoing": [
+        "N2028RT013",
+        "P1143",
+        "P1155"
+      ]
+    },
+    {
+      "seed": 93030,
+      "year": 2029,
+      "team": "CAR",
+      "pid": "N2029SAM009",
+      "name": "Riley Boyer",
+      "pos": "SAM",
+      "ovr": 70.885,
+      "retention": 3.432,
+      "selected_before": false,
+      "selected_after": true,
+      "size": 53,
+      "missing_before": 0,
+      "missing": 0,
+      "quality_change": 0.0,
+      "observed_destination": {
+        "team": "ATL",
+        "status": "active"
+      },
+      "incoming": [
+        "N2029CB019",
+        "N2029CB020",
+        "N2029SAM009"
+      ],
+      "outgoing": [
+        "P0344",
+        "P0571",
+        "P0736"
+      ]
+    },
+    {
+      "seed": 93030,
+      "year": 2029,
+      "team": "GB",
+      "pid": "N2029TE000",
+      "name": "Kade Clark",
+      "pos": "TE",
+      "ovr": 69.162,
+      "retention": 3.003,
+      "selected_before": false,
+      "selected_after": true,
+      "size": 53,
+      "missing_before": 0,
+      "missing": 0,
+      "quality_change": -0.215,
+      "observed_destination": {
+        "team": "GB",
+        "status": "PS"
+      },
+      "incoming": [
+        "N2028LEDG009",
+        "N2029DT010",
+        "N2029LG009",
+        "N2029SAM007",
+        "N2029TE000"
+      ],
+      "outgoing": [
+        "C23016",
+        "P0356",
+        "P0938",
+        "P1250",
+        "P2508"
+      ]
+    },
+    {
+      "seed": 93030,
+      "year": 2029,
+      "team": "GB",
+      "pid": "N2029DT010",
+      "name": "JaMarion Jones",
+      "pos": "DT",
+      "ovr": 73.453,
+      "retention": 4.41,
+      "selected_before": false,
+      "selected_after": true,
+      "size": 53,
+      "missing_before": 0,
+      "missing": 0,
+      "quality_change": -0.215,
+      "observed_destination": {
+        "team": "GB",
+        "status": "PS"
+      },
+      "incoming": [
+        "N2028LEDG009",
+        "N2029DT010",
+        "N2029LG009",
+        "N2029SAM007",
+        "N2029TE000"
+      ],
+      "outgoing": [
+        "C23016",
+        "P0356",
+        "P0938",
+        "P1250",
+        "P2508"
+      ]
+    },
+    {
+      "seed": 93030,
+      "year": 2029,
+      "team": "SF",
+      "pid": "N2029HB003",
+      "name": "Henry Keeley",
+      "pos": "HB",
+      "ovr": 82.067,
+      "retention": 5.525,
+      "selected_before": false,
+      "selected_after": true,
+      "size": 53,
+      "missing_before": 1,
+      "missing": 1,
+      "quality_change": -1.613,
+      "observed_destination": {
+        "team": "SEA",
+        "status": "PS"
+      },
+      "incoming": [
+        "C8172",
+        "N2028WILL010",
+        "N2029C004",
+        "N2029HB003",
+        "N2029LG011",
+        "N2029WILL007"
+      ],
+      "outgoing": [
+        "C18297",
+        "P1668",
+        "P2060",
+        "P2279",
+        "P2305",
+        "P2335"
+      ]
+    },
+    {
+      "seed": 93030,
+      "year": 2029,
+      "team": "TB",
+      "pid": "N2029TE011",
+      "name": "Day'Jon Priester",
+      "pos": "TE",
+      "ovr": 63.289,
+      "retention": 1.023,
+      "selected_before": false,
+      "selected_after": false,
+      "size": 53,
+      "missing_before": 0,
+      "missing": 0,
+      "quality_change": 0.0,
+      "observed_destination": {
+        "team": "TB",
+        "status": "PS"
+      },
+      "incoming": [
+        "N2028DT019"
+      ],
+      "outgoing": [
+        "P2382"
+      ]
+    },
+    {
+      "seed": 93031,
+      "year": 2027,
+      "team": "SF",
+      "pid": "C7642",
+      "name": "Michael Suchanic",
+      "pos": "HB",
+      "ovr": 76.818,
+      "retention": 5.162,
+      "selected_before": false,
+      "selected_after": true,
+      "size": 53,
+      "missing_before": 0,
+      "missing": 0,
+      "quality_change": -0.233,
+      "observed_destination": {
+        "team": "SF",
+        "status": "PS"
+      },
+      "incoming": [
+        "C10798",
+        "C23559",
+        "C7642",
+        "P2299"
+      ],
+      "outgoing": [
+        "P0030",
+        "P1805",
+        "P2292",
+        "P2319"
+      ]
+    },
+    {
+      "seed": 93031,
+      "year": 2027,
+      "team": "WAS",
+      "pid": "C4056",
+      "name": "Kingston Croft Jr.",
+      "pos": "QB",
+      "ovr": 72.53,
+      "retention": 3.898,
+      "selected_before": false,
+      "selected_after": true,
+      "size": 53,
+      "missing_before": 1,
+      "missing": 1,
+      "quality_change": 0.0,
+      "observed_destination": {
+        "team": "WAS",
+        "status": "PS"
+      },
+      "incoming": [
+        "C4056"
+      ],
+      "outgoing": [
+        "P0130"
+      ]
+    }
+  ],
+  "miami": {
+    "initial_score": 48.70523016215229,
+    "after_first": 64.64467313090229,
+    "second_gain": 17.05909308749999,
+    "original_offer": 29.1,
+    "revised_offer": 24.5,
+    "roles": {
+      "P0060": [
+        "SS"
+      ],
+      "P0862": [
+        "FS"
+      ]
+    },
+    "shares": {
+      "P0060": 0.9725781250000002,
+      "P0862": 1.0000000000000002
+    },
+    "limitation": "Role replay only; final-checkpoint cap ledger is not pre-FA funding"
+  }
+}
