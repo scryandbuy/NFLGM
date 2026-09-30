@@ -317,6 +317,40 @@ def _tx_line(league, x):
     return f"{team} {k.replace('_', ' ').title()}: {nm}".strip()
 
 
+def _transaction_subject(league, x):
+    """Structured columns; retain the complete event text separately for export."""
+    p = league.player(x['pid']) if x.get('pid') else None
+    name, role = (p.name, p.pos) if p else (x.get('name', ''), '')
+    k = x.get('kind')
+    if GROUP_TAG.get(k) == 'Coaching':
+        name = x.get('hired') or x.get('coach') or x.get('name') or x.get('waiting_on') or 'Head coach vacancy'
+        role = 'Head Coach' if k in ('fire', 'hire', 'gm_change', 'gm_search', 'coach_retire') else {'oc': 'Offensive Coordinator', 'dc': 'Defensive Coordinator', 'st': 'Special Teams Coordinator'}.get(x.get('role'), (x.get('role') or 'Coach').upper())
+    if k in ('trade', 'inbox_trade'):
+        other = x.get('b') or x.get('seller', '')
+        name = f"Trade with {club(other)['name']}" if other else 'Trade agreement'
+        role = 'Player / draft pick exchange'
+        if x.get('a_sends') is not None:
+            return dict(person=name, role=role,
+                        detail='Sent: ' + (', '.join(_asset(league, a) for a in x.get('a_sends', [])) or 'None'),
+                        detail_secondary='Received: ' + (', '.join(_asset(league, a) for a in x.get('b_sends', [])) or 'None'))
+    detail = ''
+    if k in ('sign', 'extension'):
+        detail = ' · '.join(([f"{x['years']} year" + ('s' if x['years'] != 1 else '')] if x.get('years') else []) + ([f"${x['apy']:.1f}m per year"] if x.get('apy') else []))
+    elif k == 'release' and x.get('dead') is not None: detail = f"${x['dead']:.1f}m penalty"
+    elif k == 'waiver_claim': detail = f"From {club(x['from_team'])['name']}" if x.get('from_team') else 'Claimed off waivers'
+    elif k in ('ps_sign', 'ps_release', 'ps_callup'): detail = {'ps_sign': 'Added to the practice squad', 'ps_release': 'Released from the practice squad', 'ps_callup': 'Signed to the active roster'}[k]
+    elif k == 'draft': detail = f"Round {x.get('round', '?')} · Pick {x.get('selection', '?')}"
+    elif k == 'position_change': detail = f"Moved to {x.get('to', '')}"
+    elif k == 'ir': detail = f"Out {int(x['weeks'])} weeks" if x.get('weeks') else 'Placed on injured reserve'
+    elif k == 'retire': detail = f"Retired at age {x['age']}" if x.get('age') else 'Retired'
+    elif k == 'tag': detail = 'Franchise tender'
+    elif k == 'restructure': detail = 'Contract restructured'
+    elif k == 'hall_of_fame': detail = 'Elected to the Hall of Fame'
+    elif k == 'season_end': name, detail = club(x.get('champion', ''))['name'], 'Super Bowl champion'
+    elif GROUP_TAG.get(k) == 'Coaching': detail = x.get('why') or x.get('background') or ''
+    return dict(person=name or 'League update', role=role, detail=detail, detail_secondary='')
+
+
 def transactions(session, league, abbr, n=150):
     """The most recent n of each group, so a cut-down day's hundreds of squad signings do not push the cuts and claims off the page."""
     rows = []; per = {}
@@ -333,8 +367,8 @@ def transactions(session, league, abbr, n=150):
         link = ('trade' if k in ('trade', 'inbox_trade') else 'contract' if k in ('extension', 'sign', 'tag', 'restructure') else 'carousel' if grp == 'Coaching' else 'card' if x.get('pid') else None)
         tag = _staff_departure_action(x.get('why')) if k == 'staff_out' else TAGS.get(k, k)
         rows.append(dict(year=x.get('year'), week=x.get('week'), phase=x.get('phase'), kind=k, tag=tag, group=grp, line=_tx_line(league, x), mine=(abbr in involved),
-                        pid=x.get('pid'), team=(club(team) if team in league.teams else None), division=(league.teams[team].division if team in league.teams else None), divisions=divisions, link=link, i=len(rows)))
-    return dict(rail=rail(session, league, abbr), rows=rows, groups=['Trades', 'Signings', 'Cuts', 'Claims', 'Practice Squad', 'Extensions', 'Tags', 'Coaching'], my_division=league.teams[abbr].division)
+                        pid=x.get('pid'), team=(club(team) if team in league.teams else None), division=(league.teams[team].division if team in league.teams else None), divisions=divisions, link=link, i=len(rows), **_transaction_subject(league, x)))
+    return dict(rail=rail(session, league, abbr), rows=rows, coaching_moves=_coaching_moves(league, recent=False), groups=['Trades', 'Signings', 'Cuts', 'Claims', 'Practice Squad', 'Extensions', 'Tags', 'Coaching'], my_division=league.teams[abbr].division)
 
 
 LEADERS = [('Passing Yards', 'pass_yds', 'yds'), ('Passing TD', 'pass_td', 'TD'), ('Rushing Yards', 'rush_yds', 'yds'), ('Rushing TD', 'rush_td', 'TD'), ('Receiving Yards', 'rec_yds', 'yds'), ('Receptions', 'rec', 'rec'),
@@ -492,6 +526,40 @@ def _award_line(league, p, yr):
     return f"{int(l.get('tackles', 0))} tkl, {int(l.get('int_def', 0))} INT, {int(l.get('pass_def', 0))} PD"
 
 
+def _coaching_moves(league, recent=True):
+    """Shared coaching ledger, including recoverable departures in older saves."""
+    import almanac as AL
+    carousel = []
+    moves = {'fire', 'hire', 'gm_change', 'gm_search', 'coach_retire', 'staff_in',
+             'staff_out', 'staff_retire', 'staff_extend', 'staff_hire', 'staff_release', 'poach'}
+    fired = {(x.get('year'), x.get('team')) for x in league.transactions if x.get('kind') == 'fire'}
+    role_name = {'oc': 'Offensive Coordinator', 'dc': 'Defensive Coordinator',
+                 'st': 'Special Teams Coordinator'}
+    for x in league.transactions:
+        k, team, year = x.get('kind'), x.get('team'), x.get('year')
+        if k not in moves or team not in league.teams or (recent and year not in (league.year, league.year - 1)):
+            continue
+        role = 'Head Coach' if k in ('fire', 'hire', 'gm_change', 'gm_search', 'coach_retire') else role_name.get(x.get('role'), (x.get('role') or 'Coach').upper())
+        person = x.get('hired') if k == 'gm_change' else x.get('coach') or x.get('name')
+        reason = x.get('why') or x.get('background') or ''
+        if k == 'gm_change' and (year, team) not in fired:
+            # Older saves logged only the incoming hire. The coaching ledger
+            # can still identify the outgoing coach without inventing a reason.
+            prior = [h for h in AL.coaching_history(league, team)
+                     if h.get('to') == year and h.get('name') != person]
+            if prior:
+                carousel.append(dict(year=year, club=club(team), division=league.teams[team].division, action='Departed',
+                                     role='Head Coach', person=prior[-1]['name'], detail='Prior head coach'))
+        action = ('Fired' if k == 'fire' else 'Hired' if k in ('hire', 'gm_change', 'staff_in', 'staff_hire')
+                  else 'Search Open' if k == 'gm_search' else 'Retired' if k in ('coach_retire', 'staff_retire')
+                  else 'Extended' if k == 'staff_extend' else 'Released' if k == 'staff_release' else 'Poached' if k == 'poach'
+                  else _staff_departure_action(reason) if k == 'staff_out' else 'Departed')
+        if k == 'gm_search': person = x.get('waiting_on') or 'Head coach vacancy'
+        carousel.append(dict(year=year, club=club(team), division=league.teams[team].division, action=action, role=role,
+                             person=person or 'Coach', detail=reason))
+    return carousel[::-1]
+
+
 def coaching(session, league, abbr):
     import firing_model as FM, coaching_pool as CP, almanac as AL
     seats = []
@@ -509,35 +577,7 @@ def coaching(session, league, abbr):
     for g in CP.pool(league)[:12]:
         hr = getattr(g, 'hc_record', None) or {}
         pool.append(dict(name=g.name, age=getattr(g, 'age', None), prestige=round(getattr(g, 'prestige', 50)), background=getattr(g, 'background', ''), seasons=hr.get('seasons', 0), win_pct=hr.get('win_pct'), playoffs=hr.get('playoffs', 0)))
-    carousel = []
-    moves = {'fire', 'hire', 'gm_change', 'gm_search', 'coach_retire', 'staff_in',
-             'staff_out', 'staff_retire', 'staff_extend', 'staff_hire', 'staff_release'}
-    fired = {(x.get('year'), x.get('team')) for x in league.transactions if x.get('kind') == 'fire'}
-    role_name = {'oc': 'Offensive Coordinator', 'dc': 'Defensive Coordinator',
-                 'st': 'Special Teams Coordinator'}
-    for x in league.transactions:
-        k, team, year = x.get('kind'), x.get('team'), x.get('year')
-        if k not in moves or team not in league.teams or year not in (league.year, league.year - 1):
-            continue
-        role = 'Head Coach' if k in ('fire', 'hire', 'gm_change', 'gm_search', 'coach_retire') else role_name.get(x.get('role'), (x.get('role') or 'Coach').upper())
-        person = x.get('hired') if k == 'gm_change' else x.get('coach') or x.get('name')
-        reason = x.get('why') or x.get('background') or ''
-        if k == 'gm_change' and (year, team) not in fired:
-            # Older saves logged only the incoming hire. The coaching ledger
-            # can still identify the outgoing coach without inventing a reason.
-            prior = [h for h in AL.coaching_history(league, team)
-                     if h.get('to') == year and h.get('name') != person]
-            if prior:
-                carousel.append(dict(year=year, club=club(team), action='Departed',
-                                     role='Head Coach', person=prior[-1]['name'], detail='Prior head coach'))
-        action = ('Fired' if k == 'fire' else 'Hired' if k in ('hire', 'gm_change', 'staff_in', 'staff_hire')
-                  else 'Search Open' if k == 'gm_search' else 'Retired' if k in ('coach_retire', 'staff_retire')
-                  else 'Extended' if k == 'staff_extend' else 'Released' if k == 'staff_release'
-                  else _staff_departure_action(reason) if k == 'staff_out' else 'Departed')
-        if k == 'gm_search': person = x.get('waiting_on') or 'Head coach vacancy'
-        carousel.append(dict(year=year, club=club(team), action=action, role=role,
-                             person=person or 'Coach', detail=reason))
-    return dict(rail=rail(session, league, abbr), seats=seats, pool=pool, carousel_open=(league.phase in ('offseason', 'free_agency', 'draft')), carousel=carousel[::-1], note=('Owners Decide After Week 18' if league.phase in ('regular', 'preseason') else 'The carousel is turning'))
+    return dict(rail=rail(session, league, abbr), seats=seats, pool=pool, carousel_open=(league.phase in ('offseason', 'free_agency', 'draft')), carousel=_coaching_moves(league), note=('Owners Decide After Week 18' if league.phase in ('regular', 'preseason') else 'The carousel is turning'))
 
 
 def almanac(session, league, abbr):

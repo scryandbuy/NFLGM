@@ -85,6 +85,30 @@ class LeagueViews(unittest.TestCase):
         self.L.transactions=[dict(kind='trade',year=2027,a='KC',b='GB',a_sends=[],b_sends=[])]
         row=V.transactions(None,self.L,'GB')['rows'][0]
         self.assertTrue(row['mine']);self.assertIn('NFC North',row['divisions'])
+    def test_transactions_keep_coaching_ledger_and_legacy_departure(self):
+        self.L.transactions=[dict(kind='gm_change',year=2027,team='GB',hired='New Coach'),
+                             dict(kind='staff_out',year=2027,team='MIN',role='dc',name='Old DC',why='unit bottom-eight two years running')]
+        with patch('almanac.coaching_history',return_value=[dict(name='Former Coach',to=2027)]):
+            view=V.transactions(None,self.L,'GB')
+            self.assertEqual(view['coaching_moves'],V._coaching_moves(self.L))
+        self.assertEqual([(x['action'],x['person']) for x in view['coaching_moves']],
+                         [('Fired','Old DC'),('Hired','New Coach'),('Departed','Former Coach')])
+        self.assertTrue(all(x['division']=='NFC North' for x in view['coaching_moves']))
+    def test_structured_transaction_columns_preserve_terms_and_both_trade_assets(self):
+        self.player('Receiver','WR',{})
+        self.L.transactions=[dict(kind='sign',year=2027,team='GB',pid='Receiver',years=2,apy=3.5),
+                             dict(kind='trade',year=2027,a='KC',b='GB',a_sends=['Receiver'],b_sends=['2028 R2'])]
+        trade,sign=V.transactions(None,self.L,'GB')['rows']
+        self.assertEqual((sign['person'],sign['role'],sign['detail']),('Receiver','WR','2 years · $3.5m per year'))
+        self.assertEqual(trade['detail'],'Sent: Receiver (WR)')
+        self.assertEqual(trade['detail_secondary'],'Received: 2028 R2')
+        self.assertIn('Receiver',trade['line'])
+    def test_coaching_filter_keeps_older_moves_and_poaches(self):
+        self.L.transactions=[dict(kind='staff_hire',year=2024,team='GB',role='oc',name='Old hire'),
+                             dict(kind='poach',year=2027,team='MIN',role='dc',name='Poached coach')]
+        rows=V.transactions(None,self.L,'GB')['coaching_moves']
+        self.assertEqual([x['person'] for x in rows],['Poached coach','Old hire'])
+        self.assertEqual(rows[0]['action'],'Poached')
     def test_old_missing_stats_not_today(self):
         self.assertEqual(V.stats(None,self.L,'GB',2026)['team'],[])
     def test_game_affiliation_survives_trade(self):

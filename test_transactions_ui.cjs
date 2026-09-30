@@ -1,0 +1,23 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const src=fs.readFileSync('docs/app.js','utf8');
+const ctx={el:(tag,attrs,...kids)=>({tag,attrs,kids}),clubLink:(abbr,name)=>({abbr,name})};
+vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('const COLOR ='),src.indexOf('const COLOR =')+src.slice(src.indexOf('const COLOR =')).indexOf('\n'))+'\n'+src.slice(src.indexOf('const BOOT_TEAM ='),src.indexOf('const BOOT_TEAM =')+src.slice(src.indexOf('const BOOT_TEAM =')).indexOf('\n')),ctx);
+vm.runInContext(src.slice(src.indexOf('function teamTheme('),src.indexOf('function applyTeamTheme(')),ctx);
+vm.runInContext("let txGroup='All',txClub='all',txQuery='';"+src.slice(src.indexOf('function coachingMoveRow('),src.indexOf('function renderTransactions(')),ctx);
+const teams=vm.runInContext('Object.keys(BOOT_TEAM)',ctx);
+for(const abbr of teams){
+  const club={abbr,name:abbr};const row=ctx.coachingMoveRow({club,year:2027,action:'Hired',person:'Coach',role:'DC'});
+  const theme=ctx.teamTheme(club);
+  assert.ok(row.attrs.style.includes(`--coach-base:${theme.base}`));
+  assert.ok(row.attrs.style.includes(`--coach-color:${theme.accent}`));
+  assert.ok(row.attrs.style.includes(`--coach-readable:${theme.readable}`));
+  assert.equal(row.kids.length,5,'keep original coaching columns');
+}
+const v={rail:{club:{abbr:'GB'}},my_division:'NFC North',rows:[{group:'Trades',team:{abbr:'KC',name:'Kansas City'},mine:true,divisions:['AFC West','NFC North'],line:'Trade',person:'Trade with Green Bay',detail:'Sent: A',detail_secondary:'Received: B'}],coaching_moves:[{club:{abbr:'GB',name:'Green Bay'},division:'NFC North',year:2027,action:'Departed',person:'Legacy Coach',role:'Head Coach',detail:'Prior head coach'},{club:{abbr:'KC',name:'Kansas City'},division:'AFC West',year:2027,action:'Hired',person:'Other Coach',role:'DC',detail:''}]};
+vm.runInContext("txClub='div';txQuery='kansas city'",ctx);assert.equal(ctx.filteredTransactions(v).length,1,'search full team names, retain both trade divisions');
+vm.runInContext("txGroup='Coaching';txQuery='';txClub='mine'",ctx);assert.equal(ctx.filteredTransactions(v)[0].person,'Legacy Coach');
+vm.runInContext("txClub='div'",ctx);assert.equal(ctx.filteredTransactions(v).length,1);
+vm.runInContext("txClub='all';txQuery='other coach'",ctx);assert.equal(ctx.filteredTransactions(v)[0].club.abbr,'KC');
+assert.equal(ctx.transactionWhen({phase:'free_agency',year:2027}),'Free agency');
+console.log('Transactions: coaching ledger filters, legacy departures, search, both trade teams and all 32 palettes passed');

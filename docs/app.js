@@ -2593,30 +2593,53 @@ function bracketTree(v) {
   return el('div', { class: 'bk-scroll' }, tree);
 }
 
+function coachingMoveRow(c) {
+  const theme = teamTheme(c.club);
+  return el('div', { class: 'league-coach-move', style: `--coach-color:${theme.accent};--coach-readable:${theme.readable};--coach-base:${theme.base}` },
+    el('span', { class: 'year' }, String(c.year)),
+    el('div', { class: 'club' }, clubLink(c.club.abbr, c.club.name)),
+    el('span', { class: 'action' }, c.action),
+    el('div', { class: 'person' }, el('b', {}, c.person), el('small', {}, c.role)),
+    el('span', { class: 'detail' }, c.detail || ''));
+}
+function filteredTransactions(v) {
+  const q = txQuery.trim().toLowerCase();
+  const rows = txGroup === 'Coaching' ? (v.coaching_moves || []).map(c => ({...c, team:c.club, mine:c.club.abbr === v.rail.club.abbr,
+    group:'Coaching', tag:c.action, line:`${c.club.name} ${c.action}: ${c.person} · ${c.role}${c.detail ? ' · '+c.detail : ''}`, coaching:true})) : v.rows;
+  return rows.filter(r => (txGroup === 'All' || r.group === txGroup) &&
+    (txClub === 'all' || (txClub === 'mine' && r.mine) || (txClub === 'div' && (r.divisions || [r.division]).includes(v.my_division))) &&
+    (!q || [r.line, r.team?.name, r.team?.abbr, r.person, r.role, r.tag, r.detail, r.detail_secondary].filter(Boolean).join(' ').toLowerCase().includes(q)));
+}
+function transactionWhen(r) { return r.week ? `Wk ${r.week}` : r.phase ? r.phase.charAt(0).toUpperCase() + r.phase.slice(1).replaceAll('_', ' ') : ''; }
 function renderTransactions(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('transactions');
-  const copyTx = el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 10px;font-size:14px', 'data-tip': 'Copy the list as filtered, every entry, as text', onclick: () => {
-    const q = txQuery.trim().toLowerCase();
-    const rows = v.rows.filter(r => (txGroup === 'All' || r.group === txGroup) && (txClub === 'all' || (txClub === 'mine' && r.mine) || (txClub === 'div' && (r.divisions || [r.division]).includes(v.my_division))) && (!q || r.line.toLowerCase().includes(q)));
-    const lines = rows.map(r => { const when = r.week ? `Wk ${r.week}` : r.phase ? r.phase.charAt(0).toUpperCase() + r.phase.slice(1).replace('_', ' ') : String(r.year); return `${r.year} · ${when} · ${r.tag} · ${r.line}`; });
+  const copyTx = el('button', { class: 'btn quiet transaction-copy', 'data-tip': 'Copy the list as filtered, every entry, as text', onclick: () => {
+    const lines = filteredTransactions(v).map(r => [r.year, transactionWhen(r), r.tag, r.line].filter(Boolean).join(' · '));
     copyText(lines.join('\n'), copyTx); } }, 'Copy');
-  const s = leagueBoard(v, 'TRANSACTIONS', '');
-  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0;flex-wrap:wrap' });
+  const s = leagueBoard(v, 'TRANSACTIONS', ''); s.classList.add('transactions-board');
+  const tabs = el('div', { class: 'tabs transaction-tabs' });
   for (const g of ['All', ...v.groups]) tabs.append(el('button', { 'aria-pressed': String(txGroup === g), onclick: () => { txGroup = g; txShown = 60; renderTransactions(v); } }, g));
   const clubs = el('div', { class: 'chips' }); for (const [k, label] of [['all', 'All Teams'], ['mine', v.rail.club.name], ['div', v.my_division]]) clubs.append(el('button', { class: 'chip', 'aria-pressed': String(txClub === k), onclick: () => { txClub = k; txShown = 60; renderTransactions(v); } }, label));
-  const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Player or Team', value: txQuery }); search.oninput = () => { txQuery = search.value; txShown = 60; draw(); };
+  const search = el('input', { type: 'search', class: 'find', 'aria-label':'Find a player, coach or team', placeholder: 'Find a player, coach or team', value: txQuery }); search.oninput = () => { txQuery = search.value; txShown = 60; draw(); };
   s.append(tabs, el('div', { class: 'tools' }, clubs, search, copyTx));
   const list = el('div', {class:'league-transactions'}); s.append(list);
   const draw = () => {
-    list.innerHTML = ''; const q = txQuery.trim().toLowerCase();
-    const rows = v.rows.filter(r => (txGroup === 'All' || r.group === txGroup) && (txClub === 'all' || (txClub === 'mine' && r.mine) || (txClub === 'div' && (r.divisions || [r.division]).includes(v.my_division))) && (!q || r.line.toLowerCase().includes(q)));
+    list.innerHTML = ''; const rows = filteredTransactions(v);
+    list.classList.toggle('league-coach-moves', txGroup === 'Coaching');
+    if (txGroup !== 'Coaching' && rows.length) list.append(el('div',{class:'transaction-columns','aria-hidden':'true'},...['WHEN','TEAM','MOVE','PLAYER / COACH','DETAILS',''].map(label=>el('span',{},label))));
     for (const r of rows.slice(0, txShown)) {
-      const when = r.week ? `Wk ${r.week}` : r.phase ? r.phase.charAt(0).toUpperCase() + r.phase.slice(1).replace('_', ' ') : String(r.year);
-      const link = r.link === 'card' && r.pid ? el('a', { class: 'more', href: '#club/player/' + r.pid }, 'Card →') : r.link === 'trade' ? el('a', { class: 'more', href: '#personnel/trades' }, 'Trades →') : r.link === 'contract' && r.pid ? el('a', { class: 'more', href: '#club/player/' + r.pid }, 'Contract →') : r.link === 'carousel' ? el('a', { class: 'more', href: '#league/coaching' }, 'Carousel →') : el('span', {});
-      list.append(el('div', { class: 'trow' + (r.mine ? ' mine' : '') }, el('time', {}, `${r.year} · ${when}`), el('span', { class: 'tag ' + r.group.toLowerCase() }, r.tag), el('span', { class: 'txt' }, r.team ? el('span', { class: 'stripe bar-only', style: `--c:${COLOR[r.team.abbr] || '#555'}` }, '') : '', ' ', r.line), link));
+      if (r.coaching) { list.append(coachingMoveRow(r)); continue; }
+      const link = (r.link === 'card' || r.link === 'contract') && r.pid ? el('a', { class: 'transaction-open', href: '#club/player/' + r.pid, 'aria-label':`Open ${r.person || 'player'} card`, 'data-tip':'Open player card' }, '›') : r.link === 'trade' ? el('a', { class: 'transaction-open', href: '#personnel/trades', 'aria-label':'Open trades', 'data-tip':'Open trades' }, '›') : r.link === 'carousel' ? el('button', { class:'transaction-open', 'aria-label':'View coaching transactions', 'data-tip':'View coaching transactions', onclick:()=>{txGroup='Coaching';txShown=60;renderTransactions(v);} }, '›') : el('span', {});
+      const theme = teamTheme(r.team || {});
+      list.append(el('div', { class: 'transaction-row', style:`--transaction-base:${theme.base};--transaction-accent:${theme.accent};--transaction-readable:${theme.readable}` },
+        el('time', {}, String(r.year ?? ''), el('small',{},transactionWhen(r))),
+        el('div',{class:'transaction-team'},r.team ? clubLink(r.team.abbr,r.team.name) : 'League',el('small',{},r.team ? `${r.team.abbr}${r.team.abbr === v.rail.club.abbr?' · YOUR TEAM':''}` : '')),
+        el('span',{class:'transaction-action'},r.tag),
+        el('div',{class:'transaction-person'},el('b',{},r.person || r.line),el('small',{},r.role || '')),
+        el('div',{class:'transaction-detail'},r.detail || '',r.detail_secondary ? el('small',{},r.detail_secondary) : ''),link));
     }
     if (!rows.length) list.append(el('div', { class: 'empty' }, 'Nothing matches.'));
-    if (rows.length > txShown) list.append(el('div', { class: 'foot' }, el('button', { class: 'btn quiet', onclick: () => { txShown += 60; draw(); } }, 'Older'), el('span', { class: 'count' }, `${Math.min(txShown, rows.length)} of ${rows.length}`)));
+    if (rows.length) list.append(el('div', { class: 'foot' }, rows.length > txShown ? el('button', { class: 'btn quiet', onclick: () => { txShown += 60; draw(); } }, 'Older') : '', el('span', { class: 'count' }, `${Math.min(txShown, rows.length)} of ${rows.length}`),el('span',{class:'count',style:'margin-left:auto'},'Most recent first')));
   };
   draw(); leagueFinish(s,page);
 }
@@ -2687,7 +2710,7 @@ let coachTab = 'seats';
 function renderCoaching(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('coaching');
   const s = leagueBoard(v, 'COACHING', v.note || '');
-  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const [k, l] of [['seats', 'The Seats'], ['pool', 'The Pool'], ['carousel', 'This Offseason']]) tabs.append(el('button', { 'aria-pressed': String(coachTab === k), onclick: () => { coachTab = k; renderCoaching(v); } }, l)); s.append(tabs);
+  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const [k, l] of [['seats', 'The Seats'], ['pool', 'The Pool']]) tabs.append(el('button', { 'aria-pressed': String(coachTab === k), onclick: () => { coachTab = k; renderCoaching(v); } }, l)); s.append(tabs);
   if (coachTab === 'seats') {
     const layout=el('div',{class:'league-coach-layout'}), detail=el('aside',{class:'league-coach-detail'});
     const t=el('table',{class:'tbl'}); t.append(el('tr',{},...['Team','Head Coach','Tenure','Record','Prestige','Job Security'].map(x=>el('th',{},x))));
@@ -2704,16 +2727,6 @@ function renderCoaching(v) {
     for (const c of v.pool) t.append(el('tr', {}, el('td', {}, c.name), el('td', {}, c.background || ''), el('td', { class: 'n' }, c.prestige ?? '—'), el('td', { class: 'n' }, c.age ?? '—')));
     if (!v.pool.length) t.append(el('tr', {}, el('td', { colspan: '4' }, el('div', { class: 'empty' }, 'The pool fills as the season ends.'))));
     s.append(t);
-  } else {
-    const moves = el('div', { class: 'league-coach-moves' });
-    for (const c of v.carousel) moves.append(el('div', { class: 'league-coach-move', style: `--coach-color:${c.club.accent || '#71909f'};--coach-base:${c.club.color || '#22323d'}` },
-      el('span', { class: 'year' }, String(c.year)),
-      el('div', { class: 'club' }, clubLink(c.club.abbr, c.club.name)),
-      el('span', { class: 'action' }, c.action),
-      el('div', { class: 'person' }, el('b', {}, c.person), el('small', {}, c.role)),
-      el('span', { class: 'detail' }, c.detail || '')));
-    if (!v.carousel.length) moves.append(el('div', { class: 'empty' }, 'No coaching changes this offseason.'));
-    s.append(moves);
   }
   leagueFinish(s,page);
 }
