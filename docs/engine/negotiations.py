@@ -107,7 +107,8 @@ def open_talks(league, pid, kind='extension'):
     else:
         v = VAL.value_player(league, p, side='agent', rng=None)
         if not v: return dict(ok=False, why='no market read on him')
-        ask, years = v['apy'], (1 if kind == 'fa_inseason' else int(np.clip(v['years'], 1, 4)))
+        from contract_terms import MAX_OFFER_YEARS
+        ask, years = v['apy'], (1 if kind == 'fa_inseason' else int(np.clip(v['years'], 1, MAX_OFFER_YEARS)))
         # a Recruiter over his position: he wants to play for that coach, and the ask comes down a little
         import staff as ST
         _pull, ask_mult = ST.recruit_pull(league.teams[league.user_team], p.pos)
@@ -222,6 +223,8 @@ def _floor(league, p, t, offer):
     if getattr(p, 'morale', None) is not None:
         ne = MS.negotiation_effect(p.morale); floor *= 1.0 + ne['demand_premium']
     # promises are worth something to him
+    from contract_terms import term_premium
+    floor *= term_premium(offer['years'], t['years'])
     import negotiation_engine as NE
     for k in offer.get('promises', []):
         floor *= 1.0 - NE.PROMISES.get(k, {}).get('base', 0.0)

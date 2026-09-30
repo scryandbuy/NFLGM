@@ -98,8 +98,9 @@ def rail(session, league, abbr):
     w, l, d = t.record
     div = _division_place(league, abbr)
     nxt = session.next_label(); blocking = session.blocking()
+    focus = cap_focus(league, t)
     return dict(club=club(abbr), coach=t.gm.name if t.gm else '', year=league.year, week=league.week,
-                phase=league.phase, record=f"{w}–{l}" + (f"–{d}" if d else ''), place=div, cap=money(cap_focus(league, t)['space']), cap_year=cap_focus(league, t)['year'], cap_next=cap_focus(league, t)['next'], prestige=round(getattr(t.gm, 'prestige', 0)) if t.gm else None,
+                phase=league.phase, record=f"{w}–{l}" + (f"–{d}" if d else ''), place=div, cap=money(focus['space']), cap_year=focus['year'], cap_next=focus['next'], prestige=round(getattr(t.gm, 'prestige', 0)) if t.gm else None,
                 advance=nxt, blocking=blocking, inbox_unread=sum(1 for m in getattr(league, 'inbox', []) if m.get('status') == 'unread'),
                 clock=_clock(league, session))
 
@@ -563,13 +564,17 @@ def cap_focus(league, t):
     headline (they had shown the 2027 inputs beside the 2026 space). After the roll, the new year is the current
     year again. Returns year, limit, committed, space and whether it is next year's ledger."""
     from cap_engine import CAP
+    from offer_reservations import held
+    pending = held(league, t.abbr)
     pre_roll = league.phase == 'offseason' and getattr(league, 'season_closed_year', None) == int(league.year)
     if pre_roll:
         limit, committed, rollover, dead_next = next_year_cap(league, t)
-        return dict(year=int(league.year) + 1, limit=round(limit, 1), committed=round(committed, 1), space=round(limit - committed, 1), next=True)
+        return dict(year=int(league.year) + 1, limit=round(limit, 1), committed=round(committed, 1),
+                    pending_offers=round(pending, 1), space=round(limit - committed - pending, 1), next=True)
     limit = float(t.cap.limit)
     space = float(t.cap_space)
-    return dict(year=int(league.year), limit=round(limit, 1), committed=round(limit - space, 1), space=round(space, 1), next=False)
+    return dict(year=int(league.year), limit=round(limit, 1), committed=round(limit - space, 1),
+                pending_offers=round(pending, 1), space=round(space - pending, 1), next=False)
 
 
 def next_year_cap(league, t):

@@ -112,7 +112,8 @@ def utility(offer, player_row, prof, team_ctx, market_apy):
     u  = w['total'] * (apy / max(market_apy, 0.1))
     # older players want years, younger ones want to get back to market
     want_long = 1.0 if age >= 29 else (0.35 if age >= 26 else 0.0)
-    u += w['years'] * (1 - abs(yrs - (2 + 3*want_long)) / 4)
+    wanted = float(player_row.get('preferred_years', 2 + 3*want_long))
+    u += w['years'] * (1 - abs(yrs - wanted) / 4)
     u += w['winning'] * team_ctx.get('contender', 0.5)
     u += w['role']    * team_ctx.get('role_clarity', 0.5)
     u += w['home']    * team_ctx.get('home_fit', 0.0)
