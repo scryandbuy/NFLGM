@@ -68,7 +68,7 @@ def candidate_grade(player, role, specialist=None, gm=None):
     fallback = player.get('ovr', 50) if isinstance(player, dict) else getattr(player, 'ovr', 50)
     if callable(fallback): fallback = 50
     def value(key):
-        val = r.get(key + '_rating', fallback)
+        val = r.get('accel_rating', r.get('acceleration_rating', fallback)) if key == 'acceleration' else r.get(key + '_rating', fallback)
         return max(0., min(100., float(val if val is not None else 50)))
     grade = sum(value(k)*w for k,w in weights.items())
     if specialist == 'nose':
@@ -288,14 +288,16 @@ def role_candidates(depth, role, pins=None, excluded=()):
     if role in ('NT', '34LE', '34RE'):
         import player_roles as PR
         # The same body/ratings distinction drives recruiting and the chart.
-        # Keep the team's depth order within each physical role category.
+        # Rank specialist fit within each physical tier; pins still win below.
         def profile_rank(p):
             if position(p) != 'DT': return 3
             roles = PR.fa_positions(p, '3-4')
             if role == 'NT':
                 return 0 if roles[0] == 'NT' else 1 if 'NT' in roles else 2
             return int(roles[0] == 'NT')
-        unique.sort(key=profile_rank)
+        unique.sort(key=lambda p: (profile_rank(p), -candidate_grade(p, role)))
+    elif role in OFFBALL_ROLES or role == 'SLOT':
+        unique.sort(key=lambda p: -candidate_grade(p, role))
     order = {key: i for i, key in enumerate((pins or {}).get(role, ())) }
     return sorted(unique, key=lambda p: order.get(pid(p), 10**6))
 
@@ -311,8 +313,8 @@ def assign(depth, front, package, pins=None, excluded=(), big_nickel=False):
     priority = {'LE': 0, 'RE': 0, 'LOLB': 0, 'ROLB': 0, 'NT': 1,
                 'FS': 1, 'SS': 1, 'LILB': 2, 'RILB': 2, 'MIKE': 2,
                 'WILL': 2, 'SAM': 2, '34LE': 3, '34RE': 3}
-    # Reuse the established package-specific off-ball policy. An excellent
-    # covering SAM can earn the nickel/dime job without becoming a rush OLB.
+    # Generic specialist fit drives deployment; the established package policy
+    # breaks equal grades. Coverage-call-specific assignments remain separate.
     import targets as TG
     offball = [p for pos in ('MIKE', 'WILL', 'SAM') for p in depth.get(pos, ())]
     preferred = [pid(p) for p, _ in TG.package_linebackers(
@@ -324,7 +326,8 @@ def assign(depth, front, package, pins=None, excluded=(), big_nickel=False):
         if role in OFFBALL_ROLES and package_key(package) != 'base':
             pinned = {key: i for i, key in enumerate((pins or {}).get(role, ()))}
             candidates.sort(key=lambda p: (pid(p) not in pinned,
-                pinned.get(pid(p), preferred.index(pid(p)) if pid(p) in preferred else 1000)))
+                pinned.get(pid(p), 1000), -candidate_grade(p, role),
+                preferred.index(pid(p)) if pid(p) in preferred else 1000))
         row['player'] = candidates[0] if candidates else None
         if row['player'] is not None: used.add(pid(row['player']))
     # Only after every normal job has been filled do emergency substitutions
