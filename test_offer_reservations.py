@@ -51,6 +51,15 @@ class OfferReservationTests(unittest.TestCase):
         self.assertIn('outstanding offers', result['why'])
         self.assertEqual(second['offers'], [])
 
+    def test_match_checks_the_increased_rival_price_before_signing(self):
+        self.thread['state'] = 'match_requested'
+        self.thread['rival'] = dict(team='MIN', apy=60.0, years=4)
+        self.team.cap.cap = OR.held(self.league, 'GB') + 0.1
+        result = VP.act_match(self.league, 'GB', self.thread['id'])
+        self.assertFalse(result['ok'])
+        self.assertEqual(self.thread['state'], 'match_requested')
+        self.assertIsNone(self.player.team)
+
     def test_revising_same_offer_replaces_its_hold(self):
         first_hit = OR.held(self.league, 'GB')
         self.team.cap.cap = first_hit + 0.1
