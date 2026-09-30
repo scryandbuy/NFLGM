@@ -23,12 +23,13 @@ PERSONNEL_OFF = {
     '22': dict(rb=2, te=2, wr=1, rate=.025, run_bias=+0.48, protect=7),
     '00': dict(rb=0, te=0, wr=5, rate=.010, run_bias=-0.45, protect=5),
 }
-# defence answers personnel. Nickel is now the base defence in the NFL.
+# Defence answers personnel. The bodies in each package come from
+# defense_roles.shape(front, package), since odd and even fronts differ.
 PERSONNEL_DEF = {
-    'base':   dict(db=4, lb=3, dl=4, box_bonus=+1.0, cover_penalty=0.10),
-    'nickel': dict(db=5, lb=2, dl=4, box_bonus= 0.0, cover_penalty=0.00),
-    'dime':   dict(db=6, lb=1, dl=4, box_bonus=-1.0, cover_penalty=-0.06),
-    'heavy':  dict(db=3, lb=3, dl=5, box_bonus=+2.0, cover_penalty=0.22),
+    'base':   dict(box_bonus=+1.0, cover_penalty=0.10),
+    'nickel': dict(box_bonus= 0.0, cover_penalty=0.00),
+    'dime':   dict(box_bonus=-1.0, cover_penalty=-0.06),
+    'heavy':  dict(box_bonus=+2.0, cover_penalty=0.22),
 }
 
 def defensive_personnel(off_pers, down, ydstogo, rng, gm_aggr=0.5, sub_lean=0.0):
@@ -524,7 +525,10 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
     if pers == 'heavy':
         cands = [f for f in (fp or ()) if f in FRONTS and FRONTS[f]['dl'] == 5] or ['bear']
     else:
-        cands = [f for f in (fp or ()) if f in FRONTS and FRONTS[f]['dl'] in (3, 4)]
+        # A 3-4 coach still uses four aligned rush-front players in standard
+        # nickel and dime. The front's base down-lineman count cannot decide
+        # whether the installed call is legal for those subpackages.
+        cands = [f for f in (fp or ()) if f in FRONTS and f != 'bear']
         if not cands:
             cands = (['3-4 one', '3-4 two', 'tite', 'mint'] if DR.coach_front(gm) == '3-4'
                      else ['4-3 over', '4-3 under', 'wide 9'])
@@ -539,7 +543,14 @@ def call_defense(off_call, down, ydstogo, rng, gm=None, yards_to_endzone=50,
                              + (1.0 - run_threat) * FRONTS[f]['rush'] for f in cands], float)
     front_weights = np.exp(12.0 * (front_scores - front_scores.max()))
     front = str(rng.choice(cands, p=front_weights / front_weights.sum()))
-    family = DR.front_family(front)
+    if pers == 'heavy':
+        # Bear is the five-man goal-line alignment for either coaching family.
+        # A caller may supply an installed front list without a GM object.
+        installed = next((DR.front_family(f) for f in (fp or ())
+                          if f in FRONTS and f != 'bear'), None)
+        family = DR.coach_front(gm) if gm is not None else installed or DR.front_family(front)
+    else:
+        family = DR.front_family(front)
 
     # real: 0 blitzers 86.7%, 1 on 9.7%, 2 on 3.1%, 3 on 0.47%
     r = rng.random()

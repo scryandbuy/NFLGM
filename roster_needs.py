@@ -61,16 +61,17 @@ def _grade(player, team):
 def roster_floors(team):
     """Minimum depth for the coach's personnel and front within 53 places."""
     offense = OR.PACKAGES[OR.base_package(getattr(team, 'gm', None))]
-    front = DR.coach_front(getattr(team, 'gm', None))
     floors = {'QB': 2, 'HB': 2, 'FB': 0,
               'WR': max(4, offense['WR'] + 2),
               'TE': max(2, offense['TE'] + 1),
               'LT': 1, 'LG': 1, 'C': 1, 'RG': 1, 'RT': 1,
-              'LEDG': 1, 'REDG': 1, 'DT': 3 if front == '3-4' else 4,
+              'LEDG': 1, 'REDG': 1, 'DT': 4,
               'MIKE': 1, 'WILL': 1, 'SAM': 0,
               'CB': 4, 'FS': 1, 'SS': 1, 'K': 1, 'P': 1, 'LS': 1}
-    groups = {'OL': 9, 'DL': 9 if front == '3-4' else 10,
-              'LB': 5 if front == '3-4' else 4, 'DB': 10, 'ST': 3}
+    # Odd-front edges live in saved LEDG/REDG slots. Standard nickel and dime
+    # keep both on the rush line, while two off-ball linebackers start in base.
+    # Reserve an extra front player in place of a fifth off-ball linebacker.
+    groups = {'OL': 9, 'DL': 10, 'LB': 4, 'DB': 10, 'ST': 3}
     if offense['FB'] and hasattr(team, 'depth'):
         # A two-back coach may use a blocking TE as the second back. Keep that
         # TE even when his native TE grade puts him behind two receiving TEs.

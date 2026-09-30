@@ -89,9 +89,15 @@ class IdentityFrontTests(unittest.TestCase):
                 chart = VC.depth(self.s, self.s.L, 'GB', package)
                 cols = {c['pos']: c for c in chart['sides']['defense']}
                 if front == '3-4':
-                    left, right = ('LE', 'RE') if package == 'Goal Line' else ('34LE', '34RE')
-                    self.assertEqual(cols[left]['title'], 'LE')
-                    self.assertEqual(cols[right]['title'], 'RE')
+                    if package in ('Base', 'Goal Line'):
+                        self.assertEqual(cols['34LE']['title'], 'LE')
+                        self.assertEqual(cols['34RE']['title'], 'RE')
+                    else:
+                        # The two edges align on the rush line in standard
+                        # nickel and dime; the interior is two defensive tackles.
+                        self.assertEqual(cols['LOLB']['title'], 'LOLB')
+                        self.assertEqual(cols['ROLB']['title'], 'ROLB')
+                        self.assertEqual(cols['DT']['on_field'], 2)
                 else:
                     self.assertEqual(cols['LEDG']['title'], 'LEDG')
                     self.assertEqual(cols['REDG']['title'], 'REDG')

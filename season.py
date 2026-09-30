@@ -228,7 +228,8 @@ class SeasonRunner:
         dressed = {p.pid: p for p in t.active()}
         dressed.update((p.pid, p) for p in getattr(t, '_elevated', [])
                        if p in (getattr(t, 'practice_squad', None) or []) and not p.retired)
-        rows = [dict(MO.effective_ratings_from(PC.effective_ratings(p), p), pid=p.pid, pos=p.pos)
+        rows = [dict(MO.effective_ratings_from(PC.effective_ratings(p), p),
+                     pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None))
                 for p in dressed.values()
                 if (desk.available(p, self.week) if desk
                     else p.out_until is None)]

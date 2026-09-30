@@ -41,7 +41,7 @@ class RosterNeedsTests(unittest.TestCase):
         four, four_groups = RN.roster_floors(Team('4-3', '11'))
         three, three_groups = RN.roster_floors(Team('3-4', '21'))
         self.assertEqual((four['DT'], four_groups['DL'], four_groups['LB']), (4, 10, 4))
-        self.assertEqual((three['DT'], three_groups['DL'], three_groups['LB']), (3, 9, 5))
+        self.assertEqual((three['DT'], three_groups['DL'], three_groups['LB']), (4, 10, 4))
         self.assertEqual((four['FB'], three['FB']), (0, 0))
 
     def test_one_player_cannot_cover_two_starting_jobs(self):
@@ -64,8 +64,8 @@ class RosterNeedsTests(unittest.TestCase):
         kept, counts = RC.allocate(pool, {}, team.gm, minimums=floors,
                                    group_minimums=groups)
         self.assertEqual(len(kept), 53)
-        self.assertGreaterEqual(counts['DT'], 3)
-        self.assertGreaterEqual(sum(counts.get(p, 0) for p in RN.GROUPS['DL']), 9)
+        self.assertGreaterEqual(counts['DT'], 4)
+        self.assertGreaterEqual(sum(counts.get(p, 0) for p in RN.GROUPS['DL']), 10)
         self.assertEqual(floors['FB'], 0)
 
     def test_trade_search_sees_an_empty_position(self):
