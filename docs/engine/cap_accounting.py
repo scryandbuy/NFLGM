@@ -128,11 +128,12 @@ def trade_projection(league, abbr, outgoing, incoming):
     return trial
 
 
-def require_trade_room(league, a, b, a_sends, b_sends):
+def require_trade_room(league, a, b, a_sends, b_sends, roster_releases=None):
     from offer_reservations import held
+    roster_releases = roster_releases or {}
     for abbr,outgoing,incoming in [(a,a_sends,b_sends),(b,b_sends,a_sends)]:
         team=league.teams[abbr]
-        trial=trade_projection(league,abbr,outgoing,incoming)
+        trial=trade_projection(league,abbr,list(outgoing)+list(roster_releases.get(abbr,())),incoming)
         after=trial.charges(team.phase)
         pending = held(league, abbr)
         pending_now = 0.0 if pre_roll(league) else pending

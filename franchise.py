@@ -102,6 +102,26 @@ def clear_undrafted(league, rng, keep=0.25):
     return gone
 
 
+def settle_final_rosters(league, rng, max_passes=8):
+    """Clear cutdown claims and repair their roster effects before Week 1."""
+    cuts, filled = CD.finalize(league, rng)
+    claims = 0
+    for _ in range(max_passes):
+        pending = WV.pending(league)
+        if pending:
+            WV.notify_user(league, pending, 0, digest=True)
+            claims += len(WV.process(league, rng, 0))
+        more_cuts, more_filled = CD.finalize(league, rng)
+        cuts.extend(more_cuts)
+        filled += more_filled
+        if not WV.pending(league):
+            problems = CD.violations(league)
+            if problems:
+                raise RuntimeError(f'Unresolved CPU rosters before Week 1: {problems}')
+            return cuts, filled, claims
+    raise RuntimeError('Cutdown waivers did not settle before Week 1')
+
+
 class Franchise:
     """A league, plus the calendar that moves it."""
 
@@ -227,10 +247,8 @@ class Franchise:
             for p in list(PSQ.squad(t)):
                 PSQ.release_from_squad(L, t.abbr, p.pid)
         PSQ.reset_season(L)
-        cut, filled = CD.finalize(L, rng)
-        # cut-down men go through the wire before the squads fill
-        WV.notify_user(L, WV.pending(L), 0, digest=True)
-        log['waiver_claims'] += len(WV.process(L, rng, 0))
+        cut, filled, claims = settle_final_rosters(L, rng)
+        log['waiver_claims'] += claims
         log['practice_squad'] = PSQ.fill_squads(L, rng)
         log['udfa_cleared'] = clear_undrafted(L, rng)
         log['cut_to_53'] = len(cut)

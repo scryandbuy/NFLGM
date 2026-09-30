@@ -73,8 +73,10 @@ def restructure_room(player, cap):
     if not c or c.years <= 1:
         return 0.0
     floor = max(MS.minimum_salary(player.accrued, cap),c.earned_base)
-    room, _conv = GM.simple_restructure_room(c.base[0], c.years, floor)
-    return room
+    import copy
+    trial = copy.deepcopy(c)
+    trial.restructure(0, min_base=floor)
+    return max(0.0, c.cap_hit(0) - trial.cap_hit(0))
 
 
 # A club does not release a star to make room; it reworks his deal. The gate
@@ -112,6 +114,12 @@ def replacement_level(team, pos):
     return grp[1].ovr
 
 
+def roster_reserve(team, cap, roster_target=53):
+    """Reprice the vacant roster spots after every departure, using unpaid salary."""
+    remaining = max(0, 18 - team.cap.paid_week) / 18.0
+    return max(0, roster_target - len(team.active())) * MS.minimum_salary(2, cap) * remaining * 1.05
+
+
 def enforce(league, rng, verbose=False, target=0.5, roster_target=None):
     """
     roster_target: when given, a club must end with enough room to sign every
@@ -127,8 +135,8 @@ def enforce(league, rng, verbose=False, target=0.5, roster_target=None):
     decisions still compound - a team signs three men it could each afford and
     cannot afford all three. So compliance is enforced afterwards by the same
     three levers a real front office has, in the order a real one uses them:
-    rework the deals of men worth keeping, release the ones you can replace,
-    and take the June 1 route on what is left.
+    rework the deals of men worth keeping, then release replaceable players
+    using the calendar's current departure rules.
 
     It does not give up quietly any more. A club that cannot get under by any
     of those means is REPORTED, because that is a modelling failure and it
@@ -136,7 +144,6 @@ def enforce(league, rng, verbose=False, target=0.5, roster_target=None):
     """
     import min_salary as MS
     cap = CAP.get(league.year, 301.2)
-    floor = MS.minimum_salary(2, cap)
     stuck = []
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None):
@@ -145,14 +152,14 @@ def enforce(league, rng, verbose=False, target=0.5, roster_target=None):
         need = target
         if roster_target:
             # the bodies he still owes have to be payable
-            need = max(target,
-                       (roster_target - len(team.active())) * floor * 1.05)
+            need = max(target, roster_reserve(team, cap, roster_target))
         if team.cap_space >= need:
             continue
         before = team.cap_space
-        _fix_one(league, team, rng, need)
+        _fix_one(league, team, rng, target, roster_target=roster_target)
         team.sync_cap()
-        if team.cap_space < min(0.0, need):
+        need = max(target, roster_reserve(team, cap, roster_target)) if roster_target else target
+        if team.cap_space + .0005 < need:
             stuck.append((abbr, before, team.cap_space, team.cap.dead,
                           len(team.active())))
     if stuck and verbose:
@@ -181,17 +188,18 @@ def _release_cap_casualty(league, team, player, rng, june1=None):
     return True
 
 
-def _fix_one(league, team, rng, target):
+def _fix_one(league, team, rng, target, roster_target=None):
     """
     Get one club under. Each round the GM weighs the two real moves:
 
     RESTRUCTURE a man worth keeping. Frees this year's room by pushing money
     into later years. The GM's restructure_depth is how far he will kick the
-    can; a declining player is never restructured, because the money lands
-    in years he will not earn.
+    can. Final roster recovery can exceed that preference on existing deals
+    when the alternative is an unfunded team; no extra contract years are added.
 
-    RELEASE a man whose contract wants to go, under the sensible-release rule
-    (never a cut that costs more than it saves). The penalty for cutting a
+    RELEASE a man whose contract wants to go. Ordinary cleanup prefers the
+    sensible-release rule; final recovery also considers positive net-saving
+    cuts with large sunk bonuses. The penalty for cutting a
     good player shrinks as the shortfall grows: a club $60m over will move a
     star it would never touch at $5m over, and sometimes one big cut of a
     great player is the better answer than a sixth restructure.
@@ -202,26 +210,54 @@ def _fix_one(league, team, rng, target):
     if team.abbr == getattr(league, 'user_team', None):
         return
     import min_salary as MS
+    import roster_needs as RN
+    import practice_squad as PS
     cap = CAP.get(league.year, 301.2)
     depth = getattr(team.gm, 'restructure_depth', 0.5) if team.gm else 0.5
     restructures_left = int(round(2 + 8 * depth))       # 2 to 10 deals an offseason
     # A club short of bodies that cannot pay a minimum salary keeps
     # restructuring past its own appetite: the alternative is not fielding
     # a team, and no front office chooses that over kicking the can.
-    short_of_bodies = len(team.active()) < 53
     for _round in range(40):
         team.sync_cap()
-        need = target - team.cap_space
-        if need <= 0:
+        short_of_bodies = len(team.active()) < (roster_target or 53)
+        reserve = roster_reserve(team, cap, roster_target) if roster_target else 0.0
+        need = max(target, reserve) - team.cap_space
+        if need <= .0005:
             return
+        # Cutting a minimum player does not fund a replacement. Final roster
+        # recovery must improve the funded roster, not only today's balance.
+        replacement_cost = (MS.minimum_salary(2, cap) * max(0, 18-team.cap.paid_week)/18 * 1.05
+                            if roster_target and len(team.active()) <= roster_target else 0.0)
+        baseline = RN.assess(team) if roster_target else None
+        market = PS.available_free_agents(league) if roster_target else []
+        costs = {}
+
+        def release_cost(p):
+            if not roster_target:
+                rep = replacement_level(team, p.pos)
+                return max(0.0, p.ovr-rep) * 3.0 if rep > 0 else None
+            if p.pid in costs: return costs[p.pid]
+            if PS.locked(p, league.week): return None
+            after = RN.assess(team, [q for q in team.active() if q is not p])
+            from collections import Counter
+            new_holes = Counter(after['uncovered']) - Counter(baseline['uncovered'])
+            # Never sacrifice the only available specialist/role to fund bodies.
+            for role, sources in RN.role_slots(team):
+                if new_holes[role] and not any(q.pos in sources for q in market):
+                    costs[p.pid] = None
+                    return None
+            cost = max(0.0, baseline['score']-after['score']) + RN.retention_value(team, p)
+            costs[p.pid] = cost
+            return cost
         # --- the restructure on the table
         rs = None
-        if restructures_left > 0 or short_of_bodies:
+        if restructures_left > 0 or short_of_bodies or roster_target:
             for p in team.active():
-                if not p.contract or _declining(p):
+                if not p.contract or (_declining(p) and not roster_target):
                     continue
                 rep = replacement_level(team, p.pos)
-                if p.ovr - rep <= CUTTABLE_SURPLUS and need < 30:
+                if p.ovr - rep <= CUTTABLE_SURPLUS and need < 30 and not roster_target:
                     continue                 # replaceable: a cut, not a rework
                 freed = restructure_room(p, cap)
                 if freed > 0.4 and (rs is None or freed > rs[0]):
@@ -233,19 +269,24 @@ def _fix_one(league, team, rng, target):
             if not p.contract:
                 continue
             ok, saved, dead, _n = sensible_release(p, june1=league.post_june1())
-            if not ok:
+            # At the final gate, sunk bonus alone cannot veto an otherwise
+            # useful cut. Its actual charge and lost role still reduce value.
+            if (not ok and not roster_target) or saved <= replacement_cost + .0005:
                 continue
-            rep = replacement_level(team, p.pos)
-            if rep <= 0:
-                continue
-            value = saved - max(0.0, p.ovr - rep) * 3.0 * squeeze - dead * 0.35
+            cost = release_cost(p)
+            if cost is None: continue
+            value = saved - replacement_cost - cost * squeeze - dead * 0.35
             if rel is None or value > rel[0]:
                 rel = (value, p, saved)
         # --- choose. A restructure that covers the need wins; otherwise the
         # move that closes more of the gap per point of quality given up.
         if rs is not None and (rel is None or rs[0] >= need or rs[0] >= rel[0]):
             freed, p = rs
-            p.contract.restructure(0, min_base=MS.minimum_salary(p.accrued, cap))
+            floor = max(MS.minimum_salary(p.accrued, cap), p.contract.earned_base)
+            amount = max(0.0, p.contract.base[0]-floor) * min(1.0, (need+.001)/freed)
+            before_hit = p.cap_hit(0)
+            p.contract.restructure(0, amount=amount, min_base=floor)
+            freed = before_hit - p.cap_hit(0)
             restructures_left -= 1
             league.log('restructure', pid=p.pid, team=team.abbr, freed=round(freed, 2),
                        enforcement=True)
@@ -254,10 +295,21 @@ def _fix_one(league, team, rng, target):
             _release_cap_casualty(league, team, rel[1], rng)
             continue
         # --- June 1 on what is left
-        j = [p for p in team.active() if p.contract and sensible_release(p, june1=True)[0]]
+        june1 = league.post_june1()
+        j = [p for p in team.active() if p.contract and sensible_release(p, june1=june1)[0]
+             and savings_if_cut(p, june1)[0] > replacement_cost + .0005
+             and (not roster_target or release_cost(p) is not None)]
+        # A legacy already-collapsed roster may have only bonus-heavy veterans
+        # left. A positive net-saving release is still preferable to an illegal
+        # minimum roster; use it only after usable conversions are exhausted.
+        if not j and roster_target:
+            j = [p for p in team.active() if p.contract
+                 and savings_if_cut(p, june1)[0] > replacement_cost + .0005
+                 and release_cost(p) is not None]
         if j:
-            j.sort(key=lambda p: -savings_if_cut(p, june1=True)[0])
-            _release_cap_casualty(league, team, j[0], rng, june1=True)
+            j.sort(key=lambda p: -(savings_if_cut(p, june1)[0]
+                                  - (release_cost(p) * squeeze if roster_target else 0)))
+            _release_cap_casualty(league, team, j[0], rng, june1=june1)
             continue
         return
 

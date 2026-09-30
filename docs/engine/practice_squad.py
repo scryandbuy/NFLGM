@@ -114,7 +114,7 @@ def release_from_squad(league, abbr, pid):
 def call_up(league, abbr, pid, years=1, emergency=False):
     """To the 53 at the minimum for his accrued seasons."""
     team = league.teams[abbr]; p = league.player(pid)
-    if p not in squad(team) or p.retired or p.team != abbr: return False
+    if p not in squad(team) or p.retired or p.team != abbr or p.out_until is not None: return False
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
     full = len(team.active()) >= 53 and league.phase in ('regular', 'playoffs')
@@ -123,14 +123,66 @@ def call_up(league, abbr, pid, years=1, emergency=False):
     c=Contract(years=years,base=[mn]*years,signed=league.year)
     c.base[0]*=max(0,18-team.cap.paid_week)/18; c.pay_start=team.cap.paid_week
     outgoing=room_candidate(league,team,p) if full else None
-    if not emergency:
-        from cap_accounting import require_room
-        try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None)
-        except ValueError: return False
+    # Emergency describes the football need, not an exemption from the cap.
+    from cap_accounting import require_room
+    try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None)
+    except ValueError: return False
     squad(team).remove(p); p.xp_spent.pop('_ps', None); p.team = None
     _make_room(league, abbr, p)
     league.sign(pid, abbr, c, log=False)
     league.log('ps_callup', pid=pid, team=abbr)          # the one line for the move
+    return True
+
+
+def minimum_contract(league, team, player):
+    """An unsigned replacement is paid only for the remaining regular season."""
+    salary = MS.minimum_salary(player.accrued or 0, CAP.get(league.year, 301.2))
+    paid = team.cap.paid_week
+    return Contract(years=1, base=[salary * max(0, 18-paid)/18],
+                    signed=league.year, pay_start=paid)
+
+
+def available_free_agents(league):
+    """The FA list also contains waived players whose claim period is open."""
+    import waivers
+    pending = {e['pid'] for e in waivers.pending(league)}
+    return [p for pid in league.free_agents if pid not in pending
+            for p in [league.player(pid)]
+            if p and p.team is None and not p.retired and p.out_until is None]
+
+
+def sign_minimum(league, abbr, player, log=True):
+    """Validate ownership, roster space and full departure cost before a move."""
+    from cap_accounting import require_room
+    team = league.teams[abbr]
+    if player not in available_free_agents(league): return False
+    full = len(team.active()) >= 53 and league.phase in ('regular', 'playoffs')
+    if full and abbr == getattr(league, 'user_team', None): return False
+    outgoing = room_candidate(league, team, player) if full else None
+    if full and outgoing is None: return False
+    contract = minimum_contract(league, team, player)
+    try:
+        require_room(league, team, player.pid, contract,
+                     release_pid=outgoing.pid if outgoing else None)
+    except ValueError:
+        return False
+    if outgoing: league.release(outgoing.pid)
+    league.sign(player.pid, abbr, contract, log=log)
+    return True
+
+
+def minimum_fits(league, team, player):
+    """Filter unaffordable first choices so a cheaper healthy option is tried."""
+    from cap_accounting import require_room
+    full = len(team.active()) >= 53 and league.phase in ('regular', 'playoffs')
+    if full and team.abbr == getattr(league, 'user_team', None): return False
+    outgoing = room_candidate(league, team, player) if full else None
+    if full and outgoing is None: return False
+    try:
+        require_room(league, team, player.pid, minimum_contract(league, team, player),
+                     release_pid=outgoing.pid if outgoing else None)
+    except ValueError:
+        return False
     return True
 
 
@@ -359,8 +411,8 @@ def keep_groups_whole(league, rng, week):
                 try:
                     import inbox as IB
                     out_men = [p for p in team.active() if GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is not None]
-                    cands = sorted([p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp], key=lambda p: -p.ovr)
-                    fa = sorted([q for q in (league.player(pid) for pid in league.free_agents) if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired], key=lambda q: -q.ovr)[:2]
+                    cands = sorted([p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired and minimum_fits(league, team, p)], key=lambda p: -p.ovr)
+                    fa = sorted([q for q in available_free_agents(league) if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and minimum_fits(league, team, q)], key=lambda q: -q.ovr)[:2]
                     who = ', '.join(f"{p.name} ({p.pos})" for p in out_men[:3]) or 'injuries'
                     cover = (f"On the practice squad: {', '.join(f'{p.name} ({p.pos}, {round(p.ovr)})' for p in cands[:2])}." if cands else '') + (f" On the street: {', '.join(f'{q.name} ({q.pos}, {round(q.ovr)})' for q in fa)}." if fa else '')
                     key_ = f"short-{grp}-{league.year}-{week}"
@@ -371,27 +423,23 @@ def keep_groups_whole(league, rng, week):
             if short > 0 and abbr == user and hard:
                 try:
                     import inbox as IB
-                    IB.post(league, 'injury', f"Emergency at {grp}: the trainers filled it", f"The chart at {grp} fell below what the game can dress ({healthy.get(grp, 0)} healthy). The best player available was called up so a team could take the field; the practice-squad and free-agent pages are yours for anything more.", sender='trainers', payload=dict(link='club:ps'))
+                    IB.post(league, 'injury', f"Emergency at {grp}: roster help needed", f"The chart at {grp} fell below what the game can dress ({healthy.get(grp, 0)} healthy). An affordable replacement will be sought; check the practice-squad and free-agent pages to resolve any remaining shortage.", sender='trainers', payload=dict(link='club:ps'))
                 except Exception: pass
             if abbr != user and getattr(team, '_moved_week', None) == wk_ and not hard:
                 continue                                  # one roster addition a week per club, short of an emergency
             while short > 0:
-                cands = [p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp]
+                cands = [p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired and minimum_fits(league, team, p)]
                 if cands:
                     best = max(cands, key=lambda p: p.ovr)
                     if not call_up(league, abbr, best.pid, emergency=True): break
                     moves.append((abbr, 'callup', best.pid)); team._moved_week = wk_
                 else:
-                    fa = [league.player(pid) for pid in league.free_agents]
-                    fa = [p for p in fa if p and GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired and not shunned(p, abbr, league)]
+                    fa = available_free_agents(league)
+                    fa = [p for p in fa if p and GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired and not shunned(p, abbr, league) and minimum_fits(league, team, p)]
                     if not fa: break
                     best = max(fa, key=lambda p: p.ovr)
-                    if len(team.active()) >= 53 and room_candidate(league, team, best) is None: break
-                    _make_room(league, abbr, best); team._moved_week = wk_
-                    mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
-                    if best.pid in league.free_agents: league.free_agents.remove(best.pid)
-                    best.contract = None
-                    league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)   # logged once, below, with the reason
+                    if not sign_minimum(league, abbr, best, log=False): break
+                    team._moved_week = wk_
                     league.log('emergency_sign', pid=best.pid, team=abbr, group=grp)
                     moves.append((abbr, 'emergency', best.pid))
                 short -= 1
@@ -412,20 +460,16 @@ def keep_groups_whole(league, rng, week):
             if added >= 2: break
             if current['needs'].get(pos, 0.0) < 0.75: break
             grp = GROUP_OF.get(pos, pos)
-            cands = sorted([q for q in squad(team) if q.pos == pos], key=lambda q: -q.ovr)
+            cands = sorted([q for q in squad(team) if q.pos == pos and q.out_until is None and not q.retired and minimum_fits(league, team, q)], key=lambda q: -q.ovr)
             if cands and call_up(league, abbr, cands[0].pid, emergency=True):
                 moves.append((abbr, 'callup', cands[0].pid)); added += 1
                 current = RN.assess(team); continue
-            fa = [league.player(pid) for pid in league.free_agents]
-            fa = [q for q in fa if q and q.pos == pos and q.out_until is None and not q.retired and not shunned(q, abbr, league)]
+            fa = available_free_agents(league)
+            fa = [q for q in fa if q and q.pos == pos and q.out_until is None and not q.retired and not shunned(q, abbr, league) and minimum_fits(league, team, q)]
             if not fa: continue
             best = max(fa, key=lambda q: q.ovr)
-            if len(team.active()) >= 53 and room_candidate(league, team, best) is None: continue
-            _make_room(league, abbr, best)
-            mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
-            if best.pid in league.free_agents: league.free_agents.remove(best.pid)
-            best.contract = None
-            league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)   # logged once, below, with the reason
+            if not sign_minimum(league, abbr, best, log=False): continue
+            mn = best.apy
             league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
             moves.append((abbr, 'sign', best.pid)); added += 1
             current = RN.assess(team)
@@ -439,13 +483,13 @@ def keep_groups_whole(league, rng, week):
             best = None
             called_up = False
             for grp in order:
-                cands = sorted([q for q in squad(team) if GROUP_OF.get(q.pos, q.pos) == grp], key=lambda q: -q.ovr)
+                cands = sorted([q for q in squad(team) if GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and minimum_fits(league, team, q)], key=lambda q: -q.ovr)
                 if cands and call_up(league, abbr, cands[0].pid, emergency=True):
                     moves.append((abbr, 'callup', cands[0].pid)); added += 1
                     called_up = True
                     break
-                fa = [league.player(pid) for pid in league.free_agents]
-                fa = [q for q in fa if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and not shunned(q, abbr, league)]
+                fa = available_free_agents(league)
+                fa = [q for q in fa if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and not shunned(q, abbr, league) and minimum_fits(league, team, q)]
                 if fa:
                     best = max(fa, key=lambda q: q.ovr + 12.0 * needs.get(q.pos, 0.0))
                     break
@@ -453,10 +497,8 @@ def keep_groups_whole(league, rng, week):
                 continue
             if best is None:
                 break
-            mn = MS.minimum_salary(best.accrued or 0, CAP.get(league.year, 301.2))
-            if best.pid in league.free_agents: league.free_agents.remove(best.pid)
-            best.contract = None
-            league.sign(best.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)   # logged once, below, with the reason
+            if not sign_minimum(league, abbr, best, log=False): break
+            mn = best.apy
             league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
             moves.append((abbr, 'sign', best.pid)); added += 1
     return moves

@@ -73,24 +73,25 @@ OFFER_SHEETS_A_YEAR = 3            # the real league sees a few; every tendered 
 
 
 class Offer:
-    __slots__ = ('team', 'pid', 'apy', 'years', 'promises', 'phase', 'front_load')
+    __slots__ = ('team', 'pid', 'apy', 'years', 'promises', 'phase', 'front_load', 'planning_gain')
 
-    def __init__(self, team, pid, apy, years=3, promises=(), phase=1, front_load=None):
+    def __init__(self, team, pid, apy, years=3, promises=(), phase=1, front_load=None, planning_gain=None):
         self.team, self.pid = team, pid
         self.apy, self.years = float(apy), int(years)
         self.promises = list(promises)
         self.phase = phase
         self.front_load = front_load          # 0 back-loaded .. 1 front-loaded; None = the club's habit
+        self.planning_gain = planning_gain    # roster value when this CPU bid was priced
 
     def as_dict(self):
         return dict(apy=self.apy, years=self.years, promises=self.promises, front_load=self.front_load)
 
     def to_save(self):
-        return dict(team=self.team, pid=self.pid, apy=self.apy, years=self.years, promises=list(self.promises), phase=self.phase, front_load=self.front_load)
+        return dict(team=self.team, pid=self.pid, apy=self.apy, years=self.years, promises=list(self.promises), phase=self.phase, front_load=self.front_load, planning_gain=self.planning_gain)
 
     @classmethod
     def from_save(cls, d):
-        return cls(d['team'], d['pid'], d['apy'], d.get('years', 3), d.get('promises', ()), d.get('phase', 1), d.get('front_load'))
+        return cls(d['team'], d['pid'], d['apy'], d.get('years', 3), d.get('promises', ()), d.get('phase', 1), d.get('front_load'), d.get('planning_gain'))
 
     def total(self):
         return self.apy * self.years
@@ -268,13 +269,71 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
             # the club shapes the deal to its own books: tight now and open
             # later means back-load it, and the reverse means pay it now
             out.setdefault(p.pid, []).append(
-                Offer(abbr, p.pid, bid, years, phase=phase, front_load=CS.choose_shape(team, years)))
+                Offer(abbr, p.pid, bid, years, phase=phase, front_load=CS.choose_shape(team, years),
+                      planning_gain=gains[p.pid]))
             if spend >= room * 0.80:
                 break
     return out
 
 
 # ============================================================ RESOLUTION
+def reconsider_bid(league, player, offer, user_team=None):
+    """Reprice an unsigned CPU offer after another acquisition changes its job.
+
+    The snapshot travels with the offer through save/load. No new valuation
+    noise is drawn, no signed contract is altered, and complementary starters
+    at one position retain the value of their distinct package assignments.
+    """
+    if offer.team == user_team:
+        return offer
+    import roster_needs as RN
+    team = league.teams[offer.team]
+    gain = RN.move_gain(team, player)
+    if gain <= 1.0:
+        return None
+    original = offer.planning_gain
+    scale = min(1.0, gain / original) if original is not None and original > 0 else 1.0
+    price = round(offer.apy * scale, 2)
+    if price < .9:
+        return None
+    revised = Offer(offer.team, offer.pid, price, offer.years, offer.promises,
+                    offer.phase, offer.front_load, gain)
+    cap = CAP.get(league.year, 301.2)
+    # Evaluate the shaped contract's real first-year hit, while leaving the
+    # floor cost of the remaining roster and future retention budget funded.
+    hit = signing_terms(league, player, team, price, offer.years, cap,
+                        offer.front_load)['cap_hits'][0]
+    if hit > power(league, team, cap, offer.years) + .0005:
+        return None
+    return revised
+
+
+def refresh_bids(league, player, offers, user_team=None):
+    rows = [reconsider_bid(league, player, o, user_team) for o in offers.get(player.pid, ())]
+    offers[player.pid] = [o for o in rows if o is not None]
+    return offers[player.pid]
+
+
+def refresh_negotiation_rivals(league, bids, user_team):
+    """Held user talks must not quote a CPU bid invalidated by this round."""
+    import negotiations as NG
+    for thread in NG._threads(league):
+        # A delivered counter/match request is already a distinct negotiation
+        # stage. Only refresh offers whose answer is about to be generated.
+        if thread.get('kind') != 'fa_offseason' or thread.get('state') != 'waiting':
+            continue
+        player = league.player(thread['pid'])
+        if player is None or not available_for_signing(player):
+            continue
+        others = [o for o in refresh_bids(league, player, bids, user_team)
+                  if o.team != thread['team']]
+        if others:
+            best = max(others, key=lambda o: o.apy)
+            NG.set_rival(league, player.pid, best.team, best.apy, best.years)
+        else:
+            thread['rival'] = None
+
+
 def resolve_phase(league, pool, offers, phase, rng, user_team=None):
     """
     Every free agent decides at once. He signs, he waits, or he writes to the
@@ -293,8 +352,7 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
         # Bids were placed together at the start of the round. A club may
         # already have signed an alternative at this spot by the time this
         # player decides, so reconsider the actual roster before accepting.
-        mine = [o for o in (offers.get(p.pid) or [])
-                if o.team == user_team or RN.move_gain(league.teams[o.team], p) > 1.0]
+        mine = refresh_bids(league, p, offers, user_team)
         if not mine:
             waiting.append(p)
             continue
@@ -663,6 +721,7 @@ def run(league, rng, user_team=None, verbose=False):
         pool_now = [p for p in pool if p not in held]
         signed, waiting, msgs = resolve_phase(league, pool_now, bids, phase, rng,
                                               user_team)
+        refresh_negotiation_rivals(league, bids, user_team)
         waiting = waiting + held
         # threads whose man signed elsewhere close; the rest get their answer
         for t in NG._threads(league):
@@ -796,6 +855,8 @@ def resolve_round(league, rng, phase, user_team=None):
     converted = convert_tenders(league, rng, phase, user_team=user_team)
     pool_now = [p for p in pool_now if p not in converted]
     signed, waiting, msgs = resolve_phase(league, pool_now, bids, phase, rng, user_team)
+    refresh_negotiation_rivals(league, bids, user_team)
+    league.fa_bids = {pid: [o.to_save() for o in rows] for pid, rows in bids.items()}
     waiting = waiting + held
     for t in NG._threads(league):
         if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered', 'match_requested'):
