@@ -18,6 +18,125 @@ ROLE_SOURCES = {
 }
 
 DEFENSE = frozenset(('LEDG', 'DT', 'REDG', 'MIKE', 'WILL', 'SAM', 'CB', 'FS', 'SS'))
+
+# Planning grades use the attributes the existing blocking, rush and coverage
+# resolvers read. They are recruiting comparisons, not gameplay multipliers.
+SPECIALIST_WEIGHTS = {
+    'nose': {'strength': .35, 'block_shed': .35, 'tackle': .15, 'play_rec': .15},
+    '34_end': {'block_shed': .30, 'strength': .25, 'power_moves': .20, 'pursuit': .15, 'play_rec': .10},
+    'interior': {'block_shed': .25, 'power_moves': .25, 'finesse_moves': .20, 'strength': .20, 'acceleration': .10},
+    'rush_edge': {'finesse_moves': .25, 'power_moves': .25, 'acceleration': .20, 'speed': .10, 'block_shed': .20},
+    'offball': {'tackle': .25, 'play_rec': .25, 'pursuit': .20, 'zone_cover': .15, 'speed': .15},
+    'tampa_middle': {'zone_cover': .35, 'speed': .25, 'play_rec': .20, 'awareness': .10, 'tackle': .10},
+    'coverage_safety': {'zone_cover': .35, 'speed': .20, 'play_rec': .20, 'awareness': .15, 'man_cover': .10},
+    'box_safety': {'tackle': .30, 'pursuit': .20, 'play_rec': .20, 'block_shed': .15, 'zone_cover': .15},
+    'man_corner': {'man_cover': .40, 'speed': .25, 'press': .20, 'agility': .15},
+    'zone_corner': {'zone_cover': .40, 'play_rec': .25, 'awareness': .15, 'speed': .20},
+    'slot_corner': {'man_cover': .25, 'zone_cover': .25, 'agility': .20, 'speed': .15, 'tackle': .15},
+    'big_nickel': {'zone_cover': .25, 'man_cover': .20, 'tackle': .20, 'agility': .15, 'speed': .20},
+}
+
+
+def _specialist(row, coverage='cover_3', under='zone', box=7):
+    role = row['role']
+    if role == 'NT': return 'nose'
+    if role in ('34LE', '34RE'): return '34_end'
+    if role == 'DT': return 'interior'
+    if role in ('LE', 'RE', 'LOLB', 'ROLB'): return 'rush_edge'
+    if role in ('MIKE', 'LILB') and coverage == 'tampa_2': return 'tampa_middle'
+    if role in ('MIKE', 'WILL', 'SAM', 'LILB', 'RILB'): return 'offball'
+    if role == 'SLOT': return 'big_nickel'
+    if role == 'CB':
+        if row['alignment'] == 'slot': return 'slot_corner'
+        side = 1 if row['alignment'] == 'corner_left' else 0
+        mode = under[side] if isinstance(under, (list, tuple)) else under
+        return 'man_corner' if mode == 'man' else 'zone_corner'
+    return 'box_safety' if role == 'SS' and box >= 8 else 'coverage_safety'
+
+
+def candidate_grade(player, role, specialist=None, gm=None):
+    """0..100 fit for one job; cross-family emergency substitutes score zero.
+
+    Accepts engine player dictionaries or saved Player objects. No mutation,
+    overall-rating bonus, development bonus or hidden positional conversion.
+    """
+    if position(player) not in ROLE_SOURCES.get(role, ()):
+        return 0.0
+    specialist = specialist or _specialist({'role': role, 'alignment': ''})
+    weights = SPECIALIST_WEIGHTS[specialist]
+    r = ratings(player)
+    fallback = player.get('ovr', 50) if isinstance(player, dict) else getattr(player, 'ovr', 50)
+    if callable(fallback): fallback = 50
+    def value(key):
+        val = r.get(key + '_rating', fallback)
+        return max(0., min(100., float(val if val is not None else 50)))
+    grade = sum(value(k)*w for k,w in weights.items())
+    if specialist == 'nose':
+        mass = player.get('weight', player.get('weight_lbs')) if isinstance(player, dict) else getattr(player, 'weight', None)
+        if mass is not None:
+            # Existing player_roles requires an anchor's mass/strength profile.
+            grade -= max(0., min(12., (305-float(mass))*.3))
+    return round(max(0., min(100., grade)), 4)
+
+
+def planning_profile(gm=None, lean=None):
+    """Pure reference demand, not a prediction of a particular opponent.
+
+    Integrates the actual play caller over a fixed, bounded reference schedule.
+    Local RNG never consumes franchise randomness. Neutral capable personnel
+    express the installed playbook rather than hiding needs behind weak players.
+    Big nickel assumes a third safety can be recruited; consumers assign eleven
+    distinct players within each variant, never sum independently chosen stars.
+    """
+    import json, copy
+    fields = ('def_front', 'box', 'aggression', 'board_trust', 'coverage', 'shell', 'blitz')
+    values = {k: (gm.get(k) if isinstance(gm, dict) else getattr(gm, k, None)) for k in fields}
+    values = {k:v for k,v in values.items() if v is not None}
+    return copy.deepcopy(_planning_cached(json.dumps(values, sort_keys=True), json.dumps(lean or {}, sort_keys=True)))
+
+
+from functools import lru_cache
+
+
+@lru_cache(maxsize=128)
+def _planning_cached(gm_json, lean_json):
+    import json
+    import numpy as np
+    from types import SimpleNamespace
+    from collections import defaultdict
+    import schemes as S
+    config = dict(def_front='4-3', box=.5, aggression=.5, board_trust=.5, coverage=.25, shell=.5, blitz=.35)
+    config.update(json.loads(gm_json)); gm = SimpleNamespace(**config)
+    fronts = {'4-3':['4-3 over','4-3 under','wide 9'], '3-4':['3-4 one','3-4 two','tite','mint'],
+              'multiple':['4-3 over','3-4 one','tite','bear']}
+    lean = dict(front_pref=fronts.get(gm.def_front, fronts['4-3']), coverage=gm.coverage, shell=gm.shell, blitz=gm.blitz)
+    lean.update(json.loads(lean_json))
+    rng = np.random.default_rng(718203)
+    # First/second downs, short conversion, long third, goal line. Weights are
+    # explicit planning assumptions; package/front probabilities come from S.
+    situations = [(1,10,50,.35),(2,6,45,.25),(2,15,60,.10),(3,2,30,.10),(3,9,40,.15),(4,1,2,.05)]
+    neutral = {g:[dict(pid=g+str(i), pos=p) for i,p in enumerate(ps)] for g,ps in
+               [('dl',['LEDG','DT','DT','REDG']),('lb',['MIKE','WILL','SAM']),('db',['CB','CB','CB','FS','SS'])]}
+    variants = defaultdict(float)
+    for op, spec in S.PERSONNEL_OFF.items():
+        for down, distance, ytg, sw in situations:
+            for _ in range(16):
+                call = S.call_defense(dict(personnel=op), down, distance, rng, gm=gm, yards_to_endzone=ytg,
+                                      defense=neutral, rate_fn=lambda p,w:.75, lean=lean)
+                package, family = call['personnel'], call['front_family']
+                for big, bw in ([(False,.66),(True,.34)] if package=='nickel' else [(False,1.)]):
+                    rows = role_slots(family, package, big)
+                    jobs = tuple(_specialist(r, call['coverage'], call['under'], call['box']) for r in rows)
+                    variants[(family,package,big,jobs)] += spec['rate']*sw*bw/16
+    total = sum(variants.values()); packages = dict.fromkeys(('base','nickel','dime','heavy'),0.)
+    demand = defaultdict(float); result=[]
+    for (family,package,big,jobs),weight in sorted(variants.items()):
+        share=weight/total; packages[package]+=share
+        slots=[dict(r,specialist=job) for r,job in zip(role_slots(family,package,big),jobs)]
+        result.append(dict(front=family,package=package,big_nickel=big,share=share,slots=slots))
+        for r in slots: demand[(r['role'],r['specialist'])]+=share
+    return dict(packages=packages,variants=result,roles=[dict(role=role,specialist=job,sources=ROLE_SOURCES[role],demand=value)
+                for (role,job),value in sorted(demand.items())])
 EDGE_ROLES = frozenset(('LE', 'RE', 'LOLB', 'ROLB'))
 OFFBALL_ROLES = frozenset(('MIKE', 'WILL', 'SAM', 'LILB', 'RILB'))
 
