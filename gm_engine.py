@@ -157,7 +157,7 @@ def scheme_of(gm):
     # base personnel: the tight end's own tag, and the tag for the receivers, the back and the fullback
     per = str(getattr(gm, 'off_personnel', '11'))
     if per in ('12', '13'): keys += ['heavy_te', 'two_wide']
-    elif per == '21':       keys += ['heavy_te', 'two_back']
+    elif per in ('21', '22'): keys += ['heavy_te', 'two_back']
     else:                   keys += ['spread_te', 'three_wide']        # 11, 10, multiple
     keys.append('pa_heavy' if pa >= 0.62 else 'dropback_qb' if pa <= 0.45 else 'balanced_qb')
     if mo >= 0.65: keys.append('motion_off')
