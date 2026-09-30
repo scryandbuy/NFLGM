@@ -1,0 +1,16 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const src=fs.readFileSync('docs/app.js','utf8'),ctx={};vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('function faFilterGroups('),src.indexOf('function renderFA(')),ctx);
+const group=(v,name)=>ctx.faFilterGroups(v).find(g=>g.group===name);
+const odd={position_filters:[{group:'DL',positions:['LE','NT','RE'].map(key=>({key,label:key}))},{group:'LB',positions:['LOLB','LILB','RILB','ROLB'].map(key=>({key,label:key}))}]};
+const edge={pos:'LEDG',filter_positions:['LOLB','ROLB']},inside={pos:'MIKE',filter_positions:['LILB','RILB']},tackle={pos:'DT',filter_positions:['NT','LE','RE']};
+assert.equal(ctx.faMatchesPosition(edge,group(odd,'LB'),''),true);assert.equal(ctx.faMatchesPosition(edge,group(odd,'DL'),''),false);
+assert.equal(ctx.faMatchesPosition(edge,group(odd,'LB'),'ROLB'),true);assert.equal(ctx.faMatchesPosition(inside,group(odd,'LB'),'LOLB'),false);
+assert.equal(ctx.faMatchesPosition(tackle,group(odd,'DL'),'NT'),true);assert.equal(ctx.faMatchesPosition(tackle,group(odd,'DL'),'RE'),true);
+const even={position_filters:[{group:'LB',positions:['WILL','MLB','SAM'].map(key=>({key,label:key}))}]};
+assert.equal(ctx.faMatchesPosition({pos:'MIKE',filter_positions:['MLB']},group(even,'LB'),'MLB'),true);
+assert.equal(ctx.faMatchesPosition({pos:'LT'},group({},'OL'),'LT'),true);assert.equal(ctx.faMatchesPosition({pos:'RG'},group({},'OL'),'LT'),false);
+for(const p of ['QB','HB','FB','WR','TE'])assert.equal(ctx.faMatchesPosition({pos:p},group({},p),''),true);
+assert.equal(ctx.faMatchesPosition({pos:'P'},group({},'ST'),''),true);
+assert.equal(ctx.faMatchesPosition(edge,undefined,''),true);
+console.log('FA filters: 3-4/4-3 role grouping, individual positions, fallback and offensive/specialist coverage passed');

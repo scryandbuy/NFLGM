@@ -2768,7 +2768,9 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .retain-pending small{color:var(--ink-3)}
 .retain-board .retain-pending .btn{min-width:0;padding:3px 8px;font-size:11px!important}
 .retain-foot{padding:0 25px 18px;color:var(--ink-3);font-size:12px}
-.retain-tag-dialog{color:var(--ink);background:var(--sheet);border:1px solid var(--rule);border-top:3px solid var(--team-accent);border-radius:8px;width:min(440px,calc(100vw - 28px));padding:0;font-family:var(--text)}
+.retain-tag-dialog{position:fixed;inset:0;margin:auto;max-height:calc(100dvh - 28px);overflow:auto;color:var(--ink);background:var(--sheet);border:1px solid var(--rule);border-top:3px solid var(--team-accent);border-radius:8px;width:min(440px,calc(100vw - 28px));padding:0;font-family:var(--text)}
+.personnel-fa .personnel-detail-actions .btn,.personnel-fa .personnel-detail>a.btn{font:700 17px var(--display)!important;letter-spacing:.02em;line-height:normal;justify-content:center;text-align:center}
+.personnel-fa .fa-filter-tools{gap:10px;align-items:center}.fa-group-options{width:100%;flex-wrap:wrap}.fa-position-options{width:100%;flex-wrap:wrap;padding-top:2px}.fa-position-options[hidden]{display:none!important}.personnel-fa .personnel-metrics{flex-wrap:wrap;row-gap:14px}
 .retain-tag-dialog::backdrop{background:#05090dbb}
 .retain-dialog-body{padding:26px}.retain-dialog-body>small{color:var(--team-readable);font-weight:700;letter-spacing:1px;font-size:11px}
 .retain-dialog-body h2{font:900 28px var(--text);padding:8px 0 20px;border:0;background:none}.retain-dialog-body h3{font-size:19px;margin:0}.retain-dialog-body p{color:var(--ink-3);font-size:13px}

@@ -1,7 +1,7 @@
 const fs = require('fs'), vm = require('vm'), assert = require('node:assert/strict');
 const src = fs.readFileSync('docs/app.js', 'utf8');
 let response = {ok:true}, queued = [], saves = 0;
-const context = {py:{runPython:()=>JSON.stringify(response)}, queueMicrotask:fn=>queued.push(fn), saveGameNotified:()=>{saves++;}};
+const context = {py:{runPython:()=>JSON.stringify(response)}, document:{visibilityState:'hidden',addEventListener(){}}, queueMicrotask:fn=>queued.push(fn), saveGameNotified:()=>{saves++;}};
 vm.createContext(context);
 vm.runInContext(src.slice(src.indexOf('function cutPenaltyText'), src.indexOf('async function newGame')), context);
 function run(code, result) {
