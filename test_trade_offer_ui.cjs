@@ -8,7 +8,7 @@ function setup({ok=true, status='open', counter=null, hash='#portal/inbox'}={}) 
   const v={ok:true,id:7,buyer:{abbr:'DEN',name:'Denver'},me:{abbr:'GB',name:'Green Bay'},
     they:[{kind:'pick',id:'2027-3-DEN',label:'2027 round 3 pick'}],you:[{kind:'player',id:'user-player',label:'Example',pos:'HB',age:25,ovr:80,apy:2}],
     open:status==='open',status,counter,read:'Fair return',expires:0};
-  const ctx={JSON, Number, document:{body:{append(x){body.push(x);}}},location:{hash},tradeState:{},
+  const ctx={JSON, Number, document:{body:{append(x){body.push(x);}}},location:{hash},tradeState:{},showAbbr:abbr=>abbr,
     el:(tag,attrs={},...children)=>({tag,attrs,children,removed:false,style:{setProperty(){}},append(...x){this.children.push(...x);},remove(){this.removed=true;}}),
     applyTeamTheme:(node,team)=>{themes.push(team.abbr);return {base:'#123',accent:'#abc'};},
     pyJSON:query=>{calls.push(query);if(query.includes('trade_offer_view'))return v;if(query==='SESSION.portal()')return {rail:{}};if(query.includes('trade_offer_answer'))return {ok,counter:draft};return {};},
