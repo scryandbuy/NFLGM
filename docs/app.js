@@ -396,7 +396,8 @@ function renderGameDay(v) {
   const drawBug = (shown, shownPlays) => {
     const final = !live && shown >= g.drives.length && shownPlays == null;
     const d = g.drives[Math.max(0, shown - 1)] || { plays: [], quarter: 1, score: '0–0', off: g.home.abbr, n: 0 }; const revealed = (shownPlays != null ? vis(d).slice(0, shownPlays) : vis(d));
-    const atBreak = shownPlays == null && shown < g.drives.length && g.drives[shown].quarter > d.quarter;   // the drive shown was the quarter's last
+    const currentQuarter = shownPlays == null ? (d.scoring_quarter || d.quarter) : ([...revealed].reverse().find(p => p.quarter)?.quarter || d.quarter);
+    const atBreak = shownPlays == null && shown < g.drives.length && g.drives[shown].quarter > currentQuarter;
     let hs = g.hs, as_ = g.as_;
     if (live) { hs = live.score.home; as_ = live.score.away; }
     else if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { const add = (n, toOff) => { if ((d.off === g.home.abbr) === toOff) hs += n; else as_ += n; }; for (const p of revealed) { if (p.type === 'field_goal' && p.made) add(3, true); else if (p.td) add(6, true); else if (p.type === 'extra_point' && p.made !== false) add(1, true); else if (p.type === 'two_point' && p.made) add(2, true); else if (p.safety) add(2, false); } } }
@@ -409,11 +410,11 @@ function renderGameDay(v) {
     bug.innerHTML = '';
     bug.append(
       el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${g.away.color}` }, showAbbr(g.away.abbr)), el('div', {}, el('div', { class: 'nm' }, g.away.nick), el('div', { class: 'rec' }, rec(g.away_rec) + (!final && d.off === g.away.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-left:auto' }, as_)),
-      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : atBreak ? (d.quarter === 2 ? 'Halftime' : d.quarter >= 4 ? 'End of Regulation' : `End of Q${d.quarter}`) : `Q${d.quarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : atBreak ? `${showAbbr(d.off)} ${String(d.result || '').toLowerCase()}`.trim() : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n} · ${showAbbr(d.off)} ball`)), el('div', { class: 'q', style: 'font-size:12.5px;color:var(--ink-3);margin-top:4px' }, (wpNow == null ? '' : `Win Probability ${wpNow}%`) + (g.env && g.env.conditions ? `${wpNow == null ? '' : ' · '}${g.env.conditions}` : ''))),
+      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : atBreak ? (currentQuarter === 2 ? 'Halftime' : currentQuarter >= 4 ? 'End of Regulation' : `End of Q${currentQuarter}`) : `${currentQuarter >= 5 ? 'OT' : 'Q' + currentQuarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : atBreak ? `${showAbbr(d.off)} ${String(d.result || '').toLowerCase()}`.trim() : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n} · ${showAbbr(d.off)} ball`)), el('div', { class: 'q', style: 'font-size:12.5px;color:var(--ink-3);margin-top:4px' }, (wpNow == null ? '' : `Win Probability ${wpNow}%`) + (g.env && g.env.conditions ? `${wpNow == null ? '' : ' · '}${g.env.conditions}` : ''))),
       el('div', { class: 'side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, showAbbr(g.home.abbr)), el('div', {}, el('div', { class: 'nm' }, g.home.nick), el('div', { class: 'rec' }, rec(g.home_rec) + (!final && d.off === g.home.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-right:auto' }, hs)));
     lineScore.innerHTML = '';
     if (g.quarters && g.quarters[g.home.abbr]) {
-      const Q = g.quarters; const upto = final ? 5 : d.quarter; const hasOT = Q[g.home.abbr][4] || Q[g.away.abbr][4];
+      const Q = g.quarters; const upto = final ? 5 : currentQuarter; const hasOT = Q[g.home.abbr][4] || Q[g.away.abbr][4];
       lineScore.append(el('tr', {}, el('th', {}, ''), ...['Q1', 'Q2', 'Q3', 'Q4'].concat(hasOT ? ['OT'] : []).map(q => el('th', {}, q)), el('th', {}, 'T')));
       for (const ab of [g.away.abbr, g.home.abbr]) lineScore.append(el('tr', {}, el('td', {}, showAbbr(ab)), ...Q[ab].slice(0, hasOT ? 5 : 4).map((x, qi) => el('td', {}, final || qi < upto - 1 ? x : qi === upto - 1 ? (ab === g.home.abbr ? hs : as_) - Q[ab].slice(0, qi).reduce((a, b) => a + b, 0) : '')), el('td', { style: 'font-weight:700' }, ab === g.home.abbr ? hs : as_)));
     }
@@ -481,7 +482,8 @@ function renderGameDay(v) {
   const copyPbp = el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 10px;font-size:14px', 'data-tip': 'Copy the play-by-play shown so far as text' , onclick: () => {
     const lines = [`${showAbbr(g.away.abbr)} at ${showAbbr(g.home.abbr)} · ${v.week ? weekName(v.week) : ''} ${v.year || ''}`];
     g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
-      lines.push(`Q${d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`); for (const p of plays) if (p.text) lines.push(`${p.head ? p.head + ' ' : ''}${p.text}`); });
+      lines.push(`${d.quarter >= 5 ? 'OT' : 'Q' + d.quarter} · ${d.head || `Drive ${d.n} · ${showAbbr(d.off)}`} · ${d.score}`); for (const p of plays) if (p.text) lines.push(`${p.head ? p.head + ' ' : ''}${p.text}`); });
+    if (!live && shown === g.drives.length && shownPlays == null) lines.push(`Final${g.ot ? ' (OT)' : ''}: ${showAbbr(g.home.abbr)} ${g.hs}, ${showAbbr(g.away.abbr)} ${g.as_}`);
     copyText(lines.join('\n'), copyPbp); } }, 'Copy');
   tick.append(el('h2', {}, 'Play by Play', el('small', {}, ''), copyPbp), ctrl);
   if (live && live.halftime_open) {

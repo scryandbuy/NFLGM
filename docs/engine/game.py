@@ -107,7 +107,7 @@ def fourth_zone(yardline_100):
 
 def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
                          aggression=0.5, timeout_edge=0, use_wp=True,
-                         kicker=None, rate_fn=None):
+                         kicker=None, rate_fn=None, must_score=False):
     """
     go, field_goal or punt.
 
@@ -125,6 +125,12 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     minimum = 0.42 if secs_left > 300 or score_diff >= 0 else 0.25
     if secs_left < 20: minimum = min(minimum, 0.20)
     in_range = kick_chance >= minimum
+    # A reply possession in overtime ends the game if it ends short of the
+    # opponent's score. Regulation clock heuristics cannot describe that state.
+    if must_score:
+        if -3 <= score_diff < 0 and in_range:
+            return 'field_goal'
+        return 'go'
     # With time for one play, a reachable kick ties or wins. The general
     # desperation rule must not force a conversion that leaves no clock.
     if secs_left <= 6 and -3 <= score_diff <= 0 and in_range:
@@ -168,6 +174,10 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         p_go = float(min(0.85, p_go * min(1.4, np.exp(0.2 * (-lead_scores) * (1.0 + played)))))   # a deficit pushes a little; the table already carries the trailing club's fourth downs, and the chase rule takes over late
     if chasing:
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
+    if ydstogo > 8 and not chasing:
+        p_go *= DEC.fourth_conversion(ydstogo) / DEC.FOURTH_CONV[8]
+        if ydstogo >= 15 and (r is None or r.get('go_boost', 0.0) <= 0):
+            p_go = 0.0
     if score_diff <= -9 and yardline_100 <= 5 and ydstogo <= 5:
         p_go = max(p_go, 0.85)                           # down two scores at the goal line, the touchdown is the point
     if secs_left < 120 and score_diff < 0 and yardline_100 > 40 and not (in_range and fg_matters):
@@ -1227,6 +1237,9 @@ class Drive:
         self.yardline = float(start_yardline)     # yards to opponent end zone
         self.down, self.togo = 1, 10
         self.clock, self.quarter = clock, quarter
+        self.start_quarter = quarter
+        self.clock_running = False
+        self.runoff_charged = 0.0
         self.score_diff = score_diff
         self.rng = rng
         self.plays, self.first_downs = 0, 0
@@ -1633,7 +1646,7 @@ def run_drive(*args, **kwargs):
 def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
               rng, resolve_fn, call_off, call_def, rate_fn, aggression=0.5,
               book=None, off_state=None, def_state=None, week=1,
-              timeouts=None, pos='home', half_end=None):
+              timeouts=None, pos='home', half_end=None, must_score=False):
     """
     Play a full possession. resolve_fn is plays.resolve_play; call_off/call_def
     are the scheme-layer callers.
@@ -1688,6 +1701,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if half_end is not None and dr.clock <= half_end:
             dr.clock = half_end
             dr.result = 'End of half'; break
+        if dr.start_quarter <= 4:
+            current_quarter = min(4, int((GAME - dr.clock) // QUARTER) + 1)
+            if current_quarter != dr.quarter:
+                dr.log.append(dict(type='period', quarter=current_quarter, clock=dr.clock))
+                dr.clock_running = False
+                dr.runoff_charged = 0.0
+            quarter = dr.quarter = current_quarter
         # 10. THE KNEEL. With the ball and no time to use it, out of range, a club takes a knee: the first half at
         # any score, the second half when it is not behind. Real clubs do not throw from their own 35 at 0:04.
         secs_left_half = dr.clock - wall
@@ -1716,11 +1736,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         clock_kick_time = secs_in_half <= 8 or (secs_in_half <= 22 and no_tos)
         _plan = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None))
         dr._plan = _plan
-        if _plan is not None and not _plan.get('hurry', True) and _plan['choice'] in ('kick', 'shot') and secs_in_half > 14 and dr.down < 4:
+        if dr.clock_running and _plan is not None and not _plan.get('hurry', True) and _plan['choice'] in ('kick', 'shot') and secs_in_half > 14 and dr.down < 4:
             # THE BLEED'S WAIT: the play clock runs down before the last snap, so the shot or the kick comes with a
             # few seconds left and the other side gets nothing back
-            burn = float(min(PLAY_SECS_RUN - 5.0, secs_in_half - 10.0))
+            burn = float(min(max(0.0, PLAY_SECS_RUN - 5.0 - dr.runoff_charged), secs_in_half - 10.0))
             _tick(dr, burn); secs_in_half -= burn; clock_kick_time = secs_in_half <= 8 or (secs_in_half <= 22 and timeouts is not None and timeouts.left.get(pos, 0) == 0)
+            dr.runoff_charged += burn
         _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4 and (_plan.get('hurry', True) or clock_kick_time or secs_in_half <= 14)
         _kick_old = ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) and dr.yardline <= 37 and dr.down < 4 and clock_kick_time and _plan is None
         if _kick_by_plan or _kick_old:
@@ -1744,7 +1765,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             aggr4 = float(off_state.coach.get('fourth_down', aggression)) if off_state is not None and off_state.coach else aggression
             dec = fourth_down_decision(dr.yardline, dr.togo, dr.score_diff,
                                        dr.clock, rng, aggr4,
-                                       kicker=(offense.get('k') or {}), rate_fn=rate_fn)
+                                       kicker=(offense.get('k') or {}), rate_fn=rate_fn,
+                                       must_score=must_score)
             if dec == 'field_goal':
                 flag = E.special_teams_penalty_check(rng, 'field_goal')
                 if _kick_presnap_flag(dr, flag): continue
@@ -1960,7 +1982,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                               noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)), hurry=_in_drill)
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
-            _tick(dr, play_seconds('penalty'))
+            # Administration is not elapsed game time. The previous snap has
+            # already paid its between-play runoff; a dead-ball foul adds none.
+            dr.clock_running = False
+            dr.runoff_charged = 0.0
             if pen['on_offense']:
                 # half the distance to the offense's own goal when the full yardage would reach it
                 walk = min(float(pen['yards']), (100.0 - dr.yardline) / 2.0)
@@ -1979,7 +2004,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     dr.yardline -= gained; dr.togo -= gained
                     if dr.togo <= 0:
                         dr.down, dr.togo = 1, min(10, dr.yardline); dr.first_downs += 1
-            dr.log.append(dict(type='penalty', **pen))
+            dr.log.append(dict(type='penalty', timing='before_snap', clock=dr.clock, **pen))
             continue
 
         # field the units for THIS snap - condition, injuries and rotation
@@ -2086,7 +2111,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 _plan_p = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half_p - PLAY_SECS, coach=(off_state.coach if off_state is not None else None)) if secs_in_half_p - PLAY_SECS > 4 else None
                 used_p, used_by_p = _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
                 hurry_p = (secs_in_half_p < 120 and dr.score_diff <= 0) or bool(oc.get('no_huddle'))
-                _tick(dr, play_seconds(t, hurry=hurry_p, timeout=used_p, tempo=(off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5)) + (0.0 if used_p else play_seconds('penalty')))
+                _tick(dr, min(6.0, play_seconds(t, hurry=hurry_p, timeout=used_p)))
+                dr.clock_running = False
+                dr.runoff_charged = 0.0
                 dr.clock = float(np.ceil(dr.clock - 1e-9))
                 if used_p and used_by_p:
                     dr.log.append(dict(type='timeout', side=used_by_p, side_abbr=(getattr(off_state if used_by_p == pos else def_state, 'abbr', None) or used_by_p.upper()), left=timeouts.left.get(used_by_p, 0), clock=dr.clock))
@@ -2153,6 +2180,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         for edge in (2700.0, 900.0):
             if clock_before > edge >= dr.clock: dr.clock = float(edge)   # the quarter ends with this play; no huddle runs into the next one
         dr.clock = float(np.ceil(dr.clock - 1e-9))                          # the clock is whole seconds; a fraction left is a second
+        dr.clock_running = t in ('run', 'complete', 'scramble', 'sack') and not used and not out.get('touchdown')
+        dr.runoff_charged = max(0.0, clock_before - dr.clock - 6.0) if dr.clock_running else 0.0
         after_clock = dr.clock - half_end if half_end is not None else dr.clock
         if used and used_by:
             dr.log.append(dict(type='timeout', side=used_by, side_abbr=(getattr(off_state if used_by == pos else def_state, 'abbr', None) or used_by.upper()), left=timeouts.left.get(used_by, 0), clock=dr.clock))
@@ -2160,6 +2189,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             # the two-minute warning: the clock stops at 2:00, so the runoff this play would have taken past it is given back
             dr.clock += min(20.0, 120.0 - after_clock); dr._two_min = True
             dr.log.append(dict(type='two_minute', clock=dr.clock))
+            dr.clock_running = False
+            dr.runoff_charged = 0.0
         before = dr.yardline
         if t == 'sack' and dr.yardline - float(out.get('yards', 0.0) or 0.0) >= 100.0:
             out['yards'] = float(-(100.0 - dr.yardline)); out['safety'] = True
@@ -2196,7 +2227,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         dr.points += t['points']
         dr.try_result = t
         if t.get('penalty'):
-            dr.log.append(dict(type='penalty', **t['penalty']))
+            dr.log.append(dict(type='penalty', try_type=t['type'], **t['penalty']))
         dr.log.append(t)
     if pending is not None:
         _o, _off, _def, _st = pending
@@ -2239,6 +2270,8 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
     clock = OT_PLAYOFF_LENGTH if playoffs else OT_LENGTH
     pos = first
     had = {'home': False, 'away': False}
+    timeouts = Timeouts()
+    timeouts.left = dict(home=3 if playoffs else 2, away=3 if playoffs else 2)
     drives = []
     kick = kickoff_booked(returner_for(home if pos == 'home' else away, home_state if pos == 'home' else away_state, rate_fn),
                           rng, rate_fn, book)
@@ -2257,7 +2290,9 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
         # lead, everyone goes for it on fourth down. Ties are real but rare:
         # 0.29% of all games, roughly 1 in 20 overtimes.
         dr = run_drive(off, deff, start, clock, 5, sd, rng, resolve_fn,
-                       call_off, call_def, rate_fn, 0.98, None, o_st, d_st, week)
+                       call_off, call_def, rate_fn, 0.98, book, o_st, d_st, week,
+                       timeouts=timeouts, pos=pos,
+                       must_score=had['away' if pos == 'home' else 'home'] and sd < 0)
         drives.append((pos, dr))
         clock = max(0.0, dr.clock)
         had[pos] = True

@@ -70,6 +70,17 @@ def _wp(score_diff, sec_left, pos_is_home):
     return float(1.0 / (1.0 + np.exp(-z)))
 
 
+def scoring_quarter(dr):
+    """Score in the period of the scoring snap, including older saved drives."""
+    if getattr(dr, 'quarter', 1) >= 5:
+        return 5
+    for p in reversed(dr.log):
+        if p.get('touchdown') and not p.get('nullified') and p.get('clock') is not None:
+            return min(4, int((3600 - float(p['clock'])) // 900) + 1)
+    # A kick ending exactly at a boundary belongs to the period just ended.
+    return min(4, max(1, int((3600 - max(0, dr.clock) - 1e-6) // 900) + 1))
+
+
 def capture(league, played, user):
     """played: list of (home, away, res, book) from the week. Returns the Game Day record."""
     out = dict(week=league.week, scores=[], game=None)
@@ -80,13 +91,23 @@ def capture(league, played, user):
         me_home = (user == home); opp = away if me_home else home
         drives, wp, plays_all = [], [], []
         hs = as_ = 0
+        previous_quarter = 1
         for i, (pos, dr) in enumerate(res['drives']):
             off_abbr = home if pos == 'home' else away; def_abbr = away if pos == 'home' else home
             qb = (dr.off or {}).get('qb', {}).get('pid'); rb = ((dr.off or {}).get('rb') or {}).get('pid')
             plays = []
+            start_quarter = int(getattr(dr, 'start_quarter', dr.quarter))
+            if start_quarter > previous_quarter:
+                plays.append(write_play(league, dict(type='period', quarter=start_quarter), qb, off_abbr, def_abbr))
             for p in dr.log:
                 if not isinstance(p, dict): continue
-                plays.append(write_play(league, p, qb, off_abbr, def_abbr, rb_pid=rb))
+                line = write_play(league, p, qb, off_abbr, def_abbr, rb_pid=rb)
+                line['quarter'] = (5 if start_quarter >= 5 else
+                                   p.get('quarter') or (min(4, int((3600 - float(p['clock'])) // 900) + 1)
+                                                       if p.get('clock') is not None else
+                                                       (plays[-1].get('quarter', start_quarter) if plays else start_quarter)))
+                plays.append(line)
+            previous_quarter = max(start_quarter, scoring_quarter(dr))
             pts = int(getattr(dr, 'points', 0) or 0)
             if pts > 0:
                 if pos == 'home': hs += pts
@@ -98,7 +119,7 @@ def capture(league, played, user):
             res_word = dr.result
             if res_word == 'End of half' and getattr(dr, 'quarter', 0) >= 4: res_word = 'End of game'
             drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=round(start - end, 1), first_downs=int(getattr(dr, 'first_downs', 0) or 0),
-                               result=res_word, points=pts, quarter=int(getattr(dr, 'quarter', 1) or 1), clock=_clock(getattr(dr, 'clock', 0)),
+                               result=res_word, points=pts, quarter=start_quarter, scoring_quarter=scoring_quarter(dr), clock=_clock(getattr(dr, 'clock', 0)),
                                score=f"{hs}–{as_}", plays=plays))
             diff = (hs - as_) if me_home else (as_ - hs)
             wp.append(round(100 * _wp(diff, float(getattr(dr, 'clock', 0) or 0), me_home)))
@@ -176,11 +197,15 @@ def capture(league, played, user):
         quarters = {home: [0, 0, 0, 0, 0], away: [0, 0, 0, 0, 0]}
         for d in drives:
             if not d.get('points'): continue
-            qi = min(4, max(0, int(d.get('quarter', 1)) - 1)); quarters[d['off']][qi] += int(d['points'])
+            qi = min(4, max(0, int(d.get('scoring_quarter', d.get('quarter', 1))) - 1))
+            scorer = d['off'] if d['points'] > 0 else (away if d['off'] == home else home)
+            quarters[scorer][qi] += abs(int(d['points']))
         # each drive: how it started and what came before it, in words
         prev_result = None
         for i, d in enumerate(drives):
-            how = {'Touchdown': 'after a touchdown', 'Field Goal': 'after a field goal', 'Punt': 'after a punt', 'Interception': 'after an interception', 'Fumble': 'after a fumble', 'Turnover on Downs': 'after a stop on fourth down', 'Missed FG': 'after a missed field goal'}.get(prev_result, 'to open' if i == 0 else 'after the kickoff' if prev_result in ('Touchdown', 'Field Goal') else '')
+            how = {'Touchdown': 'after a touchdown', 'Field goal': 'after a field goal', 'Punt': 'after a punt', 'Turnover': 'after a turnover', 'Turnover on downs': 'after a stop on fourth down', 'Missed field goal': 'after a missed field goal'}.get(prev_result, 'to open' if i == 0 else '')
+            if i and d['quarter'] >= 5 and drives[i - 1]['quarter'] < 5: how = 'to open overtime'
+            elif i and d['quarter'] == 3 and drives[i - 1]['quarter'] <= 2: how = 'to open the second half'
             spot = d.get('start', 50); side = d['off'] if spot <= 50 else (away if d['off'] == home else home)
             yard = int(round(spot if spot <= 50 else 100 - spot))
             d['head'] = f"Drive {d['n']} · {d['off']} · Started at the {side} {yard} {how}".rstrip() + f" · {d['plays_n']} play{'s' if d['plays_n'] != 1 else ''}, {int(round(d['yards']))} yard{'s' if int(round(d['yards'])) != 1 else ''}" + (f", {str(d['result']).lower()}" if d.get('result') else '')

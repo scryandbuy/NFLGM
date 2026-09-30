@@ -73,7 +73,16 @@ INTERCEPT = float(_M['intercept'])
 
 # Real conversion rates when clubs actually went for it, 2023-24.
 FOURTH_CONV = {1: 0.71, 2: 0.58, 3: 0.53, 4: 0.53, 5: 0.42, 6: 0.42,
-               7: 0.42, 8: 0.22}
+                7: 0.42, 8: 0.22}
+
+
+def fourth_conversion(distance):
+    """Retain observed short-yardage rates; long conversions get progressively harder."""
+    distance = max(1.0, float(distance))
+    if distance <= 8:
+        return FOURTH_CONV[int(np.ceil(distance))]
+    return float(max(.005, FOURTH_CONV[8] * np.exp(-(distance - 8) / 8.0)))
+
 PUNT_NET = 40.0          # average net; the engine's own punt model is finer
 XP_RATE = 0.957          # measured, 2023-24
 TWO_RATE = 0.475         # measured; the engine resolves the real play
@@ -149,8 +158,7 @@ def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
     means go.
     """
     ytg = int(np.clip(ydstogo, 1, 30))
-    p_conv = conv_prob if conv_prob is not None else FOURTH_CONV.get(
-        min(ytg, 8), 0.22)
+    p_conv = conv_prob if conv_prob is not None else fourth_conversion(ydstogo)
 
     # ---- go for it ----
     wp_conv = win_prob(score_diff, seconds_left - 6, max(1, yardline_100 - ytg),

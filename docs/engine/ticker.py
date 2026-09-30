@@ -138,6 +138,10 @@ def play_line(league, p, off_abbr, def_abbr):
         if p.get('end_zone'): ydtxt = f"in the end zone, ball placed at the {float(p.get('spot', 1)):g}"
         if p.get('safety'): ydtxt = 'in the end zone, SAFETY'
         if p.get('on_try'): ydtxt += ', enforced on the try'
+        if p.get('try_type'):
+            ydtxt += ', on the ' + ('extra-point attempt' if p['try_type'] == 'extra_point' else 'two-point attempt')
+        elif p.get('timing') == 'before_snap':
+            ydtxt += ', before the snap; no play'
         ending = (', loss of down.' if p.get('penalty') == 'Intentional Grounding' and not p.get('safety') else
                   ', automatic first down.' if (p.get('auto_first') and not p.get('on_offense') and not p.get('on_try')) else '.')
         text = f"Penalty, {p.get('penalty', 'flag')} on the {side}, {ydtxt}" + ending
@@ -159,6 +163,10 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"Timeout, {'the offense' if p.get('side') == 'off' else p.get('side_abbr') or p.get('side', '').upper()} ({p.get('left', 0)} left)."; kind = 'neutral'
     elif t == 'two_minute':
         text = 'Two-minute warning.'; kind = 'neutral'
+    elif t == 'period':
+        q = int(p.get('quarter', 1))
+        text = ('Overtime begins.' if q >= 5 else 'Halftime. Third quarter begins.' if q == 3 else f'End of Q{q - 1}. Q{q} begins.')
+        kind = 'neutral'
     elif t in ('audible', 'kneel', 'spike'):
         text = {'kneel': f"{passer or 'The quarterback'} kneels.", 'spike': f"{passer or 'The quarterback'} spikes it."}.get(t, ''); kind = 'neutral'
         if not text: return None
@@ -185,7 +193,7 @@ def write_game(league, res, home, away):
     for i, (pos, dr) in enumerate(res['drives']):
         off = home if pos == 'home' else away; deff = away if pos == 'home' else home
         lines = [x for x in (play_line(league, p, off, deff) for p in dr.log if isinstance(p, dict)) if x]
-        real = [p for p in dr.log if isinstance(p, dict) and p.get('type') not in ('penalty', 'audible', 'extra_point')]
+        real = [p for p in dr.log if isinstance(p, dict) and not p.get('nullified') and p.get('type') in ('run', 'complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble', 'kneel', 'spike', 'punt', 'field_goal')]
         yards = sum(float(p.get('yards', 0) or 0) for p in real if p.get('type') in ('run', 'complete', 'sack', 'scramble'))
         q = int(getattr(dr, 'quarter', 1) or 1)
         start = float(getattr(dr, 'start', 75) or 75); end = float(getattr(dr, 'yardline', start) or start)
