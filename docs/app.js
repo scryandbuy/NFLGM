@@ -612,11 +612,12 @@ function renderGameDay(v) {
     const wpNow = g.wp[Math.min(g.wp.length - 1, Math.max(0, shown - 1))];
     const myScore = g.me_home ? hs : as_, theirScore = g.me_home ? as_ : hs;
     const won = myScore > theirScore, tie = myScore === theirScore;
+    const indicators = gameDayIndicators(g, shown, shownPlays, live, v.week >= 19);
     bug.innerHTML = '';
     bug.append(
-      el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${g.away.color}` }, showAbbr(g.away.abbr)), el('div', {}, el('div', { class: 'nm' }, g.away.nick), el('div', { class: 'rec' }, rec(g.away_rec) + (!final && d.off === g.away.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-left:auto' }, as_)),
-      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : atBreak ? (currentQuarter === 2 ? 'Halftime' : currentQuarter >= 4 ? 'End of Regulation' : `End of Q${currentQuarter}`) : `${currentQuarter >= 5 ? 'OT' : 'Q' + currentQuarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : atBreak ? `${showAbbr(d.off)} ${String(d.result || '').toLowerCase()}`.trim() : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n} · ${showAbbr(d.off)} ball`)), el('div', { class: 'q', style: 'font-size:12.5px;color:var(--ink-3);margin-top:4px' }, (wpNow == null ? '' : `Win Probability ${wpNow}%`) + (g.env && g.env.conditions ? `${wpNow == null ? '' : ' · '}${g.env.conditions}` : ''))),
-      el('div', { class: 'side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, showAbbr(g.home.abbr)), el('div', {}, el('div', { class: 'nm' }, g.home.nick), el('div', { class: 'rec' }, rec(g.home_rec) + (!final && d.off === g.home.abbr ? ' · Ball' : ''))), el('div', { class: 'score', style: 'margin-right:auto' }, hs)));
+      el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${g.away.color}` }, showAbbr(g.away.abbr)), gameDayTeamStatus(g.away, rec(g.away_rec), indicators), el('div', { class: 'score', style: 'margin-left:auto' }, as_)),
+      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : atBreak ? (currentQuarter === 2 ? 'Halftime' : currentQuarter >= 4 ? 'End of Regulation' : `End of Q${currentQuarter}`) : `${currentQuarter >= 5 ? 'OT' : 'Q' + currentQuarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : atBreak ? `${showAbbr(d.off)} ${String(d.result || '').toLowerCase()}`.trim() : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n}`)), el('div', { class: 'q', style: 'font-size:12.5px;color:var(--ink-3);margin-top:4px' }, (wpNow == null ? '' : `Win Probability ${wpNow}%`) + (g.env && g.env.conditions ? `${wpNow == null ? '' : ' · '}${g.env.conditions}` : ''))),
+      el('div', { class: 'side home-side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, showAbbr(g.home.abbr)), gameDayTeamStatus(g.home, rec(g.home_rec), indicators), el('div', { class: 'score', style: 'margin-right:auto' }, hs)));
     lineScore.innerHTML = '';
     if (g.quarters && g.quarters[g.home.abbr]) {
       const Q = g.quarters; const upto = final ? 5 : currentQuarter; const hasOT = Q[g.home.abbr][4] || Q[g.away.abbr][4];
@@ -3495,4 +3496,60 @@ function replayPlayPoints(play) {
   if (play.type === 'extra_point' && play.made !== false) return sign;
   if (play.type === 'two_point' && play.made) return 2 * sign;
   return 0;
+}
+
+// Follow only revealed events: do not leak the finished game's timeout totals.
+function gameDayIndicators(g, shown, shownPlays, live = null, playoffs = false) {
+  const home = g.home.abbr, away = g.away.abbr;
+  const counts = { [home]: 3, [away]: 3 };
+  const final = !live && shown >= g.drives.length && shownPlays == null;
+  let period = 1, possession = away;
+  const enterQuarter = quarter => {
+    const next = quarter >= 5 ? 3 : quarter >= 3 ? 2 : 1;
+    if (next > period) {
+      const total = next === 3 && !(live?.playoffs ?? playoffs) ? 2 : 3;
+      counts[home] = counts[away] = total;
+      period = next;
+    }
+  };
+  for (const [i, drive] of g.drives.slice(0, shown).entries()) {
+    enterQuarter(drive.quarter || 1);
+    possession = drive.off;
+    const visible = (drive.plays || []).filter(p => p.text);
+    const plays = i === shown - 1 && shownPlays != null ? visible.slice(0, shownPlays) : visible;
+    for (const p of plays) {
+      enterQuarter(p.quarter || drive.quarter || 1);
+      if (p.type === 'timeout') {
+        let team = p.timeout_side === 'home' ? home : p.timeout_side === 'away' ? away : p.timeout_team;
+        let left = p.timeouts_left;
+        // Older saves retained the ticker sentence but not timeout fields.
+        const old = String(p.text).match(/^Timeout, (.+?) \((\d+) left\)/);
+        if (!team && old) team = old[1] === 'HOME' ? home : old[1] === 'AWAY' ? away : old[1] === 'the offense' ? drive.off : old[1];
+        if (left == null && old) left = Number(old[2]);
+        if (team in counts && left != null && Number.isFinite(Number(left))) counts[team] = Math.max(0, Math.min(3, Number(left)));
+      }
+      if (!p.nullified && (p.type === 'interception' || p.fumble_lost)) possession = drive.off === home ? away : home;
+    }
+    if (i === shown - 1 && shownPlays == null && g.drives[shown]) possession = g.drives[shown].off;
+  }
+  if (live?.halftime_open) {
+    enterQuarter(live.adjustment_period === 'overtime' ? 5 : 3);
+    possession = null;
+  } else if (live && 'possession' in live) possession = live.possession;
+  if (final) possession = null;
+  return { possession, timeouts: counts };
+}
+
+function gameDayTeamStatus(team, record, indicators) {
+  const hasBall = indicators.possession === team.abbr;
+  const football = el('span', { class: 'possession-football' + (hasBall ? ' has-ball' : ''),
+    role: hasBall ? 'img' : null, 'aria-label': hasBall ? `${team.name || team.nick} possession` : null,
+    'aria-hidden': hasBall ? null : 'true',
+    html: '<svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 10C7-1 25-1 30 10C25 21 7 21 2 10Z" fill="#ac6537" stroke="#efc698" stroke-width="1.3"/><path d="M8 3.5C6.5 7 6.5 13 8 16.5M24 3.5C25.5 7 25.5 13 24 16.5" fill="none" stroke="#fff4dd" stroke-width="2"/><path d="M11 10H21M13 7.5V12.5M16 7.5V12.5M19 7.5V12.5" stroke="#fff4dd" stroke-width="1.3" stroke-linecap="round"/></svg>' });
+  const remaining = indicators.timeouts[team.abbr];
+  const dots = el('span', { class: 'timeout-dots', role: 'img',
+    'aria-label': `${team.name || team.nick}: ${remaining} timeout${remaining === 1 ? '' : 's'} remaining` },
+    ...[0, 1, 2].map(i => el('i', { class: 'timeout-dot' + (i < remaining ? ' available' : ''), 'aria-hidden': 'true' })));
+  return el('div', { class: 'team-status' }, el('div', { class: 'nm' }, team.nick),
+    el('div', { class: 'team-status-line' }, el('span', { class: 'rec' }, record), football), dots);
 }

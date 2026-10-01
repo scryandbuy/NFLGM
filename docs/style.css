@@ -2752,6 +2752,14 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .gameday-page .bigbug .cr{clip-path:none;border-radius:9px;width:58px;height:58px}
 .gameday-page .bigbug .nm{font:800 clamp(20px,2vw,34px)/1.1 var(--text)}
 .gameday-page .bigbug .score{font:800 clamp(48px,4vw,70px)/1 var(--text)}
+.game-scoreboard .team-status-line{display:flex;align-items:center;gap:9px;margin-top:4px;min-height:20px}
+.game-scoreboard .home-side .team-status-line{justify-content:flex-end}
+.game-scoreboard .possession-football{display:inline-flex;width:28px;height:18px;flex:none;visibility:hidden}
+.game-scoreboard .possession-football.has-ball{visibility:visible}
+.game-scoreboard .possession-football svg{width:100%;height:100%;overflow:visible}
+.game-scoreboard .timeout-dots{display:inline-flex;align-items:center;gap:6px;margin-top:8px;vertical-align:top}
+.game-scoreboard .timeout-dot{display:block;width:8px;height:8px;border:1px solid #90a3aa;border-radius:50%;background:transparent;box-sizing:border-box}
+.game-scoreboard .timeout-dot.available{background:#eef4f2;border-color:#eef4f2}
 .gameday-page .bigbug .mid .q{font:700 11px var(--text);letter-spacing:.11em;text-transform:uppercase;color:#b9cbd2}
 .gameday-page .bigbug .mid .dd{font:650 13px var(--text);color:var(--team-readable)}
 .game-preview .facts2{padding:20px 32px!important;border-bottom:1px solid #ffffff15;gap:28px}
