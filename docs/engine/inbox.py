@@ -235,7 +235,9 @@ def body_rows(league, message):
     for char in body:
         if char == '(': depth += 1
         elif char == ')': depth = max(0, depth - 1)
-        if char == '\n' or (depth == 0 and char in ';·•'):
+        # A semicolon in ordinary prose is punctuation, not a new digest row.
+        # Player-list boundaries above already become newlines when appropriate.
+        if char == '\n' or (depth == 0 and char in '·•'):
             line = ''.join(chars).strip().rstrip(',;')
             if line: rows.append(line)
             chars = []
