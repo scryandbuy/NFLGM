@@ -90,7 +90,7 @@ PENALTIES = [
     ('Roughing the Passer',               0.399,  13.2, 0.96, False, 'pass'),
     ('Neutral Zone Infraction',           0.376,   4.8, 0.25, False, 'pre'),
     ('Face Mask',                         0.294,  13.5, 0.69, None,  'any'),
-    ('Illegal Formation',                 0.283,   4.9, 0.00, True,  'pre'),
+    ('Illegal Formation',                 0.283,   4.9, 0.00, True,  'any'),
     ('Offensive Pass Interference',       0.256,   9.7, 0.00, True,  'pass'),
     ('Illegal Contact',                   0.241,   4.9, 1.00, False, 'pass'),
     ('Illegal Block Above the Waist',     0.226,   9.3, 0.00, True,  'any'),
@@ -201,7 +201,7 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
                 auto_first=(not on_off) and (name in AUTO),
                 # only a dead-ball, pre-snap foul is decided before the snap; holding, OPI, an ineligible man downfield
                 # and a block above the waist happen DURING the play, which runs and is then wiped in the book
-                nullifies=info['phase'] in ('pre',) or name in ('Illegal Formation',))
+                nullifies=info['phase'] in ('pre',))
 
 
 def special_teams_penalty_check(rng, kind, returned=False, phase=None):

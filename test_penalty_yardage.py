@@ -19,6 +19,19 @@ class PenaltyYardageTests(unittest.TestCase):
         return dict(penalty=name, yards=float(yards), rule_yards=float(yards),
                     on_offense=offense, auto_first=not offense, nullifies=False)
 
+    def test_goal_to_go_survives_penalty_beyond_twenty(self):
+        self.assertEqual(ticker._down(3, 22, 22), '3rd & Goal')
+        self.assertEqual(ticker._down(3, 12, 22), '3rd & 12')
+
+    def test_illegal_formation_is_live_and_erases_touchdown(self):
+        self.assertEqual(events.PEN_INFO['Illegal Formation']['phase'], 'any')
+        dr = self.drive(9, down=3, togo=9)
+        flag = self.flag(True, 'Illegal Formation', 5)
+        result = game._resolve_live_penalty(dr, flag, {'type': 'complete', 'yards': 9}, {})
+        self.assertEqual(result, 'replaced')
+        self.assertEqual((dr.down, dr.yardline, dr.togo), (3, 14, 14))
+        self.assertIsNone(dr.result)
+
     def test_dead_ball_offensive_foul_follows_first_down(self):
         dr = self.drive()
         p = self.flag(True)

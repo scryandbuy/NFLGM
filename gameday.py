@@ -216,7 +216,7 @@ def capture(league, played, user):
             how = {'Touchdown': 'after a touchdown', 'Defensive touchdown': 'after a defensive touchdown', 'Field goal': 'after a field goal', 'Punt': 'after a punt', 'Turnover': 'after a turnover', 'Turnover on downs': 'after a stop on fourth down', 'Missed field goal': 'after a missed field goal'}.get(prev_result, 'to open' if i == 0 else '')
             if i and d['quarter'] >= 5 and drives[i - 1]['quarter'] < 5: how = 'to open overtime'
             elif i and d['quarter'] == 3 and drives[i - 1]['quarter'] <= 2: how = 'to open the second half'
-            d['head'] = f"Drive {d['n']} · {d['off']} · Started at the {d['start_label']} {how}".rstrip() + f" · {d['plays_n']} play{'s' if d['plays_n'] != 1 else ''}, {int(round(d['yards']))} yard{'s' if int(round(d['yards'])) != 1 else ''}" + (f", {str(d['result']).lower()}" if d.get('result') else '')
+            d['head'] = f"Drive {d['n']} · {d['off']} · Started at the {d['start_label']} {how}".rstrip() + f" · {d['plays_n']} play{'s' if d['plays_n'] != 1 else ''}, {int(round(d['yards']))} net field yards (including penalties)" + (f", {str(d['result']).lower()}" if d.get('result') else '')
             prev_result = d.get('result')
         out['game'] = dict(home=home, away=away, hs=res['home'], as_=res['away'], ot=bool(res.get('overtime')), me=user, opp=opp, me_home=me_home,
                            drives=drives, wp=wp, box=box, env=res.get('env', {}), team_stats=team_stats, reads=reads, quarters=quarters)

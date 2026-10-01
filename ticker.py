@@ -40,7 +40,7 @@ def _spot(yardline_100, off_abbr, def_abbr):
 def _down(d, togo, yardline):
     if d is None: return ''
     word = {1: '1st', 2: '2nd', 3: '3rd', 4: '4th'}.get(int(d), str(d))
-    if yardline is not None and togo is not None and togo >= yardline - 0.01 and yardline <= 20.5: return f"{word} & Goal"   # past the 20 nobody says goal to go; it reads as the distance
+    if yardline is not None and togo is not None and togo >= yardline - 0.01: return f"{word} & Goal"
     return f"{word} & {int(round(togo))}" if togo is not None else word
 
 
@@ -87,14 +87,17 @@ def play_line(league, p, off_abbr, def_abbr):
         pre = 'Play action. ' if p.get('play_action') else ''
         press_name = passer or 'the quarterback'
         pres = f"Pressure on {press_name}{'' if press_name.endswith('.') else '.'} " if p.get('pressured') else ''
-        gain_phrase = 'and is stopped inside the 1' if near_goal_short else f'for {yd}'
+        gain_phrase = ('and is stopped inside the 1' if near_goal_short else
+                       'for a touchdown from inside the 1' if td and 0 < spot < 1 else f'for {yd}')
         if p.get('screen'):
             text = f"{pre}{pres}{passer or 'The quarterback'} to {target or 'his receiver'} on a screen {gain_phrase}"
         elif p.get('swing'):
             text = f"{pre}{pres}{passer or 'The quarterback'} {'swings it to' if (p.get('yards', 0) or 0) >= 0 else 'checks down to'} {target or 'his back'} in the flat {gain_phrase}"
         else:
             text = f"{pre}{pres}{passer or 'The quarterback'} to {target or 'his receiver'} {gain_phrase}"
-        if td: text += f". TOUCHDOWN."; kind = 'score'
+        if td:
+            text += '.' if 0 < spot < 1 else '. TOUCHDOWN.'
+            kind = 'score'
         else:
             kind = cls
             text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
