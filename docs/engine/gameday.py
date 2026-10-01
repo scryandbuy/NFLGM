@@ -59,6 +59,9 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
     ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
               td=bool(q.get('touchdown') or q.get('td') or q.get('defensive_td')), defensive_td=bool(q.get('defensive_td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')), nullified=bool(q.get('nullified')))
     ln['scoring_side'] = q.get('scoring_side') or ('defense' if q.get('defensive_td') or (q.get('blocked') and q.get('recovery') == 'receiving') else 'offense')
+    if q.get('type') == 'timeout':
+        ln.update(timeout_side=q.get('side'), timeout_team=q.get('side_abbr'),
+                  timeouts_left=q.get('left'))
     return ln
 
 
@@ -142,7 +145,7 @@ def capture(league, played, user):
                     side_ = t_ if pl.get('on_offense', True) else d_
                     side_['penalties'] += 1; side_['pen_yds'] += abs(int(round(y))); continue
                 if pl.get('nullified'): continue                   # a play wiped by a flag is not a play
-                if ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
+                if ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception', 'kneel'):
                     t_['plays'] += 1
                     if pl.get('clock') is not None:
                         if first_clock is None: first_clock = float(pl['clock'])
@@ -150,6 +153,7 @@ def capture(league, played, user):
                 if ty in ('run', 'scramble'): t_['rush_yds'] += y; t_['yards'] += y; k = ('rush', pl.get('carrier') or pl.get('passer')); longest[k] = max(longest.get(k, 0), int(round(y)))
                 elif ty == 'complete': t_['pass_yds'] += y; t_['yards'] += y; longest[('pass', pl.get('passer'))] = max(longest.get(('pass', pl.get('passer')), 0), int(round(y))); longest[('rec', pl.get('target'))] = max(longest.get(('rec', pl.get('target')), 0), int(round(y)))
                 elif ty == 'sack': t_['pass_yds'] += y; t_['yards'] += y; t_['sacks_allowed'] += 1
+                elif ty == 'kneel': t_['rush_yds'] += y; t_['yards'] += y
                 elif ty == 'interception': t_['turnovers'] += 1
                 if pl.get('fumble_lost'): t_['turnovers'] += 1               # a lost fumble is a flag on the play, not a play of its own
                 if pl.get('down') == 3 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):

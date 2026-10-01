@@ -528,6 +528,8 @@ class SeasonRunner(StandingsView):
         rec_key = 'ot_recs' if period == 'overtime' else 'half_recs'
         if st is None or st.plan is None: lv[rec_key] = []; return
         lv['adjustment_base'] = st.plan.copy()
+        if period == 'halftime':
+            lv['half_plan_before'] = dict(protection=getattr(st.plan, 'protection', None))
         try: recs = HT.recommendations(self.L, user, opp, lv['drives'], me_side, lv['score'], st.plan, st.base_plan, period=period, legacy=lv['start'].get('adjustment_version', 1) < 2)
         except Exception as e:
             import sys; print('halftime read failed:', e, file=sys.stderr); recs = []
@@ -561,6 +563,8 @@ class SeasonRunner(StandingsView):
         lv = self.live; res = lv['res']; home, away, week = lv['home'], lv['away'], lv['week']
         res['coaching_review'] = dict(pregame=copy.deepcopy(lv['start'].get('pregame_review')),
             halftime=[copy.deepcopy(r) for r in lv.get('half_recs', []) if r.get('taken')],
+            halftime_declined=[copy.deepcopy(r) for r in lv.get('half_recs', []) if not r.get('taken')],
+            halftime_existing=copy.deepcopy(lv.get('half_plan_before', {})),
             overtime=[copy.deepcopy(r) for r in lv.get('ot_recs', []) if r.get('taken')])
         if lv.get('playoffs'):
             # a playoff game: the stats book, but no standings; the bracket takes the result

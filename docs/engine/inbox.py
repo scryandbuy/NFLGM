@@ -10,8 +10,49 @@ decline() closes it, and anything left past its expiry is expired on the
 next advance. The AI never sees the inbox; it only writes to it.
 """
 import itertools
+import json
+import re
 
 _ids = itertools.count(1)
+
+
+def player_name(player, label=None):
+    """An explicit mention for inbox composition; post stores plain text + spans."""
+    if player is None:
+        return label or 'Player'
+    return '\x1e' + json.dumps([str(player.pid), label if label is not None else player.name], ensure_ascii=True) + '\x1f'
+
+
+def _mentions(text):
+    spans, parts, end, length = [], [], 0, 0
+    for match in re.finditer(r'\x1e([^\x1f]*)\x1f', str(text)):
+        prefix = str(text)[end:match.start()]
+        parts.append(prefix)
+        length += len(prefix.encode('utf-16-le')) // 2
+        pid, label = json.loads(match[1])
+        size = len(label.encode('utf-16-le')) // 2
+        spans.append(dict(start=length, end=length+size, kind='player', id=pid, name=label))
+        parts.append(label)
+        length += size
+        end = match.end()
+    parts.append(str(text)[end:])
+    return ''.join(parts), spans
+
+
+def reference_spans(text, refs, existing=()):
+    """Freeze reliable legacy/payload matches without replacing explicit occurrences."""
+    spans = list(existing)
+    names = {}
+    for ref in refs:
+        if ref['kind'] == 'player': names.setdefault(ref['name'], []).append(ref)
+    for name, choices in names.items():
+        if len({r['id'] for r in choices}) != 1: continue
+        for match in re.finditer(r'(?<!\w)' + re.escape(name) + r'(?!\w)', text):
+            start = len(text[:match.start()].encode('utf-16-le')) // 2
+            end = start + len(name.encode('utf-16-le')) // 2
+            if not any(start < r['end'] and end > r['start'] for r in spans):
+                spans.append(dict(start=start, end=end, **{k:choices[0][k] for k in ('kind','id','name')}))
+    return sorted(spans, key=lambda r:r['start'])
 
 
 def _box(league):
@@ -21,9 +62,18 @@ def _box(league):
 
 
 def post(league, kind, subject, body, sender=None, payload=None, expires_week=None):
+    subject, subject_refs = _mentions(subject)
+    body, body_refs = _mentions(body)
     m = dict(id=next(_ids), year=league.year, week=league.week, kind=kind,
              sender=sender, subject=subject, body=body, payload=payload or {},
              status='unread', expires_week=expires_week)
+    m['entities'] = entity_references(league, str(subject) + '\n' + str(body), payload)
+    m['mentions'] = dict(subject=subject_refs, body=body_refs)
+    for ref in subject_refs + body_refs:
+        if not any(r['kind'] == ref['kind'] and r['id'] == ref['id'] for r in m['entities']):
+            m['entities'].append({k: ref[k] for k in ('kind', 'id', 'name')})
+    for field in ('subject', 'body'):
+        m['mentions'][field] = reference_spans(m[field], m['entities'], m['mentions'][field])
     _box(league).append(m)
     return m
 
@@ -60,7 +110,7 @@ def post_trade_offer(league, buyer, user_team, sends, gets, why, expires_week):
     def key(x):
         return x if isinstance(x, str) else dict(pick=True, year=x.year, round=x.round,
                                                   original=x.original, selection=x.selection)
-    names = ', '.join(league.players[g].name for g in gets)
+    names = ', '.join(player_name(league.players[g]) for g in gets)
     body = (f"{league.teams[buyer].name if hasattr(league.teams[buyer], 'name') else buyer} would like "
             f"{names}. {why}")
     return post(league, 'trade_offer', f'Trade offer from {buyer} for {names}', body, sender=buyer,
@@ -211,7 +261,6 @@ def reconcile(league):
             closed += 1
     return closed
 
-
 def body_rows(league, message):
     """Readable digest rows, including messages already stored in older saves.
 
@@ -246,3 +295,53 @@ def body_rows(league, message):
     line = ''.join(chars).strip().rstrip(',;')
     if line: rows.append(line)
     return rows
+
+# Name navigation data is derived and never serialized as part of the league.
+def entity_catalog(league, known=None):
+    """One directory per roster generation; unchanged page reads return no payload."""
+    players = getattr(league, 'players', {})
+    key = f'{id(league)}:{getattr(league, "year", 0)}:{len(players)}'
+    if known == key:
+        return None
+    cached = getattr(league, '_entity_catalog', None)
+    if cached and cached['key'] == key:
+        return cached['data']
+    import re
+    from views import CLUB_NAME, CLUB_DISPLAY_ABBR
+    rows = [dict(kind='player', id=str(p.pid), name=p.name,
+                 aliases=[p.name[0]+'. '+p.name.split(' ',1)[1]] if ' ' in p.name else [])
+            for p in players.values() if getattr(p, 'name', None) and getattr(p, 'pid', None) is not None]
+    rows += [dict(kind='team', id=a, name=CLUB_NAME.get(a, a),
+                  aliases=list(dict.fromkeys([a, CLUB_DISPLAY_ABBR.get(a,a)]))) for a in getattr(league, 'teams', {})]
+    names = {}
+    for row in rows:
+        names.setdefault(row['name'], []).append(row)
+    pattern = re.compile(r'(?<!\w)(?:' + '|'.join(re.escape(n) for n in sorted(names,key=len,reverse=True)) + r')(?!\w)') if names else None
+    data = dict(key=key, entities=rows)
+    league._entity_catalog = dict(key=key, data=data, names=names, pattern=pattern)
+    return data
+
+
+def entity_references(league, text, payload=None):
+    """Persist unambiguous identities, using explicit payload IDs for namesakes."""
+    entity_catalog(league)
+    cache = league._entity_catalog
+    if not cache['pattern']: return []
+    explicit = set()
+    def visit(value):
+        if isinstance(value, dict):
+            for v in value.values(): visit(v)
+        elif isinstance(value, (list, tuple)):
+            for v in value: visit(v)
+        elif isinstance(value, str):
+            explicit.add(value)
+            if value.startswith('player:'): explicit.add(value[7:])
+            if value.startswith('club:player:'): explicit.add(value[12:])
+    visit(payload or {})
+    result = []
+    for name in dict.fromkeys(m.group() for m in cache['pattern'].finditer(text)):
+        choices = cache['names'][name]
+        selected = [r for r in choices if r['id'] in explicit]
+        if len(choices) == 1: selected = choices
+        if len(selected) == 1: result.append(dict(selected[0]))
+    return result

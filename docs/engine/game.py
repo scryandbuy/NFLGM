@@ -21,6 +21,7 @@ alone for kickoffs because the rules changed).
                 returned on 35%, mean return 4.23
   KICKOFFS      2025 rules: 20.7% touchback, returned on 73.9%, 26.1 avg
 """
+import copy
 import numpy as np
 import weather as W
 ENV = W.CLEAR
@@ -891,6 +892,40 @@ def _tick(dr, secs):
     for edge in (2700.0, 1800.0, 900.0):
         if before > edge >= dr.clock: dr.clock = float(edge); break
     dr.clock = float(np.ceil(dr.clock - 1e-9))                          # whole seconds
+
+
+def _kneel_interval(seconds, down, opponent_timeouts):
+    """Live knee takes two seconds; only a retained possession can run clock.
+
+    Return remaining seconds, whether the defense uses a timeout, and whether
+    the two-minute warning stops this interval. Shared by planning/execution.
+    """
+    live_end = max(0.0, seconds - 2.0)
+    warning = seconds > 120 >= live_end
+    if live_end == 0 or down >= 4 or warning:
+        return live_end, False, warning
+    if opponent_timeouts > 0:
+        return live_end, True, False
+    end = max(0.0, live_end - 40.0)
+    if live_end > 120 >= end:
+        return 120.0, False, True
+    return end, False, False
+
+
+def _can_kneel_out(dr, seconds, opponent_timeouts):
+    """Prove that knees end this period before downs or a safety give it away."""
+    if seconds <= 0:
+        return False
+    yardline = dr.yardline
+    for down in range(dr.down, 5):
+        yardline += 1
+        if yardline >= 100:
+            return False
+        seconds, used, _ = _kneel_interval(seconds, down, opponent_timeouts)
+        opponent_timeouts -= int(used)
+        if seconds <= 0:
+            return True
+    return False
 
 
 def _penalty_ready_clock(dr, pen, half_end=None, *, before_snap=False,
@@ -1832,21 +1867,51 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         secs_left_half = dr.clock - wall
         opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
         clock_dies = secs_left_half <= 3 or (secs_left_half <= 10 and opp_tos == 0)
-        victory_kneel = (half_end is None and dr.quarter == 4 and dr.score_diff > 0
-                         and opp_tos == 0 and dr.down < 4 and dr.yardline < 99
-                         and 0 < secs_left_half <= 40)
+        can_kneel = _can_kneel_out(dr, secs_left_half, opp_tos)
+        victory_kneel = (half_end is None and dr.quarter == 4
+                         and dr.score_diff > 0 and can_kneel)
         _plan0 = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_left_half, coach=(off_state.coach if off_state is not None else None))
-        closing_kneel = (clock_dies and secs_left_half > 0 and (
+        closing_kneel = (clock_dies and can_kneel and (
             (_plan0 is not None and _plan0['choice'] == 'kneel') or
             (_plan0 is None and ((half_end is None and dr.score_diff > 0) or
                                 (dr.yardline > 45 and dr.score_diff >= 0)))))
-        if (victory_kneel or closing_kneel) and not getattr(dr, '_kneeled', False):
-            dr._kneeled = True
+        if victory_kneel or closing_kneel:
             qb = _healthy_quarterback(offense, off_state)
             if qb is None:
                 raise ValueError('No healthy player available to kneel')
-            dr.log.append(dict(type='kneel', passer=qb.get('pid'), down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock))
-            dr.plays += 1; dr.clock = wall; dr.result = 'End of half'; break
+            # Use ordinary healthy units and snap accounting, without invoking
+            # tackle, fumble, or ordinary play-resolution randomness for a knee.
+            knee_off = dict(offense, qb=qb, qbs=[qb])
+            os = off_state if hasattr(off_state, 'available') else None
+            ds = def_state if hasattr(def_state, 'available') else None
+            off_f, _ = field_units(knee_off, os, rng, True, package='11')
+            def_f, _ = field_units(defense, ds, rng, False)
+            out = dict(type='kneel', passer=off_f['qb'].get('pid'), yards=-1.0,
+                       down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock)
+            dr.log.append(out)
+            if book is not None:
+                book.record(out, off_f, def_f, rng)
+            remaining, stopped, warning = _kneel_interval(secs_left_half, dr.down, opp_tos)
+            dr.plays += 1
+            _advance(dr, -1)
+            dr.clock = wall + remaining
+            dr.clock_running = not stopped and not warning and remaining > 0
+            dr.play_clock = 40.0
+            dr.runoff_charged = max(0.0, secs_left_half - remaining - 2.0) if dr.clock_running else 0.0
+            if stopped:
+                other = 'away' if pos == 'home' else 'home'
+                timeouts.use(other)
+                dr.log.append(dict(type='timeout', side=other,
+                    side_abbr=getattr(def_state, 'abbr', None) or other.upper(),
+                    left=timeouts.left[other], clock=dr.clock))
+            if warning:
+                dr._two_min = True
+                dr.log.append(dict(type='two_minute', clock=dr.clock))
+            if remaining <= 0:
+                dr.result = 'End of half'
+            elif dr.down > 4:
+                dr.result = 'Turnover on downs'
+            continue
         if dr.plays > 25:
             dr.result = 'End of half'; break
 
@@ -2308,9 +2373,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             break
 
         # ---- timeouts ----
-        _y_after = float(np.clip(dr.yardline - float(out.get('yards', 0.0) or 0.0), 1.0, 99.0))
-        _secs_after = secs_in_half - PLAY_SECS
-        _plan_to = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None), yardline=_y_after) if _secs_after > 4 else None
+        # Look ahead from the completed play before charging its huddle. Keep
+        # the live drive unchanged until scoring/down enforcement below.
+        after_play = copy.copy(dr)
+        _advance(after_play, out.get('yards', 0.0))
+        _secs_after = secs_in_half - 6.0
+        after_play.clock = dr.clock - 6.0
+        _plan_to = end_of_half_plan(after_play, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None)) if _secs_after > 4 and after_play.result is None and after_play.down <= 4 else None
         added_penalty = live_pen is not None and taken == 'added'
         late_penalty = added_penalty and secs_in_half - 6.0 <= (120.0 if dr.quarter <= 2 else 300.0)
         used, used_by = (False, None) if late_penalty else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
@@ -2318,6 +2387,19 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         before_clock = secs_in_half
         clock_before = dr.clock
         _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
+        tempo = off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5
+        elapsed = play_seconds(t, hurry=hurry, timeout=used, tempo=tempo)
+        # A deliberate bleed may wait for a later kick, but it cannot silently
+        # consume that kick while holding a timeout. Live action still costs
+        # six seconds; no time is restored when the play itself ends the half.
+        if (not used and not added_penalty and not _fourth_fail
+                and t in ('run', 'complete', 'scramble', 'sack')
+                and after_play.result is None and _plan_to is not None
+                and _plan_to['choice'] != 'kneel'
+                and secs_in_half - elapsed < 4.0 and _secs_after > 4.0
+                and timeouts is not None and timeouts.left.get(pos, 0) > 0):
+            used = timeouts.use(pos); used_by = pos
+            elapsed = 6.0
         if (t in ('run', 'complete', 'scramble') and ((out.get('touchdown') and SCORE_STOPS_CLOCK) or float(np.round(float(out.get('yards', 0.0) or 0.0)) if SCORE_STOPS_CLOCK else float(out.get('yards', 0.0) or 0.0)) >= dr.yardline - 0.01)) or _fourth_fail:
             dr.clock -= 6.0                                    # a touchdown or a change of possession stops the clock at the whistle; no huddle follows it
         elif added_penalty:
@@ -2326,7 +2408,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 timeout=used, live_start=clock_before,
                 tempo=(off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5))
         else:
-            dr.clock -= play_seconds(t, hurry=hurry, timeout=used, tempo=(off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5))
+            dr.clock -= elapsed
         for edge in (2700.0, 900.0):
             if clock_before > edge >= dr.clock: dr.clock = float(edge)   # the quarter ends with this play; no huddle runs into the next one
         dr.clock = float(np.ceil(dr.clock - 1e-9))                          # the clock is whole seconds; a fraction left is a second
@@ -2807,7 +2889,7 @@ class StatBook:
             s = self._get(qb); s['sacked'] += 1
             d = self._get(out.get('by', (deff.get('dl') or [{}])[0].get('pid', 'DL1')))
             d['sacks'] += 1.0; d['tackles'] += 1
-        elif t == 'scramble':
+        elif t in ('scramble', 'kneel'):
             s = self._get(qb); s['rush_att'] += 1; s['rush_yds'] += out['yards']
             if out.get('touchdown') and not out.get('defensive_td'): s['rush_td'] += 1
         elif t == 'run':

@@ -81,6 +81,8 @@ def prune_pool(league, rng):
             p.retired = True; p.retired_year = league.year; p.team = None
             league.free_agents.remove(pid); gone += 1
     if gone: league.log('pool_pruned', n=gone)
+    import specialist_reserve as SR
+    SR.ensure(league)
     return gone
 
 
@@ -99,6 +101,8 @@ def clear_undrafted(league, rng, keep=0.25):
         p.retired = True; p.retired_year = league.year
         league.free_agents.remove(pid); gone += 1
     if gone: league.log('udfa_cleared', n=gone)
+    import specialist_reserve as SR
+    SR.ensure(league)
     return gone
 
 
