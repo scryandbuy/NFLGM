@@ -11,7 +11,7 @@ def setup(seed=1):
     positions=['QB','HB','FB','WR','TE','LT','LG','C','RG','RT','LEDG','REDG','DT','MIKE','WILL','SAM','CB','FS','SS','K','P','LS']
     players=[Player(str(i),f'Player {i}',positions[i%22],24,{'injury_rating':80,'tough_rating':80},team='A') for i in range(66)]
     depth={pos:[p for p in players[:53] if p.pos==pos] for pos in positions}
-    team=NS(roster=players[:53],practice_squad=players[53:],depth=depth)
+    team=NS(abbr='A',roster=players[:53],practice_squad=players[53:],depth=depth)
     league=NS(year=2026,teams={'A':team})
     state=NS(cond=H.Condition(),jaded={},last_snaps={},snaps={},out=set())
     runner=NS(states={'A':state},desks={},rng=np.random.default_rng(seed))
@@ -36,7 +36,7 @@ class PracticeTests(unittest.TestCase):
         l.practice_state=json.loads(json.dumps(l.practice_state))
         rng=copy.deepcopy(r.rng.bit_generator.state)
         self.assertEqual(first,P.resolve(l,r,'A',1));self.assertEqual(rng,r.rng.bit_generator.state)
-        moved=ps[0];l.teams['B']=NS(roster=[moved],practice_squad=[],depth={'QB':[moved]})
+        moved=ps[0];l.teams['B']=NS(abbr='B',roster=[moved],practice_squad=[],depth={'QB':[moved]})
         r.states['B']=NS(cond=H.Condition(),jaded={},last_snaps={},snaps={},out=set())
         P.resolve(l,r,'B',1)
         self.assertEqual(paid,sum(p.xp for p in ps))
@@ -56,8 +56,8 @@ class PracticeTests(unittest.TestCase):
         l,r,ps=setup();q=plan('hard');q['focus']=[p.pid for p in ps[:10]]
         l.practice_state={'auto':{'A':True},'completed':{'2023:1':{}},'participants':{'2023:1':{}}}
         v=P.resolve(l,r,'A',1,q)
-        self.assertLessEqual(sum(p.xp for p in ps),len(ps)*P.WEEKLY_XP_PER_PLAYER*1.2+.01)
-        self.assertLessEqual(max(p.xp for p in ps),24);self.assertEqual(len(v['plan']['focus']),3)
+        self.assertLessEqual(sum(p.xp for p in ps),len(ps)*P.WEEKLY_XP_CEILINGS[0])
+        self.assertLessEqual(max(p.xp for p in ps),1000);self.assertEqual(len(v['plan']['focus']),3)
         self.assertNotIn('2023:1',l.practice_state['completed']);self.assertTrue(l.practice_state['auto']['A'])
     def test_new_season_ignores_prior_health_and_snaps(self):
         l,r,ps=setup();p=ps[0]
@@ -122,14 +122,14 @@ class PracticeTests(unittest.TestCase):
         # A light week slows fatigue growth, but no longer erases weeks of game load.
         self.assertGreater(forecasts['light']['players'][0]['jaded'],.19)
 
-    def test_focus_redistributes_budget_and_does_not_override_rest(self):
+    def test_focus_increases_individual_award_and_does_not_override_rest(self):
         l,r,ps=setup();q=plan('standard')
         baseline=P.preview(l,r,'A',4,q)
         target=ps[0];q['focus']=[target.pid]
         focused=P.preview(l,r,'A',4,q)
         self.assertGreater(focused['players'][0]['xp'],baseline['players'][0]['xp'])
-        self.assertLessEqual(focused['totals']['xp'],len(ps)*P.WEEKLY_XP_PER_PLAYER+.01)
-        self.assertLessEqual(max(x['xp'] for x in focused['players']),24)
+        self.assertEqual(focused['players'][1]['xp'],baseline['players'][1]['xp'])
+        self.assertLessEqual(max(x['xp'] for x in focused['players']),1000)
         q['individual']={target.pid:'rest'}
         row=P.preview(l,r,'A',4,q)['players'][0]
         self.assertEqual((row['xp'],row['risk']),(0,0))
@@ -167,11 +167,9 @@ class PracticeTests(unittest.TestCase):
         self.assertGreater(results['hard'][5],results['standard'][5])
         self.assertGreater(results['adaptive'][5],.02)
         self.assertLess(results['adaptive'][5],.35)
-        # Mixed preparation must not buy a large development increase over the
-        # old assistant's almost-every-week light allowance (12 * .55 per man).
-        self.assertLess(results['adaptive'][0],66*18*12*.55*1.10)
+        # New individual ceiling applies even across a whole practice season.
+        self.assertLess(results['adaptive'][0],66*18*P.WEEKLY_XP_CEILINGS[0])
         self.assertLess(results['hard'][0],results['standard'][0]*1.21)
-        self.assertLess(results['standard'][3],17*(75+3*60)*.05)
-        self.assertGreater(results['standard'][4],results['standard'][3]*2)
+        self.assertLess(results['standard'][3],18*P.WEEKLY_XP_CEILINGS[0])
 
 if __name__=='__main__':unittest.main()

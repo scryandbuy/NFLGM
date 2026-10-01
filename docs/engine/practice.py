@@ -1,7 +1,7 @@
 """Weekly preparation. Read-only previews; one persisted award per player/week.
 
-Budgets are deliberately small relative to 75 game-day XP plus 3 per snap.
-Modifiers redistribute a fixed unit budget instead of inflating team earnings.
+Individual ceilings decline with elapsed seasons, including practice-squad years.
+Development, coaching and preparation determine the fraction earned each week.
 """
 import copy
 import health as H
@@ -12,12 +12,38 @@ UNITS = ('offense', 'defense', 'special')
 INTENSITIES = {'recovery': (.0, .0, .045), 'light': (.55, .35, .006),
                'standard': (1., 1., .0), 'hard': (1.20, 2.7, -.018)}
 OFFENSE = {'QB','HB','FB','WR','TE','LT','LG','C','RG','RT'}
-# Calibrated to the mixed assistant policy, preserving the prior light-heavy
-# season allowance instead of increasing development when coaches train normally.
-WEEKLY_XP_PER_PLAYER = 8.0
-MAX_PLAYER_XP = 24.0
+WEEKLY_XP_CEILINGS = (1000., 850., 700., 550., 425., 325., 250., 200., 175., 150.)
+MAX_COACH_XP_MULT = 1.15 * 1.15  # top coordinator plus Teacher/eligible Developer
 # About 0.04 incidents/team/week at standard; much less than game exposure.
 BASE_INJURY_RISK = .0007
+
+def _entry_year(league, p):
+    for value in (getattr(p, 'entry_year', None), getattr(p, 'draft_year', None),
+                  p.xp_spent.get('_practice_entry_year')):
+        if value is not None:
+            return min(int(league.year), int(value))
+    # Legacy players without either date get an anchor at their first practice.
+    # Persisted on resolution only; previewing must never change the save.
+    return int(league.year) - max(0, int(getattr(p, 'accrued', 0) or 0))
+
+def _xp_award(league, team, p, reps, gain, focused, streak):
+    import staff as ST
+    experience = max(0, int(league.year) - _entry_year(league, p))
+    ceiling = WEEKLY_XP_CEILINGS[min(experience, len(WEEKLY_XP_CEILINGS)-1)]
+    clamp = lambda value: max(0., min(1., float(value)))
+    factors = dict(development=clamp(XP.modifier(p)/max(XP.DEV_MULT.values())),
+                   coaching=clamp(ST.xp_mult(team, p)/MAX_COACH_XP_MULT),
+                   reps=clamp(reps/1.25*max(1.,gain)/(1.+.22*streak)),
+                   focus=1. if focused else 2./3., intensity=clamp(gain))
+    fraction = 1.
+    for value in factors.values(): fraction *= value
+    award = min(ceiling, max(0., ceiling*fraction))
+    experience_word = 'Rookie' if experience == 0 else f'Year {experience+1}'
+    explanation = (f'{experience_word}: {ceiling:,.0f} XP weekly ceiling. '
+                   + '; '.join(f'{name.title()} {value:.0%}' for name,value in factors.items())
+                   + f'. Award capped at {ceiling:,.0f} XP.')
+    return dict(xp=award, xp_ceiling=ceiling, xp_experience=experience,
+                xp_factors=factors, xp_explanation=explanation)
 
 def _unit(p):
     return 'special' if p.pos in ('K','P','LS') else 'offense' if p.pos in OFFENSE else 'defense'
@@ -110,7 +136,7 @@ def recommend_plan(league, runner, abbr, week, *, bye=False):
         units[unit] = dict(intensity=intensity,reps=reps)
         reasons.append(f'{unit.title()}: {reason}')
         candidates.extend(young)
-    # Coaching attention redistributes the existing budget; it never creates XP.
+    # Three focused players receive the full coaching attention factor.
     candidates.sort(key=lambda p:(-XP.modifier(p),p.age,p.pid))
     return dict(units=units,individual=individual,
                 focus=[] if bye else [p.pid for p in candidates[:3]],reasons=reasons)
@@ -162,34 +188,23 @@ def preview(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=F
         recovered=c if recovery_done else H.recover_between_games(c,fitness,7,after_j)
         after_c=max(0.,min(100.,recovered-burden*reps))
         streak=int(saved.get('hard_streak',0)) if saved.get('last_key')==f'{league.year}:{week-1}' else 0
-        weight=reps*(.4 if starter else 1.) / (1+snaps/45.)
-        weight*=XP.modifier(p)
-        # Same work ethic/coaching factors as credit, normalized into the team budget.
+        award=_xp_award(league,league.teams[abbr],p,reps,gain,
+                        p.pid in plan['focus'],streak if intensity=='hard' else 0)
+        # Reverse credit's common multipliers after calculating practice's own
+        # normalized factors. Practice has no extra work-ethic multiplier.
         import personality as PT, staff as ST
         mult=PT.xp_mult(p)*ST.xp_mult(league.teams[abbr],p)
-        weight*=mult
-        if p.pid in plan['focus']: weight*=1.5
-        if intensity=='hard': weight/=1+.22*streak
         risk=BASE_INJURY_RISK*reps*burden*H.condition_injury_multiplier(after_c)*(1+after_j)
         risk*= max(.6,min(1.5,(110-fitness)/40))*(.2 if unit=='special' else 1.)
         if duplicate: after_c,after_j=c,j
         rows.append(dict(pid=p.pid,name=p.name,pos=p.pos,unit=unit,condition=round(after_c,3),
-                         before_condition=c,jaded=after_j,xp=0.,risk=risk,weight=weight,
+                         before_condition=c,jaded=after_j,risk=risk,**award,
                          multiplier=mult,intensity=intensity,reps=reps,duplicate=duplicate,
                          rehab=rehab,hard_streak=streak+1 if intensity=='hard' and reps else 0))
-    for unit in UNITS:
-        members=[r for r in rows if r['unit']==unit]
-        budget=WEEKLY_XP_PER_PLAYER*len(members)*INTENSITIES[plan['units'][unit]['intensity']][0]
-        if plan['units'][unit]['intensity']=='hard' and members:
-            streak=sum(max(0,r['hard_streak']-1) for r in members)/len(members)
-            budget*=max(.65,1./(1.+.12*streak))
-        total=sum(r['weight'] for r in members)
-        for r in members:
-            r['xp']=min(MAX_PLAYER_XP,budget*r['weight']/total) if total else 0.
     totals=dict(xp=round(sum(r['xp'] for r in rows),2),expected_injuries=sum(r['risk'] for r in rows),
                 condition=round(sum(r['condition'] for r in rows)/max(1,len(rows)),1))
     return dict(plan=plan,players=rows,totals=totals,completed=False,injuries=[],
-                summary=['One weekly coaching budget is shared across participating players.'],
+                summary=['Individual weekly XP ceilings decline with experience; coaching, development, reps and focus determine the award.'],
                 metrics=[dict(label='Practice XP',value=round(totals['xp'])),
                          dict(label='Average condition',value=f"{totals['condition']}%"),
                          dict(label='Practice injury risk',value='Low' if totals['expected_injuries'] < .06 else 'Moderate' if totals['expected_injuries'] < .15 else 'High')])
@@ -222,10 +237,15 @@ def resolve(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=F
         people[p.pid]=abbr
         st.cond.cond[p.pid]=row['condition']; st.jaded[p.pid]=row['jaded']
         health[p.pid]=dict(condition=row['condition'],jaded=row['jaded'],hard_streak=row['hard_streak'],last_key=key,last_team=abbr)
-        # Divide out the modifier already included in the allocation. credit records
-        # the exact bounded award and remains the common staff/work-ethic entry point.
+        p.xp_spent.setdefault('_practice_entry_year',_entry_year(league,p))
+        # credit records the bounded award once, without reapplying modifiers.
         p._team_ref=league.teams[abbr]
-        p.xp+=XP.credit(p,row['xp']/max(.001,row['multiplier']),'practice')
+        credited=XP.credit(p,row['xp']/max(.001,row['multiplier']),'practice')
+        # Floating-point reversal of the common multipliers can overshoot by
+        # a fraction of an XP. Keep both the balance and ledger within forecast.
+        paid=min(row['xp'],credited)
+        if paid != credited: p.xp_spent['_earned']['practice']-=credited-paid
+        p.xp+=paid
         if row['risk'] and runner.rng.random()<row['risk']:
             duration=runner.rng.random()
             weeks=1 if duration<.92 else 2 if duration<.99 else 4
@@ -238,12 +258,13 @@ def resolve(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=F
             recap['injuries'].append(injury)
             st.out.add(p.pid)
     recap['completed']=True
-    recap['summary']=[f"Practice complete: {round(recap['totals']['xp'])} XP shared across the team.",
+    recap['summary']=[f"Practice complete: {round(recap['totals']['xp'])} XP earned across the team.",
                       f"Average condition: {recap['totals']['condition']}%."]
     recap['summary'] += [f"{i['name']}: {i['kind']}, estimated {i['weeks_out']} week(s)." for i in recap['injuries']] or ['No new practice injuries.']
     # Keep detailed results only for the user's report. CPU completion needs
     # totals, not a full duplicate of every player's weekly forecast.
-    recap['players'] = ([{k:row[k] for k in ('pid','name','xp','condition','jaded')}
+    recap['players'] = ([{k:row[k] for k in ('pid','name','xp','condition','jaded',
+                         'xp_ceiling','xp_experience','xp_factors','xp_explanation')}
                          for row in recap['players']] if abbr == getattr(league,'user_team',None) else [])
     state.setdefault('plans',{})[abbr]=copy.deepcopy(recap['plan'])
     state['completed'].setdefault(key,{})[abbr]=copy.deepcopy(recap)
