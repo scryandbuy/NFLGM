@@ -239,6 +239,11 @@
     "incorporated_as": "0292705",
     "reason": "Moderate young-player progression source and tests incorporated."
   },
+  "bf9425e": {
+    "status": "integrated",
+    "incorporated_as": "330ee50",
+    "reason": "Late Game Day copy removal cherry-picked and browser stamps rebuilt."
+  },
   "c81ecc": {
     "status": "integrated",
     "incorporated_as": "3180cb5",
