@@ -3,6 +3,7 @@ const src = fs.readFileSync('docs/app.js', 'utf8');
 let notices = [], calls = [];
 const context = {
   location: {hash: '#portal'},
+  practiceSaving: false, practiceSaveRequired: false,
   notify: n => notices.push(n), busy: () => {}, setTimeout: () => {}, renderRail: () => {},
   pyJSON: code => {
     calls.push(code);
