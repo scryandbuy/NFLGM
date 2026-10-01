@@ -1319,16 +1319,20 @@ function offerForm(t, kind, onDone, preset) {
   const shapeChips = el('div', { class: 'chips' }); let shape = 0.5;
   for (const [val, label] of [[0.85, 'Pay It Now'], [0.5, 'League Shape'], [0.15, 'Back-Load']]) shapeChips.append(el('button', { class: 'chip', 'aria-pressed': String(val === shape), onclick: e => { shape = val; shapeChips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); preview(); } }, label));
   const y1 = el('b', {}, '—'), total = el('b', {}, '—'); const hitsRow = el('div', { class: 'hits' }); const yearHits = el('div', { class: 'offer year-hits' });
+  const capImpact = el('div', { class: 'extension-impact-slot', 'aria-live': 'polite', hidden: true });
   const preview = () => {
     const r = pyJSON(`SESSION.personnel_act('offer_preview', pid=${JSON.stringify(t.pid)}, apy=${+apy.value || 0}, years=${+yrs.value || 1}, bonus=${+bonus.value || 0}, front_load=${shape})`);
-    if (!r.ok) return;
+    if (!r.ok) { capImpact.hidden = false; capImpact.replaceChildren(el('p', {}, r.why || 'Cap preview unavailable for these terms.')); yearHits.replaceChildren(); hitsRow.replaceChildren(); return; }
     y1.textContent = r.year1 != null ? `$${r.year1.toFixed(1)}m` : '—';
     total.textContent = `$${r.total}m`;
     const sy = f.querySelector('.summary-years'), sa = f.querySelector('.summary-apy');
     if (sy) sy.textContent = String(+yrs.value || 1);
     if (sa) sa.textContent = `$${apyOf().toFixed(1)}m`;
-    { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m annualized total`; if (r.extension) breakdown.textContent += ` · ${r.existing_years} existing year${r.existing_years === 1 ? '' : 's'} retained; future cap hits below include the existing deal and extension`; if (r.prorated) breakdown.textContent = `${n === 1 ? 'Remainder of this season' : n + ' seasons'} · $${apyOf().toFixed(1)}m annual rate · $${r.cash_this_season.toFixed(2)}m cash this season (including signing bonus) · $${r.year1.toFixed(2)}m current cap hit`; }
-    const visibleHits = r.hits.map((hit, i) => ({ hit, year: r.years[i], void: r.years[i] === r.expiry_year })).filter((_, i) => !r.extension || i > 0);
+    { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m annualized total`; if (r.extension) breakdown.textContent += ` · ${r.existing_years} existing year${r.existing_years === 1 ? '' : 's'} retained; cap impact includes the existing deal and extension`; if (r.prorated) breakdown.textContent = `${n === 1 ? 'Remainder of this season' : n + ' seasons'} · $${apyOf().toFixed(1)}m annual rate · $${r.cash_this_season.toFixed(2)}m cash this season (including signing bonus) · $${r.year1.toFixed(2)}m current cap hit`; }
+    capImpact.hidden = !r.extension;
+    capImpact.replaceChildren(...(r.extension ? [extensionImpact(r)] : []));
+    const visibleHits = r.hits.map((hit, i) => ({ hit, year: r.years[i], void: r.years[i] === r.expiry_year }));
+    yearHits.hidden = !!r.extension; hitsRow.hidden = !!r.extension;
     const highestHit = Math.max(0.1, ...visibleHits.map(x => x.hit));
     yearHits.innerHTML = ''; visibleHits.forEach(x => yearHits.append(el('label', {}, `${x.void ? 'Void charge' : 'Cap hit'} · ${x.year}`, el('b', {}, `$${x.hit.toFixed(1)}m`))));
     hitsRow.innerHTML = ''; visibleHits.forEach(x => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, x.hit / highestHit * 100)}%` })), el('span', {}, `${x.void ? 'Void charge · ' : ''}${x.year}`), el('b', {}, `$${x.hit.toFixed(1)}m`))));
@@ -1342,7 +1346,7 @@ function offerForm(t, kind, onDone, preset) {
       el('div', {}, el('span', {}, kind === 'extension' ? 'Added years' : 'Years'), el('b', { class: 'summary-years' }, String(start.years || t.years || 3))),
       el('div', {}, el('span', {}, 'Average per year'), el('b', { class: 'summary-apy' }, `$${apy.value}m`))
     ),
-    el('div', { class: 'offer', style: 'grid-template-columns:repeat(4,1fr)' }, el('label', {}, kind === 'extension' ? 'Added years' : 'Years', yrs), el('label', {}, 'Salary ($m / yr)', salary), el('label', {}, 'Signing Bonus ($m)', bonus), el('label', {}, kind === 'extension' ? 'New money' : 'Total', total)), yearHits, breakdown,
+    el('div', { class: 'offer', style: 'grid-template-columns:repeat(4,1fr)' }, el('label', {}, kind === 'extension' ? 'Added years' : 'Years', yrs), el('label', {}, 'Salary ($m / yr)', salary), el('label', {}, 'Signing Bonus ($m)', bonus), el('label', {}, kind === 'extension' ? 'New money' : 'Total', total)), capImpact, yearHits, breakdown,
     el('div', { class: 'shape' }, el('span', {}, 'Shape'), shapeChips), hitsRow, promises);
   const acts = el('div', { class: 'acts' });
   acts.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${+apy.value}, years=${+yrs.value}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`); notify(r); onDone(); } }, kind === 'fa_inseason' ? 'Offer (decides at Advance)' : preset ? 'Send Counter' : 'Send Offer'));
@@ -1460,18 +1464,44 @@ function openTalks(t, reload) {
   document.body.append(overlay);
 }
 
-function extensionCapMetrics(cap) {
+function extensionCapMetrics(cap, current = false) {
   return [[`$${cap.limit.toFixed(1)}m`, `${cap.year} Cap`],
     [`$${cap.committed.toFixed(1)}m`, `${cap.year} Committed`],
-    [`$${cap.space.toFixed(1)}m`, 'Cap Space for Extensions']];
+    [`$${cap.space.toFixed(1)}m`, current ? 'Current Cap Space' : 'Cap Space for Extensions']];
+}
+function extensionBudgets(current, next) {
+  const budgets = el('div', { class: 'extension-budgets' });
+  for (const [cap, now] of [[current, true], [next, false]]) {
+    if (!cap) continue;
+    const strip = el('section', { class: 'extension-cap-year' }, el('h3', {}, now ? 'This year' : 'Next year · projected'));
+    const metrics = el('div', { class: 'extension-cap-metrics' });
+    for (const [value, label] of extensionCapMetrics(cap, now)) metrics.append(el('div', {}, el('b', {}, value), el('small', {}, label)));
+    strip.append(metrics); budgets.append(strip);
+  }
+  return budgets;
+}
+function extensionImpact(preview, title = 'Proposed extension · cap impact') {
+  const rows = preview.cap_impact || [], current = rows[0];
+  const money = n => `${n < 0 ? '−' : ''}$${Math.abs(n).toFixed(3)}m`;
+  const delta = n => `${n > 0 ? '+' : ''}${money(n)}`;
+  const box = el('section', { class: 'extension-impact' }, el('h3', {}, title));
+  if (!current) return box;
+  box.append(el('div', { class: 'extension-impact-now' }, el('span', {}, `This year · ${current.year}`),
+    el('b', {}, `${delta(current.change)} cap change`), el('small', {}, `Player’s total cap hit: ${money(current.total)}`)));
+  const table = el('table', { class: 'extension-impact-table' }, el('thead', {}, el('tr', {},
+    ...['Year', 'Existing deal', 'Extension change', 'Total cap hit'].map(label => el('th', {}, label)))));
+  const body = el('tbody');
+  for (const [i, r] of rows.entries()) body.append(el('tr', { class: i === 0 ? 'current' : '' },
+    el('td', {}, `${r.year}${i === 0 ? ' · This year' : r.year === preview.expiry_year ? ' · Void charge' : ''}`),
+    el('td', {}, money(r.existing)), el('td', {}, delta(r.change)), el('td', {}, money(r.total))));
+  table.append(body); box.append(el('div', { class: 'extension-impact-scroll' }, table),
+    el('p', {}, 'Total cap hits include the existing contract plus this extension. Signing-bonus proration can add a charge this year.'));
+  return box;
 }
 function threadBox(t, onDone) {
   const box = el('div', { class: 'thread negotiation-thread' });
   if (t.kind === 'extension' && t.extension_cap) {
-    const strip = el('div', { class: 'extension-cap-metrics' });
-    for (const [value, label] of extensionCapMetrics(t.extension_cap))
-      strip.append(el('div', {}, el('b', {}, value), el('small', {}, label)));
-    box.append(strip);
+    box.append(extensionBudgets(t.current_cap, t.extension_cap));
   } else if (t.cap) box.append(el('div', { class: 'msg note cap-strip' }, el('b', {}, `${t.cap.year} cap · `), `$${t.cap.limit}m limit, $${t.cap.committed}m committed, `, el('b', {}, `$${t.cap.space}m of room`), t.cap.next ? ' (next year, the ledger this deal lands on)' : ''));
   // the conversation as logged: every line with who said it, then the agent's temperament, then the decision
   const log = t.log && t.log.length ? t.log : [];
@@ -1481,6 +1511,8 @@ function threadBox(t, onDone) {
   box.append(el('div', { class: 'msg note' }, t.agent_line || ''));
   const matching=t.state==='match_requested' && !!t.rival;
   const countered=t.state==='countered' && !!t.counter;
+  if (t.kind === 'extension' && t.offer_cap_preview?.ok)
+    box.append(extensionImpact(t.offer_cap_preview, countered ? 'Agent counter · cap impact' : 'Submitted offer · cap impact'));
   const feedback=el('div',{class:'msg note',role:'alert',hidden:true});
   const act=action=>{const r=pyJSON(`SESSION.personnel_act('${action}', tid=${t.id})`);notify(r);if(r.ok)onDone();else{feedback.hidden=false;feedback.textContent=r.why||'The decision could not be completed.';}};
   if (matching) box.append(el('div', { class: 'msg match rival-panel' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${t.rival.team} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { act('match'); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { act('withdraw'); } }, 'Let Him Go'))));
@@ -1506,11 +1538,12 @@ function finishPersonnel(page, v, kind, left, right, extra = []) {
   const subtitle = heading?.querySelector('small')?.textContent || '';
   heading?.remove();
   const title = {fa:'FREE AGENCY',wire:'WAIVER WIRE',extensions:'EXTENSIONS'}[kind];
-  const metrics = kind === 'fa' ? [[v.count,'Available'],[`$${v.cap_focus?.space ?? v.cap}m`,'Available cap room'],[`$${v.cap_focus?.pending_offers ?? 0}m`,'Held for offers'],[`$${v.committed_next}m / $${v.limit_next}m`,'Next year committed']] : kind === 'wire' ? [[v.my_priority ? `${v.my_priority}${ord(v.my_priority)}` : '—','Your priority'],[v.rows.length,'Available'],[v.awards,'Awards']] : extensionCapMetrics(v.extension_cap);
+  const metrics = kind === 'fa' ? [[v.count,'Available'],[`$${v.cap_focus?.space ?? v.cap}m`,'Available cap room'],[`$${v.cap_focus?.pending_offers ?? 0}m`,'Held for offers'],[`$${v.committed_next}m / $${v.limit_next}m`,'Next year committed']] : kind === 'wire' ? [[v.my_priority ? `${v.my_priority}${ord(v.my_priority)}` : '—','Your priority'],[v.rows.length,'Available'],[v.awards,'Awards']] : [];
   const hero=el('div',{class:'personnel-hero'},el('div',{},el('small',{},club.name.toUpperCase()),el('h1',{},title),el('p',{},subtitle)));
   const stats=el('div',{class:'personnel-metrics'});
   for(const [value,label] of metrics) stats.append(el('div',{},el('b',{},value),el('small',{},label)));
   hero.append(stats);board.append(hero);
+  if (kind === 'extensions') board.append(extensionBudgets(v.current_cap, v.extension_cap));
   left.className='personnel-main'; right.className='personnel-aside';
   const grid=el('div',{class:'personnel-columns'},left,right);board.append(grid);
   // Preserve seasonal content (tags/tenders) and the FA transaction feed.
@@ -1733,7 +1766,7 @@ function renderRetain(v) {
 function renderExtensions(v) {
   renderRail(v.rail); const page = persPage(); persSecond('extensions');
   const reload = () => renderExtensions(pyJSON(`SESSION.personnel('extensions')`));
-  const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Extensions', el('small', {}, 'Plan your next-year commitments')));
+  const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Extensions', el('small', {}, 'Review current and future cap commitments')));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   for (const [k, label, list] of [['expiring', 'Expiring', v.expiring], ['two_left', 'Two Years Left', v.two_left], ['done', 'Done This Year', v.done]]) tabs.append(el('button', { 'aria-pressed': String(extTab === k), onclick: () => { extTab = k; renderExtensions(v); } }, label + ' ', el('em', {}, list.length)));
   left.append(tabs);
