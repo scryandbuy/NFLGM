@@ -2040,6 +2040,8 @@ h2{letter-spacing:-.01em}
   text-transform:uppercase;text-align:left;padding:7px 4px;border-bottom:1px solid var(--rule-2)}
 .player-card .contract th{text-align:right}
 .player-card .contract th:first-child{text-align:left}
+.player-card .stab th,.player-card .stab td{text-align:right}
+.player-card .stab th:nth-child(-n+2),.player-card .stab td:nth-child(-n+2){text-align:left}
 .player-card .contract td,.player-card .stab td{padding:8px 4px;color:var(--ink-2);
   border-bottom:1px solid var(--rule)}
 .player-card .contract td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
