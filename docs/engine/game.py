@@ -880,7 +880,7 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
         # nothing to stop after a score (the clock is dead at the whistle) or on the play that reaches the
         # two-minute warning (the warning stops it for free)
         in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
-        failed_third = dr.down >= 3 and float(out.get('yards', 0) or 0) < dr.togo
+        failed_third = getattr(dr, 'down', 1) >= 3 and float(out.get('yards', 0) or 0) < getattr(dr, 'togo', 10)
         if (half_end is not None and dr.score_diff >= 0 and failed_third
                 and dr.yardline - float(out.get('yards', 0) or 0) > 40):
             return False, None  # do not stop a leading/tied stalled drive just to punt
