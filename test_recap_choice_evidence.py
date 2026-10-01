@@ -40,8 +40,9 @@ class RecapChoiceEvidence(unittest.TestCase):
         result = GR.assess_choice({'box_bias':.06}, [], after, before=([], before))[0]
         self.assertEqual(result['verdict'], 'positive')
         self.assertIn('5.7 → 4.5 yards per designed run', result['text'])
-        self.assertIn('(11 runs)', result['text'])
-        self.assertIn('(13 runs)', result['text'])
+        self.assertIn('(13 runs before, 11 after)', result['text'])
+        self.assertEqual(result['text'].count('5.7'), 1)
+        self.assertEqual(result['text'].count('4.5'), 1)
         self.assertNotIn('problem persisted', result['text'])
         self.assertNotIn('Did not hold up', result['text'])
 

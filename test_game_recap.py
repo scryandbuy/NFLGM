@@ -114,6 +114,61 @@ class RecapJudgmentTests(unittest.TestCase):
         self.assertEqual(len(GR.plays(res,'home',2)),0)
 
 
+class RecapAccountingTests(unittest.TestCase):
+    def test_passing_turnover_does_not_downgrade_rushing(self):
+        rows = [play('run', 6.8) for _ in range(32)] + [play('sack', -4, is_pass=True, fumble_lost=True)]
+        grade, text = GR.assessment(rows, 'run')
+        self.assertEqual(grade, 'positive')
+        self.assertNotIn('turnover', text)
+        self.assertEqual(GR.stats(rows)['turnovers'], 1)
+
+    def test_rushing_turnover_does_not_downgrade_passing_or_protection(self):
+        rows = [play(yards=8, is_pass=True) for _ in range(10)] + [play('run', 4, fumble_lost=True)]
+        for metric in ('passing', 'protection'):
+            self.assertEqual(GR.assessment(rows, metric)[0], 'positive')
+        self.assertEqual(GR.assessment([play('run',8) for _ in range(8)] + rows[-1:], 'run')[0], 'mixed')
+
+    def test_halftime_run_verdict_ignores_passing_turnovers_and_deduplicates_rates(self):
+        before = [play('run', 6.3) for _ in range(16)]
+        after = [play('run', 7.4) for _ in range(16)] + [play('interception',0,is_pass=True)]
+        finding = GR.assess_choice({'pass_bias':-.06},after,[],before=(before,[]))[0]
+        self.assertEqual(finding['verdict'],'positive')
+        self.assertEqual(finding['text'].count('6.3'),1)
+        self.assertEqual(finding['text'].count('7.4'),1)
+        self.assertIn('16 runs before, 16 after',finding['text'])
+        self.assertNotIn('turnover',finding['text'])
+
+    def test_halftime_real_rushing_turnover_still_qualifies_verdict(self):
+        before = [play('run', 5) for _ in range(8)]
+        after = [play('run', 8) for _ in range(8)]
+        after[0]['fumble_lost']=True
+        finding=GR.assess_choice({'pass_bias':-.06},after,[],before=(before,[]))[0]
+        self.assertEqual(finding['verdict'],'mixed')
+        self.assertIn('turnover',finding['text'])
+
+    def test_legacy_fractional_conversion_matches_field_spot(self):
+        import game
+        import numpy as np
+        for gained,need in [(0.7,1),(0.4,1),(9.6,10),(9.4,10),(2.5,3)]:
+            dr=game.Drive({}, {}, 44, 1800, 2, 0, np.random.default_rng(1))
+            dr.down=3;dr.togo=need
+            game._advance(dr,gained)
+            self.assertEqual(GR.stats([play('run',gained,down=3,ydstogo=need)])['converted'],
+                             int(dr.down==1))
+
+    def test_recorded_field_result_wins_over_fractional_estimate(self):
+        rows=[play('run',.4,down=3,ydstogo=1,converted=True),
+              play('run',1.2,down=3,ydstogo=1,converted=False)]
+        self.assertEqual(GR.stats(rows)['converted'],1)
+        self.assertTrue(GR.converted(rows[0]))
+        self.assertFalse(GR.converted(rows[1]))
+
+    def test_turnovers_and_wiped_plays_are_not_conversions(self):
+        for extra in ({'fumble_lost':True},{'defensive_td':True},{'nullified':True}):
+            self.assertEqual(GR.stats([play('run',20,down=3,ydstogo=10,converted=True,**extra)])['converted'],0)
+        self.assertEqual(GR.stats([play('run',20,down=3,nullified=True)])['third'],0)
+
+
 class RecapSimulationTests(unittest.TestCase):
     def test_direct_playoff_game_posts_once_and_saves(self):
         from session import Session
@@ -123,6 +178,10 @@ class RecapSimulationTests(unittest.TestCase):
         runner=SeasonRunner(s.L,s.rng)
         res=runner.play('MIN','GB',19,playoffs=True)
         self.assertIsNotNone(res)
+        third_plays=[p for side in ('home','away') for p in GR.plays(res,side) if p.get('down')==3]
+        self.assertTrue(third_plays)
+        self.assertTrue(all('converted' in p for p in third_plays))
+        self.assertEqual(GR.stats(third_plays)['converted'],sum(p['converted'] for p in third_plays))
         reviews=[m for m in s.L.inbox if (m.get('payload') or {}).get('game_key','').startswith('game-recap-')]
         self.assertEqual(len(reviews),1)
         self.assertIn('Keep a back in',reviews[0]['body'])

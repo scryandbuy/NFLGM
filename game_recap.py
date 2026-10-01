@@ -39,7 +39,16 @@ def plays(res, side, half=None):
     return out
 
 
+def converted(p):
+    """Prefer the field result; older saves use the field's whole-yard spot rule."""
+    if p.get('nullified') or p.get('defensive_td') or p.get('fumble_lost') or p['type'] == 'interception':
+        return False
+    if 'converted' in p: return bool(p['converted'])
+    return bool(p.get('touchdown')) or round(float(p.get('yards', 0) or 0)) >= float(p.get('ydstogo', 10) or 10)
+
+
 def stats(rows):
+    rows = [p for p in rows if not p.get('nullified')]
     passes = [p for p in rows if p.get('is_pass') or p['type'] in SCRIMMAGE - {'run'}]
     runs = [p for p in rows if p['type'] == 'run' and not p.get('is_pass')]
     yards = lambda ps: sum(float(p.get('yards', 0) or 0) for p in ps)
@@ -48,7 +57,7 @@ def stats(rows):
                 runs=len(runs), run_yards=yards(runs), sacks=sum(p['type']=='sack' for p in passes),
                 pressure=sum(bool(p.get('pressured')) or p['type']=='sack' for p in passes),
                 turnovers=sum(p['type']=='interception' or bool(p.get('fumble_lost')) for p in rows),
-                third=len(thirds), converted=sum(not p.get('defensive_td') and (bool(p.get('touchdown')) or float(p.get('yards',0) or 0)>=float(p.get('ydstogo',10) or 10)) for p in thirds))
+                third=len(thirds), converted=sum(converted(p) for p in thirds))
 
 
 def rate(n, d): return f'{n / d:.1f}' if d else '—'
@@ -155,6 +164,9 @@ def receiver_assessment(rows, target, name):
 
 def measurement(rows, kind):
     predicates = {
+        'run': lambda p: p['type'] == 'run' and not p.get('is_pass'),
+        'passing': lambda p: p.get('is_pass') or p['type'] in SCRIMMAGE - {'run'},
+        'protection': lambda p: p.get('is_pass') or p['type'] in SCRIMMAGE - {'run'},
         'deep': lambda p: p.get('depth') == 'deep' or float(p.get('air', 0) or 0) >= 20,
         'screens': lambda p: p.get('screen'), 'play action': lambda p: p.get('play_action'),
         'motion': lambda p: p.get('motion'), 'blitz': lambda p: p.get('blitz'),
@@ -201,19 +213,19 @@ def relative_assessment(previous, rows, kind, defense, verdict, line):
     a, an, at, _, _, unit, minimum = measurement(previous, kind)
     b, bn, bt, _, _, _, _ = measurement(rows, kind)
     if an < minimum or bn < minimum:
-        return verdict, line + ' Too little before/after evidence to judge the change.'
+        return verdict, line + ' Too little before/after evidence to judge the change. Before the adjustment: ' + evidence(previous, kind) + '.'
     old, new = at / an, bt / bn
     gain = old - new if defense or kind == 'protection' else new - old
     threshold = 5.0 if kind == 'protection' else .5 if kind == 'run' else .75
     if abs(gain) < threshold:
-        return verdict, line + ' No meaningful change from the first-half rate.'
+        return verdict, line + ' No meaningful change from the first-half rate. Before the adjustment: ' + evidence(previous, kind) + '.'
     improved = gain > 0
     caveat = (not defense and b['turnovers'] > a['turnovers']) or (
         kind == 'protection' and b['sacks'] >= 3 and b['sacks'] / bn > a['sacks'] / an + .03)
     grade = ('mixed' if caveat else 'positive') if improved else 'negative'
     label = 'Improved after halftime' if improved else 'Worsened after halftime'
-    text = (f"{label}: {old:.1f} → {new:.1f} {unit}. "
-            f"After the adjustment: {evidence(rows, kind)}.")
+    sample = 'runs' if kind == 'run' else 'dropbacks' if kind in ('passing', 'protection') else 'plays'
+    text = f"{label}: {old:.1f} → {new:.1f} {unit} ({an} {sample} before, {bn} after)."
     if improved and verdict == 'negative': text += ' The problem eased, although the final level still needs work.'
     if improved and caveat: text += ' The improvement came with worse sack or turnover outcomes.'
     return grade, text
@@ -258,7 +270,6 @@ def assess_choice(changes, own, against, before=None, league=None):
         if before is not None:
             previous = before[0 if side == 'off' else 1]
             verdict, line = relative_assessment(previous, rows, metric, side == 'def', verdict, line)
-            line += ' Before the adjustment: ' + evidence(previous, metric) + '.'
         findings.append(dict(label=label, verdict=verdict, text=line))
     return findings
 

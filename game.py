@@ -2404,6 +2404,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _prepare_interception(dr.yardline, out)
         if book is not None: book.record(out, off_f, def_f, rng)
         pending = (out, off_f, def_f, _snap_state)
+        # Persist the field's conversion decision for recaps and saved logs.
+        # Turnovers/safeties that exit before normal advancement remain false.
+        out['converted'] = False
 
         if book is not None and out.get('fumble'):
             book.record_fumble(out)
@@ -2481,6 +2484,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dr.clock -= 0; dr.result, dr.points = 'Safety', -2
             break
         scored = _advance(dr, out.get('yards', 0.0))
+        out['converted'] = dr.result == 'Touchdown' or (dr.result is None and dr.down == 1)
         if not scored and out.get('touchdown'):
             out['touchdown'] = False                # the play engine's own read used a fraction; the drive's whole yards say he was short
         if scored:

@@ -1354,6 +1354,20 @@ def _resolve_live_penalty(dr, pen, out, oc):
         if pen['penalty'] == 'Intentional Grounding':
             dr.down += 1                          # loss of down
         return 'replaced'
+    # A completed forward pass beyond the line retains its gain when the
+    # passer is roughed, provided possession did not change during the down.
+    if (pen['penalty'] == 'Roughing the Passer' and out.get('type') == 'complete'
+            and gained > 0 and not out.get('fumble_lost')
+            and not out.get('change_of_possession') and not out.get('defensive_td')):
+        spot = max(0.0, dr.yardline - spot_gain)
+        if spot <= 0 or out.get('touchdown'):
+            dr.try_penalty = yards
+            pen['on_try'] = True
+        else:
+            pen['yards'] = min(yards, spot / 2.0)
+            dr.log_pen_after = pen['yards']
+            dr.log_pen_first = True
+        return 'added'
     if not out.get('defensive_td') and (out.get('touchdown') or gained >= dr.yardline - 0.01 or float(np.round(gained)) >= dr.yardline):
         if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
             dr.try_penalty = yards
@@ -2390,6 +2404,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _prepare_interception(dr.yardline, out)
         if book is not None: book.record(out, off_f, def_f, rng)
         pending = (out, off_f, def_f, _snap_state)
+        # Persist the field's conversion decision for recaps and saved logs.
+        # Turnovers/safeties that exit before normal advancement remain false.
+        out['converted'] = False
 
         if book is not None and out.get('fumble'):
             book.record_fumble(out)
@@ -2467,6 +2484,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dr.clock -= 0; dr.result, dr.points = 'Safety', -2
             break
         scored = _advance(dr, out.get('yards', 0.0))
+        out['converted'] = dr.result == 'Touchdown' or (dr.result is None and dr.down == 1)
         if not scored and out.get('touchdown'):
             out['touchdown'] = False                # the play engine's own read used a fraction; the drive's whole yards say he was short
         if scored:
