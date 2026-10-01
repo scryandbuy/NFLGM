@@ -1169,7 +1169,10 @@ def _inbox_to_dict(m):
         if k == 'payload' and isinstance(v, dict):
             pl = {}
             for pk, pv in v.items():
-                if isinstance(pv, list):
+                if pk == 'recommendations':
+                    # Report rows are records, not trade assets merely because they have a pid.
+                    pl[pk] = pv
+                elif isinstance(pv, list):
                     pl[pk] = [_asset_ref(x) for x in pv]
                 elif isinstance(pv, (DraftPick,)) or hasattr(pv, 'pid'):
                     pl[pk] = _asset_ref(pv)

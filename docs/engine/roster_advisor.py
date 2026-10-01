@@ -14,6 +14,41 @@ from stable import stable_seed
 
 OFFENSE = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'}
 DEV = {'star': 'Rare', 'superstar': 'Epic', 'xfactor': 'Legendary'}
+DEV_RANK = {'normal': 0, 'star': 1, 'superstar': 2, 'xfactor': 3}
+
+
+def development_case(league, team, target, room):
+    """A future role must be unfilled; public development alone is not a need."""
+    tier = DEV_RANK.get(str(target.dev).lower(), 0)
+    if target.age > 25 or not tier:
+        return None
+    room = [q for q in room if q.pos == target.pos and not q.retired]
+    grade = _grade(league, team, target)
+    prospects = [q for q in room if q.age <= 25 and DEV_RANK.get(str(q.dev).lower(), 0)]
+    # Existing younger talent gets time to develop, including injured/PS players.
+    if any(DEV_RANK.get(str(q.dev).lower(), 0) >= tier and q.age <= target.age+1
+           and _grade(league, team, q) >= grade-5 for q in prospects):
+        return None
+    starter = max(room, key=lambda q: _grade(league, team, q), default=None)
+    if starter and (starter.age >= (33 if target.pos == 'QB' else 29)
+                    or (starter.contract and starter.contract.years == 1)):
+        if not prospects and grade >= _grade(league, team, starter)-6:
+            return f'Unfilled succession need behind {starter.name}.'
+    # Exceptional prospects need a plausible rotation role, not another stash.
+    if tier >= 2 and not any(DEV_RANK.get(str(q.dev).lower(), 0) >= tier for q in prospects):
+        ordered = sorted((_grade(league, team, q) for q in room), reverse=True)
+        if grade >= (ordered[1] if len(ordered)>1 else ordered[0] if ordered else 65):
+            return 'Exceptional development prospect with a path into the rotation.'
+    return None
+
+
+def investment_hurdle(source, contract, pick, cap_limit):
+    """A pick and a short contract require more immediate roster benefit."""
+    if source != 'trade': return 2.0
+    rnd = int(pick.get('round', 3))
+    return ({3:8, 4:6, 5:4, 6:3, 7:2}.get(rnd, 10)
+            + (4 if contract.years <= 1 else 0)
+            + max(0, contract.cap_hit(0)/max(1, cap_limit)*100-1))
 
 
 def _tick(league, week):
@@ -105,7 +140,7 @@ def _trade_offer(league, team, p, pool, week):
                             team.ctx(), seller.ctx(), team.cap_space, seller.cap_space,
                             TR.persona(team.gm), TR.persona(seller.gm))
         if offer.get('accepted') and not offer.get('blocked'):
-            return dict(id=f'{pk.year}-{pk.round}-{pk.original}',
+            return dict(id=f'{pk.year}-{pk.round}-{pk.original}', round=pk.round,
                         label=f'{pk.year+1} round {pk.round} pick ({pk.original})')
     return None
 
@@ -167,8 +202,15 @@ def candidates(league, week):
             continue
         after = RN.assess(team, [q for q in healthy if q is not outgoing]+[p], strict_roles=True)
         gain = after['score']-report['score']
-        if gain < 2 and not (young and grade >= worst+3 and gain >= 0):
+        future_case = development_case(league, team, p, full + own_ps)
+        if gain < 2 and not (future_case and gain >= 0):
             continue
+        if outgoing and outgoing.age <= 25 and DEV_RANK.get(str(outgoing.dev).lower(), 0):
+            # Do not discard controlled young talent for a marginal acquisition.
+            if (DEV_RANK.get(str(outgoing.dev).lower(), 0) >= DEV_RANK.get(str(p.dev).lower(), 0)
+                    and outgoing.age <= p.age and outgoing.contract
+                    and gain < 8):
+                continue
         if any(role not in report['uncovered'] for role in after['uncovered']):
             continue
         c, cost_line = _terms(league, team, p, source, pool)
@@ -190,18 +232,30 @@ def candidates(league, week):
         pick = _trade_offer(league, team, p, pool, week) if source == 'trade' else None
         if source == 'trade' and not pick:
             continue
+        hurdle = investment_hurdle(source, c, pick, team.cap.limit)
+        if source == 'trade' and gain < hurdle:
+            # Only a cheap, controlled future addition can justify a development trade.
+            if not (future_case and c.years >= 2 and pick['round'] >= 6
+                    and c.cap_hit(0) <= .01*team.cap.limit):
+                continue
         if injured:
             reason = f"{', '.join(q.name for q in injured[:2])} unavailable at {p.pos}. "
             reason += 'Short-term cover; reassess when he returns.' if short else 'Adds cover while the injured players recover.'
-        elif young:
-            reason = f'{dev} development at age {int(p.age)}; a development option in our {p.pos} room.'
-            incumbent = max((q for q in full if q.pos == p.pos), key=lambda q: q.ovr, default=None)
-            if incumbent and (incumbent.age >= 30 or (incumbent.contract and incumbent.contract.years == 1)):
-                reason += f' Succession option behind {incumbent.name}, age {int(incumbent.age)}' + (' and in his final contract year.' if incumbent.contract and incumbent.contract.years == 1 else '.')
+        elif future_case and gain < 2:
+            reason = future_case
         else:
             reason = f'Our coach’s personnel needs more quality or healthy depth at {p.pos}.'
         role = next((a['role'] for a in after['assignments'] if a['player'] is p), None)
         reason += f' Projects as {role or "a depth option"}; scheme-adjusted grade {grade:.1f}.'
+        room = sorted((q for q in full if q.pos == p.pos), key=lambda q: -_grade(league, team, q))
+        if room:
+            reason += ' Current room: ' + '; '.join(
+                f'{q.name} ({_grade(league, team, q):.1f}, age {int(q.age)}, '
+                f'{DEV.get(str(q.dev).lower(), "Normal")}, '
+                f'{q.contract.years if q.contract else 0} contract years)'
+                for q in room) + '.'
+        if source == 'trade' and c.years == 1:
+            cost_line += ' Contract expires after this season; keeping him requires a new deal.'
         if best_internal:
             reason += f' Internal alternative: {best_internal.name} ({_grade(league, team, best_internal):.1f}).'
         if outgoing:
@@ -212,7 +266,7 @@ def candidates(league, week):
         ranked.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(PS.view_ovr(league, team.abbr, p)),
                            dev=dev, source=source, owner=p.team, reason=reason, cost=cost_line,
                            pick=pick, release=outgoing.pid if outgoing else None, context=context,
-                           score=round(gain+need*5+(3 if young else 0)-(3 if source == 'trade' else 0), 2),
+                           score=round(gain+need*5+(2 if future_case else 0)-(hurdle if source == 'trade' else 0), 2),
                            urgent=source == 'waiver' or bool(injured and gain >= 8)))
     return sorted(ranked, key=lambda r: (-r['score'], r['pid']))
 
@@ -279,6 +333,8 @@ def recommendations(league, message):
     """Read-only live availability; old emails never promise an expired target."""
     rows = []
     for saved in (message.get('payload') or {}).get('recommendations', []):
+        if not isinstance(saved, dict) or 'source' not in saved:
+            continue  # Legacy saves lost the explanation; do not invent the old proposal.
         row = dict(saved)
         p = league.player(row['pid'])
         available = p is not None and _healthy(p) and message.get('year') == league.year and league.phase == 'regular'
@@ -302,6 +358,7 @@ def dismiss(league, mid, pid):
     m = next((m for m in league.inbox if m['id'] == int(mid) and m.get('kind') == 'roster_report'), None)
     if m:
         for r in m['payload']['recommendations']:
+            if not isinstance(r, dict) or 'context' not in r: continue
             if r['pid'] == pid:
                 r['dismissed'] = True
                 _state(league)['seen'][pid] = dict(tick=_tick(league, max(league.week or 1, m['payload'].get('report_week', 1))), context=r['context'])
