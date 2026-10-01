@@ -1,0 +1,132 @@
+import copy
+import unittest
+from types import SimpleNamespace as N
+import numpy as np
+import gameplan_week as GW
+import gameplan as GP
+import schemes
+
+ATTRS = ('pass_block_rating','pass_block_power_rating','pass_block_finesse_rating',
+         'power_moves_rating','finesse_moves_rating','strength_rating','block_shed_rating',
+         'accel_rating','agility_rating','speed_rating')
+
+def player(pid,pos,grade=70):
+    return N(pid=pid,name=pid,pos=pos,ovr=grade,out_until=None,
+             ratings={a:grade for a in ATTRS})
+
+def team(abbr,front='4-3'):
+    counts={'QB':1,'HB':1,'TE':2,'WR':4,'LT':2,'LG':2,'C':2,'RG':2,'RT':2,
+            'LEDG':2,'REDG':2,'DT':4,'MIKE':2,'WILL':2,'SAM':2,'CB':4,'FS':2,'SS':2}
+    return N(abbr=abbr,depth={pos:[player(f'{abbr}-{pos}-{i}',pos) for i in range(n)] for pos,n in counts.items()},
+             gm=N(def_front=front,off_personnel='11',name='Coach',prestige=50,tree=''),
+             depth_pins={},record=[0,0,0])
+
+class ProtectionAdviceTests(unittest.TestCase):
+    def setUp(self):
+        self.me=team('GB');self.opp=team('KC')
+        self.L=N(year=2027,teams={'GB':self.me,'KC':self.opp},game_stats={},tendencies={},schedule=[])
+    def read(self,week=5):return GW.protection_read(self.L,self.me,self.opp,week)
+    def grade(self,team,pos,value,index=0):
+        team.depth[pos][index].ratings={a:value for a in ATTRS}
+    def games(self,sacks=0,pressure=0,weeks=(1,2,3),year=2027,affiliation='GB'):
+        for week in weeks:
+            book={'qb':dict(team=affiliation,pass_plays=30,sacked=sacks)}
+            for pos in ('LT','LG','C','RG','RT'):
+                p=self.me.depth[pos][0]
+                book[p.pid]=dict(team=affiliation,pb_snaps=30,pressures_allowed=pressure)
+            self.L.game_stats[f'{year}-{week}-KC-GB']=book
+    def test_even_matchup_needs_no_extra_protection(self):
+        self.assertFalse(self.read()['recommend'])
+    def test_elite_line_does_not_get_help_just_for_opponent_name(self):
+        for pos in ('LT','LG','C','RG','RT'):self.grade(self.me,pos,95)
+        for pos in ('LEDG','REDG','DT'):self.grade(self.opp,pos,90)
+        self.assertFalse(self.read()['recommend'])
+    def test_interior_weak_link_is_not_hidden_by_strong_tackles(self):
+        self.grade(self.me,'LT',95);self.grade(self.me,'RT',95);self.grade(self.me,'RG',50)
+        r=self.read();self.assertTrue(r['recommend']);self.assertEqual(r['matchups'][0]['role'],'RG')
+        self.assertIn('GB-RG-0',r['why'])
+    def test_edges_match_opposite_tackles(self):
+        self.grade(self.opp,'LEDG',90)
+        r=self.read();self.assertTrue(r['recommend']);self.assertEqual(r['matchups'][0]['role'],'RT')
+    def test_injured_blocker_uses_backup_in_grade_and_advice(self):
+        self.grade(self.me,'LT',95);self.grade(self.me,'LT',50,1)
+        before=GW.unit_grades(self.L,self.me)['pass block']
+        self.assertFalse(self.read()['recommend'])
+        self.me.depth['LT'][0].out_until=8
+        self.assertLess(GW.unit_grades(self.L,self.me)['pass block'],before)
+        r=self.read();self.assertTrue(r['recommend']);self.assertIn('GB-LT-1',r['why'])
+    def test_injured_rusher_does_not_trigger(self):
+        self.grade(self.opp,'LEDG',95);self.opp.depth['LEDG'][0].out_until=8
+        self.assertFalse(self.read()['recommend'])
+    def test_pinned_order_preserved(self):
+        self.grade(self.me,'LT',50,1)
+        self.me.depth['LT'].reverse()
+        self.assertIn('GB-LT-1',self.read()['why'])
+    def test_base_fronts_and_nickel_supported(self):
+        self.grade(self.opp,'REDG',90)
+        for front in ('4-3','3-4','multiple'):
+            self.opp.gm.def_front=front
+            r=self.read();self.assertTrue(r['recommend'],front)
+            self.assertEqual(r['matchups'][0]['role'],'LT')
+    def test_two_moderate_mismatches_trigger_but_one_does_not(self):
+        self.grade(self.me,'LT',60)
+        self.assertFalse(self.read()['recommend'])
+        self.grade(self.me,'RT',60)
+        self.assertTrue(self.read()['recommend'])
+    def test_week_one_report_can_recommend_without_display_ranks(self):
+        self.grade(self.opp,'LEDG',90)
+        r=GW.opponent_report(self.L,'GB','KC',1)
+        self.assertTrue(all(x is None for x in r['my_units'].values()))
+        self.assertEqual(len([s for s in r['suggestions'] if 'protection' in s['changes']]),1)
+    def test_sustained_heavy_sacks_can_trigger_without_rating_mismatch(self):
+        self.games(sacks=4)
+        r=self.read();self.assertTrue(r['recommend']);self.assertIn('12 sacks on 90',r['why'])
+    def test_one_bad_game_and_tiny_samples_do_not_trigger(self):
+        self.games(sacks=6,weeks=(1,));self.assertFalse(self.read()['recommend'])
+        self.games(sacks=2,weeks=(1,2))
+        for book in self.L.game_stats.values():book['qb']['pass_plays']=10
+        self.assertFalse(self.read()['recommend'])
+    def test_moderate_sacks_need_current_matchup_support(self):
+        self.games(sacks=3)
+        self.assertFalse(self.read()['recommend'])
+        self.grade(self.me,'LT',62)
+        self.assertTrue(self.read()['recommend'])
+    def test_lost_blocking_reps_need_sample_and_matchup(self):
+        self.games(pressure=5)
+        self.assertFalse(self.read()['recommend'])
+        self.grade(self.me,'LT',62)
+        r=self.read();self.assertTrue(r['recommend']);self.assertIn('15 of 90 recent blocking reps',r['why'])
+    def test_recent_window_ignores_old_future_and_wrong_team_books(self):
+        self.games(sacks=8,weeks=(1,))
+        self.games(weeks=(2,3,4));self.games(sacks=8,weeks=(5,6))
+        self.games(sacks=8,weeks=(2,3,4),year=2026)
+        r=self.read();self.assertFalse(r['recommend']);self.assertEqual(r['sacks'],0)
+        self.L.game_stats={};self.games(sacks=8,affiliation='KC')
+        self.assertFalse(self.read()['recommend'])
+    def test_one_outlier_among_three_games_does_not_trigger(self):
+        self.games(weeks=(1,2));self.games(sacks=12,pressure=20,weeks=(3,))
+        self.grade(self.me,'LT',62)
+        self.assertFalse(self.read()['recommend'])
+    def test_missing_legacy_evidence_does_not_invent_pressure(self):
+        self.games(sacks=8)
+        for book in self.L.game_stats.values():
+            for s in book.values():s.pop('team')
+        self.assertFalse(self.read()['recommend'])
+    def test_blitz_only_retains_quick_game_alternative(self):
+        tr=dict(blitz=.35,two_high=.4,box8=.1,man=.3,pa_rate=.1,deep=.1,pass_rate=.6)
+        from unittest.mock import patch
+        with patch.object(GW,'tendencies',return_value=tr):r=GW.opponent_report(self.L,'GB','KC',5)
+        self.assertFalse(any('protection' in s['changes'] for s in r['suggestions']))
+        self.assertTrue(any('screen_boost' in s['changes'] for s in r['suggestions']))
+    def test_acceptance_reaches_protection_caller_without_mutating_report_inputs(self):
+        self.grade(self.opp,'LEDG',90);before=copy.deepcopy(self.L)
+        r=GW.opponent_report(self.L,'GB','KC',5)
+        suggestion=next(s for s in r['suggestions'] if 'protection' in s['changes'])
+        base=GP.Gameplan();state=N(plan=base.copy(),base_plan=base)
+        self.assertEqual(self.L,before)
+        self.L.user_week_plan=dict(year=2027,week=5,changes=suggestion['changes'])
+        GW.user_plan(self.L,state,5)
+        self.assertTrue(state.plan.protection_locked)
+        self.assertEqual(schemes.choose_protection('11',4,'medium',np.random.default_rng(1),preference=state.plan.protection),'six_bob')
+
+if __name__=='__main__':unittest.main()

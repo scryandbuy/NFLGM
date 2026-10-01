@@ -85,6 +85,25 @@ UNIT_WEIGHTS = {
 UNIT_N = {'QB': 1, 'pass block': 5, 'run block': 5, 'receivers': 3, 'tight end': 1, 'backs': 1, 'pass rush': 3, 'run front': 5, 'corners': 3, 'safeties': 2, 'linebackers': 2}
 
 
+def _offensive_line(team, healthy_only=True):
+    """Use the field's unique assignments, preserving pins and injury replacements."""
+    import offense_roles as OR
+    depth = team.depth
+    if healthy_only:
+        try:
+            return [(role, p) for role, p in OR.assign(depth, OR.base_package(team.gm)) if role in OR.OL]
+        except ValueError:
+            pass  # An incomplete preseason roster can still receive a report.
+    used, line = set(), []
+    for role in OR.OL:
+        candidates = [p for pos in (role,) + tuple(x for x in OR.OL if x != role)
+                      for p in depth.get(pos, ()) if p.pid not in used
+                      and (not healthy_only or p.out_until is None)]
+        if candidates:
+            line.append((role, candidates[0])); used.add(candidates[0].pid)
+    return line
+
+
 def unit_grades(league, team, healthy_only=True):
     """Mean grade of the starters at each unit."""
     from plays import rate as _rate
@@ -93,7 +112,7 @@ def unit_grades(league, team, healthy_only=True):
     for unit, poss in UNITS.items():
         men = [p for pos in poss for p in depth.get(pos, []) if (p.out_until is None or not healthy_only)]
         if unit in ('pass block', 'run block'):
-            men = [depth[pos][0] for pos in poss if depth.get(pos)]
+            men = [p for _, p in _offensive_line(team, healthy_only)]
         else:
             men = sorted(men, key=lambda p: -p.ovr)[:UNIT_N[unit]]
         if not men: out[unit] = None; continue
@@ -123,6 +142,100 @@ def unit_ranks(league, team, all_grades=None):
         vals = sorted((g[unit] for g in allg.values() if g.get(unit) is not None), reverse=True)
         ranks[unit] = (vals.index(v) + 1 if v in vals else sum(1 for x in vals if x > v) + 1, len(vals), v)
     return ranks
+
+
+def _recent_protection(league, abbr, week):
+    """Last three completed games before this game, using recorded team affiliation.
+
+    Blocking pressures are lost blocking reps, not unique pressured dropbacks;
+    never sum them into a QB pressure percentage. Old books without team tags
+    supply no evidence instead of assigning traded players to their new club.
+    """
+    games = []
+    for key, book in (getattr(league, 'game_stats', {}) or {}).items():
+        parts = key.split('-')
+        if len(parts) != 4 or parts[0] != str(league.year): continue
+        wk = int(parts[1])
+        if wk >= week or abbr not in parts[2:]: continue
+        lines = {pid: s for pid, s in book.items() if s.get('team') == abbr}
+        if lines: games.append((wk, lines))
+    games.sort(key=lambda x: x[0], reverse=True)
+    dropbacks = sacks = sack_games = 0
+    blocking = collections.defaultdict(collections.Counter)
+    for _, lines in games[:3]:
+        game_dropbacks = sum(s.get('pass_plays', 0) for s in lines.values())
+        game_sacks = sum(s.get('sacked', 0) for s in lines.values())
+        # Corroborating games may sit just below the aggregate 8% trigger;
+        # require two of them so one outlier cannot carry the whole window.
+        sack_games += game_dropbacks >= 20 and game_sacks / max(1, game_dropbacks) >= .07
+        for pid, s in lines.items():
+            dropbacks += s.get('pass_plays', 0); sacks += s.get('sacked', 0)
+            blocking[pid]['reps'] += s.get('pb_snaps', 0)
+            blocking[pid]['pressures'] += s.get('pressures_allowed', 0)
+            reps = s.get('pb_snaps', 0)
+            blocking[pid]['pressure_games'] += reps >= 20 and s.get('pressures_allowed', 0) / max(1, reps) >= .12
+    return dict(games=min(3, len(games)), dropbacks=dropbacks, sacks=sacks,
+                sack_games=sack_games, blocking=blocking)
+
+
+def protection_read(league, me, opp, week):
+    """Scouting evidence, using the same move grades and side matching as the field.
+
+    These are advice thresholds, not changes to play outcomes. A large mismatch
+    can justify help alone; modest mismatches need repetition or recent trouble.
+    Rankings remain a display feature and do not gate Week 1 advice.
+    """
+    import defense_roles as DR, defensive_rush as RUSH
+    from matchups import PASS_RUSH
+    from plays import rate
+    line = _offensive_line(me)
+    blockers = [dict(p.ratings, pid=p.pid, pos=role, name=p.name) for role, p in line]
+    front = getattr(opp.gm, 'def_front', '4-3')
+    fronts = ('4-3', '3-4') if front == 'multiple' else (front,)
+    matchups = {}
+    depth = opp.depth
+    unavailable = {p.pid for men in depth.values() for p in men if p.out_until is not None}
+    for family in fronts:
+        for package in ('base', 'nickel'):
+            rows = DR.assign(depth, family, package, pins=getattr(opp, 'depth_pins', None), excluded=unavailable)
+            rush = [dict(r, player=dict(r['player'].ratings, pid=r['player'].pid, name=r['player'].name))
+                    for r in rows if r.get('player') is not None
+                    and r['alignment'] in RUSH.EDGES + RUSH.INTERIOR]
+            pairs = RUSH.protection_pairs(blockers, rush)
+            for assignment, blocker in zip(rush, pairs):
+                if blocker is None: continue
+                r = assignment['player']
+                grades = {move: rate(r, PASS_RUSH['rusher'][move]) for move in ('power', 'finesse')}
+                move = max(grades, key=grades.get)
+                gap = 100 * (grades[move] - rate(blocker, PASS_RUSH['blocker'][move]))
+                evidence = dict(pid=blocker['pid'], blocker=blocker['name'], role=blocker['pos'],
+                                rusher=r['name'], move=move, gap=gap)
+                if gap > matchups.get(blocker['pid'], {}).get('gap', -1000):
+                    matchups[blocker['pid']] = evidence
+    ordered = sorted(matchups.values(), key=lambda x: -x['gap'])
+    worst = ordered[0] if ordered else None
+    recent = _recent_protection(league, me.abbr, week)
+    enough = recent['games'] >= 2 and recent['dropbacks'] >= 60
+    sack_rate = recent['sacks'] / max(1, recent['dropbacks'])
+    struggling = [x for x in ordered if x['gap'] >= 7
+                  and recent['blocking'][x['pid']]['reps'] >= 40
+                  and recent['blocking'][x['pid']]['pressure_games'] >= 2
+                  and recent['blocking'][x['pid']]['pressures'] /
+                      recent['blocking'][x['pid']]['reps'] >= .12]
+    mismatch = worst is not None and (worst['gap'] >= 12 or sum(x['gap'] >= 9 for x in ordered) >= 2)
+    recent_trouble = enough and recent['sack_games'] >= 2 and (sack_rate >= .12 or
+                                 (sack_rate >= .08 and worst is not None and worst['gap'] >= 7))
+    recommend = bool(mismatch or recent_trouble or (enough and struggling))
+    reasons = []
+    if recommend and worst and worst['gap'] >= 3:
+        reasons.append(f"{worst['rusher']} has a {worst['move']}-rush advantage against {worst['blocker']} at {worst['role']}")
+    if recommend and enough and sack_rate >= .08:
+        reasons.append(f"{recent['sacks']:.0f} sacks on {recent['dropbacks']:.0f} dropbacks over our last {recent['games']} games")
+    if recommend and enough and struggling:
+        x = struggling[0]; b = recent['blocking'][x['pid']]
+        reasons.append(f"{x['blocker']} allowed pressure on {b['pressures']:.0f} of {b['reps']:.0f} recent blocking reps")
+    return dict(recommend=recommend, why='; '.join(reasons), matchups=ordered,
+                recent_games=recent['games'], dropbacks=recent['dropbacks'], sacks=recent['sacks'])
 
 
 # ------------------------------------------------------------ the report
@@ -164,8 +277,9 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
         sug('offence', 'Attack their corners: lean deep and outside', f"their corners rank {rc[0]} of {n}, our receivers {my_wr[0]}", {'depth_mix': (-0.08, +0.03, +0.05), 'pass_bias': +0.04})
     if rf and rf[0] >= 22:
         sug('offence', 'Run it: their front does not hold up', f"their run front ranks {rf[0]} of {n}", {'pass_bias': -0.06})
-    if rr and rr[0] <= 8 and (my_ol is None or my_ol[0] >= 12):
-        sug('offence', 'Protect: more six-man protection and the quick game', f"their pass rush ranks {rr[0]}; our pass blocking {my_ol[0] if my_ol else '?'}", {'protection': 'six', 'depth_mix': (+0.08, -0.05, -0.03)})
+    protection = protection_read(league, me, opp, week)
+    if protection['recommend']:
+        sug('offence', 'Protect: more six-man protection and the quick game', protection['why'], {'protection': 'six', 'depth_mix': (+0.08, -0.05, -0.03)})
     if tr and tr['blitz'] >= 0.20:
         sug('offence', 'They bring pressure: screens and quick throws, less play action', f"blitz on {tr['blitz']*100:.0f}% of snaps", {'depth_mix': (+0.06, -0.04, -0.02), 'play_action_rate': -0.06, 'screen_boost': +0.03})
     if tr and tr['two_high'] >= 0.55:
