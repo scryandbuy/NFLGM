@@ -2312,7 +2312,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if t == 'sack':
             if rng.random() < E.scramble_chance(offense['qb'], 1.0, 1.4, rate_fn):
                 _old = out
-                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass') if k in _old}
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pressured') if k in _old}
                 out = E.resolve_scramble(offense['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
@@ -2847,6 +2847,7 @@ class StatBook:
         return self.p[pid]
 
     def record(self, out, off, deff, rng):
+        if out.get('nullified'): return
         t = out.get('type')
         qb = off['qb'].get('pid', 'QB')
 

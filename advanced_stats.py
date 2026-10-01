@@ -59,7 +59,7 @@ def epa(out, before_down, before_togo, before_ytg, after_down, after_togo, after
 
 def book_play(book, out, off, deff, epa_val):
     """Credit the men: the passer or rusher, the target, and the defence allowing it."""
-    if book is None: return
+    if book is None or out.get('nullified'): return
     t = out.get('type')
     qb = off['qb'].get('pid')
     if t in ('complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble'):
@@ -79,8 +79,8 @@ def book_play(book, out, off, deff, epa_val):
         if pid:
             x = book._get(pid); x['def_epa'] -= epa_val / 11.0; x['def_plays'] += 1
     # pass-rush reps
-    for pid, won in (out.get('pr_reps') or []):
-        x = book._get(pid); x['pr_reps'] += 1; x['pr_wins'] += bool(won)
+    # StatBook.record owns rush reps/wins/pressures after penalty resolution.
+    # EPA settlement must not book those same opportunities a second time.
 
 
 def book_special(book, dr, last, offense):

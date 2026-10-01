@@ -945,7 +945,9 @@ class League:
     def to_dict(self):
         from newgens import name_history
         return dict(
-            version=1, competition_names_version=1, year=self.year, phase=self.phase, week=self.week,
+            version=1, competition_names_version=1, rush_accounting_version=1,
+            rush_accounting_repair=getattr(self, 'rush_accounting_repair', {}),
+            year=self.year, phase=self.phase, week=self.week,
             cap_history={str(y): cap for y, cap in self.cap_history.items()},
             players={pid: p.to_dict() for pid, p in self.players.items()},
             player_name_history=name_history(self), newgen_name_cursor=self.newgen_name_cursor,
@@ -1006,8 +1008,11 @@ class League:
         from competition_names import migrate_save
         d = json.loads(blob) if isinstance(blob, str) else blob
         d = migrate_save(d)
+        import rush_stats_migration
+        rush_stats_migration.migrate(d)
         d = PB.migrate_saved_backgrounds(d)
         L = cls(d['year'])
+        L.rush_accounting_repair = d.get('rush_accounting_repair', {})
         saved_caps = {int(y): float(cap) for y, cap in (d.get('cap_history') or {}).items()}
         L.phase, L.week = d['phase'], d['week']
         L.players = {pid: Player.from_dict(pd)
