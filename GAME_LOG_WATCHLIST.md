@@ -197,3 +197,42 @@ All 64 games matched logged rush reps/wins to the player stat book: zero account
 Nominal-position sack totals were 111 edge, 136 interior, and 87 linebacker; another 21 belonged to defensive backs. Interior players also had more recorded rush opportunities (10,168 versus 8,785). A 16-game trace verified that this was not merely mislabeled alignment: 37 sacks came from actual interior alignments, 35 from edges, 27 from off-ball alignments, and six from the slot. Seventeen of the 105 sacks came from unblocked rushers (11 linebackers, six corners).
 
 **Next action:** monitor sacks per rush opportunity, free rushes versus blocked wins, protection help, and individual rush attributes alongside snap share. The current noisy arrival-time race and free-rusher opportunities merit deeper distribution calibration if this pattern persists. Do not reintroduce duplicate pressure counts or boost one named star to force a target stat line. No additional pass-rush tuning in this audit.
+
+
+## October 1 follow-up: stacked-box correction completed
+
+**Decision: the stacked-box defect is fixed and its targeted calibration passes. No further global rushing or separate third-down adjustment is supported by these tests.** This supersedes the earlier next-action recommendation to implement the contact correction.
+
+### What changed
+
+- `schemes.box_run_contact` uses the existing box-specific negative-run reference rates to shift penetration risk on the same underlying blocking/noise result. Stronger boxes can now turn marginal gains into losses; weak boxes can permit escape from marginal losses. No independent random stuff roll or extra RNG draw was added.
+- Positive contact gains are recentered before the existing box gain multiplier, avoiding a second broad yardage boost/penalty. Negative contact depths bypass that gain multiplier, so a stacked box cannot shrink an existing loss toward zero.
+- Run scheme, front fit, motion and execution affect signed outcomes in the correct direction: offensive advantages limit losses and help gains; defensive advantages deepen losses and restrict gains. Ratings, blocking assignments, pursuit/YAC, and run-block stat accounting remain active.
+- Six-man box contact remains neutral. Controlled tests verify that adding box defenders hurts the runner on identical contact draws, while improved blocking still helps. The reference loss gradient is checked using 10,000 evenly spaced normal quantiles per box, independent of game-sample noise.
+
+### Verification and calibration
+
+56 focused tests passed across contact behavior, defensive front assignments, endgame policy, rush accounting, Game Plan wiring, game-log regressions, and offensive personnel. Browser engine files rebuilt. No bundle created.
+
+Production evaluation: four comparison seeds (100101-100104, 64 games) and four fresh validation seeds (100111-100114, another 64 games), every team once per seed. The first comparison reuses the baseline's league configurations/seeds; changed outcomes naturally change subsequent random consumption, so these are aggregate comparisons, not identical-play causal estimates. No coefficient adjustment was made after inspecting the fresh validation set.
+
+| Metric | Prior 64-game baseline | Corrected comparison, 64 games | Fresh validation, 64 games |
+| --- | ---: | ---: | ---: |
+| Designed runs | 3,134 | 3,104 | 3,224 |
+| Yards per designed run | 4.58 | 4.69 | 4.66 |
+| Negative designed runs | 8.10% | 8.02% | 8.37% |
+| Third-down conversions | 43.26% | 41.17% | 42.22% |
+| Third-and-two-or-shorter runs converted | 84.57% (137/162) | 80.37% (131/163) | 81.14% (142/175) |
+
+Combined corrected sample: 6,328 carries, 4.67 YPC and 519 losses (8.20%). Both running measures satisfy the existing 4.52 +/- 0.35 YPC and 8.54% +/- 1.50-point negative-run tolerances. Overall thirds: 1,374/3,295 (41.70%); short third-down runs: 273/338 (80.77%). No third-down-specific probability was changed.
+
+Combined loss rates by box: four 4.95%, five 6.23%, six 9.07%, seven 9.23%, eight 11.89%, nine 12.23%, ten 10.00%. Nine/ten combined are 46/409 (11.25%), versus six losses in 226 carries (2.65%) in the baseline. Ten-man boxes alone are only 180 carries and occur in different field-position/personnel situations; do not force every observed bucket to exactly match a reference percentage. Identical-input tests establish the monotonic effect of added box defenders; live buckets retain matchup and sampling differences.
+
+### Remaining watch, with clear action boundaries
+
+- **No immediate additional rushing calibration.** Review future user saves/logs for the corrected heavy-box behavior, particularly goal-line situations. Fractional losses can still legitimately round to no gain in narration.
+- **No separate third-down adjustment now.** Continue tracking conversions by distance and play type. The correction already moves short-run conversions downward without a special conversion modifier.
+- **Scoring remains an open calibration question.** Points per team were 24.57 in the baseline, 25.02 in the comparison and 25.49 in validation, above the existing 22.90 +/- 1.50 target. This small aggregate difference does not establish causation by the contact change; a scoring/drive/field-goal audit is required before further tuning. These results do not constitute a full register pass.
+- **Pass-rush allocation and long-kick accuracy remain their previously documented watch items.** They were not separately tuned here.
+
+Artifacts: workspace outputs `stacked-box-candidate-20261001.json` and `stacked-box-validation-20261001.json`; baseline `game-log-audit-20261001.json`. The isolated checkout is `work/nflgm-gameplan-lock`. The main chat receives the tested commit for integration; other checkout files are not overwritten.
