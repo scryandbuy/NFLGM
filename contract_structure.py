@@ -143,6 +143,10 @@ def structure(apy, years, pos, cap, gm, void_years=0, front_load=None):
     # base curve hard enough to matter: at 0 a five-year deal puts about a
     # third more in year five than the league shape does, at 1 a third less
     curve = curve * (1.0 + (fl - 0.5) * 1.3 * np.linspace(1, -1, years))
+    if front_load is not None:
+        # An explicit loading choice has the same meaning with an automatic
+        # or custom bonus: 0.5 means equal base salaries in the new years.
+        curve = 1.0 + (float(front_load) - 0.5) * 2.0 * np.linspace(1, -1, years)
     base_total = total - signing
     # Preserve the agreed cash total. Low-price deals use their APY as the
     # construction floor; the existing minimum-pay model remains a caller concern.

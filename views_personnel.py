@@ -540,7 +540,14 @@ def act_match_counter(league, abbr, tid):
     import negotiations as NG
     t = NG.find(league, tid)
     if not t or t['state'] != 'countered' or not t.get('counter'): return dict(ok=False, why='no counter on the table')
-    c = t['counter']; return NG.make_offer(league, tid, c['apy'], c['years'], front_load=c.get('front_load'))
+    c = t['counter']
+    previous = (t.get('offers') or [{}])[-1]
+    # Older counters omitted bonus/promises; preserve the last offer's terms.
+    bonus = c.get('bonus', previous.get('bonus'))
+    if bonus is not None: bonus = min(float(bonus), c['apy'] * c['years'])
+    return NG.make_offer(league, tid, c['apy'], c['years'], bonus=bonus,
+                         front_load=c.get('front_load', previous.get('front_load')),
+                         promises=c.get('promises', previous.get('promises', [])))
 
 
 # ============================================================ WAIVERS
