@@ -1,9 +1,4 @@
 {
-  "0106287": {
-    "status": "integrated",
-    "incorporated_as": "a89b013",
-    "reason": "First-season Rookie display source cherry-picked."
-  },
   "03820a": {
     "status": "integrated",
     "incorporated_as": "412553d",
@@ -43,16 +38,6 @@
     "status": "generated",
     "reason": "Generated browser assets superseded by the current build_web.py output."
   },
-  "20d043b": {
-    "status": "integrated",
-    "incorporated_as": "20d043b",
-    "reason": "Run-contact calibration carried directly."
-  },
-  "23ec90f": {
-    "status": "integrated",
-    "incorporated_as": "23ec90f",
-    "reason": "Defensive rotation source carried directly."
-  },
   "2a10e4": {
     "status": "integrated",
     "incorporated_as": "3b29f83",
@@ -63,30 +48,10 @@
     "incorporated_as": "20100dd",
     "reason": "Source change incorporated and reconciled in this integration line."
   },
-  "2b8cb19": {
-    "status": "integrated",
-    "incorporated_as": "356b6f3",
-    "reason": "Equivalent rush-accounting source: shared audit, migration, advanced stats and tests match integrated commit; game/league differences come from surrounding branch base."
-  },
   "2e708d": {
     "status": "integrated",
     "incorporated_as": "f173281",
     "reason": "Equivalent practice XP ceiling source change incorporated and tested."
-  },
-  "318808a": {
-    "status": "integrated",
-    "incorporated_as": "318808a",
-    "reason": "Browser build for pass-rush modules carried directly."
-  },
-  "356b6f3": {
-    "status": "integrated",
-    "incorporated_as": "356b6f3",
-    "reason": "Rush accounting and legacy migration source carried directly."
-  },
-  "39438bb": {
-    "status": "integrated",
-    "incorporated_as": "bc81abd",
-    "reason": "Modifier ordering source and regression tests cherry-picked."
   },
   "3cefbe": {
     "status": "integrated",
@@ -145,20 +110,10 @@
     "status": "generated",
     "reason": "Generated development-review engine copies replaced by the current browser build."
   },
-  "6da4bd1": {
-    "status": "integrated",
-    "incorporated_as": "6da4bd1",
-    "reason": "Pass protection and rush exchange source carried directly."
-  },
   "6db1f0": {
     "status": "integrated",
     "incorporated_as": "ef0a970",
     "reason": "Source change incorporated and reconciled in this integration line."
-  },
-  "775fe30": {
-    "status": "integrated",
-    "incorporated_as": "356b6f3",
-    "reason": "Equivalent rush-accounting source: shared audit, migration, advanced stats and tests match integrated commit; game/league differences come from surrounding branch base."
   },
   "78095e": {
     "status": "integrated",
@@ -169,11 +124,6 @@
     "status": "integrated",
     "incorporated_as": "b3968e3",
     "reason": "Source change incorporated and reconciled in this integration line."
-  },
-  "7a02bfe": {
-    "status": "integrated",
-    "incorporated_as": "f21464f",
-    "reason": "Renamed team abbreviation display source cherry-picked."
   },
   "7b42a2": {
     "status": "generated",
@@ -187,11 +137,6 @@
   "967f5c": {
     "status": "generated",
     "reason": "Generated browser assets superseded by the current build_web.py output."
-  },
-  "970bd56": {
-    "status": "integrated",
-    "incorporated_as": "970bd56",
-    "reason": "Pass-rush validation documentation carried directly."
   },
   "9875fc": {
     "status": "generated",
@@ -228,11 +173,6 @@
     "status": "integrated",
     "incorporated_as": "2c55816",
     "reason": "Redundant card shortcuts removed while preserving roster advice links."
-  },
-  "audit_rush_sidecar.py": {
-    "status": "integrated",
-    "incorporated_as": "e848722",
-    "reason": "Post-push untracked observational audit helper preserved."
   },
   "b76ddc5": {
     "status": "integrated",
@@ -286,11 +226,6 @@
     "incorporated_as": "f7e1959",
     "reason": "Source change incorporated and reconciled in this integration line."
   },
-  "eeac078": {
-    "status": "integrated",
-    "incorporated_as": "eeac078",
-    "reason": "Inbox pane height fix carried directly after the last push."
-  },
   "ef8b83": {
     "status": "generated",
     "reason": "Generated browser assets superseded by the current build_web.py output."
@@ -303,5 +238,15 @@
     "status": "integrated",
     "incorporated_as": "6ddba90",
     "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "2b8cb19": {
+    "status": "integrated",
+    "incorporated_as": "356b6f3",
+    "reason": "Equivalent rush-accounting source: shared audit, migration, advanced stats and tests match integrated commit; game/league differences come from surrounding branch base."
+  },
+  "775fe30": {
+    "status": "integrated",
+    "incorporated_as": "356b6f3",
+    "reason": "Equivalent rush-accounting source: shared audit, migration, advanced stats and tests match integrated commit; game/league differences come from surrounding branch base."
   }
 }
