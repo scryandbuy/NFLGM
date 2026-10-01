@@ -189,12 +189,19 @@ def _street_alternative(league, viewer, p):
             if q is None or q.retired: continue
             by_pos.setdefault(q.pos, []).append(q)
         table = {}
+        # Every quote in this table sees the same contracts and statistics.
+        # Building comps per free agent repeatedly rescanned the entire season.
+        # Keep this snapshot local: a later cache rebuild (including releases
+        # after a trade) must price against the then-current league.
+        quote_pool = None
         for pos, players in by_pos.items():
             top = sorted(players, key=lambda q: -q.ovr)[:4]
             rows = []
             for q in top:
                 try:
-                    vv = VAL.value_player(league, q, side='agent', rng=None); cost = float(vv['apy']) if vv else 1.2
+                    if quote_pool is None:
+                        quote_pool = VAL.pool_from_league(league)
+                    vv = VAL.value_player(league, q, side='agent', rng=None, pool=quote_pool); cost = float(vv['apy']) if vv else 1.2
                 except Exception: cost = 1.2
                 rows.append((q, cost))
             table[pos] = rows
