@@ -58,7 +58,7 @@ def play_line(league, p, off_abbr, def_abbr):
     if p.get('down') is not None:
         q, ck = _clock(p.get('clock', 0))
         head = f"{_down(p.get('down'), p.get('ydstogo'), p.get('yardline'))} · {_spot(p.get('yardline', 50), off_abbr, def_abbr)} · {ck}"
-    elif p.get('clock') is not None and t == 'kickoff':
+    elif p.get('clock') is not None and t in ('kickoff', 'penalty', 'timeout'):
         head = _clock(p['clock'])[1]
     carrier = _nm(league, p.get('carrier')); passer = _nm(league, p.get('passer')); target = _nm(league, p.get('target')); tackler = _nm(league, p.get('tackler'))
     td = bool(p.get('touchdown') and not p.get('defensive_td'))
@@ -166,7 +166,7 @@ def play_line(league, p, off_abbr, def_abbr):
         if p.get('try_type'):
             ydtxt += ', on the ' + ('extra-point attempt' if p['try_type'] == 'extra_point' else 'two-point attempt')
         elif p.get('timing') == 'before_snap':
-            ydtxt += ', before the snap; no play'
+            ydtxt += ', before the next snap; no play occurred'
         ending = (', loss of down.' if p.get('penalty') == 'Intentional Grounding' and not p.get('safety') else
                   ', automatic first down.' if (p.get('auto_first') and not p.get('on_offense') and not p.get('on_try')) else '.')
         text = f"Penalty, {p.get('penalty', 'flag')} on the {side}, {ydtxt}" + ending
@@ -205,7 +205,7 @@ def play_line(league, p, off_abbr, def_abbr):
         if gain > 0 and gain < spot and 0 < remaining < 1:
             text += ' Stopped just short of the goal line.'
     if p.get('nullified'):
-        text = (text.rstrip('.') + '. No play; flag on the field.') if text else 'No play; flag on the field.'; kind = 'neutral'
+        text = (text.rstrip('.') + '. Play nullified by penalty.') if text else 'Play nullified by penalty.'; kind = 'neutral'
     if p.get('fumble'):
         recoverer = _nm(league, p.get('fumble_recovered_by'))
         if p.get('fumble_lost'):
@@ -264,7 +264,7 @@ def write_game(league, res, home, away):
                  away if p.get('possession', pos) == 'home' else home)
                  for p in dr.log if isinstance(p, dict)) if x]
         real = [p for p in dr.log if isinstance(p, dict) and not p.get('nullified') and p.get('type') in ('run', 'complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble', 'kneel', 'spike', 'punt', 'field_goal')]
-        yards = sum(float(p.get('yards', 0) or 0) for p in real if p.get('type') in ('run', 'complete', 'sack', 'scramble'))
+        yards = sum(float(p.get('yards', 0) or 0) for p in real if p.get('type') in ('run', 'complete', 'sack', 'scramble', 'kneel'))
         q = int(getattr(dr, 'quarter', 1) or 1)
         start = float(getattr(dr, 'start', 75)); end = offensive_drive_end(dr)
         secs = 0.0

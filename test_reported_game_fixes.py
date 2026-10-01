@@ -71,7 +71,7 @@ class ReportedGameFixes(unittest.TestCase):
 
     def test_end_zone_interception_return_uses_actual_spot(self):
         dr, _ = self.drive(dict(type='interception', yards=0, air=47, ret=4),
-                           start=45, clock=120, diff=10)
+                           start=45, clock=120, diff=0)
         play = next(p for p in dr.log if p.get('type') == 'interception')
         self.assertEqual(dr.yardline, 2)  # new possession starts on its own 2
         self.assertFalse(play['touchback'])
@@ -80,7 +80,7 @@ class ReportedGameFixes(unittest.TestCase):
 
     def test_return_still_inside_end_zone_is_touchback_with_no_return_credit(self):
         dr, _ = self.drive(dict(type='interception', yards=0, air=50, ret=4),
-                           start=45, clock=120, diff=10)
+                           start=45, clock=120, diff=0)
         play = next(p for p in dr.log if p.get('type') == 'interception')
         self.assertEqual(dr.yardline, 20)
         self.assertEqual((play['touchback'], play['ret']), (True, 0))

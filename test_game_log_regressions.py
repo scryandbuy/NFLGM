@@ -65,7 +65,8 @@ class GameLogRegressions(unittest.TestCase):
              patch.object(G, 'end_of_half_plan', side_effect=plan or (lambda *a, **k: None)), \
              patch.object(G, 'attempt_extra_point', return_value=dict(type='extra_point', points=1, made=True)), \
              patch('playcall.audible', side_effect=lambda oc, *a, **k: (oc, None)):
-            return G.run_drive(off, deff, 45, clock, quarter, 10, np.random.default_rng(2),
+            # A tied game keeps these clock/penalty cases outside victory formation.
+            return G.run_drive(off, deff, 45, clock, quarter, 0, np.random.default_rng(2),
                 resolve, co, cd, lambda *a: .7, half_end=half_end)
 
     def test_bleed_does_not_add_another_full_play_clock(self):

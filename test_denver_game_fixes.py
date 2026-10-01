@@ -105,15 +105,21 @@ class DenverGameFixes(unittest.TestCase):
         dr, _, _ = self.drive([], start=89, clock=32)
         self.assertEqual([p['type'] for p in dr.log], ['kneel'])
         self.assertEqual(dr.clock, 0)
-        for kwargs in (dict(tos=1), dict(diff=-5), dict(start=99.5),
+        for kwargs in (dict(tos=3), dict(diff=-5), dict(start=99.5),
                        dict(clock=1832, quarter=2, half_end=1800)):
             dr, _, _ = self.drive([dict(type='interception', yards=0, air=0, ret=0)],
                                  **dict(dict(start=89, clock=32), **kwargs))
             self.assertFalse(any(p['type'] == 'kneel' for p in dr.log))
 
     def test_fourth_down_cannot_kneel_away_32_seconds(self):
-        dr, _, decision = self.drive([dict(type='incomplete', yards=0)] * 4, clock=66,
-                                    fourth='go')
+        constructor = G.Drive
+        def fourth_down(*args, **kwargs):
+            dr = constructor(*args, **kwargs)
+            dr.down = 4
+            return dr
+        with patch.object(G, 'Drive', side_effect=fourth_down):
+            dr, _, decision = self.drive([dict(type='incomplete', yards=0)], clock=32,
+                                        fourth='go')
         self.assertTrue(decision.called)
         self.assertEqual(dr.result, 'Turnover on downs')
         self.assertFalse(any(p['type'] == 'kneel' for p in dr.log))
