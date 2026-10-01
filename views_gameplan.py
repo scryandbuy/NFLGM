@@ -334,9 +334,7 @@ def report(session, league, abbr):
     lg = _league_tend(league)
     units = [dict(unit=u, rank=v[0] if v else None, of=v[1] if v else n) for u, v in (rep['units'] or {}).items()]
     mine = [dict(unit=u, rank=v[0] if v else None, of=v[1] if v else n) for u, v in (rep['my_units'] or {}).items()]
-    ROWS = [('Pass Offense', 'QB'), ('Run Offense', 'backs'), ('Pass Defense', 'corners'), ('Run Defense', 'run front'), ('Pass Block', 'pass block'), ('Pass Rush', 'pass rush'), ('Receivers', 'receivers'), ('Corners', 'corners')]
-    U, M = rep['units'] or {}, rep['my_units'] or {}
-    unit_table = [dict(label=lab, mine=(M[k][0] if M.get(k) else None), theirs=(U[k][0] if U.get(k) else None)) for lab, k in ROWS]
+    unit_table = GW.performance_table(league, abbr, opp_abbr)
     panels = None
     try:
         import views as V

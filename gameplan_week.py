@@ -429,3 +429,61 @@ def post_report(league, week):
             body, sender='assistants', payload=dict(report=rep, link=f'gameplan:{week}'), expires_week=week)   # gone once the week is played
     league.game_plan_reports = getattr(league, 'game_plan_reports', {}); league.game_plan_reports[week] = rep
     return rep
+
+
+# Season performance is separate from the roster grades used by scouting.
+def record_team_performance(league, home, away, week, res):
+    rows = {a: dict(pass_yds=0.0, rush_yds=0.0) for a in (home, away)}
+    for side, drive in res['drives']:
+        row = rows[home if side == 'home' else away]
+        for play in drive.log:
+            if not isinstance(play, dict) or play.get('nullified'): continue
+            kind = play.get('type')
+            yards = float(play.get('yards', 0) or 0)
+            if kind in ('complete', 'sack'): row['pass_yds'] += yards
+            elif kind in ('run', 'scramble', 'kneel'): row['rush_yds'] += yards
+    store = league.__dict__.setdefault('team_game_stats', {})
+    store[f'{league.year}-{week}-{home}-{away}'] = rows
+
+
+def performance_table(league, mine, theirs):
+    """NFL-style regular-season rates; never infer missing net yards from ratings."""
+    from fractions import Fraction
+    totals = {a: dict(games=0, known=0, passing=0, rushing=0,
+                     pass_allowed=0, rush_allowed=0, points=0, points_allowed=0)
+              for a in league.teams}
+    store = getattr(league, 'team_game_stats', {}) or {}
+    for week, away, home, ap, hp in league.schedule:
+        if not 1 <= week <= 18 or ap is None or hp is None: continue
+        rows = store.get(f'{league.year}-{week}-{home}-{away}', {})
+        for a, b, points, allowed in ((home, away, hp, ap), (away, home, ap, hp)):
+            t = totals[a]; t['games'] += 1
+            t['points'] += points; t['points_allowed'] += allowed
+            if a not in rows or b not in rows: continue
+            t['known'] += 1
+            for key, source, field in (('passing', a, 'pass_yds'), ('rushing', a, 'rush_yds'),
+                                       ('pass_allowed', b, 'pass_yds'), ('rush_allowed', b, 'rush_yds')):
+                t[key] += Fraction(str(rows[source][field]))
+    specs = [('Total Offense', 'total', False), ('Pass Offense', 'passing', False),
+             ('Run Offense', 'rushing', False), ('Scoring Offense', 'points', False),
+             ('Total Defense', 'total_allowed', True), ('Pass Defense', 'pass_allowed', True),
+             ('Run Defense', 'rush_allowed', True), ('Scoring Defense', 'points_allowed', True)]
+    # A partial league sample cannot honestly be labelled a league-wide yardage rank.
+    complete = all(t['known'] == t['games'] for t in totals.values())
+    out = []
+    for label, key, lower in specs:
+        values = {}
+        for a, t in totals.items():
+            if not t['games'] or (key not in ('points', 'points_allowed') and not complete): continue
+            value = (t['passing'] + t['rushing'] if key == 'total' else
+                     t['pass_allowed'] + t['rush_allowed'] if key == 'total_allowed' else t[key])
+            values[a] = Fraction(value) / t['games']
+        def rank(a):
+            if a not in values: return None
+            return 1 + sum(v < values[a] if lower else v > values[a] for v in values.values())
+        metric = ('Points allowed/game' if lower else 'Points/game') if key.startswith('points') else (
+            ('Net passing yards' if key in ('passing', 'pass_allowed') else 'Rushing yards' if key in ('rushing', 'rush_allowed') else 'Net total yards') + (' allowed/game' if lower else '/game'))
+        out.append(dict(label=label, mine=rank(mine), theirs=rank(theirs), metric=metric,
+                        mine_value=round(float(values[mine]), 1) if mine in values else None,
+                        theirs_value=round(float(values[theirs]), 1) if theirs in values else None))
+    return out

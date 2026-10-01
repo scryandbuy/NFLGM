@@ -596,6 +596,7 @@ class SeasonRunner(StandingsView):
     def _record(self, home, away, week, res, book, playoffs=False):
         import gameplan_week as GW
         GW.record_game(self.L, home, away, res)
+        GW.record_team_performance(self.L, home, away, week, res)
         import practice_integration as PI
         PI.record_health(self, (home, away))
         H, A = self.L.teams[home], self.L.teams[away]

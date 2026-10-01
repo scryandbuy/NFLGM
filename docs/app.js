@@ -3449,9 +3449,10 @@ function renderReport(v) {
   s.append(tg);
   // unit rankings, both clubs
   const two = el('div', { class: 'two' });
-  const ut = el('div', {class:'report-unit-rankings'}, el('div', { class: 'h5' }, 'Unit Rankings'), el('div', { class: 'side-row head' }, el('span', {}), el('span', { class: 'colhead' }, showAbbr(v.rail.club.abbr)), el('span', { class: 'colhead' }, showAbbr(v.opp.abbr))));
+  const ut = el('div', {class:'report-unit-rankings'}, el('div', { class: 'h5' }, 'Team Rankings'), el('div', { class: 'side-row head' }, el('span', {}), el('span', { class: 'colhead' }, showAbbr(v.rail.club.abbr)), el('span', { class: 'colhead' }, showAbbr(v.opp.abbr))));
   const rk = r => el('span', { class: 'rk ' + (r == null ? '' : r <= 8 ? 'good' : r >= 24 ? 'bad' : 'mid-rk'), style: 'font-size:17px' }, r == null ? 'â€”' : `${r}${ord(r)}`);
-  for (const r of v.unit_table) ut.append(el('div', { class: 'side-row' }, el('span', { class: 'lab' }, r.label), rk(r.mine), rk(r.theirs)));
+  for (const r of v.unit_table) ut.append(el('div', { class: 'side-row', title: r.metric }, el('span', { class: 'lab' }, r.label), el('span', {title:r.mine_value==null?'Complete season statistics unavailable':`${r.mine_value} ${r.metric}`}, rk(r.mine)), el('span', {title:r.theirs_value==null?'Complete season statistics unavailable':`${r.theirs_value} ${r.metric}`}, rk(r.theirs))));
+  ut.append(el('div', {class:'muted', style:'font-size:11px;margin-top:8px'}, 'Regular season · per game · passing yards include sack losses. — means complete statistics are unavailable.'));
   const men = el('div', { class: 'report-players' }, el('div', { class: 'h5' }, 'Players Who Matter')); applyTeamTheme(men, v.opp); for (const p of v.stars) men.append(el('div', { class: 'plate', style: 'margin-bottom:4px;cursor:pointer', onclick: () => { location.hash = '#club/player/' + p.pid; } }, el('div', { class: 'no' }, p.pos), el('div', { class: 'nm' }, p.name, el('small', {}, p.pos)), el('div', { class: 'ov' }, p.ovr)));
   if (v.injured && v.injured.length) { men.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Injuries')); for (const x of v.injured) men.append(el('div', { style: 'font-size:15px;color:var(--ink-2);padding:2px 0' }, typeof x === 'string' ? x : `${x.name} (${x.pos})${x.back ? ' Â· out to week ' + x.back : ' Â· out'}`)); }
   two.append(ut, men); s.append(two);

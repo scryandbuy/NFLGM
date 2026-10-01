@@ -956,6 +956,7 @@ class League:
             free_agents=self.free_agents, schedule=self.schedule,
             stats=self.stats, post_stats=self.post_stats,
             game_stats=self.game_stats,
+            team_game_stats=getattr(self, "team_game_stats", {}),
             standings_history=self.standings_history,
             transactions=self.transactions, awards=self.awards,
             coach_pool=[asdict(g) for g in getattr(self, 'coach_pool', [])],
@@ -1140,6 +1141,7 @@ class League:
         L.stats = {int(k): v for k, v in d['stats'].items()}
         L.post_stats = {int(k): v for k, v in (d.get('post_stats') or {}).items()}
         L.game_stats = d.get('game_stats') or {}
+        L.team_game_stats = d.get('team_game_stats') or {}
         L.standings_history = {int(k): v for k, v
                                in d['standings_history'].items()}
         L.transactions = d['transactions']
