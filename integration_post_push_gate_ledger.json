@@ -248,5 +248,15 @@
     "status": "integrated",
     "incorporated_as": "356b6f3",
     "reason": "Equivalent rush-accounting source: shared audit, migration, advanced stats and tests match integrated commit; game/league differences come from surrounding branch base."
+  },
+  "d29b718": {
+    "status": "integrated",
+    "incorporated_as": "964860f",
+    "reason": "Bye practice source and tests match; the browser manifest was rebuilt with the combined changes."
+  },
+  "4cc0995": {
+    "status": "integrated",
+    "incorporated_as": "c9f83ac",
+    "reason": "Week 12 game source and tests match; the browser manifest was rebuilt with the combined changes."
   }
 }
