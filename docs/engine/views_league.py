@@ -3,7 +3,7 @@ from stable import stable_seed
 LEAGUE VIEWS. Standings, Schedule, Transactions, Stats, Awards, Coaching, Almanac.
 Read-only pages; nothing here changes the league.
 """
-from views import STADIUM, club, rail, _points, _form
+from views import STADIUM, club, rail, _points, _form, transaction_period
 
 DIVS = ['AFC East', 'AFC North', 'AFC South', 'AFC West', 'NFC East', 'NFC North', 'NFC South', 'NFC West']
 
@@ -365,7 +365,7 @@ def transactions(session, league, abbr, n=150):
         grp = GROUP_TAG.get(k, 'Other')
         link = ('trade' if k in ('trade', 'inbox_trade') else 'contract' if k in ('extension', 'sign', 'tag', 'restructure') else 'carousel' if grp == 'Coaching' else 'card' if x.get('pid') else None)
         tag = _staff_departure_action(x.get('why')) if k == 'staff_out' else TAGS.get(k, k)
-        rows.append(dict(year=x.get('year'), week=x.get('week'), phase=x.get('phase'), kind=k, tag=tag, group=grp, line=_tx_line(league, x), mine=(abbr in involved),
+        rows.append(dict(year=x.get('year'), week=x.get('week'), phase=x.get('phase'), period=transaction_period(x), kind=k, tag=tag, group=grp, line=_tx_line(league, x), mine=(abbr in involved),
                         pid=x.get('pid'), team=(club(team) if team in league.teams else None), division=(league.teams[team].division if team in league.teams else None), divisions=divisions, link=link, i=len(rows), **_transaction_subject(league, x)))
     return dict(rail=rail(session, league, abbr), rows=rows, coaching_moves=_coaching_moves(league, recent=False), groups=['Trades', 'Signings', 'Cuts', 'Claims', 'Practice Squad', 'Extensions', 'Tags', 'Coaching'], my_division=league.teams[abbr].division)
 

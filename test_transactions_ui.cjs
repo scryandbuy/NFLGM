@@ -19,5 +19,10 @@ vm.runInContext("txClub='div';txQuery='kansas city'",ctx);assert.equal(ctx.filte
 vm.runInContext("txGroup='Coaching';txQuery='';txClub='mine'",ctx);assert.equal(ctx.filteredTransactions(v)[0].person,'Legacy Coach');
 vm.runInContext("txClub='div'",ctx);assert.equal(ctx.filteredTransactions(v).length,1);
 vm.runInContext("txClub='all';txQuery='other coach'",ctx);assert.equal(ctx.filteredTransactions(v)[0].club.abbr,'KC');
-assert.equal(ctx.transactionWhen({phase:'free_agency',year:2027}),'Free agency');
+assert.equal(ctx.transactionWhen({phase:'free_agency',year:2027,week:22}),'Offseason');
+assert.equal(ctx.transactionWhen({phase:'offseason',year:2027,week:22}),'Offseason');
+assert.equal(ctx.transactionWhen({phase:'draft',year:2027,week:22}),'Offseason');
+assert.equal(ctx.transactionWhen({phase:'preseason',year:2027,week:22}),'Preseason');
+for (const [week,label] of [[19,'Wild Card'],[20,'Divisional Round'],[21,'Conference Championship'],[22,'Super Bowl']]) assert.equal(ctx.transactionWhen({phase:'playoffs',week}),label);
+assert.equal(ctx.transactionWhen({phase:'regular',week:8}),'Week 8');
 console.log('Transactions: coaching ledger filters, legacy departures, search, both trade teams and all 32 palettes passed');

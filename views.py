@@ -6,6 +6,27 @@ by these.
 """
 import numpy as np
 
+def transaction_period(event):
+    """Historical phase wins over the last game week retained by the calendar."""
+    phase = event.get('phase')
+    if phase in ('offseason', 'free_agency', 'draft'):
+        return 'Offseason'
+    if phase == 'preseason':
+        return 'Preseason'
+    week = event.get('week')
+    if week:
+        return {19: 'Wild Card', 20: 'Divisional Round',
+                21: 'Conference Championship', 22: 'Super Bowl'}.get(int(week), f'Week {week}')
+    return str(phase or '').replace('_', ' ').title()
+
+
+def transaction_when(event):
+    period = transaction_period(event)
+    year = str(event.get('year') or '')
+    if period == 'Offseason':
+        return f'Offseason {year}'.strip()
+    return ' · '.join(x for x in (year, period) if x)
+
 CLUB_COLOR = {'ARI': '#97233f', 'ATL': '#a71930', 'BAL': '#241773', 'BUF': '#00338d', 'CAR': '#0085ca', 'CHI': '#0b162a', 'CIN': '#fb4f14', 'CLE': '#311d00',
               'DAL': '#003594', 'DEN': '#fb4f14', 'DET': '#0076b6', 'GB': '#203731', 'HOU': '#03202f', 'IND': '#002c5f', 'JAX': '#006778', 'KC': '#c8102e',
               'LV': '#000000', 'LAC': '#0080c6', 'LA': '#003594', 'MIA': '#008e97', 'MIN': '#4f2683', 'NE': '#002244', 'NO': '#d3bc8d', 'NYG': '#0b2265',

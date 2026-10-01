@@ -2703,7 +2703,13 @@ function filteredTransactions(v) {
     (txClub === 'all' || (txClub === 'mine' && r.mine) || (txClub === 'div' && (r.divisions || [r.division]).includes(v.my_division))) &&
     (!q || [r.line, r.team?.name, r.team?.abbr, r.person, r.role, r.tag, r.detail, r.detail_secondary].filter(Boolean).join(' ').toLowerCase().includes(q)));
 }
-function transactionWhen(r) { return r.week ? `Wk ${r.week}` : r.phase ? r.phase.charAt(0).toUpperCase() + r.phase.slice(1).replaceAll('_', ' ') : ''; }
+function transactionWhen(r) {
+  if (r.period) return r.period;
+  if (['offseason', 'free_agency', 'draft'].includes(r.phase)) return 'Offseason';
+  if (r.phase === 'preseason') return 'Preseason';
+  if (r.week) return ({19:'Wild Card',20:'Divisional Round',21:'Conference Championship',22:'Super Bowl'})[r.week] || `Week ${r.week}`;
+  return r.phase ? r.phase.charAt(0).toUpperCase() + r.phase.slice(1).replaceAll('_', ' ') : '';
+}
 function renderTransactions(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('transactions');
   const copyTx = el('button', { class: 'btn quiet transaction-copy', 'data-tip': 'Copy the list as filtered, every entry, as text', onclick: () => {

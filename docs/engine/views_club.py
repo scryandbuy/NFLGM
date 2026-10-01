@@ -6,7 +6,7 @@ show, as plain dicts, and the actions their buttons call.
 """
 from views import jersey
 import numpy as np
-from views import club, money, morale_word, player_plate, rail
+from views import club, money, morale_word, player_plate, rail, transaction_when
 
 GROUPS = [('QB', ['QB']), ('HB', ['HB']), ('FB', ['FB']), ('WR', ['WR']), ('TE', ['TE']), ('LT', ['LT']), ('LG', ['LG']), ('C', ['C']), ('RG', ['RG']), ('RT', ['RT']),
           ('LEDG', ['LEDG']), ('DT', ['DT']), ('REDG', ['REDG']), ('MIKE', ['MIKE']), ('WILL', ['WILL']), ('SAM', ['SAM']), ('CB', ['CB']), ('FS', ['FS']), ('SS', ['SS']),
@@ -375,7 +375,7 @@ def _player_history(league, p):
         named = x.get('pid') == p.pid or p.pid in [str(a) for a in (x.get('a_sends') or [])] or p.pid in [str(a) for a in (x.get('b_sends') or [])]
         if not named: continue
         year = x.get('year') or 0; week = x.get('week') or 0
-        when = f"{year}" + (f" · Wk {week}" if week else (' · ' + x['phase']) if x.get('phase') else '')
+        when = transaction_when(x)
         add(year, int(week) if week else 22, when, VL._tx_line(league, x))
 
     spent = getattr(p, 'xp_spent', None) or {}
@@ -388,7 +388,7 @@ def _player_history(league, p):
         else: continue
         year = purchase.get('year') or p.draft_year or 0
         week = purchase.get('week') or 0
-        when = f"{year} · Wk {week}" if week else str(year) if purchase.get('year') else 'Earlier XP'
+        when = transaction_when(purchase) if week else str(year) if purchase.get('year') else 'Earlier XP'
         what = 'Ceiling' if kind == 'unlock' else attr.replace('_rating', '').replace('_', ' ').title()
         cost = purchase.get('cost')
         source = purchase.get('source')
