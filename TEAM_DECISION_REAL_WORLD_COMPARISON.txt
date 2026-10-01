@@ -1,0 +1,95 @@
+AI TEAM DECISIONS VS RECENT NFL ROSTER BEHAVIOR
+September 30, 2026
+
+Evidence
+Simulation: frozen ef4620a, all32 CPU teams; three full seasons plus following
+offseasons in seed93030, one in93031. 1,140 games,128 team-seasons. Both runs
+completed successfully. This is a four-cycle sample, not long-horizon proof.
+Research: Review code changes (3) reviewed2022–2026 markets using official
+transactions/rosters and attributed contract sources. It is a five-market
+evidence review, not a complete league contract census. Its sourced report:
+C:/Users/HP/Documents/Codex/2026-09-28/rev/work/nflgm-vision-audit/research/nfl_roster_behavior_2022_2026.txt
+
+WHAT THE COMPARISON CHANGES
+
+1. The expensive acquisition sequence is the strongest market concern.
+Miami's simulated same-round SS contracts ($16.34m and$29.10m APY, both3y)
+followed by cutting the first before a game deserve scrutiny. Neither player
+declined. Both initially added package value, but the team could not sustain
+the combined commitments. The final cut can be rational after overspending;
+that does not make the preceding spending plan coherent.
+Code rechecks marginal roster gain after signings but leaves the original
+offer price/term intact. Test joint role allocation and a feasible funded
+roster plan, including pending offers and future contract exposure. Do not
+automatically ban two acquisitions carrying the same position label.
+
+Real counterexample to a blanket position ban: Green Bay combined McKinney
+with three drafted safeties in2024, with rookies competing alongside him and
+learning complementary assignments. That is coherent depth and succession.
+https://www.packers.com/news/safety-competition-fully-up-and-running-for-packers
+
+2. A recent-signing cut is not automatically unrealistic.
+Buffalo's official ledger records O.J. Howard signed in March2022 for one year
+and released in August. Green Bay released March2025 signing Mecole Hardman
+at cutdown. These establish exceptions, not their league-wide frequency.
+https://www.buffalobills.com/team/transactions/2022
+https://www.packers.com/news/green-bay-packers-keep-11-defensive-backs-heres-initial-2025-roster
+
+Game FA-phase >=$4m APY contracts cut same offseason:
+93030/2027:6/124 (4.84%);2028:2/122 (1.64%);2029:14/198 (7.07%).
+93031/2027:2/128 (1.56%). Most were one-year deals. This threshold is a
+counting convention, not a definition of a major commitment; some contracts
+may be re-signings after expiry. No matched real league denominator was
+established. Do NOT claim these aggregate rates are excessive from anecdotes.
+Separate new major guarantees, extensions, one-year depth, changed role,
+decline/injury, trade availability, cap necessity and organization retention.
+
+3. Reframe the rookie finding as waiver exposure and actual loss.
+Ten R2 picks were cut at first camp across128 R2 selections; seven returned
+to their drafting team's PS, three left the organization. No R1 picks were
+cut. All-round first-camp cuts were56,48,62 in primary and57 in secondary.
+Both SF Michael Suchanic examples and WAS Kingston Croft Jr stayed on ownPS.
+Actual R2 losses: CLE2028 DT to LV active; CAR2029 SAM to ATL active;
+SF2029 HB (82.1 OVR) to SEA PS. Investigate whether the risky waiver path was
+preferable to retaining the pick, rather than assuming all cuts abandon youth.
+Selected real cohorts: GB2024 retained9/11 on initial53, cutting two R7s;
+GB2025 retained all8, two on PUP. These support checking early-pick losses,
+but they are selected examples, not a measured league retention rate.
+https://www.packers.com/news/green-bay-packers-initial-2024-season-roster-breakdown
+https://www.packers.com/news/green-bay-packers-keep-11-defensive-backs-heres-initial-2025-roster
+
+4. Final feasibility is a firm game requirement.
+Temporary over-cap after drafting is permitted by the user's workflow.
+Teams may evaluate the rookie class, then cut/restructure. Do not impose a
+hard draft-time cap veto simply to prevent intermediate negative numbers.
+In first tested offseason, cleanup leaves DEN36 in one seed; DEN23,NO38,KC50
+in the other. The36-player DEN roster actually reaches Week1 kickoff.
+That is a failed final recovery, not an acceptable temporary draft state.
+Primary2028 and2029 recover all32 teams to53/cap-compliant rosters;2028 WAS
+lacks LS, whereas all2029 starting jobs are filled. Retain successful paths.
+Ordinary active-roster additions also cause >53 at169/1140 kickoffs. These
+counts exclude the separate temporary PS elevation list; they are not legal
+54/55 elevations. Repair the trade/roster gate and verify those cases directly.
+
+5. Preserve user-specific rules and newer fixes.
+All offseason departures retain post-June1 treatment. PS salaries are exempt
+under main's later commit21b781e, which is NOT in the frozen study baseline.
+Main replayed squad filling on all four saved end-offseason states: all short
+squads became full without further cap cost. The baseline PS shortage counts
+are therefore not current-build failures. Call-up contract funding and
+in-season replenishment still require their own targeted checks.
+
+RECOMMENDED NEXT WORK (not implemented by this audit)
+A. Ensure final CPU cleanup produces a complete playable roster and legal cap
+   together; ensure ordinary trades cannot leave roster54 for the next game.
+B. Make expensive FA commitments share one projected role/budget plan.
+   Accept legitimate multi-slot roles, rotation and succession; flag unused
+   new commitments without material changed information.
+C. Carry draft succession value and waiver-loss risk into cutdown, while
+   retaining sensible PS development and justified cuts.
+D. Track outcomes at initial53, final wire, Week1 and year-end separately.
+   Compare equivalent contract/roster cohorts before choosing numeric targets.
+
+This audit added tests, observers and reports only; it changed no gameplay
+source. Detailed raw evidence and final tables are in outputs/team-study-*
+and outputs/TEAM_DECISION_STUDY_RESULTS.txt.

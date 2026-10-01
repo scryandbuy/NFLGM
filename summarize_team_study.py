@@ -104,6 +104,28 @@ def main():
                 report['positive_trade_gains'].append(dict(year=m['year'],week=m['week'],stage=m['stage'],
                     changes=changes,assets=m['assets'],cap_before={a:b['cap_space'] for a,b in m['before'].items()},
                     cap_after={a:b['cap_space'] for a,b in m['after'].items()}))
+    for row in report['first_camp_draft_cuts']:
+        pick=row['draft']
+        end=next((s for s in snaps if s['label']=='end_offseason' and s['year']==pick['year']),None)
+        row['destination_at_regular_gate']=None
+        if end:
+            for team in end['teams']:
+                if pick['pid'] in team['roster_ids']:
+                    row['destination_at_regular_gate']=dict(team=team['team'],
+                        status='IR' if pick['pid'] in team['ir_ids'] else 'active')
+                if pick['pid'] in team['ps_ids']:
+                    row['destination_at_regular_gate']=dict(team=team['team'],status='PS')
+    report['fa_churn_rates']=[]
+    for end in (s for s in snaps if s['label']=='end_offseason'):
+        year=end['year']
+        contracts=[e for e in events if e['year']==year and e['kind']=='sign'
+                   and e.get('audit_stage','').startswith('step_fa_') and e.get('apy',0)>=4]
+        released={(e.get('team'),e.get('pid')) for e in events if e['year']==year
+                  and e['kind']=='release' and e.get('phase') in ('offseason','free_agency','preseason')}
+        cut=[e for e in contracts if (e['team'],e['pid']) in released]
+        report['fa_churn_rates'].append(dict(year=year,contracts=len(contracts),cuts=len(cut),
+            percent=round(100*len(cut)/max(1,len(contracts)),2),
+            multiyear_cuts=sum(e['years']>1 for e in cut),definition='FA-phase contracts APY>=4; may include re-signings'))
     (root/'summary.json').write_text(json.dumps(report,indent=2),encoding='utf8')
     for k,v in report.items():
         if k in ('stages','coaching_changes'): print(k,json.dumps(v))

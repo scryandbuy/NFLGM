@@ -3,6 +3,9 @@ TEAM DECISION STUDY — FROZEN BASELINE ef4620a
 Purpose
 Follow all 32 CPU teams through the actual game calendar, rather than judging
 each personnel function in isolation. Production code was not changed.
+COMPLETED: seed93030 three full seasons2026–28 plus offseasons into2027–29;
+seed93031 one full2026 season plus offseason into2027. Both exited0.
+1,140 games total (855+285), four league cycles /128 team-seasons.
 
 Method
 audit_longitudinal_teams.py drives Session.advance with no human team. It omits
@@ -68,14 +71,18 @@ P0492 followed by SS P0546. Seed 93030 DEN's subsequent refill compounds #1.
 This broad emergency policy is existing behavior; a fix must explicitly
 decide how to fund complete rosters rather than silently ignore the cap.
 
-4. Offseason planning fails to reserve enough for subsequent commitments.
+4. Temporary draft/camp over-cap states are allowed; final resolution matters.
 Both first offseasons finish FA with all teams currently cap compliant.
 After the draft, 28/32 are over the current offseason cap in each seed.
 After UDFA camp, 31/32 are over in each seed. Minimum-body reserves do not
 cover rookie slot premiums. Draft._select signs rookie contracts without a
-cap gate; later cleanup is relied upon. Over-cap intermediate offseason
-states alone do not prove an illegal final roster; #1 demonstrates failure
-of that intended recovery path.
+cap gate; later cleanup is relied upon. User explicitly permits this order:
+see the rookie class, then cut/restructure to get compliant. Do not enforce
+a hard draft-time affordability rule or classify intermediate over-cap as
+a defect. #1 demonstrates failure of resolution in2027. The2028 and2029
+primary offseasons BOTH recover to53/cap-compliant rosters for all32 teams.
+WAS still lacks LS at2028 gate; all2029 starting roles are filled. Forecast
+feasibility and commitments without requiring all rookie costs prepaid.
 
 5. Same-offseason commitment reversals recur; dead money alone is not a defect.
 Counting APY >=$4m, excluding drafted/UDFA contracts, first 2027 offseason:
@@ -103,6 +110,19 @@ The concern to investigate is earlier repeated commitments and insufficient
 future reserve. Failed shopping attempts are not logged by this observer;
 no claim is made that these players could have been traded, or that an
 available acceptable offer was refused.
+Further user clarification: newly signing a player, buying another at his
+position and immediately cutting the first should be rare. A defensible
+last-step cut does not excuse avoidable acquisition churn. MIA signs both
+SS Thompkins ($16.34m APY/3y) and SS Works ($29.10m APY/3y) in FA round1,
+then cuts Thompkins before a game. Ratings have not declined. Their immediate
+roster gains were +15.94 and +17.06 respectively; cutting Thompkins later
+loses12.74. Thus both can contribute in package allocation, but the budget
+and retention plan cannot sustain the combined commitments.
+market.ai_bids prices candidates against one pre-round roster;
+resolve_phase does recheck current RN.move_gain>1, but keeps the original
+price/term. It does not require a coherent funded role plan for both recent
+acquisitions. This is not an entirely stale-roster bug, nor an argument for
+banning two acquisitions at any shared position (WR/CB/TE have multiple jobs).
 
 First-camp draft cuts by round (R1 through R7), first 2027 class:
 Seed93030: 0,1,6,12,10,12,15 =56/224 picks.
@@ -110,11 +130,17 @@ Seed93031: 0,2,10,7,11,13,14 =57/224 picks.
 Most are late picks, but SF cuts second-round HB C7642 Michael Suchanic
 (76.8 OVR) in both seeds. Seed93030 had HBs89.50/81.98/79.68 before drafting
 him49th; seed93031 had five HBs79.79–84.27 before drafting him60th. The
-current HB need was0 in both cases. Succession may justify a draft pick,
-but the first-camp cut shows that intention is not retained through cutdown.
+current HB need was0 in both cases. Succession may justify a draft pick.
+Both copies of this player return to SF's practice squad, so the cut is NOT
+evidence that the organization abandoned development. It exposes the pick
+to waivers; judge that risk separately from actual loss.
 Seed93031 WAS cuts second-round QB C4056 Kingston Croft Jr. (72.53, pick48),
 keeping QBs83.83 and76.13, both with one remaining year. No first-round
-first-camp cuts occurred in those two completed classes.
+first-camp cuts occurred in any of the four completed classes.
+Across all four classes, ten second-round picks were cut in their first camp;
+seven returned to their drafting team's PS (including WAS's QB above).
+Three left: CLE N2028DT009->LV active; CAR N2029SAM009->ATL active;
+SF N2029HB003 (82.1 OVR)->SEA PS. Do not label all ten discarded prospects.
 
 Decision quality observations (not proven defects)
 
@@ -138,8 +164,11 @@ regression, retirement, FA, trades and draft intervene.
 The second primary carousel adds BAL (Sean Zeller, front4-3->3-4,
 offense12 retained) and KC (David Hargrove, front4-3/offense12 retained).
 Both events say same_scheme=true; that flag does not prove identical front.
-All three natural hires to this point log zero position conversions. This
-is too small a sample for a general claim of gradual coaching adaptation.
+Third carousel: PIT hires Brian Renaud, front4-3->3-4/offense11 retained,
+score172.27->172.46 immediately. LA hires Andre Grady, front3-4 retained,
+offense13->21, score157.92->170.45. All five natural hires log zero position
+conversions; secondary seed has no hire in its one carousel. This is too
+small a sample for a general claim of gradual coaching adaptation.
 
 Useful successes
 All32 initially cut down to53 with cap compliance, distinct package players
@@ -152,6 +181,14 @@ not OVR points or an independent measure of football performance.
 Limits and interpretation
 This is a small-seed, short longitudinal audit, not proof of 30–40-year safety.
 The baseline is frozen; subsequent fixes in other chats are not included.
+In particular, the user's later PS-pay cap exemption implemented by the main
+chat is NOT in this baseline. It may improve squad size/funding; active
+contract affordability, roster-limit enforcement and acquisition planning
+must be verified separately on that updated code.
+Main independently replayed fill_squads on the two saved2027 checkpoints with
+PS-pay exemption 21b781e: seed93030 short squads10->0 (91 added); seed93031
+13->0 (152 added), with cap unchanged by those signings. This is a reported
+follow-up on newer code, not part of the frozen longitudinal results.
 Same-seed pre-change comparison was not run for the entire calendar. Source
 history identifies older execution paths, but emergent frequency can change
 when new roster preferences interact with them.
@@ -167,4 +204,13 @@ Street alternative samples are limited to six highest-OVR same-position
 players, and do not establish best affordable legal alternatives.
 
 The generated summary.json files are the source for final run totals and
-stage-by-stage tables. Re-run summarize_team_study.py after a run completes.
+stage-by-stage tables; both were refreshed after completion. Read
+outputs/TEAM_DECISION_STUDY_RESULTS.txt for the compact finished tables.
+Across1140 kickoffs169 games include an ordinary active roster above53.
+The separate PS elevation list is not included in team.active(); these
+counts are not legitimate temporary54/55 elevations. No wrong-team or
+multiple-owner player memberships appeared in snapshot checks.
+Final FA-phase >=$4m contract cut rates:6/124,2/122,14/198 in the primary
+three offseasons;2/128 in secondary. Most are one-year deals. No matched
+real-world denominator has been established; do not claim these aggregate
+rates are empirically excessive based only on selected real-team examples.
