@@ -2104,6 +2104,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                       secs_left=dr.clock, lean=dlean,
                       recent=(def_state.cov_memory if def_state else None))
 
+        # The audible must see the box the defense will actually show.
+        # Resolve this once; applying it again after the check would reroll it.
+        apply_defensive_plan(dc, def_state, rng)
+
         # THE AUDIBLE. He reads the look they are SHOWING and modifies the
         # call - he does not go back to the sheet and pick again, which would
         # let a good quarterback beat every defence every time. And the look
@@ -2168,7 +2172,6 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.cheaters = getattr(dr, 'cheaters', []) + [ch['call']]
                 if def_state is not None:
                     def_state.last_adjustment = None      # the reset
-        apply_defensive_plan(dc, def_state, rng)
 
         # Penalties. A pre-snap foul or a nullifying one (holding, OPI) wipes
         # the snap. EVERYTHING ELSE WAS BEING THROWN AWAY: the draw below
@@ -2234,6 +2237,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # the back who actually carries it
         # the back who carries it is the back on the field: the rotation in
         # field_units decides who that is
+        oc['execution_mod'] = script_mod
         out = resolve_fn(off_f, def_f, oc, dc, ytg_i, rng)
         if live_pen is None and out.get('throwaway') and rng.random() < 0.12:
             live_pen = dict(penalty='Intentional Grounding', yards=10.0, rule_yards=10.0,
@@ -2243,8 +2247,6 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             out['down'] = dr.down; out['ydstogo'] = dr.togo; out['yardline'] = dr.yardline; out['clock'] = dr.clock
             out['passer'] = off_f['qb'].get('pid') if out.get('is_pass') or out.get('type') in ('complete', 'incomplete', 'interception', 'drop', 'sack', 'scramble') else None
             _snap_state = (dr.down, dr.togo, dr.yardline)
-        if script_mod != 1.0 and out.get('yards'):
-            out['yards'] = round(float(out['yards']) * script_mod, 1)
         dr.plays += 1
         if off_state is not None:
             seq = getattr(off_state, 'seq', None)
@@ -2310,10 +2312,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         t = out['type']
         # a collapsed pocket is not automatically a sack - a mobile QB runs
         if t == 'sack':
-            if rng.random() < E.scramble_chance(offense['qb'], 1.0, 1.4, rate_fn):
+            if rng.random() < E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn):
                 _old = out
                 _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pressured') if k in _old}
-                out = E.resolve_scramble(offense['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
+                out = E.resolve_scramble(off_f['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
                     if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it

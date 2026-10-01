@@ -587,6 +587,7 @@ def available_depths(ytg):
     return ['short', 'medium', 'deep']
 
 def _run_play(off, deff, off_call, def_call, ytg, rng):
+    execution = float(np.clip(off_call.get('execution_mod', 1.0), 0.94, 1.06))
     scheme = off_call.get('scheme', 'inside_zone')
     fam = S.RUN_SCHEMES[scheme]['family']
     # Zone rewards agility and finesse blocking; gap rewards power and leverage.
@@ -642,6 +643,8 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     ybc = max(-4.0, ybc)
 
     if ybc < 0:
+        # Better execution limits a loss instead of making it more negative.
+        ybc /= execution
         return dict(type='run', yards=round(float(ybc), 1), scheme=scheme,
                     broken_tackles=0, touchdown=False, ybc=round(float(ybc), 1),
                     rb_reps=rb_reps)
@@ -649,7 +652,9 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     chasers = defenders[len(front):] + defenders[:len(front)]
     # The same wall applies to a run: yards after contact collapse near the
     # goal because there is nowhere to break to.
-    out = resolve_yards_after(off.get('rb') or off['qb'], chasers, ytg, rng, contact_at=ybc)
+    out = resolve_yards_after(off.get('rb') or off['qb'], chasers, ytg, rng,
+                              contact_at=ybc, gain_scale=execution)
+    ybc *= execution
     if not out['touchdown']:
         # never turn a score into a non-score: the resolver already decided he
         # reached the end zone, and compression is about the grass in between
@@ -809,9 +814,6 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # before the rush matters; a seven-step shot waits for the route. The
     # sack roll used to read only the rush's arrival, so a quick game and a
     # deep game were sacked at the same rate against a real ~3% and ~10%.
-    hold = HOLD_BY_DEPTH.get('screen' if screen else depth, 0.0)
-    p['sack'] = rng.random() < float(np.clip(SACK_K * np.exp(-2.40 * (p['time'] - hold)), 0, .85))
-
     # Free rushers force the ball out. That is what a hot route IS, and it is
     # the real answer to a blitz - not simply eating the sack.
     hot = prot['hot']
@@ -819,12 +821,15 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         depth = 'short'
         p['pressure'] = min(1.0, p['pressure'] + 0.20)
 
+    # The quick answer changes the required hold time before the sack roll.
+    hold = HOLD_BY_DEPTH.get('screen' if screen else depth, 0.0)
+    p['sack'] = rng.random() < float(np.clip(SACK_K * np.exp(-2.40 * (p['time'] - hold)), 0, .85))
     if hot:
         p['sack'] = p['sack'] and rng.random() < 0.35
     if PASS_TRACE is not None:
         PASS_TRACE.append(dict(path='clock', time=p['time'], hot=bool(hot),
                                sack=bool(p['sack']), rushers=def_call['rushers']))
-    if p['sack'] and not hot:
+    if p['sack']:
         return dict(type='sack', yards=round(-min(18.0, rng.gamma(2.0, 3.4)), 1), depth=depth, screen=bool(screen), swing=bool(swing),     # real sacks lose 6 to 8; 18 is the extreme, and the gamma tail once produced a 32-yard sack
                     touchdown=False, by=p['beaten_by'], concept=concept,
                     protection=prot_name, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
@@ -1158,6 +1163,9 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         # a smart unit kills it for two, a slow one gives up fifteen (about a third either way)
         awr = float(np.mean([rate(t_, {'awareness_rating': 1.0}) for t_ in tacklers[:3]]))
         gain_scale *= float(np.clip(1.0 - 1.8 * (awr - DEF_AWR_MEAN), 0.55, 1.45))
+    # Script execution affects running after the catch before the goal-line
+    # decision. Air distance and already-resolved sacks are never rescaled.
+    gain_scale *= float(np.clip(off_call.get('execution_mod', 1.0), 0.94, 1.06))
     yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space,
                               contact_at=min(max(te_free, scr_free), room), gain_scale=gain_scale)
     total = min(air + yac['yards'], ytg)
