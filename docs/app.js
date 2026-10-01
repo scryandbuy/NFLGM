@@ -298,10 +298,13 @@ function renderRecapBody(message) {
     const report = message.snap_counts, columns = el('div', {class:'snap-count-columns'});
     for (const unit of ['offense', 'defense']) {
       const data = report[unit] || {total:0, rows:[]};
+      const positions = unit === 'offense' ? ['QB','HB','FB','WR','TE','LT','LG','C','RG','RT'] : ['LEDG','DT','REDG','MIKE','WILL','SAM','CB','FS','SS'];
+      const positionRank = p => positions.includes(p) ? positions.indexOf(p) : positions.length;
+      const sortedRows = [...data.rows].sort((a,b) => b.snaps-a.snaps || positionRank(a.pos)-positionRank(b.pos) || a.name.localeCompare(b.name) || String(a.pid).localeCompare(String(b.pid)));
       const table = el('table', {class:'snap-count-table'},
         el('thead', {}, el('tr', {}, el('th', {scope:'col'}, 'Player'), el('th', {scope:'col'}, 'Snaps'))));
       const rows = el('tbody', {});
-      for (const player of data.rows) rows.append(el('tr', {}, el('td', {}, player.pid != null ? playerMention(player.pid,player.name) : player.name), el('td', {}, `${player.snaps}/${data.total}`)));
+      for (const player of sortedRows) rows.append(el('tr', {}, el('td', {}, player.pid != null ? playerMention(player.pid,player.name) : player.name), el('td', {}, `${player.snaps}/${data.total}`)));
       table.append(rows);
       columns.append(el('section', {}, el('h4', {}, unit === 'offense' ? 'Offense' : 'Defense'), table));
     }
