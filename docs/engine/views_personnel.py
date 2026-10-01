@@ -686,8 +686,9 @@ def extensions(session, league, abbr):
         st = r.get('talks')
         r['talks_word'] = ({'waiting': 'Waiting', 'countered': 'Countered', 'open': 'Talking', 'accepted': 'Agreed', 'signed': 'Agreed', 'declined': 'Declined', 'broken_off': 'Broke Off'}.get(st, 'Not Started') if st else ('Not Started' if r.get('eligible') else 'After Season' if r.get('yrs', 0) <= 1 else 'Not Eligible'))
         r['ask_word'] = (f"${r['ask']}m × {r['years']}" if r.get('ask') else ('Ask First' if r.get('eligible') else '—'))
-        r['tag_line'] = ('Final Year' if r.get('yrs') <= 1 else f"{r.get('yrs')} Yrs Left") + (' · Eligible' if r.get('eligible') and r.get('yrs', 0) > 1 else '')
-    return dict(rail=rail(session, league, abbr), cap_focus=focus, current_cap=current_cap, extension_cap=extension_cap, rows=rows, expiring=[r for r in rows if r['yrs'] <= 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1), committed_next=round(committed_next, 1), limit_next=round(limit_next, 1),
+        yrs = r['yrs']
+        r['tag_line'] = ('Expiring' if yrs == 0 else f"{yrs} Year{'s' if yrs != 1 else ''} Left") + (' · Eligible' if r.get('eligible') and yrs > 1 else '')
+    return dict(rail=rail(session, league, abbr), cap_focus=focus, current_cap=current_cap, extension_cap=extension_cap, rows=rows, expiring=[r for r in rows if r['yrs'] == 0], one_left=[r for r in rows if r['yrs'] == 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1), committed_next=round(committed_next, 1), limit_next=round(limit_next, 1),
                 tag=dict(open=tag_open, used=(choice not in (None, 'none')), none=(choice == 'none'), tagged=(league.player(choice).name if choice not in (None, 'none') and league.player(choice) else None)),
                 promise_kinds=[dict(key=k, label=v_['label']) for k, v_ in __import__('negotiation_engine').PROMISES.items()])
 

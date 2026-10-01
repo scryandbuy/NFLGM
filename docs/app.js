@@ -1992,7 +1992,7 @@ function renderExtensions(v) {
   const reload = () => renderExtensions(pyJSON(`SESSION.personnel('extensions')`));
   const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Extensions', el('small', {}, 'Review current and future cap commitments')));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
-  for (const [k, label, list] of [['expiring', 'Expiring', v.expiring], ['two_left', 'Two Years Left', v.two_left], ['done', 'Done This Year', v.done]]) tabs.append(el('button', { 'aria-pressed': String(extTab === k), onclick: () => { extTab = k; renderExtensions(v); } }, label + ' ', el('em', {}, list.length)));
+  for (const [k, label, list] of [['expiring', 'Expiring', v.expiring], ['one_left', '1 Year Left', v.one_left], ['two_left', '2 Years Left', v.two_left], ['done', 'Done This Year', v.done]]) tabs.append(el('button', { 'aria-pressed': String(extTab === k), onclick: () => { extTab = k; renderExtensions(v); } }, label + ' ', el('em', {}, list.length)));
   left.append(tabs);
   const rows = v[extTab] || [];
   const completed=extTab==='done';

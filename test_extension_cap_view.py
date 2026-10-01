@@ -11,6 +11,29 @@ from league import League
 
 
 class ExtensionCapViewTests(unittest.TestCase):
+    def test_offseason_expiring_and_remaining_years_are_separate(self):
+        league = fixture()
+        expired = player(league, pid='expired', contract=Contract(1, [10]))
+        one_left = player(league, pid='one_left', contract=Contract(2, [10, 11]))
+        two_left = player(league, pid='two_left', contract=Contract(3, [10, 11, 12]))
+        league.year += 1
+        league.advance_contracts()
+        league.set_phase('offseason')
+        for saved in (False, True):
+            with self.subTest(reloaded=saved):
+                if saved:
+                    league = League.load(league.save())
+                with patch.object(VP, 'rail', return_value={}):
+                    data = VP.extensions(None, league, 'GB')
+                self.assertEqual([r['pid'] for r in data['expiring']], [expired.pid])
+                self.assertEqual([r['pid'] for r in data['one_left']], [one_left.pid])
+                self.assertEqual([r['pid'] for r in data['two_left']], [two_left.pid])
+                self.assertEqual({r['pid']: r['tag_line'] for r in data['rows']}, {
+                    expired.pid: 'Expiring',
+                    one_left.pid: '1 Year Left',
+                    two_left.pid: '2 Years Left · Eligible',
+                })
+
     def test_completed_negotiations_move_out_of_talks_but_keep_done_and_history(self):
         league = fixture(); league.set_phase('regular')
         p = player(league, contract=Contract(4, [5, 20, 21, 22]))
