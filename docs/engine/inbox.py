@@ -89,7 +89,7 @@ def post(league, kind, subject, body, sender=None, payload=None, expires_week=No
         body = '\n\n'.join(chunks)
     subject, subject_refs = _mentions(subject)
     body, body_refs = _mentions(body)
-    m = dict(id=next(_ids), year=league.year, week=league.week, kind=kind,
+    m = dict(id=next(_ids), year=league.year, week=league.week, phase=league.phase, kind=kind,
              sender=sender, subject=subject, body=body, payload=payload or {},
              status='unread', expires_week=expires_week)
     m['entities'] = entity_references(league, str(subject) + '\n' + str(body), payload)
@@ -171,6 +171,9 @@ def accept(league, msg_id, user_team):
     m = next((m for m in _box(league) if m['id'] == msg_id), None)
     if m is None or m['kind'] != 'trade_offer' or m['status'] not in ('unread', 'open'):
         raise ValueError('no open offer with that id')
+    reconcile(league)
+    if m['status'] not in ('unread', 'open'):
+        raise ValueError('this offer is no longer valid')
     p = m['payload']
     if p.get('user_team', user_team) != user_team or p['buyer'] == user_team:
         raise ValueError('this offer belongs to another team')
@@ -243,6 +246,13 @@ def reconcile(league):
     """
     from game_recap import combine_saved_reports
     combine_saved_reports(league)
+    from free_agency import fa_class
+    for player in league.players.values():
+        if (not player.retired and not player.contract
+                and player.fa_class in (None, 'under_contract', 'signed')
+                and player.team in league.teams
+                and player.pid not in league.free_agents):
+            player.fa_class = fa_class(player.accrued, 0)
     closed = 0
     user = getattr(league, 'user_team', None)
     team = getattr(league, 'teams', {}).get(user)
@@ -253,7 +263,23 @@ def reconcile(league):
         pl = m.get('payload') or {}
         kind = m.get('kind')
         done = bool(m.get('resolved'))
-        if kind == 'staff':
+        if kind == 'trade_offer':
+            if (not m.get('phase') and league.phase == 'offseason'
+                    and m.get('year') == league.year
+                    and (getattr(league, 'season_closed_year', None) or league.year) < league.year):
+                m['phase'] = 'offseason'
+            for owner, assets in ((pl.get('buyer'), pl.get('sends', [])),
+                                  (pl.get('user_team', user), pl.get('gets', []))):
+                for asset in assets:
+                    if isinstance(asset, str):
+                        player = league.player(asset)
+                        if (player is None or player.team != owner or not player.contract
+                                or player.contract_years_left <= 0 or player.fa_class == 'tendered'):
+                            done = True
+                    else:
+                        try: _resolve(league, asset, owner)
+                        except (ValueError, KeyError): done = True
+        elif kind == 'staff':
             if pl.get('poach'):
                 request = next((r for r in getattr(league, 'poaches', []) or []
                                 if r['id'] == pl['poach']), None)
@@ -396,3 +422,12 @@ def entity_references(league, text, payload=None):
         if len(choices) == 1: selected = choices
         if len(selected) == 1: result.append(dict(selected[0]))
     return result
+
+
+def date_label(message):
+    year, week = message.get('year'), message.get('week')
+    if message.get('phase') in ('offseason', 'free_agency', 'draft', 'camp'):
+        return f'Offseason {year}'
+    label = {19:'Wild Card', 20:'Divisional Round', 21:'Conference Championship',
+             22:'Championship Game'}.get(week, f'Week {week}' if week else '')
+    return f'{year} · {label}' if label else str(year or '')

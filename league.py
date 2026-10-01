@@ -776,6 +776,8 @@ class League:
                 p = self.player(item)
                 if p is None or p.team != src or p not in self.teams[src].roster:
                     raise ValueError(f'trade: {item} is not on {src}')
+                if not p.contract or p.contract_years_left <= 0 or p.fa_class == 'tendered':
+                    raise ValueError('trade: player must sign a contract or tender before being traded')
         from cap_accounting import require_trade_room, settle_week, pre_roll
         if pre_roll(self): settle_week(self,18)
         roster_releases = self._trade_roster_releases(a, b, a_sends, b_sends)
@@ -928,6 +930,8 @@ class League:
                 # Moving him to the pool now stripped every club of the right
                 # to keep its own expiring players, and nobody got tagged.
                 p.contract = None
+                from free_agency import fa_class
+                p.fa_class = fa_class(p.accrued, 0)
                 expired.append(p)
         for t in self.teams.values():
             t.sync_cap()

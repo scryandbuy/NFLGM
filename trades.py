@@ -102,6 +102,8 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     see YOUR number and never theirs, which is the whole of a negotiation:
     the disagreement IS the trade, not an error to be reconciled.
     """
+    if not p.contract or p.contract_years_left <= 0 or p.fa_class == 'tendered':
+        return None  # Unsigned rights are not a transferable playing contract.
     v = VAL.value_player(league, p, side='team', pool=pool, rng=rng)
     if not v:
         return None

@@ -147,8 +147,8 @@ def trade_value(player, val, cap=CAP, contract=None):
     you control him, discounted, minus whatever the acquiring club inherits.
     A great player on a terrible contract has negative trade value.
     """
-    yrs = int(np.clip(player.get('contract_years_left', 1) or 1, 0, 6))
-    if yrs == 0: yrs = 1                                   # expiring: one year of him
+    yrs = int(np.clip(player.get('contract_years_left', 0) or 0, 0, 6))
+    if yrs == 0: return 0.0  # No signed playing time to value.
     age = float(player.get('age', 27) or 27)
     apy = float(player.get('apy', 0) or 0)
     worth = float(val['apy'])

@@ -423,7 +423,7 @@ def _inbox(league, limit=14):
     for m in (sorted(box, key=lambda m: -m['id'])[:limit] if limit else sorted(box, key=lambda m: -m['id'])):
         rows.append(dict(id=m['id'], subject=m['subject'], body=(m.get('body') or '')[:140], tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), decide=(is_decision(m)),
                          block=(is_decision(m) and (m.get('kind') in ('roster', 'trade_offer', 'offer_sheet') or bool((m.get('payload') or {}).get('poach')))),
-                         kind=m.get('kind'), unread=m.get('status') == 'unread', week=m.get('week'), year=m.get('year'), sender=m.get('sender'), **{'from': m.get('sender')}, when=(f"Wk {m.get('week')}" if m.get('week') else str(m.get('year') or ''))))
+                         kind=m.get('kind'), unread=m.get('status') == 'unread', week=m.get('week'), year=m.get('year'), sender=m.get('sender'), **{'from': m.get('sender')}, when=__import__('inbox').date_label(m)))
     return dict(rows=rows, total=len(box), unread=sum(1 for m in box if m.get('status') == 'unread'), decide=sum(1 for m in box if is_decision(m)))
 
 
