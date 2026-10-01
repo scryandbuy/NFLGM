@@ -9,6 +9,24 @@ import views_personnel as VP
 
 
 class FreeAgencyPositionViewTests(unittest.TestCase):
+    def test_position_filter_can_reach_players_beyond_global_top_300(self):
+        league = fixture()
+        league.user_team = 'GB'
+        league.set_phase('free_agency')
+        for i in range(305):
+            p = player(league, f'free-{i}', team=None)
+            p.pos = 'WR'
+            league.free_agents.append(p.pid)
+        tight_end = player(league, 'available-te', team=None)
+        tight_end.pos = 'TE'
+        league.free_agents.append(tight_end.pid)
+        with patch.object(VP, 'rail', return_value={}):
+            board = VP.free_agency(None, league, 'GB')
+        self.assertEqual(board['count'], 306)
+        self.assertEqual(len(board['rows']), 306)
+        self.assertEqual([r['pid'] for r in board['rows'] if r['pos'] == 'TE'],
+                         ['available-te'])
+
     def test_edge_recruits_into_a_rush_olb_role_only_in_odd_front(self):
         league = fixture()
         league.user_team = 'GB'

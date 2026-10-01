@@ -207,6 +207,10 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
     """
     cap = CAP.get(league.year, 301.2)
     comps = VAL.pool_from_league(league)
+    # Team-side valuation is fixed to the five-year comparison window. No
+    # contracts change while bids are assembled, so every club sees the same
+    # market quote for a player; scheme and roster need still shape each bid.
+    quotes = {}
     out = {}
     for abbr, team in league.teams.items():
         if abbr in skip_teams:
@@ -229,7 +233,9 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
             want = recruit_priority(gains.get(p.pid, 0.0))
             if want <= 0.12:
                 continue
-            v = VAL.value_player(league, p, side='team', pool=comps, rng=rng)
+            if p.pid not in quotes:
+                quotes[p.pid] = VAL.value_player(league, p, side='team', pool=comps, rng=rng)
+            v = quotes[p.pid]
             if not v:
                 continue
             from contract_terms import MAX_OFFER_YEARS

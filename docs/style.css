@@ -2457,6 +2457,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .trade-cap-arrow {color:var(--ink-3);}
 .trade-cap small {display:block;color:var(--ink-3);font-size:11px;}
 .trade-cap-change.up {color:#66d6a4;}.trade-cap-change.down {color:#ff9696;}
+.fa-results-count {padding:6px 14px 10px;color:var(--ink-3);font-size:12px;}
 .trade-label {font-size:12px;letter-spacing:2px;margin:16px 0 10px;}
 .trade-package {min-height:68px;max-height:220px;overflow:auto;border:1px solid var(--trade-rule);border-radius:8px;background:rgba(0,0,0,.12);}
 .trade-package.over {outline:2px solid var(--team-accent);}

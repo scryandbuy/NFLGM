@@ -107,10 +107,12 @@ def honors_premium(league, p):
     return 1.0 + min(0.20, sum(sorted(prem, reverse=True)[:2]))
 
 
-def terms(league, p, rng):
+def terms(league, p, rng, pool=None):
     """Return the agent ask, team offer, requested new years and discount."""
-    a = VAL.value_player(league, p, side='agent', rng=rng, extension=True)
-    t = VAL.value_player(league, p, side='team', rng=rng, extension=True)
+    if pool is None:
+        pool = VAL.pool_from_league(league)
+    a = VAL.value_player(league, p, side='agent', rng=rng, pool=pool, extension=True)
+    t = VAL.value_player(league, p, side='team', rng=rng, pool=pool, extension=True)
     if not a or not t:
         return None
     import personality as PT
@@ -153,7 +155,7 @@ def build(p, add_years, apy, cap, gm, league, front_load=None, bonus=None):
     return c
 
 
-def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agreed=False, bonus=None):
+def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agreed=False, bonus=None, pool=None):
     """The offer to the man. Returns dict(result, ...)."""
     rng = rng or np.random.default_rng()
     p = league.player(pid)
@@ -161,7 +163,7 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
         return dict(result='refused', why='not under contract to a club')
     if not eligible(p, league):
         return dict(result='refused', why='not eligible: more than two years left, or a rookie deal before his third season')
-    tm = terms(league, p, rng)
+    tm = terms(league, p, rng, pool=pool)
     if tm is None:
         return dict(result='refused', why='no market read on him')
     floor = tm['ask'] * (1.0 - tm['discount'])
@@ -252,6 +254,7 @@ def ai_round(league, rng, verbose=False):
     """Every club keeps who it can, before the market."""
     from gm_engine import scheme_fit
     done = []
+    pool = None
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None) or team.gm is None:
             continue
@@ -277,7 +280,9 @@ def ai_round(league, rng, verbose=False):
             if yrs_left >= 2 and p.ovr < 82: continue                 # two years out, only the stars get done early
             p_keep = (0.42 if rank == 0 else 0.10) * (1.2 if p.ovr >= 85 else 1.0) * (0.6 if yrs_left >= 2 else 1.0)
             if rng.random() > p_keep: continue
-            tm = terms(league, p, rng)
+            if pool is None:
+                pool = VAL.pool_from_league(league)
+            tm = terms(league, p, rng, pool=pool)
             if tm is None: continue
             floor = tm['ask'] * (1.0 - tm['discount'])
             # what the club will pay: its own number, stretched toward the ask
@@ -288,9 +293,10 @@ def ai_round(league, rng, verbose=False):
             if offer < floor: continue
             if not can_afford_extension(league, team, p, min(offer, tm['ask']), tm['years']):
                 continue
-            res = extend(league, p.pid, round(min(offer, tm['ask']), 2), tm['years'], rng, by_ai=True)
+            res = extend(league, p.pid, round(min(offer, tm['ask']), 2), tm['years'], rng, by_ai=True, pool=pool)
             if res['result'] == 'accepted':
                 n += 1; done.append((abbr, p.name, p.pos, round(p.ovr), res['apy'], res['years']))
+                pool = None  # The next player must see the new signed contract.
     if verbose:
         print(f'  {len(done)} extensions')
     return done

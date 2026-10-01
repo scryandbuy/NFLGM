@@ -1909,13 +1909,14 @@ function renderFA(v) {
   const drawPositionChoices=()=>{
     for(const button of posChips.querySelectorAll('button'))button.setAttribute('aria-pressed',String(button.dataset.group===(faPos||'All')));
     positions.replaceChildren();const group=groups.find(g=>g.group===faPos);positions.hidden=!group||group.positions.length<2;
-    if(!positions.hidden)for(const p of [{key:'',label:`All ${faPos}`},...group.positions])positions.append(el('button',{class:'chip','aria-pressed':String(faPosition===p.key),onclick:()=>{faPosition=p.key;redraw();}},p.label));
+    if(!positions.hidden)for(const p of [{key:'',label:`All ${faPos}`},...group.positions])positions.append(el('button',{class:'chip','aria-pressed':String(faPosition===p.key),onclick:()=>{faPosition=p.key;redraw();}},`${p.label} (${v.rows.filter(r=>faMatchesPosition(r,group,p.key)).length})`));
   };
   const watchB = el('button', { class: 'chip', 'aria-pressed': String(faWatch), onclick:e => { faWatch = !faWatch;e.currentTarget.setAttribute('aria-pressed',String(faWatch));drawRows(); } }, `Watchlist · ${v.rows.filter(r => r.watch).length}`);
   const rookieB = el('button', { class: 'chip', 'aria-pressed': String(faRookie), 'data-tip': 'This year\'s undrafted rookies, on the market at the minimum', onclick:e => { faRookie = !faRookie;e.currentTarget.setAttribute('aria-pressed',String(faRookie));drawRows(); } }, `Undrafted · ${v.rows.filter(r => r.rookie).length}`);
   const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Player', value: faQuery }); search.oninput = () => { faQuery = search.value; drawRows(); };
   tools.append(posChips,positions, el('div', { class: 'chips' }, ...(inSeason ? [] : [watchB]), ...(v.rows.some(r => r.rookie) ? [rookieB] : [])), search);drawPositionChoices();
   left.append(tools);
+  const countLine = el('div', { class: 'count fa-results-count' });
   const tbl = el('table', { class: 'tbl' });
   const drawRows = () => {
     tbl.innerHTML = '';
@@ -1923,7 +1924,9 @@ function renderFA(v) {
     else tbl.append(el('tr', {}, el('th', {}, ''), el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n', 'data-tip': 'How he grades in your scheme' }, 'Fit'), el('th', {}, 'Ask'), el('th', {}, 'Interest'), el('th', {}, 'Your Offer'), el('th', {}, '')));
     const q = faQuery.trim().toLowerCase();
     const rows = v.rows.filter(r => faMatchesPosition(r,groups.find(g=>g.group===faPos),faPosition) && (!faWatch || r.watch) && (!faRookie || r.rookie) && (!q || r.name.toLowerCase().includes(q)));
-    for (const r of rows) {
+    const visibleRows = rows.slice(0, 300);
+    countLine.textContent = rows.length > visibleRows.length ? `Showing ${visibleRows.length} of ${rows.length} matches. Choose a position or search to see the rest.` : `${rows.length} player${rows.length === 1 ? '' : 's'} available`;
+    for (const r of visibleRows) {
       const displayPos=r.display_pos || r.pos;
       const who = el('td', {}, el('button', { class: 'who', 'data-pid':r.pid, onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, displayPos), el('div', { class: 'nm' }, r.name, el('small', {}, inSeason ? (r.hole || displayPos) : `${displayPos}${r.last ? ' · from ' + r.last : ''}`))));
       const askBtn = el('div', { style: 'display:flex;gap:4px' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const th = v.threads.find(x => x.id === r.thread); if (th) openTalks(th, reload); } }, inSeason ? 'Talks' : 'Offer') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(inSeason ? 'fa_inseason' : 'fa_offseason')})`); if (!res.ok) { notify(res); reload(); return; } const fresh = pyJSON(`SESSION.personnel('free_agency')`); const th = fresh.threads.find(x => x.id === res.thread) || fresh.threads.filter(x => x.pid === r.pid).pop(); renderFA(fresh); if (th) openTalks(th, () => renderFA(pyJSON(`SESSION.personnel('free_agency')`))); } }, 'Ask the Agent'),
@@ -1936,7 +1939,7 @@ function renderFA(v) {
     if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '10' }, el('div', { class: 'empty' }, v.rows.length ? 'Nobody matches the filter.' : 'Nobody is on the market.'))));
     bindSelection();
   };
-  left.append(tbl); drawRows();
+  left.append(countLine, tbl); drawRows();
   page.append(left);
   const right = el('section', { class: 'sheet c4' }, el('h2', {}, inSeason ? 'Talks' : 'Negotiation', el('small', {}, `${v.threads.length} open`)));
   { const live_ = ['open', 'waiting', 'countered', 'match_requested']; const ths = [...v.threads].sort((a, b) => (live_.includes(b.state) ? 1 : 0) - (live_.includes(a.state) ? 1 : 0) || b.id - a.id); for (const t of ths) right.append(talkLine(t, reload)); }

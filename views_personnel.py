@@ -357,8 +357,9 @@ def free_agency(session, league, abbr):
     me = league.teams[abbr]
     depth = me.depth
     rows = []
-    # the best 400 on the market, not the first 400 in list order (that hid stars behind depth)
-    ordered = sorted(list(league.free_agents), key=lambda x: -(league.player(x).ovr if league.player(x) else 0))[:400]
+    # Send the full market so position filters and name search can find every
+    # available player. The browser limits only the currently drawn rows.
+    ordered = sorted(list(league.free_agents), key=lambda x: -(league.player(x).ovr if league.player(x) else 0))
     for pid in ordered:
         p = league.player(pid)
         if p is None or p.retired: continue
@@ -412,7 +413,7 @@ def free_agency(session, league, abbr):
     for t_ in threads: t_['cap'] = focus
     import practice_squad as PSQ
     ps_n = len(PSQ.squad(me))
-    return dict(rail=rail(session, league, abbr), cap_focus=focus, rows=rows[:300], count=len(rows), cap=focus['space'], pending_offers=outstanding, roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
+    return dict(rail=rail(session, league, abbr), cap_focus=focus, rows=rows, count=len(rows), cap=focus['space'], pending_offers=outstanding, roster=len(me.active()), ps=ps_n, committed_next=committed_next, limit_next=limit_next, steps=steps, step_i=step_i, top51=(phase != 'regular'),
                 weeks_left=(19 - int(league.week or 0) if phase == 'regular' else None),
                 in_season=(phase == 'regular'), phase=phase, step=step, fa_round=fa_round, threads=threads, feed=feed,
                 positions=sorted({r['pos'] for r in rows}), position_filters=PR.fa_position_filters(me))

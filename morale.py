@@ -160,10 +160,13 @@ def postseason(league, post):
 def offseason_contracts(league, rng):
     """Underpaid men against the market: the slow drag of a cheap deal."""
     import valuation as VAL
+    # This pass changes morale, not contracts. All players see the same
+    # league market, so build its comparison pool once.
+    pool = VAL.pool_from_league(league)
     for team in league.teams.values():
         for p in team.active():
             if not p.contract or p.ovr < 76: continue
-            v = VAL.value_player(league, p, side='agent', rng=rng)
+            v = VAL.value_player(league, p, side='agent', rng=rng, pool=pool)
             if not v: continue
             surplus = v['apy'] - p.apy
             if surplus <= 2.0: continue
