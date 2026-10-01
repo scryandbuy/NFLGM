@@ -3,7 +3,7 @@ from stable import stable_seed
 LEAGUE VIEWS. Standings, Schedule, Transactions, Stats, Awards, Coaching, Almanac.
 Read-only pages; nothing here changes the league.
 """
-from views import STADIUM, club, rail, _points, _form, transaction_period
+from views import CLUB_DISPLAY_ABBR, STADIUM, club, rail, _points, _form, transaction_period
 
 DIVS = ['Continental East', 'Continental North', 'Continental South', 'Continental West', 'United East', 'United North', 'United South', 'United West']
 
@@ -284,15 +284,16 @@ def _tx_line(league, x):
     k = x.get('kind'); p = league.player(x['pid']) if x.get('pid') else None
     nm = p.name if p else x.get('name', '')
     pos = f" ({p.pos})" if p else ''
-    team = x.get('team') or x.get('to') or ''
+    team = CLUB_DISPLAY_ABBR.get(x.get('team') or x.get('to'), x.get('team') or x.get('to') or '')
     if k == 'sign': return f"{team} Sign: {nm}{pos}" + (f", {x['years']} yrs" if x.get('years') else '') + (f" at ${x['apy']:.1f}m" if x.get('apy') else '')
     if k == 'release': return f"{team} Release: {nm}{pos}" + (f", ${x['dead']:.1f}m penalty" if x.get('dead') else '')
     if k in ('trade', 'inbox_trade'):
         a, b = x.get('a') or x.get('buyer', ''), x.get('b') or x.get('seller', league.user_team if hasattr(league, 'user_team') else '')
+        a, b = CLUB_DISPLAY_ABBR.get(a, a), CLUB_DISPLAY_ABBR.get(b, b)
         return f"{a} Trade: send {', '.join(_asset(league, y) for y in x.get('a_sends', []))} to {b} for {', '.join(_asset(league, y) for y in x.get('b_sends', []))}" if x.get('a_sends') is not None else f"{a} Trade: with {b}"
     if k == 'draft': return f"{team} Draft: {nm}{pos} at {x.get('round', '?')}.{((x.get('selection', 1) - 1) % 32) + 1}"
     if k == 'extension': return f"{team} Extend: {nm}{pos}" + (f", {x['years']} yrs at ${x['apy']:.1f}m" if x.get('apy') else '')
-    if k == 'waiver_claim': return f"{team} Claim: {nm}{pos}" + (f" off waivers from {x['from_team']}" if x.get('from_team') else '')
+    if k == 'waiver_claim': return f"{team} Claim: {nm}{pos}" + (f" off waivers from {CLUB_DISPLAY_ABBR.get(x['from_team'], x['from_team'])}" if x.get('from_team') else '')
     if k == 'ps_sign': return f"{team} Practice Squad: {nm}{pos}"
     if k == 'ps_release': return f"{team} Practice Squad Release: {nm}{pos}"
     if k == 'ps_callup': return f"{team} Call-Up: {nm}{pos} signed from the practice squad"
@@ -307,7 +308,7 @@ def _tx_line(league, x):
         action = 'Hired' if k == 'staff_in' else 'Retired' if k == 'staff_retire' else _staff_departure_action(x.get('why'))
         return f"{team} {action} {role}: {x.get('name', '')}" + (f" · {x['why']}" if x.get('why') else '')
     if k == 'hall_of_fame': return f"{nm}{pos} elected to the Hall of Fame"
-    if k == 'season_end': return f"{x.get('champion', '')} win the Championship Game"
+    if k == 'season_end': return f"{CLUB_DISPLAY_ABBR.get(x.get('champion'), x.get('champion', ''))} win the Championship Game"
     if k == 'position_change': return f"{team} Position Change: {nm} to {x.get('to', '')}"
     if k in ('tag', 'franchise_tag'): return f"{team} Tag: {nm}{pos}"
     if k == 'restructure': return f"{team} Restructure: {nm}{pos}"

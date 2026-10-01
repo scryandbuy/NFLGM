@@ -4,6 +4,8 @@ const ENGINE = 'engine/';
 const CLUBS = ['ARI','ATL','BAL','BUF','CAR','CHI','CIN','CLE','DAL','DEN','DET','GB','HOU','IND','JAX','KC','LV','LAC','LA','MIA','MIN','NE','NO','NYG','NYJ','PHI','PIT','SF','SEA','TB','TEN','WAS'];
 const DISPLAY_ABBR = {LAC:'CA', NYG:'NY', NYJ:'NJ'};
 const showAbbr = abbr => DISPLAY_ABBR[abbr] || abbr;
+// Presentation only: historical prose keeps canonical IDs in the saved data.
+const showTeamText = text => String(text ?? '').replace(/\b(?:LAC|NYG|NYJ)\b/g, showAbbr);
 const COLOR = {ARI:'#97233f',ATL:'#a71930',BAL:'#241773',BUF:'#00338d',CAR:'#0085ca',CHI:'#0b162a',CIN:'#fb4f14',CLE:'#311d00',DAL:'#003594',DEN:'#fb4f14',DET:'#0076b6',GB:'#203731',HOU:'#03202f',IND:'#002c5f',JAX:'#006778',KC:'#c8102e',LV:'#000000',LAC:'#0080c6',LA:'#003594',MIA:'#008e97',MIN:'#4f2683',NE:'#002244',NO:'#d3bc8d',NYG:'#0b2265',NYJ:'#125740',PHI:'#004c54',PIT:'#ffb612',SF:'#aa0000',SEA:'#002244',TB:'#d50a0a',TEN:'#0c2340',WAS:'#5a1414'};
 const BOOT_TEAM = {ARI:['Arizona','#ffb612'],ATL:['Atlanta','#a71930'],BAL:['Baltimore','#9e7c0c'],BUF:['Buffalo','#c60c30'],CAR:['Carolina','#bfc0bf'],CHI:['Chicago','#c83803'],CIN:['Cincinnati','#fb4f14'],CLE:['Cleveland','#ff3c00'],DAL:['Dallas','#869397'],DEN:['Denver','#fb4f14'],DET:['Detroit','#b0b7bc'],GB:['Green Bay','#ffb612'],HOU:['Houston','#a71930'],IND:['Indianapolis','#e5e8ed'],JAX:['Jacksonville','#d7a22a'],KC:['Kansas City','#ffb81c'],LV:['Las Vegas','#a5acaf'],LAC:['California','#ffc20e'],LA:['Los Angeles','#ffa300'],MIA:['Miami','#fc4c02'],MIN:['Minnesota','#ffc62f'],NE:['New England','#c60c30'],NO:['New Orleans','#d3bc8d'],NYG:['New York','#a71930'],NYJ:['New Jersey','#d9e2dd'],PHI:['Philadelphia','#a5acaf'],PIT:['Pittsburgh','#ffb612'],SF:['San Francisco','#b3995d'],SEA:['Seattle','#69be28'],TB:['Tampa Bay','#ff7900'],TEN:['Tennessee','#4b92db'],WAS:['Washington','#ffb612']};
 
@@ -67,7 +69,7 @@ const NameLinks = (() => {
       // A player's home state is biography, not a reference to its team.
       if (target.kind==='team' && /Home State:\s*$/i.test(text.slice(0,m.index))) continue;
       parts.push(document.createTextNode(text.slice(last,m.index)));
-      const link=document.createElement('a');link.className='entity-link';link.href=href(target);link.textContent=m[0];
+      const link=document.createElement('a');link.className='entity-link';link.href=href(target);link.textContent=target.kind==='team' ? showAbbr(m[0]) : m[0];
       link.setAttribute('aria-label',`${target.name}: ${target.kind==='player'?'player card':'team overview'}`);
       link.addEventListener('click',e=>e.stopPropagation());
       parts.push(link);last=end;
@@ -1669,7 +1671,7 @@ function threadBox(t, onDone) {
     box.append(extensionImpact(t.offer_cap_preview, countered ? 'Agent counter · cap impact' : 'Submitted offer · cap impact'));
   const feedback=el('div',{class:'msg note',role:'alert',hidden:true});
   const act=action=>{const r=pyJSON(`SESSION.personnel_act('${action}', tid=${t.id})`);notify(r);if(r.ok)onDone();else{feedback.hidden=false;feedback.textContent=r.why||'The decision could not be completed.';}};
-  if (matching) box.append(el('div', { class: 'msg match rival-panel' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${t.rival.team} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { act('match'); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { act('withdraw'); } }, 'Let Him Go'))));
+  if (matching) box.append(el('div', { class: 'msg match rival-panel' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${showAbbr(t.rival.team)} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { act('match'); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { act('withdraw'); } }, 'Let Him Go'))));
   if (countered) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, 'Counter'), el('div', { class: 'txt' }, el('b', {}, `$${t.counter.apy}m × ${t.counter.years}`), el('div', {}, t.counter.bonus != null ? `Signing bonus: $${Number(t.counter.bonus).toFixed(2)}m` : 'Signing bonus: standard structure'), el('small', {}, 'Even loading means equal base salaries in the new years; existing salary and bonus charges still apply.')), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { act('match_counter'); } }, 'Accept Counter'))));
   if (t.state === 'waiting') box.append(el('div', { class: 'msg note', style: 'display:flex;align-items:center;gap:12px' }, el('span', { style: 'flex:1' }, `Waiting on his answer${t.due ? ' · due ' + t.due : ''}.`), el('button', { class: 'btn quiet', 'data-tip': 'Pull the offer before he answers; the thread closes', onclick: () => { act('withdraw'); } }, 'Rescind Offer')));
   else if (['accepted', 'signed'].includes(t.state)) box.append(el('div', { class: 'msg note' }, 'Signed.'));
@@ -2905,7 +2907,7 @@ function filteredTransactions(v) {
     group:'Coaching', tag:c.action, line:`${c.club.name} ${c.action}: ${c.person} · ${c.role}${c.detail ? ' · '+c.detail : ''}`, coaching:true})) : v.rows;
   return rows.filter(r => (txGroup === 'All' || r.group === txGroup) &&
     (txClub === 'all' || (txClub === 'mine' && r.mine) || (txClub === 'div' && (r.divisions || [r.division]).includes(v.my_division))) &&
-    (!q || [r.line, r.team?.name, r.team?.abbr, r.person, r.role, r.tag, r.detail, r.detail_secondary].filter(Boolean).join(' ').toLowerCase().includes(q)));
+    (!q || [r.line, showTeamText(r.line), r.team?.name, r.team?.abbr, showAbbr(r.team?.abbr), r.person, r.role, r.tag, r.detail, r.detail_secondary].filter(Boolean).join(' ').toLowerCase().includes(q)));
 }
 function transactionWhen(r) {
   if (r.period) return r.period;
@@ -2917,7 +2919,7 @@ function transactionWhen(r) {
 function renderTransactions(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('transactions');
   const copyTx = el('button', { class: 'btn quiet transaction-copy', 'data-tip': 'Copy the list as filtered, every entry, as text', onclick: () => {
-    const lines = filteredTransactions(v).map(r => [r.year, transactionWhen(r), r.tag, r.line].filter(Boolean).join(' · '));
+    const lines = filteredTransactions(v).map(r => [r.year, transactionWhen(r), r.tag, showTeamText(r.line)].filter(Boolean).join(' · '));
     copyText(lines.join('\n'), copyTx); } }, 'Copy');
   const s = leagueBoard(v, 'TRANSACTIONS', ''); s.classList.add('transactions-board');
   const tabs = el('div', { class: 'tabs transaction-tabs' });
@@ -2936,7 +2938,7 @@ function renderTransactions(v) {
       const theme = teamTheme(r.team || {});
       list.append(el('div', { class: 'transaction-row', style:`--transaction-base:${theme.base};--transaction-accent:${theme.accent};--transaction-readable:${theme.readable}` },
         el('time', {}, String(r.year ?? ''), el('small',{},transactionWhen(r))),
-        el('div',{class:'transaction-team'},r.team ? clubLink(r.team.abbr,r.team.name) : 'League',el('small',{},r.team ? `${r.team.abbr}${r.team.abbr === v.rail.club.abbr?' · YOUR TEAM':''}` : '')),
+        el('div',{class:'transaction-team'},r.team ? clubLink(r.team.abbr,r.team.name) : 'League',el('small',{},r.team ? `${showAbbr(r.team.abbr)}${r.team.abbr === v.rail.club.abbr?' · YOUR TEAM':''}` : '')),
         el('span',{class:'transaction-action'},r.tag),
         el('div',{class:'transaction-person'},el('b',{},r.pid ? el('a',{class:'entity-link',href:'#club/player/'+encodeURIComponent(r.pid),onclick:e=>e.stopPropagation()},r.person || r.line) : r.person || r.line),el('small',{},r.role || '')),
         el('div',{class:'transaction-detail'},r.detail || '',r.detail_secondary ? el('small',{},r.detail_secondary) : ''),link));
@@ -2961,7 +2963,7 @@ function renderStats(v) {
   const yrs=el('div',{class:'league-year-tools'},leagueYear(v,y=>renderStats(pyJSON(`SESSION.league_view('stats', year=${y})`))),el('a',{class:'btn',href:'#league/almanac'},'Career Stats →'));
   tabs.append(yrs); s.append(tabs);
   if(v.note) s.append(el('div',{class:'read'},v.note));
-  const nm = r => el('div', { class: 'nm', style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name, el('small', {}, `${r.pos} · ${r.team}`));
+  const nm = r => el('div', { class: 'nm', style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name, el('small', {}, `${r.pos} · ${showAbbr(r.team)}`));
   if (statsTab === 'Leaders' || statsTab === 'Advanced') {
     const boxes = statsTab === 'Leaders' ? v.boxes : v.advanced;
     const grid = el('div', { class: 'leaders' });
@@ -3049,8 +3051,8 @@ function renderAlmanac(v) {
     const two = el('div', { class: 'two league-records' });
     const rs = el('div', {}, el('div', { class: 'h5' }, 'Single Season', el('span', {}, 'Since 2026'))); const rc = el('div', {}, el('div', { class: 'h5' }, 'Career', el('span', {}, 'Active players highlighted')));
     for (const r of v.records) {
-      if (r.season) rs.append(el('div', { class: 'lrow' }, el('div', { class: 'nm' }, r.stat, el('small', {}, `${r.season.name} · ${r.season.team} · ${r.season.year}`)), el('span', { class: 'v' }, r.season.v)));
-      if (r.career) rc.append(el('div', { class: 'lrow' }, el('div', { class: 'nm', style: r.career.active ? 'color:var(--club-2)' : '' }, r.stat, el('small', {}, `${r.career.name} · ${r.career.team}`)), el('span', { class: 'v' }, r.career.v)));
+      if (r.season) rs.append(el('div', { class: 'lrow' }, el('div', { class: 'nm' }, r.stat, el('small', {}, `${r.season.name} · ${showAbbr(r.season.team)} · ${r.season.year}`)), el('span', { class: 'v' }, r.season.v)));
+      if (r.career) rc.append(el('div', { class: 'lrow' }, el('div', { class: 'nm', style: r.career.active ? 'color:var(--club-2)' : '' }, r.stat, el('small', {}, `${r.career.name} · ${showAbbr(r.career.team)}`)), el('span', { class: 'v' }, r.career.v)));
     }
     if (!v.records.length) rs.append(el('div', { class: 'empty' }, 'Records are set as seasons close.'));
     two.append(rs, rc); s.append(two);
