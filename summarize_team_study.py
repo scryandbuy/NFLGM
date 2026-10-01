@@ -24,6 +24,8 @@ def main():
                 ps_range=[min(t['ps'] for t in teams),max(t['ps'] for t in teams)],
                 cap_range=[min(t['full_cap_space'] for t in teams),max(t['full_cap_space'] for t in teams)],
                 over_cap=[t['team'] for t in teams if t['full_cap_space']<-.01],
+                current_cap_range=[min(t['cap_space'] for t in teams),max(t['cap_space'] for t in teams)],
+                current_over_cap=[t['team'] for t in teams if t['cap_space']<-.01],
                 score_mean=round(sum(t['score'] for t in teams)/32,3),
                 age_mean=round(sum(t['mean_age'] for t in teams)/32,3),
                 ovr_mean=round(sum(t['mean_ovr'] for t in teams)/32,3),
@@ -32,11 +34,13 @@ def main():
                 position_short={t['team']:t['position_short'] for t in teams if t['position_short']},
                 ps_concentration={t['team']:dict(collections.Counter(p['pos'] for p in t['squad_players']))
                                   for t in teams if max(collections.Counter(p['pos'] for p in t['squad_players']).values(),default=0)>=5}))
-        if s['multiple_owners'] or s['invalid_owners'] or any(t['package_bad'] for t in teams):
-            report['violations'].append(dict(year=s['year'],stage=s['label'],multiple_owners=s['multiple_owners'],
+        # Offseason openings after expiry/retirement are expected, not lineup failures.
+        check_packages=s['phase'] in ('regular','playoffs') or s['label']=='end_offseason'
+        if s['multiple_owners'] or s['invalid_owners'] or (check_packages and any(t['package_bad'] for t in teams)):
+            report['violations'].append(dict(year=s['year'],stage=s['label'],phase=s['phase'],multiple_owners=s['multiple_owners'],
                 invalid_owners=s['invalid_owners'],packages={t['team']:t['package_bad'] for t in teams if t['package_bad']}))
         if s['label']=='step_coaching':
-            before=next(x for x in reversed(snaps[:snaps.index(s)]) if x['label']=='season_closed')
+            before=next(x for x in reversed(snaps[:snaps.index(s)]) if x['label']=='step_awards')
             prior={t['team']:t for t in before['teams']}
             changed={e['team']:e for e in events if e['year']==s['year'] and e['kind']=='gm_change'}
             for t in teams:
@@ -47,12 +51,48 @@ def main():
                         score_before=b['score'],score_after=t['score'],hire=changed[t['team']]))
     for year in sorted({e['year'] for e in events}):
         report['moves_by_year'][year]=dict(collections.Counter(e['kind'] for e in events if e['year']==year))
+    kickoffs=[json.loads(s) for s in (root/'kickoffs.jsonl').read_text(encoding='utf8').splitlines()]
+    report['kickoffs_by_year']={}
+    for year in sorted({k['year'] for k in kickoffs}):
+        games=[k for k in kickoffs if k['year']==year]
+        report['kickoffs_by_year'][year]=dict(games=len(games),
+            over53=[k for k in games if max(k['active'].values())>53],
+            under53=[k for k in games if min(k['active'].values())<53])
+    report['wire_failures']=[]
+    for s in snaps:
+        if s['label']!='end_offseason': continue
+        for t in s['teams']:
+            if t['active']==53 and t['cap_space']>=-.01 and not t['uncovered']: continue
+            releases=[e for e in events if e['year']==s['year'] and e.get('audit_stage')=='wire'
+                      and e['kind']=='release' and e.get('team')==t['team']]
+            report['wire_failures'].append(dict(year=s['year'],team=t['team'],active=t['active'],
+                cap_space=t['cap_space'],uncovered=t['uncovered'],group_short=t['group_short'],
+                position_short=t['position_short'],releases=releases))
     signs={}
+    retained={}
+    report['offseason_contract_churn']=[]
+    drafted={}
+    report['first_camp_draft_cuts']=[]
     for e in events:
         key=(e['year'],e.get('team'),e.get('pid'))
+        if e['kind']=='draft': drafted[(e['year'],e['pid'])]=e
         if e['kind']=='sign': signs[key]=e
         if e['kind']=='release' and key in signs and signs[key].get('apy',0)>=4:
             report['expensive_sign_cut'].append(dict(sign=signs[key],release=e))
+        offseason=e.get('phase') in ('offseason','free_agency','preseason')
+        if offseason and e['kind']=='release' and (e['year'],e.get('pid')) in drafted:
+            pick=drafted.pop((e['year'],e['pid']))
+            report['first_camp_draft_cuts'].append(dict(draft=pick,release=e))
+        if offseason and e['kind'] in ('sign','extension'):
+            retained[key]=e
+        if offseason and e['kind']=='release' and key in retained:
+            contract=retained.pop(key)
+            report['offseason_contract_churn'].append(dict(contract=contract,release=e,
+                notable=contract.get('apy',0)>=4,
+                category='draft' if contract.get('audit_stage')=='step_draft' else
+                         'udfa' if contract.get('audit_stage')=='practice_squad.udfa_camp' else
+                         'extension' if contract['kind']=='extension' else
+                         'other_signing'))
     for m in moves:
         if m['action']=='sign' and m['new_contract']['cap_hit']>=8:
             a=next(iter(m['before']),None)
@@ -66,7 +106,7 @@ def main():
                     cap_after={a:b['cap_space'] for a,b in m['after'].items()}))
     (root/'summary.json').write_text(json.dumps(report,indent=2),encoding='utf8')
     for k,v in report.items():
-        if k in ('stages','coaching_changes','violations'): print(k,json.dumps(v))
+        if k in ('stages','coaching_changes'): print(k,json.dumps(v))
         else: print(k,len(v))
 
 

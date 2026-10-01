@@ -1,0 +1,155 @@
+TEAM DECISION STUDY — FROZEN BASELINE ef4620a
+
+Purpose
+Follow all 32 CPU teams through the actual game calendar, rather than judging
+each personnel function in isolation. Production code was not changed.
+
+Method
+audit_longitudinal_teams.py drives Session.advance with no human team. It omits
+human UI rendering, user blocking prompts and human game/review captures.
+Normal weekly games, postseason, XP, coaching, regression, retirement,
+extensions, tags, free agency, draft, UDFA camp, cutdown and final wire execute.
+Observers do not draw RNG. PYTHONHASHSEED=0. Schedule runtime: networkx 3.7.
+Native save checkpoints permit resume after each advance.
+
+Authoritative output directories (outside the repository):
+C:/Users/HP/Documents/Codex/2026-09-28/rev/outputs/team-study-93030
+C:/Users/HP/Documents/Codex/2026-09-28/rev/outputs/team-study-93031
+Earlier longitudinal-* attempts are superseded and must not be combined.
+
+Evidence files in each output directory:
+methodology.json: seed, driver and requested duration.
+snapshots.json: full team/player lists, cap, roster gaps and planning scores.
+events.jsonl: complete transaction ledger, with execution stage.
+moves.jsonl: sampled detailed signs/releases and all trades, with before/after
+  needs/score/cap, contracts, and limited same-position street alternatives.
+kickoffs.jsonl: actual active/IR counts immediately before every game.
+checkpoint_YEAR.json: native saved game after the final offseason wire.
+summary.json: reproducible analysis from summarize_team_study.py.
+history.json: completed season records and champions.
+
+Confirmed findings
+
+1. Final cap cleanup destroys completed CPU rosters.
+Seed 93030, 2027 DEN: cutdown 53 active / -$20.295m current cap; final wire
+releases 17 and leaves 36 / +$0.021m. LS remains uncovered. Actual Week 1
+kickoff is DEN 36, BAL 53, both IR 0. Week 2 DEN has 39. Weekly refill reaches
+53 by Week 9 but cap space becomes -$19.772m.
+
+Seed 93031, 2027:
+DEN: cutdown 53/-$36.161m -> final wire 23/-$0.791m, 30 releases.
+NO:  cutdown 53/-$17.525m -> final wire 38/+$0.171m, 15 releases.
+KC:  cutdown 53/-$3.873m -> final wire 50/+$0.042m, four releases plus addition.
+DEN has two unfilled WR assignments, CB, P and LS at the final gate. Multiple
+normal offensive/defensive package assignments contain fewer than 11 players.
+
+Relevant existing flow: cutdown.finalize fills through emergency_fill after
+its limited cleanup passes; Session.step_clear_wire then runs CT.enforce with
+target=0 and does not refill. contracts.enforce calculates its roster reserve
+once; _fix_one's additional cuts increase replacement costs without updating
+that target. These are mechanism observations, not a validated fix proposal.
+
+2. CPU trades can create 54-player rosters which reach kickoff.
+Seed 93030 Week 1: LV buys WILL P0389 Ja'Sir Bentley (79.13 OVR, age28.2,
+$1.195m) from CAR for LV2026R7. LV53->54; CAR53->52. Actual Week 2 LAC/LV
+kickoff has LAC53/LV54 with no IR for either team. An independent short probe
+reproduces this: outputs/cpu-trade-roster-limit-probe.json.
+Trades execute and sync cap without a corresponding roster-limit repair;
+the game caller has no 53-player gate. Those execution lines predate the
+recent package-aware decision changes. Not evidence that all recent changes
+caused this problem.
+
+3. Weekly practice-squad refill can bypass the cap beyond minimum survival.
+practice_squad.keep_groups_whole calls call_up(emergency=True) for ordinary
+fill-to-53, role repair and group shortage. Emergency skips require_room.
+Seed 93031 CIN reaches -$0.644m at Week 9 and -$0.552m at Week 18. Its logged
+examples include IR of HB P0510 followed by QB P2577 promotion, and IR of CB
+P0492 followed by SS P0546. Seed 93030 DEN's subsequent refill compounds #1.
+This broad emergency policy is existing behavior; a fix must explicitly
+decide how to fund complete rosters rather than silently ignore the cap.
+
+4. Offseason planning fails to reserve enough for subsequent commitments.
+Both first offseasons finish FA with all teams currently cap compliant.
+After the draft, 28/32 are over the current offseason cap in each seed.
+After UDFA camp, 31/32 are over in each seed. Minimum-body reserves do not
+cover rookie slot premiums. Draft._select signs rookie contracts without a
+cap gate; later cleanup is relied upon. Over-cap intermediate offseason
+states alone do not prove an illegal final roster; #1 demonstrates failure
+of that intended recovery path.
+
+5. Expensive same-offseason signing/extension churn recurs.
+Counting APY >=$4m, excluding drafted/UDFA contracts, first 2027 offseason:
+Seed93030: six new deals cut before Week1; $15.817m current dead charges.
+           One extension cut; $2.115m current/$6.345m following-year dead.
+Seed93031: two new deals cut; $10.294m current/$11.601m following-year dead.
+Examples: NO CB P0327 Cam Reddish signed $9.16m/1y, then cut for $4.334m dead.
+NO DT P1826 extended $4.47m APY/4y, then cut for the 2.115/6.345 split.
+MIA P0060 signed $16.34m APY/3y, then cut for 5.801/11.601 dead in seed93031.
+The extension release's dead total can include previously existing bonus;
+do not equate all of it with a newly paid extension bonus without tracing.
+Minimum/camp/draft churn is reported separately in summary.json.
+
+First-camp draft cuts by round (R1 through R7), first 2027 class:
+Seed93030: 0,1,6,12,10,12,15 =56/224 picks.
+Seed93031: 0,2,10,7,11,13,14 =57/224 picks.
+Most are late picks, but SF cuts second-round HB C7642 Michael Suchanic
+(76.8 OVR) in both seeds. Seed93030 had HBs89.50/81.98/79.68 before drafting
+him49th; seed93031 had five HBs79.79–84.27 before drafting him60th. The
+current HB need was0 in both cases. Succession may justify a draft pick,
+but the first-camp cut shows that intention is not retained through cutdown.
+Seed93031 WAS cuts second-round QB C4056 Kingston Croft Jr. (72.53, pick48),
+keeping QBs83.83 and76.13, both with one remaining year. No first-round
+first-camp cuts occurred in those two completed classes.
+
+Decision quality observations (not proven defects)
+
+NE seed93030 Week3, offense12: sells its 81.08 TE Shawn Neely III to DEN for
+80.17 HB Terry Thomas plus 2026R3/2027R5. Its other HBs rate83.87/83.78/81.75;
+remaining TEs66.02/65.67. Immediate roster score falls16.96 and TE need rises
+.410->.824; DEN gains7.75. Young HB and future picks may justify rebuilding,
+but this is a concrete role-cost tradeoff to review. It is not a cap casualty:
+NE cap falls19.124->17.818. Star-market premium can bypass surplus screening.
+
+NO seed93030 naturally fires Jeff Hargrove (5-12), hires Robert Okafor, and
+changes 3-4 to4-3 with offense11 retained. Score163.03 before coaching,
+158.50 immediately after,188.66 at next regular-season gate. DT6->4,
+LEDG2->3, active54->53. It drafts LEDG Kord Bartles fifth (81.1 OVR), LT16th,
+MIKE37th; signs DT Tomarrion Danna (+7.04 immediate score) and two REDGs.
+Other moves include CB Jefferson/Anderson (+10.00/+10.79), and both RT Tafa
+(85.98,2y/$24.63 APY) and RT Bryant (92.08,age37.4,1y/$32.88). The latter
+raises the question of expensive duplication despite positive marginal score.
+Do not attribute total improvement causally to the coach: progression,
+regression, retirement, FA, trades and draft intervene.
+The second primary carousel adds BAL (Sean Zeller, front4-3->3-4,
+offense12 retained) and KC (David Hargrove, front4-3/offense12 retained).
+Both events say same_scheme=true; that flag does not prove identical front.
+All three natural hires to this point log zero position conversions. This
+is too small a sample for a general claim of gradual coaching adaptation.
+
+Useful successes
+All32 initially cut down to53 with cap compliance, distinct package players
+and no unfilled starting roles. Acquisitions respond to real needs:
+seed93030 NYJ C Nate Messer (+24.75 score), LV TE AnQuon Voss (+22.70);
+seed93031 NYG DT Kayo Kinsey (+21.46), JAX CB Alex Anderson (+20.14),
+MIN TE Jaxon Walker (+16.73). These are the game's own roster-planning score,
+not OVR points or an independent measure of football performance.
+
+Limits and interpretation
+This is a small-seed, short longitudinal audit, not proof of 30–40-year safety.
+The baseline is frozen; subsequent fixes in other chats are not included.
+Same-seed pre-change comparison was not run for the entire calendar. Source
+history identifies older execution paths, but emergent frequency can change
+when new roster preferences interact with them.
+Current cap_space respects phase/top51; full_cap_space charges all contracts.
+Use current cap for offseason legality; reports retain both explicitly.
+Season_closed rosters >53 include healed IR players and are expected during
+the offseason. Only kickoffs prove actual oversized game rosters. Under53
+alone may reflect normal short-term injury vacancies; 23–39 and missing
+roles after cleanup are material failures.
+No duplicate ownership or wrong-team membership was seen in completed first
+cycles. Final package failures arise from roster shortages, not repeated IDs.
+Street alternative samples are limited to six highest-OVR same-position
+players, and do not establish best affordable legal alternatives.
+
+The generated summary.json files are the source for final run totals and
+stage-by-stage tables. Re-run summarize_team_study.py after a run completes.
