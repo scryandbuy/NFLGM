@@ -1580,6 +1580,13 @@ function threadBox(t, onDone) {
 
 // Common Personnel presentation; original action buttons retain their engine handlers.
 const personnelSelected = {fa:null, extensions:null};
+function completedExtensionTerms(record) {
+  return {
+    outcome: ({extended:'Extended', tagged:'Franchise Tagged', 'option exercised':'Option Exercised'})[record.kind] || record.kind || 'Completed',
+    term: record.kind === 'extended' ? (record.years == null ? '—' : `${record.years} added year${record.years === 1 ? '' : 's'}`) : '1 year',
+    annual: Number.isFinite(record.apy) ? `$${record.apy.toFixed(1)}m` : '—'
+  };
+}
 function finishPersonnel(page, v, kind, left, right, extra = []) {
   const club = v.rail.club, board = el('section',{class:`sheet c12 personnel-board personnel-${kind}`});
   applyTeamTheme(board, club);
@@ -1617,6 +1624,7 @@ function finishPersonnel(page, v, kind, left, right, extra = []) {
   const detail=el('div',{class:'personnel-detail'});right.prepend(detail);
   const table=left.querySelector('table'); table.classList.add('personnel-player-table');
   const source=kind==='fa'?v.rows:(v[extTab]||[]);
+  const completed=kind==='extensions'&&extTab==='done';
   const sourceByPid=new Map(source.map(r=>[String(r.pid),r]));
   const sourceByName=new Map(source.map(r=>[r.name,r]));
   let previous=null;
@@ -1628,8 +1636,9 @@ function finishPersonnel(page, v, kind, left, right, extra = []) {
     const cell=row.lastElementChild;
     const actions=[...cell.children];
     const actionArea=el('div',{class:'personnel-detail-actions'},...actions);
-    const name=el('div',{class:'personnel-detail-name'},el('span',{class:'personnel-position'},record.display_pos || record.pos),el('div',{},el('h2',{},record.name),el('p',{},`${record.display_pos || record.pos} · ${record.age} · ${record.ovr} OVR`)));
-    detail.append(name,el('p',{class:'personnel-detail-status'},kind==='extensions'?`${record.tag_line || ''} · $${record.hit.toFixed(1)}m cap hit`:record.thread?'Negotiation in progress':'No talks started'),actionArea,el('a',{class:'btn quiet',href:'#club/player/'+record.pid},'Open Player'));
+    const deal=completed?completedExtensionTerms(record):null;
+    const name=el('div',{class:'personnel-detail-name'},el('span',{class:'personnel-position'},record.display_pos || record.pos),el('div',{},el('h2',{},record.name),el('p',{},completed?record.pos:`${record.display_pos || record.pos} · ${record.age} · ${record.ovr} OVR`)));
+    detail.append(name,el('p',{class:'personnel-detail-status'},completed?`${deal.outcome} · ${deal.term} · ${deal.annual} per year`:kind==='extensions'?`${record.tag_line || ''} · $${record.hit.toFixed(1)}m cap hit`:record.thread?'Negotiation in progress':'No talks started'),actionArea,el('a',{class:'btn quiet',href:'#club/player/'+record.pid},'Open Player'));
     previous={row,cell,actions};
   };
   const bindRows=()=>{
@@ -1637,7 +1646,7 @@ function finishPersonnel(page, v, kind, left, right, extra = []) {
     for(const row of table.querySelectorAll('tr')){
       const who=row.querySelector('button.who');if(!who)continue;
       const name=who.querySelector('.nm')?.firstChild?.textContent;
-      const record=sourceByPid.get(who.dataset.pid)||sourceByName.get(name);if(!record)continue;
+      const record=who.dataset.sourceIndex!=null?source[Number(who.dataset.sourceIndex)]:(sourceByPid.get(who.dataset.pid)||sourceByName.get(name));if(!record)continue;
       row.tabIndex=0;row.setAttribute('aria-label',`Select ${record.name}`);
       row.setAttribute('aria-selected','false');
       row.addEventListener('click',e=>{if(!e.target.closest('button,a'))drawSelection(row,record);});
@@ -1645,7 +1654,7 @@ function finishPersonnel(page, v, kind, left, right, extra = []) {
       if(!first)first=[row,record];if(record.pid===personnelSelected[kind])selected=[row,record];
     }
     if(selected||first)drawSelection(...(selected||first));
-    else detail.append(el('div',{class:'empty'},'Select a player to view available actions.'));
+    else detail.append(el('div',{class:'empty'},completed?'Select a completed decision to view its details.':'Select a player to view available actions.'));
   };
   bindRows();
   // Free-agency search redraws only the table, so refresh its detail selection afterward.
@@ -1822,10 +1831,20 @@ function renderExtensions(v) {
   for (const [k, label, list] of [['expiring', 'Expiring', v.expiring], ['two_left', 'Two Years Left', v.two_left], ['done', 'Done This Year', v.done]]) tabs.append(el('button', { 'aria-pressed': String(extTab === k), onclick: () => { extTab = k; renderExtensions(v); } }, label + ' ', el('em', {}, list.length)));
   left.append(tabs);
   const rows = v[extTab] || [];
-  const tbl = el('table', { class: 'tbl' }); tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', {}, 'Morale'), el('th', { class: 'n' }, 'Cap Hit'), el('th', {}, 'Ask'), el('th', {}, 'Talks'), el('th', {}, '')));
+  const completed=extTab==='done';
+  const tbl = el('table', { class: 'tbl' });
+  if(completed){
+    tbl.append(el('tr',{},...['Player','Pos','Decision','Term','Annual Value',''].map(label=>el('th',{},label))));
+    for(const [i,r] of rows.entries()){
+      const deal=completedExtensionTerms(r);
+      tbl.append(el('tr',{},el('td',{},el('button',{class:'who','data-pid':r.pid,'data-source-index':i,onclick:()=>{location.hash='#club/player/'+r.pid;}},el('div',{class:'no'},r.pos),el('div',{class:'nm'},r.name))),el('td',{},r.pos),el('td',{},deal.outcome),el('td',{},deal.term),el('td',{class:'n'},deal.annual),el('td',{class:'acts'})));
+    }
+  }else{
+  tbl.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', {}, 'Morale'), el('th', { class: 'n' }, 'Cap Hit'), el('th', {}, 'Ask'), el('th', {}, 'Talks'), el('th', {}, '')));
   for (const r of rows) tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'who', 'data-pid':r.pid, onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.tag_line || ''}${r.fa_class ? ' · ' + r.fa_class : ''}`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', {}, pill(r.morale)), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', {}, r.ask_word), el('td', { class: 'talks' }, r.talks_word),
     el('td', { class: 'acts' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const th = v.threads.find(t => t.id === r.thread); if (th) openTalks(th, reload); } }, 'Open Talks') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: r.eligible ? null : '', onclick: () => { const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`); if (!res.ok) { notify(res); reload(); return; } const fresh = pyJSON(`SESSION.personnel('extensions')`); const th = fresh.threads.find(t => t.id === res.thread) || fresh.threads.filter(t => t.pid === r.pid).pop(); renderExtensions(fresh); if (th) openTalks(th, reload); } }, 'Ask the Agent'))));
-  if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '9' }, el('div', { class: 'empty' }, 'Nobody here.'))));
+  }
+  if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: completed ? '6' : '9' }, el('div', { class: 'empty' }, completed ? 'No completed decisions this year.' : 'Nobody here.'))));
   left.append(tbl);
   const foot = el('div', { class: 'foot' });
   foot.append(el('a', { class: 'btn', href: '#frontoffice/cap' }, 'Restructure Instead'));
@@ -1838,9 +1857,11 @@ function renderExtensions(v) {
   if (!v.promises.length) pt.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'None made.'))));
   left.append(pt);
   page.append(left);
-  const right = el('section', { class: 'sheet c5' }, el('h2', {}, 'Negotiation', el('small', {}, `${v.threads.length} open`)));
+  const right = el('section', { class: 'sheet c5' }, el('h2', {}, completed ? 'Completed Deal' : 'Negotiation', el('small', {}, completed ? 'This year' : `${v.threads.length} open`)));
+  if(!completed){
   { const live_ = ['open', 'waiting', 'countered', 'match_requested']; const ths = [...v.threads].sort((a, b) => (live_.includes(b.state) ? 1 : 0) - (live_.includes(a.state) ? 1 : 0) || b.id - a.id); for (const t of ths) right.append(talkLine(t, reload)); }
   if (!v.threads.length) right.append(el('div', { class: 'empty' }, 'Ask an agent to hear his number. Offers are answered in one to three weeks by situation.'));
+  }
   page.append(right);
   finishPersonnel(page, v, 'extensions', left, right);
   if(pendingExtensionPid){
