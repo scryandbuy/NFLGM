@@ -295,6 +295,19 @@ function messageText(message, field) {
 }
 
 function renderRecapBody(message) {
+  if (message.recap && message.snap_counts) {
+    const wrapper = el('div', {class:'combined-game-report'});
+    const analysis = renderRecapBody({...message, snap_counts:null});
+    const snaps = renderRecapBody({...message, recap:null});
+    snaps.hidden = true;
+    const tabs = el('div', {class:'tabs', role:'tablist', 'aria-label':'Postgame report'});
+    const buttons = ['Analysis', 'Snap Counts'].map((label,i) => el('button', {
+      role:'tab', 'aria-selected':String(i===0), 'aria-pressed':String(i===0),
+      onclick:()=>{ analysis.hidden=i!==0; snaps.hidden=i!==1;
+        buttons.forEach((b,j)=>{b.setAttribute('aria-selected',String(i===j));b.setAttribute('aria-pressed',String(i===j));}); }
+    },label));
+    tabs.append(...buttons); wrapper.append(tabs,analysis,snaps); return wrapper;
+  }
   if (message.snap_counts) {
     const report = message.snap_counts, columns = el('div', {class:'snap-count-columns'});
     for (const unit of ['offense', 'defense']) {

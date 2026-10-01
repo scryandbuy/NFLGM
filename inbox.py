@@ -201,6 +201,8 @@ def reconcile(league):
     Session calls this after loading and before exposing or blocking on mail.
     Producers/actions also call it when their entity changes.
     """
+    from game_recap import combine_saved_reports
+    combine_saved_reports(league)
     closed = 0
     user = getattr(league, 'user_team', None)
     team = getattr(league, 'teams', {}).get(user)

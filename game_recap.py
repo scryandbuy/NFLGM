@@ -462,6 +462,24 @@ def declined_reviews(recs, own, against, before, accepted=(), installed=None):
     return findings
 
 
+def combine_saved_reports(league):
+    """Join existing paired reports by exact game identity, retaining analysis ID."""
+    messages = getattr(league, 'inbox', [])
+    reviews = {(m.get('payload') or {}).get('game_key'): m for m in messages
+               if (m.get('payload') or {}).get('recap')}
+    remove = set()
+    for m in messages:
+        payload = m.get('payload') or {}
+        key = payload.get('game_key', '')
+        if payload.get('snap_counts') and key.startswith('snap-counts-'):
+            review = reviews.get(key.replace('snap-counts-', 'game-recap-', 1))
+            if review is not None:
+                review['payload']['snap_counts'] = payload['snap_counts']
+                remove.add(m['id'])
+    if remove:
+        league.inbox = [m for m in messages if m['id'] not in remove]
+
+
 def post_snap_counts(league, home, away, week, states, playoffs=False):
     """Freeze one game of participation, including reserves with zero snaps."""
     import defense_roles as DR
@@ -497,6 +515,12 @@ def post_snap_counts(league, home, away, week, states, playoffs=False):
         body.append(unit.upper() + '\n' + '\n'.join(
             f"{inbox_player(league.player(p['pid']), p['name'])}: {p['snaps']}/{report[unit]['total']} Snaps" for p in report[unit]['rows']))
     opp = away if user == home else home
+    review_key = key.replace('snap-counts-', 'game-recap-', 1)
+    review = next((m for m in getattr(league, 'inbox', [])
+                   if (m.get('payload') or {}).get('game_key') == review_key), None)
+    if review is not None:
+        review['payload']['snap_counts'] = report
+        return review
     msg = IE.post(league, key, 'game', f'Snap counts: {user} vs {opp} · Week {week}',
                   '\n\n'.join(body), sender='Coaching staff',
                   payload=dict(snap_counts=report, game_key=key, link=f'gameday:{week}'))
