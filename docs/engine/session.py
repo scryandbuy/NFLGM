@@ -971,6 +971,8 @@ class Session:
         playoffs or at the close), the searching clubs hire, and the coordinators and position coaches move."""
         self.fired = self._black_monday(list(self.L.teams))
         STF.carousel(self.L, self.rng, new_head_coaches=[a for a, _bg in (self.fired or [])])
+        import league_notes as LN
+        LN.coaching_summary(self.L)
 
     def step_retire(self):
         """STEP 3: retirements and development, all of it here. Age takes what it takes, development traits roll,

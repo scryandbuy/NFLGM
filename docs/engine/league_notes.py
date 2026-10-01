@@ -180,6 +180,55 @@ def transactions(league, week, skip_signings=False):
             IB.news(league, f"{team} hire {x.get('name')}", f"{team} hire {x.get('name')}: {x.get('why')}.", payload=dict(link='league:coaching'))
 
 
+def coaching_summary(league):
+    """One offseason digest, after the carousel has resolved its pending hires.
+
+    Use the same action labels as Transactions so promotions and expiring deals
+    are not reported as firings. Keep each move in its own explicit inbox row.
+    """
+    from copy import copy
+    from views_league import _coaching_moves
+    from staff import ROLE_NAME
+    from views import CLUB_NAME
+    key = f'coaching-carousel-summary-{league.year}'
+    if IE.seen(league, key): return None
+    context = copy(league)
+    context.transactions = [x for x in league.transactions
+                            if x.get('year') == league.year
+                            and x.get('phase', 'offseason') == 'offseason']
+    groups = {'Hired': [], 'Fired / released / replaced': [], 'Other departures': []}
+    seen = set()
+    for move in _coaching_moves(context, recent=False):
+        action = move['action']
+        if action in ('Extended', 'Search Open', 'Poached'): continue
+        identity = (move['club']['abbr'], move['role'], move['person'], action)
+        if identity in seen: continue
+        seen.add(identity)
+        group = ('Hired' if action == 'Hired' else 'Fired / released / replaced'
+                 if action in ('Fired', 'Released', 'Replaced') else 'Other departures')
+        groups[group].append(move)
+    rows = ['The coaching carousel has run. Moves recorded this offseason:']
+    for heading, moves in groups.items():
+        rows.append(f'{heading} ({len(moves)})')
+        if not moves: rows.append('None')
+        for move in sorted(moves, key=lambda m: (m['club']['name'], m['role'], m['person'])):
+            role = 'Head Scout' if move['role'] == 'SCOUT' else move['role']
+            rows.append(f"{move['club']['name']} — {role} — {move['person']} — {move['action']}"
+                        + (f" ({move['detail']})" if move['detail'] else ''))
+    vacancies = []
+    for abbr, team in sorted(league.teams.items()):
+        if getattr(team, 'gm', None) is None:
+            vacancies.append(f"{CLUB_NAME.get(abbr, abbr)} — Head Coach")
+        for role, coach in (getattr(team, 'staff', {}) or {}).items():
+            if coach is None:
+                vacancies.append(f"{CLUB_NAME.get(abbr, abbr)} — {ROLE_NAME.get(role, role.upper())}")
+    if vacancies:
+        rows += [f'Jobs still open ({len(vacancies)})', *vacancies]
+    return IE.post(league, key, 'league', f'Coaching carousel summary · {league.year} offseason',
+                   '\n'.join(rows), sender='league',
+                   payload=dict(link='league:transactions', body_rows=rows))
+
+
 # ------------------------------------------------------------ the season's end
 def season_end(league, votes):
     """Awards and All-Pro, the Hall of Fame class, retirements of players 85 or better."""
