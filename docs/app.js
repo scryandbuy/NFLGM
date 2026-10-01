@@ -277,6 +277,22 @@ function openInboxMessage(id) {
   renderInbox(view);
 }
 
+function playerMention(pid, name) {
+  return el('a', {class:'entity-link', href:'#club/player/'+encodeURIComponent(pid), onclick:e=>e.stopPropagation()}, name);
+}
+
+function messageText(message, field) {
+  const text = message[field] || '', node = el('span');
+  let end = 0;
+  for (const ref of message.mentions?.[field] || []) {
+    if (ref.start < end || ref.end > text.length || ref.end <= ref.start || ref.kind !== 'player') continue;
+    node.append(document.createTextNode(text.slice(end,ref.start)), playerMention(ref.id,text.slice(ref.start,ref.end)));
+    end = ref.end;
+  }
+  node.append(document.createTextNode(text.slice(end)));
+  return node;
+}
+
 function renderRecapBody(message) {
   if (message.snap_counts) {
     const report = message.snap_counts, columns = el('div', {class:'snap-count-columns'});
@@ -285,7 +301,7 @@ function renderRecapBody(message) {
       const table = el('table', {class:'snap-count-table'},
         el('thead', {}, el('tr', {}, el('th', {scope:'col'}, 'Player'), el('th', {scope:'col'}, 'Snaps'))));
       const rows = el('tbody', {});
-      for (const player of data.rows) rows.append(el('tr', {}, el('td', {}, player.name), el('td', {}, `${player.snaps}/${data.total}`)));
+      for (const player of data.rows) rows.append(el('tr', {}, el('td', {}, player.pid != null ? playerMention(player.pid,player.name) : player.name), el('td', {}, `${player.snaps}/${data.total}`)));
       table.append(rows);
       columns.append(el('section', {}, el('h4', {}, unit === 'offense' ? 'Offense' : 'Defense'), table));
     }
@@ -299,7 +315,7 @@ function renderRecapBody(message) {
       const lines = chunk.split('\n'); return {title: lines.shift(), lines, reviews: []};
     })};
   }
-  if (!report) return el('div', {class:'mbody'}, message.body || '');
+  if (!report) return el('div', {class:'mbody'}, messageText(message,'body'));
   const body = el('div', {class:'mbody coaching-recap'}, el('p', {class:'recap-intro'}, report.intro));
   for (const section of report.sections || []) {
     const panel = el('section', {class:'recap-section'}, el('h4', {}, section.title));
@@ -354,8 +370,10 @@ function renderInbox(v) {
     NameLinks.scope(pane, m.entities);
     pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
     const structuredRecap = m.recap || m.snap_counts || (m.kind === 'result' && (m.body || '').includes('PREGAME PLAN\n'));
-    const messageBody = structuredRecap ? renderRecapBody(m) : el('div', { class: 'mbody' }, ...(m.body_rows || [m.body || '']).map(line => el('div', { class: 'mail-body-row' }, line)));
-    pane.append(el('h3', {}, m.subject), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), messageBody);
+    const messageBody = structuredRecap ? renderRecapBody(m) : (m.mentions?.body?.length
+      ? el('div', { class: 'mbody' }, messageText(m,'body'))
+      : el('div', { class: 'mbody' }, ...(m.body_rows || [m.body || '']).map(line => el('div', { class: 'mail-body-row' }, line))));
+    pane.append(el('h3', {}, messageText(m,'subject')), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), messageBody);
     if (m.kind === 'roster_report') pane.append(rosterReportCards(m, reload));
     if (m.kind === 'trade_offer') pane.append(el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openTradeOffer(cur.id, reload) }, cur.decide ? 'Open Trade Offer' : 'View Trade Offer')));
     else if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }

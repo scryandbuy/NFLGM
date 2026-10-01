@@ -24,6 +24,7 @@ THE USER. extend(league, pid, apy, years) returns accepted, countered or
 refused with the agent's reasoning; the inbox gets a note when one of his
 men enters his final year.
 """
+from inbox import player_name as inbox_player
 import numpy as np
 from cap_engine import Contract, CAP, MAX_PRORATION_YEARS
 import contract_structure as CS
@@ -333,8 +334,8 @@ def notify_user(league):
     n = 0
     for p in league.teams[user].active():
         if p.contract and p.contract.years == 1 and eligible(p, league) and p.ovr >= 76:
-            IB.post(league, 'contract_year', f'{p.name} enters his final year', 
-                    f"{p.name} ({p.pos}, {p.ovr:.0f}, age {p.age:.0f}) is in the last year of his deal at ${p.apy:.1f}m. "
+            IB.post(league, 'contract_year', f'{inbox_player(p)} enters his final year',
+                    f"{inbox_player(p)} ({p.pos}, {p.ovr:.0f}, age {p.age:.0f}) is in the last year of his deal at ${p.apy:.1f}m. "
                     f"He can be extended now; his agent will price him at the market.", sender=user,
                     payload=dict(pid=p.pid, link=f'player:{p.pid}'), expires_week=None)
             n += 1

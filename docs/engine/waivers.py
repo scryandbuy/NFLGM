@@ -24,6 +24,7 @@ message. At cut-down the notices are one digest. Claims are awarded at the
 next advance, so a higher-priority club that also claimed him wins, which
 is how a real wire works.
 """
+from inbox import player_name as inbox_player
 import collections
 import numpy as np
 
@@ -201,7 +202,7 @@ def award(league, entry, abbr):
     league.assign_number(p, abbr)
     if abbr == getattr(league, 'user_team', None):
         import inbox as IB
-        IB.post(league, 'waiver_notice', f"Claim awarded: {p.name}", f"You were awarded {p.name} ({p.pos}, {round(p.ovr)}) off waivers from {entry['from_team']}. He is on your roster with his contract" + (f", ${p.apy:.1f}m a year" if p.contract else '') + '.', sender='league')
+        IB.post(league, 'waiver_notice', f"Claim awarded: {inbox_player(p)}", f"You were awarded {inbox_player(p)} ({p.pos}, {round(p.ovr)}) off waivers from {entry['from_team']}. He is on your roster with his contract" + (f", ${p.apy:.1f}m a year" if p.contract else '') + '.', sender='league')
     # the user named the man to make room with
     rel = entry.get('release_if_awarded')
     if rel and abbr == getattr(league, 'user_team', None) and league.player(rel) is not None and league.player(rel).team == abbr:
@@ -241,7 +242,7 @@ def notify_user(league, entries, week, digest=False):
         yrs = p.contract.years if p.contract else 0
         body = (f"{p.name}, {p.pos}, {round(p.ovr)} overall, age {p.age:.0f}, {p.accrued or 0} accrued seasons, waived by {e['from_team']}. "
                 f"No club ahead of you wants him; he is yours if you claim before the Advance." + (f" Inherited deal: {yrs} year(s) at ${hit}m this season." if hit is not None else ''))
-        IB.post(league, 'waiver_notice', f'Available on waivers: {p.name} ({p.pos})', body, sender='league',
+        IB.post(league, 'waiver_notice', f'Available on waivers: {inbox_player(p)} ({p.pos})', body, sender='league',
                 payload=dict(pid=p.pid, from_team=e['from_team'], link=f'player:{p.pid}', priority=mine, cap_hit=hit, years=yrs), expires_week=(week or 0) + 1)
 
 
@@ -291,7 +292,7 @@ def process(league, rng, week, verbose=False):
         p = league.player(e['pid'])
         if p is None or p.retired or p.team is not None:
             if p is not None and user in e.get('claims', []) and p.team is not None:
-                IB.post(league, 'waiver_notice', f"Claim void: {p.name}", f"{p.name} ({p.pos}) was signed by {p.team} before the wire cleared. Your claim did not go through.", sender='league')
+                IB.post(league, 'waiver_notice', f"Claim void: {inbox_player(p)}", f"{inbox_player(p)} ({p.pos}) was signed by {p.team} before the wire cleared. Your claim did not go through.", sender='league')
             ents.remove(e); continue
         # his price, once
         market = VAL.value_player(league, p, side='team', rng=None, pool=pool)
@@ -302,7 +303,7 @@ def process(league, rng, week, verbose=False):
                 if user in e['claims']:
                     if not claim_fits(league,e,user):
                         user_failed = True
-                        IB.post(league,'waiver_notice',f'Claim failed: {p.name}','The inherited contract does not fit under your cap.',sender='league')
+                        IB.post(league,'waiver_notice',f'Claim failed: {inbox_player(p)}','The inherited contract does not fit under your cap.',sender='league')
                         continue
                     # Only the user's explicitly named active player may be cut.
                     rel = e.get('release_if_awarded')
@@ -310,7 +311,7 @@ def process(league, rng, week, verbose=False):
                     if len(active) < 53 or (len(active) == 53 and rel and league.player(rel) in active):
                         award(league, e, user); awarded.append((p.pid, user)); break
                     user_failed = True
-                    IB.post(league, 'waiver_notice', f"Claim failed: {p.name}", f"Your claim on {p.name} ({p.pos}) could not be processed: no roster spot could be opened for him. The claim window has closed; he may join another club or clear to free agency.", sender='league')
+                    IB.post(league, 'waiver_notice', f"Claim failed: {inbox_player(p)}", f"Your claim on {inbox_player(p)} ({p.pos}) could not be processed: no roster spot could be opened for him. The claim window has closed; he may join another club or clear to free agency.", sender='league')
                 continue
             import practice_squad as _PSQ
             if _PSQ.shunned(p, abbr, league) or getattr(league.teams[abbr], '_moved_week', None) == week: continue     # released him lately, or moved already this week
@@ -319,7 +320,7 @@ def process(league, rng, week, verbose=False):
                 award(league, e, abbr); awarded.append((p.pid, abbr))
                 if user in e.get('claims', []) and not user_failed:
                     import inbox as IB
-                    IB.post(league, 'waiver_notice', f"Claim lost: {p.name} to {abbr}", f"You claimed {p.name} ({p.pos}) and {abbr} held the higher priority. He is theirs.", sender='league')
+                    IB.post(league, 'waiver_notice', f"Claim lost: {inbox_player(p)} to {abbr}", f"You claimed {inbox_player(p)} ({p.pos}) and {abbr} held the higher priority. He is theirs.", sender='league')
                 break
         ents.remove(e)
         # CLEARED AND UNCLAIMED, HE IS A FREE AGENT: the contract he carried on the wire (for a claiming club to
@@ -334,10 +335,10 @@ def process(league, rng, week, verbose=False):
             club = intent.pop(p.pid)
             if p.pid in done_ids(awarded):
                 to = next(a for pid_, a in awarded if pid_ == p.pid)
-                if club == user: IB.post(league, 'waiver_notice', f"{p.name} claimed by {to}", f"You waived {p.name} for the practice squad and {to} claimed him off the wire. He is theirs.", sender='assistants')
+                if club == user: IB.post(league, 'waiver_notice', f"{inbox_player(p)} claimed by {to}", f"You waived {inbox_player(p)} for the practice squad and {to} claimed him off the wire. He is theirs.", sender='assistants')
             elif PSQ.sign_to_squad(league, club, p.pid):          # sign_to_squad logs the move
-                if club == user: IB.post(league, 'waiver_notice', f"{p.name} cleared to the practice squad", f"{p.name} cleared waivers and is on your practice squad.", sender='assistants')
-            elif club == user: IB.post(league, 'waiver_notice', f"{p.name} cleared, no room on the squad", f"{p.name} cleared waivers but the squad had no room for him under its rules; he is a free agent.", sender='assistants')
+                if club == user: IB.post(league, 'waiver_notice', f"{inbox_player(p)} cleared to the practice squad", f"{inbox_player(p)} cleared waivers and is on your practice squad.", sender='assistants')
+            elif club == user: IB.post(league, 'waiver_notice', f"{inbox_player(p)} cleared, no room on the squad", f"{inbox_player(p)} cleared waivers but the squad had no room for him under its rules; he is a free agent.", sender='assistants')
     # Close availability for this batch, including its digest, never results.
     for m in notices:
         pl = m.get('payload') or {}

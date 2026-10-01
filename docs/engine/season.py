@@ -24,6 +24,7 @@ THREE THINGS THIS HAS TO GET RIGHT:
    retirement, the league so leaderboards and awards can be computed without
    walking 2,114 players.
 """
+from inbox import player_name as inbox_player
 import copy
 from dataclasses import asdict
 from collections import defaultdict
@@ -764,7 +765,7 @@ class SeasonRunner(StandingsView):
             for p_, wks in desk_.flare(self.L, self.L.teams[abbr_], week, self.rng):
                 if abbr_ == getattr(self.L, 'user_team', None):
                     import inbox as IB
-                    IB.post(self.L, 'injury', f"{p_.name} aggravated the {str(p_.xp_spent.get('_inj_kind') or 'injury').lower()}", f"{p_.name} ({p_.pos}) played through it and it went again; he is out {wks} more week{'s' if wks != 1 else ''}.", sender='trainers')
+                    IB.post(self.L, 'injury', f"{inbox_player(p_)} aggravated the {str(p_.xp_spent.get('_inj_kind') or 'injury').lower()}", f"{inbox_player(p_)} ({p_.pos}) played through it and it went again; he is out {wks} more week{'s' if wks != 1 else ''}.", sender='trainers')
         try:
             import club_notes as CN, league_notes as LN
             CN.after_games(self.L, week, played)

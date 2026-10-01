@@ -1,3 +1,4 @@
+from inbox import player_name as inbox_player
 from player_background import home_state
 from stable import stable_seed
 """
@@ -749,7 +750,7 @@ def act_ir(league, abbr, pid, season_ending=False):
     r = t.place_on_ir(p, league.week, season_ending=bool(season_ending))
     if not r.get('ok'): return r
     import inbox as IB
-    IB.post(league, 'injury', f"{p.name} to injured reserve", f"{p.name} ({p.pos}) is on IR" + (' for the season' if not r['returnable'] else f"; he can return after {t.IR_MIN_WEEKS} weeks if he is healthy and a return is left ({t.IR_RETURNS - int(getattr(t, 'ir_returns_used', 0) or 0)} of {t.IR_RETURNS} this season)") + '. His salary counts in full; his roster spot is open.', sender='trainers')
+    IB.post(league, 'injury', f"{inbox_player(p)} to injured reserve", f"{inbox_player(p)} ({p.pos}) is on IR" + (' for the season' if not r['returnable'] else f"; he can return after {t.IR_MIN_WEEKS} weeks if he is healthy and a return is left ({t.IR_RETURNS - int(getattr(t, 'ir_returns_used', 0) or 0)} of {t.IR_RETURNS} this season)") + '. His salary counts in full; his roster spot is open.', sender='trainers')
     return dict(ok=True, line=f"{p.name} placed on IR." + ('' if r['returnable'] else ' Out for the season.'), returnable=r['returnable'])
 
 
@@ -778,7 +779,7 @@ def act_to_squad(league, abbr, pid):
     league.release(pid)
     intent = dict(getattr(league, 'ps_intent', None) or {}); intent[pid] = abbr; league.ps_intent = intent
     import inbox as IB
-    IB.post(league, 'waiver_notice', f"{p.name} waived for the practice squad", f"{p.name} ({p.pos}) has been waived and goes through waivers. If no club claims him by the Advance he is assigned to your practice squad; if a club claims him, he is theirs. {penalty_line}", sender='assistants')
+    IB.post(league, 'waiver_notice', f"{inbox_player(p)} waived for the practice squad", f"{inbox_player(p)} ({p.pos}) has been waived and goes through waivers. If no club claims him by the Advance he is assigned to your practice squad; if a club claims him, he is theirs. {penalty_line}", sender='assistants')
     return dict(ok=True, line=f"{p.name} waived. If he clears at the Advance he joins your practice squad. {penalty_line}", now=False, **penalty)
 
 

@@ -13,6 +13,7 @@ Written by the weekly roll and the season's turns, from state the engine already
 
 Every note posts once; digest items occupy separate rows and a small ledger stops repeats.
 """
+from inbox import player_name as inbox_player
 import inbox as IB
 
 GROUP_STARTERS = {'QB': 1, 'HB': 1, 'WR': 3, 'TE': 1, 'LT': 1, 'LG': 1, 'C': 1, 'RG': 1, 'RT': 1, 'LEDG': 1, 'REDG': 1, 'DT': 2, 'MIKE': 1, 'WILL': 1, 'SAM': 1, 'CB': 3, 'FS': 1, 'SS': 1, 'K': 1, 'P': 1}
@@ -60,12 +61,12 @@ def _injury_report(league, t, week, results):
         was_starter = t.depth.get(p.pos, [None])[0] is p or p in t.depth.get(p.pos, [])[:GROUP_STARTERS.get(p.pos, 1)]
         span = ('for the season' if x.get('season_ending') or weeks >= 10 else f"{weeks} week{'s' if weeks != 1 else ''}") if weeks else 'a week'
         kind = str(x.get('injury') or 'injury').replace('_', ' ')
-        line = f"{p.name} ({p.pos}) is out {span} ({kind})" 
-        if was_starter and nxt is not None: line += f"; {_surname(nxt.name)} ({round(nxt.ovr)}) steps in"
+        line = f"{inbox_player(p)} ({p.pos}) is out {span} ({kind})"
+        if was_starter and nxt is not None: line += f"; {inbox_player(nxt, _surname(nxt.name))} ({round(nxt.ovr)}) steps in"
         elif was_starter: line += '; there is nobody behind him at the spot'
         lines.append(line + '.')
     if lines and _once(league, f"inj-{league.year}-{week}"):
-        IB.post(league, 'injury', f"Injury report · Week {week}" + (f": {len(lines)} down" if len(lines) > 1 else f": {_surname(league.player(hurt[0]['pid']).name)}"), '\n'.join(lines) + '\nThe depth chart has been updated.', sender='trainers', payload=dict(link='club:depth'))
+        IB.post(league, 'injury', f"Injury report · Week {week}" + (f": {len(lines)} down" if len(lines) > 1 else f": {inbox_player(league.player(hurt[0]['pid']), _surname(league.player(hurt[0]['pid']).name))}"), '\n'.join(lines) + '\nThe depth chart has been updated.', sender='trainers', payload=dict(link='club:depth'))
 
 
 def returns(league, week):
@@ -77,7 +78,7 @@ def returns(league, week):
     # remember who was out last week; anyone now clear is back
     now_out = {p.pid for p in t.roster if not p.retired and p.out_until is not None}
     back = [pid for pid in list(out_seen.keys()) if pid not in now_out]
-    for pid in list(out_seen): 
+    for pid in list(out_seen):
         if pid not in now_out: out_seen.pop(pid, None)
     for pid in now_out: out_seen[pid] = week
     for pid in back:
@@ -85,7 +86,7 @@ def returns(league, week):
         if p is None or p.retired or p.team != t.abbr or p.out_until is not None or any(q.pid == pid for q in (getattr(t, 'ir', None) or [])): continue
         if not _once(league, f"back-{p.pid}-{league.year}-{week}"): continue
         where = f'available at {p.pos}'
-        IB.post(league, 'injury', f"{p.name} cleared to play", f"{p.name} ({p.pos}) is back from his injury and {where}. Set the depth chart if you want him elsewhere.", sender='trainers', payload=dict(link='club:depth'))
+        IB.post(league, 'injury', f"{inbox_player(p)} cleared to play", f"{inbox_player(p)} ({p.pos}) is back from his injury and {where}. Set the depth chart if you want him elsewhere.", sender='trainers', payload=dict(link='club:depth'))
 
 
 def _honors(league, t, week):
@@ -102,7 +103,7 @@ def _honors(league, t, week):
     if best and best[0].team == t.abbr and best[1] >= 20 and _once(league, f"potw-{league.year}-{week}"):
         p, _, d = best
         line = ', '.join(x for x in [f"{int(d['pass_yds'])} passing yards" if d.get('pass_yds') else '', f"{d['pass_td']} touchdown passes" if d.get('pass_td') else '', f"{int(d['rush_yds'])} rushing yards" if d.get('rush_yds') else '', f"{int(d['rec_yds'])} receiving yards" if d.get('rec_yds') else '', f"{d['rush_td'] + d['rec_td']} touchdowns" if (d.get('rush_td', 0) + d.get('rec_td', 0)) else '', f"{d['sacks']:g} sacks" if d.get('sacks') else '', f"{d['int_def']} interceptions" if d.get('int_def') else ''] if x)
-        IB.post(league, 'result', f"{p.name} named Player of the Week", f"{p.name} ({p.pos}) had the league's best line in Week {week}: {line}.", sender='league')
+        IB.post(league, 'result', f"{inbox_player(p)} named Player of the Week", f"{inbox_player(p)} ({p.pos}) had the league's best line in Week {week}: {line}.", sender='league')
 
 
 # ------------------------------------------------------------ the roll
@@ -130,7 +131,7 @@ def _morale(league, t, week):
                     p.xp_spent['_contract_concern'] = True
                 reason = {'contract': 'he believes he is underpaid', 'role': 'he wants a bigger role than he has', 'losing': 'the losing has worn on him'}.get(why, 'the season has worn on him')
                 word = {'quietly unhappy': 'is unhappy', 'publicly discontent': 'has gone public with his unhappiness', 'locker room distraction': 'is a problem in the room'}[st]
-                IB.post(league, 'morale', f"{p.name} {word}", f"{p.name} ({p.pos}, {round(p.ovr)}) {word}: {reason}. Left alone this becomes a trade request. A talk, more snaps or a new deal are the ways to turn it.", sender='assistants', payload=dict(link=f'player:{p.pid}'))
+                IB.post(league, 'morale', f"{inbox_player(p)} {word}", f"{inbox_player(p)} ({p.pos}, {round(p.ovr)}) {word}: {reason}. Left alone this becomes a trade request. A talk, more snaps or a new deal are the ways to turn it.", sender='assistants', payload=dict(link=f'player:{p.pid}'))
 
 
 def _milestones(league, t, week):
@@ -139,15 +140,15 @@ def _milestones(league, t, week):
     for p in t.active():
         gs = int(p.xp_spent.get('_starts', 0) or 0)
         if gs == 1 and (p.accrued or 0) <= 1 and float(p.age) <= 24.0 and _once(league, f"first-start-{p.pid}"):
-            IB.post(league, 'result', f"{p.name} makes his first start", f"{p.name} ({p.pos}) started his first game for you in Week {week}.", sender='assistants')
+            IB.post(league, 'result', f"{inbox_player(p)} makes his first start", f"{inbox_player(p)} ({p.pos}) started his first game for you in Week {week}.", sender='assistants')
         if gs in (50, 100, 150, 200) and _once(league, f"starts-{gs}-{p.pid}"):
-            IB.post(league, 'result', f"{p.name}'s {gs}th start", f"{p.name} ({p.pos}) made his {gs}th career start in Week {week}.", sender='assistants')
+            IB.post(league, 'result', f"{inbox_player(p)}'s {gs}th start", f"{inbox_player(p)} ({p.pos}) made his {gs}th career start in Week {week}.", sender='assistants')
         d = bk.get(p.pid) or {}
         for key, label, marks in (('pass_yds', 'passing yards', (3000, 4000, 5000)), ('rush_yds', 'rushing yards', (1000, 1500, 2000)), ('rec_yds', 'receiving yards', (1000, 1500)), ('sacks', 'sacks', (10, 15, 20)), ('int_def', 'interceptions', (5, 8))):
             v = d.get(key, 0)
             for m in marks:
                 if v >= m and _once(league, f"{key}-{m}-{p.pid}-{league.year}"):
-                    IB.post(league, 'result', f"{p.name} passes {m:,} {label}", f"{p.name} ({p.pos}) reached {m:,} {label} for the season in Week {week}.", sender='assistants')
+                    IB.post(league, 'result', f"{inbox_player(p)} passes {m:,} {label}", f"{inbox_player(p)} ({p.pos}) reached {m:,} {label} for the season in Week {week}.", sender='assistants')
 
 
 def _owner(league, t, week):
@@ -177,7 +178,7 @@ def _board(league, t, week):
         pr = last.get(pid)
         if pr is not None and abs(pr - r) >= 10:
             p = league.player(pid)
-            if p is not None: moves.append(f"{p.name} ({p.pos}) {'rises' if r < pr else 'falls'} from {pr} to {r}")
+            if p is not None: moves.append(f"{inbox_player(p)} ({p.pos}) {'rises' if r < pr else 'falls'} from {pr} to {r}")
         last[pid] = r
     if moves and _once(league, f"board-{league.year}-{week}"):
         IB.post(league, 'scouting', f"Your board: {len(moves)} mover{'s' if len(moves) > 1 else ''}", '\n'.join(moves) + '.', sender='scouts', payload=dict(link='draft:board'))
@@ -198,5 +199,5 @@ def season_end(league):
     for p in exp[:14]:
         try: v = VAL.value_player(league, p, side='agent', rng=None); ask = f"about ${v['apy']:.1f}m a year" if v else 'no read yet'
         except Exception: ask = 'no read yet'
-        rows.append(f"{p.name} ({p.pos}, {round(p.ovr)}, {int(p.age)}): {ask}")
+        rows.append(f"{inbox_player(p)} ({p.pos}, {round(p.ovr)}, {int(p.age)}): {ask}")
     IB.post(league, 'contract_year', f"{len(exp)} contracts expire this offseason", "Deals up: " + '\n'.join(rows) + ('.' if len(exp) <= 14 else f"; and {len(exp) - 14} more."), sender='assistants', payload=dict(link='personnel:extensions'))

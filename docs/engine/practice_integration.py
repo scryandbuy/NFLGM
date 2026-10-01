@@ -105,6 +105,16 @@ def prepare(runner, week, clubs=None):
         if abbr == getattr(league, 'user_team', None):
             import inbox_events as IE
             lines = summary(recap)
+            # The displayed recap stays plain; only inbox composition carries IDs.
+            import inbox as IB
+            for injury in recap.get('injuries', []):
+                p = league.player(injury.get('pid'))
+                name = injury.get('name')
+                if p is not None and name:
+                    for i, line in enumerate(lines):
+                        if line.startswith(name + ':'):
+                            lines[i] = IB.player_name(p, name) + line[len(name):]
+                            break
             IE.post(league, f'practice:{league.year}:{week}:{abbr}', 'practice',
                     f'Week {week} practice report', '\n\n'.join(lines),
                     sender='assistant coaches', payload={'link':'gameplan:practice'})

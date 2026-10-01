@@ -18,6 +18,7 @@ Effects:  the on-field modifiers go into the game rows (mental and effort
   and in the user's inbox.
 Nothing here talks to a player. No team talks, no press.
 """
+from inbox import player_name as inbox_player
 import numpy as np, collections
 import morale_system as MS
 
@@ -255,8 +256,8 @@ def offseason_requests(league, rng):
         if abbr == user:
             why = {'role': 'he wants to start and does not see it here', 'contract': 'he believes he is underpaid',
                    'losing': 'he wants to play for a winner'}[reason]
-            IB.post(league, 'trade_request', f"{p.name} {'still ' if how == 'again' else ''}wants out",
-                    f"{p.name} ({p.pos}, {p.ovr:.0f}, age {p.age:.0f}) has asked to be traded: {why}. Morale {p.morale.value:.0f}. "
+            IB.post(league, 'trade_request', f"{inbox_player(p)} {'still ' if how == 'again' else ''}wants out",
+                    f"{inbox_player(p)} ({p.pos}, {p.ovr:.0f}, age {p.age:.0f}) has asked to be traded: {why}. Morale {p.morale.value:.0f}. "
                     f"Trade him, {'make him the starter' if reason == 'role' else 'extend him' if reason == 'contract' else 'win'}, or he plays on unhappy and it shows.",
                     sender=abbr, payload=dict(pid=p.pid, reason=reason, link=f'player:{p.pid}'))
     return out

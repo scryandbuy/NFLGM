@@ -11,6 +11,7 @@ players 85 or better.
 Clinch math is conservative: strict inequalities on wins, so a note is never wrong and a
 club that is in only on a tiebreaker is announced a week later than the league would.
 """
+from inbox import player_name as inbox_player
 import inbox as IB
 import inbox_events as IE
 
@@ -169,10 +170,10 @@ def transactions(league, week, skip_signings=False):
             p = league.player(x.get('pid'))
             if p is not None and p.ovr >= 85 and x.get('apy') and p.pos not in ('K', 'P', 'LS'):      # a punter is not a star signing
                 verb = 'extend' if k == 'extension' else 'sign'
-                IB.news(league, f"{team} {verb} {p.name}", f"{team} {verb} {p.name} ({p.pos}, {round(p.ovr)}) for {x.get('years')} years at ${float(x['apy']):.1f}m a year.", payload=dict(link=f'player:{p.pid}'))
+                IB.news(league, f"{team} {verb} {inbox_player(p)}", f"{team} {verb} {inbox_player(p)} ({p.pos}, {round(p.ovr)}) for {x.get('years')} years at ${float(x['apy']):.1f}m a year.", payload=dict(link=f'player:{p.pid}'))
         elif k == 'franchise_tag':
             p = league.player(x.get('pid'))
-            if p is not None: IB.news(league, f"{team} tag {p.name}", f"{team} place the franchise tag on {p.name} ({p.pos}, {round(p.ovr)})" + (f" at ${float(x['price']):.1f}m" if x.get('price') else '') + '.', payload=dict(link=f'player:{p.pid}'))
+            if p is not None: IB.news(league, f"{team} tag {inbox_player(p)}", f"{team} place the franchise tag on {inbox_player(p)} ({p.pos}, {round(p.ovr)})" + (f" at ${float(x['price']):.1f}m" if x.get('price') else '') + '.', payload=dict(link=f'player:{p.pid}'))
         elif k == 'gm_change':
             IE.post(league, f"coach-hire-{x.get('year', league.year)}-{team}-{x.get('hired')}", 'league', f"{team} hire {x.get('hired')}", f"{team} have a new head coach and general manager: {x.get('hired')}" + (f", {x.get('background')}" if x.get('background') else '') + '.', payload=dict(link='league:coaching'))
         elif k == 'staff_in' and x.get('why') and 'head' in str(x.get('why')).lower():
@@ -186,16 +187,16 @@ def season_end(league, votes):
     if votes and _once(league, f"awards-{year}"):
         def nm(v):
             if v is None: return None
-            if hasattr(v, 'pid'): return f"{v.name} ({v.pos}, {v.team})"
+            if hasattr(v, 'pid'): return f"{inbox_player(v)} ({v.pos}, {v.team})"
             p = league.player(v) if isinstance(v, str) and v in league.players else None
-            return f"{p.name} ({p.pos}, {p.team})" if p else str(v)
+            return f"{inbox_player(p)} ({p.pos}, {p.team})" if p else str(v)
         parts = [f"{label}: {nm(votes.get(k))}" for k, label in (('mvp', 'MVP'), ('opoy', 'Offensive Player of the Year'), ('dpoy', 'Defensive Player of the Year'), ('oroy', 'Offensive Rookie of the Year'), ('droy', 'Defensive Rookie of the Year'), ('protector', 'Protector of the Year'), ('coty', 'Coach of the Year'), ('sb_mvp', 'Super Bowl MVP')) if votes.get(k)]
         IB.news(league, f"{year} awards", '. '.join(parts) + '.', payload=dict(link='league:awards'))
         sections = []
         for key, label in (('all_pro_1', 'First team'), ('all_pro_2', 'Second team')):
             players = votes.get(key) or []
             if players:
-                names = ', '.join(f"{p.name} ({p.pos}, {p.team})" +
+                names = ', '.join(f"{inbox_player(p)} ({p.pos}, {p.team})" +
                                   (' — your team' if p.team == getattr(league, 'user_team', None) else '')
                                   for p in players if hasattr(p, 'name'))
                 sections.append(f'{label}: {names}.')
@@ -203,7 +204,7 @@ def season_end(league, votes):
             IB.news(league, f'{year} All-Pro teams', ' '.join(sections), payload=dict(link='league:awards'))
     hof = [x for x in league.transactions if x.get('kind') == 'hall_of_fame' and x.get('year') == year]
     if hof and _once(league, f"hof-{year}"):
-        IB.news(league, f"Hall of Fame class of {year}", ', '.join(f"{x.get('name')} ({x.get('pos')})" for x in hof) + ' inducted.', payload=dict(link='league:almanac'))
+        IB.news(league, f"Hall of Fame class of {year}", ', '.join(f"{inbox_player(league.player(x.get('pid')), x.get('name'))} ({x.get('pos')})" for x in hof) + ' inducted.', payload=dict(link='league:almanac'))
     ret = [x for x in league.transactions if x.get('kind') == 'retire' and x.get('year') == year and league.player(x.get('pid')) is not None and league.player(x['pid']).ovr >= 85]
     if ret and _once(league, f"retire-{year}"):
-        IB.news(league, f"{len(ret)} star{'s' if len(ret) > 1 else ''} retire", ', '.join(f"{x.get('name')} ({x.get('pos')}, {round(league.player(x['pid']).ovr)})" for x in ret) + (' hang it up.' if len(ret) > 1 else ' hangs it up.'), payload=dict(link='league:almanac'))
+        IB.news(league, f"{len(ret)} star{'s' if len(ret) > 1 else ''} retire", ', '.join(f"{inbox_player(league.player(x['pid']), x.get('name'))} ({x.get('pos')}, {round(league.player(x['pid']).ovr)})" for x in ret) + (' hang it up.' if len(ret) > 1 else ' hangs it up.'), payload=dict(link='league:almanac'))

@@ -8,7 +8,7 @@ import inbox as IB, inbox_events as IE, club_notes as CN, league_notes as LN, ne
 src=ast.parse(Path('session.py').read_text(encoding='utf-8'))
 cls=next(n for n in src.body if isinstance(n,ast.ClassDef) and n.name=='Session')
 names={'_draft_over','_open_fa_if_due','_skip_empty_offseason_waivers','_black_monday','blocking','_resign_card','inbox_delete','inbox_clear_read','inbox_read','inbox_message','inbox_hurt_action','inbox_offer_sheet','advance','step_waivers_1'}
-ns={'IB':IB,'IE':IE,'MK':N(),'PS':N(),'CLUB_NAME_':{},'TG':N(),'WV':WV,'home_state':home_state}
+ns={'IB':IB,'IE':IE,'MK':N(),'PS':N(),'CLUB_NAME_':{},'TG':N(),'WV':WV,'home_state':home_state,'inbox_player':IB.player_name}
 exec(compile(ast.fix_missing_locations(ast.Module(body=[ast.ClassDef(name='S',bases=[],keywords=[],body=[n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name in names],decorator_list=[])],type_ignores=[])),'session.py','exec'),ns)
 S=ns['S']
 S.OFFSEASON=ast.literal_eval(next(n.value for n in cls.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='OFFSEASON' for t in n.targets)))

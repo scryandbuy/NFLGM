@@ -35,6 +35,7 @@ INJURED RESERVE, under the current rules:
   - a single player may be designated to return twice, each one counting
     against the eight
 """
+from inbox import player_name as inbox_player
 import numpy as np
 
 # Play rates by designation, from multi-year tracking. Questionable is the
@@ -120,9 +121,10 @@ def hurt_profile(p, desig):
     return hits, min(0.6, risk)
 
 
-def hurt_words(league, team, p, desig):
+def hurt_words(league, team, p, desig, mentions=False):
     """The trainers' sentence: what he gives up, what the risk is, what they would do. No numbers."""
     from views import surname, sentence
+    label = lambda q: inbox_player(q, surname(q.name)) if mentions else surname(q.name)
     kind = str(p.xp_spent.get('_inj_kind') or 'knock')
     hits, risk = hurt_profile(p, desig)
     d = [q for q in team.depth.get(p.pos, []) if q.pid != p.pid and q.out_until is None]
@@ -137,9 +139,10 @@ def hurt_words(league, team, p, desig):
     else: risk_w = 'there is no added risk in playing him'
     if backup is not None:
         gap = p.ovr - backup.ovr
-        rec = (f"with {surname(backup.name)} healthy behind him the trainers would sit him" if (gap < 4 or risk >= 0.15 and gap < 8) else f"the trainers would let him go; {surname(backup.name)} is the drop-off")
+        rec = (f"with {label(backup)} healthy behind him the trainers would sit him" if (gap < 4 or risk >= 0.15 and gap < 8) else f"the trainers would let him go; {label(backup)} is the drop-off")
     else: rec = 'there is nobody behind him, and the trainers would let him go'
-    return sentence(f"{surname(p.name)} is {desig} with a {kind.lower()}{', a week from healthy' if desig == 'questionable' else ', two weeks from healthy'}. {cost} Sunday; {risk_w}. {rec}.")
+    words = f"{label(p)} is {desig} with a {kind.lower()}{', a week from healthy' if desig == 'questionable' else ', two weeks from healthy'}. {cost} Sunday; {risk_w}. {rec}."
+    return words if mentions else sentence(words)
 
 
 def playing_hurt_penalty(desig):
@@ -212,7 +215,7 @@ class InjuryDesk:
                     self.pending[p.pid] = d
                     try:
                         import inbox as IB
-                        message = IB.post(league, 'injury_decision', f"{p.name}: play or sit?", hurt_words(league, team, p, d), sender='trainers', payload=dict(pid=p.pid, listed=d, link=f'player:{p.pid}'), expires_week=week)
+                        message = IB.post(league, 'injury_decision', f"{inbox_player(p)}: play or sit?", hurt_words(league, team, p, d, mentions=True), sender='trainers', payload=dict(pid=p.pid, listed=d, link=f'player:{p.pid}'), expires_week=week)
                         message['week'] = week
                     except Exception: pass
                     continue

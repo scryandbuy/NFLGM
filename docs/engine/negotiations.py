@@ -1,3 +1,4 @@
+from inbox import player_name as inbox_player
 from stable import stable_seed
 """
 NEGOTIATIONS. One live thread per man you are talking to, resolved at the
@@ -456,7 +457,7 @@ def _promise_words(league, p, pr, kept):
               'no_franchise': f"You said no tag. Then you tagged me. We'll talk through my agent from here."}
     words = (KEPT if kept else BROKEN).get(pr['kind'])
     if not words: return
-    IB.post(league, 'club', f"{p.name}: {'a promise kept' if kept else 'a promise broken'}", f'"{words}"', sender=surname(p.name), payload=dict(pid=p.pid, link='club:player:' + p.pid))
+    IB.post(league, 'club', f"{inbox_player(p)}: {'a promise kept' if kept else 'a promise broken'}", f'"{words}"', sender=surname(p.name), payload=dict(pid=p.pid, link='club:player:' + p.pid))
 
 
 def ledger(league, team=None):

@@ -29,6 +29,7 @@ filled from there, own cuts first.
 Rookie contracts are slotted by selection and every pick signs at once;
 there are no holdouts.
 """
+from inbox import player_name as inbox_player
 import numpy as np, collections
 from cap_engine import Contract, CAP
 import min_salary as MS
@@ -92,7 +93,7 @@ def sign_to_squad(league, abbr, pid):
     for e in [e for e in wire if e.get('pid') == pid]:
         if getattr(league, 'user_team', None) in e.get('claims', []):
             import inbox as IB
-            IB.post(league, 'waiver_notice', f"Claim void: {p.name} signed to {abbr}'s squad", f"{p.name} ({p.pos}) was signed to {abbr}'s practice squad before the wire cleared. Your claim did not go through.", sender='league')
+            IB.post(league, 'waiver_notice', f"Claim void: {inbox_player(p)} signed to {abbr}'s squad", f"{inbox_player(p)} ({p.pos}) was signed to {abbr}'s practice squad before the wire cleared. Your claim did not go through.", sender='league')
         wire.remove(e)
     p.team, p.contract = abbr, None          # paid weekly, no contract object
     p.xp_spent['_ps'] = True
@@ -337,7 +338,7 @@ def udfa_camp(league, rng, verbose=False):
         left = [p for p in udfa if not p.team]
         if user and left:
             top = sorted(left, key=lambda p: -p.ovr)[:5]
-            IB.post(league, 'club', f"{len(left)} undrafted rookies are on the market", f"The clubs brought their camp bodies in; {len(left)} undrafted rookies are still unsigned and will sign for the minimum. Your scouts' best of them: " + ', '.join(f"{p.name} ({p.pos}, {round(view_ovr(league, user, p))})" for p in top) + ". Sign anyone to the roster or the practice squad from Free Agency; the Undrafted filter shows them.", sender='assistants', payload=dict(link='fa'))
+            IB.post(league, 'club', f"{len(left)} undrafted rookies are on the market", f"The clubs brought their camp bodies in; {len(left)} undrafted rookies are still unsigned and will sign for the minimum. Your scouts' best of them: " + ', '.join(f"{inbox_player(p)} ({p.pos}, {round(view_ovr(league, user, p))})" for p in top) + ". Sign anyone to the roster or the practice squad from Free Agency; the Undrafted filter shows them.", sender='assistants', payload=dict(link='fa'))
     except Exception as e:
         import sys; print('udfa note failed:', e, file=sys.stderr)
     return signed
@@ -414,8 +415,8 @@ def keep_groups_whole(league, rng, week):
                     out_men = [p for p in team.active() if GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is not None]
                     cands = sorted([p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired and minimum_fits(league, team, p)], key=lambda p: -p.ovr)
                     fa = sorted([q for q in available_free_agents(league) if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and minimum_fits(league, team, q)], key=lambda q: -q.ovr)[:2]
-                    who = ', '.join(f"{p.name} ({p.pos})" for p in out_men[:3]) or 'injuries'
-                    cover = (f"On the practice squad: {', '.join(f'{p.name} ({p.pos}, {round(p.ovr)})' for p in cands[:2])}." if cands else '') + (f" On the street: {', '.join(f'{q.name} ({q.pos}, {round(q.ovr)})' for q in fa)}." if fa else '')
+                    who = ', '.join(f"{inbox_player(p)} ({p.pos})" for p in out_men[:3]) or 'injuries'
+                    cover = (f"On the practice squad: {', '.join(f'{inbox_player(p)} ({p.pos}, {round(p.ovr)})' for p in cands[:2])}." if cands else '') + (f" On the street: {', '.join(f'{inbox_player(q)} ({q.pos}, {round(q.ovr)})' for q in fa)}." if fa else '')
                     key_ = f"short-{grp}-{league.year}-{week}"
                     if not any((mm.get('payload') or {}).get('key') == key_ for mm in getattr(league, 'inbox', [])):
                         IB.post(league, 'injury', f"Short at {grp}: {short} below the floor", f"With {who} out, the chart at {grp} is {short} below the number the game needs. {cover or 'Nobody on the squad or the street plays there.'} Call up or sign before Sunday, or the game dresses what you have.", sender='trainers', payload=dict(key=key_, link='club:ps' if cands else 'personnel:fa', group=grp))

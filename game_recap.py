@@ -1,6 +1,7 @@
 """One saved, evidence-based assistant review per completed user game. No RNG."""
 import copy
 import inbox_events as IE
+from inbox import player_name as inbox_player
 
 SCRIMMAGE = {'run', 'scramble', 'complete', 'incomplete', 'drop', 'interception', 'sack'}
 TWO_HIGH = {'cover_2', 'cover_4', 'cover_6', 'two_man', 'tampa_2', 'quarters'}
@@ -245,7 +246,7 @@ def post_snap_counts(league, home, away, week, states, playoffs=False):
     body = []
     for unit in order:
         body.append(unit.upper() + '\n' + '\n'.join(
-            f"{p['name']}: {p['snaps']}/{report[unit]['total']} Snaps" for p in report[unit]['rows']))
+            f"{inbox_player(league.player(p['pid']), p['name'])}: {p['snaps']}/{report[unit]['total']} Snaps" for p in report[unit]['rows']))
     opp = away if user == home else home
     msg = IE.post(league, key, 'game', f'Snap counts: {user} vs {opp} · Week {week}',
                   '\n\n'.join(body), sender='Coaching staff',

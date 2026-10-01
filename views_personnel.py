@@ -1,3 +1,4 @@
+from inbox import player_name as inbox_player
 from player_background import home_state
 """
 PERSONNEL VIEWS. Trades, Free Agency, Waivers, Extensions: what the pages show
@@ -165,7 +166,7 @@ def _words(league, items):
         if hasattr(x, 'round') and hasattr(x, 'year'): out.append(f"{__import__('views').draft_year(x.year)} R{x.round}")
         else:
             p = league.player(getattr(x, 'pid', x))
-            if p is not None: out.append(f"{p.name} ({p.pos})")
+            if p is not None: out.append(f"{inbox_player(p)} ({p.pos})")
     return out or ['nothing']
 
 
@@ -524,7 +525,7 @@ def act_sign_ps(league, abbr, pid):
     if p.ovr >= 72 and amb >= 58: return dict(ok=False, why=f"{p.name} turned it down; he believes he can start somewhere.")
     if not PSQ.sign_to_squad(league, abbr, pid): return dict(ok=False, why='the squad could not take him')
     import inbox as IB
-    IB.post(league, 'squad', f"{p.name} to the practice squad", f"{p.name} ({p.pos}, {round(p.ovr)}) signed to your practice squad at the weekly rate.", sender='assistants')
+    IB.post(league, 'squad', f"{inbox_player(p)} to the practice squad", f"{inbox_player(p)} ({p.pos}, {round(p.ovr)}) signed to your practice squad at the weekly rate.", sender='assistants')
     return dict(ok=True, line=f"{p.name} signed to the practice squad.")
 
 

@@ -1,3 +1,4 @@
+from inbox import player_name as inbox_player
 from stable import stable_seed
 """
 FRONT OFFICE VIEWS. Owner, Identity, Staff, Cap: what the pages show and what
@@ -802,7 +803,7 @@ def exit_answer(session, league, abbr, pid, key):
     mt['answer'] = key; mt['said'] = said
     import inbox as IB
     IB.reconcile(league)
-    IB.post(league, 'club', f"{p.name}, after the meeting", f"You told him: {opt['label'].lower()}. He said: \"{said}\"", sender=surname(p.name))
+    IB.post(league, 'club', f"{inbox_player(p)}, after the meeting", f"You told him: {opt['label'].lower()}. He said: \"{said}\"", sender=surname(p.name))
     return dict(ok=True, said=said)
 
 
