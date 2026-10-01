@@ -168,9 +168,9 @@ def chance(player, games=0, ovr=None, league_avg_ovr=72.0, snaps=None):
     the signature so callers do not have to change, and so injury history can
     be added here later without another signature churn.
     """
-    # the hazard table is by the age he played the season at; the year has already ticked at Step 1 by the time
-    # retirements roll at Step 3, so read a year back
-    season_age = float(player.age) - 1.0
+    # Judge the completed season at its fixed reference age.
+    from player_age import review_age
+    season_age = review_age(player)
     h = age_hazard(season_age) * pos_factor(player.pos, season_age)
     if ovr is not None:
         # A good player keeps getting paid, and the reasons to stop arrive

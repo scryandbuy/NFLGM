@@ -3,6 +3,7 @@
 Individual ceilings decline with elapsed seasons, including practice-squad years.
 Development, coaching and preparation determine the fraction earned each week.
 """
+from player_age import development_age
 import copy
 import health as H
 import xp as XP
@@ -124,7 +125,7 @@ def recommend_plan(league, runner, abbr, week, *, bye=False):
         fatigue_limit = .06 if week > 18 else .08
         tired = sum(c < 95 or j > fatigue_limit for p,c,j,_ in exposed)/max(1,len(exposed))
         depleted = (len(members)-len(healthy))/max(1,len(members))
-        young = [p for p,_,_,_ in healthy if p.age <= 25 and
+        young = [p for p,_,_,_ in healthy if development_age(p) <= 25 and
                  p.pid not in starters and snaps.get(p.pid,0)<30 and p.pid not in individual]
         fresh = bool(healthy) and all(c >= 98.5 and j < .06 and
                     not (s.get('last_key')==f'{league.year}:{week-1}' and s.get('hard_streak',0))
@@ -151,7 +152,7 @@ def recommend_plan(league, runner, abbr, week, *, bye=False):
         experience = max(0, int(league.year) - _entry_year(league, p))
         ceiling = WEEKLY_XP_CEILINGS[min(experience, len(WEEKLY_XP_CEILINGS)-1)]
         return ceiling * XP.modifier(p) * (.35 if individual.get(p.pid)=='limited' else 1.)
-    candidates.sort(key=lambda p:(-focus_value(p),p.age,p.pid))
+    candidates.sort(key=lambda p:(-focus_value(p),development_age(p),p.pid))
     return dict(units=units,individual=individual,
                 focus=[p.pid for p in candidates[:3]],reasons=reasons)
 

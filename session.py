@@ -18,6 +18,7 @@ button reads. Anything the user must do before a stop is a blocking
 decision the Portal shows on the button.
 """
 import json, numpy as np
+import player_age as PA
 from views import CLUB_NAME as CLUB_NAME_
 import league as LG, season as SN, postseason as PS, awards as AW, coaching_pool as CP, position_change as PC
 import morale as MO, staff as STF, almanac as AL, xp as XP, dev_roll as DR, retirement as RT, regression as RG
@@ -68,6 +69,7 @@ class Session:
         for t in L.teams.values(): t.phase = 'season'
         try: GW.post_report(L, 1)
         except Exception: pass
+        PA.sync_session(s)
         return s
 
     @classmethod
@@ -233,6 +235,7 @@ class Session:
         if (s.stop[0] == 'playoffs' and len(s.stop) > 1 and int(s.stop[1]) >= 3
                 and s.post_live is not None and len(getattr(s.post_live, 'conf_champs', {}) or {}) == 2):
             s._announce_honors()
+        PA.sync_session(s)
         return s
 
     def _recorded_votes(self):
@@ -472,6 +475,7 @@ class Session:
         except Exception: pass
 
     def advance(self):
+        PA.sync_session(self)
         # References follow a successful calendar action, not football week numbers.
         blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap')]
         if blocks:
@@ -486,6 +490,7 @@ class Session:
         if result.get('done') != 'Blocked':
             STF.resolve_references(self.L, advanced=True)
             IB.reconcile(self.L)
+        PA.sync_session(self)
         return result
 
     def _advance(self):
@@ -926,9 +931,7 @@ class Session:
     def step_awards(self):
         """Close the season's awards, adding the Championship Game MVP to the announced regular-season ballot."""
         L, rng = self.L, self.rng
-        # THE YEAR TICKS HERE. Every player is a year older from Step 1 on, and every page reads the same number
-        # (the card had shown his season age while the Regression page showed the age he was turning, rounded up)
-        RG.tick_ages(L)
+        PA.offseason(L, 0)
         honors_announced = L.year in L.awards
         self.votes = self._recorded_votes() if honors_announced else AW.vote(L)
         try:
@@ -973,6 +976,7 @@ class Session:
         """STEP 3: retirements and development, all of it here. Age takes what it takes, development traits roll,
         players retire, the Hall votes, and the year ticks."""
         L, rng = self.L, self.rng
+        PA.offseason(L, 2)
         # Judge the season's performance against ratings before physical aging,
         # matching the batch franchise path.
         DR.run(L, getattr(self, 'votes', None) or {}, rng)
@@ -1071,6 +1075,7 @@ class Session:
         """The calendar sits on a free-agency round: open it (once) so the offers can be made before the advance."""
         if self.stop[0] != 'offseason': return
         self._skip_empty_offseason_waivers()
+        PA.sync_session(self)
         name = self.OFFSEASON[self.stop[1]][1]
         if name == 'step_cutdown':
             for t in self.L.teams.values(): t.phase = 'season'
@@ -1171,6 +1176,7 @@ class Session:
         self.draft = None
         if self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] == 'step_draft':
             self.stop = ('offseason', self.stop[1] + 1)
+            PA.sync_session(self)
 
     def draft_live(self):
         return self.draft is not None and not self.draft.done

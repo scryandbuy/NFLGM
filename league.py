@@ -64,7 +64,7 @@ class Player:
     targets.py can keep treating him as the dict they already take. Everything
     else - age, contract, dev, morale, stats - hangs off the object.
     """
-    __slots__ = ('pid', 'name', 'pos', 'age', 'ratings', 'dev', 'potential',
+    __slots__ = ('pid', 'name', 'pos', 'age', 'birth_date', 'development_age', 'development_year', 'ratings', 'dev', 'potential',
                  'potential_range', 'longevity', 'team', 'contract',
                  'accrued', 'draft_year', 'draft_round', 'draft_overall',
                  'entry_year', 'xp', 'xp_spent', 'morale', 'out_until',
@@ -85,6 +85,9 @@ class Player:
         self.name = name
         self.pos = pos
         self.age = float(age)
+        self.birth_date = None
+        self.development_age = None
+        self.development_year = None
         self.ratings = dict(ratings)
         self.dev = dev
         # A HARD, HIDDEN, FIXED ceiling, as FM's potential ability is: set once
@@ -210,7 +213,7 @@ class Player:
         return p
 
     def __repr__(self):
-        return f'<{self.pos} {self.name} {self.age:.0f}y {self.ovr:.0f}ovr>'
+        return f'<{self.pos} {self.name} {int(self.age)}y {self.ovr:.0f}ovr>'
 
 
 # ================================================================== PICK
@@ -553,6 +556,10 @@ class League:
 
     def __init__(self, year=2026):
         self.year = year
+        self.game_date = f'{int(year)}-08-25'
+        self.age_calendar_version = 1
+        self.age_migration = {}
+        self.regression_applied_years = []
         self.cap_history = {2026: CAP[2026]}
         self.phase = 'preseason'
         self.week = 0
@@ -874,6 +881,8 @@ class League:
         settle_week(self,18)
         prev_cap = self.cap_history.get(self.year, CAP.get(self.year, 301.2))
         self.year += 1
+        import player_age as PA
+        PA.offseason(self, 4)
         new_cap = project_cap(self.year, self.year - 1, prev_cap, rng)
         CAP[self.year] = new_cap
         self.cap_history[self.year] = new_cap
@@ -938,6 +947,8 @@ class League:
         nxt = PHASES[(i + 1) % len(PHASES)]
         if nxt == 'preseason':
             self.year += 1
+            import player_age as PA
+            PA.set_date(self, f'{self.year}-08-25')
         self.set_phase(nxt)
         return self.phase
 
@@ -948,6 +959,8 @@ class League:
             version=1, competition_names_version=2, rush_accounting_version=1,
             rush_accounting_repair=getattr(self, 'rush_accounting_repair', {}),
             year=self.year, phase=self.phase, week=self.week,
+            game_date=self.game_date, age_calendar_version=self.age_calendar_version,
+            age_migration=self.age_migration, regression_applied_years=self.regression_applied_years,
             cap_history={str(y): cap for y, cap in self.cap_history.items()},
             players={pid: p.to_dict() for pid, p in self.players.items()},
             player_name_history=name_history(self), newgen_name_cursor=self.newgen_name_cursor,
@@ -1016,6 +1029,8 @@ class League:
         L.rush_accounting_repair = d.get('rush_accounting_repair', {})
         saved_caps = {int(y): float(cap) for y, cap in (d.get('cap_history') or {}).items()}
         L.phase, L.week = d['phase'], d['week']
+        import player_age as PA
+        L.game_date = d.get('game_date') or PA.stop_date(L.year, d.get('_stop'), week=L.week, phase=L.phase).isoformat()
         L.players = {pid: Player.from_dict(pd)
                      for pid, pd in d['players'].items()}
         from newgens import name_history
@@ -1149,6 +1164,7 @@ class League:
         L.rng_state = d['rng_state']
         import specialist_reserve as SR
         SR.migrate(L, d.get('ls_reserve_version'))
+        PA.migrate(L, d)
         return L
 
     def __repr__(self):
@@ -1512,6 +1528,9 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         XP.resolve_potential(p, rng)
     import specialist_reserve as SR
     SR.ensure(L, seed_csv.replace('league_seed_2026.csv', 'free_agent_pool.csv'))
+    import player_age as PA
+    for p in L.players.values():
+        PA.initialize_player(p, L, use_seed=True)
     return L
 
 

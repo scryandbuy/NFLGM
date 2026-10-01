@@ -153,13 +153,15 @@ class Franchise:
         log['top_pick'] = order[0]
         log['fired'] = len(fired)
 
-        RG.tick_ages(L)
+        import player_age as PA
+        PA.offseason(L, 0)
 
         votes = AW.vote(L, post)
         CP.season_prestige(L, post, coty_team=votes.get('coty'))
         # THE STAFF: unit ranks land on the coordinators, prestige moves,
         # contracts run down, then the carousel after the head-coaching moves
         STF.season_end(L, STF.unit_ranks(L, L.year))
+        PA.offseason(L, 1)
         log['staff_moves'] = len(STF.carousel(L, rng, new_head_coaches=[a for a, _bg in fired]))
         AL.close_season(L, L.year, post, votes)      # the almanac: leaders, records, the coaching ledger
         log['awards'] = {k: (v.name if hasattr(v, 'name') else v)
@@ -168,6 +170,7 @@ class Franchise:
         log['xp_paid'] = len(XP.close_season(L, votes))
         # and the development trait moves: the majors are a guaranteed tier,
         # the rest of the honours and the season itself shift the odds
+        PA.offseason(L, 2)
         moved = DR.run(L, votes, rng)
         log['dev_up'] = sum(1 for m in moved if m[1] == 'up')
         log['dev_down'] = sum(1 for m in moved if m[1] == 'down')
@@ -196,6 +199,7 @@ class Franchise:
 
         # EXTENSIONS. A club keeps who it can before the market opens; the
         # user's expiring men are flagged in the inbox
+        PA.offseason(L, 5)
         MO.check_resolutions(L, week=None)   # a winning season settles the man who wanted a winner
         MO.clear_free_agents(L)              # a man who walked took his grievance with him
         log['pool_pruned'] = prune_pool(L, rng)   # men nobody signed all year move on
@@ -208,6 +212,7 @@ class Franchise:
         CT.enforce(L, rng)
         log['tagged'], log['tendered'] = len(t['tagged']), len(t['tendered'])
 
+        PA.offseason(L, 6)
         signed, left = MK.run(L, rng, user_team=self.user_team)
         # THE OFFSEASON TRADE WINDOW, once the market has settled: clubs know
         # what they could not buy and shop for it
@@ -228,14 +233,17 @@ class Franchise:
         # THE SPRING: the combine, the Senior Bowl, pro days, the thirty
         # visits, medicals and character reads. Nothing changes a prospect;
         # every room's read of him does, differently
+        PA.offseason(L, 10)
         log['spring'] = SP.run_spring(L, rng)
         # when the calendar sims the draft with nobody at the buttons, the
         # user's club picks off the consensus board and its needs
+        PA.offseason(L, 11)
         drafted = DFT.run(L, rng, year=L.year - 1, user_team=self.user_team)
         log['drafted'] = len(drafted)
         # every undrafted man is in the pool; clubs bring a handful to camp
         log['udfa_camp'] = PSQ.udfa_camp(L, rng)
         # and the class for NEXT year's draft is born now
+        PA.offseason(L, 12)
         NG.build(L, rng, draft_year=L.year + 1)
         SC.scout(L, rng)
         log['next_class'] = len(L.next_class)
@@ -251,6 +259,7 @@ class Franchise:
             for p in list(PSQ.squad(t)):
                 PSQ.release_from_squad(L, t.abbr, p.pid)
         PSQ.reset_season(L)
+        PA.offseason(L, 13)
         cut, filled, claims = settle_final_rosters(L, rng)
         log['waiver_claims'] += claims
         log['practice_squad'] = PSQ.fill_squads(L, rng)

@@ -22,6 +22,7 @@ this week. A club out of it saves for its young men.
 
 Nothing here moves a rating except xp.buy and xp.unlock.
 """
+from player_age import development_age
 import numpy as np
 import xp as XP
 import targets as TG
@@ -61,7 +62,7 @@ def choose_attr(player, gm, rng):
     for k, wt in w.items():
         if vals[k] >= 99.0:
             continue
-        if (k in XP.PHYSICAL or k in XP.TOOLS) and player.age > YOUNG:
+        if (k in XP.PHYSICAL or k in XP.TOOLS) and development_age(player) > YOUNG:
             continue
         v = wt / XP.cost_per_point(player, k)         # overall per XP
         # a hole in his own profile: up to +60% for his lowest attribute,
@@ -97,7 +98,7 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
     # for until it is bought or he ages out of buying physicals
     target = player.xp_spent.get('_saving_for')
     if target:
-        if player.age > YOUNG:
+        if development_age(player) > YOUNG:
             player.xp_spent.pop('_saving_for', None)
         elif (paid := XP.buy(player, target, year=year, week=week, source=source)) is not None:
             out.append(('buy', target, paid))
@@ -141,7 +142,7 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
         if cost is None:
             # could not afford the drawn attribute; try the cheapest skill
             cheap = min((k for k in TG.DEPTH_WEIGHTS[player.pos] if player.ratings.get(k, 70) < 99
-                         and not (k in XP.PHYSICAL and player.age > YOUNG)),
+                         and not (k in XP.PHYSICAL and development_age(player) > YOUNG)),
                         key=lambda k: XP.cost_per_point(player, k), default=None)
             cost = XP.buy(player, cheap, year=year, week=week, source=source) if cheap else None
             if cost is None:

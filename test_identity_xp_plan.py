@@ -152,8 +152,8 @@ class BoxFrequencyTests(unittest.TestCase):
             self.assertAlmostEqual(np.mean(draws), bias * 4, delta=.025)
             if bias > 0: self.assertGreater(max(draws), 0)
             else: self.assertLess(min(draws), 0)
-        self.assertEqual(VG._lean_word('box_bias', .12), '+0.48 avg')
-        self.assertEqual(VG._lean_word('box_bias', -.05), '-0.20 avg')
+        self.assertEqual(VG._lean_word('box_bias', .12), 'Heavier box · 48% tendency')
+        self.assertEqual(VG._lean_word('box_bias', -.05), 'Lighter box · 20% tendency')
 
     def test_neutral_does_not_draw_randomness(self):
         rng = np.random.default_rng(17)

@@ -167,7 +167,7 @@ def plateau_end(pos):
     return int(c.get('plateau_end') or 27)
 
 
-def decline(player, rng):
+def decline(player, rng, age=None):
     """
     One year older. Returns how much overall he lost, and mutates his ratings.
 
@@ -176,7 +176,7 @@ def decline(player, rng):
     the play engine feels it on the field the same season.
     """
     before = player.ovr
-    f = curve_factor(player.pos, player.age)
+    f = curve_factor(player.pos, player.age if age is None else age)
     if f >= 1.0:
         # still on the plateau: no decline, and no free improvement either,
         # since gains are XP and XP is earned rather than handed out
@@ -205,7 +205,11 @@ def decline(player, rng):
 
 
 def tick_ages(league):
-    """Advance all living players once at the beginning of an offseason."""
+    """Advance the calendar; legacy standalone fixtures retain their age tick."""
+    if hasattr(league, 'game_date'):
+        import player_age as PA
+        PA.offseason(league, 0)
+        return
     for p in league.players.values():
         if not p.retired:
             p.age += 1.0
@@ -213,12 +217,16 @@ def tick_ages(league):
 
 def run(league, rng, verbose=False, record_for=None, tick_age=True):
     """
-    Take what age takes during the offseason. Standalone callers tick ages
-    here; Session and Franchise tick earlier and pass tick_age=False.
+    Apply annual physical decline at the next season's reference age.
+    Birthday ages follow the calendar; standalone legacy models still support
+    an annual age tick. Managed leagues record each completed review once.
 
     record_for: a club whose players' before-and-after is written to league.regression[year] for the Regression
     page: every player, overall before and after, and each attribute that moved.
     """
+    managed = hasattr(league, 'game_date')
+    if managed and league.year in league.regression_applied_years:
+        return []
     moved = []
     rec = {}
     if tick_age:
@@ -232,8 +240,15 @@ def run(league, rng, verbose=False, record_for=None, tick_age=True):
             continue
         mine = record_for is not None and p.team == record_for
         before_r = dict(p.ratings); before_o = p.ovr
-        # the year ticked at Step 1 of the offseason; the decline reads the age he now is
-        lost = decline(p, rng)
+        # Annual decline uses the coming season's September 1 age, not the
+        # arbitrary date his club reviews him or his birthday month.
+        if managed:
+            from datetime import date
+            import player_age as PA
+            PA.initialize_player(p, league)
+            lost = decline(p, rng, age=PA.age_on(p.birth_date, date(league.year + 1, 9, 1)))
+        else:
+            lost = decline(p, rng)
         changed = {k: (round(float(before_r[k]), 1), round(float(p.ratings[k]), 1)) for k in p.ratings if round(float(before_r[k]), 1) != round(float(p.ratings[k]), 1)}
         if mine:
             rec[p.pid] = dict(before=round(float(before_o), 1), after=round(float(p.ovr), 1), lost=round(float(before_o - p.ovr), 1), attrs=changed, age=int(p.age),
@@ -246,6 +261,8 @@ def run(league, rng, verbose=False, record_for=None, tick_age=True):
                        before=round(float(before_o), 1), after=round(float(p.ovr), 1), attrs=changed)
     if record_for is not None:
         league.__dict__.setdefault('regression', {})[str(league.year)] = rec
+    if managed:
+        league.regression_applied_years.append(int(league.year))
     if verbose and moved:
         print(f'  {len(moved)} declined, mean {np.mean([m for _p, m in moved]):.2f} ovr')
     return moved

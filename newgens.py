@@ -197,6 +197,8 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
     league.next_class = out
     league.class_strength = strength
     for p in out:
+        import player_age as PA
+        PA.initialize_player(p, league)
         league.players[p.pid] = p
     if verbose:
         strong = sorted(strength.items(), key=lambda kv: -kv[1])
