@@ -35,7 +35,7 @@ const context = {
   saveGame:async()=>{if(failure)throw Error('disk full');},
   renderRail(){},persPage(){page=new Element('main');return page;},featureHero(){},
   applyTeamTheme(_node, team){themedTeams.push(team.abbr);},
-  showAbbr:x=>x,surname:x=>x,ord:()=>'',
+  showAbbr:x=>x,surname:x=>x,ord:()=>'',weekName:w=>w>=19?'Wild Card':`Week ${w}`,
   pyJSON(code) {
     calls.push(code);
     if(code.includes("plan_view('status')"))return {...state};
