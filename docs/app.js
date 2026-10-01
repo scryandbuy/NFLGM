@@ -579,7 +579,7 @@ function renderGameDay(v) {
       s.append(el('div', { class: 'read', style: 'margin:0 14px 10px' }, el('b', {}, 'Assistants: '), m.say));
       s.append(el('div', { class: 'read', style: 'margin:0 14px 12px;color:var(--ink-2)' }, v.plan_set ? 'Your game plan for this week is set.' : "You have not changed the coordinators' plan this week; the game reads their plan as it stands."));
     }
-    s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, v.week >= 19 ? `Play the ${weekName(v.week)}` : `Sim Week ${v.week}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart'), el('span', { class: 'count', style: 'margin-left:auto' }, 'Every team plays this week when you sim; the week itself moves on when you Advance.')));
+    s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, v.week >= 19 ? `Play the ${weekName(v.week)}` : `Sim Week ${v.week}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart')));
     page.append(s); return;
   }
   const g = v.game;
