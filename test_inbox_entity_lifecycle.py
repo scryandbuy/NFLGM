@@ -146,7 +146,8 @@ class DecisionLifecycleTests(unittest.TestCase):
 class WaiverLifecycleTests(unittest.TestCase):
     def scenario(self, fits, room=True):
         p = N(pid='wire', name='Wire Player', pos='QB', team=None, retired=False, contract=None)
-        L = league(players={p.pid: p}, teams={'GB': N(), 'MIN': N()},
+        active = [] if room else [N(pid=f'active-{i}') for i in range(53)]
+        L = league(players={p.pid: p}, teams={'GB': N(active=lambda: active), 'MIN': N()},
                    waivers=[dict(pid=p.pid, from_team='DAL', claims=['GB'], user_notified=True)])
         IB.post(L, 'waiver_notice', 'Available', '', payload={'pid': p.pid})
         IB.post(L, 'waiver_digest', 'Wire', '')
@@ -166,6 +167,8 @@ class WaiverLifecycleTests(unittest.TestCase):
         L = self.scenario(True, False)
         self.assertEqual(len(L.inbox), 3)
         self.assertNotIn('stays on the wire', L.inbox[-1]['body'])
+        self.assertIn('Claim failed', L.inbox[-1]['subject'])
+        self.assertEqual(L.player('wire').team, 'MIN')
 
 
 class OfferSheetTests(unittest.TestCase):

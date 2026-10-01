@@ -486,11 +486,9 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
     import rosters as RO
     pins = getattr(t, 'depth_pins', None) or {}
     def returners(slot):
-        """The candidates at KR or PR: the club's order first, then the rest by return score; healthy men only."""
-        cands = [p for p in t.active() if p.pos in RO.RETURN_POS and p.out_until is None]
-        order = [pid for pid in pins.get(slot, []) if any(p.pid == pid for p in cands)]
-        rest = sorted([p for p in cands if p.pid not in order], key=lambda p: -RO.return_score(p))
-        return [next(p for p in cands if p.pid == pid) for pid in order] + rest[:max(0, 5 - len(order))]
+        candidates = [p for p in t.active() if p.pos in RO.RETURN_POS
+                      and p.pid not in unavailable]
+        return RO.return_order(candidates, pins, slot, off_depth)[:5]
     off_depth = {}
     for canonical, men in d.items():
         if canonical not in SIDES_OFF_POS:

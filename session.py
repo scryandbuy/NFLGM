@@ -1023,7 +1023,7 @@ class Session:
         big = sorted([(t_, p, o) for t_, p, o in signed if p.ovr >= 85 or o.apy >= 15.0], key=lambda x: -x[2].apy)
         if big:
             lines = [f"{p.name} ({p.pos}, {round(p.ovr)}) to {t_} for ${o.apy:.1f}m x {o.years}" for t_, p, o in big[:10]]
-            IB.post(L, 'league', f"Free agency, round {k}: the big signings", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market. " + '; '.join(lines) + ('.' if lines else ''), sender='league', payload=dict(link='personnel:free_agency'))
+            IB.post(L, 'league', f"Free agency, round {k}: the big signings", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market. " + '\n'.join(lines) + ('.' if lines else ''), sender='league', payload=dict(link='personnel:free_agency'))
         else:
             IB.post(L, 'league', f"Free agency, round {k}", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market.", sender='league', payload=dict(link='personnel:free_agency'))
 
@@ -1036,7 +1036,7 @@ class Session:
         signed = MK.close_market(L, rng, user_team=self.user_team)
         n_left = len([x for x in L.free_agents if L.player(x)])
         big = [f"{p.name} ({p.pos}, {round(p.ovr)}) to {t_} for ${o.apy:.1f}m" for t_, p, o in sorted(signed, key=lambda x: -x[1].ovr)[:8]]
-        IB.post(L, 'league', "The market closes", f"{len(signed)} veterans signed one-year deals as the market closed; {n_left} players remain unsigned into camp. " + ('; '.join(big) + '.' if big else ''), sender='league', payload=dict(link='personnel:free_agency'))
+        IB.post(L, 'league', "The market closes", f"{len(signed)} veterans signed one-year deals as the market closed; {n_left} players remain unsigned into camp. " + ('\n' + '\n'.join(big) + '.' if big else ''), sender='league', payload=dict(link='personnel:free_agency'))
 
     def _resign_card(self):
         """The calendar sits on Re-sign: one card with your expiring players by class, the tag price on each UFA, tender
@@ -1501,7 +1501,7 @@ class Session:
         m = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
         if m is None: return dict(error='no such message')
         pl = m.get('payload') or {}
-        return dict(id=m['id'], status=m.get('status'), subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'), recap=pl.get('recap'), snap_counts=pl.get('snap_counts'),
+        return dict(id=m['id'], status=m.get('status'), subject=m['subject'], body=m.get('body') or '', body_rows=IB.body_rows(self.L, m), tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'), recap=pl.get('recap'), snap_counts=pl.get('snap_counts'),
                     **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=IB.is_decision(m))
 
     def inbox_hurt_action(self, mid, play=True):

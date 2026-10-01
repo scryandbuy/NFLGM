@@ -11,7 +11,7 @@ Written by the weekly roll and the season's turns, from state the engine already
 - the expiring contracts as one batch at the season's end
 - scouting: a prospect on your board moving ten spots on the consensus
 
-Every note is one paragraph and posts once; a small ledger on the league stops repeats.
+Every note posts once; digest items occupy separate rows and a small ledger stops repeats.
 """
 import inbox as IB
 
@@ -65,7 +65,7 @@ def _injury_report(league, t, week, results):
         elif was_starter: line += '; there is nobody behind him at the spot'
         lines.append(line + '.')
     if lines and _once(league, f"inj-{league.year}-{week}"):
-        IB.post(league, 'injury', f"Injury report · Week {week}" + (f": {len(lines)} down" if len(lines) > 1 else f": {_surname(league.player(hurt[0]['pid']).name)}"), ' '.join(lines) + ' The depth chart has been updated.', sender='trainers', payload=dict(link='club:depth'))
+        IB.post(league, 'injury', f"Injury report · Week {week}" + (f": {len(lines)} down" if len(lines) > 1 else f": {_surname(league.player(hurt[0]['pid']).name)}"), '\n'.join(lines) + '\nThe depth chart has been updated.', sender='trainers', payload=dict(link='club:depth'))
 
 
 def returns(league, week):
@@ -180,7 +180,7 @@ def _board(league, t, week):
             if p is not None: moves.append(f"{p.name} ({p.pos}) {'rises' if r < pr else 'falls'} from {pr} to {r}")
         last[pid] = r
     if moves and _once(league, f"board-{league.year}-{week}"):
-        IB.post(league, 'scouting', f"Your board: {len(moves)} mover{'s' if len(moves) > 1 else ''}", '. '.join(moves) + '.', sender='scouts', payload=dict(link='draft:board'))
+        IB.post(league, 'scouting', f"Your board: {len(moves)} mover{'s' if len(moves) > 1 else ''}", '\n'.join(moves) + '.', sender='scouts', payload=dict(link='draft:board'))
 
 
 # ------------------------------------------------------------ the season's turns
@@ -199,4 +199,4 @@ def season_end(league):
         try: v = VAL.value_player(league, p, side='agent', rng=None); ask = f"about ${v['apy']:.1f}m a year" if v else 'no read yet'
         except Exception: ask = 'no read yet'
         rows.append(f"{p.name} ({p.pos}, {round(p.ovr)}, {int(p.age)}): {ask}")
-    IB.post(league, 'contract_year', f"{len(exp)} contracts expire this offseason", "Deals up: " + '; '.join(rows) + ('.' if len(exp) <= 14 else f"; and {len(exp) - 14} more."), sender='assistants', payload=dict(link='personnel:extensions'))
+    IB.post(league, 'contract_year', f"{len(exp)} contracts expire this offseason", "Deals up: " + '\n'.join(rows) + ('.' if len(exp) <= 14 else f"; and {len(exp) - 14} more."), sender='assistants', payload=dict(link='personnel:extensions'))

@@ -2735,7 +2735,10 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .draft-clock .picksmade{padding:8px 20px}.draft-clock .pk{border-bottom:1px solid #ffffff13;padding:9px}
 .draft-clock .pk.now{background:color-mix(in srgb,var(--team-accent) 10%,#10191e);box-shadow:inset 3px 0 var(--team-accent)}
 .draft-clock .pk.next{background:color-mix(in srgb,var(--team-accent) 7%,#10191e);border-left-color:var(--team-accent)}
-.draft-clock .pickboard{padding:14px 20px 22px}
+.draft-clock .pickboard{padding:16px 20px 24px;row-gap:9px}
+.draft-clock .pb-sq{min-height:92px;padding:10px 9px;gap:5px}
+.draft-clock .pb-nm{line-height:1.25}
+.mail-body-row + .mail-body-row{margin-top:12px;padding-top:12px;border-top:1px solid var(--rule)}
 .draft-available .read{border-radius:5px;background:#ffffff04;border:1px solid #ffffff19}
 .draft-picks .years{padding:20px;gap:12px}.draft-picks .ybox{border-radius:6px;background:#142126;border:1px solid #ffffff1b}
 .draft-picks .ybox h4{padding:16px 18px;color:var(--team-readable);font:750 16px var(--text);border-bottom:1px solid #ffffff19}

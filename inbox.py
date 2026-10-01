@@ -210,3 +210,37 @@ def reconcile(league):
             m['status'] = 'done'
             closed += 1
     return closed
+
+
+def body_rows(league, message):
+    """Readable digest rows, including messages already stored in older saves.
+
+    Preserve commas/semicolons inside player details, and do not split names,
+    decimal salaries or ordinary sentences into fragments.
+    """
+    import re
+    body = str(message.get('body') or '')
+    explicit = (message.get('payload') or {}).get('body_rows')
+    if isinstance(explicit, list):
+        return [str(line) for line in explicit if str(line).strip()]
+    names = {p.name for p in getattr(league, 'players', {}).values()
+             if getattr(p, 'name', None) and p.name in body}
+    positions = r'QB|HB|RB|FB|WR|TE|LT|LG|C|RG|RT|LEDG|REDG|LE|RE|DT|NT|MIKE|WILL|SAM|MLB|LOLB|ROLB|CB|FS|SS|K|P|LS|OC|DC|HC'
+    record = r"[A-Z][A-Za-z’'.-]*(?:\s+[A-Z][A-Za-z’'.-]*){0,4}\s+\((?:" + positions + r")(?:\b)"
+    starts = '|'.join(re.escape(name) for name in sorted(names, key=len, reverse=True))
+    starts = '(?:' + (starts + '|' if starts else '') + record + ')'
+    body = re.sub(r'(?<![A-Z]\.)(?<=[.,;:])\s+(?=' + starts + ')', '\n', body)
+    body = re.sub(r'\s+and\s+(?=' + starts + ')', '\n', body)
+    rows, chars, depth = [], [], 0
+    for char in body:
+        if char == '(': depth += 1
+        elif char == ')': depth = max(0, depth - 1)
+        if char == '\n' or (depth == 0 and char in ';·•'):
+            line = ''.join(chars).strip().rstrip(',;')
+            if line: rows.append(line)
+            chars = []
+        else:
+            chars.append(char)
+    line = ''.join(chars).strip().rstrip(',;')
+    if line: rows.append(line)
+    return rows
