@@ -415,6 +415,8 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
                   recent=getattr(def_state, 'cov_memory', None))
     apply_offensive_plan(oc, off_state, rng, try_yards, 1, try_yards)
     apply_defensive_plan(dc, def_state, rng)
+    if def_state is not None:
+        def_state.rotation_context = dict(down=4, to_go=try_yards, score_diff=0)
     off_f, _ = field_units(offense, off_state, rng, True, oc.get('personnel'))
     def_f, _ = field_units(defense, def_state, rng, False, dc.get('personnel'),
                            front_family=dc.get('front_family'))
@@ -2221,6 +2223,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             continue
 
         # field the units for THIS snap - condition, injuries and rotation
+        if def_state is not None:
+            def_state.rotation_context = dict(down=dr.down, to_go=dr.togo,
+                                              score_diff=dr.score_diff)
         off_f, off_pos = field_units(offense, off_state, rng, True,
                                      oc.get('personnel'))
         def_f, def_pos = field_units(defense, def_state, rng, False,
@@ -2307,7 +2312,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if t == 'sack':
             if rng.random() < E.scramble_chance(offense['qb'], 1.0, 1.4, rate_fn):
                 _old = out
-                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass') if k in _old}
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pressured') if k in _old}
                 out = E.resolve_scramble(offense['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
@@ -2842,6 +2847,7 @@ class StatBook:
         return self.p[pid]
 
     def record(self, out, off, deff, rng):
+        if out.get('nullified'): return
         t = out.get('type')
         qb = off['qb'].get('pid', 'QB')
 
