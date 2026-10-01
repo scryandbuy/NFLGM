@@ -1,0 +1,189 @@
+Score-margin investigation, 2026-09-30
+====================================
+
+Base: integrated 737b17f. Checkout: work/nflgm-gameplan-lock.
+Coverage correction: 2b4d240. Narrow third-and-long correction: 306d48c.
+No changes to score multipliers, rating slopes, return distributions or roster
+quality. No claim that the large-margin register target is now satisfied.
+
+Target and remaining discrepancy
+-------------------------------
+nflverse completed regular-season games, 2021-2025: 1,359 games.
+17+ point final margins: 26.122%; mean absolute margin: 11.100.
+Annual 17+ percentages: 28.68, 18.08, 27.57, 27.94, 28.31.
+Source: https://github.com/nflverse/nfldata/blob/master/data/games.csv
+
+Integrated 93030 three-season study: 816 games, 15.074% margins of 17+.
+Per-team game score SD: sim 8.79 versus NFL 9.90.
+Opponent score correlation: sim +.063 versus NFL -.038.
+Team-season offensive PPG SD: sim 3.17 versus NFL 4.21.
+Team-season allowed PPG SD: sim 2.35 versus NFL 3.04.
+These identify compressed variation, not a license to add artificial noise.
+
+Missing defensive touchdowns: confirmed separate limitation
+---------------------------------------------------------
+Interception endpoints are clamped to the field before a return can score.
+Lost fumbles have no defensive return model. Neither was changed here.
+nflverse 2021-25 regular-season play-by-play (excluding no_play, punt and
+kickoff returns) contains 180 interception TDs and 86 lost-fumble TDs:
+266 / 1,359 = .196 defensive TDs per game.
+Subtracting seven points per such TD from final scores reduces 17+ margins
+from 26.122% to 24.209%. That 1.91-point difference is an arithmetic sensitivity,
+NOT a simulated counterfactual; possession and later decisions would differ.
+It explains only part of the roughly 11-point franchise discrepancy.
+Sources: https://github.com/nflverse/nflverse-data/releases/tag/pbp
+         https://nflreadr.nflverse.com/articles/dictionary_player_stats_def.html
+Selected research rows and calculations are retained in outputs/margin-real-pbp.
+
+Team strength and rotation
+-------------------------
+Pre-game healthy lineup rating gap correlates with final margin at .26-.41
+across the paired fixed-roster samples. Team quality does affect results.
+Sim team completion-rate SD across 2026/27/28 was 3.87/2.49/3.41 percentage
+points; that is not clear evidence for widening passing-rating coefficients.
+No universal NFL roster-quality scale is available here to validate the
+absolute spread of these game ratings against actual team talent.
+
+Standardized 32-team rotation probe: 70 healthy snaps per side, 11 offense /
+nickel defense, sideline recovery after each six-snap series, seed 93036.
+Across-team grade SD, fresh starters -> selected players -> with condition:
+offense 1.513 -> 1.446 -> 1.445; defense 1.539 -> 1.255 -> 1.259.
+Fresh-to-effective team-grade correlations: .995 offense, .984 defense.
+Average fraction of starting lineup slots retained: .89 offense, .74 defense.
+This controlled probe is NOT an observed season snap-share measure. Rotation
+compresses defensive quality somewhat but does not erase team ordering.
+The fixed rank-based rest bonuses and extra DL rotation deserve future study;
+these observations do not justify changing their coefficients today.
+Output: outputs/rotation-strength-93036.json.
+
+Two isolated behavior defects
+-----------------------------
+1. Coverage score direction (2b4d240): game -> season caller -> schemes ->
+   coverage_call all pass offense-minus-defense score. pick_job incorrectly
+   used positive score to select late lead-protection coverage. Now negative
+   offense score selects that job. Early-game and third-down priorities stay.
+   Three deterministic tests include the actual season caller integration.
+2. Duplicate late-lead third-and-long run bias: schemes.pass_rate already combines score,
+   clock, down and distance. game.py additionally supplied -3.5 or -1.0 bias;
+   its x4 log-odds conversion overwhelmed the table. Up seven, third-and-eight,
+   180 seconds, 11 personnel: 74.37% became 5.05%. The separate correction
+   changes the third-and-six-or-more lean from -1 to zero. All other late-
+   leading downs retain -3.5. Saved coach preferences still apply, and urgent
+   trailing drills/backed-up final-minute behavior remain intact. Four
+   deterministic drive/caller tests cover these obligations.
+
+   A broader removal was tested and rejected: it raised holdout scoring and
+   drives, and the real conditional first-down rates do not support it.
+   NFL 2021-25 REG, last four minutes, leading, run/pass plays only, excluding
+   kneels/spikes and the own-20 final-minute special case:
+   first-down dropbacks 6.22% (1,367 snaps); third-and6+ 50.15% (664 snaps).
+   Third-and6+ by lead: 1-8 points 64.44% (374); 9-16 31.48% (162);
+   17+ 32.03% (128). The broad removal's ~25% first-down prediction is not
+   appropriate to this specific situation. Raw counts retained in
+   outputs/real-late-lead-rates.json, from the same nflverse PBP source.
+
+Validation
+----------
+Coverage/front/game-plan focused suite: 15 passed.
+Late-lead/reported-game/Seattle clock and replay-related Python suite: 28 passed.
+The broader game-AI suite exposes an existing multiple-front ordering failure
+(541 vs 655) that reproduces unchanged against HEAD's original coverage code.
+It was reported to the main integration chat; it is not caused by either fix.
+
+Controlled simulations use PYTHONHASHSEED=0 and identical per-run seeds.
+The only baseline override restores coverage_call.py from 737b17f in process.
+Original baseline game.py was loaded before the late-lead source edit.
+The fresh baselines exactly reproduce the prior pursuit-scale audit metrics.
+No statistical claim relies on matching individual games after random paths
+diverge. The two fixed-roster samples contain 272 and 544 games respectively.
+
+                          points/team  17+ margin%   register passed / 33
+93031 baseline                23.910        23.529       32
+93031 coverage only           23.642        18.382       27
+93031 broad removal (reject)  23.871        18.382       29
+93032 baseline (544)          24.098        20.037       29
+93032 coverage only           23.597        23.346       30
+93032 broad removal (reject)  24.400        20.404       30
+
+Pooled baseline 17+ margins: 21.20%; coverage only: 21.69%; broad: 19.73%.
+Correct decision semantics do not guarantee improved distribution calibration.
+The rejected broad removal increases scoring/drives in the second seed; broader
+balance remains unresolved. There was no tuning to force a 33/33 result.
+
+Actual franchise seed 93034, coverage-only: all 272 regular-season games
+completed, 23.281 points/team, 15.074% 17+ margins, 22.695 drives, 28/33 targets.
+It uses the real CPU calendar, roster moves, injuries and development. Only
+user-facing blocking prompts are bypassed; no score/player outcome overrides.
+The rejected broad-removal franchise comparison and the narrower third-down
+candidate results are recorded in the final addendum.
+
+Per-run outputs: outputs/score-coverage-baseline-93031.json and -93032.json;
+score-coverage-sign-93031.json and -93032.json; score-late-lead-93031.json and
+-93032.json; score-franchise-coverage-sign-93034.json and
+score-franchise-late-lead-93034.json. The harness is audit_score_balance.py.
+
+Narrow third-and-long candidate
+------------------------------
+Only the third-and-six-or-more -1.0 lean is removed. No new coefficient.
+Seed 93031 / 272 games: 23.465 points/team, 22.342 drives, 17.279% 17+;
+28/33 targets (misses: mean margin, 10+, 17+, overtime, ties).
+Seed 93032 / 544 games: 23.594 points/team, 22.432 drives, 21.140% 17+;
+31/33 targets (misses: 17+, field-goal percentage).
+The second seed's points/team matches coverage-only 23.597 without the broad
+removal's rise to 24.400. These remain correctness checks, not proof of a solved
+margin distribution; the narrow pooled 17+ figure is 19.853%.
+
+Actual late third-and-long passing, pooled narrow 816 games:
+lead 1-8: 117/188 = 62.23% (NFL 64.44%);
+lead 9-16: 63/140 = 45.00% (NFL 31.48%);
+lead 17+: 24/74 = 32.43% (NFL 32.03%).
+The coverage-only 93031 baseline was 2/87, 0/34 and 1/27 respectively.
+A blanket -.1 replacement coefficient was considered but not added: two
+aggregate bins are already close to real rates. The two-score bin remains an
+explicit limitation, rather than being fitted to a small sample in this patch.
+The unchanged first-down logic is still conservative: pooled 2.05-3.65% pass
+depending on lead, versus real 3.42-8.01%. This is outside the narrow change.
+Real conditional extraction was checked with regulation-only, positive-clock
+filters; counts above were unchanged. Selected rows are retained in
+outputs/real-late-lead-snaps.csv. Simulation outputs:
+outputs/score-late-distribution-baseline-93031.json;
+outputs/score-third-long-93031.json and -93032.json.
+
+The rejected broad-removal franchise finished 272/272: 22.794 points/team,
+18.750% 17+ margins, 30/33 targets. This does not reverse its rejection based
+on conditional early-down behavior and the fixed-roster holdout.
+
+Defensive return TD implementation judgment
+------------------------------------------
+Defer to a separate correctness change. Existing defensive-touchdown scoring,
+try, kickoff and OT plumbing can be reused, but this still needs return endpoint
+resolution, real carrier/recoverer attribution, penalty acceptance/enforcement,
+EPA and defensive statistics, ticker/replay and save/load tests. Interception
+touchbacks/pick-sixes should be implemented and tested first, then lost-fumble
+returns; nullifying and post-play penalties, final-play scores, OT walkoffs and
+correct next-possession ownership are required gates. Current completed-pass
+fumble carrier selection uses offense.wr[0], which must not be carried forward
+as the return model's attribution. No return-TD source changes were made here.
+
+Final actual-franchise comparison
+--------------------------------
+Narrow third-and-long, seed 93034: 272/272 regular-season games completed;
+22.960 points/team; 22.232 drives; 21.829% TD drives; 33.868% punt drives;
+19.118% 17+ margins; 30/33 targets. Remaining misses: 10+ margins (38.235%),
+17+ margins, overtime (4.044%). No calendar interruption or lineup error.
+Against coverage-only: points 23.281 -> 22.960, drives 22.695 -> 22.232,
+17+ margins 15.074 -> 19.118%. This single franchise seed improves that margin
+measure, while the fixed-roster pooled result does not; do not call the gap fixed.
+Actual-franchise third-and-long pass counts by lead: 54/78, 25/44, 17/28.
+The latter bins differ from the fixed-roster samples; coach/field/down-distance
+mix and sample uncertainty remain, rather than warranting an exact-rate fit.
+Output: outputs/score-franchise-third-long-93034.json. Compact metrics and
+conditional counts for all runs are in score_margin_results_20260930.json.
+
+Reproduction on this branch (set PYTHONHASHSEED=0 before Python):
+  python -B audit_score_balance.py --seed 93031 --seasons 1 --out RESULT.json
+  Add --late-lead-baseline for coverage-only behavior.
+  Add both --late-lead-baseline --coverage-baseline for the 737b17f baseline.
+  Use --seed 93032 --seasons 2 for the fixed-roster holdout.
+  Add --franchise --seed 93034 --seasons 1 for the actual franchise calendar.
+Baseline overrides run only in that process; they do not edit source or saves.

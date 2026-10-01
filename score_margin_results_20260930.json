@@ -1,0 +1,2033 @@
+{
+  "score-coverage-baseline-93031": {
+    "seed": 93031,
+    "seasons": 1,
+    "short": 0.92,
+    "coverage_baseline": true,
+    "coverage_sha256": "3bfbffd2650e86833d2211636abd993d4a3ea4532b11e47d4f3b1dda9faf5fbd",
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": false,
+    "seasons_detail": [],
+    "got": {
+      "points_per_team": 23.909926470588236,
+      "total_points": 47.81985294117647,
+      "drives_per_game": 22.705882352941178,
+      "plays_per_drive": 5.6139896373057,
+      "first_downs_per_drive": 1.800841968911917,
+      "offensive_plays_per_gm": 127.24264705882354,
+      "drive_touchdown_pct": 22.53886010362694,
+      "drive_fieldgoal_pct": 17.665155440414505,
+      "drive_punt_pct": 32.998704663212436,
+      "drive_turnover_pct": 11.091321243523316,
+      "drive_downs_pct": 5.683290155440415,
+      "completion_pct": 63.17355723243703,
+      "sack_pct": 7.250234117009217,
+      "int_pct": 2.534807099585503,
+      "air_yards": 5.97979475100942,
+      "yac": 5.3986456931359355,
+      "yards_per_dropback": 6.2630437570063755,
+      "time_to_throw": 2.557270645127006,
+      "run_ypc": 4.483057605771031,
+      "run_explosive_pct": 1.9754139131670574,
+      "run_negative_pct": 9.891281176721382,
+      "pass_play_share": 58.621785611095056,
+      "play_action_pct": 9.939323894828084,
+      "motion_pct": 36.59347009534816,
+      "blitz_pct": 13.891999805229585,
+      "injuries_per_team_game": 0.6452205882352942,
+      "mean_margin": 10.981617647058824,
+      "margin_10plus_pct": 47.42647058823529,
+      "margin_17plus_pct": 23.52941176470588,
+      "overtime_pct": 4.779411764705882,
+      "tie_pct": 0.0,
+      "fg_pct": 86.793953858393,
+      "punt_gross": 46.06686390532545,
+      "kickoff_touchback_pct": 15.3667441088616
+    },
+    "misses": [
+      "drives_per_game"
+    ],
+    "score_sd": 9.373047482662216,
+    "calls": {
+      "close_Q1": {
+        "snaps": 7860,
+        "passes": 4291
+      },
+      "close_Q2": {
+        "snaps": 8753,
+        "passes": 5844
+      },
+      "close_Q3": {
+        "snaps": 6629,
+        "passes": 3688
+      },
+      "close_Q4": {
+        "snaps": 7477,
+        "passes": 4305
+      },
+      "trail17_Q3": {
+        "snaps": 690,
+        "passes": 470
+      },
+      "trail17_Q2": {
+        "snaps": 354,
+        "passes": 274
+      },
+      "lead17_Q2": {
+        "snaps": 214,
+        "passes": 129
+      },
+      "trail17_Q4": {
+        "snaps": 1285,
+        "passes": 1170
+      },
+      "lead17_Q3": {
+        "snaps": 474,
+        "passes": 178
+      },
+      "lead17_Q4": {
+        "snaps": 861,
+        "passes": 181
+      },
+      "trail17_Q1": {
+        "snaps": 13,
+        "passes": 7
+      }
+    },
+    "games": 272
+  },
+  "score-coverage-baseline-93032": {
+    "seed": 93032,
+    "seasons": 2,
+    "short": 0.92,
+    "coverage_baseline": true,
+    "coverage_sha256": "3bfbffd2650e86833d2211636abd993d4a3ea4532b11e47d4f3b1dda9faf5fbd",
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": false,
+    "seasons_detail": [],
+    "got": {
+      "points_per_team": 24.098345588235293,
+      "total_points": 48.19669117647059,
+      "drives_per_game": 22.639705882352942,
+      "plays_per_drive": 5.630237089964274,
+      "first_downs_per_drive": 1.8010717765508282,
+      "offensive_plays_per_gm": 127.18933823529412,
+      "drive_touchdown_pct": 22.880805456316985,
+      "drive_fieldgoal_pct": 17.611237414745048,
+      "drive_punt_pct": 33.47677817473206,
+      "drive_turnover_pct": 10.466060409223774,
+      "drive_downs_pct": 5.634946411172458,
+      "completion_pct": 63.31712730539555,
+      "sack_pct": 7.153721603454198,
+      "int_pct": 2.40976589335729,
+      "air_yards": 5.931765638692985,
+      "yac": 5.282982097400159,
+      "yards_per_dropback": 6.214329701395213,
+      "time_to_throw": 2.562176927548486,
+      "run_ypc": 4.490202926280596,
+      "run_explosive_pct": 2.0825891262413374,
+      "run_negative_pct": 10.034293062799172,
+      "pass_play_share": 58.91228628000752,
+      "play_action_pct": 9.866890202482983,
+      "motion_pct": 36.465725311095376,
+      "blitz_pct": 13.896642959438793,
+      "injuries_per_team_game": 0.671875,
+      "mean_margin": 10.306985294117647,
+      "margin_10plus_pct": 42.463235294117645,
+      "margin_17plus_pct": 20.036764705882355,
+      "overtime_pct": 5.88235294117647,
+      "tie_pct": 1.2867647058823528,
+      "fg_pct": 86.86423708450141,
+      "punt_gross": 45.086692663904465,
+      "kickoff_touchback_pct": 15.089978537229651
+    },
+    "misses": [
+      "drives_per_game",
+      "margin_17plus_pct",
+      "tie_pct",
+      "punt_gross"
+    ],
+    "score_sd": 9.114794707344721,
+    "calls": {
+      "close_Q1": {
+        "snaps": 15432,
+        "passes": 8407
+      },
+      "close_Q2": {
+        "snaps": 17807,
+        "passes": 11864
+      },
+      "close_Q3": {
+        "snaps": 13758,
+        "passes": 7659
+      },
+      "close_Q4": {
+        "snaps": 15784,
+        "passes": 9267
+      },
+      "trail17_Q4": {
+        "snaps": 2047,
+        "passes": 1864
+      },
+      "lead17_Q4": {
+        "snaps": 1451,
+        "passes": 298
+      },
+      "trail17_Q2": {
+        "snaps": 672,
+        "passes": 530
+      },
+      "lead17_Q2": {
+        "snaps": 277,
+        "passes": 172
+      },
+      "trail17_Q3": {
+        "snaps": 1203,
+        "passes": 832
+      },
+      "lead17_Q3": {
+        "snaps": 732,
+        "passes": 288
+      },
+      "trail17_Q1": {
+        "snaps": 22,
+        "passes": 13
+      },
+      "lead17_Q1": {
+        "snaps": 6,
+        "passes": 3
+      }
+    },
+    "games": 544
+  },
+  "score-coverage-sign-93031": {
+    "seed": 93031,
+    "seasons": 1,
+    "short": 0.92,
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": false,
+    "seasons_detail": [],
+    "got": {
+      "points_per_team": 23.641544117647058,
+      "total_points": 47.283088235294116,
+      "drives_per_game": 22.727941176470587,
+      "plays_per_drive": 5.611937884179877,
+      "first_downs_per_drive": 1.804270462633452,
+      "offensive_plays_per_gm": 127.30147058823529,
+      "drive_touchdown_pct": 22.403752830799096,
+      "drive_fieldgoal_pct": 17.146554513102554,
+      "drive_punt_pct": 33.629893238434164,
+      "drive_turnover_pct": 11.387900355871885,
+      "drive_downs_pct": 5.37043028146231,
+      "completion_pct": 63.00031515915537,
+      "sack_pct": 7.009231670981292,
+      "int_pct": 2.7523899569282486,
+      "air_yards": 5.934500583625146,
+      "yac": 5.428455894613974,
+      "yards_per_dropback": 6.286973580247872,
+      "time_to_throw": 2.5608033932135728,
+      "run_ypc": 4.502862079633713,
+      "run_explosive_pct": 2.1038270984418754,
+      "run_negative_pct": 9.628778631435342,
+      "pass_play_share": 59.12609022122105,
+      "play_action_pct": 9.853867036331081,
+      "motion_pct": 36.34263270374863,
+      "blitz_pct": 13.942702546016717,
+      "injuries_per_team_game": 0.6397058823529411,
+      "mean_margin": 9.856617647058824,
+      "margin_10plus_pct": 40.07352941176471,
+      "margin_17plus_pct": 18.38235294117647,
+      "overtime_pct": 4.044117647058823,
+      "tie_pct": 1.4705882352941175,
+      "fg_pct": 86.53061224489797,
+      "punt_gross": 45.57713871435477,
+      "kickoff_touchback_pct": 16.948008102633356
+    },
+    "misses": [
+      "drives_per_game",
+      "int_pct",
+      "margin_10plus_pct",
+      "margin_17plus_pct",
+      "overtime_pct",
+      "tie_pct"
+    ],
+    "score_sd": 9.326699212686982,
+    "calls": {
+      "close_Q1": {
+        "snaps": 7820,
+        "passes": 4264
+      },
+      "close_Q2": {
+        "snaps": 8954,
+        "passes": 6072
+      },
+      "close_Q3": {
+        "snaps": 6872,
+        "passes": 3865
+      },
+      "close_Q4": {
+        "snaps": 7780,
+        "passes": 4509
+      },
+      "trail17_Q3": {
+        "snaps": 552,
+        "passes": 373
+      },
+      "trail17_Q4": {
+        "snaps": 1009,
+        "passes": 914
+      },
+      "lead17_Q3": {
+        "snaps": 400,
+        "passes": 166
+      },
+      "lead17_Q4": {
+        "snaps": 797,
+        "passes": 185
+      },
+      "trail17_Q2": {
+        "snaps": 297,
+        "passes": 252
+      },
+      "lead17_Q2": {
+        "snaps": 141,
+        "passes": 96
+      },
+      "trail17_Q1": {
+        "snaps": 1,
+        "passes": 1
+      },
+      "lead17_Q1": {
+        "snaps": 3,
+        "passes": 2
+      }
+    },
+    "games": 272
+  },
+  "score-coverage-sign-93032": {
+    "seed": 93032,
+    "seasons": 2,
+    "short": 0.92,
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": false,
+    "seasons_detail": [],
+    "got": {
+      "points_per_team": 23.596507352941178,
+      "total_points": 47.193014705882355,
+      "drives_per_game": 22.604779411764707,
+      "plays_per_drive": 5.628039359193299,
+      "first_downs_per_drive": 1.7908432951126292,
+      "offensive_plays_per_gm": 127.00183823529412,
+      "drive_touchdown_pct": 22.44449865820932,
+      "drive_fieldgoal_pct": 17.34569407172481,
+      "drive_punt_pct": 33.47157843376433,
+      "drive_turnover_pct": 10.791249898349191,
+      "drive_downs_pct": 5.855086606489388,
+      "completion_pct": 62.995013587314986,
+      "sack_pct": 6.936260066784522,
+      "int_pct": 2.50903622404559,
+      "air_yards": 5.904481299995811,
+      "yac": 5.341005989027097,
+      "yards_per_dropback": 6.221758520608322,
+      "time_to_throw": 2.554522597155898,
+      "run_ypc": 4.511284021529758,
+      "run_explosive_pct": 2.238057723984817,
+      "run_negative_pct": 9.797321492515936,
+      "pass_play_share": 58.95004993559032,
+      "play_action_pct": 9.781586070141412,
+      "motion_pct": 36.494955781672914,
+      "blitz_pct": 14.13405242572213,
+      "injuries_per_team_game": 0.6461397058823529,
+      "mean_margin": 10.792279411764707,
+      "margin_10plus_pct": 46.69117647058824,
+      "margin_17plus_pct": 23.34558823529412,
+      "overtime_pct": 2.5735294117647056,
+      "tie_pct": 0.0,
+      "fg_pct": 86.74257828385522,
+      "punt_gross": 45.645272416320545,
+      "kickoff_touchback_pct": 15.501008742434433
+    },
+    "misses": [
+      "drives_per_game",
+      "completion_pct",
+      "overtime_pct"
+    ],
+    "score_sd": 9.369354512338996,
+    "calls": {
+      "close_Q1": {
+        "snaps": 15685,
+        "passes": 8739
+      },
+      "close_Q2": {
+        "snaps": 17662,
+        "passes": 11830
+      },
+      "close_Q3": {
+        "snaps": 13458,
+        "passes": 7422
+      },
+      "close_Q4": {
+        "snaps": 14946,
+        "passes": 8743
+      },
+      "trail17_Q3": {
+        "snaps": 1210,
+        "passes": 807
+      },
+      "lead17_Q3": {
+        "snaps": 921,
+        "passes": 350
+      },
+      "lead17_Q4": {
+        "snaps": 1722,
+        "passes": 350
+      },
+      "trail17_Q4": {
+        "snaps": 2345,
+        "passes": 2105
+      },
+      "trail17_Q2": {
+        "snaps": 683,
+        "passes": 537
+      },
+      "lead17_Q2": {
+        "snaps": 393,
+        "passes": 250
+      },
+      "trail17_Q1": {
+        "snaps": 45,
+        "passes": 25
+      },
+      "lead17_Q1": {
+        "snaps": 19,
+        "passes": 5
+      }
+    },
+    "games": 544
+  },
+  "score-late-lead-93031": {
+    "seed": 93031,
+    "seasons": 1,
+    "short": 0.92,
+    "coverage_baseline": false,
+    "coverage_sha256": "b912c56908d5d3e0a2908c96839c163037be9a1d42bbf58363bdcb1147dd0c79",
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": false,
+    "seasons_detail": [],
+    "got": {
+      "points_per_team": 23.871323529411764,
+      "total_points": 47.74264705882353,
+      "drives_per_game": 22.66176470588235,
+      "plays_per_drive": 5.640655418559377,
+      "first_downs_per_drive": 1.808890330953926,
+      "offensive_plays_per_gm": 127.59191176470588,
+      "drive_touchdown_pct": 22.43672939649578,
+      "drive_fieldgoal_pct": 17.92667099286178,
+      "drive_punt_pct": 32.608695652173914,
+      "drive_turnover_pct": 11.129136924075276,
+      "drive_downs_pct": 5.759247242050616,
+      "completion_pct": 63.025339925834366,
+      "sack_pct": 6.953563042123928,
+      "int_pct": 2.5700453234445817,
+      "air_yards": 5.925945901773311,
+      "yac": 5.317684072893683,
+      "yards_per_dropback": 6.217934370975243,
+      "time_to_throw": 2.561867222908941,
+      "run_ypc": 4.502564221109796,
+      "run_explosive_pct": 2.089925675178453,
+      "run_negative_pct": 9.669585694311575,
+      "pass_play_share": 60.126782884310614,
+      "play_action_pct": 9.891946405417087,
+      "motion_pct": 36.902463621956485,
+      "blitz_pct": 14.07937109301004,
+      "injuries_per_team_game": 0.6488970588235294,
+      "mean_margin": 10.161764705882353,
+      "margin_10plus_pct": 43.01470588235294,
+      "margin_17plus_pct": 18.38235294117647,
+      "overtime_pct": 4.411764705882353,
+      "tie_pct": 1.1029411764705883,
+      "fg_pct": 88.18834796488427,
+      "punt_gross": 45.758179089544775,
+      "kickoff_touchback_pct": 15.575396825396826
+    },
+    "misses": [
+      "drives_per_game",
+      "margin_17plus_pct",
+      "tie_pct",
+      "fg_pct"
+    ],
+    "score_sd": 9.2296071556849,
+    "calls": {
+      "close_Q1": {
+        "snaps": 7821,
+        "passes": 4343
+      },
+      "close_Q2": {
+        "snaps": 9055,
+        "passes": 6114
+      },
+      "close_Q3": {
+        "snaps": 7041,
+        "passes": 3918
+      },
+      "close_Q4": {
+        "snaps": 8076,
+        "passes": 4937
+      },
+      "trail17_Q4": {
+        "snaps": 1026,
+        "passes": 938
+      },
+      "trail17_Q2": {
+        "snaps": 233,
+        "passes": 181
+      },
+      "trail17_Q3": {
+        "snaps": 531,
+        "passes": 364
+      },
+      "lead17_Q4": {
+        "snaps": 594,
+        "passes": 165
+      },
+      "lead17_Q3": {
+        "snaps": 242,
+        "passes": 104
+      },
+      "lead17_Q2": {
+        "snaps": 76,
+        "passes": 45
+      },
+      "trail17_Q1": {
+        "snaps": 10,
+        "passes": 7
+      }
+    },
+    "games": 272
+  },
+  "score-late-lead-93032": {
+    "seed": 93032,
+    "seasons": 2,
+    "short": 0.92,
+    "coverage_baseline": false,
+    "coverage_sha256": "b912c56908d5d3e0a2908c96839c163037be9a1d42bbf58363bdcb1147dd0c79",
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": false,
+    "seasons_detail": [],
+    "got": {
+      "points_per_team": 24.399816176470587,
+      "total_points": 48.799632352941174,
+      "drives_per_game": 22.83639705882353,
+      "plays_per_drive": 5.605811800692265,
+      "first_downs_per_drive": 1.807856395395637,
+      "offensive_plays_per_gm": 127.78125,
+      "drive_touchdown_pct": 22.99766562022056,
+      "drive_fieldgoal_pct": 17.84593093455687,
+      "drive_punt_pct": 32.93085406101586,
+      "drive_turnover_pct": 10.786444498108347,
+      "drive_downs_pct": 5.852048619496096,
+      "completion_pct": 63.57933483681987,
+      "sack_pct": 6.83684312210201,
+      "int_pct": 2.5248204888923453,
+      "air_yards": 6.010254005789538,
+      "yac": 5.334419211481225,
+      "yards_per_dropback": 6.3647227340275325,
+      "time_to_throw": 2.561614770459082,
+      "run_ypc": 4.467268037697718,
+      "run_explosive_pct": 1.9814868382991033,
+      "run_negative_pct": 10.048452415389066,
+      "pass_play_share": 59.56871376577043,
+      "play_action_pct": 9.999568426049803,
+      "motion_pct": 36.7096802037029,
+      "blitz_pct": 14.000047781733043,
+      "injuries_per_team_game": 0.6341911764705882,
+      "mean_margin": 10.663602941176471,
+      "margin_10plus_pct": 45.588235294117645,
+      "margin_17plus_pct": 20.40441176470588,
+      "overtime_pct": 7.536764705882352,
+      "tie_pct": 0.7352941176470588,
+      "fg_pct": 87.62845849802372,
+      "punt_gross": 45.494827163520476,
+      "kickoff_touchback_pct": 14.954188481675393
+    },
+    "misses": [
+      "drives_per_game",
+      "run_negative_pct",
+      "margin_17plus_pct"
+    ],
+    "score_sd": 9.711134829261267,
+    "calls": {
+      "close_Q1": {
+        "snaps": 15643,
+        "passes": 8578
+      },
+      "close_Q2": {
+        "snaps": 17768,
+        "passes": 11830
+      },
+      "close_Q3": {
+        "snaps": 13800,
+        "passes": 7723
+      },
+      "close_Q4": {
+        "snaps": 16059,
+        "passes": 9859
+      },
+      "trail17_Q4": {
+        "snaps": 2068,
+        "passes": 1873
+      },
+      "lead17_Q4": {
+        "snaps": 1462,
+        "passes": 351
+      },
+      "trail17_Q3": {
+        "snaps": 1020,
+        "passes": 708
+      },
+      "trail17_Q2": {
+        "snaps": 561,
+        "passes": 459
+      },
+      "lead17_Q2": {
+        "snaps": 303,
+        "passes": 178
+      },
+      "lead17_Q3": {
+        "snaps": 797,
+        "passes": 277
+      },
+      "trail17_Q1": {
+        "snaps": 24,
+        "passes": 18
+      },
+      "lead17_Q1": {
+        "snaps": 8,
+        "passes": 3
+      }
+    },
+    "games": 544
+  },
+  "score-third-long-93031": {
+    "seed": 93031,
+    "seasons": 1,
+    "short": 0.92,
+    "game_sha256": "f50947a5b54bf74a8148816c531462ee549a80910dbfa6af4a405ec3e63fb78c",
+    "late_lead_baseline": false,
+    "coverage_baseline": false,
+    "coverage_sha256": "b912c56908d5d3e0a2908c96839c163037be9a1d42bbf58363bdcb1147dd0c79",
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": false,
+    "seasons_detail": [],
+    "got": {
+      "points_per_team": 23.465073529411764,
+      "total_points": 46.93014705882353,
+      "drives_per_game": 22.341911764705884,
+      "plays_per_drive": 5.6973835774230706,
+      "first_downs_per_drive": 1.8347869014316274,
+      "offensive_plays_per_gm": 126.99632352941177,
+      "drive_touchdown_pct": 22.313641599473424,
+      "drive_fieldgoal_pct": 18.117492183643243,
+      "drive_punt_pct": 32.7299654434754,
+      "drive_turnover_pct": 11.090998848115847,
+      "drive_downs_pct": 5.56195491196314,
+      "completion_pct": 64.08197760405663,
+      "sack_pct": 7.013752455795679,
+      "int_pct": 2.487851257130784,
+      "air_yards": 5.826277612924497,
+      "yac": 5.208374546653478,
+      "yards_per_dropback": 6.186208934243438,
+      "time_to_throw": 2.5569837840693004,
+      "run_ypc": 4.528565362746037,
+      "run_explosive_pct": 2.1099468924931823,
+      "run_negative_pct": 9.91818573274006,
+      "pass_play_share": 58.941030020554095,
+      "play_action_pct": 9.839909677792896,
+      "motion_pct": 36.47338100338708,
+      "blitz_pct": 13.843466446698043,
+      "injuries_per_team_game": 0.6544117647058824,
+      "mean_margin": 9.584558823529411,
+      "margin_10plus_pct": 38.23529411764706,
+      "margin_17plus_pct": 17.27941176470588,
+      "overtime_pct": 8.455882352941178,
+      "tie_pct": 1.1029411764705883,
+      "fg_pct": 87.17339667458432,
+      "punt_gross": 45.67425692695214,
+      "kickoff_touchback_pct": 14.563106796116504
+    },
+    "misses": [
+      "mean_margin",
+      "margin_10plus_pct",
+      "margin_17plus_pct",
+      "overtime_pct",
+      "tie_pct"
+    ],
+    "score_sd": 9.172703310584355,
+    "calls": {
+      "close_Q1": {
+        "snaps": 7784,
+        "passes": 4260
+      },
+      "close_Q2": {
+        "snaps": 8985,
+        "passes": 6039
+      },
+      "close_Q3": {
+        "snaps": 6971,
+        "passes": 3851
+      },
+      "close_Q4": {
+        "snaps": 8179,
+        "passes": 4798
+      },
+      "late_lead_first_1-8": {
+        "snaps": 313,
+        "passes": 9
+      },
+      "trail17_Q3": {
+        "snaps": 472,
+        "passes": 335
+      },
+      "late_lead_first_9-16": {
+        "snaps": 153,
+        "passes": 2
+      },
+      "late_lead_third_long_9-16": {
+        "snaps": 33,
+        "passes": 14
+      },
+      "late_lead_third_long_1-8": {
+        "snaps": 65,
+        "passes": 42
+      },
+      "lead17_Q3": {
+        "snaps": 294,
+        "passes": 127
+      },
+      "lead17_Q4": {
+        "snaps": 609,
+        "passes": 123
+      },
+      "trail17_Q4": {
+        "snaps": 877,
+        "passes": 803
+      },
+      "late_lead_first_17+": {
+        "snaps": 100,
+        "passes": 1
+      },
+      "late_lead_third_long_17+": {
+        "snaps": 20,
+        "passes": 6
+      },
+      "trail17_Q2": {
+        "snaps": 236,
+        "passes": 191
+      },
+      "lead17_Q2": {
+        "snaps": 127,
+        "passes": 76
+      },
+      "trail17_Q1": {
+        "snaps": 9,
+        "passes": 6
+      }
+    },
+    "games": 272
+  },
+  "score-third-long-93032": {
+    "seed": 93032,
+    "seasons": 2,
+    "short": 0.92,
+    "game_sha256": "f50947a5b54bf74a8148816c531462ee549a80910dbfa6af4a405ec3e63fb78c",
+    "late_lead_baseline": false,
+    "coverage_baseline": false,
+    "coverage_sha256": "b912c56908d5d3e0a2908c96839c163037be9a1d42bbf58363bdcb1147dd0c79",
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": false,
+    "seasons_detail": [],
+    "got": {
+      "points_per_team": 23.59375,
+      "total_points": 47.1875,
+      "drives_per_game": 22.43198529411765,
+      "plays_per_drive": 5.654347291649595,
+      "first_downs_per_drive": 1.8214373514709499,
+      "offensive_plays_per_gm": 126.61764705882354,
+      "drive_touchdown_pct": 22.281406211587313,
+      "drive_fieldgoal_pct": 18.249610751454558,
+      "drive_punt_pct": 33.80316315660083,
+      "drive_turnover_pct": 10.251577480947308,
+      "drive_downs_pct": 5.695320822748505,
+      "completion_pct": 63.36439170714874,
+      "sack_pct": 7.257687289199636,
+      "int_pct": 2.3413235645456716,
+      "air_yards": 5.917574361122748,
+      "yac": 5.2549979053204865,
+      "yards_per_dropback": 6.174892983043396,
+      "time_to_throw": 2.56269345119588,
+      "run_ypc": 4.55065023356977,
+      "run_explosive_pct": 2.1312535940195514,
+      "run_negative_pct": 9.455865439907992,
+      "pass_play_share": 58.97067363530778,
+      "play_action_pct": 10.036295005807201,
+      "motion_pct": 36.38501742160279,
+      "blitz_pct": 14.258573655494933,
+      "injuries_per_team_game": 0.6314338235294118,
+      "mean_margin": 10.856617647058824,
+      "margin_10plus_pct": 47.42647058823529,
+      "margin_17plus_pct": 21.139705882352942,
+      "overtime_pct": 4.779411764705882,
+      "tie_pct": 0.1838235294117647,
+      "fg_pct": 88.51351351351352,
+      "punt_gross": 45.62068292682927,
+      "kickoff_touchback_pct": 14.814814814814813
+    },
+    "misses": [
+      "margin_17plus_pct",
+      "fg_pct"
+    ],
+    "score_sd": 9.635090084555515,
+    "calls": {
+      "close_Q1": {
+        "snaps": 15570,
+        "passes": 8522
+      },
+      "close_Q2": {
+        "snaps": 17896,
+        "passes": 11997
+      },
+      "close_Q3": {
+        "snaps": 13655,
+        "passes": 7489
+      },
+      "close_Q4": {
+        "snaps": 15312,
+        "passes": 8993
+      },
+      "late_lead_first_9-16": {
+        "snaps": 396,
+        "passes": 13
+      },
+      "late_lead_third_long_9-16": {
+        "snaps": 107,
+        "passes": 49
+      },
+      "trail17_Q4": {
+        "snaps": 2263,
+        "passes": 2068
+      },
+      "trail17_Q2": {
+        "snaps": 506,
+        "passes": 409
+      },
+      "trail17_Q3": {
+        "snaps": 1110,
+        "passes": 757
+      },
+      "lead17_Q3": {
+        "snaps": 745,
+        "passes": 319
+      },
+      "lead17_Q4": {
+        "snaps": 1576,
+        "passes": 350
+      },
+      "late_lead_first_17+": {
+        "snaps": 241,
+        "passes": 6
+      },
+      "late_lead_first_1-8": {
+        "snaps": 510,
+        "passes": 21
+      },
+      "late_lead_third_long_1-8": {
+        "snaps": 123,
+        "passes": 75
+      },
+      "late_lead_third_long_17+": {
+        "snaps": 54,
+        "passes": 18
+      },
+      "lead17_Q2": {
+        "snaps": 242,
+        "passes": 148
+      },
+      "trail17_Q1": {
+        "snaps": 5,
+        "passes": 4
+      }
+    },
+    "games": 544
+  },
+  "score-franchise-coverage-sign-93034": {
+    "seed": 93034,
+    "seasons": 1,
+    "short": 0.92,
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": true,
+    "seasons_detail": [
+      {
+        "year": 2026,
+        "games": 272,
+        "got": {
+          "points_per_team": 23.28125,
+          "total_points": 46.5625,
+          "drives_per_game": 22.69485294117647,
+          "plays_per_drive": 5.6005183865219506,
+          "first_downs_per_drive": 1.768670014579621,
+          "offensive_plays_per_gm": 126.88235294117646,
+          "drive_touchdown_pct": 21.610238133808522,
+          "drive_fieldgoal_pct": 17.997732058966466,
+          "drive_punt_pct": 33.95431718775312,
+          "drive_turnover_pct": 10.950915276202819,
+          "drive_downs_pct": 5.653653005021869,
+          "completion_pct": 63.49511452827167,
+          "sack_pct": 6.8718611705037045,
+          "int_pct": 2.4987986544930325,
+          "air_yards": 5.737983518331652,
+          "yac": 5.448335015136226,
+          "yards_per_dropback": 6.258688355309711,
+          "time_to_throw": 2.560932404292808,
+          "run_ypc": 4.352894136719236,
+          "run_explosive_pct": 1.9173833356830676,
+          "run_negative_pct": 10.122656139856197,
+          "pass_play_share": 58.272484932777004,
+          "play_action_pct": 9.167825683820121,
+          "motion_pct": 36.735048678720446,
+          "blitz_pct": 14.02145035914592,
+          "injuries_per_team_game": 0.6911764705882353,
+          "mean_margin": 9.113970588235293,
+          "margin_10plus_pct": 34.92647058823529,
+          "margin_17plus_pct": 15.073529411764705,
+          "overtime_pct": 6.25,
+          "tie_pct": 0.7352941176470588,
+          "fg_pct": 87.0007830853563,
+          "punt_gross": 45.57999042604117,
+          "kickoff_touchback_pct": 16.93032648939751
+        }
+      }
+    ],
+    "got": {
+      "points_per_team": 23.28125,
+      "total_points": 46.5625,
+      "drives_per_game": 22.69485294117647,
+      "plays_per_drive": 5.6005183865219506,
+      "first_downs_per_drive": 1.768670014579621,
+      "offensive_plays_per_gm": 126.88235294117646,
+      "drive_touchdown_pct": 21.610238133808522,
+      "drive_fieldgoal_pct": 17.997732058966466,
+      "drive_punt_pct": 33.95431718775312,
+      "drive_turnover_pct": 10.950915276202819,
+      "drive_downs_pct": 5.653653005021869,
+      "completion_pct": 63.49511452827167,
+      "sack_pct": 6.8718611705037045,
+      "int_pct": 2.4987986544930325,
+      "air_yards": 5.737983518331652,
+      "yac": 5.448335015136226,
+      "yards_per_dropback": 6.258688355309711,
+      "time_to_throw": 2.560932404292808,
+      "run_ypc": 4.352894136719236,
+      "run_explosive_pct": 1.9173833356830676,
+      "run_negative_pct": 10.122656139856197,
+      "pass_play_share": 58.272484932777004,
+      "play_action_pct": 9.167825683820121,
+      "motion_pct": 36.735048678720446,
+      "blitz_pct": 14.02145035914592,
+      "injuries_per_team_game": 0.6911764705882353,
+      "mean_margin": 9.113970588235293,
+      "margin_10plus_pct": 34.92647058823529,
+      "margin_17plus_pct": 15.073529411764705,
+      "overtime_pct": 6.25,
+      "tie_pct": 0.7352941176470588,
+      "fg_pct": 87.0007830853563,
+      "punt_gross": 45.57999042604117,
+      "kickoff_touchback_pct": 16.93032648939751
+    },
+    "misses": [
+      "drives_per_game",
+      "run_negative_pct",
+      "mean_margin",
+      "margin_10plus_pct",
+      "margin_17plus_pct"
+    ],
+    "score_sd": 8.72264302712638,
+    "calls": {
+      "close_Q1": {
+        "snaps": 7837,
+        "passes": 4241
+      },
+      "close_Q2": {
+        "snaps": 8766,
+        "passes": 5743
+      },
+      "close_Q3": {
+        "snaps": 7008,
+        "passes": 3861
+      },
+      "close_Q4": {
+        "snaps": 8340,
+        "passes": 4863
+      },
+      "trail17_Q2": {
+        "snaps": 297,
+        "passes": 235
+      },
+      "lead17_Q2": {
+        "snaps": 183,
+        "passes": 110
+      },
+      "trail17_Q3": {
+        "snaps": 443,
+        "passes": 292
+      },
+      "lead17_Q3": {
+        "snaps": 290,
+        "passes": 122
+      },
+      "trail17_Q4": {
+        "snaps": 830,
+        "passes": 752
+      },
+      "lead17_Q4": {
+        "snaps": 515,
+        "passes": 105
+      },
+      "trail17_Q1": {
+        "snaps": 3,
+        "passes": 2
+      }
+    },
+    "games": 272
+  },
+  "score-franchise-late-lead-93034": {
+    "seed": 93034,
+    "seasons": 1,
+    "short": 0.92,
+    "coverage_baseline": false,
+    "coverage_sha256": "b912c56908d5d3e0a2908c96839c163037be9a1d42bbf58363bdcb1147dd0c79",
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": true,
+    "seasons_detail": [
+      {
+        "year": 2026,
+        "games": 272,
+        "got": {
+          "points_per_team": 22.794117647058822,
+          "total_points": 45.588235294117645,
+          "drives_per_game": 22.49264705882353,
+          "plays_per_drive": 5.6484145145472375,
+          "first_downs_per_drive": 1.7909447531873162,
+          "offensive_plays_per_gm": 126.78676470588235,
+          "drive_touchdown_pct": 21.62471395881007,
+          "drive_fieldgoal_pct": 17.195161817587447,
+          "drive_punt_pct": 34.880679960771495,
+          "drive_turnover_pct": 10.281137626675383,
+          "drive_downs_pct": 5.508336057535143,
+          "completion_pct": 64.11155295102553,
+          "sack_pct": 7.0201897348576985,
+          "int_pct": 2.3022185014650485,
+          "air_yards": 5.622198645229739,
+          "yac": 5.368856606545337,
+          "yards_per_dropback": 6.171953705261999,
+          "time_to_throw": 2.553416073670992,
+          "run_ypc": 4.382333257298183,
+          "run_explosive_pct": 1.8229546448884353,
+          "run_negative_pct": 10.266880560011666,
+          "pass_play_share": 59.60389723366004,
+          "play_action_pct": 9.47920895435829,
+          "motion_pct": 36.437974830365945,
+          "blitz_pct": 13.999614866165993,
+          "injuries_per_team_game": 0.6819852941176471,
+          "mean_margin": 9.897058823529411,
+          "margin_10plus_pct": 37.5,
+          "margin_17plus_pct": 18.75,
+          "overtime_pct": 5.147058823529411,
+          "tie_pct": 0.0,
+          "fg_pct": 84.56591639871382,
+          "punt_gross": 45.987271019257875,
+          "kickoff_touchback_pct": 15.482758620689655
+        }
+      }
+    ],
+    "got": {
+      "points_per_team": 22.794117647058822,
+      "total_points": 45.588235294117645,
+      "drives_per_game": 22.49264705882353,
+      "plays_per_drive": 5.6484145145472375,
+      "first_downs_per_drive": 1.7909447531873162,
+      "offensive_plays_per_gm": 126.78676470588235,
+      "drive_touchdown_pct": 21.62471395881007,
+      "drive_fieldgoal_pct": 17.195161817587447,
+      "drive_punt_pct": 34.880679960771495,
+      "drive_turnover_pct": 10.281137626675383,
+      "drive_downs_pct": 5.508336057535143,
+      "completion_pct": 64.11155295102553,
+      "sack_pct": 7.0201897348576985,
+      "int_pct": 2.3022185014650485,
+      "air_yards": 5.622198645229739,
+      "yac": 5.368856606545337,
+      "yards_per_dropback": 6.171953705261999,
+      "time_to_throw": 2.553416073670992,
+      "run_ypc": 4.382333257298183,
+      "run_explosive_pct": 1.8229546448884353,
+      "run_negative_pct": 10.266880560011666,
+      "pass_play_share": 59.60389723366004,
+      "play_action_pct": 9.47920895435829,
+      "motion_pct": 36.437974830365945,
+      "blitz_pct": 13.999614866165993,
+      "injuries_per_team_game": 0.6819852941176471,
+      "mean_margin": 9.897058823529411,
+      "margin_10plus_pct": 37.5,
+      "margin_17plus_pct": 18.75,
+      "overtime_pct": 5.147058823529411,
+      "tie_pct": 0.0,
+      "fg_pct": 84.56591639871382,
+      "punt_gross": 45.987271019257875,
+      "kickoff_touchback_pct": 15.482758620689655
+    },
+    "misses": [
+      "run_negative_pct",
+      "margin_10plus_pct",
+      "margin_17plus_pct"
+    ],
+    "score_sd": 9.20846609109601,
+    "calls": {
+      "close_Q1": {
+        "snaps": 7738,
+        "passes": 4246
+      },
+      "close_Q2": {
+        "snaps": 8927,
+        "passes": 5978
+      },
+      "close_Q3": {
+        "snaps": 6915,
+        "passes": 3780
+      },
+      "close_Q4": {
+        "snaps": 8163,
+        "passes": 5038
+      },
+      "trail17_Q4": {
+        "snaps": 929,
+        "passes": 842
+      },
+      "lead17_Q4": {
+        "snaps": 582,
+        "passes": 141
+      },
+      "trail17_Q3": {
+        "snaps": 529,
+        "passes": 363
+      },
+      "lead17_Q3": {
+        "snaps": 372,
+        "passes": 139
+      },
+      "trail17_Q2": {
+        "snaps": 232,
+        "passes": 187
+      },
+      "lead17_Q2": {
+        "snaps": 97,
+        "passes": 57
+      },
+      "trail17_Q1": {
+        "snaps": 2,
+        "passes": 1
+      }
+    },
+    "games": 272
+  },
+  "score-late-distribution-baseline-93031": {
+    "seed": 93031,
+    "seasons": 1,
+    "short": 0.92,
+    "game_sha256": "97be6e4d6d1bcb49019fe3052947a4d3b38e1e38c97582fe098a996866a24fa5",
+    "late_lead_baseline": true,
+    "coverage_baseline": false,
+    "coverage_sha256": "b912c56908d5d3e0a2908c96839c163037be9a1d42bbf58363bdcb1147dd0c79",
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": false,
+    "seasons_detail": [],
+    "got": {
+      "points_per_team": 23.641544117647058,
+      "total_points": 47.283088235294116,
+      "drives_per_game": 22.727941176470587,
+      "plays_per_drive": 5.611937884179877,
+      "first_downs_per_drive": 1.804270462633452,
+      "offensive_plays_per_gm": 127.30147058823529,
+      "drive_touchdown_pct": 22.403752830799096,
+      "drive_fieldgoal_pct": 17.146554513102554,
+      "drive_punt_pct": 33.629893238434164,
+      "drive_turnover_pct": 11.387900355871885,
+      "drive_downs_pct": 5.37043028146231,
+      "completion_pct": 63.00031515915537,
+      "sack_pct": 7.009231670981292,
+      "int_pct": 2.7523899569282486,
+      "air_yards": 5.934500583625146,
+      "yac": 5.428455894613974,
+      "yards_per_dropback": 6.286973580247872,
+      "time_to_throw": 2.5608033932135728,
+      "run_ypc": 4.502862079633713,
+      "run_explosive_pct": 2.1038270984418754,
+      "run_negative_pct": 9.628778631435342,
+      "pass_play_share": 59.12609022122105,
+      "play_action_pct": 9.853867036331081,
+      "motion_pct": 36.34263270374863,
+      "blitz_pct": 13.942702546016717,
+      "injuries_per_team_game": 0.6397058823529411,
+      "mean_margin": 9.856617647058824,
+      "margin_10plus_pct": 40.07352941176471,
+      "margin_17plus_pct": 18.38235294117647,
+      "overtime_pct": 4.044117647058823,
+      "tie_pct": 1.4705882352941175,
+      "fg_pct": 86.53061224489797,
+      "punt_gross": 45.57713871435477,
+      "kickoff_touchback_pct": 16.948008102633356
+    },
+    "misses": [
+      "drives_per_game",
+      "int_pct",
+      "margin_10plus_pct",
+      "margin_17plus_pct",
+      "overtime_pct",
+      "tie_pct"
+    ],
+    "score_sd": 9.326699212686982,
+    "calls": {
+      "close_Q1": {
+        "snaps": 7820,
+        "passes": 4264
+      },
+      "close_Q2": {
+        "snaps": 8954,
+        "passes": 6072
+      },
+      "close_Q3": {
+        "snaps": 6872,
+        "passes": 3865
+      },
+      "close_Q4": {
+        "snaps": 7780,
+        "passes": 4509
+      },
+      "late_lead_first_1-8": {
+        "snaps": 289,
+        "passes": 9
+      },
+      "trail17_Q3": {
+        "snaps": 552,
+        "passes": 373
+      },
+      "late_lead_first_9-16": {
+        "snaps": 140,
+        "passes": 4
+      },
+      "late_lead_third_long_9-16": {
+        "snaps": 34,
+        "passes": 0
+      },
+      "trail17_Q4": {
+        "snaps": 1009,
+        "passes": 914
+      },
+      "late_lead_third_long_1-8": {
+        "snaps": 87,
+        "passes": 2
+      },
+      "lead17_Q3": {
+        "snaps": 400,
+        "passes": 166
+      },
+      "lead17_Q4": {
+        "snaps": 797,
+        "passes": 185
+      },
+      "late_lead_first_17+": {
+        "snaps": 121,
+        "passes": 1
+      },
+      "late_lead_third_long_17+": {
+        "snaps": 27,
+        "passes": 1
+      },
+      "trail17_Q2": {
+        "snaps": 297,
+        "passes": 252
+      },
+      "lead17_Q2": {
+        "snaps": 141,
+        "passes": 96
+      },
+      "trail17_Q1": {
+        "snaps": 1,
+        "passes": 1
+      },
+      "lead17_Q1": {
+        "snaps": 3,
+        "passes": 2
+      }
+    },
+    "games": 272
+  },
+  "real_late_lead_rates": {
+    "first_down": {
+      "snaps": 1367,
+      "dropback_pct": 6.217995610826628,
+      "1-8": {
+        "snaps": 774,
+        "dropback_pct": 8.010335917312661
+      },
+      "9-16": {
+        "snaps": 351,
+        "dropback_pct": 3.418803418803419
+      },
+      "17-99": {
+        "snaps": 242,
+        "dropback_pct": 4.545454545454546
+      }
+    },
+    "third_long": {
+      "snaps": 664,
+      "dropback_pct": 50.15060240963856,
+      "1-8": {
+        "snaps": 374,
+        "dropback_pct": 64.43850267379679
+      },
+      "9-16": {
+        "snaps": 162,
+        "dropback_pct": 31.48148148148148
+      },
+      "17-99": {
+        "snaps": 128,
+        "dropback_pct": 32.03125
+      }
+    }
+  },
+  "rotation_probe": {
+    "method": "Standardized 70 healthy snaps per team in 11/nickel, six-snap series/rest; no injuries or score feedback. Diagnostic only, not live season share.",
+    "teams": [
+      {
+        "team": "ARI",
+        "unit": "offense",
+        "fresh": 82.14,
+        "selected": 81.47896103896103,
+        "effective": 81.10111024301882,
+        "starter_share": 0.8779220779220778
+      },
+      {
+        "team": "ARI",
+        "unit": "defense",
+        "fresh": 80.37181818181818,
+        "selected": 78.94777922077922,
+        "effective": 78.45404135044764,
+        "starter_share": 0.7311688311688312
+      },
+      {
+        "team": "ATL",
+        "unit": "offense",
+        "fresh": 83.34909090909092,
+        "selected": 82.88812987012987,
+        "effective": 82.466188452606,
+        "starter_share": 0.8948051948051948
+      },
+      {
+        "team": "ATL",
+        "unit": "defense",
+        "fresh": 82.19,
+        "selected": 80.86048051948053,
+        "effective": 80.41934926557474,
+        "starter_share": 0.7389610389610388
+      },
+      {
+        "team": "BAL",
+        "unit": "offense",
+        "fresh": 83.83454545454545,
+        "selected": 83.23983116883116,
+        "effective": 82.8427004289149,
+        "starter_share": 0.8961038961038961
+      },
+      {
+        "team": "BAL",
+        "unit": "defense",
+        "fresh": 83.76272727272728,
+        "selected": 82.06133766233766,
+        "effective": 81.5117294230506,
+        "starter_share": 0.7493506493506494
+      },
+      {
+        "team": "BUF",
+        "unit": "offense",
+        "fresh": 83.92909090909092,
+        "selected": 83.44963636363634,
+        "effective": 83.0348749349616,
+        "starter_share": 0.8961038961038963
+      },
+      {
+        "team": "BUF",
+        "unit": "defense",
+        "fresh": 80.74818181818182,
+        "selected": 79.53179220779221,
+        "effective": 79.02465963444241,
+        "starter_share": 0.7402597402597402
+      },
+      {
+        "team": "CAR",
+        "unit": "offense",
+        "fresh": 82.22727272727273,
+        "selected": 81.8008181818182,
+        "effective": 81.42316405086534,
+        "starter_share": 0.8831168831168832
+      },
+      {
+        "team": "CAR",
+        "unit": "defense",
+        "fresh": 81.58727272727273,
+        "selected": 80.24499999999999,
+        "effective": 79.77071988929924,
+        "starter_share": 0.7441558441558442
+      },
+      {
+        "team": "CHI",
+        "unit": "offense",
+        "fresh": 82.96454545454544,
+        "selected": 82.37288311688313,
+        "effective": 81.96263775157215,
+        "starter_share": 0.8870129870129869
+      },
+      {
+        "team": "CHI",
+        "unit": "defense",
+        "fresh": 81.07272727272726,
+        "selected": 79.76966233766234,
+        "effective": 79.24334690393187,
+        "starter_share": 0.7415584415584414
+      },
+      {
+        "team": "CIN",
+        "unit": "offense",
+        "fresh": 81.96,
+        "selected": 81.33632467532468,
+        "effective": 80.94473629276274,
+        "starter_share": 0.8922077922077922
+      },
+      {
+        "team": "CIN",
+        "unit": "defense",
+        "fresh": 80.10181818181819,
+        "selected": 78.8534935064935,
+        "effective": 78.37564039052415,
+        "starter_share": 0.7376623376623377
+      },
+      {
+        "team": "CLE",
+        "unit": "offense",
+        "fresh": 80.07,
+        "selected": 79.6406103896104,
+        "effective": 79.24487240280371,
+        "starter_share": 0.8909090909090911
+      },
+      {
+        "team": "CLE",
+        "unit": "defense",
+        "fresh": 82.79363636363637,
+        "selected": 81.1788181818182,
+        "effective": 80.63210761642702,
+        "starter_share": 0.7610389610389612
+      },
+      {
+        "team": "DAL",
+        "unit": "offense",
+        "fresh": 83.33545454545454,
+        "selected": 82.57287012987013,
+        "effective": 82.19847056661229,
+        "starter_share": 0.8857142857142856
+      },
+      {
+        "team": "DAL",
+        "unit": "defense",
+        "fresh": 82.14090909090909,
+        "selected": 80.59427272727272,
+        "effective": 80.0990537513922,
+        "starter_share": 0.7389610389610389
+      },
+      {
+        "team": "DEN",
+        "unit": "offense",
+        "fresh": 84.19363636363637,
+        "selected": 83.88397402597403,
+        "effective": 83.49713402055185,
+        "starter_share": 0.8883116883116884
+      },
+      {
+        "team": "DEN",
+        "unit": "defense",
+        "fresh": 84.26454545454546,
+        "selected": 81.97337662337662,
+        "effective": 81.45550902221916,
+        "starter_share": 0.7558441558441557
+      },
+      {
+        "team": "DET",
+        "unit": "offense",
+        "fresh": 83.40363636363635,
+        "selected": 82.81136363636362,
+        "effective": 82.38999975987225,
+        "starter_share": 0.8987012987012987
+      },
+      {
+        "team": "DET",
+        "unit": "defense",
+        "fresh": 82.64272727272727,
+        "selected": 81.12115584415584,
+        "effective": 80.63358734839935,
+        "starter_share": 0.7285714285714285
+      },
+      {
+        "team": "GB",
+        "unit": "offense",
+        "fresh": 81.22545454545455,
+        "selected": 80.58211688311691,
+        "effective": 80.13872957446478,
+        "starter_share": 0.8922077922077923
+      },
+      {
+        "team": "GB",
+        "unit": "defense",
+        "fresh": 81.75454545454545,
+        "selected": 80.22164935064933,
+        "effective": 79.67163248807708,
+        "starter_share": 0.744155844155844
+      },
+      {
+        "team": "HOU",
+        "unit": "offense",
+        "fresh": 82.20454545454547,
+        "selected": 81.9266233766234,
+        "effective": 81.53461417503597,
+        "starter_share": 0.8909090909090911
+      },
+      {
+        "team": "HOU",
+        "unit": "defense",
+        "fresh": 84.67272727272727,
+        "selected": 82.55977922077923,
+        "effective": 82.05272483988533,
+        "starter_share": 0.7467532467532467
+      },
+      {
+        "team": "IND",
+        "unit": "offense",
+        "fresh": 83.87727272727273,
+        "selected": 83.12097402597402,
+        "effective": 82.6781558503003,
+        "starter_share": 0.9
+      },
+      {
+        "team": "IND",
+        "unit": "defense",
+        "fresh": 82.2518181818182,
+        "selected": 80.60592207792209,
+        "effective": 80.11435597963045,
+        "starter_share": 0.7506493506493507
+      },
+      {
+        "team": "JAX",
+        "unit": "offense",
+        "fresh": 80.98636363636363,
+        "selected": 80.39749350649352,
+        "effective": 80.01167507469184,
+        "starter_share": 0.8909090909090909
+      },
+      {
+        "team": "JAX",
+        "unit": "defense",
+        "fresh": 81.59636363636365,
+        "selected": 79.9885324675325,
+        "effective": 79.49270507790963,
+        "starter_share": 0.7441558441558441
+      },
+      {
+        "team": "KC",
+        "unit": "offense",
+        "fresh": 84.39727272727274,
+        "selected": 83.65737662337662,
+        "effective": 83.24729098076065,
+        "starter_share": 0.8896103896103896
+      },
+      {
+        "team": "KC",
+        "unit": "defense",
+        "fresh": 81.60909090909091,
+        "selected": 80.16527272727272,
+        "effective": 79.70538680418349,
+        "starter_share": 0.7337662337662338
+      },
+      {
+        "team": "LA",
+        "unit": "offense",
+        "fresh": 84.67909090909092,
+        "selected": 83.99519480519479,
+        "effective": 83.600772599407,
+        "starter_share": 0.8922077922077923
+      },
+      {
+        "team": "LA",
+        "unit": "defense",
+        "fresh": 84.41727272727275,
+        "selected": 82.17805194805196,
+        "effective": 81.72855227660943,
+        "starter_share": 0.7389610389610388
+      },
+      {
+        "team": "LAC",
+        "unit": "offense",
+        "fresh": 82.38909090909091,
+        "selected": 81.99271428571429,
+        "effective": 81.57893918660001,
+        "starter_share": 0.8935064935064936
+      },
+      {
+        "team": "LAC",
+        "unit": "defense",
+        "fresh": 81.64181818181818,
+        "selected": 80.55675324675323,
+        "effective": 80.08162931763518,
+        "starter_share": 0.7233766233766235
+      },
+      {
+        "team": "LV",
+        "unit": "offense",
+        "fresh": 81.99363636363637,
+        "selected": 81.39316883116884,
+        "effective": 80.99861784831069,
+        "starter_share": 0.8818181818181818
+      },
+      {
+        "team": "LV",
+        "unit": "defense",
+        "fresh": 80.55,
+        "selected": 79.38107792207792,
+        "effective": 78.863557533007,
+        "starter_share": 0.7506493506493507
+      },
+      {
+        "team": "MIA",
+        "unit": "offense",
+        "fresh": 79.02727272727272,
+        "selected": 78.742,
+        "effective": 78.33314346706386,
+        "starter_share": 0.8883116883116883
+      },
+      {
+        "team": "MIA",
+        "unit": "defense",
+        "fresh": 77.40818181818182,
+        "selected": 76.46572727272726,
+        "effective": 75.91962677541561,
+        "starter_share": 0.744155844155844
+      },
+      {
+        "team": "MIN",
+        "unit": "offense",
+        "fresh": 83.07272727272726,
+        "selected": 82.50262337662336,
+        "effective": 82.11165440718486,
+        "starter_share": 0.8961038961038963
+      },
+      {
+        "team": "MIN",
+        "unit": "defense",
+        "fresh": 80.70909090909092,
+        "selected": 79.39116883116881,
+        "effective": 78.82231356002757,
+        "starter_share": 0.7480519480519481
+      },
+      {
+        "team": "NE",
+        "unit": "offense",
+        "fresh": 83.6409090909091,
+        "selected": 83.367025974026,
+        "effective": 82.98226924721344,
+        "starter_share": 0.8896103896103899
+      },
+      {
+        "team": "NE",
+        "unit": "defense",
+        "fresh": 83.16818181818181,
+        "selected": 81.31076623376623,
+        "effective": 80.79009187285145,
+        "starter_share": 0.738961038961039
+      },
+      {
+        "team": "NO",
+        "unit": "offense",
+        "fresh": 81.5,
+        "selected": 80.9634155844156,
+        "effective": 80.57096447531086,
+        "starter_share": 0.8792207792207793
+      },
+      {
+        "team": "NO",
+        "unit": "defense",
+        "fresh": 79.7409090909091,
+        "selected": 78.82394805194805,
+        "effective": 78.36748816964885,
+        "starter_share": 0.7233766233766232
+      },
+      {
+        "team": "NYG",
+        "unit": "offense",
+        "fresh": 81.50272727272728,
+        "selected": 81.32302597402598,
+        "effective": 80.94294296375507,
+        "starter_share": 0.8896103896103897
+      },
+      {
+        "team": "NYG",
+        "unit": "defense",
+        "fresh": 81.49090909090908,
+        "selected": 80.39235064935065,
+        "effective": 79.89056197257284,
+        "starter_share": 0.744155844155844
+      },
+      {
+        "team": "NYJ",
+        "unit": "offense",
+        "fresh": 80.61,
+        "selected": 80.24876623376622,
+        "effective": 79.83457780079723,
+        "starter_share": 0.8948051948051949
+      },
+      {
+        "team": "NYJ",
+        "unit": "defense",
+        "fresh": 80.73909090909092,
+        "selected": 79.80227272727272,
+        "effective": 79.34331671206832,
+        "starter_share": 0.7363636363636363
+      },
+      {
+        "team": "PHI",
+        "unit": "offense",
+        "fresh": 85.08727272727273,
+        "selected": 84.48270129870131,
+        "effective": 84.10261751676403,
+        "starter_share": 0.8818181818181821
+      },
+      {
+        "team": "PHI",
+        "unit": "defense",
+        "fresh": 82.94090909090909,
+        "selected": 81.10924675324675,
+        "effective": 80.60582064900359,
+        "starter_share": 0.7337662337662337
+      },
+      {
+        "team": "PIT",
+        "unit": "offense",
+        "fresh": 80.50999999999999,
+        "selected": 80.15258441558441,
+        "effective": 79.74057931864633,
+        "starter_share": 0.8896103896103899
+      },
+      {
+        "team": "PIT",
+        "unit": "defense",
+        "fresh": 84.42363636363636,
+        "selected": 82.71606493506495,
+        "effective": 82.25006586685235,
+        "starter_share": 0.7454545454545454
+      },
+      {
+        "team": "SEA",
+        "unit": "offense",
+        "fresh": 82.12818181818182,
+        "selected": 81.63474025974025,
+        "effective": 81.2594145167985,
+        "starter_share": 0.8896103896103895
+      },
+      {
+        "team": "SEA",
+        "unit": "defense",
+        "fresh": 82.40454545454544,
+        "selected": 80.95244155844154,
+        "effective": 80.4794829655279,
+        "starter_share": 0.7428571428571429
+      },
+      {
+        "team": "SF",
+        "unit": "offense",
+        "fresh": 84.30636363636363,
+        "selected": 83.6510779220779,
+        "effective": 83.25498714988998,
+        "starter_share": 0.8922077922077923
+      },
+      {
+        "team": "SF",
+        "unit": "defense",
+        "fresh": 82.34,
+        "selected": 80.65045454545454,
+        "effective": 80.16899379103165,
+        "starter_share": 0.7298701298701298
+      },
+      {
+        "team": "TB",
+        "unit": "offense",
+        "fresh": 82.70181818181818,
+        "selected": 82.27258441558442,
+        "effective": 81.88555631007928,
+        "starter_share": 0.887012987012987
+      },
+      {
+        "team": "TB",
+        "unit": "defense",
+        "fresh": 82.48454545454547,
+        "selected": 81.15333766233766,
+        "effective": 80.6240602408356,
+        "starter_share": 0.7350649350649352
+      },
+      {
+        "team": "TEN",
+        "unit": "offense",
+        "fresh": 79.38363636363637,
+        "selected": 79.05424675324677,
+        "effective": 78.69515061674791,
+        "starter_share": 0.8805194805194805
+      },
+      {
+        "team": "TEN",
+        "unit": "defense",
+        "fresh": 80.74181818181819,
+        "selected": 79.19038961038962,
+        "effective": 78.71391654148196,
+        "starter_share": 0.7298701298701299
+      },
+      {
+        "team": "WAS",
+        "unit": "offense",
+        "fresh": 82.07363636363635,
+        "selected": 81.80509090909091,
+        "effective": 81.39288673651266,
+        "starter_share": 0.8883116883116883
+      },
+      {
+        "team": "WAS",
+        "unit": "defense",
+        "fresh": 80.33909090909093,
+        "selected": 79.71740259740263,
+        "effective": 79.21931681920167,
+        "starter_share": 0.7337662337662337
+      }
+    ],
+    "offense": {
+      "fresh": 1.513,
+      "selected": 1.446,
+      "effective": 1.445,
+      "starter_share": 0.89,
+      "fresh_effective_correlation": 0.995
+    },
+    "defense": {
+      "fresh": 1.539,
+      "selected": 1.255,
+      "effective": 1.259,
+      "starter_share": 0.74,
+      "fresh_effective_correlation": 0.984
+    }
+  },
+  "score-franchise-third-long-93034": {
+    "seed": 93034,
+    "seasons": 1,
+    "short": 0.92,
+    "game_sha256": "f50947a5b54bf74a8148816c531462ee549a80910dbfa6af4a405ec3e63fb78c",
+    "late_lead_baseline": false,
+    "coverage_baseline": false,
+    "coverage_sha256": "b912c56908d5d3e0a2908c96839c163037be9a1d42bbf58363bdcb1147dd0c79",
+    "single_script": false,
+    "baseline_ref": null,
+    "plays_sha256": "d1cd8299f89327d357c41c77b6dfe475c38e574a3bfd14cc6fd804c1429fb5b8",
+    "franchise": true,
+    "seasons_detail": [
+      {
+        "year": 2026,
+        "games": 272,
+        "got": {
+          "points_per_team": 22.959558823529413,
+          "total_points": 45.919117647058826,
+          "drives_per_game": 22.231617647058822,
+          "plays_per_drive": 5.702166363486026,
+          "first_downs_per_drive": 1.8070117413593518,
+          "offensive_plays_per_gm": 126.5220588235294,
+          "drive_touchdown_pct": 21.82900611873656,
+          "drive_fieldgoal_pct": 17.926244418720028,
+          "drive_punt_pct": 33.86803373573673,
+          "drive_turnover_pct": 10.038035389449314,
+          "drive_downs_pct": 6.052588060195138,
+          "completion_pct": 63.84838087068411,
+          "sack_pct": 6.963288108539505,
+          "int_pct": 2.310744156122668,
+          "air_yards": 5.633075825006298,
+          "yac": 5.408203879418927,
+          "yards_per_dropback": 6.195178181596049,
+          "time_to_throw": 2.564777557366502,
+          "run_ypc": 4.315637878669238,
+          "run_explosive_pct": 1.8845285149632975,
+          "run_negative_pct": 9.86024844720497,
+          "pass_play_share": 58.255361190213286,
+          "play_action_pct": 8.984715522752367,
+          "motion_pct": 36.29046318358807,
+          "blitz_pct": 14.150943396226415,
+          "injuries_per_team_game": 0.6727941176470589,
+          "mean_margin": 9.875,
+          "margin_10plus_pct": 38.23529411764706,
+          "margin_17plus_pct": 19.11764705882353,
+          "overtime_pct": 4.044117647058823,
+          "tie_pct": 0.3676470588235294,
+          "fg_pct": 87.56058158319871,
+          "punt_gross": 45.85080922020599,
+          "kickoff_touchback_pct": 15.7429445766746
+        }
+      }
+    ],
+    "got": {
+      "points_per_team": 22.959558823529413,
+      "total_points": 45.919117647058826,
+      "drives_per_game": 22.231617647058822,
+      "plays_per_drive": 5.702166363486026,
+      "first_downs_per_drive": 1.8070117413593518,
+      "offensive_plays_per_gm": 126.5220588235294,
+      "drive_touchdown_pct": 21.82900611873656,
+      "drive_fieldgoal_pct": 17.926244418720028,
+      "drive_punt_pct": 33.86803373573673,
+      "drive_turnover_pct": 10.038035389449314,
+      "drive_downs_pct": 6.052588060195138,
+      "completion_pct": 63.84838087068411,
+      "sack_pct": 6.963288108539505,
+      "int_pct": 2.310744156122668,
+      "air_yards": 5.633075825006298,
+      "yac": 5.408203879418927,
+      "yards_per_dropback": 6.195178181596049,
+      "time_to_throw": 2.564777557366502,
+      "run_ypc": 4.315637878669238,
+      "run_explosive_pct": 1.8845285149632975,
+      "run_negative_pct": 9.86024844720497,
+      "pass_play_share": 58.255361190213286,
+      "play_action_pct": 8.984715522752367,
+      "motion_pct": 36.29046318358807,
+      "blitz_pct": 14.150943396226415,
+      "injuries_per_team_game": 0.6727941176470589,
+      "mean_margin": 9.875,
+      "margin_10plus_pct": 38.23529411764706,
+      "margin_17plus_pct": 19.11764705882353,
+      "overtime_pct": 4.044117647058823,
+      "tie_pct": 0.3676470588235294,
+      "fg_pct": 87.56058158319871,
+      "punt_gross": 45.85080922020599,
+      "kickoff_touchback_pct": 15.7429445766746
+    },
+    "misses": [
+      "margin_10plus_pct",
+      "margin_17plus_pct",
+      "overtime_pct"
+    ],
+    "score_sd": 9.591386137605838,
+    "calls": {
+      "close_Q1": {
+        "snaps": 7801,
+        "passes": 4130
+      },
+      "close_Q2": {
+        "snaps": 8930,
+        "passes": 5884
+      },
+      "close_Q3": {
+        "snaps": 6880,
+        "passes": 3761
+      },
+      "close_Q4": {
+        "snaps": 8041,
+        "passes": 4753
+      },
+      "late_lead_first_9-16": {
+        "snaps": 169,
+        "passes": 3
+      },
+      "trail17_Q2": {
+        "snaps": 228,
+        "passes": 178
+      },
+      "lead17_Q2": {
+        "snaps": 127,
+        "passes": 87
+      },
+      "trail17_Q3": {
+        "snaps": 505,
+        "passes": 331
+      },
+      "lead17_Q3": {
+        "snaps": 314,
+        "passes": 109
+      },
+      "late_lead_first_1-8": {
+        "snaps": 275,
+        "passes": 10
+      },
+      "late_lead_third_long_1-8": {
+        "snaps": 78,
+        "passes": 54
+      },
+      "late_lead_third_long_9-16": {
+        "snaps": 44,
+        "passes": 25
+      },
+      "trail17_Q4": {
+        "snaps": 941,
+        "passes": 867
+      },
+      "lead17_Q4": {
+        "snaps": 633,
+        "passes": 135
+      },
+      "late_lead_first_17+": {
+        "snaps": 107,
+        "passes": 6
+      },
+      "trail17_Q1": {
+        "snaps": 11,
+        "passes": 9
+      },
+      "lead17_Q1": {
+        "snaps": 3,
+        "passes": 2
+      },
+      "late_lead_third_long_17+": {
+        "snaps": 28,
+        "passes": 17
+      }
+    },
+    "games": 272
+  }
+}
