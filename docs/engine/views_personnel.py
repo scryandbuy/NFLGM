@@ -641,7 +641,7 @@ def extensions(session, league, abbr):
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), yrs=yrs, fa_class=cls, hit=round(p.cap_hit(0), 1) if p.contract else 0.0, morale=morale_word(p),
                          rookie_option=EXT.rookie_option_price(league, p),
                          eligible=bool(EXT.eligible(p, league)), talks=(t['state'] if t else None), thread=(t['id'] if t else None), ask=(t['ask'] if t else None), years=(t['years'] if t else None), mood=(t.get('mood') if t else None)))
-    threads = [_thread(league, t) for t in NG._threads(league) if t['kind'] == 'extension' and t.get('team') == abbr and t['state'] not in ('expired', 'void')]
+    threads = [_thread(league, t) for t in NG._threads(league) if t['kind'] == 'extension' and t.get('team') == abbr and t['state'] not in ('expired', 'void', 'accepted', 'signed')]
     promises = [dict(pid=pr['pid'], name=(league.player(pr['pid']).name if league.player(pr['pid']) else pr['pid']), kind=pr['kind'], made=pr['made'], status=pr['status']) for pr in (getattr(league, 'promises', None) or []) if pr.get('team') == abbr]
     import tags as TG_, contracts as CT
     from cap_engine import CAP

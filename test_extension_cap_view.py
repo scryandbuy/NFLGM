@@ -11,6 +11,27 @@ from league import League
 
 
 class ExtensionCapViewTests(unittest.TestCase):
+    def test_completed_negotiations_move_out_of_talks_but_keep_done_and_history(self):
+        league = fixture(); league.set_phase('regular')
+        p = player(league, contract=Contract(4, [5, 20, 21, 22]))
+        states = ('open', 'waiting', 'countered', 'match_requested',
+                  'declined', 'broken_off', 'accepted', 'signed', 'expired', 'void')
+        league.negotiations = [dict(id=i, kind='extension', team='GB', pid=p.pid,
+                                    state=state, log=[]) for i, state in enumerate(states, 1)]
+        league.log('extension', pid=p.pid, team='GB', years=3, apy=20)
+        for saved in (False, True):
+            with self.subTest(reloaded=saved):
+                if saved:
+                    league = League.load(league.save())
+                with patch.object(VP, 'rail', return_value={}), \
+                     patch.object(VP, '_thread', side_effect=lambda league, row: dict(row)):
+                    data = VP.extensions(None, league, 'GB')
+                self.assertEqual([t['state'] for t in data['threads']], list(states[:6]))
+                self.assertEqual([t['state'] for t in league.negotiations], list(states))
+                self.assertEqual(len(data['done']), 1)
+                self.assertEqual(data['done'][0]['pid'], p.pid)
+                self.assertEqual(data['done'][0]['kind'], 'extended')
+
     def test_next_year_budget_in_page_and_popup_across_season_phases(self):
         for phase in ('regular', 'offseason', 'free_agency'):
             with self.subTest(phase=phase):
