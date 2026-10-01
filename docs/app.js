@@ -126,6 +126,7 @@ function cutPenaltyText(v, year) { return `$${v.penalty.toFixed(1)}m ${year == n
 const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'practice_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_offer_sheet', 'inbox_hurt_action', 'inbox_mark_all', 'inbox_read', 'inbox_later', 'inbox_delete', 'inbox_clear_read']);
 const READ_ONLY_ACTIONS = new Set(['personnel_act:ask', 'personnel_act:gather', 'personnel_act:offer_preview', 'frontoffice_act:restructure_preview', 'draft_act:read_trade_up', 'draft_act:offers', 'plan_act:save', 'plan_act:save_failed']);
 AUTO_SAVE_METHODS.add('inbox_roster_dismiss');
+AUTO_SAVE_METHODS.add('dismiss_ceiling_notice');
 let autosaveQueued = false;
 let autosaveFrame = null, autosaveTimer = null;
 function cancelAutosaveSchedule() {
@@ -226,6 +227,7 @@ async function loadSave() {
 function renderRail(r) {
   NameLinks.sync();
   syncGameplanState();
+  queueCeilingNoticeCheck();
   // Overview owns its full-width page treatment; other routes use their own boards.
   $('#page').classList.remove('overview-page');
   $('#rail').hidden = false;
@@ -1047,6 +1049,42 @@ function renderCard(v) {
   page.append(s);
 }
 
+// Ceiling milestones are deliberate notifications, separate from routine action feedback.
+let ceilingNoticeQueued = false, ceilingNoticeOpen = false;
+function queueCeilingNoticeCheck() {
+  if (ceilingNoticeQueued || ceilingNoticeOpen || !py) return;
+  ceilingNoticeQueued = true;
+  queueMicrotask(() => {
+    ceilingNoticeQueued = false;
+    if (ceilingNoticeOpen || document.querySelector('dialog[open]')) return;
+    const report = pyJSON('SESSION.development_notices()');
+    if (!report.players?.length) return;
+    ceilingNoticeOpen = true;
+    const dialog = el('dialog', {class:'retain-tag-dialog ceiling-dialog', 'aria-labelledby':'ceiling-notice-title'});
+    applyTeamTheme(dialog, report.club);
+    const body = el('div', {class:'retain-dialog-body'}, el('small', {}, 'PLAYER DEVELOPMENT'), el('h2', {id:'ceiling-notice-title'}, 'Ceiling reached'));
+    let openPid = null;
+    for (const player of report.players) body.append(el('div', {class:'ceiling-milestone'},
+      el('p', {}, player.can_unlock
+        ? `${player.name} has reached their overall ceiling. Unlock a higher ceiling by spending XP.`
+        : `${player.name} has reached the maximum overall ceiling. It cannot be raised further.`),
+      el('button', {class:'btn', onclick:() => { openPid = player.pid; dialog.close(); }}, 'Open Development')));
+    const dismiss = el('button', {class:'btn go', onclick:() => dialog.close()}, 'Got it');
+    dialog.append(body, el('div', {class:'retain-dialog-actions'}, dismiss));
+    dialog.addEventListener('close', () => {
+      for (const player of report.players) {
+        const result = pyJSON(`SESSION.dismiss_ceiling_notice(${JSON.stringify(player.pid)}, ${player.unlocks})`);
+        if (!result.ok) notify(result);
+      }
+      dialog.remove(); ceilingNoticeOpen = false;
+      if (openPid) openPlayer(openPid, 'Development');
+    }, {once:true});
+    document.body.append(dialog); dialog.showModal(); dismiss.focus();
+  });
+}
+// A milestone deferred behind a negotiation or another dialog gets its turn on close.
+document.addEventListener('close', () => queueMicrotask(queueCeilingNoticeCheck), true);
+
 // the development sheet: his bank, his ceiling, every attribute with the price of the next point
 function developmentPanel(pid, reload) {
   const d = pyJSON(`SESSION.development(${JSON.stringify(pid)})`);
@@ -1055,7 +1093,7 @@ function developmentPanel(pid, reload) {
   const act = (name, extra) => { const r = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, pid=${JSON.stringify(pid)}${extra ? ', ' + extra : ''})`); if (!r.ok) notify(r); reload(); };
   box.append(el('div', { class: 'tiles', style: 'grid-template-columns:repeat(4,1fr);margin-bottom:12px' },
     el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'XP Banked'), el('div', { class: 'word' }, d.bank.toLocaleString()), el('div', { class: 'sub' }, `earning ${d.dev} · ${d.bought} points bought in his career`), el('div', {class:'sub'}, `Practice earned: ${(d.practice_earned || 0).toLocaleString()} XP in his career`)),
-    el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Ceiling'), el('div', { class: 'word' }, d.ceiling != null ? d.ceiling : '—'), el('div', { class: 'sub' }, d.room != null ? `${d.room} above his ${d.ovr}` : 'uncapped')),
+    el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Ceiling'), el('div', { class: 'word' }, d.ceiling != null ? d.ceiling : '—'), el('div', { class: 'sub' }, d.ceiling_estimated ? "Your scouts' estimated range" : d.room != null ? `${d.room} above his ${d.ovr}` : 'uncapped')),
     el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Raise the Ceiling'), el('div', { class: 'word', style: 'font-size:18px' }, d.unlock_cost != null ? `${d.unlock_cost.toLocaleString()} XP` : '—'), el('div', { class: 'sub' }, el('button', { class: 'btn' + (d.unlock_ok ? ' go' : ''), disabled: d.unlock_ok ? null : '', style: 'padding:3px 10px;font-size:13px;margin-top:4px', 'data-tip': 'Raises his ceiling one point', onclick: () => act('unlock_ceiling') }, 'Unlock +1'))),
     el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Auto-Spend'), el('div', { class: 'word', style: 'font-size:18px' }, d.auto ? 'On' : 'Off'), el('div', { class: 'sub' }, el('button', { class: 'btn', style: 'padding:3px 10px;font-size:13px;margin-top:4px', 'data-tip': 'The assistants spend his XP weekly', onclick: () => act('auto_xp', `on=${d.auto ? 'False' : 'True'}`) }, d.auto ? 'Turn Off' : 'Turn On'), ' ', el('button', { class: 'btn quiet', style: 'padding:3px 10px;font-size:13px;margin-top:4px', 'data-tip': 'Spend his bank now, once', onclick: () => act('spend_by_read') }, 'Spend by Read')))));
   const t = el('table', { class: 'tbl', style: 'table-layout:fixed;width:100%' });
@@ -1188,7 +1226,7 @@ function renderProgression(v) {
   s.append(el('div', { class: 'tools report-controls' }, el('button', { class: 'btn' + (v.auto_all ? ' go' : ''), 'data-tip': 'Every player, spent weekly by the assistants', onclick: () => { notify(pyJSON(`SESSION.club_act('auto_xp', on=${v.auto_all ? 'False' : 'True'})`)); reload(); } }, v.auto_all ? 'Auto-Spend: On for All' : 'Turn Auto-Spend On for All'),
     el('button', { class: 'btn', 'data-tip': 'Spend every bank now, once', onclick: () => { const r = pyJSON(`SESSION.club_act('spend_by_read')`); if (!r.ok) notify(r); reload(); } }, 'Spend All by Read'),
     el('span', { class: 'count', style: 'margin-left:auto' }, 'Open a player for his Development tab')));
-  const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n' }, 'Ceiling'), el('th', { class: 'n', 'data-tip': 'Overall left under his ceiling' }, 'Room'), el('th', { class: 'n' }, 'XP Banked'), el('th', { class: 'n', 'data-tip': 'The cheapest next point' }, 'Next Point'), el('th', { class: 'n' }, 'Bought This Year'), el('th', {}, 'Auto'), el('th', {}, '')));
+  const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n' }, 'Ceiling'), el('th', { class: 'n', 'data-tip': 'Remaining overall growth; shown as a range when the ceiling is uncertain' }, 'Room'), el('th', { class: 'n' }, 'XP Banked'), el('th', { class: 'n', 'data-tip': 'The cheapest next point' }, 'Next Point'), el('th', { class: 'n' }, 'Bought This Year'), el('th', {}, 'Auto'), el('th', {}, '')));
   for (const r of v.rows) t.append(el('tr', { class: r.can_buy && !r.auto ? 'report-ready' : '' }, el('td', {}, el('button', { class: 'who', onclick: () => { openPlayer(r.pid, 'Development'); } }, el('div', { class: 'no' }, r.no ?? r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `earning ${r.dev} · ${r.career} bought in his career`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.ceiling ?? '—'), el('td', { class: 'n' }, r.room != null ? r.room : '—'), el('td', { class: 'n' }, r.bank.toLocaleString()), el('td', { class: 'n' }, r.cheapest ? r.cheapest.toLocaleString() : '—'), el('td', { class: 'n' }, r.bought),
     el('td', {}, el('button', { class: 'btn' + (r.auto ? ' go' : ' quiet'), style: 'padding:3px 8px;font-size:13px', onclick: () => { pyJSON(`SESSION.club_act('auto_xp', pid=${JSON.stringify(r.pid)}, on=${r.auto ? 'False' : 'True'})`); reload(); } }, r.auto ? 'On' : 'Off')),
     el('td', {}, el('button', { class: 'btn', style: 'padding:3px 8px;font-size:13px', disabled: r.can_buy ? null : '', 'data-tip': 'Spend his bank now by the read', onclick: () => { const result = pyJSON(`SESSION.club_act('spend_by_read', pid=${JSON.stringify(r.pid)})`); if (!result.ok) notify(result); reload(); } }, 'Spend'))));

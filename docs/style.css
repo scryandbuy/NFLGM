@@ -2807,6 +2807,8 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .personnel-fa .personnel-detail-actions .btn,.personnel-fa .personnel-detail>a.btn{font:700 17px var(--display)!important;letter-spacing:.02em;line-height:normal;justify-content:center;text-align:center}
 .personnel-fa .fa-filter-tools{gap:10px;align-items:center}.fa-group-options{width:100%;flex-wrap:wrap}.fa-position-options{width:100%;flex-wrap:wrap;padding-top:2px}.fa-position-options[hidden]{display:none!important}.personnel-fa .personnel-metrics{flex-wrap:wrap;row-gap:14px}
 .retain-tag-dialog::backdrop{background:#05090dbb}
+.ceiling-dialog{width:min(560px,calc(100vw - 28px))}
+.ceiling-milestone+.ceiling-milestone{border-top:1px solid var(--rule);margin-top:18px;padding-top:12px}
 .retain-dialog-body{padding:26px}.retain-dialog-body>small{color:var(--team-readable);font-weight:700;letter-spacing:1px;font-size:11px}
 .retain-dialog-body h2{font:900 28px var(--text);padding:8px 0 20px;border:0;background:none}.retain-dialog-body h3{font-size:19px;margin:0}.retain-dialog-body p{color:var(--ink-3);font-size:13px}
 .retain-tag-price{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:20px 0;padding:18px 0;border-block:1px solid var(--rule)}.retain-tag-price b{font-size:32px}

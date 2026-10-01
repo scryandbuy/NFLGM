@@ -374,11 +374,17 @@ def buy(player, attr, *, year=None, week=None, source=None):
     cost = cost_per_point(player, attr)
     if player.xp < cost:
         return None
+    acknowledged = player.xp_spent.get('_ceiling_notice_ack', -1) == player.xp_spent.get('_unlocks', 0)
+    was_at_ceiling = at_ceiling(player) if acknowledged else False
     player.xp -= cost
     player.ratings[attr] = cur + 1.0
     player.xp_spent[attr] = player.xp_spent.get(attr, 0) + 1
     player.xp_spent['_bought_season'] = player.xp_spent.get('_bought_season', 0) + 1
     _record_purchase(player, 'buy', cost, attr=attr, year=year, week=week, source=source)
+    if acknowledged and not was_at_ceiling and at_ceiling(player):
+        # A new arrival counts even if regression previously took him below
+        # the same ceiling. Merely viewing a capped player never re-arms this.
+        player.xp_spent.pop('_ceiling_notice_ack', None)
     return cost
 
 

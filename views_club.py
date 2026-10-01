@@ -15,6 +15,19 @@ GROUPS = [('QB', ['QB']), ('HB', ['HB']), ('FB', ['FB']), ('WR', ['WR']), ('TE',
 OFFENSE = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'}
 # the development tiers by the names the game shows: Normal, Rare, Epic, Legendary
 DEV_WORD = {'xfactor': 'Legendary', 'superstar': 'Epic', 'star': 'Rare', 'normal': 'Normal', 'slow': 'Slow'}
+
+
+def ceiling_read(p):
+    """The same scouting estimate everywhere, including room and paid unlocks."""
+    estimate = getattr(p, 'potential_range', None)
+    if estimate:
+        unlocks = int((p.xp_spent or {}).get('_unlocks', 0))
+        lo, hi = (min(99, int(v) + unlocks) for v in estimate)
+        overall = int(round(p.ovr))
+        return dict(ceiling=f'{lo}–{hi}', room=f'{max(0, lo-overall)}–{max(0, hi-overall)}', ceiling_estimated=True)
+    pot = getattr(p, 'potential', None)
+    return dict(ceiling=round(pot) if pot is not None else None,
+                room=max(0, round(pot)-round(p.ovr)) if pot is not None else None, ceiling_estimated=False)
 DEV_KEY = {'Legendary': 'xfactor', 'Epic': 'superstar', 'Rare': 'star', 'Normal': 'normal', 'Slow': 'slow'}
 
 # attribute groups per position family for the card, in FM's three columns
@@ -83,7 +96,7 @@ def _row(session, league, t, p):
                 hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), status=_status(league, p, t),
                 home_state=home_state(p), season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
                 # ratings view
-                pot=(round(p.potential) if getattr(p, 'potential', None) else None), pot_range=list(getattr(p, 'potential_range', None) or []) or None,
+                pot=(ceiling_read(p)['ceiling'] if not p.potential_range else None), pot_range=([min(99, int(v) + int(p.xp_spent.get('_unlocks', 0))) for v in p.potential_range] if p.potential_range else None),
                 # stats view: the season line
                 stats=_season_line(league, p))
 
@@ -277,7 +290,7 @@ def card(session, league, pid):
                 rookie_option=(__import__('extensions').rookie_option_price(league, p) if p.team == session.user_team else None),
                 contract_caption=('On the wire; a claiming club inherits his deal' if (p.team is None and p.contract) else 'Free agent; no contract' if p.team is None else (f"Contract signed {getattr(p.contract, 'signed', league.year)} · {p.contract.years + (len(getattr(p.contract, 'base', [])) - p.contract.years if hasattr(p.contract, 'base') else 0)} yrs · ${round(sum(getattr(p.contract, 'base', [])) + getattr(p.contract, 'sb', 0), 1)}m" if p.contract else 'No contract')),
                 season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
-                ovr=round(p.ovr), fit=round(fit, 1), ceiling=(f"{int(p.potential_range[0])}–{int(p.potential_range[1])}" if getattr(p, 'potential_range', None) else (str(round(p.potential)) if getattr(p, 'potential', None) else '—')),
+                ovr=round(p.ovr), fit=round(fit, 1), ceiling=ceiling_read(p)['ceiling'] if ceiling_read(p)['ceiling'] is not None else '—',
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), morale=morale_word(p), morale_v=round(m.value) if m is not None else None,
                 contract=(dict(per_year=0.0, years=0, hit=0.0, penalty=0.0, penalty_next=0.0, by_year=[]) if p.team is None else dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), by_year=years)),
                 free_agent=(p.team is None), on_wire=bool(p.team is None and p.contract is not None),
@@ -653,8 +666,8 @@ def development(session, league, abbr, pid):
                          gain=round(float(TG.position_score(dict(p.ratings, **{k: p.ratings[k] + 1.0}), p.pos) - p.ovr), 2)))
     rows.sort(key=lambda r: (-r['weight'], r['cost']))
     uc = XP.unlock_cost(p)
-    return dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), bank=int(round(float(p.xp or 0))), ceiling=(int(round(pot)) if pot is not None else None),
-                room=(max(0, int(round(pot)) - int(round(p.ovr))) if pot is not None else None), unlock_cost=(int(round(uc)) if uc else None), unlock_ok=(uc is not None and p.xp >= uc and (pot or 0) < 99),
+    return dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), bank=int(round(float(p.xp or 0))), **ceiling_read(p),
+                unlock_cost=(int(round(uc)) if uc else None), unlock_ok=(uc is not None and p.xp >= uc and (pot or 0) < 99),
                 practice_earned=round(float((p.xp_spent.get('_earned') or {}).get('practice',0))),
                 bought=int(XP.points_bought(p)), unlocks=int(p.xp_spent.get('_unlocks', 0) or 0), auto=bool(p.xp_spent.get('_auto', False)), dev=modifier_word(p), rows=rows)
 
@@ -682,7 +695,7 @@ def act_unlock_ceiling(league, abbr, pid):
     if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
     cost = XP.unlock(p, year=league.year, week=league.week, source='You')
     if cost is None: return dict(ok=False, why=('his ceiling is already 99' if (p.potential or 0) >= 99 else 'not enough XP for the unlock'))
-    return dict(ok=True, line=f"Ceiling raised to {round(p.potential)} for {int(round(cost)):,} XP.")
+    return dict(ok=True, line=f"Ceiling raised by one point for {int(round(cost)):,} XP.")
 
 
 def act_auto_xp(league, abbr, pid=None, on=True):
@@ -715,10 +728,9 @@ def progression(session, league, abbr):
     t = league.teams[abbr]
     rows = []
     for p in sorted(t.active(), key=lambda p: -float(p.xp or 0)):
-        pot = XP.ceiling(p)
         cheapest = min((XP.cost_per_point(p, k) for k in p.ratings if k.endswith('_rating') and k not in XP.PHYSICAL and k not in XP.TOOLS), default=None)
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), no=getattr(p, 'number', None), bank=int(round(float(p.xp or 0))), ceiling=(round(pot) if pot is not None else None),
-                         room=(max(0, int(round(pot)) - int(round(p.ovr))) if pot is not None else None), bought=int(p.xp_spent.get('_bought_season', 0) or 0), career=int(XP.points_bought(p)), auto=bool(p.xp_spent.get('_auto', False)),
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), no=getattr(p, 'number', None), bank=int(round(float(p.xp or 0))), **ceiling_read(p),
+                         bought=int(p.xp_spent.get('_bought_season', 0) or 0), career=int(XP.points_bought(p)), auto=bool(p.xp_spent.get('_auto', False)),
                          cheapest=(int(round(cheapest)) if cheapest else None), can_buy=(cheapest is not None and p.xp >= cheapest and not XP.at_ceiling(p)), dev=modifier_word(p)))
     return dict(rail=rail(session, league, abbr), rows=rows, auto_all=bool(getattr(t, 'xp_auto_all', False)), bank_total=sum(r['bank'] for r in rows), idle=sum(1 for r in rows if r['can_buy'] and not r['auto']))
 

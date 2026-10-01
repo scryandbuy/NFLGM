@@ -1282,6 +1282,29 @@ class Session:
         v['club_abbr'] = abbr or self.user_team; v['mine'] = (abbr or self.user_team) == self.user_team
         return v
 
+    def development_notices(self):
+        """Read pending ceiling milestones without changing players or simulation RNG."""
+        import xp as XP
+        from views import club
+        team = self.L.teams.get(self.user_team)
+        pending = []
+        for p in (team.roster if team else []):
+            if p.team != self.user_team or p.retired or not XP.at_ceiling(p): continue
+            unlocks = int(p.xp_spent.get('_unlocks', 0))
+            if p.xp_spent.get('_ceiling_notice_ack', -1) >= unlocks: continue
+            pending.append(dict(pid=p.pid, name=p.name, unlocks=unlocks, can_unlock=(p.potential < 99)))
+        return dict(players=pending, club=club(self.user_team) if pending else None)
+
+    def dismiss_ceiling_notice(self, pid, unlocks):
+        """Remember the acknowledged ceiling level in the existing saved XP ledger."""
+        p = self.L.player(pid)
+        if p is None or p.team != self.user_team:
+            return dict(ok=False, why='This player is no longer on your team.')
+        if int(unlocks) != int(p.xp_spent.get('_unlocks', 0)):
+            return dict(ok=False, why='His ceiling has changed since this notification.')
+        p.xp_spent['_ceiling_notice_ack'] = int(unlocks)
+        return dict(ok=True)
+
     def club_act(self, name, **kw):
         """Roster and depth actions from the page; the page re-reads the view after."""
         import views_club as VC
