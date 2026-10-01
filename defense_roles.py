@@ -364,6 +364,37 @@ def roster_depth(roster):
     return depth
 
 
+def rotation_choice(row, reserves, state, rng):
+    """One condition decision, preserving depth order and every player's role.
+
+    A starter's real advantage over available reserves earns more tolerance
+    for fatigue. Passing downs can justify one more rep in a competitive game;
+    neither consideration allows an exhausted player to bypass rest entirely.
+    """
+    starter = row['player']
+    if state is None or rng is None or not reserves:
+        return starter
+    candidates = [starter] + reserves
+    grades = [candidate_grade(p, row['role']) for p in candidates]
+    context = getattr(state, 'rotation_context', {}) or {}
+    important = (row['role'] in EDGE_ROLES and context.get('down', 1) >= 3
+                 and context.get('to_go', 0) >= 5
+                 and abs(context.get('score_diff', 0)) <= 16)
+    condition = getattr(state.cond, 'get', lambda key: 100.0)
+    for rank, p in enumerate(candidates):
+        # Compare with the next eligible alternative, not a universal starter bonus.
+        alternative = max(grades[rank + 1:], default=grades[rank])
+        gap = max(-1.0, min(1.0, (grades[rank] - alternative) / 20.0))
+        # Urgency shifts a few condition points, never the injury/health rules.
+        gap += .25 if important and rank == 0 else 0.0
+        if not state.cond.needs_rest(pid(p), position(p), rng,
+                ratings(p).get('stamina_rating', 70), gap):
+            return p
+    # All failed their rest checks. Use the freshest eligible man, not the
+    # original exhausted starter or an unrelated position.
+    return max(candidates, key=lambda p: (condition(pid(p)), grades[candidates.index(p)]))
+
+
 def field(roster, package, front=None, rng=None, state=None):
     """Final eleven with role metadata preserved through every substitution."""
     package = package_key(package)
@@ -381,17 +412,7 @@ def field(roster, package, front=None, rng=None, state=None):
     for i in order:
         row = rows[i]; chosen = row['player']
         reserves = [p for p in row['reserves'] if pid(p) not in used]
-        candidates = [chosen] + reserves
-        if state is not None and rng is not None:
-            for rank, p in enumerate(candidates):
-                if not state.cond.needs_rest(pid(p), position(p), rng,
-                        ratings(p).get('stamina_rating', 70), .6 if rank == 0 else .3):
-                    chosen = p; break
-        rotation = .30 if row['role'] in EDGE_ROLES else .32 if row['group'] == 'dl' else 0.0
-        if chosen is row['player'] and reserves and rng is not None and rng.random() < rotation:
-            chosen = reserves[0]
-            if len(reserves) > 1 and rng.random() >= (.78 if row['role'] in EDGE_ROLES else .68):
-                chosen = reserves[1]
+        chosen = rotation_choice(row, reserves, state, rng)
         row['player'] = chosen; used.add(pid(chosen))
     on_field = {pid(row['player']): row['player'] for row in rows}
     if len(on_field) != 11:

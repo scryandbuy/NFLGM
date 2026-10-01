@@ -415,6 +415,8 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
                   recent=getattr(def_state, 'cov_memory', None))
     apply_offensive_plan(oc, off_state, rng, try_yards, 1, try_yards)
     apply_defensive_plan(dc, def_state, rng)
+    if def_state is not None:
+        def_state.rotation_context = dict(down=4, to_go=try_yards, score_diff=0)
     off_f, _ = field_units(offense, off_state, rng, True, oc.get('personnel'))
     def_f, _ = field_units(defense, def_state, rng, False, dc.get('personnel'),
                            front_family=dc.get('front_family'))
@@ -2221,6 +2223,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             continue
 
         # field the units for THIS snap - condition, injuries and rotation
+        if def_state is not None:
+            def_state.rotation_context = dict(down=dr.down, to_go=dr.togo,
+                                              score_diff=dr.score_diff)
         off_f, off_pos = field_units(offense, off_state, rng, True,
                                      oc.get('personnel'))
         def_f, def_pos = field_units(defense, def_state, rng, False,

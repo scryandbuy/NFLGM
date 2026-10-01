@@ -61,7 +61,11 @@ SNAP_INTENSITY = {
     'C': 0.190, 'LG': 0.224, 'RG': 0.224, 'QB': 0.255, 'LT': 0.258, 'RT': 0.258,
     'SS': 0.422, 'FS': 0.484, 'CB': 0.536,
     'MIKE': 0.742, 'WILL': 0.742, 'SAM': 1.000,
-    'WR': 0.942, 'DT': 1.105, 'LEDG': 1.169, 'REDG': 1.169,
+    # Edges use condition-based substitutions alone. The former 1.169 cost
+    # plus a second 30% random rotation capped even elite, high-stamina edges
+    # around two thirds of snaps. This workload permits sustained starting
+    # roles while long drives, stamina, recovery and reserve quality still matter.
+    'WR': 0.942, 'DT': 1.105, 'LEDG': 0.72, 'REDG': 0.72,
     'TE': 1.257, 'HB': 1.32, 'FB': 2.333,     # HB re-solved once the back rotated by condition: 1.66 left the lead at 52% of snaps against a real 65
     'K': 0.02, 'P': 0.02, 'LS': 0.02,
 }
@@ -114,7 +118,7 @@ class Condition:
         # breather; a low one means only the spent come off. At 78 the
         # equilibrium was capped for cheap positions and centres played 97.5%.
         trigger = 92.0 - 20.0 * (1.0 - self.policy) \
-                  - 12.0 * float(np.clip(quality_gap, -1, 1))
+                  - 12.0 * float(np.clip(quality_gap, -1, 1.25))
         if c >= trigger: return False
         p = ((trigger - c) / max(1.0, trigger)) ** 0.85
         return rng.random() < float(np.clip(p * 2.2, 0.0, 0.95))
