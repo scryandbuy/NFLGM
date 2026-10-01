@@ -761,14 +761,16 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     # nothing, a sack or a turnover ends the attempt. Each snap takes PLAY_SECS with the clock stopped after it; a
     # completion in bounds keeps the clock running and, with no timeout left and no time to spare, ends the half
     best_play = None; k_best = 0
-    n_max = int((secs_in_half - 4.0) // PLAY_SECS)
+    n_max = min(max(0, 4 - int(dr.down)), int((secs_in_half - 4.0) // PLAY_SECS))
     surv = 1.0; yk = y; sk = secs_in_half; tos_k = own_tos
     for k in range(1, max(0, min(n_max, own_tos + 3)) + 1):
         sk -= PLAY_SECS
         if sk < 3: break
         p_comp = 1.0 - PLAY_BAD - PLAY_INC
         if tos_k > 0: tos_k -= 1; surv *= (1.0 - PLAY_BAD)                                  # the timeout stops it after a catch
-        elif sk >= 25: surv *= (1.0 - PLAY_BAD)                                             # enough clock to absorb a catch in bounds
+        elif sk >= 18:
+            sk -= 12.0
+            surv *= (1.0 - PLAY_BAD)                                             # enough clock to absorb a catch in bounds
         else: surv *= (1.0 - PLAY_BAD - p_comp * (1.0 - PLAY_OOB))                          # a catch in bounds ends it; only the sideline saves it
         yk = max(1.0, yk - PLAY_GAIN * p_comp)
         terminal = max(kick_ev(yk), shot_ev(yk, sk, tos_k))
@@ -801,7 +803,7 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     # THE BLEED: k slow snaps with the clock running, then the play clock run down and one shot at the end zone
     # with a few seconds left, then the kick if it misses; the other side gets nothing back. The best k is taken.
     bleed_ev = None; k_bleed = 0; bleed_final = 'kick'
-    for k in range(0, 4):
+    for k in range(0, max(0, 4 - int(dr.down)) + 1):
         rest = secs_in_half - PLAY_SECS_RUN * k
         if rest < 6: break
         yk = max(1.0, y - PLAY_GAIN * (1.0 - PLAY_BAD - PLAY_INC) * k)
@@ -878,6 +880,10 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
         # nothing to stop after a score (the clock is dead at the whistle) or on the play that reaches the
         # two-minute warning (the warning stops it for free)
         in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
+        failed_third = dr.down >= 3 and float(out.get('yards', 0) or 0) < dr.togo
+        if (half_end is not None and dr.score_diff >= 0 and failed_third
+                and dr.yardline - float(out.get('yards', 0) or 0) > 40):
+            return False, None  # do not stop a leading/tied stalled drive just to punt
         # the defense stops the clock in the last three minutes of the GAME when it trails; in the first
         # half only a two-score deficit is worth a timeout to get the ball back before the break
         if dr.score_diff > 0 and in_bounds and timeouts.left.get(other, 0) > 0 and half_end is None and secs_in_half < 180:
