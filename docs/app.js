@@ -815,7 +815,8 @@ function ovrCell(o) { return el('span', { class: 'ovr ' + (o >= 88 ? 't1' : o >=
 function fitCell(f) { return el('span', { class: 'fit ' + (f > 0.05 ? 'p' : f < -0.05 ? 'm' : 'z') }, (f > 0 ? '+' : '') + f.toFixed(1)); }
 // a jersey number of 0 is a number; only a missing one falls through to the position
 function jerseyNo(n) { return (n === null || n === undefined || n === '') ? undefined : n; }
-function who(r) { return el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, jerseyNo(r.no) ?? r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, [r.home_state, r.season_no ? `${r.season_no}${ord(r.season_no)} season` : null].filter(Boolean).join(' · ')))); }
+function playerExperience(season) { return Number(season) === 1 ? 'Rookie' : season ? `${season}${ord(season)} season` : ''; }
+function who(r) { return el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, jerseyNo(r.no) ?? r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, [r.home_state, playerExperience(r.season_no)].filter(Boolean).join(' · ')))); }
 
 let rosterSide = 'All', rosterQuery = '', rosterSel = null;
 let viewClub = null;   // null = your own club; an abbreviation = another club's page, read-only
@@ -961,7 +962,7 @@ function renderCard(v) {
   s.append(el('div', { class: 'head' },
     el('div', { class: 'jersey', style: `background:${col}` }, jerseyNo(v.no) ?? v.pos),
     el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
-      el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.age}${v.size ? ' · ' + v.size : ''}${v.home_state ? ' · Home State: ' + v.home_state : ''}${v.season_no ? ` · ${v.season_no}${ord(v.season_no)} season` : ''} · ${v.draft}` + (v.team ? ` · ${v.team.name}` : ' · Free agent')),
+      el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.age}${v.size ? ' · ' + v.size : ''}${v.home_state ? ' · Home State: ' + v.home_state : ''}${v.season_no ? ` · ${playerExperience(v.season_no)}` : ''} · ${v.draft}` + (v.team ? ` · ${v.team.name}` : ' · Free agent')),
       el('div', { class: 'hfacts' }, ...(v.free_agent ? [el('div', {}, el('span', {}, 'Status'), el('b', {}, v.on_wire ? 'On the wire' : 'Free agent')), el('div', {}, el('span', {}, 'Market'), el('b', {}, v.market_apy != null ? `~$${v.market_apy}m per year` : ''))] : [el('div', {}, el('span', {}, `Cap Hit ${v.rail.year}`), el('b', {}, `$${v.contract.hit.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Penalty'), el('b', { 'data-tip': cutPenaltyText(v.contract) }, `$${v.contract.penalty.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Trade Value'), el('b', { style: 'color:var(--ink-2)' }, v.interest))]))),
     el('div', { class: 'ovrbig' }, el('b', {}, v.ovr), el('span', {}, 'Overall · Scheme Fit ', el('strong', { class: 'fit-change ' + (v.fit >= 0 ? 'positive' : 'negative') }, `${v.fit >= 0 ? '+' : ''}${v.fit.toFixed(1)}`)))));
   // tabs and actions
