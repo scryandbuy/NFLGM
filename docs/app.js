@@ -2113,13 +2113,6 @@ function renderBoard(v) {
     if (v.on_clock) foot.append(el('button', { class: 'btn go', disabled: (r && !r.taken) ? null : '', onclick: () => { const rr = pyJSON(`SESSION.draft_act('pick', pid=${JSON.stringify(boardSel)})`); notify(rr); if (rr.ok) location.hash = '#draft/day'; } }, 'Draft Player'));
     foot.append(el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(boardSel)})`); reload(); } }, 'Add to Your Board'), el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { location.hash = '#club/player/' + boardSel; } }, 'Prospect Card'), el('span', { class: 'count', style: 'margin-left:auto' }, r ? `${r.name} · ${r.pos} · ${r.home_state}` : 'Click a row to select a prospect')); };
   s.append(el('div', { class: 'board-wrap' }, tbl), foot); draw(); drawFoot();
-  // the spring, inline: stock moves and flags
-  const sp = v.spring || null;
-  s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'The Spring', el('small', {}, 'Stock Moves and Flags')));
-  const spBox = el('div', { class: 'pad' });
-  if (v.spring_done) spBox.append(el('a', { class: 'btn', href: '#draft/spring' }, 'Open the Spring'));
-  else spBox.append(el('div', { class: 'empty' }, 'The combine, the Senior Bowl, pro days and your visits come in the Spring step. Name your visits now; the second look is the sharpest read your scouts get.'));
-  s.append(spBox);
   page.append(s);
 }
 
