@@ -55,6 +55,12 @@ def main():
         'nfl_margin_minus_spread_sd': float((real-spread).std()),
         'sim_mean_abs_strength_gap': float(np.abs(strengths).mean()),
         'sim_strength_gap_sd': float(strengths.std()),
+        'sim_strength_by_season': {
+            str(2026+i): {
+                'mean_abs_gap': float(np.abs(strengths[272*i:272*(i+1)]).mean()),
+                'gap_sd': float(strengths[272*i:272*(i+1)].std()),
+            } for i in range(3)
+        },
         'sim_margin_per_strength_point': float(slope),
         'sim_predicted_margin_abs_mean': float(np.abs(expectation).mean()),
         'sim_predicted_margin_sd': float(expectation.std()),
