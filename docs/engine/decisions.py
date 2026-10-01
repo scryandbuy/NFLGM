@@ -148,7 +148,7 @@ def _flip(score_diff, seconds_left, yardline_100, is_home=1, **kw):
 # ============================================================ FOURTH DOWN
 def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
                 fg_prob=None, conv_prob=None, aggression=DEFAULT_AGGRESSION,
-                recent_failure=0.0, is_home=1):
+                recent_failure=0.0, is_home=1, timeout_edge=0):
     """
     Returns the call, the win probability edge of going, and how strong the
     recommendation is.
@@ -162,24 +162,24 @@ def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
 
     # ---- go for it ----
     wp_conv = win_prob(score_diff, seconds_left - 6, max(1, yardline_100 - ytg),
-                       1, min(10, max(1, yardline_100 - ytg)), is_home=is_home)
-    wp_fail = _flip(score_diff, seconds_left - 6, yardline_100, is_home=is_home)
+                       1, min(10, max(1, yardline_100 - ytg)), is_home=is_home, timeout_edge=timeout_edge)
+    wp_fail = _flip(score_diff, seconds_left - 6, yardline_100, is_home=is_home, timeout_edge=-timeout_edge)
     wp_go = p_conv * wp_conv + (1 - p_conv) * wp_fail
 
     # ---- field goal ----
     dist = yardline_100 + 17
     if fg_prob is None:
         fg_prob = float(np.clip(1.02 - 0.0095 * max(0, dist - 20), 0.02, 0.985))
-    wp_made = _flip(score_diff + 3, seconds_left - 6, 25, is_home=is_home)
+    wp_made = _flip(score_diff + 3, seconds_left - 6, 25, is_home=is_home, timeout_edge=-timeout_edge)
     wp_miss = _flip(score_diff, seconds_left - 6, min(99, yardline_100 + 8),
-                    is_home=is_home)
+                    is_home=is_home, timeout_edge=-timeout_edge)
     wp_fg = fg_prob * wp_made + (1 - fg_prob) * wp_miss
     if dist > 65:
         wp_fg = -1.0                      # not a real option
 
     # ---- punt ----
     landed = max(1, min(99, 100 - (yardline_100 - PUNT_NET)))
-    wp_punt = _flip(score_diff, seconds_left - 6, 100 - landed, is_home=is_home)
+    wp_punt = _flip(score_diff, seconds_left - 6, 100 - landed, is_home=is_home, timeout_edge=-timeout_edge)
     if yardline_100 <= 35:
         wp_punt -= 0.004                  # punting from field goal range costs
 

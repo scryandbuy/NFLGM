@@ -131,7 +131,7 @@ def fourth_zone(yardline_100):
 
 def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
                          aggression=0.5, timeout_edge=0, use_wp=True,
-                         kicker=None, rate_fn=None, must_score=False, half_seconds_left=None):
+                         kicker=None, rate_fn=None, must_score=False, half_seconds_left=None, is_home=1):
     """
     go, field_goal or punt.
 
@@ -179,7 +179,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_table = float(np.clip(GO_RATE[band][zone] * (0.55 + 0.60 * aggression), 0.0, 1.0))     # the observed rates already carry an average coach; the personality term sits around them
     r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100, ydstogo,
-                       fg_prob=kick_chance, aggression=aggression, is_home=1) if use_wp else None
+                       fg_prob=kick_chance, aggression=aggression, is_home=is_home, timeout_edge=timeout_edge) if use_wp else None
     if r is not None:
         # the model's edge as a probability: a small edge is a lean, a big one nearly certain, a negative one nearly never
         edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
@@ -1983,7 +1983,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dec = fourth_down_decision(dr.yardline, dr.togo, dr.score_diff,
                                        dr.clock, rng, aggr4,
                                        kicker=(offense.get('k') or {}), rate_fn=rate_fn,
-                                       must_score=must_score,
+                                       must_score=must_score, is_home=int(pos == 'home'),
+                                       timeout_edge=(timeouts.left.get(pos, 0) - timeouts.left.get('away' if pos == 'home' else 'home', 0)) if timeouts is not None else 0,
                                        half_seconds_left=(dr.clock - half_end if half_end is not None else None))
             if dec == 'field_goal':
                 flag = E.special_teams_penalty_check(rng, 'field_goal')
@@ -2138,6 +2139,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         try:
             import playcall as PC
             oc, checked = PC.audible(oc, dc, offense, rate_fn, rng,
+                                     score_diff=dr.score_diff, secs_left=dr.clock,
                                      family_mix=(off_state.plan.run_scheme_mix
                                                  if off_state is not None and off_state.plan is not None else None))
             if checked and late_lean >= 6.0 and not oc.get('is_pass') and dr.togo > 1.5:
