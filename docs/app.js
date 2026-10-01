@@ -123,7 +123,7 @@ async function bootEngine() {
 }
 
 function cutPenaltyText(v, year) { return `$${v.penalty.toFixed(1)}m ${year == null ? 'this year' : year}${v.penalty_next ? ` + $${v.penalty_next.toFixed(1)}m ${year == null ? 'next year' : year + 1}` : ''}`; }
-const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'practice_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_offer_sheet', 'inbox_hurt_action', 'inbox_mark_all', 'inbox_read', 'inbox_delete', 'inbox_clear_read']);
+const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'practice_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_offer_sheet', 'inbox_hurt_action', 'inbox_mark_all', 'inbox_read', 'inbox_later', 'inbox_delete', 'inbox_clear_read']);
 const READ_ONLY_ACTIONS = new Set(['personnel_act:ask', 'personnel_act:gather', 'personnel_act:offer_preview', 'frontoffice_act:restructure_preview', 'draft_act:read_trade_up', 'draft_act:offers', 'plan_act:save', 'plan_act:save_failed']);
 AUTO_SAVE_METHODS.add('inbox_roster_dismiss');
 let autosaveQueued = false;
@@ -497,7 +497,7 @@ function renderPortal(v) {
       card.append(el('div', { class: 'h' }, el('div', { class: 'k' }, 'Contracts · Final Year'), el('div', { class: 's' }, c.subject)),
         el('div', { class: 'facts2', style: 'grid-template-columns:1fr 1fr;padding:6px 0' }, el('div', {}, el('span', {}, 'Agent Asks'), el('b', {}, c.ask != null ? `$${c.ask.toFixed(1)}m` : 'Ask him')), el('div', {}, el('span', {}, 'Years Left'), el('b', {}, c.years_left ?? '—'))),
         el('div', { class: 'b' }, c.line || c.body),
-        el('div', { class: 'a' }, el('button', { class: 'btn go', onclick: () => { pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(c.pid)}, kind='extension')`); location.hash = '#personnel/extensions'; } }, 'Negotiate'), el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.inbox_read(${c.id})`); notify({ok:true,line:'Kept in your inbox for later.'}); location.hash = '#portal/inbox'; refresh(); } }, 'Later')));
+        el('div', { class: 'a' }, el('button', { class: 'btn go', onclick: () => { pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(c.pid)}, kind='extension')`); location.hash = '#personnel/extensions'; } }, 'Negotiate'), el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.inbox_later(${c.id})`); notify({ok:true,line:'Kept in your inbox for later.'}); refresh(); } }, 'Later')));
     } else {
       card.append(el('div', { class: 'h' }, el('div', { class: 'k' }, c.kind), el('div', { class: 's' }, c.subject)), el('div', { class: 'b' }, c.body),
         el('div', { class: 'a', style: 'display:flex;gap:6px' }, el('button', { class: 'btn', onclick: () => location.hash = `#portal/inbox/${c.id}` }, 'Open'), deskAction(c.kind)));
