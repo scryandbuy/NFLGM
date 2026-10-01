@@ -45,7 +45,7 @@ def run(n=160, seed=3, team='KC'):
         pl = [l for r in rs for l in r['plays']]
         runs = [l for l in pl if l['type']=='run']; dbs = [l for l in pl if l['type'] in ('complete','incomplete','sack','drop','interception')]
         att = [l for l in dbs if l['type']!='sack']
-        print(f"  {b:10s} {n_:5d}   {np.mean([r['pts'] for r in rs]):4.2f}  {f('Touchdown'):4.1f}  {f('Punt'):5.1f}  {f('Turnover'):4.1f}  {f('Turnover on downs'):5.1f}   {np.mean([bool(l.get('is_pass')) for l in pl])*100:3.0f}   {np.mean([r['yards'] for r in rs]):5.1f}   {np.mean([l['yards'] for l in runs]) if runs else 0:5.2f}    {np.mean([l.get('yards') or 0 for l in dbs]) if dbs else 0:5.2f}   {np.mean([l['type']=='complete' for l in att])*100 if att else 0:4.1f}  {np.mean([l['type']=='interception' for l in att])*100 if att else 0:4.2f}")
+        print(f"  {b:10s} {n_:5d}   {np.mean([r['pts'] for r in rs]):4.2f}  {f('Touchdown'):4.1f}  {f('Punt'):5.1f}  {f('Turnover') + f('Defensive touchdown'):4.1f}  {f('Turnover on downs'):5.1f}   {np.mean([bool(l.get('is_pass')) for l in pl])*100:3.0f}   {np.mean([r['yards'] for r in rs]):5.1f}   {np.mean([l['yards'] for l in runs]) if runs else 0:5.2f}    {np.mean([l.get('yards') or 0 for l in dbs]) if dbs else 0:5.2f}   {np.mean([l['type']=='complete' for l in att])*100 if att else 0:4.1f}  {np.mean([l['type']=='interception' for l in att])*100 if att else 0:4.2f}")
 
 if __name__ == '__main__':
     run(int(sys.argv[1]) if len(sys.argv) > 1 else 160)

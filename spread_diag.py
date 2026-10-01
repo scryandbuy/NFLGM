@@ -28,7 +28,7 @@ def run(weeks=17, seed=2026):
             for pos, d in r['drives']:
                 t, u = (h, a) if pos == 'home' else (a, h)
                 for side, tm in (('off', t), ('def', u)):
-                    c = C[side][tm]; c['drives'] += 1; c['to'] += d.result == 'Turnover'
+                    c = C[side][tm]; c['drives'] += 1; c['to'] += d.result in ('Turnover', 'Defensive touchdown')
                     for l in d.log:
                         if not isinstance(l, dict): continue
                         ty = l.get('type')

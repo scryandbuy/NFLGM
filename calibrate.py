@@ -140,7 +140,7 @@ class Collector:
             'drive_touchdown_pct': res['Touchdown'] / n * 100,
             'drive_fieldgoal_pct': res['Field goal'] / n * 100,
             'drive_punt_pct': res['Punt'] / n * 100,
-            'drive_turnover_pct': res['Turnover'] / n * 100,
+            'drive_turnover_pct': (res['Turnover'] + res['Defensive touchdown']) / n * 100,
             'drive_downs_pct': res['Turnover on downs'] / n * 100,
             'completion_pct': len(ypp['complete']) / max(att, 1) * 100,
             'sack_pct': len(ypp['sack']) / max(db, 1) * 100,

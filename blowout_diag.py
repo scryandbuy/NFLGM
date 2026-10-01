@@ -94,7 +94,7 @@ def by_script(weeks=10, seed=2026):
                                  yards=d.start - max(0, d.yardline),
                                  secs=None))
                 if d.points > 0: sc[pos] += d.points
-                elif d.points < 0: sc[other] += 2
+                elif d.points < 0: sc[other] += abs(d.points)
     def band(sd):
         return 'down 14+' if sd <= -14 else 'down 7-13' if sd <= -7 else 'down 1-6' if sd < 0 else 'tied' if sd == 0 else 'up 1-6' if sd < 7 else 'up 7-13' if sd < 14 else 'up 14+'
     print(f"\n  SECOND-HALF DRIVES by score at the start   n   pts/drive  TD%   FG%  punt%  TO%  downs%  pass%  yds/drive  start(yds to go)")
@@ -103,7 +103,7 @@ def by_script(weeks=10, seed=2026):
         if not rs: continue
         n = len(rs)
         f = lambda k: sum(r['res']==k for r in rs)/n*100
-        print(f"  {b:10s} {n:5d}   {np.mean([r['pts'] for r in rs]):5.2f}   {f('Touchdown'):4.1f}  {f('Field goal'):4.1f}  {f('Punt'):5.1f}  {f('Turnover'):4.1f}  {f('Turnover on downs'):5.1f}   {np.nanmean([r['is_pass'] for r in rs])*100:4.0f}   {np.mean([r['yards'] for r in rs]):5.1f}      {np.mean([r['start'] for r in rs]):5.1f}")
+        print(f"  {b:10s} {n:5d}   {np.mean([r['pts'] for r in rs]):5.2f}   {f('Touchdown'):4.1f}  {f('Field goal'):4.1f}  {f('Punt'):5.1f}  {f('Turnover') + f('Defensive touchdown'):4.1f}  {f('Turnover on downs'):5.1f}   {np.nanmean([r['is_pass'] for r in rs])*100:4.0f}   {np.mean([r['yards'] for r in rs]):5.1f}      {np.mean([r['start'] for r in rs]):5.1f}")
     print('  (real: points per drive barely moves with score; trailing teams throw ~70% and turn it over a little more, leaders punt more)')
 
 if __name__ == '__main__' and len(sys.argv) > 2:
