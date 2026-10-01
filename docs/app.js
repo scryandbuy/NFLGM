@@ -359,14 +359,14 @@ function renderInbox(v) {
     if (m.kind === 'roster_report') pane.append(rosterReportCards(m, reload));
     if (m.kind === 'trade_offer') pane.append(el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openTradeOffer(cur.id, reload) }, cur.decide ? 'Open Trade Offer' : 'View Trade Offer')));
     else if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
-    else if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=False)`)); reload(); } }, 'Sit Him'), el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
+    else if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=False)`)); reload(); } }, 'Sit Him'), hasPlayerReference(m,m.pid) ? null : el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
     else if (cur.decide && m.kind === 'offer_sheet') pane.append(offerSheetActions(cur.id, reload));
     else if (cur.decide && m.kind === 'roster' && m.link) pane.append(el('div',{class:'acts'},el('a',{class:'btn go',href:linkHash(m.link)},'Manage Roster →'),el('a',{class:'btn quiet',href:'#club/ps'},'View Practice Squad')));
     else if (cur.decide) {
       const destination = m.link ? linkHash(m.link) : ({ staff:'#frontoffice/staff', gameplan:'#gameplan/week', game_plan:'#gameplan/week', exit:'#frontoffice/exit', contract_year:'#personnel/extensions', offer_sheet:'#personnel/extensions', match_request:'#personnel/fa' })[m.kind];
       if (destination) pane.append(el('div', { class: 'acts' }, el('a', { class: 'btn go', href: destination }, m.kind === 'match_request' || m.kind === 'offer_sheet' ? 'View Player' : 'Handle Decision')));
     }
-    else if (m.link && !(m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60)))) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn' + (m.kind === 'negotiation' ? ' go' : ''), href: linkHash(m.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There')));
+    else if (m.link && !(m.link.startsWith('player:') && hasPlayerReference(m,m.link.slice(7))) && !(m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60)))) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn' + (m.kind === 'negotiation' ? ' go' : ''), href: linkHash(m.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There')));
     if (cur.decide) pane.append(el('div',{class:'inbox-decision-note'},'This decision stays open until it is resolved.'));
   } else pane.append(el('div', { class: 'empty' }, 'Select a message.'));
   box.append(list, pane); s.append(box); page.append(s);
@@ -403,6 +403,7 @@ function rosterReportCards(message, reload) {
   }
   return list;
 }
+function hasPlayerReference(message, pid) { return (message.entities || []).some(r => r.kind === 'player' && String(r.id) === String(pid)); }
 function linkHash(link) {
   if (!link) return '#portal';
   const [a, b] = String(link).split(':');
@@ -2909,13 +2910,13 @@ function renderTransactions(v) {
     if (txGroup !== 'Coaching' && rows.length) list.append(el('div',{class:'transaction-columns','aria-hidden':'true'},...['WHEN','TEAM','MOVE','PLAYER / COACH','DETAILS',''].map(label=>el('span',{},label))));
     for (const r of rows.slice(0, txShown)) {
       if (r.coaching) { list.append(coachingMoveRow(r)); continue; }
-      const link = (r.link === 'card' || r.link === 'contract') && r.pid ? el('a', { class: 'transaction-open', href: '#club/player/' + r.pid, 'aria-label':`Open ${r.person || 'player'} card`, 'data-tip':'Open player card' }, '›') : r.link === 'trade' ? el('a', { class: 'transaction-open', href: '#personnel/trades', 'aria-label':'Open trades', 'data-tip':'Open trades' }, '›') : r.link === 'carousel' ? el('button', { class:'transaction-open', 'aria-label':'View coaching transactions', 'data-tip':'View coaching transactions', onclick:()=>{txGroup='Coaching';txShown=60;renderTransactions(v);} }, '›') : el('span', {});
+      const link = r.link === 'trade' ? el('a', { class: 'transaction-open', href: '#personnel/trades', 'aria-label':'Open trades', 'data-tip':'Open trades' }, '›') : r.link === 'carousel' ? el('button', { class:'transaction-open', 'aria-label':'View coaching transactions', 'data-tip':'View coaching transactions', onclick:()=>{txGroup='Coaching';txShown=60;renderTransactions(v);} }, '›') : el('span', {});
       const theme = teamTheme(r.team || {});
       list.append(el('div', { class: 'transaction-row', style:`--transaction-base:${theme.base};--transaction-accent:${theme.accent};--transaction-readable:${theme.readable}` },
         el('time', {}, String(r.year ?? ''), el('small',{},transactionWhen(r))),
         el('div',{class:'transaction-team'},r.team ? clubLink(r.team.abbr,r.team.name) : 'League',el('small',{},r.team ? `${r.team.abbr}${r.team.abbr === v.rail.club.abbr?' · YOUR TEAM':''}` : '')),
         el('span',{class:'transaction-action'},r.tag),
-        el('div',{class:'transaction-person'},el('b',{},r.person || r.line),el('small',{},r.role || '')),
+        el('div',{class:'transaction-person'},el('b',{},r.pid ? el('a',{class:'entity-link',href:'#club/player/'+encodeURIComponent(r.pid),onclick:e=>e.stopPropagation()},r.person || r.line) : r.person || r.line),el('small',{},r.role || '')),
         el('div',{class:'transaction-detail'},r.detail || '',r.detail_secondary ? el('small',{},r.detail_secondary) : ''),link));
     }
     if (!rows.length) list.append(el('div', { class: 'empty' }, 'Nothing matches.'));

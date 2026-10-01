@@ -261,7 +261,7 @@ def entity_catalog(league, known=None):
     from views import CLUB_NAME, CLUB_DISPLAY_ABBR
     rows = [dict(kind='player', id=str(p.pid), name=p.name,
                  aliases=[p.name[0]+'. '+p.name.split(' ',1)[1]] if ' ' in p.name else [])
-            for p in players.values() if p.name]
+            for p in players.values() if getattr(p, 'name', None) and getattr(p, 'pid', None) is not None]
     rows += [dict(kind='team', id=a, name=CLUB_NAME.get(a, a),
                   aliases=list(dict.fromkeys([a, CLUB_DISPLAY_ABBR.get(a,a)]))) for a in getattr(league, 'teams', {})]
     names = {}
