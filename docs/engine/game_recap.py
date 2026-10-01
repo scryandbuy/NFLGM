@@ -71,6 +71,17 @@ def stats(rows):
                 third=len(thirds), converted=sum(converted(p) for p in thirds))
 
 
+def return_summary(res, side):
+    rows = []
+    for pos, dr in res.get('drives', []):
+        for p in dr.log:
+            if p.get('type') not in ('punt', 'kickoff') or p.get('nullified'): continue
+            receiving = ('away' if pos == 'home' else 'home') if p['type'] == 'punt' else p.get('possession', pos)
+            if receiving == side: rows.append(p)
+    return dict(td=sum(bool(p.get('touchdown')) and not p.get('blocked') for p in rows),
+                lost=sum(bool(p.get('fumble_lost')) for p in rows))
+
+
 def rate(n, d): return f'{n / d:.1f}' if d else '—'
 
 
@@ -630,7 +641,7 @@ def post_snap_counts(league, home, away, week, states, playoffs=False):
                                    row['name'], row['pid']))
         report[unit] = dict(total=int(recorded['total']), rows=rows)
     report['note'] = ('Recorded offensive and defensive participation, including overtime, two-point attempts '
-                      'and live plays erased by penalties. Kneeldowns and kicking plays are not tracked.')
+                      'kneeldowns and live plays erased by penalties. Kicking plays are not tracked.')
     body = []
     for unit in order:
         body.append(unit.upper() + '\n' + '\n'.join(
@@ -658,13 +669,14 @@ def post(league, home, away, week, res, playoffs=False):
     if IE.seen(league, key): return None
     own, against = plays(res, side), plays(res, other)
     me, them = stats(own), stats(against); good, bad = strengths(me, them)
+    own_returns, their_returns = return_summary(res, side), return_summary(res, other)
     ours, theirs = int(res[side]), int(res[other])
     outcome = 'Win' if ours > theirs else 'Loss' if ours < theirs else 'Tie'
     ot_own, ot_against = plays(res, side, 3), plays(res, other, 3)
     has_ot = bool(res.get('overtime') or ot_own or ot_against)
     intro = (f"{outcome}, {ours}–{theirs} against {opp}{' in overtime' if has_ot else ''}. "
              f"We gained {me['yards']:.0f} scrimmage yards and allowed {them['yards']:.0f}; "
-             f"turnovers {me['turnovers']} committed, {them['turnovers']} forced.")
+             f"turnovers {me['turnovers'] + own_returns['lost']} committed, {them['turnovers'] + their_returns['lost']} forced.")
     sections = []
     def add(title, lines=None, reviews=None):
         sections.append(dict(title=title, lines=lines or [], reviews=reviews or []))
@@ -672,7 +684,12 @@ def post(league, home, away, week, res, playoffs=False):
     add('What needs work', bad or ['No clear statistical weakness stood out in the recorded scrimmage plays.'])
     kicks = [p for pos, d in res.get('drives', []) if pos == side for p in getattr(d, 'log', [])
              if p.get('type') == 'field_goal' and not p.get('nullified')]
-    if kicks: add('Special teams', [f"We made {sum(bool(p.get('made')) for p in kicks)}/{len(kicks)} field goals."])
+    special = [f"We made {sum(bool(p.get('made')) for p in kicks)}/{len(kicks)} field goals."] if kicks else []
+    if own_returns['td']: special.append(f"We scored {own_returns['td']} return touchdown(s).")
+    if their_returns['td']: special.append(f"We allowed {their_returns['td']} return touchdown(s).")
+    if own_returns['lost']: special.append(f"We lost {own_returns['lost']} fumble(s) on returns.")
+    if their_returns['lost']: special.append(f"We recovered {their_returns['lost']} opponent return fumble(s).")
+    if special: add('Special teams', special)
     context = res.get('coaching_review') or {}; pre = context.get('pregame')
     if pre is None: add('Pregame plan', ['The kickoff plan was not recorded for this game.'])
     elif not pre.get('changes'): add('Pregame plan', ['You kept the base weekly plan; no pregame overrides were applied.'])

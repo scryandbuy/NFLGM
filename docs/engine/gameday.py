@@ -59,6 +59,10 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
     ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
               td=bool(q.get('touchdown') or q.get('td') or q.get('defensive_td')), defensive_td=bool(q.get('defensive_td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')), nullified=bool(q.get('nullified')))
     ln['scoring_side'] = q.get('scoring_side') or ('defense' if q.get('defensive_td') or (q.get('blocked') and q.get('recovery') == 'receiving') else 'offense')
+    if q.get('type') in ('punt', 'kickoff') and q.get('returner'):
+        ln.update(returner=nm(q['returner']), return_team=def_abbr if q['type']=='punt' else off_abbr,
+                  return_yards=float(q.get('ret', 0)), return_td=bool(q.get('touchdown')),
+                  turnover_team=(def_abbr if q['type']=='punt' else off_abbr) if q.get('fumble_lost') else None)
     if q.get('type') == 'timeout':
         ln.update(timeout_side=q.get('side'), timeout_team=q.get('side_abbr'),
                   timeouts_left=q.get('left'))
@@ -126,7 +130,7 @@ def capture(league, played, user):
             start = float(getattr(dr, 'start', 75)); end = ticker.offensive_drive_end(dr)
             res_word = ticker.drive_result(dr, res.get('overtime', False))
             drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), start_label=ticker._spot(start, off_abbr, def_abbr), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=round(start - end, 1), first_downs=int(getattr(dr, 'first_downs', 0) or 0),
-                               result=res_word, points=pts, quarter=start_quarter, scoring_quarter=scoring_quarter(dr), clock=_clock(getattr(dr, 'clock', 0)),
+                               result=res_word, points=pts, return_only=bool(getattr(dr, 'return_only', False)), quarter=start_quarter, scoring_quarter=scoring_quarter(dr), clock=_clock(getattr(dr, 'clock', 0)),
                                score=f"{hs}–{as_}", plays=plays))
             diff = (hs - as_) if me_home else (as_ - hs)
             wp.append(round(100 * _wp(diff, float(getattr(dr, 'clock', 0) or 0), me_home)))
@@ -155,7 +159,8 @@ def capture(league, played, user):
                 elif ty == 'sack': t_['pass_yds'] += y; t_['yards'] += y; t_['sacks_allowed'] += 1
                 elif ty == 'kneel': t_['rush_yds'] += y; t_['yards'] += y
                 elif ty == 'interception': t_['turnovers'] += 1
-                if pl.get('fumble_lost'): t_['turnovers'] += 1               # a lost fumble is a flag on the play, not a play of its own
+                if pl.get('fumble_lost'):
+                    (d_ if ty == 'punt' else t_)['turnovers'] += 1
                 if pl.get('down') == 3 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
                     t_['third_att'] += 1; t_['third_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble') and not pl.get('fumble_lost'))
                 if pl.get('down') == 4 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
@@ -190,9 +195,16 @@ def capture(league, played, user):
         def top(pids, key, n=3):
             rows = [(pid, book.p[pid]) for pid in pids if pid in book.p and book.p[pid].get(key, 0) > 0]
             return sorted(rows, key=lambda x: -x[1].get(key, 0))[:n]
-        box = dict(passing=[], rushing=[], receiving=[], defense=[])
+        box = dict(passing=[], rushing=[], receiving=[], defense=[], returns=[])
         for abbr in (home, away):
             pids = [p.pid for p in league.teams[abbr].roster]
+            for pid in pids:
+                l = book.p.get(pid, {})
+                if l.get('kr', 0) or l.get('pr', 0):
+                    box['returns'].append(dict(team=abbr, name=league.player(pid).name,
+                        kr=int(l.get('kr', 0)), kr_yds=round(l.get('kr_yds', 0), 1),
+                        pr=int(l.get('pr', 0)), pr_yds=round(l.get('pr_yds', 0), 1),
+                        td=int(l.get('kr_td', 0) + l.get('pr_td', 0))))
             for pid, l in top(pids, 'pass_att', 2):
                 p = league.player(pid); box['passing'].append(dict(team=abbr, name=p.name, ca=f"{int(l.get('pass_cmp', 0))}/{int(l.get('pass_att', 0))}", yds=int(l.get('pass_yds', 0)), td=int(l.get('pass_td', 0)), int_=int(l.get('ints', 0)), lng=longest.get(('pass', pid), 0)))
             for pid, l in top(pids, 'rush_att', 2):
