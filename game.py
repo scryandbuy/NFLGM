@@ -1019,6 +1019,7 @@ class TeamState:
         self.cov_memory = {}     # what his coverage calls have produced
         self.out = set()         # unavailable right now
         self.snaps = {}
+        self.snap_counts = {}
 
     def available(self, group, position):
         """Men at this position who are not hurt, deepest-first order kept."""
@@ -1143,6 +1144,9 @@ class TeamState:
         """Recovery and jadedness roll forward between games."""
         import health as H
         self.last_snaps = dict(self.snaps)     # keep the game log readable
+        self.last_snap_counts = {unit: dict(total=row['total'], players=dict(row['players']))
+                                 for unit, row in self.snap_counts.items()}
+        self.snap_counts = {}
         fitness = {}
         try:
             for grp in (self.roster or {}).values():
@@ -1558,6 +1562,18 @@ def package_units(roster, state, rng, is_offense, package, front_family=None):
 
 
 def field_units(roster, state, rng, is_offense, package=None, front_family=None):
+    """Record the actual selected unit without changing selection or random draws."""
+    result, positions = _field_units(roster, state, rng, is_offense, package, front_family)
+    if state is not None:
+        if not hasattr(state, 'snap_counts'): state.snap_counts = {}
+        row = state.snap_counts.setdefault('offense' if is_offense else 'defense', dict(total=0, players={}))
+        row['total'] += 1
+        for pid in positions:
+            row['players'][pid] = row['players'].get(pid, 0) + 1
+    return result, positions
+
+
+def _field_units(roster, state, rng, is_offense, package=None, front_family=None):
     """
     Put eleven men on the field for this snap, honouring condition and
     injuries. Anyone not selected recovers. This is where rotation actually

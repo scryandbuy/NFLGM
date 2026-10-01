@@ -24,6 +24,14 @@ const old=ctx.renderRecapBody({kind:'result',body:'Win\n\nPREGAME PLAN\nRun more
 assert.equal(all(old).filter(n=>n.tag==='h4').length,2);
 assert.ok(!text(old).includes('not proof of cause'));
 assert.equal(text(ctx.renderRecapBody({body:'Ordinary mail'})),'Ordinary mail');
+const snaps=ctx.renderRecapBody({snap_counts:{
+ offense:{total:60,rows:[{name:'A. Quarterback',snaps:60},{name:'B. Reserve',snaps:0}]},
+ defense:{total:82,rows:[{name:'C. Defender',snaps:75}]},note:'Includes overtime.'}});
+assert.deepEqual(all(snaps).filter(n=>n.tag==='h4').map(text),['Offense','Defense']);
+assert.equal(all(snaps).filter(n=>n.tag==='table').length,2);
+assert.ok(text(snaps).includes('0/60'));
+assert.ok(text(snaps).includes('75/82'));
+assert.ok(text(snaps).includes('Includes overtime.'));
 (async()=>{
  vm.runInContext("halfConfirmed['game-halftime']=true",ctx);
  ctx.openHalftime({home:{abbr:'GB'},away:{abbr:'LAC'}},{adjustment_period:'overtime',score:{home:24,away:24}},'game-overtime',()=>closed++);

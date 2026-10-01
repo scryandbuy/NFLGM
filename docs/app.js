@@ -196,6 +196,19 @@ function openInboxMessage(id) {
 }
 
 function renderRecapBody(message) {
+  if (message.snap_counts) {
+    const report = message.snap_counts, columns = el('div', {class:'snap-count-columns'});
+    for (const unit of ['offense', 'defense']) {
+      const data = report[unit] || {total:0, rows:[]};
+      const table = el('table', {class:'snap-count-table'},
+        el('thead', {}, el('tr', {}, el('th', {scope:'col'}, 'Player'), el('th', {scope:'col'}, 'Snaps'))));
+      const rows = el('tbody', {});
+      for (const player of data.rows) rows.append(el('tr', {}, el('td', {}, player.name), el('td', {}, `${player.snaps}/${data.total}`)));
+      table.append(rows);
+      columns.append(el('section', {}, el('h4', {}, unit === 'offense' ? 'Offense' : 'Defense'), table));
+    }
+    return el('div', {class:'mbody snap-count-report'}, columns, el('p', {class:'snap-count-note'}, report.note || ''));
+  }
   let report = message.recap;
   // Older saved reviews retain their section design without inventing new analysis.
   if (!report && message.kind === 'result' && (message.body || '').includes('PREGAME PLAN\n')) {

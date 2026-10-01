@@ -1494,7 +1494,7 @@ class Session:
         m = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
         if m is None: return dict(error='no such message')
         pl = m.get('payload') or {}
-        return dict(id=m['id'], status=m.get('status'), subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'), recap=pl.get('recap'),
+        return dict(id=m['id'], status=m.get('status'), subject=m['subject'], body=m.get('body') or '', tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'), recap=pl.get('recap'), snap_counts=pl.get('snap_counts'),
                     **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=IB.is_decision(m))
 
     def inbox_hurt_action(self, mid, play=True):

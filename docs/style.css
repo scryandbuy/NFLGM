@@ -2540,6 +2540,14 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 @media(max-width:900px){#rail .rail-identity{flex-wrap:wrap}#rail .club{flex:1}#rail .status{order:4;width:100%;justify-content:space-between}#rail .advance{min-width:160px}#rail .club .name{white-space:normal}#rail .in{padding-left:16px;padding-right:16px}#rail .sub .in{gap:12px}#rail .crumb{display:none}}
 @media(max-width:520px){#rail .hist{display:none}#rail .crest{font-size:25px;min-width:32px}#rail .club{gap:8px}#rail .club .who,#rail .club .title{font-size:10px}#rail .advance{min-width:135px;max-width:165px;padding:9px 12px;border-radius:12px}#rail .advance .txt{font-size:13px}#rail .stat b{font-size:17px}#rail .status{gap:8px}#rail .stat{min-width:0}#rail nav{gap:10px}}
 /* Inbox: shared team palette, editorial master/detail layout. */
+.snap-count-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}
+.snap-count-columns h4{color:var(--team-readable,var(--club-2));font:700 14px var(--text);text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px}
+.snap-count-table{width:100%;border-collapse:collapse;font:400 13px var(--text)}
+.snap-count-table th,.snap-count-table td{padding:9px 4px;border-bottom:1px solid var(--rule);text-align:left}
+.snap-count-table th{color:var(--ink-3);font-size:11px;font-weight:600}
+.snap-count-table th:last-child,.snap-count-table td:last-child{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.snap-count-note{color:var(--ink-3);font-size:11px;line-height:1.5}
+@media(max-width:600px){.snap-count-columns{grid-template-columns:1fr}}
 .inbox-board{padding:0!important;overflow:hidden;background:#0c171a;border:1px solid var(--rule);border-radius:10px}
 .inbox-hero{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:30px 32px;background:linear-gradient(110deg,color-mix(in srgb,var(--team-base) 70%,#102021),#0c171a)}
 .inbox-eyebrow,.inbox-label{text-transform:uppercase;font-size:11px;font-weight:800;letter-spacing:.12em;color:var(--team-readable)}
