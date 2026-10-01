@@ -312,7 +312,7 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
 
     # the sky
     home_abbr = opp_abbr if _is_home(league, opp_abbr, me_abbr, week) else me_abbr
-    forecast = _forecast(home_abbr, week)
+    forecast = game_forecast(league, home_abbr, week)
     if forecast.get('weather_risk', 0) >= 0.3:
         sug('offence', 'Weather coming: lean to the run, shorten the passing game', forecast['text'], {'pass_bias': -0.04, 'depth_mix': (+0.05, 0.0, -0.05)})
 
@@ -487,3 +487,11 @@ def performance_table(league, mine, theirs):
                         mine_value=round(float(values[mine]), 1) if mine in values else None,
                         theirs_value=round(float(values[theirs]), 1) if theirs in values else None))
     return out
+
+
+def game_forecast(league, home_abbr, week):
+    """Use the same championship host as the game weather draw."""
+    if int(week) == 22:
+        import postseason as PS
+        home_abbr = PS.sb_venue(league)['abbr']
+    return _forecast(home_abbr, week)
