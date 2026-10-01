@@ -71,11 +71,12 @@ def main():
         'sim_predicted_margin_sd': float(expectation.std()),
         'sim_unexplained_margin_sd': float((sim-expectation).std()),
         'sim_strength_margin_correlation': float(np.corrcoef(strengths, sim)[0, 1]),
-        'defensive_touchdowns': defensive_tds,
-        'defensive_touchdowns_per_game': defensive_tds / len(sim),
-        'turnovers_per_game': turnovers / len(sim),
-        'defensive_touchdown_per_turnover_pct': 100 * defensive_tds / turnovers,
-        'corrected_turnover_drive_pct': 100 * turnovers / all_drives,
+        # The historical drive result also covers blocked-punt scores. The
+        # play-level return kind was not exported by this calendar harness.
+        'defensive_scores_including_blocked_punts': defensive_tds,
+        'defensive_scores_per_game': defensive_tds / len(sim),
+        'turnover_or_defensive_score_drives_per_game': turnovers / len(sim),
+        'turnover_or_defensive_score_drive_pct': 100 * turnovers / all_drives,
     }
     args.out.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(result, indent=2))
