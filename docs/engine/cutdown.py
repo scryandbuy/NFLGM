@@ -146,7 +146,7 @@ def _convert_long_snapper(league, team, report):
     return True
 
 
-def _cross_train_kicker(league, team, report):
+def _cross_train_kicker(league, team, report, reserve=0.0):
     """A depleted kicker market can use a real punter with place-kicking skill.
 
     Use the normal position-change penalty, contracts and waivers. Never take
@@ -186,7 +186,7 @@ def _cross_train_kicker(league, team, report):
                 or ratings.get('kick_power_rating', 0) < 70 or trial.ovr < 70):
             continue
         contract = None if p in active else PS.minimum_contract(league, team, p)
-        departures = [None] if p in active else [q for q in active
+        departures = [None] if p in active or len(active) < ROSTER_LIMIT else [q for q in active
             if q.pid not in starters and q.pid not in recent and q.pos != 'QB'
             and q.out_until is None and not PS.locked(q, league.week)
             and not PS.protected(team, q, league)]
@@ -198,9 +198,11 @@ def _cross_train_kicker(league, team, report):
                 continue
             dead = 0.0
             if contract is not None:
-                saved, dead, _ = CT.savings_if_cut(q, league.post_june1())
-                if team.cap_space + saved - contract.cap_hit(0) < -.0005: continue
-                try: require_room(league, team, p.pid, contract, release_pid=q.pid)
+                saved = 0.0
+                if q is not None:
+                    saved, dead, _ = CT.savings_if_cut(q, league.post_june1())
+                if team.cap_space + saved - contract.cap_hit(0) + .0005 < reserve: continue
+                try: require_room(league, team, p.pid, contract, release_pid=q.pid if q else None)
                 except ValueError: continue
             loss = (RN.departure_loss(team, q, report) + RN.retention_value(team, q)) if q else 0.0
             key = (p in active, trial.ovr, -loss-dead)
@@ -209,6 +211,7 @@ def _cross_train_kicker(league, team, report):
     _, p, q, contract = best
     if q:
         league.release(q.pid)
+    if contract is not None:
         if not _sign_replacement(league, team, p, contract):
             raise RuntimeError('Validated kicker replacement became unavailable')
     PC.change_position(league, p.pid, 'K')
@@ -228,15 +231,18 @@ def fill_short(league, rng, verbose=False):
         if abbr == getattr(league, 'user_team', None): continue
         while len(team.active()) < ROSTER_LIMIT:
             report = RN.assess(team)
+            remaining = ROSTER_LIMIT - len(team.active()) - 1
+            # Preserve minimum funding for every spot still open after signing.
+            reserve = remaining * MS.minimum_salary(0, CAP.get(league.year, 301.2)) * max(0,18-team.cap.paid_week)/18
+            before = len(team.active())
+            if _cross_train_kicker(league, team, report, reserve=reserve):
+                signed += len(team.active()) - before
+                continue
             sources = _sources(team, report)
             pool = _replacement_pool(league, team, sources)
             pool = [p for p in pool if len(team.by_pos(p.pos)) < POS_CAP.get(p.pos, 4)]
             pool.sort(key=lambda p: (p.pos in sources,
                       p.ovr + 25 * report['needs'].get(p.pos, 0)), reverse=True)
-            remaining = ROSTER_LIMIT - len(team.active()) - 1
-            # Reserve a rookie minimum for each remaining spot. The cap
-            # recovery pass uses a larger two-year minimum as its funding goal.
-            reserve = remaining * MS.minimum_salary(0, CAP.get(league.year, 301.2)) * max(0,18-team.cap.paid_week)/18
             pick = None
             for p in pool:
                 contract = PS.minimum_contract(league, team, p)
