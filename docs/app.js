@@ -470,9 +470,9 @@ function renderPortal(v) {
     const summary=next ? `Next playoff game: ${next.away.name} at ${next.home.name}` : bk?.champion ? `${bk.champion.name} are the champions` : bk ? 'Follow the current round and your team’s progress in the bracket below.' : 'Complete the current offseason step, then use Advance to continue.';
     match.append(el('h2',{},title),el('div',{class:'pad'},summary));
   }
-  else if (m.bye) match.append(el('h2', {}, `${v.rail.clock.line === 'Camp' ? 'Opening Game · ' : 'Next Game · '}Week ${m.week}`, el('small', {}, 'Bye Week')), el('div', { class: 'empty' }, 'No game this week.'));
+  else if (m.bye) match.append(el('h2', {}, `${v.rail.clock.line === 'Camp' ? 'Opening Game · ' : 'Next Game · '}${weekName(m.week)}`, el('small', {}, 'Bye Week')), el('div', { class: 'empty' }, 'No game this week.'));
   else {
-    match.append(el('h2', {}, `${v.rail.clock.line === 'Camp' ? 'Opening Game · ' : 'Next Game · '}Week ${m.week} ${m.away ? 'at' : 'vs'} ${esc(m.them.club.name)}`, el('small', {}, m.header || m.forecast || '')));
+    match.append(el('h2', {}, `${v.rail.clock.line === 'Camp' ? 'Opening Game · ' : 'Next Game · '}${weekName(m.week)} ${m.away ? 'at' : 'vs'} ${esc(m.them.club.name)}`, el('small', {}, m.header || m.forecast || '')));
     const side = (c, right) => el('div', { class: 'side', style: right ? 'flex-direction:row-reverse;text-align:right' : '' }, el('div', { class: 'cr', style: `background:${c.club.color}` }, showAbbr(c.club.abbr)), el('div', {}, el('div', { class: 'nm' }, c.club.nick), el('div', { class: 'rec' }, `${c.record} · ${c.place}`)));
     const bug = el('div', { class: 'bug', style: 'grid-template-columns:auto 1fr auto;padding:12px 12px 4px' },
       side(m.me, false),
@@ -491,7 +491,7 @@ function renderPortal(v) {
       el('div', { class: 'men-row', style: 'border-top:1px solid var(--rule)' }, ...m.watch.map(w => el('div', {}, el('div', { class: 'lbl' }, 'Players to Watch'), el('button', { class: 'man', onclick: () => { location.hash = '#club/player/' + w.pid; } }, el('div', { class: 'no', style: `background:${m.them.club.color};color:#fff` }, jerseyNo(w.no) ?? w.pos), el('div', { class: 'nm' }, w.name.split(' ')[0][0] + '. ' + w.name.split(' ').slice(1).join(' '), el('small', {}, `${w.pos}${w.note ? ' · ' + w.note : ''}`)), el('div', { class: 'ov' }, w.ovr))))));
     match.append(el('div', { class: 'match', style: 'grid-template-columns:1fr 1.1fr' }, left, right));
     match.append(el('div', { class: 'foot' }, el('a', { class: 'btn go', href: '#gameplan' }, 'Set Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn', href: '#club/depth' }, 'Depth Chart'), el('button', { class: 'btn quiet', onclick: e => { const b = document.getElementById('series'); if (b) b.hidden = !b.hidden; } }, 'Series History')));
-    match.append(el('div', { id: 'series', class: 'read', hidden: '', style: 'margin:0 14px 12px' }, m.series && m.series.length ? m.series.map(g => `Week ${g.week}: ${g.away} ${g.ap} at ${g.home} ${g.hp}`).join(' · ') : 'The teams have not met this season. Past seasons\' meetings will show here as the almanac fills.'));
+    match.append(el('div', { id: 'series', class: 'read', hidden: '', style: 'margin:0 14px 12px' }, m.series && m.series.length ? m.series.map(g => `${weekName(g.week)}: ${g.away} ${g.ap} at ${g.home} ${g.hp}`).join(' · ') : 'The teams have not met this season. Past seasons\' meetings will show here as the almanac fills.'));
   }
   page.append(match);
 
@@ -540,7 +540,7 @@ function renderPortal(v) {
   stS.classList.add('c6'); page.append(stS);
 
   const recent=v.season.games.filter(g=>g.result).slice(-5).reverse();
-  const results=el('div',{class:'overview-results'},...(recent.length ? recent.map(g=>el('a',{href:'#league/schedule',class:'overview-result'},el('strong',{class:g.result==='W'?'good':g.result==='L'?'bad':''},g.result),el('span',{},`Week ${g.week} · ${g.home?'vs':'at'} ${g.opp}`),el('b',{},g.score))) : [el('div',{class:'empty'},'No results yet. Season statistics available after Week 1.')]));
+  const results=el('div',{class:'overview-results'},...(recent.length ? recent.map(g=>el('a',{href:'#league/schedule',class:'overview-result'},el('strong',{class:g.result==='W'?'good':g.result==='L'?'bad':''},g.result),el('span',{},`${weekName(g.week)} · ${g.home?'vs':'at'} ${g.opp}`),el('b',{},g.score))) : [el('div',{class:'empty'},'No results yet. Season statistics available after Week 1.')]));
   const seS = sheet('Recent Results', v.rail.record, results, el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#league/schedule' }, 'Schedule'), el('a', { class: 'btn', href: '#league/stats' }, 'Stats'), el('a', { class: 'btn quiet', href: '#league' }, 'Playoff Picture')));
   seS.classList.add('c6'); page.append(seS);
   const room=v.room.counts;
@@ -591,7 +591,7 @@ function renderGameDay(v) {
       s.append(el('div', { class: 'read', style: 'margin:0 14px 10px' }, el('b', {}, 'Assistants: '), m.say));
       s.append(el('div', { class: 'read', style: 'margin:0 14px 12px;color:var(--ink-2)' }, v.plan_set ? 'Your game plan for this week is set.' : "You have not changed the coordinators' plan this week; the game reads their plan as it stands."));
     }
-    s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, v.week >= 19 ? `${v.bye ? 'Sim' : 'Play'} the ${weekName(v.week)}` : `Sim Week ${v.week}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart')));
+    s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, v.week >= 19 ? `${v.bye ? 'Sim' : 'Play'} the ${weekName(v.week)}` : `Sim ${weekName(v.week)}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart')));
     page.append(s); return;
   }
   const g = v.game;
@@ -2700,7 +2700,7 @@ function renderSchedule(v) {
   for (const w of wkList) nav.append(el('button', { 'aria-pressed': String(w === v.week), 'data-tip': w >= 19 ? weekName(w) : null, onclick: () => renderSchedule(pyJSON(`SESSION.league_view('schedule', week=${w}, year=${v.year})`)) }, w >= 19 ? ({ 19: 'WC', 20: 'DIV', 21: 'CONF', 22: 'Final' })[w] : w));
   s.append(nav);
   const done = v.games.some(g => g.done);
-  s.append(el('div', { class: 'h5', style: 'padding:8px 14px 0' }, `Week ${v.week} · ${done ? 'Results' : 'Upcoming'}`, el('span', {}, done ? 'Click your game for the box score' : '')));
+  s.append(el('div', { class: 'h5', style: 'padding:8px 14px 0' }, `${weekName(v.week)} · ${done ? 'Results' : 'Upcoming'}`, el('span', {}, done ? 'Click your game for the box score' : '')));
   const grid = el('div', { class: 'league-games' });
   for (const g of v.games) {
     const tm = (c, rec, win, at) => el('div', { class: 'tm' + (g.done ? (win ? ' w' : ' l') : '') }, at ? el('small', {}, 'at') : '', clubLink(c.abbr, c.name), el('small', {}, rec));
@@ -2855,7 +2855,7 @@ function renderReview(v) {
     el('div', { class: 'rv-finish' }, `${v.finish}${v.div_rank ? ` · ${ordn(v.div_rank)} in the ${v.division}` : ''}${v.slot ? ` · pick ${v.slot}` : ''}`),
     v.expected ? el('div', { class: 'rv-ask' }, 'The owner asked for ', el('b', {}, v.expected), `. You finished at .${String(v.pct.toFixed(3)).slice(2)}.`) : el('div', { class: 'rv-ask' }, `You finished at .${String(v.pct.toFixed(3)).slice(2)}.${v.rebuilt ? ' Rebuilt from the record; the owner\'s word and the money were not kept.' : ''}`));
   const strip = el('div', { class: 'rv-strip' });
-  for (const g of v.timeline) strip.append(g.bye ? el('div', { class: 'rv-g bye', 'data-tip': `Week ${g.week} · Bye` }, '') : el('div', { class: 'rv-g ' + g.result.toLowerCase(), 'data-tip': `Week ${g.week} · ${g.away ? 'at' : 'vs'} ${g.opp.name} · ${g.mine}–${g.theirs}` }, g.result));
+  for (const g of v.timeline) strip.append(g.bye ? el('div', { class: 'rv-g bye', 'data-tip': `${weekName(g.week)} · Bye` }, '') : el('div', { class: 'rv-g ' + g.result.toLowerCase(), 'data-tip': `${weekName(g.week)} · ${g.away ? 'at' : 'vs'} ${g.opp.name} · ${g.mine}–${g.theirs}` }, g.result));
   left.append(strip);
   const owner = v.owner ? el('div', { class: 'rv-owner' }, el('div', { class: 'rv-tag ' + v.owner.mood.toLowerCase() }, v.owner.mood), el('div', { class: 'rv-quote' }, v.owner.line), el('div', { class: 'rv-job' }, `Your seat: ${v.owner.job}`)) : el('div', { class: 'rv-owner' }, el('div', { class: 'rv-quote' }, 'The owner\'s word from that year was not kept.'));
   hero.append(left, owner); content.append(hero);
@@ -3358,7 +3358,7 @@ function gameplanLeanWord(key, value) {
 function renderThisWeek(v) {
   renderRail(v.rail); const page = persPage(); gpSecond('week');
   page.className = 'gameplan-page';
-  featureHero(page, v.rail.club, v.week ? `Week ${v.week} / Preparation` : 'Game Plan', 'GAME PLAN', 'Your coaches’ ideas and your game-week decisions.', [[v.week || '—', 'Week'], [showAbbr(v.opp?.abbr) || '—', 'Opponent']]);
+  featureHero(page, v.rail.club, v.week ? `${weekName(v.week)} / Preparation` : 'Game Plan', 'GAME PLAN', 'Your coaches’ ideas and your game-week decisions.', [[v.week || '—', 'Week'], [showAbbr(v.opp?.abbr) || '—', 'Opponent']]);
   const reload = () => renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`));
   const s = el('section', { class: 'sheet c12 gameplan-surface plan-week' });
   if (v.off) { s.append(el('h2', {}, 'This Week'), el('div', { class: 'empty' }, v.note)); page.append(s); return; }
@@ -3437,7 +3437,7 @@ function renderReport(v) {
   const locked = !!(v.plan_state?.locked || v.plan_state?.started);
   const reload = () => renderReport(pyJSON("SESSION.plan_view('report')"));
   page.className = 'gameplan-page';
-  featureHero(page, v.rail.club, v.week ? `Week ${v.week} / Scouting` : 'Game Plan', 'OPPONENT REPORT', 'The tendencies, matchups, and players that matter this week.', [[v.week || '—', 'Week'], [showAbbr(v.opp?.abbr) || '—', 'Opponent']]);
+  featureHero(page, v.rail.club, v.week ? `${weekName(v.week)} / Scouting` : 'Game Plan', 'OPPONENT REPORT', 'The tendencies, matchups, and players that matter this week.', [[v.week || '—', 'Week'], [showAbbr(v.opp?.abbr) || '—', 'Opponent']]);
   const s = el('section', { class: 'sheet c12 gameplan-surface plan-report' });
   if (v.off) { s.append(el('h2', {}, 'Opponent Report'), el('div', { class: 'empty' }, v.note)); page.append(s); return; }
   s.append(el('div', { class: 'plan-matchup' }, el('div', {}, el('span', {}, `WEEK ${v.week} · ${v.away ? 'AWAY' : 'HOME'}`), el('strong', {}, v.opp.name), el('small', {}, `${v.record}` + (v.coach?.name ? ` · ${v.coach.name}, prestige ${v.coach.prestige}` : ''))), el('a', { class: 'btn', href: '#gameplan/week' }, 'This Week’s Plan →')));

@@ -642,7 +642,7 @@ def post_snap_counts(league, home, away, week, states, playoffs=False):
     if review is not None:
         review['payload']['snap_counts'] = report
         return review
-    msg = IE.post(league, key, 'game', f'Snap counts: {user} vs {opp} · Week {week}',
+    msg = IE.post(league, key, 'game', f'Snap counts: {user} vs {opp} · {__import__("club_notes")._period(week)}',
                   '\n\n'.join(body), sender='Coaching staff',
                   payload=dict(snap_counts=report, game_key=key, link=f'gameday:{week}'))
     if msg: msg['week'] = week

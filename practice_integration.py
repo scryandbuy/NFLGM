@@ -116,7 +116,7 @@ def prepare(runner, week, clubs=None):
                             lines[i] = IB.player_name(p, name) + line[len(name):]
                             break
             IE.post(league, f'practice:{league.year}:{week}:{abbr}', 'practice',
-                    f'Week {week} practice report', '\n\n'.join(lines),
+                    f'{__import__("club_notes")._period(week)} practice report', '\n\n'.join(lines),
                     sender='assistant coaches', payload={'link':'gameplan:practice'})
     return out
 

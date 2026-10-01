@@ -421,7 +421,7 @@ def post_report(league, week):
         if wk == week and user in (home, away): opp = away if home == user else home
     if opp is None: return None
     rep = opponent_report(league, user, opp, week)
-    body = f"Week {week} against {opp}. " + (f"Their coach: {rep['coach']['name']}, prestige {rep['coach']['prestige']}. " if rep['coach']['name'] else '')
+    body = f"{__import__('club_notes')._period(week)} against {opp}. " + (f"Their coach: {rep['coach']['name']}, prestige {rep['coach']['prestige']}. " if rep['coach']['name'] else '')
     if rep['strengths']: body += 'Strengths: ' + '; '.join(s['text'] for s in rep['strengths'][:3]) + '. '
     if rep['weaknesses']: body += 'Weaknesses: ' + '; '.join(s['text'] for s in rep['weaknesses'][:3]) + '. '
     body += f"Forecast: {rep['forecast']['text']}. {len(rep['suggestions'])} suggestions from the assistants."

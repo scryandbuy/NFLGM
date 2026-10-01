@@ -66,7 +66,7 @@ def _injury_report(league, t, week, results):
         elif was_starter: line += '; there is nobody behind him at the spot'
         lines.append(line + '.')
     if lines and _once(league, f"inj-{league.year}-{week}"):
-        IB.post(league, 'injury', f"Injury report · Week {week}" + (f": {len(lines)} down" if len(lines) > 1 else f": {inbox_player(league.player(hurt[0]['pid']), _surname(league.player(hurt[0]['pid']).name))}"), '\n'.join(lines) + '\nThe depth chart has been updated.', sender='trainers', payload=dict(link='club:depth'))
+        IB.post(league, 'injury', f"Injury report · {_period(week)}" + (f": {len(lines)} down" if len(lines) > 1 else f": {inbox_player(league.player(hurt[0]['pid']), _surname(league.player(hurt[0]['pid']).name))}"), '\n'.join(lines) + '\nThe depth chart has been updated.', sender='trainers', payload=dict(link='club:depth'))
 
 
 def returns(league, week):
@@ -91,7 +91,12 @@ def returns(league, week):
 
 def _honors(league, t, week):
     """The week's honors: the book's best line on your club, if it leads the league at the spot that week."""
-    bk = getattr(league, 'week_book', None)
+    # Read only this round's recorded games. The scratch week_book can still
+    # contain bye teams' lines from the preceding week during the playoffs.
+    bk = {}
+    prefix = f'{league.year}-{int(week)}-'
+    for key, lines in (getattr(league, 'game_stats', {}) or {}).items():
+        if key.startswith(prefix): bk.update(lines)
     if not bk: return
     # the strongest single line league-wide this week, by a plain score
     best = None
@@ -102,8 +107,8 @@ def _honors(league, t, week):
         if best is None or score > best[1]: best = (p, score, d)
     if best and best[0].team == t.abbr and best[1] >= 20 and _once(league, f"potw-{league.year}-{week}"):
         p, _, d = best
-        line = ', '.join(x for x in [f"{int(d['pass_yds'])} passing yards" if d.get('pass_yds') else '', f"{d['pass_td']} touchdown passes" if d.get('pass_td') else '', f"{int(d['rush_yds'])} rushing yards" if d.get('rush_yds') else '', f"{int(d['rec_yds'])} receiving yards" if d.get('rec_yds') else '', f"{d['rush_td'] + d['rec_td']} touchdowns" if (d.get('rush_td', 0) + d.get('rec_td', 0)) else '', f"{d['sacks']:g} sacks" if d.get('sacks') else '', f"{d['int_def']} interceptions" if d.get('int_def') else ''] if x)
-        IB.post(league, 'result', f"{inbox_player(p)} named Player of the Week", f"{inbox_player(p)} ({p.pos}) had the league's best line in Week {week}: {line}.", sender='league')
+        line = ', '.join(x for x in [f"{int(d['pass_yds'])} passing yards" if d.get('pass_yds') else '', f"{d['pass_td']} touchdown passes" if d.get('pass_td') else '', f"{int(d['rush_yds'])} rushing yards" if d.get('rush_yds') else '', f"{int(d['rec_yds'])} receiving yards" if d.get('rec_yds') else '', f"{d.get('rush_td', 0) + d.get('rec_td', 0)} touchdowns" if (d.get('rush_td', 0) + d.get('rec_td', 0)) else '', f"{d['sacks']:g} sacks" if d.get('sacks') else '', f"{d['int_def']} interceptions" if d.get('int_def') else ''] if x)
+        IB.post(league, 'result', f"{inbox_player(p)} named Player of the Week", f"{inbox_player(p)} ({p.pos}) had the league's best line in {_period(week)}: {line}.", sender='league')
 
 
 # ------------------------------------------------------------ the roll
@@ -140,15 +145,15 @@ def _milestones(league, t, week):
     for p in t.active():
         gs = int(p.xp_spent.get('_starts', 0) or 0)
         if gs == 1 and (p.accrued or 0) <= 1 and float(p.age) <= 24.0 and _once(league, f"first-start-{p.pid}"):
-            IB.post(league, 'result', f"{inbox_player(p)} makes his first start", f"{inbox_player(p)} ({p.pos}) started his first game for you in Week {week}.", sender='assistants')
+            IB.post(league, 'result', f"{inbox_player(p)} makes his first start", f"{inbox_player(p)} ({p.pos}) started his first game for you in {_period(week)}.", sender='assistants')
         if gs in (50, 100, 150, 200) and _once(league, f"starts-{gs}-{p.pid}"):
-            IB.post(league, 'result', f"{inbox_player(p)}'s {gs}th start", f"{inbox_player(p)} ({p.pos}) made his {gs}th career start in Week {week}.", sender='assistants')
+            IB.post(league, 'result', f"{inbox_player(p)}'s {gs}th start", f"{inbox_player(p)} ({p.pos}) made his {gs}th career start in {_period(week)}.", sender='assistants')
         d = bk.get(p.pid) or {}
         for key, label, marks in (('pass_yds', 'passing yards', (3000, 4000, 5000)), ('rush_yds', 'rushing yards', (1000, 1500, 2000)), ('rec_yds', 'receiving yards', (1000, 1500)), ('sacks', 'sacks', (10, 15, 20)), ('int_def', 'interceptions', (5, 8))):
             v = d.get(key, 0)
             for m in marks:
                 if v >= m and _once(league, f"{key}-{m}-{p.pid}-{league.year}"):
-                    IB.post(league, 'result', f"{inbox_player(p)} passes {m:,} {label}", f"{inbox_player(p)} ({p.pos}) reached {m:,} {label} for the season in Week {week}.", sender='assistants')
+                    IB.post(league, 'result', f"{inbox_player(p)} passes {m:,} {label}", f"{inbox_player(p)} ({p.pos}) reached {m:,} {label} for the season in {_period(week)}.", sender='assistants')
 
 
 def _owner(league, t, week):
@@ -201,3 +206,7 @@ def season_end(league):
         except Exception: ask = 'no read yet'
         rows.append(f"{inbox_player(p)} ({p.pos}, {round(p.ovr)}, {int(p.age)}): {ask}")
     IB.post(league, 'contract_year', f"{len(exp)} contracts expire this offseason", "Deals up: " + '\n'.join(rows) + ('.' if len(exp) <= 14 else f"; and {len(exp) - 14} more."), sender='assistants', payload=dict(link='personnel:extensions'))
+
+
+def _period(week):
+    return {19: "Wild Card", 20: "Divisional Round", 21: "Conference Championship", 22: "Championship Game"}.get(int(week), f"Week {week}")

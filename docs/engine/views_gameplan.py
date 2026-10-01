@@ -123,7 +123,7 @@ def this_week(session, league, abbr):
     r = rail(session, league, abbr)
     if wk is None: return dict(rail=r, off=True, note='The plan is set in season, the week before a game.')
     opp = session._opponent(wk)
-    if opp is None: return dict(rail=r, off=True, bye=True, note=f'Week {wk} is your bye.')
+    if opp is None: return dict(rail=r, off=True, bye=True, note=f"{__import__('views').transaction_period(dict(week=wk))} is your bye.")
     opp_abbr, away = opp
     base = _base_plan(session, league, abbr)
     changes = _saved(league, wk)
@@ -323,7 +323,7 @@ def report(session, league, abbr):
     wk = _week(session, league); r = rail(session, league, abbr)
     if wk is None: return dict(rail=r, off=True, note='The report comes in season, the week before a game.')
     opp = session._opponent(wk)
-    if opp is None: return dict(rail=r, off=True, note=f'Week {wk} is your bye.')
+    if opp is None: return dict(rail=r, off=True, note=f"{__import__('views').transaction_period(dict(week=wk))} is your bye.")
     opp_abbr, away = opp
     rep = GW.opponent_report(league, abbr, opp_abbr, wk)
     n = len(league.teams)
