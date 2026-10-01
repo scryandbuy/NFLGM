@@ -115,6 +115,8 @@ def pick_job(down, ydstogo, yards_to_endzone, score_diff, secs_left, rng):
     late = secs_left is not None and secs_left <= 300
     if ydstogo <= 2 or yards_to_endzone <= 3:
         return 'short_yardage'
+    if down == 4:
+        return 'explosive' if ydstogo >= 20 else 'chains'
     if late and score_diff > 0:
         return 'clock'
     if late and score_diff < -8:

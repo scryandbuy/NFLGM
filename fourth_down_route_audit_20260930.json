@@ -1,0 +1,74 @@
+{
+  "samples": [
+    {
+      "distance": 11,
+      "calls": {
+        "all": 1000,
+        "medium": 427,
+        "screen": 50,
+        "deep": 38,
+        "short": 503,
+        "run": 32
+      },
+      "outcomes": {
+        "incomplete": 369,
+        "complete": 461,
+        "interception": 22,
+        "sack": 93,
+        "drop": 23
+      },
+      "completions": 461,
+      "completions_short": 185,
+      "mean_completed_air": 8.0,
+      "short_completion_reasons": {
+        "short/designed": 10,
+        "medium/first": 44,
+        "short/checkdown": 41,
+        "medium/second": 22,
+        "short/scramble": 5,
+        "medium/designed": 12,
+        "short/first": 42,
+        "medium/scramble": 5,
+        "short/second": 4
+      }
+    },
+    {
+      "distance": 16,
+      "calls": {
+        "all": 1000,
+        "medium": 422,
+        "screen": 64,
+        "short": 511,
+        "run": 29,
+        "deep": 38
+      },
+      "outcomes": {
+        "complete": 480,
+        "incomplete": 361,
+        "sack": 72,
+        "drop": 32,
+        "interception": 26
+      },
+      "completions": 480,
+      "completions_short": 221,
+      "mean_completed_air": 11.22,
+      "short_completion_reasons": {
+        "short/checkdown": 42,
+        "medium/first": 49,
+        "short/first": 60,
+        "medium/designed": 11,
+        "short/designed": 11,
+        "medium/second": 15,
+        "short/scramble": 14,
+        "short/second": 10,
+        "medium/scramble": 8,
+        "deep/designed": 1
+      }
+    }
+  ],
+  "distance_only": {
+    "paired_snaps": 200,
+    "identical_outcomes": 87,
+    "paired_completions": 80
+  }
+}

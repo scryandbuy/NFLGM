@@ -104,7 +104,8 @@ RECV_GRADE = {'catch_rating': 0.20, 'route_run_short_rating': 0.15, 'route_run_m
               'accel_rating': 0.08, 'release_rating': 0.10, 'cit_rating': 0.10}
 
 
-def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zone=False):
+def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zone=False,
+                  down=1, ydstogo=10, pressure=0.0):
     """
     Who gets the ball.
 
@@ -119,6 +120,13 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zon
         return None, None, 'none', 0.0
 
     prof = read_profile(qb, rate_fn, AVG)
+    conversion = down == 4 and ydstogo > 0 and any('route_air' in p for p in pairs)
+    if conversion:
+        # Keep emergency outlets, especially against pressure, but spend more
+        # protected fourth-down reads looking for a conversion.
+        removed = prof['checkdown'] * (0.75 - 0.65 * float(np.clip(pressure, 0, 1)))
+        prof['checkdown'] -= removed
+        prof['second'] += removed
     kinds = list(prof)
     kind = str(rng.choice(kinds, p=np.array([prof[k] for k in kinds])))
 
@@ -135,6 +143,15 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zon
     # a bracketed man: the quarterback reads the double and goes elsewhere more often. Real doubled stars lose
     # about a fifth to a third of their targets; the squeeze on his separation is applied at the throw
     w = w * np.array([0.70 if p.get('bracket') else 1.0 for p in pairs])
+    conversion_weights = np.ones(n)
+    if conversion:
+        # Underneath separation can offer YAC, but a wide-open outlet many
+        # yards short must not look as useful as an actual conversion route.
+        for i, pair in enumerate(pairs):
+            short = max(0.0, ydstogo - float(pair.get('route_air', 0)))
+            room = max(0.0, float(pair.get('separation', .42)) - .42) * 5.0
+            conversion_weights[i] = 1.0 / (1.0 + max(0.0, short - room) / 2.0)
+        w *= conversion_weights
     # depth-chart position carries a mild designed bias: a coordinator does
     # build for his best player, but it breaks ties rather than setting a share
     # Real target share by rank: 23.6 / 17.5 / 13.3 / 10.5 / 8.5 - a ratio of
@@ -163,6 +180,9 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zon
         w = w * np.array([1.45 if p['receiver'].get('pos') == 'TE' else 0.9 if p['receiver'].get('pos') in ('HB', 'FB') else 1.0 for p in pairs], float)
     w = w / w.sum()
     order = list(rng.choice(n, size=n, replace=False, p=w))
+    progression = order
+    if conversion:
+        progression = [j for j in order if conversion_weights[j] >= 0.5] or order
 
     if kind == 'checkdown':
         # the back is the usual outlet but not the only one - a tight end or
@@ -171,13 +191,13 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zon
         late = order[-2:] if len(order) > 2 else order
         i = late[int(rng.integers(0, len(late)))]
     elif kind == 'designed':
-        i = order[0]
+        i = progression[0]
     elif kind == 'second':
-        i = order[1] if len(order) > 1 else order[0]
+        i = progression[1] if len(progression) > 1 else progression[0]
     elif kind == 'scramble':
         i = order[int(rng.integers(0, len(order)))]
     else:                                        # first read
-        i = order[0]
+        i = progression[0]
 
     # Openness pulls him off the read - but only a little. Even the best QBs
     # find the most open man barely more often than chance.
@@ -189,7 +209,7 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zon
     skill = rate_fn(qb, {'awareness_rating': .6, 'play_rec_rating': .4})
     if kind in ('first', 'second') and len(pairs) > 1:
         if rng.random() < float(np.clip(0.04 + 0.85 * (skill - AVG), 0.0, 0.26)):
-            seps = [p.get('separation', 0.42) for p in pairs]
+            seps = [p.get('separation', 0.42) * conversion_weights[j] for j, p in enumerate(pairs)]
             i = int(np.argmax(seps))
 
     p = pairs[int(i)]
