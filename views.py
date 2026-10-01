@@ -169,9 +169,9 @@ def portal(session, league, abbr):
 
 
 def _matchup(session, league, abbr):
-    if session.stop[0] not in ('week', 'cutdown', 'wire'):
+    if session.stop[0] not in ('week', 'cutdown', 'wire', 'playoffs'):
         return None
-    wk = session.stop[1] if session.stop[0] == 'week' else 1; opp = session._opponent(wk)
+    wk = (19 + int(session.stop[1]) if session.stop[0] == 'playoffs' else session.stop[1] if session.stop[0] == 'week' else 1); opp = session._opponent(wk)
     if opp is None:
         return dict(bye=True, week=wk)
     opp_abbr, away = opp
@@ -552,12 +552,14 @@ def gameday(session, league, abbr, gd=None):
     scoreboard and the user's game in full. A past week's, when gd is given."""
     r = rail(session, league, abbr)
     if gd is None:
-        in_week = session.stop[0] in ('week', 'cutdown', 'wire')
+        in_week = session.stop[0] in ('week', 'cutdown', 'wire') or (session.stop[0] == 'playoffs' and int(session.stop[1]) < 4)
         if in_week and not getattr(session, 'played', False):
             m = _matchup(session, league, abbr)
-            wk = session.stop[1] if session.stop[0] == 'week' else 1
+            wk = (19 + int(session.stop[1]) if session.stop[0] == 'playoffs' else session.stop[1] if session.stop[0] == 'week' else 1)
             if m is None or m.get('bye'):
-                return dict(rail=r, preview=True, week=wk, bye=True, matchup=None, line=f'Week {wk} is your bye. Sim the week to play the rest of the league.')
+                is_bye = wk <= 18 or (wk == 19 and abbr not in (getattr(getattr(session, 'post_live', None), 'exit_round', {}) or {}) and any(abbr in seeds.values() for seeds in (getattr(getattr(session, 'post_live', None), 'alive', {}) or {}).values()))
+                line = (f'{transaction_period(dict(week=wk))} is your bye. Sim the round to play the remaining games.' if is_bye and wk >= 19 else f'Week {wk} is your bye. Sim the week to play the rest of the league.' if is_bye else f'Your team has no game in the {transaction_period(dict(week=wk))}. Sim the round to follow the remaining games.')
+                return dict(rail=r, preview=True, week=wk, bye=True, no_game=not is_bye, matchup=None, line=line)
             plan_ok = bool((getattr(league, 'user_week_plan', None) or {}).get('changes'))
             return dict(rail=r, preview=True, week=wk, bye=False, matchup=m, plan_set=plan_ok, line=None)
         gd = getattr(session, 'gameday', None)

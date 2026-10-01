@@ -575,11 +575,11 @@ function renderGameDay(v) {
   $('#crumb').textContent = 'Game Day';
   $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'gameday'));
   $('#second').innerHTML = ''; document.body.classList.add('no-second');
-  featureHero(page, v.rail.club, v.week ? `${weekName(v.week)} / ${v.rail.year}` : `Season / ${v.rail.year}`, 'GAME DAY', v.preview ? 'The matchup and the decisions before kickoff.' : 'The score, the play feed, and your sideline controls.', [[v.week ? weekName(v.week) : '—', 'Week'], [v.preview ? (v.bye ? 'Bye' : 'Preview') : v.live?.open ? 'Live' : 'Final', 'Game state']]);
+  featureHero(page, v.rail.club, v.week ? `${weekName(v.week)} / ${v.rail.year}` : `Season / ${v.rail.year}`, 'GAME DAY', v.preview ? 'The matchup and the decisions before kickoff.' : 'The score, the play feed, and your sideline controls.', [[v.week ? weekName(v.week) : '—', 'Week'], [v.preview ? (v.no_game ? 'No game' : v.bye ? 'Bye' : 'Preview') : v.live?.open ? 'Live' : 'Final', 'Game state']]);
   if (v.empty) { page.append(el('section', { class: 'sheet c12' }, el('h2', {}, 'Game Day'), el('div', { class: 'empty' }, v.line))); return; }
   if (v.preview) {
     // the week has not been played: the preview of this week's game, and the button that plays it
-    const s = el('section', { class: 'sheet c12 gameday-surface game-preview' }, el('h2', {}, 'Matchup Preview', el('small', {}, v.bye ? 'Bye week' : `${v.matchup.away ? 'at' : 'vs'} ${v.matchup.them.club.name} · ${v.matchup.header || ''}`)));
+    const s = el('section', { class: 'sheet c12 gameday-surface game-preview' }, el('h2', {}, 'Matchup Preview', el('small', {}, v.no_game ? 'No game this round' : v.bye ? 'Bye week' : `${v.matchup.away ? 'at' : 'vs'} ${v.matchup.them.club.name} · ${v.matchup.header || ''}`)));
     if (v.bye) { s.append(el('div', { class: 'empty' }, v.line)); }
     else {
       const m = v.matchup;
@@ -591,7 +591,7 @@ function renderGameDay(v) {
       s.append(el('div', { class: 'read', style: 'margin:0 14px 10px' }, el('b', {}, 'Assistants: '), m.say));
       s.append(el('div', { class: 'read', style: 'margin:0 14px 12px;color:var(--ink-2)' }, v.plan_set ? 'Your game plan for this week is set.' : "You have not changed the coordinators' plan this week; the game reads their plan as it stands."));
     }
-    s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, v.week >= 19 ? `Play the ${weekName(v.week)}` : `Sim Week ${v.week}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart')));
+    s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, v.week >= 19 ? `${v.bye ? 'Sim' : 'Play'} the ${weekName(v.week)}` : `Sim Week ${v.week}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart')));
     page.append(s); return;
   }
   const g = v.game;
