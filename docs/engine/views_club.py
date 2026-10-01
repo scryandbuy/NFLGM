@@ -285,6 +285,7 @@ def card(session, league, pid):
         years = []; interest = ''; interest_line = ''
         asks = []
     return dict(rail=rail(session, league, session.user_team), pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, age=int(p.age), size=size,
+                birth_date=getattr(p, 'birth_date', None), game_date=getattr(league, 'game_date', None),
                 team=club(p.team) if p.team else None, home_state=home_state(p), draft=drafted,
                 role=role, snaps=snaps, missed=missed, pending=pending, market_apy=market_apy, ext_ask=ext_ask, ext_eligible=_ext_ok(league, p),
                 rookie_option=(__import__('extensions').rookie_option_price(league, p) if p.team == session.user_team else None),
@@ -667,6 +668,7 @@ def development(session, league, abbr, pid):
     rows.sort(key=lambda r: (-r['weight'], r['cost']))
     uc = XP.unlock_cost(p)
     return dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), bank=int(round(float(p.xp or 0))), **ceiling_read(p),
+                development_age=int(XP.development_age(p)), development_year=getattr(p, 'development_year', None),
                 unlock_cost=(int(round(uc)) if uc else None), unlock_ok=(uc is not None and p.xp >= uc and (pot or 0) < 99),
                 practice_earned=round(float((p.xp_spent.get('_earned') or {}).get('practice',0))),
                 bought=int(XP.points_bought(p)), unlocks=int(p.xp_spent.get('_unlocks', 0) or 0), auto=bool(p.xp_spent.get('_auto', False)), dev=modifier_word(p), rows=rows)

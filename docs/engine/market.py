@@ -709,6 +709,8 @@ def run(league, rng, user_team=None, verbose=False):
     all_signed = []
     import negotiations as NG
     for phase in range(1, PHASES + 1):
+        import player_age as PA
+        PA.offseason(league, 5 + phase)
         league.fa_step = phase
         bids = ai_bids(league, pool, phase, rng, skip_teams=(user_team,) if user_team else ())
         # the user's live offers do not sign inside the market: the player mulls
@@ -750,6 +752,7 @@ def run(league, rng, user_team=None, verbose=False):
                   f'{len(msgs)} messages')
 
     # the market closes: every open thread gets its final answer before the pool is filled at the minimum
+    PA.offseason(league, 9)
     league.fa_step = PHASES + 1
     NG.resolve(league, fa_step=PHASES + 1)
     for t in NG._threads(league):
@@ -887,6 +890,7 @@ def close_market(league, rng, user_team=None, verbose=False):
     a discount with clubs that have room (or wait for camp), rosters fill with genuine depth at the minimum, offer
     sheets resolve, every club is brought under the cap."""
     import negotiations as NG
+    PA.offseason(league, 9)
     league.fa_step = PHASES + 1
     NG.resolve(league, fa_step=PHASES + 1)
     for t in NG._threads(league):

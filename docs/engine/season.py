@@ -361,6 +361,8 @@ class SeasonRunner(StandingsView):
         except Exception: return None
 
     def prepare_practice(self, week, clubs=None):
+        import player_age as PA
+        PA.game_week(self.L, week)
         import practice_integration as PI
         return PI.prepare(self, week, clubs)
 
@@ -422,6 +424,8 @@ class SeasonRunner(StandingsView):
     def open_live(self, home, away, week, playoffs=False, on_close=None, replay_start=None):
         """The user's game, opened at the opening kick and played on demand. The same preparation as play()
         (hurt players, the week's plans), then the stepped engine held open until Finish."""
+        import player_age as PA
+        PA.game_week(self.L, week)
         if replay_start is not None:
             self.rng.bit_generator.state = copy.deepcopy(replay_start['rng'])
             for side in (home, away):

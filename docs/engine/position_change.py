@@ -14,6 +14,7 @@ so the cost is visible when the move is made and fades in front of you.
 The same call is available to the AI (a new coach converting his misfits)
 and to the user (change_position).
 """
+from player_age import development_age
 import numpy as np
 
 SKILL_EXCLUDE = {'speed_rating', 'accel_rating', 'agility_rating', 'strength_rating',
@@ -46,7 +47,7 @@ def change_position(league, pid, new_pos, log=True):
         return None
     pen, games = COST[d]
     aw = float(p.ratings.get('awareness_rating', 70))
-    games = int(round(games * (1.0 + 0.03 * max(0.0, p.age - 25)) * (1.15 - 0.3 * (aw - 60) / 40.0)))
+    games = int(round(games * (1.0 + 0.03 * max(0.0, development_age(p) - 25)) * (1.15 - 0.3 * (aw - 60) / 40.0)))
     team = league.teams.get(p.team) if p.team else None
     if team is not None and getattr(team, 'staff', None):
         import staff as ST

@@ -4,6 +4,7 @@ Compare role-appropriate performance with peers, sharing ranks for ties.
 Only consecutive, credible poor seasons can cause a demotion. Small samples
 are inconclusive; they must not masquerade as evidence of declining talent.
 """
+from player_age import review_age
 import collections
 import numpy as np
 import dev_evaluation as DE
@@ -68,7 +69,7 @@ def run(league, votes, rng, season=None, verbose=False):
         poor_seasons = 1 + int(prior.get('poor_seasons', 0)) if poor else 0
         elite_seasons = 1 + int(prior.get('elite_seasons', 0)) if elite else 0
         c_up, c_down = PE.trait_move_chances(
-            p.dev, p.age-1., pr, ex, honours, poor_seasons=poor_seasons,
+            p.dev, review_age(p), pr, ex, honours, poor_seasons=poor_seasons,
             elite_seasons=elite_seasons, confidence=confidence)
         before = p.dev
         change = None

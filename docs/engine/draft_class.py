@@ -298,6 +298,8 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
         XP.resolve_potential(p, rng)
     league.draft_pool = out
     for p in out:
+        import player_age as PA
+        PA.initialize_player(p, league)
         league.players[p.pid] = p
     if verbose:
         print(f'{len(out)} in the class; pro overall mean {np.mean([p.ovr for p in out]):.1f}, '

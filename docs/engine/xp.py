@@ -31,6 +31,7 @@ unit numbers below are solved backwards from what a full season should be
 worth at each spot, not chosen for how they read.
 """
 import numpy as np
+from player_age import development_age
 
 # ============================================================ PER EVENT
 # XP per single unit of each stat. Negative for the things that lose games.
@@ -256,7 +257,7 @@ def points_bought(player):
 
 def learning_relief(player):
     """All tiers learn more cheaply when young, tapering smoothly from 24 to 30."""
-    return max(0., min(1., (30. - float(player.age)) / 6.))
+    return max(0., min(1., (30. - development_age(player)) / 6.))
 
 
 PERFORMANCE_BONUS = {'normal': .15, 'star': .30, 'superstar': .60, 'xfactor': .75}
@@ -265,14 +266,14 @@ PERFORMANCE_BONUS = {'normal': .15, 'star': .30, 'superstar': .60, 'xfactor': .7
 def cost_per_point(player, attr=None):
     """XP for one more attribute point, for this player right now."""
     import regression as RG
-    f = RG.curve_factor(player.pos, player.age)
+    f = RG.curve_factor(player.pos, development_age(player))
     curve = 1.0 if f >= 1.0 else (1.0 / max(f, 0.30)) ** 1.5
-    years = max(0.0, float(player.age) - AGE_FROM)
+    years = max(0.0, development_age(player) - AGE_FROM)
     ovr_scale = 1.0 + OVR_SLOPE * max(0.0, float(player.ovr) - OVR_PIVOT)
     phys = (PHYSICAL_MULT if attr in PHYSICAL else
             AWARENESS_MULT if attr == 'awareness_rating' else 1.0)
     late_from, late_slope = LATE_SLOPE.get(player.pos, (99.0, 0.0))
-    late = 1.0 + late_slope * max(0.0, float(player.age) - late_from)
+    late = 1.0 + late_slope * max(0.0, development_age(player) - late_from)
     same = float(player.xp_spent.get(attr, 0) or 0) if attr else 0.0
     career_escalator, skill_escalator = ESCALATOR, ATTR_ESCALATOR
     if learning_relief(player):
@@ -287,7 +288,7 @@ def cost_per_point(player, attr=None):
         # each year after; strength grows a little longer, so its wall is softer. Repeats climb 25%
         # a point, so speed goes up in ones. A 22-year-old starter can add a point of speed once or
         # twice a season if he spends nothing else; a 26-year-old is looking at three seasons of XP.
-        age = float(player.age)
+        age = development_age(player)
         wall = 1.0 if age < 23 else 2.0 if age < 24 else 3.5 if age < 25 else 6.0 if age < 26 else 10.0 * (2.0 ** max(0.0, age - 26.0))
         if attr == 'strength_rating': wall = wall ** 0.7
         tool = TOOL_OVER_SPEED if attr in TOOLS else 1.0
@@ -324,7 +325,7 @@ def unlock_cost(player):
     pot = ceiling(player)
     if pot is None:
         return None
-    years = max(0.0, float(player.age) - AGE_FROM)
+    years = max(0.0, development_age(player) - AGE_FROM)
     return (UNLOCK_BASE * UNLOCK_GROWTH ** max(0.0, pot - UNLOCK_FROM)
             * (1.0 + AGE_SLOPE * years))
 

@@ -19,7 +19,7 @@ POOL_PATH = Path(__file__).with_name('free_agent_pool.csv')
 def eligible(p):
     return (p is not None and p.pos == 'LS' and not p.retired
             and p.team is None and p.contract is None
-            and 21 <= p.age <= 25 and 55 <= p.ovr <= 65)
+            and 21 <= int(p.age) <= 25 and 55 <= p.ovr <= 65)
 
 
 def ensure(league, pool_path=None):
@@ -74,6 +74,8 @@ def ensure(league, pool_path=None):
         p.number = int(row['jersey_num'])
         p.college = p.home_state
         PT.ensure(p, rng)
+        import player_age as PA
+        PA.initialize_player(p, league)
         league.players[pid] = p
         league.free_agents.append(pid)
         used_names.add(NG.normalize_name(name))

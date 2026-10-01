@@ -335,7 +335,7 @@ def notify_user(league):
     for p in league.teams[user].active():
         if p.contract and p.contract.years == 1 and eligible(p, league) and p.ovr >= 76:
             IB.post(league, 'contract_year', f'{inbox_player(p)} enters his final year',
-                    f"{inbox_player(p)} ({p.pos}, {p.ovr:.0f}, age {p.age:.0f}) is in the last year of his deal at ${p.apy:.1f}m. "
+                    f"{inbox_player(p)} ({p.pos}, {p.ovr:.0f}, age {int(p.age)}) is in the last year of his deal at ${p.apy:.1f}m. "
                     f"He can be extended now; his agent will price him at the market.", sender=user,
                     payload=dict(pid=p.pid, link=f'player:{p.pid}'), expires_week=None)
             n += 1
