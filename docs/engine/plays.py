@@ -409,9 +409,11 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
     return dict(yards=round(float(gained), 1), broken_tackles=broken,
                 touchdown=gained >= yards_to_endzone)
 
-RUN_BASE = 1.90
-# sd of yards before contact around the blocking result; with RUN_BASE
-# re-anchored lower, 1.42 put 11.7% of carries in the backfield against 8.5
+RUN_BASE = 2.05
+# The live franchise register had 10.4% negative runs and 4.31 yards per carry.
+# A small increase in yards before contact reduces backfield losses while
+# leaving blocking matchups, run schemes, and the after-contact tail intact.
+# Preserve the existing contest noise and after-contact behavior.
 RUN_NOISE = 1.33
 
 # ============================================================ RUN PLAY
