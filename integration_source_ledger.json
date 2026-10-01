@@ -1,17 +1,18 @@
 {
-  "996680": {
-    "status": "generated",
-    "reason": "Generated browser assets superseded by the current build_web.py output."
+  "03820a": {
+    "status": "integrated",
+    "incorporated_as": "412553d",
+    "reason": "Source change incorporated and reconciled in this integration line."
   },
   "0cc2c5": {
     "status": "integrated",
     "incorporated_as": "f173281",
     "reason": "Practice XP ceiling source change incorporated and tested."
   },
-  "03820a": {
+  "0f08059": {
     "status": "integrated",
-    "incorporated_as": "412553d",
-    "reason": "Source change incorporated and reconciled in this integration line."
+    "incorporated_as": "b70248d",
+    "reason": "Player and team links merged with the full-width inbox rendering."
   },
   "13298c": {
     "status": "integrated",
@@ -27,6 +28,11 @@
     "status": "integrated",
     "incorporated_as": "4ff4940",
     "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "1f9a45c": {
+    "status": "integrated",
+    "incorporated_as": "83a9349",
+    "reason": "Practice focus and contrast source changes incorporated."
   },
   "1fe1dd": {
     "status": "generated",
@@ -56,6 +62,11 @@
     "status": "integrated",
     "incorporated_as": "77ae4ff",
     "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "4bb6979": {
+    "status": "integrated",
+    "incorporated_as": "7881d6b",
+    "reason": "Equivalent development-review source changes incorporated."
   },
   "525ec0": {
     "status": "integrated",
@@ -95,6 +106,10 @@
     "incorporated_as": "d9b41db",
     "reason": "Source change incorporated and reconciled in this integration line."
   },
+  "6c27c29": {
+    "status": "generated",
+    "reason": "Generated development-review engine copies replaced by the current browser build."
+  },
   "6db1f0": {
     "status": "integrated",
     "incorporated_as": "ef0a970",
@@ -122,6 +137,15 @@
     "status": "generated",
     "reason": "Generated browser assets superseded by the current build_web.py output."
   },
+  "996680": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "9b2a53f": {
+    "status": "integrated",
+    "incorporated_as": "5d47f48",
+    "reason": "Snap report sorting merged with linked player names."
+  },
   "9f0674": {
     "status": "generated",
     "reason": "Generated browser assets superseded by the current build_web.py output."
@@ -130,10 +154,25 @@
     "status": "generated",
     "reason": "Generated browser assets superseded by the current build_web.py output."
   },
+  "a4f1970": {
+    "status": "integrated",
+    "incorporated_as": "614f465",
+    "reason": "Explicit inbox player identities merged with existing digest rows and roster advice."
+  },
   "ad6b1c": {
     "status": "integrated",
     "incorporated_as": "92be535",
     "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "afbcfcc": {
+    "status": "integrated",
+    "incorporated_as": "2c55816",
+    "reason": "Redundant card shortcuts removed while preserving roster advice links."
+  },
+  "b76ddc5": {
+    "status": "integrated",
+    "incorporated_as": "0292705",
+    "reason": "Moderate young-player progression source and tests incorporated."
   },
   "c81ecc": {
     "status": "integrated",
@@ -144,6 +183,11 @@
     "status": "integrated",
     "incorporated_as": "cc3daaf",
     "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "ca1ac73": {
+    "status": "integrated",
+    "incorporated_as": "5f9b2c6",
+    "reason": "Age-tapered learning relief source and tests incorporated."
   },
   "d3d14a": {
     "status": "integrated",
