@@ -24,6 +24,7 @@ def post(league, kind, subject, body, sender=None, payload=None, expires_week=No
     m = dict(id=next(_ids), year=league.year, week=league.week, kind=kind,
              sender=sender, subject=subject, body=body, payload=payload or {},
              status='unread', expires_week=expires_week)
+    m['entities'] = entity_references(league, str(subject) + '\n' + str(body), payload)
     _box(league).append(m)
     return m
 
@@ -211,7 +212,6 @@ def reconcile(league):
             closed += 1
     return closed
 
-
 def body_rows(league, message):
     """Readable digest rows, including messages already stored in older saves.
 
@@ -246,3 +246,50 @@ def body_rows(league, message):
     line = ''.join(chars).strip().rstrip(',;')
     if line: rows.append(line)
     return rows
+
+# Name navigation data is derived and never serialized as part of the league.
+def entity_catalog(league, known=None):
+    """One directory per roster generation; unchanged page reads return no payload."""
+    players = getattr(league, 'players', {})
+    key = f'{id(league)}:{getattr(league, "year", 0)}:{len(players)}'
+    if known == key:
+        return None
+    cached = getattr(league, '_entity_catalog', None)
+    if cached and cached['key'] == key:
+        return cached['data']
+    import re
+    from views import CLUB_NAME, CLUB_DISPLAY_ABBR
+    rows = [dict(kind='player', id=str(p.pid), name=p.name,
+                 aliases=[p.name[0]+'. '+p.name.split(' ',1)[1]] if ' ' in p.name else [])
+            for p in players.values() if p.name]
+    rows += [dict(kind='team', id=a, name=CLUB_NAME.get(a, a),
+                  aliases=list(dict.fromkeys([a, CLUB_DISPLAY_ABBR.get(a,a)]))) for a in getattr(league, 'teams', {})]
+    names = {}
+    for row in rows:
+        names.setdefault(row['name'], []).append(row)
+    pattern = re.compile(r'(?<!\w)(?:' + '|'.join(re.escape(n) for n in sorted(names,key=len,reverse=True)) + r')(?!\w)') if names else None
+    data = dict(key=key, entities=rows)
+    league._entity_catalog = dict(key=key, data=data, names=names, pattern=pattern)
+    return data
+
+
+def entity_references(league, text, payload=None):
+    """Persist unambiguous identities, using explicit payload IDs for namesakes."""
+    entity_catalog(league)
+    cache = league._entity_catalog
+    if not cache['pattern']: return []
+    explicit = set()
+    def visit(value):
+        if isinstance(value, dict):
+            for v in value.values(): visit(v)
+        elif isinstance(value, (list, tuple)):
+            for v in value: visit(v)
+        elif isinstance(value, str): explicit.add(value)
+    visit(payload or {})
+    result = []
+    for name in dict.fromkeys(m.group() for m in cache['pattern'].finditer(text)):
+        choices = cache['names'][name]
+        selected = [r for r in choices if r['id'] in explicit]
+        if len(choices) == 1: selected = choices
+        if len(selected) == 1: result.append(dict(selected[0]))
+    return result

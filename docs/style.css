@@ -2922,3 +2922,6 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .practice-page input[type=checkbox]{accent-color:var(--team-readable,#ffca28);color-scheme:light}
 .practice-page input[type=checkbox]:checked{outline:1px solid var(--team-readable,#ffca28);outline-offset:2px}
 .practice-page input[type=checkbox]:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.entity-link{color:inherit;font:inherit;text-decoration:none;cursor:pointer;border-radius:2px}
+.entity-link:hover{text-decoration:underline;text-underline-offset:3px;color:var(--ink)}
+.entity-link:focus-visible{outline:2px solid var(--team-readable,var(--club-2));outline-offset:3px;text-decoration:underline}

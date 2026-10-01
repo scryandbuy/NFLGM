@@ -17,6 +17,84 @@ let py = null, team = null, view = null;
 const boot = { bar: $('#bootbar'), line: $('#bootline') };
 const say = (t, pct) => { boot.line.closest('.boot-progress').hidden = false; boot.line.textContent = t; if (pct != null) { boot.bar.style.width = pct + '%'; boot.bar.parentElement.setAttribute('aria-valuenow', String(pct)); } };
 
+// Shared identity navigation. Indexed once, then only newly rendered text is visited.
+const NameLinks = (() => {
+  let key = null, names = new Map(), pattern = null;
+  const pending = new Set(), scopes = new WeakMap();
+  let queued = false;
+  const ignored = 'a,button,input,select,textarea,script,style,[contenteditable], [data-no-entity-links],.nm small';
+  const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const href = r => r.kind === 'player' ? '#club/player/' + encodeURIComponent(r.id) : '#league/team/' + encodeURIComponent(r.id);
+  function setCatalog(data) {
+    if (!data) return;
+    key = data.key; names = new Map();
+    for (const r of data.entities) {
+      for (const label of new Set([r.name,...(r.aliases || [])])) {
+        const k = label.toLocaleLowerCase();
+        if (!names.has(k)) names.set(k, []);
+        if (!names.get(k).some(x=>x.kind===r.kind && x.id===r.id)) names.get(k).push(r);
+      }
+    }
+    pattern = names.size ? new RegExp([...names.keys()].sort((a,b)=>b.length-a.length).map(escape).join('|'), 'giu') : null;
+    enqueue(document.body);
+  }
+  function sync() {
+    if (typeof py === 'undefined' || !py) return;
+    const data = JSON.parse(py.runPython(`_j(__import__('inbox').entity_catalog(SESSION.L, ${key ? JSON.stringify(key) : 'None'}))`));
+    setCatalog(data);
+  }
+  function scope(node, refs) { scopes.set(node, refs || []); return node; }
+  function resolve(name, parent) {
+    const candidates = names.get(name.toLocaleLowerCase()) || [];
+    for (let p=parent; p; p=p.parentElement) {
+      const local = scopes.get(p)?.filter(r=>r.name.toLocaleLowerCase()===name.toLocaleLowerCase());
+      if (local?.length === 1 && candidates.some(r=>r.kind===local[0].kind && r.id===local[0].id)) return local[0];
+    }
+    return candidates.length === 1 ? candidates[0] : null;
+  }
+  function convert(node) {
+    const parent=node.parentElement;
+    if (!parent || parent.closest(ignored) || !pattern || !node.textContent.trim()) return;
+    const text=node.textContent, parts=[];let last=0;
+    const cell=parent.closest('td');
+    if (cell && /Home State/i.test(cell.closest('table')?.querySelector('tr')?.children[cell.cellIndex]?.textContent || '')) return;
+    pattern.lastIndex=0;
+    for (const m of text.matchAll(pattern)) {
+      const end=m.index+m[0].length;
+      if ((m.index && /[\p{L}\p{N}_]/u.test(text[m.index-1])) || (end<text.length && /[\p{L}\p{N}_]/u.test(text[end]))) continue;
+      const target=resolve(m[0],parent);if(!target)continue;
+      if (target.kind==='team' && m[0].length<=3 && (m[0]!==m[0].toUpperCase() || (m[0]==='NO' && text.trim()!=='NO'))) continue;
+      // A player's home state is biography, not a reference to its team.
+      if (target.kind==='team' && /Home State:\s*$/i.test(text.slice(0,m.index))) continue;
+      parts.push(document.createTextNode(text.slice(last,m.index)));
+      const link=document.createElement('a');link.className='entity-link';link.href=href(target);link.textContent=m[0];
+      link.setAttribute('aria-label',`${target.name}: ${target.kind==='player'?'player card':'team overview'}`);
+      link.addEventListener('click',e=>e.stopPropagation());
+      parts.push(link);last=end;
+    }
+    if(!parts.length)return;
+    parts.push(document.createTextNode(text.slice(last)));node.replaceWith(...parts);
+  }
+  function flush() {
+    queued=false;observer.disconnect();
+    const roots=[...pending];pending.clear();
+    for(const root of roots) {
+      if(!root.isConnected || roots.some(other=>other!==root && other.contains(root)))continue;
+      if(root.nodeType===Node.TEXT_NODE){convert(root);continue;}
+      if(root.nodeType!==Node.ELEMENT_NODE || root.closest(ignored))continue;
+      const walk=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),nodes=[];
+      while(walk.nextNode())nodes.push(walk.currentNode);
+      nodes.forEach(convert);
+    }
+    observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+  }
+  function enqueue(node) {if(!node)return;pending.add(node);if(!queued){queued=true;queueMicrotask(flush);}}
+  const observer=new MutationObserver(records=>{for(const r of records){if(r.type==='characterData')enqueue(r.target);else for(const n of r.addedNodes)enqueue(n);}});
+  observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+  return {sync,setCatalog,scope,flush};
+})();
+// End shared identity navigation.
+
 async function bootEngine() {
   say('booting Python…', 4);
   const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.29.5/full/pyodide.mjs');
@@ -147,6 +225,7 @@ function busy(t) { const b = $('#busy'); if (t) { b.textContent = t; b.hidden = 
 
 // ---------------------------------------------------------------- the rail
 function renderRail(r) {
+  NameLinks.sync();
   syncGameplanState();
   // Overview owns its full-width page treatment; other routes use their own boards.
   $('#page').classList.remove('overview-page');
@@ -178,7 +257,7 @@ function featureHero(page, team, kicker, title, subtitle, metrics = []) {
 function surname(name) { const p = String(name || '').trim().split(' '); if (p.length >= 2 && /^(Jr\.?|Sr\.?|II|III|IV|V)$/.test(p[p.length - 1])) return p.slice(-2).join(' '); return p[p.length - 1] || ''; }
 function stripe(abbr, text) { return el('span', { class: 'stripe', style: `--c:${COLOR[abbr] || '#555'}` }, text ?? showAbbr(abbr)); }
 // a club's name as a link to its team page (your own club goes to Club)
-function clubLink(abbr, text) { const s = stripe(abbr, text); s.classList.add('clublink'); s.style.cursor = 'pointer'; s.onclick = e => { e.stopPropagation(); location.hash = (view && view.rail && view.rail.club && view.rail.club.abbr === abbr) ? '#club' : `#league/team/${abbr}`; }; return s; }
+function clubLink(abbr, text) { return el('a', {class:'clublink entity-link', href:`#league/team/${encodeURIComponent(abbr)}`, onclick:e=>e.stopPropagation()}, stripe(abbr, text)); }
 function formDots(f, big = false) { return el('div', { class: 'form' + (big ? ' big-form' : '') }, ...f.map(x => el('i', { class: x }))); }
 
 // the desk card's second button: where the decision is made
@@ -272,6 +351,7 @@ function renderInbox(v) {
   const pane = el('div', { class: 'pane' });
   if (cur) {
     const m = pyJSON(`SESSION.inbox_message(${cur.id})`);
+    NameLinks.scope(pane, m.entities);
     pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
     const structuredRecap = m.recap || m.snap_counts || (m.kind === 'result' && (m.body || '').includes('PREGAME PLAN\n'));
     const messageBody = structuredRecap ? renderRecapBody(m) : el('div', { class: 'mbody' }, ...(m.body_rows || [m.body || '']).map(line => el('div', { class: 'mail-body-row' }, line)));
