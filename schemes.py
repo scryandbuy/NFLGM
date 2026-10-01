@@ -441,7 +441,16 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         call['play_action'] = rng.random() < min(0.6, (0.37 if not shotgun else 0.175) * pa_scale * sit)
         # the designed screen: about 5.5% of throws league-wide, and a club's plan can add no more than three points
         # (a plan that stacked several screen calls had one club throwing a third of its passes on screens)
-        call['screen'] = rng.random() < 0.055 + float(np.clip(float(lean.get('screen_boost', 0.0) or 0.0), -0.03, 0.03))
+        screen_rate = 0.055 + float(np.clip(float(lean.get('screen_boost', 0.0) or 0.0), -0.03, 0.03))
+        if down == 4:
+            # Most fourth-down calls must reach the sticks through the air.
+            # Keep an occasional short-yardage screen without treating a
+            # five-yard conversion like an ordinary early-down opportunity.
+            screen_rate *= (1.0 if ydstogo <= 2 else .4 if ydstogo <= 3
+                            else .15 if ydstogo <= 7 else .05 if ydstogo < 15 else 0.)
+        call['screen'] = rng.random() < screen_rate
+        # The concept selector and pressure audibles share this decision.
+        call['allow_screen'] = down != 4 or ydstogo <= 2 or call['screen']
         call['rpo'] = rng.random() < 0.057
         # THE CONCEPT IS A CALL, NOT A DRAW. It used to come off a flat
         # rng.choice inside a distance bucket, so a quarterback who could not
@@ -458,7 +467,8 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
             call['concept'] = PC.call_pass(
                 offense, job, rate_fn, rng,
                 identity=(ident_pass if ident_pass else None),
-                pressure_risk=(1.0 - (ident['pass_block'] if ident else 0.8)))
+                pressure_risk=(1.0 - (ident['pass_block'] if ident else 0.8)),
+                allow_screen=call['allow_screen'])
         elif ydstogo >= 12 or (down >= 3 and ydstogo >= 8):
             call['concept'] = rng.choice(['four_verts', 'dagger', 'flood', 'levels', 'scissors'])
         elif ydstogo <= 4:

@@ -34,7 +34,7 @@ QUARTER = 900
 HALF = 1800
 GAME = 3600
 
-def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=0.5):
+def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=0.5, urgent=False):
     s = SEC.get(result, 25.0)
     if clock_stopped: s = min(s, 8.0)
     if not clock_stopped and not hurry and not timeout and result in ('complete', 'run', 'scramble', 'sack'):
@@ -43,12 +43,25 @@ def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=
         # AFTER this snap, bounded by the 40-second play clock plus live action.
         s = 6.0 + min(40.0, max(0.0, s - 6.0 + 2.0) * (1.0 - 0.6 * (float(np.clip(tempo, 0, 1)) - 0.5)))
     if hurry: s *= 0.65     # a two-minute drill runs about 17 seconds a snap against 25 to 27 at the normal pace
+    if urgent and result in ('complete', 'run', 'scramble', 'sack'):
+        # Preserve live action, but spend only a short reset between snaps
+        # when another possession (or several) is still needed to catch up.
+        s = min(s, 6.0 + 8.0 * (1.0 - .5 * (float(np.clip(tempo, 0, 1)) - .5)))
     if timeout: s = min(s, 6.0)     # the clock stops the moment it is called
     return float(s)
 
 
-def hurry_for_snap(seconds, score_diff, plan=None, call=None):
+def multi_score_urgency(seconds, score_diff, quarter):
+    if quarter != 4 or score_diff >= -8 or seconds <= 0:
+        return False
+    scores_needed = int(np.ceil(-score_diff / 8.0))
+    return seconds <= min(300, 90 * scores_needed)
+
+
+def hurry_for_snap(seconds, score_diff, plan=None, call=None, quarter=None):
     """Use the coach's clock plan for normal plays and penalty restarts alike."""
+    if multi_score_urgency(seconds, score_diff, quarter):
+        return True
     if plan is not None:
         return plan.get('choice') != 'kneel' and bool(plan.get('hurry', True))
     return (seconds <= 120 and score_diff <= 0) or bool((call or {}).get('no_huddle'))
@@ -577,6 +590,8 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70, snapper=None,
     new = float(np.clip(100 - land - ret, 1, 99))
     return dict(type='punt', blocked=False, touchback=False, pooch=pooch, how=how,
                 gross=round(float(gross), 1), ret=round(float(ret), 1),
+                display_gross=int(round(yardline_100)) - int(round(land)),
+                display_ret=100 - int(round(new)) - int(round(land)),
                 land=round(float(land), 1), origin=yardline_100,
                 net=round(float(yardline_100 - (100 - new)), 1),
                 new_yardline=round(new, 0))
@@ -2197,7 +2212,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                  (defense.get('lb') or [])[:_dc['lb']] +
                  (defense.get('dl') or [])[:_dc['dl']])
         d_awr = float(np.mean([rate_fn(d, {'awareness_rating': 1.0}) for d in _dmen])) if _dmen else 0.70
-        _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc)
+        _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
         pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'], discipline=float(np.clip(0.70 + 0.8 * (d_awr - 0.787), 0.5, 0.9)),
                               noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)), hurry=_in_drill)
         live_pen = pen if (pen and not pen['nullifies']) else None
@@ -2349,7 +2364,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # the snap. Keep timeout inventory for subsequent live downs.
                 late_penalty = secs_in_half_p - 6.0 <= (120.0 if dr.quarter <= 2 else 300.0)
                 used_p, used_by_p = (False, None) if late_penalty else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
-                hurry_p = hurry_for_snap(secs_in_half_p, dr.score_diff, getattr(dr, '_plan', None), oc)
+                hurry_p = hurry_for_snap(secs_in_half_p, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
                 live_start = dr.clock
                 _tick(dr, min(6.0, play_seconds(t, hurry=hurry_p, timeout=used_p)))
                 _penalty_ready_clock(dr, penalty_entry, half_end, result=t,
@@ -2398,11 +2413,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # The change of possession stops the clock at the whistle. Spending a
         # timeout for the former offense here buys no time.
         used, used_by = (False, None) if late_penalty or _fourth_fail else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
-        hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc)
+        hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
         before_clock = secs_in_half
         clock_before = dr.clock
         tempo = off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5
-        elapsed = play_seconds(t, hurry=hurry, timeout=used, tempo=tempo)
+        elapsed = play_seconds(t, hurry=hurry, timeout=used, tempo=tempo,
+                               urgent=multi_score_urgency(secs_in_half, dr.score_diff, dr.quarter))
         # A deliberate bleed may wait for a later kick, but it cannot silently
         # consume that kick while holding a timeout. Live action still costs
         # six seconds; no time is restored when the play itself ends the half.

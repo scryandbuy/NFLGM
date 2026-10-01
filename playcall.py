@@ -192,7 +192,7 @@ def call_run(off, job, rate_fn, rng, identity=None, box=6, family_mix=None):
     return pool[int(rng.choice(len(pool), p=w / w.sum()))]
 
 
-def call_pass(off, job, rate_fn, rng, identity=None, pressure_risk=0.5):
+def call_pass(off, job, rate_fn, rng, identity=None, pressure_risk=0.5, allow_screen=True):
     """
     Which concept, judged by whether THIS quarterback can throw it.
 
@@ -202,6 +202,8 @@ def call_pass(off, job, rate_fn, rng, identity=None, pressure_risk=0.5):
     pool = list(PASS_FOR.get(job, PASS_FOR['chains']))
     if pressure_risk > 0.62:
         pool += PASS_FOR['protect']
+    if not allow_screen:
+        pool = [concept for concept in pool if concept != 'screen']
     qb = off.get('qb')
     if qb is None:
         return pool[0]
@@ -329,7 +331,8 @@ def audible(off_call, def_call, off, rate_fn, rng, latitude=None, family_mix=Non
         return call, 'depth'
     if call.get('is_pass') and look['looks_heavy']:
         # pressure showing - get the ball out
-        call['concept'] = call_pass(off, 'protect', rate_fn, rng)
+        call['concept'] = call_pass(off, 'protect', rate_fn, rng,
+                                   allow_screen=call.get('allow_screen', True))
         return call, 'protect'
     return off_call, None
 

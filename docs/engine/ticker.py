@@ -152,8 +152,9 @@ def play_line(league, p, off_abbr, def_abbr):
         else:
             _ny = p.get('new_yardline')
             _down_spot = _spot(100.0 - float(_ny), off_abbr, def_abbr) if _ny is not None else None
-            ret = int(round(p.get('ret', 0)))
-            text = f"Punt, {int(round(p.get('gross', 0)))} yards" + (", touchback." if p.get('touchback') else (f", returned {ret} yard{'s' if ret != 1 else ''}." if p.get('how') == 'return' and p.get('ret') else (", fair catch." if p.get('how') == 'fair_catch' else (f", downed at the {_down_spot}." if p.get('how') == 'downed' and _down_spot else '.'))))
+            ret = int(p.get('display_ret', round(p.get('ret', 0))))
+            gross = int(p.get('display_gross', round(p.get('gross', 0))))
+            text = f"Punt, {gross} yards" + (", touchback." if p.get('touchback') else (f", returned {ret} yard{'s' if ret != 1 else ''}." if p.get('how') == 'return' and p.get('ret') else (", fair catch." if p.get('how') == 'fair_catch' else (f", downed at the {_down_spot}." if p.get('how') == 'downed' and _down_spot else '.'))))
             kind = 'special'
     elif t == 'field_goal':
         d = int(round(p.get('distance', 0)))
