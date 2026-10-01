@@ -1,0 +1,179 @@
+{
+  "996680": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "03820a": {
+    "status": "integrated",
+    "incorporated_as": "412553d",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "13298c": {
+    "status": "integrated",
+    "incorporated_as": "31764be",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "1da80a": {
+    "status": "integrated",
+    "incorporated_as": "412553d",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "1eb402": {
+    "status": "integrated",
+    "incorporated_as": "4ff4940",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "1fe1dd": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "2a10e4": {
+    "status": "integrated",
+    "incorporated_as": "3b29f83",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "2aeba4": {
+    "status": "integrated",
+    "incorporated_as": "20100dd",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "3cefbe": {
+    "status": "integrated",
+    "incorporated_as": "6cf23fb",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "3ecdbb": {
+    "status": "integrated",
+    "incorporated_as": "77ae4ff",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "525ec0": {
+    "status": "integrated",
+    "incorporated_as": "412553d",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "5913b2": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "5a3286": {
+    "status": "integrated",
+    "incorporated_as": "b3f9465",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "5cc6cd": {
+    "status": "integrated",
+    "incorporated_as": "0af1f97",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "5de029": {
+    "status": "integrated",
+    "incorporated_as": "ce8ffea",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "5e1beb": {
+    "status": "integrated",
+    "incorporated_as": "ebf8547",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "5e4775": {
+    "status": "integrated",
+    "incorporated_as": "d9b41db",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "6db1f0": {
+    "status": "integrated",
+    "incorporated_as": "ef0a970",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "78095e": {
+    "status": "integrated",
+    "incorporated_as": "412553d",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "78e482": {
+    "status": "integrated",
+    "incorporated_as": "b3968e3",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "7b42a2": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "967f5c": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "9875fc": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "9f0674": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "a4eb87": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "ad6b1c": {
+    "status": "integrated",
+    "incorporated_as": "92be535",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "c81ecc": {
+    "status": "integrated",
+    "incorporated_as": "3180cb5",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "c89fa1": {
+    "status": "integrated",
+    "incorporated_as": "cc3daaf",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "d3d14a": {
+    "status": "integrated",
+    "incorporated_as": "5b260fd",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "d410bc": {
+    "status": "integrated",
+    "incorporated_as": "df71eb3",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "df4002": {
+    "status": "superseded",
+    "reason": "In-progress snapshot of older roster fixes; completed source changes were integrated from their final branches."
+  },
+  "e35cd0": {
+    "status": "integrated",
+    "incorporated_as": "55c6091",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "e84a1b": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "eb0cab": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "eb968e": {
+    "status": "integrated",
+    "incorporated_as": "f7e1959",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  },
+  "ef8b83": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "f4f305": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "fcebd7": {
+    "status": "integrated",
+    "incorporated_as": "6ddba90",
+    "reason": "Source change incorporated and reconciled in this integration line."
+  }
+}
