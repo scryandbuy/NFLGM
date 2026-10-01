@@ -2,6 +2,8 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const src=fs.readFileSync('docs/app.js','utf8');
 const ctx={el:(tag,attrs,...kids)=>({tag,attrs,kids}),clubLink:(abbr,name)=>({abbr,name})};
 vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('const DISPLAY_ABBR ='),src.indexOf('const COLOR =')),ctx);
+assert.equal(vm.runInContext("showTeamText('LAC NYG NYJ LA')",ctx),'CA NY NJ LA');
 vm.runInContext(src.slice(src.indexOf('const COLOR ='),src.indexOf('const COLOR =')+src.slice(src.indexOf('const COLOR =')).indexOf('\n'))+'\n'+src.slice(src.indexOf('const BOOT_TEAM ='),src.indexOf('const BOOT_TEAM =')+src.slice(src.indexOf('const BOOT_TEAM =')).indexOf('\n')),ctx);
 vm.runInContext(src.slice(src.indexOf('function teamTheme('),src.indexOf('function applyTeamTheme(')),ctx);
 vm.runInContext("let txGroup='All',txClub='all',txQuery='';"+src.slice(src.indexOf('function coachingMoveRow('),src.indexOf('function renderTransactions(')),ctx);

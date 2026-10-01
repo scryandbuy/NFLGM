@@ -5,7 +5,9 @@ function setup(state,{ok=true}={}){
   let done=0;const calls=[];
   const ctx={el:(tag,attrs={},...children)=>({tag,attrs,children,append(...items){this.children.push(...items);}}),
     offerForm:()=>({tag:'form',children:[]}),notify:()=>{},pyJSON:query=>{calls.push(query);return {ok,why:'Not enough cap room'};}};
-  vm.createContext(ctx);vm.runInContext(code,ctx);
+  vm.createContext(ctx);
+  vm.runInContext(src.slice(src.indexOf('const DISPLAY_ABBR ='),src.indexOf('const COLOR =')),ctx);
+  vm.runInContext(code,ctx);
   const box=ctx.threadBox({id:1,state,kind:'fa_offseason',ask:22,years:3,rival:{team:'Arizona',apy:20,years:3},counter:{apy:21,years:3}},()=>done++);
   const walk=n=>[n,...(n.children||[]).filter(x=>x&&typeof x==='object').flatMap(walk)];
   const nodes=walk(box),buttons=nodes.filter(n=>n.tag==='button');

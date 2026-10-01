@@ -10,10 +10,11 @@ const el=(tag,attrs={},...kids)=>new Element(tag,attrs,kids);
 const text=n=>typeof n==='string'?n:(n?.kids||[]).map(text).join(' ');
 const all=n=>[n,...(n?.kids||[]).flatMap(k=>typeof k==='object'?all(k):[])];
 let saved=0,closed=0,taken=false;
-const ctx={el,document:{body:el('body')},showAbbr:x=>x,
+const ctx={el,document:{body:el('body'),createTextNode:text=>text},showAbbr:x=>x,
  pyJSON:cmd=>{if(cmd.startsWith('SESSION.half_take'))taken=!taken;return {live:{recs:[{i:0,text:'Protect',why:'Pressure',side:'offence',taken}]}};},
  saveLiveJournalNotified:async()=>{saved++;}};
 vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('function playerMention('),src.indexOf('function renderRecapBody(')),ctx);
 vm.runInContext(src.slice(src.indexOf('function renderRecapBody('),src.indexOf('function renderInbox(')),ctx);
 vm.runInContext(src.slice(src.indexOf('const halfConfirmed ='),src.indexOf('// Team reports share')),ctx);
 let body=ctx.renderRecapBody({kind:'result',recap:{intro:'A game',sections:[{title:'Pregame plan',reviews:[{title:'Run it',conclusion:'Positive',findings:[{label:'Running',verdict:'positive',text:'Eight yards per run'}]}]}]}});
