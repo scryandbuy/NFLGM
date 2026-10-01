@@ -23,8 +23,50 @@ class LeagueViews(unittest.TestCase):
         self.player('lineman','LT',dict(snaps=900,pb_snaps=400,pb_wins=300))
         v=V.stats(None,self.L,'GB',2026)
         self.assertEqual([r['pid'] for r in v['tables']['blocking']['rows']],['lineman'])
-        rows=next(b['rows'] for b in v['advanced'] if b['title']=='Defensive EPA per Play')
-        self.assertEqual([r['pid'] for r in rows],[str(i) for i in range(8)])
+        box=next(b for b in v['advanced'] if b['title']==AS.DEF_EPA_LABEL)
+        self.assertEqual([r['pid'] for r in box['rows']],[str(i) for i in range(39,31,-1)])
+        self.assertIn('Higher is better',box['note'])
+    def test_defensive_ranking_matches_booked_sign_and_preserves_negatives(self):
+        from collections import defaultdict
+        import copy
+        lines=defaultdict(lambda: defaultdict(float))
+        book=N(_get=lambda pid: lines[pid])
+        for pid,epa in [('allowed',2.2),('stopped',-2.2)]:
+            AS.book_play(book,{'type':'run'}, {'qb':{'pid':'qb'},'rb':{'pid':'rb'}},
+                         {'dl':[{'pid':pid}]},epa)
+            self.player(pid,'DT',dict(lines[pid]))
+        before=copy.deepcopy(self.L.stats)
+        ranked=AS.leaders(self.L,2026,'def_epa_per_play')
+        self.assertEqual([p.pid for p,_,_ in ranked],['stopped','allowed'])
+        self.assertAlmostEqual(ranked[0][1],0.2)
+        self.assertAlmostEqual(ranked[1][1],-0.2)
+        self.assertEqual(self.L.stats,before)
+        self.assertLess(AS.line_metrics({'pass_plays':10,'pass_epa':-1,
+                                      'pass_cmp':4,'xcomp':5,'cpoe_att':10})['cpoe'],0)
+    def test_snapshot_advanced_leaders_are_rebuilt_without_mutating_history(self):
+        import copy
+        for i in range(12):self.player(str(i),'CB',dict(def_plays=300,def_epa=i-6))
+        self.L.history={'2026':{'stats':{'advanced':[{'title':'Defensive EPA per Play','rows':[]}],
+                                       'team':[{'kept':True}]}}}
+        before=copy.deepcopy(self.L.history)
+        view=V.stats(None,self.L,'GB',2026)
+        self.assertEqual(view['advanced'][0]['rows'][0]['pid'],'11')
+        self.assertEqual(view['team'],[{'kept':True}])
+        self.assertEqual(self.L.history,before)
+    def test_snapshot_without_raw_lines_does_not_keep_wrong_defensive_leaders(self):
+        self.L.stats={}
+        self.L.history={'2026':{'stats':{'advanced':[{'title':'Defensive EPA per Play','rows':[]},
+                                                   {'title':'EPA per Dropback','rows':[]}]}}}
+        view=V.stats(None,self.L,'GB',2026)
+        self.assertEqual([b['title'] for b in view['advanced']],['EPA per Dropback'])
+    def test_defensive_player_stats_and_career_explain_shared_metric(self):
+        from views_club import _season_line
+        for pos in ['DT','CB']:
+            p=self.player(pos,pos,dict(def_plays=300,def_epa=-6))
+            view=_season_line(self.L,p,2026)
+            self.assertEqual(view['cols'][-1],AS.DEF_EPA_LABEL)
+            self.assertIn('not an individual grade',view['epa_note'])
+            self.assertEqual(view['row'][-1],'-0.02')
     def test_old_team_totals_and_identity(self):
         self.player('qb','QB',dict(pass_yds=3400,pass_att=400,pass_plays=400),team='MIN')
         self.L.history={'2026':{'schedule':{'all_games':[dict(week=w,done=True,away={'abbr':'MIN'},home={'abbr':'GB'},hp=10,ap=5) for w in range(1,18)]}}}

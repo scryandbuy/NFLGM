@@ -118,6 +118,11 @@ def line_metrics(line):
     return m
 
 
+DEF_EPA_LABEL = 'Shared Defensive EPA/Play'
+DEF_EPA_NOTE = ('Higher is better. Each play\'s defensive EPA is shared equally among all 11 defenders, '
+                'then averaged over each player\'s defensive snaps. This reflects on-field results, not an individual grade.')
+
+
 def leaders(league, year, metric, min_n=1, top=10, pos=None):
     """League leaders on a derived metric with a floor on the denominator."""
     floor_key = {'epa_per_dropback': 'pass_plays', 'cpoe': 'cpoe_att', 'epa_per_rush': 'rush_plays',
@@ -131,5 +136,6 @@ def leaders(league, year, metric, min_n=1, top=10, pos=None):
         if p is None or (pos and season_pos not in pos) or n < min_n: continue
         m = line_metrics(line)
         if metric in m: rows.append((p, m[metric], n))
-    rows.sort(key=lambda r: r[1] if metric == 'def_epa_per_play' else -r[1])
+    # book_play negates offensive EPA: positive defensive contribution is better.
+    rows.sort(key=lambda r: -r[1])
     return rows[:top]

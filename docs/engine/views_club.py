@@ -140,8 +140,8 @@ def _season_line(league, p, year=None):
     # the defense
     front = p.pos in ('LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM')
     return dict(games=g, line=f"{int(S.get('tackles', 0))} tkl · {float(S.get('sacks', 0) or 0):.1f} sk · {int(S.get('int_def', 0))} INT · {int(S.get('pass_def', 0))} PD",
-                comp=None, epa=m.get('def_epa_per_play'),
-                cols=(['Tkl', 'Sacks', 'Pressures', 'Pass Rush Win%', 'FF', 'EPA/Play'] if front else ['Tkl', 'INT', 'PD', 'FF', 'Sacks', 'EPA/Play']),
+                comp=None, epa=m.get('def_epa_per_play'), epa_note=AS.DEF_EPA_NOTE,
+                cols=(['Tkl', 'Sacks', 'Pressures', 'Pass Rush Win%', 'FF', AS.DEF_EPA_LABEL] if front else ['Tkl', 'INT', 'PD', 'FF', 'Sacks', AS.DEF_EPA_LABEL]),
                 row=([int(S.get('tackles', 0)), f"{float(S.get('sacks', 0) or 0):.1f}", int(S.get('pressures', 0)), (f"{m['pass_rush_win_rate']:.0f}%" if 'pass_rush_win_rate' in m else '—'), int(S.get('ff', 0)), f1(m.get('def_epa_per_play'))] if front
                      else [int(S.get('tackles', 0)), int(S.get('int_def', 0)), int(S.get('pass_def', 0)), int(S.get('ff', 0)), f"{float(S.get('sacks', 0) or 0):.1f}", f1(m.get('def_epa_per_play'))]))
 

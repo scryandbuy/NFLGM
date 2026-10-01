@@ -383,11 +383,37 @@ def _season_player(league, p, year):
     return SimpleNamespace(pid=p.pid, name=p.name, pos=line.get('pos', p.pos), team=line.get('team', ''))
 
 
+def _advanced_stats(league, yr, abbr):
+    import advanced_stats as AS
+    adv = []
+    for title, metric, floor, pos, fmt in (('EPA per Dropback', 'epa_per_dropback', 150, ['QB'], 'epa'), ('Completion Over Expected', 'cpoe', 150, ['QB'], 'pct1'), ('EPA per Rush', 'epa_per_rush', 80, ['HB', 'FB'], 'epa'), ('EPA per Target', 'rec_epa_per_target', 40, ['WR', 'TE', 'HB'], 'epa'),
+                                            ('Pass Rush Win Rate', 'pass_rush_win_rate', 100, None, 'pct'), ('Pass Block Win Rate', 'pass_block_win_rate', 200, ['LT', 'LG', 'C', 'RG', 'RT'], 'pct'), ('Separation', 'separation', 40, ['WR', 'TE'], 'f1'), (AS.DEF_EPA_LABEL, 'def_epa_per_play', 200, None, 'epa')):
+        scale = played_share(league, yr)
+        try: rows = AS.leaders(league, yr, metric, min_n=max(1, int(floor * scale)), top=8, pos=pos)
+        except Exception: rows = []
+        out = []
+        for p, val, n in rows:
+            p = _season_player(league, p, yr)
+            s = (f"{val:+.2f}" if fmt == 'epa' else f"{val:+.1f}" if fmt == 'pct1' else f"{val:.0f}%" if fmt == 'pct' else f"{val:.1f}")
+            out.append(dict(pid=p.pid, name=p.name, pos=p.pos, team=(p.team or ''), v=s, n=int(n), mine=(p.team == abbr)))
+        unit_word = {'epa_per_dropback': 'dropbacks', 'cpoe': 'attempts', 'epa_per_rush': 'carries', 'rec_epa_per_target': 'targets', 'pass_rush_win_rate': 'rushes', 'pass_block_win_rate': 'blocking snaps', 'separation': 'targets', 'def_epa_per_play': 'plays'}[metric]
+        if out: adv.append(dict(title=title, unit=f"min {max(1, int(floor * scale))} {unit_word}", rows=out, note=(AS.DEF_EPA_NOTE if metric == 'def_epa_per_play' else '')))
+    return adv
+
+
 def stats(session, league, abbr, year=None):
     yr = int(year or league.year)
     if yr != int(league.year):
         saved = _past(session, league, abbr, 'stats', yr)
-        if saved is not None: return saved
+        if saved is not None:
+            if yr in league.stats:
+                saved['advanced'] = _advanced_stats(league, yr, abbr)
+            else:
+                # Old snapshots retained only the bottom eight defenders. Without
+                # raw lines, reversing that subset cannot recover true leaders.
+                saved['advanced'] = [b for b in saved.get('advanced', [])
+                                     if b.get('title') != 'Defensive EPA per Play']
+            return saved
     book = league.stats.get(yr, {}) or {}
     boxes = []
     for title, key, unit in LEADERS:
@@ -400,20 +426,7 @@ def stats(session, league, abbr, year=None):
             out.append(dict(pid=pid, name=p.name, pos=p.pos, team=(p.team or ''), v=(round(float(val), 1) if key == 'sacks' else _num(val)), mine=(p.team == abbr)))
         if out: boxes.append(dict(title=title, unit=unit, rows=out))
     years = sorted(set(int(k) for k in league.stats) | {int(league.year)})
-    import advanced_stats as AS
-    adv = []
-    for title, metric, floor, pos, fmt in (('EPA per Dropback', 'epa_per_dropback', 150, ['QB'], 'epa'), ('Completion Over Expected', 'cpoe', 150, ['QB'], 'pct1'), ('EPA per Rush', 'epa_per_rush', 80, ['HB', 'FB'], 'epa'), ('EPA per Target', 'rec_epa_per_target', 40, ['WR', 'TE', 'HB'], 'epa'),
-                                            ('Pass Rush Win Rate', 'pass_rush_win_rate', 100, None, 'pct'), ('Pass Block Win Rate', 'pass_block_win_rate', 200, ['LT', 'LG', 'C', 'RG', 'RT'], 'pct'), ('Separation', 'separation', 40, ['WR', 'TE'], 'f1'), ('Defensive EPA per Play', 'def_epa_per_play', 200, None, 'epa_neg')):
-        scale = played_share(league, yr)
-        try: rows = AS.leaders(league, yr, metric, min_n=max(1, int(floor * scale)), top=8, pos=pos)
-        except Exception: rows = []
-        out = []
-        for p, val, n in rows:
-            p = _season_player(league, p, yr)
-            s = (f"{val:+.2f}" if fmt in ('epa', 'epa_neg') else f"{val:+.1f}" if fmt == 'pct1' else f"{val:.0f}%" if fmt == 'pct' else f"{val:.1f}")
-            out.append(dict(pid=p.pid, name=p.name, pos=p.pos, team=(p.team or ''), v=s, n=int(n), mine=(p.team == abbr)))
-        unit_word = {'epa_per_dropback': 'dropbacks', 'cpoe': 'attempts', 'epa_per_rush': 'carries', 'rec_epa_per_target': 'targets', 'pass_rush_win_rate': 'rushes', 'pass_block_win_rate': 'blocking snaps', 'separation': 'targets', 'def_epa_per_play': 'plays'}[metric]
-        if out: adv.append(dict(title=title, unit=f"min {max(1, int(floor * scale))} {unit_word}", rows=out))
+    adv = _advanced_stats(league, yr, abbr)
     # the position tables: passing, rushing, receiving, defense, blocking; and the team table
     def table(filt, key, cols):
         out = []
