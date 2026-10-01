@@ -243,10 +243,10 @@ function renderInbox(v) {
   const cur = rows.find(r => r.id === mailSel) || null;
   const messageTools = el('div',{class:'inbox-message-tools'},
     el('button', { class: 'btn', disabled: cur && cur.unread ? null : '', onclick: () => { pyJSON(`SESSION.inbox_read(${cur.id})`); reload(); } }, 'Mark Read'),
-    el('button', { class: 'btn', disabled: cur && !cur.decide ? null : '', title: 'Remove this message', onclick: () => { notify(pyJSON(`SESSION.inbox_delete(${cur.id})`)); mailSel = null; reload(); } }, 'Delete'));
+    el('button', { class: 'btn', disabled: cur && !cur.decide ? null : '', 'data-tip': 'Remove this message', onclick: () => { notify(pyJSON(`SESSION.inbox_delete(${cur.id})`)); mailSel = null; reload(); } }, 'Delete'));
   tools.append(el('span',{class:'inbox-tool-space'}),
     el('button', { class: 'btn quiet', onclick: () => { pyJSON('SESSION.inbox_mark_all()'); reload(); } }, 'Mark All Read'),
-    el('button', { class: 'btn quiet', title: 'Remove every read message that needs no decision', onclick: () => { if (confirm('Clear every read message that needs no decision?')) { pyJSON('SESSION.inbox_clear_read()'); mailSel = null; reload(); } } }, 'Clear Read'));
+    el('button', { class: 'btn quiet', 'data-tip': 'Remove every read message that needs no decision', onclick: () => { if (confirm('Clear every read message that needs no decision?')) { pyJSON('SESSION.inbox_clear_read()'); mailSel = null; reload(); } } }, 'Clear Read'));
   s.append(tools);
   const box = el('div', { class: 'mailbox' });
   const list = el('div', { class: 'list' });
@@ -712,9 +712,9 @@ function renderRoster(v) {
   const hasStatus = ['Overview', 'Contract'].includes(clubView);
   if (clubTab === 'ps' || clubTab === 'ir') { heads.splice(heads.length - (hasStatus ? 2 : 1), hasStatus ? 2 : 1); heads.push(el('th', {}, clubTab === 'ir' ? 'IR' : '')); }
   const acts = r => el('td', {}, el('div', { class: 'row-act' },
-    el('button', { title: 'Card', 'data-tip': 'Open his card', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, '▣'),
-    el('button', { title: 'Extend', 'data-tip': 'Ask his agent and open the talks', onclick: e => { e.stopPropagation(); const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`); notify(res); if (res.ok) location.hash = '#personnel/extensions'; } }, '$'),
-    el('button', { title: 'Trade Block', 'data-tip': 'Put him in a trade package', onclick: e => { e.stopPropagation(); tradeState = { other: tradeState.other, a: [r.pid], b: [], keep: true }; location.hash = '#personnel/trades'; } }, '⇄')));
+    el('button', { 'aria-label': 'Card', 'data-tip': 'Open his card', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, '▣'),
+    el('button', { 'aria-label': 'Extend', 'data-tip': 'Ask his agent and open the talks', onclick: e => { e.stopPropagation(); const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`); notify(res); if (res.ok) location.hash = '#personnel/extensions'; } }, '$'),
+    el('button', { 'aria-label': 'Trade Block', 'data-tip': 'Put him in a trade package', onclick: e => { e.stopPropagation(); tradeState = { other: tradeState.other, a: [r.pid], b: [], keep: true }; location.hash = '#personnel/trades'; } }, '⇄')));
   const drawRows = () => {
     tbl.innerHTML = ''; tbl.append(el('tr', {}, ...heads));
     const q = rosterQuery.trim().toLowerCase(); let shown = 0;
@@ -725,12 +725,12 @@ function renderRoster(v) {
       tbl.append(el('tr', { class: 'grp' }, el('td', { colspan: String(heads.length) }, `${g.title} · ${rows.length}`)));
       for (const r of rows) {
         shown++;
-        const cells = { Overview: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, devTag(r.dev)), el('td', {}, condBar(r.cond)), el('td', {}, pill(r.morale)), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n', title: cutPenaltyText(r) }, `$${r.penalty.toFixed(1)}m`, r.penalty_next ? el('small', {}, ` + $${r.penalty_next.toFixed(1)}m next yr`) : ''), el('td', {}, el('span', { class: 'inj' }, r.status))],
+        const cells = { Overview: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, devTag(r.dev)), el('td', {}, condBar(r.cond)), el('td', {}, pill(r.morale)), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n', 'data-tip': cutPenaltyText(r) }, `$${r.penalty.toFixed(1)}m`, r.penalty_next ? el('small', {}, ` + $${r.penalty_next.toFixed(1)}m next yr`) : ''), el('td', {}, el('span', { class: 'inj' }, r.status))],
                         Ratings: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.pot_range ? `${r.pot_range[0]}–${r.pot_range[1]}` : (r.pot ?? '—')), el('td', {}, devTag(r.dev)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, pill(r.morale))],
-                        Contract: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n', title: cutPenaltyText(r) }, `$${r.penalty.toFixed(1)}m`, r.penalty_next ? el('small', {}, ` + $${r.penalty_next.toFixed(1)}m next yr`) : ''), el('td', {}, el('span', { class: 'inj' }, r.status))],
+                        Contract: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, r.yrs), el('td', { class: 'n' }, `$${r.hit.toFixed(1)}m`), el('td', { class: 'n', 'data-tip': cutPenaltyText(r) }, `$${r.penalty.toFixed(1)}m`, r.penalty_next ? el('small', {}, ` + $${r.penalty_next.toFixed(1)}m next yr`) : ''), el('td', {}, el('span', { class: 'inj' }, r.status))],
                         Stats: () => [el('td', {}, who(r)), el('td', {}, r.pos), el('td', { class: 'n' }, r.stats.games), el('td', { style: 'text-align:left;font-family:var(--mono);font-size:14px' }, r.stats.line), el('td', { class: 'n' }, r.stats.comp != null ? `${r.stats.comp}%` : '—'), el('td', { class: 'n', style: r.stats.epa != null ? (r.stats.epa > 0 ? 'color:var(--ok)' : 'color:var(--danger)') : '' }, r.stats.epa != null ? (r.stats.epa > 0 ? '+' : '') + r.stats.epa.toFixed(2) : '—')] }[clubView]();
         if (clubTab === 'ps' || clubTab === 'ir') { if (hasStatus) cells.splice(cells.length - 1, 1); }   // the squad and IR pages carry no Status column and no card/agent/trade icons
-        else if (!mine) { if (hasStatus) cells.splice(cells.length - 1, 1); cells.push(el('td', {}, el('div', { class: 'row-act' }, el('button', { title: 'Card', 'data-tip': 'Open his card', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, '▣'), el('button', { title: 'Trade', 'data-tip': 'Ask about him in a trade', onclick: e => { e.stopPropagation(); tradeState = { other: abbr, a: [], b: [r.pid] }; location.hash = '#personnel/trades'; } }, '⇄')))); }
+        else if (!mine) { if (hasStatus) cells.splice(cells.length - 1, 1); cells.push(el('td', {}, el('div', { class: 'row-act' }, el('button', { 'aria-label': 'Card', 'data-tip': 'Open his card', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, '▣'), el('button', { 'aria-label': 'Trade', 'data-tip': 'Ask about him in a trade', onclick: e => { e.stopPropagation(); tradeState = { other: abbr, a: [], b: [r.pid] }; location.hash = '#personnel/trades'; } }, '⇄')))); }
         else cells.push(acts(r));
         if (clubTab === 'ir' && !mine) cells.push(el('td', {}, r.returnable ? `Placed week ${r.ir_week}` : 'Season'));
         if (clubTab === 'ir' && mine) cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' }, el('span', { class: 'muted', style: 'font-size:12px;margin-right:6px' }, r.returnable ? `placed wk ${r.ir_week}` : 'season'), el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: mine && r.can_activate ? null : '', 'data-tip': r.can_activate ? 'Back to the 53 (a spot must be open)' : (r.returnable ? 'Four weeks on the list and healthy first' : 'Placed for the season; no return'), onclick: () => { const res = pyJSON(`SESSION.club_act('ir_activate', pid=${JSON.stringify(r.pid)})`); notify(res); renderRoster(pyJSON('SESSION.club_roster()')); } }, 'Activate'))));
@@ -806,7 +806,7 @@ function renderCard(v) {
     el('div', { class: 'jersey', style: `background:${col}` }, jerseyNo(v.no) ?? v.pos),
     el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
       el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.age}${v.size ? ' · ' + v.size : ''}${v.home_state ? ' · Home State: ' + v.home_state : ''}${v.season_no ? ` · ${v.season_no}${ord(v.season_no)} season` : ''} · ${v.draft}` + (v.team ? ` · ${v.team.name}` : ' · Free agent')),
-      el('div', { class: 'hfacts' }, ...(v.free_agent ? [el('div', {}, el('span', {}, 'Status'), el('b', {}, v.on_wire ? 'On the wire' : 'Free agent')), el('div', {}, el('span', {}, 'Market'), el('b', {}, v.market_apy != null ? `~$${v.market_apy}m per year` : ''))] : [el('div', {}, el('span', {}, `Cap Hit ${v.rail.year}`), el('b', {}, `$${v.contract.hit.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Penalty'), el('b', { title: cutPenaltyText(v.contract) }, `$${v.contract.penalty.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Trade Value'), el('b', { style: 'color:var(--ink-2)' }, v.interest))]))),
+      el('div', { class: 'hfacts' }, ...(v.free_agent ? [el('div', {}, el('span', {}, 'Status'), el('b', {}, v.on_wire ? 'On the wire' : 'Free agent')), el('div', {}, el('span', {}, 'Market'), el('b', {}, v.market_apy != null ? `~$${v.market_apy}m per year` : ''))] : [el('div', {}, el('span', {}, `Cap Hit ${v.rail.year}`), el('b', {}, `$${v.contract.hit.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Penalty'), el('b', { 'data-tip': cutPenaltyText(v.contract) }, `$${v.contract.penalty.toFixed(1)}m`)), el('div', {}, el('span', {}, 'Trade Value'), el('b', { style: 'color:var(--ink-2)' }, v.interest))]))),
     el('div', { class: 'ovrbig' }, el('b', {}, v.ovr), el('span', {}, 'Overall · Scheme Fit ', el('strong', { class: 'fit-change ' + (v.fit >= 0 ? 'positive' : 'negative') }, `${v.fit >= 0 ? '+' : ''}${v.fit.toFixed(1)}`)))));
   // tabs and actions
   const tabs = el('div', { class: 'ctabs' });
@@ -834,7 +834,7 @@ function renderCard(v) {
       el('td', {}, y.year), el('td', {}, y.base != null ? `$${y.base.toFixed(1)}m` : '—'),
       el('td', {}, y.bonus != null ? `$${y.bonus.toFixed(1)}m` : '—'),
       el('td', {}, `$${y.hit.toFixed(1)}m`),
-      el('td', { title: y.penalty != null ? cutPenaltyText(y, y.year) : '' },
+      el('td', { 'data-tip': y.penalty != null ? cutPenaltyText(y, y.year) : '' },
         y.penalty != null ? `$${y.penalty.toFixed(1)}m` : '—'))));
     return ct;
   };
@@ -938,27 +938,52 @@ function placeTip(x, y) {
 function showTip(target, x, y) {
   const message = target?.getAttribute('data-tip');
   if (!message) { hideTip(); return; }
+  if (tipTarget !== target) hideTip();
   tipTarget = target;
+  const ids = new Set((target.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
+  ids.add('floating-tooltip');
+  target.setAttribute('aria-describedby', [...ids].join(' '));
+  // Native dialogs occupy the top layer; their tooltip must live there too.
+  const host = target.closest('dialog') || document.body;
+  if (floatingTip.parentElement !== host) host.append(floatingTip);
   floatingTip.textContent = message;
   floatingTip.classList.add('visible');
   placeTip(x, y);
 }
-function hideTip() { tipTarget = null; floatingTip.classList.remove('visible'); }
+function hideTip() {
+  if (tipTarget) {
+    const ids = (tipTarget.getAttribute('aria-describedby') || '').split(/\s+/)
+      .filter(id => id && id !== 'floating-tooltip');
+    if (ids.length) tipTarget.setAttribute('aria-describedby', ids.join(' '));
+    else tipTarget.removeAttribute('aria-describedby');
+  }
+  tipTarget = null;
+  floatingTip.classList.remove('visible');
+  if (floatingTip.parentElement !== document.body) document.body.append(floatingTip);
+}
 document.addEventListener('mouseover', e => {
   const target = e.target?.closest?.('[data-tip]');
   if (target) showTip(target, e.clientX, e.clientY);
+  else hideTip();
 }, true);
-document.addEventListener('mousemove', e => { if (tipTarget) placeTip(e.clientX, e.clientY); }, true);
+document.addEventListener('mousemove', e => {
+  if (tipTarget && !tipTarget.isConnected) hideTip();
+  else if (tipTarget) placeTip(e.clientX, e.clientY);
+}, true);
 document.addEventListener('mouseout', e => {
   if (tipTarget && !tipTarget.contains(e.relatedTarget)) hideTip();
 }, true);
 document.addEventListener('focusin', e => {
   const target = e.target?.closest?.('[data-tip]');
   if (target) { const r = target.getBoundingClientRect(); showTip(target, r.left + r.width / 2, r.bottom); }
+  else hideTip();
 }, true);
 document.addEventListener('focusout', e => { if (tipTarget && !tipTarget.contains(e.relatedTarget)) hideTip(); }, true);
 window.addEventListener('scroll', hideTip, true);
 window.addEventListener('resize', hideTip);
+window.addEventListener('hashchange', hideTip);
+document.addEventListener('close', hideTip, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideTip(); }, true);
 
 // weeks 19 to 22 are the playoff rounds
 function weekName(w) { return ({ 19: 'Wild Card', 20: 'Divisional Round', 21: 'Conference Championship', 22: 'Super Bowl' })[w] || `Week ${w}`; }
@@ -1123,7 +1148,7 @@ function renderDepth(v) {
       const fit = x.fit || 0;
       const decide = x.pending && mine ? el('span', { style: 'display:inline-flex;gap:3px;margin-top:4px' }, el('button', { class: 'btn go', style: 'padding:1px 8px;font-size:11px', onclick: e => { e.stopPropagation(); notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(x.pid)}, play=True)`)); reload(); } }, 'Play'), el('button', { class: 'btn', style: 'padding:1px 8px;font-size:11px', onclick: e => { e.stopPropagation(); notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(x.pid)}, play=False)`)); reload(); } }, 'Sit')) : null;
       const fitEl = x.flag_word ? el('span', { style: 'display:inline-flex;flex-direction:column;align-items:flex-start;gap:0' }, el('span', { class: 'tag ' + (x.flag === 'out' ? 'out' : 'q') }, x.flag_word), decide || '') : x.elevated ? el('span', { class: 'tag q', 'data-tip': 'Elevated from the practice squad for this game' }, 'Elevated') : x.playing_hurt ? el('span', { class: 'tag q' }, `Playing · ${x.playing_hurt}`) : el('span', { class: 'fit' }, 'Fit ', el('b', { class: fit > 0.05 ? 'up' : fit < -0.05 ? 'dn' : '' }, (fit > 0.05 ? '+' : fit < -0.05 ? '−' : '\u00a0') + Math.abs(fit).toFixed(1)));
-      const plate = el('div', { class: 'plate3' + (x.start ? ' start' : '') + (x.flag === 'out' ? ' out' : ''), draggable: mine ? 'true' : 'false', title: x.name },
+      const plate = el('div', { class: 'plate3' + (x.start ? ' start' : '') + (x.flag === 'out' ? ' out' : ''), draggable: mine ? 'true' : 'false', 'data-tip': x.name },
         el('div', { class: 'row1' }, el('span', { class: 'no' }, String(i+1).padStart(2, '0')), el('span', { class: 'nm' }, surname(x.name) || x.name)),
         el('div', { class: 'row2' }, x.sub ? el('span', { class: 'fit' }, x.sub) : fitEl, el('span', { class: 'ov' }, x.ovr)));
       plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); plate.classList.add('dragging'); });
@@ -1824,37 +1849,6 @@ function staffTraits(c) {
   return box;
 }
 
-// STAFF / OWNER / CAP: viewport tooltips stay outside scrolling cards and dialogs.
-let foTip = null, foTipAnchor = null;
-function hideFoTip() {
-  if (foTip) foTip.remove();
-  if (foTipAnchor) {
-    const ids=(foTipAnchor.getAttribute('aria-describedby') || '').split(' ').filter(x=>x && x!=='fo-tooltip');
-    if (ids.length) foTipAnchor.setAttribute('aria-describedby',ids.join(' ')); else foTipAnchor.removeAttribute('aria-describedby');
-  }
-  foTip=null; foTipAnchor=null;
-}
-function showFoTip(e) {
-  const target = e.target.closest?.('[data-tip]');
-  if (!target?.closest('.fo-board, .fo-coach-dialog') || !target.dataset.tip) return;
-  hideFoTip();
-  foTipAnchor=target;
-  foTip = el('div', {class:'fo-tooltip', id:'fo-tooltip', role:'tooltip'}, target.dataset.tip);
-  target.setAttribute('aria-describedby',`${target.getAttribute('aria-describedby') || ''} fo-tooltip`.trim());
-  // A native dialog occupies the top layer; its fixed tooltip must live there too.
-  (target.closest('dialog') || document.body).append(foTip);
-  const r = target.getBoundingClientRect(), box = foTip.getBoundingClientRect();
-  foTip.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth-box.width-8))}px`;
-  foTip.style.top = `${Math.max(8, r.bottom+8+box.height <= window.innerHeight-8 ? r.bottom+8 : r.top-box.height-8)}px`;
-}
-document.addEventListener('mouseover', showFoTip);
-document.addEventListener('focusin', showFoTip);
-document.addEventListener('mouseout', e => { if (foTipAnchor?.contains(e.target) && !foTipAnchor.contains(e.relatedTarget) && document.activeElement!==foTipAnchor) hideFoTip(); });
-document.addEventListener('focusout', hideFoTip);
-document.addEventListener('scroll', hideFoTip, true);
-window.addEventListener('resize', hideFoTip);
-window.addEventListener('hashchange', hideFoTip);
-
 // STAFF: an offer is submitted only from the dialog, using the existing engine actions.
 function openStaffTalk(c, v, mode, reload) {
   const owned = mode === 'extend';
@@ -1864,7 +1858,7 @@ function openStaffTalk(c, v, mode, reload) {
     if (!r.ok) { notify(r); return; }
     state = r.state;
   }
-  hideFoTip();
+  hideTip();
   const dialog = el('dialog', {class:'sheet negotiation-sheet fo-coach-dialog', 'aria-labelledby':'fo-coach-title'});
   applyTeamTheme(dialog, v.rail.club);
   const palette = teamTheme(v.rail.club);
@@ -1921,7 +1915,7 @@ function openStaffTalk(c, v, mode, reload) {
     form.append(response, el('div', {class:'acts'}, el('button', {class:'btn go',type:'submit',disabled:unavailable?'':null}, owned ? 'Submit Extension' : 'Offer Contract'), el('button', {class:'btn quiet',type:'button',onclick:close}, owned ? 'Cancel' : 'Leave Interview')));
     body.append(form);
   };
-  dialog.addEventListener('close', () => { hideFoTip(); dialog.remove(); reload(); document.querySelector('.fo-board h1')?.focus(); });
+  dialog.addEventListener('close', () => { hideTip(); dialog.remove(); reload(); document.querySelector('.fo-board h1')?.focus(); });
   draw(); document.body.append(dialog); dialog.showModal(); closeButton.focus();
 }
 

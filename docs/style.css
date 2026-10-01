@@ -237,7 +237,6 @@ tr.me td{background:var(--sheet-2)}
 .pf{display:flex;gap:1px;height:8px}
 .pf i{display:block;height:100%}
 footer{max-width:1600px;margin:0 auto 36px;padding:0 18px;color:var(--ink-3);font-size:14.5px;line-height:1.6;max-width:84ch}
-.bars .t[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);bottom:100%;margin-bottom:6px;background:var(--ink);color:#111;font-family:var(--mono);font-size:13px;padding:5px 8px;white-space:nowrap;z-index:20;border:1px solid var(--rule-hi);pointer-events:none}
 .mh .two-col{display:flex;gap:0}
 .mh .two-col em{font-style:normal;width:64px;text-align:center;font-family:var(--display);font-weight:700;font-size:16px;color:var(--ink-3)}
 .m-side .bars{height:100%;align-content:space-evenly}
@@ -337,7 +336,6 @@ main[hidden]{display:none}
 .count{font-size:14px;color:var(--ink-3);margin-left:8px}
 
 /* header tooltips (the th is already positioned by sticky, so no relative here) */
-.tbl th[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:4px;background:var(--ink);color:#111;font-family:var(--text);font-weight:500;font-size:14px;letter-spacing:0;padding:6px 9px;white-space:nowrap;z-index:20;border:1px solid var(--rule-hi);pointer-events:none}
 .tbl th:hover{z-index:21}
 
 /* the roster table */
@@ -641,7 +639,6 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .cy .big.neg{color:var(--danger)}
 .cy .stack{display:flex;height:16px;border:1px solid var(--rule-2);margin:8px 0 6px}
 .cy .stack i{display:block;height:100%;position:relative}
-.cy .stack i[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);bottom:100%;margin-bottom:6px;background:var(--ink);color:#111;font-family:var(--mono);font-size:13px;padding:5px 8px;white-space:nowrap;z-index:20;border:1px solid var(--rule-hi);pointer-events:none}
 .cy .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:14px}
 .cy .kv span:nth-child(odd){color:var(--ink-3)}
 .cy .kv span:nth-child(even){font-family:var(--mono);text-align:right}
@@ -671,7 +668,6 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .confirm b{color:var(--club-2)}
 .confirm div{display:flex;gap:6px}
 .arch div{cursor:pointer;position:relative}
-.arch div[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:6px;background:var(--ink);color:#111;font-family:var(--text);font-weight:500;font-size:14px;padding:6px 9px;white-space:nowrap;z-index:20;border:1px solid var(--rule-hi);pointer-events:none;text-align:left}
 .arch div:hover{border-color:var(--rule-hi)}
 .arch div.preview{outline:2px solid var(--club-2);outline-offset:-2px}
 .fitrow .t i{transition:width .3s}
@@ -706,7 +702,6 @@ select.btn{background:var(--sheet-2);padding:6px 10px}
 .flag{display:inline-block;font-size:12px;font-weight:700;padding:1px 6px;border-radius:2px;border:1px solid var(--fc,var(--rule-hi));color:var(--fc,var(--ink-2));margin-left:4px}
 .flag.med{--fc:var(--danger)}.flag.chr{--fc:var(--decide)}.flag.vis{--fc:var(--live)}.flag.sr{--fc:var(--ok)}.flag.pd{--fc:var(--ok)}.flag.up{--fc:var(--ok)}.flag.dn{--fc:var(--danger)}.flag.ss{--fc:var(--rule-hi)}.flag.uc{--fc:var(--rule-hi)}
 .flag[data-tip]{position:relative}
-.flag[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:6px;background:var(--ink);color:#111;font-family:var(--text);font-weight:500;font-size:14px;padding:6px 9px;white-space:nowrap;z-index:20;border:1px solid var(--rule-hi);pointer-events:none}
 .board{display:flex;flex-direction:column;gap:4px;padding:10px 12px}
 .brow{display:grid;grid-template-columns:32px 1fr;align-items:center;gap:0;cursor:grab}
 .brow .r{font-family:var(--display);font-weight:800;font-size:19.5px;color:#111;background:var(--club-2);height:38px;display:grid;place-items:center}
@@ -1111,8 +1106,6 @@ button.btn{line-height:normal;box-sizing:border-box}
 
 /* one tooltip rule for everything that carries a data-tip; table headers keep their sticky position */
 [data-tip]:not(th){position:relative}
-[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:6px;background:var(--ink);color:#111;font-family:var(--text);font-weight:500;font-size:14px;line-height:1.35;padding:6px 9px;border-radius:2px;white-space:normal;width:max-content;max-width:260px;text-align:left;z-index:40;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.4)}
-.tbl th[data-tip]:hover::after,.arch div[data-tip]:hover::after,.bars .t[data-tip]:hover::after,.cy .stack i[data-tip]:hover::after,.flag[data-tip]:hover::after{max-width:260px;white-space:normal;width:max-content;line-height:1.35}
 /* the card's attribute rows: room for the archetype's name between the label and the value */
 .attrs .arow{grid-template-columns:1fr minmax(0,112px) 34px}
 .arow em.fitd{grid-column:2;font-size:11px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;padding-right:4px;cursor:help}
@@ -1166,7 +1159,6 @@ button.btn{line-height:normal;box-sizing:border-box}
 .mailtools .count{margin-left:auto;font-size:12px;color:var(--ink-3)}
 
 /* the cap stack's hovers open upward; below the bar there is no room in the card */
-.stack i[data-tip]:hover::after{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
 .capyears,.cy,.cy .stack,.bars,.bars .t{overflow:visible}
 /* the card's contract table fits its column */
 .contract{table-layout:fixed}
@@ -1177,8 +1169,6 @@ button.btn{line-height:normal;box-sizing:border-box}
 .mailbox{height:calc(100vh - 250px);min-height:420px;max-height:none;grid-template-rows:minmax(0,1fr)}
 .mailbox .list,.mailbox .pane{min-height:0;overflow-y:auto}
 /* hovers sit above everything, and a row-action's hover opens upward so the next row never covers it */
-[data-tip]:hover::after{z-index:200}
-.row-act [data-tip]:hover::after,.tbl td .btn[data-tip]:hover::after{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
 
 /* dropdowns keep the dark board in every state; the browser was painting its own white on focus */
 select,select.btn,select.btn:focus,select.btn:focus-visible,select.btn:active{background-color:var(--sheet-2);color:var(--ink);color-scheme:dark;outline:none;border-color:var(--rule-hi);-webkit-appearance:none;appearance:none;padding-right:26px;background-image:linear-gradient(45deg,transparent 50%,var(--ink-3) 50%),linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);background-position:calc(100% - 14px) 55%,calc(100% - 9px) 55%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
@@ -1192,9 +1182,6 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .stack i span{overflow:hidden}
 
 /* a hover never leaves the sheet: it stays within the viewport's width */
-[data-tip]:hover::after{max-width:min(260px,70vw)}
-.tbl th[data-tip]:hover::after{left:auto;right:0;transform:none}
-.tbl th:first-child[data-tip]:hover::after{left:0;right:auto}
 
 /* the message pane uses the width it has */
 .mailbox .pane{padding:18px 28px}
@@ -1221,7 +1208,6 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .talkline.done .go{color:var(--ink-3)}
 
 /* hovers on action rows and footers open upward, so a box that scrolls never grows for one */
-.acts [data-tip]:hover::after,.foot [data-tip]:hover::after,.thread [data-tip]:hover::after,.offer [data-tip]:hover::after{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
 
 .side-row.head .colhead{text-align:center;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.04em;color:var(--ink-2)}
 .side-row.head .lab{font-size:12.5px;color:var(--ink-3)}
@@ -1233,12 +1219,8 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 /* header hovers: open downward, stay inside the header's own box edges (a header with overflow hidden clipped its own hover), above every row's hover
    and the sticky header itself */
 .tbl th[data-tip]{overflow:visible}
-.tbl th[data-tip]:hover::after{top:100%;bottom:auto;margin-top:6px;margin-bottom:0;left:auto;right:0;transform:none;white-space:normal;max-width:220px;width:max-content;z-index:1000}
-.tbl th:first-child[data-tip]:hover::after,.tbl th:nth-child(2)[data-tip]:hover::after{left:0;right:auto}
 .tbl th:hover{z-index:1001}
-[data-tip]:hover::after{z-index:1000}
 /* a row action's upward hover clears the sticky header: rows near the top open downward instead */
-.tbl tr:nth-child(-n+3) .btn[data-tip]:hover::after,.tbl tr:nth-child(-n+3) .row-act [data-tip]:hover::after{top:100%;bottom:auto;margin-top:6px;margin-bottom:0}
 
 /* tendency bars: the club's fill in its color, the league average as a white tick */
 .tend .bar i{background:var(--club-2)}
@@ -1452,10 +1434,6 @@ h2{letter-spacing:-.01em}
 .gridtable th,th{letter-spacing:.05em}
 
 /* hovers never leave the page: a fixed width that wraps, and the edges handled by position classes the script sets */
-[data-tip]:hover::after{max-width:280px;width:max-content;white-space:normal;z-index:1000}
-[data-tip].tip-right:hover::after{left:auto;right:0;transform:none}
-[data-tip].tip-left:hover::after{left:0;transform:none}
-[data-tip].tip-up:hover::after{top:auto;bottom:100%;margin-top:0;margin-bottom:6px}
 
 /* the free-agency rows: the action buttons stay inside their cell */
 .fa-tbl td:last-child,.fa-tbl th:last-child{white-space:nowrap}
@@ -2639,8 +2617,6 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .fo-staff-traits{display:flex;flex-wrap:nowrap!important;gap:4px;min-width:0;overflow-x:auto;align-items:center;padding:3px 0 7px}
 .fo-staff-traits .trait{flex:none;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .fo-board .kv>.fo-staff-traits{grid-column:1/-1}
-.fo-board [data-tip]:hover::after,.fo-coach-dialog [data-tip]:hover::after{display:none!important}
-.fo-tooltip{position:fixed;z-index:1200;max-width:min(280px,calc(100vw - 16px));padding:9px 12px;border:1px solid var(--rule-hi);border-radius:5px;background:var(--ink);color:#111;font:500 14px/1.45 var(--text);box-shadow:0 6px 22px #0006;pointer-events:none;overflow-wrap:anywhere;box-sizing:border-box}
 .fo-coach-dialog{width:min(920px,95vw);max-height:92vh;padding:0;margin:auto;color:var(--ink);font-family:var(--text)}
 .fo-coach-dialog::backdrop{background:#000b;backdrop-filter:blur(7px)}
 .fo-coach-body{padding:24px;display:grid;gap:18px}
