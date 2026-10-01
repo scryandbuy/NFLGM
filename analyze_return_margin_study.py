@@ -75,6 +75,7 @@ def main():
         # play-level return kind was not exported by this calendar harness.
         'defensive_scores_including_blocked_punts': defensive_tds,
         'defensive_scores_per_game': defensive_tds / len(sim),
+        'defensive_scores_by_kind': current.get('defensive_scores'),
         'turnover_or_defensive_score_drives_per_game': turnovers / len(sim),
         'turnover_or_defensive_score_drive_pct': 100 * turnovers / all_drives,
     }

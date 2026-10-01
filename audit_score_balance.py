@@ -65,6 +65,7 @@ def main():
     games = []
     drives = collections.defaultdict(collections.Counter)
     calls = collections.defaultdict(collections.Counter)
+    defensive_scores = collections.Counter()
     season_reports = []
     diagnostic_collector = None
     original_game = G.play_game
@@ -104,9 +105,13 @@ def main():
             score[scorer] += abs(points)
             band = 'lead17' if dr.score_diff >= 17 else 'trail17' if dr.score_diff <= -17 else 'close'
             drives[band][dr.result] += 1
+            return_score_seen = False
             for play in dr.log:
                 if not isinstance(play, dict) or play.get('nullified'):
                     continue
+                if play.get('defensive_td') and play.get('return_kind') in ('int', 'fumble'):
+                    defensive_scores[play['return_kind']] += 1
+                    return_score_seen = True
                 if play.get('type') not in ('run', 'scramble', 'complete', 'incomplete', 'drop', 'sack', 'interception'):
                     continue
                 quarter = min(4, max(1, 4-int(max(0, play.get('clock', dr.clock)-.01)//900)))
@@ -123,6 +128,8 @@ def main():
                         row = calls[f'late_lead_{situation}_{lead}']
                         row['snaps'] += 1
                         row['passes'] += bool(play.get('is_pass'))
+            if dr.result == 'Defensive touchdown' and not return_score_seen:
+                defensive_scores['other'] += 1
         games.append(dict(home=result['home'], away=result['away'], halftime=half,
                           strength=result.get('_audit_strength')))
         if len(games) % 64 == 0:
@@ -200,7 +207,7 @@ def main():
                   got={k: float(v) for k, v in got.items()},
                   misses=[k for k, target, tol, _ in CB.TARGETS if abs(got[k]-target)>tol],
                   score_sd=float(np.std([g[k] for g in games for k in ('home', 'away')])),
-                  drives=drives, calls=calls, games=games)
+                  drives=drives, calls=calls, defensive_scores=defensive_scores, games=games)
     Path(args.out).write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(json.dumps({k: v for k, v in report.items() if k not in ('games', 'drives')}, indent=2))
 
