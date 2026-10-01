@@ -13,7 +13,7 @@ class Element {
   remove() { this.removed = true; }
   focus() {}
 }
-const events = {}, docEvents = {}, calls = [], body = new Element('body');
+const events = {}, docEvents = {}, calls = [], themedTeams = [], body = new Element('body');
 let state = {key:'2026:1:GB', locked:false, dirty:false, started:false}, page, failure = false;
 const fixture = () => ({rail:{club:{name:'Green Bay',abbr:'GB'}}, plan_state:{...state}, week:1,
   opp:{name:'Minnesota',abbr:'MIN'}, suggestions:[{i:0,text:'Advice A',why:'Reason',taken:true,side:'offense'},
@@ -33,6 +33,7 @@ const context = {
   notify(result){context.notice=result;},
   saveGame:async()=>{if(failure)throw Error('disk full');},
   renderRail(){},persPage(){page=new Element('main');return page;},featureHero(){},
+  applyTeamTheme(_node, team){themedTeams.push(team.abbr);},
   showAbbr:x=>x,surname:x=>x,ord:()=>'',
   pyJSON(code) {
     calls.push(code);
@@ -64,6 +65,7 @@ function reset(next={}) {state={key:'2026:1:GB',locked:false,dirty:false,started
   assert.ok(button('Undo'));assert.ok(button('Restore'));assert.ok(button('Accept All'));
   assert.ok(!context.gameplanUnsaved());
   reset({locked:true});context.renderReport(fixture());
+  assert.ok(themedTeams.includes('MIN'));
   assert.ok(button('Re-Open Game Plan'));assert.ok(!button("Accept All and Open This Week's Plan"));
   assert.ok(!button('Accept'));assert.ok(!button('Undo'));
 
