@@ -1354,6 +1354,20 @@ def _resolve_live_penalty(dr, pen, out, oc):
         if pen['penalty'] == 'Intentional Grounding':
             dr.down += 1                          # loss of down
         return 'replaced'
+    # A completed forward pass beyond the line retains its gain when the
+    # passer is roughed, provided possession did not change during the down.
+    if (pen['penalty'] == 'Roughing the Passer' and out.get('type') == 'complete'
+            and gained > 0 and not out.get('fumble_lost')
+            and not out.get('change_of_possession') and not out.get('defensive_td')):
+        spot = max(0.0, dr.yardline - spot_gain)
+        if spot <= 0 or out.get('touchdown'):
+            dr.try_penalty = yards
+            pen['on_try'] = True
+        else:
+            pen['yards'] = min(yards, spot / 2.0)
+            dr.log_pen_after = pen['yards']
+            dr.log_pen_first = True
+        return 'added'
     if not out.get('defensive_td') and (out.get('touchdown') or gained >= dr.yardline - 0.01 or float(np.round(gained)) >= dr.yardline):
         if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
             dr.try_penalty = yards

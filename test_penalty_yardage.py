@@ -32,6 +32,19 @@ class PenaltyYardageTests(unittest.TestCase):
         self.assertEqual((dr.down, dr.yardline, dr.togo), (3, 14, 14))
         self.assertIsNone(dr.result)
 
+    def test_roughing_keeps_completion_and_adds_yards(self):
+        dr = self.drive(47, down=2, togo=13)
+        flag = self.flag(False, 'Roughing the Passer', 15)
+        self.assertEqual(game._resolve_live_penalty(dr, flag, {'type':'complete','yards':8}, {}), 'added')
+        game._advance(dr, 8)
+        self.assertEqual((dr.yardline, dr.down, dr.togo), (24, 1, 10))
+
+    def test_roughing_on_interception_replaces_play(self):
+        dr = self.drive(47)
+        flag = self.flag(False, 'Roughing the Passer', 15)
+        self.assertEqual(game._resolve_live_penalty(dr, flag, {'type':'interception','yards':0,'air':8,'ret':0}, {}), 'replaced')
+        self.assertEqual(dr.yardline, 32)
+
     def test_dead_ball_offensive_foul_follows_first_down(self):
         dr = self.drive()
         p = self.flag(True)
