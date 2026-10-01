@@ -45,6 +45,7 @@ async function bootEngine() {
 function cutPenaltyText(v, year) { return `$${v.penalty.toFixed(1)}m ${year == null ? 'this year' : year}${v.penalty_next ? ` + $${v.penalty_next.toFixed(1)}m ${year == null ? 'next year' : year + 1}` : ''}`; }
 const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'practice_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_offer_sheet', 'inbox_hurt_action', 'inbox_mark_all', 'inbox_read', 'inbox_delete', 'inbox_clear_read']);
 const READ_ONLY_ACTIONS = new Set(['personnel_act:ask', 'personnel_act:gather', 'personnel_act:offer_preview', 'frontoffice_act:restructure_preview', 'draft_act:read_trade_up', 'draft_act:offers', 'plan_act:save', 'plan_act:save_failed']);
+AUTO_SAVE_METHODS.add('inbox_roster_dismiss');
 let autosaveQueued = false;
 let autosaveFrame = null, autosaveTimer = null;
 function cancelAutosaveSchedule() {
@@ -275,6 +276,7 @@ function renderInbox(v) {
     const structuredRecap = m.recap || m.snap_counts || (m.kind === 'result' && (m.body || '').includes('PREGAME PLAN\n'));
     const messageBody = structuredRecap ? renderRecapBody(m) : el('div', { class: 'mbody' }, ...(m.body_rows || [m.body || '']).map(line => el('div', { class: 'mail-body-row' }, line)));
     pane.append(el('h3', {}, m.subject), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), messageBody);
+    if (m.kind === 'roster_report') pane.append(rosterReportCards(m, reload));
     if (m.kind === 'trade_offer') pane.append(el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openTradeOffer(cur.id, reload) }, cur.decide ? 'Open Trade Offer' : 'View Trade Offer')));
     else if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
     else if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=False)`)); reload(); } }, 'Sit Him'), el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
@@ -288,6 +290,38 @@ function renderInbox(v) {
     if (cur.decide) pane.append(el('div',{class:'inbox-decision-note'},'This decision stays open until it is resolved.'));
   } else pane.append(el('div', { class: 'empty' }, 'Select a message.'));
   box.append(list, pane); s.append(box); page.append(s);
+}
+function rosterReportCards(message, reload) {
+  const list = el('div', {class:'roster-advice'});
+  const labels = {fa:'Free agent', ps:'Practice squad', waiver:'Waiver claim', trade:'Trade target'};
+  for (const r of message.recommendations || []) {
+    const card = el('section', {class:'roster-advice-item'});
+    card.append(el('div', {class:'inbox-eyebrow'}, labels[r.source] || 'Roster opportunity'),
+      el('h4', {}, `${r.name} · ${r.pos} · ${r.ovr} OVR${r.dev ? ' · ' + r.dev : ''}`),
+      el('p', {}, r.reason), el('p', {class:'roster-advice-cost'}, r.cost),
+      el('div', {class:'from'}, r.status));
+    const acts = el('div', {class:'acts'}, el('a', {class:'btn', href:'#club/player/'+r.pid}, 'View Player'));
+    if (r.available) {
+      acts.append(el('button', {class:'btn go', onclick:() => {
+        // Refresh availability when clicked, not just when the email was opened.
+        const fresh = pyJSON(`SESSION.inbox_message(${Number(message.id)})`);
+        const current = (fresh.recommendations || []).find(q => q.pid === r.pid);
+        if (!current?.available) { notify({ok:false,why:'This opportunity is no longer available.'}); reload(); return; }
+        if (r.source === 'trade') {
+          tradeState = {other:r.owner, a:r.pick ? [r.pick.id] : [], b:[r.pid], keep:true};
+          location.hash = '#personnel/trades';
+        } else if (r.source === 'waiver') location.hash = '#personnel/wire';
+        else {
+          const call = r.source === 'ps' ? `SESSION.personnel_act('poach_ps', pid=${JSON.stringify(r.pid)})` : `SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='fa_inseason')`;
+          const result = pyJSON(call); notify(result);
+          if (result.ok) location.hash = '#personnel/fa';
+        }
+      }}, r.source === 'trade' ? 'Review Trade' : r.source === 'waiver' ? 'Review Claim' : 'Open Negotiation'),
+      el('button', {class:'btn quiet', onclick:() => { notify(pyJSON(`SESSION.inbox_roster_dismiss(${Number(message.id)}, ${JSON.stringify(r.pid)})`)); reload(); }}, 'Dismiss'));
+    }
+    card.append(acts); list.append(card);
+  }
+  return list;
 }
 function linkHash(link) {
   if (!link) return '#portal';

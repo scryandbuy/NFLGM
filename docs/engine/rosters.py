@@ -150,8 +150,8 @@ def _assemble(by_pos, pins=None, front=None, box=0.5, scheme=None):
         ol=ol, dl=dl, lb=lb, db=db,
         k=(take('K', 1) or [None])[0],
         p=(take('P', 1) or [None])[0],
-        kr=_returner(rows, pins, 'KR'),
-        pr=_returner(rows, pins, 'PR'),
+        kr=_returner(rows, pins, 'KR', by_pos),
+        pr=_returner(rows, pins, 'PR', by_pos),
         depth=by_pos, front_family=front, depth_pins=pins or {},
     )
 
@@ -165,16 +165,33 @@ def return_score(p):
 RETURN_POS = ('WR', 'HB', 'CB', 'FS', 'SS')
 
 
-def _returner(rows, pins, slot):
-    """The returner: the club's order at KR or PR if it set one, else the best return score
-    among the receivers, backs and defensive backs who dress. A starter at his own spot still returns;
-    the real league does it too, and the depth chart shows who."""
-    avail = {p['pid']: p for p in rows if p.get('pos') in RETURN_POS}
-    if pins and pins.get(slot):
-        for pid in pins[slot]:
-            if pid in avail: return avail[pid]
-    if not avail: return None
-    return max(avail.values(), key=return_score)
+def return_order(rows, pins=None, slot='KR', depth=None):
+    """Manual return orders win; automatic choices protect the current HB1/WR1.
+
+    A primary starter is an emergency option only when no other return
+    candidate remains. The same order feeds the chart and live substitutions.
+    """
+    def field(p, key):
+        return p.get(key) if isinstance(p, dict) else getattr(p, key, None)
+    available = {field(p, 'pid'): p for p in rows if field(p, 'pos') in RETURN_POS}
+    protected = set()
+    for pos in ('HB', 'WR'):
+        men = [p for p in (depth or {}).get(pos, []) if field(p, 'pid') in available]
+        if not men:
+            men = sorted((p for p in available.values() if field(p, 'pos') == pos),
+                         key=lambda p: -TG.position_score(p if isinstance(p, dict) else p.ratings, pos))
+            order = {pid: i for i, pid in enumerate((pins or {}).get(pos, []))}
+            if order: men.sort(key=lambda p: order.get(field(p, 'pid'), 10**6))
+        if men: protected.add(field(men[0], 'pid'))
+    chosen = list(dict.fromkeys(pid for pid in (pins or {}).get(slot, []) if pid in available))
+    rest = sorted((p for pid, p in available.items() if pid not in chosen),
+                  key=lambda p: (field(p, 'pid') in protected, -return_score(p)))
+    return [available[pid] for pid in chosen] + rest
+
+
+def _returner(rows, pins, slot, depth=None):
+    ordered = return_order(rows, pins, slot, depth)
+    return ordered[0] if ordered else None
 
 
 def team_strength(roster):

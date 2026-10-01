@@ -841,7 +841,6 @@ class SeasonRunner(StandingsView):
         # THE WIRE: award last week's claims first (the user had the week to
         # claim from the inbox), then notify the user of this week's waivers
         WV.process(self.L, self.rng, week)
-        WV.notify_user(self.L, WV.pending(self.L), week)
         # WEDNESDAY: next week's injury report is listed now, so the Questionable and Doubtful decisions sit in
         # the inbox all week and are answered before Sunday, not thirty seconds before the kick
         if week < 18:
@@ -874,6 +873,9 @@ class SeasonRunner(StandingsView):
             for a, b, sends, got, res in made:
                 self.L.log('trade_window', buyer=a, seller=b, got=got.pid,
                            sent=[x['pid'] if x['kind'] != 'pick' else 'pick' for x in sends])
+        import roster_advisor as RA
+        RA.weekly(self.L, week)
+        WV.notify_user(self.L, WV.pending(self.L), week)
         return played
 
     def run(self, weeks=WEEKS, verbose=False):

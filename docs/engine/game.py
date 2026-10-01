@@ -209,18 +209,6 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     return 'punt'
 
 
-def returner_for(ros, state, rate_fn, kind='kr'):
-    """The club's return man for this kick: the charted one unless he is hurt or out, then the best healthy
-    man among the return positions. A hurt returner kept returning kicks because the slot was fixed at kickoff."""
-    out = state.out if state is not None else set()
-    kr = ros.get(kind) or {}
-    if kr and kr.get('pid') not in out: return kr
-    import rosters as R
-    cands = [p for grp in ('wr', 'db', 'backs') for p in (ros.get(grp) or []) if p and p.get('pid') not in out and p.get('pos') in R.RETURN_POS]
-    if ros.get('rb') and ros['rb'].get('pid') not in out: cands.append(ros['rb'])
-    return max(cands, key=R.return_score) if cands else (kr or {})
-
-
 def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
     """kickoff(), and the return goes in the book against the returner. Kickoff returns were resolved
     for years and never booked, so no kick returner had a line. The result is kept so the drive it
@@ -943,15 +931,20 @@ def _penalty_ready_clock(dr, pen, half_end=None, *, before_snap=False,
 
 
 def returner_for(ros, state, rate_fn, kind='kr'):
-    """The club's return man for this kick: the charted one unless he is hurt or out, then the best healthy
-    man among the return positions. A hurt returner kept returning kicks because the slot was fixed at kickoff."""
-    out = state.out if state is not None else set()
-    kr = ros.get(kind) or {}
-    if kr and kr.get('pid') not in out: return kr
+    """Re-evaluate healthy returners, including newly promoted primary starters."""
     import rosters as R
-    cands = [p for grp in ('wr', 'db', 'backs') for p in (ros.get(grp) or []) if p and p.get('pid') not in out and p.get('pos') in R.RETURN_POS]
-    if ros.get('rb') and ros['rb'].get('pid') not in out: cands.append(ros['rb'])
-    return max(cands, key=R.return_score) if cands else (kr or {})
+    out = state.out if state is not None else set()
+    depth = ros.get('depth') or {}
+    current = ros.get(kind) or (ros.get('kr') if kind == 'pr' else None) or {}
+    # Legacy/minimal game rosters may specify a return man without a chart.
+    if not depth and current and current.get('pid') not in out:
+        return current
+    groups = depth.values() if depth else [ros.get(g) or [] for g in ('wr', 'db', 'backs')]
+    candidates = [p for men in groups for p in men if p and p.get('pid') not in out]
+    if not depth and ros.get('rb') and ros['rb'].get('pid') not in out:
+        candidates.append(ros['rb'])
+    ordered = R.return_order(candidates, ros.get('depth_pins'), kind.upper(), depth)
+    return ordered[0] if ordered else {}
 
 
 def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
@@ -1860,8 +1853,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if dec == 'punt':
                 flag = E.special_teams_penalty_check(rng, 'punt')
                 if _kick_presnap_flag(dr, flag, half_end): continue
+                returner = returner_for(defense, def_state, rate_fn, kind='pr')
                 p = punt(dr.yardline, (offense.get('p') or {}),
-                         (defense.get('pr') or defense.get('kr') or {}), rng, rate_fn,
+                         returner, rng, rate_fn,
                          snapper=snapper_for(offense, off_state),
                          kicking=[m for m in (offense.get('ol', []) + [offense.get('p')])
                                   if m and (off_state is None or m.get('pid') not in off_state.out)],
@@ -1883,7 +1877,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 if book is not None:
                     book.special('punt', (offense.get('p') or {}).get('pid'), **p)
                     if p.get('how') == 'return' or (p.get('ret') and not p.get('touchback')):
-                        book.special('pr', (defense.get('pr') or defense.get('kr') or {}).get('pid'), ret=p.get('ret', 0.0))
+                        book.special('pr', returner.get('pid'), ret=p.get('ret', 0.0))
                 dr.clock -= play_seconds('punt')
                 dr.result = 'Punt'; dr.log.append(p)
                 if p.get('blocked') and 'end_spot' in p:

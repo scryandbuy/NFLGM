@@ -107,6 +107,18 @@ def _assets(league, abbr, items, pool, rng, viewer):
     return out
 
 
+def _cap_block_read(reason, other):
+    name = club(other)['name']
+    messages = {
+        'a_dead_money': 'Your front office will not take on the dead-money charge from this trade.',
+        'b_dead_money': f"{name}'s front office will not take on the dead-money charge from this trade.",
+        'a_cannot_fit': 'Your team does not have enough cap space for this trade.',
+        'b_cannot_fit': f'{name} does not have enough cap space for this trade.',
+    }
+    reason = {'a_space': 'a_cannot_fit', 'b_space': 'b_cannot_fit'}.get(reason, reason)
+    return messages.get(reason, 'This trade cannot proceed under the current cap constraints.')
+
+
 def _evaluate(league, abbr, other, a_sends, b_sends):
     """Both clubs price the package. Returns the read in words, never the dollars."""
     a_sends = _trade_ids(league, abbr, a_sends)
@@ -120,33 +132,25 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
     # words for their side
     g = r['b_gain']
     if r.get('blocked'):
-        why = {'a_dead_money': 'the penalty on what you send is more than your cap can carry', 'b_dead_money': f"the penalty on what {them.abbr} sends is more than their cap can carry", 'a_space': 'you do not have the cap space to take on what comes back', 'b_space': f"{them.abbr} do not have the cap space to take on what you send"}.get(str(r['blocked']), str(r['blocked']))
-        read = f"It does not work on the cap: {why}."; verdict = 'blocked'
+        read = _cap_block_read(r['blocked'], other); verdict = 'blocked'
     elif g >= 4: read = f"{them.abbr} would take this and feel they won it. You are giving more than you need to."; verdict = 'overpay'
     elif g >= 0.5: read = f"This is fair for {them.abbr}. They would take it."; verdict = 'fair'
     elif g >= -3: read = f"Close, a touch short for {them.abbr}. A mid-round pick or a depth piece would get it done."; verdict = 'short'
     else: read = f"Well short. {them.abbr} would not consider this as it stands."; verdict = 'far'
     mine = r['a_gain']
-    my_read = 'Your assistants like your side of it.' if mine > 1 else 'Your assistants call your side about even.' if mine > -2 else 'Your assistants think you are giving up too much.'
-    try:
-        their_surplus, _n = TR.surplus_and_needs(league, them, pool, rng); my_needs = TR.surplus_and_needs(league, me, pool, rng)[1]
-    except Exception: their_surplus, my_needs = [], set()
+    my_read = ('Change the player package or clear cap room before proceeding.' if verdict == 'blocked' else
+               'Your assistants like your side of it.' if mine > 1 else
+               'Your assistants call your side about even.' if mine > -2 else
+               'Your assistants think you are giving up too much.')
     extra = []
-    if verdict in ('short', 'far'):
-        adds = [league.player(x['pid']) for x in their_surplus if league.player(x['pid']) and x['pid'] not in b_sends]
-        fills = [q for q in adds if any(q.pos in poss for g, poss in _need_groups().items() if g in my_needs)]
-        fill = fills[0] if fills else (adds[0] if adds else None)
-        if fill: extra.append(f"If you want more, {__import__('views').surname(fill.name)} would balance it" + (' and fills a spot you need.' if fills else '.'))
-    for pid in a_sends:
-        if not _trade_player(league, pid): continue
-        p = league.player(pid)
-        if p is None: continue
-        d = me.depth.get(p.pos, []); nxt = next((q for q in d if q.pid != pid and q.out_until is None), None)
-        if nxt:
-            depth_word = 'our deepest position' if len(d) >= 5 and nxt.ovr >= p.ovr - 6 else 'thin behind him' if len(d) <= 2 or nxt.ovr < p.ovr - 12 else 'covered'
-            extra.append(f"{p.pos} is {depth_word}; {__import__('views').surname(nxt.name)} would start Sunday.")
-        else: extra.append(f"Nobody is behind {__import__('views').surname(p.name)} at {p.pos}.")
-    read = read + (' ' + ' '.join(extra) if extra else '')
+    outgoing = {pid for pid in a_sends if _trade_player(league, pid)}
+    incoming = [league.player(pid) for pid in b_sends if _trade_player(league, pid)]
+    positions = sorted({league.player(pid).pos for pid in outgoing})
+    for pos in positions:
+        remaining = [p for p in me.active() if p.pid not in outgoing] + incoming
+        healthy = [p for p in remaining if p.pos == pos and p.out_until is None]
+        extra.append(f"Your {pos} depth after this trade: {len(healthy)} healthy player{'s' if len(healthy) != 1 else ''}.")
+    my_read += (' ' + ' '.join(extra) if extra else '')
     # roster counts after
     return dict(verdict=verdict, read=read, my_read=my_read, roster_after=dict(me=len(me.active()) - len([x for x in a_sends if _trade_player(league, x)]) + len([x for x in b_sends if _trade_player(league, x)]),
                                                                               them=len(them.active()) + len([x for x in a_sends if _trade_player(league, x)]) - len([x for x in b_sends if _trade_player(league, x)])),
@@ -251,7 +255,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
         return TE.evaluate(dict(a_sends=outgoing + extra, a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
     initial = evaluate([])
     if initial.get('blocked'):
-        return dict(ok=False, adds=[], why=f"The trade is blocked: {initial['blocked']}.")
+        return dict(ok=False, adds=[], why=_cap_block_read(initial['blocked'], other))
     # Selling GMs accept deterministically above 0.9, not at the old 0.5 preview threshold.
     if initial['b_gain'] > 0.9: return dict(ok=True, adds=[], line=f"{other} would take it as it is.")
     candidates = []

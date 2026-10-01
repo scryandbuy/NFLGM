@@ -42,6 +42,7 @@ INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 
              'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad', 'league': 'League', 'trade_done': 'Trade', 'waiver_notice': 'Wire', 'waiver_digest': 'Wire', 'injury_decision': 'Trainers', 'ir_ready': 'Trainers', 'injury': 'Trainers', 'roster': 'Roster', 'review': 'Season Review', 'exit': 'Exit Meetings'}
 from inbox import is_decision, DECISION_KINDS
 DECIDE_KINDS = DECISION_KINDS | {'staff'}
+INBOX_TAG['roster_report'] = 'Assistants'
 
 
 STADIUM = {'ARI': 'State Farm Stadium', 'ATL': 'Mercedes-Benz Stadium', 'BAL': 'M&T Bank Stadium', 'BUF': 'Highmark Stadium', 'CAR': 'Bank of America Stadium', 'CHI': 'Soldier Field', 'CIN': 'Paycor Stadium', 'CLE': 'Huntington Bank Field',

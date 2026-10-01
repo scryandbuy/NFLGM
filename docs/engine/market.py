@@ -468,9 +468,12 @@ def signing_terms(league, player, team, apy, years, cap, front_load=None, bonus=
 
 
 def sign(league, player, offer, cap, bonus=None):
-    if not available_for_signing(player):
-        raise ValueError('This player is no longer available as a free agent')
     team = league.teams[offer.team]
+    import practice_squad as PSQ
+    squad_source = player.team if (player.team in league.teams and player.team != offer.team
+                                    and player in PSQ.squad(league.teams[player.team])) else None
+    if not available_for_signing(player) and squad_source is None:
+        raise ValueError('This player is no longer available as a free agent')
     st = signing_terms(league, player, team, offer.apy, offer.years, cap, offer.front_load, bonus)
     base = st['base']
     paid = team.cap.paid_week
@@ -494,7 +497,13 @@ def sign(league, player, offer, cap, bonus=None):
                 MO.shock(league, q.pid, 'team_signed_over_him')
     except Exception:
         pass
-    league.sign(player.pid, offer.team, c)
+    league.sign(player.pid, offer.team, c, log=not bool(squad_source))
+    if squad_source:
+        # Negotiated practice-squad signings carry the same roster lock as
+        # PSQ.poach. The advisor opens this existing negotiation route.
+        player.xp_spent['_poach_lock'] = (league.week or 0) + PSQ.POACH_LOCK_GAMES
+        league.log('ps_poach', pid=player.pid, team=offer.team, source=squad_source,
+                   locked_until=player.xp_spent['_poach_lock'])
     player.fa_class = 'signed'
     for k in offer.promises:
         league.log('promise', pid=player.pid, team=offer.team, kind=k)
