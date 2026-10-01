@@ -9,7 +9,7 @@ class LeagueViews(unittest.TestCase):
         self.players={}
         self.L=N(year=2027,week=0,stats={2026:{}},teams={},schedule=[],history={},awards={},almanac={},transactions=[])
         self.L.player=lambda pid:self.players.get(pid)
-        for a,div in [('GB','NFC North'),('MIN','NFC North'),('KC','AFC West')]:
+        for a,div in [('GB','United North'),('MIN','United North'),('KC','Continental West')]:
             self.L.teams[a]=N(abbr=a,division=div,roster=[],record=[0,0,0],gm=N(name='Replacement',prestige=50))
         self.patches=[patch.object(V,'rail',lambda *a:{}),patch.object(V,'club',lambda a:dict(abbr=a,name=a))]
         for p in self.patches:p.start()
@@ -84,7 +84,7 @@ class LeagueViews(unittest.TestCase):
     def test_both_trade_sides(self):
         self.L.transactions=[dict(kind='trade',year=2027,a='KC',b='GB',a_sends=[],b_sends=[])]
         row=V.transactions(None,self.L,'GB')['rows'][0]
-        self.assertTrue(row['mine']);self.assertIn('NFC North',row['divisions'])
+        self.assertTrue(row['mine']);self.assertIn('United North',row['divisions'])
     def test_transactions_keep_coaching_ledger_and_legacy_departure(self):
         self.L.transactions=[dict(kind='gm_change',year=2027,team='GB',hired='New Coach'),
                              dict(kind='staff_out',year=2027,team='MIN',role='dc',name='Old DC',why='unit bottom-eight two years running')]
@@ -93,7 +93,7 @@ class LeagueViews(unittest.TestCase):
             self.assertEqual(view['coaching_moves'],V._coaching_moves(self.L))
         self.assertEqual([(x['action'],x['person']) for x in view['coaching_moves']],
                          [('Fired','Old DC'),('Hired','New Coach'),('Departed','Former Coach')])
-        self.assertTrue(all(x['division']=='NFC North' for x in view['coaching_moves']))
+        self.assertTrue(all(x['division']=='United North' for x in view['coaching_moves']))
     def test_structured_transaction_columns_preserve_terms_and_both_trade_assets(self):
         self.player('Receiver','WR',{})
         self.L.transactions=[dict(kind='sign',year=2027,team='GB',pid='Receiver',years=2,apy=3.5),

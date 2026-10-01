@@ -20,7 +20,7 @@ def player(pid, pos='CB', grade=84, team=None, dev='normal'):
 def fixture():
     L = League(2026); L.user_team = 'GB'; L.week = 3; L.inbox=[]
     for abbr in ('GB', 'MIN'):
-        t = Team(abbr, 'NFC North', 'NFC'); t.league = L; t.gm = GM.GM()
+        t = Team(abbr, 'United North', 'United'); t.league = L; t.gm = GM.GM()
         L.teams[abbr] = t
         counts = dict(QB=2, HB=2, WR=5, TE=3, LT=2, LG=2, C=1, RG=2, RT=2,
                       LEDG=2, REDG=2, DT=4, MIKE=2, WILL=2, SAM=1, CB=5, FS=2, SS=2, K=1, P=1, LS=1)

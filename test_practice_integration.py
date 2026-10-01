@@ -74,7 +74,7 @@ class PracticeIntegrationTests(unittest.TestCase):
 
     def test_batch_playoffs_prepare_all_alive_including_byes(self):
         from postseason import Postseason
-        seeds={c:[f'{c}{i}' for i in range(1,8)] for c in ('AFC','NFC')}
+        seeds={c:[f'{c}{i}' for i in range(1,8)] for c in ('Continental','United')}
         teams={a:NS(win_pct=.7) for sd in seeds.values() for a in sd}
         league=NS(year=2026,teams=teams,schedule=[],log=lambda *a,**k:None)
         counts=[]

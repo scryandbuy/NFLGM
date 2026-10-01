@@ -249,7 +249,7 @@ if __name__ == '__main__':
 
         pl = G[(G.season == season) & (G.game_type != 'REG')]
         field = set(pl.home_team) | set(pl.away_team)
-        mine = set(seed_conference(S, 'AFC') + seed_conference(S, 'NFC'))
+        mine = set(seed_conference(S, 'Continental') + seed_conference(S, 'United'))
         fok = len(mine & field)
         tot_seed += len(field); hit_seed += fok
         if ok < 32 or fok < len(field): bad_years.append((season, ok, fok, len(field)))
@@ -289,7 +289,7 @@ if __name__ == '__main__':
         if len(S.games) < 200: continue
         pl = G[(G.season == season) & (G.game_type == 'WC')]
         if not len(pl): continue
-        for conf in ['AFC','NFC']:
+        for conf in ['Continental','United']:
             sd = seed_conference(S, conf)
             pairs = {tuple(sorted([a, b])) for a, b in wc_matchups(sd)}
             mine = {tuple(sorted([sd[a-1], sd[b-1]])) for a, b in wc_matchups(sd)}
@@ -299,7 +299,7 @@ if __name__ == '__main__':
             # home team must be the better seed
         print(f'  {season}: ', end='')
         ok = 0; n = 0
-        for conf in ['AFC','NFC']:
+        for conf in ['Continental','United']:
             sd = seed_conference(S, conf)
             mine = {tuple(sorted([sd[a-1], sd[b-1]])) for a, b in wc_matchups(sd)}
             realp = {tuple(sorted([r.home_team, r.away_team])) for _, r in pl.iterrows()

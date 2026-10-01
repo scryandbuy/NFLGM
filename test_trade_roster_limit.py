@@ -20,7 +20,7 @@ def fixture():
     league.set_phase('regular')
     league.week = 2
     for abbr in ('GB', 'MIN'):
-        team = Team(abbr, 'NFC North', 'NFC', gm=GE.GM())
+        team = Team(abbr, 'United North', 'United', gm=GE.GM())
         team.league = league
         team.phase = 'season'
         team.scheme = GE.scheme_of(team.gm)

@@ -135,7 +135,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_missing_specialist_is_legally_poached_before_conversion(self):
         L,t=self.roster(); t.by_pos('LS')[0].pos='TE'
-        other=Team('GB','NFC North','NFC'); other.league=L; L.teams['GB']=other
+        other=Team('GB','United North','United'); other.league=L; L.teams['GB']=other
         p=copy.deepcopy(t.by_pos('TE')[0]); p.pid='ps-snapper'; p.pos='LS'
         p.team='GB'; p.contract=None; L.players[p.pid]=p; PS.squad(other).append(p)
         self.assertEqual(CD.repair_shape(L),1)

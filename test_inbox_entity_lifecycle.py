@@ -175,7 +175,7 @@ class OfferSheetTests(unittest.TestCase):
     def fixture(self, holder='GB'):
         L = League(2026); L.user_team = 'GB'; L.week = 0
         for a in ('GB', 'MIN'):
-            t = Team(a, 'NFC North', 'NFC'); t.league = L; L.teams[a] = t
+            t = Team(a, 'United North', 'United'); t.league = L; L.teams[a] = t
         L.set_phase('free_agency')
         p = Player('p', 'Player', 'QB', 25, {}, team=holder, contract=Contract(1, [3]), accrued=3)
         p.fa_class = 'tendered'; p.tender_team = holder

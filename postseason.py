@@ -5,7 +5,7 @@ Three things happen here, and two of them have consequences that outlive the
 season:
 
   THE BRACKET decides a champion. Wild card, divisional with RESEEDING, the
-  conference championships, the Super Bowl. Playoff games run with playoffs=True
+  conference championships, the Championship Game. Playoff games run with playoffs=True
   so overtime uses 15-minute periods and repeats until somebody wins - the
   postseason never ties. There is no bye week inside the bracket, so health
   carries straight through: a team that comes out of a physical wild-card game
@@ -40,9 +40,9 @@ from gm_engine import make_gm
 
 ROUNDS = ('WC', 'DIV', 'CONF', 'SB')
 
-# ================================================================ THE SUPER BOWL SITE
+# ================================================================ THE CHAMPIONSHIP GAME SITE
 # A neutral site, awarded years ahead and rotating through the warm-weather and domed buildings the way the real
-# league does it. The 2026 season's game is Super Bowl LXI at SoFi; the list then cycles. The host club's
+# league does it. The 2026 season's game is Championship Game LXI at SoFi; the list then cycles. The host club's
 # building supplies the weather (a dome plays as a dome); nobody gets the crowd or the altitude.
 SB_HOSTS = [('LA', 'SoFi Stadium', 'Inglewood, California'), ('ATL', 'Mercedes-Benz Stadium', 'Atlanta'), ('LV', 'Allegiant Stadium', 'Las Vegas'),
             ('NO', 'Caesars Superdome', 'New Orleans'), ('MIA', 'Hard Rock Stadium', 'Miami Gardens, Florida'), ('ARI', 'State Farm Stadium', 'Glendale, Arizona'),
@@ -50,7 +50,7 @@ SB_HOSTS = [('LA', 'SoFi Stadium', 'Inglewood, California'), ('ATL', 'Mercedes-B
 
 
 def sb_venue(league, year=None):
-    """Where this season's Super Bowl is played: dict(abbr, stadium, city, numeral). Deterministic from the year, so
+    """Where this season's Championship Game is played: dict(abbr, stadium, city, numeral). Deterministic from the year, so
     the schedule, the report, the email and the game itself all agree without a save carrying it."""
     y = int(year if year is not None else league.year)
     abbr, stadium, city = SB_HOSTS[(y - 2026) % len(SB_HOSTS)]
@@ -96,7 +96,7 @@ class Postseason:
 
     # ---- the bracket, one round at a time -------------------------------
     ROUNDS = ('WC', 'DIV', 'CONF', 'SB')
-    ROUND_NAMES = {'WC': 'Wild Card', 'DIV': 'Divisional Round', 'CONF': 'Conference Championship', 'SB': 'Super Bowl'}
+    ROUND_NAMES = {'WC': 'Wild Card', 'DIV': 'Divisional Round', 'CONF': 'Conference Championship', 'SB': 'Championship Game'}
 
     def start(self):
         """Seed the bracket. State is plain data so a save can carry it between rounds."""
@@ -265,7 +265,7 @@ def run_firings(league, rng, pool=None, verbose=False, clubs=None):
 
     BLACK MONDAY. With `clubs` given, only those clubs roll (the ones whose season just ended), and the result is
     remembered so the season's close rolls only the clubs that have not yet. That is how the real market works:
-    a club fires the day after it is eliminated, and the two Super Bowl clubs wait.
+    a club fires the day after it is eliminated, and the two Championship Game clubs wait.
     """
     pool = pool if pool is not None else []
     fired = []
@@ -350,7 +350,7 @@ if __name__ == '__main__':
 def provisional_slot(league, post, abbr):
     """Where a club picks in the first round, as far as the season has settled it: the eighteen that missed are
     fixed at week 18 by record; a round's losers are fixed once the round is complete; the finalists wait for the
-    Super Bowl. None until the club's own season is over."""
+    Championship Game. None until the club's own season is over."""
     if post is None or not getattr(post, 'seeds', None): return None
     field = {t for sd in post.seeds.values() for t in sd}
     out = [a for a in league.teams if a not in field]

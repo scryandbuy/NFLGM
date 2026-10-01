@@ -5,7 +5,7 @@ Read-only pages; nothing here changes the league.
 """
 from views import STADIUM, club, rail, _points, _form, transaction_period
 
-DIVS = ['AFC East', 'AFC North', 'AFC South', 'AFC West', 'NFC East', 'NFC North', 'NFC South', 'NFC West']
+DIVS = ['Continental East', 'Continental North', 'Continental South', 'Continental West', 'United East', 'United North', 'United South', 'United West']
 
 
 def _state(session):
@@ -93,7 +93,7 @@ def standings(session, league, abbr, year=None):
         rows.sort(key=lambda x: (x['div_rank'] or 9, -x['pct'], -x['pd']))
         divs.append(dict(name=name, rows=rows))
     picture = []
-    for conf in ('AFC', 'NFC'):
+    for conf in ('Continental', 'United'):
         sd = seeds.get(conf) or []
         rows = []
         for i, a in enumerate(sd[:7], 1):
@@ -107,7 +107,7 @@ def standings(session, league, abbr, year=None):
     # the conference table, and a tiebreak note for clubs tied on pct within a division
     conf_rows = {}
     S_ = r.season_state() if r is not None else None
-    for conf in ('AFC', 'NFC'):
+    for conf in ('Continental', 'United'):
         rows = [x for d in divs for x in d['rows'] if league.teams[x['club']['abbr']].conf == conf]
         sd = seeds.get(conf) or []
         rows = sorted(rows, key=lambda x: (sd.index(x['club']['abbr']) if x['club']['abbr'] in sd else 99, -x['pct'], -x['pd']))
@@ -307,7 +307,7 @@ def _tx_line(league, x):
         action = 'Hired' if k == 'staff_in' else 'Retired' if k == 'staff_retire' else _staff_departure_action(x.get('why'))
         return f"{team} {action} {role}: {x.get('name', '')}" + (f" · {x['why']}" if x.get('why') else '')
     if k == 'hall_of_fame': return f"{nm}{pos} elected to the Hall of Fame"
-    if k == 'season_end': return f"{x.get('champion', '')} win the Super Bowl"
+    if k == 'season_end': return f"{x.get('champion', '')} win the Championship Game"
     if k == 'position_change': return f"{team} Position Change: {nm} to {x.get('to', '')}"
     if k in ('tag', 'franchise_tag'): return f"{team} Tag: {nm}{pos}"
     if k == 'restructure': return f"{team} Restructure: {nm}{pos}"
@@ -345,7 +345,7 @@ def _transaction_subject(league, x):
     elif k == 'tag': detail = 'Franchise tender'
     elif k == 'restructure': detail = 'Contract restructured'
     elif k == 'hall_of_fame': detail = 'Elected to the Hall of Fame'
-    elif k == 'season_end': name, detail = club(x.get('champion', ''))['name'], 'Super Bowl champion'
+    elif k == 'season_end': name, detail = club(x.get('champion', ''))['name'], 'Championship Game champion'
     elif GROUP_TAG.get(k) == 'Coaching': detail = x.get('why') or x.get('background') or ''
     return dict(person=name or 'League update', role=role, detail=detail, detail_secondary='')
 
@@ -462,7 +462,7 @@ def played_share(league, yr):
 
 
 AWARD_NAMES = [('mvp', 'Most Valuable Player'), ('opoy', 'Offensive Player of the Year'), ('dpoy', 'Defensive Player of the Year'), ('oroy', 'Offensive Rookie of the Year'), ('droy', 'Defensive Rookie of the Year'),
-               ('protector', 'Protector of the Year'), ('coty', 'Coach of the Year'), ('sb_mvp', 'Super Bowl MVP')]
+               ('protector', 'Protector of the Year'), ('coty', 'Coach of the Year'), ('sb_mvp', 'Championship Game MVP')]
 
 
 def awards(session, league, abbr, year=None):
@@ -492,18 +492,18 @@ def awards(session, league, abbr, year=None):
             kept = archived.get(k, {})
             if p and historical and isinstance(kept, dict):
                 p.name = kept.get("name") or p.name; p.pos = kept.get("pos") or p.pos; p.team = kept.get("team") or p.team
-            if p: rows.append(dict(award=name, code=k.upper().replace('SB_MVP', 'SB MVP'), name=p.name, pos=p.pos, team=(club(p.team) if p.team else None), pid=p.pid, mine=(p.team == abbr), line=(_sb_line(league, p, yr) if k == 'sb_mvp' else _award_line(league, p, yr))))
+            if p: rows.append(dict(award=name, code=k.upper().replace('SB_MVP', 'Championship Game MVP'), name=p.name, pos=p.pos, team=(club(p.team) if p.team else None), pid=p.pid, mine=(p.team == abbr), line=(_sb_line(league, p, yr) if k == 'sb_mvp' else _award_line(league, p, yr))))
     def team_list(key):
         out = []
         for pid in a.get(key, []) or []:
             p = _season_player(league, league.player(pid), yr)
             if p: out.append(dict(pid=pid, name=p.name, pos=p.pos, team=(club(p.team) if p.team else None), mine=(p.team == abbr)))
         return out
-    return dict(rail=rail(session, league, abbr), year=yr, years=years, rows=rows, first=team_list('all_pro_1'), second=team_list('all_pro_2'), pending=(league.year if league.year not in league.awards else None), note=None if a else f"The {yr} honors are announced after the Wild Card round; Super Bowl MVP follows the final")
+    return dict(rail=rail(session, league, abbr), year=yr, years=years, rows=rows, first=team_list('all_pro_1'), second=team_list('all_pro_2'), pending=(league.year if league.year not in league.awards else None), note=None if a else f"The {yr} honors are announced after the Wild Card round; Championship Game MVP follows the final")
 
 
 def _sb_line(league, p, yr):
-    """The Super Bowl MVP's line from THAT game (week 22 of the year), not his season."""
+    """The Championship Game MVP's line from THAT game (week 22 of the year), not his season."""
     key = next((k for k in (getattr(league, 'game_stats', {}) or {}) if k.startswith(f'{yr}-22-') and p.pid in league.game_stats[k]), None)
     l = league.game_stats[key][p.pid] if key else {}
     if not l: return _award_line(league, p, yr)
@@ -664,7 +664,7 @@ def _identity_names(league, t):
 
 def bracket(session, league, abbr, year=None):
     """The playoff bracket as a tree: each conference's bye, three wild card games, two divisional games and the
-    championship, the Super Bowl in the middle with its site. Live while the postseason runs; the last finished
+    championship, the Championship Game in the middle with its site. Live while the postseason runs; the last finished
     bracket after it; before the playoffs, the field as the standings would seed it; a past year's from the history."""
     import postseason as PS, standings_and_seeding as SS
     yr = int(year) if year else int(league.year)
@@ -722,7 +722,7 @@ def bracket(session, league, abbr, year=None):
         confs.append(dict(conf=conf, bye=(dict(club=club(bye), seed=1, record=_rec(league, bye), me=(bye == abbr), alive=(bye in alive_now)) if bye else None),
                           wc=rounds['WC'], div=rounds['DIV'], conf_game=(rounds['CONF'][0] if rounds['CONF'] else None),
                           champ=club(post.conf_champs[conf]) if started and (getattr(post, 'conf_champs', {}) or {}).get(conf) else None))
-    order = {'AFC': 0, 'NFC': 1}; confs.sort(key=lambda c: order.get(c['conf'], 9))
+    order = {'Continental': 0, 'United': 1}; confs.sort(key=lambda c: order.get(c['conf'], 9))
     sb = [game_row('SB', c, h, a, hs, as_) for (r_, c, h, a, hs, as_) in games if r_ == 'SB']
     if not sb and started and champion is None and len(getattr(post, 'conf_champs', {}) or {}) == 2: sb = [game_row('SB', c, h, a) for (c, h, a) in post.matchups('SB')]
     site = PS.sb_venue(league, year=yr)

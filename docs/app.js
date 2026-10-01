@@ -1137,7 +1137,7 @@ document.addEventListener('close', hideTip, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') hideTip(); }, true);
 
 // weeks 19 to 22 are the playoff rounds
-function weekName(w) { return ({ 19: 'Wild Card', 20: 'Divisional Round', 21: 'Conference Championship', 22: 'Super Bowl' })[w] || `Week ${w}`; }
+function weekName(w) { return ({ 19: 'Wild Card', 20: 'Divisional Round', 21: 'Conference Championship', 22: 'Championship Game' })[w] || `Week ${w}`; }
 
 // copy text to the clipboard, with a fallback for browsers that refuse the API
 async function copyText(text, btn) {
@@ -2565,7 +2565,7 @@ function renderStandings(v) {
   const arrow = r => r.arrow > 0 ? el('span', { class: 'arr up' }, `▲${r.arrow}`) : r.arrow < 0 ? el('span', { class: 'arr dn' }, `▼${-r.arrow}`) : el('span', { class: 'arr' }, '–');
   const pd = r => el('td', { class: 'n', style: r.pd > 0 ? 'color:var(--ok)' : r.pd < 0 ? 'color:var(--danger)' : '' }, (r.pd > 0 ? '+' : '') + r.pd);
   if (standingsView === 'Conference') {
-    for (const conf of ['AFC', 'NFC']) {
+    for (const conf of ['Continental', 'United']) {
       const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, conf), el('th', { class: 'n' }, 'Seed'), el('th', { class: 'n' }, 'W'), el('th', { class: 'n' }, 'L'), el('th', { class: 'n' }, 'T'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Strength of victory' }, 'SOV'), el('th', { class: 'n', 'data-tip': 'Strength of schedule' }, 'SOS'), el('th', {}, 'Form')));
       for (const r of v.conferences[conf]) t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.seed ? el('span', { class: 'seed ' + (r.seed === 1 ? 'bye' : 'in') + (r.me ? ' me' : '') }, r.seed) : ''), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', { class: 'n' }, r.t), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), pd(r), el('td', { class: 'n' }, r.sov != null ? r.sov.toFixed(3).replace(/^0/, '') : '—'), el('td', { class: 'n' }, r.sos != null ? r.sos.toFixed(3).replace(/^0/, '') : '—'), el('td', {}, formDots(r.form))));
       s.append(t);
@@ -2633,7 +2633,7 @@ function renderSchedule(v) {
   s.append(el('div', { class: 'tabs', style: 'padding:8px 14px 0' }, el('button', { 'aria-pressed': 'true' }, 'League Schedule'), el('button', { 'aria-pressed': 'false', onclick: () => renderTeamSchedule(pyJSON(`SESSION.league_view('team_schedule', year=${Number(v.year)})`)) }, 'Team Schedule')));
   const nav = el('div', { class: 'wknav' }, el('span', { class: 'lab' }, 'Week'));
   const wkList = Array.isArray(v.weeks) ? v.weeks : Array.from({ length: v.weeks || 18 }, (_, i) => i + 1);
-  for (const w of wkList) nav.append(el('button', { 'aria-pressed': String(w === v.week), onclick: () => renderSchedule(pyJSON(`SESSION.league_view('schedule', week=${w}, year=${v.year})`)) }, w >= 19 ? ({ 19: 'WC', 20: 'DIV', 21: 'CONF', 22: 'SB' })[w] : w));
+  for (const w of wkList) nav.append(el('button', { 'aria-pressed': String(w === v.week), 'data-tip': w >= 19 ? weekName(w) : null, onclick: () => renderSchedule(pyJSON(`SESSION.league_view('schedule', week=${w}, year=${v.year})`)) }, w >= 19 ? ({ 19: 'WC', 20: 'DIV', 21: 'CONF', 22: 'Final' })[w] : w));
   s.append(nav);
   const done = v.games.some(g => g.done);
   s.append(el('div', { class: 'h5', style: 'padding:8px 14px 0' }, `Week ${v.week} · ${done ? 'Results' : 'Upcoming'}`, el('span', {}, done ? 'Click your game for the box score' : '')));
@@ -2750,7 +2750,7 @@ function scheduleContent(v) {
     }
     strip.append(el('div',{class:'rv-g '+(g.done?g.result.toLowerCase():''),'data-tip':`${weekName(g.week)} · ${g.opp.name}`},el('small',{},g.week),g.done?g.result:showAbbr(g.opp.abbr)));
     const row = el('div', { class: 'ts-row' + (g.done ? ' ' + g.result.toLowerCase() : '') + (g.box ? ' box' : ''), onclick: g.box ? event => { if (!event.target.closest('a')) location.hash = `#gameday/${g.week}`; } : null, style: g.box ? 'cursor:pointer' : '' },
-      el('span', { class: 'wk' }, g.week >= 19 ? ({ 19: 'WC', 20: 'DIV', 21: 'CONF', 22: 'SB' })[g.week] : `Wk ${g.week}`),
+      el('span', { class: 'wk', 'data-tip': g.week >= 19 ? weekName(g.week) : null }, g.week >= 19 ? ({ 19: 'WC', 20: 'DIV', 21: 'CONF', 22: 'Final' })[g.week] : `Wk ${g.week}`),
       el('span', { class: 'ha' }, g.home ? 'vs' : 'at'),
       el('span', { class: 'opp' }, clubLink(g.opp.abbr, g.opp.name), g.opp_rec ? el('small', {}, ` ${g.opp_rec}`) : ''),
       el('b', { class: 'res' }, g.done ? g.result : 'Upcoming'),
@@ -2876,14 +2876,14 @@ function bracketTree(v) {
     const cols = [el('div', { class: 'bk-col', 'data-name': 'Wild Card' }, ...wc), el('div', { class: 'bk-join j2' + f }, el('i', {}), el('i', {})), el('div', { class: 'bk-col', 'data-name': 'Divisional' }, ...dv), el('div', { class: 'bk-join j4' + f }, el('i', {})), el('div', { class: 'bk-col', 'data-name': c.conf + ' Championship' }, cf)];
     return flip ? cols.reverse() : cols;
   };
-  const afc = v.confs.find(c => c.conf === 'AFC') || v.confs[0]; const nfc = v.confs.find(c => c.conf === 'NFC') || v.confs[1];
-  if (afc) tree.append(...side(afc, false));
-  // the middle: the Super Bowl, its site, the champion beneath it
-  const sb = el('div', { class: 'bk-col bk-final', 'data-name': `Super Bowl ${v.site ? v.site.numeral : ''}` },
+  const continental = v.confs.find(c => c.conf === 'Continental') || v.confs[0]; const united = v.confs.find(c => c.conf === 'United') || v.confs[1];
+  if (continental) tree.append(...side(continental, false));
+  // the middle: the Championship Game, its site, the champion beneath it
+  const sb = el('div', { class: 'bk-col bk-final', 'data-name': `Championship Game ${v.site ? v.site.numeral : ''}` },
     el('div', { class: 'bk-slot s8' }, el('div', { class: 'bk-site' }, v.site ? `${v.site.stadium} · ${v.site.city}` : ''), gameCard(v.final, 'sb'),
       v.champion ? el('div', { class: 'bk-champ', style: `--c1:${v.champion.color};--c2:${v.champion.accent}` }, el('span', {}, v.champion.name), el('small', {}, 'Champions')) : ''));
   tree.append(el('div', { class: 'bk-join j8' }, el('i', {})), sb, el('div', { class: 'bk-join j8 r' }, el('i', {})));
-  if (nfc) tree.append(...side(nfc, true));
+  if (united) tree.append(...side(united, true));
   return el('div', { class: 'bk-scroll' }, tree);
 }
 
@@ -2908,7 +2908,7 @@ function transactionWhen(r) {
   if (r.period) return r.period;
   if (['offseason', 'free_agency', 'draft'].includes(r.phase)) return 'Offseason';
   if (r.phase === 'preseason') return 'Preseason';
-  if (r.week) return ({19:'Wild Card',20:'Divisional Round',21:'Conference Championship',22:'Super Bowl'})[r.week] || `Week ${r.week}`;
+  if (r.week) return ({19:'Wild Card',20:'Divisional Round',21:'Conference Championship',22:'Championship Game'})[r.week] || `Week ${r.week}`;
   return r.phase ? r.phase.charAt(0).toUpperCase() + r.phase.slice(1).replaceAll('_', ' ') : '';
 }
 function renderTransactions(v) {

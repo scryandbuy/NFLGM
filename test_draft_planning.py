@@ -16,7 +16,7 @@ from cap_engine import Contract
 
 def fixture():
     L = League(2027); L.user_team = 'GB'; L.season_closed_year = 2026
-    t = Team('MIN', 'NFC North', 'NFC'); t.league = L
+    t = Team('MIN', 'United North', 'United'); t.league = L
     t.gm = GM.GM(); L.teams['MIN'] = t; L.set_phase('free_agency')
     counts = dict(QB=2, HB=3, FB=1, WR=5, TE=3, LT=2, LG=2, C=2, RG=2, RT=2,
                   LEDG=3, REDG=3, DT=4, MIKE=2, WILL=2, SAM=2, CB=6, FS=2, SS=2, K=1, P=1, LS=1)

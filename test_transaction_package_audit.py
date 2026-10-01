@@ -82,7 +82,7 @@ class TransactionPackageAuditTests(unittest.TestCase):
         from gm_engine import GM
         from cap_engine import Contract
         L,t,wr,te,qb=offense_fixture('10')
-        seller=Team('DEN','AFC West','AFC');seller.league=L;seller.gm=GM();L.teams['DEN']=seller
+        seller=Team('DEN','Continental West','Continental');seller.league=L;seller.gm=GM();L.teams['DEN']=seller
         wr.team='DEN';wr.contract=Contract(1,[1]);seller.roster=[wr]
         street=prospect(L,'WR','street-equivalent');L.free_agents=[street.pid]
         self.assertAlmostEqual(RN.move_gain(t,wr),RN.move_gain(t,street),places=4)
@@ -152,7 +152,7 @@ class TransactionPackageAuditTests(unittest.TestCase):
         from league import Team
         from gm_engine import GM
         L,t,wr,te,qb=offense_fixture('12');L.free_agents=[te.pid]
-        rival=Team('DEN','AFC West','AFC');rival.league=L;rival.gm=GM();L.teams['DEN']=rival
+        rival=Team('DEN','Continental West','Continental');rival.league=L;rival.gm=GM();L.teams['DEN']=rival
         self.resolve(L,[te],{te.pid:[self.offer(te)]})
         self.assertEqual(te.team,'MIN')
         before=copy.deepcopy(L.save())

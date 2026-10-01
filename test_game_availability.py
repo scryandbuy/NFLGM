@@ -153,7 +153,7 @@ class AvailabilityTests(unittest.TestCase):
 
     def test_other_squad_is_last_resort_and_poach_lock_applies(self):
         league, team = self.roster()
-        other = Team('ATL', 'NFC South', 'NFC'); other.league = league
+        other = Team('ATL', 'United South', 'United'); other.league = league
         league.teams['ATL'] = other
         p = self.candidate(league, other)
         GA.ensure(league, team, None, 2)
@@ -205,8 +205,8 @@ class AvailabilityTests(unittest.TestCase):
         r = self.runner(); r.L.schedule = [(19,'A','B',None,None),(19,'C','D',None,None)]
         r.L.log = lambda *args, **kwargs: None
         r.require_available = lambda *args, **kwargs: None
-        post = Postseason(r); post.seeds = {'AFC':['A','B','C','D']}
-        post.alive = {'AFC':{1:'B',2:'A',3:'D',4:'C'}}
+        post = Postseason(r); post.seeds = {'Continental':['A','B','C','D']}
+        post.alive = {'Continental':{1:'B',2:'A',3:'D',4:'C'}}
         r.play = lambda h,a,w,**kw: {'home':20,'away':10} if h == 'B' else None
         with self.assertRaises(GA.FieldabilityError): post.play_round('WC')
         self.assertEqual(len(post.games), 1)

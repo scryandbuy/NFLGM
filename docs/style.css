@@ -1227,7 +1227,7 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .tend .bar i{background:var(--club-2)}
 .tend .bar em{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);transform:translateX(-1px)}
 
-/* the bracket: a tree, wild card on the outside working in to the Super Bowl in the middle. Each side is three columns
+/* the bracket: a tree, wild card on the outside working in to the Championship Game in the middle. Each side is three columns
    and two gap columns; every column is a grid of 8 half-rows, so a wild card slot spans 2, a divisional slot 4, the
    championship 8, and the joins in the gaps draw the lines from pair to pair */
 .bk-scroll{max-width:100%;overflow-x:auto;scrollbar-width:thin}
@@ -1257,7 +1257,7 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .bk-join.r i{border-left:1px solid var(--rule-2);border-right:0;border-radius:4px 0 0 4px}
 .bk-join.j2 i:nth-child(1){grid-row:2/4}.bk-join.j2 i:nth-child(2){grid-row:6/8}   /* the bye and game 1 centre at half-row lines 2 and 4; games 2 and 3 at 6 and 8 */
 .bk-join.j4 i{grid-row:3/7}                                                           /* the two divisional cards centre at lines 3 and 7 */
-.bk-join.j8 i{grid-row:4/6;border:0}                                                  /* the championship into the Super Bowl: one line across the gap */
+.bk-join.j8 i{grid-row:4/6;border:0}                                                  /* the championship into the Championship Game: one line across the gap */
 .bk-join.j8 i::after{content:'';position:absolute;top:50%;left:0;right:0;border-top:1px solid var(--rule-2)}
 /* the stub from a join's vertical on to the card it feeds */
 .bk-slot.s4::before,.bk-slot.s8::before{content:'';position:absolute;top:50%;left:-28px;width:28px;border-top:1px solid var(--rule-2)}
@@ -1379,7 +1379,7 @@ th.sortable .arrow{font-size:10px}
 
 
 
-/* the Super Bowl card fills the middle column */
+/* the Championship Game card fills the middle column */
 .bk-final .bk-slot{align-items:stretch;justify-content:center}
 .bk-final .bk-game.sb{width:100%}
 .bk-final .bk-site{padding:0 4px}

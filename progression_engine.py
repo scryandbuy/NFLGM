@@ -52,7 +52,7 @@ DEV_P = [0.65, 0.22, 0.10, 0.03]
 # is required for demotion. The major-award reward remains guaranteed.
 # Protector is one lineman out of 160 starters, rarer than a first-team slot
 # at a position, so it sits above All-Pro 1st and under the player-of-the-year
-# awards. Super Bowl MVP is one game and usually lands on a man who already
+# awards. Championship Game MVP is one game and usually lands on a man who already
 # holds an All-Pro or a major for the same season, so it is a small stack on
 # top. There is no Pro Bowl in this game; its entry was dead.
 AWARD_WEIGHT = {'mvp': 0.40, 'opoy': 0.30, 'dpoy': 0.30, 'protector': 0.25,

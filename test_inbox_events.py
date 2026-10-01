@@ -80,33 +80,33 @@ class EventTests(unittest.TestCase):
  def test_distinct_promise_types_preserved(self):
   L=league(players={'p':N(contract=None)});NG.record_promise(L,'p','GB','captaincy');NG.record_promise(L,'p','GB','no_trade');self.assertEqual(len(L.promises),2)
  def test_tie_is_not_win(self):
-  L=league(teams={a:N(abbr=a,division='NFC North',record=[1,1,1]) for a in ('GB','MIN','CHI')});LN.big_result(L,3,[('MIN','CHI',20,20)])
+  L=league(teams={a:N(abbr=a,division='United North',record=[1,1,1]) for a in ('GB','MIN','CHI')});LN.big_result(L,3,[('MIN','CHI',20,20)])
   self.assertIn('tied 20–20',L.inbox[0]['body']);self.assertNotIn('beat',L.inbox[0]['body'])
  def test_weak_division_winner_not_eliminated(self):
   teams={}
   for d,rs in zip(('East','North','South','West'),([12,11,10,9],[12,11,10,9],[12,7,6,5],[8,7,6,1])):
-   for i,w in enumerate(rs):a=f'{d}{i}';teams[a]=N(abbr=a,division='NFC '+d,record=[w,17-w,0])
+   for i,w in enumerate(rs):a=f'{d}{i}';teams[a]=N(abbr=a,division='United '+d,record=[w,17-w,0])
   L=league(week=18,teams=teams,user_team='West0');LN.standings(L,18)
   mine=[m for m in L.inbox if m['kind']=='result'];self.assertEqual(len(mine),1);self.assertIn('clinch',mine[0]['subject']);self.assertNotIn('eliminated',mine[0]['body'])
  def test_equal_ceiling_does_not_promise_playoffs(self):
-  teams={f'T{i}':N(abbr=f'T{i}',division=f'NFC D{i//4}',record=[9,7,0]) for i in range(16)}
+  teams={f'T{i}':N(abbr=f'T{i}',division=f'United D{i//4}',record=[9,7,0]) for i in range(16)}
   L=league(week=17,teams=teams,user_team='T0');LN.standings(L,17);self.assertFalse(any('clinch' in m['subject'] for m in L.inbox))
  def test_final_messages_match_actual_seeding(self):
   import standings_and_seeding as SS
-  teams={f'T{i}':N(abbr=f'T{i}',division=f'NFC D{i//4}',record=[0,0,0]) for i in range(16)}
+  teams={f'T{i}':N(abbr=f'T{i}',division=f'United D{i//4}',record=[0,0,0]) for i in range(16)}
   games=[]
   for i in range(16):
    for j in range(i+1,16):games.append((f'T{i}',f'T{j}',20,17 if (i+j)%3 else 20))
   for _ in range(2):
    for i in range(0,16,2):games.append((f'T{i}',f'T{i+1}',10,20))
-  state=SS.Season.live({a:t.division for a,t in teams.items()},{a:'NFC' for a in teams},games,2026)
+  state=SS.Season.live({a:t.division for a,t in teams.items()},{a:'United' for a in teams},games,2026)
   for a,t in teams.items():t.record=state.rec[a]
   L=league(week=18,teams=teams,user_team='T0',schedule=[(18,a,h,ap,hp) for h,a,hp,ap in games]);LN.standings(L,18)
-  actual=set(SS.seed_conference(state,'NFC'));notified={a for a in teams if f'po-2026-{a}' in L.league_notes_sent}
+  actual=set(SS.seed_conference(state,'United'));notified={a for a in teams if f'po-2026-{a}' in L.league_notes_sent}
   self.assertEqual(actual,notified);self.assertFalse(any(f'out-2026-{a}' in L.league_notes_sent for a in actual))
  def test_awards_consolidated_and_complete(self):
   p=N(pid='p',name='Winner',pos='FB',team='GB');L=league(players={'p':p})
-  LN.season_end(L,{'all_pro_1':[p],'all_pro_2':[p],'sb_mvp':p});self.assertEqual(len(L.inbox),2);self.assertIn('Second team',L.inbox[1]['body']);self.assertIn('your team',L.inbox[1]['body']);self.assertIn('Super Bowl MVP',L.inbox[0]['body'])
+  LN.season_end(L,{'all_pro_1':[p],'all_pro_2':[p],'sb_mvp':p});self.assertEqual(len(L.inbox),2);self.assertIn('Second team',L.inbox[1]['body']);self.assertIn('your team',L.inbox[1]['body']);self.assertIn('Championship Game MVP',L.inbox[0]['body'])
 
 class SessionIntegrationTests(unittest.TestCase):
  def test_answered_poach_unblocks_and_can_delete(self):

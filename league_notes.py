@@ -143,13 +143,13 @@ def big_result(league, week, results):
     line = f"{win.abbr} beat {lose.abbr} {max(hp, ap)}–{min(hp, ap)}"
     if int(week) >= 19:
         # THE PLAYOFFS. Records mean nothing now: the winner moves on, the loser is done
-        NEXT = {19: 'the Divisional Round', 20: 'the Conference Finals', 21: f'Super Bowl {_sb_numeral(league)}', 22: None}
+        NEXT = {19: 'the Divisional Round', 20: 'the Conference Finals', 21: f'Championship Game {_sb_numeral(league)}', 22: None}
         nxt = NEXT.get(int(week))
         line += f". {win.abbr} {'are champions' if nxt is None else 'advance to ' + nxt}; {lose.abbr} are eliminated"
     elif me.division in (th.division, ta.division):
         rival = th if th.division == me.division else ta
         line += f". {rival.abbr} are {rival.record[0]}–{rival.record[1]} in your division; you are {me.record[0]}–{me.record[1]}"
-    ROUND_ = {19: 'Wild Card Weekend', 20: 'Divisional Round', 21: 'Conference Finals', 22: 'Super Bowl'}
+    ROUND_ = {19: 'Wild Card Weekend', 20: 'Divisional Round', 21: 'Conference Finals', 22: 'Championship Game'}
     when = ROUND_.get(int(week), f"Week {week}")
     IB.news(league, f"{when} around the league: {win.abbr} over {lose.abbr}", line + '.', payload=dict(link='league:bracket' if int(week) >= 19 else 'league:schedule'))
 
@@ -190,7 +190,7 @@ def season_end(league, votes):
             if hasattr(v, 'pid'): return f"{inbox_player(v)} ({v.pos}, {v.team})"
             p = league.player(v) if isinstance(v, str) and v in league.players else None
             return f"{inbox_player(p)} ({p.pos}, {p.team})" if p else str(v)
-        parts = [f"{label}: {nm(votes.get(k))}" for k, label in (('mvp', 'MVP'), ('opoy', 'Offensive Player of the Year'), ('dpoy', 'Defensive Player of the Year'), ('oroy', 'Offensive Rookie of the Year'), ('droy', 'Defensive Rookie of the Year'), ('protector', 'Protector of the Year'), ('coty', 'Coach of the Year'), ('sb_mvp', 'Super Bowl MVP')) if votes.get(k)]
+        parts = [f"{label}: {nm(votes.get(k))}" for k, label in (('mvp', 'MVP'), ('opoy', 'Offensive Player of the Year'), ('dpoy', 'Defensive Player of the Year'), ('oroy', 'Offensive Rookie of the Year'), ('droy', 'Defensive Rookie of the Year'), ('protector', 'Protector of the Year'), ('coty', 'Coach of the Year'), ('sb_mvp', 'Championship Game MVP')) if votes.get(k)]
         IB.news(league, f"{year} awards", '. '.join(parts) + '.', payload=dict(link='league:awards'))
         sections = []
         for key, label in (('all_pro_1', 'First team'), ('all_pro_2', 'Second team')):

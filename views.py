@@ -16,7 +16,7 @@ def transaction_period(event):
     week = event.get('week')
     if week:
         return {19: 'Wild Card', 20: 'Divisional Round',
-                21: 'Conference Championship', 22: 'Super Bowl'}.get(int(week), f'Week {week}')
+                21: 'Conference Championship', 22: 'Championship Game'}.get(int(week), f'Week {week}')
     return str(phase or '').replace('_', ' ').title()
 
 
@@ -581,7 +581,7 @@ def gameday(session, league, abbr, gd=None):
 
 
 def cap_focus(league, t):
-    """THE CAP THAT MATTERS. In season, this year's. From the Super Bowl until the year rolls at Step 4 of the offseason,
+    """THE CAP THAT MATTERS. In season, this year's. From the Championship Game until the year rolls at Step 4 of the offseason,
     next year's: that is the ledger every extension, ask and tag is priced against, and the pages read it as the
     headline (they had shown the 2027 inputs beside the 2026 space). After the roll, the new year is the current
     year again. Returns year, limit, committed, space and whether it is next year's ledger."""

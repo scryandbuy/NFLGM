@@ -14,7 +14,7 @@ for(const abbr of teams){
   assert.ok(row.attrs.style.includes(`--coach-readable:${theme.readable}`));
   assert.equal(row.kids.length,5,'keep original coaching columns');
 }
-const v={rail:{club:{abbr:'GB'}},my_division:'NFC North',rows:[{group:'Trades',team:{abbr:'KC',name:'Kansas City'},mine:true,divisions:['AFC West','NFC North'],line:'Trade',person:'Trade with Green Bay',detail:'Sent: A',detail_secondary:'Received: B'}],coaching_moves:[{club:{abbr:'GB',name:'Green Bay'},division:'NFC North',year:2027,action:'Departed',person:'Legacy Coach',role:'Head Coach',detail:'Prior head coach'},{club:{abbr:'KC',name:'Kansas City'},division:'AFC West',year:2027,action:'Hired',person:'Other Coach',role:'DC',detail:''}]};
+const v={rail:{club:{abbr:'GB'}},my_division:'United North',rows:[{group:'Trades',team:{abbr:'KC',name:'Kansas City'},mine:true,divisions:['Continental West','United North'],line:'Trade',person:'Trade with Green Bay',detail:'Sent: A',detail_secondary:'Received: B'}],coaching_moves:[{club:{abbr:'GB',name:'Green Bay'},division:'United North',year:2027,action:'Departed',person:'Legacy Coach',role:'Head Coach',detail:'Prior head coach'},{club:{abbr:'KC',name:'Kansas City'},division:'Continental West',year:2027,action:'Hired',person:'Other Coach',role:'DC',detail:''}]};
 vm.runInContext("txClub='div';txQuery='kansas city'",ctx);assert.equal(ctx.filteredTransactions(v).length,1,'search full team names, retain both trade divisions');
 vm.runInContext("txGroup='Coaching';txQuery='';txClub='mine'",ctx);assert.equal(ctx.filteredTransactions(v)[0].person,'Legacy Coach');
 vm.runInContext("txClub='div'",ctx);assert.equal(ctx.filteredTransactions(v).length,1);
@@ -23,6 +23,6 @@ assert.equal(ctx.transactionWhen({phase:'free_agency',year:2027,week:22}),'Offse
 assert.equal(ctx.transactionWhen({phase:'offseason',year:2027,week:22}),'Offseason');
 assert.equal(ctx.transactionWhen({phase:'draft',year:2027,week:22}),'Offseason');
 assert.equal(ctx.transactionWhen({phase:'preseason',year:2027,week:22}),'Preseason');
-for (const [week,label] of [[19,'Wild Card'],[20,'Divisional Round'],[21,'Conference Championship'],[22,'Super Bowl']]) assert.equal(ctx.transactionWhen({phase:'playoffs',week}),label);
+for (const [week,label] of [[19,'Wild Card'],[20,'Divisional Round'],[21,'Conference Championship'],[22,'Championship Game']]) assert.equal(ctx.transactionWhen({phase:'playoffs',week}),label);
 assert.equal(ctx.transactionWhen({phase:'regular',week:8}),'Week 8');
 console.log('Transactions: coaching ledger filters, legacy departures, search, both trade teams and all 32 palettes passed');

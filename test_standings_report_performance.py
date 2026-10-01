@@ -10,7 +10,7 @@ import views_league as VL
 
 def fixture():
     teams = {}
-    for conf in ('AFC', 'NFC'):
+    for conf in ('Continental', 'United'):
         for division in ('East', 'North', 'South', 'West'):
             for i in range(4):
                 a = f'{conf}_{division}_{i}'
@@ -26,7 +26,7 @@ class StandingsPreparationTests(unittest.TestCase):
             view = VL._state(SimpleNamespace(L=league, runner=None))
             self.assertIsInstance(view, SN.StandingsView)
             self.assertEqual(32, len(view.standings()))
-            self.assertEqual({'AFC', 'NFC'}, set(view.seeds()))
+            self.assertEqual({'Continental', 'United'}, set(view.seeds()))
         runner = object()
         self.assertIs(runner, VL._state(SimpleNamespace(L=league, runner=runner)))
 
@@ -44,7 +44,7 @@ class StandingsPreparationTests(unittest.TestCase):
         expected = SS.Season.live({a:t.division for a,t in league.teams.items()},
                                  {a:t.conf for a,t in league.teams.items()}, games, league.year)
         self.assertEqual(games, view.completed())
-        self.assertEqual({c:SS.seed_conference(expected,c) for c in ('AFC','NFC')}, view.seeds())
+        self.assertEqual({c:SS.seed_conference(expected,c) for c in ('Continental','United')}, view.seeds())
         for a, row in view.standings().items():
             self.assertEqual(SS.division_ranks(expected)[a], row['div_rank'])
             self.assertEqual(round(expected.wpct(a),3), row['pct'])

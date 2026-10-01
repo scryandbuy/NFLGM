@@ -353,7 +353,7 @@ class SeasonRunner(StandingsView):
 
     # ---- one game -------------------------------------------------------
     def _venue(self, week, playoffs):
-        """The building a game is played in when it is not the home club's: the Super Bowl's neutral site."""
+        """The building a game is played in when it is not the home club's: the Championship Game's neutral site."""
         if not playoffs or week < 22: return None
         try:
             import postseason as PS

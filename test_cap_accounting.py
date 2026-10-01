@@ -10,7 +10,7 @@ import extensions, contract_structure as CS, practice_squad as PS, tags
 def fixture():
     L=League(2026)
     for abbr in ('GB','MIN'):
-        t=Team(abbr,'NFC North','NFC'); t.league=L; L.teams[abbr]=t
+        t=Team(abbr,'United North','United'); t.league=L; L.teams[abbr]=t
     L.set_phase('regular')
     return L
 

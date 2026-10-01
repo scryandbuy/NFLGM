@@ -15,7 +15,7 @@ from test_cap_accounting import fixture, player
 def setup_market():
     L = fixture(); L.user_team = 'GB'; L.set_phase('offseason')
     for abbr in ('DEN', 'KC'):
-        t = Team(abbr, 'AFC West', 'AFC'); t.league = L
+        t = Team(abbr, 'Continental West', 'Continental'); t.league = L
         t.phase = 'offseason'; L.teams[abbr] = t
     seller = L.teams['MIN']; seller.cap.cap = 15; seller.cap.rollover = 0
     p = player(L, 'casualty', 'MIN', Contract(1, [20], signing_bonus=2))

@@ -13,7 +13,7 @@ class TransactionPeriods(unittest.TestCase):
         for phase in ('offseason', 'free_agency', 'draft'):
             self.assertEqual(transaction_when(dict(year=2027,week=22,phase=phase)), 'Offseason 2027')
         self.assertEqual(transaction_period(dict(phase='preseason',week=22)), 'Preseason')
-        for week, name in ((19,'Wild Card'),(20,'Divisional Round'),(21,'Conference Championship'),(22,'Super Bowl')):
+        for week, name in ((19,'Wild Card'),(20,'Divisional Round'),(21,'Conference Championship'),(22,'Championship Game')):
             self.assertEqual(transaction_period(dict(phase='playoffs',week=week)),name)
         self.assertEqual(transaction_when(dict(year=2026,phase='regular',week=8)), '2026 · Week 8')
 

@@ -36,7 +36,7 @@ the data said, in short:
   where the team constraint did most of the work.
 
 Ballots are cast at the end of the regular season and BEFORE the playoffs,
-which is why this reads league.stats and never league.post_stats. Super Bowl
+which is why this reads league.stats and never league.post_stats. Championship Game
 MVP is the exception and reads a single game.
 """
 import numpy as np
@@ -326,7 +326,7 @@ class Ballot:
         return first, second
 
 
-def super_bowl_mvp(league, post, season=None):
+def championship_game_mvp(league, post, season=None):
     """
     One game, not one season - so this is the only award that reads the
     per-game book rather than the season totals.
@@ -373,7 +373,7 @@ def vote(league, post=None, season=None):
         'all_pro_1': first, 'all_pro_2': second,
     }
     if post is not None:
-        out['sb_mvp'] = super_bowl_mvp(league, post, year)
+        out['sb_mvp'] = championship_game_mvp(league, post, year)
     league.awards[year] = {
         k: ([p.pid for p in v] if isinstance(v, list)
             else (v.pid if hasattr(v, 'pid') else v))

@@ -9,31 +9,31 @@ if __name__ == '__main__':
     st = pd.read_csv('standings.csv', low_memory=False)
     g  = pd.read_csv('sched.csv', low_memory=False)
 
-    DIVS = ['AFC East','AFC North','AFC South','AFC West','NFC East','NFC North','NFC South','NFC West']
+    DIVS = ['Continental East','Continental North','Continental South','Continental West','United East','United North','United South','United West']
 
     # ---- rotations, derived from 2002-2026 real schedules (see derive_rotation.py) ----
     # intra-conference: 3-year cycle. anchor 2026.
     INTRA = [
-      {'AFC East':'AFC West','AFC West':'AFC East','AFC North':'AFC South','AFC South':'AFC North',
-       'NFC East':'NFC West','NFC West':'NFC East','NFC North':'NFC South','NFC South':'NFC North'},   # 2026
-      {'AFC East':'AFC South','AFC South':'AFC East','AFC North':'AFC West','AFC West':'AFC North',
-       'NFC East':'NFC South','NFC South':'NFC East','NFC North':'NFC West','NFC West':'NFC North'},   # 2027
-      {'AFC East':'AFC North','AFC North':'AFC East','AFC South':'AFC West','AFC West':'AFC South',
-       'NFC East':'NFC North','NFC North':'NFC East','NFC South':'NFC West','NFC West':'NFC South'},   # 2028
+      {'Continental East':'Continental West','Continental West':'Continental East','Continental North':'Continental South','Continental South':'Continental North',
+       'United East':'United West','United West':'United East','United North':'United South','United South':'United North'},   # 2026
+      {'Continental East':'Continental South','Continental South':'Continental East','Continental North':'Continental West','Continental West':'Continental North',
+       'United East':'United South','United South':'United East','United North':'United West','United West':'United North'},   # 2027
+      {'Continental East':'Continental North','Continental North':'Continental East','Continental South':'Continental West','Continental West':'Continental South',
+       'United East':'United North','United North':'United East','United South':'United West','United West':'United South'},   # 2028
     ]
     # inter-conference 4-game block: 4-year cycle. anchor 2026.
     INTER = [
-      {'AFC East':'NFC North','AFC North':'NFC South','AFC West':'NFC West','AFC South':'NFC East'},   # 2026
-      {'AFC East':'NFC East','AFC North':'NFC West','AFC West':'NFC North','AFC South':'NFC South'},   # 2027
-      {'AFC East':'NFC West','AFC North':'NFC East','AFC West':'NFC South','AFC South':'NFC North'},   # 2028
-      {'AFC East':'NFC South','AFC North':'NFC North','AFC West':'NFC East','AFC South':'NFC West'},   # 2029
+      {'Continental East':'United North','Continental North':'United South','Continental West':'United West','Continental South':'United East'},   # 2026
+      {'Continental East':'United East','Continental North':'United West','Continental West':'United North','Continental South':'United South'},   # 2027
+      {'Continental East':'United West','Continental North':'United East','Continental West':'United South','Continental South':'United North'},   # 2028
+      {'Continental East':'United South','Continental North':'United North','Continental West':'United East','Continental South':'United West'},   # 2029
     ]
     # 17th game division pairing: its own 4-year cycle. anchor 2026.
     X17 = [
-      {'AFC East':'NFC West','AFC North':'NFC East','AFC South':'NFC North','AFC West':'NFC South'},   # 2026
-      {'AFC East':'NFC South','AFC North':'NFC North','AFC South':'NFC West','AFC West':'NFC East'},   # 2027
-      {'AFC East':'NFC North','AFC North':'NFC South','AFC South':'NFC East','AFC West':'NFC West'},   # 2028
-      {'AFC East':'NFC East','AFC North':'NFC West','AFC South':'NFC South','AFC West':'NFC North'},   # 2029
+      {'Continental East':'United West','Continental North':'United East','Continental South':'United North','Continental West':'United South'},   # 2026
+      {'Continental East':'United South','Continental North':'United North','Continental South':'United West','Continental West':'United East'},   # 2027
+      {'Continental East':'United North','Continental North':'United South','Continental South':'United East','Continental West':'United West'},   # 2028
+      {'Continental East':'United East','Continental North':'United West','Continental South':'United South','Continental West':'United North'},   # 2029
     ]
 
     def rot(season):
@@ -84,7 +84,7 @@ if __name__ == '__main__':
         # The four divisions of a conference form a 4-cycle under "not my block partner".
         # Orient the cycle: each division hosts the next and visits the previous,
         # which gives every team exactly 1 home and 1 away here.
-        for conf in ['AFC','NFC']:
+        for conf in ['Continental','United']:
             cds = sorted(d for d in DIVS if d.startswith(conf))
             cycle = [cds[0]]
             while len(cycle) < 4:
@@ -99,12 +99,12 @@ if __name__ == '__main__':
                     games.append((a, b, 'place_intra'))     # d hosts od
 
         # 5. the 17th game: place-based, cross-conference, host conference alternates
-        host_conf = 'NFC' if season % 2 == 0 else 'AFC'
-        for d in [x for x in DIVS if x.startswith('AFC')]:
+        host_conf = 'United' if season % 2 == 0 else 'Continental'
+        for d in [x for x in DIVS if x.startswith('Continental')]:
             od = x17[d]
             for a in bydiv[d]:
                 b = next(x for x in bydiv[od] if RANK[x] == RANK[a])
-                games.append((b, a, 'g17') if host_conf == 'NFC' else (a, b, 'g17'))
+                games.append((b, a, 'g17') if host_conf == 'United' else (a, b, 'g17'))
 
         return games
 
