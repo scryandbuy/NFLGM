@@ -2979,3 +2979,4 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .plan-report .report-players .plate .no{width:48px;min-width:48px;height:32px;border-radius:5px;background:color-mix(in srgb,var(--team-base) 72%,#253d42);color:#edf3f5;border:1px solid #ffffff1d;font:800 12px var(--display);letter-spacing:0;white-space:nowrap}
 .plan-report .report-players .plate .nm{padding:0;font-size:15px;line-height:1.2;min-width:0}
 .plan-report .report-players .plate .ov{font-size:18px;padding:0 4px}
+.stats-board .league-year-tools .league-year{margin-bottom:0}.stats-board .league-year-tools>.btn{height:34px;box-sizing:border-box;display:inline-flex;align-items:center}
