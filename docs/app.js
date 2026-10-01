@@ -3269,25 +3269,26 @@ function renderThisWeek(v) {
   if (!v.suggestions.length) sug.append(el('div', { class: 'empty' }, 'The report has nothing to add this week; the plan is the coordinators\' own.'));
   else if (!locked) sug.append(el('div', { style: 'display:flex;gap:6px;padding:8px 0 0' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); reload(); } }, 'Accept All'), el('span', { class: 'count', style: 'align-self:center' }, '')));
   s.append(sug);
-  // leans
+  s.append(el('p', {class:'count', style:'padding:0 20px'}, 'These settings guide your team’s approach. Actual gameplay varies with the game situation.'));
+  // preferences
   const plan = el('div', { class: 'plan' });
   const side = (title, leans) => {
     const d = el('div', {}, el('div', { class: 'h5' }, title));
     for (const ln of leans) {
-      const lo = Math.max(0, ln.min), hi = Math.min(1, ln.max), span = Math.max(0.02, hi - lo);
+      const lo = ln.min, hi = ln.max, span = Math.max(0.02, hi - lo);
       const pos = x => `${Math.round((Math.min(hi, Math.max(lo, x)) - lo) / span * 100)}%`;
       const moved = Math.abs(ln.value - ln.base) > 1e-6;
       const track = el('div', { class: 'track' }, el('div', { class: 'range', style: 'left:0;right:0' }), el('div', { class: 'tick', style: `left:${pos(ln.base)}` }));
       if (ln.ghost != null) track.append(el('div', { class: 'knob ghost', style: `left:${pos(ln.ghost)}`, 'data-tip': `The assistants would put it at ${ln.ghost_word}` }));
       track.append(el('div', { class: 'knob' + (moved ? ' sug' : ''), style: `left:${pos(ln.value)}` }));
       const rng = el('input', { type: 'range', min: String(Math.round(lo * 1000)), max: String(Math.round(hi * 1000)), value: String(Math.round(ln.value * 1000)) }); rng.onchange = () => { pyJSON(`SESSION.plan_act('set_lean', key=${JSON.stringify(ln.key)}, value=${+rng.value / 1000})`); reload(); }; track.append(rng);
-      d.append(el('div', { class: 'lean' }, el('div', { class: 'l' }, ln.label, el('small', {}, ln.desc)), track, el('div', { class: 'v' + (moved ? ' sug' : ''), 'data-tip': moved ? `${ln.value > ln.base ? '+' : ''}${Math.round((ln.value - ln.base) * 100)} from your identity` : 'At your identity' }, ln.word)));
+      d.append(el('div', { class: 'lean' + (ln.key === 'box_bias' ? ' lean-box' : '') }, el('div', { class: 'l' }, ln.label, el('small', {}, ln.desc)), track, el('div', { class: 'v' + (moved ? ' sug' : ''), 'data-tip': moved ? 'Adjusted from your coaching identity' : 'At your identity' }, ln.word)));
     }
     return d;
   };
   const off = side('Offense', v.leans.filter(l => l.side === 'offense')), deff = side('Defense', v.leans.filter(l => l.side === 'defense'));
   // depth mix as three numbers
-  const dm = el('div', { class: 'lean', style: 'grid-template-columns:130px 1fr' }, el('div', { class: 'l' }, 'Depth of Target', el('small', {}, 'short · medium · deep')));
+  const dm = el('div', { class: 'lean', style: 'grid-template-columns:130px 1fr' }, el('div', { class: 'l' }, 'Depth of Target', el('small', {}, 'Baseline mix; the game situation adjusts target depth.')));
   const depthValues = gameplanPendingDepth || v.depth.value.map(pct);
   const inputs = depthValues.map((x, i) => el('input', { type: 'number', min: '5', max: '90', value: String(x), style: 'width:56px;font-family:var(--mono);font-size:14.5px;background:var(--board);color:var(--ink);border:1px solid var(--rule-2);padding:4px 6px' }));
   inputs.forEach(input => input.addEventListener('input', () => { gameplanPendingDepth = inputs.map(x => Number(x.value)); }));
