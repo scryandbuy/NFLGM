@@ -2398,6 +2398,11 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .league-board .lbox{border:0;border-bottom:1px solid var(--league-rule);background:none;min-width:0}.league-board .lbox h4{padding:0 0 15px;font:700 14px var(--text)}
 .league-board .lrow{padding:13px 0;border-bottom:1px solid #ffffff0b;font-family:var(--text)}.league-board .lrow .nm{font:600 13px var(--text)}.league-board .lrow small{display:block;font:400 11px var(--text);color:var(--ink-3);margin-top:5px}
 .league-board .lrow .v{font:700 18px var(--text);font-variant-numeric:tabular-nums}.league-board .lbox .lrow:nth-child(2){padding:18px 0}.league-board .lbox .lrow:nth-child(2) .v{font-size:27px}
+.stats-board .stats-team-row{background:linear-gradient(95deg,color-mix(in srgb,var(--team-base) 38%,#101820),#101820 60%)}
+.stats-board .lbox .stats-team-row{border:1px solid var(--league-rule);border-left:4px solid var(--team-accent);border-radius:7px;padding:13px 12px;margin-bottom:6px}
+.stats-board .lbox .stats-team-row:nth-child(2){padding:18px 12px}
+.stats-board tr.stats-team-row>td:first-child{border-left:4px solid var(--team-accent)}
+.stats-board .stats-team-row .who .no{background:var(--team-base);color:var(--team-readable);border:1px solid color-mix(in srgb,var(--team-accent) 40%,transparent);border-radius:4px}
 .league-awards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:1160px;margin:28px 0 36px}
 .league-awards .aw{position:relative;background:linear-gradient(135deg,color-mix(in srgb,var(--award-base) 38%,#101c24),#101820 72%);border:1px solid var(--league-rule);border-left:4px solid var(--award-accent);border-radius:8px;padding:22px 24px;min-width:0;min-height:150px}
 .league-awards .aw:first-child,.league-awards .aw:last-child{grid-column:1/-1}.league-awards .aw:first-child{min-height:178px;background:linear-gradient(115deg,color-mix(in srgb,var(--award-base) 58%,#101b23),#101820 78%)}

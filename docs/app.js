@@ -2753,9 +2753,15 @@ function renderTransactions(v) {
 }
 
 let statsTab = 'Leaders';
+function statsTeamRow(tag, player, ...children) {
+  const row = el(tag, { class: 'stats-team-row' + (tag === 'div' ? ' lrow' : '') }, ...children);
+  applyTeamTheme(row, player.club || { abbr: player.team });
+  return row;
+}
 function renderStats(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('stats');
   const s = leagueBoard(v, 'STATS', `${v.year} · Through Week ${v.week ?? '—'}`);
+  s.classList.add('stats-board');
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const k of ['Leaders', 'Passing', 'Rushing', 'Receiving', 'Defense', 'Blocking', 'Advanced', 'Team']) tabs.append(el('button', { 'aria-pressed': String(statsTab === k), onclick: () => { statsTab = k; renderStats(v); } }, k));
   const yrs=el('div',{class:'league-year-tools'},leagueYear(v,y=>renderStats(pyJSON(`SESSION.league_view('stats', year=${y})`))),el('a',{class:'btn',href:'#league/almanac'},'Career Stats →'));
   tabs.append(yrs); s.append(tabs);
@@ -2764,18 +2770,18 @@ function renderStats(v) {
   if (statsTab === 'Leaders' || statsTab === 'Advanced') {
     const boxes = statsTab === 'Leaders' ? v.boxes : v.advanced;
     const grid = el('div', { class: 'leaders' });
-    for (const b of boxes) { const box = el('div', { class: 'lbox' }, el('h4', {}, b.title, el('small', {}, b.unit || ''))); b.rows.slice(0, 5).forEach((r, i) => box.append(el('div', { class: 'lrow', style: r.mine ? 'background:var(--sheet-2)' : '' }, el('span', { class: 'r' }, i + 1), nm(r), el('span', { class: 'v' }, r.v)))); grid.append(box); }
+    for (const b of boxes) { const box = el('div', { class: 'lbox' }, el('h4', {}, b.title, el('small', {}, b.unit || ''))); b.rows.slice(0, 5).forEach((r, i) => box.append(statsTeamRow('div', r, el('span', { class: 'r' }, i + 1), nm(r), el('span', { class: 'v' }, r.v)))); grid.append(box); }
     if (!boxes.length) grid.append(el('div', { class: 'empty' }, 'No games played this season yet.'));
     s.append(grid);
   } else if (statsTab === 'Team') {
     const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Team'), el('th', { class: 'n' }, 'PF/G'), el('th', { class: 'n' }, 'PA/G'), el('th', { class: 'n' }, 'Yds/G'), el('th', { class: 'n' }, 'Pass/G'), el('th', { class: 'n' }, 'Rush/G'), el('th', { class: 'n' }, 'EPA/Play'), el('th', { class: 'n' }, 'Sacks'), el('th', { class: 'n' }, 'INT')));
     if(!v.team.length) t.append(el('tr',{},el('td',{colspan:'9'},'Team statistics were not retained for this season.')));
-    for (const r of v.team) t.append(el('tr', { style: r.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), el('td', { class: 'n' }, r.ypg), el('td', { class: 'n' }, r.pyds), el('td', { class: 'n' }, r.ryds), el('td', { class: 'n', style: r.epa > 0 ? 'color:var(--ok)' : r.epa < 0 ? 'color:var(--danger)' : '' }, (r.epa > 0 ? '+' : '') + r.epa.toFixed(2)), el('td', { class: 'n' }, r.sacks), el('td', { class: 'n' }, r.ints)));
+    for (const r of v.team) t.append(statsTeamRow('tr', r, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), el('td', { class: 'n' }, r.ypg), el('td', { class: 'n' }, r.pyds), el('td', { class: 'n' }, r.ryds), el('td', { class: 'n', style: r.epa > 0 ? 'color:var(--ok)' : r.epa < 0 ? 'color:var(--danger)' : '' }, (r.epa > 0 ? '+' : '') + r.epa.toFixed(2)), el('td', { class: 'n' }, r.sacks), el('td', { class: 'n' }, r.ints)));
     s.append(t);
   } else {
     const tb = v.tables[statsTab.toLowerCase()];
     const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Player'), el('th', {}, 'Team'), ...tb.cols.map(c => el('th', { class: 'n' }, c))));
-    tb.rows.forEach((r, i) => t.append(el('tr', { style: r.mine ? 'background:var(--sheet-2)' : '' }, el('td', { class: 'n' }, i + 1), el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.team ? stripe(r.team) : ''), ...r.row.map(x => el('td', { class: 'n' }, String(x))))));
+    tb.rows.forEach((r, i) => t.append(statsTeamRow('tr', r, el('td', { class: 'n' }, i + 1), el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.team ? stripe(r.team) : ''), ...r.row.map(x => el('td', { class: 'n' }, String(x))))));
     if (!tb.rows.length) t.append(el('tr', {}, el('td', { colspan: String(3 + tb.cols.length) }, el('div', { class: 'empty' }, 'No games played this season yet.'))));
     s.append(t);
   }
