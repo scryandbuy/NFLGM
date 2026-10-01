@@ -39,3 +39,12 @@ This records evidence from user-supplied games, fixes made, and questions to rev
 ## Updating this list
 
 For each future log, record the season, week, teams, score, relevant timestamps, and build if known. Mark observations as fixed, recurring, resolved by context, or requiring save/box-score evidence. Promote an item to a fix when a reproducible code path or repeated comparable evidence supports it. Keep broad statistical tuning separate from confirmed accounting, selection, and clock defects.
+
+## 2027 Week 15: Green Bay 28-20 Kansas City
+
+- Evidence: user play log, attachment e672d1cf-d393-4fa1-8300-cf017a566095. Build unknown.
+- Fixed in the integrated branch: Q4 11:33 roughing erased an eight-yard completion from KC47. Completed positive-yardage passes without a possession change now retain the gain and add roughing enforcement (KC24 in this example); interceptions retain previous-spot enforcement. Regression coverage added; 34 penalty tests passed.
+- Open, penalty decision valuation: Q2 4:23, holding accepted after two yards on third-and-21. Current evaluator rates fourth-and-19 at opponent55 as -0.4847 offensive EP versus third-and-31 at opponent67 as -0.6870, thus accepts. Reproduce and calibrate fourth-down alternatives/EP before adding a blanket decline rule. Successful subsequent conversion alone is not proof the decision was wrong.
+- Recurring timeout ownership: Q2 0:39 timeout credited to KC after GB reaches KC1. Compare raw timeout side and team metadata, actual score state, and game build; do not infer an AI strategy defect from narration alone.
+- Recurring conversion watch: GB third-and-31 and third-and-13; KC third-and-nine run. Track called play versus audible, distance, pressure and conversion rates across sample.
+- Context: final score reconciles; both long field goals missed; KC late punt preserved a final possession; final GB kneel is consistent with KC having no timeouts.
