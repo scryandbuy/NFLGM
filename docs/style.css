@@ -2915,3 +2915,6 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .roster-advice-item p { margin:8px 0; line-height:1.5; }
 .roster-advice-cost { color:var(--ink-2); }
 .roster-advice-item .acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.practice-unit-filter{margin:0 0 14px;gap:6px}
+.practice-unit-filter .chip[aria-pressed="true"]{color:var(--team-readable);border-color:var(--team-readable);background:color-mix(in srgb,var(--team-accent) 12%,transparent)}
+.practice-players tr[hidden]{display:none}

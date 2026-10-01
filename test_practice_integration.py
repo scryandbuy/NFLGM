@@ -107,6 +107,19 @@ class PracticeIntegrationTests(unittest.TestCase):
         self.assertEqual(xp,{pid:p.xp for pid,p in loaded.L.players.items()})
         self.assertEqual(len([m for m in loaded.L.inbox if m['kind']=='practice']),1)
 
+    def test_player_xp_forecast_and_saved_award_reach_view(self):
+        s=self.fixture()
+        pid=s.L.teams['GB'].roster[0].pid
+        forecast=dict(players=[dict(pid=pid,xp=500,xp_ceiling=1000,
+                                   xp_explanation='Rookie · balanced reps')])
+        with patch('practice.preview',return_value=forecast):
+            row=next(p for p in s.practice_view()['players'] if p['pid']==pid)
+        self.assertEqual((row['practice_xp'],row['xp_ceiling']), (500,1000))
+        self.assertIn('Rookie',row['xp_explanation'])
+        s.L.practice_state={'completed':{'2026:1':{'GB':forecast}}}
+        row=next(p for p in s.practice_view()['players'] if p['pid']==pid)
+        self.assertEqual((row['practice_xp'],row['xp_ceiling']), (500,1000))
+
     def test_practice_injury_reaches_game_medical_availability(self):
         s=self.fixture()
         with patch('practice.BASE_INJURY_RISK',100.):

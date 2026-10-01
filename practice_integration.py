@@ -141,6 +141,7 @@ def view(session):
         bye=not any(w == week and abbr in (a,h) for w,a,h,ap,hp in league.schedule),
         recovery_done=abbr in state.get('recovery_already_applied', {}).get(f'{league.year}:{week}', [])) if can and not done else {}
     plan = preview.get('plan', plan)
+    projections = {row['pid']: row for row in (done or preview).get('players', [])}
     players = []
     roster = {p.pid:p for p in league.teams[abbr].roster}
     roster.update((p.pid,p) for p in getattr(league.teams[abbr], 'practice_squad', []))
@@ -152,7 +153,10 @@ def view(session):
         condition = st.cond.get(p.pid) if st and p.pid in st.cond.cond else health.get('condition', 100)
         jaded = st.jaded.get(p.pid, 0) if st else health.get('jaded', 0)
         unit = 'special' if p.pos in ('K','P','LS') else 'offense' if p.pos in ('QB','HB','FB','TE','WR','LT','LG','C','RG','RT') else 'defense'
+        projection = projections.get(p.pid, {})
         players.append(dict(pid=p.pid, name=p.name, pos=p.pos, unit=unit,
+                            practice_xp=projection.get('xp'), xp_ceiling=projection.get('xp_ceiling'),
+                            xp_explanation=projection.get('xp_explanation', ''),
                             condition=f'{condition:.0f}%',jaded=('High' if jaded >= .65 else 'Moderate' if jaded >= .3 else 'Low'),
                             injured=p.out_until is not None or bool(runner and p.pid in runner.desks[abbr].playing_hurt)))
     return dict(rail=views.rail(session, league, abbr),week=week,eligible=can,
