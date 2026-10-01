@@ -81,6 +81,11 @@ def run(league, votes, rng, season=None, verbose=False):
                       elite_seasons=elite_seasons, previous_dev=before, dev=p.dev,
                       chance_up=round(c_up,6), chance_down=round(c_down,6),
                       awards=sorted(honours), reason=reason)
+        if assessment and 'coverage_cells' in assessment:
+            record['coverage_evidence'] = dict(
+                targets=assessment['opportunities'],
+                snaps=float(lines[pid].get('cov_snaps', 0) or 0),
+                basis=assessment['basis'], reason=assessment['reason'])
         # Bounded evidence for streaks; full changes remain in transactions.
         p.xp_spent['_dev_review'] = sorted([r for r in history if r.get('year',0)<year]+[record],
                                          key=lambda r:r['year'])[-3:]

@@ -57,6 +57,82 @@ def _production(line):
                                              _n(line, 'fum_lost')))
 
 
+# Numeric counters merge through the existing per-game/season stat books.
+COVERAGE_BUCKETS = tuple(f'{mode}_{depth}' for mode in ('man', 'zone')
+                         for depth in ('short', 'medium', 'deep'))
+COVERAGE_OUTCOMES = ('completions', 'air_yards', 'td', 'explosive', 'pd', 'ints')
+# A grading scale, not a claimed real-world coverage formula. Compare only
+# within the same role and depth/mode bucket; higher costs mean worse results.
+COVERAGE_COSTS = dict(completions=1., air_yards=.08, td=2., explosive=1., pd=-.5, ints=-2.)
+
+
+def coverage_assessment(p, line):
+    snaps = _n(line, 'cov_snaps')
+    cells = {}
+    for bucket in COVERAGE_BUCKETS:
+        prefix = 'cov_' + bucket + '_'
+        targets = _n(line, prefix + 'targets')
+        if not targets:
+            continue
+        cell = {key: _n(line, prefix + key) for key in COVERAGE_OUTCOMES}
+        # Missing or malformed partial records cannot support demotion.
+        if any(prefix + key not in line for key in COVERAGE_OUTCOMES):
+            return None
+        if any(cell[key] > targets for key in ('completions','td','explosive','pd','ints')):
+            return None
+        cell['targets'] = targets
+        cells[bucket] = cell
+    targets = sum(c['targets'] for c in cells.values())
+    if snaps < 100 or targets < 10 or targets > snaps:
+        return None
+    roles = {role: _n(line, 'cov_' + role + '_snaps')
+             for role in ('outside', 'slot', 'safety')}
+    role = max(roles, key=roles.get)
+    if roles[role] < .6 * snaps:
+        role = 'mixed'
+    family = 'CB' if p.pos == 'CB' else 'S'
+    out = _result(0., family + ':coverage:' + role, targets,
+                  min(snaps / 500., targets / 60.),
+                  'Individual coverage outcomes adjusted for role, depth and man/zone',
+                  'Awaiting comparable coverage evidence', reliable=False)
+    out['coverage_cells'] = cells
+    return out
+
+
+def calibrate_coverage(assessments):
+    """Compare each target bucket to other players doing the same job.
+
+    Leave the evaluated player out of the baseline. Sparse or missing buckets
+    cannot establish a poor season. Never use shared team EPA as individual blame.
+    This only changes assessments; no ratings, RNG, or historical stats change.
+    """
+    groups = {}
+    for pid, row in assessments.items():
+        if 'coverage_cells' in row:
+            groups.setdefault(row['group'], []).append((pid, row))
+    for peers in groups.values():
+        for pid, row in peers:
+            total = sum(c['targets'] for c in row['coverage_cells'].values())
+            observed, score = 0., 0.
+            for bucket, cell in row['coverage_cells'].items():
+                others = [r['coverage_cells'][bucket] for other, r in peers
+                          if other != pid and bucket in r['coverage_cells']]
+                n = sum(c['targets'] for c in others)
+                if len(others) < 4 or n < 100:
+                    continue
+                expected = sum(COVERAGE_COSTS[k] * sum(c[k] for c in others) / n
+                               for k in COVERAGE_OUTCOMES)
+                actual = sum(COVERAGE_COSTS[k] * cell[k] for k in COVERAGE_OUTCOMES)
+                score += expected * cell['targets'] - actual
+                observed += cell['targets']
+            row['score'] = 100. * score / observed if observed else 0.
+            completeness = observed / total if total else 0.
+            row['confidence'] = min(row['confidence'], completeness)
+            row['credible'] = row['confidence'] >= .75 and completeness >= .8
+            row['reason'] = ('' if row['credible'] else
+                             'Insufficient targets, coverage snaps or comparable role evidence')
+
+
 def assessment(p, line):
     """Return role score + evidence, or None when the season cannot be assessed.
 
@@ -148,6 +224,9 @@ No ratings, age, development trait, team record or awards enter the score.
         tackles, sacks = _n(line, 'tackles'), _n(line, 'sacks')
         pd, ints, ff = _n(line, 'pass_def'), _n(line, 'int_def'), _n(line, 'ff')
         if pos in ('CB', 'FS', 'SS'):
+            coverage = coverage_assessment(p, line)
+            if coverage is not None:
+                return coverage
             score = 100 * (3 * pd + 8 * ints + 3 * ff + .2 * tackles) / snaps
             return _result(score, 'CB' if pos == 'CB' else 'S', snaps,
                            min(.65, snaps / 750), 'Ball-production proxy per defensive play',
@@ -207,6 +286,7 @@ def season_comparisons(league, year):
         if result is not None:
             assessments[pid] = result
             groups[result['group']].append(p)
+    calibrate_coverage(assessments)
     def percentile(values):
         if len(values) <= 1: return np.full(len(values), .5)
         _, inverse, counts = np.unique(values, return_inverse=True, return_counts=True)
