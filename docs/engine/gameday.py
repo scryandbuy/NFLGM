@@ -117,7 +117,10 @@ def capture(league, played, user):
             elif pts < 0:
                 if pos == 'home': as_ += abs(pts)
                 else: hs += abs(pts)
-            start = float(getattr(dr, 'start', 75)); end = float(getattr(dr, 'yardline', start))
+            # The possession endpoint includes an interception's catch/return.
+            # Offensive drive yardage ends at that pass's line of scrimmage.
+            # Derive it from the log so previously saved games render correctly.
+            start = float(getattr(dr, 'start', 75)); end = ticker.offensive_drive_end(dr)
             res_word = ticker.drive_result(dr, res.get('overtime', False))
             drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), start_label=ticker._spot(start, off_abbr, def_abbr), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=round(start - end, 1), first_downs=int(getattr(dr, 'first_downs', 0) or 0),
                                result=res_word, points=pts, quarter=start_quarter, scoring_quarter=scoring_quarter(dr), clock=_clock(getattr(dr, 'clock', 0)),
@@ -157,7 +160,7 @@ def capture(league, played, user):
             # possession: from the drive's first entry (the kick that opened it, or the first snap) to the clock when it ended
             _clocks = [float(pl['clock']) for pl in getattr(dr, 'log', []) if isinstance(pl, dict) and pl.get('clock') is not None]
             if _clocks: t_['top'] += max(0.0, _clocks[0] - float(getattr(dr, 'clock', _clocks[-1]) or _clocks[-1]))
-            deepest = min(deepest, float(getattr(dr, 'yardline', 99) or 99))
+            deepest = min(deepest, ticker.offensive_drive_end(dr))
             if deepest <= 20 or (dr.result == 'Touchdown'): t_['red_zone'] += 1; t_['red_zone_td'] += int(dr.result == 'Touchdown')
         team_stats = {}
         for abbr_, t_ in T.items():

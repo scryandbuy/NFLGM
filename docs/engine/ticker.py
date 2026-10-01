@@ -223,6 +223,16 @@ def drive_result(dr, overtime=False):
     return dr.result
 
 
+def offensive_drive_end(dr):
+    """Exclude interception flight/return yards from offensive drive progress."""
+    if dr.result in ('Turnover', 'Interception'):
+        interception = next((p for p in reversed(dr.log) if isinstance(p, dict)
+                             and p.get('type') == 'interception' and not p.get('nullified')), None)
+        if interception is not None and interception.get('yardline') is not None:
+            return float(interception['yardline'])
+    return float(getattr(dr, 'yardline', getattr(dr, 'start', 75)))
+
+
 def write_game(league, res, home, away):
     """The whole game as drives: header, lines, and the numbers the drive chart needs."""
     out = []
@@ -235,7 +245,7 @@ def write_game(league, res, home, away):
         real = [p for p in dr.log if isinstance(p, dict) and not p.get('nullified') and p.get('type') in ('run', 'complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble', 'kneel', 'spike', 'punt', 'field_goal')]
         yards = sum(float(p.get('yards', 0) or 0) for p in real if p.get('type') in ('run', 'complete', 'sack', 'scramble'))
         q = int(getattr(dr, 'quarter', 1) or 1)
-        start = float(getattr(dr, 'start', 75) or 75); end = float(getattr(dr, 'yardline', start) or start)
+        start = float(getattr(dr, 'start', 75)); end = offensive_drive_end(dr)
         secs = 0.0
         if real:
             c0 = real[0].get('clock'); c1 = real[-1].get('clock')
