@@ -1233,14 +1233,14 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
    and two gap columns; every column is a grid of 8 half-rows, so a wild card slot spans 2, a divisional slot 4, the
    championship 8, and the joins in the gaps draw the lines from pair to pair */
 .bk-scroll{max-width:100%;overflow-x:auto;scrollbar-width:thin}
-.bk-tree{display:grid;grid-template-columns:1fr 28px 1fr 28px 1fr 28px 1.25fr 28px 1fr 28px 1fr 28px 1fr;gap:0;padding:34px 18px 20px;min-width:1520px;min-height:620px}
-.bk-col{display:grid;grid-template-rows:repeat(8,1fr);position:relative}
+.bk-tree{display:grid;grid-template-columns:repeat(3,minmax(0,1fr) 28px) minmax(0,1.25fr) repeat(3,28px minmax(0,1fr));gap:0;padding:34px 18px 20px;min-width:1520px;min-height:620px}
+.bk-col{display:grid;grid-template-rows:repeat(8,minmax(96px,1fr));position:relative}
 .bk-col::before{content:attr(data-name);position:absolute;top:-20px;left:0;right:0;text-align:center;font-family:var(--display);font-weight:700;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
 .bk-slot{display:flex;flex-direction:column;justify-content:center;padding:6px 0;position:relative}
 .bk-slot.s2{grid-row:span 2}.bk-slot.s4{grid-row:span 4}.bk-slot.s8{grid-row:span 8}
 .bk-game{border:1px solid color-mix(in srgb,var(--match-accent,#657987) 42%,var(--rule));border-top:2px solid var(--match-accent,#657987);background:linear-gradient(160deg,color-mix(in srgb,var(--match-base,#22323d) 40%,var(--sheet-2)),var(--sheet-2) 70%);border-radius:7px;overflow:hidden;position:relative;box-shadow:0 8px 25px #0003}
 .bk-game.mine{border-color:var(--club-2)}
-.bk-line{display:grid;grid-template-columns:16px 4px 1fr auto auto;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--rule)}
+.bk-line{display:grid;grid-template-columns:16px 4px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--rule)}
 .bk-line:last-of-type{border-bottom:0}
 .bk-line .sd{font-family:var(--mono);font-size:12px;color:var(--ink-3);text-align:center}
 .bk-line .str{width:4px;height:22px;border-radius:2px;background:var(--sheet-3)}
@@ -1249,8 +1249,8 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 .bk-line b{font-family:var(--display);font-weight:800;font-size:22px;min-width:44px;text-align:right;color:var(--ink)}
 .bk-line.lose .ab,.bk-line.lose b{color:var(--ink-3);font-weight:700}
 .bk-line.me .ab{color:var(--club-2)}
-.bk-game .foot{display:flex;justify-content:space-between;gap:8px;padding:4px 10px;font-family:var(--display);font-weight:700;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);background:var(--sheet);border-top:1px solid var(--rule)}
-.bk-game .foot span{font-family:var(--text);font-weight:500;text-transform:none;letter-spacing:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk-game .foot{display:flex;justify-content:space-between;flex-wrap:nowrap;gap:8px;padding:4px 10px;font-family:var(--display);font-weight:700;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);background:var(--sheet);border-top:1px solid var(--rule)}
+.bk-game .foot span{min-width:0;font-family:var(--text);font-weight:500;text-transform:none;letter-spacing:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bk-game.tbd .ab{color:var(--ink-3)}.bk-game.tbd{border-style:dashed;background:transparent}
 .bk-game.bye .foot{color:var(--ok)}
 /* the joins: a ] shape from the two cards' centres to the gap's far edge, and a stub on to the next card */

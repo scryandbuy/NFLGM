@@ -513,7 +513,7 @@ def awards(session, league, abbr, year=None):
             p = _season_player(league, league.player(pid), yr)
             if p: out.append(dict(pid=pid, name=p.name, pos=p.pos, team=(club(p.team) if p.team else None), mine=(p.team == abbr)))
         return out
-    return dict(rail=rail(session, league, abbr), year=yr, years=years, rows=rows, first=team_list('all_pro_1'), second=team_list('all_pro_2'), pending=(league.year if league.year not in league.awards else None), note=None if a else f"The {yr} honors are announced after the Wild Card round; Championship Game MVP follows the final")
+    return dict(rail=rail(session, league, abbr), year=yr, years=years, rows=rows, first=team_list('all_pro_1'), second=team_list('all_pro_2'), pending=(league.year if league.year not in league.awards else None), note=None if a else f"The {yr} honors are announced after the Conference Championships; Championship Game MVP follows the final")
 
 
 def _sb_line(league, p, yr):

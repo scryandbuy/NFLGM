@@ -2,6 +2,7 @@
 import copy
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import numpy as np
 import session as SS
@@ -119,6 +120,32 @@ class CalendarAwardResumeTests(unittest.TestCase):
         loaded = SS.Session.load(s.save())
         self.assertEqual([p.pid for p in loaded.votes['all_pro_1']], [pid])
         self.assertIsNone(loaded.votes['sb_mvp'])
+
+    def test_announced_honors_survive_reload_and_are_not_paid_twice(self):
+        s = self.fresh()
+        p = next(p for p in s.L.teams['GB'].active() if p.pos == 'QB')
+        def vote(league, post=None):
+            self.assertIsNone(post)
+            league.awards[league.year] = {'mvp': p.pid}
+            return {'mvp': p, 'coty': 'GB'}
+        with patch.object(SS.AW, 'vote', side_effect=vote), patch.object(SS.XP, 'pay_awards'), \
+                patch.object(SS.IB, 'post') as letter:
+            s._announce_honors()
+        self.assertIn(s.L.year, s.L.awards)
+        letter.assert_called_once()
+        s = SS.Session.load(s.save())
+        s.post = SimpleNamespace()
+        self.assertEqual(s.votes['mvp'].pid, p.pid)
+        with patch.object(SS.AW, 'vote', side_effect=AssertionError('regular honors must not be revoted')), \
+                patch.object(SS.AW, 'championship_game_mvp', return_value=None), \
+                patch.object(SS.MO, 'ensure') as morale, patch.object(SS.RG, 'tick_ages'), \
+                patch.object(SS.XP, 'pay_awards'), patch.object(SS.XP, 'close_season'), \
+                patch.object(SS.CP, 'season_prestige'), patch.object(SS.STF, 'unit_ranks', return_value={}), \
+                patch.object(SS.STF, 'season_end'), patch.object(SS.AL, 'close_season'), \
+                patch('views_league.awards', return_value={}), patch('club_notes.season_end'), \
+                patch('league_notes.season_end'):
+            s.step_awards()
+        morale.assert_not_called()
 
 
 if __name__ == '__main__':

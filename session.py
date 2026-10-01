@@ -593,6 +593,7 @@ class Session:
             losers = [a for a, r in (getattr(post, 'exit_round', {}) or {}).items() if r == rnd]
             self._ai_exit_meetings(losers)
             if rnd == 'CONF':
+                self._announce_honors()
                 self._senior_bowl()
             if rnd_i + 1 < len(PS.Postseason.ROUNDS):
                 self.stop = ('playoffs', rnd_i + 1)
@@ -638,8 +639,9 @@ class Session:
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
 
     def _announce_honors(self):
-        """The season's honors come out after the Wild Card round, as they do: the vote on the regular season, paid
-        in XP the same day, felt in the room, priced into the next ask. The Championship Game MVP waits for the game."""
+        """Announce regular-season honors after the conference finals and before the Championship Game."""
+        if self.L.year in self.L.awards:
+            return
         try:
             import morale as MO
             from views import surname
@@ -915,14 +917,13 @@ class Session:
 
     # ---- the offseason steps, the same code as franchise.play_year in the same order
     def step_awards(self):
-        """STEP 1: the season's awards, all of it here. The vote on the regular season, the Championship Game MVP, the XP the
-        honors pay, the morale they lift, the prestige, the almanac, the notes and the sub-tab. Nothing about awards
-        happens before this step (the honors had come out after the Wild Card and then again here)."""
+        """Close the season's awards, adding the Championship Game MVP to the announced regular-season ballot."""
         L, rng = self.L, self.rng
         # THE YEAR TICKS HERE. Every player is a year older from Step 1 on, and every page reads the same number
         # (the card had shown his season age while the Regression page showed the age he was turning, rounded up)
         RG.tick_ages(L)
-        self.votes = AW.vote(L, self.post)
+        honors_announced = L.year in L.awards
+        self.votes = self._recorded_votes() if honors_announced else AW.vote(L)
         try:
             self.votes['sb_mvp'] = AW.championship_game_mvp(L, self.post, L.year)
             if self.votes['sb_mvp']: L.awards[L.year]['sb_mvp'] = getattr(self.votes['sb_mvp'], 'pid', self.votes['sb_mvp'])
@@ -932,6 +933,7 @@ class Session:
             XP.pay_awards(L, self.votes)
             for k, who in self.votes.items():
                 if k in ('coty',) or not who: continue
+                if honors_announced and k != 'sb_mvp': continue
                 for w in (who if isinstance(who, list) else [who]):
                     p = L.player(getattr(w, 'pid', w)) if not hasattr(w, 'pid') else w
                     m = MO.ensure(p) if p is not None else None
