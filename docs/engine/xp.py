@@ -252,6 +252,11 @@ def points_bought(player):
                if not k.startswith('_') and isinstance(v, (int, float)))
 
 
+def elite_learning(player):
+    """The tested young-prospect window; other tiers retain ordinary progression."""
+    return player.dev in ('superstar', 'xfactor') and player.age <= 24
+
+
 def cost_per_point(player, attr=None):
     """XP for one more attribute point, for this player right now."""
     import regression as RG
@@ -264,6 +269,12 @@ def cost_per_point(player, attr=None):
     late_from, late_slope = LATE_SLOPE.get(player.pos, (99.0, 0.0))
     late = 1.0 + late_slope * max(0.0, float(player.age) - late_from)
     same = float(player.xp_spent.get(attr, 0) or 0) if attr else 0.0
+    career_escalator, skill_escalator = ESCALATOR, ATTR_ESCALATOR
+    if elite_learning(player):
+        # Full moderate relief through 88 OVR, fading to ordinary prices at 94.
+        blend = max(0., min(1., (94. - player.ovr) / 6.))
+        career_escalator = ESCALATOR + (1.01 - ESCALATOR) * blend
+        skill_escalator = ATTR_ESCALATOR + (1.03 - ATTR_ESCALATOR) * blend
     if attr in PHYSICAL or attr in TOOLS:
         # PHYSICALS ARE NOT LEARNED. Speed, burst, agility, jumping and strength grow only while a
         # young player's body is still finishing, and by a little. They price off their own base and
@@ -275,10 +286,10 @@ def cost_per_point(player, attr=None):
         wall = 1.0 if age < 23 else 2.0 if age < 24 else 3.5 if age < 25 else 6.0 if age < 26 else 10.0 * (2.0 ** max(0.0, age - 26.0))
         if attr == 'strength_rating': wall = wall ** 0.7
         tool = TOOL_OVER_SPEED if attr in TOOLS else 1.0
-        return (PHYSICAL_BASE * wall * ovr_scale * ESCALATOR ** points_bought(player) * PHYS_ATTR_ESCALATOR ** same * tool)
+        return (PHYSICAL_BASE * wall * ovr_scale * career_escalator ** points_bought(player) * PHYS_ATTR_ESCALATOR ** same * tool)
     specialist = KICK_ACCURACY_MULT if player.pos in ('K', 'P') and attr == 'kick_acc_rating' else 1.0
     return (BASE_COST * curve * (1.0 + AGE_SLOPE * years) * ovr_scale * late
-            * ESCALATOR ** points_bought(player) * ATTR_ESCALATOR ** same * phys * specialist)
+            * career_escalator ** points_bought(player) * skill_escalator ** same * phys * specialist)
 
 
 # ============================================================ THE CEILING
@@ -403,7 +414,11 @@ def weekly_xp(player, line, season=None):
 
 def game_xp(player, line, season=None):
     """One game: the events plus whatever weekly lines he crossed."""
-    return (event_xp(line) + weekly_xp(player, line, season)) * modifier(player)
+    performance = event_xp(line) + weekly_xp(player, line, season)
+    # Snap participation keeps its ordinary reward even if supplied in this line.
+    snaps = event_xp({'snaps': line.get('snaps', 0)})
+    boost = (1.75 if player.dev == 'xfactor' else 1.6) if elite_learning(player) else 1.
+    return ((performance - snaps) * boost + snaps) * modifier(player)
 
 
 def long_snap_line(drives, side):
