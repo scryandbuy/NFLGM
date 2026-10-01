@@ -135,11 +135,17 @@ def recommend_plan(league, runner, abbr, week, *, bye=False):
         reps = 'development' if bye or intensity=='light' or (week<=18 and len(young)>=len(members)*.30) else 'balanced'
         units[unit] = dict(intensity=intensity,reps=reps)
         reasons.append(f'{unit.title()}: {reason}')
-        candidates.extend(young)
+        # Focus can develop starters too; the reserve-only list is for deciding
+        # unit reps, not eligibility for individual coaching attention.
+        candidates.extend(p for p,_,_,_ in healthy)
     # Three focused players receive the full coaching attention factor.
-    candidates.sort(key=lambda p:(-XP.modifier(p),p.age,p.pid))
+    def focus_value(p):
+        experience = max(0, int(league.year) - _entry_year(league, p))
+        ceiling = WEEKLY_XP_CEILINGS[min(experience, len(WEEKLY_XP_CEILINGS)-1)]
+        return ceiling * XP.modifier(p) * (.35 if individual.get(p.pid)=='limited' else 1.)
+    candidates.sort(key=lambda p:(-focus_value(p),p.age,p.pid))
     return dict(units=units,individual=individual,
-                focus=[] if bye else [p.pid for p in candidates[:3]],reasons=reasons)
+                focus=[p.pid for p in candidates[:3]],reasons=reasons)
 
 def _plan(league,runner,abbr,week,plan,bye):
     base = recommend_plan(league,runner,abbr,week,bye=bye)

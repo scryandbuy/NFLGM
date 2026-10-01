@@ -3114,7 +3114,7 @@ function renderPractice(v) {
       [...body.children].forEach((row, i) => { row.hidden = v.players[i].unit !== practicePlayerUnit; });
       [...unitButtons.children].forEach(button => button.setAttribute('aria-pressed', String(button.dataset.unit === practicePlayerUnit)));
     };
-    for (const [unit, label] of [['offense','Off'],['defense','Def'],['special','ST']]) {
+    for (const [unit, label] of [['offense','OFF'],['defense','DEF'],['special','ST']]) {
       unitButtons.append(el('button', {type:'button', class:'chip', 'data-unit':unit, onclick:() => { practicePlayerUnit = unit; filterPlayers(); }}, label));
     }
     filterPlayers();

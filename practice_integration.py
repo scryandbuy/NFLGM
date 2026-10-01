@@ -135,8 +135,11 @@ def view(session):
     can = eligible(league, abbr, week) and not session.played
     # Opening a page must not build a runner, list injuries, or consume RNG.
     runner = session.runner
-    plan = state.get('plans', {}).get(abbr) or PR.recommend_plan(league, runner, abbr, week or 1)
     done = result(league, abbr, week)
+    bye = not any(w == week and abbr in (a,h) for w,a,h,ap,hp in league.schedule)
+    plan = (done or {}).get('plan') or state.get('plans', {}).get(abbr)
+    if not plan or (state.get('auto', {}).get(abbr) and not done):
+        plan = PR.recommend_plan(league, runner, abbr, week or 1, bye=bye)
     preview = PR.preview(league, runner, abbr, week or 1, plan,
         bye=not any(w == week and abbr in (a,h) for w,a,h,ap,hp in league.schedule),
         recovery_done=abbr in state.get('recovery_already_applied', {}).get(f'{league.year}:{week}', [])) if can and not done else {}

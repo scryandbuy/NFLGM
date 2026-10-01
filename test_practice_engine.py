@@ -95,7 +95,7 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(q['units']['offense']['intensity'],'hard')
         self.assertEqual(q['units']['offense']['reps'],'development')
         self.assertEqual(len(q['focus']),3)
-        self.assertTrue(all(pid not in P._starters(l.teams['A'],l.teams['A'].depth) for pid in q['focus']))
+
         l.practice_state={'players':{p.pid:dict(last_key='2026:2',hard_streak=1) for p in ps}}
         self.assertEqual(P.recommend_plan(l,r,'A',3)['units']['offense']['intensity'],'standard')
         l.practice_state={}
@@ -104,6 +104,19 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual({v['intensity'] for v in P.recommend_plan(l,r,'A',3,bye=True)['units'].values()},{'recovery'})
         for p in ps:p.age=24
         self.assertNotIn('hard',{v['intensity'] for v in P.recommend_plan(l,r,'A',19)['units'].values()})
+
+    def test_focus_includes_young_starters_and_prefers_development(self):
+        l,r,ps=setup()
+        for p in ps:
+            p.age=31;p.entry_year=2017
+        for p,dev in zip(ps[:4],('xfactor','superstar','star','normal')):
+            p.age=22;p.entry_year=2026;p.dev=dev
+        q=P.recommend_plan(l,r,'A',1)
+        self.assertEqual(q['focus'],[p.pid for p in ps[:3]])
+        ps[0].out_until=4
+        q=P.recommend_plan(l,r,'A',1)
+        self.assertNotIn(ps[0].pid,q['focus'])
+        self.assertEqual(len(q['focus']),3)
 
     def test_manual_workloads_have_costs_and_rest_is_protected(self):
         l,r,ps=setup();st=r.states['A']

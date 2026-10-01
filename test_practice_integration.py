@@ -115,10 +115,19 @@ class PracticeIntegrationTests(unittest.TestCase):
         with patch('practice.preview',return_value=forecast):
             row=next(p for p in s.practice_view()['players'] if p['pid']==pid)
         self.assertEqual((row['practice_xp'],row['xp_ceiling']), (500,1000))
+
         self.assertIn('Rookie',row['xp_explanation'])
         s.L.practice_state={'completed':{'2026:1':{'GB':forecast}}}
         row=next(p for p in s.practice_view()['players'] if p['pid']==pid)
         self.assertEqual((row['practice_xp'],row['xp_ceiling']), (500,1000))
+
+    def test_auto_preview_replaces_stale_manual_focus(self):
+        s=self.fixture()
+        manual=s.practice_view()['plan'];manual['focus']=[]
+        s.L.practice_state={'plans':{'GB':manual},'auto':{'GB':True}}
+        shown=s.practice_view()
+        self.assertEqual(len(shown['plan']['focus']),3)
+        self.assertEqual(s.L.practice_state['plans']['GB']['focus'],[])
 
     def test_practice_injury_reaches_game_medical_availability(self):
         s=self.fixture()
