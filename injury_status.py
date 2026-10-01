@@ -180,6 +180,9 @@ class InjuryDesk:
         import inbox as IB
         for message in IB.pending(league, 'injury_decision'):
             if team.abbr == getattr(league, 'user_team', None): message['status'] = 'done'
+        schedule = getattr(league, 'schedule', None)
+        has_game = schedule is None or any(w == week and team.abbr in (away, home)
+                                             for w, away, home, *_ in schedule)
         for p in list(team.roster):
             if p.out_until is None:
                 continue
@@ -209,7 +212,7 @@ class InjuryDesk:
             # concussion protocol: never better than Doubtful the first week, and never played through
             if str(p.xp_spent.get('_inj_kind') or '') == 'Concussion' and d == 'questionable' and left >= 1 and int(p.xp_spent.get('_inj_week', 0) or 0) >= week - 1: d = 'doubtful'
             self.status[p.pid] = d
-            if d in ('questionable', 'doubtful'):
+            if has_game and d in ('questionable', 'doubtful'):
                 if team.abbr == getattr(league, 'user_team', None):
                     # THE GM DECIDES. The item sits in the inbox until Sunday; unanswered, the trainers call it.
                     self.pending[p.pid] = d

@@ -248,6 +248,11 @@ def reconcile(league):
                 m['expires_week'] = expiry - 1
             done = ((year is not None and m.get('year', year) != year)
                     or (week is not None and m.get('week', week) < week))
+            schedule = getattr(league, 'schedule', None)
+            target_week = m.get('week', week)
+            if schedule is not None and target_week is not None:
+                done = done or not any(w == target_week and user in (away, home)
+                                       for w, away, home, *_ in schedule)
         elif kind == 'offer_sheet':
             # Old saves may contain CPU-only requests in the shared inbox.
             if m.get('team', pl.get('team')) != user:

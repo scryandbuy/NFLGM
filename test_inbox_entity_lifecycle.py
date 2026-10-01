@@ -80,6 +80,31 @@ class DecisionLifecycleTests(unittest.TestCase):
         IB.reconcile(L)
         self.assertEqual((contract['status'], invite['status']), ('done', 'done'))
 
+    def test_bye_week_has_health_listing_but_no_play_decision(self):
+        for abbr, week, schedule in [('GB', 8, [(8, 'NYJ', 'MIN', None, None)]),
+                                     ('MIN', 19, [(19, 'NYJ', 'GB', None, None)])]:
+            L = league(week=week, schedule=schedule)
+            p = N(pid='hurt', name='Hurt Player', out_until=week+1,
+                  xp_spent={}, ratings={'tough_rating': 70})
+            team = N(abbr=abbr, roster=[p], ir=[])
+            L.players[p.pid] = p
+            desk = IS.InjuryDesk()
+            with patch.object(IS, 'designation', return_value='questionable'), patch.object(desk, '_ai_plays') as ai:
+                desk.set_week(L, team, week, np.random.default_rng(1))
+            self.assertEqual(desk.status['hurt'], 'questionable')
+            self.assertFalse(desk.pending)
+            self.assertFalse(desk.playing_hurt)
+            self.assertFalse(IB.pending(L, 'injury_decision'))
+            self.assertEqual(p.out_until, week+1)
+            ai.assert_not_called()
+
+    def test_existing_bye_prompt_closes_but_scheduled_prompt_stays(self):
+        for schedule, expected in [([], 'done'), ([(8, 'GB', 'MIN', None, None)], 'unread')]:
+            L = league(week=8, schedule=schedule)
+            m = IB.post(L, 'injury_decision', 'Play or sit?', '', expires_week=8)
+            IB.reconcile(L)
+            self.assertEqual(m['status'], expected)
+
     def test_trainer_automatic_decision_closes_original_week(self):
         L = league()
         p = N(pid='hurt', name='Hurt Player', out_until=5, xp_spent={}, ratings={'tough_rating': 70})
