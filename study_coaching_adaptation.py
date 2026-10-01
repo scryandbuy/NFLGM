@@ -8,12 +8,21 @@ import league as LG, coaching_pool as CP, gm_engine as GE, roster_needs as RN
 import contracts as CT, market as MK, trades as TR, newgens as NG, scouting as SC
 import draft as DFT, cutdown as CD, regression as RG, practice_squad as PS
 import extensions as EXT, tags as TAG, waivers as WV
+from session import Session
 
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--years',type=int,default=3); ap.add_argument('--seed',type=int,default=93041); ap.add_argument('--output',required=True)
     args=ap.parse_args(); rng=np.random.default_rng(args.seed); start=time.time()
     L=LG.build_league(rng=rng); L.user_team=None
-    L.set_phase('offseason'); CD.finalize(L,rng)
+    session=Session.__new__(Session); session.L=L; session.rng=rng; session.user_team=None
+    def finalize():
+        session.step_cutdown()
+        for attempt in range(10):
+            if session.step_clear_wire() is not False: break
+        else: raise AssertionError('Wire/cap cleanup did not settle')
+        assert all(t.cap_space >= -.001 for t in L.teams.values()), 'Over cap after actual Session cleanup'
+        assert all(len(t.active()) <= 53 for t in L.teams.values()), 'Over roster limit after cleanup'
+    L.set_phase('offseason'); finalize()
     tracked={'GB':('3-4','12','gap'),'DEN':('multiple','21','zone'),'ATL':('4-3','10','gap')}
     result=dict(seed=args.seed,limitations='Construction only: no games, seasonal production, injury, XP, retirement or owner performance feedback. Incoming hires controlled; draft order synthetic alphabetical, not standings. Initial rosters normalized to53. Not a causal comparison against unchanged coaches.',snapshots=[],decisions=[],draft_counts=[])
     previous={a:set() for a in tracked}
@@ -30,17 +39,19 @@ def main():
             previous[a]=ids
         save(); print(stage,L.year,round(time.time()-start,1),flush=True)
     snap('before_hire')
+    hire_log_start=len(L.transactions)
     for a,(front,pers,blocking) in tracked.items():
         g=copy.deepcopy(L.teams[a].gm); g.name='Study '+a; g.def_front=front; g.off_personnel=pers; g.off_blocking=blocking
         g.background='former head coach'
         with patch.object(CP,'owner_hire',return_value=(g,{})):
             CP.fire_and_hire(L,L.teams[a],rng)
+    result['controlled_hires']=L.transactions[hire_log_start:]
     snap('after_hire')
     for _ in range(args.years):
         log_start=len(L.transactions)
         L.set_phase('offseason'); RG.tick_ages(L); RG.run(L,rng,tick_age=False)
         L.roll_year(rng); L.advance_contracts(); CT.run(L,rng); CT.enforce(L,rng)
-        EXT.ai_round(L,rng); TAG.run(L,rng); CT.enforce(L,rng)
+        session.step_extensions()
         snap('contracts')
         MK.run(L,rng); snap('free_agency')
         TR.run(L,rng,rounds=2); snap('trades')
@@ -53,9 +64,10 @@ def main():
         assert len(drafted)==224, f'Invalid study draft: {len(drafted)} picks'
         result['draft_counts'].append(dict(year=L.year,picks=len(drafted)))
         PS.udfa_camp(L,rng); snap('draft')
-        for t in L.teams.values():
-            for p in list(PS.squad(t)): PS.release_from_squad(L,t.abbr,p.pid)
-        PS.reset_season(L); CD.finalize(L,rng); WV.process(L,rng,0); PS.fill_squads(L,rng); snap('cutdown')
+        finalize(); snap('cutdown')
+        result.setdefault('cleanup_failures',[]).extend(dict(year=L.year,team=a,count=len(t.active()),cap=t.cap_space)
+            for a,t in L.teams.items() if len(t.active()) != 53)
+        Path(args.output+'.checkpoint').write_text(L.save())
         result['decisions'].extend(x for x in L.transactions[log_start:] if x.get('team') in tracked or x.get('a') in tracked or x.get('b') in tracked)
         save()
 

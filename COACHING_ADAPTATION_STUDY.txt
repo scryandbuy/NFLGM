@@ -48,4 +48,45 @@ Discarded pilot
 The initial3-year pilot omitted pick selections, producing zero draft picks.
 Its coaching-adaptation-93041.json is INVALID as full adaptation evidence.
 Do not use its roster, cap or quality trends to diagnose the production engine.
-The corrected output is coaching-adaptation-valid-93041.json.
+The second pilot coaching-adaptation-valid-93041.json also omitted the Session
+full-roster cap gates; do not use it for financial or full adaptation conclusions.
+Authoritative construction output: coaching-adaptation-session-93041.json.
+It calls actual Session.step_extensions, step_cutdown and step_clear_wire,
+asserts cap legality and active<=53 after cleanup, and saves league checkpoints.
+Additional limitations: MK.run uses the aggregate market rather than individual
+Session stops; no spring combine/visits are simulated before scouting/draft.
+Use it for controlled roster direction, not real-season causal magnitude.
+
+Completed controlled run: seed93041, two offseasons, 630.9 seconds
+Both drafts selected224 players. All three actual controlled gm_change events
+record conversions=0; immediate conversion hook was called but chose no moves.
+GB changed4-3 to3-4 and blocking; personnel was already12 and stayed12.
+ATL changed12 to10; DEN changed11 to21. Do not describe GB as a TE transition.
+
+GB: after hire fit .064, then .175 and .385. Package offense57.64 ->54.50
+->61.85; defense74.67 ->73.98 ->71.13. TE stayed4; DT6 ->4 ->5;
+MIKE1 ->2 ->2. Both final rosters53, cap4.09 then16.30 million.
+ATL: after hire fit .172, then .067 and .020. Package offense87.98 ->91.00
+->82.98; defense82.09 ->64.67 ->39.03. WR6 ->8 ->7; TE4 ->3 ->2.
+Both final rosters53, cap27.75 then5.15 million. Offensive role counts shifted
+toward10 personnel, but package quality and aggregate fit did not consistently
+improve. Quality scores are internal package indices, not player overall.
+These examples demonstrate roster direction, not a causal coaching benefit.
+No seasonal XP/performance, no unchanged-coach control, single seed.
+
+Conditional roster cleanup failure -- exclude DEN2027+ adaptation
+At2027 CD.finalize emergency_fill restored53 at cap -26.94m. Actual next
+Session.step_clear_wire called CT.enforce(target=0), released23 players and
+finished with30 at +.079m. It never refills after enforcement. DEN2028 recovered
+53 but remains excluded because it inherits that failure. Natural full-Session
+incidence awaits the other study; do not call this a normal coaching effect.
+CD passes also repeatedly signed/released the same veterans, accumulating
+.309/.504m bonus charges. CT.enforce computes roster reserve once before
+_fix_one, so subsequent cuts increase vacancies without increasing that target.
+Source: cutdown.py239..265 and196..232; session.py1160..1175;
+contracts.py145..153 and184..262. The guarantee and cap cleanup conflict under
+this state; synthetic calendar may affect reaching it.
+Checkpoint trace: outputs/coaching-checkpoint-trace.txt (first-year snapshot).
+Summary: outputs/coaching-adaptation-summary.txt. Full JSON retains failures.
+
+Study scripts/report only; no production fix or bundle made.
