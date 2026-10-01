@@ -10,7 +10,6 @@ import collections
 import functools
 import json
 import math
-import pickle
 import time
 import numpy as np
 from pathlib import Path
@@ -85,16 +84,26 @@ def team_report(t, full=False):
 
 
 class Audit:
-    def __init__(self, folder):
+    def __init__(self, folder, resume=False):
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         self.stage = 'initial'
         self.start = time.monotonic()
         self.samples = collections.Counter()
         self.snapshots = []
-        self.moves = self.folder.joinpath('moves.jsonl').open('w', encoding='utf8')
-        self.events = self.folder.joinpath('events.jsonl').open('w', encoding='utf8')
-        self.kickoffs = self.folder.joinpath('kickoffs.jsonl').open('w', encoding='utf8')
+        mode='r+' if resume else 'w'
+        self.moves = self.folder.joinpath('moves.jsonl').open(mode, encoding='utf8')
+        self.events = self.folder.joinpath('events.jsonl').open(mode, encoding='utf8')
+        self.kickoffs = self.folder.joinpath('kickoffs.jsonl').open(mode, encoding='utf8')
+
+    def checkpoint(self, session, history):
+        state=session.save()
+        data=dict(session=state,history=history,snapshots=len(self.snapshots),
+                  offsets={k:getattr(self,k).tell() for k in ('events','moves','kickoffs')},
+                  samples=list(self.samples.items()),elapsed=time.monotonic()-self.start)
+        temporary=self.folder/'checkpoint.pending.json'
+        temporary.write_text(json.dumps(data,default=json_default),encoding='utf8')
+        temporary.replace(self.folder/'checkpoint.json')
 
     def write(self, stream, row):
         stream.write(json.dumps(row, default=json_default, allow_nan=False)+'\n')
@@ -226,27 +235,44 @@ def main():
     ap.add_argument('--seed',type=int,default=93030)
     ap.add_argument('--years',type=int,default=3)
     ap.add_argument('--output',required=True)
+    ap.add_argument('--resume',action='store_true')
     args=ap.parse_args()
-    audit=Audit(args.output)
+    import networkx as nx
+    assert callable(nx.max_weight_matching), 'Install networkx before running the calendar'
+    audit=Audit(args.output,args.resume)
     audit.install()
     # These functions only render the human rail/review; None is not a team.
     import views_league as VL
     VL.rail=lambda *a,**k: {}
-    f=AuditSession.new(team=None,seed=args.seed)
-    audit.snapshot(f.L,'initial')
+    if args.resume:
+        data=json.loads((audit.folder/'checkpoint.json').read_text(encoding='utf8'))
+        f=AuditSession.load(data['session'])
+        history=data['history']
+        audit.snapshots=json.loads((audit.folder/'snapshots.json').read_text(encoding='utf8'))[:data['snapshots']]
+        for k,offset in data['offsets'].items():
+            stream=getattr(audit,k); stream.seek(offset); stream.truncate()
+        audit.samples=collections.Counter({tuple(k):v for k,v in data['samples']})
+        audit.start=time.monotonic()-data['elapsed']
+        print('RESUMED',f.L.year,f.stop,flush=True)
+    else:
+        f=AuditSession.new(team=None,seed=args.seed)
+        history=[]
+        audit.snapshot(f.L,'initial')
     audit.folder.joinpath('methodology.json').write_text(json.dumps(dict(seed=args.seed,years=args.years,
         base='ef4620a',driver='Session.advance / all-CPU (human UI methods omitted)',all_32_cpu=True,
-        python_hash_seed='0',
+        python_hash_seed='0',networkx=nx.__version__,
         limitations=__doc__),indent=2),encoding='utf8')
     try:
-        for attempt in range(6):
-            f.advance()
-            if f.stop==('week',1): break
-        else: raise RuntimeError('Initial wire did not clear')
-        audit.snapshot(f.L,'initial_cutdown')
-        history=[]
-        for _ in range(args.years):
-            year=f.L.year
+        if not args.resume:
+            for attempt in range(6):
+                f.advance()
+                if f.stop==('week',1): break
+            else: raise RuntimeError('Initial wire did not clear')
+            audit.snapshot(f.L,'initial_cutdown')
+            audit.checkpoint(f,history)
+        completed=sum(s['label']=='end_offseason' for s in audit.snapshots)
+        for cycle in range(completed,args.years):
+            year=audit.snapshots[0]['year']+cycle
             for advance in range(120):
                 old_stop=f.stop
                 name=f.OFFSEASON[old_stop[1]][1] if old_stop[0]=='offseason' else old_stop[0]
@@ -257,14 +283,13 @@ def main():
                 if f.stop==('offseason',0) and old_stop[0]=='playoffs':
                     audit.snapshot(f.L,'season_closed')
                     history.append(dict(year=f.L.year,standings=f.standings,champion=f.post.champion))
+                audit.checkpoint(f,history)
                 if f.L.year>year and f.stop==('week',1): break
             else: raise RuntimeError('Calendar did not complete year within 120 advances')
             audit.snapshot(f.L,'end_offseason')
-            audit.folder.joinpath(f'checkpoint_{f.L.year}.pickle').write_bytes(pickle.dumps((f.L,f.rng)))
+            audit.folder.joinpath(f'checkpoint_{f.L.year}.json').write_text(f.save(),encoding='utf8')
             audit.folder.joinpath('history.json').write_text(json.dumps(history,default=str,indent=2),encoding='utf8')
-    except Exception:
-        audit.folder.joinpath('failure_checkpoint.pickle').write_bytes(pickle.dumps((f.L,f.rng)))
-        raise
+            audit.checkpoint(f,history)
     finally:
         audit.moves.close()
         audit.events.close()
