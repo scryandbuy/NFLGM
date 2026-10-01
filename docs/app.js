@@ -44,7 +44,7 @@ async function bootEngine() {
 
 function cutPenaltyText(v, year) { return `$${v.penalty.toFixed(1)}m ${year == null ? 'this year' : year}${v.penalty_next ? ` + $${v.penalty_next.toFixed(1)}m ${year == null ? 'next year' : year + 1}` : ''}`; }
 const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'practice_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_offer_sheet', 'inbox_hurt_action', 'inbox_mark_all', 'inbox_read', 'inbox_delete', 'inbox_clear_read']);
-const READ_ONLY_ACTIONS = new Set(['personnel_act:ask', 'personnel_act:gather', 'personnel_act:offer_preview', 'frontoffice_act:restructure_preview', 'draft_act:read_trade_up', 'draft_act:offers']);
+const READ_ONLY_ACTIONS = new Set(['personnel_act:ask', 'personnel_act:gather', 'personnel_act:offer_preview', 'frontoffice_act:restructure_preview', 'draft_act:read_trade_up', 'draft_act:offers', 'plan_act:save', 'plan_act:save_failed']);
 let autosaveQueued = false;
 let autosaveFrame = null, autosaveTimer = null;
 function cancelAutosaveSchedule() {
@@ -79,6 +79,7 @@ if (typeof document !== 'undefined') document.addEventListener('visibilitychange
 });
 function pyJSON(code) {
   const result = JSON.parse(py.runPython(`_j(${code})`));
+  if (result?.plan_state) updateGameplanState(result.plan_state);
   const call = code.match(/^SESSION\.([A-Za-z_][A-Za-z_0-9]*)\(\s*(?:'([^']*)'|"([^"]*)")?/);
   if (call && AUTO_SAVE_METHODS.has(call[1]) && !READ_ONLY_ACTIONS.has(`${call[1]}:${call[2] || call[3] || ''}`)
       && result !== false && result !== null && result?.ok !== false && !result?.error) queueAutosave();
@@ -145,6 +146,7 @@ function busy(t) { const b = $('#busy'); if (t) { b.textContent = t; b.hidden = 
 
 // ---------------------------------------------------------------- the rail
 function renderRail(r) {
+  syncGameplanState();
   // Overview owns its full-width page treatment; other routes use their own boards.
   $('#page').classList.remove('overview-page');
   $('#rail').hidden = false;
@@ -2918,6 +2920,76 @@ function renderAlmanac(v) {
 }
 
 // ---------------------------------------------------------------- Game Plan
+let gameplanState = null, gameplanPendingDepth = null, gameplanSaving = false;
+function updateGameplanState(state) {
+  if (gameplanState?.key !== state.key) gameplanPendingDepth = null;
+  gameplanState = state;
+}
+function gameplanUnsaved() { return !!(gameplanState?.dirty || gameplanPendingDepth); }
+function syncGameplanState() {
+  if (py) updateGameplanState(pyJSON("SESSION.plan_view('status')"));
+}
+function flushGameplanDepth() {
+  if (!gameplanPendingDepth) return true;
+  const [short, medium, deep] = gameplanPendingDepth;
+  if (![short, medium, deep].every(Number.isFinite)) {
+    notify({ ok: false, why: 'Enter three valid depth-of-target percentages.' }); return false;
+  }
+  const result = pyJSON(`SESSION.plan_act('set_depth', short=${short}, medium=${medium}, deep=${deep})`);
+  if (!result.ok) { notify(result); return false; }
+  gameplanPendingDepth = null;
+  return true;
+}
+async function saveSundayPlan(reload) {
+  if (gameplanSaving || !flushGameplanDepth()) return;
+  const result = pyJSON("SESSION.plan_act('save')");
+  if (!result.ok) { notify(result); return; }
+  gameplanSaving = true;
+  try {
+    reload();
+    await saveGame();
+    notify({ ok: true, line: 'Game plan saved for Sunday.' });
+  } catch (error) {
+    pyJSON("SESSION.plan_act('save_failed')");
+    notify({ ok: false, why: 'Your game plan could not be saved. Your choices are still here; please save again.' });
+  } finally { gameplanSaving = false; reload(); }
+}
+function gameplanSaveControl(v, reload) {
+  if (v.plan_state?.started) return el('span', { class: 'count' }, 'Game started · Plan locked');
+  return v.plan_state?.locked
+    ? el('button', { class: 'btn go', disabled: gameplanSaving ? '' : null, onclick: () => { notify(pyJSON("SESSION.plan_act('reopen')")); reload(); } }, 'Re-Open Game Plan')
+    : el('button', { class: 'btn go', onclick: () => saveSundayPlan(reload) }, 'Save Plan for Sunday');
+}
+function warnUnsavedGameplan() {
+  if ($('#gameplan-warning')) return;
+  const dialog = el('dialog', { id: 'gameplan-warning', 'aria-labelledby': 'gameplan-warning-title', style: 'max-width:480px;background:var(--board);color:var(--ink);border:1px solid var(--rule-2);border-radius:12px;padding:24px' });
+  const back = el('button', { class: 'btn go', onclick: () => { dialog.close(); location.hash = '#gameplan/week'; } }, 'Return to Game Plan');
+  dialog.append(el('h2', { id: 'gameplan-warning-title' }, gameplanSaving ? 'Saving game plan' : 'Game plan not saved'),
+    el('p', {}, gameplanSaving ? 'Please wait for your game plan to finish saving.' : 'You have not saved your game plan. Save Plan for Sunday before leaving so your choices are locked in.'), back);
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  document.body.append(dialog); dialog.showModal(); back.focus();
+}
+function guardGameplanRoute(event) {
+  const oldHash = new URL(event.oldURL).hash;
+  if (!oldHash.startsWith('#gameplan') || location.hash.startsWith('#gameplan')) return false;
+  syncGameplanState();
+  if (!gameplanUnsaved() && !gameplanSaving) return false;
+  history.replaceState(null, '', event.oldURL);
+  warnUnsavedGameplan();
+  return true;
+}
+window.addEventListener('beforeunload', event => {
+  if (!gameplanUnsaved() && !gameplanSaving) return;
+  event.preventDefault(); event.returnValue = '';
+});
+// Catch links before changing the URL; hashchange also covers Back/Forward and script navigation.
+document.addEventListener('click', event => {
+  const a = event.target.closest?.('a[href]');
+  if (!a || !location.hash.startsWith('#gameplan')) return;
+  const target = new URL(a.href, location.href);
+  if (target.origin === location.origin && target.pathname === location.pathname && target.hash.startsWith('#gameplan')) return;
+  if (gameplanUnsaved() || gameplanSaving) { event.preventDefault(); event.stopImmediatePropagation(); warnUnsavedGameplan(); }
+}, true);
 const GPN = { week: 'This Week', practice: 'Practice', report: 'Opponent Report' };
 function gpSecond(cur) { secondRow(Object.entries(GPN).map(([k, l]) => [l, '#gameplan/' + k]), '#gameplan/' + cur); $('#crumb').textContent = 'Game Plan'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'gameplan')); }
 const pct = x => Math.round(x * 100);
@@ -2998,7 +3070,7 @@ function renderPractice(v) {
   surface.append(actions);
 }
 
-function gameplanSuggestion(x, reload) {
+function gameplanSuggestion(x, reload, locked = false) {
   const act = (name, extra = '') => {
     notify(pyJSON(`SESSION.plan_act('${name}', i=${x.i}${extra})`));
     reload();
@@ -3006,7 +3078,7 @@ function gameplanSuggestion(x, reload) {
   return el('div', { class: 'sug-row' + (x.taken ? ' on' : '') },
     el('div', { class: 't' }, x.text, el('small', {},
       `${x.target ? x.target + ' · ' : ''}${x.taken ? 'Accepted · ' : x.skipped ? 'Skipped · ' : ''}${x.why}`)),
-    el('div', { class: 'a', style: 'display:flex;gap:4px' },
+    locked ? '' : el('div', { class: 'a', style: 'display:flex;gap:4px' },
       el('button', { class: x.taken ? 'btn quiet' : 'btn go', onclick: () => act(x.taken ? 'untake' : 'take') }, x.taken ? 'Undo' : 'Accept'),
       x.taken ? '' : el('button', { class: 'btn quiet', onclick: () => act('skip', `, skip=${x.skipped ? 'False' : 'True'}`) }, x.skipped ? 'Restore' : 'Skip')));
 }
@@ -3022,9 +3094,11 @@ function renderThisWeek(v) {
   // suggestions
   const sug = el('div', { class: 'sugs' });
   sug.append(el('div', { class: 'h5' }, "Assistants' Suggestions"));
-  for (const x of v.suggestions) sug.append(gameplanSuggestion(x, reload));
+  const locked = !!(v.plan_state?.locked || v.plan_state?.started);
+  sug.append(el('p', { class: 'count' }, locked ? 'Saved for Sunday · Re-open to edit your choices' : gameplanUnsaved() ? 'Unsaved changes' : 'Open for editing'));
+  for (const x of v.suggestions) sug.append(gameplanSuggestion(x, reload, locked));
   if (!v.suggestions.length) sug.append(el('div', { class: 'empty' }, 'The report has nothing to add this week; the plan is the coordinators\' own.'));
-  else sug.append(el('div', { style: 'display:flex;gap:6px;padding:8px 0 0' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); reload(); } }, 'Accept All'), el('span', { class: 'count', style: 'align-self:center' }, '')));
+  else if (!locked) sug.append(el('div', { style: 'display:flex;gap:6px;padding:8px 0 0' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); reload(); } }, 'Accept All'), el('span', { class: 'count', style: 'align-self:center' }, '')));
   s.append(sug);
   // leans
   const plan = el('div', { class: 'plan' });
@@ -3045,8 +3119,10 @@ function renderThisWeek(v) {
   const off = side('Offense', v.leans.filter(l => l.side === 'offense')), deff = side('Defense', v.leans.filter(l => l.side === 'defense'));
   // depth mix as three numbers
   const dm = el('div', { class: 'lean', style: 'grid-template-columns:130px 1fr' }, el('div', { class: 'l' }, 'Depth of Target', el('small', {}, 'short · medium · deep')));
-  const inputs = v.depth.value.map((x, i) => el('input', { type: 'number', min: '5', max: '90', value: String(pct(x)), style: 'width:56px;font-family:var(--mono);font-size:14.5px;background:var(--board);color:var(--ink);border:1px solid var(--rule-2);padding:4px 6px' }));
-  const dmrow = el('div', { style: 'display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink-3)' }); v.depth.labels.forEach((l, i) => dmrow.append(el('span', {}, l), inputs[i], el('span', {}, '%'))); dmrow.append(el('button', { class: 'btn', style: 'padding:3px 8px;font-size:14px', onclick: () => { notify(pyJSON(`SESSION.plan_act('set_depth', short=${+inputs[0].value}, medium=${+inputs[1].value}, deep=${+inputs[2].value})`)); reload(); } }, 'Set'), el('span', {}, `base ${v.depth.base.map(pct).join(' · ')}`));
+  const depthValues = gameplanPendingDepth || v.depth.value.map(pct);
+  const inputs = depthValues.map((x, i) => el('input', { type: 'number', min: '5', max: '90', value: String(x), style: 'width:56px;font-family:var(--mono);font-size:14.5px;background:var(--board);color:var(--ink);border:1px solid var(--rule-2);padding:4px 6px' }));
+  inputs.forEach(input => input.addEventListener('input', () => { gameplanPendingDepth = inputs.map(x => Number(x.value)); }));
+  const dmrow = el('div', { style: 'display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink-3)' }); v.depth.labels.forEach((l, i) => dmrow.append(el('span', {}, l), inputs[i], el('span', {}, '%'))); dmrow.append(el('button', { class: 'btn', style: 'padding:3px 8px;font-size:14px', onclick: () => { gameplanPendingDepth = inputs.map(x => Number(x.value)); if (flushGameplanDepth()) reload(); } }, 'Set'), el('span', {}, `base ${v.depth.base.map(pct).join(' · ')}`));
   dm.append(dmrow); off.append(dm);
   plan.append(off, deff); s.append(plan);
   // decisions
@@ -3060,12 +3136,15 @@ function renderThisWeek(v) {
   tr.append(tro); dec.append(tr);
   const br = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Coverage · Bracket a Star?'), el('div', { class: 's' }, v.bracket ? `Bracket ${surname(v.bracket.name)}` : (v.wr_out && v.wr_out.length ? `${v.wr_out[0]} Is Out · None` : 'None'))); const bo = el('div', { class: 'opts' }, el('button', { class: 'btn chip' + (!v.bracket ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value='')`); reload(); } }, 'None')); for (const w of v.their_wrs) bo.append(el('button', { class: 'btn chip' + (v.bracket && v.bracket.pid === w.pid ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value=${JSON.stringify(w.pid)})`); reload(); } }, `${w.name} · ${w.ovr}`)); br.append(bo); dec.append(br);
   s.append(dec);
-  s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', 'data-tip': 'The plan you leave here is the plan the game reads; this confirms it', onclick: async () => { try { await saveGame(); notify({ ok: true, line: 'Game plan saved.' }); } catch (error) { busy(null); notify({ ok: false, why: 'The plan could not be saved. Please try again.' }); } } }, 'Save Plan for Sunday'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('reset')`)); reload(); } }, 'Reset to Identity'), el('span', { class: 'count', style: 'margin-left:auto' }, v.forecast && v.forecast.text ? v.forecast.text : '')));
+  if (locked) s.querySelectorAll('button, input, select').forEach(control => { control.disabled = true; });
+  s.append(el('div', { class: 'foot' }, gameplanSaveControl(v, reload), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), locked ? '' : el('button', { class: 'btn quiet', onclick: () => { gameplanPendingDepth = null; notify(pyJSON(`SESSION.plan_act('reset')`)); reload(); } }, 'Reset to Identity'), el('span', { class: 'count', style: 'margin-left:auto' }, v.forecast && v.forecast.text ? v.forecast.text : '')));
   page.append(s);
 }
 
 function renderReport(v) {
   renderRail(v.rail); const page = persPage(); gpSecond('report');
+  const locked = !!(v.plan_state?.locked || v.plan_state?.started);
+  const reload = () => renderReport(pyJSON("SESSION.plan_view('report')"));
   page.className = 'gameplan-page';
   featureHero(page, v.rail.club, v.week ? `Week ${v.week} / Scouting` : 'Game Plan', 'OPPONENT REPORT', 'The tendencies, matchups, and players that matter this week.', [[v.week || '—', 'Week'], [showAbbr(v.opp?.abbr) || '—', 'Opponent']]);
   const s = el('section', { class: 'sheet c12 gameplan-surface plan-report' });
@@ -3103,9 +3182,9 @@ function renderReport(v) {
   const cards = el('div', { class: 'cards' });
   for (const x of v.suggestions) cards.append(el('div', { class: 'card', style: `--k:${x.side === 'offense' ? 'var(--ok)' : 'var(--live)'};opacity:${x.taken || x.skipped ? '.75' : '1'}` }, el('div', { class: 'h' }, el('div', { class: 'k' }, x.side.charAt(0).toUpperCase() + x.side.slice(1) + (x.taken ? ' · accepted' : x.skipped ? ' · skipped' : '')), el('div', { class: 's' }, x.text)), el('div', { class: 'b' }, x.why),
     el('div', { class: 'b', style: 'margin-top:6px' }, el('span', { style: 'font-size:12.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em' }, 'Plan Change '), el('span', { style: 'font-family:var(--mono);font-size:14px' }, x.change || '—')),
-    el('div', { class: 'a' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Accept'), x.taken ? '' : el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('skip', i=${x.i}, skip=${x.skipped ? 'False' : 'True'})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, x.skipped ? 'Restore' : 'Skip'))));
+    locked ? '' : el('div', { class: 'a' }, x.taken ? el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('untake', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Undo') : el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.plan_act('take', i=${x.i})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, 'Accept'), x.taken ? '' : el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.plan_act('skip', i=${x.i}, skip=${x.skipped ? 'False' : 'True'})`)); renderReport(pyJSON(`SESSION.plan_view('report')`)); } }, x.skipped ? 'Restore' : 'Skip'))));
   if (!v.suggestions.length) cards.append(el('div', { class: 'empty' }, 'Nothing to add this week.'));
-  s.append(cards, el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); location.hash = '#gameplan/week'; } }, "Accept All and Open This Week's Plan"), el('a', { class: 'btn', href: '#gameplan/week' }, "Back to This Week's Plan")));
+  s.append(cards, el('div', { class: 'foot' }, gameplanSaveControl(v, reload), locked ? '' : el('button', { class: 'btn', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); location.hash = '#gameplan/week'; } }, "Accept All and Open This Week's Plan"), el('a', { class: 'btn', href: '#gameplan/week' }, "Back to This Week's Plan")));
   page.append(s);
 }
 
@@ -3120,6 +3199,8 @@ function refresh() {
 function bootHash() { if (location.hash && location.hash !== '#portal') history.replaceState(null, '', '#portal'); }
 
 async function advance() {
+  syncGameplanState();
+  if (gameplanUnsaved() || gameplanSaving) { location.hash = '#gameplan/week'; warnUnsavedGameplan(); return; }
   try { await advanceInner(); }
   catch (e) {
     // whatever failed, the GM sees it and can send it on: the message, and where in the engine it happened
@@ -3222,7 +3303,7 @@ async function advanceInner() {
     const blob = new Blob([text], { type: 'application/json' }); const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = `nflgm-${st.year}-${st.stop}.json`; document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
   };
-  $('#import').onclick = () => $('#importfile').click();
+  $('#import').onclick = () => { if (gameplanUnsaved() || gameplanSaving) { warnUnsavedGameplan(); return; } $('#importfile').click(); };
   $('#importfile').onchange = async e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
     const text = await f.text(); busy('Loading the save…');
@@ -3232,7 +3313,7 @@ async function advanceInner() {
   };
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
-  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.inbox_view()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'practice') renderPractice(pyJSON('SESSION.practice_view()')); else if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
+  window.addEventListener('hashchange', event => { if (guardGameplanRoute(event)) return; if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.inbox_view()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'practice') renderPractice(pyJSON('SESSION.practice_view()')); else if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
     else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'retain') renderRetain(pyJSON(`SESSION.personnel('retain')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; tradeState.counter_id = null; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();
 

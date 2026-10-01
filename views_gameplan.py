@@ -66,6 +66,41 @@ def _taken(league, week):
     return []
 
 
+def status(session, league, abbr):
+    """Editing state belongs to this season and game, including playoff rounds."""
+    week = _week(session, league)
+    wp = getattr(league, 'user_week_plan', None) or {}
+    current = wp.get('year') == league.year and wp.get('week') == week
+    live = getattr(session.runner, 'live', None) if session.runner is not None else None
+    started = bool(session.played or (live and not live.get('done', False)))
+    return dict(key=f'{league.year}:{week}:{abbr}', locked=bool(current and wp.get('locked')),
+                dirty=bool(current and wp.get('dirty')), started=started)
+
+
+def act_save(session, league, abbr):
+    week = _week(session, league)
+    manual, suggestions = _parts(league, week)
+    _write(league, week, manual, suggestions)
+    league.user_week_plan.update(locked=True, dirty=False)
+    return dict(ok=True, line='Game plan saved for Sunday.')
+
+
+def act_reopen(session, league, abbr):
+    if not status(session, league, abbr)['locked']:
+        return dict(ok=False, why='The game plan is already open for editing.')
+    # Keep every accepted, skipped and manual choice exactly as saved.
+    league.user_week_plan['locked'] = False
+    return dict(ok=True, line='Game plan reopened for editing.')
+
+
+def act_save_failed(session, league, abbr):
+    """A failed browser write must not leave an apparently saved, locked plan."""
+    wp = getattr(league, 'user_week_plan', None)
+    if wp and wp.get('year') == league.year and wp.get('week') == _week(session, league):
+        wp.update(locked=False, dirty=True)
+    return dict(ok=True)
+
+
 def _preview(base, changes):
     import gameplan_week as GW
     plan = base.copy(); GW.apply_changes(plan, base, changes); return plan
@@ -118,7 +153,7 @@ def this_week(session, league, abbr):
     wr_out = [__import__('views').surname(p.name) for p in league.teams[opp_abbr].depth.get('WR', [])[:2] if p.out_until is not None]
     import staff as ST
     t = league.teams[abbr]
-    return dict(rail=r, off=False, week=wk, opp=club(opp_abbr), away=away, leans=leans,
+    return dict(rail=r, off=False, week=wk, opp=club(opp_abbr), away=away, leans=leans, plan_state=status(session, league, abbr),
                 depth=dict(base=[round(float(x), 3) for x in base.depth_mix], value=[round(float(x), 3) for x in plan.depth_mix], labels=list(DEPTH_LABELS)),
                 protection=dict(base=base.protection, value=plan.protection, options=[dict(key=k, word=PROT_WORDS[k]) for k in PROTECTIONS]),
                 travel=bool(plan.travel), travel_target=(dict(pid=tp.pid, name=tp.name) if (tp := league.player(changes.get('travel_target'))) else None), my_cb1=_cb1(league, t), bracket=(dict(pid=bp.pid, name=bp.name) if bp else None), their_wrs=their_wrs, wr_out=wr_out,
@@ -189,7 +224,7 @@ def _write(league, week, manual, suggestions):
     for changes in suggestions.values(): combined = _merge(combined, changes)
     combined.update(manual)  # an explicit GM instruction wins over advice
     wp = GW.set_user_plan(league, week, combined, taken=list(suggestions))
-    wp.update(manual=manual, suggestions=suggestions)
+    wp.update(manual=manual, suggestions=suggestions, locked=False, dirty=True)
 
 
 def _suggestion(session, league, abbr, i):
@@ -302,7 +337,7 @@ def report(session, league, abbr):
     sugg = [dict(i=i, side=('offense' if s['side'] == 'offence' else 'defense'), text=sentence(s['text']), why=sentence(s['why']), change=_change_words(s.get('changes')), taken=(s['text'] in _taken(league, wk)), skipped=(s['text'] in _skipped(league, wk))) for i, s in enumerate(rep['suggestions'])]
     return dict(rail=r, off=False, week=wk, opp=club(opp_abbr), away=away, coach=rep['coach'], tendencies=tend(rep['tendencies']), mine_tend=tend(rep['my_tendencies']), league_tend=lg,
                 units=units, my_units=mine, unit_table=unit_table, panels=panels, stars=rep['stars'], injured=rep['injured'], strengths=[sentence(s['text']) for s in rep['strengths']], weaknesses=[sentence(w['text']) for w in rep['weaknesses']],
-                suggestions=sugg, forecast=rep.get('forecast'), record=_rec(league, opp_abbr))
+                suggestions=sugg, forecast=rep.get('forecast'), record=_rec(league, opp_abbr), plan_state=status(session, league, abbr))
 
 
 def _rec(league, a):

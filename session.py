@@ -1430,11 +1430,17 @@ class Session:
         live = getattr(self.runner, 'live', None) if self.runner is not None else None
         if self.played or (live and not live.get('done', False)):
             return dict(ok=False, why='The game has started; use halftime adjustments.')
+        if VG.status(self, self.L, self.user_team)['locked'] and name not in ('reopen', 'save_failed'):
+            return dict(ok=False, why='Your game plan is saved. Re-open Game Plan to make changes.')
         r = fn(self, self.L, self.user_team, **kw)
-        return r if isinstance(r, dict) else dict(ok=bool(r))
+        r = r if isinstance(r, dict) else dict(ok=bool(r))
+        r['plan_state'] = VG.status(self, self.L, self.user_team)
+        return r
 
     def plan_take_all(self):
         import views_gameplan as VG
+        if VG.status(self, self.L, self.user_team)['locked']:
+            return dict(ok=False, why='Your game plan is saved. Re-open Game Plan to make changes.')
         wk = VG._week(self, self.L)
         if wk is None: return dict(ok=False, why='no game this week')
         import gameplan_week as GW
@@ -1446,7 +1452,8 @@ class Session:
             r = self.plan_act('take', i=i)
             if not r.get('ok'): return r
             n += 1
-        return dict(ok=True, n=n, line=f"Took {n} suggestion{'s' if n != 1 else ''}.")
+        return dict(ok=True, n=n, line=f"Took {n} suggestion{'s' if n != 1 else ''}.",
+                    plan_state=VG.status(self, self.L, self.user_team))
 
     def inbox_mark_all(self):
         import inbox as IB
