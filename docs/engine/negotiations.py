@@ -55,6 +55,11 @@ def _threads(league):
     if not hasattr(league, 'negotiations') or league.negotiations is None:
         league.negotiations = []
     for t in league.negotiations:
+        if t.get('counter'):
+            c = t['counter']; previous = (t.get('offers') or [{}])[-1]
+            c.setdefault('bonus', previous.get('bonus'))
+            if c['bonus'] is not None: c['bonus'] = min(float(c['bonus']), c['apy'] * c['years'])
+            c.setdefault('promises', list(previous.get('promises', [])))
         if t.get('kind') == 'fa_inseason' and t.get('state') not in ('accepted', 'declined', 'expired', 'void'):
             t['years'] = 1
             if t.get('counter'): t['counter']['years'] = 1
@@ -152,7 +157,7 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     p = league.player(t['pid']); s = _situation(league, p)
     offer = dict(apy=float(apy), years=int(years), bonus=bonus, front_load=front_load, promises=list(promises), when=_clock(league), by='you')
     t['offers'].append(offer)
-    _say(t, 'you', f"${float(apy):.1f}m a year over {int(years)}" + (f", {'front' if (front_load or 0.5) >= 0.66 else 'back' if (front_load or 0.5) <= 0.34 else 'even'}-loaded" if front_load is not None else '') + (f", with {', '.join(str(x).replace('_', ' ') for x in promises)}" if promises else '') + '.')
+    _say(t, 'you', f"${float(apy):.1f}m a year over {int(years)}" + (f", {'front' if front_load > 0.5 else 'back' if front_load < 0.5 else 'even'}-loaded" if front_load is not None else '') + (f", with {', '.join(str(x).replace('_', ' ') for x in promises)}" if promises else '') + '.')
     ask = t['ask']
     room = (t['kind'] == 'extension' and not s['in_season'])      # the offseason room: he answers here, and a walk is a walk
     # an insult ends it
@@ -178,7 +183,9 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     # HIS OWN NUMBER IS A YES. An offer that meets the agent's standing counter (his money and his years) is the
     # deal he asked for: it is signed on the spot, whatever the kind of talk or the time of year. It had gone back
     # into the queue as a fresh offer and the agent took a week to say yes to his own terms.
-    if c and apy + 1e-9 >= float(c.get('apy', apy)) and int(years) == int(c.get('years', years)):
+    if (c and apy + 1e-9 >= float(c.get('apy', apy)) and int(years) == int(c.get('years', years))
+            and bonus == c.get('bonus') and front_load == c.get('front_load')
+            and set(promises) == set(c.get('promises', []))):
         result = _accept(league, t, offer, how='counter accepted')
         if not result.get('ok'): t['counter'] = c
         return result
@@ -282,8 +289,14 @@ def _answer(league, t, p, offer, floor, quiet=False):
         return 'declined'
     # a counter: toward the floor, not all the way
     counter = round(min(t['ask'], floor * (1.0 + 0.03 * max(0, t['patience'] - 1))), 2)    # never above his own ask
-    t['state'] = 'countered'; t['counter'] = dict(apy=counter, years=(1 if t['kind'] == 'fa_inseason' else t['years']), front_load=0.5); _say(t, 'agent', f"Close. He would do it at ${counter:.1f}m a year.")
-    post(f"{p.name}'s agent counters at ${counter:.1f}m", f"Over {t['counter']['years']} year(s) at the league shape. " + ("He is close." if counter <= offer['apy'] * 1.06 else "There is a gap."),
+    counter_years = 1 if t['kind'] == 'fa_inseason' else t['years']
+    counter_bonus = offer.get('bonus')
+    if counter_bonus is not None: counter_bonus = min(float(counter_bonus), counter * counter_years)
+    t['state'] = 'countered'
+    t['counter'] = dict(apy=counter, years=counter_years, bonus=counter_bonus,
+                        front_load=offer.get('front_load'), promises=list(offer.get('promises', [])))
+    _say(t, 'agent', f"Close. He would do it at ${counter:.1f}m a year.")
+    post(f"{p.name}'s agent counters at ${counter:.1f}m", f"Over {counter_years} year(s), keeping the offered salary structure. " + (f"Signing bonus: ${counter_bonus:.2f}m. " if counter_bonus is not None else "Signing bonus uses the standard structure. ") + ("He is close." if counter <= offer['apy'] * 1.06 else "There is a gap."),
          payload=dict(counter=t['counter'], thread=t['id'], link=f'negotiation:{t["id"]}'))
     return 'countered'
 
