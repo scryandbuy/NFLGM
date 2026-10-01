@@ -91,7 +91,7 @@ def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
                           picks=[_pick_row(league, pk) for pk in sorted(them.picks, key=lambda k: (k.year, k.round)) if not pk.used_on and pk.year <= league.year + 2],
                           surplus=[dict(pid=x['pid'], why=_surplus_why(league, them, x)) for x in their_surplus], needs=sorted(their_needs),
                           coach=them.gm.name if them.gm else '', prestige=round(getattr(them.gm, 'prestige', 50)) if them.gm else None),
-                package=pkg, can_trade=can_trade, deadline_week=TR.TRADE_DEADLINE_WEEK, balance=f"{len([x for x in a_sends if _trade_player(league, x)])} for {len([x for x in b_sends if _trade_player(league, x)])}",
+                package=pkg, cap_year=league.year, can_trade=can_trade, deadline_week=TR.TRADE_DEADLINE_WEEK, balance=f"{len([x for x in a_sends if _trade_player(league, x)])} for {len([x for x in b_sends if _trade_player(league, x)])}",
                 note=None if can_trade else 'The trade deadline has passed. Trades reopen after the season.')
 
 
@@ -155,7 +155,9 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
     # roster counts after
     return dict(verdict=verdict, read=read, my_read=my_read, roster_after=dict(me=len(me.active()) - len([x for x in a_sends if _trade_player(league, x)]) + len([x for x in b_sends if _trade_player(league, x)]),
                                                                               them=len(them.active()) + len([x for x in a_sends if _trade_player(league, x)]) - len([x for x in b_sends if _trade_player(league, x)])),
-                cap_after=dict(me=round(__import__('cap_accounting').trade_projection(league,me.abbr,a_sends,b_sends).space(me.phase),1)),
+                cap_after=dict(
+                    me=round(__import__('cap_accounting').trade_projection(league, me.abbr, a_sends, b_sends).space(me.phase), 1),
+                    them=round(__import__('cap_accounting').trade_projection(league, them.abbr, b_sends, a_sends).space(them.phase), 1)),
                 would_accept=bool(r.get('accepted', False)) or (g >= 0.5 and not r.get('blocked')))
 
 

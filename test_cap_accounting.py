@@ -2,7 +2,7 @@ import unittest, copy
 from types import SimpleNamespace as N
 from unittest.mock import patch
 from cap_engine import Contract, TeamCap
-from cap_accounting import settle_week, require_room, next_year_ledger
+from cap_accounting import settle_week, require_room, next_year_ledger, trade_projection
 from league import League, Team, Player, contract_to_dict, contract_from_dict
 import extensions, contract_structure as CS, practice_squad as PS, tags
 
@@ -121,6 +121,24 @@ class CapAccountingTests(unittest.TestCase):
         self.assertEqual(p.contract.sb,0)
         settle_week(L,18)
         self.assertEqual(p.contract.earned_base,9)
+
+    def test_trade_preview_matches_current_year_cap_after_exchange(self):
+        L=fixture()
+        player(L,'gb_player','GB',Contract(2,[18,18],signing_bonus=10))
+        player(L,'min_player','MIN',Contract(2,[12,12],signing_bonus=6))
+        settle_week(L,9)
+        before={abbr:L.teams[abbr].cap_space for abbr in ('GB','MIN')}
+        projected={
+            'GB':trade_projection(L,'GB',['gb_player'],['min_player']).space('season'),
+            'MIN':trade_projection(L,'MIN',['min_player'],['gb_player']).space('season'),
+        }
+        self.assertNotEqual(projected['GB'],before['GB'])
+        self.assertNotEqual(projected['MIN'],before['MIN'])
+        self.assertEqual(L.player('gb_player').team,'GB')
+        self.assertEqual(L.player('min_player').team,'MIN')
+        L.trade('GB','MIN',['gb_player'],['min_player'])
+        for abbr in ('GB','MIN'):
+            self.assertAlmostEqual(projected[abbr],L.teams[abbr].cap_space)
 
     def test_over_cap_trade_is_atomic(self):
         L=fixture(); p=player(L,contract=Contract(1,[10])); L.teams['MIN'].cap.cap=1

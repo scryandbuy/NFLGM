@@ -45,6 +45,16 @@ class TradeFeedbackTests(unittest.TestCase):
         self.assertEqual(result['my_read'].count('Your WR depth'),1)
         self.assertNotIn('Your WR depth',result['read'])
 
+    def test_trade_read_projects_both_teams_current_cap(self):
+        def preview(league, abbr, outgoing, incoming):
+            self.assertEqual((outgoing, incoming),
+                             (['send1'], ['incoming']) if abbr == 'GB' else (['incoming'], ['send1']))
+            return N(space=lambda phase: 94.2 if abbr == 'GB' else 6.8)
+        with patch('trade_engine.evaluate',return_value=dict(a_gain=2,b_gain=2,accepted=True)), \
+             patch('cap_accounting.trade_projection',side_effect=preview):
+            result=VP._evaluate(self.L,'GB','NYG',['send1'],['incoming'])
+        self.assertEqual(result['cap_after'],{'me':94.2,'them':6.8})
+
     def test_all_reasons_and_unknown_codes_have_safe_text(self):
         for reason in ('a_dead_money','b_dead_money','a_cannot_fit','b_cannot_fit','a_space','b_space','unknown_internal_reason'):
             with self.subTest(reason=reason):

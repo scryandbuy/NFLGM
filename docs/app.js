@@ -1517,7 +1517,12 @@ function renderTradeSide(v, key, reload) {
   const own = key === 'a' ? v.me : v.them, selected = tradeState[key];
   const box = el('section',{class:'trade-side','data-team':own.club.abbr}); applyTeamTheme(box,own.club);
   const head = el('div',{class:'trade-side-head'},el('h2',{},own.club.name));
-  head.append(el('div',{class:'trade-cap'},el('b',{},`$${own.cap.toFixed(1)}m`),el('small',{},'Cap space')));
+  const after = v.package?.cap_after?.[key === 'a' ? 'me' : 'them'] ?? own.cap;
+  const change = Math.round((after - own.cap) * 10) / 10;
+  head.append(el('div',{class:'trade-cap'},
+    el('small',{},`${v.cap_year} CAP SPACE`),
+    el('div',{class:'trade-cap-values'},el('span',{},`$${own.cap.toFixed(1)}m`),el('span',{class:'trade-cap-arrow'},'→'),el('b',{},`$${after.toFixed(1)}m`)),
+    el('small',{class:'trade-cap-change' + (change < 0 ? ' down' : change > 0 ? ' up' : '')},`${change > 0 ? '+' : ''}${change.toFixed(1)}m after trade`)));
   const onChange=(asset,remove)=>{
     const i=selected.findIndex(x=>x.kind===asset.kind && String(x.id)===String(asset.id));
     if(remove && i>=0) selected.splice(i,1); else if(!remove && i<0) selected.push(asset);
