@@ -870,7 +870,8 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
     clock_aggr = float(np.clip(0.5 * float(c.get('fourth_down', 0.5)) + 0.5 * float(c.get('adjust_willingness', 0.5)), 0.0, 1.0))
     own_left = timeouts.left.get(pos, 0) if timeouts is not None else 0
     trail_window = (60.0 + 40.0 * clock_aggr) if own_left >= 2 else 60.0
-    _scored_now = t in ('run', 'complete', 'scramble') and float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01
+    _scored_now = bool(out.get('touchdown') or out.get('defensive_td')) or (t in ('run', 'complete', 'scramble') and float(out.get('yards', 0.0) or 0.0) >= dr.yardline - 0.01)
+    if out.get('fumble_lost') or t == 'interception': return False, None
     _at_warning = secs_in_half > 120 and secs_in_half - play_seconds(t) <= 120 and not getattr(dr, '_two_min', False)
     if timeouts is not None and secs_in_half < 300 and not _scored_now and not _at_warning:
         other = 'away' if pos == 'home' else 'home'
@@ -921,7 +922,7 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
             used = timeouts.use(pos); used_by = pos                        # one score down inside a minute, or tied at the very end; down two the offense runs the hurry-up and keeps them for the defense
         elif plan is not None and plan['choice'] != 'kneel' and plan.get('hurry', True) and in_bounds and secs_in_half > 4 and timeouts.left.get(pos, 0) > 0:
             used = timeouts.use(pos); used_by = pos                        # the clock is running on a spot worth a kick or a shot, and the plan needs the time
-        elif plan is not None and not plan.get('hurry', True) and in_bounds and timeouts.left.get(other, 0) > 0 and dr.score_diff >= 0 and (half_end is None or dr.score_diff == 0):
+        elif plan is not None and not plan.get('hurry', True) and in_bounds and timeouts.left.get(other, 0) > 0 and dr.score_diff >= 0 and (half_end is None or (dr.score_diff == 0 and dr.down >= 3 and float(out.get('yards', 0) or 0) < dr.togo)):
             # THE DEFENSE BUYS ITSELF A POSSESSION. The offense is bleeding the clock toward a late kick; each
             # timeout the defense spends now is time it gets back after the score. It spends one when that time
             # is worth a real possession to it, by its own coach's appetite for the chance.
