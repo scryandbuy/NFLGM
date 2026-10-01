@@ -11,26 +11,37 @@ import numpy as np
 from views import club, rail, sentence
 
 LEANS = [
-    ('offense', 'pass_bias', 'Pass Lean', 'Run more', 'Pass more', 'Adjust the situational tendency to pass'),
-    ('offense', 'play_action_rate', 'Play Action', 'Less', 'More', 'Play-action tendency off the run game'),
-    ('offense', 'motion_rate', 'Motion', 'Still', 'Constant', 'Pre-snap movement tendency'),
-    ('offense', 'tempo', 'Tempo', 'Huddle', 'Hurry', 'Huddle · Normal · Hurry'),
-    ('defense', 'blitz_rate', 'Blitz Rate', 'Rush four', 'Send heat', 'Pressure tendency; actual rate depends on the situation'),
-    ('defense', 'man_rate', 'Man Coverage', 'Zone', 'Man', 'Share of coverage snaps in man'),
-    ('defense', 'shell_lean', 'Shell', 'Single high', 'Two high', 'Single-High · Two-High'),
-    ('defense', 'zone_aggression', 'Zone Aggression', 'Stay home', 'Drive on the throw', 'Drive on the throw or stay home'),
-    ('defense', 'box_bias', 'Box', 'Light', 'Loaded', 'Average extra defenders near the line relative to the situational call; actual box varies by snap'),
+    ('offense', 'pass_bias', 'Run–Pass Balance', 'Run more', 'Pass more', 'Run more · Balanced · Pass more'),
+    ('offense', 'play_action_rate', 'Play Action', 'Less', 'More', 'Less · Standard · More'),
+    ('offense', 'motion_rate', 'Motion', 'Less', 'More', 'Less · Standard · More'),
+    ('offense', 'tempo', 'Tempo', 'Slower', 'Faster', 'Slower · Normal · Faster'),
+    ('defense', 'blitz_rate', 'Blitz Frequency', 'Less', 'More', 'Less · Standard · More'),
+    ('defense', 'man_rate', 'Coverage Preference', 'Favor zone', 'Favor man', 'Favor zone · Mixed · Favor man'),
+    ('defense', 'shell_lean', 'Safety Alignment', 'Favor single-high', 'Favor two-high', 'Favor single-high · Mixed · Favor two-high'),
+    ('defense', 'zone_aggression', 'Zone Aggression', 'Protect deeper routes', 'Attack short routes', 'Protect deeper routes · Balanced · Attack short routes'),
+    ('defense', 'box_bias', 'Box', 'Light', 'Loaded', 'Tendency to move defenders out of or into the situational box; actual counts stay between 4 and 10'),
 ]
 
 
 def _lean_word(k, val):
-    """The value as the page shows it: a percentage where the lean is a rate, a word where it is a shape."""
-    if k == 'pass_bias': return f"{round(50 + val * 100)}%"
-    if k in ('play_action_rate', 'motion_rate', 'blitz_rate', 'man_rate'): return f"{round(min(1.0, max(0.0, val)) * 100)}%"
-    if k == 'tempo': return 'Huddle' if val < 0.4 else 'Hurry' if val > 0.6 else 'Normal'
-    if k == 'shell_lean': return '1-Hi' if val < 0.42 else '2-Hi' if val > 0.58 else 'Mixed'
-    if k == 'zone_aggression': return str(round(val * 100))
-    if k == 'box_bias': return 'Situational' if not val else f'{val * 4:+.2f} avg'
+    """Preferences, not forecasts of the percentage of plays called."""
+    if k == 'pass_bias': return 'Run more' if val < -0.02 else 'Pass more' if val > 0.02 else 'Balanced'
+    if k in ('play_action_rate', 'motion_rate', 'blitz_rate'):
+        # Centers match the engine's neutral settings; these are display bands only.
+        center = {'play_action_rate': 0.5, 'motion_rate': 0.581, 'blitz_rate': 0.133}[k]
+        return 'Less' if val < center - 0.02 else 'More' if val > center + 0.02 else 'Standard'
+    if k == 'man_rate': return 'Favor zone' if val < 0.42 else 'Favor man' if val > 0.58 else 'Mixed'
+    if k == 'tempo': return 'Slower' if val < 0.4 else 'Faster' if val > 0.6 else 'Normal'
+    if k == 'shell_lean': return 'Favor single-high' if val < 0.42 else 'Favor two-high' if val > 0.58 else 'Mixed'
+    if k == 'zone_aggression': return 'Protect deeper routes' if val < 0.42 else 'Attack short routes' if val > 0.58 else 'Balanced'
+    if k == 'box_bias':
+        shift = round(abs(val) * 4, 6)
+        if not shift: return 'Situational box'
+        direction = 'Lighter' if val < 0 else 'Heavier'
+        if shift <= 1: return f'{direction} box · {round(shift * 100)}% tendency'
+        # Larger settings move at least one defender on every snap, rather than
+        # implying an impossible probability above 100 percent.
+        return f'{direction} box · {shift:g} defenders on average'
     return f"{val:.2f}"
 DEPTH_LABELS = ('Short', 'Medium', 'Deep')
 PROTECTIONS = ['half_slide', 'full_slide', 'six', 'empty']
