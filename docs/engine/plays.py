@@ -660,6 +660,44 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
                rb_reps=rb_reps)
     return out
 
+# Fitted on nflverse 2021-24 regular-season turnover returns; 2025 held out.
+# Stop rates by original-offense yards-to-go at the catch/recovery. Positive
+# return distances are censored by the goal line, not a separate TD lottery.
+DEFENSIVE_RETURNS = {
+    'int': dict(stop=(.68085, .44892, .35156, .32000, .27368, .15556),
+                tail=.11561, scales=(18.52291, 99.99826)),
+    'fumble': dict(stop=(.84615, .68707, .79397, .69068, .72059, .61458),
+                   tail=.35259, scales=(8.17646, 65.83713)),
+}
+
+
+def defensive_return(start, kind, returner, chasers, rng, rate_fn=None):
+    """Return in old-offense coordinates; scoring follows actual distance."""
+    start = float(np.clip(start, -10.0, 100.0))
+    model = DEFENSIVE_RETURNS[kind]
+    region = int(np.searchsorted([0, 20, 40, 60, 80], start, side='left'))
+    gain = 0.0
+    if start < 100 and rng.random() >= model['stop'][region]:
+        scale = model['scales'][int(rng.random() < model['tail'])]
+        if rate_fn is not None and returner and chasers:
+            weights = {'speed_rating': .7, 'accel_rating': .3}
+            pursuit = sorted((rate_fn(m, weights) for m in chasers if m), reverse=True)[:4]
+            if pursuit:
+                scale *= float(np.clip(np.exp(.5 * (rate_fn(returner, weights) - np.mean(pursuit))), .9, 1.1))
+        gain = float(rng.exponential(scale))
+    end = min(100.0, start + gain)
+    touchback = end <= 0
+    scored = end >= 100
+    # Return yardage starts at the goal line on a catch in the end zone.
+    ret = 0.0 if touchback else max(0.0, end - max(0.0, start))
+    result = dict(return_kind=kind, returner=(returner or {}).get('pid'),
+                  return_start=start, end_spot=(20.0 if touchback else end),
+                  ret=round(ret, 1), touchback=touchback, defensive_td=scored)
+    if scored:
+        result.update(touchdown=True, scoring_side='defense')
+    return result
+
+
 def _pass_play(off, deff, off_call, def_call, ytg, rng):
     depth = off_call.get('depth', 'short')
     ok = available_depths(ytg)
@@ -983,12 +1021,13 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         air = float(np.clip(rng.normal(route_air if route_air is not None else {'short': 5, 'medium': 13, 'deep': 27}.get(depth, 6),
                                        {'short': 3, 'medium': 5, 'deep': 9}.get(depth, 3)),
                             -3 if screen else 1, 48))
-        ret = float(np.clip(rng.gamma(2.0, 5.0), 0, 65))
+        returning = defensive_return(float(ytg) - air, 'int', cb,
+            [off['qb']] + list(off.get('ol') or []) + receivers, rng, rate)
         return dict(type='interception', yards=0.0, touchdown=False,
-                    air=round(air, 1), ret=round(ret, 1),
+                    air=round(air, 1),
                     depth=depth, in_man=bool(in_man), screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
+                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
     if not complete:
         throwaway = bool(p['pressure'] >= 0.35 and not screen and rng.random() < 0.18)
         # A PASS DEFENDED is a defender breaking the ball up, not simply an

@@ -41,9 +41,11 @@ def epa(out, before_down, before_togo, before_ytg, after_down, after_togo, after
     """EPA of one play for the offence."""
     before = ep(before_down, before_togo, before_ytg)
     t = out.get('type')
+    if out.get('defensive_td') or out.get('scoring_side') == 'defense' or result == 'Defensive touchdown':
+        return -TD_VALUE - before
     if out.get('touchdown'):
         return TD_VALUE - before
-    if t in ('interception', 'fumble') or result == 'Turnover':
+    if t in ('interception', 'fumble') or out.get('fumble_lost') or result == 'Turnover':
         spot = 100.0 - float(after_ytg if after_ytg is not None else before_ytg)     # the other side's spot
         return -ep(1, 10, spot) - before
     if result == 'Turnover on downs':

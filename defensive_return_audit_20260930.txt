@@ -1,0 +1,70 @@
+Defensive turnover returns — 2026-09-30
+Base: 02dc06e. Isolated branch: codex/defensive-returns-20260930.
+
+Reference and calibration
+Source: https://github.com/nflverse/nflverse-data/releases/tag/pbp
+Dictionary: https://nflreadr.nflverse.com/articles/dictionary_pbp.html
+Input retained outside source at outputs/margin-real-pbp/2021.csv through 2025.csv.
+Regular season only; exclude no_play, kickoffs and punts. Interceptions take
+precedence over fumbles on a play with both flags. 2055 INTs/180 defensive TDs;
+1207 other lost fumbles/86 defensive TDs. These span 1359 games.
+For fumble distances, use the final credited defensive RECOVERED-by location
+in the description, matched against possession/defending team abbreviations.
+22 fumble rows lacked a usable recovery location and are excluded from the
+conditional fit: 1185 rows, 85 TDs remain. Interception spots use LOS-air_yards.
+
+Fit 2021-24, hold out 2025. Stop rates by recovery region; positive distance
+uses a two-exponential mixture, with TD observations right-censored at the
+goal line. A latent distance scale is bounded at 100 yards because the data
+cannot identify a scale beyond the field; no infinite-distance/forced-TD mass.
+The runtime caps distance at the goal line; no independent touchdown roll.
+Runner versus fastest four pursuers' speed/acceleration changes distance scale
+at most +/-10%. Calibration samples use neutral ratings.
+
+2025 holdout actual -> fitted TD rate:
+INT 7.37% -> 8.38%; matched fumble 7.98% -> 7.04%.
+All-five-year runtime sample, 20 repetitions of reference recovery spots:
+INT: 41100 returns, 8.822% TD, 12.372 mean return yards (real 8.759%, 12.399).
+Fumble: 23700 returns, 6.895% TD, 4.688 mean yards (real 7.173%, 4.360).
+Detailed parameters/results: defensive_return_fit_20260930.json.
+Reproduce: python audit_defensive_returns.py <selected-reference-CSV-directory>.
+These are conditional return checks, not a whole-season scoring calibration.
+
+Engine/reporting contract
+Keep original type (interception, run, complete, sack, scramble) and offensive
+yards. Add return_kind, returner, ret, return_start, end_spot, touchback,
+defensive_td; fumbles also add recoverer/fumble_recovered_by/fumble_forced.
+TD events set touchdown=True and scoring_side='defense'. Coordinates are the
+original offense's distance to the opposing goal, so defensive TD ends at100.
+An end-zone touchback transfers at old coordinate20 (new offense own20).
+Return yardage excludes travel inside the returner's own end zone.
+dr.result='Defensive touchdown'; points=-6 plus defending team's try. OT return
+TD ends immediately without a try. Existing defensive-TD kickoff path sends
+the ball back to the team that conceded it.
+
+Stats: int_ret_yds/int_ret_td, fum_rec/fum_ret_yds/fum_ret_td, def_td.
+Retain normal interception/fumble counts and pre-fumble offensive gain.
+Do not credit an offensive passing, receiving or rushing TD for a return TD.
+EPA recognizes defensive scoring before examining the general touchdown flag.
+Resolve loose-ball outcomes before choosing enforcement; accepted live fouls
+can cancel the turnover and stats. Post-return fouls move the new possession;
+post-score fouls affect the defending team's try. Return yards exclude penalty
+yardage. Fumbles identify the actual selected receiver/carrier and fielded
+recoverer, rather than roster WR1/HB1. Unforced fumbles do not credit an FF.
+
+Validation
+16 new tests: scoring/stat ownership, touchbacks/end-zone exit, distance-based
+scores, returner/recovery stats, actual receiver fumbles, strip-sack end-zone
+recovery, live penalty cancellation, offensive foul declined, post-return and
+post-TD enforcement, OT walkoff/no try, capped legacy returns, EPA and RNG
+restore determinism. The combined run passed116 tests before the last three
+targeted cases; all16 new cases then passed (119 distinct passing tests).
+Combined coverage includes actual Session save/load/live-journal replay,
+previous game/penalty/clock fixes, fourth-down routes and Game Plan wiring.
+
+Boundaries
+No new return-phase penalty lottery, lateral/re-fumble chain or backward-return
+safety model. Existing live and post-play penalties are enforced. Recovery is
+at the current modeled end of the offensive play, without a separate loose-ball
+bounce simulation. Main integration owns display/reporting and the subsequent
+three-season scoring study. No source changes to session/UI/report modules.

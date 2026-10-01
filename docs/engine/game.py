@@ -703,9 +703,9 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         if secs >= 6:                                                # the throw takes four seconds; an incompletion leaves the kick
             ev += live * ((1.0 - SHOT_SHORT) * kick_ev(yy) + SHOT_SHORT * (kick_ev(max(1.0, yy - 15.0)) if tos > 0 else 0.0))
         elif game_end and need == 0:
-            # A final-play interception normally ends regulation tied too;
-            # it is not an automatic loss. The current return model does not
-            # score defensive touchdowns on interceptions.
+            # A final-play interception usually ends regulation tied too;
+            # it is not an automatic loss. Return touchdowns are possible,
+            # but this coarse look-ahead does not resolve the return itself.
             ev += (1.0 - p) * v_kneel
         return ev
     if secs_in_half > 0: evs['shot'] = shot_ev(y, secs_in_half, own_tos)
@@ -1212,12 +1212,15 @@ def _ep_play_stands(dr, out):
     touchdown, a turnover, or a failed fourth down handing the ball over."""
     import advanced_stats as AS
     gained = float(np.round(float(out.get('yards') or 0.0)))
+    if out.get('defensive_td'):
+        return -float(AS.TD_VALUE)
     if out.get('touchdown') or float(out.get('yards') or 0.0) >= dr.yardline - 0.01 or gained >= dr.yardline - 0.01: return float(AS.TD_VALUE)
     spot = float(np.clip(dr.yardline - gained, 1.0, 99.0))
     if out.get('type') == 'interception':
         spot = _interception_spot(dr.yardline, out)
         return -_ep_state(1, 10, 100.0 - spot)
     if out.get('fumble_lost'):
+        spot = float(out.get('end_spot', spot))
         return -_ep_state(1, 10, 100.0 - spot)
     if gained >= dr.togo - 0.01:
         return _ep_state(1, min(10.0, spot), spot)
@@ -1259,6 +1262,10 @@ def _resolve_live_penalty(dr, pen, out, oc):
     yards = float(pen['yards'])
     gained = float(out.get('yards') or 0.0)
     spot_gain = dr.yardline if gained >= dr.yardline - 0.01 else float(np.round(gained))
+    if out.get('defensive_td') and E.PEN_INFO[pen['penalty']]['phase'] == 'post':
+        dr.try_penalty = yards if pen['on_offense'] else -yards
+        pen['on_try'] = True
+        return 'added'
     if pen['on_offense']:
         if pen['penalty'] == 'Intentional Grounding':
             yards = max(yards, float(out.get('throwback', 0.0) or 0.0))
@@ -1290,7 +1297,7 @@ def _resolve_live_penalty(dr, pen, out, oc):
         if pen['penalty'] == 'Intentional Grounding':
             dr.down += 1                          # loss of down
         return 'replaced'
-    if out.get('touchdown') or gained >= dr.yardline - 0.01 or float(np.round(gained)) >= dr.yardline:
+    if not out.get('defensive_td') and (out.get('touchdown') or gained >= dr.yardline - 0.01 or float(np.round(gained)) >= dr.yardline):
         if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
             dr.try_penalty = yards
             pen['on_try'] = True
@@ -1356,21 +1363,33 @@ class Drive:
 
 def _interception_spot(yardline, out):
     """The former offense's distance to goal after the catch and return."""
+    if out.get('end_spot') is not None:
+        return float(out['end_spot'])
     caught = float(yardline) - float(out.get('air', 0.0) or 0.0)
     returned_to = caught + float(out.get('ret', 0.0) or 0.0)
     if caught <= 0 and returned_to <= 0:
         return 20.0                         # defensive touchback in the end zone
-    return float(np.clip(returned_to, 1.0, 99.0))
+    return float(np.clip(returned_to, 0.0, 100.0))
 
 
 def _prepare_interception(yardline, out):
     """Record a touchback without crediting return yards inside the end zone."""
     if out.get('type') != 'interception':
         return
+    if out.get('end_spot') is not None:
+        return
     caught = float(yardline) - float(out.get('air', 0.0) or 0.0)
     out['touchback'] = caught <= 0 and caught + float(out.get('ret', 0.0) or 0.0) <= 0
     if out['touchback']:
         out['ret'] = 0.0
+    out['return_start'] = caught
+    out['returner'] = out.get('by')
+    out['return_kind'] = 'int'
+    out['end_spot'] = _interception_spot(yardline, out)
+    out['defensive_td'] = out['end_spot'] >= 100
+    if out['defensive_td']:
+        out['ret'] = 100.0 - max(0.0, caught)
+        out.update(touchdown=True, scoring_side='defense')
 
 
 def _healthy_quarterback(roster, state):
@@ -1381,6 +1400,51 @@ def _healthy_quarterback(roster, state):
     candidates += [p for men in depth.values() for p in men]
     excluded = state.out if state is not None else ()
     return next((p for p in candidates if p is not None and p.get('pid') not in excluded), None)
+
+
+def _prepare_fumble(dr, out, off, deff, rng, rate_fn, off_state=None):
+    """Resolve the loose ball before penalties choose between play outcomes."""
+    import events as E
+    from plays import defensive_return
+    ev = {'complete': 'complete_pass', 'run': 'run', 'sack': 'sack', 'scramble': 'scramble'}.get(out['type'])
+    if ev is None or out.get('touchdown'):
+        return
+    men = [off['qb'], off.get('rb')] + list(off.get('wr') or []) + list(off.get('te') or [])
+    carrier_id = out.get('target') if ev == 'complete_pass' else out.get('carrier_pid') or out.get('carrier')
+    carrier = next((m for m in men if m and m.get('pid') == carrier_id), None) if carrier_id else None
+    if carrier is None:
+        carrier = off['qb'] if ev in ('sack', 'scramble') or out.get('sneak') else (off.get('rb') or off['qb'])
+    fum = E.fumble_check(carrier, ev, rng, rate_fn, env_mult=ENV.fumble_mult,
+                        rate_mult=(getattr(off_state, 'staff_fx', None) or {}).get('fum_off', 1.0))
+    if not fum:
+        return
+    out.update(fumble=True, fumble_lost=bool(fum['lost']), fumble_by=carrier.get('pid'),
+               fumble_forced=bool(fum.get('forced', True)))
+    if not fum['lost']:
+        return
+    defenders = list(deff.get('dl') or []) + list(deff.get('lb') or []) + list(deff.get('db') or [])
+    if not defenders:
+        raise ValueError('A defensive fumble recovery requires a defender on the field')
+    weights = np.array([3.0 if (ev == 'sack' and p in (deff.get('dl') or [])) else
+                        1.5 if p.get('pid') == out.get('tackler') else 1.0 for p in defenders])
+    recoverer = defenders[int(rng.choice(len(defenders), p=weights/weights.sum()))]
+    start = float(np.clip(dr.yardline - float(np.round(out.get('yards', 0) or 0)), 0, 100))
+    out.update(recoverer=recoverer.get('pid'), fumble_recovered_by=recoverer.get('pid'))
+    out.update(defensive_return(start, 'fumble', recoverer,
+               [m for m in men + list(off.get('ol') or []) if m], rng, rate_fn))
+
+
+def _finish_turnover(dr, out, penalty=None):
+    dr.yardline = float(out['end_spot'])
+    if out.get('defensive_td'):
+        dr.result, dr.points = 'Defensive touchdown', -6
+    else:
+        dr.result = 'Turnover'
+        if penalty is not None:
+            _enforce_turnover_penalty(dr, penalty)
+    dr.log_pen_after = 0.0
+    dr.log_pen_first = False
+    dr.clock -= play_seconds('interception' if out['type'] == 'interception' else 'fumble')
 
 def _enforce_turnover_penalty(dr, pen):
     """Walk a dead-ball foul from the turnover's return spot, in the old offense's coordinates."""
@@ -1489,7 +1553,7 @@ def _advance(dr, gained):
 
 def _prepare_scoring_play(dr, out):
     """Give the play log and stat book the distance actually gained before booking the snap."""
-    if out.get('type') not in ('run', 'complete', 'scramble') or out.get('nullified'):
+    if out.get('type') not in ('run', 'complete', 'scramble') or out.get('nullified') or out.get('defensive_td'):
         return
     yards = float(out.get('yards', 0.0) or 0.0)
     scored = yards >= dr.yardline - 0.01 or float(np.round(yards)) >= dr.yardline - 0.01
@@ -2174,6 +2238,18 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     if inj_: dr.log.append(dict(type='injury', pid=d.get('pid'), pos=def_pos.get(d.get('pid'), 'CB'), kind=inj_.get('kind'), weeks=inj_.get('weeks_out'), side='def', clock=dr.clock))
 
         t = out['type']
+        # a collapsed pocket is not automatically a sack - a mobile QB runs
+        if t == 'sack':
+            if rng.random() < E.scramble_chance(offense['qb'], 1.0, 1.4, rate_fn):
+                _old = out
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass') if k in _old}
+                out = E.resolve_scramble(offense['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
+                t = 'scramble'
+                for _i in range(len(dr.log) - 1, -1, -1):
+                    if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
+        _prepare_scoring_play(dr, out)
+        _prepare_interception(dr.yardline, out)
+        _prepare_fumble(dr, out, off_f, def_f, rng, rate_fn, off_state)
         if live_pen is not None:
             taken = _resolve_live_penalty(dr, live_pen, out, oc)
             if taken in ('replaced', 'added') and not live_pen.get('on_offense'):
@@ -2214,15 +2290,6 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 penalty_entry = dict(type='penalty', **live_pen)
                 dr.log.append(penalty_entry)
 
-        # a collapsed pocket is not automatically a sack - a mobile QB runs
-        if t == 'sack':
-            if rng.random() < E.scramble_chance(offense['qb'], 1.0, 1.4, rate_fn):
-                _old = out
-                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass') if k in _old}
-                out = E.resolve_scramble(offense['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
-                t = 'scramble'
-                for _i in range(len(dr.log) - 1, -1, -1):
-                    if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
         # THE BOOK IS WRITTEN HERE, after the flags and the scramble are settled: a play wiped by a penalty or
         # turned into a scramble was being credited as it first resolved
         _prepare_scoring_play(dr, out)
@@ -2230,29 +2297,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if book is not None: book.record(out, off_f, def_f, rng)
         pending = (out, off_f, def_f, _snap_state)
 
-        if t == 'interception':
-            # The ball changes hands at the catch, then travels on the return.
-            dr.yardline = _interception_spot(dr.yardline, out)
-            if live_pen is not None and taken == 'added' and E.PEN_INFO[live_pen['penalty']]['phase'] == 'post':
-                _enforce_turnover_penalty(dr, live_pen)
-            dr.clock -= play_seconds('interception'); dr.result = 'Turnover'; break
-
-        # fumbles attach to the event that produced them
-        ev = {'complete': 'complete_pass', 'run': 'run', 'sack': 'sack',
-              'scramble': 'scramble'}.get(t)
-        if ev and not out.get('touchdown'):
-            carrier = offense['qb'] if ev in ('sack', 'scramble') else \
-                      ((offense.get('rb') or offense['qb']) if ev == 'run' else offense['wr'][0])
-            fum = E.fumble_check(carrier, ev, rng, rate_fn, env_mult=ENV.fumble_mult, rate_mult=(getattr(off_state, 'staff_fx', None) or {}).get('fum_off', 1.0))
-            if fum:
-                out['fumble'] = True; out['fumble_lost'] = bool(fum['lost']); out['fumble_by'] = (carrier or {}).get('pid')
-                if book is not None: book.record_fumble(out)          # the book was written before the ball came out
-            if fum and fum['lost']:
-                # the ball comes out where the play ended, not where it started: the gain (or loss) is applied first
-                dr.yardline = float(np.clip(dr.yardline - float(np.round(out.get('yards', 0.0) or 0.0)), 1.0, 99.0))
-                if live_pen is not None and taken == 'added' and E.PEN_INFO[live_pen['penalty']]['phase'] == 'post':
-                    _enforce_turnover_penalty(dr, live_pen)
-                dr.clock -= play_seconds('fumble'); dr.result = 'Turnover'; break
+        if book is not None and out.get('fumble'):
+            book.record_fumble(out)
+        if t == 'interception' or out.get('fumble_lost'):
+            if book is not None:
+                book.record_defensive_return(out)
+            post = penalty_entry if (live_pen is not None and taken == 'added'
+                    and E.PEN_INFO[live_pen['penalty']]['phase'] == 'post') else None
+            _finish_turnover(dr, out, post)
+            break
 
         # ---- timeouts ----
         _y_after = float(np.clip(dr.yardline - float(out.get('yards', 0.0) or 0.0), 1.0, 99.0))
@@ -2682,6 +2735,7 @@ class StatBook:
                 rush_att=0, rush_yds=0.0, rush_td=0,
                 tgt=0, rec=0, rec_yds=0.0, rec_td=0, drops=0,
                 tackles=0, sacks=0.0, int_def=0, pressures=0, ff=0, fumbles=0, fumbles_lost=0,
+                int_ret_yds=0.0, int_ret_td=0, fum_rec=0, fum_ret_yds=0.0, fum_ret_td=0, def_td=0,
                 pass_def=0,
                 fum=0, fum_lost=0,
                 # ---- specialists ----
@@ -2742,7 +2796,7 @@ class StatBook:
             if t == 'complete':
                 s['pass_cmp'] += 1; s['pass_yds'] += out['yards']
                 w['rec'] += 1; w['rec_yds'] += out['yards']
-                if out.get('touchdown'): s['pass_td'] += 1; w['rec_td'] += 1
+                if out.get('touchdown') and not out.get('defensive_td'): s['pass_td'] += 1; w['rec_td'] += 1
             elif t == 'drop':
                 w['drops'] += 1
             elif t == 'interception':
@@ -2755,13 +2809,13 @@ class StatBook:
             d['sacks'] += 1.0; d['tackles'] += 1
         elif t == 'scramble':
             s = self._get(qb); s['rush_att'] += 1; s['rush_yds'] += out['yards']
-            if out.get('touchdown'): s['rush_td'] += 1
+            if out.get('touchdown') and not out.get('defensive_td'): s['rush_td'] += 1
         elif t == 'run':
             rb = out.get('carrier_pid') or (off.get('rb') or off['qb']).get('pid', 'RB1')
             s = self._get(rb); s['rush_att'] += 1; s['rush_yds'] += out['yards']
-            if out.get('touchdown'): s['rush_td'] += 1
+            if out.get('touchdown') and not out.get('defensive_td'): s['rush_td'] += 1
         # a tackle is credited on any play that ends in the field of play, to the player the play-by-play names
-        if t in ('run', 'complete', 'scramble') and not out.get('touchdown'):
+        if t in ('run', 'complete', 'scramble') and (not out.get('touchdown') or out.get('defensive_td')):
             tk_pid = out.get('tackler')
             if not tk_pid:
                 pool = deff['db'] + deff['lb'] + deff['dl']
@@ -2775,8 +2829,22 @@ class StatBook:
         if fb:
             s = self._get(fb); s['fumbles'] = s.get('fumbles', 0) + 1
             if out.get('fumble_lost'): s['fumbles_lost'] = s.get('fumbles_lost', 0) + 1
-        if out.get('tackler'):
-            d = self._get(out['tackler']); d['ff'] += 1
+        forcing = out.get('tackler') or (out.get('by') if out.get('type') == 'sack' else None)
+        if forcing and out.get('fumble_forced', True):
+            d = self._get(forcing); d['ff'] += 1
+
+    def record_defensive_return(self, out):
+        pid = out.get('returner') or out.get('recoverer') or out.get('by')
+        if not pid or out.get('nullified'):
+            return
+        s = self._get(pid)
+        kind = 'int' if out.get('type') == 'interception' else 'fum'
+        if kind == 'fum': s['fum_rec'] = s.get('fum_rec', 0) + 1
+        yards_key, td_key = kind + '_ret_yds', kind + '_ret_td'
+        s[yards_key] = s.get(yards_key, 0.0) + float(out.get('ret', 0.0))
+        if out.get('defensive_td'):
+            s[td_key] = s.get(td_key, 0) + 1
+            s['def_td'] = s.get('def_td', 0) + 1
 
     def table(self):
         import pandas as pd
