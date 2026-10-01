@@ -17,7 +17,8 @@ Rotations are anchored on 2026 and derived from the 2002-2026 real slates.
 
 Weeks: 17 games in 18 weeks, one bye each in weeks 5-14 with an even number
 of clubs off, week 18 all division games, 13-16 games a week, no road trip
-over three, no rematch within two weeks. Solved as min-conflicts local search
+over three, at least two week numbers between rematches (one intervening
+week). Solved as min-conflicts local search
 with a repair pass, as the script did.
 """
 import random
@@ -51,6 +52,66 @@ X17 = [
 BYE_WEEKS = list(range(5, 15))
 FULL_WEEKS = [1, 2, 3, 4, 15, 16, 17, 18]
 MAX_AWAY_RUN, MIN_REMATCH = 3, 2
+
+
+def rematch_violations(games, weeks):
+    """The minimum is a hard rule, not an optional solver preference."""
+    seen = defaultdict(list)
+    for i, week in weeks.items():
+        seen[tuple(sorted(games[i][:2]))].append(week)
+    return [(pair, a, b) for pair, ws in seen.items()
+            for a, b in zip(sorted(ws), sorted(ws)[1:]) if b - a < MIN_REMATCH]
+
+
+def space_rematches(games, weeks, node_limit=50000):
+    """Reorder whole weekly slates when single-game swaps get stuck.
+
+    Matchups, venues and weekly team conflicts cannot change. Bye-containing
+    weeks remain in the bye window and the divisional finale stays in week 18.
+    Search is bounded; callers must retry rather than publish an invalid slate.
+    """
+    pairs = defaultdict(set)
+    venues = defaultdict(dict)
+    for i, week in weeks.items():
+        home, away, _ = games[i]
+        pairs[week].add(tuple(sorted((home, away))))
+        venues[week][home] = 'H'; venues[week][away] = 'A'
+    order = []
+    nodes = 0
+
+    def search(remaining, away_runs):
+        nonlocal nodes
+        nodes += 1
+        if nodes > node_limit: return False
+        # Start at the fixed finale so its rematch restriction is handled
+        # immediately instead of discovering it at the end of the search.
+        dest = 18 - len(order)
+        if dest == 0: return True
+        candidates = [w for w in remaining
+                      if (w == 18) == (dest == 18)
+                      and (w in BYE_WEEKS) == (dest in BYE_WEEKS)
+                      and all(not (pairs[w] & pairs[prev])
+                              for prev in order[-(MIN_REMATCH - 1):])]
+
+        def road_cost(w):
+            return sum(max(0, away_runs.get(t, 0) + 1 - MAX_AWAY_RUN)
+                       for t, venue in venues[w].items() if venue == 'A')
+
+        # Prefer shorter road trips, then retain the original placement.
+        candidates.sort(key=lambda w: (road_cost(w), w != dest, abs(w - dest), w))
+        for w in candidates:
+            order.append(w)
+            runs = dict(away_runs)
+            for t, venue in venues[w].items():
+                runs[t] = runs.get(t, 0) + 1 if venue == 'A' else 0
+            if search(remaining - {w}, runs): return True
+            order.pop()
+        return False
+
+    if not search(set(range(1, 19)), {}): return None
+    mapping = {old: new for new, old in enumerate(reversed(order), 1)}
+    result = {i: mapping[w] for i, w in weeks.items()}
+    return result if not rematch_violations(games, result) else None
 
 
 def rotation(season):
@@ -230,6 +291,12 @@ def assign_weeks(games, div, seed=0, restarts=30, iters=60000):
                     break
                 wk[i], wk[j] = w1, w2
             if not moved: stall += 1
+        if rematch_violations(games, wk):
+            wk = space_rematches(games, wk)
+            if wk is None: continue
+            bye = {t: next(w for w in range(1, 19)
+                           if all(wk[i] != w for i, (h, a, _) in enumerate(games)
+                                  if t in (h, a))) for t in teams}
         return wk, bye
     return None, None
 
@@ -252,6 +319,8 @@ def new_season(league, rank, rng):
     wk, bye = assign_weeks(games, div, seed=seed)
     if wk is None:
         raise RuntimeError('schedule: no week assignment found')
+    if rematch_violations(games, wk):
+        raise RuntimeError('schedule: division rematches are too close')
     league.schedule = sorted([(wk[i], a, h, None, None) for i, (h, a, _) in enumerate(games)])
     league.byes = bye
     return league.schedule
@@ -262,6 +331,10 @@ def validate(league):
     fails = []
     sched = league.schedule
     div = {a: t.division for a, t in league.teams.items()}
+    regular = [g for g in sched if 1 <= g[0] <= 18]
+    games = [(h, a, '') for _, a, h, _, _ in regular]
+    for (a, h), first, second in rematch_violations(games, dict(enumerate(g[0] for g in regular))):
+        fails.append(f'{a}-{h} rematch in weeks {first}/{second}: minimum gap {MIN_REMATCH}')
     pg = Counter()
     for wk, a, h, _, _ in sched: pg[h] += 1; pg[a] += 1
     if set(pg.values()) != {17}: fails.append('not every team plays 17')
