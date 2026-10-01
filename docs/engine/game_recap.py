@@ -27,7 +27,8 @@ def plays(res, side, half=None):
     for pos, drive in res.get('drives', []):
         if pos != side: continue
         q = getattr(drive, 'start_quarter', getattr(drive, 'quarter', 1))
-        for p in getattr(drive, 'log', []):
+        logged = getattr(drive, 'log', [])
+        for index, p in enumerate(logged):
             if not isinstance(p, dict): continue
             if p.get('type') == 'period': q = p.get('quarter', q)
             if p.get('type') not in SCRIMMAGE or p.get('nullified'): continue
@@ -35,7 +36,17 @@ def plays(res, side, half=None):
             pq = p.get('quarter', q)
             period = 3 if pq > 4 else (1 if p.get('clock', 1801 if pq <= 2 else 1800) > 1800 else 2)
             if half is None or half == period or (half == 'after_break' and period in (2, 3)):
-                out.append(p)
+                row = dict(p, score_diff=getattr(drive, 'score_diff', p.get('score_diff')))
+                # Compare continuous in-bounds snap intervals only. Never
+                # measure pace across possessions, stoppages, or quarter ends.
+                if p['type'] in ('run', 'complete', 'scramble', 'sack') and not p.get('touchdown'):
+                    nxt = logged[index + 1] if index + 1 < len(logged) else {}
+                    if (nxt.get('type') in SCRIMMAGE and not nxt.get('nullified')
+                            and p.get('clock') is not None and nxt.get('clock') is not None):
+                        interval = p['clock'] - nxt['clock']
+                        if 6 <= interval <= 50:
+                            row['snap_interval'] = interval
+                out.append(row)
     return out
 
 
@@ -86,22 +97,22 @@ def groups(changes):
         ('Run/pass and personnel',{'pass_bias','heavy_lean'},'off','mix'),
         ('Passing depth',{'depth_mix'},'off','deep'), ('Screens',{'screen_boost'},'off','screens'),
         ('Play action',{'play_action_rate'},'off','play action'), ('Motion',{'motion_rate'},'off','motion'),
-        ('Tempo',{'tempo'},'off','mix'), ('Run defense',{'box_bias'},'def','run'),
-        ('Pressure calls',{'blitz_lean'},'def','blitz'), ('Safety shell',{'shell_lean'},'def','shell'),
+        ('Tempo',{'tempo'},'off','tempo'), ('Run defense',{'box_bias'},'def','run'),
+        ('Pressure calls',{'blitz_lean','blitz_rate'},'def','blitz'), ('Safety shell',{'shell_lean'},'def','shell'),
         ('Coverage',{'man_rate','zone_aggression','sub_lean'},'def','passing'),
         ('Receiver matchup',{'travel','travel_target','bracket'},'def','matchup')]
     used=set(); out=[]
     for label, keys, side, metric in mapping:
         found=keys & changes.keys()
         if found: out.append((label,side,metric)); used |= found
-    if changes.keys()-used: out.append(('Other plan changes','off','mix'))
+    if changes.keys()-used: out.append(('Other plan changes','unknown','unknown'))
     return out
 
 
 def choices(changes):
     """Explain manual overrides too, not only the assistant buttons accepted."""
     names={'pass_bias':('passing','running'),'heavy_lean':('heavy personnel','spread personnel'),
-           'blitz_lean':('blitzing','four-man pressure'),'box_bias':('heavier boxes','lighter boxes'),
+           'blitz_lean':('blitzing','four-man pressure'),'blitz_rate':('blitzing','less blitzing'),'box_bias':('heavier boxes','lighter boxes'),
            'shell_lean':('two-high shells','single-high shells'),'man_rate':('man coverage','zone coverage'),
            'tempo':('faster tempo','slower tempo'),'screen_boost':('screens','fewer screens'),
            'play_action_rate':('play action','less play action'),'motion_rate':('motion','less motion'),
@@ -144,7 +155,7 @@ def receiver_line(rows, target, name='The targeted receiver'):
     touchdowns = sum(bool(p.get('touchdown') or p.get('td')) and not p.get('defensive_td') for p in catches)
     explosive = sum(float(p.get('yards', 0) or 0) >= 20 for p in catches)
     detail = (f"{name}: {len(catches)} catches on {len(aimed)} targets for {yards:.0f} yards, "
-              f"{touchdowns} receiving touchdowns; {explosive} catches of 20+ yards")
+              f"{touchdowns} receiving touchdowns; {explosive} {'catch' if explosive == 1 else 'catches'} of 20+ yards")
     return dict(n=len(aimed), yards=yards, td=touchdowns, explosive=explosive, detail=detail)
 
 
@@ -157,8 +168,8 @@ def receiver_assessment(rows, target, name):
     ypt = s['yards'] / s['n']
     if s['td'] >= 2 or s['yards'] >= 100 or ypt >= 10:
         return 'negative', 'The receiver still hurt us: ' + s['detail'] + '.'
-    if ypt <= 6 and not s['td'] and not s['explosive']:
-        return 'positive', 'The matchup held up: ' + s['detail'] + '.'
+    if ypt <= 6 and not s['td'] and s['explosive'] <= 1:
+        return 'positive', ('Mostly contained, with one explosive allowed: ' if s['explosive'] else 'The matchup held up: ') + s['detail'] + '.'
     return 'mixed', 'Mixed matchup results: ' + s['detail'] + '.'
 
 
@@ -191,7 +202,7 @@ def assessment(rows, kind, defense=False):
     s, n, total, low, high, unit, minimum = measurement(rows, kind)
     if not n: return 'ungraded', 'No relevant plays were logged, so this choice has no on-field result to assess.'
     value = total / n
-    detail = f"{value:.1f} {unit} across {n} plays"
+    detail = f"{value:.1f} {unit} across {n} {'play' if n == 1 else 'plays'}"
     if kind == 'protection': detail += f"; {s['sacks']} sack{'s' if s['sacks'] != 1 else ''}"
     if n < minimum: return 'limited', f"Too little evidence for a firm verdict: {detail}."
     lower_better = defense or kind == 'protection'
@@ -202,7 +213,7 @@ def assessment(rows, kind, defense=False):
         detail += f"; {s['turnovers']} turnover" + ('s' if s['turnovers'] != 1 else '')
         if good: return 'mixed', f"Mixed results: productive yardage came with lost possessions ({detail})."
     if good:
-        return 'positive', (f"Held up well: the opponent was limited to {detail}." if defense else f"Paid off on the field: {detail}.")
+        return 'positive', (f"Held up well: the opponent was limited to {detail}." if defense else f"Productive results: {detail}.")
     if bad:
         return 'negative', (f"Did not hold up: the opponent produced {detail}." if defense else f"Struggled on the field: {detail}.")
     return 'mixed', f"Mixed results: {detail}, without a clear statistical edge."
@@ -213,7 +224,7 @@ def relative_assessment(previous, rows, kind, defense, verdict, line):
     a, an, at, _, _, unit, minimum = measurement(previous, kind)
     b, bn, bt, _, _, _, _ = measurement(rows, kind)
     if an < minimum or bn < minimum:
-        return verdict, line + ' Too little before/after evidence to judge the change. Before the adjustment: ' + evidence(previous, kind) + '.'
+        return 'limited', line + ' Too little before/after evidence to judge the change. Before the adjustment: ' + evidence(previous, kind) + '.'
     old, new = at / an, bt / bn
     gain = old - new if defense or kind == 'protection' else new - old
     threshold = 5.0 if kind == 'protection' else .5 if kind == 'run' else .75
@@ -231,15 +242,103 @@ def relative_assessment(previous, rows, kind, defense, verdict, line):
     return grade, text
 
 
+def pace(rows):
+    intervals = [float(p['snap_interval']) for p in rows
+                 if not p.get('nullified') and p.get('snap_interval') is not None]
+    return len(intervals), sum(intervals) / len(intervals) if intervals else None
+
+
+def tempo_finding(rows, previous, change):
+    n, seconds = pace(rows); pn, old = pace(previous)
+    if n < 4:
+        return dict(label='Tempo', verdict='limited',
+                    text=f'Only {n} comparable in-bounds snap intervals; too little timing evidence to grade pace.')
+    text = f'Average in-bounds snap interval: {seconds:.1f} seconds across {n} intervals.'
+    grade = 'limited'
+    if pn >= 4:
+        text += f' Before the adjustment: {old:.1f} seconds across {pn} intervals.'
+        gain = seconds - old if change < 0 else old - seconds
+        grade = 'positive' if gain >= 2 else 'negative' if gain <= -2 else 'mixed'
+        text += (' Pace moved in the intended direction.' if gain >= 2 else
+                 ' Pace moved against the intended direction.' if gain <= -2 else
+                 ' No meaningful change in measured pace.')
+    else:
+        text += ' Too little comparable timing evidence before the adjustment.'
+    return dict(label='Tempo', verdict=grade, text=text)
+
+
+def pressure_finding(rows, previous=None):
+    s = stats(rows); n = s['passes']
+    text = 'On blitz calls: ' + evidence(rows, 'protection') + '.'
+    grade = 'limited'
+    if n >= 8:
+        pct = s['pressure'] / n
+        grade = 'positive' if pct >= .35 else 'negative' if pct <= .12 else 'mixed'
+    if previous is not None:
+        old = stats(previous)
+        text += ' Before halftime: ' + evidence(previous, 'protection') + '.'
+        if n < 8 or old['passes'] < 8:
+            grade = 'limited'; text += ' Too little evidence to compare pass-rush pressure.'
+        else:
+            gain = s['pressure']/n - old['pressure']/old['passes']
+            if abs(gain) >= .08:
+                grade = 'positive' if gain > 0 else 'negative'
+                text += ' Pressure rate increased.' if gain > 0 else ' Pressure rate decreased.'
+            else:
+                text += ' No meaningful change in pressure rate.'
+    return dict(label='Pass-rush pressure', verdict=grade, text=text)
+
+
+def clock_control_finding(rows, previous, final_margin):
+    # Grade only snaps while protecting a meaningful lead. A later comeback
+    # drive or overtime must not masquerade as an attempt to burn the clock.
+    relevant = [p for p in rows if p.get('score_diff') is not None and p['score_diff'] >= 9]
+    now, old = stats(relevant), stats(previous)
+    n, seconds = pace(relevant)
+    if now['snaps'] < 8:
+        return dict(label='Clock control', verdict='limited',
+                    text='Too few recorded snaps with a two-score lead to judge clock control.')
+    share = now['runs'] / now['snaps']
+    ypc = now['run_yards'] / max(1, now['runs'])
+    text = (f"While leading by at least two scores, we ran on {now['runs']}/{now['snaps']} snaps "
+            f"({share:.0%}), gaining {ypc:.1f} yards per designed run.")
+    if old['snaps']:
+        text += f" Before halftime: {old['runs']}/{old['snaps']} snaps were designed runs ({old['runs']/old['snaps']:.0%})."
+    if n >= 4:
+        text += f' In-bounds snap intervals averaged {seconds:.1f} seconds across {n} comparable intervals.'
+    else:
+        text += ' Too few comparable snap intervals to verify the pace.'
+    text += f" We committed {now['turnovers']} turnovers during these snaps."
+    if final_margin is not None:
+        text += f' Final margin: {final_margin:+d}.'
+    grade = 'limited'
+    if final_margin is not None and final_margin <= 0:
+        grade = 'negative'; text += ' The lead was not protected.'
+    elif n >= 4 and final_margin is not None:
+        if now['turnovers']:
+            grade = 'mixed'; text += ' Giveaways undermined clock control.'
+        elif share >= .6 and ypc >= 3.5 and seconds >= 28:
+            grade = 'positive'; text += ' The offense sustained a productive ground game, used the clock, and protected the win.'
+        else:
+            grade = 'mixed'; text += ' The results do not establish all parts of the clock-control objective.'
+    return dict(label='Clock control', verdict=grade, text=text)
+
+
 def assess_choice(changes, own, against, before=None, league=None):
     findings = []
     for label, side, metric in groups(changes):
+        if metric == 'unknown':
+            findings.append(dict(label=label, verdict='ungraded', text='No matching evidence measure is available for these settings.'))
+            continue
+        if metric == 'tempo':
+            findings.append(tempo_finding(own, before[0] if before else [], changes.get('tempo', 0)))
+            continue
         if metric == 'mix' and 'pass_bias' in changes:
             metric = 'run' if changes['pass_bias'] < 0 else 'passing'
         if metric == 'deep' and changes.get('depth_mix', (0, 0, 0))[2] <= 0:
             metric = 'passing'
         if metric == 'shell' and changes.get('shell_lean', 0) < 0: metric = 'single shell'
-        if metric == 'blitz' and changes.get('blitz_lean', 0) < 0: metric = 'passing'
+        if metric == 'blitz' and changes.get('blitz_lean', changes.get('blitz_rate', 0)) < 0: metric = 'passing'
         if metric in ('screens', 'play action', 'motion'):
             key = {'screens':'screen_boost', 'play action':'play_action_rate', 'motion':'motion_rate'}[metric]
             if changes.get(key, 0) < 0: metric = 'passing' if metric != 'motion' else 'mix'
@@ -270,7 +369,13 @@ def assess_choice(changes, own, against, before=None, league=None):
         if before is not None:
             previous = before[0 if side == 'off' else 1]
             verdict, line = relative_assessment(previous, rows, metric, side == 'def', verdict, line)
+        if label == 'Pressure calls':
+            selected = [p for p in rows if p.get('blitz')] if metric == 'blitz' else rows
+            line += ' Pass-rush evidence: ' + evidence(selected, 'protection') + '.'
         findings.append(dict(label=label, verdict=verdict, text=line))
+        if label == 'Pressure calls' and metric == 'blitz':
+            earlier = [p for p in before[1] if p.get('blitz')] if before is not None else None
+            findings.append(pressure_finding(selected, earlier))
     return findings
 
 
@@ -278,6 +383,8 @@ def conclusion(findings):
     grades = {x['verdict'] for x in findings}
     if not grades or grades <= {'limited', 'ungraded'}:
         return 'Not enough relevant plays for a firm verdict on these choices.'
+    if grades & {'limited', 'ungraded'}:
+        return 'The available findings are incomplete; there is not enough evidence to grade the whole recommendation.'
     if 'negative' in grades and ('positive' in grades or 'mixed' in grades):
         return 'A mixed return: some parts of the plan held up, while others struggled.'
     if 'negative' in grades: return 'The evaluated parts of the plan struggled; the intended payoff did not show up in those results.'
@@ -286,10 +393,19 @@ def conclusion(findings):
     return 'The results were mixed, with no consistent advantage across the evaluated choices.'
 
 
-def review_choices(pre, own, against, before=None, league=None):
+def review_choices(pre, own, against, before=None, league=None, final_margin=None):
     findings = []
     for rec in pre:
-        items = assess_choice(rec.get('changes', {}), own, against, before, league)
+        changes = rec.get('changes', {})
+        if (rec.get('review_key') == 'clock_control' or rec.get('text') == 'Up two scores: shorten the game, run it') and before is not None:
+            items = [clock_control_finding(own, before[0], final_margin)]
+        elif rec.get('review_key') == 'blitz_opportunity':
+            faced = [p for p in own if p.get('blitz')]
+            prior = ([p for p in before[0] if p.get('blitz')], []) if before else None
+            items = assess_choice({'pass_bias': 1}, faced, [], prior, league)
+            for item in items: item['label'] = 'Passing against the blitz'
+        else:
+            items = assess_choice(changes, own, against, before, league)
         summary = conclusion(items)
         if rec.get('overridden'):
             summary = (summary + ' ' if items else '') + 'Your manual settings replaced ' + ', '.join(k.replace('_', ' ') for k in rec['overridden']) + '; those choices are reviewed under Your saved plan.'
@@ -577,7 +693,7 @@ def post(league, home, away, week, res, playoffs=False):
     if not taken: add('Halftime adjustments', ['No halftime recommendations were accepted.'])
     else:
         add('Halftime adjustments', ['Results after halftime' + (' include overtime.' if has_ot else '.')],
-            review_choices(taken, *after, before=before, league=league))
+            review_choices(taken, *after, before=before, league=league, final_margin=ours-theirs))
     # A later overtime decision must not be blamed on the halftime choice.
     contextual_own = [dict(p, score_diff=getattr(d, 'score_diff', None))
                       for pos, d in res.get('drives', []) if pos == side

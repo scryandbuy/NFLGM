@@ -212,8 +212,6 @@ def play_line(league, p, off_abbr, def_abbr):
         if not text: return None
     else:
         return None
-    if p.get('nullified'):
-        text = (text.rstrip('.') + '. Play nullified by penalty.') if text else 'Play nullified by penalty.'; kind = 'neutral'
     if p.get('fumble'):
         recoverer = _nm(league, p.get('fumble_recovered_by'))
         if p.get('fumble_lost'):
@@ -230,6 +228,9 @@ def play_line(league, p, off_abbr, def_abbr):
             text = (text.rstrip('.') + '. Fumbles, and the offense recovers.') if text else 'Fumble, recovered.'
     if p.get('safety'):
         text = (text.rstrip('.') + '. SAFETY.') if text else 'SAFETY.'; kind = 'turnover'
+    if p.get('nullified'):
+        text = (text.rstrip('.') + '. Play nullified by penalty.') if text else 'Play nullified by penalty.'
+        kind = 'neutral'
     return dict(head=head, text=text, kind=kind, type=t, made=p.get('made'), safety=bool(p.get('safety')), nullified=bool(p.get('nullified')))
 
 
