@@ -1,9 +1,10 @@
 const fs = require('fs'), vm = require('vm'), assert = require('node:assert/strict');
 const source = fs.readFileSync('docs/app.js', 'utf8');
 class Element {
-  constructor(tag, attrs = {}, ...children) { this.tag = tag; this.attrs = attrs; this.children = children; this.disabled = attrs.disabled != null; }
+  constructor(tag, attrs = {}, ...children) { this.tag = tag; this.attrs = attrs; this.children = children; this.disabled = attrs.disabled != null; this.style = {}; }
   append(...children) { this.children.push(...children); }
   addEventListener(name, fn) { this.attrs['on' + name] = fn; }
+  setAttribute(name, value) { this.attrs[name] = value; }
   querySelectorAll(selector) {
     const tags = selector.split(',').map(x => x.trim());
     return this.children.flatMap(x => x instanceof Element ? [...(tags.includes(x.tag) ? [x] : []), ...x.querySelectorAll(selector)] : []);
@@ -18,7 +19,7 @@ let state = {key:'2026:1:GB', locked:false, dirty:false, started:false}, page, f
 const fixture = () => ({rail:{club:{name:'Green Bay',abbr:'GB'}}, plan_state:{...state}, week:1,
   opp:{name:'Minnesota',abbr:'MIN'}, suggestions:[{i:0,text:'Advice A',why:'Reason',taken:true,side:'offense'},
     {i:1,text:'Advice B',why:'Reason',taken:false,skipped:true,side:'defense'}],
-  leans:[{key:'tempo',side:'offense',label:'Tempo',base:.5,value:.5,min:.3,max:.7}],
+  leans:[{key:'tempo',side:'offense',label:'Tempo',desc:'Slower · Normal · Faster',base:.5,value:.5,word:'Normal',min:.3,max:.7,ghost:.65,ghost_word:'Faster'}],
   depth:{value:[.5,.3,.2],base:[.5,.3,.2],labels:['Short','Medium','Deep']},
   protection:{value:'six',options:[{key:'six',word:'Six-man'}]},their_wrs:[],wr_out:[],
   unit_table:[],stars:[],injured:[],record:'0–0'});
@@ -57,8 +58,22 @@ function reset(next={}) {state={key:'2026:1:GB',locked:false,dirty:false,started
 (async()=>{
   reset({dirty:true});context.renderThisWeek(fixture());
   assert.ok(button('Accept All'));
+  assert.equal(run("gameplanScale('play_action_rate', .5)"), 50);
+  assert.equal(run("gameplanScale('blitz_rate', .133)"), 50);
+  assert.equal(run("gameplanLeanWord('play_action_rate', .38)"), 'Less');
+  assert.ok(button('Use Coach Defaults'));assert.ok(button('Save Preview Plan'));
+  const slider = page.querySelectorAll('input').find(x => x.attrs.id === 'gameplan-tempo');
+  assert.ok(slider);
+  slider.value = '800'; slider.oninput();
+  assert.equal(slider.attrs['aria-valuetext'], 'Faster');
+  calls.length = 0; slider.onchange();
+  assert.ok(calls.some(x => x.includes("plan_act('set_lean', key=\"tempo\", value=0.7)")));
+  calls.length = 0; button('Apply suggestion').attrs.onclick();
+  assert.ok(calls.some(x => x.includes("plan_act('set_lean', key=\"tempo\", value=0.65)")));
+  calls.length = 0; button('Use Coach Defaults').attrs.onclick();
+  assert.ok(calls.some(x => x.includes("plan_act('reset')")));
   await context.saveSundayPlan(()=>context.renderThisWeek(fixture()));
-  assert.ok(!button('Accept All'));assert.ok(!button('Save Plan for Sunday'));
+  assert.ok(!button('Accept All'));assert.ok(!button('Save Preview Plan'));
   assert.ok(button('Re-Open Game Plan'));assert.ok(!button('Undo'));assert.ok(!button('Restore'));
   assert.ok(page.querySelectorAll('input').every(x=>x.disabled));
   button('Re-Open Game Plan').attrs.onclick();
@@ -73,7 +88,7 @@ function reset(next={}) {state={key:'2026:1:GB',locked:false,dirty:false,started
   await context.saveSundayPlan(()=>context.renderThisWeek(fixture()));
   assert.equal(state.locked,false);assert.equal(state.dirty,true);
   assert.match(context.notice.why,/could not be saved/);
-  assert.ok(button('Save Plan for Sunday'));
+  assert.ok(button('Save Preview Plan'));
   failure=false;
   run('gameplanPendingDepth = [45, 35, 20]');
   calls.length=0;

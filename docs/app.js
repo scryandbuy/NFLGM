@@ -3160,11 +3160,11 @@ async function saveSundayPlan(reload) {
     notify({ ok: false, why: 'Your game plan could not be saved. Your choices are still here; please save again.' });
   } finally { gameplanSaving = false; reload(); }
 }
-function gameplanSaveControl(v, reload) {
+function gameplanSaveControl(v, reload, label = 'Save Plan for Sunday') {
   if (v.plan_state?.started) return el('span', { class: 'count' }, 'Game started · Plan locked');
   return v.plan_state?.locked
     ? el('button', { class: 'btn go', disabled: gameplanSaving ? '' : null, onclick: () => { notify(pyJSON("SESSION.plan_act('reopen')")); reload(); } }, 'Re-Open Game Plan')
-    : el('button', { class: 'btn go', onclick: () => saveSundayPlan(reload) }, 'Save Plan for Sunday');
+    : el('button', { class: 'btn go', onclick: () => saveSundayPlan(reload) }, label);
 }
 function warnUnsavedGameplan() {
   if ($('#gameplan-warning')) return;
@@ -3301,6 +3301,45 @@ function gameplanSuggestion(x, reload, locked = false) {
       x.taken ? '' : el('button', { class: 'btn quiet', onclick: () => act('skip', `, skip=${x.skipped ? 'False' : 'True'}`) }, x.skipped ? 'Restore' : 'Skip')));
 }
 
+// Keep the center of each rail at the setting the wording calls neutral.
+// The highlighted segment shows the range this coach permits this week.
+const GAMEPLAN_SCALES = {
+  pass_bias: [-0.25, 0, 0.25], play_action_rate: [0, 0.5, 1],
+  motion_rate: [0, 0.581, 1], tempo: [0, 0.5, 1],
+  blitz_rate: [0, 0.133, 0.4], man_rate: [0, 0.5, 1],
+  shell_lean: [0, 0.5, 1], zone_aggression: [0, 0.5, 1],
+  box_bias: [-0.5, 0, 0.5]
+};
+function gameplanScale(key, value) {
+  const [lo, center, hi] = GAMEPLAN_SCALES[key];
+  return Math.max(0, Math.min(100, value <= center
+    ? 50 * (value - lo) / (center - lo)
+    : 50 + 50 * (value - center) / (hi - center)));
+}
+function gameplanUnscale(key, percent) {
+  const [lo, center, hi] = GAMEPLAN_SCALES[key];
+  return percent <= 50 ? lo + (center - lo) * percent / 50
+    : center + (hi - center) * (percent - 50) / 50;
+}
+function gameplanLeanWord(key, value) {
+  if (key === 'pass_bias') return value < -0.02 ? 'Run more' : value > 0.02 ? 'Pass more' : 'Balanced';
+  if (['play_action_rate', 'motion_rate', 'blitz_rate'].includes(key)) {
+    const center = GAMEPLAN_SCALES[key][1];
+    return value < center - 0.02 ? 'Less' : value > center + 0.02 ? 'More' : 'Standard';
+  }
+  if (key === 'tempo') return value < 0.4 ? 'Slower' : value > 0.6 ? 'Faster' : 'Normal';
+  if (key === 'man_rate') return value < 0.42 ? 'Favor zone' : value > 0.58 ? 'Favor man' : 'Mixed';
+  if (key === 'shell_lean') return value < 0.42 ? 'Favor single-high' : value > 0.58 ? 'Favor two-high' : 'Mixed';
+  if (key === 'zone_aggression') return value < 0.42 ? 'Protect deeper routes' : value > 0.58 ? 'Attack short routes' : 'Balanced';
+  if (key === 'box_bias') {
+    const shift = Math.round(Math.abs(value) * 4 * 1e6) / 1e6;
+    if (!shift) return 'Situational box';
+    const direction = value < 0 ? 'Lighter' : 'Heavier';
+    return shift <= 1 ? `${direction} box · ${Math.round(shift * 100)}% tendency`
+      : `${direction} box · ${shift} defenders on average`;
+  }
+  return String(value);
+}
 function renderThisWeek(v) {
   renderRail(v.rail); const page = persPage(); gpSecond('week');
   page.className = 'gameplan-page';
@@ -3320,28 +3359,46 @@ function renderThisWeek(v) {
   s.append(sug);
   s.append(el('p', {class:'count', style:'padding:0 20px'}, 'These settings guide your team’s approach. Actual gameplay varies with the game situation.'));
   // preferences
-  const plan = el('div', { class: 'plan' });
+  const plan = el('div', { class: 'plan plan-controls' });
+  s.append(el('div', { class: 'plan-legend' },
+    el('span', {}, el('i', { class: 'plan-dot' }), 'Your setting'),
+    el('span', {}, el('i', { class: 'plan-default' }), 'Coach Default'),
+    el('span', {}, el('i', { class: 'plan-diamond' }), 'Assistant suggestion'),
+    el('span', {}, 'Brighter track = available adjustment range')));
   const side = (title, leans) => {
-    const d = el('div', {}, el('div', { class: 'h5' }, title));
+    const d = el('div', {}, el('h3', { class: 'h5' }, title));
     for (const ln of leans) {
-      const lo = ln.min, hi = ln.max, span = Math.max(0.02, hi - lo);
-      const pos = x => `${Math.round((Math.min(hi, Math.max(lo, x)) - lo) / span * 100)}%`;
-      const moved = Math.abs(ln.value - ln.base) > 1e-6;
-      const track = el('div', { class: 'track' }, el('div', { class: 'range', style: 'left:0;right:0' }), el('div', { class: 'tick', style: `left:${pos(ln.base)}` }));
-      if (ln.ghost != null) track.append(el('div', { class: 'knob ghost', style: `left:${pos(ln.ghost)}`, 'data-tip': `The assistants would put it at ${ln.ghost_word}` }));
-      track.append(el('div', { class: 'knob' + (moved ? ' sug' : ''), style: `left:${pos(ln.value)}` }));
-      const rng = el('input', { type: 'range', min: String(Math.round(lo * 1000)), max: String(Math.round(hi * 1000)), value: String(Math.round(ln.value * 1000)) }); rng.onchange = () => { pyJSON(`SESSION.plan_act('set_lean', key=${JSON.stringify(ln.key)}, value=${+rng.value / 1000})`); reload(); }; track.append(rng);
-      d.append(el('div', { class: 'lean' + (ln.key === 'box_bias' ? ' lean-box' : '') }, el('div', { class: 'l' }, ln.label, el('small', {}, ln.desc)), track, el('div', { class: 'v' + (moved ? ' sug' : ''), 'data-tip': moved ? 'Adjusted from your coaching identity' : 'At your identity' }, ln.word)));
+      const pos = value => `${gameplanScale(ln.key, value).toFixed(2)}%`;
+      const axes = ln.key === 'box_bias' ? ['Lighter', 'Situational', 'Heavier'] : ln.desc.split(' · ');
+      const id = `gameplan-${ln.key}`;
+      const output = el('output', { for: id, class: 'plan-current' }, ln.word);
+      const marker = el('i', { class: 'plan-thumb', style: `left:${pos(ln.value)}` });
+      const track = el('div', { class: 'plan-rail' },
+        el('i', { class: 'plan-bar' }),
+        el('i', { class: 'plan-allowed', style: `left:${pos(ln.min)};width:${(gameplanScale(ln.key, ln.max) - gameplanScale(ln.key, ln.min)).toFixed(2)}%` }),
+        el('i', { class: 'plan-coach-tick', style: `left:${pos(ln.base)}` }));
+      if (ln.ghost != null) track.append(el('i', { class: 'plan-suggestion', style: `left:${pos(ln.ghost)}`, 'data-tip': `Assistant suggestion: ${ln.ghost_word}` }));
+      track.append(marker);
+      const rng = el('input', { id, type: 'range', min: '0', max: '1000', step: '1', value: String(Math.round(gameplanScale(ln.key, ln.value) * 10)), 'aria-label': ln.label, 'aria-valuetext': ln.word });
+      const selected = () => Math.max(ln.min, Math.min(ln.max, gameplanUnscale(ln.key, Number(rng.value) / 10)));
+      rng.oninput = () => { const value = selected(); marker.style.left = pos(value); output.textContent = gameplanLeanWord(ln.key, value); rng.setAttribute('aria-valuetext', output.textContent); };
+      rng.onchange = () => { const result = pyJSON(`SESSION.plan_act('set_lean', key=${JSON.stringify(ln.key)}, value=${selected()})`); if (!result.ok) notify(result); reload(); };
+      track.append(rng);
+      const below = el('div', { class: 'plan-below' }, el('span', {}, `Coach Default: ${gameplanLeanWord(ln.key, ln.base)}`));
+      if (ln.ghost != null) below.append(el('button', { class: 'btn quiet', onclick: () => { const result = pyJSON(`SESSION.plan_act('set_lean', key=${JSON.stringify(ln.key)}, value=${ln.ghost})`); if (!result.ok) notify(result); reload(); } }, 'Apply suggestion'));
+      d.append(el('div', { class: 'plan-setting' },
+        el('div', { class: 'plan-setting-head' }, el('label', { for: id }, ln.label), output),
+        track, el('div', { class: 'plan-axis' }, ...axes.map(word => el('span', {}, word))), below));
     }
     return d;
   };
   const off = side('Offense', v.leans.filter(l => l.side === 'offense')), deff = side('Defense', v.leans.filter(l => l.side === 'defense'));
   // depth mix as three numbers
-  const dm = el('div', { class: 'lean', style: 'grid-template-columns:130px 1fr' }, el('div', { class: 'l' }, 'Depth of Target', el('small', {}, 'Baseline mix; the game situation adjusts target depth.')));
+  const dm = el('div', { class: 'plan-setting plan-depth' }, el('div', { class: 'plan-setting-head' }, el('span', {}, 'Depth of Target')), el('small', {}, 'Baseline mix; the game situation adjusts target depth.'));
   const depthValues = gameplanPendingDepth || v.depth.value.map(pct);
   const inputs = depthValues.map((x, i) => el('input', { type: 'number', min: '5', max: '90', value: String(x), style: 'width:56px;font-family:var(--mono);font-size:14.5px;background:var(--board);color:var(--ink);border:1px solid var(--rule-2);padding:4px 6px' }));
   inputs.forEach(input => input.addEventListener('input', () => { gameplanPendingDepth = inputs.map(x => Number(x.value)); }));
-  const dmrow = el('div', { style: 'display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink-3)' }); v.depth.labels.forEach((l, i) => dmrow.append(el('span', {}, l), inputs[i], el('span', {}, '%'))); dmrow.append(el('button', { class: 'btn', style: 'padding:3px 8px;font-size:14px', onclick: () => { gameplanPendingDepth = inputs.map(x => Number(x.value)); if (flushGameplanDepth()) reload(); } }, 'Set'), el('span', {}, `base ${v.depth.base.map(pct).join(' · ')}`));
+  const dmrow = el('div', { class: 'plan-depth-fields' }); v.depth.labels.forEach((l, i) => dmrow.append(el('label', {}, el('span', {}, `${l} %`), inputs[i]))); dmrow.append(el('button', { class: 'btn', onclick: () => { gameplanPendingDepth = inputs.map(x => Number(x.value)); if (flushGameplanDepth()) reload(); } }, 'Set'), el('span', { class: 'plan-depth-base' }, `Coach Default: ${v.depth.base.map(pct).join(' · ')}`));
   dm.append(dmrow); off.append(dm);
   plan.append(off, deff); s.append(plan);
   // decisions
@@ -3356,7 +3413,7 @@ function renderThisWeek(v) {
   const br = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Coverage · Bracket a Star?'), el('div', { class: 's' }, v.bracket ? `Bracket ${surname(v.bracket.name)}` : (v.wr_out && v.wr_out.length ? `${v.wr_out[0]} Is Out · None` : 'None'))); const bo = el('div', { class: 'opts' }, el('button', { class: 'btn chip' + (!v.bracket ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value='')`); reload(); } }, 'None')); for (const w of v.their_wrs) bo.append(el('button', { class: 'btn chip' + (v.bracket && v.bracket.pid === w.pid ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='bracket', value=${JSON.stringify(w.pid)})`); reload(); } }, `${w.name} · ${w.ovr}`)); br.append(bo); dec.append(br);
   s.append(dec);
   if (locked) s.querySelectorAll('button, input, select').forEach(control => { control.disabled = true; });
-  s.append(el('div', { class: 'foot' }, gameplanSaveControl(v, reload), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), locked ? '' : el('button', { class: 'btn quiet', onclick: () => { gameplanPendingDepth = null; notify(pyJSON(`SESSION.plan_act('reset')`)); reload(); } }, 'Reset to Identity'), el('span', { class: 'count', style: 'margin-left:auto' }, v.forecast && v.forecast.text ? v.forecast.text : '')));
+  s.append(el('div', { class: 'foot' }, gameplanSaveControl(v, reload, 'Save Preview Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), locked ? '' : el('button', { class: 'btn quiet', onclick: () => { gameplanPendingDepth = null; notify(pyJSON(`SESSION.plan_act('reset')`)); reload(); } }, 'Use Coach Defaults'), el('span', { class: 'count', style: 'margin-left:auto' }, v.forecast && v.forecast.text ? v.forecast.text : '')));
   page.append(s);
 }
 
