@@ -1,0 +1,44 @@
+DEFENSIVE RETURN AND SCORE-MARGIN FOLLOW-UP (2026-09-30)
+
+Run: seed 93030, three complete 272-game regular seasons through Session.advance,
+all 32 CPU clubs. The starting game and play hashes were bb865bd76031 and
+309552cc1863. Compared with the earlier integrated run at 66b86b5 and the
+1,359 scored regular-season games in nflverse's 2021-25 games data.
+
+                              Earlier sim   New sim    NFL 2021-25
+Games                              816         816          1,359
+Mean winning margin                9.45        9.80          11.10
+Decided by 17+                    17.52%      18.01%         26.12%
+Decided by 24+                      --        6.62%         11.85%
+
+The earlier register-results.json did not store a separate 24+ metric.
+
+The new run's 17+ rates by season were 20.22%, 15.81%, and 18.01%. Its register
+still misses the 10+ and 17+ margin targets. A separate correction counts
+defensive scoring drives as turnover-ending drives in the register; the new
+run's corrected turnover-or-defensive-score drive rate is 10.41% against the
+10.23% target. The recorded run began before that diagnostic correction, so
+its own JSON still displays the older 9.49% turnover figure.
+
+The new run had 167 defensive scoring drives (0.205/game). That drive label
+also includes blocked-punt touchdowns. The calendar harness used for this
+run did not export each score's play-level return kind, so this is not an
+exact interception/fumble touchdown count. The harness now records the kinds
+for future runs; a separate eight-game smoke check verified that field.
+
+Roster-strength proxy: the average absolute difference in assigned 11-personnel
+offense plus base-defense rating was 1.47 points in 2026, 1.06 in 2027, and
+1.04 in 2028. In this run a one-point strength difference corresponded to
+about 2.41 scoreboard points, leaving a fitted average matchup advantage of
+2.88 points. The comparison games' average absolute pregame spread was 5.26
+points. The simulator's residual margin SD was 11.85; the real margin minus
+spread SD was 12.62. Thus the narrower outcomes appear to involve both
+smaller team-strength differences and somewhat narrower game variance.
+
+These are indicators, not a controlled causal estimate. The previous and new
+integrated builds differ in more than turnover returns, the strength proxy
+does not weight every offensive/defensive package, and a market spread includes
+information absent from the roster proxy. Do not raise return touchdown rates
+or force scoreboard margins solely to pass the register. A paired same-code
+return-on/return-off experiment and direct roster-strength distribution check
+would identify how much of the remaining gap comes from each mechanism.
