@@ -1,6 +1,7 @@
 """A missing kicker must use a legal, qualified player without inventing talent."""
 import copy
 import unittest
+import numpy as np
 
 import cutdown as CD
 import practice_squad as PS
@@ -24,6 +25,73 @@ class KickerRecoveryTests(unittest.TestCase):
         p.ratings.update(kick_acc_rating=accuracy, kick_power_rating=power)
         league.players[pid] = p; league.free_agents.append(pid)
         return p
+
+    def vacancies(self, league, team, count):
+        removed = []
+        for _ in range(count):
+            starters = {r['player'].pid for r in RN.assess(team)['assignments']
+                        if r['player'] is not None}
+            p = next(p for p in team.active() if p.pid not in starters
+                     and p.pos not in ('K', 'P', 'QB'))
+            team.roster.remove(p); p.team = None; p.retired = True
+            removed.append(p)
+        team.sync_cap()
+        self.assertEqual(RN.assess(team)['uncovered'], ['K'])
+        return removed
+
+    def test_open_spot_signs_kicker_without_releasing_anyone(self):
+        league, team = self.fixture(); self.vacancies(league, team, 1)
+        p = self.punter(league, team); ids = {q.pid for q in team.active()}
+        self.assertEqual(CD.fill_short(league, np.random.default_rng(19)), 1)
+        self.assertEqual({q.pid for q in team.active()}, ids | {p.pid})
+        self.assertEqual(p.pos, 'K'); self.assertFalse(CD.violations(league))
+        self.assertFalse(any(r['kind'] == 'release' for r in league.transactions))
+        saved = League.load(league.save()); transactions = list(saved.transactions)
+        CD.finalize(saved, np.random.default_rng(19))
+        self.assertEqual(saved.transactions, transactions)
+        self.assertEqual(saved.player(p.pid).transition, p.transition)
+        self.assertFalse(CD.violations(saved))
+
+    def test_two_vacancies_reserve_budget_for_last_spot(self):
+        league, team = self.fixture(); removed = self.vacancies(league, team, 2)
+        filler = removed[0]; filler.retired = False; filler.contract = None; filler.accrued = 0
+        league.free_agents.append(filler.pid)
+        expensive = self.punter(league, team, accuracy=94, power=99)
+        cheap = self.punter(league, team, pid='rookie-punter'); cheap.accrued = 0
+        cost = PS.minimum_contract(league, team, cheap).cap_hit(0)
+        team.cap.cap = team.cap.charges(team.phase) + 2 * cost + .001
+        self.assertEqual(CD.fill_short(league, np.random.default_rng(19)), 2)
+        self.assertIn(cheap, team.active()); self.assertIn(filler, team.active())
+        self.assertIsNone(expensive.team)
+        self.assertEqual(cheap.pos, 'K'); self.assertFalse(CD.violations(league))
+
+    def test_open_spots_cannot_spend_the_last_vacancys_budget(self):
+        league, team = self.fixture(); self.vacancies(league, team, 2)
+        p = self.punter(league, team)
+        team.cap.cap = team.cap.charges(team.phase) + PS.minimum_contract(league, team, p).cap_hit(0) + .01
+        before = league.save()
+        self.assertEqual(CD.fill_short(league, np.random.default_rng(19)), 0)
+        self.assertEqual(league.save(), before)
+        self.assertIsNone(p.transition)
+
+    def test_underfilled_own_reserve_conversion_does_not_count_as_signing(self):
+        league, team = self.fixture(); self.vacancies(league, team, 1)
+        starter = team.by_pos('P')[0]
+        starter.ratings.update(kick_acc_rating=92, kick_power_rating=96)
+        reserve = team.by_pos('TE')[-1]; reserve.pos = 'P'
+        reserve.ratings.update(kick_acc_rating=81, kick_power_rating=91)
+        self.assertEqual(CD.fill_short(league, np.random.default_rng(19)), 0)
+        self.assertEqual(len(team.active()), 52)
+        self.assertEqual(reserve.pos, 'K'); self.assertEqual(starter.pos, 'P')
+        self.assertEqual([r['kind'] for r in league.transactions], ['position_change'])
+
+    def test_open_spot_prefers_native_kicker(self):
+        league, team = self.fixture(); self.vacancies(league, team, 1)
+        p = self.punter(league, team)
+        kicker = self.punter(league, team, pid='native-kicker'); kicker.pos = 'K'
+        self.assertEqual(CD.fill_short(league, np.random.default_rng(19)), 1)
+        self.assertIn(kicker, team.active()); self.assertIsNone(p.team)
+        self.assertFalse(any(r['kind'] == 'position_change' for r in league.transactions))
 
     def test_street_punter_trains_with_real_ratings_and_keeps_starting_punter(self):
         league, team = self.fixture(); starter = team.by_pos('P')[0]

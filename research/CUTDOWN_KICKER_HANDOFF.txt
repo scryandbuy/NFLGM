@@ -25,3 +25,8 @@ Together with existing roster recovery and cap accounting:53 distinct tests.
 Integration
 Only cutdown.py, test_cutdown_kicker.py and this handoff belong to the fix. Rebuild web engine after cherry-pick. The copied score harness belongs to(3)'s separate report commit, not this fix.
 This is a cutdown fallback when a suitable punter exists. It intentionally still blocks if no qualified legal player exists. Draft class sizes, ratings, retirement and scoring were not retuned.
+
+Underfilled-roster follow-up (base c606878)
+fill_short now attempts the same qualified-kicker fallback before optional depth spending when no native kicker is available. An external candidate uses an empty active spot without releasing anyone. Its affordability check reserves a prorated rookie minimum for each remaining vacancy, matching ordinary fill_short budgeting. An existing reserve conversion adds no body and does not inflate the signing count. Full-53 surplus swaps retain the previous behavior.
+
+Five additional tests cover 52-to-53 acquisition with no release and save/finalize retry, a 51-player roster rejecting the stronger expensive option to fund both remaining spots, insufficient reserve funding as an unchanged no-op, underfilled own-reserve conversion accounting, and native-kicker priority. All 58 distinct kicker/recovery/cap tests pass. Source-only follow-up; main integration must rebuild web assets.
