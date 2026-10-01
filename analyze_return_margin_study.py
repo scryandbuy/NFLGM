@@ -43,6 +43,11 @@ def main():
                       and r['home_score'] and r['away_score'] and r['spread_line']]
     real = np.array([float(r['home_score']) - float(r['away_score']) for r in real_games])
     spread = np.array([float(r['spread_line']) for r in real_games])
+    defensive_tds = sum(bucket.get('Defensive touchdown', 0)
+                        for bucket in current['drives'].values())
+    turnovers = sum(bucket.get('Turnover', 0) + bucket.get('Defensive touchdown', 0)
+                    for bucket in current['drives'].values())
+    all_drives = sum(sum(bucket.values()) for bucket in current['drives'].values())
     result = {
         'source_commits': {'current': 'defensive returns plus later integrated work',
                            'previous': previous.get('commit')},
@@ -66,12 +71,11 @@ def main():
         'sim_predicted_margin_sd': float(expectation.std()),
         'sim_unexplained_margin_sd': float((sim-expectation).std()),
         'sim_strength_margin_correlation': float(np.corrcoef(strengths, sim)[0, 1]),
-        'defensive_touchdowns': sum(bucket.get('Defensive touchdown', 0)
-                                    for bucket in current['drives'].values()),
-        'corrected_turnover_drive_pct': 100 * sum(
-            bucket.get('Turnover', 0) + bucket.get('Defensive touchdown', 0)
-            for bucket in current['drives'].values()) / sum(sum(bucket.values())
-                                                            for bucket in current['drives'].values()),
+        'defensive_touchdowns': defensive_tds,
+        'defensive_touchdowns_per_game': defensive_tds / len(sim),
+        'turnovers_per_game': turnovers / len(sim),
+        'defensive_touchdown_per_turnover_pct': 100 * defensive_tds / turnovers,
+        'corrected_turnover_drive_pct': 100 * turnovers / all_drives,
     }
     args.out.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(result, indent=2))
