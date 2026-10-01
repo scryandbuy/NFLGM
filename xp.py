@@ -94,6 +94,8 @@ PER_EVENT = {
     'punt_tb':    -60.0,
     'kr_yds':       4.0,
     'pr_yds':       5.0,
+    'kr_td':      250.0,
+    'pr_td':      250.0,
     # ---- being out there ----
     # A snap is worth something on its own. It is why rotating a backup in
     # develops him, and why a man buried on a depth chart does not grow.

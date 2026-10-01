@@ -159,6 +159,8 @@ def play_line(league, p, off_abbr, def_abbr):
             gross = int(p.get('display_gross', round(p.get('gross', 0))))
             text = f"Punt, {gross} yards" + (", touchback." if p.get('touchback') else (f", returned {ret} yard{'s' if ret != 1 else ''}." if p.get('how') == 'return' and p.get('ret') else (", fair catch." if p.get('how') == 'fair_catch' else (f", downed at the {_down_spot}." if p.get('how') == 'downed' and _down_spot else '.'))))
             kind = 'special'
+            if p.get('touchdown'):
+                text += f' TOUCHDOWN, {def_abbr}.'; kind = 'score'
     elif t == 'field_goal':
         d = int(round(p.get('distance', 0)))
         text = f"{d}-yard field goal is {'GOOD.' if p.get('made') else 'NO GOOD.'}"
@@ -193,6 +195,9 @@ def play_line(league, p, off_abbr, def_abbr):
             text = f"Onside kick, {'RECOVERED by the kicking team' if p.get('recovered') else 'recovered by ' + off_abbr} at the {spot}."; kind = 'turnover' if p.get('recovered') else 'special'
         else:
             text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {spot}." if who else f", returned to the {spot}.")); kind = 'special'
+        if p.get('touchdown'):
+            text = f"Kickoff returned by {who or 'the returner'} {int(round(p.get('ret', 0)))} yards. TOUCHDOWN, {off_abbr}."
+            kind = 'score'
         if p.get('ends_period'):
             text += ' Time expires in ' + ('the first half.' if p.get('quarter') == 2 else 'overtime.' if p.get('quarter', 0) >= 5 else 'regulation.')
     elif t == 'injury':
@@ -212,7 +217,12 @@ def play_line(league, p, off_abbr, def_abbr):
         if not text: return None
     else:
         return None
-    if p.get('fumble'):
+    if p.get('fumble') and t in ('punt', 'kickoff'):
+        receiving = def_abbr if t == 'punt' else off_abbr
+        kicking = off_abbr if t == 'punt' else def_abbr
+        text = text.rstrip('.') + '. FUMBLE, recovered by ' + (kicking if p.get('fumble_lost') else receiving) + '.'
+        kind = 'turnover' if p.get('fumble_lost') else 'special'
+    elif p.get('fumble'):
         recoverer = _nm(league, p.get('fumble_recovered_by'))
         if p.get('fumble_lost'):
             recovery = f'{recoverer} ({def_abbr})' if recoverer else def_abbr
@@ -248,6 +258,10 @@ def drive_result(dr, overtime=False):
 
 def offensive_drive_end(dr):
     """Exclude defensive return yards from offensive drive progress."""
+    kick = next((p for p in reversed(dr.log) if p.get('type') in ('punt', 'kickoff')
+                 and (p.get('touchdown') or p.get('fumble_lost'))), None)
+    if kick is not None:
+        return float(kick.get('yardline', getattr(dr, 'start', 75)))
     if dr.result in ('Turnover', 'Interception', 'Defensive touchdown'):
         interception = next((p for p in reversed(dr.log) if isinstance(p, dict)
                              and p.get('type') == 'interception' and not p.get('nullified')), None)

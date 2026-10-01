@@ -739,15 +739,25 @@ function renderGameDay(v) {
     box.append(th('Rushing', 'Att', 'Yds', 'TD', '', 'Lng')); R.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, ''), el('td', {}, r.lng ?? ''))));
     box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD', 'Lng')); C.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng ?? ''))));
     box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD', 'TD')); D.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd), el('td', {}, r.td || 0))));
+    if ((g.box.returns || []).length) {
+      box.append(th('Returns', 'KR', 'KR Yds', 'PR', 'PR Yds', 'TD'));
+      awayFirst(g.box.returns).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), ...['kr','kr_yds','pr','pr_yds','td'].map(k => el('td', {}, r[k] || 0)))));
+    }
   };
   const drawLiveBox = (shown, shownPlays) => {
     drawTeamStats(shown, shownPlays);
     if (shown >= g.drives.length && shownPlays == null) { drawFullBox(); return; }
     boxHead.querySelector('small').textContent = 'Live'; box.innerHTML = '';
-    const pass = {}, rush = {}, recv = {};
+    const pass = {}, rush = {}, recv = {}, returns = {};
     const revealed = []; g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; revealed.push(...((last && shownPlays != null) ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays)); });
     for (const p of revealed) {
       if (!p.type) continue; const y = p.yards || 0;
+      if (!p.nullified && p.returner && ['punt','kickoff'].includes(p.type)) {
+        const k = p.return_team + '|' + p.returner;
+        const r = returns[k] = returns[k] || {team:p.return_team, name:p.returner, kr:0, kr_yds:0, pr:0, pr_yds:0, td:0};
+        const stat = p.type === 'punt' ? 'pr' : 'kr'; r[stat]++; r[stat + '_yds'] += p.return_yards || 0; if (p.return_td) r.td++;
+      }
+
       if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.passer) { const k = p.off + '|' + p.passer; const r = pass[k] = pass[k] || { team: p.off, name: p.passer, cmp: 0, att: 0, yds: 0, td: 0, int_: 0 }; r.att++; if (p.type === 'complete') { r.cmp++; r.yds += y; if (p.td) r.td++; } if (p.type === 'interception') r.int_++; }
       if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.target) { const k = p.off + '|' + p.target; const r = recv[k] = recv[k] || { team: p.off, name: p.target, tgt: 0, rec: 0, yds: 0, td: 0 }; r.tgt++; if (p.type === 'complete') { r.rec++; r.yds += y; if (p.td) r.td++; } }
       if (['run', 'scramble'].includes(p.type) && (p.carrier || p.passer)) { const who = p.carrier || p.passer; const k = p.off + '|' + who; const r = rush[k] = rush[k] || { team: p.off, name: who, att: 0, yds: 0, td: 0, lng: 0 }; r.att++; r.yds += y; if (p.td) r.td++; r.lng = Math.max(r.lng, y); }
@@ -756,7 +766,11 @@ function renderGameDay(v) {
     box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT')); top(pass, 'att', 4).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, `${r.cmp}/${r.att}`), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_))));
     box.append(th('Rushing', 'Att', 'Yds', 'TD', 'Lng')); top(rush, 'att', 6).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng))));
     box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD')); top(recv, 'tgt', 10).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td))));
-    if (!Object.keys(pass).length && !Object.keys(rush).length) box.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'Step through the game; the box fills as plays are revealed.'))));
+    if (Object.keys(returns).length) {
+      box.append(th('Returns', 'KR', 'KR Yds', 'PR', 'PR Yds', 'TD'));
+      awayFirst(Object.values(returns)).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), ...['kr','kr_yds','pr','pr_yds','td'].map(k => el('td', {}, Math.round(r[k] * 10) / 10)))));
+    }
+    if (!Object.keys(pass).length && !Object.keys(rush).length && !Object.keys(returns).length) box.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'Step through the game; the box fills as plays are revealed.'))));
   };
 
   // team stats side by side: the full book at Final, and until then the totals of the plays revealed so far
@@ -783,11 +797,12 @@ function renderGameDay(v) {
           if (['run', 'scramble'].includes(p.type)) { t.plays++; t.yards += y; t.rush_yds += y; }
           else if (['complete', 'incomplete', 'drop', 'interception', 'sack'].includes(p.type)) { t.plays++; if (p.type === 'complete') { t.yards += y; t.pass_yds += y; } if (p.type === 'sack') { t.yards += y; t.pass_yds += y; t.sacks_allowed++; } if (p.type === 'interception') t.turnovers++; }
           else if (p.type === 'penalty') t.penalties++;
-          if (p.kind === 'turnover' && !['interception', 'punt'].includes(p.type) && !p.safety) t.turnovers++;
+          if (p.turnover_team && T[p.turnover_team]) T[p.turnover_team].turnovers++;
+          else if (p.kind === 'turnover' && !['interception', 'punt'].includes(p.type) && !p.safety) t.turnovers++;
           // third and fourth down: converted when the next scrimmage snap is a first down, or the play scored
           if (SCRIM.includes(p.type) && (p.down === 3 || p.down === 4)) { const next = plays.slice(k + 1).find(q => q.down != null && SCRIM.includes(q.type)); const conv = !p.defensive_td && (p.td || (next && next.down === 1) || (!next && !partial && d.result === 'Touchdown')); if (p.down === 3) { t._3a++; if (conv) t._3c++; } else { t._4a++; if (conv) t._4c++; } }
         });
-        if (!partial) { t.first_downs += (d.first_downs || 0); if ((d.end != null && d.end >= 80) || /Touchdown/.test(d.result || '')) { t._rz++; if (/Touchdown/.test(d.result || '')) t._rztd++; } }   // the drive's end is on a 0-100 line toward the goal; inside the 20 is 80 and up
+        if (!partial) { t.first_downs += (d.first_downs || 0); if (!d.return_only && ((d.end != null && d.end >= 80) || /Touchdown/.test(d.result || ''))) { t._rz++; if (/Touchdown/.test(d.result || '')) t._rztd++; } }   // the drive's end is on a 0-100 line toward the goal; inside the 20 is 80 and up
       });
       for (const t of Object.values(T)) { t.ypp = t.plays ? (t.yards / t.plays).toFixed(1) : '0.0'; t.third = t._3a ? `${t._3c}/${t._3a}` : '—'; t.fourth = t._4a ? `${t._4c}/${t._4a}` : '—'; t.red_zone = t._rz ? `${t._rztd}/${t._rz}` : '—'; t.top = t._secs ? `${Math.floor(t._secs / 60)}:${String(Math.round(t._secs % 60)).padStart(2, '0')}` : '—'; }
       A = T[g.away.abbr]; H = T[g.home.abbr];
@@ -3650,7 +3665,8 @@ function gameDayIndicators(g, shown, shownPlays, live = null, playoffs = false) 
         if (left == null && old) left = Number(old[2]);
         if (team in counts && left != null && Number.isFinite(Number(left))) counts[team] = Math.max(0, Math.min(3, Number(left)));
       }
-      if (!p.nullified && (p.type === 'interception' || p.fumble_lost)) possession = drive.off === home ? away : home;
+      if (!p.nullified && p.type === 'punt' && p.fumble_lost) possession = drive.off;
+      else if (!p.nullified && (p.type === 'interception' || p.fumble_lost)) possession = drive.off === home ? away : home;
     }
     if (i === shown - 1 && shownPlays == null && g.drives[shown]) possession = g.drives[shown].off;
   }

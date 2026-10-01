@@ -93,10 +93,17 @@ class Collector:
         if r.get('overtime'): self.ot += 1
         if r['home'] == r['away']: self.ties += 1
         for _, d in r['drives']:
-            self.drives_total += 1
-            self.res[d.result] += 1
-            self.fd.append(d.first_downs + (1 if d.result == 'Touchdown' else 0))
-            self.plays_pd.append(d.plays)
+            # Return-only kickoff events never begin an offensive possession.
+            # A punt return score/fumble still ends the kicking offense's
+            # series with a punt, not an offensive TD or interception.
+            if not getattr(d, 'return_only', False):
+                punt_return = any(p.get('type') == 'punt' and not p.get('blocked')
+                                  and (p.get('touchdown') or p.get('fumble_lost')) for p in d.log)
+                result = 'Punt' if punt_return else d.result
+                self.drives_total += 1
+                self.res[result] += 1
+                self.fd.append(d.first_downs + (1 if result == 'Touchdown' else 0))
+                self.plays_pd.append(d.plays)
             for l in d.log:
                 if not isinstance(l, dict): continue
                 if l.get('nullified'): continue                       # a play wiped by a flag is not an official play: not in the count, not in the per-play rates

@@ -256,18 +256,6 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     return 'punt'
 
 
-def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
-    """kickoff(), and the return goes in the book against the returner. Kickoff returns were resolved
-    for years and never booked, so no kick returner had a line. The result is kept so the drive it
-    opens can log the kick as its first play."""
-    r = kickoff(returner, rng, rate_fn, from_50=from_50)
-    if book is not None and not r.get('touchback') and returner:
-        book.special('kr', returner.get('pid'), ret=r.get('ret', 0.0))
-    r['returner'] = (returner or {}).get('pid')
-    LAST_KICKOFF['r'] = r
-    return r
-
-
 def kickoff_clock(clock, kick):
     """Run the game clock during a live kickoff return, stopping at period end.
 
@@ -276,6 +264,7 @@ def kickoff_clock(clock, kick):
     """
     if kick.get('touchback') or clock <= 0:
         return clock
+    kick['clock'] = clock
     after = clock - play_seconds('kickoff')
     for edge in (2700.0, 1800.0, 900.0, 0.0):
         if clock > edge >= after:
@@ -333,15 +322,20 @@ def snap_quality(snapper, rate_fn):
     return float(np.clip(rate_fn(snapper, TG.DEPTH_WEIGHTS['LS']) - 0.70, -0.5, 0.3))
 
 
-def attempt_field_goal(yardline_100, kicker, rng, rate_fn, snapper=None):
-    dist = yardline_100 + 17               # 10 end zone + 7 snap
+def kick_probability(dist, kicker, rate_fn, snapper=None):
+    """Shared field-goal/try accuracy after weather, coaching and snapping."""
     p_make = fg_probability(dist, kicker, rate_fn) * (ENV.kick_mult if dist >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult))
     # the special teams coordinator: a good one keeps the kicker near his number, a poor one adds variance either way
     kn = float(kicker.get('st_noise', 1.0)) if isinstance(kicker, dict) else 1.0
     if kn != 1.0:
         p_make = float(np.clip(0.5 + (p_make - 0.5) / kn, 0.02, 0.99))
     p_make = float(np.clip(p_make + 0.02 * snap_quality(snapper, rate_fn), 0.005, 0.995))
-    made = rng.random() < p_make
+    return float(p_make)
+
+
+def attempt_field_goal(yardline_100, kicker, rng, rate_fn, snapper=None):
+    dist = yardline_100 + 17
+    made = rng.random() < kick_probability(dist, kicker, rate_fn, snapper)
     return dict(type='field_goal', distance=dist, made=made,
                 points=3 if made else 0)
 
@@ -391,7 +385,7 @@ def attempt_extra_point(kicker, rng, rate_fn, snapper=None, distance=33):
     flag = E.special_teams_penalty_check(rng, 'extra_point')
     if flag and flag['on_offense']:
         distance += flag['yards']
-    chance = np.clip(fg_probability(distance, kicker, rate_fn) + 0.02 * snap_quality(snapper, rate_fn), 0.005, 0.995)
+    chance = kick_probability(distance, kicker, rate_fn, snapper)
     made = rng.random() < chance
     if flag and not flag['on_offense']:
         if made:
@@ -401,7 +395,7 @@ def attempt_extra_point(kicker, rng, rate_fn, snapper=None, distance=33):
             walk = min(flag['yards'], spot / 2.0)
             flag['yards'] = walk
             distance -= walk
-            chance = np.clip(fg_probability(distance, kicker, rate_fn) + 0.02 * snap_quality(snapper, rate_fn), 0.005, 0.995)
+            chance = kick_probability(distance, kicker, rate_fn, snapper)
             made = rng.random() < chance       # replay the untimed try
     return dict(type='extra_point', distance=distance, penalty=flag, made=bool(made),
                 points=1 if made else 0)
@@ -548,7 +542,7 @@ def _apply_blocked_punt(dr, kick):
 
 
 def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70, snapper=None,
-         kicking=(), receiving=()):
+         kicking=(), receiving=(), return_coverage=None, return_blockers=None):
     """
     The punter READS THE FIELD, and so does the returner.
 
@@ -615,14 +609,22 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70, snapper=None,
     # SHORTENS the receiving team's field. This was + ret: every punt return
     # in the engine's history pushed the returner backwards by the length of
     # his own return, and the punt net came out longer than the gross.
-    new = float(np.clip(100 - land - ret, 1, 99))
-    return dict(type='punt', blocked=False, touchback=False, pooch=pooch, how=how,
+    import kick_returns as KR
+    outcome = KR.resolve(100 - land, ret, returner or {}, rng, rate_fn,
+                         kicking if return_coverage is None else return_coverage,
+                         receiving if return_blockers is None else return_blockers,
+                         event='punt_return', weather=ENV.fumble_mult) if how == 'return' else {}
+    ret = outcome.get('ret', ret)
+    new = outcome.get('new_yardline', float(np.clip(100 - land, 1, 99)))
+    result = dict(type='punt', blocked=False, touchback=False, pooch=pooch, how=how,
                 gross=round(float(gross), 1), ret=round(float(ret), 1),
                 display_gross=int(round(yardline_100)) - int(round(land)),
                 display_ret=100 - int(round(new)) - int(round(land)),
                 land=round(float(land), 1), origin=yardline_100,
                 net=round(float(yardline_100 - (100 - new)), 1),
                 new_yardline=round(new, 0))
+    result.update(outcome)
+    return result
 
 # ============================================================ KICKOFFS
 # 2026 DYNAMIC KICKOFF. The rule has changed every year since 2024, so older
@@ -1044,40 +1046,43 @@ def returner_for(ros, state, rate_fn, kind='kr'):
     return ordered[0] if ordered else {}
 
 
-def kickoff_booked(returner, rng, rate_fn, book, from_50=False):
-    """kickoff(), and the return goes in the book against the returner. Kickoff returns were resolved
-    for years and never booked, so no kick returner had a line. The result is kept so the drive it
-    opens can log the kick as its first play."""
-    r = kickoff(returner, rng, rate_fn, from_50=from_50)
+def kickoff_booked(returner, rng, rate_fn, book, from_50=False, kicking=(), receiving=()):
+    """Resolve, enforce and book the return once, before the next possession."""
+    import events as E
+    import kick_returns as KR
+    r = kickoff(returner, rng, rate_fn, from_50=from_50, kicking=kicking, receiving=receiving)
     if not r.get('touchback'):
-        import events as E
-        flag = E.special_teams_penalty_check(rng, 'kickoff', returned=True)
-        if flag:
-            walk = min(flag['yards'], (100.0 - r['new_yardline']) / 2.0)
-            flag['yards'] = walk
-            r['new_yardline'] += walk
-            r['penalty'] = flag
-    if book is not None and not r.get('touchback') and returner:
-        book.special('kr', returner.get('pid'), ret=r.get('ret', 0.0))
+        KR.enforce_return_flag(r, E.special_teams_penalty_check(rng, 'kickoff', returned=True))
+        KR.book_return(book, 'kr', r)
     r['returner'] = (returner or {}).get('pid')
     LAST_KICKOFF['r'] = r
     return r
 
 
-def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False):
+def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False, kicking=(), receiving=()):
     if rng.random() < KICKOFF['touchback']:
         spot = KICKOFF['touchback_from_50'] if from_50 else KICKOFF['touchback_to']
         return dict(type='kickoff', touchback=True, new_yardline=spot)
-    skill = rate_fn(returner, {'kick_ret_rating': .45, 'speed_rating': .30,
-                               'juke_move_rating': .25})
-    # the returner is the club's best now, not its last receiver: the skill term is centered on
-    # the typical chosen returner, so the league mean stays at the real 26.9
-    ret = min(98.0, rng.gamma(7.0, KICKOFF['return_mean'] / 7.0) * (1.0 + 0.8 * (skill - RET_AVG)))     # 2024-25: mean 27.6 with most returns 20 to 35; a 50-yarder is a few a season, not two a game
-    # the landing zone runs from the goal line to the 20, so a returned kick
-    # starts from roughly the 5 and the return is measured from there
-    start = 5.0 + ret
-    return dict(type='kickoff', touchback=False, ret=round(float(ret), 1),
-                new_yardline=float(np.clip(100 - start, 1, 99)))
+    import kick_returns as KR
+    skill = rate_fn(returner, {'kick_ret_rating': .45, 'speed_rating': .30, 'juke_move_rating': .25})
+    ret = rng.gamma(7.0, KICKOFF['return_mean'] / 7.0) * (1.0 + 0.8 * (skill - RET_AVG))
+    outcome = KR.resolve(95., ret, returner or {}, rng, rate_fn, kicking, receiving,
+                         event='kick_return', weather=ENV.fumble_mult)
+    return dict(type='kickoff', touchback=False, **outcome)
+
+
+def kickoff_for(kicking, receiving, kick_state, receive_state, rng, rate, book):
+    import kick_returns as KR
+    returner = returner_for(receiving, receive_state, rate)
+    return kickoff_booked(returner, rng, rate, book,
+        kicking=KR.unit(kicking, kick_state, rate),
+        receiving=KR.unit(receiving, receive_state, rate, True, returner.get('pid')))
+
+
+def pending_kick_outcome():
+    kick = LAST_KICKOFF.get('r') or {}
+    return bool(kick.get('touchdown') or kick.get('fumble_lost'))
+
 
 # ============================================================ TEAM STATE
 class TeamState:
@@ -1876,17 +1881,27 @@ def run_drive(*args, **kwargs):
 def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
               rng, resolve_fn, call_off, call_def, rate_fn, aggression=0.5,
               book=None, off_state=None, def_state=None, week=1,
-              timeouts=None, pos='home', half_end=None, must_score=False):
+              timeouts=None, pos='home', half_end=None, must_score=False, try_allowed=True,
+              start_state=None):
     """
     Play a full possession. resolve_fn is plays.resolve_play; call_off/call_def
     are the scheme-layer callers.
     """
     dr = Drive(offense, defense, start_yardline, clock, quarter, score_diff, rng)
+    if start_state is not None:
+        dr.down, dr.togo = start_state
     import events as E
     # the kick that opened this possession, when there was one, is the drive's first entry
     ko = LAST_KICKOFF.pop('r', None)
     if ko is not None and abs(float(ko.get('new_yardline', -1)) - float(start_yardline)) < 0.5:
-        dr.log.append(dict(type='kickoff', touchback=bool(ko.get('touchback')), new_yardline=float(ko.get('new_yardline', start_yardline)), ret=float(ko.get('ret', 0.0) or 0.0), carrier=ko.get('returner'), clock=clock, onside=bool(ko.get('onside')), recovered=bool(ko.get('recovered')), free_kick=bool(ko.get('free_kick'))))
+        dr.log.append(dict(ko, type='kickoff', carrier=ko.get('returner'), clock=ko.get('clock', clock)))
+        if ko.get('touchdown'):
+            dr.result, dr.points, dr.yardline = 'Touchdown', 6, 0.
+        elif ko.get('fumble_lost'):
+            dr.result = 'Turnover'
+        if dr.result is not None:
+            dr.start = float(ko.get('return_start', 95))
+            dr.return_only = True
         if ko.get('penalty'):
             dr.log.append(dict(type='penalty', **ko['penalty']))
     # Adjustment happens AFTER EACH SERIES, which is what the coaches describe:
@@ -2063,13 +2078,16 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 flag = E.special_teams_penalty_check(rng, 'punt')
                 if _kick_presnap_flag(dr, flag, half_end): continue
                 returner = returner_for(defense, def_state, rate_fn, kind='pr')
+                import kick_returns as KR
                 p = punt(dr.yardline, (offense.get('p') or {}),
                          returner, rng, rate_fn,
                          snapper=snapper_for(offense, off_state),
                          kicking=[m for m in (offense.get('ol', []) + [offense.get('p')])
                                   if m and (off_state is None or m.get('pid') not in off_state.out)],
                          receiving=[m for m in (defense.get('dl', []) + defense.get('lb', []))
-                                    if m and (def_state is None or m.get('pid') not in def_state.out)])
+                                    if m and (def_state is None or m.get('pid') not in def_state.out)],
+                         return_coverage=KR.unit(offense, off_state, rate_fn),
+                         return_blockers=KR.unit(defense, def_state, rate_fn, True, returner.get('pid')))
                 p.update(clock=dr.clock, down=dr.down, ydstogo=dr.togo, yardline=dr.yardline)
                 if _kick_roughing(dr, flag, p):
                     dr.clock -= play_seconds('punt')
@@ -2078,15 +2096,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     dr.clock -= play_seconds('punt')
                     continue
                 if p.get('how') == 'return':
-                    return_flag = E.special_teams_penalty_check(rng, 'punt', returned=True, phase='return')
-                    if return_flag:
-                        walk = min(return_flag['yards'], (100.0 - p['new_yardline']) / 2.0)
-                        return_flag['yards'] = walk
-                        p['new_yardline'] += walk
+                    KR.enforce_return_flag(p, E.special_teams_penalty_check(rng, 'punt', returned=True, phase='return'))
+                    # Return penalties change the next spot, not punt yardage.
+                    p['net'] = round(p['gross'] - p.get('ret', 0), 1)
                 if book is not None:
                     book.special('punt', (offense.get('p') or {}).get('pid'), **p)
                     if p.get('how') == 'return' or (p.get('ret') and not p.get('touchback')):
-                        book.special('pr', returner.get('pid'), ret=p.get('ret', 0.0))
+                        KR.book_return(book, 'pr', p)
                 dr.clock -= play_seconds('punt')
                 dr.result = 'Punt'; dr.log.append(p)
                 if p.get('blocked') and 'end_spot' in p:
@@ -2096,9 +2112,17 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     if dr.result is None:
                         continue
                     break
-                if p.get('how') == 'return' and return_flag:
-                    dr.log.append(dict(type='penalty', **return_flag))
-                dr.next_yardline = p['new_yardline']; break
+                if p.get('penalty'):
+                    dr.log.append(dict(type='penalty', **p['penalty']))
+                if p.get('touchdown'):
+                    dr.result, dr.points, dr.yardline = 'Defensive touchdown', -6, 100.
+                    p['scoring_side'] = 'defense'
+                elif p.get('fumble_lost'):
+                    dr.result = 'Recovered punt'
+                dr.next_yardline = (100 - p['new_yardline']) if p.get('fumble_lost') else p['new_yardline']
+                AS.book_special(book, dr, p, offense)
+                p['epa_booked'] = True
+                break
 
         # ---- a real play ----
         # Pass the REAL down. The first build sent down=1 on fourth down, so a
@@ -2544,7 +2568,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     if dr.result is None: dr.result = 'End of half'
 
     # ---- the try, once the touchdown is on the board ----
-    if dr.result in ('Touchdown', 'Defensive touchdown') and not (dr.result == 'Defensive touchdown' and dr.quarter >= 5):
+    if try_allowed and dr.result in ('Touchdown', 'Defensive touchdown') and not (dr.result == 'Defensive touchdown' and dr.quarter >= 5):
         defending = dr.result == 'Defensive touchdown'
         try_off, try_def = (defense, offense) if defending else (offense, defense)
         try_os, try_ds = (def_state, off_state) if defending else (off_state, def_state)
@@ -2572,8 +2596,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     # the kick or the punt that ended it has an EPA of its own, so the ledger
     # balances: what the offence had on fourth down against what it left
     if dr.result in ('Punt', 'Field goal', 'Missed field goal') and dr.log and isinstance(dr.log[-1], dict):
-        last = dr.log[-1]
-        if not last.get('epa_booked'): AS.book_special(book, dr, last, offense)
+        last = next((p for p in reversed(dr.log) if p.get('type') in ('punt', 'field_goal')), None)
+        if last is not None and not last.get('epa_booked'): AS.book_special(book, dr, last, offense)
     if len(dr.log) > _seen: yield ('snap', dr)
     return dr
 
@@ -2583,7 +2607,7 @@ OT_PLAYOFF_LENGTH = 900  # 15-minute periods, repeated until someone wins
 def _terminal_kickoff(dr, kick, before, after, possession, quarter):
     """Keep a return that ends a half even when no offensive drive follows it."""
     boundary = 1800 if quarter == 2 else 0
-    if before <= boundary or after > boundary:
+    if kick.get('touchdown') or kick.get('fumble_lost') or before <= boundary or after > boundary:
         return
     dr.log.append(dict(type='kickoff', touchback=bool(kick.get('touchback')),
                        new_yardline=kick['new_yardline'], ret=float(kick.get('ret', 0) or 0),
@@ -2626,12 +2650,15 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
     timeouts = Timeouts()
     timeouts.left = dict(home=3 if playoffs else 2, away=3 if playoffs else 2)
     drives = []
-    kick = kickoff_booked(returner_for(home if pos == 'home' else away, home_state if pos == 'home' else away_state, rate_fn),
-                          rng, rate_fn, book)
+    kick = kickoff_for(away if pos == 'home' else home, home if pos == 'home' else away,
+                       away_state if pos == 'home' else home_state, home_state if pos == 'home' else away_state, rng, rate_fn, book)
     start = kick['new_yardline']
     clock = kickoff_clock(clock, kick)
 
-    while clock > 0:
+    resume_state = None
+    while clock > 0 or pending_kick_outcome() or playoffs:
+        if clock <= 0 and not pending_kick_outcome():
+            clock = OT_PLAYOFF_LENGTH
         off = home if pos == 'home' else away
         deff = away if pos == 'home' else home
         o_st = home_state if pos == 'home' else away_state
@@ -2645,10 +2672,14 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
         dr = run_drive(off, deff, start, clock, 5, sd, rng, resolve_fn,
                        call_off, call_def, rate_fn, 0.98, book, o_st, d_st, week,
                        timeouts=timeouts, pos=pos,
-                       must_score=had['away' if pos == 'home' else 'home'] and sd < 0)
+                       must_score=had['away' if pos == 'home' else 'home'] and sd < 0,
+                       try_allowed=not (had['away' if pos == 'home' else 'home'] and sd + 6 > 0),
+                       start_state=resume_state)
+        resume_state = None
         drives.append((pos, dr))
         clock = max(0.0, dr.clock)
-        had[pos] = True
+        if dr.result != 'End of half': had[pos] = True
+        if dr.result == 'Recovered punt': had['away' if pos == 'home' else 'home'] = True
         other = 'away' if pos == 'home' else 'home'
 
         if dr.points > 0:
@@ -2668,11 +2699,19 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
             if score['home'] != score['away']:
                 return score, drives, 'decided'
 
-        if clock <= 0:
+        if clock <= 0 and not playoffs:
             break
+        if clock <= 0:
+            # Continue the same overtime. Preserve the book, possession
+            # opportunities and downs instead of recursively starting a new game.
+            clock = OT_PLAYOFF_LENGTH
+        if dr.result == 'End of half':
+            start = dr.yardline
+            resume_state = (dr.down, dr.togo)
+            continue
 
         if dr.result in ('Touchdown', 'Field goal'):
-            kick = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)
+            kick = kickoff_for(off, deff, o_st, d_st, rng, rate_fn, book)
             start = kick['new_yardline']
             before = clock
             clock = kickoff_clock(clock, kick)
@@ -2683,12 +2722,11 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
             start = float(np.clip(100 - dr.yardline, 1, 99))
         else:
             start = 75
-        pos = other
+        if dr.result == 'Recovered punt':
+            start = dr.next_yardline
+        else:
+            pos = other
 
-    if playoffs:                       # the postseason never ties
-        return play_overtime(home, away, score, rng, resolve_fn, call_off,
-                             call_def, rate_fn, home_state, away_state, week,
-                             True, first)
     return score, drives, ('tie' if score['home'] == score['away'] else 'decided')
 
 
@@ -2711,9 +2749,6 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
     pos = 'away'                                   # away receives first
-    kick = kickoff_booked(returner_for(away, away_state, rate_fn), rng, rate_fn, book)    # the RECEIVING side's man returns it
-    start = kick['new_yardline']
-    clock = kickoff_clock(clock, kick)
 
     tos = Timeouts()
     half_done = False
@@ -2729,6 +2764,11 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         away_state.road_noise = ENV.road_false_start; away_state.road_stamina = ENV.road_stamina
     if home_state is not None:
         home_state.road_noise = 1.0; home_state.road_stamina = 1.0
+    LAST_KICKOFF.clear()
+    kick = kickoff_for(home, away, home_state, away_state, rng, rate_fn, book)
+    start = kick['new_yardline']
+    clock = kickoff_clock(clock, kick)
+
     # SHADOWING IS A GAME-WEEK DECISION. A coordinator decides on Tuesday
     # whether his best corner follows their best receiver, and then he does
     # it all game. Decided per snap it ran at 4% of pass plays; the real rate
@@ -2763,8 +2803,8 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
                 p_br = (0.55 if star else 0.25) * float(np.clip(gap / 0.08, 0.3, 1.5)) * float(st.coach.get('bracket_willingness', 0.5)) / 0.5
                 if rng.random() < min(0.8, p_br):
                     st.plan.bracket = srt[0].get('pid')
-    while clock > 0:
-        if not half_done and clock <= HALF:
+    while clock > 0 or pending_kick_outcome():
+        if not half_done and clock <= HALF and not pending_kick_outcome():
             # A kickoff return can itself use the final seconds of the half.
             # There is no empty offensive drive after that return.
             tos.halftime()
@@ -2772,12 +2812,13 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             yield ('halftime', dict(score))
             ENV.turn(rng, home_abbr); _P.ENV = ENV
             pos = 'home'
-            kick = kickoff_booked(returner_for(home, home_state, rate_fn), rng, rate_fn, book)
+            kick = kickoff_for(away, home, away_state, home_state, rng, rate_fn, book)
             start = kick['new_yardline']
             clock = kickoff_clock(HALF, kick)
             quarter = 3
             continue
-        quarter = min(4, int((GAME - clock) // QUARTER) + 1)
+        kick_clock = (LAST_KICKOFF.get('r') or {}).get('clock', clock) if pending_kick_outcome() else clock
+        quarter = min(4, int((GAME - kick_clock) // QUARTER) + 1)
         off = home if pos == 'home' else away
         deff = away if pos == 'home' else home
         sd = score[pos] - score['away' if pos == 'home' else 'home']
@@ -2803,7 +2844,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             score['away' if pos == 'home' else 'home'] += abs(dr.points)
         yield ('drive', pos, dr, dict(score))
 
-        if not half_done and clock <= HALF:
+        if not half_done and clock <= HALF and not pending_kick_outcome():
             continue                      # the next loop opens the second half
 
         if clock <= 0:
@@ -2831,15 +2872,18 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
                 else: start = 45.0                                       # the receiving side takes over at the kicking team's 45
                 if got: receiving_pos = pos
             else:
-                kick = kickoff_booked(returner_for(deff, d_st, rate_fn), rng, rate_fn, book)
+                kick = kickoff_for(off, deff, o_st, d_st, rng, rate_fn, book)
                 start = kick['new_yardline']
                 clock = kickoff_clock(clock, kick)
         elif dr.result == 'Defensive touchdown':
-            kick = kickoff_booked(returner_for(off, o_st, rate_fn), rng, rate_fn, book)
+            kick = kickoff_for(deff, off, d_st, o_st, rng, rate_fn, book)
             start = kick['new_yardline']
             clock = kickoff_clock(clock, kick)
             receiving_pos = pos
             onside_kept = True          # the team that conceded the return TD receives
+        elif dr.result == 'Recovered punt':
+            start = dr.next_yardline
+            onside_kept = True
         elif dr.result == 'Punt':
             start = getattr(dr, 'next_yardline', 75)
         elif dr.result in ('Turnover', 'Turnover on downs'):
@@ -2900,8 +2944,10 @@ class StatBook:
             elif kw.get('new_yardline', 50) >= 80: d['punt_in20'] += 1
         elif kind == 'kr':
             d['kr'] += 1; d['kr_yds'] += float(kw.get('ret', 0.0))
+            if kw.get('touchdown'): d['kr_td'] += 1
         elif kind == 'pr':
             d['pr'] += 1; d['pr_yds'] += float(kw.get('ret', 0.0))
+            if kw.get('touchdown'): d['pr_td'] += 1
 
     def _get(self, pid):
         if pid not in self.p:
@@ -2916,7 +2962,7 @@ class StatBook:
                 # ---- specialists ----
                 fg_att=0, fg_made=0, fg_long=0, xp_att=0, xp_made=0,
                 punts=0, punt_yds=0.0, punt_net_yds=0.0, punt_in20=0, punt_tb=0,
-                kr=0, kr_yds=0.0, pr=0, pr_yds=0.0,
+                kr=0, kr_yds=0.0, kr_td=0, pr=0, pr_yds=0.0, pr_td=0,
                 # ---- offensive line ----
                 # There are no traditional stats for a lineman, which is why
                 # his page on any real site is blank. The industry settled on

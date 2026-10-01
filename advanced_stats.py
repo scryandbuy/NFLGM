@@ -84,18 +84,25 @@ def book_play(book, out, off, deff, epa_val):
 
 
 def book_special(book, dr, last, offense):
-    """The punt or the kick: from the fourth-down state to what it produced."""
-    before = ep(4, last.get('ydstogo', dr.togo), last.get('yardline', dr.yardline))
+    """The kick's actual pre-snap state and its final enforced outcome."""
+    if last.get('type') not in ('punt', 'field_goal'):
+        raise ValueError('Special-teams EPA requires the resolved kick event')
+    before = ep(last.get('down', 4), last.get('ydstogo', dr.togo), last.get('yardline', dr.yardline))
     if last.get('blocked'):
         pid = (offense.get('p') or {}).get('pid')
         value = dr.points if dr.points else ep(1, dr.togo, dr.yardline) if last.get('retained') else -ep(1, 10, last['new_yardline'])
         v = value - before
+    elif last.get('type') == 'punt' and last.get('touchdown'):
+        v = -TD_VALUE - before; pid = (offense.get('p') or {}).get('pid')
+    elif last.get('type') == 'punt' and last.get('fumble_lost'):
+        v = ep(1, 10, 100 - last['new_yardline']) - before
+        pid = (offense.get('p') or {}).get('pid')
     elif dr.result == 'Field goal':
         v = 3.0 - before; pid = (offense.get('k') or {}).get('pid')
     elif dr.result == 'Missed field goal':
         v = -ep(1, 10, 100.0 - max(20.0, dr.yardline + 7.0)) - before; pid = (offense.get('k') or {}).get('pid')
     else:
-        spot = float(last.get('new_yardline', 60.0)) if isinstance(last, dict) else 60.0   # the other side's yards to goal
+        spot = float(last['new_yardline'])
         v = -ep(1, 10, spot) - before; pid = (offense.get('p') or {}).get('pid')
     if isinstance(last, dict): last['epa'] = round(v, 3)
     if book is not None and pid:

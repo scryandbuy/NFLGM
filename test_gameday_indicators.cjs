@@ -33,7 +33,11 @@ turnover.drives[0].plays=[{type:'interception',text:'Intercepted',quarter:2}];
 assert.equal(state(turnover,1,1).possession,'MIN');
 turnover.drives[0].plays[0].nullified=true;
 assert.equal(state(turnover,1,1).possession,'GB');
-console.log('13 scoreboard-state assertions passed');
+turnover.drives[0].plays=[{type:'punt',text:'Return fumble',quarter:2,fumble_lost:true}];
+assert.equal(state(turnover,1,1).possession,'GB');
+turnover.drives[0].plays[0].type='kickoff';
+assert.equal(state(turnover,1,1).possession,'MIN');
+console.log('15 scoreboard-state assertions passed');
 
 async function browserCheck() {
   const {chromium} = require('C:/Users/HP/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
