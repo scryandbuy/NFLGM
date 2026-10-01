@@ -1884,16 +1884,16 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         last_shot = (_pl is not None and _pl['choice'] == 'shot') or (_pl is None and (half_end is not None and quarter <= 2 or (quarter >= 4 and -8 <= dr.score_diff <= 0)) and secs_in_half <= 25 and dr.yardline <= 37 and dr.yardline > 1)
         if _pl is not None and _pl['choice'] in ('shot', 'play') and _pl.get('hurry', True) and dr.score_diff > 0 and half_end is not None:
             secs_for_call = secs_in_half          # a leading offense hurrying before the break is in the drill too, not burning clock
-        # THE CLOCK DECIDES THE CALL LATE. Ahead in the last four minutes the offense runs to burn it
-        # (a pass on third and long, otherwise the ball stays on the ground); behind, or tied, in the
-        # last two minutes of a half it throws, a draw once in a while and a run only on a yard to go.
+        # Preserve the clock-burning early-down bias. On third and long use
+        # the scheme caller's score/clock/down table: another negative bias
+        # overwhelms it and makes a leading team almost never throw for a first.
         late_lean = 0.0
         final_period = (quarter >= 4 and half_end is None) or (half_end is not None and quarter <= 2)
         if final_period:
             if dr.score_diff > 0 and dr.yardline >= 80 and secs_in_half <= 60:
                 late_lean = -8.0                                   # ahead, inside your own 20, under a minute: the clock is the point and a run cannot stop it
             elif dr.score_diff > 0 and half_end is None and dr.clock <= 240:
-                late_lean = -1.0 if (dr.down == 3 and dr.togo >= 6) else -3.5    # run-heavy, not run-only: a lead still needs first downs
+                late_lean = 0.0 if (dr.down == 3 and dr.togo >= 6) else -3.5
             elif dr.score_diff <= 0 and secs_in_half <= 120:
                 late_lean = 1.0 if dr.togo <= 1 else (12.0 if secs_in_half <= 30 else 6.5)          # the two-minute drill: throw; under thirty seconds there is no other call
             elif dr.score_diff < 0 and half_end is None and dr.clock < 150 * int(np.ceil(-dr.score_diff / 8.0)) + 90:
