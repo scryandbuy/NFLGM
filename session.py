@@ -962,6 +962,9 @@ class Session:
         """STEP 3: retirements and development, all of it here. Age takes what it takes, development traits roll,
         players retire, the Hall votes, and the year ticks."""
         L, rng = self.L, self.rng
+        # Judge the season's performance against ratings before physical aging,
+        # matching the batch franchise path.
+        DR.run(L, getattr(self, 'votes', None) or {}, rng)
         # regression: every player takes what age takes; your club's before-and-after is kept for the Regression page
         try:
             RG.run(self.L, self.rng, record_for=self.user_team, tick_age=False)
@@ -973,7 +976,6 @@ class Session:
             IB.post(self.L, 'club', f"Going into {self.L.year + 1}: what age took", body, sender='assistants', payload=dict(link='club:regression'))
         except Exception as e:
             import sys; print('regression report failed:', e, file=sys.stderr)
-        DR.run(L, getattr(self, 'votes', None) or {}, rng)
         RT.run(L, rng); AL.hall_vote(L, L.year)
         try:
             import league_notes as LN; LN.season_end(L, None)          # the Hall class and the retirements, now that they are in
