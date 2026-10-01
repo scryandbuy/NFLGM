@@ -577,74 +577,177 @@ def _can_absorb(league, team, target, space):
     return keeper is not None and target.get('seen_ovr', p.ovr) > keeper.ovr + 1.0
 
 
-PLAYER_IN_PACKAGE = 0.55     # real: 55% of deals send a player with the picks
+MAX_PACKAGE_SEARCH = 50000  # fail closed on pathological pick-hoarding banks
+MAX_PACKAGE_ROSTER_CHECKS = 64  # also bound costly role assignments
+
+
+def _upgrade_budget(gain):
+    """Small upgrades receive 40% of the ceiling; gains of six receive all.
+
+    Smoothstep avoids a spending jump at either end. This is a roster gain,
+    not an OVR difference: package usage and reserve depth already enter it.
+    """
+    t = min(1.0, max(0.0, (float(gain) - UPGRADE_GAP) / 4.0))
+    return .4 + .6 * t * t * (3.0 - 2.0 * t)
+
+
+def _market_floor(target):
+    """A pick philosophy cannot erase most of a controlled player's value.
+
+    Rentals and an explicit request to leave allow a larger concession. A
+    decided cap casualty has its own shop_cap_casualty path; merely being
+    over the cap does not turn every player into a forced-sale exception.
+    """
+    player = target.get('obj')
+    years = getattr(player, 'contract_years_left', 2)
+    fraction = .5 if years <= 1 or target.get('wants_out') else .75
+    return max(0.0, float(target.get('trade_value', 0) or 0)) * fraction
 
 
 def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
                rng, needs_b=None):
+    """Find the cheapest acceptable complete offer, up to five assets.
+
+    Prices and willingness are fixed for this negotiation. Compare alternate
+    combinations instead of adding an expensive pick to a failed offer.
+    Positive costs, suffix value bounds and a node budget bound the work. If
+    the budget is exhausted, decline rather than return an unproven overpay.
+    ``needs_b`` remains for caller compatibility; actual recipient roles decide
+    whether an outgoing player helps, including combinations of players.
     """
-    Build up an offer until the other club takes it.
+    import roster_needs as RN
+    from types import SimpleNamespace
 
-    Start with the cheapest single asset and ADD to it rather than swapping to
-    a dearer one. That is what the data shows - a club chasing a good player
-    sends two or three things, and a club buying depth sends one - and it
-    falls out naturally instead of being imposed: an expensive target simply
-    needs more added before the seller says yes.
-
-    A surplus PLAYER can go into the package too, which is where the 55% of
-    real deals that are players plus picks come from.
-    """
-    bank = _picks_by_price(league, ta, ga, ctx_a, sa)
-    bank += [x for x in surplus if x['pid'] != target.get('pid')]
-    if not bank:
-        return None, None
-
-    pkg = []
-    # A PLAYER GOES IN MOST PACKAGES. Building up from the cheapest asset
-    # made 85% of deals picks-only against a real 45%: picks are finer
-    # currency, so they always closed the gap first. Real clubs send a body
-    # the other side can use, at the spot it is thin, and top up with picks.
-    if rng.random() < PLAYER_IN_PACKAGE:
-        cands = [x for x in surplus if x['pid'] != target.get('pid')]
-        fits = [x for x in cands if needs_b and x.get('grp') in needs_b] or cands
-        if fits:
-            pkg.append(max(fits, key=lambda x: x.get('seen_ovr', 0)))
-    # THE LEAGUE'S PRICE IS THE CEILING. A buyer prices a man through his own eyes (his scheme, his hole, his
-    # window), and a contender with a hole talked itself into a first and a second for a backup center. No
-    # club pays more than the market's value of the man plus a premium: a modest one for depth, a real one
-    # for a star in a contender's window, which is how Metcalf fetches a second and Bortolini a sixth.
     market = float(target.get('trade_value', 0.0) or 0.0)
     wdw = TE.window(ctx_a)
     prem = (1.40 if target.get('star') else 1.25) if wdw in ('contending', 'win_now') else (1.25 if target.get('star') else 1.10)
-    ceiling = market * prem + 0.35
-    def _paid(items):
-        tot = 0.0
-        for x in items:
-            if x['kind'] == 'pick': tot += float(TE.pick_value_dollars(x['pick'], x.get('years_out', 0)))
-            else: tot += float(x.get('trade_value', 0.0) or 0.0)
-        return tot
-    for _step in range(MAX_PACKAGE):
-        best = None
-        for cand in bank:
-            if cand in pkg:
-                continue
-            o = dict(a_sends=pkg + [cand], a_gets=[target])
-            if _paid(o['a_sends']) > ceiling:
-                continue                    # more than the league would pay for him
-            r = TE.evaluate(o, ctx_a, ctx_b, sa, sb, ga, gb)
-            if r['a_gain'] <= -ACCEPT_WINDOW:
-                continue                    # paying this much stops paying off
-            if (will_accept(r['a_gain'], rng, ga['aggression'])
-                    and will_accept(r['b_gain'], rng, gb['aggression'],
-                                    selling=True)):
-                return o, r
-            # not enough yet - keep the addition that moved him furthest
-            if best is None or r['b_gain'] > best[0]:
-                best = (r['b_gain'], cand)
-        if best is None:
+    gain = target.get('package_gain')
+    if gain is None:
+        gain = RN.move_gain(ta, target['obj'])
+    ceiling = (market * prem + .35) * _upgrade_budget(gain)
+    floor = _market_floor(target)
+    if ceiling <= 0 or ceiling + 1e-9 < floor:
+        return None, None
+
+    raw = _picks_by_price(league, ta, ga, ctx_a, sa)
+    candidates = {x['pid']: x for x in surplus
+                  if x['pid'] != target.get('pid') and x.get('obj') is not None
+                  and 0 < float(x.get('trade_value', 0) or 0) <= ceiling}
+    # Assess the receiving roster AFTER the target leaves. A replacement can
+    # help even when he would have sat behind the traded player beforehand.
+    recipient = [p for p in tb.active() if p.pid != target.get('pid')]
+    roster_scores, exhausted = {}, False
+    def roster_score(ids):
+        nonlocal exhausted
+        ids = tuple(sorted(ids))
+        if ids not in roster_scores:
+            if len(roster_scores) >= MAX_PACKAGE_ROSTER_CHECKS:
+                exhausted = True
+                return float('-inf')
+            roster_scores[ids] = RN.assess(tb, recipient + [candidates[i]['obj'] for i in ids])['score']
+        return roster_scores[ids]
+
+    if candidates:
+        base = roster_score(())
+        raw += [x for pid, x in candidates.items()
+                if roster_score((pid,)) > base + 1e-6]
+        if exhausted:
             return None, None
-        pkg.append(best[1])
-    return None, None
+
+    bank, seen = [], set()
+    for asset in raw:
+        if asset['kind'] == 'pick':
+            pk = asset['obj']
+            key = ('pick', pk.year, pk.round, pk.original)
+            paid = float(TE.pick_value_dollars(asset['pick'], asset.get('years_out', 0)))
+        else:
+            key = ('player', asset['pid'])
+            paid = float(asset.get('trade_value', 0.0) or 0.0)
+        if key in seen:
+            continue
+        seen.add(key)
+        buyer = TE.team_price(asset, ctx_a, sa, ga, owns=True)
+        seller = TE.team_price(asset, ctx_b, sb, gb, owns=False)
+        # Salary dumps and negative-value sweeteners need a separate market;
+        # this ordinary upgrade search spends only useful, positive assets.
+        if 0 < paid <= ceiling and buyer >= 0 and seller > 0:
+            bank.append((paid, buyer, seller, key, asset))
+    bank.sort(key=lambda row: (row[0], row[3]))
+    if not bank:
+        return None, None
+
+    # Reusing each draw prevents repeated counteroffers from turning a low
+    # acceptance chance into a near-certain sale by trying many combinations.
+    draw_a, draw_b = float(rng.random()), float(rng.random())
+    roll_a = SimpleNamespace(random=lambda: draw_a)
+    roll_b = SimpleNamespace(random=lambda: draw_b)
+    value_in = TE.team_price(target, ctx_a, sa, ga, owns=False)
+    ask = TE.team_price(target, ctx_b, sb, gb, owns=True)
+    def accepts_a(cost):
+        margin = round(value_in - cost, 2)
+        return margin > -ACCEPT_WINDOW and will_accept(margin, roll_a, ga['aggression'])
+    def accepts_b(value):
+        return will_accept(round(value - ask, 2), roll_b, gb['aggression'], selling=True)
+
+    # Upper bound on what any remaining k assets could bring the seller.
+    # Ignoring their costs/cap/role fit is optimistic and therefore safe for
+    # pruning: no valid cheaper package is removed by this bound.
+    n = len(bank)
+    upper = [[0.0] * (MAX_PACKAGE + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        for k in range(1, MAX_PACKAGE + 1):
+            upper[i][k] = max(upper[i+1][k], bank[i][2] + upper[i+1][k-1])
+    valid_players = {}
+    best, nodes = None, 0
+
+    def legal(items):
+        ids = tuple(sorted(x['pid'] for x in items if x['kind'] == 'player'))
+        if ids not in valid_players:
+            offer = dict(a_sends=[candidates[i] for i in ids], a_gets=[target])
+            valid = TE.cap_blocks(offer, sa, sb, ga, gb) is None
+            if valid and ids:
+                total = roster_score(ids)
+                valid = all(total > roster_score(tuple(j for j in ids if j != i)) + 1e-6
+                            for i in ids)
+            valid_players[ids] = valid
+        return valid_players[ids]
+
+    def visit(start, chosen, paid, cost, value):
+        nonlocal best, nodes, exhausted
+        nodes += 1
+        if nodes > MAX_PACKAGE_SEARCH:
+            exhausted = True
+            return
+        if not accepts_a(cost):
+            return  # every remaining asset has a nonnegative buyer cost
+        if chosen and paid + 1e-9 >= floor and accepts_b(value):
+            items = [bank[i][4] for i in chosen]
+            if legal(items):
+                rank = (paid, len(chosen), cost, tuple(bank[i][3] for i in chosen))
+                if best is None or rank < best[0]:
+                    best = (rank, items)
+                return  # any superset costs more
+            if exhausted:
+                return
+        left = MAX_PACKAGE - len(chosen)
+        if not left or not accepts_b(value + upper[start][left]):
+            return
+        limit = min(ceiling, best[0][0] if best else ceiling)
+        for i in range(start, n):
+            row = bank[i]
+            if paid + row[0] > limit + 1e-9:
+                break
+            visit(i + 1, chosen + (i,), paid + row[0], cost + row[1], value + row[2])
+            if exhausted:
+                return
+            limit = min(ceiling, best[0][0] if best else ceiling)
+
+    visit(0, (), 0.0, 0.0, 0.0)
+    if exhausted or best is None:
+        return None, None
+    offer = dict(a_sends=best[1], a_gets=[target])
+    result = TE.evaluate(offer, ctx_a, ctx_b, sa, sb, ga, gb)
+    return offer, result
 
 
 # THE CALENDAR. Real player trades run roughly 40 to 60 across the
