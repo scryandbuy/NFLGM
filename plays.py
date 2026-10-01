@@ -101,11 +101,12 @@ INT_BASE = 0.129
 INT_DEPTH = {'short': 0.68, 'medium': 0.86, 'deep': 0.74}   # picks per uncompleted throw, by depth, against the base
 SCREEN_FREE_BASE = 5.0      # free yards behind the convoy before first contact, average blocking
 SCREEN_FREE_BLK = 8.0       # ...more behind good linemen, fewer behind bad
-# A second blocker buys the pocket roughly this much more time. Used only to
-# decide who is CHARGED with a rep, never to change the play.
-DOUBLE_TEAM_HELP = 1.45
+# A retained helper buys time in his assigned matchup, scaled by blocking
+# ability. Extra helpers on that same matchup have diminishing value.
+PROTECTION_HELP = 0.16
 
-def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=None):
+def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=None,
+                       protection='five'):
     """
     Returns time available, whether a sack happened, and pressure 0-1.
     Each rusher races his blocker; the FASTEST win sets the clock.
@@ -114,19 +115,26 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
     chipper's block, and the chipper's route arrives late.
     """
     import defensive_rush as DRUSH
+    blockers = list({DRUSH.player_key(b): b for b in blockers if b}.values())
     if assignments is None:
         inferred = DRUSH.assignments({'dl':rushers})
         by_id = {DRUSH.player_key(a['player']):a for a in inferred}
         assignments = [by_id[DRUSH.player_key(r)] for r in rushers]
     matched = DRUSH.protection_pairs(blockers, assignments)
+    moves, attacks, threats = [], [], []
+    for r, b in zip(rushers, matched):
+        pw = rate(r, PASS_RUSH['rusher']['power'])
+        fn = rate(r, PASS_RUSH['rusher']['finesse'])
+        move = 'power' if pw >= fn else 'finesse'
+        moves.append(move); attacks.append(max(pw, fn))
+        threats.append(max(pw, fn) - rate(b, PASS_RUSH['blocker'][move]) if b else 1.0)
+    helpers = DRUSH.protection_helpers(blockers, assignments, matched, threats, protection)
+    helper_reps = []
     wins = []
     for i in sorted(range(len(rushers)), key=lambda i: (assignments[i]['alignment'], DRUSH.player_key(rushers[i]))):
         r = rushers[i]
         b = matched[i]
-        pw = rate(r, PASS_RUSH['rusher']['power'])
-        fn = rate(r, PASS_RUSH['rusher']['finesse'])
-        move = 'power' if pw >= fn else 'finesse'
-        atk = max(pw, fn)
+        move, atk = moves[i], attacks[i]
         if b is None:                      # unblocked - a free runner
             wins.append((0.6, move, r, None)); continue
         dfn = rate(b, PASS_RUSH['blocker'][move])
@@ -139,11 +147,17 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
         # so hard that an average line against an elite front sacked on 42% of
         # dropbacks; the real spread is roughly 4% to 11%.
         t = RUSHER_BASE * (1.0 - 0.35 * e) * rng.lognormal(0.0, 0.26)
+        # Help was assigned before the random outcomes, using alignment and
+        # known threats. Never let a helper chase the fastest rolled winner.
+        assistance = sum(PROTECTION_HELP * float(np.clip(rate(h, PASS_RUSH['blocker'][move]), 0, 1)) / (j + 1)
+                         for j, h in enumerate(helpers[i]))
+        t *= 1.0 + assistance
         wins.append((max(0.35, t), move, r, b))
+        helper_reps.extend((h, r, t >= PBW_THRESHOLD) for h in helpers[i])
 
     if not wins:
         return dict(time=6.0, pressure=0.0, sack=False, beaten_by=None, beaten=None,
-                    move=None, pb_reps=[(b.get('pid'),True) for b in blockers], pr_reps=[])
+                    move=None, pb_reps=[(b.get('pid'),True) for b in blockers], pr_reps=[], pb_helpers=[])
     t_arrive, move, winner, loser = min(wins, key=lambda x: x[0])
 
     # EVERY rep, not just the one that ended the play. The resolver already
@@ -151,33 +165,15 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
     # fastest, so the per-man result was being computed and thrown away.
     # A pass block win is ESPN's definition: the blocker sustains for 2.5
     # seconds or longer.
-    # Every blocker gets a rep, including the free interior helper after
-    # alignment-based protection matching assigns both tackles to the edges.
-    #
-    # A lineman nobody rushed still blocked: he wins by default, because
-    # nobody beat him. That is what five blockers against four rushers means.
-    #
-    # A surplus blocker DOUBLES rather than standing free. Crediting him with
-    # an automatic win put the right tackle at a 98.4% win rate against a real
-    # best-in-league 95.6%, because he was handed a free rep on every four-man
-    # rush. He now shares the rep of the man being doubled: they both win it or
-    # they both lose it, which is what a double team actually is.
+    # The primary blocker and his helpers share the actual assisted result.
+    # A truly unengaged blocker has no defeated matchup to charge to him.
     engaged = {DRUSH.player_key(b) for _t, _m, _r, b in wins if b}
     reps = [(b.get('pid'), t >= PBW_THRESHOLD) for t, _m, _r, b in wins if b]
     rush_reps = [(r.get('pid'), t < PBW_THRESHOLD) for t, _m, r, b in wins if b and r is not None]
-    spare = sorted((b for b in blockers if DRUSH.player_key(b) not in engaged), key=DRUSH.player_key)
-    if spare and wins:
-        # He helps on the man getting there quickest, and a DOUBLED rusher is
-        # beaten less often - so the pair are credited against a longer clock,
-        # not against the raw loss. Tying him to the unaided result was as
-        # wrong in the other direction: it put the right tackle at 53.9%.
-        #
-        # CREDIT ONLY. The double does not feed back into t_arrive, because
-        # that would move a sack rate calibrated to a real 6.6%. It changes
-        # who gets charged for the rep, not what happened on the play.
-        worst = min(wins, key=lambda x: x[0])
-        held = worst[0] * DOUBLE_TEAM_HELP >= PBW_THRESHOLD
-        reps += [(b.get('pid'), held) for b in spare]
+    reps += [(h.get('pid'), held) for h, _r, held in helper_reps]
+    engaged.update(DRUSH.player_key(h) for h, _r, _held in helper_reps)
+    reps += [(b.get('pid'), True) for b in sorted(blockers, key=DRUSH.player_key)
+             if DRUSH.player_key(b) not in engaged]
 
     # the QB's own escapability buys time once someone arrives
     if qb is not None:
@@ -205,7 +201,8 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
     return dict(time=round(float(t_arrive), 2), pressure=round(pressure, 3),
                 sack=bool(sack), beaten_by=winner.get('pid'),
                 beaten=loser.get('pid') if loser else None, move=move,
-                pb_reps=reps, pr_reps=rush_reps)
+                pb_reps=reps, pr_reps=rush_reps,
+                pb_helpers=[(h.get('pid'), r.get('pid')) for h, r, _held in helper_reps])
 
 # ============================================================ MAN COVERAGE
 # The defender watches the RECEIVER, head often turned from the ball. The
@@ -768,7 +765,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     blockers = off['ol'][:5] + extras
     kept_in = {id(x) for x in extras}
     import defensive_rush as DRUSH
-    rush_plan = DRUSH.select_rush(deff, def_call)
+    rush_plan = DRUSH.select_rush(deff, def_call, rng=rng)
     rushers = rush_plan['rushers']
     def_call = dict(def_call, rushers=len(rushers))
     prot = S.protection_math(prot_name, len(rushers))
@@ -788,7 +785,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                 if rng.random() < float(np.clip(0.30 + 2.5 * threat, 0.08, 0.7)):
                     chip = (max(cands, key=lambda x: x.get('pass_block_rating', 60)), worst)
 
-    p = resolve_protection(blockers, rushers, rng, qb=off['qb'], chip=chip, assignments=rush_plan['assignments'])
+    p = resolve_protection(blockers, rushers, rng, qb=off['qb'], chip=chip,
+                           assignments=rush_plan['assignments'], protection=prot_name)
     # A protection scheme is worth real time against a blitz, and a simulated
     # pressure makes the line set for a front that never comes.
     if def_call['rushers'] >= 5:

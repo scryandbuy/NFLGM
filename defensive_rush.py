@@ -56,7 +56,46 @@ def assignments(defense, call=None):
     return sorted(out, key=lambda a: (a.get('alignment', ''), a.get('role', ''), player_key(a['player'])))
 
 
-def select_rush(defense, call):
+def _coverage_grade(a, call):
+    """Value the underneath job vacated by an exchange rusher."""
+    p = a['player']
+    man = call.get('under') == 'man' or call.get('coverage') in ('cover_0', 'cover_1')
+    key = 'man_cover_rating' if man else 'zone_cover_rating'
+    return (.65 * float(p.get(key, 40)) + .20 * float(p.get('play_rec_rating', 70))
+            + .15 * float(p.get('speed_rating', 70)))
+
+
+def _exchange_pair(front, replacements, call, rng):
+    """Trade rush and underneath coverage jobs using information before the snap.
+
+    A better coverage grade alone is not a reason to remove the best rusher.
+    Some variation remains among plausible exchanges; named pressures are
+    handled separately by select_rush and never overridden here.
+    """
+    import math
+    choices = []
+    for dropped in front:
+        for sent in replacements:
+            ds, ss = dropped['alignment'], sent['alignment']
+            opposite = (('left' in ds and 'right' in ss) or
+                        ('right' in ds and 'left' in ss))
+            role_cost = (6.0 if opposite else 0.0) + (4.0 if ss == 'slot' else 0.0)
+            score = (_rush_grade(sent) - _rush_grade(dropped)
+                     + .4 * (_coverage_grade(dropped, call) - _coverage_grade(sent, call))
+                     - role_cost)
+            choices.append((score, dropped, sent))
+    if not choices:
+        return None
+    choices.sort(key=lambda x: (player_key(x[1]['player']), player_key(x[2]['player'])))
+    best = max(x[0] for x in choices)
+    if rng is None:
+        return max(choices, key=lambda x: x[0])[1:]
+    weights = [math.exp((x[0] - best) / 4.0) for x in choices]
+    total = sum(weights)
+    return choices[int(rng.choice(len(choices), p=[w / total for w in weights]))][1:]
+
+
+def select_rush(defense, call, rng=None):
     rows = assignments(defense, call)
     by_id = {player_key(a['player']): a for a in rows}
     cov = call.get('coverage', call.get('shell', 'cover_3'))
@@ -93,21 +132,31 @@ def select_rush(defense, call):
             if str(pid) in by_id: add(by_id[str(pid)])
     for pid in call.get('blitzer_ids', []):
         if str(pid) in by_id: add(by_id[str(pid)])
-    if explicit is None and call.get('sim_pressure') and extra and preferred:
-        # A deliberate four-man exchange: the best dropping edge (or interior
-        # if no edge) replaces his rush with a second-level pressure.
-        front = preferred[:count]
-        droppers = [a for a in front if a['alignment'] in EDGES] or front
-        dropped = max(droppers, key=lambda a: (float(a['player'].get('zone_cover_rating', 40)), player_key(a['player'])))
-        add(extra[0])
-        preferred = [a for a in preferred if a is not dropped]+[dropped]
     for a in preferred: add(a)
+    exchange = None
+    if explicit is None and not call.get('blitzer_ids') and call.get('sim_pressure'):
+        front = [a for a in selected if a['alignment'] in EDGES]
+        if not front:
+            front = [a for a in selected if a['alignment'] in INTERIOR]
+        replacements = [a for a in extra if a not in selected and
+                        (a['alignment'].startswith('offball') or a['alignment'] == 'slot')]
+        exchange = _exchange_pair(front, replacements, call, rng)
+        if exchange:
+            dropped, sent = exchange
+            selected.remove(dropped); selected.append(sent)
     selected.sort(key=lambda a: (a['alignment'], player_key(a['player'])))
     rush_ids = {player_key(a['player']) for a in selected}
     coverage = dict(defense)
     for group in GROUPS:
         coverage[group] = [a['player'] for a in rows if a['group'] == group and player_key(a['player']) not in rush_ids]
     coverage['defensive_assignments'] = [a for a in rows if player_key(a['player']) not in rush_ids]
+    if exchange:
+        # The dropper fills the blitzer's underneath job. He is not a spare
+        # unassigned coverage body still labelled as an edge on the rush line.
+        dropped, sent = exchange
+        coverage['defensive_assignments'] = [dict(a, role=sent['role'], alignment=sent['alignment'])
+            if player_key(a['player']) == player_key(dropped['player']) else a
+            for a in coverage['defensive_assignments']]
     return dict(rushers=[a['player'] for a in selected], assignments=selected, coverage=coverage)
 
 
@@ -135,3 +184,38 @@ def protection_pairs(blockers, rush_assignments):
         pairs[i] = b
         if b: used.add(player_key(b))
     return [pairs[i] for i in range(len(rush_assignments))]
+
+
+def protection_helpers(blockers, rush_assignments, matched, threats, protection='five'):
+    """Assign spare blockers by reachable gap and known matchup before any rolls.
+
+    Interior linemen help adjacent interior gaps; retained backs scan inside
+    out in slide protection and edges first in man protection. Tight ends
+    help an edge. Each blocker has one job, with diminishing stacked help.
+    """
+    engaged = {player_key(b) for b in matched if b is not None}
+    spare = {player_key(b): b for b in blockers if b and player_key(b) not in engaged}
+    help_by = [[] for _ in rush_assignments]
+    reach = {'C': INTERIOR, 'LG': ('right_interior', 'nose', 'right_edge'),
+             'RG': ('left_interior', 'nose', 'left_edge'),
+             'LT': ('right_edge', 'right_interior'), 'RT': ('left_edge', 'left_interior'),
+             'TE': EDGES}
+    order = {'C': 0, 'LG': 1, 'RG': 1, 'LT': 2, 'RT': 2, 'TE': 3, 'HB': 4, 'FB': 4}
+    for b in sorted(spare.values(), key=lambda b: (order.get(b.get('pos'), 5), player_key(b))):
+        pos = b.get('pos')
+        allowed = reach.get(pos, EDGES + INTERIOR + ('offball_left', 'offball_right', 'offball_middle', 'slot'))
+        candidates = [i for i, a in enumerate(rush_assignments)
+                      if matched[i] is not None and a['alignment'] in allowed]
+        if not candidates:
+            continue
+        def priority(i):
+            alignment = rush_assignments[i]['alignment']
+            preference = 0.0
+            if pos in ('HB', 'FB'):
+                slide = protection in ('six_slide', 'half_slide')
+                preference = .06 if alignment in (INTERIOR if slide else EDGES) else 0.0
+            return (float(threats[i]) + preference - .25 * len(help_by[i]),
+                    rush_assignments[i]['alignment'], player_key(rush_assignments[i]['player']))
+        chosen = max(candidates, key=priority)
+        help_by[chosen].append(b)
+    return help_by
