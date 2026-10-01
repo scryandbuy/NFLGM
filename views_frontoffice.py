@@ -494,6 +494,84 @@ def _club_done(session, league, abbr):
     return abbr not in alive
 
 
+def _review_performance(league, abbr, year):
+    """Use precisely the opponent report's regular-season performance ranks."""
+    import gameplan_week as GW
+    from types import SimpleNamespace
+    if year == league.year:
+        schedule = league.schedule
+    else:
+        saved = ((getattr(league, 'history', {}) or {}).get(str(year)) or {}).get('schedule') or {}
+        schedule = [(g['week'], g['away']['abbr'], g['home']['abbr'], g['ap'], g['hp'])
+                    for g in saved.get('all_games', [])]
+    context = SimpleNamespace(year=year, teams=league.teams, schedule=schedule,
+                              team_game_stats=getattr(league, 'team_game_stats', {}) or {})
+    rows = GW.performance_table(context, abbr, abbr)
+    units = [dict(label=r['label'], rank=r['mine'], of=len(league.teams),
+                  metric=r['metric'], value=r['mine_value']) for r in rows]
+    sides = dict(offense=rows[0]['mine'], defense=rows[4]['mine'], kicking=None)
+    return units, sides
+
+
+def _review_players(league, abbr, year):
+    import dev_evaluation as DE
+    from types import SimpleNamespace
+    current = int(year) == int(league.year)
+    assessments, ranks = DE.season_comparisons(league, year) if current else ({}, {})
+    # Do not credit a traded player's full-year line to one of his clubs.
+    affiliations = {}
+    for key, book in (getattr(league, 'game_stats', {}) or {}).items():
+        parts = key.split('-')
+        if len(parts) != 4 or parts[0] != str(year) or not 1 <= int(parts[1]) <= 18: continue
+        for pid, line in book.items():
+            if line.get('team'): affiliations.setdefault(pid, set()).add(line['team'])
+    above, below = [], []
+    for pid, line in league.stats.get(year, {}).items():
+        p = league.player(pid)
+        if p is None: continue
+        career = (getattr(p, 'career', {}) or {}).get(year) or (getattr(p, 'career', {}) or {}).get(str(year)) or {}
+        teams = affiliations.get(pid) or {career.get('team', p.team if current else None)}
+        if teams != {abbr}: continue
+        pos = career.get('pos', p.pos)
+        evidence = assessments.get(pid) if current else DE.assessment(SimpleNamespace(pos=pos), line)
+        if not evidence: continue
+        saved = next((r for r in (getattr(p, 'xp_spent', {}) or {}).get('_dev_review', []) if r.get('year') == year), None)
+        if saved and saved.get('group') == evidence['group']:
+            actual, expected, confidence = saved['production'], saved['expected'], saved['confidence']
+        elif current and pid in ranks:
+            actual, expected, confidence = ranks[pid]
+        else:
+            continue  # Never reconstruct historical expectations from today's rating.
+        delta = actual - expected
+        positive = confidence >= .6 and actual > .5 and delta >= .15
+        negative = bool(evidence.get('credible')) and confidence >= .75 and actual < .5 and delta <= -.15
+        if not positive and not negative: continue
+        if pos == 'QB': bits = f"{int(line.get('pass_yds', 0))} yds, {int(line.get('pass_td', 0))} TD, {int(line.get('ints', 0))} INT"
+        elif pos in ('HB', 'FB'): bits = f"{int(line.get('rush_yds', 0))} rush yds, {int(line.get('rush_td', 0))} TD"
+        elif pos in ('WR', 'TE'): bits = f"{int(line.get('rec', 0))} rec, {int(line.get('rec_yds', 0))} yds, {int(line.get('rec_td', 0))} TD"
+        elif pos in ('LT', 'LG', 'C', 'RG', 'RT'): bits = f"{int(line.get('pb_snaps', 0))} pass-block reps, {float(line.get('sacks_allowed', 0)):g} sacks allowed"
+        elif pos == 'K': bits = f"{int(line.get('fg_made', 0))}/{int(line.get('fg_att', 0))} FG"
+        elif pos == 'P': bits = f"{int(line.get('punts', 0))} punts"
+        else: bits = f"{int(line.get('tackles', 0))} tkl, {float(line.get('sacks', 0)):g} sk, {int(line.get('int_def', 0))} INT"
+        card = dict(pid=pid, name=p.name, pos=pos, no=getattr(p, 'number', None),
+                    ovr=round(p.ovr) if current else None, age=int(p.age) if current else None,
+                    line=bits, up=positive, basis=evidence['basis'],
+                    evidence_note=evidence.get('reason', ''), comparison=round(delta * 100, 1))
+        (above if positive else below).append(card)
+    above.sort(key=lambda c: (-c['comparison'], c['pid']))
+    below.sort(key=lambda c: (c['comparison'], c['pid']))
+    return above[:3], below[:3]
+
+
+def _refresh_review_evidence(league, abbr, year, out):
+    if out.get('evidence_version') == 2: return out
+    out = dict(out)
+    out['units'], out['sides'] = _review_performance(league, abbr, year)
+    out['exceeded'], out['short'] = _review_players(league, abbr, year)
+    out['evidence_version'] = 2
+    return out
+
+
 def season_review(session, league, abbr, year=None):
     from views_league import _years, _past
     years = _years(league)
@@ -508,12 +586,12 @@ def season_review(session, league, abbr, year=None):
     if yr == cur and over:
         snap = ((getattr(league, 'history', {}) or {}).get(str(yr)) or {}).get('review')
         if snap is not None:
-            out = dict(snap); out['rail'] = rail(session, league, abbr); out['year'] = yr; out['years'] = years; out['past'] = False; return out
-        out = _season_review_now(session, league, abbr); out['year'] = yr; out['years'] = years; out['past'] = False; return out
+            out = dict(snap); out['rail'] = rail(session, league, abbr); out['year'] = yr; out['years'] = years; out['past'] = False; return _refresh_review_evidence(league, abbr, yr, out)
+        out = _season_review_now(session, league, abbr); out['year'] = yr; out['years'] = years; out['past'] = False; return _refresh_review_evidence(league, abbr, yr, out)
     past = _past(session, league, abbr, 'review', yr)
-    if past is not None: return past
+    if past is not None: return _refresh_review_evidence(league, abbr, yr, past)
     rebuilt = _review_rebuilt(session, league, abbr, yr)
-    if rebuilt is not None: return rebuilt
+    if rebuilt is not None: return _refresh_review_evidence(league, abbr, yr, rebuilt)
     return dict(rail=rail(session, league, abbr), year=yr, years=years, past=True, missing=True)
 
 
@@ -521,8 +599,7 @@ def _review_rebuilt(session, league, abbr, yr):
     """A season that closed before reviews were kept: what the record still holds. The record and finish from the
     standings history and the last postseason, the units from that year's stats, the players from that year's
     lines. The owner's word and next year's money are not recoverable and are left off."""
-    import staff as ST
-    from views import club, surname
+    from views import club
     from views_league import _years
     hist = (getattr(league, 'standings_history', {}) or {}).get(yr) or {}
     rec = hist.get(abbr); rec = rec.get('record') if isinstance(rec, dict) else rec
@@ -536,29 +613,8 @@ def _review_rebuilt(session, league, abbr, yr):
             er = (getattr(post, 'exit_round', {}) or {}).get(abbr)
             exit_ = {'WC': 'Lost in the Wild Card round', 'DIV': 'Lost in the Divisional round', 'CONF': 'Lost the Conference Championship', 'SB': 'Lost the Championship Game'}.get(er, exit_)
             if er is None and abbr in {x for sd in (getattr(post, 'seeds', {}) or {}).values() for x in sd}: exit_ = 'In the playoffs'
-    try: sr = ST.unit_ranks(league, yr).get(abbr, {})
-    except Exception: sr = {}
-    sides = dict(offense=sr.get('oc'), defense=sr.get('dc'), kicking=sr.get('st'))
-    # the players from that year's lines
-    S = league.stats.get(yr, {}) or {}
-    scored = []
-    for pid, line in S.items():
-        p = league.player(pid)
-        if p is None: continue
-        if p.team != abbr and (getattr(p, 'last_team', None) != abbr): continue
-        snaps = int(line.get('snaps', 0) or 0)
-        if snaps < 200: continue
-        epa = sum(float(line.get(k, 0) or 0) for k in ('pass_epa', 'rush_epa', 'rec_epa', 'def_epa'))
-        scored.append((epa / max(1, snaps) * 100.0 - 0.02 * (p.ovr - 75), p, line, snaps))
-    scored.sort(key=lambda x: -x[0])
-    def card(p, line, up):
-        if p.pos == 'QB': bits = f"{int(line.get('pass_yds', 0))} yds, {int(line.get('pass_td', 0))} TD, {int(line.get('ints', 0))} INT"
-        elif p.pos in ('HB', 'FB'): bits = f"{int(line.get('rush_yds', 0))} rush yds, {int(line.get('rush_td', 0))} TD"
-        elif p.pos in ('WR', 'TE'): bits = f"{int(line.get('rec', 0))} rec, {int(line.get('rec_yds', 0))} yds, {int(line.get('rec_td', 0))} TD"
-        else: bits = f"{int(line.get('tackles', 0))} tkl, {float(line.get('sacks', 0) or 0):.0f} sk, {int(line.get('int_def', 0))} INT"
-        return dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), line=bits, up=up)
-    exceeded = [card(p, ln, True) for _s, p, ln, sn in scored[:3]]
-    short = [card(p, ln, False) for _s, p, ln, sn in scored[-3:][::-1] if p.ovr >= 78]
+    units, sides = _review_performance(league, abbr, yr)
+    exceeded, short = _review_players(league, abbr, yr)
     timeline = []
     snap_s = ((getattr(league, 'history', {}) or {}).get(str(yr)) or {}).get('schedule')
     for g in (snap_s or {}).get('all_games', []):
@@ -571,14 +627,14 @@ def _review_rebuilt(session, league, abbr, yr):
     timeline.sort(key=lambda x: x['week'])
     return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=_years(league), past=True, rebuilt=True,
                 record=f"{w}–{l}" + (f"–{d}" if d else ''), pct=round(pct, 3), expected=None, expected_pct=None, finish=exit_, div_rank=None, division=league.teams[abbr].division,
-                owner=None, timeline=timeline, units=[], sides=sides, exceeded=exceeded, short=short, cap=None, pending=[], notes=[], slot=None)
+                owner=None, timeline=timeline, units=units, evidence_version=2, sides=sides, exceeded=exceeded, short=short, cap=None, pending=[], notes=[], slot=None)
 
 
 def _season_review_now(session, league, abbr):
     """The morning after the season ends: the year against what the owner asked for, the seventeen results, the
     units against the league, the men who exceeded and fell short, next year's money and the men whose deals are
     up. Composed once the club is out; readable all offseason."""
-    import gameplan_week as GW, staff as ST, firing_model as FM
+    import firing_model as FM
     from views import _owner_mood, CLUB_NAME, club, surname, next_year_cap
     t = league.teams[abbr]; h = t.hist(); w, l, d = t.record; n = max(1, w + l + d); pct = (w + 0.5 * d) / n
     exp = float(h.get('expected_pct') or 0.5)
@@ -620,37 +676,8 @@ def _season_review_now(session, league, abbr):
     for wk in range(1, 19):
         if wk not in weeks_played: timeline.append(dict(week=wk, bye=True))
     timeline.sort(key=lambda x: x['week'])
-    # the units against the league (stat-based offense and defense, grade-based subunits)
-    try: sr = ST.unit_ranks(league, league.year).get(abbr, {})
-    except Exception: sr = {}
-    try: ur = GW.unit_ranks(league, t)
-    except Exception: ur = {}
-    ROWS = [('Pass Offense', 'QB'), ('Run Offense', 'backs'), ('Pass Block', 'pass block'), ('Receivers', 'receivers'), ('Pass Rush', 'pass rush'), ('Run Front', 'run front'), ('Corners', 'corners'), ('Safeties', 'safeties'), ('Linebackers', 'linebackers')]
-    units = [dict(label=lab, rank=(ur[k][0] if ur.get(k) else None), of=(ur[k][1] if ur.get(k) else 32)) for lab, k in ROWS]
-    sides = dict(offense=sr.get('oc'), defense=sr.get('dc'), kicking=sr.get('st'))
-    # who exceeded and who fell short: this season's production against the player's grade
-    S = league.stats.get(league.year, {}) or {}
-    import xp as XP
-    scored = []
-    for p in t.active():
-        line = S.get(p.pid)
-        if not line: continue
-        snaps = int(line.get('snaps', 0) or 0)
-        if snaps < 200: continue
-        epa = float(line.get('pass_epa', 0) or 0) + float(line.get('rush_epa', 0) or 0) + float(line.get('rec_epa', 0) or 0) + float(line.get('def_epa', 0) or 0)
-        per = epa / max(1, snaps) * 100.0
-        scored.append((per - 0.02 * (p.ovr - 75), p, per, snaps))
-    scored.sort(key=lambda x: -x[0])
-    def card(p, per, snaps, up):
-        line = S.get(p.pid, {})
-        bits = []
-        if p.pos == 'QB': bits.append(f"{int(line.get('pass_yds', 0))} yds, {int(line.get('pass_td', 0))} TD, {int(line.get('ints', 0))} INT")
-        elif p.pos in ('HB', 'FB'): bits.append(f"{int(line.get('rush_yds', 0))} rush yds, {int(line.get('rush_td', 0))} TD")
-        elif p.pos in ('WR', 'TE'): bits.append(f"{int(line.get('rec', 0))} rec, {int(line.get('rec_yds', 0))} yds, {int(line.get('rec_td', 0))} TD")
-        else: bits.append(f"{int(line.get('tackles', 0))} tkl, {float(line.get('sacks', 0) or 0):.0f} sk, {int(line.get('int_def', 0))} INT")
-        return dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), line=bits[0], up=up)
-    exceeded = [card(p, per, sn, True) for _s, p, per, sn in scored[:3]]
-    short = [card(p, per, sn, False) for _s, p, per, sn in scored[-3:][::-1] if p.ovr >= 78]
+    units, sides = _review_performance(league, abbr, league.year)
+    exceeded, short = _review_players(league, abbr, league.year)
     # next year's money and the players whose deals are up
     limit_next, committed_next, rollover, dead_next = next_year_cap(league, t)
     expiring = sorted([p for p in t.active() if p.contract and p.contract.years <= 1], key=lambda p: -p.ovr)
@@ -663,7 +690,7 @@ def _season_review_now(session, league, abbr):
     except Exception: slot = None
     return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, record=f"{w}–{l}" + (f"–{d}" if d else ''), pct=round(pct, 3), expected=exp_words, expected_pct=round(exp, 2), slot=slot,
                 finish=exit_, div_rank=div_rank, division=t.division, owner=dict(name=own['name'], mood=mood, line=owner_line, job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat')),
-                timeline=timeline, units=units, sides=sides, exceeded=exceeded, short=short, cap=dict(limit=round(limit_next, 1), committed=round(committed_next, 1), dead=round(dead_next, 1), rollover=round(rollover, 1), room=round(room, 1)),
+                timeline=timeline, units=units, evidence_version=2, sides=sides, exceeded=exceeded, short=short, cap=dict(limit=round(limit_next, 1), committed=round(committed_next, 1), dead=round(dead_next, 1), rollover=round(rollover, 1), room=round(room, 1)),
                 pending=pending)
 
 

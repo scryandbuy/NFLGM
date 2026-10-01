@@ -2876,15 +2876,17 @@ function renderReview(v) {
   const owner = v.owner ? el('div', { class: 'rv-owner' }, el('div', { class: 'rv-tag ' + v.owner.mood.toLowerCase() }, v.owner.mood), el('div', { class: 'rv-quote' }, v.owner.line), el('div', { class: 'rv-job' }, `Your seat: ${v.owner.job}`)) : el('div', { class: 'rv-owner' }, el('div', { class: 'rv-quote' }, 'The owner\'s word from that year was not kept.'));
   hero.append(left, owner); content.append(hero);
   // three columns
-  const units = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Units', el('small', {}, `offense ${v.sides.offense ? ordn(v.sides.offense) : '—'} · defense ${v.sides.defense ? ordn(v.sides.defense) : '—'}`)));
-  if (!v.units.length) units.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'The unit grades from that year were not kept.'));
+  const units = el('section', { class: 'sheet c4' }, el('h2', {}, 'Season Performance', el('small', {}, `offense ${v.sides.offense ? ordn(v.sides.offense) : '—'} · defense ${v.sides.defense ? ordn(v.sides.defense) : '—'}`)));
+  units.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'Regular-season yards and points per game. Missing records stay unranked.'));
   const ub = el('div', { class: 'rv-units' });
-  for (const u of v.units) { const r = u.rank || 32; const pct = 100 * (1 - (r - 1) / Math.max(1, u.of - 1)); ub.append(el('div', { class: 'rv-u' }, el('span', { class: 'lab' }, u.label), el('div', { class: 'bar' }, el('i', { style: `width:${pct}%;background:${r <= 8 ? 'var(--ok)' : r >= 24 ? 'var(--danger)' : 'var(--ink-3)'}` })), el('b', { class: r <= 8 ? 'good' : r >= 24 ? 'bad' : '' }, u.rank ? ordn(u.rank) : '—'))); }
+  for (const u of v.units) { const r = u.rank || 32; const pct = 100 * (1 - (r - 1) / Math.max(1, u.of - 1)); ub.append(el('div', { class: 'rv-u', 'data-tip': `${u.metric || u.label}: ${u.value == null ? 'Not recorded' : u.value}` }, el('span', { class: 'lab' }, u.label), el('div', { class: 'bar' }, el('i', { style: `width:${pct}%;background:${r <= 8 ? 'var(--ok)' : r >= 24 ? 'var(--danger)' : 'var(--ink-3)'}` })), el('b', { class: r <= 8 ? 'good' : r >= 24 ? 'bad' : '' }, u.rank ? ordn(u.rank) : '—'))); }
   units.append(ub); content.append(units);
-  const men = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Players', el('small', {}, 'who rose, who fell')));
-  const cardOf = p => el('div', { class: 'rv-card' + (p.up ? ' up' : ' down'), onclick: () => { location.hash = '#club/player/' + p.pid; }, style: 'cursor:pointer' }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, p.no != null ? p.no : p.pos), el('div', { class: 'rv-body' }, el('div', { class: 'nm' }, p.name, el('small', {}, ` ${p.pos} · ${p.age}`)), el('div', { class: 'ln' }, p.line)), el('div', { class: 'rv-ovr' }, p.ovr));
-  men.append(el('div', { class: 'h5', style: 'padding:6px 14px 0' }, 'Exceeded the grade')); for (const p of v.exceeded) men.append(cardOf(p));
-  if (v.short.length) { men.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Fell short of it')); for (const p of v.short) men.append(cardOf(p)); }
+  const men = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Players', el('small', {}, 'performance against role expectations')));
+  const cardOf = p => el('div', { class: 'rv-card' + (p.up ? ' up' : ' down'), onclick: () => { location.hash = '#club/player/' + p.pid; }, style: 'cursor:pointer', 'data-tip': [p.basis, p.evidence_note].filter(Boolean).join(' · ') }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, p.no != null ? p.no : p.pos), el('div', { class: 'rv-body' }, el('div', { class: 'nm' }, p.name, el('small', {}, ` ${p.pos}${p.age == null ? '' : ' · ' + p.age}`)), el('div', { class: 'ln' }, p.line)), el('div', { class: 'rv-ovr' }, p.ovr == null ? '—' : p.ovr));
+  men.append(el('div', { class: 'h5', style: 'padding:6px 14px 0' }, 'Above expectations')); for (const p of v.exceeded) men.append(cardOf(p));
+  if (!v.exceeded.length) men.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'No players have sufficient evidence of exceeding role expectations.'));
+  if (v.short.length) { men.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Below expectations')); for (const p of v.short) men.append(cardOf(p)); }
+  men.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'Compared with players in the same role. Limited evidence is left ungraded; older seasons require saved expectations.'));
   content.append(men);
   if (!v.cap) { content.append(el('section', { class: 'sheet c4' }, el('h2', {}, 'Next Year'), el('div', { class: 'count', style: 'padding:8px 14px' }, 'The money from that year was not kept.'))); return; }
   const money = el('section', { class: 'sheet c4' }, el('h2', {}, 'Next Year', el('small', {}, `$${v.cap.limit}m cap`)));

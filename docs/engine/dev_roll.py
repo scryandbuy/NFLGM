@@ -29,25 +29,8 @@ def run(league, votes, rng, season=None, verbose=False):
             pid = getattr(winner, 'pid', winner)
             if isinstance(pid, str) and league.player(pid): won[pid].add(award)
 
-    groups, assessments = collections.defaultdict(list), {}
     lines = league.stats.get(year, {})
-    # Include processed players in comparisons so partial retries keep ranks.
-    for pid, line in lines.items():
-        p = league.player(pid)
-        if p is None or p.retired: continue
-        assessment = DE.assessment(p, line)
-        if assessment is not None:
-            assessments[pid] = assessment
-            groups[assessment['group']].append(p)
-    ranks = {}
-    for group, players in groups.items():
-        production = _pct([assessments[p.pid]['score'] for p in players])
-        expected = .5 + .7*(_pct([p.ovr for p in players])-.5)
-        # Small groups get cautious assessments, not an arbitrary freeze.
-        peer_confidence = min(1., max(0., (len(players)-1)/3.))
-        for p, pr, ex in zip(players, production, expected):
-            confidence = min(1., max(0., assessments[p.pid]['confidence'])) * peer_confidence
-            ranks[p.pid] = (.5 + (float(pr)-.5)*confidence, float(ex), confidence)
+    assessments, ranks = DE.season_comparisons(league, year)
 
     already_logged = {x.get('pid') for x in league.transactions
                       if x.get('kind') == 'dev_trait' and x.get('year') == year}

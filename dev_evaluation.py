@@ -190,3 +190,33 @@ No ratings, age, development trait, team record or awards enter the score.
                        'Net punt yardage with placement rates',
                        'Field-position-adjusted punt opportunity data are unavailable')
     return None
+
+
+def season_comparisons(league, year):
+    """Shared role/grade comparisons for development and the season review.
+
+    Read-only: the caller decides whether evidence warrants an action.
+    """
+    from collections import defaultdict
+    import numpy as np
+    groups, assessments, ranks = defaultdict(list), {}, {}
+    for pid, line in league.stats.get(year, {}).items():
+        p = league.player(pid)
+        if p is None or p.retired: continue
+        result = assessment(p, line)
+        if result is not None:
+            assessments[pid] = result
+            groups[result['group']].append(p)
+    def percentile(values):
+        if len(values) <= 1: return np.full(len(values), .5)
+        _, inverse, counts = np.unique(values, return_inverse=True, return_counts=True)
+        starts = np.cumsum(counts) - counts
+        return (starts[inverse] + (counts[inverse] - 1) / 2.) / (len(values) - 1)
+    for players in groups.values():
+        production = percentile([assessments[p.pid]['score'] for p in players])
+        expected = .5 + .7 * (percentile([p.ovr for p in players]) - .5)
+        peer_confidence = min(1., max(0., (len(players) - 1) / 3.))
+        for p, actual, expectation in zip(players, production, expected):
+            confidence = min(1., max(0., assessments[p.pid]['confidence'])) * peer_confidence
+            ranks[p.pid] = (.5 + (float(actual) - .5) * confidence, float(expectation), confidence)
+    return assessments, ranks
