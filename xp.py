@@ -252,9 +252,12 @@ def points_bought(player):
                if not k.startswith('_') and isinstance(v, (int, float)))
 
 
-def elite_learning(player):
-    """The tested young-prospect window; other tiers retain ordinary progression."""
-    return player.dev in ('superstar', 'xfactor') and player.age <= 24
+def learning_relief(player):
+    """All tiers learn more cheaply when young, tapering smoothly from 24 to 30."""
+    return max(0., min(1., (30. - float(player.age)) / 6.))
+
+
+PERFORMANCE_BONUS = {'normal': .15, 'star': .30, 'superstar': .60, 'xfactor': .75}
 
 
 def cost_per_point(player, attr=None):
@@ -270,9 +273,9 @@ def cost_per_point(player, attr=None):
     late = 1.0 + late_slope * max(0.0, float(player.age) - late_from)
     same = float(player.xp_spent.get(attr, 0) or 0) if attr else 0.0
     career_escalator, skill_escalator = ESCALATOR, ATTR_ESCALATOR
-    if elite_learning(player):
+    if learning_relief(player):
         # Full moderate relief through 88 OVR, fading to ordinary prices at 94.
-        blend = max(0., min(1., (94. - player.ovr) / 6.))
+        blend = learning_relief(player) * max(0., min(1., (94. - player.ovr) / 6.))
         career_escalator = ESCALATOR + (1.01 - ESCALATOR) * blend
         skill_escalator = ATTR_ESCALATOR + (1.03 - ATTR_ESCALATOR) * blend
     if attr in PHYSICAL or attr in TOOLS:
@@ -417,7 +420,7 @@ def game_xp(player, line, season=None):
     performance = event_xp(line) + weekly_xp(player, line, season)
     # Snap participation keeps its ordinary reward even if supplied in this line.
     snaps = event_xp({'snaps': line.get('snaps', 0)})
-    boost = (1.75 if player.dev == 'xfactor' else 1.6) if elite_learning(player) else 1.
+    boost = 1. + PERFORMANCE_BONUS.get(player.dev, 0.) * learning_relief(player)
     return ((performance - snaps) * boost + snaps) * modifier(player)
 
 
