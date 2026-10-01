@@ -1,9 +1,11 @@
 """Regression checks for coach choices reaching the live game."""
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
 import coverage_call
+import defense_roles
 import game
 import gameplan
 import playcall
@@ -65,13 +67,35 @@ class GameAiChoicesTests(unittest.TestCase):
                          kicker=weak, rate_fn=plays.rate), 'punt')
 
     def test_multiple_front_answers_the_offensive_grouping(self):
-        def three_four_share(personnel, down, distance):
+        def calls(personnel, down, distance):
             rng = np.random.default_rng(7)
-            return sum(schemes.call_defense({'personnel': personnel}, down,
-                       distance, rng, lean={'front_pref': ['4-3 over', 'tite']})
-                       ['front_family'] == '3-4' for _ in range(1000))
-        self.assertGreater(three_four_share('12', 2, 2),
-                           three_four_share('10', 3, 10) + 150)
+            return [schemes.call_defense({'personnel': personnel}, down,
+                    distance, rng, lean={'front_pref': ['4-3 over', 'tite']})
+                    for _ in range(1000)]
+        heavy, spread = calls('12', 2, 2), calls('10', 3, 10)
+        # Odd-coach nickel/dime keep their 3-4 identity but align four rush-front
+        # players. Check the actual package rather than counting that label.
+        def three_lineman_count(rows):
+            return sum(defense_roles.counts(c['front_family'], c['personnel'])['dl'] == 3
+                       for c in rows)
+        self.assertGreater(three_lineman_count(heavy), three_lineman_count(spread) + 150)
+        self.assertGreater(sum(c['personnel'] == 'base' for c in heavy), 600)
+        self.assertTrue(all(c['personnel'] == 'dime' for c in spread))
+        for call in heavy + spread:
+            shape = defense_roles.counts(call['front_family'], call['personnel'])
+            self.assertEqual(sum(shape.values()), 11)
+            self.assertEqual(schemes.FRONTS[call['front']]['dl'], shape['dl'])
+
+    def test_multiple_front_situation_changes_choice_with_same_package(self):
+        # Isolate front selection from personnel selection: removing the
+        # run-threat weighting must fail even if package substitutions work.
+        def tite_count(personnel, down, distance):
+            rng = np.random.default_rng(7)
+            with patch.object(schemes, 'defensive_personnel', return_value='base'):
+                return sum(schemes.call_defense({'personnel': personnel}, down,
+                           distance, rng, lean={'front_pref': ['4-3 over', 'tite']})
+                           ['front'] == 'tite' for _ in range(1000))
+        self.assertGreater(tite_count('12', 2, 2), tite_count('10', 3, 10) + 150)
 
 
 if __name__ == '__main__':
