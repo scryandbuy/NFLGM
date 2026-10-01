@@ -171,6 +171,8 @@ class SeasonRunner(StandingsView):
                  cond=dict(st.cond.cond), cond_snaps=dict(st.cond.snaps),
                  cond_policy=st.cond.policy, jaded=dict(st.jaded),
                  snaps=dict(st.snaps), last_snaps=dict(getattr(st, 'last_snaps', {}) or {}),
+                 snap_counts=copy.deepcopy(getattr(st, 'snap_counts', {})),
+                 last_snap_counts=copy.deepcopy(getattr(st, 'last_snap_counts', {})),
                  plan=asdict(st.plan), base_plan=asdict(st.base_plan),
                  script=dict(st.script.__dict__), coach=copy.deepcopy(st.coach),
                  scheme=copy.deepcopy(st.scheme),
@@ -198,6 +200,8 @@ class SeasonRunner(StandingsView):
         st.jaded = dict(d.get('jaded') or {})
         st.snaps = dict(d.get('snaps') or {})
         st.last_snaps = dict(d.get('last_snaps') or {})
+        st.snap_counts = copy.deepcopy(d.get('snap_counts') or {})
+        st.last_snap_counts = copy.deepcopy(d.get('last_snap_counts') or {})
         if d.get('plan'): st.plan = GP.Gameplan(**d['plan'])
         if d.get('base_plan'): st.base_plan = GP.Gameplan(**d['base_plan'])
         if d.get('script'): st.script.__dict__.update(d['script'])
@@ -678,6 +682,7 @@ class SeasonRunner(StandingsView):
                        injury=inj['kind'])
         import game_recap as GR
         GR.post(self.L, home, away, week, res, playoffs)
+        GR.post_snap_counts(self.L, home, away, week, self.states, playoffs)
         return res
 
     # ---- one week -------------------------------------------------------

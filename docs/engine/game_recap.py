@@ -213,6 +213,47 @@ def review_choices(pre, own, against, before=None):
     return findings
 
 
+def post_snap_counts(league, home, away, week, states, playoffs=False):
+    """Freeze one game of participation, including reserves with zero snaps."""
+    import defense_roles as DR
+    user = getattr(league, 'user_team', None)
+    if user not in (home, away): return None
+    key = f'snap-counts-{league.year}-{week}-{home}-{away}-{int(playoffs)}'
+    if IE.seen(league, key): return None
+    state = states[user]
+    counts = getattr(state, 'last_snap_counts', None)
+    if not counts: return None  # No invented counts for a result imported from an older build.
+    team = league.teams[user]
+    roster = {p.pid: p for p in team.active()}
+    roster.update((p.pid, p) for p in (getattr(team, '_elevated', None) or []))
+    for unit in counts.values():
+        for pid in unit['players']:
+            p = league.player(pid)
+            if p is not None: roster[pid] = p
+    order = dict(offense=('QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'),
+                 defense=('LEDG', 'DT', 'REDG', 'MIKE', 'WILL', 'SAM', 'CB', 'FS', 'SS'))
+    report = {}
+    for unit, positions in order.items():
+        recorded = counts.get(unit, dict(total=0, players={}))
+        rows = [dict(pid=p.pid, name=p.name, pos=DR.position(p), snaps=int(recorded['players'].get(p.pid, 0)))
+                for p in roster.values() if DR.position(p) in positions or p.pid in recorded['players']]
+        rows.sort(key=lambda row: (positions.index(row['pos']) if row['pos'] in positions else len(positions),
+                                   -row['snaps'], row['name'], row['pid']))
+        report[unit] = dict(total=int(recorded['total']), rows=rows)
+    report['note'] = ('Recorded offensive and defensive participation, including overtime, two-point attempts '
+                      'and live plays erased by penalties. Kneeldowns and kicking plays are not tracked.')
+    body = []
+    for unit in order:
+        body.append(unit.upper() + '\n' + '\n'.join(
+            f"{p['name']}: {p['snaps']}/{report[unit]['total']} Snaps" for p in report[unit]['rows']))
+    opp = away if user == home else home
+    msg = IE.post(league, key, 'game', f'Snap counts: {user} vs {opp} · Week {week}',
+                  '\n\n'.join(body), sender='Coaching staff',
+                  payload=dict(snap_counts=report, game_key=key, link=f'gameday:{week}'))
+    if msg: msg['week'] = week
+    return msg
+
+
 def post(league, home, away, week, res, playoffs=False):
     user = getattr(league, 'user_team', None)
     if user not in (home, away): return None
