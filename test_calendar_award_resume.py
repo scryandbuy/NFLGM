@@ -1,5 +1,6 @@
 """Public-calendar regressions for cutdown and persisted award effects."""
 import copy
+import json
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
@@ -146,6 +147,19 @@ class CalendarAwardResumeTests(unittest.TestCase):
                 patch('league_notes.season_end'):
             s.step_awards()
         morale.assert_not_called()
+
+    def test_old_championship_week_save_gets_honors_on_load(self):
+        saved = json.loads(self.baseline)
+        saved['_stop'] = ['playoffs', 3]
+        saved['_post_live'] = dict(games=[], champion=None, finalists={}, exit_round={},
+                                   seeds={}, alive={}, conf_champs={'Continental': 'GB', 'United': 'KC'})
+        session = SS.Session.load(json.dumps(saved))
+        self.assertIn(session.L.year, session.L.awards)
+        letters = [m for m in session.L.inbox if m.get('subject') == "The season's honors"]
+        self.assertEqual(len(letters), 1)
+        again = SS.Session.load(session.save())
+        self.assertEqual(again.L.awards, session.L.awards)
+        self.assertEqual(len([m for m in again.L.inbox if m.get('subject') == "The season's honors"]), 1)
 
 
 if __name__ == '__main__':

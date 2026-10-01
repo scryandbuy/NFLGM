@@ -228,6 +228,11 @@ class Session:
             s.draft.last_dealt = live.get('last_dealt')
             s.draft.trade_targets = {int(sel): dict(intent) for sel, intent in live.get('trade_targets', {}).items()
                                      if intent.get('pid') in s.L.players and intent.get('buyer') in s.L.teams}
+        # Saves made before honors moved to the week before the final have
+        # already crossed that calendar boundary. Publish the ballot on load.
+        if (s.stop[0] == 'playoffs' and len(s.stop) > 1 and int(s.stop[1]) >= 3
+                and s.post_live is not None and len(getattr(s.post_live, 'conf_champs', {}) or {}) == 2):
+            s._announce_honors()
         return s
 
     def _recorded_votes(self):
@@ -559,6 +564,8 @@ class Session:
                 self._playoff_prep(0)
             post = self.post_live
             rnd = PS.Postseason.ROUNDS[rnd_i]; wk_ = 19 + rnd_i
+            if rnd == 'SB' and len(getattr(post, 'conf_champs', {}) or {}) == 2:
+                self._announce_honors()
             self.L._post_ref = post
             if self.played and not any(g[0] == rnd for g in post.games):
                 self.played = False                       # a save from before the round flow: this round has not been played
