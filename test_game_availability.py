@@ -141,6 +141,16 @@ class AvailabilityTests(unittest.TestCase):
         self.assertIn(old, team.active())
         self.assertFalse(GA.shortages(GA.dressed(team, None, 2)))
 
+    def test_center_can_cover_long_snaps_when_no_ls_is_available(self):
+        league, team = self.roster()
+        for p in team.by_pos('QB'): p.out_until = None
+        snapper = team.by_pos('LS')[0]
+        team.roster.remove(snapper)
+        snapper.team = None
+        self.assertFalse(any(label == 'LS' for label, _, _ in GA.shortages(GA.dressed(team, None, 2))))
+        GA.ensure(league, team, None, 2)
+        self.assertIsNone(snapper.team)
+
     def test_other_squad_is_last_resort_and_poach_lock_applies(self):
         league, team = self.roster()
         other = Team('ATL', 'NFC South', 'NFC'); other.league = league

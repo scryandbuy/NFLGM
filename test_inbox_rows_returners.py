@@ -34,6 +34,11 @@ class InboxRowsTests(unittest.TestCase):
         self.assertEqual(inbox.body_rows(league,dict(body=body)),[body])
         self.assertEqual(inbox.body_rows(league,dict(body=body,payload={'body_rows':['First player','Second player']})),['First player','Second player'])
 
+    def test_injury_prose_uses_full_reading_width(self):
+        league=NS(players={})
+        body='His hands will be off Sunday; the risk of making the elbow worse is small. The trainers would let him go; Penix Jr. is the drop-off.'
+        self.assertEqual(inbox.body_rows(league,dict(kind='injury_decision',body=body)),[body])
+
 
 class ReturnerPriorityTests(unittest.TestCase):
     def setUp(self):

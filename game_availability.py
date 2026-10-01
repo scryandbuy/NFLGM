@@ -27,7 +27,10 @@ REQUIREMENTS = (
     ('backs/receivers', ('HB', 'FB', 'WR', 'TE'), 5),
     ('defensive back', ('CB', 'FS', 'SS'), 1),
     ('defense', tuple(sorted(DR.DEFENSE)), 11),
-    ('K', ('K',), 1), ('P', ('P',), 1), ('LS', ('LS',), 1),
+    ('K', ('K',), 1), ('P', ('P',), 1),
+    # game.snapper_for already uses a center when no long snapper is dressed.
+    # Older saves can run out of LS before the new draft pipeline reaches camp.
+    ('LS', ('LS', 'C'), 1),
 )
 
 
