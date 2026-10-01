@@ -3,6 +3,11 @@
     "status": "generated",
     "reason": "Generated browser assets superseded by the current build_web.py output."
   },
+  "0cc2c5": {
+    "status": "integrated",
+    "incorporated_as": "f173281",
+    "reason": "Practice XP ceiling source change incorporated and tested."
+  },
   "03820a": {
     "status": "integrated",
     "incorporated_as": "412553d",
@@ -37,6 +42,11 @@
     "incorporated_as": "20100dd",
     "reason": "Source change incorporated and reconciled in this integration line."
   },
+  "2e708d": {
+    "status": "integrated",
+    "incorporated_as": "f173281",
+    "reason": "Equivalent practice XP ceiling source change incorporated and tested."
+  },
   "3cefbe": {
     "status": "integrated",
     "incorporated_as": "6cf23fb",
@@ -53,6 +63,10 @@
     "reason": "Source change incorporated and reconciled in this integration line."
   },
   "5913b2": {
+    "status": "generated",
+    "reason": "Generated browser assets superseded by the current build_web.py output."
+  },
+  "59be93": {
     "status": "generated",
     "reason": "Generated browser assets superseded by the current build_web.py output."
   },
