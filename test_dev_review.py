@@ -50,7 +50,7 @@ class DevReviewTests(unittest.TestCase):
         b.stats[b.year]=dict(reversed(list(b.stats[b.year].items())))
         for l in (a,b):DR.run(l,{},np.random.default_rng(33))
         self.assertEqual({p.pid:p.xp_spent for p in a.players.values()},
-                         {p.pid:p.xp_spent for p in b.players.values()})
+                         {pid:b.player(pid).xp_spent for pid in a.players})
 
     def test_two_poor_seasons_required_and_demotion_resets_evidence(self):
         l=league_fixture();rng=N(random=lambda:.9999);p=l.player('3')
@@ -89,7 +89,8 @@ class DevReviewTests(unittest.TestCase):
         clone=League.load(l.save());clone_rng=np.random.default_rng()
         clone_rng.bit_generator.state=copy.deepcopy(rng.bit_generator.state)
         DR.run(l,{},rng);DR.run(clone,{},clone_rng)
-        self.assertEqual([p.dev for p in l.players.values()],[p.dev for p in clone.players.values()])
+        self.assertEqual({pid:p.dev for pid,p in l.players.items()},
+                         {pid:clone.player(pid).dev for pid in l.players})
         self.assertEqual(rng.bit_generator.state,clone_rng.bit_generator.state)
         before=clone.save();state=copy.deepcopy(clone_rng.bit_generator.state)
         self.assertEqual(DR.run(clone,{},clone_rng),[])

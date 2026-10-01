@@ -475,8 +475,9 @@ def post_snap_counts(league, home, away, week, states, playoffs=False):
         recorded = counts.get(unit, dict(total=0, players={}))
         rows = [dict(pid=p.pid, name=p.name, pos=DR.position(p), snaps=int(recorded['players'].get(p.pid, 0)))
                 for p in roster.values() if DR.position(p) in positions or p.pid in recorded['players']]
-        rows.sort(key=lambda row: (positions.index(row['pos']) if row['pos'] in positions else len(positions),
-                                   -row['snaps'], row['name'], row['pid']))
+        rows.sort(key=lambda row: (-row['snaps'],
+                                   positions.index(row['pos']) if row['pos'] in positions else len(positions),
+                                   row['name'], row['pid']))
         report[unit] = dict(total=int(recorded['total']), rows=rows)
     report['note'] = ('Recorded offensive and defensive participation, including overtime, two-point attempts '
                       'and live plays erased by penalties. Kneeldowns and kicking plays are not tracked.')
