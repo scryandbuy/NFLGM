@@ -945,7 +945,7 @@ class League:
     def to_dict(self):
         from newgens import name_history
         return dict(
-            version=1, competition_names_version=1, rush_accounting_version=1,
+            version=1, competition_names_version=2, rush_accounting_version=1,
             rush_accounting_repair=getattr(self, 'rush_accounting_repair', {}),
             year=self.year, phase=self.phase, week=self.week,
             cap_history={str(y): cap for y, cap in self.cap_history.items()},

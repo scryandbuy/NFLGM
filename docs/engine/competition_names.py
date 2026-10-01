@@ -1,14 +1,16 @@
 """Competition names and a one-time upgrade of older franchise snapshots."""
 import re
+from stadium_names import rename_venues, TEAM_NAMES
 
-VERSION = 1
+VERSION = 2
 _LEGACY = re.compile(r'\b(?:AFC|NFC|Super[ -]?Bowl|SB MVP)\b', re.IGNORECASE)
 _NAMES = {'afc': 'Continental', 'nfc': 'United',
           'superbowl': 'Championship Game', 'sbmvp': 'Championship Game MVP'}
 
 
-def rename_text(text):
-    return _LEGACY.sub(lambda m: _NAMES[re.sub(r'[ -]', '', m.group().lower())], text)
+def rename_text(text, home=None):
+    text = _LEGACY.sub(lambda m: _NAMES[re.sub(r'[ -]', '', m.group().lower())], text)
+    return rename_venues(text, home)
 
 
 def migrate_save(data):
@@ -20,16 +22,18 @@ def migrate_save(data):
     if data.get('competition_names_version', 0) >= VERSION:
         return data
 
-    def walk(value):
+    def walk(value, home=None):
         if isinstance(value, str):
-            return rename_text(value)
+            return rename_text(value, home)
         if isinstance(value, dict):
-            return {rename_text(k) if isinstance(k, str) else k: walk(v)
+            home = next((value[k] for k in ('home_abbr', 'home', 'host', 'abbr')
+                         if isinstance(value.get(k), str) and value[k] in TEAM_NAMES), home)
+            return {rename_text(k, home) if isinstance(k, str) else k: walk(v, home)
                     for k, v in value.items()}
         if isinstance(value, list):
-            return [walk(v) for v in value]
+            return [walk(v, home) for v in value]
         if isinstance(value, tuple):
-            return tuple(walk(v) for v in value)
+            return tuple(walk(v, home) for v in value)
         return value
 
     renamed = walk(data)

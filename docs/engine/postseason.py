@@ -42,11 +42,13 @@ ROUNDS = ('WC', 'DIV', 'CONF', 'SB')
 
 # ================================================================ THE CHAMPIONSHIP GAME SITE
 # A neutral site, awarded years ahead and rotating through the warm-weather and domed buildings the way the real
-# league does it. The 2026 season's game is Championship Game LXI at SoFi; the list then cycles. The host club's
+# league does it. The 2026 season's game is Championship Game LXI at Los Angeles Stadium; the list then cycles. The host club's
 # building supplies the weather (a dome plays as a dome); nobody gets the crowd or the altitude.
-SB_HOSTS = [('LA', 'SoFi Stadium', 'Inglewood, California'), ('ATL', 'Mercedes-Benz Stadium', 'Atlanta'), ('LV', 'Allegiant Stadium', 'Las Vegas'),
-            ('NO', 'Caesars Superdome', 'New Orleans'), ('MIA', 'Hard Rock Stadium', 'Miami Gardens, Florida'), ('ARI', 'State Farm Stadium', 'Glendale, Arizona'),
-            ('HOU', 'NRG Stadium', 'Houston'), ('TB', 'Raymond James Stadium', 'Tampa'), ('SF', "Levi's Stadium", 'Santa Clara, California'), ('DAL', 'AT&T Stadium', 'Arlington, Texas')]
+from stadium_names import STADIUM
+SB_HOSTS = [(abbr, STADIUM[abbr], city) for abbr, city in [
+    ('LA', 'Inglewood, California'), ('ATL', 'Atlanta'), ('LV', 'Las Vegas'),
+    ('NO', 'New Orleans'), ('MIA', 'Miami Gardens, Florida'), ('ARI', 'Glendale, Arizona'),
+    ('HOU', 'Houston'), ('TB', 'Tampa'), ('SF', 'Santa Clara, California'), ('DAL', 'Arlington, Texas')]]
 
 
 def sb_venue(league, year=None):

@@ -32,10 +32,7 @@ CLUB_COLOR = {'ARI': '#97233f', 'ATL': '#a71930', 'BAL': '#241773', 'BUF': '#003
               'LV': '#000000', 'LAC': '#0080c6', 'LA': '#003594', 'MIA': '#008e97', 'MIN': '#4f2683', 'NE': '#002244', 'NO': '#d3bc8d', 'NYG': '#0b2265',
               'NYJ': '#125740', 'PHI': '#004c54', 'PIT': '#ffb612', 'SF': '#aa0000', 'SEA': '#002244', 'TB': '#d50a0a', 'TEN': '#0c2340', 'WAS': '#5a1414'}
 CLUB_ACCENT = {'KC': '#ffb612', 'PIT': '#101820', 'NO': '#101820', 'LV': '#a5acaf'}
-CLUB_NAME = {'ARI': 'Arizona', 'ATL': 'Atlanta', 'BAL': 'Baltimore', 'BUF': 'Buffalo', 'CAR': 'Carolina', 'CHI': 'Chicago', 'CIN': 'Cincinnati', 'CLE': 'Cleveland',
-             'DAL': 'Dallas', 'DEN': 'Denver', 'DET': 'Detroit', 'GB': 'Green Bay', 'HOU': 'Houston', 'IND': 'Indianapolis', 'JAX': 'Jacksonville', 'KC': 'Kansas City',
-             'LV': 'Las Vegas', 'LAC': 'California', 'LA': 'Los Angeles', 'MIA': 'Miami', 'MIN': 'Minnesota', 'NE': 'New England', 'NO': 'New Orleans', 'NYG': 'New York',
-             'NYJ': 'New Jersey', 'PHI': 'Philadelphia', 'PIT': 'Pittsburgh', 'SF': 'San Francisco', 'SEA': 'Seattle', 'TB': 'Tampa Bay', 'TEN': 'Tennessee', 'WAS': 'Washington'}
+from stadium_names import TEAM_NAMES as CLUB_NAME
 CLUB_DISPLAY_ABBR = {'LAC': 'CA', 'NYG': 'NY', 'NYJ': 'NJ'}
 INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 'contract': 'Contract', 'contract_year': 'Contract', 'negotiation': 'Contract', 'waiver': 'Wire', 'waivers': 'Wire', 'wire': 'Wire',
              'squad': 'Squad', 'practice_squad': 'Squad', 'game': 'Game', 'result': 'Game', 'scouting': 'Scouting', 'spring': 'Scouting', 'morale': 'Locker Room', 'trade_request': 'Locker Room',
@@ -45,10 +42,7 @@ DECIDE_KINDS = DECISION_KINDS | {'staff'}
 INBOX_TAG['roster_report'] = 'Assistants'
 
 
-STADIUM = {'ARI': 'State Farm Stadium', 'ATL': 'Mercedes-Benz Stadium', 'BAL': 'M&T Bank Stadium', 'BUF': 'Highmark Stadium', 'CAR': 'Bank of America Stadium', 'CHI': 'Soldier Field', 'CIN': 'Paycor Stadium', 'CLE': 'Huntington Bank Field',
-           'DAL': 'AT&T Stadium', 'DEN': 'Empower Field', 'DET': 'Ford Field', 'GB': 'Lambeau Field', 'HOU': 'NRG Stadium', 'IND': 'Lucas Oil Stadium', 'JAX': 'EverBank Stadium', 'KC': 'Arrowhead Stadium', 'LV': 'Allegiant Stadium', 'LAC': 'SoFi Stadium',
-           'LA': 'SoFi Stadium', 'MIA': 'Hard Rock Stadium', 'MIN': 'U.S. Bank Stadium', 'NE': 'Gillette Stadium', 'NO': 'Caesars Superdome', 'NYG': 'MetLife Stadium', 'NYJ': 'MetLife Stadium', 'PHI': 'Lincoln Financial Field', 'PIT': 'Acrisure Stadium',
-           'SF': "Levi's Stadium", 'SEA': 'Lumen Field', 'TB': 'Raymond James Stadium', 'TEN': 'Nissan Stadium', 'WAS': 'Northwest Stadium'}
+from stadium_names import STADIUM
 
 
 SUFFIXES = ('Jr.', 'Sr.', 'St.', 'Dr.', 'Mr.', 'II.', 'III.', 'IV.')
