@@ -126,7 +126,7 @@ def calibrate_coverage(assessments):
                 actual = sum(COVERAGE_COSTS[k] * cell[k] for k in COVERAGE_OUTCOMES)
                 score += expected * cell['targets'] - actual
                 observed += cell['targets']
-            row['score'] = 100. * score / observed if observed else 0.
+            row['score'] = round(100. * score / observed, 8) if observed else 0.
             completeness = observed / total if total else 0.
             row['confidence'] = min(row['confidence'], completeness)
             row['credible'] = row['confidence'] >= .75 and completeness >= .8

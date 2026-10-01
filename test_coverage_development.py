@@ -60,7 +60,7 @@ class CoverageDevelopmentTests(unittest.TestCase):
             lines.append(d)
         rows=calibrated(lines)
         self.assertTrue(all(r['credible'] for r in rows))
-        for r in rows:self.assertAlmostEqual(r['score'],0.)
+        for r in rows:self.assertEqual(r['score'],0.)
 
     def test_two_seasons_then_save_reload_idempotence(self):
         from league import League
