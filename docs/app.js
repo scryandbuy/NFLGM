@@ -294,6 +294,41 @@ function messageText(message, field) {
   return node;
 }
 
+function renderMailBody(message) {
+  const cellText = cell => messageText({body:cell.text, mentions:{body:cell.mentions || []}}, 'body');
+  const body = el('div', {class:'mbody mail-content'});
+  if (message.mail_sections?.length) {
+    if (message.mail_intro?.text) body.append(el('p', {class:'mail-intro'}, cellText(message.mail_intro)));
+    for (const section of message.mail_sections) {
+      const block = el('section', {class:'mail-section'});
+      if (section.title) block.append(el('h4', {}, section.title));
+      if (section.columns?.length) {
+        const table = el('table', {class:'mail-table'});
+        table.append(el('thead', {}, el('tr', {}, ...section.columns.map(label => el('th', {scope:'col'}, label)))));
+        table.append(el('tbody', {}, ...section.rows.map(row => el('tr', {}, ...row.map(cell => el('td', {}, cellText(cell)))))));
+        block.append(el('div', {class:'mail-table-scroll', tabindex:'0', 'aria-label':section.title || 'Message details'}, table));
+      } else {
+        for (const row of section.rows) block.append(el('div', {class:'mail-body-row'}, ...row.map(cellText)));
+      }
+      body.append(block);
+    }
+    return body;
+  }
+  // Legacy rows are substrings of the original body. Preserve per-occurrence
+  // player IDs (including namesakes) while translating their UTF-16 offsets.
+  const text = message.body || '';
+  let cursor = 0;
+  for (const row of message.body_rows || [text]) {
+    const start = text.indexOf(row, cursor);
+    const refs = start < 0 ? [] : (message.mentions?.body || [])
+      .filter(ref => ref.start >= start && ref.end <= start + row.length)
+      .map(ref => ({...ref, start:ref.start-start, end:ref.end-start}));
+    if (start >= 0) cursor = start + row.length;
+    body.append(el('div', {class:'mail-body-row'}, messageText({body:row, mentions:{body:refs}}, 'body')));
+  }
+  return body;
+}
+
 function renderRecapBody(message) {
   if (message.recap && message.snap_counts) {
     const wrapper = el('div', {class:'combined-game-report'});
@@ -387,9 +422,7 @@ function renderInbox(v) {
     NameLinks.scope(pane, m.entities);
     pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
     const structuredRecap = m.recap || m.snap_counts || (m.kind === 'result' && (m.body || '').includes('PREGAME PLAN\n'));
-    const messageBody = structuredRecap ? renderRecapBody(m) : (m.mentions?.body?.length
-      ? el('div', { class: 'mbody' }, messageText(m,'body'))
-      : el('div', { class: 'mbody' }, ...(m.body_rows || [m.body || '']).map(line => el('div', { class: 'mail-body-row' }, line))));
+    const messageBody = structuredRecap ? renderRecapBody(m) : renderMailBody(m);
     pane.append(el('h3', {}, messageText(m,'subject')), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), messageBody);
     if (m.kind === 'roster_report') pane.append(rosterReportCards(m, reload));
     if (m.kind === 'trade_offer') pane.append(el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openTradeOffer(cur.id, reload) }, cur.decide ? 'Open Trade Offer' : 'View Trade Offer')));

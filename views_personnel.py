@@ -236,7 +236,10 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     except ValueError as e: return dict(ok=False, done=False, why=str(e))
     if counter is not None: counter['state'] = 'accepted'
     import inbox as IB
-    IB.post(league, 'trade_done', f"Trade with {other} is done", f"You send {', '.join(_words(league, a_items))} to {other} for {', '.join(_words(league, b_items))}.", sender=other)
+    if len(a_items) + len(b_items) > 2:
+        IB.post(league, 'trade_done', f"Trade with {other} is done", f"The trade with {other} is complete.", sender=other, payload=dict(mail_sections=[IB.mail_section('You Send', _words(league, a_items)), IB.mail_section('You Receive', _words(league, b_items))]))
+    else:
+        IB.post(league, 'trade_done', f"Trade with {other} is done", f"You send {', '.join(_words(league, a_items))} to {other} for {', '.join(_words(league, b_items))}.", sender=other)
     return dict(ok=True, done=True, why=f"Done. {them.abbr} accepts.")
 
 

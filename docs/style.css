@@ -2983,3 +2983,12 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 
 .plan-report .report-unit-rankings .side-row{grid-template-columns:minmax(0,1.4fr) minmax(64px,1fr) minmax(64px,1fr)}
 .plan-report .report-unit-rankings .side-row>:not(:first-child){text-align:center;justify-self:stretch;font-variant-numeric:tabular-nums}
+
+/* Inbox digests: readable sections with names linked inside individual cells. */
+.inbox-board .mailbox .pane .mail-content{white-space:normal;min-width:0}
+.mail-content .mail-intro{margin:0 0 22px;white-space:pre-wrap}
+.mail-section{margin:24px 0}.mail-section h4{margin:0 0 10px;color:var(--team-accent);font-size:13px;letter-spacing:.04em}
+.mail-content .mail-body-row{white-space:pre-wrap;overflow-wrap:anywhere}
+.mail-table-scroll{max-width:100%;overflow-x:auto}.mail-table{width:100%;border-collapse:collapse;font-size:14px;line-height:1.5}
+.mail-table th,.mail-table td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--rule)}
+.mail-table th{color:var(--ink-3);font-size:11px;font-weight:600}.mail-table td{overflow-wrap:anywhere}.mail-table th:first-child,.mail-table td:first-child{padding-left:0}

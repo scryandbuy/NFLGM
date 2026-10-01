@@ -671,12 +671,13 @@ class Session:
                     m = MO.ensure(p)
                     if m is not None:
                         m.apply('major_award' if k in ('mvp', 'opoy', 'dpoy', 'oroy', 'droy', 'protector') else 'all_pro' if k == 'all_pro_1' else 'all_pro_2')
-                    if p.team == self.user_team: mine.append(f"{inbox_player(p, surname(p.name))} ({names.get(k, k) if k not in ('all_pro_1', 'all_pro_2') else ('All-Pro first team' if k == 'all_pro_1' else 'All-Pro second team')})")
+                    if p.team == self.user_team: mine.append([inbox_player(p), names.get(k, k) if k not in ('all_pro_1', 'all_pro_2') else ('All-Pro first team' if k == 'all_pro_1' else 'All-Pro second team')])
                 if k not in ('all_pro_1', 'all_pro_2'):
                     p = self.L.player(getattr(ws[0], 'pid', ws[0])) if not hasattr(ws[0], 'pid') else ws[0]
-                    if p is not None: lines.append(f"{names.get(k, k)}: {inbox_player(p)} ({p.pos}, {p.team})")
-            body = ('Yours: ' + ', '.join(mine) + '. ' if mine else 'None of yours were named. ') + ' · '.join(lines)
-            IB.post(self.L, 'league', "The season's honors", body, sender='league', payload=dict(link='league:awards'))
+                    if p is not None: lines.append([names.get(k, k), inbox_player(p), p.pos, p.team])
+            body = f'{len(mine)} honors for your team.' if mine else 'None of your players were named.'
+            sections = ([IB.mail_section('Your team', mine, ['Player', 'Honor'])] if mine else []) + [IB.mail_section('League awards', lines, ['Award', 'Player', 'Position', 'Team'])]
+            IB.post(self.L, 'league', "The season's honors", body, sender='league', payload=dict(link='league:awards', mail_sections=sections))
         except Exception as e:
             import sys; print('honors failed:', e, file=sys.stderr)
 
@@ -737,8 +738,9 @@ class Session:
             moves.sort(key=lambda x: -x[0])
             up = [f"{inbox_player(p, surname(p.name))} ({p.pos}, {d:+.1f})" for d, p in moves[:3] if d > 0.4]
             down = [f"{inbox_player(p, surname(p.name))} ({p.pos}, {d:+.1f})" for d, p in moves[-3:][::-1] if d < -0.4]
-            body = f"Your scouts spent the week at the Senior Bowl; {len(moves)} seniors played. " + (f"Helped himself: {', '.join(up)}. " if up else '') + (f"Hurt himself: {', '.join(down)}. " if down else '') + "Their marks on your board have moved; the players who played carry the Senior Bowl tag."
-            IB.post(self.L, 'draft', "Senior Bowl week: the scouts' word", body, sender='scouts', payload=dict(link='draft:board'))
+            body = f"Your scouts watched {len(moves)} seniors. Their marks on your board have moved; participants carry the Senior Bowl tag."
+            sections = ([IB.mail_section('Helped himself', up)] if up else []) + ([IB.mail_section('Hurt himself', down)] if down else [])
+            IB.post(self.L, 'draft', "Senior Bowl week: the scouts' word", body, sender='scouts', payload=dict(link='draft:board', mail_sections=sections))
         except Exception as e:
             import sys; print('senior bowl failed:', e, file=sys.stderr)
 
@@ -762,7 +764,7 @@ class Session:
                 top = sorted(cands, key=hot, reverse=True)[:3]
                 if top:
                     lines = [f"{c.name} ({'OC' if c.role == 'oc' else 'DC'}, {c.team}; his unit ranked {', '.join(str(int(r)) + ('st' if r == 1 else 'nd' if r == 2 else 'rd' if r == 3 else 'th') for r in c.unit_ranks[-2:]) or 'unranked'} the last two years)" for c in top]
-                    IB.post(self.L, 'league', "The coaching market", f"{len(fired)} club{'s' if len(fired) != 1 else ''} making coaching changes. Notable names on the coaching market: " + '; '.join(lines) + '.', sender='league')
+                    IB.post(self.L, 'league', "The coaching market", f"{len(fired)} club{'s' if len(fired) != 1 else ''} making coaching changes.", sender='league', payload=dict(mail_sections=[IB.mail_section('Notable coaching candidates', lines)]))
         except Exception as e:
             import sys; print('black monday failed:', e, file=sys.stderr)
         return fired
@@ -795,9 +797,11 @@ class Session:
             two = sorted([p for p in t.active() if p.contract and p.contract.years == 2 and p.ovr >= 82], key=lambda p: -p.ovr)
             limit_next, committed_next, _ro, _dn = next_year_cap(self.L, t)
             if up or two:
-                body = (f"Deals up: {', '.join(f'{inbox_player(p, surname(p.name))} ({p.pos}, {round(p.ovr)})' for p in up[:6])}. " if up else '') + (f"Two years left and worth a look: {', '.join(f'{inbox_player(p, surname(p.name))} ({p.pos}, {round(p.ovr)})' for p in two[:4])}. " if two else '') + f"About ${limit_next - committed_next:.0f}m of room next year."
+                sections = [IB.mail_section(label, [[inbox_player(p), p.pos, str(round(p.ovr))] for p in players], ['Player', 'Position', 'OVR'])
+                            for label, players in [('Expiring contracts', up), ('Two years left: worth a look', two)] if players]
+                body = f"About ${limit_next - committed_next:.0f}m of room next year."
                 if not IE.seen(self.L, f"extwin-{self.L.year}"):
-                    IE.post(self.L, f"extwin-{self.L.year}", 'contract', "The extension window is open", body, sender='front office', payload=dict(key=f"extwin-{self.L.year}", link='personnel:extensions'))
+                    IE.post(self.L, f"extwin-{self.L.year}", 'contract', "The extension window is open", body, sender='front office', payload=dict(key=f"extwin-{self.L.year}", link='personnel:extensions', mail_sections=sections))
         except Exception as e:
             import sys; print('extension window note failed:', e, file=sys.stderr)
         try:
@@ -805,9 +809,9 @@ class Session:
             ms = [m for m in VF.build_exit_meetings(self, self.L, self.user_team) if not m.get("answer")]
             if ms:
                 from views import surname
-                names = ', '.join(inbox_player(self.L.player(x['pid']), surname(self.L.player(x['pid']).name)) for x in ms if self.L.player(x['pid']))
+                rows = [[inbox_player(self.L.player(x['pid'])), x.get('quote') or x.get('kind', '').replace('_', ' ').title()] for x in ms if self.L.player(x['pid'])]
                 if not IE.seen(self.L, f"exit-{self.L.year}"):
-                    IE.post(self.L, f"exit-{self.L.year}", 'exit', f"Exit meetings: {len(ms)} players want a word", f"{names}.", sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit'))
+                    IE.post(self.L, f"exit-{self.L.year}", 'exit', f"Exit meetings: {len(ms)} players want a word", 'Players waiting to discuss their future.', sender='assistants', payload=dict(key=f"exit-{self.L.year}", link='front_office:exit', mail_sections=[IB.mail_section('Meetings', rows, ['Player', 'Reason'])]))
         except Exception as e:
             import sys; print('exit meetings failed:', e, file=sys.stderr)
 
@@ -860,13 +864,13 @@ class Session:
                     opp = aw if hm == x else hm; mine_, theirs = (hp, ap) if hm == x else (ap, hp)
                     steps.append(f"{nm(opp)} {mine_}-{theirs} in the {PS.Postseason.ROUND_NAMES[r_].replace(' Round', '')}")
                 if x in seed_of and seed_of[x] == 1: steps.insert(0, 'the first-round bye')
-                return ', then '.join(steps) if steps else 'the conference'
+                return '\n'.join(steps) if steps else 'the conference'
             conf_of = {t: cf for cf, sd in (getattr(post, 'seeds', {}) or {}).items() for t in sd}
             lines = [f"Championship Game {site['numeral']} is set: {nm(a)} against {nm(h)}, at {site['stadium']} in {site['city']}.",
-                     f"{nm(a)}, the {seed_of.get(a, '?')} seed out of the {conf_of.get(a, '')}, finished {rec(a)} and came through {road(a)}.",
-                     f"{nm(h)}, the {seed_of.get(h, '?')} seed out of the {conf_of.get(h, '')}, finished {rec(h)} and came through {road(h)}."]
+                     f"{nm(a)}, the {seed_of.get(a, '?')} seed out of the {conf_of.get(a, '')}, finished {rec(a)}. Road to the final:\n{road(a)}",
+                     f"{nm(h)}, the {seed_of.get(h, '?')} seed out of the {conf_of.get(h, '')}, finished {rec(h)}. Road to the final:\n{road(h)}"]
             if user in (h, a): lines.append("You are in it. The game plan is on your desk.")
-            return f"Championship Game {site['numeral']}: {nm(a)} vs {nm(h)} at {site['stadium']}", ' '.join(lines)
+            return f"Championship Game {site['numeral']}: {nm(a)} vs {nm(h)} at {site['stadium']}", '\n\n'.join(lines)
         games = [f"{tag(a)} at {tag(h)}, {STADIUM.get(h, nm(h))}" for c, h, a in ms]
         if mine is not None:
             c, h, a = mine
@@ -875,7 +879,7 @@ class Session:
             alive = {t for al in post.alive.values() for t in al.values()}
             opener = f"You have the bye this round; the winner of the worst surviving seed's game comes to you." if user in alive else "Your season is over."
         subject = {'WC': f"Wild Card Weekend: {len(ms)} games", 'DIV': f"Divisional Round: {len(ms)} games", 'CONF': "Conference Championships: the two finals"}[rnd]
-        return subject, opener + (' The round: ' + '; '.join(games) + '.' if games else '')
+        return subject, opener + ('\n\nThe round\n' + '\n'.join(games) if games else '')
 
     def _close_playoffs(self):
         """After the Championship Game: the champion, the draft order, the firings, and into the offseason."""
@@ -988,9 +992,9 @@ class Session:
             rec = (getattr(self.L, 'regression', {}) or {}).get(str(self.L.year), {})
             from views import surname
             hit = sorted([(v['lost'], pid) for pid, v in rec.items() if v['lost'] >= 0.5], reverse=True)
-            names = ', '.join(f"{inbox_player(self.L.player(pid), surname(self.L.player(pid).name))} ({self.L.player(pid).pos}, −{lost:.0f})" for lost, pid in hit[:6] if self.L.player(pid))
-            body = (f"{len(hit)} of your players lost ground with age: {names}. " if hit else "None of your players lost ground with age this year. ") + "The full analysis, every player and every attribute, is on the Regression page."
-            IB.post(self.L, 'club', f"Going into {self.L.year + 1}: what age took", body, sender='assistants', payload=dict(link='club:regression'))
+            rows = [[inbox_player(self.L.player(pid)), self.L.player(pid).pos, f'−{lost:.1f}'] for lost, pid in hit if self.L.player(pid)]
+            body = (f"{len(hit)} of your players lost ground with age. " if hit else "None of your players lost ground with age this year. ") + "The full attribute analysis is on the Regression page."
+            IB.post(self.L, 'club', f"Going into {self.L.year + 1}: what age took", body, sender='assistants', payload=dict(link='club:regression', mail_sections=[IB.mail_section('Regression', rows, ['Player', 'Position', 'OVR lost'])] if rows else []))
         except Exception as e:
             import sys; print('regression report failed:', e, file=sys.stderr)
         RT.run(L, rng); AL.hall_vote(L, L.year)
@@ -1041,8 +1045,8 @@ class Session:
         from views import surname
         big = sorted([(t_, p, o) for t_, p, o in signed if p.ovr >= 85 or o.apy >= 15.0], key=lambda x: -x[2].apy)
         if big:
-            lines = [f"{inbox_player(p)} ({p.pos}, {round(p.ovr)}) to {t_} for ${o.apy:.1f}m x {o.years}" for t_, p, o in big[:10]]
-            IB.post(L, 'league', f"Free agency, round {k}: the big signings", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market. " + '\n'.join(lines) + ('.' if lines else ''), sender='league', payload=dict(link='personnel:free_agency'))
+            rows = [[inbox_player(p), p.pos, str(round(p.ovr)), t_, str(o.years), f'${o.apy:.1f}m'] for t_, p, o in big[:10]]
+            IB.post(L, 'league', f"Free agency, round {k}: the big signings", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market.", sender='league', payload=dict(link='personnel:free_agency', mail_sections=[IB.mail_section('Notable signings', rows, ['Player', 'Position', 'OVR', 'Team', 'Years', 'Annual salary'])]))
         else:
             IB.post(L, 'league', f"Free agency, round {k}", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market.", sender='league', payload=dict(link='personnel:free_agency'))
 
@@ -1054,8 +1058,8 @@ class Session:
         L, rng = self.L, self.rng
         signed = MK.close_market(L, rng, user_team=self.user_team)
         n_left = len([x for x in L.free_agents if L.player(x)])
-        big = [f"{inbox_player(p)} ({p.pos}, {round(p.ovr)}) to {t_} for ${o.apy:.1f}m" for t_, p, o in sorted(signed, key=lambda x: -x[1].ovr)[:8]]
-        IB.post(L, 'league', "The market closes", f"{len(signed)} veterans signed one-year deals as the market closed; {n_left} players remain unsigned into camp. " + ('\n' + '\n'.join(big) + '.' if big else ''), sender='league', payload=dict(link='personnel:free_agency'))
+        rows = [[inbox_player(p), p.pos, str(round(p.ovr)), t_, f'${o.apy:.1f}m'] for t_, p, o in sorted(signed, key=lambda x: -x[1].ovr)[:8]]
+        IB.post(L, 'league', "The market closes", f"{len(signed)} veterans signed one-year deals as the market closed; {n_left} players remain unsigned into camp.", sender='league', payload=dict(link='personnel:free_agency', mail_sections=[IB.mail_section('Notable signings', rows, ['Player', 'Position', 'OVR', 'Team', 'Annual salary'])] if rows else []))
 
     def _resign_card(self):
         """The calendar sits on Re-sign: one card with your expiring players by class, the tag price on each UFA, tender
@@ -1064,14 +1068,14 @@ class Session:
         if IE.seen(L, key_): return
         sheet = TG.user_resign_sheet(L)
         from views import surname
-        ufa = ', '.join(f"{inbox_player(L.player(r['pid']), surname(r['name']))} ({r['pos']}, {r['ovr']}; tag ${r['tag_price']}m)" for r in sheet['ufa'][:8])
-        rfa = ', '.join(f"{inbox_player(L.player(r['pid']), surname(r['name']))} ({r['pos']}, {r['ovr']}; tender ${r['tender_price']}m)" for r in sheet['rfa'][:8])
-        erfa = ', '.join(f"{inbox_player(L.player(r['pid']), surname(r['name']))} ({r['pos']})" for r in sheet['erfa'][:8])
-        body = (f"Unrestricted: {ufa}. One franchise tag, or none; anyone you do not tag or re-sign goes to the market when you advance. " if sheet['ufa'] else "No unrestricted free agents. ")
-        body += (f"Restricted: {rfa}. Choose Tender in Retain Players to keep matching rights; an untendered player goes to the market unrestricted. " if sheet['rfa'] else "")
-        body += (f"Exclusive rights, kept at the minimum: {erfa}. " if sheet['erfa'] else "")
-        body += f"You can commit about ${sheet['room']}m after the minimums you still owe."
-        IE.post(L, key_, 'contract', "Re-sign: your tag and tenders", body, sender='front office', payload=dict(key=key_, link='personnel:retain'))
+        sections = []
+        for kind, title, price in [('ufa', 'Unrestricted free agents', 'tag_price'), ('rfa', 'Restricted free agents', 'tender_price'), ('erfa', 'Exclusive rights: kept at the minimum', None)]:
+            rows = [[inbox_player(L.player(r['pid']), r['name']), r['pos'], str(r.get('ovr', '—'))] + ([f"${r[price]}m"] if price else []) for r in sheet[kind]]
+            if rows: sections.append(IB.mail_section(title, rows, ['Player', 'Position', 'OVR'] + (['Tag price' if kind == 'ufa' else 'Tender price'] if price else [])))
+        sections.append(IB.mail_section('Before advancing', [
+            'One franchise tag, or none. Untagged unrestricted players without new deals enter the market.',
+            'Tender restricted players in Retain Players to keep matching rights. Untendered players enter the market unrestricted.']))
+        IE.post(L, key_, 'contract', "Re-sign: your tag and tenders", f"You can commit about ${sheet['room']}m after the minimums you still owe.", sender='front office', payload=dict(key=key_, link='personnel:retain', mail_sections=sections))
 
     def _open_fa_if_due(self):
         """The calendar sits on a free-agency round: open it (once) so the offers can be made before the advance."""
@@ -1559,6 +1563,7 @@ class Session:
         pl = m.get('payload') or {}
         import roster_advisor as RA
         return dict(id=m['id'], mentions=m.get('mentions', {}), entities=m.get('entities') or IB.entity_references(self.L, m['subject']+'\n'+(m.get('body') or ''), pl), status=m.get('status'), subject=m['subject'], body=m.get('body') or '', body_rows=IB.body_rows(self.L, m), tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'), recap=pl.get('recap'), snap_counts=pl.get('snap_counts'),
+                    mail_sections=pl.get('mail_sections'), mail_intro=pl.get('mail_intro'),
                     recommendations=RA.recommendations(self.L, m) if m.get('kind') == 'roster_report' else [],
                     **{'from': m.get('sender')}, when=(f"{m.get('year')} · Week {m.get('week')}" if m.get('week') else str(m.get('year') or '')), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=IB.is_decision(m))
 

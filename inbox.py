@@ -61,7 +61,32 @@ def _box(league):
     return league.inbox
 
 
+def mail_section(title, rows, columns=()):
+    """Explicit display structure; strings may contain player_name mentions."""
+    return dict(title=title, columns=list(columns),
+                rows=[list(row) if isinstance(row, (list, tuple)) else [row] for row in rows])
+
+
 def post(league, kind, subject, body, sender=None, payload=None, expires_week=None):
+    payload = dict(payload or {})
+    sections = payload.get('mail_sections')
+    if sections:
+        # Preserve the plain body for exports, search, and older readers. Store
+        # mention offsets within each cell as well as within that full body.
+        def cell(value):
+            text, refs = _mentions(str(value))
+            return dict(text=text, mentions=refs)
+        payload['mail_intro'] = cell(body)
+        chunks = [body] if body else []
+        normalized = []
+        for section in sections:
+            rows = section.get('rows') or []
+            chunks.append('\n'.join([section.get('title') or ''] +
+                                     [' | '.join(str(value) for value in row) for row in rows]))
+            normalized.append(dict(title=section.get('title') or '', columns=section.get('columns') or [],
+                                   rows=[[cell(value) for value in row] for row in rows]))
+        payload['mail_sections'] = normalized
+        body = '\n\n'.join(chunks)
     subject, subject_refs = _mentions(subject)
     body, body_refs = _mentions(body)
     m = dict(id=next(_ids), year=league.year, week=league.week, kind=kind,
@@ -74,6 +99,10 @@ def post(league, kind, subject, body, sender=None, payload=None, expires_week=No
             m['entities'].append({k: ref[k] for k in ('kind', 'id', 'name')})
     for field in ('subject', 'body'):
         m['mentions'][field] = reference_spans(m[field], m['entities'], m['mentions'][field])
+    if sections:
+        cells = [payload['mail_intro']] + [c for s in payload['mail_sections'] for row in s['rows'] for c in row]
+        for c in cells:
+            c['mentions'] = reference_spans(c['text'], m['entities'], c['mentions'])
     _box(league).append(m)
     return m
 
@@ -113,8 +142,19 @@ def post_trade_offer(league, buyer, user_team, sends, gets, why, expires_week):
     names = ', '.join(player_name(league.players[g]) for g in gets)
     body = (f"{league.teams[buyer].name if hasattr(league.teams[buyer], 'name') else buyer} would like "
             f"{names}. {why}")
+    sections = []
+    if len(sends) + len(gets) > 2:
+        def asset(x):
+            if isinstance(x, str):
+                p = league.player(x)
+                return f'{player_name(p)} ({p.pos})' if p is not None else x
+            from views import draft_year
+            return f'{draft_year(x.year)} R{x.round} ({x.original})'
+        body = why
+        sections = [mail_section('You Send', [asset(x) for x in gets]),
+                    mail_section('You Receive', [asset(x) for x in sends])]
     return post(league, 'trade_offer', f'Trade offer from {buyer} for {names}', body, sender=buyer,
-                payload=dict(buyer=buyer, user_team=user_team, sends=[key(x) for x in sends], gets=list(gets)),
+                payload=dict(buyer=buyer, user_team=user_team, sends=[key(x) for x in sends], gets=list(gets), mail_sections=sections),
                 expires_week=expires_week)
 
 
@@ -279,6 +319,10 @@ def body_rows(league, message):
     explicit = (message.get('payload') or {}).get('body_rows')
     if isinstance(explicit, list):
         return [str(line) for line in explicit if str(line).strip()]
+    if '\n' in body:
+        # Producers already chose the boundaries. Do not separate a labeled
+        # injury status or recommendation from the player it describes.
+        return [line.strip() for line in body.splitlines() if line.strip()]
     names = {p.name for p in getattr(league, 'players', {}).values()
              if getattr(p, 'name', None) and p.name in body}
     positions = r'QB|HB|RB|FB|WR|TE|LT|LG|C|RG|RT|LEDG|REDG|LE|RE|DT|NT|MIKE|WILL|SAM|MLB|LOLB|ROLB|CB|FS|SS|K|P|LS|OC|DC|HC'

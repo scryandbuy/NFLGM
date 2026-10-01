@@ -239,21 +239,20 @@ def season_end(league, votes):
             if hasattr(v, 'pid'): return f"{inbox_player(v)} ({v.pos}, {v.team})"
             p = league.player(v) if isinstance(v, str) and v in league.players else None
             return f"{inbox_player(p)} ({p.pos}, {p.team})" if p else str(v)
-        parts = [f"{label}: {nm(votes.get(k))}" for k, label in (('mvp', 'MVP'), ('opoy', 'Offensive Player of the Year'), ('dpoy', 'Defensive Player of the Year'), ('oroy', 'Offensive Rookie of the Year'), ('droy', 'Defensive Rookie of the Year'), ('protector', 'Protector of the Year'), ('coty', 'Coach of the Year'), ('sb_mvp', 'Championship Game MVP')) if votes.get(k)]
-        IB.news(league, f"{year} awards", '. '.join(parts) + '.', payload=dict(link='league:awards'))
+        rows = [[label, nm(votes.get(k))] for k, label in (('mvp', 'MVP'), ('opoy', 'Offensive Player of the Year'), ('dpoy', 'Defensive Player of the Year'), ('oroy', 'Offensive Rookie of the Year'), ('droy', 'Defensive Rookie of the Year'), ('protector', 'Protector of the Year'), ('coty', 'Coach of the Year'), ('sb_mvp', 'Championship Game MVP')) if votes.get(k)]
+        IB.news(league, f"{year} awards", 'The season’s award winners.', payload=dict(link='league:awards', mail_sections=[IB.mail_section('Awards', rows, ['Award', 'Recipient'])]))
         sections = []
         for key, label in (('all_pro_1', 'First team'), ('all_pro_2', 'Second team')):
             players = votes.get(key) or []
-            if players:
-                names = ', '.join(f"{inbox_player(p)} ({p.pos}, {p.team})" +
-                                  (' — your team' if p.team == getattr(league, 'user_team', None) else '')
-                                  for p in players if hasattr(p, 'name'))
-                sections.append(f'{label}: {names}.')
+            rows = [[inbox_player(p), p.pos, p.team, 'your team' if p.team == getattr(league, 'user_team', None) else ''] for p in players if hasattr(p, 'name')]
+            if rows: sections.append(IB.mail_section(label, rows, ['Player', 'Position', 'Team', '']))
         if sections:
-            IB.news(league, f'{year} All-Pro teams', ' '.join(sections), payload=dict(link='league:awards'))
+            IB.news(league, f'{year} All-Pro teams', 'First- and second-team selections.', payload=dict(link='league:awards', mail_sections=sections))
     hof = [x for x in league.transactions if x.get('kind') == 'hall_of_fame' and x.get('year') == year]
     if hof and _once(league, f"hof-{year}"):
-        IB.news(league, f"Hall of Fame class of {year}", ', '.join(f"{inbox_player(league.player(x.get('pid')), x.get('name'))} ({x.get('pos')})" for x in hof) + ' inducted.', payload=dict(link='league:almanac'))
+        rows = [[inbox_player(league.player(x.get('pid')), x.get('name')), x.get('pos', '')] for x in hof]
+        IB.news(league, f"Hall of Fame class of {year}", 'This year’s inductees.', payload=dict(link='league:almanac', mail_sections=[IB.mail_section('Hall of Fame', rows, ['Player', 'Position'])]))
     ret = [x for x in league.transactions if x.get('kind') == 'retire' and x.get('year') == year and league.player(x.get('pid')) is not None and league.player(x['pid']).ovr >= 85]
     if ret and _once(league, f"retire-{year}"):
-        IB.news(league, f"{len(ret)} star{'s' if len(ret) > 1 else ''} retire", ', '.join(f"{inbox_player(league.player(x['pid']), x.get('name'))} ({x.get('pos')}, {round(league.player(x['pid']).ovr)})" for x in ret) + (' hang it up.' if len(ret) > 1 else ' hangs it up.'), payload=dict(link='league:almanac'))
+        rows = [[inbox_player(league.player(x['pid']), x.get('name')), x.get('pos', ''), str(round(league.player(x['pid']).ovr))] for x in ret]
+        IB.news(league, f"{len(ret)} star{'s' if len(ret) > 1 else ''} retire", 'These players are calling it a career.', payload=dict(link='league:almanac', mail_sections=[IB.mail_section('Retirements', rows, ['Player', 'Position', 'OVR'])]))

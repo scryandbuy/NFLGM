@@ -142,7 +142,10 @@ def hurt_words(league, team, p, desig, mentions=False):
         rec = (f"with {label(backup)} healthy behind him the trainers would sit him" if (gap < 4 or risk >= 0.15 and gap < 8) else f"the trainers would let him go; {label(backup)} is the drop-off")
     else: rec = 'there is nobody behind him, and the trainers would let him go'
     words = f"{label(p)} is {desig} with a {kind.lower()}{', a week from healthy' if desig == 'questionable' else ', two weeks from healthy'}. {cost} Sunday; {risk_w}. {rec}."
-    return words if mentions else sentence(words)
+    if mentions:
+        return (f"Status: {label(p)} is {desig} with a {kind.lower()}{', a week from healthy' if desig == 'questionable' else ', two weeks from healthy'}.\n"
+                f"On-field impact: {cost} Sunday.\nRisk: {risk_w}.\nRecommendation: {rec}.")
+    return sentence(words)
 
 
 def playing_hurt_penalty(desig):

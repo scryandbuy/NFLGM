@@ -201,11 +201,11 @@ def season_end(league):
     if not exp or not _once(league, f"expiring-{league.year}"): return
     import valuation as VAL
     rows = []
-    for p in exp[:14]:
+    for p in exp:
         try: v = VAL.value_player(league, p, side='agent', rng=None); ask = f"about ${v['apy']:.1f}m a year" if v else 'no read yet'
         except Exception: ask = 'no read yet'
-        rows.append(f"{inbox_player(p)} ({p.pos}, {round(p.ovr)}, {int(p.age)}): {ask}")
-    IB.post(league, 'contract_year', f"{len(exp)} contracts expire this offseason", "Deals up: " + '\n'.join(rows) + ('.' if len(exp) <= 14 else f"; and {len(exp) - 14} more."), sender='assistants', payload=dict(link='personnel:extensions'))
+        rows.append([inbox_player(p), p.pos, str(round(p.ovr)), str(int(p.age)), ask])
+    IB.post(league, 'contract_year', f"{len(exp)} contracts expire this offseason", 'Review these expiring deals before the offseason.', sender='assistants', payload=dict(link='personnel:extensions', mail_sections=[IB.mail_section('Expiring contracts', rows, ['Player', 'Position', 'OVR', 'Age', 'Agent estimate'])]))
 
 
 def _period(week):
