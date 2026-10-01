@@ -72,7 +72,8 @@ class Session:
 
     @classmethod
     def load(cls, text):
-        d = json.loads(text)
+        from competition_names import migrate_save
+        d = migrate_save(json.loads(text))
         L = LG.League.load(d)
         rng_ = np.random.default_rng(d.get('_seed_state', None))
         if d.get('_rng_state') is not None:
@@ -362,7 +363,7 @@ class Session:
                 return dict(title='Game Day', sub=(('Overtime: your adjustments' if lv.get('adjustment_period') == 'overtime' else 'Halftime: your adjustments') if lv['halftime_open'] else 'Your playoff game is on; finish it to advance'), played=True, live=True)
             if rnd_i >= 4: return dict(title='Close the Season', sub='the champion is crowned', played=True)
             rnd = PS.Postseason.ROUNDS[rnd_i]; name = PS.Postseason.ROUND_NAMES[rnd]
-            SHORT = {'WC': 'Wild Card', 'DIV': 'Divisional Round', 'CONF': 'Conference Finals', 'SB': 'Super Bowl'}   # the button has one line; 'Conference Championship' broke the header
+            SHORT = {'WC': 'Wild Card', 'DIV': 'Divisional Round', 'CONF': 'Conference Finals', 'SB': 'Championship Game'}   # the button has one line; 'Conference Championship' broke the header
             name = SHORT.get(rnd, name)
             post = getattr(self, 'post_live', None); user = self.user_team
             if self.played:
@@ -376,7 +377,7 @@ class Session:
                     ms = [m for m in post.matchups(rnd) if user in (m[1], m[2])]
                     if ms:
                         c, h, a = ms[0]
-                        if rnd == 'SB': v = PS.sb_venue(self.L); return dict(title=f"Play Super Bowl {v['numeral']}", sub=f"vs {a if h == user else h} at {v['stadium']}")
+                        if rnd == 'SB': v = PS.sb_venue(self.L); return dict(title=f"Play Championship Game {v['numeral']}", sub=f"vs {a if h == user else h} at {v['stadium']}")
                         return dict(title=f'Play the {name}', sub=(f'vs {a}' if h == user else f'at {h}'))
                     return dict(title=f'Sim the {name}', sub='You have the bye')
                 return dict(title=f'Sim the {name}', sub="Your season is over")
@@ -546,7 +547,7 @@ class Session:
             # schedule, the injury desk lists the hurt with their Play/Sit notes, the opponent report and game plan
             # post, and the inbox gets the round. Advance then plays the round: the other games sim onto the strip and
             # yours opens live on Game Day. Advance again rolls the week (XP, morale, injuries, notes) into the next
-            # round's prep. After the Super Bowl the season closes.
+            # round's prep. After the Championship Game the season closes.
             if self.runner is None: self.runner = SN.SeasonRunner(self.L, self.rng)
             rnd_i = int(self.stop[1]) if len(self.stop) > 1 else 0
             lv = getattr(self.runner, 'live', None)
@@ -638,7 +639,7 @@ class Session:
 
     def _announce_honors(self):
         """The season's honors come out after the Wild Card round, as they do: the vote on the regular season, paid
-        in XP the same day, felt in the room, priced into the next ask. The Super Bowl MVP waits for the game."""
+        in XP the same day, felt in the room, priced into the next ask. The Championship Game MVP waits for the game."""
         try:
             import morale as MO
             from views import surname
@@ -712,7 +713,7 @@ class Session:
                 import sys; print('snapshot failed:', page, e, file=sys.stderr)
 
     def _senior_bowl(self):
-        """The week before the Super Bowl: every room's second look at the seniors in Mobile, and the assistants'
+        """The week before the Championship Game: every room's second look at the seniors in Mobile, and the assistants'
         word on who helped himself."""
         try:
             import scouting as SC
@@ -821,7 +822,7 @@ class Session:
 
     def _round_letter(self, post, rnd, ms, user, mine):
         """The league's letter for a playoff round: who plays whom, as what seed with what record, and where. The
-        Super Bowl letter names the site and walks both finalists' road to it."""
+        Championship Game letter names the site and walks both finalists' road to it."""
         from views import CLUB_NAME, STADIUM
         L = self.L
         nm = lambda x: CLUB_NAME.get(x, x)
@@ -835,7 +836,7 @@ class Session:
         wk_ = 19 + PS.Postseason.ROUNDS.index(rnd)
         name = PS.Postseason.ROUND_NAMES[rnd]
         if rnd == 'SB':
-            if not ms: return f"Super Bowl", "The conference championships are not yet decided."
+            if not ms: return f"Championship Game", "The conference championships are not yet decided."
             c, h, a = ms[0]
             site = PS.sb_venue(L)
             def road(x):
@@ -847,11 +848,11 @@ class Session:
                 if x in seed_of and seed_of[x] == 1: steps.insert(0, 'the first-round bye')
                 return ', then '.join(steps) if steps else 'the conference'
             conf_of = {t: cf for cf, sd in (getattr(post, 'seeds', {}) or {}).items() for t in sd}
-            lines = [f"Super Bowl {site['numeral']} is set: {nm(a)} against {nm(h)}, at {site['stadium']} in {site['city']}.",
+            lines = [f"Championship Game {site['numeral']} is set: {nm(a)} against {nm(h)}, at {site['stadium']} in {site['city']}.",
                      f"{nm(a)}, the {seed_of.get(a, '?')} seed out of the {conf_of.get(a, '')}, finished {rec(a)} and came through {road(a)}.",
                      f"{nm(h)}, the {seed_of.get(h, '?')} seed out of the {conf_of.get(h, '')}, finished {rec(h)} and came through {road(h)}."]
             if user in (h, a): lines.append("You are in it. The game plan is on your desk.")
-            return f"Super Bowl {site['numeral']}: {nm(a)} vs {nm(h)} at {site['stadium']}", ' '.join(lines)
+            return f"Championship Game {site['numeral']}: {nm(a)} vs {nm(h)} at {site['stadium']}", ' '.join(lines)
         games = [f"{tag(a)} at {tag(h)}, {STADIUM.get(h, nm(h))}" for c, h, a in ms]
         if mine is not None:
             c, h, a = mine
@@ -863,7 +864,7 @@ class Session:
         return subject, opener + (' The round: ' + '; '.join(games) + '.' if games else '')
 
     def _close_playoffs(self):
-        """After the Super Bowl: the champion, the draft order, the firings, and into the offseason."""
+        """After the Championship Game: the champion, the draft order, the firings, and into the offseason."""
         post = self.post_live
         if post is None or not getattr(post, 'seeds', None):
             self._playoff_prep(0); post = self.post_live
@@ -886,7 +887,7 @@ class Session:
         self._snapshot_season()
         from cap_accounting import settle_week
         settle_week(self.L,18)
-        # THE DAY AFTER THE SUPER BOWL: practice squad contracts expire (every squad player is a free agent; his club
+        # THE DAY AFTER THE CHAMPIONSHIP GAME: practice squad contracts expire (every squad player is a free agent; his club
         # can sign him back on the market like anyone else), and the offseason heals. A player's weeks left run off
         # against the thirty weeks to camp; only a long-term injury carries into next season
         try:
@@ -914,7 +915,7 @@ class Session:
 
     # ---- the offseason steps, the same code as franchise.play_year in the same order
     def step_awards(self):
-        """STEP 1: the season's awards, all of it here. The vote on the regular season, the Super Bowl MVP, the XP the
+        """STEP 1: the season's awards, all of it here. The vote on the regular season, the Championship Game MVP, the XP the
         honors pay, the morale they lift, the prestige, the almanac, the notes and the sub-tab. Nothing about awards
         happens before this step (the honors had come out after the Wild Card and then again here)."""
         L, rng = self.L, self.rng
@@ -923,7 +924,7 @@ class Session:
         RG.tick_ages(L)
         self.votes = AW.vote(L, self.post)
         try:
-            self.votes['sb_mvp'] = AW.super_bowl_mvp(L, self.post, L.year)
+            self.votes['sb_mvp'] = AW.championship_game_mvp(L, self.post, L.year)
             if self.votes['sb_mvp']: L.awards[L.year]['sb_mvp'] = getattr(self.votes['sb_mvp'], 'pid', self.votes['sb_mvp'])
         except Exception: pass
         try:

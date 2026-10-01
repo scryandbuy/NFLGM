@@ -267,7 +267,7 @@ def scheme_fit_view(league, abbr, p, view):
 
 
 def senior_bowl(league, rng):
-    """The week before the Super Bowl, in Mobile: the seniors who accept the invitation play in front of every
+    """The week before the Championship Game, in Mobile: the seniors who accept the invitation play in front of every
     scouting department. Every room gets a second look at them (their estimates tighten and move), the players
     carry the mark on the board, and the user's assistants say who helped himself and who did not."""
     pool = list(getattr(league, 'draft_pool', None) or getattr(league, 'next_class', None) or [])   # in season the class waits in next_class

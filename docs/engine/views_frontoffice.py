@@ -534,7 +534,7 @@ def _review_rebuilt(session, league, abbr, yr):
         if getattr(post, 'champion', None) == abbr: exit_ = 'Champions'
         else:
             er = (getattr(post, 'exit_round', {}) or {}).get(abbr)
-            exit_ = {'WC': 'Lost in the Wild Card round', 'DIV': 'Lost in the Divisional round', 'CONF': 'Lost the Conference Championship', 'SB': 'Lost the Super Bowl'}.get(er, exit_)
+            exit_ = {'WC': 'Lost in the Wild Card round', 'DIV': 'Lost in the Divisional round', 'CONF': 'Lost the Conference Championship', 'SB': 'Lost the Championship Game'}.get(er, exit_)
             if er is None and abbr in {x for sd in (getattr(post, 'seeds', {}) or {}).values() for x in sd}: exit_ = 'In the playoffs'
     try: sr = ST.unit_ranks(league, yr).get(abbr, {})
     except Exception: sr = {}
@@ -596,7 +596,7 @@ def _season_review_now(session, league, abbr):
         if getattr(post, 'champion', None) == abbr: exit_ = 'Champions'
         else:
             er = (getattr(post, 'exit_round', {}) or {}).get(abbr)
-            exit_ = {'WC': 'Lost in the Wild Card round', 'DIV': 'Lost in the Divisional round', 'CONF': 'Lost the Conference Championship', 'SB': 'Lost the Super Bowl'}.get(er)
+            exit_ = {'WC': 'Lost in the Wild Card round', 'DIV': 'Lost in the Divisional round', 'CONF': 'Lost the Conference Championship', 'SB': 'Lost the Championship Game'}.get(er)
             if exit_ is None and abbr in {x for sd in (getattr(post, 'seeds', {}) or {}).values() for x in sd}: exit_ = 'In the playoffs'
     if exit_ is None: exit_ = 'Missed the playoffs'
     gap = pct - exp

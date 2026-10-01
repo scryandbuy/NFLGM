@@ -597,7 +597,7 @@ class League:
         Regular and postseason are kept APART. Awards are voted on the regular
         season - the ballots are cast before the playoffs - so folding a
         playoff run into a season line would hand the award to whoever went
-        deepest. Per-game lines are kept too, because Super Bowl MVP is a
+        deepest. Per-game lines are kept too, because Championship Game MVP is a
         one-game award.
         """
         if game is not None:
@@ -945,7 +945,7 @@ class League:
     def to_dict(self):
         from newgens import name_history
         return dict(
-            version=1, year=self.year, phase=self.phase, week=self.week,
+            version=1, competition_names_version=1, year=self.year, phase=self.phase, week=self.week,
             cap_history={str(y): cap for y, cap in self.cap_history.items()},
             players={pid: p.to_dict() for pid, p in self.players.items()},
             player_name_history=name_history(self), newgen_name_cursor=self.newgen_name_cursor,
@@ -1003,7 +1003,9 @@ class League:
 
     @classmethod
     def load(cls, blob):
+        from competition_names import migrate_save
         d = json.loads(blob) if isinstance(blob, str) else blob
+        d = migrate_save(d)
         d = PB.migrate_saved_backgrounds(d)
         L = cls(d['year'])
         saved_caps = {int(y): float(cap) for y, cap in (d.get('cap_history') or {}).items()}
@@ -1312,7 +1314,7 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
     import identity_catalog as IC
     from gm_engine import apply_identity, scheme_of
     for abbr in sorted(S.team.dropna().unique()):
-        d = div.get(abbr, 'AFC East')
+        d = div.get(abbr, 'Continental East')
         t = Team(abbr, d, d.split()[0], year, gm=make_gm(rng))
         # THE MAN IN CHARGE, from the 2026 catalog: what he runs and how he
         # builds. His scheme becomes the club's scheme for the depth chart,
