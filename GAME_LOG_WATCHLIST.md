@@ -48,3 +48,10 @@ For each future log, record the season, week, teams, score, relevant timestamps,
 - Recurring timeout ownership: Q2 0:39 timeout credited to KC after GB reaches KC1. Compare raw timeout side and team metadata, actual score state, and game build; do not infer an AI strategy defect from narration alone.
 - Recurring conversion watch: GB third-and-31 and third-and-13; KC third-and-nine run. Track called play versus audible, distance, pressure and conversion rates across sample.
 - Context: final score reconciles; both long field goals missed; KC late punt preserved a final possession; final GB kneel is consistent with KC having no timeouts.
+
+## PHI at GB — Divisional Round review
+- Fixed: tied-first-half defensive timeout branch could fund an opponent's continuing drive after first downs. Restrict this possession-buying branch to a failed third/fourth-down conversion. Explicit touchdown/defensive-TD and turnover outcomes cannot spend timeouts.
+- Watch: PHI fourth-and-one at GB49, tied with 0:32, passes and is sacked. Revisit fourth-down win-probability estimate including opponent short-field scoring risk and the short-yardage play choice; one outcome alone does not prove the decision wrong. No blanket punt/run override added.
+- Cleared: Q3 DPI acceptance on second-and-seven: completion gained three, while penalty grants automatic first down. Earlier review mistakenly treated both as first downs.
+- Cleared as direct clock error: GB 54-yard kick with 0:14 followed GB's last timeout, so clock was stopped. Waiting cannot drain game time. Watch whether preceding timeout/clock plan should preserve a later kick opportunity; no unsafe extra-play requirement added.
+- Timeout-after-TD appearance: stronger explicit scoring guard added; exact cause in this saved build is unconfirmed without structured play outcomes.
