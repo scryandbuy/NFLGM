@@ -62,13 +62,17 @@ def play_line(league, p, off_abbr, def_abbr):
         head = _clock(p['clock'])[1]
     carrier = _nm(league, p.get('carrier')); passer = _nm(league, p.get('passer')); target = _nm(league, p.get('target')); tackler = _nm(league, p.get('tackler'))
     td = bool(p.get('touchdown') and not p.get('defensive_td'))
+    spot = float(p.get('yardline') or 0)
+    gain = float(p.get('yards') or 0)
+    near_goal_short = (t in ('run', 'complete', 'scramble') and not td and not p.get('nullified')
+                       and 0 < gain < spot and 0 < spot - round(gain) < 1)
     kind = 'neutral'; text = ''
     if t == 'run':
         cls, yd = _yards(p.get('yards', 0))
         who = carrier or 'The back'
         how = {'inside_zone': 'up the middle', 'duo': 'between the tackles', 'power': 'behind the pulling guard', 'counter': 'on a counter', 'trap': 'on a trap',
                'outside_zone': 'off the edge', 'stretch': 'wide on the stretch', 'draw': 'on a draw', 'toss': 'on a toss', 'sweep': 'on a sweep'}.get(p.get('scheme'), 'inside' if p.get('sneak') else '')
-        text = f"{who} {'sneaks' if p.get('sneak') else 'runs'}{(' ' + how) if how else ''} for {yd}"
+        text = f"{who} {'sneaks' if p.get('sneak') else 'runs'}{(' ' + how) if how else ''} {'to inside the 1' if near_goal_short else 'for ' + yd}"
         if td:
             yl = float(p.get('yardline', 1) or 1)
             origin = 'inside the 1' if 0 < yl < 1 else f'the {int(round(yl))}'
@@ -79,14 +83,17 @@ def play_line(league, p, off_abbr, def_abbr):
             text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
     elif t == 'complete':
         cls, yd = _yards(p.get('yards', 0))
+        if td and 0 < gain < .5: yd = 'less than a yard'
         pre = 'Play action. ' if p.get('play_action') else ''
-        pres = f"Pressure on {passer or 'the quarterback'}. " if p.get('pressured') else ''
+        press_name = passer or 'the quarterback'
+        pres = f"Pressure on {press_name}{'' if press_name.endswith('.') else '.'} " if p.get('pressured') else ''
+        gain_phrase = 'and is stopped inside the 1' if near_goal_short else f'for {yd}'
         if p.get('screen'):
-            text = f"{pre}{pres}{passer or 'The quarterback'} to {target or 'his receiver'} on a screen for {yd}"
+            text = f"{pre}{pres}{passer or 'The quarterback'} to {target or 'his receiver'} on a screen {gain_phrase}"
         elif p.get('swing'):
-            text = f"{pre}{pres}{passer or 'The quarterback'} {'swings it to' if (p.get('yards', 0) or 0) >= 0 else 'checks down to'} {target or 'his back'} in the flat for {yd}"
+            text = f"{pre}{pres}{passer or 'The quarterback'} {'swings it to' if (p.get('yards', 0) or 0) >= 0 else 'checks down to'} {target or 'his back'} in the flat {gain_phrase}"
         else:
-            text = f"{pre}{pres}{passer or 'The quarterback'} to {target or 'his receiver'} for {yd}"
+            text = f"{pre}{pres}{passer or 'The quarterback'} to {target or 'his receiver'} {gain_phrase}"
         if td: text += f". TOUCHDOWN."; kind = 'score'
         else:
             kind = cls
@@ -102,11 +109,12 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"{passer or 'The quarterback'} to {target or 'his receiver'}, dropped."; kind = 'loss'
     elif t == 'sack':
         by = _nm(league, p.get('by')); beaten = _nm(league, p.get('beaten'))
-        text = f"{by or 'The rush'} sacks {passer or 'the quarterback'} for a loss of {int(round(-p.get('yards', 0)))}" + (f", beating {beaten}." if beaten else '.')
+        loss = int(round(-gain))
+        text = f"{by or 'The rush'} sacks {passer or 'the quarterback'}" + (f" for a loss of {loss}" if loss else ' at the line of scrimmage') + (f", beating {beaten}{'' if beaten.endswith('.') else '.'}" if beaten else '.')
         kind = 'loss'
     elif t == 'scramble':
         cls, yd = _yards(p.get('yards', 0))
-        text = f"{passer or 'The quarterback'} scrambles for {yd}" + ((f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.')
+        text = f"{passer or 'The quarterback'} scrambles {'to inside the 1' if near_goal_short else 'for ' + yd}" + ((f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.')
         if td: text = f"{passer or 'The quarterback'} scrambles in. TOUCHDOWN."; kind = 'score'
         else: kind = cls
     elif t == 'interception':
@@ -144,7 +152,8 @@ def play_line(league, p, off_abbr, def_abbr):
         else:
             _ny = p.get('new_yardline')
             _down_spot = _spot(100.0 - float(_ny), off_abbr, def_abbr) if _ny is not None else None
-            text = f"Punt, {int(round(p.get('gross', 0)))} yards" + (", touchback." if p.get('touchback') else (f", returned {int(round(p.get('ret', 0)))} yards." if p.get('how') == 'return' and p.get('ret') else (", fair catch." if p.get('how') == 'fair_catch' else (f", downed at the {_down_spot}." if p.get('how') == 'downed' and _down_spot else '.'))))
+            ret = int(round(p.get('ret', 0)))
+            text = f"Punt, {int(round(p.get('gross', 0)))} yards" + (", touchback." if p.get('touchback') else (f", returned {ret} yard{'s' if ret != 1 else ''}." if p.get('how') == 'return' and p.get('ret') else (", fair catch." if p.get('how') == 'fair_catch' else (f", downed at the {_down_spot}." if p.get('how') == 'downed' and _down_spot else '.'))))
             kind = 'special'
     elif t == 'field_goal':
         d = int(round(p.get('distance', 0)))
@@ -199,11 +208,6 @@ def play_line(league, p, off_abbr, def_abbr):
         if not text: return None
     else:
         return None
-    if t in ('run', 'complete', 'scramble') and not td and not p.get('nullified') and p.get('yardline') is not None:
-        spot, gain = float(p['yardline']), float(p.get('yards', 0) or 0)
-        remaining = spot - round(gain)
-        if gain > 0 and gain < spot and 0 < remaining < 1:
-            text += ' Stopped just short of the goal line.'
     if p.get('nullified'):
         text = (text.rstrip('.') + '. Play nullified by penalty.') if text else 'Play nullified by penalty.'; kind = 'neutral'
     if p.get('fumble'):

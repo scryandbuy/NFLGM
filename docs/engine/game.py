@@ -147,6 +147,11 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # Keep this separate from the full-game clock and fourth-quarter urgency.
     if half_seconds_left is not None and half_seconds_left <= 20 and yardline_100 >= 60:
         return 'punt'
+    # A late-half conversion on fourth and long usually leaves no time for a
+    # follow-up score. The full-game win model cannot price the halftime break.
+    if (half_seconds_left is not None and 0 < half_seconds_left <= 12
+            and in_range and yardline_100 <= 35 and ydstogo >= 5):
+        return 'field_goal'
     # With time for one play, a reachable kick ties or wins. The general
     # desperation rule must not force a conversion that leaves no clock.
     if secs_left <= 6 and -3 <= score_diff <= 0 and in_range:
@@ -2389,11 +2394,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _plan_to = end_of_half_plan(after_play, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None)) if _secs_after > 4 and after_play.result is None and after_play.down <= 4 else None
         added_penalty = live_pen is not None and taken == 'added'
         late_penalty = added_penalty and secs_in_half - 6.0 <= (120.0 if dr.quarter <= 2 else 300.0)
-        used, used_by = (False, None) if late_penalty else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
+        _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
+        # The change of possession stops the clock at the whistle. Spending a
+        # timeout for the former offense here buys no time.
+        used, used_by = (False, None) if late_penalty or _fourth_fail else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
         hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc)
         before_clock = secs_in_half
         clock_before = dr.clock
-        _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
         tempo = off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5
         elapsed = play_seconds(t, hurry=hurry, timeout=used, tempo=tempo)
         # A deliberate bleed may wait for a later kick, but it cannot silently

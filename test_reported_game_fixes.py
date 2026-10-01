@@ -111,7 +111,7 @@ class ReportedGameFixes(unittest.TestCase):
             game._prepare_scoring_play(dr, play)
             self.assertFalse(game._advance(dr, 3))
             text = ticker.play_line(self.league, play, 'LAC', 'GB')['text']
-            self.assertIn('just short of the goal line', text)
+            self.assertIn('inside the 1', text)
             self.assertNotIn('TOUCHDOWN', text)
             self.assertEqual(ticker._spot(dr.yardline, 'LAC', 'GB'), 'inside the GB 1')
         td = ticker.play_line(self.league, dict(type='run', yardline=.4, yards=.4,
