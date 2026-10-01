@@ -27,6 +27,10 @@ class CoverageDevelopmentTests(unittest.TestCase):
         self.assertTrue(all(r['credible'] for r in rows))
         self.assertGreater(rows[0]['score'],rows[-1]['score'])
 
+    def test_completed_air_can_be_negative_on_screens(self):
+        rows=calibrated([line(40,-100)]+[line(40,0) for _ in range(5)])
+        self.assertGreater(rows[0]['score'],rows[1]['score'])
+
     def test_no_peers_cannot_demote(self):
         self.assertFalse(calibrated([line()])[0]['credible'])
 

@@ -74,7 +74,8 @@ def coverage_assessment(p, line):
         targets = _n(line, prefix + 'targets')
         if not targets:
             continue
-        cell = {key: _n(line, prefix + key) for key in COVERAGE_OUTCOMES}
+        cell = {key: (_g(line, prefix + key) if key == 'air_yards' else
+                      _n(line, prefix + key)) for key in COVERAGE_OUTCOMES}
         # Missing or malformed partial records cannot support demotion.
         if any(prefix + key not in line for key in COVERAGE_OUTCOMES):
             return None
