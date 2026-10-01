@@ -244,3 +244,8 @@ Artifacts: workspace outputs `stacked-box-candidate-20261001.json` and `stacked-
 - Cleared: Q3 DPI acceptance on second-and-seven: completion gained three, while penalty grants automatic first down. Earlier review mistakenly treated both as first downs.
 - Cleared as direct clock error: GB 54-yard kick with 0:14 followed GB's last timeout, so clock was stopped. Waiting cannot drain game time. Watch whether preceding timeout/clock plan should preserve a later kick opportunity; no unsafe extra-play requirement added.
 - Timeout-after-TD appearance: stronger explicit scoring guard added; exact cause in this saved build is unconfirmed without structured play outcomes.
+
+## NY at GB — Conference Championship, pre-latest-fixes build
+- Fixed planner mismatch: extra-play and bleed estimates now respect remaining downs. Leading/tied offense does not spend a first-half timeout after a failed third-down conversion beyond the opponent40 simply to enable a punt.
+- Fixed lookahead cliff: with no timeouts, a completion leaving 18+ seconds can budget 12 seconds for hurried setup instead of automatically treating an in-bounds catch with fewer than25 seconds as drive-ending. Thirty-second long-kick scenario now has a continuation option; actual choice still depends on kicker.
+- Watch: 59-yard kick up3 with1:50. Current fourth-down logic DOES compare punt WP against kick WP including missed-kick spot and timeout edge. Representative42% kicker yields FG .7992 vs punt .7919 (go .8128); small-margin calibration concern, not missing wiring. Need actual saved kicker/weather/coach inputs and broader decision study before overriding.
