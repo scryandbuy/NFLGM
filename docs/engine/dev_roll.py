@@ -1,94 +1,112 @@
-"""
-THE DEVELOPMENT TRAIT MOVES, once a year.
+"""One annual development review, before physical regression.
 
-progression_engine.trait_move_chances had the odds and nothing ever called
-it: the year loop ran regression, which ages men and takes points, and the
-trait the league was seeded with never changed. No MVP got his guaranteed
-tier, no All-Pro rolled, no fading superstar was demoted.
-
-The odds need two things the engine did not define. PRODUCTION is his
-percentile within his position on the season score the awards ballot already
-computes (passer, skill, defence, line). EXPECTATION is his percentile within
-the same position by overall. Beat your rating rank and the up-odds rise;
-fall short of it and, for anyone above normal, the down-odds rise. Awards
-stack on top: the five majors are a guaranteed tier, the rest add to the odds
-and protect against demotion. Runs after the vote and before regression, on
-men who actually played.
+Compare role-appropriate performance with peers, sharing ranks for ties.
+Only consecutive, credible poor seasons can cause a demotion. Small samples
+are inconclusive; they must not masquerade as evidence of declining talent.
 """
-import numpy as np, collections
-import awards as AW
+import collections
+import numpy as np
+import dev_evaluation as DE
 import progression_engine as PE
-
-MIN_SNAPS = 300
-
-
-def _score(b, p, line):
-    if p.pos in AW.OL_POS:
-        return b.line_score(p, line)
-    if p.pos in AW.PASS_RUSH_POS + AW.COVERAGE_POS:
-        return b.def_score(p, line)
-    if p.pos == 'QB':
-        return b.passer_score(line)
-    if p.pos in ('K', 'P', 'LS'):
-        return None
-    return b.skill_score(line)
 
 
 def _pct(vals):
-    """Percentile within a group, 0-1, ties at the mean rank."""
-    order = np.argsort(np.argsort(vals, kind='stable'))
-    n = max(len(vals) - 1, 1)
-    return order / n
+    """0-1 percentile, ties at their mean rank; a singleton is inconclusive."""
+    vals = np.asarray(vals)
+    if len(vals) <= 1: return np.full(len(vals), .5)
+    _, inverse, counts = np.unique(vals, return_inverse=True, return_counts=True)
+    starts = np.cumsum(counts) - counts
+    return (starts[inverse] + (counts[inverse]-1)/2.) / (len(vals)-1)
 
 
 def run(league, votes, rng, season=None, verbose=False):
-    year = season or league.year
-    b = AW.Ballot(league, year)
-    # awards by pid
+    year = int(season or league.year)
     won = collections.defaultdict(set)
     for award, who in (votes or {}).items():
         if award == 'coty': continue
-        for w in (who if isinstance(who, list) else [who]):
-            pid = getattr(w, 'pid', None)
-            if pid: won[pid].add(award)
-    # the men who played, grouped by position
-    groups = collections.defaultdict(list)
-    for p, line in b.players():
-        if p.retired or float(line.get('snaps', 0) or 0) < MIN_SNAPS: continue
-        sc = _score(b, p, line)
-        if sc is None: continue
-        # A RATE, not a total. Season totals rank a man who missed half the
-        # year at the bottom of his position: Crosby at 92 overall came out at
-        # the 18th percentile of edges after an injury and was demoted for it.
-        # Per snap, with the 300-snap floor above, he is ranked on how he
-        # played when he played.
-        snaps = float(line.get('snaps', 0) or 0)
-        groups[p.pos].append((p, sc / snaps))
+        for winner in (who if isinstance(who, list) else [who]):
+            pid = getattr(winner, 'pid', winner)
+            if isinstance(pid, str) and league.player(pid): won[pid].add(award)
+
+    groups, assessments = collections.defaultdict(list), {}
+    lines = league.stats.get(year, {})
+    # Include processed players in comparisons so partial retries keep ranks.
+    for pid, line in lines.items():
+        p = league.player(pid)
+        if p is None or p.retired: continue
+        assessment = DE.assessment(p, line)
+        if assessment is not None:
+            assessments[pid] = assessment
+            groups[assessment['group']].append(p)
+    ranks = {}
+    for group, players in groups.items():
+        production = _pct([assessments[p.pid]['score'] for p in players])
+        expected = .5 + .7*(_pct([p.ovr for p in players])-.5)
+        # Small groups get cautious assessments, not an arbitrary freeze.
+        peer_confidence = min(1., max(0., (len(players)-1)/3.))
+        for p, pr, ex in zip(players, production, expected):
+            confidence = min(1., max(0., assessments[p.pid]['confidence'])) * peer_confidence
+            ranks[p.pid] = (.5 + (float(pr)-.5)*confidence, float(ex), confidence)
+
+    already_logged = {x.get('pid') for x in league.transactions
+                      if x.get('kind') == 'dev_trait' and x.get('year') == year}
     moved = []
-    for pos, rows in groups.items():
-        if len(rows) < 4: continue
-        prod = _pct(np.array([sc for _, sc in rows]))
-        # Expectation is his rating rank SHRUNK toward the middle. Taken
-        # straight, the best-rated man at a position expects the 100th
-        # percentile and can never beat it: Chase produced at the 93rd among
-        # receivers and was demoted for falling short. The top-rated man is
-        # expected to land around the 85th and the lowest around the 15th.
-        exp = 0.5 + 0.7 * (_pct(np.array([p.ovr for p, _ in rows])) - 0.5)
-        for (p, _), pr, ex in zip(rows, prod, exp):
-            aw = won.get(p.pid, set())
-            c_up, c_down = PE.trait_move_chances(p.dev, p.age - 1.0, float(pr), float(ex), aw)   # the roll is on the season he played; the year ticked at Step 1
-            r = rng.random()
-            change = None
-            if r < c_up and p.dev != PE.DEV_ORDER[-1]:
-                p.dev = PE.DEV_ORDER[PE.DEV_ORDER.index(p.dev) + 1]; change = 'up'
-            elif r > 1 - c_down and p.dev != PE.DEV_ORDER[0]:
-                p.dev = PE.DEV_ORDER[PE.DEV_ORDER.index(p.dev) - 1]; change = 'down'
-            if change:
-                moved.append((p, change, float(pr), float(ex), sorted(aw)))
-                league.log('dev_trait', pid=p.pid, pos=p.pos, age=round(p.age, 1),
-                           change=change, dev=p.dev, production=round(float(pr), 2),
-                           expected=round(float(ex), 2), awards=sorted(aw))
+    for pid in sorted(set(lines) | set(won)):
+        p = league.player(pid)
+        if p is None or p.retired: continue
+        history = p.xp_spent.get('_dev_review', [])
+        if any(r.get('year') == year for r in history) or pid in already_logged: continue
+        assessment = assessments.get(pid)
+        pr, ex, confidence = ranks.get(pid, (.5, .5, 0.))
+        group = assessment['group'] if assessment else p.pos
+        prior = next((r for r in reversed(history) if r.get('year') == year-1
+                      and r.get('group') == group), {})
+        honours = won.get(pid, set())
+        credible = bool(assessment and assessment.get('credible', True) and confidence >= .75)
+        poor = credible and not honours and pr < .5 and pr < ex-.15
+        elite = credible and pr >= .8
+        poor_seasons = 1 + int(prior.get('poor_seasons', 0)) if poor else 0
+        elite_seasons = 1 + int(prior.get('elite_seasons', 0)) if elite else 0
+        c_up, c_down = PE.trait_move_chances(
+            p.dev, p.age-1., pr, ex, honours, poor_seasons=poor_seasons,
+            elite_seasons=elite_seasons, confidence=confidence)
+        before = p.dev
+        change = None
+        if c_up or c_down:
+            roll = rng.random()
+            if roll < c_up and p.dev != PE.DEV_ORDER[-1]:
+                p.dev = PE.DEV_ORDER[PE.DEV_ORDER.index(p.dev)+1]; change = 'up'
+            elif roll > 1-c_down and p.dev != PE.DEV_ORDER[0]:
+                p.dev = PE.DEV_ORDER[PE.DEV_ORDER.index(p.dev)-1]; change = 'down'
+        if PE.GUARANTEED_UPGRADE & honours:
+            reason = 'Major season award: ' + ', '.join(a.upper() for a in sorted(PE.GUARANTEED_UPGRADE & honours))
+        elif change == 'down':
+            reason = f'{poor_seasons} consecutive credible seasons below role expectations'
+        elif honours:
+            reason = 'Season honors: ' + ', '.join(a.replace('_', ' ').upper() for a in sorted(honours))
+        elif change == 'up':
+            reason = 'Sustained elite performance' if elite_seasons >= 2 else 'Breakout performance above role expectations'
+        elif not credible:
+            reason = 'Insufficient reliable evidence for a downgrade'
+        elif poor:
+            reason = f'{poor_seasons} consecutive credible season(s) below role expectations'
+        else:
+            reason = 'Performance does not justify a downgrade'
+        record = dict(year=year, group=group, production=round(pr,4), expected=round(ex,4),
+                      confidence=round(confidence,4), poor_seasons=0 if change=='down' else poor_seasons,
+                      elite_seasons=elite_seasons, previous_dev=before, dev=p.dev,
+                      chance_up=round(c_up,6), chance_down=round(c_down,6),
+                      awards=sorted(honours), reason=reason)
+        # Bounded evidence for streaks; full changes remain in transactions.
+        p.xp_spent['_dev_review'] = sorted([r for r in history if r.get('year',0)<year]+[record],
+                                         key=lambda r:r['year'])[-3:]
+        if change:
+            moved.append((p, change, pr, ex, sorted(honours)))
+            league.log('dev_trait', pid=pid, pos=p.pos, age=round(p.age,1),
+                       change=change, previous_dev=before, dev=p.dev,
+                       production=round(pr,2), expected=round(ex,2),
+                       awards=sorted(honours), reason=reason)
     if verbose:
-        ups = [m for m in moved if m[1] == 'up']; downs = [m for m in moved if m[1] == 'down']
-        print(f'  dev traits: {len(ups)} up, {len(downs)} down, of {sum(len(v) for v in groups.values())} who played')
+        print(f"  dev traits: {sum(m[1]=='up' for m in moved)} up, "
+              f"{sum(m[1]=='down' for m in moved)} down")
     return moved

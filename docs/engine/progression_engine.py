@@ -48,9 +48,8 @@ DEV = {'normal': 1.00, 'star': 1.55, 'superstar': 2.20, 'xfactor': 3.00}
 DEV_ORDER = ['normal', 'star', 'superstar', 'xfactor']
 DEV_P = [0.65, 0.22, 0.10, 0.03]
 
-# Traits themselves move, on the same logic as attributes: a scale of odds, not
-# a set rule. Production, age and awards all shift the probability of climbing
-# or falling a tier, and nothing is ever certain.
+# Annual performance and honors affect upgrades; sustained credible poor play
+# is required for demotion. The major-award reward remains guaranteed.
 # Protector is one lineman out of 160 starters, rarer than a first-team slot
 # at a position, so it sits above All-Pro 1st and under the player-of-the-year
 # awards. Super Bowl MVP is one game and usually lands on a man who already
@@ -65,17 +64,16 @@ AWARD_WEIGHT = {'mvp': 0.40, 'opoy': 0.30, 'dpoy': 0.30, 'protector': 0.25,
 # already at the top, where it instead locks the trait against demotion.
 GUARANTEED_UPGRADE = {'mvp', 'oroy', 'droy', 'opoy', 'dpoy'}
 
-# Traits should not churn. One scalar on both the up and the down odds (the
-# guaranteed awards ignore it); solved so roughly 40 men a year move each
-# way out of the 750 who play, with the great and the terrible seasons still
-# carrying real odds.
+# Retain the existing general probability scale. Demotions now additionally
+# require multi-season evidence; old annual churn targets no longer apply.
 TRAIT_SCALE = 0.6
 
-def trait_move_chances(dev, age, production, expected, awards=()):
+def trait_move_chances(dev, age, production, expected, awards=(), *,
+                       poor_seasons=0, elite_seasons=0, confidence=1.0):
     """
     Returns (chance_up, chance_down) for this offseason.
-    Rising is driven by beating your own level and by honours; falling is driven
-    by age and by underperforming what your tier implies.
+    Rising needs convincing performance or honours. Falling needs consecutive
+    credible poor seasons. Physical aging belongs to the separate regression.
     """
     over = production - expected
     tier = DEV_ORDER.index(dev)
@@ -89,28 +87,24 @@ def trait_move_chances(dev, age, production, expected, awards=()):
     # tenth of a percentile over expectation is a normal year, not a rise;
     # the odds start once he is clearly above it, so a great season still
     # carries real weight while an ordinary one barely moves the trait.
-    up = (max(0.0, over - 0.10) * 1.8 + award) * (0.85 ** tier)
+    confidence = float(np.clip(confidence, 0.0, 1.0))
+    breakout = max(0.0, over - 0.10) * 1.8 if production >= .65 else 0.0
+    sustained = .12 if elite_seasons >= 2 and production >= .80 else 0.0
+    up = (breakout + sustained + award) * (0.85 ** tier) * confidence
     if age >= 27: up *= 0.55
     if age >= 30: up *= 0.35
     up = float(np.clip(up * TRAIT_SCALE, 0.0, 0.55))
 
-    # DOWN: only possible if you are above normal. Underperforming the tier you
-    # hold is the main driver; age adds to it; honours suppress it.
-    if tier == 0:
+    # No random demotion for meeting expectations, playing well, age alone,
+    # a single bad year, an inconclusive sample, or a season with honours.
+    if (tier == 0 or poor_seasons < 2 or confidence < .75 or awards
+            or production >= .50 or over >= -.15):
         down = 0.0
     else:
-        # A shortfall inside a tenth of a percentile is noise, not a decline.
-        shortfall = max(0.0, -over - 0.10)
-        # The age term used to sit on every man over 28 whatever he did, so a
-        # 32-year-old who out-produced his rating rank was demoted on a 29%
-        # roll, and half the men above normal churned every year. Beating
-        # expectation now buys the age term off: clear it by a tenth and
-        # age costs nothing this year; fall short and it counts in full.
-        beat = float(np.clip(over / 0.25, 0.0, 1.0))
-        down = 0.02 + shortfall * 1.6 + max(0.0, (age - 28)) * 0.045 * (1.0 - beat)
-        down *= (1.0 + 0.25 * tier)          # higher tiers have further to fall
-        down *= max(0.25, 1.0 - award * 1.8)  # a big year protects the trait
-        down = float(np.clip(down * TRAIT_SCALE, 0.005, 0.70))
+        shortfall = max(0.0, -over - .15)
+        persistence = min(1.3, 1.0 + .15 * (poor_seasons - 2))
+        down = shortfall * 1.6 * (1.0 + .25*tier) * persistence * confidence
+        down = float(np.clip(down * TRAIT_SCALE, 0.0, .40))
     return up, down
 
 # ---------------------------------------------------------------- regression odds

@@ -299,7 +299,15 @@ class Ballot:
         """
         by_pos = {}
         for p, line in self.players():
-            if p.pos in OL_POS:
+            if p.pos in ('K', 'P'):
+                # Generic offensive production is zero for kickers/punters;
+                # it made honors (and their dev rewards) follow insertion order.
+                import dev_evaluation as DE
+                assessment = DE.assessment(p, line)
+                if assessment is None or not assessment.get('credible', False):
+                    continue
+                sc = assessment['score']
+            elif p.pos in OL_POS:
                 sc = self.line_score(p, line)
                 if sc is None:
                     continue

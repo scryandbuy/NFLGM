@@ -350,6 +350,15 @@ def _player_history(league, p):
     if getattr(p, 'draft_year', None) and getattr(p, 'draft_round', None):
         add(p.draft_year, -1, str(p.draft_year), f"Drafted {p.draft_overall}{_ordn(p.draft_overall)} overall (round {p.draft_round})" if getattr(p, 'draft_overall', None) else f"Drafted, round {p.draft_round}")
     for x in league.transactions:
+        if x.get('kind') == 'dev_trait' and x.get('pid') == p.pid:
+            year = x.get('year') or 0
+            after = DEV_WORD.get(x.get('dev'), x.get('dev', 'Unknown'))
+            before = DEV_WORD.get(x.get('previous_dev'), x.get('previous_dev'))
+            outcome = 'upgraded' if x.get('change') == 'up' else 'downgraded'
+            line = f"Development {outcome}: " + (f"{before} → {after}" if before else after)
+            if x.get('reason'): line += f" · {x['reason']}"
+            add(year, 23, f"{year} · Offseason", line)
+            continue
         if x.get('kind') == 'regress' and x.get('pid') == p.pid:
             year = x.get('year') or 0
             # Older saves only logged total OVR loss. Use a saved report when
