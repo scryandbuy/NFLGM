@@ -123,6 +123,8 @@ def pick_job(down, ydstogo, score_diff, secs_left, off_personnel, rng,
              aggression=0.5):
     """
     What this call needs to DO. The situation decides it, not the playbook.
+
+    score_diff is offense minus defense, as in the drive and scheme callers.
     """
     heavy = off_personnel in ('12', '13', '21', '22')
     late = secs_left is not None and secs_left < 300
@@ -135,7 +137,7 @@ def pick_job(down, ydstogo, score_diff, secs_left, off_personnel, rng,
         if ydstogo >= 7:
             return 'sticks' if rng.random() < 0.62 else 'pressure'
         return 'sticks'
-    if late and score_diff > 0:
+    if late and score_diff < 0:
         return 'no_chunk'                 # protecting a lead: nothing behind us
     if ydstogo >= 15:
         return 'no_chunk'
@@ -255,7 +257,7 @@ if __name__ == '__main__':
     for lab, args in (('1st and 10', (1, 10, 0, 1800, '11')),
                       ('3rd and 2', (3, 2, 0, 1800, '11')),
                       ('3rd and 12', (3, 12, 0, 1800, '11')),
-                      ('2nd and 8, up 10, 3 min', (2, 8, 10, 180, '11')),
+                      ('2nd and 8, defense up 10, 3 min', (2, 8, -10, 180, '11')),
                       ('1st and 10 vs 12 personnel', (1, 10, 0, 1800, '12'))):
         c = collections.Counter(); jobs = collections.Counter()
         for _ in range(400):
