@@ -266,6 +266,18 @@ class Birthdays(unittest.TestCase):
         self.assertEqual(int(p.age), 27)
         self.assertEqual(L.game_date, PA.week_date(2028, 9).isoformat())
 
+    def test_staged_market_close_advances_calendar_without_batch_market_run(self):
+        import market as MK
+        L, p = self.make('2001-04-05')
+        L.game_date = '2028-04-03'
+        PA.set_date(L, L.game_date)
+        seasonal = p.development_age
+        self.assertEqual(int(p.age), 26)
+        self.assertEqual(MK.close_market(L, np.random.default_rng(1)), [])
+        self.assertEqual(L.game_date, '2028-04-10')
+        self.assertEqual(int(p.age), 27)
+        self.assertEqual(p.development_age, seasonal)
+
     def test_batch_and_live_preparation_use_the_same_calendar(self):
         import season as SN
         import practice_integration as PI

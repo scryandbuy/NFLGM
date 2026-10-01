@@ -32,6 +32,7 @@ THE POOL STAYS OPEN. It closes after the last phase and reopens at training
 camp, which is where clubs patch the injuries camp produces.
 """
 import numpy as np
+import player_age as PA
 
 import free_agency as FA
 import negotiation_engine as NE
@@ -709,7 +710,6 @@ def run(league, rng, user_team=None, verbose=False):
     all_signed = []
     import negotiations as NG
     for phase in range(1, PHASES + 1):
-        import player_age as PA
         PA.offseason(league, 5 + phase)
         league.fa_step = phase
         bids = ai_bids(league, pool, phase, rng, skip_teams=(user_team,) if user_team else ())
