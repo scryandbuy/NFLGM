@@ -1629,6 +1629,12 @@ h2{letter-spacing:-.01em}
   padding:14px 18px 18px !important;
   gap:10px !important;
 }
+.extension-cap-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:14px 0 18px;border-bottom:1px solid var(--rule-2)}
+.extension-cap-metrics>div+div{border-left:1px solid var(--rule-2);padding-left:18px}
+.extension-cap-metrics b{display:block;font:700 25px var(--text)}
+.extension-cap-metrics small{display:block;margin-top:6px;font:500 12px var(--text);color:var(--ink-3)}
+.extension-cap-metrics>div:last-child b{color:var(--club-2)}
+@media(max-width:520px){.extension-cap-metrics{gap:8px}.extension-cap-metrics>div+div{padding-left:8px}.extension-cap-metrics b{font-size:20px}}
 
 .negotiation-thread .msg{
   border-radius:8px;
@@ -2236,11 +2242,12 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .standings-picture h2 {font:650 18px var(--text);color:var(--stand-accent);text-transform:uppercase;letter-spacing:1px;margin:0;padding:0 0 10px;border-bottom:1px solid #ffffff19;background:transparent}
 .standings-picture h2 small {display:block;text-transform:none;font:400 12px var(--text);letter-spacing:0;color:#acbec8;margin-top:6px}
 .standings-picture h4 {padding:12px 0 4px!important;color:var(--stand-accent)!important;font:600 13px var(--text)}
-.standings-picture .tbl td {font-size:11px;padding:4px 3px;height:29px}
+.standings-picture .tbl td {font-size:13px;padding:5px 3px;height:32px}
+.standings-picture .tbl td small {font-size:12px}
 .standings-picture .tbl td:first-child {width:24px!important}
-.standings-picture .seed {border-radius:3px;background:#243b3e;color:#f1f5f7;border:0;font:600 11px var(--text);width:20px;height:20px;line-height:20px}
+.standings-picture .seed {border-radius:3px;background:#243b3e;color:#f1f5f7;border:0;font:600 12px var(--text);width:22px;height:22px;line-height:22px}
 .standings-picture .seed.me {outline:1px solid var(--stand-accent)}
-.standings-picture .hunt-heading td {padding-top:14px;font-size:10px;color:#aab9c2;letter-spacing:.8px}
+.standings-picture .hunt-heading td {padding-top:14px;font-size:11px;color:#aab9c2;letter-spacing:.8px}
 .standings-board .legend-line {font:400 11px/1.6 var(--text);color:#99afbb;padding:12px 0 0;border:0}
 .standings-board .arr {font-size:10px}
 @media(max-width:1250px){.standings-layout{grid-template-columns:minmax(0,1fr) 280px}.standings-board .divgrid{grid-template-columns:1fr}}

@@ -1435,9 +1435,19 @@ function openTalks(t, reload) {
   document.body.append(overlay);
 }
 
+function extensionCapMetrics(cap) {
+  return [[`$${cap.limit.toFixed(1)}m`, `${cap.year} Cap`],
+    [`$${cap.committed.toFixed(1)}m`, `${cap.year} Committed`],
+    [`$${cap.space.toFixed(1)}m`, 'Cap Space for Extensions']];
+}
 function threadBox(t, onDone) {
   const box = el('div', { class: 'thread negotiation-thread' });
-  if (t.cap) box.append(el('div', { class: 'msg note cap-strip' }, el('b', {}, `${t.cap.year} cap · `), `$${t.cap.limit}m limit, $${t.cap.committed}m committed, `, el('b', {}, `$${t.cap.space}m of room`), t.cap.next ? ' (next year, the ledger this deal lands on)' : ''));
+  if (t.kind === 'extension' && t.extension_cap) {
+    const strip = el('div', { class: 'extension-cap-metrics' });
+    for (const [value, label] of extensionCapMetrics(t.extension_cap))
+      strip.append(el('div', {}, el('b', {}, value), el('small', {}, label)));
+    box.append(strip);
+  } else if (t.cap) box.append(el('div', { class: 'msg note cap-strip' }, el('b', {}, `${t.cap.year} cap · `), `$${t.cap.limit}m limit, $${t.cap.committed}m committed, `, el('b', {}, `$${t.cap.space}m of room`), t.cap.next ? ' (next year, the ledger this deal lands on)' : ''));
   // the conversation as logged: every line with who said it, then the agent's temperament, then the decision
   const log = t.log && t.log.length ? t.log : [];
   if (!log.length) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, `Agent · Before Any Offer`), el('div', { class: 'txt' }, t.ask ? el('span', {}, `He is asking `, el('b', {}, `$${t.ask}m × ${t.years}`), '.') : 'He would rather wait.')));
@@ -1471,7 +1481,7 @@ function finishPersonnel(page, v, kind, left, right, extra = []) {
   const subtitle = heading?.querySelector('small')?.textContent || '';
   heading?.remove();
   const title = {fa:'FREE AGENCY',wire:'WAIVER WIRE',extensions:'EXTENSIONS'}[kind];
-  const metrics = kind === 'fa' ? [[v.count,'Available'],[`$${v.cap_focus?.space ?? v.cap}m`,'Available cap room'],[`$${v.cap_focus?.pending_offers ?? 0}m`,'Held for offers'],[`$${v.committed_next}m / $${v.limit_next}m`,'Next year committed']] : kind === 'wire' ? [[v.my_priority ? `${v.my_priority}${ord(v.my_priority)}` : '—','Your priority'],[v.rows.length,'Available'],[v.awards,'Awards']] : v.cap_focus ? [[`$${v.cap_focus.limit}m`,`${v.cap_focus.year} cap`],[`$${v.cap_focus.committed}m`,'Committed'],[`$${v.cap_focus.space}m`,'Cap space']] : [[`$${v.committed_next}m`,'Next year committed'],[`$${v.limit_next}m`,'Next year cap']];
+  const metrics = kind === 'fa' ? [[v.count,'Available'],[`$${v.cap_focus?.space ?? v.cap}m`,'Available cap room'],[`$${v.cap_focus?.pending_offers ?? 0}m`,'Held for offers'],[`$${v.committed_next}m / $${v.limit_next}m`,'Next year committed']] : kind === 'wire' ? [[v.my_priority ? `${v.my_priority}${ord(v.my_priority)}` : '—','Your priority'],[v.rows.length,'Available'],[v.awards,'Awards']] : extensionCapMetrics(v.extension_cap);
   const hero=el('div',{class:'personnel-hero'},el('div',{},el('small',{},club.name.toUpperCase()),el('h1',{},title),el('p',{},subtitle)));
   const stats=el('div',{class:'personnel-metrics'});
   for(const [value,label] of metrics) stats.append(el('div',{},el('b',{},value),el('small',{},label)));
@@ -1698,7 +1708,7 @@ function renderRetain(v) {
 function renderExtensions(v) {
   renderRail(v.rail); const page = persPage(); persSecond('extensions');
   const reload = () => renderExtensions(pyJSON(`SESSION.personnel('extensions')`));
-  const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Extensions', el('small', {}, v.cap_focus ? `${v.cap_focus.year} Cap $${v.cap_focus.limit}m · Committed $${v.cap_focus.committed}m · Space $${v.cap_focus.space}m` : `Next Year Committed: $${v.committed_next}m of $${v.limit_next}m`)));
+  const left = el('section', { class: 'sheet c7' }, el('h2', {}, 'Extensions', el('small', {}, 'Plan your next-year commitments')));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   for (const [k, label, list] of [['expiring', 'Expiring', v.expiring], ['two_left', 'Two Years Left', v.two_left], ['done', 'Done This Year', v.done]]) tabs.append(el('button', { 'aria-pressed': String(extTab === k), onclick: () => { extTab = k; renderExtensions(v); } }, label + ' ', el('em', {}, list.length)));
   left.append(tabs);
@@ -2396,7 +2406,6 @@ function pictureSheet(v) {
     for (const x of c.hunt) t.append(el('tr', { style: 'color:var(--ink-3)' + (x.me ? ';background:var(--sheet-2)' : '') }, el('td', {}, el('span', { class: 'seed bub' }, '·')), el('td', {}, clubLink(x.club.abbr, x.club.name)), el('td', { class: 'n' }, x.record), el('td', {}, el('small', {}, 'in the hunt'))));
     r.append(t);
   }
-  r.append(el('div', { class: 'legend-line' }, 'Division winners seed one through four; the one seed has the bye. Ties break by the league rules.'));
   return r;
 }
 
