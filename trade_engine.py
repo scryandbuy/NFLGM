@@ -286,7 +286,9 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
     # base and roster bonus he would inherit, the bonus having been paid
     v = asset['trade_value'] if owns else asset.get('trade_value_buyer', asset['trade_value'])
     if asset['age'] >= 30: v *= WINDOW_AGE_BIAS[wdw]
-    if asset['need']: v *= 1.18
+    # ``need`` describes the receiving club's hole.  A buyer wanting a
+    # player cannot make that player more indispensable to his current club.
+    if asset['need'] and not owns: v *= 1.18
     v *= g['own_bias'] if owns else g['target_bias']
     if owns and asset.get('star'):
         v *= float(asset.get('ask', 1.3))            # a starter is not for sale at his value
