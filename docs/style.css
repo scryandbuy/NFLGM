@@ -2895,3 +2895,13 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .coaching-recap .recap-finding.negative{border-color:var(--danger)}
 .coaching-recap .recap-finding.mixed{border-color:var(--team-accent,var(--club-2))}
 .coaching-recap .recap-finding b{font-weight:700;color:var(--ink)}
+
+/* Practice columns share alignment; the horizontal wrapper must not offset sticky headers. */
+.practice-players th{position:static;cursor:default;background:transparent}
+.practice-players th,.practice-players td{text-align:center;padding:10px 8px}
+.practice-players th:first-child,.practice-players td:first-child,
+.practice-players th:nth-child(5),.practice-players td:nth-child(5){text-align:left}
+.practice-players td:nth-child(2){text-align:center}
+.practice-players td:first-child{white-space:normal;min-width:180px}
+.practice-players td:nth-child(5){min-width:160px}
+.practice-players input[type=checkbox]{display:block;margin:0 auto}
