@@ -77,17 +77,32 @@ cap gate; later cleanup is relied upon. Over-cap intermediate offseason
 states alone do not prove an illegal final roster; #1 demonstrates failure
 of that intended recovery path.
 
-5. Expensive same-offseason signing/extension churn recurs.
+5. Same-offseason commitment reversals recur; dead money alone is not a defect.
 Counting APY >=$4m, excluding drafted/UDFA contracts, first 2027 offseason:
 Seed93030: six new deals cut before Week1; $15.817m current dead charges.
            One extension cut; $2.115m current/$6.345m following-year dead.
 Seed93031: two new deals cut; $10.294m current/$11.601m following-year dead.
 Examples: NO CB P0327 Cam Reddish signed $9.16m/1y, then cut for $4.334m dead.
-NO DT P1826 extended $4.47m APY/4y, then cut for the 2.115/6.345 split.
+NO MIKE P1826 Kamari Kloska extended $4.47m APY/4y, then cut for that split.
 MIA P0060 signed $16.34m APY/3y, then cut for 5.801/11.601 dead in seed93031.
 The extension release's dead total can include previously existing bonus;
 do not equate all of it with a newly paid extension bonus without tracing.
 Minimum/camp/draft churn is reported separately in summary.json.
+User policy: a costly cut can be sensible after decline, loss of a starting
+job, or inability to trade the player. Do not classify cuts solely by dead
+charges. Follow-up finds explainable cuts in these examples:
+- Kloska stays78.773 from extension to camp, then is displaced by FA Mitch
+  Orange82.274 and rookie Joel Marcelin79.83. No decline; a lost-role case.
+- Reddish stays83.126 and the CB group is unchanged between his signing and
+  camp. NO moves from +6.981 after FA to -24.408 after draft/camp, making cap
+  relief necessary. His release alone is not evidence of a bad decision.
+- MIA Thompkins stays84.328 but same-round FA Chris Works87.65 takes the lead
+  SS role. His release moves cap -10.405->-0.555 by saving9.850. A defensible
+  lost-role/cap cut despite substantial dead charges.
+The concern to investigate is earlier repeated commitments and insufficient
+future reserve. Failed shopping attempts are not logged by this observer;
+no claim is made that these players could have been traded, or that an
+available acceptable offer was refused.
 
 First-camp draft cuts by round (R1 through R7), first 2027 class:
 Seed93030: 0,1,6,12,10,12,15 =56/224 picks.
