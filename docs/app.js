@@ -198,8 +198,7 @@ function saveGame(silent = false) {
   autosaveQueued = false;
   cancelAutosaveSchedule();
   const text = py.runPython(`SESSION.save()`);
-  if (!silent) busy('Saving…');
-  return queueSave('full', text).finally(() => { if (!silent) busy(null); });
+  return queueSave('full', text);
 }
 async function saveGameNotified(silent = false) {
   try { await saveGame(silent); }
@@ -222,8 +221,6 @@ async function loadSave() {
     tx.onerror = () => { db.close(); res({ text: null, journal: null }); };
   });
 }
-
-function busy(t) { const b = $('#busy'); if (t) { b.textContent = t; b.hidden = false; } else b.hidden = true; }
 
 // ---------------------------------------------------------------- the rail
 function renderRail(r) {
@@ -894,7 +891,7 @@ function renderRoster(v) {
         if (clubTab === 'ps' && !mine) {
           cells.push(el('td', {}, el('div', { style: 'display:flex' }, el('button', { class: 'btn go', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': "Sign him to your 53; he must stay on it three weeks", onclick: () => { const res = pyJSON(`SESSION.personnel_act('poach_ps', pid=${JSON.stringify(r.pid)})`); notify(res.ok ? { ok: true, line: res.line } : res); if (res.ok) location.hash = '#personnel/fa'; } }, 'Sign to Your Roster'))));
         } else if (clubTab === 'ps') {
-          const act = (name, extra) => { const res = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, ${extra})`); busy(res.ok ? (res.moves ? res.moves.map(m => `${m.name} ${m.how}`).join(', ') : `${res.name}: done.`) : res.why); setTimeout(() => busy(null), 2200); renderRoster(pyJSON('SESSION.club_roster()')); };
+          const act = (name, extra) => { const res = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, ${extra})`); notify(res); renderRoster(pyJSON('SESSION.club_roster()')); };
           cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' },
             el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'Sign him to the 53 at the minimum', onclick: () => act('call_up', `pid=${JSON.stringify(r.pid)}`) }, 'Call Up'),
             el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: r.elevated_now ? '' : null, 'data-tip': v.playoff_elevations ? 'Dress him for this game · unlimited playoff elevations per player' : `Dress him Sunday and send him back after · ${r.elevations} of ${v.per_man_max} used`, onclick: () => act('elevate', `pids=[${JSON.stringify(r.pid)}]`) }, r.elevated_now ? 'Elevated' : v.playoff_elevations ? 'Elevate' : `Elevate · ${r.elevations}/${v.per_man_max}`),
@@ -1333,7 +1330,15 @@ let tradeState = { other: null, a: [], b: [] };
 function persSecond(cur) { secondRow(Object.entries(PERS).map(([k, l]) => [l, '#personnel/' + k]), '#personnel/' + cur); $('#crumb').textContent = 'Personnel'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'personnel')); }
 function persPage() { const page = $('#page'); page.innerHTML = ''; page.className = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)'; return page; }
 function crest(c, size) { return el('div', { class: 'cr', style: `background:${c.color}${size ? `;height:${size}px;font-size:${Math.max(10, Math.round(size * 0.4))}px` : ''}` }, showAbbr(c.abbr)); }
-function notify(r) { busy(r.why || r.line || (r.ok ? 'Done.' : 'That did not work.')); setTimeout(() => busy(null), 2600); }
+// Successful actions are reflected by their page. Only failures need feedback,
+// outside #page so an immediate re-render cannot erase the explanation.
+function notify(r) {
+  const feedback = $('#action-feedback');
+  const failed = r?.ok === false || !!r?.error || (r?.ok !== true && !!r?.why);
+  feedback.hidden = !failed;
+  $('#action-feedback-text').textContent = failed ? (r.why || r.error || r.line || 'That did not work.') : '';
+  $('#dismiss-feedback').onclick = () => { feedback.hidden = true; };
+}
 
 // Each team owns its panel palette; shared by trades, cards and negotiations.
 let personnelRailTeam = null;
@@ -3380,10 +3385,9 @@ async function advance() {
   try { await advanceInner(); }
   catch (e) {
     // whatever failed, the GM sees it and can send it on: the message, and where in the engine it happened
-    console.error(e); const msg = String(e && e.message || e); const tail = msg.split('\n').filter(l => l.trim()).slice(-6).join('\n');
-    $('#advance').disabled = false; busy('The advance failed; see the notice.'); setTimeout(() => busy(null), 6000);
-    notify({ ok: false, why: 'The advance failed. Copy this and send it: ' + tail.slice(0, 600) });
-    try { const box = el('div', { class: 'sheet', style: 'position:fixed;left:16px;right:16px;bottom:16px;z-index:999;padding:12px 16px;max-height:40vh;overflow:auto;border-color:var(--danger)' }, el('b', {}, 'The advance failed. Copy this text and send it:'), el('pre', { style: 'white-space:pre-wrap;font-size:12px;margin:8px 0 0' }, msg.slice(-1500)), el('button', { class: 'btn', style: 'margin-top:8px', onclick: e => e.currentTarget.parentNode.remove() }, 'Close')); document.body.append(box); } catch (_) {}
+    console.error(e); const msg = String(e && e.message || e);
+    $('#advance').disabled = false;
+    notify({ ok: false, why: 'The advance failed. Copy this and send it:\n' + msg.slice(-1500) });
   }
 }
 
@@ -3392,11 +3396,11 @@ async function advanceInner() {
   // a block stops the click: a roster over 53 or under 46 sends you to fix it; a decision opens it
   const blocks = pyJSON('SESSION.blocking()');
   if (blocks.length && blocks[0].kind === 'live') { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); return; }
-  if (blocks.length) { const b = blocks[0]; notify({ ok: false, why: `Blocked: ${b.subject}. ${b.kind === 'cap' ? 'Open Cap to choose your contract moves.' : b.kind === 'roster' ? 'Fix the roster first.' : 'Answer it (or decline) to advance.'}` }); busy(`Blocked: ${b.subject}`); setTimeout(() => busy(null), 4000); renderRail(pyJSON('SESSION.portal()').rail); if (b.go) location.hash = b.go; else if (b.id != null) location.hash = `#portal/inbox/${b.id}`; return; }
-  const adv = $('#advance'); adv.disabled = true; const wasSim = /^Sim Week/.test(view.rail.advance.title); busy(view.rail.advance.title + '…');
+  if (blocks.length) { const b = blocks[0]; notify({ ok: false, why: `Blocked: ${b.subject}. ${b.kind === 'cap' ? 'Open Cap to choose your contract moves.' : b.kind === 'roster' ? 'Fix the roster first.' : 'Answer it (or decline) to advance.'}` }); renderRail(pyJSON('SESSION.portal()').rail); if (b.go) location.hash = b.go; else if (b.id != null) location.hash = `#portal/inbox/${b.id}`; return; }
+  const adv = $('#advance'); adv.disabled = true;
   await new Promise(r => setTimeout(r, 30));
   let r = null;
-  try { r = pyJSON('SESSION.advance()'); busy(`${r.done} done.`); setTimeout(() => busy(null), 1200); }
+  try { r = pyJSON('SESSION.advance()'); }
   catch (e) { adv.disabled = false; throw e; }
   adv.disabled = false;
   if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
@@ -3482,10 +3486,10 @@ async function advanceInner() {
   $('#import').onclick = () => { if (gameplanUnsaved() || gameplanSaving) { warnUnsavedGameplan(); return; } $('#importfile').click(); };
   $('#importfile').onchange = async e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
-    const text = await f.text(); busy('Loading the save…');
+    const text = await f.text();
     try { py.globals.set('_import_text', text); py.runPython(`import session as S\nSESSION = S.Session.load(_import_text)`); await saveGame(); bootHash(); refresh(); notify({ ok: true, line: 'Save loaded.' }); }
     catch (err) { notify({ ok: false, why: 'That file could not be loaded as a save.' }); }
-    busy(null); e.target.value = '';
+    e.target.value = '';
   };
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
