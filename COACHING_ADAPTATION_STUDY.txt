@@ -1,0 +1,51 @@
+Coaching adaptation study -- production baseline ef4620a
+
+Confirmed defects
+1. Delayed first-choice coordinator hires regenerate their evaluated candidate.
+   coaching_pool.owner_hire generates the candidate at line207 and stores only
+   names/source in pending_hires at292. complete_pending_hire calls make_candidate
+   again at363. It restores name, age, prestige and reputation, not tactical traits.
+   study_pending_identity.py uses real candidate generation with a controlled
+   successful coordinator selection. Seeds93044..93053 changed tactical identity
+   in10/10 first-choice completions, versus0/10 second-choice completions.
+   Example93044: evaluated4-3 /12 /mixed, coverage0, blitz.134; installedmultiple
+   /11 /zone, coverage.735, blitz.828. Conditional mechanism, not league incidence.
+2. Immediate hire calls position_change.convert_misfits at coaching_pool.py346;
+   pending completion375..377 does not. Seed93042 hook probe confirms1 vs0 calls.
+   Both reset identity and install scheme. No count of lost useful conversions
+   is inferred from the hook probe. The pending path is reachable when an AI
+   wants the user's coordinator and awaits the user's answer; carousel closes it.
+
+Assessment gaps, not proven bad hires
+Hiring roster_fit uses canonical two-deep mean scheme fit (148..162), while
+scheme_similarity181..189 omits offensive personnel. The new package assessment
+is used downstream by roster construction, not by these hiring metrics.
+Controlled72-profile comparison across3teams (seed93045) found inversions:
+GB: multiple/21/gap fit+.130, package score127.60 versus3-4/10/gap fit+.003,
+package score136.75. These are synthetic profiles, not actual available hires;
+the owner's total score also includes quality, money and continuity.
+
+Retention probe
+Seed93043, three changed coaches,17 actual in_season_round calls without games:
+25 eligible tracked starters,1 severe misfit (<-2 fit),3 accepted extensions,
+0 severe-misfit extensions. GB RT P0940 had fit-2.028 and was eligible, but was
+not selected. In-season extension code lacks the offseason fit<-2 rejection.
+That missing filter is source-confirmed; harmful cap lock was not observed here.
+Tag replacement value is raw positional OVR gap, not package fit. PS/UDFA
+recruiting also retains generic position/OVR ranking. These secondary channels
+can lag package-aware FA/trades/draft decisions; no frequency claim is made.
+
+Longitudinal construction method
+study_coaching_adaptation.py forces three incoming coaching identities through
+the immediate hire path, then uses real construction modules for successive
+offseasons. No games, production, injury, XP, retirement, awards or owner feedback.
+Initial rosters are normalized to53. Draft order is explicitly alphabetical,
+not fabricated standings, and each draft must select224 players. Retention,
+tags, FA, trades, drafts, UDFA, cutdown, waivers and PSfill are included.
+There is no unchanged-coach control, so trends are descriptive, not causal.
+
+Discarded pilot
+The initial3-year pilot omitted pick selections, producing zero draft picks.
+Its coaching-adaptation-93041.json is INVALID as full adaptation evidence.
+Do not use its roster, cap or quality trends to diagnose the production engine.
+The corrected output is coaching-adaptation-valid-93041.json.
