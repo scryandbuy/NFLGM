@@ -71,6 +71,24 @@ class EndgameIntentTests(unittest.TestCase):
         self.assertTrue(G._onside_call(60, 10, 0, {}, None))
         self.assertTrue(G.hurry_for_snap(120, -21, quarter=4))
 
+    def test_three_score_chase_uses_the_play_call_clock_budget(self):
+        # LV began this drive down 17 with 7:43 left. The pass lean already
+        # started at 9:00; the clock must not wait until 4:30 to speed up.
+        self.assertEqual(G.comeback_clock_budget(17), 540)
+        self.assertFalse(G.multi_score_urgency(541, -17, 4))
+        self.assertTrue(G.multi_score_urgency(463, -17, 4))
+        self.assertFalse(G.multi_score_urgency(463, -17, 3))
+        helper = clocks.ClockDecisions()
+        helper.setUp()
+        outcomes = [dict(type='complete', yards=10),
+                    dict(type='interception', yards=0, air=0, ret=0)]
+        for remaining, expected in ((600, 34), (463, 14)):
+            with self.subTest(seconds=remaining):
+                dr, _, _ = helper.drive(outcomes, start=78, clock=remaining,
+                                        quarter=4, wall=None, diff=-17)
+                snaps = [p for p in dr.log if p.get('down')]
+                self.assertEqual(snaps[0]['clock'] - snaps[1]['clock'], expected)
+
     def test_live_and_batch_kneels_keep_unused_timeouts(self):
         helper = clocks.ClockDecisions()
         helper.setUp()

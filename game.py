@@ -62,12 +62,17 @@ def comeback_viable(seconds, deficit):
     return seconds > 0 and seconds >= 90.0 * max(0, scores - 2)
 
 
+def comeback_clock_budget(deficit):
+    """Seconds left at which each required scoring possession needs clock help."""
+    scores_needed = int(np.ceil(max(0.0, deficit) / 8.0))
+    return 150.0 * scores_needed + 90.0
+
+
 def multi_score_urgency(seconds, score_diff, quarter):
     if quarter != 4 or score_diff >= -8 or seconds <= 0:
         return False
-    scores_needed = int(np.ceil(-score_diff / 8.0))
     return (comeback_viable(seconds, -score_diff)
-            and seconds <= min(300, 90 * scores_needed))
+            and seconds <= comeback_clock_budget(-score_diff))
 
 
 def hurry_for_snap(seconds, score_diff, plan=None, call=None, quarter=None):
@@ -195,7 +200,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     if secs_left <= 6 and score_diff < -3:
         return 'go'
     need_now = int(np.ceil(-score_diff / 8.0)) if score_diff < 0 else 0
-    chasing = score_diff < 0 and secs_left < 150 * need_now + 90
+    chasing = score_diff < 0 and secs_left < comeback_clock_budget(-score_diff)
     # does a field goal matter? Down 14 it leaves two scores either way; down 10 it makes it one
     need_after_fg = int(np.ceil(-(score_diff + 3) / 8.0)) if score_diff + 3 < 0 else 0
     fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now and -score_diff not in (7, 8) and -(score_diff + 3) not in (7, 8))
@@ -2126,7 +2131,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 late_lean = 0.0 if (dr.down == 3 and dr.togo >= 6) else -3.5
             elif dr.score_diff <= 0 and secs_in_half <= 120:
                 late_lean = 1.0 if dr.togo <= 1 else (12.0 if secs_in_half <= 30 else 6.5)          # the two-minute drill: throw; under thirty seconds there is no other call
-            elif dr.score_diff < 0 and half_end is None and dr.clock < 150 * int(np.ceil(-dr.score_diff / 8.0)) + 90:
+            elif dr.score_diff < 0 and half_end is None and dr.clock <= comeback_clock_budget(-dr.score_diff):
                 late_lean = 0.5 if dr.togo <= 1 else 2.5          # chasing with little time: lean to the pass, not all of it
         lean_now = dict(olean or {})
         # the plan's 'play' is a quick throw to move the kick closer, whatever the score: the same drill the trailing side runs

@@ -14,9 +14,9 @@ import test_game_clock_decisions as clocks
 class Week12Log(unittest.TestCase):
     def test_multi_score_urgency_preserves_other_situations(self):
         for seconds, margin, quarter, urgent in (
-            (180, -9, 4, True), (181, -9, 4, False),
-            (270, -21, 4, True), (271, -21, 4, False),
-            (300, -28, 4, True), (301, -28, 4, False),
+            (390, -9, 4, True), (391, -9, 4, False),
+            (540, -21, 4, True), (541, -21, 4, False),
+            (690, -28, 4, True), (691, -28, 4, False),
             (60, -8, 4, False), (60, 14, 4, False),
             (60, -21, 2, False), (0, -21, 4, False)):
             with self.subTest(seconds=seconds, margin=margin, quarter=quarter):
