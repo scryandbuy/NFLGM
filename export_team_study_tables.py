@@ -37,6 +37,14 @@ def main():
             rows=[x for x in report['first_camp_draft_cuts'] if x['draft']['year']==year]
             counts=collections.Counter(x['draft']['round'] for x in rows)
             lines.append(f"{year}: " + ', '.join(f'R{r}={counts[r]}' for r in range(1,8)))
+            r2=[x for x in rows if x['draft']['round']==2]
+            same=sum(bool(x.get('destination_at_regular_gate')) and
+                     x['destination_at_regular_gate']['team']==x['draft']['team'] for x in r2)
+            lines.append(f'  R2 cuts: {same} stayed in organization; {len(r2)-same} left by final wire.')
+        lines += ['', 'FA-phase APY >=4 cut rates (contracts may include re-signings):']
+        for r in report['fa_churn_rates']:
+            lines.append(f"{r['year']}: {r['cuts']}/{r['contracts']} ({r['percent']:.2f}%), "
+                         f"{r['multiyear_cuts']} multiyear cuts.")
         lines += ['', 'Notable offseason contract churn (APY >=4; excluding draft/UDFA):']
         churn=report['offseason_contract_churn']
         for year in sorted({x['contract']['year'] for x in churn}):
