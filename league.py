@@ -949,6 +949,7 @@ class League:
             cap_history={str(y): cap for y, cap in self.cap_history.items()},
             players={pid: p.to_dict() for pid, p in self.players.items()},
             player_name_history=name_history(self), newgen_name_cursor=self.newgen_name_cursor,
+            ls_reserve_version=getattr(self, 'ls_reserve_version', 0),
             teams={a: t.to_dict() for a, t in self.teams.items()},
             free_agents=self.free_agents, schedule=self.schedule,
             stats=self.stats, post_stats=self.post_stats,
@@ -1137,6 +1138,8 @@ class League:
         L.transactions = d['transactions']
         L.awards = {int(k): v for k, v in d['awards'].items()}
         L.rng_state = d['rng_state']
+        import specialist_reserve as SR
+        SR.migrate(L, d.get('ls_reserve_version'))
         return L
 
     def __repr__(self):
@@ -1418,6 +1421,9 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
         fa_cols = [c for c in FA.columns if c.endswith('_rating') and c != 'src_rating']
         n_fa = 0
         for _, r in FA.iterrows():
+            # Added separately using a private RNG so existing seed players and
+            # coaches retain their original potential/personality draws.
+            if r.get('iteration') == 'LS Reserve 2026 v1': continue
             pid = f"FA{int(r.player_id)}" if pd.notna(r.get('player_id')) else f"FA{n_fa}"
             if pid in L.players: continue
             ratings = {c: float(r[c]) for c in fa_cols if pd.notna(r.get(c))}
@@ -1492,6 +1498,8 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
     import xp as XP
     for p in L.players.values():
         XP.resolve_potential(p, rng)
+    import specialist_reserve as SR
+    SR.ensure(L, seed_csv.replace('league_seed_2026.csv', 'free_agent_pool.csv'))
     return L
 
 
