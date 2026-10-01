@@ -339,7 +339,7 @@ class Team:
         return dict(ok=True, returnable=returnable)
 
     def activate_from_ir(self, p, week):
-        """Back to the 53 after four weeks, healthy, with a return left and a roster spot open."""
+        """Return after the minimum absence and recovery; roster compliance gates advance."""
         ir = getattr(self, 'ir', None) or []
         if not any(q.pid == p.pid for q in ir): return dict(ok=False, why='he is not on IR')
         if not p.xp_spent.get('_ir_return', False): return dict(ok=False, why='he was placed on IR for the season')
@@ -347,7 +347,6 @@ class Team:
         if p.out_until is not None and int(p.out_until) > int(week or 0): return dict(ok=False, why=f"he is not healthy until week {p.out_until}")
         used = int(getattr(self, 'ir_returns_used', 0) or 0)
         if used >= self.IR_RETURNS: return dict(ok=False, why='the club has used its eight returns this season')
-        if len(self.active()) >= 53: return dict(ok=False, why='the 53 is full; open a spot first')
         self.ir = [q for q in ir if q.pid != p.pid]; self.ir_returns_used = used + 1; p.out_until = None
         return dict(ok=True, returns_left=self.IR_RETURNS - self.ir_returns_used)
 

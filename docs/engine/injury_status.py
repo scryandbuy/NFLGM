@@ -284,10 +284,57 @@ class InjuryDesk:
         """
         back = []
         if team.abbr == getattr(league, 'user_team', None): return back        # the GM activates his own
+        import cutdown as CD
+        import roster_needs as RN
+        import practice_squad as PSQ
+        from cap_accounting import trade_projection
+        from offer_reservations import held
         for p in list(getattr(team, 'ir', None) or []):
+            # Preview the same full-roster assessment used at cutdown. Restore
+            # eligibility state before committing any release or return charge.
+            old_ir = list(team.ir)
+            old_used = int(getattr(team, 'ir_returns_used', 0) or 0)
+            old_until = p.out_until
+            current = team.active()
+            cuts = []
+            accepted = False
+            try:
+                r = team.activate_from_ir(p, week)
+                if not r.get('ok'):
+                    continue
+                projected = team.active()
+                kept = (RN.select_cutdown(team, CD.rows_for(team), 53)
+                        if len(projected) > 53 else {q.pid for q in projected})
+                if p.pid not in kept:
+                    continue
+                cuts = [q for q in projected if q.pid not in kept]
+                if len(projected) - len(cuts) > 53:
+                    continue
+                if any(PSQ.locked(q, week) or PSQ.protected(team, q, league) for q in cuts):
+                    continue
+                missing, quality = RN.lineup_strength(team, [q for q in projected if q.pid in kept])
+                old_missing, old_quality = RN.lineup_strength(team, current)
+                if missing > old_missing or quality < old_quality - .5:
+                    continue
+                trial = trade_projection(league, team.abbr, [q.pid for q in cuts], [])
+                if trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005:
+                    continue
+                accepted = True
+            finally:
+                team.ir = old_ir
+                team.ir_returns_used = old_used
+                p.out_until = old_until
+            if not accepted:
+                continue
+            # Eligibility and every required release have passed preflight.
             r = team.activate_from_ir(p, week)
             if r.get('ok'):
-                back.append(p); self.status.pop(p.pid, None)
+                for q in cuts:
+                    league.release(q.pid)
+                team.sync_cap()
+                back.append(p)
+                self.status.pop(p.pid, None)
+                self.ir.pop(p.pid, None)
                 league.log('ir_return', pid=p.pid, team=team.abbr, returns_left=r.get('returns_left'))
         return back
 

@@ -434,7 +434,7 @@ class Session:
         # 68 and cuts to 53 before week 1, the way every club does.
         offseason_cutdown = (self.stop[0] == 'offseason'
                              and self.OFFSEASON[self.stop[1]][1] == 'step_cutdown')
-        if offseason_cutdown or (self.stop[0] in ('week', 'cutdown', 'wire') and not getattr(self, 'played', False)):
+        if offseason_cutdown or self.stop[0] in ('week', 'playoffs', 'cutdown', 'wire'):
             n = len(self.L.teams[self.user_team].active())
             import inbox as IB
             key_ = f"roster-{self.L.year}-{self.stop[1] if len(self.stop) > 1 else 0}"
@@ -477,7 +477,7 @@ class Session:
     def advance(self):
         PA.sync_session(self)
         # References follow a successful calendar action, not football week numbers.
-        blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap')]
+        blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap', 'roster')]
         if blocks:
             return dict(done='Blocked', next=self.next_label(), why=blocks[0]['subject'])
         from game_availability import FieldabilityError
