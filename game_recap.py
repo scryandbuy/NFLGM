@@ -286,6 +286,93 @@ def review_choices(pre, own, against, before=None, league=None):
     return findings
 
 
+def declined_evidence(key, own, against, before):
+    """Review the recommendation's actual concern, not every setting in its bundle.
+
+    Opportunity advice needs evidence of both an available strength and a costly
+    alternative. Absence of the suggested tactic alone is not a bad decision.
+    """
+    a, b = stats(own), stats(against)
+    first, opp_first = stats(before[0]), stats(before[1])
+    def avg(s, kind):
+        n = s['runs' if kind == 'run' else 'passes']
+        return s['run_yards' if kind == 'run' else 'pass_yards'] / max(1, n)
+    def deep(rows):
+        return [p for p in rows if p['type'] in ('complete', 'incomplete', 'drop', 'interception')
+                and (p.get('depth') == 'deep' or float(p.get('air', 0) or 0) >= 20)]
+    def completions(rows):
+        caught = [p for p in rows if p['type'] == 'complete']
+        return len(caught), sum(float(p.get('yards', 0) or 0) for p in caught)
+    def line(detail, baseline): return detail + ' Before halftime: ' + baseline + '.'
+    if key == 'protection':
+        if a['passes'] >= 8 and (a['sacks'] >= 3 or (a['passes'] >= 12 and
+                a['pressure'] / a['passes'] >= .4 and
+                a['pressure'] / a['passes'] >= first['pressure'] / max(1, first['passes']) - .05)):
+            return line(f"We allowed {a['sacks']} sacks after halftime on {a['passes']} dropbacks; pressure or sacks affected {a['pressure']} of them.", evidence(before[0], 'protection'))
+    elif key in ('run_working', 'run_stalled'):
+        if key == 'run_working' and first['runs'] >= 6 and avg(first, 'run') >= 5.2 and a['runs'] >= 5 and avg(a, 'run') >= 5 and a['passes'] >= 12 and a['passes'] > a['runs'] * 1.5 and avg(a, 'pass') <= 4:
+            return line(f"The run remained productive at {avg(a, 'run'):.1f} yards on {a['runs']} carries, but we chose {a['passes']} dropbacks for only {avg(a, 'pass'):.1f} net yards each after halftime.", evidence(before[0], 'run'))
+        if key == 'run_stalled' and a['runs'] >= 8 and avg(a, 'run') <= 2.6 and avg(a, 'run') <= avg(first, 'run') + .5:
+            return line(f"We continued running into the same problem after halftime: {evidence(own, 'run')}.", evidence(before[0], 'run'))
+    elif key in ('deep_stalled', 'deep_working', 'blitz_opportunity'):
+        old_deep, new_deep = deep(before[0]), deep(own)
+        if key == 'deep_stalled' and len(new_deep) >= 4 and completions(new_deep)[0] == 0:
+            return line(f"The shots still did not connect: 0 completions on {len(new_deep)} deep attempts after halftime.", f"{completions(old_deep)[0]} of {len(old_deep)} deep attempts completed")
+        if key == 'deep_working' and completions(old_deep)[0] >= 2 and completions(old_deep)[1] >= 60 and a['passes'] >= 12 and len(new_deep) <= 1 and avg(a, 'pass') <= 4:
+            return line(f"We took only {len(new_deep)} deep shots after halftime while the passing game stalled at {avg(a, 'pass'):.1f} net yards on {a['passes']} dropbacks.", f"{completions(old_deep)[0]} deep completions for {completions(old_deep)[1]:.0f} yards")
+        if key == 'blitz_opportunity':
+            old = stats([p for p in before[0] if p.get('blitz') and p['type'] != 'run'])
+            passing = stats([p for p in own if p.get('blitz') and p['type'] != 'run'])
+            runs = stats([p for p in own if p.get('blitz') and p['type'] == 'run'])
+            if old['passes'] >= 4 and avg(old, 'pass') >= 8 and passing['passes'] >= 4 and avg(passing, 'pass') >= 8 and runs['runs'] >= 6 and avg(runs, 'run') <= 2.6:
+                return line(f"Against their blitz after halftime, we ran {runs['runs']} times for {avg(runs, 'run'):.1f} yards each despite gaining {avg(passing, 'pass'):.1f} net yards on {passing['passes']} dropbacks against it.", f"{avg(old, 'pass'):.1f} net yards per dropback against the blitz")
+    elif key in ('screens_stalled', 'screens_defense'):
+        defense = key == 'screens_defense'
+        rows, earlier = (against, before[1]) if defense else (own, before[0])
+        screen = [p for p in rows if p.get('screen')]
+        old = [p for p in earlier if p.get('screen')]
+        now = sum(float(p.get('yards', 0) or 0) for p in screen) / max(1, len(screen))
+        prior = sum(float(p.get('yards', 0) or 0) for p in old) / max(1, len(old))
+        if len(screen) >= 5 and ((defense and now >= 7 and now >= prior - .75) or (not defense and now <= 1)):
+            return line(('Their screens kept hurting us' if defense else 'Our screens continued to stall') + f" after halftime: {evidence(rows, 'screens')}.", evidence(earlier, 'screens'))
+    elif key in ('third_offense', 'third_defense'):
+        defense = key == 'third_defense'
+        s, old = (b, opp_first) if defense else (a, first)
+        now, prior = s['converted'] / max(1, s['third']), old['converted'] / max(1, old['third'])
+        if s['third'] >= 5 and old['third'] >= 4 and ((defense and now >= .6 and now >= prior - .1) or (not defense and now <= .25 and now <= prior + .1)):
+            return line(f"{'They' if defense else 'We'} converted {s['converted']}/{s['third']} third downs after halftime; the third-down problem persisted.", evidence(before[1 if defense else 0], 'third'))
+    elif key == 'turnovers':
+        if a['snaps'] >= 12 and a['turnovers'] >= 2:
+            return line(f"We committed {a['turnovers']} more turnovers after halftime on {a['snaps']} offensive plays.", f"{first['turnovers']} turnovers")
+    elif key in ('run_defense', 'pass_defense'):
+        run = key == 'run_defense'
+        metric, n, minimum, threshold, improvement = ('run', 'runs', 8, 5, .5) if run else ('passing', 'passes', 12, 8.5, .75)
+        kind = 'run' if run else 'pass'
+        if b[n] >= minimum and opp_first[n] >= (6 if run else 8) and avg(b, kind) >= threshold and avg(b, kind) >= avg(opp_first, kind) - improvement:
+            return line(f"The opponent's problem area remained productive after halftime: {evidence(against, metric)}.", evidence(before[1], metric))
+    elif key == 'deep_defense':
+        throws = deep(against)
+        caught, yards = completions(throws)
+        if len(throws) >= 4 and caught >= 2 and yards >= 60:
+            return line(f"The opponent completed {caught} of {len(throws)} deep throws for {yards:.0f} yards after halftime.", evidence(before[1], 'deep'))
+    elif key == 'pressure_defense':
+        if b['passes'] >= 12 and b['pressure'] / b['passes'] <= .12 and avg(b, 'pass') >= 7:
+            return line(f"We generated pressure or a sack on only {b['pressure']}/{b['passes']} opposing dropbacks after halftime, and allowed {avg(b, 'pass'):.1f} net yards per dropback.", evidence(before[1], 'protection'))
+    elif key in ('hurry', 'clock_control'):
+        chasing = key == 'hurry'
+        # Use the actual score on each drive, not the final score or halftime lead.
+        relevant = [p for p in own if p.get('down') in (1, 2) and p.get('score_diff') is not None
+                    and (p['score_diff'] <= -9 if chasing else p['score_diff'] >= 9)]
+        s = stats(relevant)
+        if s['snaps'] >= 8:
+            if chasing and s['runs'] >= 6 and s['runs'] / s['snaps'] >= .6 and avg(s, 'run') <= 3:
+                return f"While still down at least two scores after halftime, we ran on {s['runs']}/{s['snaps']} early downs for {avg(s, 'run'):.1f} yards per carry. The offense kept using downs on an ineffective ground game while chasing the score."
+            misses = sum(p['type'] in ('incomplete', 'drop') for p in relevant)
+            if not chasing and s['passes'] >= 8 and s['passes'] / s['snaps'] >= .65 and misses >= 5 and avg(s, 'pass') <= 4:
+                return f"While still leading by at least two scores after halftime, we chose {s['passes']} dropbacks on {s['snaps']} early downs for {avg(s, 'pass'):.1f} net yards each; {misses} incompletions stopped the clock. The passing choices did little to move the ball or protect the clock."
+    return None
+
+
 def declined_reviews(recs, own, against, before, accepted=(), installed=None):
     """Mention only substantial continuing problems relevant to unaccepted advice."""
     findings = []
@@ -293,6 +380,35 @@ def declined_reviews(recs, own, against, before, accepted=(), installed=None):
     covered.update({k: v for r in accepted for k, v in r.get('changes', {}).items()})
     for rec in recs:
         ch = rec.get('changes') or {}
+        key = rec.get('review_key')
+        if key:
+            # Shared primary adjustments count as acting on the advice, even if
+            # they came from a different accepted recommendation.
+            primary = {
+                'run_working': ('pass_bias',), 'run_stalled': ('pass_bias',),
+                'protection': ('protection',), 'deep_stalled': ('depth_mix',),
+                'deep_working': ('depth_mix',), 'screens_stalled': ('screen_boost',),
+                'blitz_opportunity': ('depth_mix',), 'third_offense': ('depth_mix',),
+                'turnovers': ('depth_mix',), 'run_defense': ('box_bias',),
+                'pass_defense': ('sub_lean', 'shell_lean'), 'deep_defense': ('shell_lean',),
+                'pressure_defense': ('blitz_lean',), 'third_defense': ('zone_aggression',),
+                'screens_defense': ('blitz_lean',), 'hurry': ('tempo', 'pass_bias'),
+                'clock_control': ('tempo', 'pass_bias')}.get(key, ())
+            def aligned(k):
+                wanted, actual = ch.get(k), covered.get(k)
+                if wanted is None or actual is None: return False
+                if isinstance(wanted, (tuple, list)) and isinstance(actual, (tuple, list)):
+                    return len(wanted) == len(actual) and all(not w or w * a > 0 for w, a in zip(wanted, actual))
+                if isinstance(wanted, (int, float)) and isinstance(actual, (int, float)):
+                    return wanted * actual > 0
+                return wanted == actual
+            if primary and all(aligned(k) for k in primary): continue
+            detail = declined_evidence(key, own, against, before)
+            if detail:
+                findings.append(dict(title=rec['text'],
+                    conclusion='You left this recommendation off; the later results make it worth revisiting.',
+                    findings=[dict(label='Not taken at halftime', verdict='negative', text=detail)]))
+            continue
         metric, defense, detail = None, False, None
         if ch.get('protection') and covered.get('protection') != ch['protection']:
             after = stats(own); earlier = stats(before[0])
@@ -332,7 +448,7 @@ def declined_reviews(recs, own, against, before, accepted=(), installed=None):
                 conclusion='You left this recommendation off; the concern remained worth addressing.',
                 findings=[dict(label='Not taken at halftime', verdict='negative', text=detail +
                     ' Before halftime: ' + evidence(before[1 if defense else 0], metric) + '.')]))
-    return findings[:2]
+    return findings
 
 
 def post_snap_counts(league, home, away, week, states, playoffs=False):
@@ -422,7 +538,10 @@ def post(league, home, away, week, res, playoffs=False):
         add('Halftime adjustments', ['Results after halftime' + (' include overtime.' if has_ot else '.')],
             review_choices(taken, *after, before=before, league=league))
     # A later overtime decision must not be blamed on the halftime choice.
-    missed = declined_reviews(context.get('halftime_declined', []), plays(res, side, 2),
+    contextual_own = [dict(p, score_diff=getattr(d, 'score_diff', None))
+                      for pos, d in res.get('drives', []) if pos == side
+                      for p in plays({'drives': [(pos, d)]}, side, 2)]
+    missed = declined_reviews(context.get('halftime_declined', []), contextual_own,
                               plays(res, other, 2), before, accepted=taken,
                               installed=context.get('halftime_existing'))
     if missed: add('Halftime advice not taken', reviews=missed)
