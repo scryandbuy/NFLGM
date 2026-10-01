@@ -48,3 +48,32 @@ For each future log, record the season, week, teams, score, relevant timestamps,
 - Recurring timeout ownership: Q2 0:39 timeout credited to KC after GB reaches KC1. Compare raw timeout side and team metadata, actual score state, and game build; do not infer an AI strategy defect from narration alone.
 - Recurring conversion watch: GB third-and-31 and third-and-13; KC third-and-nine run. Track called play versus audible, distance, pressure and conversion rates across sample.
 - Context: final score reconciles; both long field goals missed; KC late punt preserved a final possession; final GB kneel is consistent with KC having no timeouts.
+
+## Week 17 Chicago at Green Bay
+
+Green Bay won 41–10. User described this as the latest build. The pasted log does not identify the build or season year; code review used the clean integrated state `2401dd9`. Source: attachment `89299c24-ddab-439a-80d7-389b41f8b4ec/Pasted text.txt`. Reviewed October 1, 2026. This entry changes no gameplay code.
+
+### Fixes supported by this log
+
+- **Late urgency works in the observed situation.** Chicago's Q4 drive uses 14-second resets after completions at 3:30, 3:16, and 2:56, and after the draw at 2:42. The accepted holding call costs six seconds and leaves second-and-16. This is consistent with the new multi-score pace.
+- **Punt distances reconcile.** GB36 plus a 47-yard punt leads to CHI17. CHI38 plus 44 yards and a 20-yard return leads to GB38. CHI49 plus 36 yards and an eight-yard return leads to GB23. The other punt ends the half, so no subsequent receiving possession is available for comparison.
+- **No fourth-down screen recurrence.** The logged fourth-down attempts include Chicago's failed goal-line run, failed fourth-and-six pass and fourth-and-ten sack, plus Green Bay's successful fourth-and-goal pass. One game without a screen is supportive, not a frequency validation.
+- **Game ending is coherent.** Once Chicago has no timeouts, Green Bay kneels at 1:42, 1:00, and 0:18. The final score matches five GB touchdowns and two field goals against one CHI touchdown and one field goal.
+- **Screens are not excessive here.** Five non-nullified screens in 54 pass attempts: Chicago two for ten displayed yards; Green Bay three for 26. Keep the earlier screen-volume concern open without treating it as present in every game.
+
+### Strategy findings requiring attention
+
+1. **Trailing-defense timeouts lack a realistic comeback check.** Chicago spends all three at 1:54, 1:48, and 1:42 while down 31. In the reviewed code, `_timeout_call` automatically spends the trailing defense's timeouts inside three minutes after an in-bounds play; deficit size and attainable remaining possessions are absent from that branch. A direct reproduction with the defense down 31 confirms it spends one. Recommend a consistent endgame intent decision rather than automatic timeouts for every losing team.
+2. **Late field-goal value uses theoretical score counts.** At 2:28, down 41–7, Chicago kicks from 63 yards on fourth-and-three. Reducing the deficit from 34 to 31 changes `ceil(deficit / 8)` from five to four, so `fg_matters` accepts the kick despite the time required for that comeback. On 500 seeded calls with otherwise neutral settings and a strong kicker, this state selected 281 conversion attempts and 219 field goals. A garbage-time consolation kick can be intentional; the problem is that the current arithmetic treats it as a comeback benefit and then continues the automatic timeout chase. Align kick, pace, and timeout decisions with one coherent coach intent.
+
+### Recurring observations without enough evidence to tune
+
+- **Few losing runs.** One negative designed run in 66 carries, excluding the QB scramble and three kneels. Green Bay has 46 designed runs; Hall has 25 carries for about 205 displayed yards, including a fractional goal-line gain. This merits tracking against defensive quality, boxes, substitutions, fatigue, and blocking. It does not establish that all teams' rushing is inflated. Brown's 21 carries produce 93 displayed yards, so the backs did not perform identically.
+- **Long-kick success remains a watch item.** This game's three field goals are made from 18, 31, and 63 yards. Week 12 had made kicks from 57 and 59; Week 15 had two long misses. Preserve both successes and failures. The current code's 63-yard chance depends strongly on power, accuracy, and environment; the log lacks those inputs, so a single make does not prove a kicking defect.
+- **Long-distance conversions.** GB's third-and-goal draw from the 13 scores after an 11-yard sack. Add this to Week 15's conversion watch, while noting that many other long downs fail in this game. Investigate rates and defensive choices rather than prohibiting a successful draw.
+
+### Calls not classified as defects
+
+- Chicago going on fourth-and-six at its own 47, down seven early in Q2, is aggressive rather than automatically invalid. A 500-call neutral-coach reproduction chose it 56 times (11.2%); the actual coach's aggression is unknown.
+- Green Bay's run-heavy approach and roughly 40-second second-half intervals fit its large lead. Chicago's 16-play opening drive and Green Bay's subsequent 99-yard touchdown are plausible outcomes, not accounting failures.
+- Goal-line text explicitly describes fractional progress without awarding a touchdown. Drive headers identify net field movement including penalties. Do not equate those headers with offensive scrimmage yards.
