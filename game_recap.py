@@ -487,6 +487,11 @@ def post_snap_counts(league, home, away, week, states, playoffs=False):
     if user not in (home, away): return None
     key = f'snap-counts-{league.year}-{week}-{home}-{away}-{int(playoffs)}'
     if IE.seen(league, key): return None
+    review_key = key.replace('snap-counts-', 'game-recap-', 1)
+    if any((m.get('payload') or {}).get('game_key') == review_key
+           and (m.get('payload') or {}).get('snap_counts')
+           for m in getattr(league, 'inbox', [])):
+        return None
     state = states[user]
     counts = getattr(state, 'last_snap_counts', None)
     if not counts: return None  # No invented counts for a result imported from an older build.
