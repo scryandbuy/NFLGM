@@ -117,7 +117,7 @@ def fourth_zone(yardline_100):
 
 def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
                          aggression=0.5, timeout_edge=0, use_wp=True,
-                         kicker=None, rate_fn=None, must_score=False):
+                         kicker=None, rate_fn=None, must_score=False, half_seconds_left=None):
     """
     go, field_goal or punt.
 
@@ -141,6 +141,11 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         if -3 <= score_diff < 0 and in_range:
             return 'field_goal'
         return 'go'
+    # A conversion deep in our own end with one or two snaps before halftime
+    # offers little scoring opportunity; failing hands over field-goal range.
+    # Keep this separate from the full-game clock and fourth-quarter urgency.
+    if half_seconds_left is not None and half_seconds_left <= 20 and yardline_100 >= 60:
+        return 'punt'
     # With time for one play, a reachable kick ties or wins. The general
     # desperation rule must not force a conversion that leaves no clock.
     if secs_left <= 6 and -3 <= score_diff <= 0 and in_range:
@@ -1300,7 +1305,10 @@ def _resolve_live_penalty(dr, pen, out, oc):
         if out.get('air') is not None:
             yards = float(max(1, int(round(float(out['air'])))))
             pen['yards'] = yards
-    if E.PEN_INFO[pen['penalty']]['phase'] == 'post':
+    running_facemask = (pen['penalty'] == 'Face Mask'
+                        and out.get('type') in ('run', 'scramble', 'complete')
+                        and gained >= 0 and not out.get('fumble_lost'))
+    if E.PEN_INFO[pen['penalty']]['phase'] == 'post' or running_facemask:
         spot = max(0.0, dr.yardline - spot_gain)
         yards = min(yards, spot / 2.0); pen['yards'] = yards
         dr.log_pen_after = yards                      # the defense fouled: the offense walks forward
@@ -1751,8 +1759,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         secs_left_half = dr.clock - wall
         opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
         clock_dies = secs_left_half <= 3 or (secs_left_half <= 10 and opp_tos == 0)
+        victory_kneel = (half_end is None and dr.quarter == 4 and dr.score_diff > 0
+                         and opp_tos == 0 and dr.down < 4 and dr.yardline < 99
+                         and 0 < secs_left_half <= 40)
         _plan0 = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_left_half, coach=(off_state.coach if off_state is not None else None))
-        if clock_dies and secs_left_half > 0 and ((_plan0 is not None and _plan0['choice'] == 'kneel') or (_plan0 is None and ((half_end is None and dr.score_diff > 0) or (dr.yardline > 45 and dr.score_diff >= 0)))) and not getattr(dr, '_kneeled', False):
+        closing_kneel = (clock_dies and secs_left_half > 0 and (
+            (_plan0 is not None and _plan0['choice'] == 'kneel') or
+            (_plan0 is None and ((half_end is None and dr.score_diff > 0) or
+                                (dr.yardline > 45 and dr.score_diff >= 0)))))
+        if (victory_kneel or closing_kneel) and not getattr(dr, '_kneeled', False):
             dr._kneeled = True
             qb = _healthy_quarterback(offense, off_state)
             if qb is None:
@@ -1808,7 +1823,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dec = fourth_down_decision(dr.yardline, dr.togo, dr.score_diff,
                                        dr.clock, rng, aggr4,
                                        kicker=(offense.get('k') or {}), rate_fn=rate_fn,
-                                       must_score=must_score)
+                                       must_score=must_score,
+                                       half_seconds_left=(dr.clock - half_end if half_end is not None else None))
             if dec == 'field_goal':
                 flag = E.special_teams_penalty_check(rng, 'field_goal')
                 if _kick_presnap_flag(dr, flag, half_end): continue
@@ -2259,8 +2275,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if used and used_by:
             dr.log.append(dict(type='timeout', side=used_by, side_abbr=(getattr(off_state if used_by == pos else def_state, 'abbr', None) or used_by.upper()), left=timeouts.left.get(used_by, 0), clock=dr.clock))
         if before_clock > 120 >= after_clock and not getattr(dr, '_two_min', False):
-            # the two-minute warning: the clock stops at 2:00, so the runoff this play would have taken past it is given back
-            if not added_penalty: dr.clock += min(20.0, 120.0 - after_clock)
+            # Stop between plays at 2:00, or after the live play if it crosses
+            # 2:00 itself. Never charge the subsequent huddle past the warning.
+            if not added_penalty:
+                live_end = clock_before - min(6.0, clock_before - dr.clock)
+                dr.clock = max(dr.clock, min(wall + 120.0, live_end))
             dr._two_min = True
             dr.log.append(dict(type='two_minute', clock=dr.clock))
             dr.clock_running = False
