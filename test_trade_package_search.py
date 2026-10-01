@@ -65,9 +65,11 @@ class PackageSearchTests(unittest.TestCase):
         return result
 
     def test_two_later_picks_before_first_and_no_forced_player(self):
-        offer, _ = self.negotiate([pick(1, 16), pick(2, 5, 7), pick(3, 5, 7)],
-                                  [player('filler', 2, 0)])
+        offer, result = self.negotiate([pick(1, 16), pick(2, 5, 7), pick(3, 5, 7)],
+                                       [player('filler', 2, 0)])
         self.assertEqual({a['pick'] for a in offer['a_sends']}, {2, 3})
+        self.assertEqual(result['search']['package_market'], 10)
+        self.assertEqual(result['search']['target_gain'], 6)
 
     def test_player_alone_can_close_without_a_sweetener(self):
         p = player('needed', 13)

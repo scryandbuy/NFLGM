@@ -747,6 +747,11 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         return None, None
     offer = dict(a_sends=best[1], a_gets=[target])
     result = TE.evaluate(offer, ctx_a, ctx_b, sa, sb, ga, gb)
+    result['search'] = dict(
+        target_gain=round(float(gain), 3), target_market=round(market, 3),
+        market_floor=round(floor, 3), market_ceiling=round(ceiling, 3),
+        package_market=round(best[0][0], 3), candidates=n, nodes=nodes,
+        buyer_target_price=round(value_in, 3), seller_ask=round(ask, 3))
     return offer, result
 
 
@@ -984,6 +989,11 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                        for x in offer['a_sends']]
                 try: league.trade(a, b, out, [offer['a_gets'][0]['pid']])
                 except ValueError: continue
+                league.log('ai_trade_decision', buyer=a, seller=b,
+                           target_pid=target['pid'],
+                           buyer_gain=res['a_gain'], seller_gain=res['b_gain'],
+                           offered=[str(x) for x in out],
+                           **res.get('search', {}))
                 made.append((a, b, offer['a_sends'], offer['a_gets'][0]['obj'],
                              res))
                 ta.sync_cap(); tb.sync_cap()
