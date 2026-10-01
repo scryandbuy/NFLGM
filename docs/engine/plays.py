@@ -636,10 +636,13 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # slope 5.5 to 3.5: the best line in the league was worth two yards before contact on every carry, and with an
     # elite back behind it the club ran for four thousand; a yard is the real gap between the best line and an average one
     ybc = RUN_BASE + 3.5 * push - 2.0 * (fill - AVG) + rng.normal(0, RUN_NOISE)
-    ybc *= S.box_run_multiplier(def_call['box'])
-    ybc *= S.run_scheme_multiplier(scheme, def_call['front'], ytg, def_call['box'])
-    ybc *= S.FRONTS[def_call['front']]['run_fit'] ** -1
-    if off_call.get('motion'): ybc *= 1.04
+    ybc = S.box_run_contact(ybc, def_call['box'], RUN_BASE, RUN_NOISE)
+    advantage = S.run_scheme_multiplier(scheme, def_call['front'], ytg, def_call['box'])
+    advantage /= S.FRONTS[def_call['front']]['run_fit']
+    if off_call.get('motion'): advantage *= 1.04
+    # A favorable fit helps gains and limits losses; a strong defensive fit
+    # cannot soften a loss by multiplying a negative number toward zero.
+    ybc = ybc * advantage if ybc >= 0 else ybc / advantage
     ybc = max(-4.0, ybc)
 
     if ybc < 0:

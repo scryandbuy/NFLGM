@@ -10,6 +10,7 @@ Every rate is from real data: FTN charting of 96,256 plays (2023-24) for scheme
 usage, and six seasons of play-by-play for the effects.
 """
 import numpy as np
+from statistics import NormalDist
 import defense_roles as DR
 
 # ============================================================ PERSONNEL
@@ -122,11 +123,32 @@ BOX_NEG = {4: 4.5, 5: 5.53, 6: 8.20, 7: 9.57, 8: 11.14, 9: 13.76, 10: 16.0}
 def box_run_multiplier(box):
     """
     How much this box count helps or hurts a run, relative to a 6-man box.
-    The raw ratio is applied to YARDS BEFORE CONTACT only, and the break-tackle
-    chain then compresses it, so the ratio is exponentiated to survive that.
+    The raw ratio is applied to POSITIVE yards before contact only; loss
+    generation is separate. The break-tackle chain compresses the ratio,
+    so it is exponentiated to survive that.
     Without it the sim spread only 5.51 to 3.72 against a real 5.92 to 2.41.
     """
     return (BOX_YPC.get(int(np.clip(box, 4, 10)), 4.5) / BOX_YPC[6]) ** 2.1
+
+# Translate the existing box-specific loss rates into a contact-depth shift.
+# This changes penetration risk on the same matchup/noise draw, not via an
+# independent stuff lottery that could erase a won blocking matchup.
+_BOX_CONTACT_SHIFT = {box: NormalDist().inv_cdf(BOX_NEG[6] / 100)
+                      - NormalDist().inv_cdf(pct / 100) for box, pct in BOX_NEG.items()}
+
+
+def box_run_contact(yards, box, neutral_mean, noise):
+    """Box pressure changes the loss threshold; gain scaling never shrinks losses."""
+    box = max(4, min(10, int(box)))
+    shift = noise * _BOX_CONTACT_SHIFT[box]
+    contact = yards + shift
+    if contact <= 0:
+        return contact
+    # Recenter the positive branch around its previous neutral mean before
+    # applying the existing gain multiplier. Otherwise the shift would also
+    # amplify light-box gains / suppress heavy-box gains a second time.
+    return contact * neutral_mean / (neutral_mean + shift) * box_run_multiplier(box)
+
 
 # ============================================================ PROTECTION
 # The scheme decides how many bodies stay in - and every body that stays in is

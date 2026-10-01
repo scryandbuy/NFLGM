@@ -21,7 +21,9 @@ This records evidence from user-supplied games, fixes made, and questions to rev
 3. **Leading team before halftime.** GB led by seven, took a sack at 1:06, then next snapped at 0:27 before switching to aggressive passing and timeouts. Track score, field position, available timeouts, and coach decisions to establish whether the shift is sensible or inconsistent. No new first-half strategy change in this patch.
 4. **Star pass rush contribution.** Narration alone cannot establish workload or pass-rush effectiveness. Request box scores or a save when needed; track snaps, rush opportunities, pressures, sacks, coverage assignments, fatigue, and opponent protection together.
 
-## Confirmed review issues awaiting implementation
+## Review issues fixed October 1, 2026 (original diagnoses)
+
+The five findings below are fixed in `157c3c6`. Later historical entries saying these review findings are open are superseded by the implementation status and audit at the end of this document.
 
 1. **Pregame blitz recommendation graded on the wrong side.** `gameplan_week.py` produces `blitz_rate`, but `game_recap.groups` recognizes only `blitz_lean`. The unknown key falls into offensive Other plan changes. This explains why Bring it cites GB's offensive yardage and turnover. The blitz setting does reach actual defensive play calling through `gameplan.as_def_lean`; this is a reporting mapping error. The saved-plan summary also omits `blitz_rate`.
 2. **Success language exceeds the evidence.** `relative_assessment` retains the absolute positive grade when rates barely change or the comparison sample is insufficient. Thus 9.5 to 9.8 net yards per dropback is called Paid off despite the same line saying no meaningful change. Report continued effectiveness separately from improvement attributed to an adjustment.
@@ -49,7 +51,194 @@ For each future log, record the season, week, teams, score, relevant timestamps,
 - Recurring conversion watch: GB third-and-31 and third-and-13; KC third-and-nine run. Track called play versus audible, distance, pressure and conversion rates across sample.
 - Context: final score reconciles; both long field goals missed; KC late punt preserved a final possession; final GB kneel is consistent with KC having no timeouts.
 
+## Week 17 Chicago at Green Bay
+
+Green Bay won 41–10. User described this as the latest build. The pasted log does not identify the build or season year; code review used the clean integrated state `2401dd9`. Source: attachment `89299c24-ddab-439a-80d7-389b41f8b4ec/Pasted text.txt`. Reviewed October 1, 2026. This entry changes no gameplay code.
+
+### Fixes supported by this log
+
+- **Late urgency works in the observed situation.** Chicago's Q4 drive uses 14-second resets after completions at 3:30, 3:16, and 2:56, and after the draw at 2:42. The accepted holding call costs six seconds and leaves second-and-16. This is consistent with the new multi-score pace.
+- **Punt distances reconcile.** GB36 plus a 47-yard punt leads to CHI17. CHI38 plus 44 yards and a 20-yard return leads to GB38. CHI49 plus 36 yards and an eight-yard return leads to GB23. The other punt ends the half, so no subsequent receiving possession is available for comparison.
+- **No fourth-down screen recurrence.** The logged fourth-down attempts include Chicago's failed goal-line run, failed fourth-and-six pass and fourth-and-ten sack, plus Green Bay's successful fourth-and-goal pass. One game without a screen is supportive, not a frequency validation.
+- **Game ending is coherent.** Once Chicago has no timeouts, Green Bay kneels at 1:42, 1:00, and 0:18. The final score matches five GB touchdowns and two field goals against one CHI touchdown and one field goal.
+- **Screens are not excessive here.** Five non-nullified screens in 54 pass attempts: Chicago two for ten displayed yards; Green Bay three for 26. Keep the earlier screen-volume concern open without treating it as present in every game.
+
+### Strategy findings fixed after review
+
+The two findings below now share `comeback_viable` in `game.py`. One- and two-score chases remain available; each additional required score needs a generous 90 seconds beyond that allowance. This is a coaching heuristic, not a measured win-probability estimate. When that budget is exhausted, ordinary field-position choices replace desperation fourth-down choices, consolation kicks require at least a 60% modeled chance, and forced hurry-up, endgame planning, onside attempts, and automatic timeouts stop. Kneel planning uses the same defensive intent without deleting timeout inventory. Close-game and halftime behavior have regression coverage. Awaiting fresh game logs to judge the transition in practice.
+
+1. **Trailing-defense timeouts lack a realistic comeback check.** Chicago spends all three at 1:54, 1:48, and 1:42 while down 31. In the reviewed code, `_timeout_call` automatically spends the trailing defense's timeouts inside three minutes after an in-bounds play; deficit size and attainable remaining possessions are absent from that branch. A direct reproduction with the defense down 31 confirms it spends one. Recommend a consistent endgame intent decision rather than automatic timeouts for every losing team.
+2. **Late field-goal value uses theoretical score counts.** At 2:28, down 41–7, Chicago kicks from 63 yards on fourth-and-three. Reducing the deficit from 34 to 31 changes `ceil(deficit / 8)` from five to four, so `fg_matters` accepts the kick despite the time required for that comeback. On 500 seeded calls with otherwise neutral settings and a strong kicker, this state selected 281 conversion attempts and 219 field goals. A garbage-time consolation kick can be intentional; the problem is that the current arithmetic treats it as a comeback benefit and then continues the automatic timeout chase. Align kick, pace, and timeout decisions with one coherent coach intent.
+
+### Recurring observations without enough evidence to tune
+
+- **Few losing runs.** One negative designed run in 66 carries, excluding the QB scramble and three kneels. Green Bay has 46 designed runs; Hall has 25 carries for about 205 displayed yards, including a fractional goal-line gain. This merits tracking against defensive quality, boxes, substitutions, fatigue, and blocking. It does not establish that all teams' rushing is inflated. Brown's 21 carries produce 93 displayed yards, so the backs did not perform identically.
+- **Long-kick success remains a watch item.** This game's three field goals are made from 18, 31, and 63 yards. Week 12 had made kicks from 57 and 59; Week 15 had two long misses. Preserve both successes and failures. The current code's 63-yard chance depends strongly on power, accuracy, and environment; the log lacks those inputs, so a single make does not prove a kicking defect.
+- **Long-distance conversions.** GB's third-and-goal draw from the 13 scores after an 11-yard sack. Add this to Week 15's conversion watch, while noting that many other long downs fail in this game. Investigate rates and defensive choices rather than prohibiting a successful draw.
+
+### Calls not classified as defects
+
+- Chicago going on fourth-and-six at its own 47, down seven early in Q2, is aggressive rather than automatically invalid. A 500-call neutral-coach reproduction chose it 56 times (11.2%); the actual coach's aggression is unknown.
+- Green Bay's run-heavy approach and roughly 40-second second-half intervals fit its large lead. Chicago's 16-play opening drive and Green Bay's subsequent 99-yard touchdown are plausible outcomes, not accounting failures.
+- Goal-line text explicitly describes fractional progress without awarding a touchdown. Drive headers identify net field movement including penalties. Do not equate those headers with offensive scrimmage yards.
+
+### Week 17 coordinator email review
+
+The subsequent email identifies the season as 2027. Its 481 yards / 67 snaps is consistent with the displayed 7.2 yards per play; kneels are excluded from these scrimmage results. Per-play integer narration is not an exact source for underlying fractional yard totals.
+
+- **Confirmed clock-control grading defect, still open.** The accepted shorten-the-game recommendation is marked unsuccessful because rushing efficiency fell from 7.0 to 6.1. Its actual goal is clock control while sustaining drives and protecting the lead. Designed runs rose from 16 of 29 scrimmage snaps (55%) to 30 of 38 (79%); the lead grew from 21 to 31. These support effective clock control, not failure. The accepted-review path needs recommendation-specific measures of run share, clock use, continued first downs, giveaways, and lead protection.
+- **Duplicate Tempo evidence, still open.** Both Tempo and Run/pass map to the mix metric, and `assess_choice` changes every mix metric to run efficiency when the recommendation contains negative `pass_bias`. Thus Tempo repeats the rushing decline instead of evaluating pace. This is a reproducible code-path defect, not a disputed threshold.
+- **Deep-plan summary remains too confident.** Two relevant deep plays cannot establish that the deep/outside plan delivered favorable results. The 8.9 net passing average supports good overall passing, but cannot independently validate the specific depth or outside emphasis. The summary should preserve the limited-evidence verdict.
+- **Pressure verdict is appropriately uncertain.** Only two second-half blitz plays were logged versus nine before. The review correctly avoids a firm verdict. Add pressure and sack evidence before judging whether the intended pass-rush payoff occurred. Fewer logged blitz plays alone cannot prove the accepted setting was ignored; compare opponent dropback opportunities and the installed call settings.
+- **Run-defense criticism is relevant.** Allowing 5.3 yards per designed run is a useful weakness to identify even in a large win. It should retain sample and explosive-run context.
+
+Only the endgame gameplay policy was changed with this follow-up. The email findings are documented for a separate recap fix.
+
+## Week 18 Green Bay at Chicago
+
+Green Bay won 44–24. Source: user attachment `47c6647b-69cc-4af1-b121-0f0059f5f23c/Pasted text.txt`. Reviewed October 1, 2026. The log contains no build stamp. The integration checkout remains at `2401dd9`, without the completed endgame fix `7a00193`; observed late-game behavior matches the earlier policy. Do not classify this as a regression in the new policy before testing an integrated build containing it.
+
+### Findings requiring attention
+
+- **Confirmed nullified-fumble presentation defect.** Q4 10:32: an Odunze completion and lost fumble are wiped out by defensive pass interference. Chicago correctly keeps possession at its 42. In `ticker.play_line`, nullification first sets the event to neutral, but the subsequent fumble block changes its kind back to turnover and appends the fumble after the nullification notice. A direct reproduction returns `kind=turnover` with `nullified=True`; the ticker key-play filter/styles use kind without excluding nullified plays. Correct the presentation and category; this log does not establish a turnover-bookkeeping error.
+- **Completed endgame fix still needs integration and live validation.** Chicago uses timeouts at 2:52, 2:46 and 2:40 down 25, then uses 14-second urgent intervals down 28 and attempts an onside kick at 0:30 down 20. These are the old behaviors addressed by `7a00193`. Verify the installed build before changing the policy again.
+
+### Recurring gameplay evidence
+
+- **Losing runs warrant a targeted raw-data audit.** GB has 48 designed runs for 265 displayed yards; CHI eight for 28. Only one is visibly negative. Together with Week 17, two visibly negative runs appear in 122 designed carries. These are rounded narration counts, not the engine's exact negative-run statistic: sub-yard losses can display as no gain. Reconcile raw play outcomes, blocking/tackling matchups, and actual ratings before tuning. Both games involve the same teams, so this is not a league-wide sample.
+- **Third-down dominance needs distance context.** GB converts 13 of 16, following six of ten in Week 17. Eleven of this game's 13 conversions are on four or fewer yards to go; the other two are third-and-12 and third-and-six. Strong early-down gains repeatedly create easier conversion opportunities. Investigate the run-loss/short-yardage distributions before assuming the third-down conversion model itself is inflated.
+- **Screens remain restrained.** Three screens in 62 non-nullified pass attempts: GB one for seven displayed yards, CHI two for seven. No fourth-down screen recurrence.
+- **Field-goal evidence is mixed.** Six makes in seven attempts. Chicago makes 41, 43 and 49, then misses another 49; GB makes 18, 21 and 23. No 55-plus attempt here. Keep this distinct from the earlier long-kick watch.
+
+### Supported behavior and accounting
+
+- GB's five touchdowns, five extra points, and three field goals total 44; CHI's two touchdowns, one extra point, one two-point conversion, and three field goals total 24.
+- The lone punt from CHI43 travels 49 yards to GB8. The missed 49-yard field goal from GB32 gives GB the ball at its 40. Both spots reconcile.
+- The kickoff at 0:04 is explicitly recorded as ending the first half; the third-quarter opening is present. The final single kneel at 0:30 correctly ends the game with Chicago out of timeouts.
+- Nullified interceptions, sacks, catches, and runs do not count as official outcomes. Headers explicitly report field movement including penalties. The roughness call at Q4 15:00 retains Hall's 12-yard catch, then adds 15 yards to CHI24.
+- Reconstructed passing from rounded narration: Love 23/27 for about 230 yards, two touchdowns, no interceptions; Williams 21/35 for about 258 yards, one touchdown, one valid interception. GB also has a 25-yard QB scramble. Treat these yard totals as approximate until compared with the box score.
+- Cook exits injured in Q3 and Hill takes the subsequent carries. No later Cook participation is visible in this log.
+
+This review updates documentation only. Recommended next actions are integration of the existing endgame patch, the small ticker fix, and a focused rushing-outcome audit; no blanket offense or kicking adjustment is supported yet.
+
+
+## October 1 implementation and targeted audit
+
+### Completed fixes
+
+- `157c3c6`: nullification now takes precedence over fumble/safety/score presentation. Canceled plays are excluded from the browser's key-play and scoring filters.
+- Pregame `blitz_rate` is graded using opposing offense, blitz results, and pressure/sack evidence. Unknown settings are ungraded instead of silently borrowing offensive yardage.
+- Specific deep-plan summaries retain limited evidence. Small before/after samples no longer inherit a positive improvement verdict. Unchanged productive results are described as productive, without claiming the adjustment paid off.
+- Tempo uses comparable consecutive in-bounds snap intervals, excluding intervening stoppages, quarter changes, possession changes, and touchdowns. It no longer inherits rushing efficiency.
+- Accepted clock-control advice gets one intent-specific finding: run share while leading by at least two scores, run productivity, measured timing, turnovers, and final margin. Missing timing or score context yields limited evidence. A win alone does not guarantee success.
+- Passing-against-blitz advice uses those dropbacks. Receiver containment can be qualified as mostly contained with one explosive allowed; singular catch/play wording is corrected.
+- `d2509fc` combines these fixes and the previous `7a00193` endgame policy with the main branch's `ac45e5d` scheduler in the isolated `nflgm-gameplan-lock` checkout. The main chat was sent the tested commits; its working folder was not modified here.
+- Verification: 63 focused recap, choice-evidence, ticker/log, and endgame tests passed. Save/resume adds six passing tests. All seven scheduler tests passed after using the existing local NetworkX dependency (the default runtime lacked it). Total: 76 distinct targeted tests passed. Browser engine rebuilt; no distribution bundle created.
+
+### Week 18 coordinator email
+
+The new email's 519 yards / 76 snaps rounds correctly to 6.8. Its 48 designed runs and 28 dropbacks total 76; the quarterback scramble belongs to dropbacks. Tiny differences from summed narration reflect fractional raw yards.
+
+- **Deep/outside advice:** 9.1 net yards per dropback supports productive passing generally. One deep play for 73.8 yards cannot validate the specific recommendation. The overall recommendation now stays incomplete, and the evidence says one play, not one plays. Outside-route success is not separately established.
+- **Run-front advice:** 5.5 yards on 48 designed runs supports productive rushing. It remains observational evidence, not proof that the recommendation caused the result.
+- **Clock control:** designed-run share rose from 22/40 (55%) before halftime to 26/36 (72%) afterward. Rushing remained productive at 5.6 versus 5.5, no giveaways were recorded, and the game ended with a 20-point lead. The matching play log shows clock use consistent with protecting the lead. The corrected report evaluates those goals together instead of repeating YPC under Tempo. The old email already stored in a save is not rewritten automatically.
+- **13/16 third downs:** worth highlighting, but eleven conversions were on four or fewer yards. This result alone does not demonstrate a broken conversion model.
+- **No clear statistical weakness:** defensible as a statement about these recorded scrimmage plays. It is not a claim that every defensive or special-teams decision was optimal.
+
+### Audit scope
+
+`audit_game_log_watch.py` ran 64 fresh production-path games, all 32 teams in each of four seeds (100101-100104), using catalog coaches and rosters. The simulator's RNG stream is unchanged by diagnostic wrappers. A repeated 16-game sample added rush alignment traces and exactly matched the original game results and team scrimmage summaries. These are fresh 2026 rosters, not a replay of the user's developed 2027 Green Bay/Chicago roster or accumulated fatigue. This was a targeted audit, not a complete franchise register.
+
+Raw artifacts in the workspace outputs folder:
+- `game-log-audit-20261001.json`: 64 games, raw plays, register measurements, modeled field-goal probabilities, and player rush statistics.
+- `game-log-rush-trace-20261001.json`: repeated seed 100101, including actual rusher alignments and whether the sack winner was unblocked.
+
+### 1. Rushing losses: league total is plausible; box response needs correction
+
+3,134 designed runs gained 14,366.6 yards (4.58 per carry). There were 254 raw losses (8.10%), near the existing register target of 8.54% +/- 1.50 percentage points. Only 121 (3.86%) round to a visibly negative whole-yard result. Thus narration hides roughly half the actual losses. Fresh Green Bay produced 4.77 YPC with eight raw losses in 88 carries; it did not reproduce the user's dominant developed roster.
+
+**New structural finding:** box strength multiplies signed yards before contact by a positive number. A heavier box compresses positive gains, but also compresses negative losses toward zero; it cannot create a loss from an otherwise positive pre-contact result. Subsequent one-decimal rounding can erase tiny losses entirely. `schemes.BOX_NEG` contains reference loss rates but is not wired into this resolver.
+
+Observed by box count (diagnostic sample, not a controlled causal comparison):
+
+| Box | Carries | YPC | Raw losses | Visible losses |
+| --- | ---: | ---: | ---: | ---: |
+| 4 | 271 | 6.93 | 9.6% | 7.4% |
+| 6 | 871 | 4.63 | 7.9% | 3.2% |
+| 8 | 268 | 3.21 | 8.6% | 1.1% |
+| 9 | 120 | 2.78 | 1.7% | 0% |
+| 10 | 106 | 1.17 | 3.8% | 0% |
+
+**Next action:** separate disruption/loss generation from gain compression, then calibrate by box, blocking matchup, and distance while preserving overall rushing. Do not apply a blanket rushing reduction. This investigation does not implement that new model change.
+
+### 2. Third downs: distance explains much of the apparent dominance
+
+703/1,625 conversions (43.3%) across the sample:
+
+| Distance | Converted / attempts | Rate |
+| --- | ---: | ---: |
+| 1-2 yards | 192 / 265 | 72.5% |
+| 3-4 yards | 152 / 279 | 54.5% |
+| 5-7 yards | 170 / 405 | 42.0% |
+| 8+ yards | 189 / 676 | 28.0% |
+
+Short runs converted 137/162 (84.6%) on third-and-two or shorter; runs on third-and-eight or longer converted 11/92 (12.0%). The latter does not look like automatic long-distance success. The short-run success rate and heavy-box loss mechanism should be investigated together against the existing research data. No independent third-down probability nerf is justified by the Chicago 13/16 alone.
+
+### 3. Field goals: distance falloff works; retain the accuracy watch
+
+The diagnostic kick rolls include 32/34 makes from 50-54, 24/35 from 55-59, and 9/17 from 60+. The model expected 29.0, 25.4, and 7.9 makes respectively. Four attempts at 64-68 yards all missed, with modeled chances from 7.7% to 32.7%. This contradicts the idea that extreme kicks routinely succeed automatically.
+
+Across all 268 diagnostic kick rolls, modeled expected accuracy was 87.2%. Official recorded field goals were 239/267 (89.5%), above the register's 85% +/- 3-point target in this sample. One diagnostic roll was not counted as an official attempt; distance-bucket numbers above are explicitly diagnostic rolls, not certified official split statistics. Continue watching official accuracy by distance, kicker, weather, and selection; the limited extreme-distance sample does not justify a new curve change yet.
+
+### 4. Pass rush: accounting and workloads pass; allocation remains a watch item
+
+All 64 games matched logged rush reps/wins to the player stat book: zero accounting discrepancies. Sack rate was 7.36% under the register's attempt-plus-sack denominator. Elite nominal edge players (88+ overall) averaged 87.4% of defensive snaps and 21 sacks in 36 player-games. Fresh roster workload does not reproduce the earlier two-thirds-snap concern.
+
+Nominal-position sack totals were 111 edge, 136 interior, and 87 linebacker; another 21 belonged to defensive backs. Interior players also had more recorded rush opportunities (10,168 versus 8,785). A 16-game trace verified that this was not merely mislabeled alignment: 37 sacks came from actual interior alignments, 35 from edges, 27 from off-ball alignments, and six from the slot. Seventeen of the 105 sacks came from unblocked rushers (11 linebackers, six corners).
+
+**Next action:** monitor sacks per rush opportunity, free rushes versus blocked wins, protection help, and individual rush attributes alongside snap share. The current noisy arrival-time race and free-rusher opportunities merit deeper distribution calibration if this pattern persists. Do not reintroduce duplicate pressure counts or boost one named star to force a target stat line. No additional pass-rush tuning in this audit.
+
+
+## October 1 follow-up: stacked-box correction completed
+
+**Decision: the stacked-box defect is fixed and its targeted calibration passes. No further global rushing or separate third-down adjustment is supported by these tests.** This supersedes the earlier next-action recommendation to implement the contact correction.
+
+### What changed
+
+- `schemes.box_run_contact` uses the existing box-specific negative-run reference rates to shift penetration risk on the same underlying blocking/noise result. Stronger boxes can now turn marginal gains into losses; weak boxes can permit escape from marginal losses. No independent random stuff roll or extra RNG draw was added.
+- Positive contact gains are recentered before the existing box gain multiplier, avoiding a second broad yardage boost/penalty. Negative contact depths bypass that gain multiplier, so a stacked box cannot shrink an existing loss toward zero.
+- Run scheme, front fit, motion and execution affect signed outcomes in the correct direction: offensive advantages limit losses and help gains; defensive advantages deepen losses and restrict gains. Ratings, blocking assignments, pursuit/YAC, and run-block stat accounting remain active.
+- Six-man box contact remains neutral. Controlled tests verify that adding box defenders hurts the runner on identical contact draws, while improved blocking still helps. The reference loss gradient is checked using 10,000 evenly spaced normal quantiles per box, independent of game-sample noise.
+
+### Verification and calibration
+
+56 focused tests passed across contact behavior, defensive front assignments, endgame policy, rush accounting, Game Plan wiring, game-log regressions, and offensive personnel. Browser engine files rebuilt. No bundle created.
+
+Production evaluation: four comparison seeds (100101-100104, 64 games) and four fresh validation seeds (100111-100114, another 64 games), every team once per seed. The first comparison reuses the baseline's league configurations/seeds; changed outcomes naturally change subsequent random consumption, so these are aggregate comparisons, not identical-play causal estimates. No coefficient adjustment was made after inspecting the fresh validation set.
+
+| Metric | Prior 64-game baseline | Corrected comparison, 64 games | Fresh validation, 64 games |
+| --- | ---: | ---: | ---: |
+| Designed runs | 3,134 | 3,104 | 3,224 |
+| Yards per designed run | 4.58 | 4.69 | 4.66 |
+| Negative designed runs | 8.10% | 8.02% | 8.37% |
+| Third-down conversions | 43.26% | 41.17% | 42.22% |
+| Third-and-two-or-shorter runs converted | 84.57% (137/162) | 80.37% (131/163) | 81.14% (142/175) |
+
+Combined corrected sample: 6,328 carries, 4.67 YPC and 519 losses (8.20%). Both running measures satisfy the existing 4.52 +/- 0.35 YPC and 8.54% +/- 1.50-point negative-run tolerances. Overall thirds: 1,374/3,295 (41.70%); short third-down runs: 273/338 (80.77%). No third-down-specific probability was changed.
+
+Combined loss rates by box: four 4.95%, five 6.23%, six 9.07%, seven 9.23%, eight 11.89%, nine 12.23%, ten 10.00%. Nine/ten combined are 46/409 (11.25%), versus six losses in 226 carries (2.65%) in the baseline. Ten-man boxes alone are only 180 carries and occur in different field-position/personnel situations; do not force every observed bucket to exactly match a reference percentage. Identical-input tests establish the monotonic effect of added box defenders; live buckets retain matchup and sampling differences.
+
+### Remaining watch, with clear action boundaries
+
+- **No immediate additional rushing calibration.** Review future user saves/logs for the corrected heavy-box behavior, particularly goal-line situations. Fractional losses can still legitimately round to no gain in narration.
+- **No separate third-down adjustment now.** Continue tracking conversions by distance and play type. The correction already moves short-run conversions downward without a special conversion modifier.
+- **Scoring remains an open calibration question.** Points per team were 24.57 in the baseline, 25.02 in the comparison and 25.49 in validation, above the existing 22.90 +/- 1.50 target. This small aggregate difference does not establish causation by the contact change; a scoring/drive/field-goal audit is required before further tuning. These results do not constitute a full register pass.
+- **Pass-rush allocation and long-kick accuracy remain their previously documented watch items.** They were not separately tuned here.
+
+Artifacts: workspace outputs `stacked-box-candidate-20261001.json` and `stacked-box-validation-20261001.json`; baseline `game-log-audit-20261001.json`. The isolated checkout is `work/nflgm-gameplan-lock`. The main chat receives the tested commit for integration; other checkout files are not overwritten.
+
 ## PHI at GB — Divisional Round review
+
 - Fixed: tied-first-half defensive timeout branch could fund an opponent's continuing drive after first downs. Restrict this possession-buying branch to a failed third/fourth-down conversion. Explicit touchdown/defensive-TD and turnover outcomes cannot spend timeouts.
 - Watch: PHI fourth-and-one at GB49, tied with 0:32, passes and is sacked. Revisit fourth-down win-probability estimate including opponent short-field scoring risk and the short-yardage play choice; one outcome alone does not prove the decision wrong. No blanket punt/run override added.
 - Cleared: Q3 DPI acceptance on second-and-seven: completion gained three, while penalty grants automatic first down. Earlier review mistakenly treated both as first downs.

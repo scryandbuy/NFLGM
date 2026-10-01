@@ -51,15 +51,29 @@ def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=
     return float(s)
 
 
+def comeback_viable(seconds, deficit):
+    """Generous clock budget for chasing, not a win-probability estimate.
+
+    Preserve one- and two-score attempts, including last-ditch onside paths.
+    Each score beyond those needs another 90 seconds of usable game time.
+    This prevents a four/five-score blowout from using close-game strategy.
+    """
+    scores = int(np.ceil(max(0.0, deficit) / 8.0))
+    return seconds > 0 and seconds >= 90.0 * max(0, scores - 2)
+
+
 def multi_score_urgency(seconds, score_diff, quarter):
     if quarter != 4 or score_diff >= -8 or seconds <= 0:
         return False
     scores_needed = int(np.ceil(-score_diff / 8.0))
-    return seconds <= min(300, 90 * scores_needed)
+    return (comeback_viable(seconds, -score_diff)
+            and seconds <= min(300, 90 * scores_needed))
 
 
 def hurry_for_snap(seconds, score_diff, plan=None, call=None, quarter=None):
     """Use the coach's clock plan for normal plays and penalty restarts alike."""
+    if quarter == 4 and score_diff < 0 and not comeback_viable(seconds, -score_diff):
+        return False
     if multi_score_urgency(seconds, score_diff, quarter):
         return True
     if plan is not None:
@@ -155,6 +169,15 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         if -3 <= score_diff < 0 and in_range:
             return 'field_goal'
         return 'go'
+    if score_diff < 0 and not comeback_viable(secs_left, -score_diff):
+        # Play out a decided game with ordinary field-position choices.
+        # A consolation kick is not a comeback benefit: attempt it only
+        # with a routine chance of success, not the desperation range bar.
+        band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
+        ordinary_go = float(np.clip(GO_RATE[band][zone] * (0.55 + 0.60 * aggression), 0, 1))
+        if rng.random() < ordinary_go:
+            return 'go'
+        return 'field_goal' if kick_chance >= .60 else 'punt'
     # A conversion deep in our own end with one or two snaps before halftime
     # offers little scoring opportunity; failing hands over field-goal range.
     # Keep this separate from the full-game clock and fourth-quarter urgency.
@@ -687,6 +710,8 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     down eight, and with no timeouts a completion in bounds ends it. Returns dict(choice, evs, p_fg, p_td) or None
     outside the window, or when the side with the ball is ahead at the end of the game (it wants the clock)."""
     if half_end is None and (dr.quarter < 4 or dr.score_diff > 0): return None
+    if half_end is None and dr.quarter == 4 and dr.score_diff < 0 and not comeback_viable(secs_in_half, -dr.score_diff):
+        return None
     if half_end is not None and dr.quarter > 2: return None
     if secs_in_half > PLAN_WINDOW or secs_in_half <= 0: return None
     y = float(yardline if yardline is not None else dr.yardline)
@@ -811,7 +836,7 @@ def _onside_call(clock, need, my_tos, coach, rng):
     with whatever the stop leaves, and the timeouts in hand decide how much that is. The coach's aggression
     weighs the gamble; a club needing two scores counts every possession double. Where the two are close the
     coach's appetite decides, so the same spot is not the same call for every staff."""
-    if need <= 0: return False
+    if need <= 0 or not comeback_viable(clock, need): return False
     c = coach or {}
     aggr = float(np.clip(0.5 * float(c.get('fourth_down', 0.5)) + 0.5 * float(c.get('adjust_willingness', 0.5)), 0.0, 1.0))
     p_rec = KICKOFF['onside_recovery']
@@ -837,6 +862,9 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
     three timeouts starts spending them earlier than one down to its last: from 60 seconds out for the most
     conservative coach to 100 for the most aggressive (his fourth-down and adjustment dials), and 60 with one left
     whoever he is. Tied stays at 40: a tie is not worth the last timeout until the very end."""
+    if (half_end is None and getattr(dr, 'quarter', 4) == 4 and dr.score_diff != 0
+            and not comeback_viable(secs_in_half, abs(dr.score_diff))):
+        return False, None
     used = False; used_by = None
     c = coach or {}
     clock_aggr = float(np.clip(0.5 * float(c.get('fourth_down', 0.5)) + 0.5 * float(c.get('adjust_willingness', 0.5)), 0.0, 1.0))
@@ -1902,6 +1930,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # any score, the second half when it is not behind. Real clubs do not throw from their own 35 at 0:04.
         secs_left_half = dr.clock - wall
         opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
+        if (half_end is None and dr.quarter == 4 and dr.score_diff > 0
+                and not comeback_viable(secs_left_half, dr.score_diff)):
+            opp_tos = 0  # inventory remains; this defense will not stop knees
         clock_dies = secs_left_half <= 3 or (secs_left_half <= 10 and opp_tos == 0)
         can_kneel = _can_kneel_out(dr, secs_left_half, opp_tos)
         victory_kneel = (half_end is None and dr.quarter == 4
