@@ -61,7 +61,7 @@ def play_line(league, p, off_abbr, def_abbr):
     elif p.get('clock') is not None and t == 'kickoff':
         head = _clock(p['clock'])[1]
     carrier = _nm(league, p.get('carrier')); passer = _nm(league, p.get('passer')); target = _nm(league, p.get('target')); tackler = _nm(league, p.get('tackler'))
-    td = bool(p.get('touchdown'))
+    td = bool(p.get('touchdown') and not p.get('defensive_td'))
     kind = 'neutral'; text = ''
     if t == 'run':
         cls, yd = _yards(p.get('yards', 0))
@@ -117,6 +117,9 @@ def play_line(league, p, off_abbr, def_abbr):
             touchback = caught <= 0 and caught + float(p.get('ret', 0) or 0) <= 0
         text = f"{passer or 'The quarterback'} throws to {target or 'his receiver'}, INTERCEPTED by {by or 'the defense'}" + (", touchback." if touchback else f", returned {int(round(p.get('ret', 0)))} yards." if p.get('ret') else '.')
         kind = 'turnover'
+        if p.get('defensive_td'):
+            text += f' TOUCHDOWN, {def_abbr}.'
+            kind = 'score'
     elif t == 'fumble':
         who = carrier or target or passer or 'The ball carrier'
         text = f"{who} fumbles" + (". Recovered by the defense." if p.get('lost', True) else ". Recovered by the offense.")
@@ -204,15 +207,26 @@ def play_line(league, p, off_abbr, def_abbr):
     if p.get('nullified'):
         text = (text.rstrip('.') + '. No play; flag on the field.') if text else 'No play; flag on the field.'; kind = 'neutral'
     if p.get('fumble'):
-        text = (text.rstrip('.') + (f". FUMBLE, recovered by {def_abbr}." if p.get('fumble_lost') else ". Fumbles, and the offense recovers.")) if text else ('FUMBLE.' if p.get('fumble_lost') else 'Fumble, recovered.')
-        if p.get('fumble_lost'): kind = 'turnover'
+        recoverer = _nm(league, p.get('fumble_recovered_by'))
+        if p.get('fumble_lost'):
+            recovery = f'{recoverer} ({def_abbr})' if recoverer else def_abbr
+            text = (text.rstrip('.') + f'. FUMBLE, recovered by {recovery}.') if text else f'FUMBLE, recovered by {recovery}.'
+            if p.get('ret'):
+                text += f" Returned {int(round(p['ret']))} yards."
+            if p.get('defensive_td'):
+                text += f' TOUCHDOWN, {def_abbr}.'
+                kind = 'score'
+            else:
+                kind = 'turnover'
+        else:
+            text = (text.rstrip('.') + '. Fumbles, and the offense recovers.') if text else 'Fumble, recovered.'
     if p.get('safety'):
         text = (text.rstrip('.') + '. SAFETY.') if text else 'SAFETY.'; kind = 'turnover'
     return dict(head=head, text=text, kind=kind, type=t, made=p.get('made'), safety=bool(p.get('safety')), nullified=bool(p.get('nullified')))
 
 
 def _result_word(r):
-    return {'Touchdown': 'touchdown', 'Field goal': 'field goal', 'Punt': 'punt', 'Turnover': 'turnover', 'Interception': 'interception', 'Fumble': 'fumble',
+    return {'Touchdown': 'touchdown', 'Defensive touchdown': 'defensive touchdown', 'Field goal': 'field goal', 'Punt': 'punt', 'Turnover': 'turnover', 'Interception': 'interception', 'Fumble': 'fumble',
             'Missed FG': 'missed field goal', 'End of half': 'end of half', 'End of game': 'end of game', 'Turnover on downs': 'turnover on downs', 'Safety': 'safety'}.get(r, str(r).lower() if r else '')
 
 
@@ -224,12 +238,19 @@ def drive_result(dr, overtime=False):
 
 
 def offensive_drive_end(dr):
-    """Exclude interception flight/return yards from offensive drive progress."""
-    if dr.result in ('Turnover', 'Interception'):
+    """Exclude defensive return yards from offensive drive progress."""
+    if dr.result in ('Turnover', 'Interception', 'Defensive touchdown'):
         interception = next((p for p in reversed(dr.log) if isinstance(p, dict)
                              and p.get('type') == 'interception' and not p.get('nullified')), None)
         if interception is not None and interception.get('yardline') is not None:
             return float(interception['yardline'])
+        fumble = next((p for p in reversed(dr.log) if isinstance(p, dict)
+                       and p.get('fumble_lost') and not p.get('nullified')), None)
+        if fumble is not None:
+            if fumble.get('return_start') is not None:
+                return float(fumble['return_start'])
+            if fumble.get('yardline') is not None:
+                return float(fumble['yardline']) - float(fumble.get('yards', 0) or 0)
     return float(getattr(dr, 'yardline', getattr(dr, 'start', 75)))
 
 

@@ -584,7 +584,7 @@ function renderGameDay(v) {
     box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT', 'Lng')); P.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.ca), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_), el('td', {}, r.lng ?? ''))));
     box.append(th('Rushing', 'Att', 'Yds', 'TD', '', 'Lng')); R.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, ''), el('td', {}, r.lng ?? ''))));
     box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD', 'Lng')); C.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng ?? ''))));
-    box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD', '')); D.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd), el('td', {}, ''))));
+    box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD', 'TD')); D.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd), el('td', {}, r.td || 0))));
   };
   const drawLiveBox = (shown, shownPlays) => {
     drawTeamStats(shown, shownPlays);
@@ -631,7 +631,7 @@ function renderGameDay(v) {
           else if (p.type === 'penalty') t.penalties++;
           if (p.kind === 'turnover' && !['interception', 'punt'].includes(p.type) && !p.safety) t.turnovers++;
           // third and fourth down: converted when the next scrimmage snap is a first down, or the play scored
-          if (SCRIM.includes(p.type) && (p.down === 3 || p.down === 4)) { const next = plays.slice(k + 1).find(q => q.down != null && SCRIM.includes(q.type)); const conv = p.td || (next && next.down === 1) || (!next && !partial && /Touchdown/.test(d.result || '')); if (p.down === 3) { t._3a++; if (conv) t._3c++; } else { t._4a++; if (conv) t._4c++; } }
+          if (SCRIM.includes(p.type) && (p.down === 3 || p.down === 4)) { const next = plays.slice(k + 1).find(q => q.down != null && SCRIM.includes(q.type)); const conv = !p.defensive_td && (p.td || (next && next.down === 1) || (!next && !partial && d.result === 'Touchdown')); if (p.down === 3) { t._3a++; if (conv) t._3c++; } else { t._4a++; if (conv) t._4c++; } }
         });
         if (!partial) { t.first_downs += (d.first_downs || 0); if ((d.end != null && d.end >= 80) || /Touchdown/.test(d.result || '')) { t._rz++; if (/Touchdown/.test(d.result || '')) t._rztd++; } }   // the drive's end is on a 0-100 line toward the goal; inside the 20 is 80 and up
       });

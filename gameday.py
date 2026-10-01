@@ -57,8 +57,8 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
         if pp is None: return None
         parts = pp.name.split(); return parts[-2] + ' ' + parts[-1] if parts[-1] in ('Jr.', 'Sr.', 'II', 'III', 'IV') and len(parts) > 1 else parts[-1]
     ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
-              td=bool(q.get('touchdown') or q.get('td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')), nullified=bool(q.get('nullified')))
-    ln['scoring_side'] = q.get('scoring_side') or ('defense' if q.get('blocked') and q.get('recovery') == 'receiving' else 'offense')
+              td=bool(q.get('touchdown') or q.get('td') or q.get('defensive_td')), defensive_td=bool(q.get('defensive_td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')), nullified=bool(q.get('nullified')))
+    ln['scoring_side'] = q.get('scoring_side') or ('defense' if q.get('defensive_td') or (q.get('blocked') and q.get('recovery') == 'receiving') else 'offense')
     return ln
 
 
@@ -75,7 +75,7 @@ def scoring_quarter(dr):
     if getattr(dr, 'quarter', 1) >= 5:
         return 5
     for p in reversed(dr.log):
-        if p.get('touchdown') and not p.get('nullified') and p.get('clock') is not None:
+        if (p.get('touchdown') or p.get('defensive_td')) and not p.get('nullified') and p.get('clock') is not None:
             return min(4, int((3600 - float(p['clock'])) // 900) + 1)
     # A kick ending exactly at a boundary belongs to the period just ended.
     return min(4, max(1, int((3600 - max(0, dr.clock) - 1e-6) // 900) + 1))
@@ -153,9 +153,9 @@ def capture(league, played, user):
                 elif ty == 'interception': t_['turnovers'] += 1
                 if pl.get('fumble_lost'): t_['turnovers'] += 1               # a lost fumble is a flag on the play, not a play of its own
                 if pl.get('down') == 3 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
-                    t_['third_att'] += 1; t_['third_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble'))
+                    t_['third_att'] += 1; t_['third_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble') and not pl.get('fumble_lost'))
                 if pl.get('down') == 4 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
-                    t_['fourth_att'] += 1; t_['fourth_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble'))
+                    t_['fourth_att'] += 1; t_['fourth_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble') and not pl.get('fumble_lost'))
             t_['first_downs'] += int(getattr(dr, 'first_downs', 0) or 0)
             # possession: from the drive's first entry (the kick that opened it, or the first snap) to the clock when it ended
             _clocks = [float(pl['clock']) for pl in getattr(dr, 'log', []) if isinstance(pl, dict) and pl.get('clock') is not None]
@@ -195,8 +195,10 @@ def capture(league, played, user):
                 p = league.player(pid); box['rushing'].append(dict(team=abbr, name=p.name, att=int(l.get('rush_att', 0)), yds=int(l.get('rush_yds', 0)), td=int(l.get('rush_td', 0)), lng=longest.get(('rush', pid), 0)))
             for pid, l in top(pids, 'rec', 3):
                 p = league.player(pid); box['receiving'].append(dict(team=abbr, name=p.name, tgt=int(l.get('tgt', 0)), rec=int(l.get('rec', 0)), yds=int(l.get('rec_yds', 0)), td=int(l.get('rec_td', 0)), lng=longest.get(('rec', pid), 0)))
-            for pid, l in top(pids, 'tackles', 3):
-                p = league.player(pid); box['defense'].append(dict(team=abbr, name=p.name, tkl=int(l.get('tackles', 0)), sk=float(l.get('sacks', 0)), int_=int(l.get('int_def', 0)), pd=int(l.get('pass_def', 0))))
+            defensive_lines = [(pid, book.p[pid]) for pid in pids if pid in book.p]
+            defensive_lines.sort(key=lambda x: (-int(x[1].get('def_td', 0)), -int(x[1].get('tackles', 0)), -int(x[1].get('int_def', 0))))
+            for pid, l in defensive_lines[:3]:
+                p = league.player(pid); box['defense'].append(dict(team=abbr, name=p.name, tkl=int(l.get('tackles', 0)), sk=float(l.get('sacks', 0)), int_=int(l.get('int_def', 0)), pd=int(l.get('pass_def', 0)), td=int(l.get('def_td', 0))))
         # line score by quarter, from the score at each drive's end
         quarters = {home: [0, 0, 0, 0, 0], away: [0, 0, 0, 0, 0]}
         for d in drives:
@@ -207,7 +209,7 @@ def capture(league, played, user):
         # each drive: how it started and what came before it, in words
         prev_result = None
         for i, d in enumerate(drives):
-            how = {'Touchdown': 'after a touchdown', 'Field goal': 'after a field goal', 'Punt': 'after a punt', 'Turnover': 'after a turnover', 'Turnover on downs': 'after a stop on fourth down', 'Missed field goal': 'after a missed field goal'}.get(prev_result, 'to open' if i == 0 else '')
+            how = {'Touchdown': 'after a touchdown', 'Defensive touchdown': 'after a defensive touchdown', 'Field goal': 'after a field goal', 'Punt': 'after a punt', 'Turnover': 'after a turnover', 'Turnover on downs': 'after a stop on fourth down', 'Missed field goal': 'after a missed field goal'}.get(prev_result, 'to open' if i == 0 else '')
             if i and d['quarter'] >= 5 and drives[i - 1]['quarter'] < 5: how = 'to open overtime'
             elif i and d['quarter'] == 3 and drives[i - 1]['quarter'] <= 2: how = 'to open the second half'
             d['head'] = f"Drive {d['n']} · {d['off']} · Started at the {d['start_label']} {how}".rstrip() + f" · {d['plays_n']} play{'s' if d['plays_n'] != 1 else ''}, {int(round(d['yards']))} yard{'s' if int(round(d['yards'])) != 1 else ''}" + (f", {str(d['result']).lower()}" if d.get('result') else '')

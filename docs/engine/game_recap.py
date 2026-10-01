@@ -47,7 +47,7 @@ def stats(rows):
                 runs=len(runs), run_yards=yards(runs), sacks=sum(p['type']=='sack' for p in passes),
                 pressure=sum(bool(p.get('pressured')) or p['type']=='sack' for p in passes),
                 turnovers=sum(p['type']=='interception' or bool(p.get('fumble_lost')) for p in rows),
-                third=len(thirds), converted=sum(bool(p.get('touchdown')) or float(p.get('yards',0) or 0)>=float(p.get('ydstogo',10) or 10) for p in thirds))
+                third=len(thirds), converted=sum(not p.get('defensive_td') and (bool(p.get('touchdown')) or float(p.get('yards',0) or 0)>=float(p.get('ydstogo',10) or 10)) for p in thirds))
 
 
 def rate(n, d): return f'{n / d:.1f}' if d else '—'
