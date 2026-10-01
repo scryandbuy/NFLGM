@@ -295,7 +295,7 @@ def read_the_look(def_call):
                 lying=bool(def_call.get('fooled')))
 
 
-def audible(off_call, def_call, off, rate_fn, rng, latitude=None, family_mix=None):
+def audible(off_call, def_call, off, rate_fn, rng, latitude=None, family_mix=None, score_diff=0, secs_left=None):
     """
     Change the call at the line, or leave it alone.
 
@@ -318,7 +318,10 @@ def audible(off_call, def_call, off, rate_fn, rng, latitude=None, family_mix=Non
         call['concept'] = call_pass(off, 'chains', rate_fn, rng)
         call.pop('scheme', None)
         return call, 'run_to_pass'
-    if call.get('is_pass') and look['looks_light']:
+    down, distance = int(call.get('down', 1)), float(call.get('ydstogo', 10))
+    needs_pass = ((down >= 3 and distance > 3) or (down == 2 and distance >= 15)
+                  or (score_diff < 0 and secs_left is not None and secs_left <= 240 and distance > 2))
+    if call.get('is_pass') and look['looks_light'] and not needs_pass:
         # light box against a pass - take the run they are giving
         call['is_pass'] = False
         call['scheme'] = call_run(off, 'chains', rate_fn, rng,
