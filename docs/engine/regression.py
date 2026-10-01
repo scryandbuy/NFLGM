@@ -167,6 +167,23 @@ def plateau_end(pos):
     return int(c.get('plateau_end') or 27)
 
 
+def athletic_loss(pos, age, longevity, annual_roll, attribute, old_loss):
+    """Bound ordinary speed/acceleration aging in rating points.
+
+    A gameplay curve, not a conversion from production to sprint speed.
+    Reuse the annual draw and never worsen the prior model's loss.
+    """
+    years = max(0, int(age) - plateau_end(pos))
+    if not years:
+        return 0.0
+    baseline = min(1.8, .35 + .22 * (years - 1))
+    persistence = float(np.clip(1.0 / max(.35, longevity), .8, 1.2))
+    variation = float(np.clip(annual_roll, .65, 1.35))
+    acceleration = attribute == 'accel_rating'
+    loss = baseline * persistence * variation * (1.1 if acceleration else 1.0)
+    return min(max(0., old_loss), loss, 2.25 if acceleration else 2.0)
+
+
 def decline(player, rng, age=None):
     """
     One year older. Returns how much overall he lost, and mutates his ratings.
@@ -176,7 +193,8 @@ def decline(player, rng, age=None):
     the play engine feels it on the field the same season.
     """
     before = player.ovr
-    f = curve_factor(player.pos, player.age if age is None else age)
+    reference_age = player.age if age is None else age
+    f = curve_factor(player.pos, reference_age)
     if f >= 1.0:
         # still on the plateau: no decline, and no free improvement either,
         # since gains are XP and XP is earned rather than handed out
@@ -185,7 +203,8 @@ def decline(player, rng, age=None):
     # damp production into ability, then let the hidden longevity draw decide
     # whether this is the man who falls off at 28 or the one still going at 38
     drop = (1.0 - f) * DAMPING / max(0.35, player.longevity)
-    drop *= float(np.clip(rng.normal(1.0, 0.35), 0.15, 2.2))
+    annual_roll = float(np.clip(rng.normal(1.0, 0.35), 0.15, 2.2))
+    drop *= annual_roll
 
     for k in list(player.ratings):
         if k in UNTOUCHED:
@@ -193,7 +212,10 @@ def decline(player, rng, age=None):
         w = PHYS_WEIGHT.get(k, DEFAULT_PHYS)
         v = player.ratings[k]
         if w > 0:
-            v *= 1.0 - drop * w * (PHYS_DAMP if k in PHYS_GROUP else 1.0)
+            loss = v * drop * w * (PHYS_DAMP if k in PHYS_GROUP else 1.0)
+            if k in ('speed_rating', 'accel_rating'):
+                loss = athletic_loss(player.pos, reference_age, player.longevity, annual_roll, k, loss)
+            v -= loss
         if k in MENTAL_GROWS:
             # he knows more than he did, right up until the end: awareness and recognition keep growing with age.
             # (the gain had applied to every non-physical attribute, so a linebacker's route running rose too)
