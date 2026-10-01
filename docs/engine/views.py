@@ -352,10 +352,12 @@ def _watch_notes(league, abbr, opp_abbr, rep):
 
 
 def _desk(league, abbr):
-    """Things on your desk: open decisions."""
+    """Things on your desk: unresolved decisions not deferred by the user."""
+    import inbox as IB
+    IB.reconcile(league)
     cards = []
     for m in getattr(league, 'inbox', []):
-        if m.get('status') not in ('unread', 'open'): continue
+        if m.get('status') not in ('unread', 'open') or m.get('overview_dismissed'): continue
         if is_decision(m):
             card = dict(id=m['id'], kind=INBOX_TAG.get(m['kind'], m['kind']), raw_kind=m['kind'], subject=m['subject'], body=m['body'][:220], payload=_payload(m.get('payload') or {}), expires=m.get('expires_week'))
             card.update(_desk_detail(league, abbr, m))

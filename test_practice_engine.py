@@ -101,7 +101,7 @@ class PracticeTests(unittest.TestCase):
         l.practice_state={}
         for p in ps:p.age=32
         self.assertEqual(P.recommend_plan(l,r,'A',3)['units']['offense']['intensity'],'standard')
-        self.assertEqual({v['intensity'] for v in P.recommend_plan(l,r,'A',3,bye=True)['units'].values()},{'recovery'})
+        self.assertEqual({v['intensity'] for v in P.recommend_plan(l,r,'A',3,bye=True)['units'].values()},{'light'})
         for p in ps:p.age=24
         self.assertNotIn('hard',{v['intensity'] for v in P.recommend_plan(l,r,'A',19)['units'].values()})
 
@@ -117,6 +117,48 @@ class PracticeTests(unittest.TestCase):
         q=P.recommend_plan(l,r,'A',1)
         self.assertNotIn(ps[0].pid,q['focus'])
         self.assertEqual(len(q['focus']),3)
+
+    def test_bye_develops_healthy_players_and_rests_tired_or_injured_players(self):
+        l,r,ps=setup();st=r.states['A']
+        l.user_team='A'
+        tired,heavy,injured=ps[:3]
+        st.jaded[tired.pid]=.20;st.cond.cond[tired.pid]=72
+        st.last_snaps[heavy.pid]=78
+        injured.out_until=8
+        q=P.recommend_plan(l,r,'A',6,bye=True)
+        self.assertEqual({v['intensity'] for v in q['units'].values()},{'light'})
+        self.assertEqual({v['reps'] for v in q['units'].values()},{'development'})
+        for p in (tired,heavy,injured):
+            self.assertEqual(q['individual'][p.pid],'rest')
+            self.assertNotIn(p.pid,q['focus'])
+        preview=P.preview(l,r,'A',6,bye=True)
+        rows={x['pid']:x for x in preview['players']}
+        for p in (tired,heavy,injured):
+            self.assertEqual((rows[p.pid]['xp'],rows[p.pid]['risk']),(0,0))
+        self.assertLess(rows[tired.pid]['jaded'],.20)
+        self.assertGreater(rows[tired.pid]['condition'],72)
+        self.assertTrue(all(rows[p.pid]['xp']>0 for p in ps[3:]))
+        self.assertTrue(all(rows[p.pid]['xp']>0 for p in l.teams['A'].practice_squad))
+        result=P.resolve(l,r,'A',6,bye=True)
+        self.assertGreater(result['totals']['xp'],0)
+        self.assertAlmostEqual(sum(p.xp for p in ps),result['totals']['xp'],places=2)
+        self.assertEqual(preview['totals']['xp'],result['totals']['xp'])
+        earned=sum(p.xp for p in ps)
+        self.assertEqual(P.resolve(l,r,'A',6,bye=True),result)
+        self.assertEqual(sum(p.xp for p in ps),earned)
+
+    def test_bye_recovery_remains_available_and_depleted_units_rest(self):
+        l,r,ps=setup()
+        explicit=P.preview(l,r,'A',6,plan('recovery'),bye=True)
+        self.assertEqual(explicit['totals']['xp'],0)
+        self.assertEqual(explicit['totals']['expected_injuries'],0)
+        for p in ps:
+            if P._unit(p)=='offense':r.states['A'].jaded[p.pid]=.2
+        v=P.preview(l,r,'A',6,bye=True)
+        self.assertEqual(v['plan']['units']['offense']['intensity'],'recovery')
+        self.assertEqual(v['plan']['units']['defense']['intensity'],'light')
+        self.assertTrue(all(row['xp']==0 for row in v['players'] if row['unit']=='offense'))
+        self.assertGreater(v['totals']['xp'],0)
 
     def test_manual_workloads_have_costs_and_rest_is_protected(self):
         l,r,ps=setup();st=r.states['A']

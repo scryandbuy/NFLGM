@@ -109,6 +109,11 @@ def recommend_plan(league, runner, abbr, week, *, bye=False):
             if _rehab(runner,abbr,p) or c < 55 or j > .65:
                 individual[p.pid] = 'rest'
                 continue
+            if bye and (projected < 95 or j > .08 or snaps.get(p.pid,0) >= 75):
+                # Spend the break recovering worn players individually, while
+                # healthy teammates can still develop with light work.
+                individual[p.pid] = 'rest'
+                continue
             if projected < 92 or j > .35 or snaps.get(p.pid,0) >= 75:
                 individual[p.pid] = 'limited'
             healthy.append((p,projected,j,saved))
@@ -125,7 +130,10 @@ def recommend_plan(league, runner, abbr, week, *, bye=False):
                     not (s.get('last_key')==f'{league.year}:{week-1}' and s.get('hard_streak',0))
                     for _,c,j,s in healthy)
         if bye:
-            intensity,reason = 'recovery','Bye week: recover before the next game.'
+            if healthy:
+                intensity,reason = 'light','Bye week: light development work; tired or injured players rest.'
+            else:
+                intensity,reason = 'recovery','Bye week: this unit needs recovery; all players rest.'
         elif tired >= .30 or depleted >= .25:
             intensity,reason = 'light','Several regulars need a lighter week.'
         elif week <= 18 and (week == 1 or previous_bye) and fresh and depleted == 0 and len(young) >= max(2,len(members)*.35):

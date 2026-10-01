@@ -1474,6 +1474,18 @@ class Session:
             if m['id'] == int(mid) and m.get('status') == 'unread': m['status'] = 'open'
         return dict(ok=True)
 
+    def inbox_later(self, mid):
+        """Hide a reminder from Overview without resolving its inbox decision."""
+        import inbox as IB
+        IB.reconcile(self.L)
+        msg = next((m for m in getattr(self.L, 'inbox', []) if m['id'] == int(mid)), None)
+        if msg is None:
+            return dict(ok=False, why='Message not found.')
+        msg['overview_dismissed'] = True
+        if msg.get('status') == 'unread':
+            msg['status'] = 'open'
+        return dict(ok=True)
+
     def inbox_delete(self, mid):
         import inbox as IB
         IB.reconcile(self.L)
