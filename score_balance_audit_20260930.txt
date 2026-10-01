@@ -1,0 +1,98 @@
+SCORE BALANCE AUDIT - 2026-09-30
+Baseline: integrated 412553d; isolated branch codex/register-balance-20260930.
+
+Scope and rationale
+The old passing path resolved pursuit to an endpoint, capped it at the goal, then multiplied the capped distance by congestion.
+Final event, score and spot were mutually consistent; this was NOT an awarded game-state touchdown subsequently revoked.
+However, non-screen catch-and-run scores with <26.4 yards remaining were impossible after that adjustment, even after beating every pursuer and winning the final race.
+Screens could either lose that endpoint or inflate recorded YAC beyond the goal through the additional awareness multiplier.
+A simple exemption for resolved touchdowns raised scoring too far on holdout, so it was rejected.
+
+Selected change
+Apply the existing congestion factor and existing screen-awareness factor to each pursuit distance increment BEFORE tackle/goal checks.
+A defender still gets the next tackle opportunity if congestion keeps the receiver short. A successful final escape reaches the goal.
+Runs retain gain_scale=1.0 and their original resolution. No coefficient, rating slope, playcall, clock, roster, penalty, or OT change.
+
+Controlled register results
+Columns: points/team | touchdown drives % | punt drives % | 17+ margin % | drives/game | missed targets.
+Baseline catalog 272, seed 93031: 22.489 | 20.650 | 34.460 | 19.853 | 22.735 | drives_per_game, margin_17plus_pct, tie_pct
+Short completion .95 only, rejected: 23.542 | 22.723 | 32.633 | 19.485 | 22.037 | margin_17plus_pct, fg_pct
+Uncompressed terminal guard 272, rejected: 23.932 | 22.684 | 33.068 | 18.382 | 22.625 | drives_per_game, margin_17plus_pct
+Guard + single score/clock 272, rejected: 24.382 | 23.397 | 32.501 | 20.588 | 22.533 | int_pct, margin_17plus_pct
+Baseline catalog holdout 544, seed 93032: 23.405 | 22.202 | 33.006 | 16.360 | 22.256 | margin_17plus_pct
+Guard holdout 544, rejected: 24.605 | 23.303 | 33.274 | 19.669 | 22.877 | points_per_team, total_points, drives_per_game, margin_17plus_pct
+Guard + single score/clock holdout 544, rejected: 24.639 | 23.288 | 33.710 | 19.669 | 22.930 | points_per_team, total_points, drives_per_game, completion_pct, margin_17plus_pct, tie_pct
+Final pursuit-scale catalog 272, seed 93031: 23.910 | 22.539 | 32.999 | 23.529 | 22.706 | drives_per_game
+Final pursuit-scale holdout 544, seed 93032: 24.098 | 22.881 | 33.477 | 20.037 | 22.640 | drives_per_game, margin_17plus_pct, tie_pct, punt_gross
+
+Limitations
+Fixed-roster catalog seasons replay 2026 rosters; they are NOT franchise calendar seasons.
+The 544-game baseline holdout used a process-local shim reproducing old post-pursuit scaling (unconditionally scale even when pursuit reports touchdown).
+The checked-in audit supports exact baseline-ref loading for future comparisons.
+No short-pass or score/clock experiment is shipped. All process-local overrides are explicit CLI options.
+Final candidate holdout still misses margin17+, ties, and narrow drives/game and punt-gross thresholds. Do not describe it as a fully calibrated register.
+No injury, roster construction, practice, or emergency fieldability change is included; sibling work requires an integrated rerun.
+
+Additional margin diagnosis
+An independent 64-game diagnostic (seed93035) used a pregame position-weighted 11-person offense plus base-defense proxy, not an engine strength multiplier.
+Signed lineup-gap/final-margin correlation r=0.241; QB-gap r=0.201. Only19 games had >2-point lineup gap; stronger side won10. Sample too small to justify steeper rating slopes.
+Lead17 Q4 pass share14.4% vs trailing89.1% in that probe.
+The single-score/clock experiment preserved more 17+ halftime leads (39/52 vs guard26/44) but did NOT increase final 17+ wins on the 544-game holdout and introduced more misses.
+Interception return endpoints currently clamp at99, so no pick-six; left as a separate model limitation rather than inventing a new return distribution during balance work.
+
+Verification
+73 Python tests passed: receiving pursuit, reported LAC/SEA game fixes, game-log regressions, penalty yardage/pace, kickoff clock, register diagnostics.
+3 Node checks passed: blocked-punt replay scoring, ordinary/nullified scoring, recap and OT workflow.
+6 new deterministic receiving tests cover actual goal crossing, screen distance/stats, compression once, next defender stopping the receiver, final escape, unchanged default run scaling.
+Browser engine rebuilt from source. No release bundle made.
+
+Actual franchise calendar holdout
+Seed93034, PYTHONHASHSEED=0, Session.advance, all32 CPU clubs, original roster/practice policy. User-only prompts suppressed.
+First season completed272/272 fixtures. Requested second season did NOT run: calendar blocked before2027 Week1.
+CPU roster repair needed before Week 1: TB (53 players, $9.12m cap space, missing K)
+This is a roster-repair blocker on the412553d baseline; reported to main and emergency-roster thread.
+No games silently skipped, and no multi-season franchise success claimed.
+Source candidate fcebd769c0e6137e4d18099603a8576e5c285583; build ef87894daa.
+Main integrated it as6ddba90 and is running the independent combined3-season calendar.
+
+2026 actual franchise metrics (seed93034):
+points_per_team: 23.768382
+total_points: 47.536765
+drives_per_game: 22.389706
+plays_per_drive: 5.675862
+first_downs_per_drive: 1.818062
+offensive_plays_per_gm: 126.875000
+drive_touchdown_pct: 22.725780
+drive_fieldgoal_pct: 17.865353
+drive_punt_pct: 32.922824
+drive_turnover_pct: 10.525452
+drive_downs_pct: 5.730706
+completion_pct: 63.938659
+sack_pct: 6.650925
+int_pct: 2.366147
+air_yards: 5.622946
+yac: 5.503857
+yards_per_dropback: 6.285313
+time_to_throw: 2.565523
+run_ypc: 4.408924
+run_explosive_pct: 2.178899
+run_negative_pct: 10.134748
+pass_play_share: 58.904665
+play_action_pct: 9.605911
+motion_pct: 36.815416
+blitz_pct: 13.585952
+injuries_per_team_game: 0.612132
+mean_margin: 10.272059
+margin_10plus_pct: 40.808824
+margin_17plus_pct: 20.220588
+overtime_pct: 4.044118
+tie_pct: 0.000000
+fg_pct: 85.534591
+punt_gross: 45.885750
+kickoff_touchback_pct: 14.811100
+
+Reproduce fixed-roster comparison (PYTHONHASHSEED=0):
+python -B -X utf8 audit_score_balance.py --baseline-ref 412553d --seed 93032 --seasons 2 --out baseline.json
+python -B -X utf8 audit_score_balance.py --seed 93032 --seasons 2 --out candidate.json
+Actual calendar:
+python -B -X utf8 audit_score_balance.py --franchise --seed 93034 --seasons 2 --out franchise.json
