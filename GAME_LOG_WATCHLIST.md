@@ -91,3 +91,30 @@ The subsequent email identifies the season as 2027. Its 481 yards / 67 snaps is 
 - **Run-defense criticism is relevant.** Allowing 5.3 yards per designed run is a useful weakness to identify even in a large win. It should retain sample and explosive-run context.
 
 Only the endgame gameplay policy was changed with this follow-up. The email findings are documented for a separate recap fix.
+
+## Week 18 Green Bay at Chicago
+
+Green Bay won 44–24. Source: user attachment `47c6647b-69cc-4af1-b121-0f0059f5f23c/Pasted text.txt`. Reviewed October 1, 2026. The log contains no build stamp. The integration checkout remains at `2401dd9`, without the completed endgame fix `7a00193`; observed late-game behavior matches the earlier policy. Do not classify this as a regression in the new policy before testing an integrated build containing it.
+
+### Findings requiring attention
+
+- **Confirmed nullified-fumble presentation defect.** Q4 10:32: an Odunze completion and lost fumble are wiped out by defensive pass interference. Chicago correctly keeps possession at its 42. In `ticker.play_line`, nullification first sets the event to neutral, but the subsequent fumble block changes its kind back to turnover and appends the fumble after the nullification notice. A direct reproduction returns `kind=turnover` with `nullified=True`; the ticker key-play filter/styles use kind without excluding nullified plays. Correct the presentation and category; this log does not establish a turnover-bookkeeping error.
+- **Completed endgame fix still needs integration and live validation.** Chicago uses timeouts at 2:52, 2:46 and 2:40 down 25, then uses 14-second urgent intervals down 28 and attempts an onside kick at 0:30 down 20. These are the old behaviors addressed by `7a00193`. Verify the installed build before changing the policy again.
+
+### Recurring gameplay evidence
+
+- **Losing runs warrant a targeted raw-data audit.** GB has 48 designed runs for 265 displayed yards; CHI eight for 28. Only one is visibly negative. Together with Week 17, two visibly negative runs appear in 122 designed carries. These are rounded narration counts, not the engine's exact negative-run statistic: sub-yard losses can display as no gain. Reconcile raw play outcomes, blocking/tackling matchups, and actual ratings before tuning. Both games involve the same teams, so this is not a league-wide sample.
+- **Third-down dominance needs distance context.** GB converts 13 of 16, following six of ten in Week 17. Eleven of this game's 13 conversions are on four or fewer yards to go; the other two are third-and-12 and third-and-six. Strong early-down gains repeatedly create easier conversion opportunities. Investigate the run-loss/short-yardage distributions before assuming the third-down conversion model itself is inflated.
+- **Screens remain restrained.** Three screens in 62 non-nullified pass attempts: GB one for seven displayed yards, CHI two for seven. No fourth-down screen recurrence.
+- **Field-goal evidence is mixed.** Six makes in seven attempts. Chicago makes 41, 43 and 49, then misses another 49; GB makes 18, 21 and 23. No 55-plus attempt here. Keep this distinct from the earlier long-kick watch.
+
+### Supported behavior and accounting
+
+- GB's five touchdowns, five extra points, and three field goals total 44; CHI's two touchdowns, one extra point, one two-point conversion, and three field goals total 24.
+- The lone punt from CHI43 travels 49 yards to GB8. The missed 49-yard field goal from GB32 gives GB the ball at its 40. Both spots reconcile.
+- The kickoff at 0:04 is explicitly recorded as ending the first half; the third-quarter opening is present. The final single kneel at 0:30 correctly ends the game with Chicago out of timeouts.
+- Nullified interceptions, sacks, catches, and runs do not count as official outcomes. Headers explicitly report field movement including penalties. The roughness call at Q4 15:00 retains Hall's 12-yard catch, then adds 15 yards to CHI24.
+- Reconstructed passing from rounded narration: Love 23/27 for about 230 yards, two touchdowns, no interceptions; Williams 21/35 for about 258 yards, one touchdown, one valid interception. GB also has a 25-yard QB scramble. Treat these yard totals as approximate until compared with the box score.
+- Cook exits injured in Q3 and Hill takes the subsequent carries. No later Cook participation is visible in this log.
+
+This review updates documentation only. Recommended next actions are integration of the existing endgame patch, the small ticker fix, and a focused rushing-outcome audit; no blanket offense or kicking adjustment is supported yet.
