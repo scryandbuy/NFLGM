@@ -427,7 +427,7 @@ def _player_history(league, p):
     earlier_unlocks = max(0, int(spent.get('_unlocks', 0) or 0) - logged_unlocks)
     if earlier_unlocks: add(p.draft_year or 0, 0, 'Earlier XP', f"Progression: +{earlier_unlocks} Ceiling · before purchase history")
 
-    award_names = dict(VL.AWARD_NAMES, all_pro_1='First-Team All-Pro', all_pro_2='Second-Team All-Pro', pro_bowl='Pro Bowl')
+    award_names = dict(VL.AWARD_NAMES, sb_mvp='CHAMP MVP', all_pro_1='First-Team All-Pro', all_pro_2='Second-Team All-Pro', pro_bowl='Pro Bowl')
     for year, awards in (getattr(league, 'awards', None) or {}).items():
         for key, winners in (awards or {}).items():
             if key == 'coty': continue
