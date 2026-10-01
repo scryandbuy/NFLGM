@@ -705,6 +705,48 @@ def defensive_return(start, kind, returner, chasers, rng, rate_fn=None):
     return result
 
 
+def _coverage_evidence(coverage, pairs=(), primary=None, helper=None, in_man=False, hole=False):
+    """Read-only attribution after resolution; never draw RNG or choose a defender.
+
+    Zone pairing defenders are provisional. Only the final owner gets the
+    target; an empty zone has no individual owner even if the play resolver
+    retained a provisional defender for its existing outcome math.
+    """
+    drops = {}
+    for assignment in coverage.get('defensive_assignments', ()):
+        pid = assignment['player'].get('pid')
+        if not pid: continue
+        alignment = assignment.get('alignment', '')
+        role = ('outside' if alignment.startswith('corner_') else 'slot' if alignment == 'slot'
+                else 'safety' if alignment.startswith('deep_') else 'other')
+        drops[pid] = [role, None]
+    # Actual man matchups can move a travelling corner from outside to slot.
+    pair_modes, pair_roles = {}, {}
+    for pair in pairs:
+        pid = (pair.get('defender') or {}).get('pid')
+        if pid not in drops: continue
+        pair_modes.setdefault(pid, set()).add('man' if pair.get('man') else 'zone')
+        if pair.get('man'):
+            spot = pair.get('spot')
+            role = 'outside' if spot in ('X', 'Z') else 'slot' if spot == 'slot' else drops[pid][0]
+            pair_roles.setdefault(pid, set()).add(role)
+    for pid, modes in pair_modes.items():
+        if len(modes) == 1: drops[pid][1] = next(iter(modes))
+    for pid, roles in pair_roles.items():
+        drops[pid][0] = next(iter(roles)) if len(roles) == 1 else 'other'
+    owner = (primary or {}).get('pid') if not hole else None
+    helper_id = (helper or {}).get('pid')
+    if owner not in drops: owner = None
+    if helper_id not in drops or helper_id == owner: helper_id = None
+    mode = 'man' if in_man else 'zone'
+    if owner: drops[owner][1] = mode
+    # A zone converger remains zone help even when quarters matches the
+    # primary defender into man against a vertical route.
+    if helper_id: drops[helper_id][1] = 'zone'
+    return dict(version=1, drops=[(pid, role, exposure) for pid, (role, exposure) in drops.items()],
+                primary=owner, helper=helper_id, mode=mode, hole=bool(hole))
+
+
 def _pass_play(off, deff, off_call, def_call, ytg, rng):
     depth = off_call.get('depth', 'short')
     ok = available_depths(ytg)
@@ -836,7 +878,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         return dict(type='sack', yards=round(-min(18.0, rng.gamma(2.0, 3.4)), 1), depth=depth, screen=bool(screen), swing=bool(swing),     # real sacks lose 6 to 8; 18 is the extreme, and the gamma tail once produced a 32-yard sack
                     touchdown=False, by=p['beaten_by'], concept=concept,
                     protection=prot_name, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
-                    beaten=p.get('beaten'), pressured=True)
+                    beaten=p.get('beaten'), pressured=True,
+                    coverage_evidence=_coverage_evidence(rush_plan['coverage']))
 
     # the concept, against the coverage it actually faces
     cmult = S.concept_multiplier(
@@ -953,6 +996,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
             in_man = True; cov = zone_owner
         elif zone_owner is not None:
             cov = zone_owner
+    coverage_evidence = _coverage_evidence(in_coverage, pairs, cov, zone_second, in_man, zone_hole)
     if depth == 'short' and not screen and not swing:
         cmult *= SHORT_PASS_COMPLETION
     if in_man:
@@ -1033,7 +1077,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
             [off['qb']] + list(off.get('ol') or []) + receivers, rng, rate)
         return dict(type='interception', yards=0.0, touchdown=False,
                     air=round(air, 1),
-                    depth=depth, in_man=bool(in_man), screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
+                    depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
     if not complete:
@@ -1050,7 +1094,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         return dict(type='incomplete', yards=0.0, touchdown=False,
                     throwaway=throwaway,
                     throwback=round(float(max(0.0, rng.normal(6.0, 3.0))), 1) if throwaway else 0.0,
-                    depth=depth, in_man=bool(in_man), screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
+                    depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=None if throwaway else tgt.get('pid'),
                     read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
                     pass_def=(cb.get('pid') if broken and cb else None),
@@ -1059,7 +1103,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # contested-catch gate again; drops were running at 8.7% against a real ~5%.
     if not resolve_catch(tgt, cb, contested and rng.random() < 0.45, rng):
         return dict(type='drop', yards=0.0, touchdown=False,
-                    depth=depth, in_man=bool(in_man), screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
+                    depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
 
@@ -1101,8 +1145,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # yards after catch to 2.8 against a real 5.2.
     if air >= ytg:
         return dict(type='complete', yards=round(float(ytg), 1),
-                    air=round(float(air), 1), yac=0.0, touchdown=True,
-                    in_man=bool(in_man), screen=bool(screen), swing=bool(swing),
+                    air=round(float(air), 1), yac=0.0, touchdown=True, coverage_air_td=True,
+                    in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing),
                     coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, depth=depth,
                     target=tgt.get('pid'), read=read_kind,
@@ -1174,7 +1218,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
                 yac=yac['yards'], touchdown=total >= ytg, concept=concept,
-                in_man=bool(in_man), screen=bool(screen), swing=bool(swing),
+                in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing),
                 coverage=def_call.get('coverage') or def_call['shell'],
                 protection=prot_name, depth=depth, target=tgt.get('pid'),
                 read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))

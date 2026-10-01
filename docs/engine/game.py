@@ -2417,7 +2417,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if t == 'sack':
             if rng.random() < E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn):
                 _old = out
-                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pressured') if k in _old}
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pressured', 'coverage_evidence') if k in _old}
                 out = E.resolve_scramble(off_f['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
@@ -2980,8 +2980,61 @@ class StatBook:
                 rb_snaps=0, rb_wins=0)
         return self.p[pid]
 
+    def record_coverage(self, out):
+        """Book existing coverage decisions, without changing outcomes or RNG.
+
+        Air yards/TDs/explosives describe the catch point; YAC and total-play
+        touchdowns are separate descriptive counters, never coverage blame.
+        Uncovered targets remain in play metadata with no individual charge.
+        """
+        evidence = out.get('coverage_evidence')
+        if (not evidence or evidence.get('version') != 1 or out.get('nullified')
+                or out.get('throwaway') or out.get('spike')
+                or out.get('type') not in ('complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble')):
+            return
+        seen = set()
+        def add(line, key, value=1):
+            line[key] = line.get(key, 0) + value
+        for pid, role, mode in evidence.get('drops', ()):
+            if not pid or pid in seen: continue
+            seen.add(pid)
+            line = self._get(pid)
+            add(line, 'cov_snaps')
+            add(line, 'cov_' + (role if role in ('outside', 'slot', 'safety') else 'other') + '_snaps')
+            add(line, 'cov_' + (mode if mode in ('man', 'zone') else 'unknown') + '_snaps')
+        if not out.get('target') or out.get('type') not in ('complete', 'incomplete', 'drop', 'interception'):
+            return
+        primary = evidence.get('primary') if not evidence.get('hole') else None
+        helper = evidence.get('helper')
+        mode, depth = evidence.get('mode'), out.get('depth')
+        if mode not in ('man', 'zone') or depth not in ('short', 'medium', 'deep'): return
+        if helper in seen and helper != primary:
+            line = self._get(helper)
+            add(line, 'cov_help_targets')
+            add(line, 'cov_help_pd', int(out.get('pass_def') == helper))
+            add(line, 'cov_help_ints', int(out.get('type') == 'interception' and out.get('by') == helper))
+        if primary not in seen: return
+        line = self._get(primary)
+        complete = out.get('type') == 'complete'
+        air = float(out.get('air') or 0) if complete else 0.0
+        receiving_td = complete and bool(out.get('touchdown')) and not out.get('defensive_td')
+        values = dict(targets=1, completions=int(complete), air_yards=air,
+                      td=int(receiving_td and bool(out.get('coverage_air_td'))),
+                      explosive=int(complete and air >= 20),
+                      pd=int(out.get('pass_def') == primary),
+                      ints=int(out.get('type') == 'interception' and out.get('by') == primary))
+        # Emit every field, including zeroes, so missing legacy data cannot
+        # masquerade as a complete observed bucket in season evaluation.
+        for metric, value in values.items():
+            add(line, f'cov_{mode}_{depth}_{metric}', value)
+            add(line, 'cov_' + metric, value)
+        add(line, 'cov_yac_yards', float(out.get('yac') or 0) if complete else 0.0)
+        add(line, 'cov_receiving_td', int(receiving_td))
+        add(line, 'cov_receiving_explosive', int(complete and float(out.get('yards') or 0) >= 20))
+
     def record(self, out, off, deff, rng):
         if out.get('nullified'): return
+        self.record_coverage(out)
         t = out.get('type')
         qb = off['qb'].get('pid', 'QB')
 
