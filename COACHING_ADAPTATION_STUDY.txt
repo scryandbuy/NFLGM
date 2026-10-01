@@ -90,3 +90,10 @@ Checkpoint trace: outputs/coaching-checkpoint-trace.txt (first-year snapshot).
 Summary: outputs/coaching-adaptation-summary.txt. Full JSON retains failures.
 
 Study scripts/report only; no production fix or bundle made.
+
+Independent full-Session corroboration received from Review code changes (2):
+Seeds93030/93031 final wire DEN53 to36/23, with actual kickoff underfilled.
+Secondary NO38 and KC50; DEN remained -0.791m. Primary later reached53 at
+Week9 but -19.772m. Main holds exact full-study evidence. Cleanup defect is
+therefore corroborated in normal Session.advance, not only this harness.
+DEN controlled adaptation remains excluded. No production changes here.
