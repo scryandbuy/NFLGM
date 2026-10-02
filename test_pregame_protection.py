@@ -161,4 +161,51 @@ class ProtectionAdviceTests(unittest.TestCase):
         self.assertTrue(state.plan.protection_locked)
         self.assertEqual(schemes.choose_protection('11',4,'medium',np.random.default_rng(1),preference=state.plan.protection),'six_bob')
 
+class ProtectionChoiceTests(ProtectionAdviceTests):
+    def suggestion(self):
+        return GW.protection_suggestion(self.L,self.me,self.opp,5,
+                                       opponent_tendencies={'blitz':.10})
+    def test_full_slide_for_multiple_threats_including_interior(self):
+        self.grade(self.opp,'DT',92);self.grade(self.opp,'REDG',90)
+        self.assertEqual(self.suggestion()['changes']['protection'],'full_slide')
+    def test_isolated_edge_keeps_six(self):
+        self.grade(self.opp,'LEDG',90)
+        self.assertEqual(self.suggestion()['changes']['protection'],'six')
+    def empty_setup(self):
+        for pos in ('LT','LG','C','RG','RT'):self.grade(self.me,pos,92)
+        self.me.depth['HB'][0].ratings.update(catch_rating=90,route_run_short_rating=90,speed_rating=90)
+        self.games(sacks=0)
+    def test_empty_requires_positive_evidence(self):
+        self.empty_setup()
+        self.assertEqual(self.suggestion()['changes']['protection'],'empty')
+        self.L.game_stats={};self.assertIsNone(self.suggestion())
+    def test_empty_rejected_against_blitz_or_bad_receiving_back(self):
+        self.empty_setup()
+        self.assertIsNone(GW.protection_suggestion(self.L,self.me,self.opp,5,opponent_tendencies={'blitz':.4}))
+        self.me.depth['HB'][0].ratings.update(catch_rating=40,route_run_short_rating=40,speed_rating=70)
+        self.assertIsNone(self.suggestion())
+    def test_new_choices_reach_actual_pass_resolver(self):
+        from unittest.mock import patch
+        import game,rosters,plays
+        teams=rosters.load_league()
+        for mode,expected,count in [('full_slide','six_slide',6),('empty','five',5)]:
+            self.setUp()
+            if mode=='empty':self.empty_setup()
+            else:self.grade(self.opp,'DT',92);self.grade(self.opp,'REDG',90)
+            advice=self.suggestion();self.assertEqual(advice['changes']['protection'],mode)
+            base=GP.Gameplan();state=N(plan=base.copy(),base_plan=base)
+            self.L.user_week_plan=dict(year=2027,week=5,changes=advice['changes'])
+            GW.user_plan(self.L,state,5)
+            self.assertTrue(state.plan.protection_locked)
+            rng=np.random.default_rng(17)
+            oc=schemes.call_offense(2,8,0,50,rng,lean={'protection':state.plan.protection})
+            oc.update(is_pass=True,personnel='11',depth='medium',concept='dagger',down=2,ydstogo=8,play_action=False,shotgun=True)
+            off,_=game.field_units(teams['GB'],None,rng,True,'11')
+            defense,_=game.field_units(teams['DEN'],None,rng,False,'nickel','3-4')
+            dc=schemes.call_defense(oc,2,8,rng);dc.update(front_family='3-4',personnel='nickel',rushers=4)
+            with patch.object(plays,'resolve_protection',wraps=plays.resolve_protection) as resolve:
+                plays._pass_play(off,defense,oc,dc,50,rng)
+            self.assertEqual(resolve.call_args.kwargs['protection'],expected)
+            self.assertEqual(len(resolve.call_args.args[0]),count)
+
 if __name__=='__main__':unittest.main()

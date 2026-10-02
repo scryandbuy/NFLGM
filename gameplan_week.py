@@ -238,6 +238,40 @@ def protection_read(league, me, opp, week):
                 recent_games=recent['games'], dropbacks=recent['dropbacks'], sacks=recent['sacks'])
 
 
+def protection_suggestion(league, me, opp, week, read=None, opponent_tendencies=None):
+    """Choose one protection recommendation from observed risk and matchups."""
+    read = protection_read(league, me, opp, week) if read is None else read
+    rows = read['matchups']
+    if read['recommend']:
+        interior = [r for r in rows if r['role'] in ('LG', 'C', 'RG') and r['gap'] >= 7]
+        distributed = sum(r['gap'] >= 7 for r in rows) >= 2
+        slide = bool(interior and distributed)
+        return dict(side='offence',
+            text='Full Slide: coordinate protection against their interior rush' if slide else
+                 'Protect: more six-man protection and the quick game',
+            why=read['why'], changes=dict(protection='full_slide' if slide else 'six',
+                                         depth_mix=(+.08, -.05, -.03)))
+    # Absence of trouble is insufficient: require clean recent protection,
+    # favorable line matchups, low observed blitzing and a useful extra target.
+    tape = opponent_tendencies if opponent_tendencies is not None else tendencies(league, opp.abbr)
+    if not tape or tape['blitz'] > .15 or len(_offensive_line(me)) != 5:
+        return None
+    if not rows or max(r['gap'] for r in rows) > -5:
+        return None
+    if read['recent_games'] < 2 or read['dropbacks'] < 60 or read['sacks'] / read['dropbacks'] > .04:
+        return None
+    from plays import rate
+    backs = [p for p in me.depth.get('HB', ()) if p.out_until is None]
+    back = 100 * rate(backs[0].ratings, {'catch_rating': .45, 'route_run_short_rating': .35, 'speed_rating': .20}) if backs else None
+    coverage = unit_grades(league, opp).get('linebackers')
+    if back is None or coverage is None or back < coverage + 5:
+        return None
+    return dict(side='offence', text='Empty: release the extra receiver with five-man protection',
+        why=f"our line has favorable rush matchups; {read['sacks']:.0f} sacks on {read['dropbacks']:.0f} recent dropbacks, "
+            f"they blitz on {tape['blitz']*100:.0f}% of snaps, and our back grades above their coverage linebackers",
+        changes=dict(protection='empty', depth_mix=(+.05, -.02, -.03)))
+
+
 def scouting_suggestions(league, me, opp, all_grades=None):
     """Cautious roster and coach reads before the opponent has current-season tape.
 
@@ -331,9 +365,9 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
         sug('offence', 'Attack their corners: lean deep and outside', f"their corners rank {rc[0]} of {n}, our receivers {my_wr[0]}", {'depth_mix': (-0.08, +0.03, +0.05), 'pass_bias': +0.04})
     if rf and rf[0] >= 22:
         sug('offence', 'Run it: their front does not hold up', f"their run front ranks {rf[0]} of {n}", {'pass_bias': -0.06})
-    protection = protection_read(league, me, opp, week)
-    if protection['recommend']:
-        sug('offence', 'Protect: more six-man protection and the quick game', protection['why'], {'protection': 'six', 'depth_mix': (+0.08, -0.05, -0.03)})
+    protection = protection_suggestion(league, me, opp, week, opponent_tendencies=tr)
+    if protection:
+        suggestions.append(protection)
     if tr and tr['blitz'] >= 0.20:
         sug('offence', 'They bring pressure: screens and quick throws, less play action', f"blitz on {tr['blitz']*100:.0f}% of snaps", {'depth_mix': (+0.06, -0.04, -0.02), 'play_action_rate': -0.06, 'screen_boost': +0.03})
     if tr and tr['two_high'] >= 0.55:
