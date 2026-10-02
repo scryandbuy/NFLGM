@@ -17,7 +17,7 @@ rather than identity-only.
 Nothing carries to the next week: the plan the game reads is base plus the
 week's changes, and the state's plan resets when the game ends.
 """
-import numpy as np, collections
+import numpy as np, collections, re
 
 TEND_KEYS = ('plays', 'passes', 'pa', 'motion', 'deep', 'fourth_go', 'fourth_opp', 'def_snaps', 'blitz', 'man', 'two_high', 'box8', 'shadow', 'bracket')
 TWO_HIGH = {'cover_2', 'cover_4', 'cover_6', 'two_man', 'tampa_2', 'quarters'}
@@ -238,6 +238,60 @@ def protection_read(league, me, opp, week):
                 recent_games=recent['games'], dropbacks=recent['dropbacks'], sacks=recent['sacks'])
 
 
+def scouting_suggestions(league, me, opp, all_grades=None):
+    """Cautious roster and coach reads before the opponent has current-season tape.
+
+    Keep these distinct from measured tendencies and performance rankings.
+    They use current, healthy personnel and known coaching preferences only.
+    """
+    mine = (all_grades.get(me.abbr) if all_grades is not None else
+            unit_grades(league, me) if me.depth else {})
+    theirs = (all_grades.get(opp.abbr) if all_grades is not None else
+              unit_grades(league, opp) if opp.depth else {})
+    suggestions = []
+
+    def edge(our_unit, their_unit):
+        a, b = mine.get(our_unit), theirs.get(their_unit)
+        return None if a is None or b is None else a - b
+
+    def add(side, text, why, changes):
+        suggestions.append(dict(side=side, text=text,
+                                why=f'Pregame projection: {why}; current-season tape is not available yet',
+                                changes=changes, basis='projection'))
+
+    receiver_edge = edge('receivers', 'corners')
+    run_edge = edge('run block', 'run front')
+    if receiver_edge is not None and receiver_edge >= 7 and (run_edge is None or receiver_edge >= run_edge):
+        add('offence', 'Test their corners with more outside throws',
+            f'our current receivers grade {mine["receivers"]:.0f} against their corners at {theirs["corners"]:.0f}',
+            {'pass_bias': +0.03, 'depth_mix': (-0.04, 0.0, +0.04)})
+    elif run_edge is not None and run_edge >= 7:
+        add('offence', 'Lean on the run blocking matchup',
+            f'our current line grades {mine["run block"]:.0f} against their run front at {theirs["run front"]:.0f}',
+            {'pass_bias': -0.04})
+
+    gm = getattr(opp, 'gm', None)
+    if gm is not None and not any(s['side'] == 'offence' for s in suggestions):
+        shell = float(getattr(gm, 'shell', .5))
+        coverage = float(getattr(gm, 'coverage', .5))
+        if shell >= .56 and coverage <= .35:
+            add('offence', 'Expect two-high zones: work underneath and test the run',
+                'their coach leans toward a two-high shell and zone coverage',
+                {'pass_bias': -0.03, 'depth_mix': (+0.05, +0.02, -0.07)})
+        elif shell <= .40 and coverage >= .60:
+            add('offence', 'Expect single-high man: use motion and outside shots',
+                'their coach leans toward a single-high shell and man coverage',
+                {'motion_rate': +0.06, 'depth_mix': (-0.04, 0.0, +0.04)})
+
+    receiving_threat = theirs.get('receivers')
+    our_corners = mine.get('corners')
+    if receiving_threat is not None and our_corners is not None and receiving_threat - our_corners >= 7:
+        add('defence', 'Protect the deep routes against their receivers',
+            f'their current receivers grade {receiving_threat:.0f} against our corners at {our_corners:.0f}',
+            {'shell_lean': +0.10, 'zone_aggression': -0.08})
+    return suggestions
+
+
 # ------------------------------------------------------------ the report
 def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
     import weather as W
@@ -309,6 +363,9 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
         sug('defence', f'Take away {wrs[0].name}: shadow him, bracket on the shots', f"a {wrs[0].ovr:.0f} with a {wrs[1].ovr:.0f} behind him", {'travel': True, 'bracket': wrs[0].pid})
     if owr and owr[0] >= 24 and my_cb and my_cb[0] <= 12:
         sug('defence', 'Our corners can hold them one-on-one: more man, more pressure', f"their receivers rank {owr[0]}, our corners {my_cb[0]}", {'man_rate': +0.10, 'blitz_rate': +0.04})
+
+    if tr is None:
+        suggestions.extend(scouting_suggestions(league, me, opp, all_grades))
 
     # the sky
     home_abbr = opp_abbr if _is_home(league, opp_abbr, me_abbr, week) else me_abbr
@@ -424,11 +481,42 @@ def post_report(league, week):
     body = f"{__import__('club_notes')._period(week)} against {opp}. " + (f"Their coach: {rep['coach']['name']}, prestige {rep['coach']['prestige']}. " if rep['coach']['name'] else '')
     if rep['strengths']: body += 'Strengths: ' + '; '.join(s['text'] for s in rep['strengths'][:3]) + '. '
     if rep['weaknesses']: body += 'Weaknesses: ' + '; '.join(s['text'] for s in rep['weaknesses'][:3]) + '. '
-    body += f"Forecast: {rep['forecast']['text']}. {len(rep['suggestions'])} suggestions from the assistants."
+    count = len(rep['suggestions'])
+    body += f"Forecast: {rep['forecast']['text']}. {count} suggestion{'s' if count != 1 else ''} from the assistants."
     IB.post(league, 'game_plan', f"Game plan: week {week} at {opp}" if not _is_home(league, user, opp, week) else f"Game plan: week {week} vs {opp}",
             body, sender='assistants', payload=dict(report=rep, link=f'gameplan:{week}'), expires_week=week)   # gone once the week is played
     league.game_plan_reports = getattr(league, 'game_plan_reports', {}); league.game_plan_reports[week] = rep
     return rep
+
+
+def refresh_open_report(league, week):
+    """Repair an empty current-week report saved before scouting projections existed.
+
+    Preserve the original message, its read state, and historical reports. The
+    count is at the end of the body, so existing entity offsets stay valid.
+    """
+    user = getattr(league, 'user_team', None)
+    if not user:
+        return False
+    for mail in reversed(getattr(league, 'inbox', None) or []):
+        old = (mail.get('payload') or {}).get('report') or {}
+        if (mail.get('kind') != 'game_plan' or mail.get('year') != league.year
+                or old.get('week') != week or old.get('me') != user):
+            continue
+        if old.get('suggestions') or old.get('opp') not in league.teams:
+            return False
+        report = opponent_report(league, user, old['opp'], week)
+        if not report['suggestions']:
+            return False
+        mail['payload']['report'] = report
+        count = len(report['suggestions'])
+        ending = f"{count} suggestion{'s' if count != 1 else ''} from the assistants."
+        body, n = re.subn(r'0 suggestions from the assistants\.$', ending, mail.get('body') or '')
+        mail['body'] = body if n else (mail.get('body') or '') + f' Scouting update: {ending}'
+        league.game_plan_reports = getattr(league, 'game_plan_reports', {})
+        league.game_plan_reports[week] = report
+        return True
+    return False
 
 
 # Season performance is separate from the roster grades used by scouting.

@@ -1,5 +1,6 @@
 import copy
 import unittest
+from collections import Counter
 from types import SimpleNamespace as N
 import numpy as np
 import gameplan_week as GW
@@ -78,6 +79,37 @@ class ProtectionAdviceTests(unittest.TestCase):
         r=GW.opponent_report(self.L,'GB','KC',1)
         self.assertTrue(all(x is None for x in r['my_units'].values()))
         self.assertEqual(len([s for s in r['suggestions'] if 'protection' in s['changes']]),1)
+    def test_week_one_coach_projection_is_labeled_and_expires_with_tape(self):
+        self.opp.gm.shell=.61; self.opp.gm.coverage=.2
+        early=GW.opponent_report(self.L,'GB','KC',1)
+        self.assertTrue(all(x is None for x in early['units'].values()))
+        projected=[s for s in early['suggestions'] if s.get('basis')=='projection']
+        self.assertEqual(len(projected),1)
+        self.assertIn('Pregame projection',projected[0]['why'])
+        self.assertIn('two-high',projected[0]['text'])
+        self.L.tendencies={self.L.year:{'KC':Counter(plays=60,passes=30,def_snaps=60)}}
+        measured=GW.opponent_report(self.L,'GB','KC',2)
+        self.assertIsNotNone(measured['tendencies'])
+        self.assertFalse(any(s.get('basis')=='projection' for s in measured['suggestions']))
+    def test_week_one_roster_edge_is_projected_without_old_tendencies(self):
+        self.L.tendencies={self.L.year-1:{'KC':{'plays':60,'passes':30,'def_snaps':60}}}
+        for p in self.me.depth['WR'][:3]: p.ovr=90
+        early=GW.opponent_report(self.L,'GB','KC',1)
+        self.assertIsNone(early['tendencies'])
+        projected=[s for s in early['suggestions'] if s.get('basis')=='projection']
+        self.assertEqual(len(projected),1)
+        self.assertIn('receivers grade',projected[0]['why'])
+    def test_saved_empty_current_report_is_refreshed_once(self):
+        self.opp.gm.shell=.61; self.opp.gm.coverage=.2
+        self.L.user_team='GB'; self.L.inbox=[dict(kind='game_plan',year=self.L.year,
+            status='unread',body='Week 1. 0 suggestions from the assistants.',
+            payload={'report':dict(week=1,me='GB',opp='KC',suggestions=[])})]
+        self.assertTrue(GW.refresh_open_report(self.L,1))
+        self.assertEqual(len(self.L.inbox),1)
+        self.assertEqual(self.L.inbox[0]['status'],'unread')
+        self.assertEqual(len(self.L.inbox[0]['payload']['report']['suggestions']),1)
+        self.assertIn('1 suggestion from the assistants',self.L.inbox[0]['body'])
+        self.assertFalse(GW.refresh_open_report(self.L,1))
     def test_sustained_heavy_sacks_can_trigger_without_rating_mismatch(self):
         self.games(sacks=4)
         r=self.read();self.assertTrue(r['recommend']);self.assertIn('12 sacks on 90',r['why'])

@@ -235,6 +235,8 @@ class Session:
         if (s.stop[0] == 'playoffs' and len(s.stop) > 1 and int(s.stop[1]) >= 3
                 and s.post_live is not None and len(getattr(s.post_live, 'conf_champs', {}) or {}) == 2):
             s._announce_honors()
+        if s.stop[0] == 'week' and not s.played:
+            GW.refresh_open_report(L, int(s.stop[1]))
         PA.sync_session(s)
         return s
 
