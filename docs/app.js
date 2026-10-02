@@ -3554,7 +3554,26 @@ function renderThisWeek(v) {
   // decisions
   s.append(el('div', { class: 'h5', style: 'padding:10px 14px 6px' }, 'Game-Week Decisions'));
   const dec = el('div', { class: 'decide' });
-  const prot = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Protection'), el('div', { class: 's' }, v.protection.options.find(o => o.key === v.protection.value)?.word || v.protection.value)); const po = el('div', { class: 'opts' }); for (const o of v.protection.options) po.append(el('button', { class: 'btn chip' + (o.key === v.protection.value ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='protection', value=${JSON.stringify(o.key)})`); reload(); } }, o.word)); prot.append(po); dec.append(prot);
+  const protectionDescriptions = {
+    empty: 'The line protects alone; all eligible receivers run routes.',
+    half_slide: 'Mixes area protection with individual blocking assignments.',
+    full_slide: 'Slides the line together; an extra blocker covers the remaining threat.',
+    six: 'Individual assignments, with a back or tight end staying in.'
+  };
+  const protectionWords = { empty: 'Empty', half_slide: 'Half Slide', full_slide: 'Full Slide', six: 'Man Protection' };
+  const prot = el('div', { class: 'dcard protection-card' }, el('div', { class: 'k' }, 'Pass Protection'));
+  const groups = el('div', { class: 'protection-groups' });
+  for (const [heading, hint, keys] of [['5 Blockers', 'More receiving options', ['empty']], ['6+ Blockers', 'Extra protection', ['half_slide', 'full_slide', 'six']]]) {
+    const group = el('div', { class: 'protection-group' }, el('div', { class: 'protection-label' }, heading), el('div', { class: 'protection-hint' }, hint));
+    const options = el('div', { class: 'opts' });
+    for (const key of keys) {
+      if (!v.protection.options.some(o => o.key === key)) continue;
+      options.append(el('button', { type: 'button', class: 'btn chip' + (key === v.protection.value ? ' go' : ''), 'aria-pressed': String(key === v.protection.value), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='protection', value=${JSON.stringify(key)})`); reload(); } }, protectionWords[key]));
+    }
+    group.append(options); groups.append(group);
+  }
+  prot.append(groups, el('div', { class: 'protection-detail', 'aria-live': 'polite' }, el('strong', {}, protectionWords[v.protection.value] || v.protection.value), ' - ', protectionDescriptions[v.protection.value] || ''));
+  dec.append(prot);
   const shadowWord = v.travel ? (v.travel_target ? `${v.my_cb1 ? v.my_cb1.name : 'CB1'} on ${v.travel_target.name}` : `${v.my_cb1 ? v.my_cb1.name : 'CB1'} follows their best receiver`) : 'Corners stay by side';
   const tr = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Coverage · Shadow Their WR1?'), el('div', { class: 's' }, shadowWord));
   const tro = el('div', { class: 'opts' }, el('button', { class: 'btn chip' + (!v.travel ? ' go' : ''), onclick: () => { pyJSON(`SESSION.plan_act('set_decision', key='travel_target', value='')`); pyJSON(`SESSION.plan_act('set_decision', key='travel', value=False)`); reload(); } }, 'No Shadow'));
