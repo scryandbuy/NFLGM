@@ -1,0 +1,73 @@
+production score computed for 1,436 of 2,608 players
+1/32: ARI 14-31 HOU
+2/32: NO 14-52 DEN
+3/32: BAL 19-9 DAL
+4/32: ATL 30-23 TEN
+5/32: NE 26-21 LV
+6/32: GB 10-16 DET
+7/32: MIN 23-22 SEA
+8/32: PHI 23-19 CLE
+9/32: CAR 31-25 SF
+10/32: PIT 33-14 TB
+11/32: CHI 30-6 IND
+12/32: NYG 34-31 WAS
+13/32: NYJ 18-48 LAC
+14/32: LA 27-21 KC
+15/32: CIN 11-27 JAX
+16/32: BUF 27-24 MIA
+17/32: DEN 33-21 TB
+18/32: DAL 27-30 SF
+19/32: ARI 19-34 DET
+20/32: NYG 10-23 MIN
+21/32: BUF 31-34 GB
+22/32: HOU 27-26 ATL
+23/32: CIN 20-24 LA
+24/32: PIT 24-17 TEN
+25/32: KC 31-29 NYJ
+26/32: CHI 6-29 BAL
+27/32: NO 12-33 PHI
+28/32: CLE 23-9 LV
+29/32: IND 23-30 SEA
+30/32: MIA 15-36 JAX
+31/32: CAR 22-26 WAS
+32/32: NE 30-23 LAC
+Week 3 targeted-fix production slice, 32 games
+
+  metric                          sim     real     diff       controls
+  points_per_team               24.00    22.90    +1.10  ok   emergent
+  total_points                  48.00    45.80    +2.20  ok   emergent
+  drives_per_game               22.06    21.60    +0.46  ok   emergent
+  plays_per_drive                5.76     5.90    -0.14  ok   emergent
+  first_downs_per_drive          1.86     1.84    +0.02  ok   emergent
+  offensive_plays_per_gm       125.69   123.95    +1.74  ok   emergent
+  drive_touchdown_pct           23.37    22.60    +0.77  ok   emergent
+  drive_fieldgoal_pct           17.28    16.50    +0.78  ok   game.fourth_down_decision
+  drive_punt_pct                33.85    32.40    +1.45  ok   emergent
+  drive_turnover_pct            10.06    10.23    -0.17  ok   emergent
+  drive_downs_pct                5.95     5.60    +0.35  ok   game.GO_RATE
+  completion_pct                63.57    65.00    -1.43  ok   plays.DEPTH_MULT
+  sack_pct                       7.12     6.60    +0.52  ok   plays.resolve_protection
+  int_pct                        2.30     2.10    +0.20  ok   plays.resolve_throw p_int
+  air_yards                      5.88     5.72    +0.16  ok   plays base_air
+  yac                            5.29     5.19    +0.10  ok   plays.resolve_yards_after in_space
+  yards_per_dropback             6.13     6.18    -0.05  ok   emergent
+  run_ypc                        4.71     4.52    +0.19  ok   plays._run_play
+  run_explosive_pct              2.18     2.46    -0.28  ok   plays.resolve_yards_after
+  run_negative_pct               7.64     8.54    -0.90  ok   plays._run_play ybc
+  pass_play_share               59.37    57.80    +1.57  ok   schemes.PASS_RATE
+  play_action_pct               10.14    10.20    -0.06  ok   schemes.call_offense
+  motion_pct                    35.55    36.50    -0.95  ok   schemes.call_offense
+  blitz_pct                     14.17    13.30    +0.87  ok   schemes.call_defense
+  injuries_per_team_game         0.67     0.85    -0.18  ok   health._RULED_OUT_SHARE
+  mean_margin                   11.00    11.10    -0.10  ok   emergent
+  margin_10plus_pct             43.75    44.70    -0.95  ok   emergent
+  margin_17plus_pct             25.00    26.10    -1.10  ok   emergent
+  overtime_pct                   0.00     6.20    -6.20  OFF  emergent
+  tie_pct                        0.00     0.29    -0.29  ok   game.play_overtime
+  fg_pct                        89.71    85.00    +4.71  OFF  game.FG_PCT
+  punt_gross                    46.33    47.20    -0.87  ok   game.PUNT
+  kickoff_touchback_pct         14.12    15.50    -1.38  ok   game.KICKOFF
+  time_to_throw                  2.68        -        -  diag protection-time proxy; QB release is not modeled
+
+  31/33 within tolerance
+Invariant violations: 0

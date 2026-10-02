@@ -1,0 +1,80 @@
+{
+  "commit": "cf70245",
+  "fourth_down": {
+    "half_protect_0.0": {
+      "punt": 1000
+    },
+    "half_attack_0.0": {
+      "go": 185,
+      "punt": 815
+    },
+    "late_goal_0.0": {
+      "go": 101,
+      "field_goal": 899
+    },
+    "half_protect_0.5": {
+      "punt": 1000
+    },
+    "half_attack_0.5": {
+      "go": 298,
+      "punt": 702
+    },
+    "late_goal_0.5": {
+      "go": 161,
+      "field_goal": 839
+    },
+    "half_protect_1.0": {
+      "punt": 1000
+    },
+    "half_attack_1.0": {
+      "go": 423,
+      "punt": 577
+    },
+    "late_goal_1.0": {
+      "go": 230,
+      "field_goal": 770
+    }
+  },
+  "penalty_probabilities": {
+    "def_low": {
+      "Delay of Game": 0.004687373940347133,
+      "False Start": 0.017974989912381095,
+      "Offensive Holding": 0.018096006451288504,
+      "Defensive Holding": 0.007007341668894848
+    },
+    "def_high": {
+      "Delay of Game": 0.00468737394461378,
+      "False Start": 0.01797498992874269,
+      "Offensive Holding": 0.01809600646776026,
+      "Defensive Holding": 0.0036098426812013595
+    },
+    "off_low": {
+      "Delay of Game": 0.006187333598125072,
+      "False Start": 0.023726986672328164,
+      "Offensive Holding": 0.023886728503605056,
+      "Defensive Holding": 0.005308592170717021
+    },
+    "off_high": {
+      "Delay of Game": 0.003187414275717947,
+      "False Start": 0.012222993126161081,
+      "Offensive Holding": 0.012305284372522127,
+      "Defensive Holding": 0.005308592167212741
+    },
+    "hurry": {
+      "Delay of Game": 0.0,
+      "False Start": 0.017974989909920976,
+      "Offensive Holding": 0.018096006448811822,
+      "Defensive Holding": 0.005308592172678636
+    }
+  },
+  "late_goal_values": {
+    "call": "field_goal",
+    "go_boost": -0.0043,
+    "optimal": "field_goal",
+    "strong": false,
+    "wp_go": 0.9806,
+    "wp_fg": 0.9849,
+    "wp_punt": 0.9532
+  },
+  "limitations": "1000 evenly spaced decision thresholds per scenario; exact penalty probability probes, not sampled game rates. Neutral context, not a reconstruction of the user save."
+}
