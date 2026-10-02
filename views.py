@@ -551,6 +551,8 @@ def gameday(session, league, abbr, gd=None):
     """This week's game. Before Sunday: the preview (the matchup, the plan, the Sim button). After: the
     scoreboard and the user's game in full. A past week's, when gd is given."""
     r = rail(session, league, abbr)
+    if gd is None and league.phase not in ('regular', 'playoffs', 'preseason'):
+        return dict(rail=r, empty=True, line='No game scheduled. The season has ended.')
     if gd is None:
         in_week = session.stop[0] in ('week', 'cutdown', 'wire') or (session.stop[0] == 'playoffs' and int(session.stop[1]) < 4)
         if in_week and not getattr(session, 'played', False):
