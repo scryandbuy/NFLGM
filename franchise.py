@@ -242,6 +242,10 @@ class Franchise:
         log['drafted'] = len(drafted)
         # every undrafted man is in the pool; clubs bring a handful to camp
         log['udfa_camp'] = PSQ.udfa_camp(L, rng)
+        # Fill the remaining minimum-salary depth after the rookie class is
+        # known, matching the interactive offseason calendar.
+        log['depth_signings'] = MK.fill_out_rosters(
+            L, [p for p in MK._pool(L) if p.team is None], rng)
         # and the class for NEXT year's draft is born now
         PA.offseason(L, 12)
         NG.build(L, rng, draft_year=L.year + 1)

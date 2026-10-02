@@ -1038,7 +1038,8 @@ class Session:
     # ---- FREE AGENCY AS STAGES. Each round is a stop on the calendar: it opens (the AI clubs' bids are lodged, your
     # talks show who else is in) when the calendar lands on it, you make your offers on the Free Agency page, and the
     # Advance resolves it: every player signs, waits, or asks for a match, and your answers land in the inbox. Nothing
-    # signs on the spot in the open market. The close prices the leftovers and fills rosters with depth only.
+    # signs on the spot in the open market. The close prices the leftovers;
+    # minimum-salary depth is filled after the draft and undrafted signings.
     FA_STEPS = {'step_fa_1': 1, 'step_fa_2': 2, 'step_fa_3': 3}
 
     def _fa_round(self, k):
@@ -1192,7 +1193,9 @@ class Session:
 
     def step_camp(self):
         L, rng = self.L, self.rng
-        PSQ.udfa_camp(L, rng); NG.build(L, rng, draft_year=L.year + 1); SC.scout(L, rng)
+        PSQ.udfa_camp(L, rng)
+        MK.fill_out_rosters(L, [p for p in MK._pool(L) if p.team is None], rng)
+        NG.build(L, rng, draft_year=L.year + 1); SC.scout(L, rng)
 
     def step_cutdown(self):
         L, rng = self.L, self.rng

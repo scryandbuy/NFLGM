@@ -653,13 +653,11 @@ def rfa_offer_sheets(league, rng):
 
 def fill_out_rosters(league, pool, rng, verbose=False):
     """
-    Clubs still short of a roster sign cheap depth.
+    After the draft, clubs still short of a roster sign cheap depth.
 
-    This is most of free agency by headcount and none of it by money. After
-    expiries a team can be down to twenty men under contract, and it has to
-    field eleven on each side - so it signs minimum-salary bodies until it is
-    whole. Without this the AI chased eight stars apiece and left the league
-    with clubs carrying thirty players.
+    Wait until the rookie class and undrafted signings are on rosters. A club
+    can be short after expiries, but filling every slot at market close just
+    creates veterans who are immediately displaced by draft picks.
     """
     import min_salary as MS
     import roster_needs as RN
@@ -759,15 +757,14 @@ def run(league, rng, user_team=None, verbose=False):
             print(f'  phase {phase}: {len(signed)} signed, {len(pool)} left, '
                   f'{len(msgs)} messages')
 
-    # the market closes: every open thread gets its final answer before the pool is filled at the minimum
+    # The market closes before the draft. Depth is filled after teams see
+    # their rookie classes and undrafted signings.
     PA.offseason(league, 9)
     league.fa_step = PHASES + 1
     NG.resolve(league, fa_step=PHASES + 1)
     for t in NG._threads(league):
         if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered', 'match_requested'):
             t['state'] = 'declined'; NG._post(league, t, f"{league.player(t['pid']).name} moves on", "The market has closed without a deal.")
-    fill_out_rosters(league, pool, rng, verbose)
-
     resolve_offer_sheets(league, rng, verbose)
 
     # Nobody leaves the market over the cap. Decisions compound even when each
@@ -776,7 +773,8 @@ def run(league, rng, user_team=None, verbose=False):
     CT.enforce(league, rng, verbose)
 
     # the pool does not empty - it stays open and reopens at camp
-    league.free_agents = [p.pid for p in pool]
+    league.free_agents = [pid for pid in dict.fromkeys([p.pid for p in pool] + league.free_agents)
+                          if (p := league.player(pid)) and p.team is None and not p.retired]
     if verbose:
         sp = np.array([t.cap_space for t in league.teams.values()])
         print(f'  {len(all_signed)} signed in all, {len(pool)} unsigned, '
@@ -895,8 +893,8 @@ def resolve_round(league, rng, phase, user_team=None):
 
 def close_market(league, rng, user_team=None, verbose=False):
     """The market closes: the user's unanswered talks lapse, the players still worth real money sign one-year deals at
-    a discount with clubs that have room (or wait for camp), rosters fill with genuine depth at the minimum, offer
-    sheets resolve, every club is brought under the cap."""
+    a discount with clubs that have room (or wait for camp), offer sheets resolve, every club is brought under the
+    cap. Minimum-salary depth waits until after the draft."""
     import negotiations as NG
     PA.offseason(league, 9)
     league.fa_step = PHASES + 1
@@ -912,11 +910,11 @@ def close_market(league, rng, user_team=None, verbose=False):
     pool = [p for p in pool if p.team is None]
     signed = sign_the_leftovers(league, pool, rng, user_team=user_team)
     pool = [p for p in pool if p.team is None]
-    fill_out_rosters(league, pool, rng, verbose)
     resolve_offer_sheets(league, rng, verbose)
     import contracts as CT
     CT.enforce(league, rng, verbose)
-    league.free_agents = [p.pid for p in pool if p.team is None]
+    league.free_agents = [pid for pid in dict.fromkeys([p.pid for p in pool] + league.free_agents)
+                          if (p := league.player(pid)) and p.team is None and not p.retired]
     league.fa_bids = {}; league.fa_bids_phase = None
     return signed
 

@@ -1,10 +1,15 @@
-"""Automatic pre-draft signings should be cheap to release after the draft."""
+"""Routine depth deals wait for the draft and carry no signing bonus."""
 
+import copy
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
 import market
+import session
+from cap_engine import Contract
+from test_draft_planning import fixture as roster_fixture
 
 
 class MarketCloseBonusTests(unittest.TestCase):
@@ -47,6 +52,54 @@ class MarketCloseBonusTests(unittest.TestCase):
         self.assertGreater(normal['signing_bonus'], 0)
         self.assertEqual(clean['signing_bonus'], 0)
         self.assertEqual(clean['cap_hits'], normal['cap_hits'])
+
+    def test_market_waits_for_rookies_before_filling_depth(self):
+        league, team = roster_fixture()
+        removed = team.by_pos('WR')[-2:]
+        for p in removed:
+            team.roster.remove(p)
+            league.players.pop(p.pid)
+        team.sync_cap()
+        self.assertEqual(len(team.active()), 51)
+
+        street = copy.deepcopy(removed[0])
+        street.pid = 'street-WR'
+        street.team = None
+        street.contract = None
+        street.ratings = {key: 70 for key in street.ratings}
+        league.players[street.pid] = street
+        league.free_agents.append(street.pid)
+
+        with patch('player_age.offseason'), \
+             patch('negotiations.resolve'), \
+             patch('negotiations._threads', return_value=[]), \
+             patch.object(market, 'sign_the_leftovers', return_value=[]), \
+             patch.object(market, 'resolve_offer_sheets'), \
+             patch('contracts.enforce'):
+            market.close_market(league, np.random.default_rng(2), user_team='GB')
+        self.assertEqual(len(team.active()), 51)
+        self.assertIsNone(street.team)
+
+        rookie = copy.deepcopy(removed[1])
+        rookie.pid = 'drafted-WR'
+        rookie.team = None
+        rookie.contract = None
+        league.players[rookie.pid] = rookie
+
+        def sign_rookie(*_args):
+            league.sign(rookie.pid, team.abbr, Contract(4, [1.0] * 4))
+
+        game = session.Session.__new__(session.Session)
+        game.L = league
+        game.rng = np.random.default_rng(3)
+        with patch.object(session.PSQ, 'udfa_camp', side_effect=sign_rookie), \
+             patch.object(session.NG, 'build'), \
+             patch.object(session.SC, 'scout'):
+            game.step_camp()
+        self.assertEqual(len(team.active()), 53)
+        self.assertEqual(rookie.team, team.abbr)
+        self.assertEqual(street.team, team.abbr)
+        self.assertEqual(street.contract.sb, 0)
 
 
 if __name__ == '__main__':
