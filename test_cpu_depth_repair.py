@@ -5,6 +5,7 @@ from unittest.mock import patch
 import numpy as np
 
 import financial_plan as FP
+import game_availability as GA
 import practice_squad as PS
 import targets as TG
 from cap_engine import Contract
@@ -55,8 +56,12 @@ class DepthRepairTests(unittest.TestCase):
                     elif route=='callup':ok=PS.call_up(L,t.abbr,p.pid,emergency=True)
                     else:ok=PS.poach(L,t.abbr,p.pid,1,essential=True)
                 self.assertTrue(ok); self.assertIn(starter,t.roster)
-                self.assertEqual(len(t.by_pos('QB')),2); self.assertEqual(len(t.active()),53)
-                self.assertEqual(before-{q.pid for q in t.roster},set(budget.call_args.kwargs['removals']))
+                self.assertEqual(len(t.by_pos('QB')),2); self.assertEqual(len(t.active()),54)
+                self.assertEqual(before-{q.pid for q in t.roster},set())
+                self.assertEqual(budget.call_args.kwargs['removals'],[])
+                GA.settle_roster(L,t,1)
+                self.assertEqual(len(t.active()),53)
+                self.assertIn(starter,t.roster); self.assertIn(p,t.roster)
                 self.assertFalse(PS.essential_depth(t,week=1)['shortages'])
 
     def test_two_tight_ends_added_without_same_pass_or_repeat_churn(self):
@@ -102,6 +107,7 @@ class DepthRepairTests(unittest.TestCase):
         L,t=self.fixture(); starter=t.by_pos('QB')[0]
         self.move_position(t.by_pos('QB')[-1],'RT')
         p=self.arrival(L,'QB','backup',65)
+        t.cap.cap=t.cap.charges(t.phase)+.3
         before={q.pid for q in t.roster}; calls=[]
         def budget(*args,**kw):
             self.assertEqual(before,{q.pid for q in t.roster})
@@ -117,8 +123,10 @@ class DepthRepairTests(unittest.TestCase):
         p=self.arrival(L,'QB','backup',65)
         for q in t.roster:q.contract=Contract(4,[1]*4,signing_bonus=20)
         t.sync_cap();before=list(t.roster)
-        self.assertFalse(PS.sign_minimum(L,t.abbr,p,essential=True))
-        self.assertEqual(before,t.roster);self.assertIn(p.pid,L.free_agents)
+        self.assertTrue(PS.sign_minimum(L,t.abbr,p,essential=True))
+        self.assertEqual(t.roster[:-1],before)
+        self.assertEqual(len(t.active()),54)
+        self.assertIn(p,t.roster)
 
     def test_recent_acquisition_is_not_optional_upgrade_departure(self):
         L,t=self.fixture(); recent=t.by_pos('WR')[-1];set_grade(recent,60)
@@ -134,6 +142,9 @@ class DepthRepairTests(unittest.TestCase):
         self.assertFalse(PS.protected(t,old,L,incoming=p))
         before={q.pid for q in t.roster}
         self.assertTrue(PS.sign_minimum(L,t.abbr,p))
+        self.assertEqual(len(t.by_pos('P')),2)
+        self.assertEqual(before-{q.pid for q in t.roster},set())
+        GA.settle_roster(L,t,1)
         self.assertEqual(t.by_pos('P'),[p])
         self.assertEqual(before-{q.pid for q in t.roster},{old.pid})
 
@@ -157,6 +168,8 @@ class DepthRepairTests(unittest.TestCase):
         p=self.arrival(L,'QB','backup',65,t.abbr)
         self.assertTrue(PS.minimum_fits(L,t,p,essential=True))
         self.assertTrue(PS.call_up(L,t.abbr,p.pid,emergency=True))
+        self.assertEqual(len(t.active()),54)
+        GA.settle_roster(L,t,1)
         self.assertEqual(len(t.active()),53);self.assertEqual(len(t.by_pos('QB')),2)
 
 

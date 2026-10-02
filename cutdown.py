@@ -51,30 +51,34 @@ def rows_for(team):
             for p in team.active()]
 
 
-def trim_specialists(league):
-    """Release affordable healthy duplicates through normal waivers at cutdown.
+def trim_specialists_for_team(league, team):
+    """Release affordable healthy duplicate specialists on one CPU roster.
 
-    Camp competition is over. Keep the best specialist and actual injury cover;
-    do not take roster control from the user or discard protected investments.
+    Keep the best specialist and actual injury cover; do not take roster
+    control from the user or discard protected investments.
     """
     import practice_squad as PS
+    if team.abbr == getattr(league, 'user_team', None): return []
     cuts = []
-    for abbr, team in league.teams.items():
-        if abbr == getattr(league, 'user_team', None):
-            continue
-        for pos in ('K', 'P', 'LS'):
-            healthy = sorted((p for p in team.active() if p.pos == pos and p.out_until is None),
-                             key=lambda p: (-p.ovr, p.pid))
-            for p in healthy[1:]:
-                if PS.locked(p, league.week) or PS.protected(team, p, league):
-                    continue
-                saved, _, _ = CT.savings_if_cut(p, league.post_june1())
-                if team.cap_space + saved < -.0005:
-                    continue
-                league.release(p.pid)
-                team.sync_cap()
-                cuts.append((abbr, p))
+    for pos in ('K', 'P', 'LS'):
+        healthy = sorted((p for p in team.active() if p.pos == pos and p.out_until is None),
+                         key=lambda p: (-p.ovr, p.pid))
+        for p in healthy[1:]:
+            if PS.locked(p, league.week) or PS.protected(team, p, league):
+                continue
+            saved, _, _ = CT.savings_if_cut(p, league.post_june1())
+            if team.cap_space + saved < -.0005:
+                continue
+            league.release(p.pid)
+            team.sync_cap()
+            cuts.append((team.abbr, p))
     return cuts
+
+
+def trim_specialists(league):
+    """Run duplicate-specialist cleanup for each CPU team at cutdown."""
+    return [cut for team in league.teams.values()
+            for cut in trim_specialists_for_team(league, team)]
 
 
 def run(league, rng, verbose=False):
@@ -348,7 +352,8 @@ def repair_depth(league):
             if not before: break
             sources = {pos for pos in POS_CAP if PS.GROUP_OF.get(pos, pos) in before}
             pool = sorted(_replacement_pool(league, team, sources, essential=True),
-                          key=lambda p: (bool(p.team and p.team != abbr), -p.ovr, str(p.pid)))
+                          key=lambda p: (not PS.minimum_fits(league, team, p, essential=True),
+                                         bool(p.team and p.team != abbr), -p.ovr, str(p.pid)))
             moved = False
             for p in pool:
                 if p.pos not in sources: continue

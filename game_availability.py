@@ -156,6 +156,9 @@ def settle_roster(league, team, week):
     import roster_needs as RN
     from cap_accounting import trade_projection
     from offer_reservations import held
+    CD.trim_specialists_for_team(league, team)
+    if len(team.active()) <= 53:
+        return
     active = team.active()
     kept = RN.select_cutdown(team, CD.rows_for(team), 53)
     cuts = [p for p in active if p.pid not in kept]

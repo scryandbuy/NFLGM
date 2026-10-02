@@ -122,6 +122,7 @@ def call_up(league, abbr, pid, years=1, emergency=False):
     c.base[0]*=max(0,18-team.cap.paid_week)/18; c.pay_start=team.cap.paid_week
     allowed, outgoing = _active_move(league, team, p, c, essential=emergency, action='ps_callup')
     if not allowed: return False
+    if outgoing: league.release(outgoing.pid)
     squad(team).remove(p); p.xp_spent.pop('_ps', None); p.team = None
     league.sign(pid, abbr, c, log=False)
     league.log('ps_callup', pid=pid, team=abbr)          # the one line for the move
@@ -169,6 +170,7 @@ def sign_minimum(league, abbr, player, log=True, essential=False):
     contract = minimum_contract(league, team, player)
     allowed, outgoing = _active_move(league, team, player, contract, essential=essential)
     if not allowed: return False
+    if outgoing: league.release(outgoing.pid)
     league.sign(player.pid, abbr, contract, log=log)
     player.xp_spent['_cpu_added'] = [league.year, int(league.week or 0)]
     return True
@@ -296,11 +298,21 @@ def _needs_room(league, team, essential=False):
 
 
 def _active_move(league, team, p, contract, *, essential=False, action='roster_repair'):
-    """Require current cap room and price the CPU addition before changing rosters."""
+    """Allow roster overflow; a CPU club may cut first only to fund the move."""
     from cap_accounting import require_room
-    try: require_room(league, team, p.pid, contract)
-    except ValueError: return False, None
-    return _cpu_move_budget(league, team, p, contract, essential=essential, action=action), None
+    try:
+        require_room(league, team, p.pid, contract)
+    except ValueError:
+        if team.abbr == getattr(league, 'user_team', None): return False, None
+        for outgoing in _room_candidates(league, team, p):
+            try: require_room(league, team, p.pid, contract, release_pid=outgoing.pid)
+            except ValueError: continue
+            if _cpu_move_budget(league, team, p, contract, outgoing,
+                                essential=essential, action=action):
+                return True, outgoing
+        return False, None
+    return _cpu_move_budget(league, team, p, contract,
+                            essential=essential, action=action), None
 
 
 def _make_room(league, abbr, p):
@@ -320,6 +332,7 @@ def poach(league, abbr, pid, week, essential=False):
     c=Contract(years=1,base=[mn*max(0,18-team.cap.paid_week)/18],signed=league.year,pay_start=team.cap.paid_week)
     allowed, outgoing = _active_move(league, team, p, c, essential=essential, action='ps_poach')
     if not allowed: return False
+    if outgoing: league.release(outgoing.pid)
     squad(league.teams[src]).remove(p); league.teams[src].sync_cap(); p.xp_spent.pop('_ps', None); p.team = None
     league.sign(pid, abbr, c, log=False)
     p.xp_spent['_poach_lock'] = (week or 0) + POACH_LOCK_GAMES
@@ -496,14 +509,16 @@ def keep_groups_whole(league, rng, week):
                 continue                                  # one roster addition a week per club, short of an emergency
             while short > 0:
                 cands = sorted([p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp
-                    and p.out_until is None and not p.retired], key=lambda p: -p.ovr)
+                    and p.out_until is None and not p.retired],
+                    key=lambda p: (not minimum_fits(league, team, p, essential=True), -p.ovr))
                 best = next((p for p in cands if call_up(league, abbr, p.pid, emergency=True)), None)
                 if best is not None:
                     moves.append((abbr, 'callup', best.pid)); team._moved_week = wk_
                 else:
                     fa = available_free_agents(league)
                     fa = sorted([p for p in fa if GROUP_OF.get(p.pos, p.pos) == grp
-                        and not shunned(p, abbr, league)], key=lambda p: -p.ovr)
+                        and not shunned(p, abbr, league)],
+                        key=lambda p: (not minimum_fits(league, team, p, essential=True), -p.ovr))
                     best = next((p for p in fa if sign_minimum(league, abbr, p, log=False, essential=True)), None)
                     if best is None: break
                     team._moved_week = wk_

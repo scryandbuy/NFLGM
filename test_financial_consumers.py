@@ -102,7 +102,8 @@ class FinancialConsumerTests(unittest.TestCase):
         L, t = self.roster(); p = self.arrival(L, t)
         L.free_agents.remove(p.pid); p.team = t.abbr; PS.squad(t).append(p)
         t.roster.pop(); t.sync_cap(); t.cap.cap = t.cap.charges(t.phase)
-        self.assertFalse(PS.call_up(L, t.abbr, p.pid, emergency=True))
+        with patch.object(PS, 'protected', return_value=True):
+            self.assertFalse(PS.call_up(L, t.abbr, p.pid, emergency=True))
         self.assertIn(p, PS.squad(t))
 
     def test_optional_upgrade_does_not_gain_emergency_status_from_its_own_cut(self):
@@ -195,7 +196,7 @@ class FinancialConsumerTests(unittest.TestCase):
                     result = PS.poach(L, t.abbr, p.pid, 9)
                 self.assertEqual(result, expected)
                 self.assertGreaterEqual(t.cap_space, -.0005)
-                self.assertEqual(len(t.active()), 53)
+                self.assertEqual(len(t.active()), 53 + int(expected))
                 if expected:
                     self.assertIn(p,t.roster)
                     self.assertNotIn(p,PS.squad(L.teams['DEN']))

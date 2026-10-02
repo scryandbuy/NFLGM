@@ -3,6 +3,7 @@ import unittest
 
 from cap_engine import Contract
 import cutdown as CD
+import game_availability as GA
 import waivers as WV
 import practice_squad as PS
 import targets as TG
@@ -91,6 +92,8 @@ class SpecialistAllocationTests(unittest.TestCase):
         self.assertTrue(any(p['depth'].get('TE') for p in CD.violations(L)))
         self.assertGreater(CD.repair_depth(L), 0)
         self.assertEqual(PS.essential_depth(t)['shortages'], {})
+        self.assertEqual(len(t.active()), 55)
+        GA.settle_roster(L,t,L.week)
         self.assertEqual(len(t.active()), 53)
         self.assertGreaterEqual(t.cap_space, -.0005)
         acquired = {p.pid for p in t.by_pos('TE')}
@@ -121,6 +124,7 @@ class SpecialistAllocationTests(unittest.TestCase):
         self.assertEqual(PS.essential_depth(t, week=L.week)['shortages'], {})
         self.assertEqual(L.player('affordable-ps').team, t.abbr)
         self.assertIsNone(L.player('expensive-veteran').team)
+        GA.settle_roster(L,t,L.week)
         self.assertEqual(len(t.active()), 53)
         self.assertGreaterEqual(t.cap_space, -.0005)
 
