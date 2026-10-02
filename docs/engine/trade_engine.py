@@ -238,21 +238,69 @@ def situational_shift(gm, team):
     year that would never have been on the market in a good one.
     """
     g = dict(gm)
-    w = team['win_pct']
-    if w <= .35:                      # season is gone: stock up, sell veterans
+    wdw = window(team)
+    if wdw in ('retooling', 'rebuilding'):
         g['pick_lens'] = max(0.0, g['pick_lens'] - .18)   # values picks nearer TRUE value
         g['aggression'] = max(0.0, g['aggression'] - .30)
         g['own_bias']   = max(0.90, g['own_bias'] - .16)  # less attached to his own men
-    elif w >= .65:                    # window is open: chase it
+    elif wdw in ('contending', 'win_now'):
         g['pick_lens'] = min(1.0, g['pick_lens'] + .14)   # discounts picks toward market
         g['aggression'] = min(1.0, g['aggression'] + .28)
         g['target_bias'] = g['target_bias'] * 1.12        # overpays for the man he wants
     return g
 
 # ---------------------------------------------------------------- AI willingness
+def race_context(team):
+    """Current record and distance from the division/wild-card race, no RNG.
+
+    These are games-behind estimates, not playoff odds or tiebreaker forecasts.
+    Byes and ties are reflected in net wins. Unknown race data stays unknown.
+    Never call Team.ctx here: it incorporates these fields itself.
+    """
+    league = getattr(team, 'league', None)
+    phase = getattr(league, 'phase', getattr(team, 'phase', None))
+    record = getattr(team, 'record', (0, 0, 0))
+    games = sum(record)
+    result = dict(phase=phase, games_played=games, division_gap=None,
+                  wildcard_gap=None, in_playoff_position=False)
+    if phase != 'regular' or league is None: return result
+    clubs = [t for t in league.teams.values() if t.conf == team.conf]
+    division = [t for t in clubs if t.division == team.division]
+    def pct(t):
+        w, l, ties = t.record
+        return (w + .5 * ties) / max(1, w + l + ties)
+    def net(t): return t.record[0] - t.record[1]
+    def order(t): return (-pct(t), -net(t), t.abbr)
+    if len(division) > 1:
+        leader = min(division, key=order)
+        result['division_gap'] = max(0., (net(leader) - net(team)) / 2.)
+        result['in_playoff_position'] = team is leader
+    # A small fixture or incomplete league cannot establish a wild-card cut.
+    divisions = {t.division for t in clubs}
+    if len(divisions) >= 4 and len(clubs) >= 8:
+        leaders = {min((t for t in clubs if t.division == div), key=order).abbr for div in divisions}
+        chasing = sorted((t for t in clubs if t.abbr not in leaders), key=order)
+        if len(chasing) >= 3:
+            cutoff = chasing[2]
+            result['wildcard_gap'] = max(0., (net(cutoff) - net(team)) / 2.)
+            result['in_playoff_position'] |= any(t is team for t in chasing[:3])
+    return result
+
+
 def window(team):
-    """contending / retooling / rebuilding, from record and roster age."""
+    """Wait for evidence, then distinguish buyers from genuine sellers."""
     w = team['win_pct']; age = team['avg_age']
+    if team.get('phase') == 'regular':
+        games = team.get('games_played', 0)
+        if games < 4: return 'middling'
+        if w <= .40:
+            gaps = (team.get('division_gap'), team.get('wildcard_gap'))
+            # Do not sell a contender in a weak division or a club within
+            # one game of either route. Six games is the earliest sell signal.
+            if games < 6 or any(gap is None or gap <= 1. for gap in gaps):
+                return 'middling'
+        if w >= .50 and team.get('in_playoff_position'):
+            return 'contending' if age <= 28.5 else 'win_now'
     if w >= .60 and age <= 28.5: return 'contending'
     if w >= .60:                 return 'win_now'
     if w <= .40 and age >= 28.0: return 'rebuilding'

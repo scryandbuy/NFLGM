@@ -35,6 +35,12 @@ import numpy as np
 
 import trade_engine as TE
 import valuation as VAL
+from trade_calendar import TRADE_DEADLINE_WEEK, trading_open
+
+
+def context(team):
+    ctx = team.ctx()
+    return ctx if 'games_played' in ctx else dict(ctx, **TE.race_context(team))
 
 
 # How far apart two clubs can see the same man, in overall points. Real
@@ -379,6 +385,58 @@ def starter_bar(league):
     return bar
 
 
+def _young_core(player):
+    return (getattr(player, 'age', 99) <= 26
+            and getattr(player, 'contract_years_left', 0) >= 2
+            and player.ovr >= (78 if player.pos == 'QB' else 82))
+
+
+def seller_veterans(league, team, baseline):
+    """A lost-season club may shop replaceable veterans at normal market value.
+
+    This never chooses a cap casualty or grants a liquidation discount. The
+    existing fair-price negotiation and final cap checks still decide a trade.
+    """
+    if (getattr(league, 'phase', None) != 'regular' or not trading_open(league)
+            or getattr(team, 'abbr', None) == getattr(league, 'user_team', None)
+            or TE.window(context(team)) not in ('rebuilding', 'retooling')):
+        return []
+    import roster_needs as RN
+    import cap_accounting as CA
+    from offer_reservations import held
+    candidates = [p for p in baseline['players']
+                  if p.pos not in ('QB', 'K', 'P', 'LS') and p.age >= 28
+                  and p.contract and 0 < p.contract_years_left <= 2
+                  and p.fa_class != 'tendered' and p.out_until is None]
+    candidates.sort(key=lambda p: (p.contract_years_left, -p.ovr, -p.age, p.pid))
+    chosen, groups = [], set()
+    # Bound the expensive package reassignments; this is a short shopping
+    # list, not a sweep that attempts to dismantle a losing team's roster.
+    for p in candidates[:6]:
+        grp = GRP.get(p.pos, p.pos)
+        if grp in groups or RN.departure_loss(team, p, baseline=baseline) > 6.0: continue
+        remaining = [q for q in baseline['players'] if q.pid != p.pid]
+        after = RN.assess(team, remaining)
+        if set(after['uncovered']) - set(baseline['uncovered']): continue
+        before_rows, after_rows = baseline['package_assignments'], after['package_assignments']
+        if len(before_rows) != len(after_rows): continue
+        # Check every package, including nickel/dime and the second TE/FB:
+        # a nominal depth backup is not enough if he cannot fill the actual job.
+        safe = True
+        for old, new in zip(before_rows, after_rows):
+            if old['player'] is None: continue
+            if new['player'] is None or new['player'].pos not in new['sources']:
+                safe = False; break
+            if new['player'].pid != old['player'].pid and float(new['grade'] or 0) < 70:
+                safe = False; break
+        if not safe: continue
+        projected = CA.trade_projection(league, team.abbr, [p.pid], [])
+        if projected.space(team.phase) - held(league, team.abbr) < -.0005: continue
+        chosen.append(p); groups.add(grp)
+        if len(chosen) == 2: break
+    return chosen
+
+
 def surplus_and_needs(league, team, pool, rng, n=3):
     """
     Who a club can spare and where it is thin. Surplus is depth behind a
@@ -386,7 +444,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     """
     import roster_needs as RN
     surplus, needs = [], {}
-    roster_report = RN.assess(team)
+    roster_report = RN.assess(team, [p for p in team.active() if getattr(p, 'out_until', None) is None])
     roster_needs = roster_report['needs']
     league_bar = starter_bar(league)
     depth = team.depth
@@ -405,6 +463,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
         men = sorted(men, key=lambda p: -p.ovr)
         if len(men) >= 3:
             for p in men[2:4]:
+                if _young_core(p): continue
                 if men[0].ovr - p.ovr > 3:
                     if RN.departure_loss(team, p, baseline=roster_report) > 6.0:
                         continue  # he is needed for a job this coach actually runs
@@ -443,7 +502,15 @@ def surplus_and_needs(league, team, pool, rng, n=3):
             if grp not in needs or have < needs[grp]:
                 needs[grp] = have
 
-    surplus.sort(key=lambda a: -a['trade_value'])
+    have = {a['pid'] for a in surplus}
+    for p in seller_veterans(league, team, roster_report):
+        if p.pid in have: continue
+        a = player_asset(league, team, p, pool, rng, viewer=team)
+        if a and a['trade_value'] > 0:
+            a['grp'] = GRP.get(p.pos, p.pos)
+            a['seller_veteran'] = True
+            surplus.append(a); have.add(p.pid)
+    surplus.sort(key=lambda a: (not a.get('seller_veteran', False), -a['trade_value']))
     # A MAN WHO ASKED OUT is shopped like surplus, at his market value: his
     # club is willing where it was not, and buyers see him in the flow
     import morale as MO
@@ -471,7 +538,7 @@ def stars_at(league, team, pool, rng, grp, viewer=None):
     out = []
     men = sorted((p for pos, ps in team.depth.items() if GRP.get(pos, pos) == grp for p in ps
                   if p.out_until is None), key=lambda p: -p.ovr)[:2]
-    wdw = TE.window(team.ctx())
+    wdw = TE.window(context(team))
     import morale as MO
     for p in men:
         wants_out = MO.wants_out(p)
@@ -479,6 +546,7 @@ def stars_at(league, team, pool, rng, grp, viewer=None):
         # club takes a fair offer where it wanted a premium. The price does
         # not move: buyers pay what he is worth, they just get to buy him.
         if not wants_out:
+            if _young_core(p): continue
             if p.pos == 'QB' and wdw in ('contending', 'win_now'):
                 continue                              # the one man not for sale
             if p.ovr >= 95 and p.age < 30 and wdw in ('contending', 'win_now'):
@@ -762,7 +830,6 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
 # THE CALENDAR. Real player trades run roughly 40 to 60 across the
 # offseason and 20 to 25 in season, most of those in the two weeks before
 # the deadline. Nothing after the deadline until the season is over.
-TRADE_DEADLINE_WEEK = 9
 IN_SEASON_ACTIVITY = {w: 0.04 for w in range(1, 7)}
 IN_SEASON_ACTIVITY.update({7: 0.15, 8: 0.35, 9: 0.60})
 
@@ -785,10 +852,9 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
             or player not in seller.active() or not player.contract
             or player.out_until is not None):
         return False
-    offseason = league.phase in ('offseason', 'free_agency')
-    if not offseason and not (league.phase == 'regular'
-                              and int(league.week or 0) <= TRADE_DEADLINE_WEEK):
+    if not trading_open(league):
         return False
+    offseason = league.phase in ('offseason', 'free_agency')
     if CA.pre_roll(league):
         CA.settle_week(league, 18)
     seller.sync_cap()
@@ -807,7 +873,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
     own = player_asset(league, seller, player, pool, rng, viewer=seller)
     if own is None:
         return False
-    ctx_s, gm_s = seller.ctx(), persona(seller.gm)
+    ctx_s, gm_s = context(seller), persona(seller.gm)
     ask = TE.team_price(own, ctx_s, seller.cap_space, gm_s, owns=True)
     bids = []
     for abbr, buyer in sorted(league.teams.items()):
@@ -832,7 +898,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
             CA.require_trade_room(league, seller.abbr, abbr, [player.pid], [])
         except ValueError:
             continue
-        ctx_b, gm_b = buyer.ctx(), persona(buyer.gm)
+        ctx_b, gm_b = context(buyer), persona(buyer.gm)
         # A clear buyer gain and the ordinary market ceiling are required;
         # cap desperation never persuades the buyer to overpay.
         budget = TE.team_price(target, ctx_b, buyer.cap_space, gm_b) - .5
@@ -893,6 +959,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
     deadline week). exclude: clubs that do not trade on their own, which is
     the user's team.
     """
+    if not trading_open(league): return []
     pool = VAL.pool_from_league(league)
     cap_space = {a: t.cap_space for a, t in league.teams.items()}
     made = []
@@ -913,10 +980,8 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
         for a in active:
             ta = league.teams[a]
             sa, _ = sn[a]
-            if not sa:
-                continue
             ga = persona(ta.gm)
-            ctx_a = ta.ctx()
+            ctx_a = context(ta)
             if a not in target_reports: target_reports[a] = RN.assess(ta)
             gain_cache = target_gains.setdefault(a, {})
             for b in teams:
@@ -927,7 +992,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 if not sb:
                     continue
                 gb = persona(tb.gm)
-                ctx_b = tb.ctx()
+                ctx_b = context(tb)
                 # MOST TRADES ARE A PLAYER FOR A PICK, not a swap of needs.
                 # Requiring each club to want exactly what the other spares
                 # produced four matched pairs in the whole league and no deals.
@@ -945,9 +1010,12 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 # deals: the seller's asking price on a star (stars_at) is
                 # what keeps it rare, not a rule.
                 wdw_a = TE.window(ctx_a)
+                selling = ctx_a.get('phase') == 'regular' and wdw_a in ('rebuilding', 'retooling')
+                if selling:
+                    want_a = [x for x in want_a if x.get('age', 30) < 28]
                 chase = (0.35 if wdw_a in ('contending', 'win_now') else 0.10) * (0.5 + ga['aggression'])
                 hole = package_trade_hole(target_reports[a])
-                if hole and rng.random() < chase:
+                if hole and not selling and rng.random() < chase:
                     for x in stars_at(league, tb, pool, rng, hole, viewer=ta):
                         if x['pid'] not in moved:
                             want_a.append(x)
@@ -1004,6 +1072,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 for changed in (a,b):
                     target_reports.pop(changed, None); target_gains.pop(changed, None)
                     street_cache.pop(changed, None)
+                    sn[changed] = surplus_and_needs(league, league.teams[changed], pool, rng)
                 cap_space[a], cap_space[b] = ta.cap_space, tb.cap_space
                 break
 
@@ -1031,22 +1100,24 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
         import inbox as IB
         live = {m['sender'] for m in IB.pending(league, 'trade_offer')}
         su, nu = surplus_and_needs(league, tu, pool, rng)
-        gu, ctx_u = TE.GM_ARCHETYPES['balanced'], tu.ctx()
+        gu, ctx_u = TE.GM_ARCHETYPES['balanced'], context(tu)
         active_now = [a for a in teams if activity >= 1.0 or rng.random() <= activity * 0.6]
         for a in active_now:
             if a in live or not su:
                 continue
             ta = league.teams[a]
             sa, _ = surplus_and_needs(league, ta, pool, rng)
-            ga, ctx_a = persona(ta.gm), ta.ctx()
+            ga, ctx_a = persona(ta.gm), context(ta)
             su_seen = [through_buyer_eyes(x, ta, tu) for x in su]
             import roster_needs as RN
             report = RN.assess(ta)
             candidates = list(su_seen)
             wdw_a = TE.window(ctx_a)
+            selling = ctx_a.get('phase') == 'regular' and wdw_a in ('rebuilding', 'retooling')
+            if selling: candidates = [x for x in candidates if x.get('age', 30) < 28]
             chase = (0.35 if wdw_a in ('contending', 'win_now') else 0.10) * (0.5 + ga['aggression'])
             hole = package_trade_hole(report)
-            if hole and rng.random() < chase:
+            if hole and not selling and rng.random() < chase:
                 candidates.extend(stars_at(league, tu, pool, rng, hole, viewer=ta))
             want = package_trade_targets(ta, candidates, report)
             alternatives = {}

@@ -695,7 +695,7 @@ def rfa_offer_sheets(league, rng):
     return out
 
 
-def fill_out_rosters(league, pool, rng, verbose=False):
+def fill_out_rosters(league, pool, rng, verbose=False, user_team=None):
     """
     After the draft, clubs still short of a roster sign cheap depth.
 
@@ -708,7 +708,10 @@ def fill_out_rosters(league, pool, rng, verbose=False):
     from cutdown import POS_CAP
     cap = CAP.get(league.year, 301.2)
     signed = 0
+    protected = {user_team, getattr(league, 'user_team', None)} - {None}
     for abbr, team in league.teams.items():
+        if abbr in protected:
+            continue  # The user fills their own roster, including cheap depth.
         need = ROSTER_TARGET - len(team.active())
         if need <= 0:
             continue

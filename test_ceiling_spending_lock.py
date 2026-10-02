@@ -90,7 +90,7 @@ class CeilingSpendingLockTests(unittest.TestCase):
         for p in (self.p,cpu): p.xp_spent['_saving_for']='injury_rating'
         self.p.xp_spent['_auto']=True
         with patch.object(XS,'choose_attr',return_value=None):
-            actions=XS.spend_week(self.L,1,self.rng,user_team='GB')
+            actions=XS.spend_week(self.L,3,self.rng,user_team='GB')
         for p in (self.p,cpu):
             self.assertEqual([a[0] for a in actions[p.pid]],['unlock','buy'])
 

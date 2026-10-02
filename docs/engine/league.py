@@ -535,7 +535,8 @@ class Team:
         gm_engine, negotiation_engine and roster_construction were written
         against a plain dict. Rather than rewrite four modules, hand them one.
         """
-        return dict(team=self.abbr, win_pct=self.win_pct,
+        from trade_engine import race_context
+        return dict(**race_context(self), team=self.abbr, win_pct=self.win_pct,
                     prev_win_pct=self.prev_win_pct, contender=self.contender,
                     avg_age=self.avg_age, top_apy=self.top_apy,
                     expiring=self.expiring, depth=self.depth,
@@ -791,6 +792,8 @@ class League:
     def trade(self, a, b, a_sends, b_sends):
         """a_sends / b_sends: lists of pid or DraftPick. Refuses, rather than
         half-executes, if any man is not where the deal says he is."""
+        from trade_calendar import require_open
+        require_open(self)
         for item, src in [(x, a) for x in a_sends] + [(x, b) for x in b_sends]:
             if isinstance(item, DraftPick):
                 if item.owner != src or item.used_on or not any(q is item for q in self.teams[src].picks):

@@ -266,13 +266,17 @@ def scheme_fit_view(league, abbr, p, view):
     except Exception: return 0.0
 
 
-def senior_bowl(league, rng):
+def senior_bowl(league, rng, *, event_year=None):
     """The week before the Championship Game, in Mobile: the seniors who accept the invitation play in front of every
     scouting department. Every room gets a second look at them (their estimates tighten and move), the players
     carry the mark on the board, and the user's assistants say who helped himself and who did not."""
     pool = list(getattr(league, 'draft_pool', None) or getattr(league, 'next_class', None) or [])   # in season the class waits in next_class
     if not pool: return []
-    if any(p.xp_spent.get('_senior_bowl') == league.year for p in pool):
+    event_year = league.year + 1 if event_year is None else event_year
+    if any(x.get('year') == event_year and x.get('event') == 'Senior Bowl'
+           and x.get('kind') == 'event' for x in (getattr(league, 'spring_news', None) or [])):
+        return []
+    if any(p.xp_spent.get('_senior_bowl') in (event_year - 1, event_year) for p in pool):
         return []
     cons = getattr(league, 'consensus', None) or {}
     seniors = [p for p in pool if p.age >= 22.5 and p.pos not in ('K', 'P', 'LS')]
@@ -295,8 +299,8 @@ def senior_bowl(league, rng):
     except Exception: pass
     # Played before the year roll; results belong to the following spring.
     import spring as SP
-    SP._stock_moves(league, 'Senior Bowl', year=league.year + 1)
-    SP._log(league, 'event', year=league.year + 1, event='Senior Bowl', participants=len(invited))
+    SP._stock_moves(league, 'Senior Bowl', year=event_year)
+    SP._log(league, 'event', year=event_year, event='Senior Bowl', participants=len(invited))
     moves = []
     if user:
         after = getattr(league, 'scouting', {}).get(user, {}) or {}

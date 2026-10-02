@@ -552,6 +552,8 @@ def gameday(session, league, abbr, gd=None):
     """This week's game. Before Sunday: the preview (the matchup, the plan, the Sim button). After: the
     scoreboard and the user's game in full. A past week's, when gd is given."""
     r = rail(session, league, abbr)
+    if gd is None and league.phase not in ('regular', 'playoffs', 'preseason'):
+        return dict(rail=r, empty=True, line='No game scheduled. The season has ended.')
     if gd is None and session.stop[0] in ('cutdown', 'wire'):
         return dict(rail=r, empty=True, line='Week 1 opens after Post-Cutdown Waivers.')
     if gd is None:

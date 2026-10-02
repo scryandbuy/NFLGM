@@ -1144,6 +1144,7 @@ class Session:
 
     def step_spring(self):
         L, rng = self.L, self.rng
+        if SP.completed(L): return
         if getattr(L, 'next_class', None):
             L.draft_pool = L.next_class; L.next_class = []
         else:
@@ -1651,12 +1652,15 @@ class Session:
 
     # ---- the live game
     def live_state(self):
+        if self.L.phase not in ('regular', 'playoffs', 'preseason'): return None
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is None: return None
         return dict(open=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], adjustment_period=lv.get('adjustment_period'), score=lv['score'], home=lv['home'], away=lv['away'])
 
     def live_step(self, mode='play'):
         """Move the live game: 'play', 'drive', 'half', 'finish', or 'resume' from halftime. Returns Game Day."""
+        if self.L.phase not in ('regular', 'playoffs', 'preseason'):
+            return self.gameday_view()
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is None: return self.gameday_view()
         was_done = lv['done']
@@ -1666,11 +1670,14 @@ class Session:
         return self.gameday_view()
 
     def half_take(self, i, on=True):
+        if self.L.phase not in ('regular', 'playoffs', 'preseason'):
+            return dict(ok=False, why='No game is being played.')
         ok = self.runner.half_take(int(i), bool(on)) if self.runner is not None else False
         return self.gameday_view() if ok else dict(ok=False, why='no break recommendation to take')
 
     def _finish_live(self):
         """A save or an advance with a game still open plays it out first."""
+        if self.L.phase not in ('regular', 'playoffs', 'preseason'): return False
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is None or lv['done']: return False
         while not lv['done']:
@@ -1680,6 +1687,8 @@ class Session:
 
     def gameday_view(self, week=None, year=None):
         import views
+        if week is None and self.L.phase not in ('regular', 'playoffs', 'preseason'):
+            return views.gameday(self, self.L, self.user_team)
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if week is None and lv is not None and not lv['done']:
             import gameday as GD

@@ -5,6 +5,7 @@ shortage is not a vacant starting job, and an IR designation is not a departure.
 Scores are on the draft board's existing 0..12 need scale.
 """
 from collections import defaultdict
+from math import ceil
 import gm_engine as GM
 import roster_needs as RN
 from cap_engine import CAP
@@ -38,6 +39,40 @@ class _Roster:
             groups[p.pos].append(p)
         return {pos: sorted(men, key=lambda p: -RN._grade(p, self))
                 for pos, men in groups.items()}
+
+
+def _reserve_grade(player, team, belief):
+    """Conservative, visible growth credit, shared by depth and succession."""
+    grade = RN._grade(player, team)
+    pr = getattr(player, 'potential_range', None)
+    if getattr(player, 'age', 25) <= 26 and pr:
+        grade += min(6.0, max(0.0, sum(pr) / 2 - player.ovr)) * (.5 + .5 * belief)
+    from development_value import player_credit
+    return grade + 2.0 * player_credit(player)
+
+
+def redundancy_penalty(plan, prospect, grade=None, gain=0.0):
+    """Soft draft-slot cost for another player with no useful roster opening.
+
+    Applies in every round. Call with the same scouting grade and marginal
+    package gain used by the board; never inspect the prospect's true ceiling.
+    Strong upgrades can overcome a crowded room, and expiring/weak depth leaves
+    space for successors. Existing picks enter the next assessment as retained
+    players, so their value does not disappear at the end of round three.
+    """
+    position = plan['positions'][prospect.pos]
+    room = position.get('retention', {})
+    excess = max(0.0, room.get('occupied', 0.0) + 1.0 -
+                 room.get('capacity', 1.0) - min(1.0, position['future'] / 12.0))
+    if excess <= 0:
+        return 0.0
+    # An identifiable role improvement is a replacement plan. Merely being
+    # the best remaining player at this position is not one.
+    relief = min(1.0, max(0.0, float(gain)) / 4.0)
+    if grade is not None:
+        relief = max(relief, min(1.0, max(0.0, float(grade) -
+                                         room.get('best_grade', float(grade)) - 2.0) / 6.0))
+    return round(min(140.0, 12.0 * excess + 14.0 * excess * excess) * (1.0 - relief), 4)
 
 
 def assess(league, abbr, level=None, players=None):
@@ -108,10 +143,7 @@ def assess(league, abbr, level=None, players=None):
             c = getattr(p, 'contract', None)
             if c is not None and c.years < 2:
                 continue
-            grade = RN._grade(p, proxy)
-            pr = getattr(p, 'potential_range', None)
-            if getattr(p, 'age', 25) <= 26 and pr:
-                grade += min(6.0, max(0.0, sum(pr) / 2 - p.ovr)) * (.5 + .5 * belief)
+            grade = _reserve_grade(p, proxy, belief)
             successors.append(max(0.0, min(1.0, (grade - (bar - 8)) / 8)))
         cover = sum(sorted(successors, reverse=True)[:max(1, exposed)]) / max(1, exposed)
         succession *= 1.0 - min(1.0, cover)
@@ -123,16 +155,37 @@ def assess(league, abbr, level=None, players=None):
                        for p in incumbents if getattr(p, 'contract', None)
                        and p.contract.years > 1), default=0.0)
         contract = min(6.0, 60.0 * savings / max(limit, 1.0) * pressure)
+        # A credible controlled replacement also resolves contract exposure;
+        # otherwise an expensive starter keeps requesting another rookie even
+        # after the club has already drafted his successor.
+        contract *= 1.0 - min(1.0, cover)
         future = max(succession, contract)
         exposure = min(1.0, report['package_demand'].get(pos, 0.0) / max(1, len(assignments)))
         if pos not in ('K', 'P', 'LS'):
             future *= exposure
         need = max(starter, .6 * depth, .75 * future)
+        demand = report['package_demand'].get(pos, 0.0)
+        capacity = max(floors[pos], len(assignments),
+                       ceil(demand - 1e-6) + 1 if demand >= .25 else 0)
+        if pos in ('FB', 'K', 'P', 'LS'):
+            capacity = max(floors[pos], len(assignments), ceil(demand - 1e-6))
+        occupied = 0.0
+        reserve_grades = []
+        for p in by_pos.get(pos, ()):
+            grade = _reserve_grade(p, proxy, belief)
+            reserve_grades.append(grade)
+            quality = max(0.0, min(1.0, (grade - (bar - 12.0)) / 8.0))
+            years = getattr(getattr(p, 'contract', None), 'years', 4)
+            retained = .35 if years <= 1 else 1.0
+            occupied += quality * retained
+        retention = dict(capacity=capacity, occupied=round(occupied, 4),
+                         best_grade=max(reserve_grades, default=0.0))
         positions[pos] = dict(starter=round(starter, 4), depth=round(depth, 4),
                               succession=round(succession, 4), contract=round(contract, 4),
                               future=round(future, 4), need=round(min(12.0, need), 4),
                               count=count, starters=len(assignments),
-                              expiring=sum(yrs <= 1 for _, yrs, _ in control))
+                              expiring=sum(yrs <= 1 for _, yrs, _ in control),
+                              retention=retention)
     return dict(positions=positions, players=men, assignments=report['assignments'],
                 roster_score=report['score'], committed_next=committed,
                 cap_pressure=pressure, package_demand=report['package_demand'],

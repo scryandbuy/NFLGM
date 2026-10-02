@@ -197,6 +197,10 @@ def counter(league, msg_id, user_team):
     m = next((m for m in _box(league) if m['id'] == msg_id), None)
     if not m or m.get('kind') != 'trade_offer' or m.get('status') not in ('unread', 'open', 'countered'):
         raise ValueError('no open offer to counter')
+    from trade_calendar import offer_expired
+    if offer_expired(league, m):
+        m['status'] = 'expired'
+        raise ValueError('This trade offer has expired.')
     pl = m['payload']
     if pl.get('user_team', user_team) != user_team or pl['buyer'] == user_team:
         raise ValueError('this offer belongs to another team')
@@ -258,6 +262,12 @@ def reconcile(league):
     team = getattr(league, 'teams', {}).get(user)
     year, week = getattr(league, 'year', None), getattr(league, 'week', None)
     for m in _box(league):
+        from trade_calendar import offer_expired
+        if (m.get('kind') == 'trade_offer'
+                and m.get('status', 'unread') in ('unread', 'open', 'countered')
+                and offer_expired(league, m)):
+            m['status'] = 'expired'
+            closed += 1
         if m.get('status', 'unread') not in ('unread', 'open'):
             continue
         pl = m.get('payload') or {}

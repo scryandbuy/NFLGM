@@ -75,9 +75,8 @@ def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
     rng = _rng(league, 3); pool = VAL.pool_from_league(league)
     my_surplus, my_needs = TR.surplus_and_needs(league, me, pool, rng)
     their_surplus, their_needs = TR.surplus_and_needs(league, them, pool, rng)
-    deadline = league.week is not None and 1 <= int(league.week) <= TR.TRADE_DEADLINE_WEEK
-    offseason = league.phase in ('offseason', 'free_agency', 'preseason') or not league.week
-    can_trade = offseason or deadline
+    from trade_calendar import trading_open
+    can_trade = trading_open(league)
     pkg = _evaluate(league, abbr, other, list(a_sends), list(b_sends)) if (a_sends or b_sends) else None
     draft_live = None
     D = getattr(session, 'draft', None)
