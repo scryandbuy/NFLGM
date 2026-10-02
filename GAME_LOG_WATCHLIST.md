@@ -309,3 +309,10 @@ The three findings in the preceding investigation are now implemented.
 Verification: 86 focused tests passed across new regressions, clock behavior, endgame intent, penalty enforcement/pace and prior game-log fixes. Four fresh-roster games completed with 538 penalty checks; every check supplied separate unit discipline/staff inputs, with no runtime errors. Results are in `week3_engine_smoke.json`. These games are runtime verification, not proof of long-run calibration. No global penalty/scoring/rushing rate adjustment, no change to coach aggression coefficients, and no user-save replay. Browser engine rebuilt for integration.
 
 Continue monitoring first-half play selection after a stalled hurry drive, penalties by offending team/foul type, and goal-line choices by score/timeouts. Previous low-sack and negative-run items remain observational watches.
+
+## Week 4 GB at NY: clock intent and copied labels
+
+- Fixed fourth-and-four at own24, down26, 3:01: all1000 seeded trials now retain possession rather than the prior467 punts. The late possession override shares the comeback-viability check, preserves useful kicks, and does not force comeback behavior in decided blowouts.
+- Added gradual second-half catch-up pace based on remaining game time and required scores. It applies to normal in-bounds play intervals and penalty ready-for-play runoff, preserves timeout/incomplete timing, and has no discontinuity at the Q3/Q4 boundary. Full hurry remains separate from this gradual acceleration.
+- Copied play-by-play now applies the existing NYG->NY, NYJ->NJ, LAC->CA presentation formatter to the complete exported text. Saved canonical team IDs are unchanged.
+- Verification:37 clock/fourth-down checks,14 save/resume/log checks, and a Node execution of the actual copy callback passed. Browser engine rebuilt. Four interceptions and two11-yard sacks remain observational watches; no broad turnover or sack-loss tuning from this game.

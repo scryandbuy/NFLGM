@@ -766,7 +766,7 @@ function renderGameDay(v) {
     g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
       lines.push(`${d.quarter >= 5 ? 'OT' : 'Q' + d.quarter} · ${d.head || `Drive ${d.n} · ${showAbbr(d.off)}`} · ${d.score}`); for (const p of plays) if (p.text) lines.push(`${p.head ? p.head + ' ' : ''}${p.text}`); });
     if (!live && shown === g.drives.length && shownPlays == null) lines.push(`Final${g.ot ? ' (OT)' : ''}: ${showAbbr(g.home.abbr)} ${g.hs}, ${showAbbr(g.away.abbr)} ${g.as_}`);
-    copyText(lines.join('\n'), copyPbp); } }, 'Copy');
+    copyText(showTeamText(lines.join('\n')), copyPbp); } }, 'Copy');
   tick.append(el('h2', {}, 'Play by Play', el('small', {}, ''), copyPbp), ctrl);
   if (live && live.halftime_open) {
     const overtime = live.adjustment_period === 'overtime';

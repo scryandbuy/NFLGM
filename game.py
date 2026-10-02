@@ -35,7 +35,7 @@ QUARTER = 900
 HALF = 1800
 GAME = 3600
 
-def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=0.5, urgent=False):
+def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=0.5, urgent=False, catchup=0.0):
     s = SEC.get(result, 25.0)
     if clock_stopped: s = min(s, 8.0)
     if not clock_stopped and not hurry and not timeout and result in ('complete', 'run', 'scramble', 'sack'):
@@ -44,6 +44,9 @@ def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=
         # AFTER this snap, bounded by the 40-second play clock plus live action.
         s = 6.0 + min(40.0, max(0.0, s - 6.0 + 2.0) * (1.0 - 0.6 * (float(np.clip(tempo, 0, 1)) - 0.5)))
     if hurry: s *= 0.65     # a two-minute drill runs about 17 seconds a snap against 25 to 27 at the normal pace
+    if catchup and result in ('complete', 'run', 'scramble', 'sack'):
+        target = 6.0 + 8.0 * (1.0 - .5 * (float(np.clip(tempo, 0, 1)) - .5))
+        s -= float(np.clip(catchup, 0, 1)) * max(0.0, s - target)
     if urgent and result in ('complete', 'run', 'scramble', 'sack'):
         # Preserve live action, but spend only a short reset between snaps
         # when another possession (or several) is still needed to catch up.
@@ -93,10 +96,20 @@ def comeback_clock_budget(deficit):
 
 
 def multi_score_urgency(seconds, score_diff, quarter, chasing=False):
-    if quarter != 4 or score_diff >= -8 or seconds <= 0:
+    if quarter not in (3, 4) or score_diff >= -8 or seconds <= 0:
         return False
     return ((chasing or comeback_viable(seconds, -score_diff))
             and seconds <= comeback_clock_budget(-score_diff))
+
+
+def comeback_pace(seconds, score_diff, quarter):
+    """Gradual second-half acceleration; seconds is remaining game time."""
+    if quarter not in (3, 4) or score_diff >= -8 or not comeback_viable(seconds, -score_diff):
+        return 0.0
+    scores = int(np.ceil(-score_diff / 8.0))
+    start = min(HALF, 450.0 * scores)
+    full = comeback_clock_budget(-score_diff)
+    return float(np.clip((start - seconds) / max(1.0, start - full), 0.0, 1.0))
 
 
 def hurry_for_snap(seconds, score_diff, plan=None, call=None, quarter=None, chasing=False):
@@ -234,6 +247,11 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # does a field goal matter? Down 14 it leaves two scores either way; down 10 it makes it one
     need_after_fg = int(np.ceil(-(score_diff + 3) / 8.0)) if score_diff + 3 < 0 else 0
     fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now and -score_diff not in (7, 8) and -(score_diff + 3) not in (7, 8))
+    # Keep possession for a still-viable late comeback. Useful tying/winning
+    # or score-reducing kicks remain available; decided games returned above.
+    if (chasing and secs_left <= 90.0 * need_now + 60.0
+            and not (in_range and fg_matters)):
+        return 'go'
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_table = float(np.clip(GO_RATE[band][zone] * (0.55 + 0.60 * aggression), 0.0, 1.0))     # the observed rates already carry an average coach; the personality term sits around them
     punt_value = (PST.estimate(yardline_100, punter, returner, rate_fn, PUNT,
@@ -1070,7 +1088,8 @@ def _penalty_ready_clock(dr, pen, half_end=None, *, before_snap=False,
         return
     start = dr.clock
     ready = min(dr.play_clock, max(0.0, play_seconds(
-        result or 'run', hurry=hurry, tempo=tempo) - 6.0))
+        result or 'run', hurry=hurry, tempo=tempo,
+        catchup=comeback_pace(secs, dr.score_diff, dr.quarter)) - 6.0))
     # A warning interrupts ready-for-play runoff, but never erases live action.
     if not getattr(dr, '_two_min', False) and secs > 120:
         ready = min(ready, secs - 120.0)
@@ -2616,7 +2635,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         clock_before = dr.clock
         tempo = off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5
         elapsed = play_seconds(t, hurry=hurry, timeout=used, tempo=tempo,
-                               urgent=multi_score_urgency(secs_in_half, dr.score_diff, dr.quarter, chasing)) + live_seconds - 6.0
+                               urgent=multi_score_urgency(secs_in_half, dr.score_diff, dr.quarter, chasing),
+                               catchup=comeback_pace(secs_in_half, dr.score_diff, dr.quarter)) + live_seconds - 6.0
         # A deliberate bleed may wait for a later kick, but it cannot silently
         # consume that kick while holding a timeout. Live action still costs
         # its own live time; no time is restored when the play ends the half.

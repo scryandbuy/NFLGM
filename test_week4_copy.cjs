@@ -1,0 +1,20 @@
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const src = fs.readFileSync('docs/app.js', 'utf8');
+const helpers = src.slice(src.indexOf('const DISPLAY_ABBR'), src.indexOf('\n', src.indexOf('const showTeamText')));
+const start = src.indexOf('    const lines = [`${showAbbr(g.away.abbr)} at');
+const end = src.indexOf("}, 'Copy');", start);
+assert(start >= 0 && end > start);
+const g = {away:{abbr:'GB'},home:{abbr:'NYG'},hs:26,as_:0,drives:[{quarter:1,head:'Drive 1 · NYG · NYG 20',score:'0–0',plays:[{head:'1st & 10 · NYG 20',text:'Pass intercepted by NYJ; LAC recovers.'}]}]};
+const before=JSON.stringify(g);
+let output;
+vm.runInNewContext(helpers+'\n'+src.slice(start,end).replace(/\}\s*$/, ''), {g,v:{week:4},shown:1,shownPlays:null,live:false,weekName:w=>'Week '+w,copyPbp:{},copyText:s=>output=s});
+assert(output.includes('GB at NY'));
+assert(output.includes('Drive 1 · NY · NY 20'));
+assert(output.includes('by NJ; CA recovers.'));
+assert(output.includes('Final: NY 26, GB 0'));
+assert(!/\b(NYG|NYJ|LAC)\b/.test(output));
+assert.equal(JSON.stringify(g),before);
+console.log('Copied log labels normalized; saved data unchanged.');
+
