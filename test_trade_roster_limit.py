@@ -1,5 +1,6 @@
 """An in-season player trade must leave both clubs with playable active rosters."""
 import unittest
+from unittest.mock import patch
 
 from cap_engine import Contract
 import gm_engine as GE
@@ -68,6 +69,22 @@ class TradeRosterLimitTests(unittest.TestCase):
         league.set_phase('offseason')
         league.trade('GB', 'MIN', [pick], [star.pid])
         self.assertEqual(len(league.teams['GB'].active()), 54)
+
+    def test_cpu_tries_another_cut_when_cutdown_selects_protected_player(self):
+        from game_availability import settle_roster
+        league, star, pick = fixture()
+        league.trade('GB', 'MIN', [pick], [star.pid])
+        team = league.teams['GB']
+        protected = league.player('GB-WR-0')
+        protected.contract = Contract(2, [1, 1], signing_bonus=5)
+        team.sync_cap()
+        wrong_choice = {p.pid for p in team.active() if p is not protected}
+        with patch.object(RN, 'select_cutdown', return_value=wrong_choice):
+            settle_roster(league, team, 2)
+        self.assertEqual(len(team.active()), 53)
+        self.assertIn(protected, team.active())
+        self.assertIn(star, team.active())
+        self.assertGreaterEqual(team.cap_space, 0)
 
 
 if __name__ == '__main__':

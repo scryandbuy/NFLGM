@@ -500,7 +500,10 @@ class Session:
             return dict(done='Blocked', next=self.next_label(), why=blocks[0]['subject'])
         from game_availability import FieldabilityError
         try:
-            if self.stop[0] in ('week', 'playoffs', 'cutdown', 'wire'):
+            # Camp and waiver stops have their own complete cutdown/funding
+            # pass.  The game-day overflow resolver assumes a settled roster
+            # and must not run on a 70-man camp squad.
+            if self.stop[0] in ('week', 'playoffs'):
                 from game_availability import settle_roster
                 for team in self.L.teams.values():
                     settle_roster(self.L, team, self.L.week or 0)

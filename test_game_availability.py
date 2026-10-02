@@ -1,6 +1,7 @@
 """Emergency availability, legal funding, persistence, and calendar retry gates."""
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import cutdown
 import game
@@ -194,10 +195,11 @@ class AvailabilityTests(unittest.TestCase):
     def test_incomplete_week_never_settles_and_session_surfaces_reason(self):
         r = self.runner(); r._after_games(1, [])
         self.assertIsNone(getattr(r, '_after_done', None))
-        s = Session.__new__(Session); s.runner = r
+        s = Session.__new__(Session); s.runner = r; s.stop = ('offseason', 0)
         s.blocking = lambda: []; s.next_label = lambda: 'Play Week 1'
         s._advance = lambda: GA.require_scores(r.L, 1)
-        result = s.advance()
+        with patch('session.PA.sync_session'):
+            result = s.advance()
         self.assertEqual(result['done'], 'Blocked')
         self.assertIn('unplayed games', result['why'])
 

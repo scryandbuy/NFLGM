@@ -1,6 +1,7 @@
 """Last pre-kickoff availability gate, separate from long-term roster planning."""
 import copy
 from collections import Counter
+from itertools import combinations
 
 import defense_roles as DR
 import offense_roles as OR
@@ -160,13 +161,42 @@ def settle_roster(league, team, week):
     if len(team.active()) <= 53:
         return
     active = team.active()
+    extra = len(active) - 53
+    baseline = RN.assess(team)
     kept = RN.select_cutdown(team, CD.rows_for(team), 53)
-    cuts = [p for p in active if p.pid not in kept]
-    trial = trade_projection(league, team.abbr, [p.pid for p in cuts], [])
-    if (len(kept) > 53 or not cuts
-            or any(PS.locked(p, week) or PS.protected(team, p, league) for p in cuts)
-            or trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005
-            or RN.lineup_strength(team, [p for p in active if p.pid in kept])[0]):
+    preferred = [p for p in active if p.pid not in kept]
+    recent = PS._recent_additions(league, team)
+
+    def legal(cuts):
+        if len(cuts) != extra or any(PS.locked(p, week) or PS.protected(team, p, league) for p in cuts):
+            return False
+        removed = {p.pid for p in cuts}
+        remaining = [p for p in active if p.pid not in removed]
+        trial = trade_projection(league, team.abbr, list(removed), [])
+        if trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005:
+            return False
+        if RN.lineup_strength(team, remaining)[0]:
+            return False
+        return not (Counter(RN.assess(team, remaining)['uncovered'])
+                    - Counter(baseline['uncovered']))
+
+    # The ordinary cutdown can select a protected investment. In a settled
+    # season roster, try a legal surplus alternative before blocking the week.
+    cuts = preferred if not any(p.pid in recent for p in preferred) and legal(preferred) else None
+    if cuts is None:
+        options = [p for p in active if not PS.locked(p, week) and not PS.protected(team, p, league)]
+        options.sort(key=lambda p: (RN.departure_loss(team, p, baseline)
+                                    + RN.retention_value(team, p), p.pid))
+        for pool in ([p for p in options if p.pid not in recent], options):
+            if len(pool) < extra:
+                continue
+            for choice in combinations(pool, extra):
+                if legal(choice):
+                    cuts = choice
+                    break
+            if cuts is not None:
+                break
+    if cuts is None:
         raise FieldabilityError(f'{team.abbr}: cannot clear roster overflow within cap and roster rules.')
     for p in cuts:
         league.release(p.pid)

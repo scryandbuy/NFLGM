@@ -2,12 +2,14 @@
 import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
+import numpy as np
 from cap_engine import Contract
 from test_trade_roster_limit import fixture
 import extensions as E
 import practice_squad as PS
 import trade_engine as TE
 import game_availability as GA
+import session as SS
 from league import League, Player
 
 class FreedomTests(unittest.TestCase):
@@ -101,6 +103,15 @@ class FreedomTests(unittest.TestCase):
     def test_game_gate_blocks_user_overflow_before_roster_build(self):
         L,star,pick=fixture(); L.user_team='GB'; L.trade('GB','MIN',[pick],[star.pid])
         with self.assertRaises(GA.FieldabilityError): GA.ensure(L,L.teams['GB'],None,2)
+
+    def test_camp_cutdown_runs_before_game_day_overflow_gate(self):
+        L,_,_=fixture(); L.user_team='GB'
+        s=SS.Session(L,np.random.default_rng(12),'GB')
+        with patch.object(GA,'settle_roster',side_effect=AssertionError('game-day gate ran during camp')):
+            for stop in (('cutdown',),('wire',)):
+                s.stop=stop
+                with patch.object(s,'_advance',return_value={'done':'Advanced'}):
+                    self.assertEqual(s.advance()['done'],'Advanced')
 
     def test_cpu_cleanup_failure_does_not_partially_cut(self):
         L,star,pick=fixture(); L.trade('GB','MIN',[pick],[star.pid])
