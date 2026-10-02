@@ -22,7 +22,16 @@ def _trait(team, name, default=.5):
 
 
 def _cap(league, team, year):
-    return float(CAP.get(year, team.cap.cap * 1.055 ** (year - league.year)))
+    # Projected entries in the compatibility CAP table can belong to another
+    # loaded franchise. Current books and this league's history are authority.
+    if year == league.year:
+        return float(team.cap.cap)
+    history = getattr(league, 'cap_history', None) or {}
+    if year in history:
+        return float(history[year])
+    if year <= 2026 and year in CAP:
+        return float(CAP[year])
+    return float(team.cap.cap * 1.055 ** (year - league.year))
 
 
 def _charge(contract, index):

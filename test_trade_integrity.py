@@ -176,7 +176,7 @@ class TradeIntegrityTests(unittest.TestCase):
         incoming=next(p for p in b.picks if p.year==2026 and p.round==2)
         outgoing.selection=43;incoming.selection=36
         require_trade_room(L,a.abbr,b.abbr,[outgoing],[incoming],{})
-        with patch.dict('cap_engine.CAP',{2027:100.}):
+        with patch.dict(L.cap_history,{2027:100.}):
             self.assertFalse(TR._financial_trade(L,a,b,[outgoing],[incoming]))
 
     def test_gm_willingness_still_allows_bounded_marginal_disagreement(self):

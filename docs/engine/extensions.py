@@ -399,7 +399,8 @@ def _pursue_retention(league, team, p, rng, pool=None, scale=None):
     import retention_plan as RP
     plan = RP.assess(league,team,p,pool=pool,scale=scale)
     RP.record(league,plan)
-    if plan['decision']!='retain' or not plan['affordable'] or _ai_refusal(league,p):
+    if (plan['decision']!='retain' or not plan['affordable']
+            or plan.get('veteran_viable') is False or _ai_refusal(league,p)):
         return dict(result='refused',why=', '.join(plan['reasons']))
     tm = terms(league,p,rng,pool=pool)
     if tm is None: return dict(result='refused',why='No market read')
@@ -407,7 +408,8 @@ def _pursue_retention(league, team, p, rng, pool=None, scale=None):
     offer = round(min(tm['offer']*(1.+.12*want),tm['ask']),2)
     # Actual player asks/terms retain negotiation uncertainty; the plan is a
     # forecast, never authority to force acceptance or bypass current finances.
-    res = negotiate_ai(league,p,offer,tm['years'],rng,pool=pool)
+    years = min(tm['years'],plan.get('max_new_years',tm['years']))
+    res = negotiate_ai(league,p,offer,years,rng,pool=pool)
     c=p.contract
     outcome=dict(plan,contract_years=c.years if c else 0,contract_signed=c.signed if c else None,
                  extension_result=res['result'],extension_reason=res.get('why',''))
