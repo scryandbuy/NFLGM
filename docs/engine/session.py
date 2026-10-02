@@ -67,8 +67,6 @@ class Session:
         s = cls(L, rng, team)
         s.stop = ('cutdown',)
         for t in L.teams.values(): t.phase = 'season'
-        try: GW.post_report(L, 1)
-        except Exception: pass
         PA.sync_session(s)
         return s
 
@@ -92,6 +90,14 @@ class Session:
         if (s.stop[0] in ('cutdown', 'wire') or
                 (s.stop[0] == 'offseason' and s.OFFSEASON[s.stop[1]][1] == 'step_cutdown')):
             for t in L.teams.values(): t.phase = 'season'
+            # Older builds posted this before cutdown/waivers had finished.
+            # Replace it with a fresh roster-aware report upon entering Week 1.
+            L.inbox = [m for m in getattr(L, 'inbox', [])
+                       if not (m.get('kind') == 'game_plan' and m.get('year') == L.year
+                               and (m.get('payload') or {}).get('link') == 'gameplan:1')]
+            reports = getattr(L, 'game_plan_reports', None) or {}
+            reports.pop(1, None)
+            reports.pop('1', None)
         s.gameday = d.get('_gameday'); s.gamedays = d.get('_gamedays') or {}; s.played = bool(d.get('_played', False))
         if d.get('_runner_state'):
             s.runner = SN.SeasonRunner(s.L, s.rng)
@@ -365,7 +371,7 @@ class Session:
         if k == 'wire':
             import waivers as WV
             n = sum(1 for e in WV.pending(self.L) if e.get('ahead', None) is None and e.get('from_team') != self.user_team and self.L.player(e['pid']) is not None and self.L.player(e['pid']).team is None)
-            return dict(title='Sim to Reg. Season', sub=f"{n} on the wire reach your priority · claim any first", played=False)
+            return dict(title='Post-Cutdown Waivers', sub=f"{n} reach your priority · advance to Week 1 when ready", played=False)
         if k == 'week':
             wk = self.stop[1]; opp = self._opponent(wk)
             if getattr(self, 'played', False):
@@ -523,7 +529,10 @@ class Session:
                     return dict(done='Blocked', next=self.next_label(), why=self._cpu_roster_block)
                 return dict(done='Cap compliance cuts are on waivers', next=self.next_label())
             self.stop = ('week', 1); self.played = False
-            return dict(done='Camp', next=self.next_label())
+            try: GW.post_report(self.L, 1)
+            except Exception as e:
+                import sys; print('Week 1 report failed:', e, file=sys.stderr)
+            return dict(done='Post-Cutdown Waivers', next=self.next_label())
         if k == 'week':
             wk = self.stop[1]
             if self.runner is None:
@@ -658,8 +667,6 @@ class Session:
             # Every year's cutdown gets the same claim window as initial camp.
             # Clearing that wire fills squads and enters the regular phase.
             self.stop = ('wire',); self.runner = None; self.played = False
-            try: GW.post_report(self.L, 1)
-            except Exception: pass
         return dict(done=self.OFFSEASON[i][0], next=self.next_label())
 
     def _announce_honors(self):

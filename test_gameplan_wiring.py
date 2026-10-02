@@ -10,14 +10,14 @@ class GameplanWiringTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls): cls.session=Session.new('GB',seed=23)
  def setUp(self):
-  self.s=self.session; self.s.stop=('cutdown',); self.s.played=False; self.s.runner=None
+  self.s=self.session; self.s.stop=('week',1); self.s.played=False; self.s.runner=None
   self.s.L.user_week_plan=None
  def test_save_reload(self):
   self.s.plan_act('set_lean',key='pass_bias',value=.08)
   self.s.plan_take_all()
   saved=Session.load(self.s.save())
   self.assertEqual(json.loads(json.dumps(self.s.L.user_week_plan)),saved.L.user_week_plan)
- def test_camp_accept_all_and_undo_manual(self):
+ def test_week_one_accept_all_and_undo_manual(self):
   v=self.s.plan_view('this_week'); self.assertTrue(v['suggestions'])
   self.assertTrue(self.s.plan_take_all()['ok'])
   target=v['their_wrs'][1]['pid']; self.s.plan_act('set_decision',key='bracket',value=target)

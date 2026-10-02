@@ -14,7 +14,7 @@ class GameplanLockTests(unittest.TestCase):
 
     def setUp(self):
         self.s = self.session
-        self.s.stop = ('cutdown',)
+        self.s.stop = ('week', 1)
         self.s.played = False
         self.s.runner = None
         self.s.L.user_week_plan = None

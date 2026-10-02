@@ -124,7 +124,8 @@ def rail(session, league, abbr):
 def _clock(league, session):
     k = session.stop[0]
     if k == 'week': return dict(line=f"Week {session.stop[1]}", sub=f"{league.year}")
-    if k in ('cutdown', 'wire'): return dict(line='Camp', sub=f"{league.year} · cut to 53")
+    if k == 'cutdown': return dict(line='Camp', sub=f"{league.year} · cut to 53")
+    if k == 'wire': return dict(line='Post-Cutdown Waivers', sub=f"{league.year} · before Week 1")
     if k == 'playoffs': return dict(line='Playoffs', sub=f"{league.year}")
     return dict(line='Offseason', sub=f"{league.year}")
 
@@ -169,7 +170,7 @@ def portal(session, league, abbr):
 
 
 def _matchup(session, league, abbr):
-    if session.stop[0] not in ('week', 'cutdown', 'wire', 'playoffs'):
+    if session.stop[0] not in ('week', 'playoffs'):
         return None
     wk = (19 + int(session.stop[1]) if session.stop[0] == 'playoffs' else session.stop[1] if session.stop[0] == 'week' else 1); opp = session._opponent(wk)
     if opp is None:
@@ -553,8 +554,10 @@ def gameday(session, league, abbr, gd=None):
     r = rail(session, league, abbr)
     if gd is None and league.phase not in ('regular', 'playoffs', 'preseason'):
         return dict(rail=r, empty=True, line='No game scheduled. The season has ended.')
+    if gd is None and session.stop[0] in ('cutdown', 'wire'):
+        return dict(rail=r, empty=True, line='Week 1 opens after Post-Cutdown Waivers.')
     if gd is None:
-        in_week = session.stop[0] in ('week', 'cutdown', 'wire') or (session.stop[0] == 'playoffs' and int(session.stop[1]) < 4)
+        in_week = session.stop[0] == 'week' or (session.stop[0] == 'playoffs' and int(session.stop[1]) < 4)
         if in_week and not getattr(session, 'played', False):
             m = _matchup(session, league, abbr)
             wk = (19 + int(session.stop[1]) if session.stop[0] == 'playoffs' else session.stop[1] if session.stop[0] == 'week' else 1)

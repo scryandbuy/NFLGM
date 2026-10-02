@@ -59,7 +59,6 @@ def _base_plan(session, league, abbr):
 
 def _week(session, league):
     if session.stop[0] == 'week': return session.stop[1]
-    if session.stop[0] in ('cutdown', 'wire'): return 1
     if session.stop[0] == 'playoffs' and len(session.stop) > 1 and 0 <= session.stop[1] < 4:
         return 19 + session.stop[1]
     return None
@@ -121,7 +120,9 @@ def this_week(session, league, abbr):
     import gameplan_week as GW
     wk = _week(session, league)
     r = rail(session, league, abbr)
-    if wk is None: return dict(rail=r, off=True, note='The plan is set in season, the week before a game.')
+    if wk is None:
+        return dict(rail=r, off=True, note=('Week 1 planning opens after Post-Cutdown Waivers.'
+                    if session.stop[0] in ('cutdown', 'wire') else 'The plan is set in season, the week before a game.'))
     opp = session._opponent(wk)
     if opp is None: return dict(rail=r, off=True, bye=True, note=f"{__import__('views').transaction_period(dict(week=wk))} is your bye.")
     opp_abbr, away = opp
@@ -321,7 +322,9 @@ def act_reset(session, league, abbr):
 def report(session, league, abbr):
     import gameplan_week as GW
     wk = _week(session, league); r = rail(session, league, abbr)
-    if wk is None: return dict(rail=r, off=True, note='The report comes in season, the week before a game.')
+    if wk is None:
+        return dict(rail=r, off=True, note=('The Week 1 opponent report opens after Post-Cutdown Waivers.'
+                    if session.stop[0] in ('cutdown', 'wire') else 'The report comes in season, the week before a game.'))
     opp = session._opponent(wk)
     if opp is None: return dict(rail=r, off=True, note=f"{__import__('views').transaction_period(dict(week=wk))} is your bye.")
     opp_abbr, away = opp
