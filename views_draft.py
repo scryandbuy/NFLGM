@@ -52,8 +52,8 @@ def draft_year_of(y):
 
 
 def _spring_done(league):
-    return any(x.get('year') == spring_year(league) and x.get('event') != 'Senior Bowl'
-               for x in (getattr(league, 'spring_news', None) or []))
+    import spring as SP
+    return SP.completed(league, spring_year(league))
 
 
 def _pool(league):
@@ -295,6 +295,9 @@ def _prospect_read(league, abbr, p, row, view):
 def act_visit(session, league, abbr, pid):
     """Name a visit, or cancel one named this week. Once the week rolls a visit is locked in: the scouts have made the call."""
     import spring as SP
+    if _spring_done(league):
+        return dict(ok=False, why='Spring visits are complete; selections are locked.', locked=True,
+                    visits=list(getattr(league, 'user_visits', None) or []))
     cur = list(getattr(league, 'user_visits', None) or [])
     when = league.__dict__.setdefault('user_visit_week', {})
     stamp = f"{league.year}-{league.week}-{league.phase}"

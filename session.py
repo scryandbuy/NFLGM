@@ -1127,6 +1127,7 @@ class Session:
 
     def step_spring(self):
         L, rng = self.L, self.rng
+        if SP.completed(L): return
         if getattr(L, 'next_class', None):
             L.draft_pool = L.next_class; L.next_class = []
         else:

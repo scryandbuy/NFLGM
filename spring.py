@@ -96,21 +96,23 @@ def _attends(team, p, base, rng, plan):
 
 
 def senior_bowl(league, rng):
-    pool = _pool(league); cons = league.consensus or {}
-    seniors = [p for p in pool if p.age >= 22.0]
-    invited = sorted(seniors, key=lambda p: cons.get(p.pid, {}).get('rank', 9999))[:SENIOR_BOWL]
-    for p in invited:
-        p.xp_spent['_senior_bowl'] = league.year
-    looks = 0
-    for abbr, team in league.teams.items():
-        sd = SC.error_sd(team.gm, team)
-        plan = DP.assess(league, abbr)
-        for p in invited:
-            if _attends(team, p, 0.55, rng, plan):
-                SC.second_look(league.scouting[abbr][p.pid], p, sd * 0.8, rng, R=SC.room(team), team=team); looks += 1
-                _character(league, abbr, team, p, sd, rng)
-    SC.consensus(league)
-    return looks, _stock_moves(league, 'Senior Bowl')
+    """Fallback calendar uses the same event as the interactive postseason."""
+    before = sum(v.get('reads', 1) for room in league.scouting.values() for v in room.values())
+    start = len(getattr(league, 'spring_news', None) or [])
+    SC.senior_bowl(league, rng, event_year=league.year)
+    after = sum(v.get('reads', 1) for room in league.scouting.values() for v in room.values())
+    moves = [(league.player(x['pid']), x['frm'], x['to'])
+             for x in league.spring_news[start:] if x.get('kind') == 'stock']
+    return int(round((after - before) / 0.7)), moves
+
+
+def completed(league, year=None):
+    """Explicit completion, with legacy evidence from completed spring events."""
+    year = league.year if year is None else year
+    return any(x.get('year') == year and
+               ((x.get('kind') == 'complete' and x.get('event') == 'spring') or
+                x.get('event') in ('pro days', 'visits', 'visit'))
+               for x in (getattr(league, 'spring_news', None) or []))
 
 
 def pro_days(league, rng):
@@ -237,6 +239,8 @@ def _character(league, abbr, team, p, sd, rng):
 def run_spring(league, rng, verbose=False):
     """The whole spring in order. The UI will step it; the calendar runs it whole."""
     # Preserve this class's early Senior Bowl results across the year roll.
+    if completed(league):
+        return dict(already_completed=True)
     league.spring_news = [x for x in (getattr(league, 'spring_news', None) or [])
                           if x.get('year') == league.year and x.get('event') == 'Senior Bowl']
     if not getattr(league, 'consensus', None): SC.consensus(league)
@@ -256,5 +260,8 @@ def run_spring(league, rng, verbose=False):
 
 
 def set_user_visits(league, pids):
-    league.user_visits = list(pids)[:VISITS]
+    from views_draft import spring_year
+    if completed(league, spring_year(league)):
+        raise ValueError('Spring visits are complete; selections are locked.')
+    league.user_visits = list(dict.fromkeys(pids))[:VISITS]
     return league.user_visits
