@@ -74,8 +74,7 @@ class Draft:
         return DFT.board(self.L, abbr, sel, self.level, self.taken, self.scale, gm=gm)
 
     def user_pick(self):
-        """The first eligible man on Your Board, then the room's remaining order."""
-        import views_draft as VD
+        """Honor explicit board priorities, then draft for roster needs like the CPU."""
         ub = getattr(self.L, 'user_board', None) or {}
         dnd = set(ub.get('dnd') or [])
         available = {p.pid: p for p in self.available() if p.pid not in dnd}
@@ -84,10 +83,7 @@ class Draft:
                 return available[pid]
         if not available:
             return None
-        rows = [VD._prospect(self.L, self.user, p) for p in available.values()]
-        rows = [r for r in rows if r is not None]
-        VD._my_rank(rows)
-        return available[min(rows, key=lambda r: r['my_rank'])['pid']] if rows else None
+        return next((p for _, p in self.board_for(self.user) if p.pid in available), None)
 
     # ------------------------------------------------------------ the buttons
     def sim_pick(self):
