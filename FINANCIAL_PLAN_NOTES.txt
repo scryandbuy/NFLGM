@@ -62,3 +62,34 @@ Same-date real Week 1/deadline cap panels and actual injury replacement spending
 are still needed for numerical reserve calibration. Year-end carryover must not
 be treated as a Week 1 target. Multiple seeds and multi-season runs remain needed
 before claiming stable long-term talent, spending or competitive balance.
+
+Verified results — 2 October 2026
+196 focused tests passed: 190 combined accounting/strategy/transaction tests,
+plus six market route regressions supplied by Review code changes (2).
+Four of the six regressions were confirmed to fail against the old market code.
+Browser build ed91ce2b36: all eight modified engine modules match their source
+copies, new financial_plan is in the manifest, and shipped imports succeed.
+
+Matched accelerated offseason, seed 30102, final Week 1:
+                                      Baseline          Candidate
+Median cap room                        $0.5825M          $13.229M
+Teams below $1M                        16 / 32           1 / 32
+Middle half of cap room                $0.001–7.3165M   $7.131–17.9435M
+Maximum cap room                       $50.284M          $66.029M
+Average dead cap                       $2.1835M          $0.5962M
+Active roster min/max                  53 / 53           53 / 53
+Teams with uncovered required roles    0                 0
+Teams with negative cap room           0                 0
+Average internal roster-value score    162.594           158.557
+
+The candidate preserves flexibility with about 2.5% less average roster value
+in this one replay. This is a tradeoff to monitor, not proof of optimal spending
+or an empirically calibrated NFL reserve. No scoring/gameplay register was
+rerun because this pass changes financial decisions, not play resolution.
+
+Reproduction (Python environment requires this project's dependencies):
+python audit_financial_plan.py --engine-root <checkout> --output <file.json> --finish-roster
+python compare_financial_audit.py <baseline.json> <candidate.json> --output <comparison.json>
+Research/output directory: ../../outputs/gm-financial-research-20261002
+Use baseline-30102.json and candidate-final-30102.json; candidate-30102.json is
+an intermediate run before the APY-gate and displacement corrections.
