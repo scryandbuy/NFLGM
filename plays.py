@@ -617,9 +617,6 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # Same as protection: the per-blocker result already exists and was only
     # ever averaged away. A run block win is beating the man across from you,
     # which is a positive edge.
-    # Same fault in the run game: zip() stops at the shorter list, so against a
-    # four-man front the fifth lineman was never recorded either. An unblocked
-    # man is still blocking somebody - he wins his rep.
     # A win is beating your man, and the line wins about 71% of them (ESPN
     # RBWR): the deterministic edge is the mean, and the rep itself is a
     # draw around it, so a slightly out-rated blocker still wins his share

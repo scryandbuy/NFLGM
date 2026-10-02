@@ -1529,7 +1529,7 @@ def _healthy_quarterback(roster, state):
 def _prepare_fumble(dr, out, off, deff, rng, rate_fn, off_state=None):
     """Resolve the loose ball before penalties choose between play outcomes."""
     import events as E
-    from plays import defensive_return
+    from plays import defensive_return, YAC
     ev = {'complete': 'complete_pass', 'run': 'run', 'sack': 'sack', 'scramble': 'scramble'}.get(out['type'])
     if ev is None or out.get('touchdown'):
         return
@@ -1538,7 +1538,11 @@ def _prepare_fumble(dr, out, off, deff, rng, rate_fn, off_state=None):
     carrier = next((m for m in men if m and m.get('pid') == carrier_id), None) if carrier_id else None
     if carrier is None:
         carrier = off['qb'] if ev in ('sack', 'scramble') or out.get('sneak') else (off.get('rb') or off['qb'])
-    fum = E.fumble_check(carrier, ev, rng, rate_fn, env_mult=ENV.fumble_mult,
+    defenders = list(deff.get('dl') or []) + list(deff.get('lb') or []) + list(deff.get('db') or [])
+    contact_id = out.get('by') if ev == 'sack' else out.get('tackler')
+    contact = next((p for p in defenders if p.get('pid') == contact_id), None) if contact_id else None
+    impact = rate_fn(contact, YAC['tackler']['impact']) if contact is not None else 0.70
+    fum = E.fumble_check(carrier, ev, rng, rate_fn, hit_power=impact, env_mult=ENV.fumble_mult,
                         rate_mult=(getattr(off_state, 'staff_fx', None) or {}).get('fum_off', 1.0))
     if not fum:
         return
@@ -1546,7 +1550,6 @@ def _prepare_fumble(dr, out, off, deff, rng, rate_fn, off_state=None):
                fumble_forced=bool(fum.get('forced', True)))
     if not fum['lost']:
         return
-    defenders = list(deff.get('dl') or []) + list(deff.get('lb') or []) + list(deff.get('db') or [])
     if not defenders:
         raise ValueError('A defensive fumble recovery requires a defender on the field')
     weights = np.array([3.0 if (ev == 'sack' and p in (deff.get('dl') or [])) else

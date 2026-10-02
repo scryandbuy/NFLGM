@@ -15,7 +15,8 @@ what moves the result.
 """
 import numpy as np
 from matchups import (PASS_RUSH, ROUTE, THROW, CATCH, YAC, RUN_BLOCK,
-                      BALL_SECURITY, ZONE_DEFENDERS_NEAR, zone_window)
+                      BALL_SECURITY, ZONE_DEFENDERS_NEAR, zone_window,
+                      throw_ability_multiplier)
 
 AVG = 0.70
 
@@ -237,10 +238,7 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     if pressure > 0:
         up = rate(qb, THROW['under_pressure'])
         acc *= 1.0 - pressure * (0.42 - 0.34 * (up - AVG))
-    if on_run:
-        acc *= 0.88 + 0.24 * (rate(qb, THROW['on_run']) - AVG)
-    if play_action:
-        acc *= 1.0 + 0.12 * (rate(qb, THROW['play_action']) - AVG)
+    acc *= throw_ability_multiplier(qb, rate, on_run, play_action)
 
     # A deep throw is harder for EVERYONE, not just for a QB with a poor deep
     # accuracy rating. The first build used one depth-independent multiplier, so
@@ -282,9 +280,12 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # 1.5 (two thirds of attempts), medium at 2.0 against 2.5, deep at 5.3 against 4.5, and the league sat at 2.8
     # against 2.1 once the tag map, field fit and the screen convoy changed who was contested where
     p_int = (1.0 - separation) * INT_BASE * INT_DEPTH[depth] * (1.0 + 2.2 * (AVG - acc)) * (1.0 + 0.9 * (float(def_awr) - DEF_AWR_MEAN))   # a smart defender is where the bad ball ends up
-    if rng.random() < max(0.0, p_int):
-        return dict(result='interception', contested=True, p=p, base=base)
-    return dict(result='incomplete', contested=separation < 0.45, p=p, base=base)
+    int_roll = rng.random()
+    if int_roll < max(0.0, p_int):
+        return dict(result='interception', contested=True, p=p, base=base,
+                    int_roll=int_roll, p_int=max(0.0, p_int))
+    return dict(result='incomplete', contested=separation < 0.45, p=p, base=base,
+                int_roll=int_roll, p_int=max(0.0, p_int))
 
 # ============================================================ THE CATCH
 def resolve_catch(receiver, defender, contested, rng):
@@ -609,24 +610,21 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
                  rate(d, RUN_BLOCK['defender']['shed']))
             for b, d in contests]
     push = float(np.mean(wins)) if wins else 0.0
+    from run_blocking import support_blocks
+    support_yards, support = support_blocks(off, roles,
+        {DRUSH.player_key(b) for b, _ in contests},
+        {DRUSH.player_key(d) for _, d in contests}, scheme, rate)
     # Same as protection: the per-blocker result already exists and was only
     # ever averaged away. A run block win is beating the man across from you,
     # which is a positive edge.
-    # Same fault in the run game: zip() stops at the shorter list, so against a
-    # four-man front the fifth lineman was never recorded either. An unblocked
-    # man is still blocking somebody - he wins his rep.
     # A win is beating your man, and the line wins about 71% of them (ESPN
     # RBWR): the deterministic edge is the mean, and the rep itself is a
     # draw around it, so a slightly out-rated blocker still wins his share
     rb_reps = [(b.get('pid'), (w + rng.normal(0.0, 0.10)) > RBW_THRESHOLD) for (b, _), w in zip(contests, wins)]
-    # Same in the run game: a surplus blocker is doubling or pulling, not
-    # standing free, so he shares the result of the block that mattered most
-    # rather than banking an automatic win.
-    if len(blockers) > len(wins) and wins:
-        # An extra man at the point of attack usually means that block holds.
-        shared = max(wins) > -0.04
-        engaged = {DRUSH.player_key(b) for b, _ in contests}
-        rb_reps += [(b.get('pid'), shared) for b in blockers if DRUSH.player_key(b) not in engaged]
+    # Surplus linemen climb; skill players execute their actual support job.
+    # Record one contest per blocker, including failed blocks on stuffed runs.
+    rb_reps += [(b['blocker'], b['edge'] + rng.normal(0.0, 0.10) > RBW_THRESHOLD)
+                for b in support]
     fill = np.mean([rate(d, RUN_BLOCK['defender']['fill']) for d in defenders[:7]])
 
     # Slopes cut from 9.0 and 3.2: yards per carry ALLOWED varied across
@@ -635,7 +633,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # so the league lands on 4.52.
     # slope 5.5 to 3.5: the best line in the league was worth two yards before contact on every carry, and with an
     # elite back behind it the club ran for four thousand; a yard is the real gap between the best line and an average one
-    ybc = RUN_BASE + 3.5 * push - 2.0 * (fill - AVG) + rng.normal(0, RUN_NOISE)
+    ybc = RUN_BASE + 3.5 * push - 2.0 * (fill - AVG) + support_yards + rng.normal(0, RUN_NOISE)
     ybc = S.box_run_contact(ybc, def_call['box'], RUN_BASE, RUN_NOISE)
     advantage = S.run_scheme_multiplier(scheme, def_call['front'], ytg, def_call['box'])
     advantage /= S.FRONTS[def_call['front']]['run_fit']
@@ -650,7 +648,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
         ybc /= execution
         return dict(type='run', yards=round(float(ybc), 1), scheme=scheme,
                     broken_tackles=0, touchdown=False, ybc=round(float(ybc), 1),
-                    rb_reps=rb_reps)
+                    rb_reps=rb_reps, run_support=support)
 
     chasers = defenders[len(front):] + defenders[:len(front)]
     # The same wall applies to a run: yards after contact collapse near the
@@ -664,7 +662,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
         after = max(0.0, out['yards'] - ybc)
         out['yards'] = round(ybc + after * _compression(ytg), 1)
     out.update(type='run', scheme=scheme, ybc=round(float(ybc), 1),
-               rb_reps=rb_reps)
+               rb_reps=rb_reps, run_support=support)
     return out
 
 # Fitted on nflverse 2021-24 regular-season turnover returns; 2025 held out.
@@ -745,6 +743,24 @@ def _coverage_evidence(coverage, pairs=(), primary=None, helper=None, in_man=Fal
     if helper_id: drops[helper_id][1] = 'zone'
     return dict(version=1, drops=[(pid, role, exposure) for pid, (role, exposure) in drops.items()],
                 primary=owner, helper=helper_id, mode=mode, hole=bool(hole))
+
+
+def moving_throw(call, *, screen=False, swing=False, hot=False):
+    """Explicit movement or the existing under-center PA flood boot action.
+
+    Pressure alone is not a rolling throw. Quick screens, swings and hot
+    answers also stay on their existing mechanics; mobility grants no time
+    or sack escape here.
+    """
+    if screen or swing or hot:
+        return False
+    boot = bool(call.get('play_action') and not call.get('shotgun', False)
+                and call.get('concept') == 'flood')
+    if call.get('qb_movement') == 'boot':
+        return boot  # An audible may have replaced the original concept.
+    if 'on_run' in call:
+        return bool(call['on_run'])
+    return boot
 
 
 def _pass_play(off, deff, off_call, def_call, ytg, rng):
@@ -999,6 +1015,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     coverage_evidence = _coverage_evidence(in_coverage, pairs, cov, zone_second, in_man, zone_hole)
     if depth == 'short' and not screen and not swing:
         cmult *= SHORT_PASS_COMPLETION
+    on_run = moving_throw(off_call, screen=screen, swing=swing, hot=hot)
     if in_man:
         cb = cov
         # Apply the concept and read modifiers to the COMPLETION PROBABILITY,
@@ -1009,13 +1026,14 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         # (61.6% against 75.7%) and dragged league completion to 58.5%.
         sep = float(np.clip(sep_raw, .02, .98))
         thr = resolve_throw(off['qb'], depth, sep, p['pressure'], rng,
-                            play_action=off_call.get('play_action', False),
+                            on_run=on_run, play_action=off_call.get('play_action', False),
                             outcome_mult=cmult * (1.0 - dis) * rmod['comp'] * (TE_CATCH_MULT if (tgt.get('pos') == 'TE' and depth != 'deep') else 1.0),
                             def_awr=rate(cov, {'awareness_rating': 1.0}) if cov else DEF_AWR_MEAN)
         complete = thr['result'] == 'complete'
         global LAST_XCOMP; LAST_XCOMP = float(thr['p'])
         if PASS_TRACE is not None:
             PASS_TRACE.append(dict(path='man', depth=depth, screen=screen,
+                                   on_run=on_run, play_action=bool(off_call.get('play_action')),
                                    base=thr['base'], p=thr['p'],
                                    acc=rate(off['qb'], THROW[depth]),
                                    sep=sep, cmult=cmult, rmod=rmod['comp'],
@@ -1024,6 +1042,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
             complete = True        # a ball thrown at his numbers three yards
                                    # behind the line is rarely missed
         picked = thr['result'] == 'interception'
+        int_roll, p_int = thr.get('int_roll'), thr.get('p_int', 0.0)
         contested = thr['contested']
     else:
         # Only the NEAREST defender contests - handing the resolver the whole
@@ -1037,7 +1056,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         za = float(def_call.get('zone_aggression', 0.5)) - 0.5
         z_bias = (1.0 - 0.28 * za) if depth == 'short' else (1.0 + 0.20 * za) if depth == 'medium' else (1.0 + 0.24 * za)
         z = resolve_zone(tgt, dbs, off['qb'], def_call['shell'], depth,
-                         p['pressure'], rng, rate, hole=zone_hole, bias=z_bias)
+                         p['pressure'], rng, rate, hole=zone_hole, bias=z_bias,
+                         on_run=on_run, play_action=off_call.get('play_action', False))
         # Apply the concept to the WINDOW, not as a second independent gate.
         # Gating twice dropped four-man-rush completion to 51.8% against a
         # real 61.9%.
@@ -1050,6 +1070,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
             adj = min(0.97, adj + SCREEN_RESCUE)
         if PASS_TRACE is not None:
             PASS_TRACE.append(dict(path='zone', depth=depth, screen=screen,
+                                   on_run=on_run, play_action=bool(off_call.get('play_action')),
                                    base=z['raw'] * cmult * cover_relief
                                         * (1.0 - dis) * rmod['comp'],
                                    p=adj, acc=rate(off['qb'], THROW[depth]),
@@ -1061,7 +1082,9 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         LAST_XCOMP = float(adj)
         # 2.1% is the rate per ATTEMPT, not per incompletion. Applying it to
         # incompletions only produced ~1.1% league-wide.
-        picked = (not complete) and rng.random() < 0.092   # re-anchored with the man path
+        int_roll = rng.random() if not complete else None
+        p_int = 0.092   # re-anchored with the man path
+        picked = int_roll is not None and int_roll < p_int
         contested = z['contested']
         cb = cov
         # the man who arrives second breaks up his share of the throws he
@@ -1069,6 +1092,17 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         if zone_second is not None and rng.random() < 0.45:
             cb = zone_second
 
+    # The existing turnover roll includes average hands. Rescale that same
+    # opportunity for the actual defender, without taxing neutral catches a
+    # second time or consuming an additional random draw. No completed pass
+    # can become an interception (including a rescued screen).
+    dropped_int = False
+    if int_roll is not None:
+        hands = rate(cb, {'catch_rating': 1.0}) if cb is not None else AVG
+        catch_mult = float(np.clip(1.0 + 0.8 * (hands - AVG), 0.5, 1.25))
+        secured = not complete and cb is not None and int_roll < min(1.0, p_int * catch_mult)
+        dropped_int = bool(picked and not secured and not complete and cb is not None)
+        picked = secured
     if picked:
         air = float(np.clip(rng.normal(route_air if route_air is not None else {'short': 5, 'medium': 13, 'deep': 27}.get(depth, 6),
                                        {'short': 3, 'medium': 5, 'deep': 9}.get(depth, 3)),
@@ -1081,15 +1115,15 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
     if not complete:
-        throwaway = bool(p['pressure'] >= 0.35 and not screen and rng.random() < 0.18)
+        throwaway = bool(not dropped_int and p['pressure'] >= 0.35 and not screen and rng.random() < 0.18)
         # A PASS DEFENDED is a defender breaking the ball up, not simply an
         # incompletion - a throw into the dirt is nobody's credit. Real rate:
         # 37.5% of incompletions, 11.4% of attempts, with a league leader
         # around 24 in a season. It is the main counting stat a corner has and
         # this engine resolved the event without recording it, so a defensive
         # back had almost no box score at all.
-        broken = False
-        if not throwaway:
+        broken = dropped_int
+        if not throwaway and not dropped_int:
             broken = rng.random() < (PD_CONTESTED if contested else PD_LOOSE)
         return dict(type='incomplete', yards=0.0, touchdown=False,
                     throwaway=throwaway,

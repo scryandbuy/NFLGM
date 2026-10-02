@@ -1,0 +1,529 @@
+{
+  "seeds": [
+    100151,
+    100152,
+    100153,
+    100154
+  ],
+  "games": [
+    {
+      "seed": 100151,
+      "home": "LAC",
+      "away": "PHI",
+      "home_score": 13,
+      "away_score": 30
+    },
+    {
+      "seed": 100151,
+      "home": "NYJ",
+      "away": "LV",
+      "home_score": 37,
+      "away_score": 31
+    },
+    {
+      "seed": 100151,
+      "home": "IND",
+      "away": "ATL",
+      "home_score": 29,
+      "away_score": 25
+    },
+    {
+      "seed": 100151,
+      "home": "NO",
+      "away": "HOU",
+      "home_score": 44,
+      "away_score": 17
+    },
+    {
+      "seed": 100151,
+      "home": "CAR",
+      "away": "NE",
+      "home_score": 23,
+      "away_score": 40
+    },
+    {
+      "seed": 100151,
+      "home": "CIN",
+      "away": "BUF",
+      "home_score": 24,
+      "away_score": 46
+    },
+    {
+      "seed": 100151,
+      "home": "LA",
+      "away": "KC",
+      "home_score": 27,
+      "away_score": 7
+    },
+    {
+      "seed": 100151,
+      "home": "PIT",
+      "away": "GB",
+      "home_score": 20,
+      "away_score": 12
+    },
+    {
+      "seed": 100151,
+      "home": "CLE",
+      "away": "DET",
+      "home_score": 44,
+      "away_score": 37
+    },
+    {
+      "seed": 100151,
+      "home": "SF",
+      "away": "BAL",
+      "home_score": 19,
+      "away_score": 22
+    },
+    {
+      "seed": 100151,
+      "home": "SEA",
+      "away": "TEN",
+      "home_score": 45,
+      "away_score": 22
+    },
+    {
+      "seed": 100151,
+      "home": "DAL",
+      "away": "DEN",
+      "home_score": 31,
+      "away_score": 27
+    },
+    {
+      "seed": 100151,
+      "home": "NYG",
+      "away": "WAS",
+      "home_score": 44,
+      "away_score": 20
+    },
+    {
+      "seed": 100151,
+      "home": "ARI",
+      "away": "JAX",
+      "home_score": 25,
+      "away_score": 44
+    },
+    {
+      "seed": 100151,
+      "home": "MIN",
+      "away": "CHI",
+      "home_score": 41,
+      "away_score": 11
+    },
+    {
+      "seed": 100151,
+      "home": "TB",
+      "away": "MIA",
+      "home_score": 30,
+      "away_score": 28
+    },
+    {
+      "seed": 100152,
+      "home": "WAS",
+      "away": "BAL",
+      "home_score": 24,
+      "away_score": 27
+    },
+    {
+      "seed": 100152,
+      "home": "NYG",
+      "away": "NE",
+      "home_score": 13,
+      "away_score": 23
+    },
+    {
+      "seed": 100152,
+      "home": "GB",
+      "away": "DAL",
+      "home_score": 29,
+      "away_score": 18
+    },
+    {
+      "seed": 100152,
+      "home": "ATL",
+      "away": "CIN",
+      "home_score": 26,
+      "away_score": 45
+    },
+    {
+      "seed": 100152,
+      "home": "NO",
+      "away": "SEA",
+      "home_score": 23,
+      "away_score": 11
+    },
+    {
+      "seed": 100152,
+      "home": "TB",
+      "away": "PIT",
+      "home_score": 36,
+      "away_score": 34
+    },
+    {
+      "seed": 100152,
+      "home": "LAC",
+      "away": "BUF",
+      "home_score": 27,
+      "away_score": 24
+    },
+    {
+      "seed": 100152,
+      "home": "IND",
+      "away": "JAX",
+      "home_score": 13,
+      "away_score": 17
+    },
+    {
+      "seed": 100152,
+      "home": "MIA",
+      "away": "SF",
+      "home_score": 12,
+      "away_score": 21
+    },
+    {
+      "seed": 100152,
+      "home": "LV",
+      "away": "LA",
+      "home_score": 38,
+      "away_score": 48
+    },
+    {
+      "seed": 100152,
+      "home": "MIN",
+      "away": "DEN",
+      "home_score": 16,
+      "away_score": 31
+    },
+    {
+      "seed": 100152,
+      "home": "ARI",
+      "away": "CAR",
+      "home_score": 14,
+      "away_score": 27
+    },
+    {
+      "seed": 100152,
+      "home": "KC",
+      "away": "CHI",
+      "home_score": 6,
+      "away_score": 20
+    },
+    {
+      "seed": 100152,
+      "home": "PHI",
+      "away": "TEN",
+      "home_score": 24,
+      "away_score": 13
+    },
+    {
+      "seed": 100152,
+      "home": "NYJ",
+      "away": "CLE",
+      "home_score": 10,
+      "away_score": 20
+    },
+    {
+      "seed": 100152,
+      "home": "DET",
+      "away": "HOU",
+      "home_score": 37,
+      "away_score": 38
+    },
+    {
+      "seed": 100153,
+      "home": "BAL",
+      "away": "PHI",
+      "home_score": 23,
+      "away_score": 19
+    },
+    {
+      "seed": 100153,
+      "home": "MIN",
+      "away": "ARI",
+      "home_score": 29,
+      "away_score": 34
+    },
+    {
+      "seed": 100153,
+      "home": "DET",
+      "away": "ATL",
+      "home_score": 34,
+      "away_score": 31
+    },
+    {
+      "seed": 100153,
+      "home": "BUF",
+      "away": "MIA",
+      "home_score": 34,
+      "away_score": 37
+    },
+    {
+      "seed": 100153,
+      "home": "SEA",
+      "away": "CIN",
+      "home_score": 31,
+      "away_score": 16
+    },
+    {
+      "seed": 100153,
+      "home": "WAS",
+      "away": "LV",
+      "home_score": 23,
+      "away_score": 26
+    },
+    {
+      "seed": 100153,
+      "home": "NO",
+      "away": "DEN",
+      "home_score": 16,
+      "away_score": 19
+    },
+    {
+      "seed": 100153,
+      "home": "LA",
+      "away": "PIT",
+      "home_score": 17,
+      "away_score": 14
+    },
+    {
+      "seed": 100153,
+      "home": "IND",
+      "away": "CAR",
+      "home_score": 41,
+      "away_score": 34
+    },
+    {
+      "seed": 100153,
+      "home": "GB",
+      "away": "NYG",
+      "home_score": 30,
+      "away_score": 9
+    },
+    {
+      "seed": 100153,
+      "home": "DAL",
+      "away": "HOU",
+      "home_score": 35,
+      "away_score": 24
+    },
+    {
+      "seed": 100153,
+      "home": "JAX",
+      "away": "LAC",
+      "home_score": 30,
+      "away_score": 16
+    },
+    {
+      "seed": 100153,
+      "home": "KC",
+      "away": "TB",
+      "home_score": 18,
+      "away_score": 23
+    },
+    {
+      "seed": 100153,
+      "home": "NYJ",
+      "away": "CLE",
+      "home_score": 27,
+      "away_score": 24
+    },
+    {
+      "seed": 100153,
+      "home": "TEN",
+      "away": "CHI",
+      "home_score": 24,
+      "away_score": 31
+    },
+    {
+      "seed": 100153,
+      "home": "SF",
+      "away": "NE",
+      "home_score": 13,
+      "away_score": 26
+    },
+    {
+      "seed": 100154,
+      "home": "PIT",
+      "away": "ATL",
+      "home_score": 31,
+      "away_score": 35
+    },
+    {
+      "seed": 100154,
+      "home": "SF",
+      "away": "NE",
+      "home_score": 9,
+      "away_score": 27
+    },
+    {
+      "seed": 100154,
+      "home": "SEA",
+      "away": "NYG",
+      "home_score": 13,
+      "away_score": 10
+    },
+    {
+      "seed": 100154,
+      "home": "HOU",
+      "away": "DET",
+      "home_score": 14,
+      "away_score": 20
+    },
+    {
+      "seed": 100154,
+      "home": "DAL",
+      "away": "BAL",
+      "home_score": 10,
+      "away_score": 34
+    },
+    {
+      "seed": 100154,
+      "home": "NO",
+      "away": "CHI",
+      "home_score": 24,
+      "away_score": 32
+    },
+    {
+      "seed": 100154,
+      "home": "WAS",
+      "away": "GB",
+      "home_score": 13,
+      "away_score": 27
+    },
+    {
+      "seed": 100154,
+      "home": "BUF",
+      "away": "NYJ",
+      "home_score": 45,
+      "away_score": 17
+    },
+    {
+      "seed": 100154,
+      "home": "DEN",
+      "away": "IND",
+      "home_score": 10,
+      "away_score": 37
+    },
+    {
+      "seed": 100154,
+      "home": "MIA",
+      "away": "CLE",
+      "home_score": 27,
+      "away_score": 17
+    },
+    {
+      "seed": 100154,
+      "home": "TB",
+      "away": "TEN",
+      "home_score": 14,
+      "away_score": 27
+    },
+    {
+      "seed": 100154,
+      "home": "LAC",
+      "away": "CIN",
+      "home_score": 20,
+      "away_score": 33
+    },
+    {
+      "seed": 100154,
+      "home": "LV",
+      "away": "PHI",
+      "home_score": 5,
+      "away_score": 41
+    },
+    {
+      "seed": 100154,
+      "home": "KC",
+      "away": "LA",
+      "home_score": 22,
+      "away_score": 41
+    },
+    {
+      "seed": 100154,
+      "home": "JAX",
+      "away": "CAR",
+      "home_score": 34,
+      "away_score": 37
+    },
+    {
+      "seed": 100154,
+      "home": "MIN",
+      "away": "ARI",
+      "home_score": 38,
+      "away_score": 11
+    }
+  ],
+  "register": {
+    "points_per_team": 25.4921875,
+    "total_points": 50.984375,
+    "drives_per_game": 22.34375,
+    "plays_per_drive": 5.730769230769231,
+    "first_downs_per_drive": 1.8706293706293706,
+    "offensive_plays_per_gm": 126.359375,
+    "drive_touchdown_pct": 24.545454545454547,
+    "drive_fieldgoal_pct": 16.573426573426573,
+    "drive_punt_pct": 32.79720279720279,
+    "drive_turnover_pct": 10.41958041958042,
+    "drive_downs_pct": 5.664335664335664,
+    "completion_pct": 64.19194205522861,
+    "sack_pct": 7.0677324358435,
+    "int_pct": 2.3540063377093707,
+    "air_yards": 6.145874471086037,
+    "yac": 5.752291960507757,
+    "yards_per_dropback": 6.620726724518069,
+    "time_to_throw": 2.6847317790855594,
+    "run_ypc": 4.738596723788028,
+    "run_explosive_pct": 2.217496962332928,
+    "run_negative_pct": 7.685297691373026,
+    "pass_play_share": 58.78570545319649,
+    "play_action_pct": 10.077902806974157,
+    "motion_pct": 37.15840237418078,
+    "blitz_pct": 15.057351407716371,
+    "injuries_per_team_game": 0.6171875,
+    "mean_margin": 11.765625,
+    "margin_10plus_pct": 54.6875,
+    "margin_17plus_pct": 28.125,
+    "overtime_pct": 4.6875,
+    "tie_pct": 0.0,
+    "fg_pct": 87.13235294117648,
+    "punt_gross": 45.3326923076923,
+    "kickoff_touchback_pct": 15.10989010989011
+  },
+  "signals": {
+    "moving_throws": 0,
+    "fumbles": 97,
+    "lost_fumbles": 50,
+    "run_support_blocks": 0
+  },
+  "misses": [
+    {
+      "metric": "points_per_team",
+      "value": 25.4921875,
+      "target": 22.9,
+      "tolerance": 1.5
+    },
+    {
+      "metric": "total_points",
+      "value": 50.984375,
+      "target": 45.8,
+      "tolerance": 3.0
+    },
+    {
+      "metric": "margin_10plus_pct",
+      "value": 54.6875,
+      "target": 44.7,
+      "tolerance": 4.0
+    }
+  ],
+  "denominators": {
+    "games": 64,
+    "drives": 1430,
+    "offensive_plays": 8087,
+    "passes": 4418,
+    "runs": 3292,
+    "fg": 272
+  },
+  "scope": "Fresh 2026 rosters, each team once per seed; no season development"
+}

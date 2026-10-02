@@ -214,7 +214,22 @@ def zone_window(shell, depth):
     i = {'short': 0, 'medium': 1, 'deep': 2}[depth]
     return ZONE_WINDOW.get(shell, (0.58, 0.39, 0.27))[i]
 
-def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate, hole=False, bias=1.0):
+def throw_ability_multiplier(qb, rate, on_run=False, play_action=False):
+    """Situational QB ability, neutral at 70 in either coverage path.
+
+    The play-action concept already provides its schematic advantage. This
+    adjusts only the passer's execution, without adding another flat bonus.
+    """
+    multiplier = 1.0
+    if on_run:
+        multiplier *= 1.0 + 0.24 * (rate(qb, THROW['on_run']) - 0.70)
+    if play_action:
+        multiplier *= 1.0 + 0.12 * (rate(qb, THROW['play_action']) - 0.70)
+    return multiplier
+
+
+def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate, hole=False, bias=1.0,
+                 on_run=False, play_action=False):
     """
     Zone pass resolution. Two steps, as the football describes it:
 
@@ -273,6 +288,8 @@ def resolve_zone(receiver, defenders, qb, shell, depth, pressure, rng, rate, hol
         # heavy pressure worth ~3 points of completion.
         up = rate(qb, THROW['under_pressure'])
         acc *= 1.0 - pressure * (0.42 - 0.34 * (up - AVG))
+
+    acc *= throw_ability_multiplier(qb, rate, on_run, play_action)
 
     # a good enough throw beats the window; a poor one gets contested.
     # 1.26 is solved, not chosen: with the depth-anchored windows above it puts

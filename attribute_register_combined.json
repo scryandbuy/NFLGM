@@ -1,0 +1,315 @@
+{
+  "seeds": [
+    100141,
+    100142
+  ],
+  "games": [
+    {
+      "seed": 100141,
+      "home": "ARI",
+      "away": "HOU",
+      "home_score": 27,
+      "away_score": 33
+    },
+    {
+      "seed": 100141,
+      "home": "NO",
+      "away": "DEN",
+      "home_score": 20,
+      "away_score": 27
+    },
+    {
+      "seed": 100141,
+      "home": "BAL",
+      "away": "DAL",
+      "home_score": 36,
+      "away_score": 6
+    },
+    {
+      "seed": 100141,
+      "home": "ATL",
+      "away": "TEN",
+      "home_score": 24,
+      "away_score": 17
+    },
+    {
+      "seed": 100141,
+      "home": "NE",
+      "away": "LV",
+      "home_score": 22,
+      "away_score": 24
+    },
+    {
+      "seed": 100141,
+      "home": "GB",
+      "away": "DET",
+      "home_score": 27,
+      "away_score": 11
+    },
+    {
+      "seed": 100141,
+      "home": "MIN",
+      "away": "SEA",
+      "home_score": 32,
+      "away_score": 7
+    },
+    {
+      "seed": 100141,
+      "home": "PHI",
+      "away": "CLE",
+      "home_score": 24,
+      "away_score": 19
+    },
+    {
+      "seed": 100141,
+      "home": "CAR",
+      "away": "SF",
+      "home_score": 17,
+      "away_score": 23
+    },
+    {
+      "seed": 100141,
+      "home": "PIT",
+      "away": "TB",
+      "home_score": 24,
+      "away_score": 27
+    },
+    {
+      "seed": 100141,
+      "home": "CHI",
+      "away": "IND",
+      "home_score": 35,
+      "away_score": 18
+    },
+    {
+      "seed": 100141,
+      "home": "NYG",
+      "away": "WAS",
+      "home_score": 24,
+      "away_score": 28
+    },
+    {
+      "seed": 100141,
+      "home": "NYJ",
+      "away": "LAC",
+      "home_score": 30,
+      "away_score": 24
+    },
+    {
+      "seed": 100141,
+      "home": "LA",
+      "away": "KC",
+      "home_score": 25,
+      "away_score": 22
+    },
+    {
+      "seed": 100141,
+      "home": "CIN",
+      "away": "JAX",
+      "home_score": 13,
+      "away_score": 20
+    },
+    {
+      "seed": 100141,
+      "home": "BUF",
+      "away": "MIA",
+      "home_score": 44,
+      "away_score": 10
+    },
+    {
+      "seed": 100142,
+      "home": "DEN",
+      "away": "TB",
+      "home_score": 27,
+      "away_score": 33
+    },
+    {
+      "seed": 100142,
+      "home": "DAL",
+      "away": "SF",
+      "home_score": 40,
+      "away_score": 19
+    },
+    {
+      "seed": 100142,
+      "home": "ARI",
+      "away": "DET",
+      "home_score": 21,
+      "away_score": 35
+    },
+    {
+      "seed": 100142,
+      "home": "NYG",
+      "away": "MIN",
+      "home_score": 23,
+      "away_score": 36
+    },
+    {
+      "seed": 100142,
+      "home": "BUF",
+      "away": "GB",
+      "home_score": 23,
+      "away_score": 37
+    },
+    {
+      "seed": 100142,
+      "home": "HOU",
+      "away": "ATL",
+      "home_score": 24,
+      "away_score": 22
+    },
+    {
+      "seed": 100142,
+      "home": "CIN",
+      "away": "LA",
+      "home_score": 40,
+      "away_score": 37
+    },
+    {
+      "seed": 100142,
+      "home": "PIT",
+      "away": "TEN",
+      "home_score": 33,
+      "away_score": 13
+    },
+    {
+      "seed": 100142,
+      "home": "KC",
+      "away": "NYJ",
+      "home_score": 24,
+      "away_score": 3
+    },
+    {
+      "seed": 100142,
+      "home": "CHI",
+      "away": "BAL",
+      "home_score": 24,
+      "away_score": 19
+    },
+    {
+      "seed": 100142,
+      "home": "NO",
+      "away": "PHI",
+      "home_score": 25,
+      "away_score": 27
+    },
+    {
+      "seed": 100142,
+      "home": "CLE",
+      "away": "LV",
+      "home_score": 21,
+      "away_score": 27
+    },
+    {
+      "seed": 100142,
+      "home": "IND",
+      "away": "SEA",
+      "home_score": 31,
+      "away_score": 39
+    },
+    {
+      "seed": 100142,
+      "home": "MIA",
+      "away": "JAX",
+      "home_score": 9,
+      "away_score": 30
+    },
+    {
+      "seed": 100142,
+      "home": "CAR",
+      "away": "WAS",
+      "home_score": 21,
+      "away_score": 27
+    },
+    {
+      "seed": 100142,
+      "home": "NE",
+      "away": "LAC",
+      "home_score": 31,
+      "away_score": 11
+    }
+  ],
+  "register": {
+    "points_per_team": 24.5625,
+    "total_points": 49.125,
+    "drives_per_game": 21.96875,
+    "plays_per_drive": 5.8677098150782365,
+    "first_downs_per_drive": 1.8975817923186344,
+    "offensive_plays_per_gm": 127.59375,
+    "drive_touchdown_pct": 22.617354196301566,
+    "drive_fieldgoal_pct": 19.34566145092461,
+    "drive_punt_pct": 31.721194879089616,
+    "drive_turnover_pct": 10.241820768136558,
+    "drive_downs_pct": 5.120910384068279,
+    "completion_pct": 63.96635679504206,
+    "sack_pct": 7.493857493857494,
+    "int_pct": 2.213368747233289,
+    "air_yards": 6.0619377162629755,
+    "yac": 5.305536332179931,
+    "yards_per_dropback": 6.180612788042797,
+    "time_to_throw": 2.682270030987162,
+    "run_ypc": 4.606610800744879,
+    "run_explosive_pct": 1.86219739292365,
+    "run_negative_pct": 9.931719428926133,
+    "pass_play_share": 59.808963997060985,
+    "play_action_pct": 10.017144256674014,
+    "motion_pct": 35.39064413421504,
+    "blitz_pct": 14.76537216828479,
+    "injuries_per_team_game": 0.578125,
+    "mean_margin": 11.25,
+    "margin_10plus_pct": 40.625,
+    "margin_17plus_pct": 28.125,
+    "overtime_pct": 6.25,
+    "tie_pct": 0.0,
+    "fg_pct": 87.74193548387098,
+    "punt_gross": 45.604054054054046,
+    "kickoff_touchback_pct": 14.054054054054054
+  },
+  "signals": {
+    "moving_throws": 27,
+    "fumbles": 68,
+    "lost_fumbles": 23,
+    "run_support_blocks": 7606
+  },
+  "misses": [
+    {
+      "metric": "points_per_team",
+      "value": 24.5625,
+      "target": 22.9,
+      "tolerance": 1.5
+    },
+    {
+      "metric": "total_points",
+      "value": 49.125,
+      "target": 45.8,
+      "tolerance": 3.0
+    },
+    {
+      "metric": "drive_fieldgoal_pct",
+      "value": 19.34566145092461,
+      "target": 16.5,
+      "tolerance": 2.0
+    },
+    {
+      "metric": "injuries_per_team_game",
+      "value": 0.578125,
+      "target": 0.85,
+      "tolerance": 0.25
+    },
+    {
+      "metric": "margin_10plus_pct",
+      "value": 40.625,
+      "target": 44.7,
+      "tolerance": 4.0
+    }
+  ],
+  "denominators": {
+    "games": 32,
+    "drives": 703,
+    "offensive_plays": 4083,
+    "passes": 2259,
+    "runs": 1611,
+    "fg": 155
+  },
+  "scope": "Fresh 2026 rosters, each team once per seed; no season development"
+}

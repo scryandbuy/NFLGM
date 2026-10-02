@@ -508,6 +508,12 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
         import identity as ID3
         mix = ID3.situational_depth(mix, yards_to_endzone, down, ydstogo)
         call['depth'] = str(rng.choice(['short', 'medium', 'deep'], p=mix))
+        # The existing under-center PA flood is a boot action. Mark the
+        # intent without another random draw; the resolver rechecks it after
+        # audibles and abandons movement for a hot answer.
+        if call.get('play_action') and not shotgun and call['concept'] == 'flood':
+            call['on_run'] = True
+            call['qb_movement'] = 'boot'
     else:
         heavy = PERSONNEL_OFF[pers]['te'] >= 2 or PERSONNEL_OFF[pers]['rb'] >= 2
         if offense is not None and rate_fn is not None:

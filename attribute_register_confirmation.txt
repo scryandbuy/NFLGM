@@ -1,0 +1,104 @@
+production score computed for 1,436 of 2,608 players
+1/64 LAC 30-37 PHI
+2/64 NYJ 24-19 LV
+3/64 IND 23-9 ATL
+4/64 NO 13-20 HOU
+5/64 CAR 13-17 NE
+6/64 CIN 27-38 BUF
+7/64 LA 45-41 KC
+8/64 PIT 30-36 GB
+9/64 CLE 21-25 DET
+10/64 SF 23-29 BAL
+11/64 SEA 13-20 TEN
+12/64 DAL 22-7 DEN
+13/64 NYG 19-13 WAS
+14/64 ARI 34-31 JAX
+15/64 MIN 28-32 CHI
+16/64 TB 27-20 MIA
+17/64 WAS 10-22 BAL
+18/64 NYG 10-38 NE
+19/64 GB 48-32 DAL
+20/64 ATL 30-27 CIN
+21/64 NO 20-33 SEA
+22/64 TB 9-44 PIT
+23/64 LAC 23-28 BUF
+24/64 IND 26-18 JAX
+25/64 MIA 12-44 SF
+26/64 LV 16-31 LA
+27/64 MIN 9-27 DEN
+28/64 ARI 9-41 CAR
+29/64 KC 6-36 CHI
+30/64 PHI 27-23 TEN
+31/64 NYJ 44-39 CLE
+32/64 DET 30-16 HOU
+33/64 BAL 30-12 PHI
+34/64 MIN 21-23 ARI
+35/64 DET 20-13 ATL
+36/64 BUF 13-0 MIA
+37/64 SEA 39-35 CIN
+38/64 WAS 24-36 LV
+39/64 NO 16-20 DEN
+40/64 LA 38-31 PIT
+41/64 IND 24-33 CAR
+42/64 GB 31-29 NYG
+43/64 DAL 16-50 HOU
+44/64 JAX 20-41 LAC
+45/64 KC 31-35 TB
+46/64 NYJ 30-26 CLE
+47/64 TEN 30-22 CHI
+48/64 SF 34-28 NE
+49/64 PIT 24-22 ATL
+50/64 SF 34-38 NE
+51/64 SEA 28-17 NYG
+52/64 HOU 6-29 DET
+53/64 DAL 16-3 BAL
+54/64 NO 26-12 CHI
+55/64 WAS 27-33 GB
+56/64 BUF 19-25 NYJ
+57/64 DEN 21-18 IND
+58/64 MIA 20-7 CLE
+59/64 TB 29-26 TEN
+60/64 LAC 28-26 CIN
+61/64 LV 24-29 PHI
+62/64 KC 30-22 LA
+63/64 JAX 31-29 CAR
+64/64 MIN 34-27 ARI
+Attribute wiring register, 64 games
+
+  metric                          sim     real     diff       controls
+  points_per_team               25.20    22.90    +2.30  OFF  emergent
+  total_points                  50.39    45.80    +4.59  OFF  emergent
+  drives_per_game               22.45    21.60    +0.85  ok   emergent
+  plays_per_drive                5.79     5.90    -0.11  ok   emergent
+  first_downs_per_drive          1.87     1.84    +0.03  ok   emergent
+  offensive_plays_per_gm       128.53   123.95    +4.58  ok   emergent
+  drive_touchdown_pct           23.87    22.60    +1.27  ok   emergent
+  drive_fieldgoal_pct           17.88    16.50    +1.38  ok   game.fourth_down_decision
+  drive_punt_pct                32.92    32.40    +0.52  ok   emergent
+  drive_turnover_pct            11.06    10.23    +0.83  ok   emergent
+  drive_downs_pct                5.01     5.60    -0.59  ok   game.GO_RATE
+  completion_pct                63.96    65.00    -1.04  ok   plays.DEPTH_MULT
+  sack_pct                       6.55     6.60    -0.05  ok   plays.resolve_protection
+  int_pct                        2.45     2.10    +0.35  ok   plays.resolve_throw p_int
+  air_yards                      6.02     5.72    +0.30  ok   plays base_air
+  yac                            5.26     5.19    +0.07  ok   plays.resolve_yards_after in_space
+  yards_per_dropback             6.27     6.18    +0.09  ok   emergent
+  run_ypc                        4.76     4.52    +0.24  ok   plays._run_play
+  run_explosive_pct              2.35     2.46    -0.11  ok   plays.resolve_yards_after
+  run_negative_pct               7.98     8.54    -0.56  ok   plays._run_play ybc
+  pass_play_share               60.53    57.80    +2.73  ok   schemes.PASS_RATE
+  play_action_pct               10.05    10.20    -0.15  ok   schemes.call_offense
+  motion_pct                    36.19    36.50    -0.31  ok   schemes.call_offense
+  blitz_pct                     13.39    13.30    +0.09  ok   schemes.call_defense
+  injuries_per_team_game         0.71     0.85    -0.14  ok   health._RULED_OUT_SHARE
+  mean_margin                   10.27    11.10    -0.83  ok   emergent
+  margin_10plus_pct             37.50    44.70    -7.20  OFF  emergent
+  margin_17plus_pct             15.62    26.10   -10.48  OFF  emergent
+  overtime_pct                   9.38     6.20    +3.17  OFF  emergent
+  tie_pct                        0.00     0.29    -0.29  ok   game.play_overtime
+  fg_pct                        89.55    85.00    +4.55  OFF  game.FG_PCT
+  punt_gross                    46.14    47.20    -1.06  ok   game.PUNT
+  kickoff_touchback_pct         14.36    15.50    -1.14  ok   game.KICKOFF
+  time_to_throw                  2.69        -        -  diag protection-time proxy; QB release is not modeled
+
+  27/33 within tolerance
