@@ -301,8 +301,9 @@ def repair_shape(league):
         if abbr == getattr(league, 'user_team', None): continue
         for _ in range(ROSTER_LIMIT):
             report = RN.assess(team)
-            if not report['uncovered'] or len(team.active()) != ROSTER_LIMIT: break
-            sources = _sources(team, report, league.week)
+            coverage = RN.essential_coverage(team, report=report)
+            if not coverage['shortages'] or len(team.active()) != ROSTER_LIMIT: break
+            sources = _sources(team, report, league.week) | {pos for eligible in coverage['sources'].values() for pos in eligible}
             pool = _replacement_pool(league, team, sources)
             if not any(p.pos == 'LS' for p in pool) and _convert_long_snapper(league, team, report):
                 fixed += 1
@@ -313,15 +314,19 @@ def repair_shape(league):
             for p in candidates:
                 contract = PS.minimum_contract(league, team, p)
                 for q in team.active():
-                    if PS.locked(q, league.week): continue
+                    if PS.locked(q, league.week) or PS.protected(team, q, league, incoming=p): continue
                     saved, dead, _ = CT.savings_if_cut(q, league.post_june1())
                     if team.cap_space + saved - contract.cap_hit(0) < -.0005: continue
                     try: require_room(league, team, p.pid, contract, release_pid=q.pid)
                     except ValueError: continue
                     after = RN.assess(team, [r for r in team.active() if r is not q] + [p])
-                    if len(after['uncovered']) >= len(report['uncovered']): continue
+                    next_coverage = RN.essential_coverage(team, report=after)
+                    if not RN.coverage_not_worse(coverage, next_coverage): continue
+                    improvement = sum(coverage['shortages'].values()) - sum(next_coverage['shortages'].values())
+                    if improvement <= 1e-9: continue
                     gain = after['score'] - report['score'] - dead - RN.retention_value(team, q)
-                    key = (-len(after['uncovered']), gain)
+                    if gain <= 0: continue
+                    key = (improvement, gain)
                     if best is None or key > best[0]: best = (key, p, q, contract)
             if best is None:
                 if _cross_train_kicker(league, team, report):
@@ -381,11 +386,13 @@ def violations(league):
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None): continue
         team.sync_cap()
-        missing = RN.assess(team)['uncovered']
+        report = RN.assess(team)
+        missing = report['uncovered']
+        essential = {k: v for k, v in RN.essential_coverage(team, report=report)['shortages'].items() if v >= 1.0}
         depth = PS.essential_depth(team, week=league.week)['shortages']
-        if len(team.active()) != ROSTER_LIMIT or team.cap_space < -.0005 or missing or depth:
+        if len(team.active()) != ROSTER_LIMIT or team.cap_space < -.0005 or missing or depth or essential:
             problems.append(dict(team=abbr, size=len(team.active()),
-                                 cap=round(team.cap_space, 3), missing=list(missing), depth=depth))
+                                 cap=round(team.cap_space, 3), missing=list(missing), depth=depth, essential=essential))
     return problems
 
 
