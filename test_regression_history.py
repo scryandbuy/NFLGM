@@ -21,7 +21,8 @@ class RegressionHistoryTests(unittest.TestCase):
             regress = [r for r in rows if r['line'].startswith('Regression:')]
             self.assertEqual(len(regress), 1)
             self.assertIn('Speed -', regress[0]['line'])
-            self.assertIn('Awareness +', regress[0]['line'])
+            self.assertIn('Awareness +1', regress[0]['line'])
+            self.assertNotRegex(regress[0]['line'], r'\d+\.\d+')
             self.assertEqual(regress[0]['when'], '2026 · Offseason')
             p.ratings['speed_rating'] = 99
             self.assertEqual(_player_history(loaded, p), rows)
@@ -65,6 +66,55 @@ class RegressionHistoryTests(unittest.TestCase):
         self.assertEqual(len(_player_history(L, p)), 1)
         L.transactions[-1].update(before=82.9, after=82.9, lost=.14)
         self.assertEqual(_player_history(L, p), [])
+
+    def test_old_ol_history_uses_whole_endpoints_and_relevant_attributes(self):
+        L = fixture(); p = player('ol', 'LT', 32); L.players[p.pid] = p
+        attrs = {
+            'pass_block_rating': [90.8, 89.4],
+            'run_block_rating': [90.8, 89.2],
+            'strength_rating': [90.8, 89.6],
+            'speed_rating': [70.1, 70.0],
+            'awareness_rating': [80.4, 80.7],
+            'tackle_rating': [50.8, 49.3],
+            'play_rec_rating': [50.4, 51.7],
+            'kick_power_rating': [40.8, 39.6],
+            'throw_power_rating': [40.8, 39.6],
+            'carry_rating': [40.8, 39.6],
+            'block_shed_rating': [40.8, 39.6],
+        }
+        L.log('regress', pid=p.pid, pos='LT', lost=1.27,
+              before=90.8, after=89.5, attrs=attrs)
+        loaded = League.load(L.save())
+        line = _player_history(loaded, loaded.player(p.pid))[0]['line']
+        self.assertEqual(line, 'Regression: -1 OVR (91 → 90) · Strength -1'
+                         ' · Pass Block -2 · Run Block -2 · Awareness +1')
+        self.assertEqual(loaded.transactions[-1]['attrs'], attrs)
+
+    def test_history_uses_report_attributes_and_historical_position(self):
+        L = fixture(); p = player('p', 'LT', 32); L.players[p.pid] = p
+        L.log('regress', pid=p.pid, pos='LT', lost=2, before=84, after=82,
+              attrs={'pass_block_rating': [84, 82]})
+        L.regression = {'2026': {p.pid: dict(pos='TE', before=83.8, after=82.2,
+            attrs={'catch_rating': [84.3, 82.8], 'tackle_rating': [70, 68]})}}
+        line = _player_history(L, p)[0]['line']
+        self.assertEqual(line, 'Regression: -2 OVR (84 → 82) · Catching -1')
+
+    def test_history_and_report_match_for_every_position(self):
+        from views_club import ATTR, FAM
+        attrs = {key: [82.7, 81.3] for group in ATTR.values() for key, _ in group}
+        for pos in FAM:
+            with self.subTest(pos=pos):
+                L = fixture(); p = player('p', pos, 32); L.players[p.pid] = p
+                rec = dict(pos=pos, before=82.7, after=81.3, attrs=attrs)
+                L.regression = {'2026': {p.pid: rec}}
+                L.log('regress', pid=p.pid, **rec)
+                with patch('views.rail', return_value={}), patch('views.club', return_value={}):
+                    report = regression_view(None, L, 'GB')['rows'][0]
+                expected = ['Regression: -2 OVR (83 → 81)']
+                for col in report['cols']:
+                    for group in (col, col.get('extra') or {}):
+                        expected += [f"{r['label']} {r['delta']:+d}" for r in group.get('rows', []) if r.get('delta')]
+                self.assertEqual(_player_history(L, p)[0]['line'], ' · '.join(expected))
 
 
 if __name__ == '__main__': unittest.main()
