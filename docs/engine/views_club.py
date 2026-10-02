@@ -94,7 +94,7 @@ def _row(session, league, t, p):
     return dict(pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, side=('offense' if p.pos in OFFENSE else 'special' if p.pos in ('K', 'P', 'LS') else 'defense'), age=int(p.age), ovr=round(p.ovr), fit=round(_fit(league, t, p), 1),
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), cond=_cond(session, p), morale=morale_word(p), yrs=yrs,
                 hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), status=_status(league, p, t),
-                home_state=home_state(p), season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
+                home_state=home_state(p), season_no=max(1, league.year - (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) + 1) if (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) else None,
                 # ratings view
                 pot=(ceiling_read(p)['ceiling'] if not p.potential_range else None), pot_range=([min(99, int(v) + int(p.xp_spent.get('_unlocks', 0))) for v in p.potential_range] if p.potential_range else None),
                 # stats view: the season line
@@ -276,7 +276,7 @@ def card(session, league, pid):
     for yr in sorted(career)[-3:]:
         ln = _season_line(league, p, yr); seasons.append(dict(year=yr, team=career[yr].get('team') or '', games=int((career[yr] or {}).get('games', 0) or 0), row=ln['row'], cols=ln['cols']))
     cur = _season_line(league, p)
-    h = getattr(p, 'height', None); size = (f"{h // 12}'{h % 12}\" {getattr(p, 'weight', '') or ''}".strip() if h else '')
+    h = getattr(p, 'height', None); size = (f"{int(h) // 12}'{int(h) % 12}\" {getattr(p, 'weight', '') or ''}".strip() if h else '')
     drafted = (f"drafted {p.draft_overall}{_ordn(p.draft_overall)} overall, {p.draft_year}" if getattr(p, 'draft_overall', None) else f"drafted round {p.draft_round}, {p.draft_year}" if getattr(p, 'draft_round', None) else 'undrafted')
     if p.team is None:
         # A FREE AGENT HAS NO CLUB'S NUMBERS: no contract, no cap hit, no penalty, no trade interest, nothing on the
@@ -290,7 +290,7 @@ def card(session, league, pid):
                 role=role, snaps=snaps, missed=missed, pending=pending, market_apy=market_apy, ext_ask=ext_ask, ext_eligible=_ext_ok(league, p),
                 rookie_option=(__import__('extensions').rookie_option_price(league, p) if p.team == session.user_team else None),
                 contract_caption=('On the wire; a claiming club inherits his deal' if (p.team is None and p.contract) else 'Free agent; no contract' if p.team is None else (f"Contract signed {getattr(p.contract, 'signed', league.year)} · {p.contract.years + (len(getattr(p.contract, 'base', [])) - p.contract.years if hasattr(p.contract, 'base') else 0)} yrs · ${round(sum(getattr(p.contract, 'base', [])) + getattr(p.contract, 'sb', 0), 1)}m" if p.contract else 'No contract')),
-                season_no=(league.year - p.draft_year + 1) if getattr(p, 'draft_year', None) else None,
+                season_no=max(1, league.year - (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) + 1) if (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) else None,
                 ovr=round(p.ovr), fit=round(fit, 1), ceiling=ceiling_read(p)['ceiling'] if ceiling_read(p)['ceiling'] is not None else '—',
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), morale=morale_word(p), morale_v=round(m.value) if m is not None else None,
                 contract=(dict(per_year=0.0, years=0, hit=0.0, penalty=0.0, penalty_next=0.0, by_year=[]) if p.team is None else dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), by_year=years)),

@@ -239,7 +239,16 @@ class Session:
         if s.stop[0] == 'week' and not s.played:
             GW.refresh_open_report(L, int(s.stop[1]))
         PA.sync_session(s)
+        if s.stop[0] == 'offseason':
+            s._offseason_condition_reset()
         return s
+
+    def _offseason_condition_reset(self):
+        """Summer restores freshness for every club; injury healing stays separate."""
+        for st in self.runner.states.values():
+            st.cond.cond.clear()
+            st.cond.snaps.clear()
+            st.jaded.clear()
 
     def _recorded_votes(self):
         """Rehydrate this season's ballot without voting again or consuming RNG.
@@ -931,6 +940,7 @@ class Session:
         except Exception: self.post.seeds_at_close = {}
         MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
         self.post_live = None
+        self._offseason_condition_reset()
         self.stop = ('offseason', 0)
         return dict(done='Playoffs', champion=self.post.champion, next=self.next_label())
 

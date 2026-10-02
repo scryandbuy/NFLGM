@@ -2614,18 +2614,19 @@ function renderDraftResults(v) {
   // only within the same default, so a new season resets it instead of carrying last year's draft forward
   if (picksYearFor !== v.default_year) { picksYear = v.default_year; picksYearFor = v.default_year; }
   s.append(el('h2', {}, 'Draft Results', el('small', {}, `${v.results.length} drafted players on record`)));
+  if (picksClub === 'div') picksClub = 'mine';
   const tools = el('div', { class: 'tools' });
-  const clubs = el('div', { class: 'chips' }); for (const [k, l] of [['mine', v.rail.club.name], ['all', 'All Teams'], ['div', v.my_division]]) clubs.append(el('button', { class: 'chip', 'aria-pressed': String(picksClub === k), onclick: () => { picksClub = k; renderDraftResults(v); } }, l));
+  const clubs = el('div', { class: 'chips' }); for (const [k, l] of [['mine', v.rail.club.name], ['all', 'All Teams]]) clubs.append(el('button', { class: 'chip', 'aria-pressed': String(picksClub === k), onclick: () => { picksClub = k; renderDraftResults(v); } }, l));
   const yrsChips = el('div', { class: 'chips' }); for (const y of (v.result_years.includes(v.default_year) ? v.result_years : [v.default_year, ...v.result_years])) yrsChips.append(el('button', { class: 'chip', 'aria-pressed': String(picksYear === y), onclick: () => { picksYear = y; renderDraftResults(v); } }, y));
   const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Player', value: picksQuery }); search.oninput = () => { picksQuery = search.value; drawR(); };
   tools.append(clubs, yrsChips, search); s.append(tools);
   const rt = el('table', { class: 'tbl' });
   const drawR = () => {
-    rt.innerHTML = ''; rt.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n', 'data-tip': 'Where he was drafted' }, 'Pick'), el('th', { class: 'n', 'data-tip': "Where the league's consensus ranked him going into the draft" }, 'Consensus'), el('th', { class: 'n', 'data-tip': 'His overall rating today' }, 'Overall')));
+    rt.innerHTML = ''; rt.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n', 'data-tip': 'Where he was drafted' }, 'Pick'), el('th', {}, 'DEV'), el('th', { class: 'n', 'data-tip': "Where the league's consensus ranked him going into the draft" }, 'Consensus'), el('th', { class: 'n', 'data-tip': 'His overall rating today' }, 'Overall')));
     const q = picksQuery.trim().toLowerCase();
-    const rows = v.results.filter(r => (picksClub === 'all' || (picksClub === 'mine' && r.team && r.team.abbr === v.rail.club.abbr) || (picksClub === 'div' && r.division === v.my_division)) && (!picksYear || r.year === picksYear) && (!q || r.name.toLowerCase().includes(q)));
-    for (const r of rows.slice(0, 200)) rt.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.home_state}${r.team ? ' · ' + showAbbr(r.team.abbr) : ''}`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.pick), el('td', { class: 'n' }, r.cons_was != null ? `#${r.cons_was}` : '—'), el('td', { class: 'n' }, ovrCell(r.ovr))));
-    if (!rows.length) rt.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, (picksYear === v.default_year && !v.default_held) ? `The ${v.default_year} draft has not been held yet. Earlier drafts are on the year chips.` : v.results.length ? 'Nobody matches.' : 'The first class is drafted in the spring.'))));
+    const rows = v.results.filter(r => (picksClub === 'all' || (picksClub === 'mine' && r.team && r.team.abbr === v.rail.club.abbr)) && (!picksYear || r.year === picksYear) && (!q || r.name.toLowerCase().includes(q)));
+    for (const r of rows.slice(0, 200)) rt.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.home_state}${r.team ? ' · ' + showAbbr(r.team.abbr) : ''}`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.pick), el('td', {}, devTag(r.dev)), el('td', { class: 'n' }, r.cons_was != null ? `#${r.cons_was}` : '—'), el('td', { class: 'n' }, ovrCell(r.ovr))));
+    if (!rows.length) rt.append(el('tr', {}, el('td', { colspan: '6' }, el('div', { class: 'empty' }, (picksYear === v.default_year && !v.default_held) ? `The ${v.default_year} draft has not been held yet. Earlier drafts are on the year chips.` : v.results.length ? 'Nobody matches.' : 'The first class is drafted in the spring.'))));
   };
   s.append(rt); drawR(); page.append(s);
 }
