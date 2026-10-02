@@ -8,7 +8,7 @@ import game
 import game_availability as GA
 import practice_squad as PS
 import roster_needs as RN
-from cap_engine import Contract
+from cap_engine import CAP, Contract
 from league import League, Player, Team
 from postseason import Postseason
 from season import SeasonRunner
@@ -42,15 +42,16 @@ class AvailabilityTests(unittest.TestCase):
         GA.ensure(league, team, None, 2)
         self.assertIn(p, team._elevated)
         self.assertEqual(p.xp_spent['_elevations'], 1)
-        loaded = League.load(league.save()); other = loaded.teams[team.abbr]
-        before = len(loaded.transactions)
-        GA.ensure(loaded, other, None, 2)
-        self.assertEqual([p.pid for p in other._elevated], ['replacement'])
-        self.assertEqual(loaded.player(p.pid).xp_spent['_elevations'], 1)
-        self.assertEqual(before, len(loaded.transactions))
-        self.assertEqual(len(other.active()), 53)
-        PS.reset_season(loaded)
-        self.assertEqual(other._elevated, [])
+        with patch.dict(CAP):
+            loaded = League.load(league.save()); other = loaded.teams[team.abbr]
+            before = len(loaded.transactions)
+            GA.ensure(loaded, other, None, 2)
+            self.assertEqual([p.pid for p in other._elevated], ['replacement'])
+            self.assertEqual(loaded.player(p.pid).xp_spent['_elevations'], 1)
+            self.assertEqual(before, len(loaded.transactions))
+            self.assertEqual(len(other.active()), 53)
+            PS.reset_season(loaded)
+            self.assertEqual(other._elevated, [])
 
     def test_fourth_regular_use_needs_contract_but_playoffs_can_elevate(self):
         league, team = self.roster(); p = self.candidate(league, team)

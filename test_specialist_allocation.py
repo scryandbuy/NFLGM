@@ -119,7 +119,11 @@ class SpecialistAllocationTests(unittest.TestCase):
             p.xp_spent = {}; p.out_until = None; L.players[pid] = p
             if source: PS.squad(donor).append(p)
             else: L.free_agents.append(pid)
-        t.sync_cap(); t.cap.cap = t.cap.charges(t.phase) + .01
+        t.sync_cap()
+        rookie_cost = PS.minimum_contract(L, t, L.player('affordable-ps')).cap_hit(0)
+        veteran_cost = PS.minimum_contract(L, t, L.player('expensive-veteran')).cap_hit(0)
+        self.assertGreater(veteran_cost, rookie_cost + .05)
+        t.cap.cap = t.cap.charges(t.phase) + rookie_cost + .05
         self.assertEqual(CD.repair_depth(L), 1)
         self.assertEqual(PS.essential_depth(t, week=L.week)['shortages'], {})
         self.assertEqual(L.player('affordable-ps').team, t.abbr)

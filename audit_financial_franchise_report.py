@@ -18,16 +18,22 @@ def report(folder):
     for s in snaps:
         if s['invalid_owners'] or s['multiple_owners']:
             failures.append(dict(year=s['year'], label=s['label'], issue='ownership'))
-        ready = s['label'] in ('initial_cutdown', 'end_offseason', 'week_1', 'week_9', 'week_18')
-        if ready:
+        opening = s['label'] in ('initial_cutdown', 'end_offseason')
+        sampled_week = s['label'] in ('week_1', 'week_9', 'week_18')
+        if opening or sampled_week:
             for t in s['teams']:
-                for issue, bad in [('illegal_cap', t['cap_space'] < -.01),
-                                   ('over_53', t['active'] > 53),
-                                   ('missing_roles', bool(t['uncovered'])),
-                                   ('duplicate_or_missing_package_players', bool(t['package_bad']))]:
+                # Weekly snapshots are taken after the games and transactions.
+                # A newly acquired player may temporarily put a team over 53;
+                # the next advance clears it before any kickoff.
+                checks = [('illegal_cap', t['cap_space'] < -.01)]
+                if opening:
+                    checks += [('over_53', t['active'] > 53),
+                               ('missing_roles', bool(t['uncovered'])),
+                               ('duplicate_or_missing_package_players', bool(t['package_bad']))]
+                for issue, bad in checks:
                     if bad:
                         failures.append(dict(year=s['year'], label=s['label'], team=t['team'], issue=issue))
-        if ready or s['label'] == 'season_closed':
+        if opening or sampled_week or s['label'] == 'season_closed':
             ts = s['teams']
             future = [[t['financial_plan']['years'][i] for t in ts] for i in range(4)]
             selected.append(dict(year=s['year'], label=s['label'], regular_games=s['regular_games'],
@@ -47,6 +53,11 @@ def report(folder):
     for s in closed:
         if (s['regular_games'], s['playoff_games']) != (272, 13):
             failures.append(dict(year=s['year'], issue='incomplete_season', regular=s['regular_games'], playoffs=s['playoff_games']))
+    for k in kickoffs:
+        for abbr, count in k['active'].items():
+            if count > 53:
+                failures.append(dict(year=k['year'], week=k['week'], team=abbr,
+                                     issue='over_53_at_kickoff', active=count))
     by_year = collections.defaultdict(collections.Counter)
     for e in events:
         by_year[str(e['year'])][e['kind']] += 1
