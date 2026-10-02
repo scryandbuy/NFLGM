@@ -71,7 +71,8 @@ class RosterNeedsTests(unittest.TestCase):
 
     def test_trade_search_sees_an_empty_position(self):
         team = Team()
-        league = SimpleNamespace(teams={'TST': team}, free_agents=[], week=0)
+        league = SimpleNamespace(teams={'TST': team}, free_agents=[], week=0,
+                                 year=2026, phase='regular', transactions=[])
         with patch.object(trades, 'starter_bar', return_value={'QB': 80.0}):
             _, needs = trades.surplus_and_needs(league, team, {}, None)
         self.assertIn('QB', needs)
