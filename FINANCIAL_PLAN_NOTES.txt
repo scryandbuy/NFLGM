@@ -97,3 +97,42 @@ python compare_financial_audit.py <baseline.json> <candidate.json> --output <com
 Research/output directory: ../../outputs/gm-financial-research-20261002
 Use baseline-30102.json and candidate-final-30102.json; candidate-30102.json is
 an intermediate run before the APY-gate and displacement corrections.
+
+Behavioral follow-up — 2 October 2026
+The user clarified that believable GM thinking is the goal; precise historical
+reserve fitting is not required. Further data collection was stopped.
+
+Confirmed and corrected: an expiring rookie star could produce zero retention
+allowance because his old pay was below replacement salary. Nearby same-position
+veteran contracts now inform the placeholder. It remains a soft planning cost,
+refreshes without randomness or persisted quote caches, excludes identifiable
+original rookie contracts, and disappears once an actual renewal covers that year.
+The new regression was demonstrated to fail under the old current-pay-only rule.
+
+97 focused tests passed (financial plan, market routes, transaction consumers,
+CPU extension counters, cap accounting, emergency roster recovery).
+24 controlled situations plus a filled-job follow-up passed using real roster
+gain and bidding functions: trivial upgrades do not become pursuits; major funded
+upgrades do; higher prices do not revive rejected proposals; redundant bids are
+withdrawn. Extreme GM profiles establish direction, not real-world prevalence.
+
+Additional accelerated offseason runs, all 32 teams:
+Before renewal fix: seed 30103 median room $11.707M; seed 30104 $10.005M.
+After fix, seed 30103: median $12.5115M, maximum $31.955M, 2 clubs below $1M.
+All three runs finished with exactly 53 active players per club, zero negative
+cap balances and zero uncovered required roles. The final run recorded 5,384
+financial evaluations (not unique transactions); normal spending, exceptional
+upgrades, retention protection and emergency approvals all appeared.
+Final run took 321 seconds versus 301 seconds for its precursor. Decisions alter
+later random draws, so the roster-value difference is not a causal estimate.
+These runs skip games, injuries, retirement and regression. Full-season and
+multiyear stability are not established by this pass.
+
+Source correction: 4bd5a57. Browser copy: 97a572a, build 30d8c74814, verified
+equal to source. Structured evidence: ../../outputs/gm-financial-research-20261002/
+behavior-validation.json and behavior-final-scenarios.json; complete financial
+decision trace: behavior-final-decisions-30103.jsonl.
+
+Coordination: Changes (2) was assigned consumer behavior checks, but paused for
+clarification in its own chat and supplied no new findings in this pass. The
+coordinator ran the existing consumer checks as part of the 97 tests above.
