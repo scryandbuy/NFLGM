@@ -47,6 +47,14 @@ def resolve_scramble(qb, tacklers, yards_to_endzone, rng, rate_fn, AVG=0.70):
     # shape/scale solved against mean 7.00 / sd 6.07
     shape, scale = 1.33, 5.26
     y = rng.gamma(shape, scale) * (1.0 + 0.85 * (mob - AVG))
+    # Escaping the pocket does not also beat the pursuit. Use the selected
+    # on-field defenders, with no extra roll and neutral legacy context.
+    unique = {p.get('pid', id(p)): p for p in tacklers if p}
+    if unique:
+        chase = float(np.mean([rate_fn(p, {'pursuit_rating': .40,
+                               'speed_rating': .30, 'tackle_rating': .30})
+                               for p in unique.values()]))
+        y *= float(np.clip(1.0 - .40 * (chase - AVG), .85, 1.20))
     y = float(np.clip(y, 0.0, min(yards_to_endzone, SCRAMBLE['max'])))
     return dict(type='scramble', yards=round(y, 1),
                 touchdown=y >= yards_to_endzone, by=qb.get('pid'))

@@ -288,13 +288,14 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
                 int_roll=int_roll, p_int=max(0.0, p_int))
 
 # ============================================================ THE CATCH
-def resolve_catch(receiver, defender, contested, rng):
+def resolve_catch(receiver, defender, contested, rng, in_man=True):
     if not contested:
         # Real drop rates run roughly 2% for the best hands to 8% for the worst.
         # The first build spread them only 95.0 to 96.9 - hands did not matter.
         p = 0.952 + 0.55 * (rate(receiver, CATCH['clean']) - AVG)
     else:
-        e = edge(rate(receiver, CATCH['contested']), rate(defender, CATCH['defender']))
+        defense = CATCH['defender'] if in_man else ROUTE['defender_zone']['contest']
+        e = edge(rate(receiver, CATCH['contested']), rate(defender, defense))
         p = 0.50 + 1.10 * e
     # rain and snow: the drop rate runs 1.4x and 1.7x
     p = 1.0 - (1.0 - p) * ENV.drop_mult
@@ -1135,7 +1136,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     pressured=bool(p['pressure'] >= 0.35))
     # A contested ball that already survived the throw should not face the full
     # contested-catch gate again; drops were running at 8.7% against a real ~5%.
-    if not resolve_catch(tgt, cb, contested and rng.random() < 0.45, rng):
+    if not resolve_catch(tgt, cb, contested and rng.random() < 0.45, rng, in_man=in_man):
         return dict(type='drop', yards=0.0, touchdown=False,
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
