@@ -45,7 +45,7 @@ def _lean_word(k, val):
     return f"{val:.2f}"
 DEPTH_LABELS = ('Short', 'Medium', 'Deep')
 PROTECTIONS = ['half_slide', 'full_slide', 'six', 'empty']
-PROT_WORDS = {'half_slide': 'Half slide', 'full_slide': 'Full slide', 'six': 'Six-man', 'empty': 'Empty'}
+PROT_WORDS = {'half_slide': 'Half Slide', 'full_slide': 'Full Slide', 'six': 'Man Protection', 'empty': 'Empty'}
 
 
 def _base_plan(session, league, abbr):
