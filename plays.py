@@ -15,7 +15,8 @@ what moves the result.
 """
 import numpy as np
 from matchups import (PASS_RUSH, ROUTE, THROW, CATCH, YAC, RUN_BLOCK,
-                      BALL_SECURITY, ZONE_DEFENDERS_NEAR, zone_window)
+                      BALL_SECURITY, ZONE_DEFENDERS_NEAR, zone_window,
+                      throw_ability_multiplier)
 
 AVG = 0.70
 
@@ -237,10 +238,7 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     if pressure > 0:
         up = rate(qb, THROW['under_pressure'])
         acc *= 1.0 - pressure * (0.42 - 0.34 * (up - AVG))
-    if on_run:
-        acc *= 0.88 + 0.24 * (rate(qb, THROW['on_run']) - AVG)
-    if play_action:
-        acc *= 1.0 + 0.12 * (rate(qb, THROW['play_action']) - AVG)
+    acc *= throw_ability_multiplier(qb, rate, on_run, play_action)
 
     # A deep throw is harder for EVERYONE, not just for a QB with a poor deep
     # accuracy rating. The first build used one depth-independent multiplier, so
@@ -750,6 +748,24 @@ def _coverage_evidence(coverage, pairs=(), primary=None, helper=None, in_man=Fal
                 primary=owner, helper=helper_id, mode=mode, hole=bool(hole))
 
 
+def moving_throw(call, *, screen=False, swing=False, hot=False):
+    """Explicit movement or the existing under-center PA flood boot action.
+
+    Pressure alone is not a rolling throw. Quick screens, swings and hot
+    answers also stay on their existing mechanics; mobility grants no time
+    or sack escape here.
+    """
+    if screen or swing or hot:
+        return False
+    boot = bool(call.get('play_action') and not call.get('shotgun', False)
+                and call.get('concept') == 'flood')
+    if call.get('qb_movement') == 'boot':
+        return boot  # An audible may have replaced the original concept.
+    if 'on_run' in call:
+        return bool(call['on_run'])
+    return boot
+
+
 def _pass_play(off, deff, off_call, def_call, ytg, rng):
     depth = off_call.get('depth', 'short')
     ok = available_depths(ytg)
@@ -1002,6 +1018,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     coverage_evidence = _coverage_evidence(in_coverage, pairs, cov, zone_second, in_man, zone_hole)
     if depth == 'short' and not screen and not swing:
         cmult *= SHORT_PASS_COMPLETION
+    on_run = moving_throw(off_call, screen=screen, swing=swing, hot=hot)
     if in_man:
         cb = cov
         # Apply the concept and read modifiers to the COMPLETION PROBABILITY,
@@ -1012,13 +1029,14 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         # (61.6% against 75.7%) and dragged league completion to 58.5%.
         sep = float(np.clip(sep_raw, .02, .98))
         thr = resolve_throw(off['qb'], depth, sep, p['pressure'], rng,
-                            play_action=off_call.get('play_action', False),
+                            on_run=on_run, play_action=off_call.get('play_action', False),
                             outcome_mult=cmult * (1.0 - dis) * rmod['comp'] * (TE_CATCH_MULT if (tgt.get('pos') == 'TE' and depth != 'deep') else 1.0),
                             def_awr=rate(cov, {'awareness_rating': 1.0}) if cov else DEF_AWR_MEAN)
         complete = thr['result'] == 'complete'
         global LAST_XCOMP; LAST_XCOMP = float(thr['p'])
         if PASS_TRACE is not None:
             PASS_TRACE.append(dict(path='man', depth=depth, screen=screen,
+                                   on_run=on_run, play_action=bool(off_call.get('play_action')),
                                    base=thr['base'], p=thr['p'],
                                    acc=rate(off['qb'], THROW[depth]),
                                    sep=sep, cmult=cmult, rmod=rmod['comp'],
@@ -1041,7 +1059,8 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         za = float(def_call.get('zone_aggression', 0.5)) - 0.5
         z_bias = (1.0 - 0.28 * za) if depth == 'short' else (1.0 + 0.20 * za) if depth == 'medium' else (1.0 + 0.24 * za)
         z = resolve_zone(tgt, dbs, off['qb'], def_call['shell'], depth,
-                         p['pressure'], rng, rate, hole=zone_hole, bias=z_bias)
+                         p['pressure'], rng, rate, hole=zone_hole, bias=z_bias,
+                         on_run=on_run, play_action=off_call.get('play_action', False))
         # Apply the concept to the WINDOW, not as a second independent gate.
         # Gating twice dropped four-man-rush completion to 51.8% against a
         # real 61.9%.
@@ -1054,6 +1073,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
             adj = min(0.97, adj + SCREEN_RESCUE)
         if PASS_TRACE is not None:
             PASS_TRACE.append(dict(path='zone', depth=depth, screen=screen,
+                                   on_run=on_run, play_action=bool(off_call.get('play_action')),
                                    base=z['raw'] * cmult * cover_relief
                                         * (1.0 - dis) * rmod['comp'],
                                    p=adj, acc=rate(off['qb'], THROW[depth]),
