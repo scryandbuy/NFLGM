@@ -217,6 +217,7 @@ class Player:
     def to_dict(self):
         d = {k: getattr(self, k) for k in self.__slots__
              if k not in ('contract', 'morale', '_team_ref')}
+        d['te_rating_version'] = 1
         d['contract'] = contract_to_dict(self.contract)
         d['morale'] = morale_to_dict(self.morale)
         return d
@@ -230,6 +231,14 @@ class Player:
         p.morale = morale_from_dict(d.get('morale'))
         p.career = {int(k): v for k, v in (d.get('career') or {}).items()}
         PB.restore_background(p)
+        if p.pos == 'TE' and d.get('te_rating_version', 0) < 1:
+            import position_change as PC
+            ratings = PC.effective_ratings(p)
+            delta = TG.position_score(ratings, 'TE') - TG.te_role_score(ratings, 'balanced')
+            if p.potential is not None:
+                p.potential = min(99.0, max(0.0, p.potential + delta))
+            if p.potential_range is not None:
+                p.potential_range = tuple(min(99.0, max(0.0, v + delta)) for v in p.potential_range)
         return p
 
     def __repr__(self):

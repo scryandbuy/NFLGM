@@ -253,6 +253,26 @@ DEPTH_WEIGHTS = {
     'P': {'kick_power_rating': 0.55, 'kick_acc_rating': 0.40, 'awareness_rating': 0.05},
     'LS': {'awareness_rating': 0.60, 'strength_rating': 0.15, 'run_block_rating': 0.15, 'pass_block_rating': 0.10},
 }
+# Preserve the previous scale for one-time save migration and balanced roles.
+TE_LEGACY_WEIGHTS = dict(DEPTH_WEIGHTS['TE'])
+_TE_BLOCK = {k for k in TE_LEGACY_WEIGHTS if 'block' in k}
+_TE_RECEIVING = set(TE_LEGACY_WEIGHTS) - _TE_BLOCK - {
+    'awareness_rating', 'speed_rating', 'accel_rating', 'strength_rating'}
+TE_ROLE_WEIGHTS = {'balanced': dict(TE_LEGACY_WEIGHTS)}
+TE_ROLE_WEIGHTS['receiving'] = {
+    k: v * (10 / 21 if k in _TE_BLOCK else 60 / 49 if k in _TE_RECEIVING else 1)
+    for k, v in TE_LEGACY_WEIGHTS.items()}
+TE_ROLE_WEIGHTS['blocking'] = {
+    k: v * (50 / 21 if k in _TE_BLOCK else 50 / 79)
+    for k, v in TE_LEGACY_WEIGHTS.items()}
+DEPTH_WEIGHTS['TE'] = dict(TE_ROLE_WEIGHTS['receiving'])
+
+
+def te_role_score(ratings, role='balanced'):
+    weights = TE_ROLE_WEIGHTS[role]
+    return sum(ratings.get(k, 70.0) * v for k, v in weights.items()) / sum(weights.values())
+
+
 DEPTH_WEIGHTS['RG'] = DEPTH_WEIGHTS['LG']
 DEPTH_WEIGHTS['RT'] = dict(DEPTH_WEIGHTS['LT'])
 DEPTH_WEIGHTS['REDG'] = DEPTH_WEIGHTS['LEDG']
@@ -423,6 +443,8 @@ def _score_raw(player, position, scheme=None):
     w = dict(DEPTH_WEIGHTS.get(position, {'awareness_rating': 1.0}))
     if scheme:
         for s in ([scheme] if isinstance(scheme, str) else scheme):
+            if position == 'TE' and s in ('heavy_te', 'spread_te'):
+                continue  # Personnel roles are graded at the assignment, not twice through fit.
             if position not in SCHEME_DOMAIN.get(s, ()):
                 continue
             for k, v in SCHEME_SHIFT.get(s, {}).items():

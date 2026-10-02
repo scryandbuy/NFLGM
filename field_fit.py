@@ -33,6 +33,8 @@ def touched(pos, tags):
     w = TG.DEPTH_WEIGHTS.get(pos, {})
     out = {}
     for s in (tags or []):
+        if pos == 'TE' and s in ('heavy_te', 'spread_te'):
+            continue
         if pos not in TG.SCHEME_DOMAIN.get(s, ()):
             continue
         for k, v in TG.SCHEME_SHIFT.get(s, {}).items():

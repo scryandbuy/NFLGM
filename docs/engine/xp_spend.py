@@ -52,9 +52,12 @@ def _weekly_rate(player):
     return sum(led.get(source, 0.0) for source in ('game', 'snaps', 'roster', 'long_snap')) / weeks
 
 
-def choose_attr(player, gm, rng):
+def choose_attr(player, gm, rng, team=None):
     """One attribute, drawn. None if nothing is buyable."""
     w = TG.DEPTH_WEIGHTS.get(player.pos)
+    if player.pos == 'TE' and team is not None:
+        import offense_roles as OR
+        w = TG.TE_ROLE_WEIGHTS[OR.te_development_role(player, team)]
     if not w:
         return None
     belief = getattr(gm, 'dev_belief', 0.5)
@@ -127,7 +130,7 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
             else:
                 out.append(('save', target, max(0.0, XP.cost_per_point(player, target) - player.xp)))
                 break
-        attr = choose_attr(player, gm, rng)
+        attr = choose_attr(player, gm, rng, team)
         if attr is None:
             break
         cost = XP.buy(player, attr, year=year, week=week, source=source)

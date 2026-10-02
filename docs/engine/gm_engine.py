@@ -154,11 +154,11 @@ def scheme_of(gm):
     keys.append(blk if blk in ('zone', 'gap') else 'mixed_block')
     deep = float(getattr(gm, 'deep', 0.5)); pa = float(getattr(gm, 'play_action', 0.5)); mo = float(getattr(gm, 'motion', 0.5)); pl = float(getattr(gm, 'pass_lean', 0.5)); tp = float(getattr(gm, 'tempo', 0.5))
     keys.append('deep_game' if deep >= 0.55 else 'quick_game' if deep <= 0.42 else 'intermediate_game')
-    # base personnel: the tight end's own tag, and the tag for the receivers, the back and the fullback
+    # TE jobs are graded per assignment; these tags cover the other skill roles.
     per = str(getattr(gm, 'off_personnel', '11'))
-    if per in ('12', '13'): keys += ['heavy_te', 'two_wide']
-    elif per in ('21', '22'): keys += ['heavy_te', 'two_back']
-    else:                   keys += ['spread_te', 'three_wide']        # 11, 10, multiple
+    if per in ('12', '13'): keys += ['two_wide']
+    elif per in ('21', '22'): keys += ['two_back']
+    else:                   keys += ['three_wide']        # 11, 10, multiple
     keys.append('pa_heavy' if pa >= 0.62 else 'dropback_qb' if pa <= 0.45 else 'balanced_qb')
     if mo >= 0.65: keys.append('motion_off')
     if pl <= 0.45: keys.append('run_first')
@@ -190,6 +190,8 @@ def scheme_fit(player_ratings, pos, team):
         return 0.0
     gm = getattr(team, 'gm', None)
     rigidity = float(getattr(gm, 'scheme_rigidity', 0.5)) if gm is not None else 0.5
+    if pos == 'TE':
+        scheme = [s for s in ([scheme] if isinstance(scheme, str) else scheme) if s not in ('heavy_te', 'spread_te')]
     raw = TG.position_score(player_ratings, pos)
     sch = TG.position_score(player_ratings, pos, scheme)
     return float((sch - raw) * (0.6 + 0.8 * rigidity))
