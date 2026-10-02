@@ -515,7 +515,8 @@ class Team:
         gm_engine, negotiation_engine and roster_construction were written
         against a plain dict. Rather than rewrite four modules, hand them one.
         """
-        return dict(team=self.abbr, win_pct=self.win_pct,
+        from trade_engine import race_context
+        return dict(**race_context(self), team=self.abbr, win_pct=self.win_pct,
                     prev_win_pct=self.prev_win_pct, contender=self.contender,
                     avg_age=self.avg_age, top_apy=self.top_apy,
                     expiring=self.expiring, depth=self.depth,
