@@ -301,12 +301,14 @@ def _ai_refusal(league, p):
     return None
 
 
-def _retention_budget(league, team, player, contract, action='extension'):
+def _retention_budget(league, team, player, contract, action='extension', *,
+                      benefit=None, before=None, market=None):
     import financial_plan as FP
     import roster_needs as RN
-    benefit = max(0.0, RN.departure_loss(team, player), RN.retention_value(team, player))
+    if benefit is None:
+        benefit = max(0.0, RN.departure_loss(team, player), RN.retention_value(team, player))
     return FP.evaluate(league, team, additions=[(player, contract)],
-                       gain=benefit, action=action)
+                       gain=benefit, action=action, before=before, market=market)
 
 
 def negotiate_ai(league, p, apy, years, rng=None, pool=None):

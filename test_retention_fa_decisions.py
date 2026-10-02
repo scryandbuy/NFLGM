@@ -189,6 +189,31 @@ class RetentionRecruitmentTests(unittest.TestCase):
         self.assertFalse(row['affordable'])
         self.assertIn('legal_cap_failure',row['reasons'])
 
+    def test_review_cache_matches_fresh_financial_evaluations(self):
+        for room in (5.,50.,400.):
+            with self.subTest(room=room):
+                self.setUp()
+                for pid in ('WR2','CB0','TE1'):self.expiring(pid)
+                self.t.sync_cap();self.t.cap.dead=self.t.cap.limit-self.t.cap.charges(self.t.phase)-room
+                other=copy.deepcopy(self.L);ot=other.teams[self.t.abbr]
+                original=EXT._retention_budget
+                def fresh(L,t,p,c,action='extension',**unused):
+                    # Deliberately rebuild all financial and role inputs for
+                    # every candidate schedule, as the previous path did.
+                    return original(L,t,p,c,action)
+                with patch.object(EXT,'terms',return_value=self.quote), \
+                     patch.object(FP,'retention_market',wraps=FP.retention_market) as scans:
+                    cached=RP.refresh(self.L,self.t)
+                    cached_scans=scans.call_count
+                with patch.object(EXT,'terms',return_value=self.quote), \
+                     patch.object(EXT,'_retention_budget',side_effect=fresh):
+                    uncached=RP.refresh(other,ot)
+                self.assertEqual(cached,uncached)
+                self.assertEqual(self.L.transactions,other.transactions)
+                self.assertEqual(self.t.cap_space,ot.cap_space)
+                self.assertEqual(self.L.save(),other.save())
+                self.assertEqual(cached_scans,1)
+
     def test_late_market_can_fill_secondary_jobs_behind_elite_starter(self):
         for pos,base in (('WR','11'),('CB','11'),('TE','12')):
             with self.subTest(pos=pos):
