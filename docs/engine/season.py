@@ -793,9 +793,8 @@ class SeasonRunner(StandingsView):
         if played is None: played = getattr(self, 'last_played', []) or []
         self.week = week
         self.L.week = week
-        # THE WEEKLY ADVANCE: every AI club spends what its players earned, and
-        # the user's auto-spend men go with them. The user's other players
-        # keep their XP until he spends it from the player tab.
+        # CPU clubs spend accumulated XP every third week. User auto-spend
+        # still runs weekly; other user players keep XP for manual spending.
         XS.spend_week(self.L, week, self.rng,
                       user_team=getattr(self.L, 'user_team', None))
         import inbox as IB, practice_squad as PSQ, waivers as WV, morale as MO

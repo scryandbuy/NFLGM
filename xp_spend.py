@@ -1,8 +1,9 @@
 """
 HOW A CLUB SPENDS ITS PLAYERS' XP.
 
-Runs at the weekly advance for every AI club, and for any of the user's
-players with auto-spend on. XP belongs to the man who earned it, so the
+Runs every third league week for AI clubs, and weekly for any of the user's
+players with auto-spend on. XP accumulates between spending rounds.
+XP belongs to the man who earned it, so the
 club's choices are about HIM: what to buy, whether to buy a physical,
 whether to hold the money for a ceiling unlock.
 
@@ -29,6 +30,7 @@ import targets as TG
 
 YOUNG = 26            # physicals are bought for men this age and under
 SAVE_WEEKS = 4        # an unlock within this many weeks of earning is worth saving for
+CPU_SPEND_INTERVAL = 3
 
 
 def situation(team, week):
@@ -154,8 +156,13 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
 
 
 def spend_week(league, week, rng, user_team=None, verbose=False):
-    """Every AI club, and the user's auto-spend men. Returns {pid: actions}."""
+    """CPU spending every three weeks; user auto-spend weekly. Returns {pid: actions}.
+
+    Use the league week so saves, byes, and season changes need no separate
+    spending counter. Earnings-rate bookkeeping still advances every week.
+    """
     log = {}
+    cpu_spend_due = week > 0 and week % CPU_SPEND_INTERVAL == 0
     for abbr, team in league.teams.items():
         gm = team.gm
         for p in team.roster:
@@ -163,6 +170,8 @@ def spend_week(league, week, rng, user_team=None, verbose=False):
                 continue
             p.xp_spent['_weeks'] = p.xp_spent.get('_weeks', 0) + 1
             if abbr == user_team and not p.xp_spent.get('_auto'):
+                continue
+            if abbr != user_team and not cpu_spend_due:
                 continue
             acts = spend_player(p, gm, team, week, rng, year=league.year, source='Assistant' if abbr == user_team else 'AI')
             if acts:
