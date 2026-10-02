@@ -316,3 +316,11 @@ Continue monitoring first-half play selection after a stalled hurry drive, penal
 - Added gradual second-half catch-up pace based on remaining game time and required scores. It applies to normal in-bounds play intervals and penalty ready-for-play runoff, preserves timeout/incomplete timing, and has no discontinuity at the Q3/Q4 boundary. Full hurry remains separate from this gradual acceleration.
 - Copied play-by-play now applies the existing NYG->NY, NYJ->NJ, LAC->CA presentation formatter to the complete exported text. Saved canonical team IDs are unchanged.
 - Verification:37 clock/fourth-down checks,14 save/resume/log checks, and a Node execution of the actual copy callback passed. Browser engine rebuilt. Four interceptions and two11-yard sacks remain observational watches; no broad turnover or sack-loss tuning from this game.
+
+## Week 5 DET at GB: safety and onside fixes
+
+- Safety outcomes are identified before clock/timeout processing. Only live action runs off; no post-safety huddle or timeout is charged. Sack and run safety endpoints are the goal line, fixing net field-yardage summaries.
+- Reproduced safety at4:59 from own7: finishes4:53 with both teams' timeouts unchanged in ordinary and stepped drive paths. Original own13 drive endpoint gives minus13 net field yards including the earlier penalty.
+- Onside evaluation reserves45 seconds plus6 seconds for each additional required scoring possession. It no longer values one usable possession as a complete comeback. The deep-kick alternative also cannot reuse timeouts spent forcing the stop.
+- Down23 at2:14 with three timeouts now selects onside across cautious/neutral/aggressive settings. One-score deep-kick and decided-blowout cases remain available. This is a bounded clock-feasibility heuristic, not a newly calibrated full comeback probability model.
+-55 focused checks including safety ordinary/stepped paths, previous clock/log regressions and save/resume passed. Browser rebuilt. Repeated18-yard sacks remain on the watch list; no sack-distribution change.

@@ -915,12 +915,18 @@ def _onside_call(clock, need, my_tos, coach, rng):
     c = coach or {}
     aggr = float(np.clip(0.5 * float(c.get('fourth_down', 0.5)) + 0.5 * float(c.get('adjust_willingness', 0.5)), 0.0, 1.0))
     p_rec = KICKOFF['onside_recovery']
+    scores_needed = int(np.ceil(need / 8.0))
+    # The first possession is useful only if time remains for the other
+    # scores. Reserve an optimistic 45-second scoring drive plus a six-second
+    # recovery attempt for each additional possession; do not spend the
+    # entire remaining clock valuing a single consolation score.
+    reserve = 51.0 * max(0, scores_needed - 1)
     def usable(secs, tos):
-        pr, _ = _possession_odds(secs, tos); return pr / 0.5             # the odds of a usable possession, 0 to 1
+        pr, _ = _possession_odds(max(0.0, secs - reserve), tos); return pr / 0.5
     # DEEP: they have it at their 30; the ball comes back if they stall (about 60% of drives after a kickoff do),
     # with whatever their three snaps leave on the clock; each timeout in hand keeps about 24 seconds of it
     burn = 3 * PLAY_SECS_RUN - 24.0 * min(3, my_tos)
-    v_deep = 0.60 * usable(max(0.0, clock - burn - 6.0), my_tos)
+    v_deep = 0.60 * usable(max(0.0, clock - burn - 6.0), max(0, my_tos - 3))
     # ONSIDE: recovered, the ball is near midfield with the clock intact (worth more than a kickoff drive); missed,
     # they have it in range and the clock, and it comes back only if they stall (about 35% from there)
     v_rec = 1.25 * usable(clock, my_tos)
@@ -1755,6 +1761,7 @@ def _advance(dr, gained):
         dr.result, dr.points = 'Touchdown', 6
         return True
     if dr.yardline >= 100:
+        dr.yardline = 100.0
         dr.result, dr.points = 'Safety', -2
         return True
     if dr.togo <= 0:
@@ -2619,6 +2626,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # the live drive unchanged until scoring/down enforcement below.
         after_play = copy.copy(dr)
         _advance(after_play, out.get('yards', 0.0))
+        scoring_safety = after_play.result == 'Safety'
         _secs_after = secs_in_half - live_seconds
         after_play.clock = dr.clock - live_seconds
         _plan_to = end_of_half_plan(after_play, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None)) if _secs_after > 4 and after_play.result is None and after_play.down <= 4 else None
@@ -2627,7 +2635,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
         # The change of possession stops the clock at the whistle. Spending a
         # timeout for the former offense here buys no time.
-        used, used_by = (False, None) if late_penalty or _fourth_fail else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
+        used, used_by = (False, None) if late_penalty or _fourth_fail or scoring_safety else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
         hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing)
         if half_end is not None and getattr(dr, '_half_stall_intent', None) is not None:
             hurry = dr._half_stall_intent == 'attack'
@@ -2648,7 +2656,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 and timeouts is not None and timeouts.left.get(pos, 0) > 0):
             used = timeouts.use(pos); used_by = pos
             elapsed = live_seconds
-        if (t in ('run', 'complete', 'scramble') and ((out.get('touchdown') and SCORE_STOPS_CLOCK) or float(np.round(float(out.get('yards', 0.0) or 0.0)) if SCORE_STOPS_CLOCK else float(out.get('yards', 0.0) or 0.0)) >= dr.yardline - 0.01)) or _fourth_fail:
+        if scoring_safety or (t in ('run', 'complete', 'scramble') and ((out.get('touchdown') and SCORE_STOPS_CLOCK) or float(np.round(float(out.get('yards', 0.0) or 0.0)) if SCORE_STOPS_CLOCK else float(out.get('yards', 0.0) or 0.0)) >= dr.yardline - 0.01)) or _fourth_fail:
             dr.clock -= live_seconds  # scoring/change of possession stops at the whistle
         elif added_penalty:
             _tick(dr, live_seconds)
@@ -2662,7 +2670,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         dr.clock = float(np.ceil(dr.clock - 1e-9))                          # the clock is whole seconds; a fraction left is a second
         dr.clock = max(wall, dr.clock)
         if not added_penalty:
-            dr.clock_running = t in ('run', 'complete', 'scramble', 'sack') and not used and not out.get('touchdown')
+            dr.clock_running = t in ('run', 'complete', 'scramble', 'sack') and not used and not out.get('touchdown') and not scoring_safety
             dr.play_clock = 40.0
             dr.runoff_charged = max(0.0, clock_before - dr.clock - live_seconds) if dr.clock_running else 0.0
         after_clock = dr.clock - half_end if half_end is not None else dr.clock
@@ -2681,7 +2689,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         before = dr.yardline
         if t == 'sack' and dr.yardline - float(out.get('yards', 0.0) or 0.0) >= 100.0:
             out['yards'] = float(-(100.0 - dr.yardline)); out['safety'] = True
-            dr.clock -= 0; dr.result, dr.points = 'Safety', -2
+            dr.yardline = 100.0
+            dr.result, dr.points = 'Safety', -2
             break
         scored = _advance(dr, out.get('yards', 0.0))
         out['converted'] = dr.result == 'Touchdown' or (dr.result is None and dr.down == 1)
