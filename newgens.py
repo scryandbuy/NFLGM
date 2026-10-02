@@ -3,8 +3,9 @@ NEWGENS: the draft class after the real one.
 
 Built onto the same template the College Football 27 class was mapped to:
 your position counts, the real rookie curve at each position for the pro
-overall, the seed's headroom rule for the ceiling, and the shared development
-curve weighted toward the top of each position and the whole class.
+overall (with a stronger future TE curve), the seed's headroom rule for the
+ceiling, and the shared development curve weighted toward the top of each
+position and the whole class.
 
 WHAT VARIES. Class strength. Position and class rolls are drawn at standard
 deviations 1.5 and 0.8, then their combined effect is capped and tapered by
@@ -168,8 +169,9 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
         if pos in DC.FALLBACK_MEAN: rk = [DC.FALLBACK_MEAN[pos]] * 2
         pos_shift = float(rng.normal(0.0, STRENGTH_SD_POS))
         base_curve = DC.target_curve(rk, n)
-        curve = DB.variation_targets(pos, base_curve, class_shift, pos_shift)
-        strength[pos] = round(curve[0] - base_curve[0], 1)
+        varied_curve = DB.variation_targets(pos, base_curve, class_shift, pos_shift)
+        strength[pos] = round(varied_curve[0] - base_curve[0], 1)
+        curve = DB.newgen_position_targets(pos, varied_curve)
         # a random real profile at the spot for each slot; the top of the class
         # leans on the better college profiles so shapes stay plausible
         ranked = templates.sort_values('overall_rating', ascending=False)

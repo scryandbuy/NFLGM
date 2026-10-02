@@ -11,6 +11,24 @@ SPECIALIST_VARIATION_CAP = 1.0
 TAIL_DROP = 6.5
 TAIL_KEEP_FRACTION = 0.20
 TAIL_POWER = 0.80
+TE_NEWGEN_TOP_BOOST = 6.0
+TE_NEWGEN_TAIL_BOOST = 1.0
+
+
+def newgen_position_targets(pos, curve):
+    """Give future tight end classes a stronger top without inflating the tail.
+
+    The seed's small rookie TE cohort tops out around 71, making every later
+    class weak even in a strong TE year. Keep year-to-year variation while
+    lifting a premium prospect roughly six points and the last slot one.
+    """
+    values = [float(value) for value in curve]
+    if pos != 'TE':
+        return values
+    last = max(len(values) - 1, 1)
+    return [value + TE_NEWGEN_TAIL_BOOST
+            + (TE_NEWGEN_TOP_BOOST - TE_NEWGEN_TAIL_BOOST) * (1.0 - i / last)
+            for i, value in enumerate(values)]
 
 
 def variation_targets(pos, base_curve, class_shift, position_shift):

@@ -18,6 +18,14 @@ class DraftBalanceTest(unittest.TestCase):
                          [87.0, 84.25, 81.5])
         self.assertEqual(DB.variation_targets('TE', [], 1.0, 1.0), [])
 
+    def test_newgen_tight_end_curve_lifts_top_more_than_tail(self):
+        base = [70.8, 68.0, 65.0, 60.4]
+        raised = DB.newgen_position_targets('TE', base)
+        for got, expected in zip(raised, [76.8, 72.33333333333333, 67.66666666666667, 61.4]):
+            self.assertAlmostEqual(got, expected)
+        self.assertEqual(DB.newgen_position_targets('WR', base), base)
+        self.assertEqual(DB.newgen_position_targets('TE', []), [])
+
     def test_top_of_each_position_is_preserved(self):
         for rank in range(6):
             self.assertEqual(DB.tail_target('TE', 74.37, rank, 30), 74.37)
