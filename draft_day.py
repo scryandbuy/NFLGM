@@ -6,7 +6,7 @@ sim_round, sim_all, make_pick. Nothing happens until a button is pressed.
 When an AI club is on the clock it first decides whether to move, then picks
 off its own board (draft.board). When the user's club is on the clock the
 draft stops and waits, unless auto-pick is on, in which case the user's
-saved board and scouts' order determine the pick.
+saved board takes priority, followed by the roster-aware draft board.
 
 TRADES ON THE CLOCK, rarely. Real drafts see 15 to 25 pick trades out of
 257, most in the first three rounds. A club picking a little later whose
