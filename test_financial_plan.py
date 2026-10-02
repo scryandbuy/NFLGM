@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from cap_engine import CAP, Contract
-from league import DraftPick, League
+from league import DraftPick, League, Team
 from test_draft_planning import fixture, set_grade
 import financial_plan as FP
 import market
@@ -84,6 +84,44 @@ class FinancialPlanTests(unittest.TestCase):
         self.assertGreater(before['years'][1]['retention_reserve'],0)
         self.assertEqual(after['years'][1]['retention_reserve'],0)
         self.assertEqual(before['years'][0]['raw_room'],after['years'][0]['raw_room'])
+
+    def test_cheap_expiring_star_plans_for_raise_and_refreshes_from_veteran_pay(self):
+        p=self.L.player('QB0');set_grade(p,95)
+        p.contract=Contract(1,[1],signed=2024);p.draft_year=2024;p.draft_round=1
+        other=Team('DEN','Continental West','Continental');other.league=self.L
+        self.L.teams['DEN']=other
+        for i,pay in enumerate((24.,30.,36.)):
+            q=copy.deepcopy(p);q.pid='veteran-'+str(i);q.team='DEN';q.draft_year=2018
+            q.contract=Contract(3,[pay]*3,signed=2026);set_grade(q,94+i)
+            other.roster.append(q);self.L.players[q.pid]=q
+        first=FP.snapshot(self.L,self.t)
+        self.assertGreater(first['years'][1]['retention_reserve'],10.)
+        # A low-value backloaded purchase cannot consume the raise allowance.
+        arrival=self.candidate('unrelated-purchase')
+        arrival.pos='WR';set_grade(arrival,70)
+        price=first['years'][1]['funded_room']-8
+        decision=FP.evaluate(self.L,self.t,additions=[(arrival,Contract(2,[1,price]))],gain=2)
+        self.assertFalse(decision['approved'])
+        self.assertEqual(decision['reason'],'preserve_retention')
+        self.assertGreater(decision['after']['years'][1]['raw_room'],0.)
+        # Once renewed, the placeholder is replaced by the actual commitment.
+        renewed=FP.snapshot(self.L,self.t,additions=[(p,Contract(4,[30]*4))])
+        self.assertEqual(renewed['years'][1]['retention_reserve'],0.)
+        # No hidden quote cache: changes in peer contracts are visible immediately.
+        for q in other.roster:q.contract=Contract(3,[12]*3,signed=2026)
+        revised=FP.snapshot(self.L,self.t)
+        self.assertLess(revised['years'][1]['retention_reserve'],first['years'][1]['retention_reserve'])
+        saved=self.L.save();loaded=League.load(saved)
+        self.assertEqual(revised,FP.snapshot(loaded,loaded.teams[self.t.abbr]))
+
+    def test_original_rookie_deals_do_not_set_star_renewal_market(self):
+        p=self.L.player('QB0');set_grade(p,95);p.contract=Contract(1,[1],signed=2024)
+        p.draft_year=2024;p.draft_round=1
+        before=FP.snapshot(self.L,self.t)['years'][1]['retention_reserve']
+        q=copy.deepcopy(p);q.pid='other-rookie';q.contract=Contract(3,[20]*3,signed=2024)
+        self.t.roster.append(q);self.L.players[q.pid]=q;set_grade(q,87)
+        after=FP.snapshot(self.L,self.t)['years'][1]['retention_reserve']
+        self.assertEqual(before,after)
 
     def test_rookie_forecast_displaces_minimum_slots_without_changing_legal_room(self):
         for p in self.t.roster: p.contract=Contract(1,[1])

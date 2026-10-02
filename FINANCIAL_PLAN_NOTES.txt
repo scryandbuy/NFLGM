@@ -36,7 +36,10 @@ Initial settings — NOT empirically fitted NFL coefficients
 - Opportunity allowance: continuous GM patience/risk/aggression/security and
   contender inputs, bounded to 0.3–3.5% of base cap.
 - Retention allowance: a 50% premium over replacement pay for selected leading
-  players with expiring deals, based on known pay. This is not an agent quote.
+  players with expiring deals. Uses the greater of known pay and the median of
+  up to three nearby veteran grades at the same position; identifiable original
+  rookie deals are excluded. This anticipates raises from cheap rookie contracts
+  without inventing an agent quote. Estimates refresh from current league state.
 - Large roster improvement can release up to 80% of the soft cushion.
 - Emergency required-role repairs can release all soft/completion reserves;
   existing hard legal checks still apply.
@@ -57,11 +60,12 @@ draft order is synthetic alphabetical. Different acquisitions change later
 random draws. This is an accelerated behavior probe, not a complete season or
 proof of long-term franchise balance.
 
-Outstanding evidence
-Same-date real Week 1/deadline cap panels and actual injury replacement spending
-are still needed for numerical reserve calibration. Year-end carryover must not
-be treated as a Week 1 target. Multiple seeds and multi-season runs remain needed
-before claiming stable long-term talent, spending or competitive balance.
+Validation goal clarified by user
+Prioritize believable GM trade-offs over fitting precise NFL reserve percentages.
+Historical deadline panels and injury-replacement examples supply context; more
+data collection is not a prerequisite. Test needs, future obligations, urgency,
+flexibility and emergency repairs. Multiple seeds and multi-season runs remain
+necessary before claiming stable long-term talent or competitive balance.
 
 Verified results — 2 October 2026
 196 focused tests passed: 190 combined accounting/strategy/transaction tests,

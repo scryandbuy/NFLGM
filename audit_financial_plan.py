@@ -20,6 +20,7 @@ def main():
     ap.add_argument('--output',type=Path,required=True)
     ap.add_argument('--seed',type=int,default=30102)
     ap.add_argument('--finish-roster',action='store_true')
+    ap.add_argument('--decision-log',type=Path,help='Optional observational financial decisions (JSONL)')
     args=ap.parse_args()
     root=args.engine_root.resolve();os.chdir(root);sys.path.insert(0,str(root))
     import numpy as np
@@ -33,6 +34,26 @@ def main():
     rng=np.random.default_rng(args.seed)
     started=time.monotonic()
     L=LG.build_league(rng=rng);L.user_team=None
+    if args.decision_log:
+        import atexit
+        import financial_plan as policy
+        args.decision_log.parent.mkdir(parents=True,exist_ok=True)
+        stream=args.decision_log.open('w',encoding='utf-8')
+        atexit.register(stream.close)
+        evaluate=policy.evaluate
+        def observed(league,team,**kw):
+            result=evaluate(league,team,**kw)
+            a=result['after'];b=result['before']
+            row=dict(year=league.year,phase=league.phase,team=team.abbr,
+                     action=kw.get('action'),gain=kw.get('gain',0),
+                     essential=kw.get('essential',False),approved=result['approved'],
+                     reason=result['reason'],raw_before=b['raw_room'],raw_after=a['raw_room'],
+                     funded_before=b['funded_room'],funded_after=a['funded_room'],
+                     reserve=a['soft_reserve'],reserve_used=result['reserve_used'],
+                     players=[dict(pid=p.pid,pos=p.pos,ovr=p.ovr) for p,c in kw.get('additions',())])
+            stream.write(json.dumps(row)+'\n');stream.flush()
+            return result
+        policy.evaluate=observed
     snapshots=[]
     def capture(phase):
         teams=[]
