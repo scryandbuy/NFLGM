@@ -410,8 +410,10 @@ def retention_value(team, player, players=None):
     accrued = int(getattr(player, 'accrued', 3) or 0)
     contract = getattr(player, 'contract', None)
     years = int(getattr(contract, 'years', 0) or 0)
+    from development_value import player_credit
+    dev_credit = 2.0 * player_credit(player)
     if age > 26 or accrued > 2 or years < 2:
-        return 0.0
+        return dev_credit
     readiness = max(0.0, min(1.0, (float(player.ovr) - 60.0) / 18.0))
     visible = getattr(player, 'potential_range', None)
     growth = min(6.0, max(0.0, sum(visible) / 2 - player.ovr)) if visible else 0.0
@@ -428,7 +430,7 @@ def retention_value(team, player, players=None):
                      or getattr(getattr(q, 'contract', None), 'years', 3) <= 1
                      for q in incumbents)
     return min(6.0, readiness * growth * (.35 + .25 * belief)
-               + exposure + (1.0 if succession else 0.0) * readiness)
+               + exposure + (1.0 if succession else 0.0) * readiness + dev_credit)
 
 
 def select_cutdown(team, rows, limit=53):

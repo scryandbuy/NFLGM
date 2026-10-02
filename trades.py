@@ -159,8 +159,10 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     yrs = max(1, int(p.contract_years_left or 1))
     inherited_apy = (round(sum(c.cap_hit(i) - c.bonus_at(i) for i in range(yrs)) / yrs, 2)
                      if c else p.apy)
+    from development_value import player_credit
     row = dict(age=p.age, apy=p.apy, ovr=float(seen),
-               contract_years_left=p.contract_years_left, madden_position=p.pos)
+               contract_years_left=p.contract_years_left, madden_position=p.pos,
+               development_credit=player_credit(p))
     row_buyer = dict(row, apy=inherited_apy)
     tv_buyer = TE.trade_value(row_buyer, v)
     # THE STREET AND THE SQUAD ARE THE ALTERNATIVE. Why give a pick for a man when a comparable one is a free

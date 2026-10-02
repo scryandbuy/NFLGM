@@ -47,7 +47,8 @@ def _reserve_grade(player, team, belief):
     pr = getattr(player, 'potential_range', None)
     if getattr(player, 'age', 25) <= 26 and pr:
         grade += min(6.0, max(0.0, sum(pr) / 2 - player.ovr)) * (.5 + .5 * belief)
-    return grade
+    from development_value import player_credit
+    return grade + 2.0 * player_credit(player)
 
 
 def redundancy_penalty(plan, prospect, grade=None, gain=0.0):
