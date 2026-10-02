@@ -3402,11 +3402,11 @@ function renderPractice(v) {
     surface.append(el('p', {class:'practice-note'}, 'Save your plan to update the forecast. Practice is only resolved when you run it.'));
   }
   if (!locked || v.completed) {
-    const table = el('table', {class:'tbl practice-players'}, el('thead', {}, el('tr', {}, ...['Player','Position','Condition','Fatigue','Workload','Focus (up to 3)','XP / weekly max'].map(label => el('th', {}, label)))));
+    const table = el('table', {class:'tbl practice-players'}, el('thead', {}, el('tr', {}, ...['Player','Position','Condition','Fatigue','Workload','Focus (up to 3)','XP'].map(label => el('th', {}, label)))));
     const body = el('tbody'); table.append(body);
     for (const player of v.players || []) {
       const focus = el('input', {type:'checkbox', disabled:locked ? '' : null, 'aria-label':`Focus on ${player.name}`, checked:plan.focus.includes(player.pid) ? '' : null, onchange:e => { if (!practiceFocus(plan, player.pid, e.target.checked)) { e.target.checked = false; notify({ok:false,why:'Choose up to three focus players.'}); } }});
-      body.append(el('tr', {}, el('td', {}, el('strong', {}, player.name), player.injured ? el('small', {}, 'Injured · restricted work') : null), el('td', {}, player.pos), el('td', {}, player.condition ?? '—'), el('td', {}, player.jaded ?? '—'), el('td', {}, select([['follow','Follow unit'],['limited','Limited'],['rest','Rest']], plan.individual[player.pid] || 'follow', value => { if (value === 'follow') delete plan.individual[player.pid]; else plan.individual[player.pid] = value; })), el('td', {}, focus), el('td', {class:'practice-xp', 'data-tip':player.xp_explanation || 'Save your plan to update projected XP.'}, player.practice_xp == null ? '—' : Math.round(player.practice_xp).toLocaleString(), el('small', {}, player.xp_ceiling == null ? '' : '/ ' + Number(player.xp_ceiling).toLocaleString()))));
+      body.append(el('tr', {}, el('td', {}, el('strong', {}, player.name), player.injured ? el('small', {}, 'Injured · restricted work') : null), el('td', {}, player.pos), el('td', {}, player.condition ?? '—'), el('td', {}, player.jaded ?? '—'), el('td', {}, select([['follow','Follow unit'],['limited','Limited'],['rest','Rest']], plan.individual[player.pid] || 'follow', value => { if (value === 'follow') delete plan.individual[player.pid]; else plan.individual[player.pid] = value; })), el('td', {}, focus), el('td', {class:'practice-xp', 'data-tip':player.xp_explanation || 'Save your plan to update projected XP.'}, player.practice_xp == null ? '—' : Math.round(player.practice_xp).toLocaleString())));
     }
     const unitButtons = el('div', {class:'chips practice-unit-filter', 'aria-label':'Player unit'});
     const filterPlayers = () => {
