@@ -935,7 +935,8 @@ function renderRoster(v) {
       v.count > 53 ? el('small', {class:'roster-limit'}, `${v.count - 53} players over the regular-season limit`) : el('small', {}, 'Team personnel')),
     el('div', {class:'roster-metrics'}, metric(`${v.count} / 53`, 'Active'), metric(`$${v.cap_total.toFixed(1)}m`, 'Cap committed'), metric(v.rail.cap, 'Cap space'))));
   const tabs = el('div', { class: 'tabs' });
-  for (const [k, label, n] of [['active', 'Active', v.count], ['ps', 'Practice Squad', v.practice.length], ['injured', 'Injured', v.injured.length]])
+  const membershipTabs = clubTab === 'ir' ? [] : clubTab === 'ps' ? [['ps', 'Practice Squad', v.practice.length]] : [['active', 'Active', v.count], ['ps', 'Practice Squad', v.practice.length], ['injured', 'Injured', v.injured.length]];
+  for (const [k, label, n] of membershipTabs)
     tabs.append(el('button', { 'aria-pressed': String(clubTab === k), onclick: () => { clubTab = k; const want = mine ? (k === 'ps' ? '#club/ps' : k === 'ir' ? '#club/ir' : k === 'active' ? '#club' : null) : (k === 'ps' ? `#club/team/${abbr}/ps` : k === 'active' ? `#club/team/${abbr}/roster` : null); if (want && location.hash !== want) { location.hash = want; } else renderRoster(v); } }, label + ' ', el('em', {}, n)));
   const views = el('div', { class: 'tabs', style: 'margin-left:14px' });
   const availableViews = clubTab === 'ps' ? ['Overview', 'Ratings'] : ['Overview', 'Ratings', 'Contract', 'Stats'];
@@ -947,7 +948,7 @@ function renderRoster(v) {
   const count = el('span', { class: 'count', style: 'margin-left:auto' });
   const pick = clubSelect(abbr, a => { const m = pyJSON('SESSION.club_list()').find(c => c.abbr === a); location.hash = m && m.mine ? (clubTab === 'ps' ? '#club/ps' : '#club') : `#club/team/${a}/${clubTab === 'ps' ? 'ps' : 'roster'}`; });
   tabs.classList.add('roster-membership'); views.classList.add('roster-views');
-  sheet.append(el('div', {class:'roster-top-tools'}, tabs, pick), el('div', {class:'roster-filters'}, views, sides, search));
+  sheet.append(el('div', {class:'roster-top-tools'}, ...(membershipTabs.length ? [tabs] : []), pick), el('div', {class:'roster-filters'}, views, sides, search));
   const tbl = el('table', { class: 'tbl' });
   const H = (t, tip, n) => el('th', { 'data-tip': tip || null, class: n ? 'n' : null }, t);
   const heads = { Overview: [H('Player'), H('Pos', 'Position'), H('Age', null, 1), H('Ovr', 'Overall Rating', 1), H('Fit', "How well the player matches your coach's scheme", 1), H('Dev', 'Rate of XP Growth'), H('Condition', 'Game-day Freshness'), H('Morale', "Player's happiness"), H('Yrs', 'Years left on his contract', 1), H('Cap Hit', "This year's cap hit", 1), H('Penalty', 'Dead cap charged if player is cut/traded', 1), H('Status'), H('')],
