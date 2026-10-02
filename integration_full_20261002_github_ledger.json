@@ -1,0 +1,464 @@
+{
+  "02ba6b6": {
+    "incorporated_as": "697b177",
+    "reason": "Equivalent season review source and tests incorporated.",
+    "status": "integrated"
+  },
+  "03820a": {
+    "incorporated_as": "412553d",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "0a601ab": {
+    "incorporated_as": "bab6ac2",
+    "reason": "Equivalent playoff preview source and tests incorporated.",
+    "status": "integrated"
+  },
+  "0cc2c5": {
+    "incorporated_as": "f173281",
+    "reason": "Practice XP ceiling source change incorporated and tested.",
+    "status": "integrated"
+  },
+  "0eefb33": {
+    "incorporated_as": "51c1b52",
+    "reason": "Equivalent formation foul source and tests incorporated.",
+    "status": "integrated"
+  },
+  "0f08059": {
+    "incorporated_as": "b70248d",
+    "reason": "Player and team links merged with the full-width inbox rendering.",
+    "status": "integrated"
+  },
+  "1055d32": {
+    "incorporated_as": "f53f1dd",
+    "reason": "Equivalent tied-half timeout source and tests incorporated.",
+    "status": "integrated"
+  },
+  "10ba68e": {
+    "incorporated_as": "eec28a8",
+    "reason": "Athletic aging incorporated with the current birthday reference age and tested.",
+    "status": "integrated"
+  },
+  "13298c": {
+    "incorporated_as": "31764be",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "180b2d6": {
+    "incorporated_as": "b99a309",
+    "reason": "Equivalent opponent report source and tests incorporated.",
+    "status": "integrated"
+  },
+  "1a8799e": {
+    "incorporated_as": "b254ca0",
+    "reason": "Post-cutdown Week 1 planning gate integrated with the offseason Game Day guard.",
+    "status": "integrated"
+  },
+  "1da80a": {
+    "incorporated_as": "412553d",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "1eb402": {
+    "incorporated_as": "4ff4940",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "1f9a45c": {
+    "incorporated_as": "83a9349",
+    "reason": "Practice focus and contrast source changes incorporated.",
+    "status": "integrated"
+  },
+  "1fe1dd": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "2502ccb": {
+    "incorporated_as": "b208357",
+    "reason": "Long-play timing, displayed spots, and comeback urgency reconciled with existing clock logic.",
+    "status": "integrated"
+  },
+  "29c8f61": {
+    "incorporated_as": "3a84751",
+    "reason": "Cap display layout integrated.",
+    "status": "integrated"
+  },
+  "2a10e4": {
+    "incorporated_as": "3b29f83",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "2aa3dc4": {
+    "incorporated_as": "e478434",
+    "reason": "Bounded development value integrated in trade and roster decisions.",
+    "status": "integrated"
+  },
+  "2aeba4": {
+    "incorporated_as": "20100dd",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "2b22c96": {
+    "incorporated_as": "8e5fdb1",
+    "reason": "Equivalent coverage responsibility source and tests incorporated.",
+    "status": "integrated"
+  },
+  "2b8cb19": {
+    "incorporated_as": "356b6f3",
+    "reason": "Equivalent rush-accounting source: shared audit, migration, advanced stats and tests match integrated commit; game/league differences come from surrounding branch base.",
+    "status": "integrated"
+  },
+  "2e708d": {
+    "incorporated_as": "f173281",
+    "reason": "Equivalent practice XP ceiling source change incorporated and tested.",
+    "status": "integrated"
+  },
+  "37174ca": {
+    "incorporated_as": "1e9acef",
+    "reason": "Equivalent coaching carousel mail source and tests incorporated.",
+    "status": "integrated"
+  },
+  "38bd046": {
+    "incorporated_as": "3f6ec94",
+    "reason": "Equivalent injury-return roster checks incorporated.",
+    "status": "integrated"
+  },
+  "3cefbe": {
+    "incorporated_as": "6cf23fb",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "3dee644": {
+    "incorporated_as": "215ce2b",
+    "reason": "Equivalent weekly honors source and tests incorporated.",
+    "status": "integrated"
+  },
+  "3ecdbb": {
+    "incorporated_as": "77ae4ff",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "4bb6979": {
+    "incorporated_as": "7881d6b",
+    "reason": "Equivalent development-review source changes incorporated.",
+    "status": "integrated"
+  },
+  "4cc0995": {
+    "incorporated_as": "c9f83ac",
+    "reason": "Week 12 game source and tests match; the browser manifest was rebuilt with the combined changes.",
+    "status": "integrated"
+  },
+  "525ec0": {
+    "incorporated_as": "412553d",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "58e8282": {
+    "reason": "Isolated contract-security audit does not change the runtime and documents failed release gates; excluded from this build.",
+    "status": "superseded"
+  },
+  "5913b2": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "59be93": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "5a3286": {
+    "incorporated_as": "b3f9465",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "5ac8622": {
+    "incorporated_as": "a975e1b",
+    "reason": "Overall ceiling enforced for player attribute spending.",
+    "status": "integrated"
+  },
+  "5ba44fa": {
+    "incorporated_as": "5bc1ce7",
+    "reason": "Equivalent long inbox digest source and tests incorporated.",
+    "status": "integrated"
+  },
+  "5cc6cd": {
+    "incorporated_as": "0af1f97",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "5de029": {
+    "incorporated_as": "ce8ffea",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "5e1beb": {
+    "incorporated_as": "ebf8547",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "5e4775": {
+    "incorporated_as": "d9b41db",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "6c27c29": {
+    "reason": "Generated development-review engine copies replaced by the current browser build.",
+    "status": "generated"
+  },
+  "6ca5775": {
+    "incorporated_as": "8e2d578",
+    "reason": "CPU-only depth filling integrated while retaining post-draft roster completion.",
+    "status": "integrated"
+  },
+  "6db1f0": {
+    "incorporated_as": "ef0a970",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "6f3b5f1": {
+    "incorporated_as": "8ed2558",
+    "reason": "Equivalent end-half planning source and tests incorporated.",
+    "status": "integrated"
+  },
+  "702edfd": {
+    "incorporated_as": "0836f83",
+    "reason": "Equivalent trade eligibility and expiration source and tests incorporated.",
+    "status": "integrated"
+  },
+  "7440a48": {
+    "reason": "Contract security prototype failed its release gates and remains isolated from live negotiations.",
+    "status": "superseded"
+  },
+  "775fe30": {
+    "incorporated_as": "356b6f3",
+    "reason": "Equivalent rush-accounting source: shared audit, migration, advanced stats and tests match integrated commit; game/league differences come from surrounding branch base.",
+    "status": "integrated"
+  },
+  "78095e": {
+    "incorporated_as": "412553d",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "78e482": {
+    "incorporated_as": "b3968e3",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "79e5771": {
+    "incorporated_as": "c31eac5",
+    "reason": "Trade calendar integrated.",
+    "status": "integrated"
+  },
+  "7b42a2": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "7d60aef": {
+    "reason": "Browser assets regenerated after the underlying special-teams fixes were incorporated.",
+    "status": "generated"
+  },
+  "83bf4d7": {
+    "incorporated_as": "7599593",
+    "reason": "Game plan save label integrated.",
+    "status": "integrated"
+  },
+  "8412bf6": {
+    "incorporated_as": "65cc4dd",
+    "reason": "Stadium names and save migration cherry-picked; generated browser manifest rebuilt from merged source.",
+    "status": "integrated"
+  },
+  "88e357f": {
+    "incorporated_as": "9867949",
+    "reason": "Revised CPU extension counter handling integrated.",
+    "status": "integrated"
+  },
+  "8912bfa": {
+    "incorporated_as": "c31eac5",
+    "reason": "Equivalent duplicate of the integrated trade calendar patch.",
+    "status": "integrated"
+  },
+  "94c8582": {
+    "incorporated_as": "1010675",
+    "reason": "Senior Bowl Spring report movement integrated.",
+    "status": "integrated"
+  },
+  "967f5c": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "9875fc": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "996680": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "9b2a53f": {
+    "incorporated_as": "5d47f48",
+    "reason": "Snap report sorting merged with linked player names.",
+    "status": "integrated"
+  },
+  "9f0674": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "a1f6be1": {
+    "incorporated_as": "154798d",
+    "reason": "Equivalent championship venue forecast source and tests incorporated.",
+    "status": "integrated"
+  },
+  "a4eb87": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "a4f1970": {
+    "incorporated_as": "614f465",
+    "reason": "Explicit inbox player identities merged with existing digest rows and roster advice.",
+    "status": "integrated"
+  },
+  "ab82649": {
+    "incorporated_as": "7930397",
+    "reason": "Bounded autosave memory integrated.",
+    "status": "integrated"
+  },
+  "ac16de7": {
+    "incorporated_as": "47ddc11",
+    "reason": "Equivalent coverage development source and tests incorporated.",
+    "status": "integrated"
+  },
+  "ad6b1c": {
+    "incorporated_as": "92be535",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "afbcfcc": {
+    "incorporated_as": "2c55816",
+    "reason": "Redundant card shortcuts removed while preserving roster advice links.",
+    "status": "integrated"
+  },
+  "b29f615": {
+    "incorporated_as": "95831ee",
+    "reason": "Team salary ledger integrated.",
+    "status": "integrated"
+  },
+  "b76ddc5": {
+    "incorporated_as": "0292705",
+    "reason": "Moderate young-player progression source and tests incorporated.",
+    "status": "integrated"
+  },
+  "b92ad57": {
+    "incorporated_as": "cb705c1",
+    "reason": "Equivalent ceiling visibility source and tests incorporated.",
+    "status": "integrated"
+  },
+  "bbc035b": {
+    "incorporated_as": "d209580",
+    "reason": "Contract security model integrated and reconciled with firm refusals.",
+    "status": "integrated"
+  },
+  "be0b18d": {
+    "incorporated_as": "a696bea",
+    "reason": "Practice squad offer eligibility integrated.",
+    "status": "integrated"
+  },
+  "c53ee79": {
+    "incorporated_as": "f6f3b18",
+    "reason": "Development trade premium ceiling integrated.",
+    "status": "integrated"
+  },
+  "c81ecc": {
+    "incorporated_as": "3180cb5",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "c89fa1": {
+    "incorporated_as": "cc3daaf",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "c9ec63d": {
+    "incorporated_as": "bbbb28c",
+    "reason": "Equivalent game log and replay correction already integrated.",
+    "status": "integrated"
+  },
+  "ca1ac73": {
+    "incorporated_as": "5f9b2c6",
+    "reason": "Age-tapered learning relief source and tests incorporated.",
+    "status": "integrated"
+  },
+  "cbae1c7": {
+    "incorporated_as": "a25b6c1",
+    "reason": "Rookie display and draft results corrections integrated.",
+    "status": "integrated"
+  },
+  "cf70245": {
+    "incorporated_as": "e5db601",
+    "reason": "Equivalent penalty and halftime correction already integrated.",
+    "status": "integrated"
+  },
+  "d29b718": {
+    "incorporated_as": "964860f",
+    "reason": "Bye practice source and tests match; the browser manifest was rebuilt with the combined changes.",
+    "status": "integrated"
+  },
+  "d3d14a": {
+    "incorporated_as": "5b260fd",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "d410bc": {
+    "incorporated_as": "df71eb3",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "d86096a": {
+    "incorporated_as": "d708ba8",
+    "reason": "Contract counter diagnostic probe integrated.",
+    "status": "integrated"
+  },
+  "df4002": {
+    "reason": "In-progress snapshot of older roster fixes; completed source changes were integrated from their final branches.",
+    "status": "superseded"
+  },
+  "e35cd0": {
+    "incorporated_as": "55c6091",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "e84a1b": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "eb0cab": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "eb968e": {
+    "incorporated_as": "f7e1959",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  },
+  "ef08c4a": {
+    "incorporated_as": "47ddc11",
+    "reason": "Equivalent coverage development source and tests incorporated.",
+    "status": "integrated"
+  },
+  "ef8b83": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "f4f305": {
+    "reason": "Generated browser assets superseded by the current build_web.py output.",
+    "status": "generated"
+  },
+  "fa7cddb": {
+    "incorporated_as": "d6a4c0b",
+    "reason": "Three-week CPU XP spending cadence integrated.",
+    "status": "integrated"
+  },
+  "fcebd7": {
+    "incorporated_as": "6ddba90",
+    "reason": "Source change incorporated and reconciled in this integration line.",
+    "status": "integrated"
+  }
+}
