@@ -692,8 +692,8 @@ function renderGameDay(v) {
   const tick = el('section', { class: 'sheet c8 gameday-surface game-feed' });
   const live = v.live && v.live.open ? v.live : null;
   const gkey = `${g.home.abbr}-${g.away.abbr}-${v.week || ''}-${v.year || ''}`;
-  const saved = live ? { shown: Math.max(1, g.drives.length), shownPlays: null } : (gdReveal[gkey] || { shown: 1, shownPlays: 0 });
-  let shown = saved.shown, shownPlays = saved.shownPlays;      // shownPlays: within the last shown drive, how many plays are revealed (null = all)
+  // Completed games open at their final result. Replay starts only when requested.
+  let shown = Math.max(1, g.drives.length), shownPlays = null; // null = all plays in the current drive
   const body = el('div', { class: 'ticker' });
   const filt = { mode: 'all' };
   const draw = () => {
@@ -711,7 +711,6 @@ function renderGameDay(v) {
     });
     tick.querySelector('h2 small').textContent = live ? (live.halftime_open ? (live.adjustment_period === 'overtime' ? 'Overtime adjustments' : 'Halftime') : `Live · drive ${g.drives.length}`) : (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
     body.scrollTop = body.scrollHeight;
-    gdReveal[gkey] = { shown, shownPlays };
     drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays); drawRead(shown >= g.drives.length && shownPlays == null); drawWp(shown, shownPlays);
     if (strips.mine) { const fin = !live && shown >= g.drives.length && shownPlays == null; const { card, s } = strips.mine; card.querySelector('.as').textContent = fin ? s.as_ : ''; card.querySelector('.hs').textContent = fin ? s.hs : ''; card.querySelector('.st span').textContent = fin ? 'Final' + (s.ot ? ' · OT' : '') : 'In progress'; }
   };
@@ -729,6 +728,7 @@ function renderGameDay(v) {
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })())
   : el('div', { class: 'ctrl2' },
+    el('button', { class: 'btn quiet', onclick: () => { shown = 1; shownPlays = 0; draw(); } }, 'Replay from Kickoff'),
     el('button', { class: 'btn', 'data-tip': 'One snap at a time', onclick: nextPlay }, 'Next Play'),
     el('button', { class: 'btn go', 'data-tip': 'Through the end of this drive, or the next one if this one is in', onclick: () => { if (shownPlays != null) { shownPlays = null; } else shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
     el('button', { class: 'btn', 'data-tip': 'Through the end of the quarter', onclick: nextQuarter }, 'Next Quarter'),
@@ -2581,7 +2581,6 @@ function renderDraftDay(v) {
   page.append(right);
 }
 let offersCache = null;
-const gdReveal = {};      // where each game's reveal stands, so leaving the page and coming back holds the place
 
 let picksClub = 'mine', picksYear = null, picksYearFor = null, picksQuery = '';
 function renderPicks(v) {
