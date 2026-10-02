@@ -419,6 +419,7 @@ def free_agency(session, league, abbr):
 
 
 def _thread(league, t):
+    import negotiations as NG
     p = league.player(t['pid'])
     mood = t.get('mood') or 'open'
     temper = {'eager': 'Eager', 'firm': 'Firm', 'open': 'Open', 'deferring': 'Deferring'}.get(mood, mood.capitalize())
@@ -429,7 +430,7 @@ def _thread(league, t):
     ROUNDS_ = {19: 'Wild Card', 20: 'Divisional', 21: 'Conf. Finals', 22: 'Championship Game'}     # the playoffs run as weeks 19 to 22 inside
     opened = ((f"Week {op}" if op <= 18 else ROUNDS_.get(op, 'the playoffs')) if op is not None and op < 100 else ('the offseason' if op == 100 else f"FA step {op - 100}") if op is not None else '')
     return dict(id=t['id'], pid=t['pid'], name=p.name if p else t['pid'], pos=p.pos if p else '', kind=t['kind'], state=t['state'], ask=t.get('ask'), years=t.get('years'), mood=mood, opened=opened,
-                offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=pat, log=t.get('log', []),
+                offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=pat, log=t.get('log', []), sign_today_offer=NG.sign_today_offer(league, t),
                 agent_line=f"The agent is {temper} and {pat_word}. He answers {answers}.")
 
 

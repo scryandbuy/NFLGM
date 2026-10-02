@@ -1619,6 +1619,20 @@ function renderTrades(v) {
   s.append(renderTradeSummary(v,reload));page.append(s);
 }
 
+function signTodayButton(t, onDone, compact = false) {
+  const quote = t?.sign_today_offer;
+  if (!quote) return el('span', { class: 'count' }, 'Reopen talks for current signing terms');
+  const label = compact ? `Sign $${quote.apy.toFixed(2)}m` : `Sign Today at $${quote.apy.toFixed(2)}m`;
+  return el('button', { class: compact ? 'btn go' : 'btn',
+    'data-tip': `${quote.years} year(s), $${quote.apy.toFixed(2)}m annual rate, $${quote.bonus.toFixed(2)}m signing bonus`,
+    onclick: () => {
+      const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${quote.apy}, years=${quote.years}, bonus=${quote.bonus}, front_load=${quote.front_load}, sign_today=True)`);
+      notify(r.ok && r.state !== 'accepted' ? {ok:false, why:r.line || 'The player has not signed. Reopen talks to review his response.'} : r);
+      onDone();
+    }
+  }, label);
+}
+
 function offerForm(t, kind, onDone, preset) {
   const f = el('div', { class: 'msg you offer-panel' },
     el('div', { class: 'offer-panel-head' },
@@ -1671,7 +1685,7 @@ function offerForm(t, kind, onDone, preset) {
     el('div', { class: 'shape' }, el('span', {}, 'Shape'), shapeChips), hitsRow, promises);
   const acts = el('div', { class: 'acts' });
   acts.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${+apy.value}, years=${+yrs.value}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`); notify(r); onDone(); } }, kind === 'fa_inseason' ? 'Offer (decides at Advance)' : preset ? 'Send Counter' : 'Send Offer'));
-  if (kind === 'fa_inseason') acts.append(el('button', { class: 'btn', 'data-tip': 'His full ask, signed now', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${t.ask}, years=${t.years}, sign_today=True)`); notify(r); onDone(); } }, `Sign Today at $${t.ask}m`));
+  if (kind === 'fa_inseason') acts.append(signTodayButton(t, onDone));
   acts.append(el('button', { class: 'btn quiet', 'data-tip': (t.offers && t.offers.length) ? 'Pull your offer and end the talks' : 'End the talks', onclick: () => { const r = pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`); notify(r); onDone(); } }, (t.offers && t.offers.length) ? 'Rescind and Walk' : 'Let Him Go'));
   f.append(acts); setTimeout(preview, 0); return f;
 }
@@ -1984,7 +1998,7 @@ function renderFA(v) {
       const askBtn = el('div', { style: 'display:flex;gap:4px' }, r.thread ? el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const th = v.threads.find(x => x.id === r.thread); if (th) openTalks(th, reload); } }, inSeason ? 'Talks' : 'Offer') : el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind=${JSON.stringify(inSeason ? 'fa_inseason' : 'fa_offseason')})`); if (!res.ok) { notify(res); reload(); return; } const fresh = pyJSON(`SESSION.personnel('free_agency')`); const th = fresh.threads.find(x => x.id === res.thread) || fresh.threads.filter(x => x.pid === r.pid).pop(); renderFA(fresh); if (th) openTalks(th, () => renderFA(pyJSON(`SESSION.personnel('free_agency')`))); } }, 'Ask the Agent'),
         inSeason && r.ps_ok ? el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'Sign him to the practice squad at the weekly rate; he can say no', onclick: () => { notify(pyJSON(`SESSION.personnel_act('sign_ps', pid=${JSON.stringify(r.pid)})`)); reload(); } }, 'Practice Squad') : '');
       if (inSeason) tbl.append(el('tr', {}, who, el('td', {}, displayPos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)), el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', { class: 'n' }, r.ask_now != null ? `$${r.ask_now.toFixed(2)}m` : '—'),
-        el('td', {}, r.thread && r.ask ? el('button', { class: 'btn go', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'His full ask, signed now', onclick: () => { const t = v.threads.find(x => x.id === r.thread); const res = pyJSON(`SESSION.personnel_act('offer', tid=${r.thread}, apy=${t ? t.ask : r.ask}, years=${t ? t.years : r.years}, sign_today=True)`); notify(res); reload(); } }, 'Sign') : ''), el('td', {}, askBtn)));
+        el('td', {}, r.thread && r.ask ? signTodayButton(v.threads.find(x => x.id === r.thread), reload, true) : ''), el('td', {}, askBtn)));
       else tbl.append(el('tr', {}, el('td', {}, el('button', { class: 'star' + (r.watch ? ' on' : ''), 'data-tip': r.watch ? 'On your watchlist' : 'Add to your watchlist', onclick: () => { pyJSON(`SESSION.personnel_act('watch', pid=${JSON.stringify(r.pid)})`); reload(); } }, '★')), who, el('td', {}, displayPos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, fitCell(r.fit)),
         el('td', {}, r.ask ? `$${r.ask}m × ${r.years}` : el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', {}, r.interest ? el('span', { class: 'pill ' + ({ 'Match Asked': 'unsettled', Agreed: 'happy', Countered: 'content', Mulling: 'content', Walked: 'unhappy' }[r.interest] || 'content') }, r.interest) : '', r.bidders ? el('small', { class: 'count', style: 'display:block', 'data-tip': 'Clubs with an offer lodged on him this round' }, `${r.bidders} club${r.bidders === 1 ? '' : 's'} in`) : ''), el('td', {}, r.my_offer || el('span', { style: 'color:var(--ink-3)' }, '—')), el('td', {}, askBtn)));
     }

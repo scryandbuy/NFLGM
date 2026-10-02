@@ -9,6 +9,8 @@ import negotiations as NG
 import offer_reservations as OR
 import practice_squad as PS
 import views_personnel as VP
+import morale_system as MS
+import copy
 
 
 class PracticeSquadOfferTests(unittest.TestCase):
@@ -77,6 +79,62 @@ class PracticeSquadOfferTests(unittest.TestCase):
         self.assertEqual(self.p.team, 'MIN')
         self.assertIn(self.p, self.l.teams['MIN'].practice_squad)
         self.assertEqual(thread['offers'], [])
+
+    def test_ui_quote_signs_unhappy_player_at_every_season_stage(self):
+        for week in (1, 9, 18, 20):
+            for morale in (0, 20, 40, 70):
+                with self.subTest(week=week, morale=morale):
+                    self.setUp()
+                    self.l.week = week
+                    self.l.set_phase('playoffs' if week > 18 else 'regular')
+                    self.p.morale = MS.Morale(self.p.pid, baseline=morale)
+                    thread = self.open()
+                    # Existing saves have only the headline ask, no cached quote.
+                    self.l = League.load(self.l.save())
+                    self.l.user_team = 'GB'  # Session.load restores the human team.
+                    thread = NG.find(self.l, thread['id'])
+                    q = VP._thread(self.l, thread)['sign_today_offer']
+                    self.assertGreaterEqual(q['apy'], thread['ask'])
+                    s = Session.__new__(Session)
+                    s.L = self.l; s.user_team = 'GB'
+                    r = s.personnel_act('offer', tid=thread['id'], **q, sign_today=True)
+                    self.assertEqual(r.get('state'), 'accepted', r)
+                    p = self.l.player(self.p.pid)
+                    self.assertEqual(p.team, 'GB')
+                    self.assertIn(p, self.l.teams['GB'].active())
+                    self.assertNotIn(p, PS.squad(self.l.teams['MIN']))
+                    self.assertTrue(PS.locked(p, week + 2))
+                    self.assertFalse(NG.sign_today_offer(self.l, thread))
+                    again = VP.act_offer(self.l, 'GB', thread['id'], **q, sign_today=True)
+                    self.assertFalse(again['ok'])
+                    self.assertEqual(sum(x.pid == p.pid for x in self.l.teams['GB'].roster), 1)
+
+    def test_below_immediate_terms_is_visible_and_preserves_pending_offer(self):
+        self.p.morale = MS.Morale(self.p.pid, baseline=20)
+        t = self.open()
+        r = VP.act_offer(self.l, 'GB', t['id'], 2.1, 1)
+        self.assertTrue(r['ok'])
+        before = copy.deepcopy(t)
+        r = VP.act_offer(self.l, 'GB', t['id'], t['ask'], t['years'], sign_today=True)
+        self.assertFalse(r['ok'], r)
+        self.assertIn('immediate-signing request', r['why'])
+        self.assertGreater(r['sign_today_offer']['apy'], t['ask'])
+        self.assertEqual(t, before)
+        self.assertEqual(self.p.team, 'MIN')
+
+    def test_immediate_quote_does_not_bypass_competitor_or_cap(self):
+        self.p.morale = MS.Morale(self.p.pid, baseline=20)
+        t = self.open(); q = VP._thread(self.l, t)['sign_today_offer']
+        t['rival'] = dict(team='DAL', apy=3., years=1)
+        r = VP.act_offer(self.l, 'GB', t['id'], **q, sign_today=True)
+        self.assertFalse(r['ok']); self.assertIn('Another team', r['why'])
+        self.assertEqual(t['offers'], [])
+        t['rival'] = None
+        self.l.teams['GB'].cap.cap = 0
+        r = VP.act_offer(self.l, 'GB', t['id'], **q, sign_today=True)
+        self.assertFalse(r['ok']); self.assertIn('cap room', r['why'])
+        self.assertEqual(t['offers'], [])
+        self.assertEqual(self.p.team, 'MIN')
 
 
 if __name__ == '__main__':

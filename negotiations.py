@@ -176,9 +176,21 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     from offer_reservations import check_offer
     why = check_offer(league, t['team'], t, offer['apy'], offer['years'], offer['bonus'], offer['front_load'])
     if why: return dict(ok=False, why=why)
+    immediate = bool(sign_today and t['kind'] == 'fa_inseason')
+    if immediate:
+        # A failed instant signing must leave any standing offer/counter intact
+        # and report a visible failure, rather than silently returning "open".
+        if t.get('rival'):
+            return dict(ok=False, why='Another team has an offer in. Submit an offer for the next Advance or match the competing offer when his agent requests it.')
+        if not _assessment(league, p, t, offer, immediate=True)['acceptable']:
+            quote = sign_today_offer(league, t)
+            return dict(ok=False, why=f"These terms do not meet his immediate-signing request. Sign Today currently requires ${quote['apy']:.2f}m a year with ${quote['bonus']:.2f}m signing bonus.",
+                        sign_today_offer=quote)
     t['counter'] = None
     t['offers'].append(offer)
     _say(t, 'you', f"${float(apy):.1f}m a year over {int(years)}" + (f", {'front' if front_load > 0.5 else 'back' if front_load < 0.5 else 'even'}-loaded" if front_load is not None else '') + (f", with {', '.join(str(x).replace('_', ' ') for x in promises)}" if promises else '') + '.')
+    if immediate:
+        return _accept(league, t, offer, how='signed today')
     # HIS OWN NUMBER IS A YES. An offer that meets the agent's standing counter (his money and his years) is the
     # deal he asked for: it is signed on the spot, whatever the kind of talk or the time of year. It had gone back
     # into the queue as a fresh offer and the agent took a week to say yes to his own terms.
@@ -211,12 +223,6 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
             return dict(ok=True, state='broken_off')
     # what he will take, shape and loyalty and morale included (extensions.py knows the floor logic)
     floor = _floor(league, p, t, offer, assessment)
-    if sign_today and t['kind'] == 'fa_inseason':
-        # today means the ask, no discount; and another club may already have him
-        if _assessment(league, p, t, offer, immediate=True)['acceptable'] and not t.get('rival'):
-            return _accept(league, t, offer, how='signed today')
-        _say(t, 'agent', f"To sign today he wants the ask, ${ask:.1f}m." + (" Another club is also talking to him." if t.get('rival') else ''))
-        return dict(ok=True, state='open', line=t['log'][-1]['text'])
     # the offseason room: an extension is answered on the spot, in the conversation, and nothing goes to the inbox
     if t['kind'] == 'extension' and not s['in_season']:
         state = _answer(league, t, p, offer, floor, quiet=True)
@@ -236,6 +242,23 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     t['pending_floor'] = floor
     _say(t, 'agent', f"{p.name}'s agent will get back to you" + (f" in about {t['due'] - _clock(league)} week{'s' if t['due'] - _clock(league) != 1 else ''}." if t['kind'] == 'extension' else ' at the next step.'))
     return dict(ok=True, state='waiting', due=t['due'], line=t['log'][-1]['text'])
+
+
+def sign_today_offer(league, t):
+    """Quote the exact package that meets the existing immediate assessment.
+
+    The headline market APY omits morale and payment structure. Both the UI
+    button and the signing decision must use the same complete terms.
+    Computed for old saved negotiations too; never silently raises an offer.
+    """
+    if t.get('kind') != 'fa_inseason' or t.get('state') not in ('open', 'waiting', 'countered', 'match_requested'):
+        return None
+    p = league.player(t['pid'])
+    if p is None: return None
+    probe = dict(apy=t['ask'], years=t['years'])
+    quote = dict(_assessment(league, p, t, probe, immediate=True)['reference_package'])
+    quote['apy'] = math.ceil(float(quote['apy']) * 100 - 1e-9) / 100
+    return quote
 
 
 def _assessment(league, p, t, offer, immediate=False):
