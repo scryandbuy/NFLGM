@@ -46,6 +46,13 @@ class PracticeAcceptanceTests(unittest.TestCase):
         self.assertFalse(PS.sign_to_squad(L,t.abbr,p.pid))
         self.assertIn(p,t.roster);self.assertIs(p.contract,original)
 
+    def test_clear_starter_young_player_declines_but_development_player_accepts(self):
+        for grade, expected in ((87, False), (85, False), (76, True)):
+            L,t,p=self.setup_player(grade);p.age=22;p.accrued=0
+            self.assertEqual(PS.sign_to_squad(L,t.abbr,p.pid),expected)
+            self.assertEqual(p.pid in L.free_agents,not expected)
+            self.assertEqual(p in PS.squad(t),expected)
+
     def test_young_path_and_specialist_normalization(self):
         L,t,p=self.setup_player();p.accrued=1
         self.assertTrue(PS.squad_acceptance(L,p)['accepts'])
