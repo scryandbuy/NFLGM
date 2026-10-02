@@ -33,7 +33,7 @@ import contract_structure as CS
 import valuation as VAL
 import contract_terms as CT
 
-MAX_PER_CLUB = 6                 # a ceiling, not a target; the per-player chance sets the number
+MAX_PER_CLUB = 6                 # a ceiling, not a target; roles, price and agreement set the number
 AGE_LIMIT = {'QB': 36, 'K': 38, 'P': 38}
 CERTAINTY_DISCOUNT = 0.07
 
@@ -364,53 +364,50 @@ def negotiate_ai(league, p, apy, years, rng=None, pool=None):
 
 
 def ai_round(league, rng, verbose=False):
-    """Every club keeps who it can, before the market."""
-    from gm_engine import scheme_fit
+    """Review real package jobs before reserves; agreement still needs both sides."""
+    import retention_plan as RP
+    import draft as DFT
     done = []
     pool = None
+    scale = DFT.position_scale(league)
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None) or team.gm is None:
             continue
-        gm = team.gm
-        cands = []
-        for pos, ps in team.depth.items():
-            for rank, p in enumerate(ps[:2]):
-                if not ai_eligible(p, league): continue
-                if p.age > AGE_LIMIT.get(p.pos, 31) - (0 if rank == 0 else 2): continue
-                if scheme_fit(p.ratings, p.pos, team) < -2.0: continue
-                cands.append((rank, -p.ovr, p))
-        # starters first, then by value on the common scale, so a kicker's 90
-        # does not jump the queue over a tackle's 86
-        import draft as DFT
-        scale = DFT.position_scale(league)
-        cands.sort(key=lambda x: (x[0], -DFT.common_scale(x[2].ovr, x[2].pos, scale)))
+        if pool is None: pool = VAL.pool_from_league(league)
+        RP.refresh(league,team,pool=pool)
         n = 0
-        for rank, _o, p in cands:
+        for p, inputs in RP.candidates(league,team,scale):
             if n >= MAX_PER_CLUB: break
-            # NOT A QUOTA. Each expiring player is a chance, not a slot: a starter is likely to be kept, a backup
-            # rarely, and a club lands anywhere from none to several rather than four every time
-            yrs_left = int(p.contract.years) if p.contract is not None else 0
-            if yrs_left >= 2 and p.ovr < 82: continue                 # two years out, only the stars get done early
-            p_keep = (0.42 if rank == 0 else 0.10) * (1.2 if p.ovr >= 85 else 1.0) * (0.6 if yrs_left >= 2 else 1.0)
-            if rng.random() > p_keep: continue
-            if pool is None:
-                pool = VAL.pool_from_league(league)
-            tm = terms(league, p, rng, pool=pool)
-            if tm is None: continue
-            floor = tm['ask'] * (1.0 - tm['discount'])
-            # what the club will pay: its own number, stretched toward the ask
-            # by how much it wants him (a starter more than a backup) and by
-            # its youth lean (a youth club lets the 29-year-old walk)
-            want = 1.0 - 0.06 * rank - 0.10 * max(0.0, gm.youth - 0.5) * (p.age >= 28)
-            offer = tm['offer'] * (1.0 + 0.12 * want)
-            if offer < floor: continue
-            res = negotiate_ai(league, p, round(min(offer, tm['ask']), 2), tm['years'], rng, pool=pool)
+            # Useful reserve retention remains discretionary. Important starting
+            # roles receive a real review instead of a coin flip that skips them.
+            if inputs['role_share'] < .15 and rng.random() > .25+.25*team.gm.loyalty: continue
+            res = _pursue_retention(league,team,p,rng,pool,scale)
             if res['result'] == 'accepted':
                 n += 1; done.append((abbr, p.name, p.pos, round(p.ovr), res['apy'], res['years']))
-                pool = None  # The next player must see the new signed contract.
+                pool = VAL.pool_from_league(league)
     if verbose:
         print(f'  {len(done)} extensions')
     return done
+
+
+def _pursue_retention(league, team, p, rng, pool=None, scale=None):
+    import retention_plan as RP
+    plan = RP.assess(league,team,p,pool=pool,scale=scale)
+    RP.record(league,plan)
+    if plan['decision']!='retain' or not plan['affordable'] or _ai_refusal(league,p):
+        return dict(result='refused',why=', '.join(plan['reasons']))
+    tm = terms(league,p,rng,pool=pool)
+    if tm is None: return dict(result='refused',why='No market read')
+    want = .75+.25*plan['role_share']-.10*max(0.,team.gm.youth-.5)*(p.age>=28)
+    offer = round(min(tm['offer']*(1.+.12*want),tm['ask']),2)
+    # Actual player asks/terms retain negotiation uncertainty; the plan is a
+    # forecast, never authority to force acceptance or bypass current finances.
+    res = negotiate_ai(league,p,offer,tm['years'],rng,pool=pool)
+    c=p.contract
+    outcome=dict(plan,contract_years=c.years if c else 0,contract_signed=c.signed if c else None,
+                 extension_result=res['result'],extension_reason=res.get('why',''))
+    RP.record(league,outcome)
+    return res
 
 
 def in_season_round(league, rng, week):
@@ -425,20 +422,25 @@ def in_season_round(league, rng, week):
         post = getattr(league, '_post_ref', None)
         alive = set(getattr(post, 'alive_now', lambda: set())()) if post is not None else set()
     done = []
+    import retention_plan as RP
+    import draft as DFT
+    scale=DFT.position_scale(league)
+    pool=None
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None) or team.gm is None: continue
         if wk >= 18 and abbr in alive: continue
+        if 6 <= wk <= 9:
+            if pool is None: pool=VAL.pool_from_league(league)
+            RP.refresh(league,team,pool=pool)
         # the eliminated clubs work it harder: the window is short and the market is coming
         if rng.random() > (0.085 if wk <= 17 else 0.16): continue
-        cands = [p for pos, ps in team.depth.items() for p in ps[:1] if ai_eligible(p, league) and p.age <= AGE_LIMIT.get(p.pos, 31) and p.ovr >= 76]
-        if not cands: continue
-        p = max(cands, key=lambda q: q.ovr)
-        tm = terms(league, p, rng)
-        if tm is None: continue
-        offer = tm['offer'] * 1.04
-        if offer < tm['ask'] * (1.0 - tm['discount']): continue
-        res = negotiate_ai(league, p, round(min(offer, tm['ask']), 2), tm['years'], rng)
-        if res.get('result') == 'accepted': done.append((abbr, p.name, p.pos, res['apy'], res['years']))
+        if pool is None: pool=VAL.pool_from_league(league)
+        for p,inputs in RP.candidates(league,team,scale)[:4]:
+            res=_pursue_retention(league,team,p,rng,pool,scale)
+            if res.get('result') == 'accepted':
+                done.append((abbr,p.name,p.pos,res['apy'],res['years']))
+                pool=VAL.pool_from_league(league)
+                break
     return done
 
 
