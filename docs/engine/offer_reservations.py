@@ -12,6 +12,20 @@ LIVE_STATES = frozenset(('waiting', 'match_requested'))
 FA_KINDS = frozenset(('fa_offseason', 'fa_inseason'))
 
 
+def available_target(league, abbr, player):
+    """A market player or another club's practice-squad player can hear an offer."""
+    if player is None or player.retired:
+        return False
+    if player.pid in league.free_agents:
+        from market import available_for_signing
+        return available_for_signing(player)
+    owner = league.teams.get(player.team)
+    if owner is None or player.team == abbr:
+        return False
+    from practice_squad import squad
+    return player in squad(owner)
+
+
 def offer_hit(league, team, player, offer):
     """First cap-year charge of the deal currently offered to a free agent."""
     from market import signing_terms
@@ -36,7 +50,7 @@ def pending_offers(league, abbr, exclude_thread=None, exclude_pid=None):
         if thread.get('kind') not in FA_KINDS or thread.get('state') not in LIVE_STATES:
             continue
         player = league.player(thread.get('pid'))
-        if player is None or player.pid not in league.free_agents or not thread.get('offers'):
+        if not available_target(league, abbr, player) or not thread.get('offers'):
             continue
         offer = thread['offers'][-1]
         try:
@@ -72,7 +86,7 @@ def check_offer(league, abbr, thread, apy, years, bonus=None, front_load=None):
     if thread.get('kind') not in FA_KINDS:
         return None
     player = league.player(thread.get('pid'))
-    if player is None or player.pid not in league.free_agents:
+    if not available_target(league, abbr, player):
         return 'This player is no longer available.'
     offer = dict(apy=apy, years=years, bonus=bonus, front_load=front_load)
     try:
