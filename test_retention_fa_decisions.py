@@ -212,6 +212,24 @@ class RetentionRecruitmentTests(unittest.TestCase):
                     self.assertEqual(MK.sign_the_leftovers(self.L,[p],self.rng),[])
                 self.assertIsNone(p.team)
 
+    def test_late_market_snapshot_refreshes_after_each_successful_signing(self):
+        for i,p in enumerate(self.t.by_pos('WR')):set_grade(p,95 if i==0 else 55)
+        pool=[self.arrival('WR',85,'first'),self.arrival('WR',82,'second')]
+        original=RN.move_gain;observed=[]
+        def gain(team,p,departure=None,baseline=None):
+            # Compare the reused snapshot to the actual current roster, not
+            # to another cached result. The second bid must see the first deal.
+            self.assertIsNotNone(baseline)
+            self.assertEqual({q.pid for q in baseline['players']},{q.pid for q in team.active()})
+            self.assertAlmostEqual(baseline['score'],RN.assess(team)['score'])
+            observed.append((p.pid,{q.pid for q in baseline['players']}))
+            return original(team,p,departure,baseline)
+        with patch.object(RN,'move_gain',side_effect=gain), \
+             patch.object(MK.VAL,'value_player',return_value=dict(apy=10.,years=2)):
+            signed=MK.sign_the_leftovers(self.L,pool,self.rng)
+        self.assertEqual(len(signed),2)
+        self.assertTrue(any(pid=='second' and 'first' in roster for pid,roster in observed))
+
     def test_fill_skips_unaffordable_veteran_and_signs_cheaper_rookie(self):
         self.L,self.t=recovery.RecoveryTests().roster()
         old=self.t.by_pos('WR')[-1];self.t.roster.remove(old)
