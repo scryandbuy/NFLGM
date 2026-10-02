@@ -194,7 +194,9 @@ def card(session, league, pid):
     if p is None: return dict(error='no such player')
     t = league.teams.get(p.team) if p.team else None
     user = league.teams[session.user_team]
-    fit = _fit(league, t, p) if t else 0.0
+    # Free agents are evaluated for the viewing club, just like the FA list.
+    fit_team = user if t is None or p.pid in league.free_agents else t
+    fit = _fit(league, fit_team, p)
     fam = FAM.get(p.pos, 'DB')
     import targets as TG, position_change as PC
     # the shift the user's scheme puts on each attribute, from the scheme's weights at his spot
