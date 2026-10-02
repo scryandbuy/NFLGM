@@ -258,5 +258,26 @@
     "status": "integrated",
     "incorporated_as": "c9f83ac",
     "reason": "Week 12 game source and tests match; the browser manifest was rebuilt with the combined changes."
+  },
+  "02ba6b6": {"status": "integrated", "incorporated_as": "697b177", "reason": "Equivalent season review source and tests incorporated."},
+  "0a601ab": {"status": "integrated", "incorporated_as": "bab6ac2", "reason": "Equivalent playoff preview source and tests incorporated."},
+  "0eefb33": {"status": "integrated", "incorporated_as": "51c1b52", "reason": "Equivalent formation foul source and tests incorporated."},
+  "1055d32": {"status": "integrated", "incorporated_as": "f53f1dd", "reason": "Equivalent tied-half timeout source and tests incorporated."},
+  "10ba68e": {"status": "integrated", "incorporated_as": "eec28a8", "reason": "Athletic aging incorporated with the current birthday reference age and tested."},
+  "180b2d6": {"status": "integrated", "incorporated_as": "b99a309", "reason": "Equivalent opponent report source and tests incorporated."},
+  "2b22c96": {"status": "integrated", "incorporated_as": "8e5fdb1", "reason": "Equivalent coverage responsibility source and tests incorporated."},
+  "37174ca": {"status": "integrated", "incorporated_as": "1e9acef", "reason": "Equivalent coaching carousel mail source and tests incorporated."},
+  "38bd046": {"status": "integrated", "incorporated_as": "3f6ec94", "reason": "Equivalent injury-return roster checks incorporated."},
+  "3dee644": {"status": "integrated", "incorporated_as": "215ce2b", "reason": "Equivalent weekly honors source and tests incorporated."},
+  "58e8282": {"status": "superseded", "reason": "Isolated contract-security audit does not change the runtime and documents failed release gates; excluded from this build."},
+  "5ba44fa": {"status": "integrated", "incorporated_as": "5bc1ce7", "reason": "Equivalent long inbox digest source and tests incorporated."},
+  "6f3b5f1": {"status": "integrated", "incorporated_as": "8ed2558", "reason": "Equivalent end-half planning source and tests incorporated."},
+  "702edfd": {"status": "integrated", "incorporated_as": "0836f83", "reason": "Equivalent trade eligibility and expiration source and tests incorporated."},
+  "7440a48": {"status": "superseded", "reason": "Contract security prototype failed its release gates and remains isolated from live negotiations."},
+  "7d60aef": {"status": "generated", "reason": "Browser assets regenerated after the underlying special-teams fixes were incorporated."},
+  "a1f6be1": {"status": "integrated", "incorporated_as": "154798d", "reason": "Equivalent championship venue forecast source and tests incorporated."},
+  "ac16de7": {"status": "integrated", "incorporated_as": "47ddc11", "reason": "Equivalent coverage development source and tests incorporated."},
+  "b92ad57": {"status": "integrated", "incorporated_as": "cb705c1", "reason": "Equivalent ceiling visibility source and tests incorporated."},
+  "ef08c4a": {"status": "integrated", "incorporated_as": "47ddc11", "reason": "Equivalent coverage development source and tests incorporated."
   }
 }
