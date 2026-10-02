@@ -1,0 +1,132 @@
+CPU GM financial plan — full-calendar verification, 2 October 2026
+
+ORIGINAL AUDIT RESULT: NOT FULLY PASSED. Production code stayed frozen at 1ce274c.
+FOLLOW-UP: all three confirmed defects were fixed and targeted replays passed.
+See the repair verification below; a fresh full multiyear run was not repeated.
+
+Two independent seeds (30105, 30106), all 32 teams controlled by the CPU,
+using actual Session.advance. Games, injuries, development, retirement,
+contracts, free agency, draft and cutdown all ran. Only human presentation
+and user-only blocking prompts were omitted; CPU fieldability gates remained.
+
+Both seeds completed 2026 and 2027: 1,088 regular-season games and 52 playoff
+games combined. Seed30105 completed both following offseasons and reached
+2028 Week1. Seed30106 completed its first offseason but blocked during the
+second post-cutdown waiver stage. No forced progression or fabricated repair.
+
+Checks that held
+- No negative current cap balances, duplicate ownership or invalid package
+  player assignments at the recorded ready-to-play checkpoints before the
+  documented specialist failure. Temporary trade vacancies subsequently filled.
+- Real injury replacements, promotions, extensions and trades occurred.
+- At the three successfully completed offseason endpoints all 32 teams had
+  exactly53 active players and no projected unfunded year in the four-year plan.
+  Median room: seed30105 2027 $8.0865M, 2028 $7.788M; seed30106 2027 $8.443M.
+- Reloading all three endpoint saves reproduced all32 teams' four-year
+  financial projections, with no RNG or transaction changes from projection.
+
+Confirmed fixes needed, in priority order
+
+1. Specialist allocation can block the next season indefinitely.
+   Seed30106, 2028: SF has53 active, $6.016M room, no punter. DAL/DEN/MIA/PIT
+   each retain two punters; other clubs have one. No free/squad/waiver punter
+   remains. The last available waived punter went to DAL, which kept its old
+   punter and released a halfback. CD._replacement_pool cannot acquire an
+   active-roster surplus player. Three repeated advances reproduce the block.
+   There are35 rostered punters: this is allocation/recovery, not a shortage
+   of total league bodies or a lack of SF cap room. Fix specialist retention
+   and lawful surplus acquisition/waiver recovery; preserve actual cap limits,
+   waiver priority and player ability. Do not bypass the fieldability gate.
+
+2. Depth repair can fail to improve depth and churn its own acquisitions.
+   Independent review by Review code changes (2), plus original log evidence:
+   Miami begins the2027 opening checkpoint with zero native TEs. A real Week1
+   repair calls up a TE, releases him for another TE, then releases that TE for
+   a third, ending with only one. All three financial decisions were approved.
+   A separate Cleveland checkpoint replay/probe selects its sole QB for release
+   when adding a backup despite affordable surplus alternatives. The Cleveland
+   release is replay-only, not asserted to have occurred in the original run.
+   practice_squad.room_candidate prioritizes same-position departures; the
+   repair loop decrements shortage without checking net coverage. Cutdown
+   checks size/cap/starting roles and can certify emergency WR-at-TE fallback
+   without adequate real personnel depth. Require net coverage improvement,
+   preserve needed incumbents/recent arrivals, and reconcile essential backup
+   checks across finalizer, callups, signings and poaching.
+   Do not turn every ideal count into a hard gate: flexible C/edge assignments
+   and coach-specific group depths can be valid. The19/16 nominal-target misses
+   at the2027 openings are not19/16 unplayable teams.
+
+3. Trade searches repeatedly rebuild unchanged renewal comparisons.
+   One observed Year2 deadline advance took about280 seconds locally.
+   A separate30-second interrupted profile of trade search rebuilt financial
+   snapshots2,278 times; _retention_estimates consumed16.6 cumulative seconds.
+   Reuse the veteran-pay comparison within an unchanged negotiation, refreshing
+   after actual roster/contract/rating changes. Check identical complete search
+   results and RNG state before accepting an optimization. No persistent stale
+   quote cache or changed reserve rules is needed. Timings include profiling
+   and concurrent local audits; this is not a browser performance benchmark.
+
+Evidence (relative to this checkout)
+../../outputs/financial-multiyear-verification-20261002.json
+../../outputs/financial-longitudinal-30105/verification.json
+../../outputs/financial-longitudinal-30106/verification.json
+../../outputs/financial-longitudinal-30106/punter-block-replay.json
+../../outputs/financial-longitudinal-30106/failed_checkpoint.json
+../../outputs/financial-depth-diagnosis-20261002/findings.txt
+../../outputs/financial-depth-diagnosis-20261002/evidence.json
+../../outputs/financial-performance-finding.json
+../../outputs/financial-trade-search-profile.txt
+
+Reproduction: audit_financial_franchise.py --seed SEED --years2 --output PATH
+(Use --years 2 with a space.) PYTHONHASHSEED=0. Local NetworkX dependency was
+loaded from ../../outputs/team-study-deps. audit_financial_franchise_report.py
+summarizes saved observations; audit_financial_reload.py verifies endpoint saves.
+
+Repair verification, 2 October 2026
+---------------------------------
+Depth: shared complete-move validation now preserves essential backup counts,
+incumbents and recent arrivals. It prices the actual outgoing player once and
+recomputes the resulting roster. The season-opening gate checks usable depth,
+including longer injuries. Essential repairs can try an affordable external
+practice-squad player when free-agent candidates cannot fit the cap.
+
+Specialists: cutdown releases affordable, unprotected healthy duplicates through
+normal waivers. CPU specialist upgrades replace the incumbent instead of cutting
+unrelated depth; locks, recent additions and protected investments remain safe.
+User roster decisions and genuine injury cover are preserved.
+
+Performance: veteran pay observations are reused within one unchanged trade
+negotiation, then discarded. No persistent cache, new randomness or changed
+financial thresholds. The identical Week9 trade-search input produced eight
+trades and byte-equivalent canonical saved state with identical RNG:
+SHA256 33d37b8ed05f0c05bd8a4ced12fa4ae865a37bdc9de8cfad689270530e44a6fb.
+Measured search time: baseline295.43s; corrected95.76s (67.6% reduction in this
+test, not a promise for every advance or machine).
+
+Validation:
+- 99 focused tests passed across financial_plan, financial_consumers,
+  financial_market_routes, specialist_allocation, cpu_depth_repair,
+  roster_cap_recovery, waiver_cap_claim and franchise_roster_gate.
+- Both 2027 opening saves and seed30105's 2028 opening save repaired to32
+  legal53-man rosters, no essential-depth gaps or duplicate/missing package
+  assignments, and no same-team acquisition churn. A second depth pass made0moves.
+- The actual blocked seed30106 2028 save advanced through two normal waiver
+  stops into Week1 and successfully played it. SF acquired real punterP2159.
+  All32 clubs had53 players, legal cap and essential depth; all four-year funded
+  projections were nonnegative. No fabricated players or bypassed calendar gate.
+- Browser engine rebuilt from corrected source; source/shipped module parity
+  verified. Changes(2)'s depth commit cc724ab integrated as41b602f, plus root
+  specialist, finalizer and performance corrections.
+
+Evidence: ../../outputs/financial-fix-validation-20261002/*.json,
+../../outputs/financial-trade-benchmark-baseline.json,
+../../outputs/financial-trade-benchmark-plan.json and
+../../outputs/financial-depth-diagnosis-20261002/fixed-checkpoint-replay.json.
+Reproduce a repair: audit_financial_repairs.py SAVE OUTPUT [--play].
+Limits: original1140-game audit is still the multiyear evidence; the corrections
+were verified with targeted tests, original failure saves and one new Week1,
+not a newly repeated complete two-season sweep.
+The harness now saves failure.json/failed_checkpoint.json on a blocked advance.
+For the original failed run those files were reconstructed from its unchanged
+pre-wire checkpoint and the matching blocked replay. No engine fixes in this
+verification turn. Two played years do not establish decade-long economic balance.

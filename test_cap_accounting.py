@@ -12,7 +12,7 @@ def fixture():
     for abbr in ('GB','MIN'):
         t=Team(abbr,'United North','United'); t.league=L; L.teams[abbr]=t
     L.set_phase('regular')
-    L.week=1
+    L.week=1  # Transaction tests need an open regular-season trade window.
     return L
 
 
@@ -115,6 +115,7 @@ class CapAccountingTests(unittest.TestCase):
 
     def test_trade_keeps_paid_salary_at_seller(self):
         L=fixture(); p=player(L,contract=Contract(2,[18,18],signing_bonus=10))
+        L.week=9
         settle_week(L,9)
         L.trade('GB','MIN',['p'],[])
         self.assertEqual(L.teams['GB'].cap.charges(),19)
@@ -125,6 +126,7 @@ class CapAccountingTests(unittest.TestCase):
 
     def test_trade_preview_matches_current_year_cap_after_exchange(self):
         L=fixture()
+        L.week=9
         player(L,'gb_player','GB',Contract(2,[18,18],signing_bonus=10))
         player(L,'min_player','MIN',Contract(2,[12,12],signing_bonus=6))
         settle_week(L,9)

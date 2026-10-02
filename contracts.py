@@ -320,13 +320,14 @@ def run(league, rng, verbose=False):
     then try June 1 releases if still stuck. Shop each decided cut last.
     """
     cap = CAP.get(league.year, 301.2)
+    import financial_plan as FP
     cuts, restructures = [], []
 
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None):
             continue
         team.sync_cap()
-        need = TARGET_ROOM - team.cap_space
+        need = FP.roster_funding_target(league, team) - team.cap_space
         if need <= 0:
             continue
 
@@ -351,7 +352,16 @@ def run(league, rng, verbose=False):
                 break
             floor = MS.minimum_salary(p.accrued, cap)
             before_hit = p.cap_hit(0)
-            conv, _spread = p.contract.restructure(0, min_base=floor)
+            # Fund identified roster/draft obligations only, not a generic
+            # cushion that the market immediately treats as spending money.
+            amount = max(0.,p.contract.base[0]-floor) * min(1.,(need+.001)/freed)
+            import copy
+            preview = copy.deepcopy(p.contract)
+            preview.restructure(0, amount=amount, min_base=floor)
+            if not FP.evaluate(league, team, additions=[(p, preview)],
+                               essential=True, action='fund_roster_restructure')['approved']:
+                continue
+            conv, _spread = p.contract.restructure(0, amount=amount, min_base=floor)
             if conv <= 0:
                 continue
             team.sync_cap()
@@ -360,7 +370,7 @@ def run(league, rng, verbose=False):
             league.log('restructure', pid=p.pid, team=abbr,
                        converted=round(conv, 2), freed=round(got, 2),
                        dead_now=round(p.dead_if_cut(0), 2))
-            need = TARGET_ROOM - team.cap_space
+            need = FP.roster_funding_target(league, team) - team.cap_space
 
         # ---- 2. cut the bad contracts -----------------------------------
         cands = []
@@ -385,7 +395,7 @@ def run(league, rng, verbose=False):
             if _release_cap_casualty(league, team, p, rng):
                 cuts.append((abbr, p, saved))
             team.sync_cap()
-            need = TARGET_ROOM - team.cap_space
+            need = FP.roster_funding_target(league, team) - team.cap_space
 
         # ---- 3. still stuck: take the June 1 route -----------------------
         if need > 0:
@@ -405,7 +415,7 @@ def run(league, rng, verbose=False):
                     league.log('june1_cut', pid=p.pid, team=abbr,
                                saved=round(saved, 2), dead_next=round(dead_next, 2))
                 team.sync_cap()
-                need = TARGET_ROOM - team.cap_space
+                need = FP.roster_funding_target(league, team) - team.cap_space
 
     if verbose:
         over = sum(1 for t in league.teams.values() if t.cap_space < 0)

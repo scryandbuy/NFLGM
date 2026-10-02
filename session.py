@@ -1256,7 +1256,9 @@ class Session:
         if problems:
             self._cpu_roster_block = 'CPU roster repair needed before Week 1: ' + '; '.join(
                 f"{p['team']} ({p['size']} players, ${p['cap']:.2f}m cap space"
-                + (', missing ' + ', '.join(p['missing']) if p['missing'] else '') + ')'
+                + (', missing ' + ', '.join(p['missing']) if p['missing'] else '')
+                + (', depth needed: ' + ', '.join(f'{g} {n}' for g,n in p['depth'].items())
+                   if p.get('depth') else '') + ')'
                 for p in problems)
             return False
         PSQ.fill_squads(L, rng)

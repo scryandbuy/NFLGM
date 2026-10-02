@@ -33,6 +33,10 @@ class MarketCloseBonusTests(unittest.TestCase):
     def test_discounted_market_close_veterans_keep_normal_bonus(self):
         self.player.ovr = 82.0
         with patch('roster_needs.assess', return_value={'needs': {'WR': 1.0}}), \
+             patch('roster_needs.move_gain', return_value=12), \
+             patch('financial_plan.evaluate', return_value={'approved': True}), \
+             patch.object(market, 'power', return_value=50), \
+             patch.object(market, 'offer_contract', return_value=Contract(1,[4.2])), \
              patch.object(market.VAL, 'pool_from_league', return_value=[]), \
              patch.object(market.VAL, 'value_player', return_value={'apy': 6.0}), \
              patch.object(market, 'sign') as sign:

@@ -616,37 +616,53 @@ def _pick_to_offer(league, team, target, gm, ctx, space):
 MAX_PACKAGE = 5
 
 
-def _can_absorb(league, team, target, space):
-    """
-    Can this club carry what he is owed, on top of what it already owes its
-    own people?
-
-    Two separate questions, and a front office asks both. THIS year: is there
-    room for his cap hit at all. AFTER this year: a multi-year deal is paid
-    out of the same money that would keep the men already on the roster, so
-    the longer he is signed for the more of his own future a general manager
-    is spending - and he only spends it on somebody better than whoever walks
-    as a result.
-
-    A one-year rental passes freely. That is the point: a cap-strapped club
-    can still buy help for a run without mortgaging anything.
-    """
-    p = target.get('obj')
-    if p is None or not getattr(p, 'contract', None):
-        return True
-    if target.get('inherit', p.apy) > space:
-        return False                       # cannot fit his inherited hit this season
-    yrs = p.contract_years_left
-    if yrs <= 1:
-        return True                        # a rental commits nothing
-    owed = team.future_obligation()
-    forward = space - owed * min(1.0, (yrs - 1) / 3.0) * 0.5
-    if p.apy <= forward:
-        return True
-    # He costs more than the club has left once its own are paid for, so he
-    # has to be better than the man it would give up to keep him.
-    keeper = team.worst_keeper()
-    return keeper is not None and target.get('seen_ovr', p.ovr) > keeper.ovr + 1.0
+def _financial_trade(league, ta, tb, outgoing, incoming, cache=None):
+    """Price both complete rosters, including any cuts needed for this trade."""
+    import cap_accounting as CA
+    import financial_plan as FP
+    import roster_needs as RN
+    # One negotiation can compare many pick combinations for the same player
+    # exchange. Reuse its roster math, never cache beyond that negotiation.
+    cache = {} if cache is None else cache
+    key = (ta.abbr, tb.abbr, tuple(sorted(x for x in outgoing if isinstance(x, str))),
+           tuple(sorted(x for x in incoming if isinstance(x, str))))
+    if key not in cache:
+        try:
+            releases = league._trade_roster_releases(ta.abbr, tb.abbr, outgoing, incoming)
+            CA.require_trade_room(league, ta.abbr, tb.abbr, outgoing, incoming, releases)
+        except ValueError:
+            cache[key] = None
+            return False
+        if 'retention_market' not in cache:
+            cache['retention_market'] = FP.retention_market(league)
+        market = cache['retention_market']
+        states = {}
+        for team, sent, received in ((ta, outgoing, incoming), (tb, incoming, outgoing)):
+            if team.abbr == getattr(league, 'user_team', None):
+                continue
+            removed = [x for x in sent if isinstance(x, str)] + list(releases.get(team.abbr, ()))
+            arrivals = [league.player(x) for x in received if isinstance(x, str)]
+            arrivals = [p for p in arrivals if p is not None and p.contract]
+            trial = CA.trade_projection(league, team.abbr, removed, received)
+            contracts = {pid: c for pid, c, _ in trial.contracts}
+            projected = [p for p in team.active() if p.pid not in removed] + arrivals
+            gain = RN.assess(team, projected)['score'] - RN.assess(team)['score']
+            states[team.abbr] = dict(additions=[(p, contracts[p.pid]) for p in arrivals],
+                removals=removed, trial_cap=trial, gain=gain, market=market,
+                before=FP.snapshot(league, team, market=market))
+        cache[key] = states
+    if cache[key] is None:
+        return False
+    for team, sent, received in ((ta, outgoing, incoming), (tb, incoming, outgoing)):
+        if team.abbr == getattr(league, 'user_team', None):
+            continue
+        sent_picks = {id(x) for x in sent if not isinstance(x, str)}
+        picks = [pk for pk in team.picks if id(pk) not in sent_picks]
+        picks += [x for x in received if not isinstance(x, str)]
+        decision = FP.evaluate(league, team, **cache[key][team.abbr], action='trade', picks=picks)
+        if not decision['approved']:
+            return False
+    return True
 
 
 MAX_PACKAGE_SEARCH = 50000  # fail closed on pathological pick-hoarding banks
@@ -771,6 +787,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         for k in range(1, MAX_PACKAGE + 1):
             upper[i][k] = max(upper[i+1][k], bank[i][2] + upper[i+1][k-1])
     valid_players = {}
+    financial_cache = {}
     best, nodes = None, 0
 
     def legal(items):
@@ -783,7 +800,12 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
                 valid = all(total > roster_score(tuple(j for j in ids if j != i)) + 1e-6
                             for i in ids)
             valid_players[ids] = valid
-        return valid_players[ids]
+        if not valid_players[ids]:
+            return False
+        if league is not None:
+            sent = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in items]
+            return _financial_trade(league, ta, tb, sent, [target['pid']], financial_cache)
+        return True  # Standalone valuation/search probes have no league ledger.
 
     def visit(start, chosen, paid, cost, value):
         nonlocal best, nodes, exhausted
@@ -846,7 +868,6 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
     from itertools import combinations
     import roster_needs as RN
     import cap_accounting as CA
-    from contracts import TARGET_ROOM
 
     user = getattr(league, 'user_team', None)
     if (seller.abbr == user or player.team != seller.abbr
@@ -888,12 +909,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
             continue
         target = player_asset(league, seller, player, pool, rng,
                               need=True, viewer=buyer)
-        if target is None or not _can_absorb(league, buyer, target, buyer.cap_space):
-            continue
-        projection = CA.trade_projection(league, abbr, [], [player.pid])
-        # Keep the same cushion cleanup seeks; otherwise a later team in
-        # that very cleanup pass could buy him and immediately cut him again.
-        if projection.space(buyer.phase) < TARGET_ROOM - .0005:
+        if target is None:
             continue
         try:
             CA.require_trade_room(league, seller.abbr, abbr, [player.pid], [])
@@ -939,6 +955,8 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
         if best is not None:
             bids.append((best[0], abbr, best[1]))
     for rank, abbr, picks in sorted(bids, key=lambda bid: bid[0], reverse=True):
+        if not _financial_trade(league, seller, league.teams[abbr], [player.pid], picks):
+            continue
         try:
             league.trade(seller.abbr, abbr, [player.pid], picks)
         except ValueError:
@@ -1034,14 +1052,8 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 # offer; he does not shrug and walk. He stops when the deal
                 # stops being worth it to him, which is what makes the price
                 # real rather than arbitrary.
-                # WHAT HE INHERITS HAS TO FIT. A trade is not only a price,
-                # it is a commitment: taking on four years of big money is the
-                # same room that would have re-signed his own expiring men,
-                # and a club that cannot see that trades itself into a corner
-                # it only discovers next March. Free agency already refuses
-                # those deals; trades were taking them blind.
-                if not _can_absorb(league, ta, target, cap_space[a]):
-                    continue
+                # The package search checks both clubs' actual contract and
+                # rookie funding after the complete exchange.
                 # a man already sent away in an earlier deal this window is
                 # not in the bank any more (the surplus list was built once)
                 sa_live = [x for x in sa if x['pid'] not in moved
@@ -1126,8 +1138,6 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             if not want:
                 continue
             target = dict(want[0]); target['need'] = True
-            if not _can_absorb(league, ta, target, cap_space[a]):
-                continue
             offer, res = _negotiate(league, ta, tu, target, ga, gu, ctx_a, ctx_u,
                                     cap_space[a], cap_space[u], sa, rng)
             if offer is None:

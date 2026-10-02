@@ -151,6 +151,15 @@ def pending_tender_cost(league, exclude=None):
                and FA.fa_class(p.accrued, p.contract_years_left) == 'RFA')
 
 
+def _cpu_retention_fits(league, team, player, price, action):
+    from cap_accounting import require_room
+    from extensions import _retention_budget
+    preview = _one_year(price, league.year)
+    try: require_room(league, team, player.pid, preview)
+    except ValueError: return False
+    return _retention_budget(league, team, player, preview, action)['approved']
+
+
 def run(league, rng, verbose=False):
     """
     Tag, tender, and let everyone else reach the market. Called after cuts and
@@ -182,7 +191,7 @@ def run(league, rng, verbose=False):
             cand = max(mine, key=worth)
             price = tag_price(cand, cap)
             if (cand.tag_count < MAX_TAGS and worth(cand) >= 5.0
-                    and price <= power(league, team, cap)):
+                    and _cpu_retention_fits(league, team, cand, price, 'franchise_tag')):
                 cand.contract = _one_year(price, league.year)
                 cand.tag_count += 1
                 cand.tagged_year = league.year
@@ -198,7 +207,8 @@ def run(league, rng, verbose=False):
             price = tender_price(p, cap)
             if is_user and p.pid not in set(getattr(league, 'user_tenders', None) or []):
                 p.fa_class = 'UFA'; to_market.append((abbr, p)); continue        # the user chose not to tender him: unrestricted
-            if price > power(league, team, cap):
+            if (price > power(league, team, cap) if is_user else
+                    not _cpu_retention_fits(league, team, p, price, 'rfa_tender')):
                 to_market.append((abbr, p))     # cannot afford to keep him
                 continue
             p.contract = _one_year(price, league.year)

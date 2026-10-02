@@ -41,12 +41,13 @@ def fixture(space, second_candidate=False):
 
 class WaiverCapClaimTests(unittest.TestCase):
     def run_wire(self, league):
-        def move_gain(team, incoming, outgoing=None):
+        def move_gain(team, incoming, outgoing=None, baseline=None):
             return 2.0 if outgoing is None or outgoing.pid == 'bad_cut' else 1.0
 
         with patch('targets.position_score', side_effect=lambda p, pos, scheme=None: p.get('test_ovr', 0)), \
              patch('waivers.priority', return_value=['GB']), \
              patch('waivers.wants', return_value=True), \
+             patch('waivers._claim_budget', return_value=True), \
              patch('valuation.pool_from_league', return_value=None), \
              patch('valuation.value_player', return_value={'value': 1}), \
              patch('roster_needs.move_gain', side_effect=move_gain), \

@@ -77,6 +77,15 @@ def exercise_rookie_option(league, pid, by_ai=False):
     team = league.teams[p.team]
     if price > next_year_room(team, CAP.get(league.year + 1, CAP.get(league.year, 301.2) * 1.07)):
         return dict(ok=False, why='the fifth-year salary will not fit next year’s cap')
+    if by_ai:
+        import copy
+        preview = copy.deepcopy(p.contract)
+        preview.years += 1
+        preview.base.append(price)
+        preview.rb.append(0.0)
+        decision = _retention_budget(league, team, p, preview, 'rookie_option')
+        if not decision['approved']:
+            return dict(ok=False, why=decision['reason'])
     p.contract.years += 1
     p.contract.base.append(price)
     p.contract.rb.append(0.0)
@@ -292,6 +301,14 @@ def _ai_refusal(league, p):
     return None
 
 
+def _retention_budget(league, team, player, contract, action='extension'):
+    import financial_plan as FP
+    import roster_needs as RN
+    benefit = max(0.0, RN.departure_loss(team, player), RN.retention_value(team, player))
+    return FP.evaluate(league, team, additions=[(player, contract)],
+                       gain=benefit, action=action)
+
+
 def negotiate_ai(league, p, apy, years, rng=None, pool=None):
     """One budget, one term, at most four alternative payment packages.
 
@@ -322,6 +339,15 @@ def negotiate_ai(league, p, apy, years, rng=None, pool=None):
             continue
         if not can_afford_extension(league, team, p, package['apy'], years,
                                     package['front_load'], package['bonus']):
+            if package is original:
+                candidates.extend([dict(original, front_load=.5), dict(original, front_load=.85),
+                    dict(original, front_load=.5, bonus=min(max_bonus, total*.445))])
+            continue
+        preview = build(p, years, package['apy'], CAP.get(league.year, 301.2),
+                        team.gm, league, front_load=package['front_load'], bonus=package['bonus'])
+        decision = _retention_budget(league, team, p, preview)
+        if not decision['approved']:
+            last = dict(result='refused', why=decision['reason'])
             if package is original:
                 candidates.extend([dict(original, front_load=.5), dict(original, front_load=.85),
                     dict(original, front_load=.5, bonus=min(max_bonus, total*.445))])
