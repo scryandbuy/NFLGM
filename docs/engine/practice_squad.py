@@ -128,6 +128,9 @@ def call_up(league, abbr, pid, years=1, emergency=False):
     from cap_accounting import require_room
     try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None)
     except ValueError: return False
+    if not _cpu_move_budget(league, team, p, c, outgoing, essential=emergency,
+                            action='ps_callup'):
+        return False
     squad(team).remove(p); p.xp_spent.pop('_ps', None); p.team = None
     _make_room(league, abbr, p)
     league.sign(pid, abbr, c, log=False)
@@ -152,7 +155,27 @@ def available_free_agents(league):
             if p and p.team is None and not p.retired and p.out_until is None]
 
 
-def sign_minimum(league, abbr, player, log=True):
+def _cpu_move_budget(league, team, player, contract, outgoing=None, *, essential=False,
+                     action='roster_repair'):
+    """Screen the complete CPU move before changing either roster."""
+    if team.abbr == getattr(league, 'user_team', None):
+        return True
+    import financial_plan as FP
+    import roster_needs as RN
+    healthy = [p for p in team.active() if p.out_until is None]
+    group = GROUP_OF.get(player.pos, player.pos)
+    group_size = sum(GROUP_OF.get(p.pos, p.pos) == group for p in healthy)
+    shortage = (outgoing is None and len(team.active()) < 53
+                or group_size < GROUP_MIN.get(group, 0)
+                or player.pos in ('K', 'P', 'LS') and not any(p.pos == player.pos for p in healthy))
+    return FP.evaluate(league, team, additions=[(player, contract)],
+                       removals=[outgoing.pid] if outgoing else [],
+                       gain=RN.move_gain(team, player, outgoing),
+                       essential=essential or (player.out_until is None and shortage),
+                       action=action)['approved']
+
+
+def sign_minimum(league, abbr, player, log=True, essential=False):
     """Validate ownership, roster space and full departure cost before a move."""
     from cap_accounting import require_room
     team = league.teams[abbr]
@@ -166,6 +189,9 @@ def sign_minimum(league, abbr, player, log=True):
         require_room(league, team, player.pid, contract,
                      release_pid=outgoing.pid if outgoing else None)
     except ValueError:
+        return False
+    if not _cpu_move_budget(league, team, player, contract, outgoing,
+                            essential=essential):
         return False
     if outgoing: league.release(outgoing.pid)
     league.sign(player.pid, abbr, contract, log=log)
@@ -238,7 +264,7 @@ def _make_room(league, abbr, p):
     return True
 
 
-def poach(league, abbr, pid, week):
+def poach(league, abbr, pid, week, essential=False):
     """Sign another club's practice-squad man to your 53. Locked for three games."""
     p = league.player(pid)
     if p is None or p.retired: return False
@@ -254,6 +280,9 @@ def poach(league, abbr, pid, week):
     from cap_accounting import require_room
     try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None)
     except ValueError: return False
+    if not _cpu_move_budget(league, team, p, c, outgoing, essential=essential,
+                            action='ps_poach'):
+        return False
     squad(league.teams[src]).remove(p); league.teams[src].sync_cap(); p.xp_spent.pop('_ps', None); p.team = None
     _make_room(league, abbr, p)
     league.sign(pid, abbr, c, log=False)
@@ -439,7 +468,7 @@ def keep_groups_whole(league, rng, week):
                     fa = [p for p in fa if p and GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired and not shunned(p, abbr, league) and minimum_fits(league, team, p)]
                     if not fa: break
                     best = max(fa, key=lambda p: p.ovr)
-                    if not sign_minimum(league, abbr, best, log=False): break
+                    if not sign_minimum(league, abbr, best, log=False, essential=True): break
                     team._moved_week = wk_
                     league.log('emergency_sign', pid=best.pid, team=abbr, group=grp)
                     moves.append((abbr, 'emergency', best.pid))
@@ -469,7 +498,7 @@ def keep_groups_whole(league, rng, week):
             fa = [q for q in fa if q and q.pos == pos and q.out_until is None and not q.retired and not shunned(q, abbr, league) and minimum_fits(league, team, q)]
             if not fa: continue
             best = max(fa, key=lambda q: q.ovr)
-            if not sign_minimum(league, abbr, best, log=False): continue
+            if not sign_minimum(league, abbr, best, log=False, essential=True): continue
             mn = best.apy
             league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
             moves.append((abbr, 'sign', best.pid)); added += 1
@@ -498,7 +527,7 @@ def keep_groups_whole(league, rng, week):
                 continue
             if best is None:
                 break
-            if not sign_minimum(league, abbr, best, log=False): break
+            if not sign_minimum(league, abbr, best, log=False, essential=True): break
             mn = best.apy
             league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
             moves.append((abbr, 'sign', best.pid)); added += 1
@@ -545,21 +574,25 @@ def roster_review(league, rng, week, user_team=None):
                 best = (gain, q, p)
         if best is None: continue
         gain, q, p = best
-        mn = MS.minimum_salary(p.accrued or 0, cap)
-        if team.cap_space < mn + 0.2: continue
+        contract = minimum_contract(league, team, p)
         # Another club may already have signed a candidate from the review's
         # cached pool. Validate his current location before releasing our man.
         is_fa = p.pid in league.free_agents
         source = league.teams.get(p.team) if p.team else None
         if not is_fa and (source is None or p not in squad(source)):
             continue
+        from cap_accounting import require_room
+        try: require_room(league, team, p.pid, contract, release_pid=q.pid)
+        except ValueError: continue
+        if not _cpu_move_budget(league, team, p, contract, q, action='roster_upgrade'):
+            continue
         league.release(q.pid)
         if is_fa:
             league.free_agents.remove(p.pid); p.contract = None
-            league.sign(p.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year))
+            league.sign(p.pid, abbr, contract)
         else:
             src = p.team; squad(league.teams[src]).remove(p); p.xp_spent.pop('_ps', None); p.team = None
-            league.sign(p.pid, abbr, Contract(years=1, base=[mn], signing_bonus=0.0, signed=league.year), log=False)
+            league.sign(p.pid, abbr, contract, log=False)
             p.xp_spent['_poach_lock'] = int(week or 0) + POACH_LOCK_GAMES
             league.log('ps_poach', pid=p.pid, team=abbr, source=src, locked_until=int(week or 0) + POACH_LOCK_GAMES)
         team._moved_week = int(week or 0)
@@ -596,6 +629,6 @@ def weekly(league, rng, week, user_team=None, playoffs=None):
             cands = [p for t2, tm in league.teams.items() if t2 != abbr for p in squad(tm) if p.pos == thin]
             if cands:
                 p = max(cands, key=lambda p: p.ovr)
-                if team.cap_space > MS.minimum_salary(p.accrued or 0, CAP.get(league.year, 301.2)):
-                    poach(league, abbr, p.pid, week); moves.append((abbr, 'poach', p.pid))
+                if poach(league, abbr, p.pid, week, essential=True):
+                    moves.append((abbr, 'poach', p.pid))
     return moves
