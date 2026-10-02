@@ -12,6 +12,7 @@ def fixture():
     for abbr in ('GB','MIN'):
         t=Team(abbr,'United North','United'); t.league=L; L.teams[abbr]=t
     L.set_phase('regular')
+    L.week=1
     return L
 
 
