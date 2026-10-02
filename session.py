@@ -251,6 +251,8 @@ class Session:
 
     def _offseason_condition_reset(self):
         """Summer restores freshness for every club; injury healing stays separate."""
+        if self.runner is None:
+            return  # An offseason save may have no live season state to clear.
         for st in self.runner.states.values():
             st.cond.cond.clear()
             st.cond.snaps.clear()
