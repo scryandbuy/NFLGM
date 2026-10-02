@@ -199,9 +199,9 @@ def trade_value(player, val, cap=CAP, contract=None):
     scarcity = float(np.clip((ovr - 72.0) / 12.0, 0.0, 1.0)) ** 1.5
     total *= scarcity
     total *= POSITION_TRADE_MULT.get(player.get('madden_position'), 1.0)
-    # A faster developer can add at most 15% to positive trade value. A bad
+    # A faster developer can add at most 20% to positive trade value. A bad
     # contract remains a liability; scarcity and street alternatives still bind.
-    total += max(0.0, total) * .15 * max(0., min(1., float(player.get('development_credit', 0.))))
+    total += max(0.0, total) * .20 * max(0., min(1., float(player.get('development_credit', 0.))))
     return round(total, 2)
 
 def dead_money_on_trade(contract, year_index):

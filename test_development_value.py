@@ -32,7 +32,7 @@ class DevelopmentValueTests(unittest.TestCase):
         row=dict(age=23,ovr=84,apy=2,contract_years_left=4,madden_position='HB')
         normal=TE.trade_value(row,dict(apy=8))
         legend=TE.trade_value(dict(row,development_credit=1),dict(apy=8))
-        self.assertGreater(legend,normal);self.assertAlmostEqual(legend,normal*1.15,delta=.02)
+        self.assertGreater(legend,normal);self.assertAlmostEqual(legend,normal*1.20,delta=.02)
         bad=dict(row,apy=90)
         self.assertEqual(TE.trade_value(bad,dict(apy=8)),TE.trade_value(dict(bad,development_credit=1),dict(apy=8)))
 
