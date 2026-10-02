@@ -362,3 +362,59 @@ Source: C:/Users/HP/.codex/attachments/08ae5f6a-d052-41dc-b36a-ff021687a75d/Past
 - Low-priority watches: two punts across19 possessions (two are half/game-ending kneel possessions); one kickoff touchback in12 kickoffs; both teams attempt57-yard FGs, one made and one missed. Evaluate punts alongside fourth-down attempts, giveaways and explosive TDs rather than tuning punt frequency from this game.
 - Fourth-down/clock decisions: Houston's Q3 fourth-and-four from its47 while down8 and GB's Q4 fourth-and-three from HOU4 while tied are situational gambles, not proven decision bugs. Houston's tying FG attempt on fourth-and-six at0:33 is coherent. The late short kickoff giving Houston its42 merits tactical monitoring, not a forced fix based on the return outcome.
 - Status: review/watchlist update only. No engine changes or claims of reproducing this saved game's outcomes.
+
+
+## October 2: recent-log investigation, rushing losses, sacks and explosives
+
+**Decision: fix post-catch pursuit selection before tuning explosive frequency. No blanket rushing reduction or sack increase is supported. The low visible-loss rate in the historical logs remains unresolved rather than declared fixed. No production engine changes in this investigation.**
+
+### Evidence reviewed
+
+Re-read the six supplied Weeks3-8 logs against the saved 2028 Weeks3-7 summaries; also reviewed the earlier 2027 Week12 LA and Weeks17/18 Chicago logs. Counts exclude nullified plays and kneels, retain designed QB runs/sneaks, and separate scrambles from designed runs. Copied logs do not identify the engine build. Week7 has eleven GB designed runs, including Love's sneak, and46 MIN runs including Fletcher's carry; HB-only box rows omit those additional runners.
+
+| Recent game | Visible run losses / designed attempts, both teams | Sacks / dropbacks, both teams |
+| --- | ---: | ---: |
+| Week3 GB at CHI | 1 /43 | 1 /80 |
+| Week4 GB at NY | 1 /58 | 5 /58 |
+| Week5 DET at GB | 2 /52 | 5 /82 |
+| Week6 CHI at GB | 0 /45 | 6 /90 |
+| Week7 GB at MIN | 2 /57 | 3 /68 |
+| Week8 GB at HOU | 0 /49 | 1 /76 |
+| Total | 6 /304 (1.97%) | 21 /454 (4.63%) |
+
+GB allowed14 sacks in240 dropbacks; opponents allowed7 in214. Houston's sack-free GB game is therefore not representative of the whole sequence. Recent completed passes of40+ yards: GB4/224 attempts, opponents4/205. The older three logs also show few visible rushing losses (three in159 attempts), but their historical builds cannot establish a current regression.
+
+### Current-engine experiments
+
+Source checkout `nflgm-gm-financial-plan` at7f20cb2; relevant gameplay source matched integration10b547b at inspection. Non-mutating diagnostic wrappers refresh the previous audit's contact calculation to include support blocking, record actual rush assignments and post-catch tacklers, and consume no extra RNG draws. Source save `Downloads/nflgm-2028-week-7.json` was read only.
+
+32 fresh-roster games and32 developed-save games, seeds102021/102022, each team once perseed. Developed-save runs independently reload the save perseed and restore runner state, then play randomized pairings atWeek8. Eight additional HOU-home/GB-away games independently reload that save with seeds102031-102038. They are current-engine experiments, NOT exact replays of historical RNG, builds, Week8 acquisitions or user halftime choices. The saved Week7 user plan is not applied as a Week8 plan. These samples are not a full register certification.
+
+| Sample | Designed carries | YPC | Raw losses | Whole-yard visible losses | Sack rate* |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Fresh rosters,32 games | 1,699 | 4.57 | 140 (8.24%) | 81 (4.77%) | 6.96% |
+| Developed save,32 games | 1,621 | 4.56 | 164 (10.12%) | 89 (5.49%) | 7.08% |
+| GB-HOU,8 games | 333 | 4.67 | 29 (8.71%) | 17 (5.11%) | 7.06% |
+
+*Sack rate uses the existing register's attempts-plus-sacks denominator; the historical table uses all dropbacks including scrambles. Do not compare them as identical denominators.
+
+Rounding hides roughly half of raw backfield losses, but does not fully explain why the supplied historical sequence has only1.97% visible losses. Current tests do not reproduce that shortage; developed-save raw losses are already slightly above the register's10.04% upper tolerance (10.12%, a small-sample miss). Increasing loss frequency globally would be unjustified. Heavy boxes continue to increase loss risk: saved sample six-man46/487 versus eight-man29/151, although live buckets differ in matchup/context. Support blocking's average contact contribution was only+0.008 yards in this sample, not evidence of a universal support-block bonus overwhelming penetration.
+
+Current pass rush also does not reproduce a global failure: zero rush-rep/win accounting mismatches across64 mixed-matchup games. Elite edge snap shares were86.2% fresh and84.7% developed. In eight GB-HOU trials Parsons logged459/583 defensive snaps (78.7%),284 blocked rush reps,27 wins and7 sacks. That supports retaining meaningful rotation and individual ability rather than adding a named-player boost. Existing box 'pressures' match credited rush wins, so do not treat their sum as unique pressured dropbacks.
+
+GB-HOU trials: GB23 sacks in378 dropbacks, HOU29 in362; GB4.69YPC and HOU4.64. GB had six40+ completions and HOU seven across all eight games. Fresh versus developed passing:6.46 versus6.12 net yards perdropback;40+ completions28/2259 versus23/2323 attempts. These do not support a broad passing nerf. Scoring remains on the prior watch (25.11 and24.89 points/team in the mixed samples, above the existing target), but requires its own drive/field-position analysis.
+
+### Confirmed structural issue: pursuit after the catch
+
+`plays._pass_play` draws nearby tacklers with replacement from all DBs/LBs, instead of deriving unique pursuers from the actual coverage assignments. The same defender can appear more than once. In the targeted GB-HOU trace,201/412 accepted completion pursuit lists contained duplicates. Those are lists, not claims that every duplicated defender was actually encountered before the play ended.
+
+For a deep completion with separation>=0.5, the code reduces the list to one random defender. All ten such lists in the targeted sample selected a non-safety, including a WILL; the rule does not inspect whether two-high safety help remains. A reproduced81.6-yard completion against two_man had21.5 air yards and60.5 YAC, and faced only one CB despite two safeties in the coverage assignments. A cover_2 completion with a recorded safety helper similarly used a random CB alone for pursuit. Once the sampled list is beaten, the final chase is evaluated against that same list, so omitted safety help cannot intervene.
+
+**Recommended fix:** build a unique pursuit group from the actual primary defender, coverage helper and remaining eligible defenders; preserve safety help according to shell/assignment, depth and separation. Exclude already beaten/ineligible defenders appropriately, and let relevant pursuit/speed/tackling ratings decide the remaining chase. Verify repeated-defender prevention and deep catches versus one-high/two-high, then compare YAC/explosive/scoring outcomes across seeds before changing any global coefficients. This is a structural recommendation, not proof that each historical long TD was invalid or that all deep catches must face two safeties.
+
+### Remaining evidence needed / watch disposition
+
+- **Rushing losses:** open discrepancy. Capture raw yards/contact/box in a future game from the exact played build, then compare to the copied log; current save reconstruction is not exact replay. No global loss-frequency change now.
+- **Sacks:** no current global fix justified; retain team/role distribution and pressure-to-sack monitoring. Single-game no-sack outcomes remain possible.
+- **Explosives:** concrete pursuit-selection correction recommended; global explosive frequency unproven. Preserve legitimate long touchdowns.
+- Artifacts: `outputs/game-watch-investigation-20261002/` contains `fresh.json`, `saved.json`, `matchup.json`, diagnostic runners and `log-comparison.json`. Detailed raw outcomes and coverage/pursuit evidence are retained for a targeted follow-up.
