@@ -17,6 +17,10 @@ def stage(league):
 
 
 def role_inputs(league, team, player, baseline=None, scale=None):
+    return _role_read(league,team,player,baseline,scale)[0]
+
+
+def _role_read(league, team, player, baseline=None, scale=None):
     report = RN.assess(team) if baseline is None else baseline
     scale = DFT.position_scale(league) if scale is None else scale
     rows = [r for r in report['package_assignments'] if r['player'] is player]
@@ -31,11 +35,24 @@ def role_inputs(league, team, player, baseline=None, scale=None):
     own = team.by_pos(player.pos)
     rank = next((i for i,p in enumerate(own) if p.pid == player.pid), len(own))
     replacement = own[rank+1].ovr if rank+1 < len(own) else min((p.ovr for p in reserves), default=55.)
-    important = share >= .15 or loss >= 2. or RN.retention_value(team, player) >= 2.
-    return dict(role_share=round(share,4), roles=sorted({r['role'] for r in rows}),
+    retention=RN.retention_value(team,player)
+    important = share >= .15 or loss >= 2. or retention >= 2.
+    row=dict(role_share=round(share,4), roles=sorted({r['role'] for r in rows}),
         departure_loss=round(loss,4), replacement_grade=round(replacement,3),
         normalized_grade=round(normalized,3), important=important,
         importance=round(3.*loss + 12.*share + (normalized-75.)*.7,4))
+    return row,max(loss,retention)  # unrounded benefit preserves financial thresholds
+
+
+def _review_context(league,team,baseline=None,scale=None):
+    """Read-only work shared only inside one unchanged team review.
+
+    Never persisted or reused across a transaction. Every candidate still gets
+    its own full proposed-contract projection and authoritative cap check.
+    """
+    return dict(report=RN.assess(team) if baseline is None else baseline,
+                scale=DFT.position_scale(league) if scale is None else scale,
+                inputs={},financial=None)
 
 
 def candidates(league, team, scale=None):
@@ -58,12 +75,16 @@ def candidates(league, team, scale=None):
                   -pr[1]['importance'],str(pr[0].pid)))
 
 
-def assess(league, team, player, pool=None, baseline=None, scale=None):
+def assess(league, team, player, pool=None, baseline=None, scale=None, *, _context=None):
     import extensions as EXT
     import contract_offer as CO
     from development_value import player_credit
     from trade_calendar import trading_open
-    row = role_inputs(league,team,player,baseline,scale)
+    context=_review_context(league,team,baseline,scale) if _context is None else _context
+    if player.pid not in context['inputs']:
+        context['inputs'][player.pid]=_role_read(league,team,player,context['report'],context['scale'])
+    inputs,benefit=context['inputs'][player.pid]
+    row=dict(inputs)
     c = player.contract
     row.update(team=team.abbr,pid=player.pid,decision='let_walk',reasons=[],
         expected_apy=0.,offer_apy=0.,years=0,extension_probability=0.,
@@ -92,7 +113,13 @@ def assess(league, team, player, pool=None, baseline=None, scale=None):
             row['financial_reason']='legal_cap_failure'; continue
         preview = EXT.build(player,tm['years'],apy,CAP.get(league.year,301.2),team.gm,league,
                             front_load=package['front_load'],bonus=package['bonus'])
-        budget = EXT._retention_budget(league,team,player,preview)
+        if context['financial'] is None:
+            import financial_plan as FP
+            market=FP.retention_market(league)
+            context['financial']=(FP.snapshot(league,team,market=market),market)
+        before,market=context['financial']
+        budget = EXT._retention_budget(league,team,player,preview,
+                                      benefit=benefit,before=before,market=market)
         row['financial_reason']=budget['reason']
         if budget['approved']:
             row['affordable']=True; break
@@ -175,11 +202,13 @@ def refresh(league, team, pool=None, stage=None):
     cache=getattr(team,'_retention_review_signature',None)
     if signature==cache: return choices(league,team)
     report=RN.assess(team);scale=DFT.position_scale(league)
+    context=_review_context(league,team,report,scale)
     if pool is None: pool=VAL.pool_from_league(league)
     for p in report['players']:
         if p.contract and p.contract.years>1: continue
-        inputs=role_inputs(league,team,p,report,scale)
+        inputs,benefit=_role_read(league,team,p,report,scale)
+        context['inputs'][p.pid]=(inputs,benefit)
         if not inputs['important']: continue
-        record(league,assess(league,team,p,pool,report,scale),review_stage)
+        record(league,assess(league,team,p,pool,report,scale,_context=context),review_stage)
     team._retention_review_signature=signature
     return choices(league,team)
