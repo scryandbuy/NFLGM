@@ -6,7 +6,8 @@ Usage from the integration checkout:
 
 The snapshot records branch tips, unmatched source commits, and hashes of every
 modified or untracked file in the other worktrees. Verification fails when any
-source changes after review or a commit lacks an explicit disposition.
+source changes after review or a commit lacks an explicit disposition. It also
+checks that the integration branch contains the current GitHub main commit.
 """
 
 import argparse
@@ -101,12 +102,31 @@ def verify_ledger(commits, ledger_path):
     print(f'Source ledger passed: {len(commits)} unmatched source commits reviewed.')
 
 
+def verify_upstream(ref, url):
+    try:
+        upstream = git('rev-parse', '--verify', ref + '^{commit}')
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f'Fetch GitHub main into {ref} before verifying.') from exc
+    if subprocess.run(['git', 'merge-base', '--is-ancestor', upstream, 'HEAD']).returncode:
+        raise SystemExit(f'Integration branch does not contain {ref} ({upstream[:12]}).')
+    try:
+        remote = git('-c', 'http.sslBackend=openssl', 'ls-remote', url, 'refs/heads/main')
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit('Could not check current GitHub main; release verification is incomplete.') from exc
+    rows = [line.split()[0] for line in remote.splitlines() if line.strip()]
+    if len(rows) != 1 or rows[0] != upstream:
+        raise SystemExit(f'GitHub main changed: fetched {upstream[:12]}, current {rows[0][:12] if rows else "missing"}.')
+    print(f'GitHub main ancestry passed: {upstream[:12]} is in the integration branch.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', choices=('snapshot', 'verify'))
     parser.add_argument('path', type=Path)
     parser.add_argument('--target', default='codex/complete-integration-20260930')
     parser.add_argument('--ledger', type=Path)
+    parser.add_argument('--upstream-ref', default='refs/remotes/github/main')
+    parser.add_argument('--upstream-url', default='https://github.com/scryandbuy/NFLGM.git')
     args = parser.parse_args()
     if git('branch', '--show-current') != args.target:
         parser.error('Run this from the integration branch.')
@@ -130,6 +150,7 @@ def main():
                     print(f'  {key}: {str(before.get(key))[:100]} -> {str(after.get(key))[:100]}')
         raise SystemExit(1)
     verify_ledger(actual['unique_commits'], args.ledger)
+    verify_upstream(args.upstream_ref, args.upstream_url)
     print('Integration gate passed: no source branch or worktree changed since review.')
 
 
