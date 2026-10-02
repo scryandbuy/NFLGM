@@ -32,7 +32,8 @@ class MarketCloseBonusTests(unittest.TestCase):
 
     def test_discounted_market_close_veterans_keep_normal_bonus(self):
         self.player.ovr = 82.0
-        with patch('roster_needs.assess', return_value={'needs': {'WR': 1.0}}), \
+        with patch('roster_needs.assess', return_value={
+                 'needs': {'WR': 1.0}, 'players': (), 'package_assignments': []}), \
              patch('roster_needs.move_gain', return_value=12), \
              patch('financial_plan.evaluate', return_value={'approved': True}), \
              patch.object(market, 'power', return_value=50), \

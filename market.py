@@ -208,6 +208,63 @@ def recruit_priority(gain):
     return float(np.clip(float(gain) / 12.0, 0.0, 1.5))
 
 
+def acquisition_read(league, team, player, offer, gain, reference_apy=None, baseline=None):
+    """Compare a marginal job upgrade with its complete cash commitment.
+
+    A discounted veteran can be useful behind a star. Premium reserve spending
+    must justify the salary and the guaranteed money displaced in existing jobs.
+    This is a preference only; financial_plan and legal accounting still bind.
+    """
+    import roster_needs as RN
+    import min_salary as MS
+    preview=offer_contract(league,player,offer)
+    cash=sum(preview.base)+sum(preview.rb)+preview.sb
+    before=RN.assess(team) if baseline is None else baseline
+    after=RN.assess(team,[p for p in before['players'] if p.pid!=player.pid]+[player])
+    def shares(report):
+        result={}
+        for r in report['package_assignments']:
+            if r['player'] is not None:
+                pid=r['player'].pid;result[pid]=result.get(pid,0.)+r['weight']
+        for pos in ('K','P','LS'):
+            men=[p for p in report['players'] if p.pos==pos and not p.retired]
+            if men: result[max(men,key=lambda p:p.ovr).pid]=1.
+        return result
+    old,new=shares(before),shares(after)
+    displaced=sum(p.contract.remaining_proration(0) for p in before['players']
+        if p.contract and old.get(p.pid,0.)>=.15 and new.get(p.pid,0.)<old[p.pid]*.5)
+    annual=(cash+displaced)/max(1,preview.years)
+    cap=CAP.get(league.year,301.2)
+    cheap=annual<=1.25*MS.minimum_salary(player.accrued or 0,cap)
+    if reference_apy is None:
+        quote=VAL.value_player(league,player,side='team',rng=None)
+        reference_apy=quote['apy'] if quote else offer.apy
+    ceiling=reference_apy*(.45+.55*min(1.,max(0.,gain)/8.))
+    approved=gain>1. and (cheap or gain>=8. or annual<=ceiling*1.1)
+    return dict(approved=approved,reason='useful_upgrade' if approved else 'cost_exceeds_marginal_role',
+        gain=round(gain,4),cash_commitment=round(cash,3),displaced_guarantees=round(displaced,3),
+        annual_economic_cost=round(annual,3),role_price_ceiling=round(ceiling,3))
+
+
+def _prefer_affordable_alternatives(candidates, gains):
+    """Try a nearly equivalent, materially cheaper same-position option first.
+
+    A preference, not a veto: if its actual contract cannot fit, the original
+    target still gets a turn. Current players and pending bids are assessed
+    again at that point so two bids cannot both claim the same vacant job.
+    """
+    ordered=[]
+    remaining=list(candidates)
+    while remaining:
+        target=remaining[0]
+        alternatives=[c for c in remaining if c[1].pos==target[1].pos
+            and gains[c[1].pid]>=.9*gains[target[1].pid]
+            and c[2]<=.8*target[2] and c[2]*c[3]<=.7*target[2]*target[3]]
+        choice=min(alternatives,key=lambda c:(c[2]*c[3],-gains[c[1].pid])) if alternatives else target
+        ordered.append(choice);remaining.remove(choice)
+    return ordered
+
+
 def ai_bids(league, pool, phase, rng, skip_teams=()):
     import contract_structure as CS
     import roster_needs as RN
@@ -249,7 +306,7 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
             bid = v['apy'] * PHASE_LEVEL[phase] * (1.0 + 0.045 * fit)
             # Limited rotation/depth help gets a bounded discount; full-time
             # improvement earns the normal quote, before the urgency premium.
-            bid *= 0.85 + 0.15 * min(1.0, want)
+            bid *= .45+.55*min(1.,gains.get(p.pid,0.)/8.)
             # a club that wants him badly pays over its own number
             bid *= 1.0 + 0.22 * max(0.0, want - 0.5)
             floor = 0.9
@@ -261,6 +318,7 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
             cand.append((want, p, round(bid, 2), years))
         # he pursues the men he wants most, and only as many as he can carry
         cand.sort(key=lambda x: -x[0])
+        cand=_prefer_affordable_alternatives(cand,gains)
         pending = []
         targets = 0
         for want, p, bid, years in cand[:MAX_TARGETS[phase] * 2]:
@@ -268,12 +326,19 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
                 break
             # the club shapes the deal to its own books: tight now and open
             # later means back-load it, and the reverse means pay it now
+            planned=RN.assess(team,list(report['players'])+[q for q,_ in pending]) if pending else report
+            gain=RN.move_gain(team,p,baseline=planned) if pending else gains[p.pid]
+            if gain<=1.: continue
+            bid=round(bid*min(1.,(.45+.55*min(1.,gain/8.))/
+                             (.45+.55*min(1.,gains[p.pid]/8.))),2)
             offer = Offer(abbr, p.pid, bid, years, phase=phase,
-                          front_load=CS.choose_shape(team, years), planning_gain=gains[p.pid])
+                          front_load=CS.choose_shape(team, years), planning_gain=gain)
+            if not acquisition_read(league,team,p,offer,gain,quotes[p.pid]['apy'],planned)['approved']:
+                continue
             preview = offer_contract(league, p, offer)
             import financial_plan as FP
             decision = FP.evaluate(league, team, additions=[(p, preview)],
-                                   pending=pending, gain=gains[p.pid], action='fa_bid')
+                                   pending=pending, gain=gain, action='fa_bid')
             if not decision['approved']:
                 continue
             pending.append((p, preview))
@@ -305,6 +370,8 @@ def reconsider_bid(league, player, offer, user_team=None):
     revised = Offer(offer.team, offer.pid, price, offer.years, offer.promises,
                     offer.phase, offer.front_load, gain,
                     None if offer.bonus is None else offer.bonus * price / offer.apy)
+    if not acquisition_read(league,team,player,revised,gain)['approved']:
+        return None
     import financial_plan as FP
     if not FP.evaluate(league, team, additions=[(player, offer_contract(league, player, revised))],
                        gain=gain, action='fa_reconsider')['approved']:
@@ -716,13 +783,13 @@ def fill_out_rosters(league, pool, rng, verbose=False, user_team=None):
             floor = MS.minimum_salary(p.accrued, cap)
             # filling a slot RELEASES reserve, so the test is plain space
             if team.cap_space < floor * 1.05:
-                break
+                continue  # A cheaper rookie behind this veteran may still fit.
             grp = team.by_pos(p.pos)
             if len(grp) >= POS_CAP.get(p.pos, 4):
                 continue                  # already deep here
             o = Offer(abbr, p.pid, round(floor, 3), 1, phase=3)
-            # These are disposable one-year depth deals made before the draft.
-            # A bonus would become dead cap if the rookie class displaces them.
+            # Post-draft depth remains disposable; no bonus to turn a later
+            # waiver upgrade into unnecessary dead money.
             try: sign(league, p, o, cap, bonus=0)
             except ValueError: continue
             team.sync_cap()
@@ -974,19 +1041,17 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
         price = round(max(market * 0.70, 1.5), 2)
         best = None; best_score = -1e9
         for abbr, team in league.teams.items():
-            if abbr == user_team: continue
+            if abbr in (user_team,getattr(league,'user_team',None)): continue
             if len(team.active()) >= 90: continue
-            # the need: how far below him the club's starter at his spot is
-            ps = team.depth.get(p.pos) or []
-            gap = p.ovr - (ps[0].ovr if ps else 60.0)
             gain = RN.move_gain(team, p)
             if gain <= 1.: continue
             proposal = Offer(abbr, p.pid, price, 1, phase=PHASES+1)
+            if not acquisition_read(league,team,p,proposal,gain,market)['approved']:
+                continue
             if not FP.evaluate(league, team, additions=[(p,offer_contract(league,p,proposal))],
                                gain=gain, action='fa_leftover')['approved']:
                 continue
-            score = gap + 10.0 * needs_by_team[abbr].get(p.pos, 0.0) + rng.normal(0, 1.5)
-            if gap < -2: continue
+            score = gain + 10.0 * needs_by_team[abbr].get(p.pos, 0.0) + rng.normal(0, 1.5)
             if score > best_score: best, best_score = team, score
         if best is None: continue
         o = Offer(best.abbr, p.pid, price, 1, phase=PHASES + 1)
