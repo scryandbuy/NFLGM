@@ -169,6 +169,8 @@ def play_line(league, p, off_abbr, def_abbr):
             # raw return yards. Derive both distances from the actual endpoints
             # instead, including saved logs carrying those overwritten fields.
             origin = p.get('yardline', p.get('origin'))
+            if p.get('touchback') and origin is not None:
+                gross = _spot_yards(origin)  # A rolling touchback ends at the goal line.
             if not p.get('touchback') and origin is not None and _ny is not None:
                 if p.get('return_start') is not None:
                     catch = float(p['return_start'])

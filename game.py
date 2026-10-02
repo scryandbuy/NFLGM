@@ -661,7 +661,7 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70, snapper=None,
             how = 'fair_catch'
     if touchback:
         return dict(type='punt', blocked=False, touchback=True, how='touchback',
-                    gross=round(float(gross), 1), pooch=pooch,
+                    gross=round(float(yardline_100), 1), pooch=pooch,
                     origin=yardline_100, net=round(float(yardline_100 - 20), 1),
                     new_yardline=80)       # opponent's own 20
     # A return brings the ball OUT, toward the kicking team's goal, so it
@@ -2009,6 +2009,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     ko = LAST_KICKOFF.pop('r', None)
     if ko is not None and abs(float(ko.get('new_yardline', -1)) - float(start_yardline)) < 0.5:
         dr.log.append(dict(ko, type='kickoff', carrier=ko.get('returner'), clock=ko.get('clock', clock)))
+        wall = HALF if quarter == 2 else 0 if quarter == 4 else None
+        if wall is not None and float(ko.get('clock', clock)) > wall + 120 >= clock:
+            dr._two_min = True
+            dr.log.append(dict(type='two_minute', clock=clock))
         if ko.get('touchdown'):
             dr.result, dr.points, dr.yardline = 'Touchdown', 6, 0.
         elif ko.get('fumble_lost'):
@@ -3008,7 +3012,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             # time under the dynamic kickoff (2024-25); a failed one gives the receiving side the ball near
             # the kicking team's 45.
             my_diff = score[pos] - score['away' if pos == 'home' else 'home']
-            need_after = int(np.ceil(-my_diff / 8.0)) if my_diff < 0 else 0
+            need_after = max(0, -my_diff)  # _onside_call expects points, not number of scores
             try_onside = my_diff < 0 and half_done and clock > 0 and _onside_call(clock, need_after, tos.left.get(pos, 0), (o_st.coach if o_st is not None else None), rng)
             if try_onside:
                 got = rng.random() < KICKOFF['onside_recovery']
