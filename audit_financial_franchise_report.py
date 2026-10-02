@@ -27,7 +27,7 @@ def report(folder):
                 # the next advance clears it before any kickoff.
                 checks = [('illegal_cap', t['cap_space'] < -.01)]
                 if opening:
-                    checks += [('over_53', t['active'] > 53),
+                    checks += [('not_53', t['active'] != 53),
                                ('missing_roles', bool(t['uncovered'])),
                                ('duplicate_or_missing_package_players', bool(t['package_bad']))]
                 for issue, bad in checks:
@@ -55,9 +55,9 @@ def report(folder):
             failures.append(dict(year=s['year'], issue='incomplete_season', regular=s['regular_games'], playoffs=s['playoff_games']))
     for k in kickoffs:
         for abbr, count in k['active'].items():
-            if count > 53:
+            if count > 53 or count < 46:
                 failures.append(dict(year=k['year'], week=k['week'], team=abbr,
-                                     issue='over_53_at_kickoff', active=count))
+                                     issue='illegal_roster_at_kickoff', active=count))
     by_year = collections.defaultdict(collections.Counter)
     for e in events:
         by_year[str(e['year'])][e['kind']] += 1
