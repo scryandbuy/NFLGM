@@ -11,6 +11,7 @@ MODULES = ['halftime', 'staff_traits', 'club_notes', 'league_notes', 'adjust', '
 MODULES.extend(['development_value', 'game_recap', 'practice', 'practice_integration', 'game_availability', 'dev_evaluation', 'specialist_reserve', 'competition_names', 'stadium_names', 'rush_stats_migration', 'kick_returns', 'player_age', 'run_blocking', 'punt_strategy', 'contract_offer', 'contract_offer_model'])
 MODULES.append('financial_plan')
 MODULES.append('retention_plan')
+MODULES.append('pass_pursuit')
 DATA = ['newgen_shape.json', 'league_seed_2026.csv', 'schedule_2026.csv', 'cfb27_ratings.csv', 'aging_curves.json', 'pick_values.json', 'wp_model.json', 'production_scores.json', 'free_agent_pool.csv', 'original_player_name_hashes.json']
 os.makedirs(OUT, exist_ok=True)
 def _check_imports():

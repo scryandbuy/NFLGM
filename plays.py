@@ -345,7 +345,8 @@ TE_FREE_BASE, TE_FREE_SEP = 1.0, 2.2      # a tight end's step at the catch: fir
 
 
 def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
-                        already=0.0, contact_at=0.0, in_space=False, gain_scale=1.0):
+                        already=0.0, contact_at=0.0, in_space=False, gain_scale=1.0,
+                        track_tackler=False):
     """
     Walks the carrier through pursuers one at a time. Each is a contest he can
     win; clearing them all is a touchdown from wherever he is.
@@ -354,11 +355,15 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
     # it before checking the goal line, while pursuers can still stop the play.
     # A runner who has beaten every pursuer and wins the final chase scores.
     gained = contact_at * gain_scale
+    if track_tackler and not tacklers:
+        return dict(yards=round(float(yards_to_endzone), 1), broken_tackles=0,
+                    touchdown=True, tackler=None)
     elus = rate(carrier, YAC['carrier']['elusive'])
     powr = rate(carrier, YAC['carrier']['power'])
     brk = rate(carrier, YAC['carrier']['breakaway'])
     vis = rate(carrier, YAC['carrier']['vision'])
     broken = 0
+    stopped_by = None
 
     # Each successive defender is HARDER to beat, because the further he runs
     # the better the angles behind him get. Without this ramp a good back beats
@@ -398,6 +403,7 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
         p_break = logistic(edge(atk, wrap) - base - ramp * i, k=7.0)
         if rng.random() > p_break:
             gained += max(0.0, rng.normal(0.9, 0.8)) * gain_scale  # brought down
+            stopped_by = t
             break
         broken += 1
         chase = logistic(edge(brk, rate(t, YAC['tackler']['angle'])), k=5.5)
@@ -418,10 +424,14 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
             gained = yards_to_endzone                          # house call
         else:
             gained += max(1.0, rng.gamma(2.2, 5.0 + 9.0 * chase_all)) * gain_scale
+            stopped_by = max(tacklers, key=lambda t: rate(t, YAC['tackler']['angle']), default=None)
 
     gained = min(gained, yards_to_endzone)
-    return dict(yards=round(float(gained), 1), broken_tackles=broken,
-                touchdown=gained >= yards_to_endzone)
+    out = dict(yards=round(float(gained), 1), broken_tackles=broken,
+               touchdown=gained >= yards_to_endzone)
+    if track_tackler:
+        out['tackler'] = stopped_by.get('pid') if stopped_by and not out['touchdown'] else None
+    return out
 
 RUN_BASE = 2.05
 # The live franchise register had 10.4% negative runs and 4.31 yards per carry.
@@ -1202,20 +1212,9 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # deep 5.31 - a U-shape, because a screen has blockers in front and a deep
     # ball is caught past everyone, while an intermediate throw is caught in
     # traffic. Flat pursuit produced 3.06 overall against a real 5.19.
-    pool = deff['db'] + deff['lb']
-    n_near = {'short': 3, 'medium': 4, 'deep': 2}[depth]
-    if screen: n_near = 4                         # screen: two in front of the convoy, two arriving from the back side (two alone made every broken screen a house call)
-    if depth == 'deep' and float(sep_raw) >= 0.5: n_near = 1     # a deep catch with separation: the man who had him is behind him, only the safety is left
-    tacklers = [pool[rng.integers(0, len(pool))] for _ in range(n_near)]
-    if tgt.get('pos') in ('HB', 'FB') and not screen:
-        # A BACK'S CATCH is at the line with the underneath defence in front
-        # of him: the man who had him is the first tackler and the box
-        # linebackers arrive next. Drawing his tacklers from the whole
-        # secondary put corners forty yards away on the list and left backs
-        # at 8-9 yards a target against a real 6.
-        first = [cov] if cov is not None else []
-        lbs = list(deff['lb']) or pool
-        tacklers = first + [lbs[rng.integers(0, len(lbs))] for _ in range(2)] + [pool[rng.integers(0, len(pool))]]
+    import pass_pursuit
+    tacklers = pass_pursuit.select(in_coverage, def_call, tgt_pair, pairs,
+        cov, zone_second, depth, float(sep_raw), in_man, zone_hole, screen)
     # IN SPACE ONLY WHERE THERE IS SPACE. Every catch used to be resolved as
     # if the receiver had open field, and near the goal line he does not: the
     # end zone is a wall and eleven defenders are standing in twenty yards.
@@ -1261,10 +1260,12 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # decision. Air distance and already-resolved sacks are never rescaled.
     gain_scale *= float(np.clip(off_call.get('execution_mod', 1.0), 0.94, 1.06))
     yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space,
-                              contact_at=min(max(te_free, scr_free), room), gain_scale=gain_scale)
+                              contact_at=min(max(te_free, scr_free), room), gain_scale=gain_scale,
+                              track_tackler=True)
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
                 yac=yac['yards'], touchdown=total >= ytg, concept=concept,
+                tackler=yac.get('tackler'), pursuit=[DRUSH.player_key(t) for t in tacklers],
                 in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing),
                 coverage=def_call.get('coverage') or def_call['shell'],
                 protection=prot_name, depth=depth, target=tgt.get('pid'),

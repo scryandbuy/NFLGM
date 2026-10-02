@@ -418,3 +418,29 @@ For a deep completion with separation>=0.5, the code reduces the list to one ran
 - **Sacks:** no current global fix justified; retain team/role distribution and pressure-to-sack monitoring. Single-game no-sack outcomes remain possible.
 - **Explosives:** concrete pursuit-selection correction recommended; global explosive frequency unproven. Preserve legitimate long touchdowns.
 - Artifacts: `outputs/game-watch-investigation-20261002/` contains `fresh.json`, `saved.json`, `matchup.json`, diagnostic runners and `log-comparison.json`. Detailed raw outcomes and coverage/pursuit evidence are retained for a targeted follow-up.
+
+
+## October 2: coverage-aware post-catch pursuit implemented
+
+User approved the preceding pursuit recommendation. Source changes are isolated to `pass_pursuit.py`, the receiving pursuit integration/optional tackler attribution in `plays.py`, the browser module list, and focused tests. No global completion, sack, rushing, or break-tackle coefficients were adjusted.
+
+- Pursuers are unique live player IDs from the actual rush/coverage complement. Blitzing/absent players cannot reappear. Actual primary/helper coverage is retained, and zone catch areas come from the existing zone model.
+- Two-man sideline catches use the safety responsible for that half; seam catches use the middle landing area and can involve both halves. An opposite-half safety is not automatically added to a sideline catch. One-high and Cover0 remain distinct. Safeties already assigned to other man receivers are not treated as free help.
+- A separated man defender trails the relevant deep support rather than being erased from recovery pursuit. Underneath catches retain a deeper support opportunity. This remains an assignment/side approximation, not coordinate-level tracking.
+- Actual selected defenders' existing tackle/pursuit/speed/awareness grades resolve the chase. Completed passes retain pursuit IDs and the actual stopping defender, so tackle/forced-fumble credit and contact Hit Power no longer use an unrelated randomly chosen defender. Rushing attribution is unchanged. No available pursuer means no invented tackler or phantom stop.
+- Verification:69 tests passed (12 new pursuit checks, coverage recording/rush selection, receiving touchdowns, modifier ordering, hit power, fourth-down routes, save/resume). Browser build passed with121 shipped modules, including the new helper. Integration should rebuild generated browser files from source.
+
+Development comparisons identified two structural omissions in an early candidate: deeper support could be absent from short-catch pursuit, and separated primaries were deleted from recovery. Both were corrected before final validation; their earlier output files are development artifacts, not the shipped result. No coefficient search was performed.
+
+Final validation used fresh seeds102041/102042 after the final seam-area correction,32 games with fresh rosters and32 independently loaded from the user's2028 Week7 save. Final artifacts: `pursuit-validation-fresh.json` and `pursuit-validation-saved.json` in `outputs/game-watch-investigation-20261002/`. The saved league was played atWeek8 with restored runner state, not replayed with historical user decisions. Other `pursuit-*` files in this folder document prior candidates.
+
+| Final validation | Fresh rosters,32 games | Developed save,32 games |
+| --- | ---: | ---: |
+| Points/team | 26.56 | 25.00 |
+| Yards after catch/completion | 5.94 | 5.25 |
+| Net yards/dropback | 6.70 | 6.03 |
+|40+ yard completions/attempts | 38/2311 (1.64%) | 27/2345 (1.15%) |
+| Designed-run YPC | 4.61 | 4.58 |
+| Sack rate, attempts+sacks denominator | 7.11% | 6.91% |
+
+**Balance status: structural tests/build pass; full register NOT certified.** Earlier baseline32-game samples were25.11/24.89 points perteam and1.24%/0.99%40+ pass rates; final validation uses different seeds, so these differences are not clean causal estimates. Fresh-roster YAC/scoring remain elevated and warrant a dedicated calibration follow-up; the developed-save sample stays close to its prior yardage/scoring level. Long gains remain possible. Do not claim this fix alone has reduced league-wide explosive frequency or solved scoring. Preserve this concern in the running watchlist instead of applying an untested broad offense reduction.
