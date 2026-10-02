@@ -34,7 +34,7 @@ def player(pid, value, contribution=1, pos='LB', inherit=0):
 class PackageSearchTests(unittest.TestCase):
     def negotiate(self, bank, surplus=(), gain=6, incoming=30, ask=12,
                   market=12, recipient=None, max_nodes=None, roll=None,
-                  years=2, wants_out=False):
+                  years=2, wants_out=False, user=False):
         target = player('target', market)
         target['obj'].contract_years_left = years
         target.update(package_gain=gain, buy=ask, sell=incoming, wants_out=wants_out)
@@ -60,9 +60,18 @@ class PackageSearchTests(unittest.TestCase):
                 stack.enter_context(patch('roster_needs.assess', side_effect=score))
             if max_nodes is not None:
                 stack.enter_context(patch.object(TR, 'MAX_PACKAGE_SEARCH', max_nodes))
-            result = TR._negotiate(None, team, team, target, gm, gm, ctx, ctx,
+            team.abbr = 'B'
+            result = TR._negotiate(SimpleNamespace(user_team='B') if user else None, team, team, target, gm, gm, ctx, ctx,
                                    100, 100, list(surplus), roll, needs_b={'LB': 50})
         return result
+
+    def test_user_offer_does_not_require_simulated_seller_acceptance(self):
+        bank = [pick(1, 10, received=10)]
+        self.assertIsNone(self.negotiate(bank, ask=100)[0])
+        offer, result = self.negotiate(bank, ask=100, user=True)
+        self.assertIsNotNone(offer)
+        self.assertGreaterEqual(result['search']['package_market'], result['search']['market_floor'])
+        self.assertLessEqual(result['search']['package_market'], result['search']['market_ceiling'])
 
     def test_two_later_picks_before_first_and_no_forced_player(self):
         offer, result = self.negotiate([pick(1, 16), pick(2, 5, 7), pick(3, 5, 7)],
@@ -93,9 +102,9 @@ class PackageSearchTests(unittest.TestCase):
         # Seller sheds the target's salary, so 110 fits after the exchange.
         # Exercise this path with real cap checks in a separately patched target.
         original = TE.cap_blocks
-        def cap(offer, *args):
+        def cap(offer, *args, **kwargs):
             offer = dict(offer, a_gets=[dict(offer['a_gets'][0], out_hit=20)])
-            return original(offer, *args)
+            return original(offer, *args, **kwargs)
         with patch.object(TE, 'cap_blocks', side_effect=cap):
             offer, _ = self.negotiate([pick(1, 6, 7)], [p])
         self.assertEqual(len(offer['a_sends']), 2)

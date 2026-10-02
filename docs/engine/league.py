@@ -741,53 +741,8 @@ class League:
         return dead_now, dead_next, saved
 
     def _trade_roster_releases(self, a, b, a_sends, b_sends):
-        """Plan AI cuts needed to keep an in-season trade at 53, before any move."""
-        if self.phase not in ('regular', 'playoffs'):
-            return {}
-        import practice_squad as PSQ
-        import roster_needs as RN
-        from cap_accounting import require_trade_room
-
-        plan = {}
-        for abbr, outgoing, incoming in ((a, a_sends, b_sends), (b, b_sends, a_sends)):
-            team = self.teams[abbr]
-            current = team.active()
-            outgoing_ids = {x for x in outgoing if isinstance(x, str)}
-            arrivals = [self.player(x) for x in incoming if isinstance(x, str)]
-            arrivals = [p for p in arrivals if p is not None and not p.retired]
-            projected = [p for p in current if p.pid not in outgoing_ids] + arrivals
-            excess = len(projected) - 53
-            if excess <= 0:
-                continue
-            if abbr == getattr(self, 'user_team', None):
-                raise ValueError(f'{abbr} must make room on the active roster before this trade')
-            original_missing, original_quality = RN.lineup_strength(team, current)
-            candidates = [p for p in current if p.pid not in outgoing_ids
-                          and not PSQ.locked(p, self.week)
-                          and not PSQ.protected(team, p, self)]
-            chosen = []
-            for _ in range(excess):
-                best = None
-                for p in candidates:
-                    if p in chosen:
-                        continue
-                    remaining = [q for q in projected if q is not p and q not in chosen]
-                    missing, quality = RN.lineup_strength(team, remaining)
-                    if missing > original_missing or quality < original_quality - .5:
-                        continue
-                    trial_plan = dict(plan, **{abbr: [q.pid for q in chosen] + [p.pid]})
-                    try:
-                        require_trade_room(self, a, b, a_sends, b_sends, trial_plan)
-                    except ValueError:
-                        continue
-                    rank = (quality, -p.dead_if_cut(0))
-                    if best is None or rank > best[0]:
-                        best = (rank, p)
-                if best is None:
-                    raise ValueError(f'{abbr} cannot make a playable 53 for this trade')
-                chosen.append(best[1])
-            plan[abbr] = [p.pid for p in chosen]
-        return plan
+        """Acquisitions fit the cap now; roster cleanup happens before play/advance."""
+        return {}
 
     def trade(self, a, b, a_sends, b_sends):
         """a_sends / b_sends: lists of pid or DraftPick. Refuses, rather than

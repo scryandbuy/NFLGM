@@ -837,7 +837,7 @@ def act_to_squad(league, abbr, pid):
     import practice_squad as PSQ
     t = league.teams[abbr]; p = league.player(pid)
     if p is None or p not in t.roster: return dict(ok=False, why='not on your roster')
-    if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most, one specialist)'))
+    if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most)'))
     penalty = _cut_penalty(league, p)
     penalty_line = _cut_penalty_line(penalty)
     if int(p.accrued or 0) >= 4:
@@ -878,7 +878,7 @@ def act_position_change(league, abbr, pid, new_pos):
 def act_call_up(league, abbr, pid):
     import practice_squad as PSQ
     p = league.player(pid); ok = bool(PSQ.call_up(league, abbr, pid))
-    return dict(ok=ok, name=p.name if p else pid, why=None if ok else 'Call-up unavailable: check squad eligibility, cap space, and open a roster spot if you have 53 active players.')
+    return dict(ok=ok, name=p.name if p else pid, why=None if ok else 'Call-up unavailable: check squad eligibility, cap space, and player health.')
 
 
 def act_elevate(league, abbr, pids, week, playoffs=False):

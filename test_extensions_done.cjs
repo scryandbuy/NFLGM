@@ -11,7 +11,7 @@ vm.createContext(ctx);
 vm.runInContext(src.slice(src.indexOf('function completedExtensionTerms('),src.indexOf('function finishPersonnel(')),ctx);
 vm.runInContext(src.slice(src.indexOf('function renderExtensions('),src.indexOf('// ---------------------------------------------------------------- Front Office')),ctx);
 const active={pid:'p1',name:'Active QB',pos:'QB',age:28,ovr:88,hit:20,eligible:true};
-const data={rail:{},expiring:[active],two_left:[{...active,pid:'p2',name:'Two Years QB'}],
+const data={rail:{},expiring:[active],one_left:[],long_term:[{...active,pid:'p4',name:'Long Contract QB'}],two_left:[{...active,pid:'p2',name:'Two Years QB'}],
   done:[{pid:'p1',name:'Signed QB',pos:'QB',kind:'extended',years:4,apy:40},
         {pid:'p1',name:'Signed QB',pos:'QB',kind:'tagged',years:null,apy:30},
         {pid:'p3',name:'Option WR',pos:'WR',kind:'option exercised',years:null,apy:15}],
@@ -27,7 +27,8 @@ const who=all(page).filter(n=>n.attrs?.class==='who');
 assert.deepEqual(who.map(n=>n.attrs['data-source-index']),[0,1,2]);
 who[0].attrs.onclick();assert.equal(ctx.location.hash,'#club/player/p1');
 clickTab('Expiring');assert.match(text(page),/Active QB/);assert.match(text(page),/Ask the Agent/);
-clickTab('Two Years Left');assert.match(text(page),/Two Years QB/);
+clickTab('2 Years Left');assert.match(text(page),/Two Years QB/);
+clickTab('3+ Years Left');assert.match(text(page),/Long Contract QB/);assert.match(text(page),/Ask the Agent/);
 clickTab('Done This Year');
 ctx.renderExtensions({...data,done:[]});assert.match(text(page),/No completed decisions this year/);
 console.log('Extensions tabs: completed extensions, tags/options, empty history, duplicate-player records, player links, and switching back pass');

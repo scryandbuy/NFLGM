@@ -15,6 +15,7 @@ class PSDecisionAudit(unittest.TestCase):
         for i in range(53): player(league,pid=str(i))
         p=player(league,pid='poach',team='MIN')
         league.teams['MIN'].roster.remove(p); PS.squad(league.teams['MIN']).append(p)
+        league.teams['GB'].cap.cap=.01
         before={x.pid for x in league.teams['GB'].roster}
         self.assertFalse(PS.poach(league,'GB',p.pid,1))
         self.assertEqual({x.pid for x in league.teams['GB'].roster},before)
@@ -58,23 +59,23 @@ class PSDecisionAudit(unittest.TestCase):
         self.assertFalse(PS.sign_to_squad(league,'GB',p.pid))
         self.assertEqual(p.team,'MIN')
 
-    def test_user_callup_requires_user_to_choose_cut(self):
+    def test_user_callup_defers_user_cut(self):
         league=fixture(); league.user_team='GB'
         for i in range(53): player(league,pid=str(i))
         p=player(league,pid='ps'); league.teams['GB'].roster.remove(p)
         PS.squad(league.teams['GB']).append(p)
         before={x.pid for x in league.teams['GB'].roster}
         result=VC.act_call_up(league,'GB',p.pid)
-        self.assertFalse(result['ok'])
-        self.assertEqual({x.pid for x in league.teams['GB'].roster},before)
+        self.assertTrue(result['ok'])
+        self.assertEqual({x.pid for x in league.teams['GB'].roster},before | {p.pid})
 
-    def test_playoff_callup_respects_active_roster_limit(self):
+    def test_playoff_callup_allows_temporary_overflow(self):
         league=fixture(); league.set_phase('playoffs')
         for i in range(53): player(league,pid=str(i))
         p=player(league,pid='ps'); league.teams['GB'].roster.remove(p)
         PS.squad(league.teams['GB']).append(p)
         PS.call_up(league,'GB',p.pid)
-        self.assertLessEqual(len(league.teams['GB'].active()),53)
+        self.assertEqual(len(league.teams['GB'].active()),54)
 
     def test_squad_move_with_dead_cap_failure_does_not_cut(self):
         league=fixture(); team=league.teams['GB']; team.cap.cap=.1; team.cap.rollover=0

@@ -360,11 +360,11 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
     return v
 
 
-def cap_blocks(offer, space_a, space_b, gm_a=None, gm_b=None):
+def cap_blocks(offer, space_a, space_b, gm_a=None, gm_b=None, *, user_a=False, user_b=False):
     """
     The two ways a trade dies before the assets are weighed. The seller's
     dead money would put him over the cap, or past the share of his room his
-    contract_focus will stomach. Or the buyer cannot fit the inherited hits.
+    contract_focus will stomach (CPU only). Or the buyer cannot fit the inherited hits.
     Returns the reason, or None.
     """
     def tol(gm):
@@ -382,21 +382,21 @@ def cap_blocks(offer, space_a, space_b, gm_a=None, gm_b=None):
     # after the deal: space + hits shed - hits taken on - dead eaten
     after_a = space_a + out_a - in_a - dead_a
     after_b = space_b + out_b - in_b - dead_b
-    if dead_a > 0 and (after_a < 0 or dead_a > space_a * tol(gm_a)):
+    if not user_a and dead_a > 0 and (after_a < 0 or dead_a > space_a * tol(gm_a)):
         return 'a_dead_money'
-    if dead_b > 0 and (after_b < 0 or dead_b > space_b * tol(gm_b)):
+    if not user_b and dead_b > 0 and (after_b < 0 or dead_b > space_b * tol(gm_b)):
         return 'b_dead_money'
     if after_a < 0: return 'a_cannot_fit'
     if after_b < 0: return 'b_cannot_fit'
     return None
 
-def evaluate(offer, team_a, team_b, space_a, space_b, gm_a=None, gm_b=None):
+def evaluate(offer, team_a, team_b, space_a, space_b, gm_a=None, gm_b=None, *, user_a=False, user_b=False):
     """
     A trade happens when BOTH clubs think they gained. Each prices through its own
     window, its own GM, and its own season, so a deal can be genuinely positive for
     both. That disagreement is the mechanism, not a rounding error.
     """
-    block = cap_blocks(offer, space_a, space_b, gm_a, gm_b)
+    block = cap_blocks(offer, space_a, space_b, gm_a, gm_b, user_a=user_a, user_b=user_b)
     if block:
         return dict(a_gain=-999.0, b_gain=-999.0, accepted=False, blocked=block)
     a_out = sum(team_price(x, team_a, space_a, gm_a, owns=True)  for x in offer['a_sends'])

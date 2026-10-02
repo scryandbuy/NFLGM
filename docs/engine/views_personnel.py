@@ -128,7 +128,7 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
     rng = _rng(league, 5); pool = VAL.pool_from_league(league)
     ga, gb = TR.persona(me.gm), TR.persona(them.gm)
     offer_a = dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me))
-    r = TE.evaluate(offer_a, me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
+    r = TE.evaluate(offer_a, me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
     # words for their side
     g = r['b_gain']
     if r.get('blocked'):
@@ -227,7 +227,7 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     # their GM answers: the engine's acceptance roll on their gain
     import trade_engine as TE, valuation as VAL
     pool = VAL.pool_from_league(league); me = league.teams[abbr]
-    r = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, TR.persona(me.gm), TR.persona(them.gm))
+    r = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, TR.persona(me.gm), TR.persona(them.gm), user_a=True)
     a_items = [(x if _trade_player(league, x) else _find_pick(league, abbr, x)) for x in a_sends]; b_items = [(x if _trade_player(league, x) else _find_pick(league, other, x)) for x in b_sends]
     yes = TR.will_accept(r['b_gain'], rng, TR.persona(them.gm)['aggression'], selling=True)
     if not yes:
@@ -257,7 +257,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     outgoing = _assets(league, abbr, a_sends, pool, rng, viewer=them)
     incoming = _assets(league, other, b_sends, pool, rng, viewer=me)
     def evaluate(extra):
-        return TE.evaluate(dict(a_sends=outgoing + extra, a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
+        return TE.evaluate(dict(a_sends=outgoing + extra, a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
     initial = evaluate([])
     if initial.get('blocked'):
         return dict(ok=False, adds=[], why=_cap_block_read(initial['blocked'], other))
@@ -293,7 +293,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     chosen = [candidates[i] for i in best[1]]
     # Reprice the complete offer exactly as Propose will, then verify the final package.
     rng = _rng(league, 11)
-    final = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends + [x[1] for x in chosen], pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
+    final = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends + [x[1] for x in chosen], pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
     if final.get('blocked') or final['b_gain'] <= 0.9:
         return dict(ok=False, adds=[], why='No acceptable counteroffer was found. Your offer has not changed.')
     labels = [_pick_row(league, x[0])['label'] for x in chosen]
@@ -335,7 +335,7 @@ def act_gather(league, abbr, pid):
             return asset_cache[k]
         for pkg in cands[:24]:
             gets = [asset_of(kind, it) for kind, it in pkg]
-            r = TE.evaluate(dict(a_sends=sends_them, a_gets=gets), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb)
+            r = TE.evaluate(dict(a_sends=sends_them, a_gets=gets), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
             if r.get('blocked') or r['b_gain'] < 0.5: continue
             if best is None or r['a_gain'] > best[1]['a_gain']: best = (pkg, r)
         if best:
@@ -535,7 +535,7 @@ def act_sign_ps(league, abbr, pid):
     import practice_squad as PSQ
     t = league.teams[abbr]; p = league.player(pid)
     if p is None or pid not in league.free_agents: return dict(ok=False, why='he is not on the market')
-    if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most, one specialist)'))
+    if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most)'))
     amb = float((getattr(p, 'traits', None) or {}).get('ambition', 50))
     if p.ovr >= 76: return dict(ok=False, why=f"{p.name} wants a roster spot, not the practice squad.")
     if p.ovr >= 72 and amb >= 58: return dict(ok=False, why=f"{p.name} turned it down; he believes he can start somewhere.")
@@ -659,12 +659,11 @@ def extensions(session, league, abbr):
     import free_agency as FA_
     for p in sorted(me.active(), key=lambda p: (p.contract.years if p.contract else 0, -p.ovr)):
         yrs = p.contract.years if p.contract else 0
-        if yrs > 2: continue
         t = NG.open_for(league, p.pid, 'extension')
         cls = FA_.fa_class(p.accrued, p.contract_years_left) if yrs == 0 else None
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), yrs=yrs, fa_class=cls, hit=round(p.cap_hit(0), 1) if p.contract else 0.0, morale=morale_word(p),
                          rookie_option=EXT.rookie_option_price(league, p),
-                         eligible=bool(EXT.eligible(p, league)), talks=(t['state'] if t else None), thread=(t['id'] if t else None), ask=(t['ask'] if t else None), years=(t['years'] if t else None), mood=(t.get('mood') if t else None)))
+                         eligible=bool(EXT.eligible(p, league)), talks=(t['state'] if t else None), thread=(t['id'] if t else None), ask=(t.get('ask') if t else None), years=(t.get('years') if t else None), mood=(t.get('mood') if t else None)))
     threads = [_thread(league, t) for t in NG._threads(league) if t['kind'] == 'extension' and t.get('team') == abbr and t['state'] not in ('expired', 'void', 'accepted', 'signed')]
     promises = [dict(pid=pr['pid'], name=(league.player(pr['pid']).name if league.player(pr['pid']) else pr['pid']), kind=pr['kind'], made=pr['made'], status=pr['status']) for pr in (getattr(league, 'promises', None) or []) if pr.get('team') == abbr]
     import tags as TG_, contracts as CT
@@ -704,7 +703,7 @@ def extensions(session, league, abbr):
         r['ask_word'] = (f"${r['ask']}m × {r['years']}" if r.get('ask') else ('Ask First' if r.get('eligible') else '—'))
         yrs = r['yrs']
         r['tag_line'] = ('Expiring' if yrs == 0 else f"{yrs} Year{'s' if yrs != 1 else ''} Left") + (' · Eligible' if r.get('eligible') and yrs > 1 else '')
-    return dict(rail=rail(session, league, abbr), cap_focus=focus, current_cap=current_cap, extension_cap=extension_cap, rows=rows, expiring=[r for r in rows if r['yrs'] == 0], one_left=[r for r in rows if r['yrs'] == 1], two_left=[r for r in rows if r['yrs'] == 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1), committed_next=round(committed_next, 1), limit_next=round(limit_next, 1),
+    return dict(rail=rail(session, league, abbr), cap_focus=focus, current_cap=current_cap, extension_cap=extension_cap, rows=rows, expiring=[r for r in rows if r['yrs'] == 0], one_left=[r for r in rows if r['yrs'] == 1], two_left=[r for r in rows if r['yrs'] == 2], long_term=[r for r in rows if r['yrs'] > 2], done=done, threads=threads, promises=promises, cap=round(me.cap_space, 1), committed_next=round(committed_next, 1), limit_next=round(limit_next, 1),
                 tag=dict(open=tag_open, used=(choice not in (None, 'none')), none=(choice == 'none'), tagged=(league.player(choice).name if choice not in (None, 'none') and league.player(choice) else None)),
                 promise_kinds=[dict(key=k, label=v_['label']) for k, v_ in __import__('negotiation_engine').PROMISES.items()])
 

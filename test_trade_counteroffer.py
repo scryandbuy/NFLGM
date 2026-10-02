@@ -11,7 +11,7 @@ class CounterTests(unittest.TestCase):
   league=NS(teams={'GB':me,'MIN':them})
   prices={f'2026-{i}-GB':v for i,v in values.items()};prices['target']=target
   def assets(L,abbr,ids,*args,**kwargs): return [dict(value=prices[x]) for x in ids]
-  def evaluate(offer,*args):
+  def evaluate(offer,*args,**kwargs):
    gain=sum(x['value'] for x in offer['a_sends'])-sum(x['value'] for x in offer['a_gets'])
    return dict(a_gain=-gain,b_gain=gain,blocked='cap' if blocked else None)
   with ExitStack() as st:

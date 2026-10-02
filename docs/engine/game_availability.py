@@ -146,8 +146,34 @@ def _acquire(league, team, available, positions, desk, week):
     return False
 
 
+def settle_roster(league, team, week):
+    """Resolve temporary CPU overflow; users choose their own departures."""
+    if len(team.active()) <= 53:
+        return
+    if team.abbr == getattr(league, 'user_team', None):
+        raise FieldabilityError(f'{team.abbr}: cut to 53 players before playing or advancing.')
+    import cutdown as CD
+    import roster_needs as RN
+    from cap_accounting import trade_projection
+    from offer_reservations import held
+    active = team.active()
+    kept = RN.select_cutdown(team, CD.rows_for(team), 53)
+    cuts = [p for p in active if p.pid not in kept]
+    trial = trade_projection(league, team.abbr, [p.pid for p in cuts], [])
+    if (len(kept) > 53 or not cuts
+            or any(PS.locked(p, week) or PS.protected(team, p, league) for p in cuts)
+            or trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005
+            or RN.lineup_strength(team, [p for p in active if p.pid in kept])[0]):
+        raise FieldabilityError(f'{team.abbr}: cannot clear roster overflow within cap and roster rules.')
+    for p in cuts:
+        league.release(p.pid)
+    team.sync_cap()
+
+
 def ensure(league, team, desk, week, playoffs=False):
     """CPU repairs are idempotent: only an actual hole can trigger a move."""
+    if league.phase in ('regular', 'playoffs'):
+        settle_roster(league, team, week)
     available = dressed(team, desk, week)
     missing = shortages(available)
     if team.abbr != getattr(league, 'user_team', None):

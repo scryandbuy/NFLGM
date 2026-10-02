@@ -6,8 +6,9 @@ remaining years of his deal stay as signed; the new years are added on top
 and the new signing bonus prorates over up to five years from now. Cap
 hits, dead money and the trade engine read the result like any contract.
 
-WHO CAN. Two or fewer years left, and a rookie deal only after his third
-season (first-rounders carry the fifth-year option separately).
+WHO CAN. Veterans may extend with any number of years remaining. Drafted
+rookies wait three seasons, undrafted rookies two. CPU clubs prefer two or
+fewer years left (first-rounders carry the fifth-year option separately).
 
 THE PRICE. The agent asks the market's agent-side number; the club offers
 its team-side number. The player takes a small certainty discount for money
@@ -39,11 +40,21 @@ CERTAINTY_DISCOUNT = 0.07
 
 def eligible(p, league):
     c = p.contract
-    if p.team is None or (c is None and (league.phase != 'offseason' or getattr(league, 'tags_done_year', None) == league.year)) or (c is not None and c.years > 2):
+    if p.team is None or (c is None and (league.phase != 'offseason' or getattr(league, 'tags_done_year', None) == league.year)):
         return False
-    if p.draft_year and (league.year - p.draft_year) < 3 and p.draft_round is not None:
-        return False
+    if p.draft_year is not None and c is not None and c.signed <= p.draft_year:
+        required = 3 if p.draft_round is not None else 2
+        completed = league.year - p.draft_year
+        from cap_accounting import pre_roll
+        if getattr(league, 'phase', '') == 'playoffs' or pre_roll(league):
+            completed += 1
+        if completed < required:
+            return False
     return True
+
+
+def ai_eligible(p, league):
+    return eligible(p, league) and (p.contract is None or p.contract.years <= 2)
 
 
 def rookie_option_price(league, p):
@@ -163,7 +174,7 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
     if p is None or p.team is None:
         return dict(result='refused', why='not under contract to a club')
     if not eligible(p, league):
-        return dict(result='refused', why='not eligible: more than two years left, or a rookie deal before his third season')
+        return dict(result='refused', why='not eligible to extend: rookie-contract waiting period or no retained contract rights')
     if by_ai:
         why = _ai_refusal(league, p)
         if why: return dict(result='refused', why=why)
@@ -338,7 +349,7 @@ def ai_round(league, rng, verbose=False):
         cands = []
         for pos, ps in team.depth.items():
             for rank, p in enumerate(ps[:2]):
-                if not eligible(p, league): continue
+                if not ai_eligible(p, league): continue
                 if p.age > AGE_LIMIT.get(p.pos, 31) - (0 if rank == 0 else 2): continue
                 if scheme_fit(p.ratings, p.pos, team) < -2.0: continue
                 cands.append((rank, -p.ovr, p))
@@ -393,7 +404,7 @@ def in_season_round(league, rng, week):
         if wk >= 18 and abbr in alive: continue
         # the eliminated clubs work it harder: the window is short and the market is coming
         if rng.random() > (0.085 if wk <= 17 else 0.16): continue
-        cands = [p for pos, ps in team.depth.items() for p in ps[:1] if eligible(p, league) and p.age <= AGE_LIMIT.get(p.pos, 31) and p.ovr >= 76]
+        cands = [p for pos, ps in team.depth.items() for p in ps[:1] if ai_eligible(p, league) and p.age <= AGE_LIMIT.get(p.pos, 31) and p.ovr >= 76]
         if not cands: continue
         p = max(cands, key=lambda q: q.ovr)
         tm = terms(league, p, rng)

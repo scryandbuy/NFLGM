@@ -110,7 +110,7 @@ def open_talks(league, pid, kind='extension'):
     s = _situation(league, p)
     if kind == 'extension':
         if not EXT.eligible(p, league):
-            return dict(ok=False, why='not eligible: more than two years left, or a rookie deal before his third season')
+            return dict(ok=False, why='not eligible to extend: rookie-contract waiting period or no retained contract rights')
         tm = EXT.terms(league, p, np.random.default_rng(stable_seed(pid)))
         if tm is None:
             return dict(ok=False, why='no market read on him')

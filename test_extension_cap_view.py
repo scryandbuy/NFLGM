@@ -11,6 +11,15 @@ from league import League
 
 
 class ExtensionCapViewTests(unittest.TestCase):
+    def test_long_contract_veteran_appears_and_is_eligible(self):
+        league = fixture()
+        p = player(league, contract=Contract(5, [3]*5, signed=league.year))
+        p.draft_year = league.year-5
+        with patch.object(VP, 'rail', return_value={}):
+            data = VP.extensions(None, league, 'GB')
+        self.assertEqual([r['pid'] for r in data['long_term']], [p.pid])
+        self.assertTrue(data['long_term'][0]['eligible'])
+
     def test_offseason_expiring_and_remaining_years_are_separate(self):
         league = fixture()
         expired = player(league, pid='expired', contract=Contract(1, [10]))
@@ -40,7 +49,7 @@ class ExtensionCapViewTests(unittest.TestCase):
         states = ('open', 'waiting', 'countered', 'match_requested',
                   'declined', 'broken_off', 'accepted', 'signed', 'expired', 'void')
         league.negotiations = [dict(id=i, kind='extension', team='GB', pid=p.pid,
-                                    state=state, log=[]) for i, state in enumerate(states, 1)]
+                                    state=state, log=[], ask=20, years=3) for i, state in enumerate(states, 1)]
         league.log('extension', pid=p.pid, team='GB', years=3, apy=20)
         for saved in (False, True):
             with self.subTest(reloaded=saved):
@@ -63,7 +72,7 @@ class ExtensionCapViewTests(unittest.TestCase):
                 team = league.teams['GB']
                 player(league, contract=Contract(4, [5, 20, 21, 22]))
                 team.cap.dead_next = 7.125
-                thread = dict(id=1, kind='extension', team='GB', state='open')
+                thread = dict(id=1, kind='extension', team='GB', pid='p', state='open', ask=20, years=3)
                 with patch.object(VP, 'rail', return_value={}), \
                      patch('negotiations._threads', return_value=[thread]), \
                      patch.object(VP, '_thread', side_effect=lambda league, row: dict(row)):

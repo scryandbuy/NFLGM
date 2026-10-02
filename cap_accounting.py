@@ -71,14 +71,15 @@ def require_room(league, team, pid, contract, release_pid=None):
             trial.earned+=c.earned_base+c.earned_roster
     after=trial.charges(team.phase)
     pending_now = 0.0 if pre_roll(league) else pending
-    if after + pending_now > team.cap.limit + .0005 and after > before + .0005:
+    acquisition = not any(p.pid == pid for p in team.roster)
+    if after + pending_now > team.cap.limit + .0005 and (acquisition or after > before + .0005):
         raise ValueError('Not enough cap space for this contract')
     if pre_roll(league):
         old=next((p.contract for p in team.roster if p.pid==pid),None)
         limit,committed,_,_=next_year_ledger(league,team)
         oldhit=old.cap_hit(1) if old and old.years>1 else (old.remaining_proration(1) if old else 0.0)
         newhit=contract.cap_hit(1) if contract.years>1 else contract.remaining_proration(1)
-        if committed-oldhit+newhit+pending>limit+.0005 and newhit>oldhit+.0005:
+        if committed-oldhit+newhit+pending>limit+.0005 and (acquisition or newhit>oldhit+.0005):
             raise ValueError('Not enough cap space next year for this contract')
 
 
@@ -137,15 +138,11 @@ def require_trade_room(league, a, b, a_sends, b_sends, roster_releases=None):
         after=trial.charges(team.phase)
         pending = held(league, abbr)
         pending_now = 0.0 if pre_roll(league) else pending
-        if after+pending_now>trial.limit+.0005 and after>team.cap.charges(team.phase)+.0005:
+        acquisition = any(isinstance(x, str) for x in incoming)
+        if after+pending_now>trial.limit+.0005 and (acquisition or after>team.cap.charges(team.phase)+.0005):
             raise ValueError(f'{abbr} cannot fit this trade under the cap')
-        if pre_roll(league):
-            base=CAP.get(league.year+1,CAP.get(league.year,301.2)*1.055)
-            limit=base+max(0.0,trial.space('season'))
-            charge=trial.dead_next+sum(c.cap_hit(1) if c.years>1 else c.remaining_proration(1) for _,c,_ in trial.contracts)
-            oldlimit,oldcharge,_,_=next_year_ledger(league,team)
-            if charge+pending>limit+.0005 and charge+pending-limit>oldcharge-oldlimit+.0005:
-                raise ValueError(f"{abbr} cannot fit this trade under next year's cap")
+        # Future-year commitments inform CPU valuation, not trade legality.
+        # Each club must become cap compliant when that league year arrives.
 
 
 def migrate_earned(team, league_data):

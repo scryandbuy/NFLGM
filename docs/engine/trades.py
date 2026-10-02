@@ -690,6 +690,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     import roster_needs as RN
     from types import SimpleNamespace
 
+    user_seller = bool(getattr(league, 'user_team', None)) and getattr(tb, 'abbr', None) == league.user_team
     market = float(target.get('trade_value', 0.0) or 0.0)
     wdw = TE.window(ctx_a)
     prem = (1.40 if target.get('star') else 1.25) if wdw in ('contending', 'win_now') else (1.25 if target.get('star') else 1.10)
@@ -722,7 +723,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     if candidates:
         base = roster_score(())
         raw += [x for pid, x in candidates.items()
-                if roster_score((pid,)) > base + 1e-6]
+                if user_seller or roster_score((pid,)) > base + 1e-6]
         if exhausted:
             return None, None
 
@@ -759,7 +760,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         margin = round(value_in - cost, 2)
         return margin > -ACCEPT_WINDOW and will_accept(margin, roll_a, ga['aggression'])
     def accepts_b(value):
-        return will_accept(round(value - ask, 2), roll_b, gb['aggression'], selling=True)
+        return user_seller or will_accept(round(value - ask, 2), roll_b, gb['aggression'], selling=True)
 
     # Upper bound on what any remaining k assets could bring the seller.
     # Ignoring their costs/cap/role fit is optimistic and therefore safe for
@@ -776,8 +777,8 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         ids = tuple(sorted(x['pid'] for x in items if x['kind'] == 'player'))
         if ids not in valid_players:
             offer = dict(a_sends=[candidates[i] for i in ids], a_gets=[target])
-            valid = TE.cap_blocks(offer, sa, sb, ga, gb) is None
-            if valid and ids:
+            valid = TE.cap_blocks(offer, sa, sb, ga, gb, user_b=user_seller) is None
+            if valid and ids and not user_seller:
                 total = roster_score(ids)
                 valid = all(total > roster_score(tuple(j for j in ids if j != i)) + 1e-6
                             for i in ids)
@@ -818,7 +819,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     if exhausted or best is None:
         return None, None
     offer = dict(a_sends=best[1], a_gets=[target])
-    result = TE.evaluate(offer, ctx_a, ctx_b, sa, sb, ga, gb)
+    result = TE.evaluate(offer, ctx_a, ctx_b, sa, sb, ga, gb, user_b=user_seller)
     result['search'] = dict(
         target_gain=round(float(gain), 3), target_market=round(market, 3),
         market_floor=round(floor, 3), market_ceiling=round(ceiling, 3),

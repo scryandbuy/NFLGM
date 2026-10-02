@@ -44,25 +44,24 @@ def fixture():
 
 
 class TradeRosterLimitTests(unittest.TestCase):
-    def test_cpu_buyer_makes_funded_room_before_player_for_pick_trade(self):
-        league, star, pick = fixture()
-        league.trade('GB', 'MIN', [pick], [star.pid])
-        self.assertEqual([len(league.teams[a].active()) for a in ('GB', 'MIN')], [53, 53])
-        self.assertEqual(star.team, 'GB')
-        self.assertEqual(len([e for e in league.transactions if e['kind'] == 'release']), 1)
-        self.assertEqual(RN.lineup_strength(league.teams['GB'], league.teams['GB'].active())[0], 0)
-        self.assertGreaterEqual(league.teams['GB'].cap_space, 0)
-
-    def test_user_buyer_must_choose_own_cut_and_failed_trade_is_atomic(self):
-        league, star, pick = fixture()
-        league.user_team = 'GB'
-        before = set(p.pid for p in league.teams['GB'].active())
-        with self.assertRaisesRegex(ValueError, 'make room'):
+    def test_both_buyers_choose_cuts_after_acquisition(self):
+        from game_availability import settle_roster, FieldabilityError
+        for user in (None, 'GB'):
+            league, star, pick = fixture()
+            league.user_team = user
+            before = {p.pid for p in league.teams['GB'].active()}
             league.trade('GB', 'MIN', [pick], [star.pid])
-        self.assertEqual(before, {p.pid for p in league.teams['GB'].active()})
-        self.assertEqual(star.team, 'MIN')
-        self.assertEqual(pick.owner, 'GB')
-        self.assertFalse(any(e['kind'] in ('trade', 'release') for e in league.transactions))
+            self.assertEqual(len(league.teams['GB'].active()), 54)
+            self.assertEqual(before | {star.pid}, {p.pid for p in league.teams['GB'].active()})
+            self.assertFalse(any(e['kind'] == 'release' for e in league.transactions))
+            if user:
+                with self.assertRaises(FieldabilityError):
+                    settle_roster(league, league.teams['GB'], 2)
+            else:
+                settle_roster(league, league.teams['GB'], 2)
+                self.assertEqual(len(league.teams['GB'].active()), 53)
+                self.assertIn(star, league.teams['GB'].active())
+                self.assertGreaterEqual(league.teams['GB'].cap_space, 0)
 
     def test_offseason_can_temporarily_carry_more_than_53(self):
         league, star, pick = fixture()

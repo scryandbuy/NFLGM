@@ -500,6 +500,10 @@ class Session:
             return dict(done='Blocked', next=self.next_label(), why=blocks[0]['subject'])
         from game_availability import FieldabilityError
         try:
+            if self.stop[0] in ('week', 'playoffs', 'cutdown', 'wire'):
+                from game_availability import settle_roster
+                for team in self.L.teams.values():
+                    settle_roster(self.L, team, self.L.week or 0)
             result = self._advance()
         except FieldabilityError as exc:
             # Keep completed scores and the calendar position for a safe retry.

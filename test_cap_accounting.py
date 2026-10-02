@@ -244,12 +244,14 @@ class CapAccountingTests(unittest.TestCase):
         self.assertEqual(p.contract.base[0],9); self.assertEqual(p.contract.sb,0)
         self.assertEqual(L.teams['GB'].cap.earned,9)
 
-    def test_pre_roll_trade_checks_future_cap(self):
+    def test_pre_roll_trade_allows_future_cap_overage(self):
         L=fixture(); p=player(L,contract=Contract(2,[1,400]))
         player(L,'m','MIN',Contract(1,[290]))
         settle_week(L,18); L.set_phase('offseason'); L.season_closed_year=L.year
-        with self.assertRaises(ValueError): L.trade('GB','MIN',[p.pid],[])
-        self.assertEqual(p.team,'GB')
+        L.trade('GB','MIN',[p.pid],[])
+        self.assertEqual(p.team,'MIN')
+        limit, committed, _, _ = next_year_ledger(L, L.teams['MIN'])
+        self.assertGreater(committed, limit)
 
     def test_rollover_and_void_expiry_reconcile(self):
         import numpy as np

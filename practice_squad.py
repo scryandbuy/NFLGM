@@ -60,12 +60,12 @@ def is_young(p):
     return (p.accrued or 0) <= 2
 
 
-def can_add(team, p):
+def can_add(team, p, *, by_ai=False):
     sq = squad(team)
     if len(sq) >= SIZE: return False
     # one specialist at most: the engine rates kickers and punters in the
     # high 80s, and a squad picked on raw overall carried two punters
-    if p.pos in ('K', 'P') and any(q.pos in ('K', 'P') for q in sq): return False
+    if by_ai and p.pos in ('K', 'P') and any(q.pos in ('K', 'P') for q in sq): return False
     # the real rule is a CAP of six veterans, which leaves ten slots that
     # only young men can fill; a minimum of ten young men is the same thing
     # when the pool is deep and a squad of seven when it is not
@@ -79,7 +79,7 @@ def sign_to_squad(league, abbr, pid):
     team = league.teams[abbr]; p = league.player(pid)
     if (p is None or p.retired or (p.team is not None and p.team != abbr)
             or p in squad(team) or p in (getattr(team, 'ir', None) or [])
-            or not can_add(team, p)):
+            or not can_add(team, p, by_ai=abbr != getattr(league, 'user_team', None))):
         return False
     # A roster demotion can still accelerate contract bonuses into dead cap.
     from cap_accounting import require_squad_room
@@ -118,18 +118,13 @@ def call_up(league, abbr, pid, years=1, emergency=False):
     if p not in squad(team) or p.retired or p.team != abbr or p.out_until is not None: return False
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
-    full = len(team.active()) >= 53 and league.phase in ('regular', 'playoffs')
-    if full and (abbr == getattr(league, 'user_team', None) or room_candidate(league, team, p) is None):
-        return False                                      # nobody the club would release for him
     c=Contract(years=years,base=[mn]*years,signed=league.year)
     c.base[0]*=max(0,18-team.cap.paid_week)/18; c.pay_start=team.cap.paid_week
-    outgoing=room_candidate(league,team,p) if full else None
     # Emergency describes the football need, not an exemption from the cap.
     from cap_accounting import require_room
-    try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None)
+    try: require_room(league,team,pid,c)
     except ValueError: return False
     squad(team).remove(p); p.xp_spent.pop('_ps', None); p.team = None
-    _make_room(league, abbr, p)
     league.sign(pid, abbr, c, log=False)
     league.log('ps_callup', pid=pid, team=abbr)          # the one line for the move
     return True
@@ -153,21 +148,15 @@ def available_free_agents(league):
 
 
 def sign_minimum(league, abbr, player, log=True):
-    """Validate ownership, roster space and full departure cost before a move."""
+    """Validate ownership and cap before a move; roster cleanup follows."""
     from cap_accounting import require_room
     team = league.teams[abbr]
     if player not in available_free_agents(league): return False
-    full = len(team.active()) >= 53 and league.phase in ('regular', 'playoffs')
-    if full and abbr == getattr(league, 'user_team', None): return False
-    outgoing = room_candidate(league, team, player) if full else None
-    if full and outgoing is None: return False
     contract = minimum_contract(league, team, player)
     try:
-        require_room(league, team, player.pid, contract,
-                     release_pid=outgoing.pid if outgoing else None)
+        require_room(league, team, player.pid, contract)
     except ValueError:
         return False
-    if outgoing: league.release(outgoing.pid)
     league.sign(player.pid, abbr, contract, log=log)
     return True
 
@@ -175,13 +164,8 @@ def sign_minimum(league, abbr, player, log=True):
 def minimum_fits(league, team, player):
     """Filter unaffordable first choices so a cheaper healthy option is tried."""
     from cap_accounting import require_room
-    full = len(team.active()) >= 53 and league.phase in ('regular', 'playoffs')
-    if full and team.abbr == getattr(league, 'user_team', None): return False
-    outgoing = room_candidate(league, team, player) if full else None
-    if full and outgoing is None: return False
     try:
-        require_room(league, team, player.pid, minimum_contract(league, team, player),
-                     release_pid=outgoing.pid if outgoing else None)
+        require_room(league, team, player.pid, minimum_contract(league, team, player))
     except ValueError:
         return False
     return True
@@ -225,16 +209,7 @@ def room_candidate(league, team, p):
 
 
 def _make_room(league, abbr, p):
-    """The 53 is the 53: a call-up or a poach in season releases a man, who goes through waivers like anyone
-    else. That is where the in-season wire comes from. Returns False when no acceptable man exists, and the move
-    that needed the spot does not happen."""
-    team = league.teams[abbr]
-    if league.phase not in ('regular', 'playoffs') or len(team.active()) < 53:
-        return True
-    if abbr == getattr(league, 'user_team', None): return False
-    q = room_candidate(league, team, p)
-    if q is None: return False
-    league.release(q.pid)
+    """Do not release anyone as a side effect of an acquisition."""
     return True
 
 
@@ -245,17 +220,13 @@ def poach(league, abbr, pid, week):
     src = p.team
     if src not in league.teams or src == abbr or p not in squad(league.teams[src]): return False
     team = league.teams[abbr]
-    full = len(team.active()) >= 53 and league.phase in ('regular', 'playoffs')
-    if full and (abbr == getattr(league, 'user_team', None) or room_candidate(league, team, p) is None): return False
     cap = CAP.get(league.year, 301.2)
     mn = MS.minimum_salary(p.accrued or 0, cap)
     c=Contract(years=1,base=[mn*max(0,18-team.cap.paid_week)/18],signed=league.year,pay_start=team.cap.paid_week)
-    outgoing=room_candidate(league,team,p) if full else None
     from cap_accounting import require_room
-    try: require_room(league,team,pid,c,release_pid=outgoing.pid if outgoing else None)
+    try: require_room(league,team,pid,c)
     except ValueError: return False
     squad(league.teams[src]).remove(p); league.teams[src].sync_cap(); p.xp_spent.pop('_ps', None); p.team = None
-    _make_room(league, abbr, p)
     league.sign(pid, abbr, c, log=False)
     p.xp_spent['_poach_lock'] = (week or 0) + POACH_LOCK_GAMES
     league.log('ps_poach', pid=pid, team=abbr, source=src, locked_until=(week or 0) + POACH_LOCK_GAMES)
