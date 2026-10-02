@@ -53,11 +53,13 @@ def _role_read(league, team, player, baseline=None, scale=None):
     # when cross-position replacements or multiple starting slots apply.
     own = team.by_pos(player.pos)
     rank = next((i for i,p in enumerate(own) if p.pid == player.pid), len(own))
-    replacement = own[rank+1].ovr if rank+1 < len(own) else min((p.ovr for p in reserves), default=55.)
+    next_body = own[rank+1] if rank+1 < len(own) else min(reserves, key=lambda p: p.ovr, default=None)
+    replacement = next_body.ovr if next_body is not None else 55.
     retention=RN.retention_value(team,player)
     important = share >= .15 or loss >= 2. or retention >= 2.
     row=dict(role_share=round(share,4), roles=sorted({r['role'] for r in rows}),
         departure_loss=round(loss,4), replacement_grade=round(replacement,3),
+        replacement_pid=next_body.pid if next_body is not None else None,
         normalized_grade=round(normalized,3), important=important,
         importance=retention_priority(player.pos, normalized, share, loss))
     return row,max(loss,retention)  # unrounded benefit preserves financial thresholds
@@ -74,6 +76,44 @@ def _review_context(league,team,baseline=None,scale=None):
                 inputs={},financial=None)
 
 
+def veteran_plan(team, player, inputs, scale, window):
+    """A short bridge must still beat the replacement after expected aging.
+
+    Use the engine's aging curves at neutral longevity and annual variation,
+    not the player's hidden longevity or future random draws. Existing years
+    count toward the forecast because an extension adds years at the end.
+    """
+    import copy
+    from types import SimpleNamespace
+    import regression as REG
+    left = int(getattr(player.contract, 'years', 0))
+    def forecast(p):
+        projected = copy.copy(p)
+        projected.ratings = dict(p.ratings)
+        projected.longevity = 1.
+        grades = []
+        for year in range(1, left + 3):
+            REG.decline(projected, SimpleNamespace(normal=lambda *args: 1.), age=p.age + year)
+            if year > left: grades.append(projected.ovr)
+        return grades
+    grades = forecast(player)
+    successor = next((p for p in team.active() if p.pid == inputs.get('replacement_pid')), None)
+    replacements = forecast(successor) if successor is not None else [inputs['replacement_grade']]*2
+    youth = max(0., min(1., float(team.gm.youth)))
+    threshold = 2. + 6.*youth + (2. if window in ('rebuilding','retooling') else
+                               -1. if window in ('contending','win_now') else 0.)
+    grade = DFT.common_scale(grades[0], player.pos, scale)
+    edge = grades[0] - replacements[0]
+    viable = inputs['important'] and grade >= 70.+4.*youth and edge >= threshold
+    two_years = (viable and youth <= .5 and grade >= 78.
+                 and grades[1] >= replacements[1] + threshold
+                 and player.ovr - grades[1] <= 5.)
+    return dict(veteran_viable=viable, veteran_projected_grade=round(grades[0],3),
+                veteran_projected_replacement=round(replacements[0],3),
+                veteran_replacement_edge=round(edge,3), veteran_required_edge=round(threshold,3),
+                max_new_years=2 if two_years else 1)
+
+
 def candidates(league, team, scale=None):
     """Package starters and useful reserves, including WR3, TE2 and nickel CB."""
     import extensions as EXT
@@ -85,7 +125,6 @@ def candidates(league, team, scale=None):
         row = role_inputs(league,team,p,report,scale)
         if not row['important']: continue
         if p.contract and p.contract.years >= 2 and row['normalized_grade'] < 80: continue
-        if p.age > EXT.AGE_LIMIT.get(p.pos,31)+2: continue
         out.append((p,row))
     # Resolve contracts that have actually expired before buying optional
     # extra control on men who will already be here next season.
@@ -114,23 +153,30 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
     tm = EXT.terms(league,player,None,pool=pool)
     if not tm:
         row['reasons']=['no_market_read']; return row
+    race = team.ctx()
+    if 'games_played' not in race: race=dict(race,**TE.race_context(team))
+    window = TE.window(race)
+    years = tm['years']
+    if player.age > EXT.AGE_LIMIT.get(player.pos,31):
+        row.update(veteran_plan(team,player,inputs,context['scale'],window))
+        years = min(years,row['max_new_years'])
     want = .75 + .25*row['role_share'] - .10*max(0.,team.gm.youth-.5)*(player.age>=28)
     ceiling = tm['offer']*(1.+.12*want)
     apy = round(min(ceiling,tm['ask']),2)
     floor = tm['ask']*(1.-tm['discount'])
-    row.update(expected_apy=round(tm['ask'],2),offer_apy=apy,years=tm['years'])
+    row.update(expected_apy=round(tm['ask'],2),offer_apy=apy,years=years)
     refusal = EXT._ai_refusal(league,player)
     # Evaluate the same bounded payment alternatives as the negotiator; never
     # declare someone unaffordable solely because the first schedule misses.
-    original = CO.canonical(league,player,team,dict(apy=apy,years=tm['years']),'extension')
-    total = apy*tm['years']; bonus = min(total*.78,original['bonus']+total*.10)
+    original = CO.canonical(league,player,team,dict(apy=apy,years=years),'extension')
+    total = apy*years; bonus = min(total*.78,original['bonus']+total*.10)
     packages = [original,dict(original,front_load=.5),dict(original,front_load=.85),
                 dict(original,front_load=.5,bonus=min(bonus,total*.445))]
     for package in packages:
-        if not EXT.can_afford_extension(league,team,player,apy,tm['years'],
+        if not EXT.can_afford_extension(league,team,player,apy,years,
                                        package['front_load'],package['bonus']):
             row['financial_reason']='legal_cap_failure'; continue
-        preview = EXT.build(player,tm['years'],apy,CAP.get(league.year,301.2),team.gm,league,
+        preview = EXT.build(player,years,apy,CAP.get(league.year,301.2),team.gm,league,
                             front_load=package['front_load'],bonus=package['bonus'])
         if context['financial'] is None:
             import financial_plan as FP
@@ -146,20 +192,17 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
     probability = max(.05,min(.9,.55+(ratio-1.)*2.+.12*row['role_share']))
     if refusal: probability = .15 if 'during the season' in refusal else .05
     if not row['affordable']: probability = .05
-    if player.age > EXT.AGE_LIMIT.get(player.pos,31): probability *= .7
     row['extension_probability']=round(probability,3)
     value = VAL.value_player(league,player,side='team',pool=pool,rng=None)
     if value and c and c.years>0:
         asset=dict(age=player.age,apy=player.apy,ovr=player.ovr,madden_position=player.pos,
                    contract_years_left=c.years,development_credit=player_credit(player))
         row['trade_floor']=round(max(0.,TE.trade_value(asset,value))*(.5 if c.years==1 else .75),2)
-    context = team.ctx()
-    if 'games_played' not in context: context=dict(context,**TE.race_context(team))
-    window = TE.window(context)
     retain = (row['important'] and row['affordable'] and ratio>=.90
-              and probability>=.35 and player.age<=EXT.AGE_LIMIT.get(player.pos,31)+1)
+              and probability>=.35 and row.get('veteran_viable',True))
     if retain:
         row['decision']='retain'; row['reasons']=['valuable_role','viable_extension']
+        if 'veteran_viable' in row: row['reasons'].append('short_term_veteran')
     elif (c and c.years>0 and trading_open(league) and row['trade_floor']>.25
           and (window in ('rebuilding','retooling') or row['departure_loss']<=6.)
           and window not in ('contending','win_now')):
@@ -171,6 +214,7 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
     if refusal: row['reasons'].append('agent_defers' if 'during the season' in refusal else 'agent_declines')
     if not row['affordable']: row['reasons'].append(row['financial_reason'])
     if ratio<.90: row['reasons'].append('price_gap')
+    if row.get('veteran_viable') is False: row['reasons'].append('prefer_veteran_replacement')
     return row
 
 
