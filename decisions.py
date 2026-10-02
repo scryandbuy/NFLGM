@@ -84,6 +84,7 @@ def fourth_conversion(distance):
     return float(max(.005, FOURTH_CONV[8] * np.exp(-(distance - 8) / 8.0)))
 
 PUNT_NET = 40.0          # average net; the engine's own punt model is finer
+PUNT_SHORT_FIELD_START = 16.0  # receiving team's expected own-yardline on a pooch
 XP_RATE = 0.957          # measured, 2023-24
 TWO_RATE = 0.475         # measured; the engine resolves the real play
 
@@ -148,7 +149,8 @@ def _flip(score_diff, seconds_left, yardline_100, is_home=1, **kw):
 # ============================================================ FOURTH DOWN
 def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
                 fg_prob=None, conv_prob=None, aggression=DEFAULT_AGGRESSION,
-                recent_failure=0.0, is_home=1, timeout_edge=0, kickoff_yardline=65):
+                recent_failure=0.0, is_home=1, timeout_edge=0, kickoff_yardline=65,
+                punt_start=None):
     """
     Returns the call, the win probability edge of going, and how strong the
     recommendation is.
@@ -193,7 +195,13 @@ def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
         wp_fg = -1.0                      # not a real option
 
     # ---- punt ----
-    landed = max(1, min(99, 100 - (yardline_100 - PUNT_NET)))
+    # A full-net subtraction cannot apply to a short-field punt: it imagines
+    # pinning the opponent at its one every time. Pooches, returns and
+    # touchbacks put the average receiving start near its 16 in game.punt.
+    # This is an expected decision value, not a limit on actual punt outcomes.
+    receiving_start = (max(PUNT_SHORT_FIELD_START, yardline_100 - PUNT_NET)
+                       if punt_start is None else float(punt_start))
+    landed = max(1, min(99, 100 - receiving_start))
     wp_punt = _flip(score_diff, seconds_left - 6, 100 - landed, is_home=is_home, timeout_edge=-timeout_edge)
     if yardline_100 <= 35:
         wp_punt -= 0.004                  # punting from field goal range costs
