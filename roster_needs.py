@@ -367,11 +367,13 @@ def essential_coverage(team, players=None, report=None):
     base = OR.base_package(getattr(team, 'gm', None))
     occurrences = Counter()
     for row in report['package_assignments']:
-        # Rare situational calls do not impose hard roster requirements.
-        if row['weight'] < .1 and not (row['package'] == 'base' or row['side'] == 'offense' and row['package'] == base):
-            continue
         index = occurrences[(row['variant'], row['role'])]
         occurrences[(row['variant'], row['role'])] += 1
+        # Every callable package needs eleven qualified bodies. Low-share
+        # packages still do not impose quality or preferred-depth floors.
+        if row['weight'] < .1 and not (row['package'] == 'base' or row['side'] == 'offense' and row['package'] == base):
+            if row['weight'] <= 0 or row['player'] is not None:
+                continue
         key = f"{row['side']}:{row['role']}:{index}"
         p, grade = row['player'], row['grade']
         severity = 2.0 if p is None else max(0.0, (65.0 - grade) / 65.0)
