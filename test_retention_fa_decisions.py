@@ -19,6 +19,11 @@ import test_roster_cap_recovery as recovery
 
 class RetentionRecruitmentTests(unittest.TestCase):
     def setUp(self):
+        # Loading the synthetic $500m franchise installs its projected cap
+        # history globally. Restore that compatibility table after each test
+        # so later fixtures do not inherit this deliberately inflated budget.
+        caps = patch.dict('cap_engine.CAP')
+        caps.start(); self.addCleanup(caps.stop)
         self.L,self.t=fixture()
         self.t.picks=[]; self.t.cap.cap=500.; self.t.sync_cap()
         self.rng=np.random.default_rng(313)
@@ -78,6 +83,9 @@ class RetentionRecruitmentTests(unittest.TestCase):
 
     def test_unlikely_extension_can_be_shopped_without_forcing_a_trade(self):
         p=self.expiring('WR0');self.L.set_phase('regular');self.L.week=8
+        # Give him real trade value without relying on another test's inflated
+        # projected cap to push an ordinary receiver above the shopping floor.
+        set_grade(p,88)
         before=list(self.t.roster)
         with patch.object(EXT,'terms',return_value=self.quote), \
              patch.object(EXT,'_ai_refusal',return_value='His agent will not negotiate an extension during the season'), \

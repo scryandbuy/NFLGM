@@ -21,6 +21,23 @@ class FinancialPlanTests(unittest.TestCase):
         p=copy.deepcopy(self.t.roster[0]);p.pid=pid;p.team=None;p.contract=None
         return p
 
+    def test_forecast_uses_own_cap_not_another_loaded_franchise(self):
+        current = self.t.cap.cap
+        with patch.dict(CAP, {self.L.year: 500., self.L.year+1: 900.}):
+            before = FP.snapshot(self.L, self.t)
+            self.assertAlmostEqual(before['years'][0]['injury_reserve'], current*.008)
+            self.assertAlmostEqual(before['years'][1]['injury_reserve'], current*1.055*.008)
+            loaded = League.load(self.L.save())
+            self.assertEqual(before, FP.snapshot(loaded, loaded.teams[self.t.abbr]))
+
+    def test_known_franchise_caps_override_forecast_and_global_cache(self):
+        self.L.cap_history[self.L.year+1] = 360.
+        self.L.cap_history[self.L.year] = 280.  # current ledger still wins
+        with patch.dict(CAP, {self.L.year: 500., self.L.year+1: 900.}):
+            self.assertEqual(FP._cap(self.L,self.t,self.L.year), self.t.cap.cap)
+            self.assertEqual(FP._cap(self.L,self.t,self.L.year+1), 360.)
+        self.assertEqual(FP._cap(self.L,self.t,2026), CAP[2026])
+
     def room(self, amount):
         self.t.sync_cap()
         self.t.cap.dead=self.t.cap.limit-self.t.cap.charges('season')+self.t.cap.dead-amount
