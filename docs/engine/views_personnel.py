@@ -129,10 +129,18 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
     ga, gb = TR.persona(me.gm), TR.persona(them.gm)
     offer_a = dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me))
     r = TE.evaluate(offer_a, me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
+    plan_read = None
+    if not r.get('blocked'):
+        items_a = [x if _trade_player(league, x) else _find_pick(league, abbr, x) for x in a_sends]
+        items_b = [x if _trade_player(league, x) else _find_pick(league, other, x) for x in b_sends]
+        decision = TR.cpu_trade_check(league, me, them, items_a, items_b)
+        if not decision['approved']:
+            r = dict(r, blocked='cpu_plan', accepted=False)
+            plan_read = decision['why']
     # words for their side
     g = r['b_gain']
     if r.get('blocked'):
-        read = _cap_block_read(r['blocked'], other); verdict = 'blocked'
+        read = plan_read or _cap_block_read(r['blocked'], other); verdict = 'blocked'
     elif g >= 4: read = f"{them.abbr} would take this and feel they won it. You are giving more than you need to."; verdict = 'overpay'
     elif g >= 0.5: read = f"This is fair for {them.abbr}. They would take it."; verdict = 'fair'
     elif g >= -3: read = f"Close, a touch short for {them.abbr}. A mid-round pick or a depth piece would get it done."; verdict = 'short'
@@ -157,7 +165,7 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
                 cap_after=dict(
                     me=round(__import__('cap_accounting').trade_projection(league, me.abbr, a_sends, b_sends).space(me.phase), 1),
                     them=round(__import__('cap_accounting').trade_projection(league, them.abbr, b_sends, a_sends).space(them.phase), 1)),
-                would_accept=bool(r.get('accepted', False)) or (g >= 0.5 and not r.get('blocked')))
+                would_accept=not r.get('blocked') and (bool(r.get('accepted', False)) or g >= 0.5))
 
 
 def _words(league, items):
@@ -229,6 +237,10 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     pool = VAL.pool_from_league(league); me = league.teams[abbr]
     r = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, TR.persona(me.gm), TR.persona(them.gm), user_a=True)
     a_items = [(x if _trade_player(league, x) else _find_pick(league, abbr, x)) for x in a_sends]; b_items = [(x if _trade_player(league, x) else _find_pick(league, other, x)) for x in b_sends]
+    decision = TR.cpu_trade_check(league, me, them, a_items, b_items)
+    if not decision['approved']:
+        if counter is not None: counter['state'] = 'declined'
+        return dict(ok=False, done=False, why=decision['why'])
     yes = TR.will_accept(r['b_gain'], rng, TR.persona(them.gm)['aggression'], selling=True)
     if not yes:
         if counter is not None: counter['state'] = 'declined'

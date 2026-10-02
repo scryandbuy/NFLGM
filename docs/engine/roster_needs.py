@@ -313,6 +313,24 @@ def assess(team, players=None, strict_roles=False):
     profile = DR.planning_profile(getattr(team, 'gm', None))
     role_grades = {}
     rows = _package_rows(team, players, grades, profile, role_grades)
+    # The summary chart must describe the same choices as the package planner.
+    # Preserve specialist rows and the extra nickel corner without reranking LBs
+    # by their saved MIKE/WILL label.
+    base_off = OR.base_package(getattr(team, 'gm', None))
+    base_def = [v for v in profile['variants'] if v['package'] == 'base']
+    representative = max(base_def or profile['variants'], key=lambda v: v['share'])
+    def_index = next(i for i, v in enumerate(profile['variants']) if v is representative)
+    base_rows = [dict(r) for r in rows if r['variant'] in
+                 ('offense:' + base_off, 'defense:' + str(def_index))]
+    old_extra = [r for r in report['assignments'] if r['role'] in ('K', 'P', 'LS')]
+    if sum(r['role'] == 'CB' for r in base_rows) < 3:
+        used = {r['player'].pid for r in base_rows if r['player'] is not None}
+        corners = [p for p in players if p.pos == 'CB' and p.pid not in used]
+        corner = max(corners, key=lambda p: grades[p.pid], default=None)
+        old_extra.insert(0, dict(role='CB', sources=('CB',), player=corner,
+                                grade=grades[corner.pid] if corner else None))
+    report['assignments'] = base_rows + old_extra
+    report['uncovered'] = [r['role'] for r in report['assignments'] if r['player'] is None]
     depth_score, needs = _depth_accounting(team, players, grades)
     package_needs = {pos: 0.0 for pos in POSITIONS}
     demand = {pos: 0.0 for pos in POSITIONS}
@@ -334,6 +352,48 @@ def assess(team, players=None, strict_roles=False):
                   _grades=grades, _role_grades=role_grades, _profile=profile, _package_scores=scores)
     return report
 
+
+
+def essential_coverage(team, players=None, report=None):
+    """Normal starter coverage, independent of preferred reserve depth.
+
+    Stable side:role:slot keys permit before/after comparisons. Severity is
+    2 for an empty job, at least 1 for a non-native OL starter, and (65-grade)/65
+    for a weak starter. Compatible FB and defensive roles remain legitimate.
+    Quality is the same complete-package score consumed by move_gain.
+    """
+    report = assess(team, players) if report is None else report
+    shortages, sources = {}, {}
+    base = OR.base_package(getattr(team, 'gm', None))
+    occurrences = Counter()
+    for row in report['package_assignments']:
+        # Rare situational calls do not impose hard roster requirements.
+        if row['weight'] < .1 and not (row['package'] == 'base' or row['side'] == 'offense' and row['package'] == base):
+            continue
+        index = occurrences[(row['variant'], row['role'])]
+        occurrences[(row['variant'], row['role'])] += 1
+        key = f"{row['side']}:{row['role']}:{index}"
+        p, grade = row['player'], row['grade']
+        severity = 2.0 if p is None else max(0.0, (65.0 - grade) / 65.0)
+        eligible = tuple(row['sources'])
+        if row['side'] == 'offense' and row['role'] in OR.OL:
+            eligible = (row['role'],)
+            if p is not None and p.pos != row['role']:
+                severity = max(1.0, severity)
+        if severity > 0:
+            shortages[key] = max(shortages.get(key, 0.0), severity)
+            sources[key] = eligible
+    for row in report['assignments']:
+        if row['role'] in ('K', 'P', 'LS') and row['player'] is None:
+            key = 'special:' + row['role'] + ':0'
+            shortages[key] = 2.0; sources[key] = tuple(row['sources'])
+    return dict(shortages=shortages, sources=sources, quality=report['score'])
+
+
+def coverage_not_worse(before, after):
+    """Reject newly opened or worsened essential jobs, not existing weaknesses."""
+    return all(value <= before['shortages'].get(key, 0.0) + 1e-9
+               for key, value in after['shortages'].items())
 
 def move_gain(team, arrival, departure=None, baseline=None):
     """Marginal package/depth value; a supplied snapshot avoids repeated setup."""

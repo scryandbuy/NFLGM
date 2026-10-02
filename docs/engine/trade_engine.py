@@ -129,6 +129,14 @@ def pick_value_dollars(pick, years_out=0, cap=CAP, lens='blend', blend=0.5):
     """Deprecated alias for the PRICE."""
     return pick_price_dollars(pick, years_out, cap)
 
+
+def market_price(asset):
+    """Neutral compensation, separate from either GM's willingness to pay."""
+    if asset['kind'] == 'pick':
+        return pick_value_dollars(asset['pick'], asset.get('years_out', 0),
+                                  cap=asset.get('cap', CAP))
+    return max(0., float(asset.get('trade_value', 0.) or 0.))
+
 # ---------------------------------------------------------------- player value
 STAR_PREMIUM = 0.50     # share of a proven player's market salary his certainty is worth, per year, at the elite tier
 # specialists do not fetch premium picks whatever their overall: kickers and
@@ -326,7 +334,7 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
         # He PAYS the market price; what he thinks it is worth is separate and
         # only decides whether he wants the deal.
         v = pick_belief_dollars(asset['pick'], asset.get('years_out', 0),
-                                lens=g['pick_lens'])
+                                cap=asset.get('cap', CAP), lens=g['pick_lens'])
         v *= max(0.75, WINDOW_PICK_BIAS[wdw] * (1.25 - 0.45*g['aggression']))
         # On the clock a buyer may value this exact selection above an
         # interchangeable chart pick because his target will be gone later.

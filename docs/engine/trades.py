@@ -247,18 +247,24 @@ def through_buyer_eyes(asset, buyer, seller):
     return a
 
 
-def pick_asset(league, pk, need=False):
+def _pick_base_year(league):
     # Picks name the season that earned them. The league has already rolled
     # forward when that season's draft is held, so the upcoming pick can be
     # one season behind league.year throughout the pre-draft offseason.
     base_year = int(league.year)
     closed = getattr(league, 'season_closed_year', None)
     last = getattr(league, 'last_draft', None) or {}
-    if (league.phase in ('offseason', 'free_agency') and closed is not None
+    if (league.phase in ('offseason', 'free_agency', 'draft') and closed is not None
             and int(closed) == base_year - 1 and int(last.get('year', -1)) < base_year - 1):
         base_year -= 1
+    return base_year
+
+
+def pick_asset(league, pk, need=False):
+    base_year = _pick_base_year(league)
     return dict(kind='pick', pick=pk.selection or (pk.round - 1) * 32 + 16,
                 years_out=max(0, pk.year - base_year), need=need,
+                cap=VAL._league_cap(league, league.year),
                 age=22, apy=0.0, trade_value=0.0, obj=pk)
 
 
@@ -437,6 +443,111 @@ def seller_veterans(league, team, baseline):
     return chosen
 
 
+def recent_acquisitions(league, team):
+    """Give new arrivals a trial; a whole offseason is one acquisition window.
+
+    Transaction history survives saves and the league-year rollover. During the
+    season the protection lasts three weeks, including opening-week arrivals.
+    Cap casualties use their separate, already-decided-release trade path.
+    """
+    year, week = int(league.year), int(league.week or 0)
+    offseason = league.phase in ('offseason', 'free_agency', 'draft', 'camp', 'preseason')
+    recent, rookies = set(), set()
+    for e in reversed(getattr(league, 'transactions', ())):
+        ey, ew = int(e.get('year', year)), int(e.get('week') or 0)
+        ep = e.get('phase')
+        if offseason:
+            if ep in ('regular', 'playoffs') or ey < year - 1:
+                break
+        elif ey != year or (ep == 'regular' and week - ew > 3):
+            break
+        elif ep != 'regular' and week > 3:
+            break
+        kind = e.get('kind')
+        if e.get('team') == team.abbr and kind in ('sign', 'draft', 'ps_callup', 'ps_poach', 'emergency_sign', 'waiver_claim'):
+            recent.add(e.get('pid'))
+            if kind == 'draft': rookies.add(e.get('pid'))
+        if kind == 'trade':
+            incoming = e.get('b_sends', ()) if e.get('a') == team.abbr else e.get('a_sends', ()) if e.get('b') == team.abbr else ()
+            recent.update(x for x in incoming if isinstance(x, str) and not x.startswith('DraftPick('))
+    # A player's explicit request is a reason to revisit an acquisition, but
+    # never to recycle a rookie immediately after making that draft selection.
+    import morale
+    return {p.pid for p in team.active() if p.pid in recent
+            and (p.pid in rookies or not morale.wants_out(p))}
+
+
+def _coverage(team, players, week=None, report=None):
+    import roster_needs as RN
+    import practice_squad as PS
+    depth = PS.essential_depth(team, players, week)
+    gaps = {'depth:' + key: value for key, value in depth['shortages'].items()}
+    available = [p for p in players if week is None or getattr(p, 'out_until', None) is None
+                 or int(p.out_until) < 99 and int(p.out_until) - week <= 2]
+    if hasattr(RN, 'essential_coverage'):
+        assessment = RN.essential_coverage(team, available, report=report if len(available) == len(players) else None)
+        gaps.update({'role:' + key: value for key, value in assessment['shortages'].items()})
+    else:
+        # Compatibility for standalone installs until the shared role assessment
+        # ships; essential depth still binds and emergency empty roles are caught.
+        assessment = report if report is not None and len(available) == len(players) else RN.assess(team, available)
+        gaps.update({'role:' + key: 1 for key in assessment['uncovered']})
+    return gaps
+
+
+def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache=None):
+    """Assess both complete rosters, not the target in isolation.
+
+    Sellers may exchange present quality for picks, but neither CPU can leave
+    new essential holes. A draft buyer includes the player it intends to pick.
+    """
+    import roster_needs as RN
+    cache = {} if cache is None else cache
+    key = (ta.abbr, tb.abbr, tuple(sorted(x for x in outgoing if isinstance(x, str))),
+           tuple(sorted(x for x in incoming if isinstance(x, str))), getattr(prospect, 'pid', None))
+    if key in cache: return cache[key]
+    result = dict(approved=True, gains={}, reason='approved')
+    week = int(league.week or 0) if league.phase in ('regular', 'playoffs') else None
+    for team, sent, received in ((ta, outgoing, incoming), (tb, incoming, outgoing)):
+        if prospect is not None:
+            import draft_plan
+            old = list(draft_plan.projected_players(team))
+        else:
+            old = list(team.active())
+        removed = {x for x in sent if isinstance(x, str)}
+        arrivals = [league.player(x) for x in received if isinstance(x, str)]
+        if prospect is not None and team is ta: arrivals.append(prospect)
+        projected = [p for p in old if p.pid not in removed] + [p for p in arrivals if p is not None]
+        baseline_key = ('baseline', team.abbr, week)
+        if baseline_key not in cache:
+            baseline = RN.assess(team, old)
+            cache[baseline_key] = (baseline, _coverage(team, old, week, baseline), recent_acquisitions(league, team))
+        baseline, before, recent = cache[baseline_key]
+        after_report = RN.assess(team, projected)
+        result['gains'][team.abbr] = after_report['score'] - baseline['score']
+        if team.abbr == getattr(league, 'user_team', None): continue
+        if removed & recent:
+            result.update(approved=False, reason='recent_acquisition')
+            break
+        after = _coverage(team, projected, week, after_report)
+        if any(value > before.get(role, 0) + 1e-6 for role, value in after.items()):
+            result.update(approved=False, reason='essential_coverage')
+            break
+    cache[key] = result
+    return result
+
+
+def _refresh_retention(league, teams, pool):
+    """Record decisions at a simulation boundary, never while viewing trades."""
+    if not (league.phase in ('offseason', 'free_agency')
+            or league.phase == 'regular' and 6 <= int(league.week or 0) <= 9):
+        return
+    import retention_plan as RP
+    for abbr in teams:
+        if abbr != getattr(league, 'user_team', None):
+            RP.refresh(league, league.teams[abbr], pool=pool)
+
+
 def surplus_and_needs(league, team, pool, rng, n=3):
     """
     Who a club can spare and where it is thin. Surplus is depth behind a
@@ -444,6 +555,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     """
     import roster_needs as RN
     surplus, needs = [], {}
+    recent = recent_acquisitions(league, team)
     roster_report = RN.assess(team, [p for p in team.active() if getattr(p, 'out_until', None) is None])
     roster_needs = roster_report['needs']
     league_bar = starter_bar(league)
@@ -463,7 +575,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
         men = sorted(men, key=lambda p: -p.ovr)
         if len(men) >= 3:
             for p in men[2:4]:
-                if _young_core(p): continue
+                if _young_core(p) or p.pid in recent: continue
                 if men[0].ovr - p.ovr > 3:
                     if RN.departure_loss(team, p, baseline=roster_report) > 6.0:
                         continue  # he is needed for a job this coach actually runs
@@ -504,13 +616,32 @@ def surplus_and_needs(league, team, pool, rng, n=3):
 
     have = {a['pid'] for a in surplus}
     for p in seller_veterans(league, team, roster_report):
-        if p.pid in have: continue
+        if p.pid in have or p.pid in recent: continue
         a = player_asset(league, team, p, pool, rng, viewer=team)
         if a and a['trade_value'] > 0:
             a['grp'] = GRP.get(p.pos, p.pos)
             a['seller_veteran'] = True
             surplus.append(a); have.add(p.pid)
-    surplus.sort(key=lambda a: (not a.get('seller_veteran', False), -a['trade_value']))
+    # An expiring player with no viable renewal can be offered deliberately;
+    # the shared plan proposes shopping, never authorizes a forced sale.
+    if (getattr(team, 'abbr', None) != getattr(league, 'user_team', None)
+            and (league.phase in ('offseason', 'free_agency')
+                 or league.phase == 'regular' and 6 <= int(league.week or 0) <= 9)):
+        import retention_plan as RP
+        assets = {a['pid']:a for a in surplus}
+        for row in RP.choices(league, team):
+            if row['decision'] != 'shop' or row['pid'] in recent: continue
+            p = league.player(row['pid'])
+            if p is None or p.team != team.abbr or p.out_until is not None: continue
+            a = assets.get(p.pid)
+            if a is None:
+                a = player_asset(league, team, p, pool, rng, viewer=team)
+                if a is None or a['trade_value'] <= 0: continue
+                a['grp'] = GRP.get(p.pos, p.pos)
+                surplus.append(a); assets[p.pid] = a
+            a['retention_shop'] = True
+            a['retention_floor'] = max(0., float(row.get('trade_floor', 0.) or 0.))
+    surplus.sort(key=lambda a: (not a.get('retention_shop', False), not a.get('seller_veteran', False), -a['trade_value']))
     # A MAN WHO ASKED OUT is shopped like surplus, at his market value: his
     # club is willing where it was not, and buyers see him in the flow
     import morale as MO
@@ -522,7 +653,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
                 if a:
                     a['grp'] = GRP.get(pos, pos); a['wants_out'] = True
                     surplus.insert(0, a)
-    return surplus[:n + sum(1 for x in surplus if x.get('wants_out'))], needs
+    return surplus[:n + sum(1 for x in surplus if x.get('wants_out') or x.get('retention_shop'))], needs
 
 
 STAR_ASK = {'contending': 1.60, 'win_now': 1.45, 'middling': 1.30, 'retooling': 1.15, 'rebuilding': 1.05}
@@ -540,7 +671,9 @@ def stars_at(league, team, pool, rng, grp, viewer=None):
                   if p.out_until is None), key=lambda p: -p.ovr)[:2]
     wdw = TE.window(context(team))
     import morale as MO
+    recent = recent_acquisitions(league, team)
     for p in men:
+        if p.pid in recent: continue
         wants_out = MO.wants_out(p)
         # A MAN WHO ASKED OUT is available where he was untouchable, and his
         # club takes a fair offer where it wanted a premium. The price does
@@ -569,8 +702,9 @@ def _picks_by_price(league, team, gm, ctx, space):
     away happy.
     """
     out = []
+    base_year = _pick_base_year(league)
     for pk in team.picks:
-        if pk.year < league.year or pk.year > league.year + 2 or pk.used_on is not None:      # this draft and the next two
+        if pk.year < base_year or pk.year > base_year + 2 or pk.used_on is not None:      # this draft and the next two
             continue
         a = pick_asset(league, pk)
         out.append((TE.team_price(a, ctx, space, gm, owns=True), a))
@@ -587,8 +721,9 @@ def _pick_to_offer(league, team, target, gm, ctx, space):
     and one that prices them at market spends them freely. That is `pick_lens`
     and it is why two front offices can both be happy.
     """
+    base_year = _pick_base_year(league)
     owned = [pk for pk in team.picks
-             if league.year <= pk.year <= league.year + 2 and pk.used_on is None]
+             if base_year <= pk.year <= base_year + 2 and pk.used_on is None]
     if not owned:
         return None
     want = TE.team_price(target, ctx, space, gm, owns=False)
@@ -665,6 +800,45 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None):
     return True
 
 
+def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
+    """Revalidate interactive transactions against today's CPU plan.
+
+    The user controls their own roster. A CPU seller may exchange quality for
+    picks; an outstanding CPU purchase must still be a useful, funded upgrade.
+    No new willingness roll is drawn when the user accepts an inbox offer.
+    """
+    football = package_football(league, ta, tb, outgoing, incoming)
+    if not football['approved']:
+        why = ('The other team is keeping its recently acquired player for now.'
+               if football['reason'] == 'recent_acquisition' else
+               'The other team would lose essential positional coverage in this trade.')
+        return dict(approved=False, why=why)
+    if buyer is not None and buyer != getattr(league, 'user_team', None):
+        club, sent, received = (ta, outgoing, incoming) if ta.abbr == buyer else (tb, incoming, outgoing)
+        gain = football['gains'][buyer]
+        if gain < UPGRADE_GAP:
+            return dict(approved=False, why='This offer no longer provides the other team a useful roster upgrade.')
+        pool = VAL.pool_from_league(league)
+        def quote(item, viewer):
+            if not isinstance(item, str): return pick_asset(league, item)
+            p = league.player(item)
+            return player_asset(league, league.teams[p.team], p, pool, None, viewer=viewer) if p else None
+        paid_assets = [quote(x, club) for x in sent]
+        target_assets = [quote(x, club) for x in received]
+        if any(x is None for x in paid_assets + target_assets):
+            return dict(approved=False, why='A player in this offer is no longer available on a signed contract.')
+        market = sum(TE.market_price(x) for x in target_assets)
+        # Retain the maximum ordinary starter premium; changing roster value
+        # may reduce the budget, but accepting mail never rerolls GM taste.
+        premium = 1.40 if TE.window(context(club)) in ('contending', 'win_now') else 1.25
+        ceiling = (market * premium + .35) * _upgrade_budget(gain)
+        if sum(TE.market_price(x) for x in paid_assets) > ceiling + 1e-9:
+            return dict(approved=False, why='The other team no longer values this package enough to pay that price.')
+    if not _financial_trade(league, ta, tb, outgoing, incoming):
+        return dict(approved=False, why='The other team cannot fund this trade and its remaining roster commitments.')
+    return dict(approved=True)
+
+
 MAX_PACKAGE_SEARCH = 50000  # fail closed on pathological pick-hoarding banks
 MAX_PACKAGE_ROSTER_CHECKS = 64  # also bound costly role assignments
 
@@ -689,7 +863,8 @@ def _market_floor(target):
     player = target.get('obj')
     years = getattr(player, 'contract_years_left', 2)
     fraction = .5 if years <= 1 or target.get('wants_out') else .75
-    return max(0.0, float(target.get('trade_value', 0) or 0)) * fraction
+    return max(max(0.0, float(target.get('trade_value', 0) or 0)) * fraction,
+               float(target.get('retention_floor', 0.) or 0.))
 
 
 def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
@@ -748,7 +923,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         if asset['kind'] == 'pick':
             pk = asset['obj']
             key = ('pick', pk.year, pk.round, pk.original)
-            paid = float(TE.pick_value_dollars(asset['pick'], asset.get('years_out', 0)))
+            paid = TE.market_price(asset)
         else:
             key = ('player', asset['pid'])
             paid = float(asset.get('trade_value', 0.0) or 0.0)
@@ -789,6 +964,8 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     valid_players = {}
     financial_cache = {}
     best, nodes = None, 0
+    football_cache = {}
+    net_gains = {}
 
     def legal(items):
         ids = tuple(sorted(x['pid'] for x in items if x['kind'] == 'player'))
@@ -802,6 +979,15 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             valid_players[ids] = valid
         if not valid_players[ids]:
             return False
+        if league is not None and hasattr(league, 'teams'):
+            sent = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in items]
+            football = package_football(league, ta, tb, sent, [target['pid']], cache=football_cache)
+            if not football['approved']: return False
+            net = football['gains'][ta.abbr]
+            budget = (market * prem + .35) * _upgrade_budget(net)
+            if net < UPGRADE_GAP or sum(TE.market_price(x) for x in items) > budget + 1e-9:
+                return False
+            net_gains[ids] = (net, budget)
         if league is not None:
             sent = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in items]
             return _financial_trade(league, ta, tb, sent, [target['pid']], financial_cache)
@@ -842,9 +1028,12 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         return None, None
     offer = dict(a_sends=best[1], a_gets=[target])
     result = TE.evaluate(offer, ctx_a, ctx_b, sa, sb, ga, gb, user_b=user_seller)
+    selected = tuple(sorted(x['pid'] for x in best[1] if x['kind'] == 'player'))
+    net_gain, net_ceiling = net_gains.get(selected, (gain, ceiling))
     result['search'] = dict(
         target_gain=round(float(gain), 3), target_market=round(market, 3),
-        market_floor=round(floor, 3), market_ceiling=round(ceiling, 3),
+        net_gain=round(float(net_gain), 3), acceptance='bounded_gm_willingness',
+        market_floor=round(floor, 3), market_ceiling=round(min(ceiling, net_ceiling), 3),
         package_market=round(best[0][0], 3), candidates=n, nodes=nodes,
         buyer_target_price=round(value_in, 3), seller_ask=round(ask, 3))
     return offer, result
@@ -927,7 +1116,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
             asset = pick_asset(league, pk)
             # pick_asset handles the game's previous-season draft labels.
             if (pk.owner != abbr or pk.used_on is not None
-                    or pk.year > league.year + 2
+                    or pk.year > _pick_base_year(league) + 2
                     or pk.year < league.year - (1 if offseason else 0)):
                 continue
             if pk.year < league.year and (
@@ -935,7 +1124,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
                     or int((getattr(league, 'last_draft', None) or {}).get('year', -1)) >= pk.year):
                 continue
             cost = TE.team_price(asset, ctx_b, buyer.cap_space, gm_b, owns=True)
-            market = TE.pick_value_dollars(asset['pick'], asset['years_out'])
+            market = TE.market_price(asset)
             value = TE.team_price(asset, ctx_s, seller.cap_space, gm_s)
             if 0 < cost <= budget and 0 < market <= ceiling:
                 bank.append((pk, cost, market, value))
@@ -993,6 +1182,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
         active = [a for a in teams if activity >= 1.0 or rng.random() <= activity]
         if not active:
             continue
+        _refresh_retention(league, teams, pool)
         sn = {b: surplus_and_needs(league, league.teams[b], pool, rng) for b in teams}
         import roster_needs as RN
         target_reports, target_gains, street_cache = {}, {}, {}
