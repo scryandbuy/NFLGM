@@ -123,6 +123,36 @@ class RetentionRecruitmentTests(unittest.TestCase):
         self.assertIn(p.name,[r[1] for r in result])
         self.assertEqual(p.contract.years,4)
 
+    def test_immediate_expiries_are_not_capped_at_six_reviews(self):
+        self.L.set_phase('offseason')
+        ids=['QB0','LT0','LG0','C0','RG0','RT0','WR2']
+        for pid in ids:self.L.player(pid).contract=None
+        # Even a highly valuable early renewal waits behind current expiries.
+        early=self.expiring('TE0');set_grade(early,95)
+        quote=dict(ask=2.,offer=2.,years=2,discount=.07)
+        with patch.object(EXT,'terms',return_value=quote):
+            ordered=[p.pid for p,_ in RP.candidates(self.L,self.t)]
+            self.assertGreater(ordered.index(early.pid),max(ordered.index(pid) for pid in ids))
+            signed=EXT.ai_round(self.L,self.rng)
+        self.assertEqual(len(signed),7)
+        self.assertTrue(all(self.L.player(pid).contract.years==2 for pid in ids))
+        self.assertEqual(early.contract.years,1)
+
+    def test_seventh_expiry_still_cannot_bypass_budget(self):
+        self.L.set_phase('offseason')
+        ids=['QB0','LT0','LG0','C0','RG0','RT0','WR2']
+        for pid in ids:self.L.player(pid).contract=None
+        original=EXT._retention_budget
+        def budget(L,t,p,c,*a,**kw):
+            if p.pid=='WR2':return dict(approved=False,reason='preserve_flexibility')
+            return original(L,t,p,c,*a,**kw)
+        with patch.object(EXT,'terms',return_value=dict(ask=2.,offer=2.,years=2,discount=.07)), \
+             patch.object(EXT,'_retention_budget',side_effect=budget):
+            signed=EXT.ai_round(self.L,self.rng)
+        self.assertEqual(len(signed),6)
+        self.assertIsNone(self.L.player('WR2').contract)
+        self.assertIn('preserve_flexibility',next(r for r in RP.choices(self.L,self.t) if r['pid']=='WR2')['reasons'])
+
     def test_user_contracts_and_decisions_remain_user_controlled(self):
         p=self.expiring('WR2');self.L.user_team=self.t.abbr
         self.assertEqual(RP.refresh(self.L,self.t),[])
