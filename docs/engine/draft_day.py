@@ -6,7 +6,7 @@ sim_round, sim_all, make_pick. Nothing happens until a button is pressed.
 When an AI club is on the clock it first decides whether to move, then picks
 off its own board (draft.board). When the user's club is on the clock the
 draft stops and waits, unless auto-pick is on, in which case the user's
-saved board and scouts' order determine the pick.
+saved board takes priority, followed by the roster-aware draft board.
 
 TRADES ON THE CLOCK, rarely. Real drafts see 15 to 25 pick trades out of
 257, most in the first three rounds. A club picking a little later whose
@@ -74,8 +74,7 @@ class Draft:
         return DFT.board(self.L, abbr, sel, self.level, self.taken, self.scale, gm=gm)
 
     def user_pick(self):
-        """The first eligible man on Your Board, then the room's remaining order."""
-        import views_draft as VD
+        """Honor explicit board priorities, then draft for roster needs like the CPU."""
         ub = getattr(self.L, 'user_board', None) or {}
         dnd = set(ub.get('dnd') or [])
         available = {p.pid: p for p in self.available() if p.pid not in dnd}
@@ -84,10 +83,7 @@ class Draft:
                 return available[pid]
         if not available:
             return None
-        rows = [VD._prospect(self.L, self.user, p) for p in available.values()]
-        rows = [r for r in rows if r is not None]
-        VD._my_rank(rows)
-        return available[min(rows, key=lambda r: r['my_rank'])['pid']] if rows else None
+        return next((p for _, p in self.board_for(self.user) if p.pid in available), None)
 
     # ------------------------------------------------------------ the buttons
     def sim_pick(self):
