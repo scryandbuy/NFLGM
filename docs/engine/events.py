@@ -132,10 +132,14 @@ def dpi_yards(rng, air_yards=None):
     return float(np.clip(rng.lognormal(np.log(13.0), 0.62), 1, DPI['max']))
 
 def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
-                  air_yards=None, noise=1.0, hurry=False):
+                  air_yards=None, noise=1.0, hurry=False, *,
+                  offense_discipline=None, defense_discipline=None,
+                  offense_multiplier=1.0, defense_multiplier=1.0):
     """
     Returns a penalty or None. discipline is the offending unit's rating on
     0-1; the league rate of 7.03% of plays sits at average discipline.
+    Explicit unit ratings and staff multipliers apply by offending side.
+    The legacy discipline argument supplies both when they are omitted.
     """
     # EACH FOUL AT ITS OWN PER-PLAY RATE. The old draw rolled one flat 7.03%
     # (a rate quoted per play INCLUDING special teams, applied to scrimmage
@@ -169,7 +173,15 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
         for k, i in enumerate(ok):
             if _names[i] == 'Delay of Game':
                 per_play[k] = 0.0
-    p = per_play.sum() * (1.0 + 1.6 * (AVG - discipline))
+    off_rating = discipline if offense_discipline is None else offense_discipline
+    def_rating = discipline if defense_discipline is None else defense_discipline
+    off_factor = max(0.0, (1 + 1.6 * (AVG - off_rating)) * offense_multiplier)
+    def_factor = max(0.0, (1 + 1.6 * (AVG - def_rating)) * defense_multiplier)
+    either_factor = .18 * off_factor + .82 * def_factor
+    for k, i in enumerate(ok):
+        side = PEN_INFO[_names[i]]['offense']
+        per_play[k] *= off_factor if side is True else def_factor if side is False else either_factor
+    p = per_play.sum()
     if rng.random() >= max(0.0, p):
         return None
     name = _names[int(rng.choice(ok, p=per_play / per_play.sum()))]
@@ -190,7 +202,7 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
         # value here reaches exactly 56%. The gap is the untracked long tail
         # (the 20 types cover 10.96 of the real 11.88 per game), which skews
         # defensive. These specific fouls go against the defence more often.
-        on_off = rng.random() < 0.18
+        on_off = rng.random() < (.18 * off_factor / either_factor if either_factor else .18)
     if name == 'Illegal Use of Hands' and not on_off:
         yds = 5.0                         # defensive use of hands is five, offensive is ten
     # the rulebook's automatic first down: every defensive foul except the pre-snap fives

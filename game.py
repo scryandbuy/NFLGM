@@ -150,7 +150,8 @@ def fourth_zone(yardline_100):
 
 def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
                          aggression=0.5, timeout_edge=0, use_wp=True,
-                         kicker=None, rate_fn=None, must_score=False, half_seconds_left=None, is_home=1):
+                         kicker=None, rate_fn=None, must_score=False, half_seconds_left=None, is_home=1,
+                         half_intent=None):
     """
     go, field_goal or punt.
 
@@ -174,6 +175,8 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         if -3 <= score_diff < 0 and in_range:
             return 'field_goal'
         return 'go'
+    if half_seconds_left is not None and half_intent == 'protect' and score_diff >= 0:
+        return 'field_goal' if in_range else 'punt'
     if score_diff < 0 and not comeback_viable(secs_left, -score_diff):
         # Play out a decided game with ordinary field-position choices.
         # A consolation kick is not a comeback benefit: attempt it only
@@ -207,7 +210,8 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_table = float(np.clip(GO_RATE[band][zone] * (0.55 + 0.60 * aggression), 0.0, 1.0))     # the observed rates already carry an average coach; the personality term sits around them
     r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100, ydstogo,
-                       fg_prob=kick_chance, aggression=aggression, is_home=is_home, timeout_edge=timeout_edge) if use_wp else None
+                       fg_prob=kick_chance, aggression=aggression, is_home=is_home, timeout_edge=timeout_edge,
+                       kickoff_yardline=KICKOFF['touchback_to']) if use_wp else None
     if r is not None:
         # the model's edge as a probability: a small edge is a lean, a big one nearly certain, a negative one nearly never
         edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
@@ -871,6 +875,7 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
     three timeouts starts spending them earlier than one down to its last: from 60 seconds out for the most
     conservative coach to 100 for the most aggressive (his fourth-down and adjustment dials), and 60 with one left
     whoever he is. Tied stays at 40: a tie is not worth the last timeout until the very end."""
+    dr._half_stall_intent = None
     if (half_end is None and getattr(dr, 'quarter', 4) == 4 and dr.score_diff != 0
             and not comeback_viable(secs_in_half, abs(dr.score_diff))):
         return False, None
@@ -890,7 +895,10 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
         failed_third = getattr(dr, 'down', 1) >= 3 and float(out.get('yards', 0) or 0) < getattr(dr, 'togo', 10)
         if (half_end is not None and dr.score_diff >= 0 and failed_third
                 and dr.yardline - float(out.get('yards', 0) or 0) > 40):
-            return False, None  # do not stop a leading/tied stalled drive just to punt
+            attacking = plan is not None and plan.get('hurry', True) and plan.get('choice') != 'kneel'
+            dr._half_stall_intent = 'attack' if attacking else 'protect'
+            if not attacking:
+                return False, None  # retain this intent for the subsequent fourth down
         # the defense stops the clock in the last three minutes of the GAME when it trails; in the first
         # half only a two-score deficit is worth a timeout to get the ball back before the break
         if dr.score_diff > 0 and in_bounds and timeouts.left.get(other, 0) > 0 and half_end is None and secs_in_half < 180:
@@ -2057,7 +2065,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                        kicker=(offense.get('k') or {}), rate_fn=rate_fn,
                                        must_score=must_score, is_home=int(pos == 'home'),
                                        timeout_edge=(timeouts.left.get(pos, 0) - timeouts.left.get('away' if pos == 'home' else 'home', 0)) if timeouts is not None else 0,
-                                       half_seconds_left=(dr.clock - half_end if half_end is not None else None))
+                                       half_seconds_left=(dr.clock - half_end if half_end is not None else None),
+                                       half_intent=getattr(dr, '_half_stall_intent', None))
             if dec == 'field_goal':
                 flag = E.special_teams_penalty_check(rng, 'field_goal')
                 if _kick_presnap_flag(dr, flag, half_end): continue
@@ -2286,7 +2295,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # real ~3.4 - and drives died four yards and a third of a first down
         # short of real. The non-nullifying fouls are held here and resolved
         # after the play, where the offence decides whether to take them.
-        # the Disciplinarian's units foul less: the offense's factor on its plays, the defense's folded in evenly
+        # Apply each staff's discipline to its own unit; crowd noise is separate.
         fx_o = getattr(off_state, 'staff_fx', None) or {}; fx_d = getattr(def_state, 'staff_fx', None) or {}
         # the defense's discipline carries its awareness: the smart unit jumps offside and grabs less
         import defense_roles as DR
@@ -2295,9 +2304,20 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                  (defense.get('lb') or [])[:_dc['lb']] +
                  (defense.get('dl') or [])[:_dc['dl']])
         d_awr = float(np.mean([rate_fn(d, {'awareness_rating': 1.0}) for d in _dmen])) if _dmen else 0.70
+        import offense_roles as OR
+        _oc = OR.PACKAGES.get(oc.get('personnel'), OR.PACKAGES['11'])
+        _omen = ([offense.get('qb')] + ([offense.get('rb')] if _oc['HB'] else [])
+                 + ((offense.get('depth') or {}).get('FB', [])[:1] if _oc['FB'] else [])
+                 + (offense.get('ol') or [])[:5]
+                 + (offense.get('wr') or [])[:_oc['WR']] + (offense.get('te') or [])[:_oc['TE']])
+        _omen = [p for p in _omen if p]
+        o_awr = float(np.mean([rate_fn(p, {'awareness_rating': 1.0}) for p in _omen])) if _omen else 0.70
         _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
-        pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'], discipline=float(np.clip(0.70 + 0.8 * (d_awr - 0.787), 0.5, 0.9)),
-                              noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0) * (0.5 * fx_o.get('pen_off', 1.0) + 0.5 * fx_d.get('pen_def', 1.0)), hurry=_in_drill)
+        pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'],
+                              offense_discipline=float(np.clip(0.70 + 0.8 * (o_awr - 0.787), 0.5, 0.9)),
+                              defense_discipline=float(np.clip(0.70 + 0.8 * (d_awr - 0.787), 0.5, 0.9)),
+                              offense_multiplier=fx_o.get('pen_off', 1.0), defense_multiplier=fx_d.get('pen_def', 1.0),
+                              noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0), hurry=_in_drill)
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
             penalty_clock = dr.clock
@@ -2500,6 +2520,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # timeout for the former offense here buys no time.
         used, used_by = (False, None) if late_penalty or _fourth_fail else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
         hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
+        if half_end is not None and getattr(dr, '_half_stall_intent', None) is not None:
+            hurry = dr._half_stall_intent == 'attack'
         before_clock = secs_in_half
         clock_before = dr.clock
         tempo = off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5

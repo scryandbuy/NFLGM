@@ -1,0 +1,67 @@
+{
+  "seed": 100131,
+  "runner_seed": 101131,
+  "games": [
+    {
+      "home": "CHI",
+      "away": "GB",
+      "home_score": 3,
+      "away_score": 7,
+      "drives": 22,
+      "penalties": {
+        "Offensive Holding": 4,
+        "False Start": 4,
+        "Defensive Too Many Men on Field": 1,
+        "Delay of Game": 1,
+        "Offensive Pass Interference": 1
+      }
+    },
+    {
+      "home": "MIN",
+      "away": "DET",
+      "home_score": 10,
+      "away_score": 24,
+      "drives": 22,
+      "penalties": {
+        "Defensive Pass Interference": 1,
+        "Illegal Block Above the Waist": 1,
+        "False Start": 1,
+        "Neutral Zone Infraction": 2,
+        "Offensive Holding": 3,
+        "Unnecessary Roughness": 1
+      }
+    },
+    {
+      "home": "DAL",
+      "away": "ARI",
+      "home_score": 34,
+      "away_score": 28,
+      "drives": 21,
+      "penalties": {
+        "Defensive Offside": 3,
+        "False Start": 4,
+        "Defensive Holding": 1,
+        "Roughing the Passer": 2,
+        "Illegal Block in Back": 1
+      }
+    },
+    {
+      "home": "HOU",
+      "away": "JAX",
+      "home_score": 0,
+      "away_score": 24,
+      "drives": 24,
+      "penalties": {
+        "Defensive Offside": 1,
+        "Offensive Holding": 4,
+        "False Start": 3,
+        "Defensive Pass Interference": 1,
+        "Neutral Zone Infraction": 1,
+        "Face Mask": 1
+      }
+    }
+  ],
+  "penalty_checks": 538,
+  "separate_unit_inputs_verified": true,
+  "limitations": "Four fresh-roster games verify runtime wiring; not a calibration sample or reproduction of the user save."
+}

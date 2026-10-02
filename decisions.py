@@ -57,9 +57,9 @@ WHAT THE RESEARCH SAYS, AND WHAT IT MEANS HERE:
   Knowing the result lets a coach set the rest of his strategy with certainty
   instead of guessing about onside kicks and field goals later.
 
-NOT MODELLED: timeouts. Every published model uses them and the engine does
-not track them, so both sides are assumed to hold all three. The feature is in
-the model and fed a constant; wiring real timeouts in later needs no refit.
+Fourth-down callers supply the current timeout advantage. Hypothetical
+possession changes reverse that advantage and home-field ownership. Scoring
+branches use a representative kickoff spot, not a simulated return.
 """
 import json
 import os
@@ -148,7 +148,7 @@ def _flip(score_diff, seconds_left, yardline_100, is_home=1, **kw):
 # ============================================================ FOURTH DOWN
 def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
                 fg_prob=None, conv_prob=None, aggression=DEFAULT_AGGRESSION,
-                recent_failure=0.0, is_home=1, timeout_edge=0):
+                recent_failure=0.0, is_home=1, timeout_edge=0, kickoff_yardline=65):
     """
     Returns the call, the win probability edge of going, and how strong the
     recommendation is.
@@ -161,8 +161,23 @@ def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
     p_conv = conv_prob if conv_prob is not None else fourth_conversion(ydstogo)
 
     # ---- go for it ----
-    wp_conv = win_prob(score_diff, seconds_left - 6, max(1, yardline_100 - ytg),
-                       1, min(10, max(1, yardline_100 - ytg)), is_home=is_home, timeout_edge=timeout_edge)
+    def after_score(points):
+        lead = score_diff + points
+        if seconds_left <= 6:
+            return 1.0 if lead > 0 else .5 if lead == 0 else 0.0
+        return _flip(lead, seconds_left - 6, 100 - kickoff_yardline,
+                     is_home=is_home, timeout_edge=-timeout_edge)
+
+    if float(ydstogo) >= float(yardline_100) - .01:
+        # A goal-line conversion scores; possession passes to the opponent.
+        two = two_point(score_diff + 6, max(0, seconds_left - 6),
+                        aggression=aggression, is_home=is_home,
+                        timeout_edge=timeout_edge, kickoff_yardline=kickoff_yardline)['call'] == 'two'
+        chance, points = (TWO_RATE, 8) if two else (XP_RATE, 7)
+        wp_conv = chance * after_score(points) + (1 - chance) * after_score(6)
+    else:
+        wp_conv = win_prob(score_diff, seconds_left - 6, max(1, yardline_100 - ytg),
+                           1, min(10, max(1, yardline_100 - ytg)), is_home=is_home, timeout_edge=timeout_edge)
     wp_fail = _flip(score_diff, seconds_left - 6, yardline_100, is_home=is_home, timeout_edge=-timeout_edge)
     wp_go = p_conv * wp_conv + (1 - p_conv) * wp_fail
 
@@ -170,7 +185,7 @@ def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
     dist = yardline_100 + 17
     if fg_prob is None:
         fg_prob = float(np.clip(1.02 - 0.0095 * max(0, dist - 20), 0.02, 0.985))
-    wp_made = _flip(score_diff + 3, seconds_left - 6, 25, is_home=is_home, timeout_edge=-timeout_edge)
+    wp_made = after_score(3)
     wp_miss = _flip(score_diff, seconds_left - 6, min(99, yardline_100 + 8),
                     is_home=is_home, timeout_edge=-timeout_edge)
     wp_fg = fg_prob * wp_made + (1 - fg_prob) * wp_miss
@@ -218,7 +233,8 @@ def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
 
 # ============================================================ THE TRY
 def two_point(score_diff_after_td, seconds_left, conv_prob=TWO_RATE,
-              xp_prob=XP_RATE, aggression=DEFAULT_AGGRESSION, is_home=1):
+              xp_prob=XP_RATE, aggression=DEFAULT_AGGRESSION, is_home=1,
+              timeout_edge=0, kickoff_yardline=65):
     """
     Kick or go, decided on win probability rather than points.
 
@@ -231,8 +247,11 @@ def two_point(score_diff_after_td, seconds_left, conv_prob=TWO_RATE,
     players so this number can be real.
     """
     def after(points):
-        return _flip(score_diff_after_td + points, max(1, seconds_left), 25,
-                     is_home=is_home)
+        lead = score_diff_after_td + points
+        if seconds_left <= 0:
+            return 1.0 if lead > 0 else .5 if lead == 0 else 0.0
+        return _flip(lead, seconds_left, 100 - kickoff_yardline,
+                     is_home=is_home, timeout_edge=-timeout_edge)
 
     wp_kick = xp_prob * after(1) + (1 - xp_prob) * after(0)
     wp_go = conv_prob * after(2) + (1 - conv_prob) * after(0)
