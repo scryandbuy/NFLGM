@@ -443,7 +443,14 @@ def cap(session, league, abbr):
         try: tag_rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), price=round(TGS.tag_price(p, CAP.get(league.year, 301.2)), 1)))
         except Exception: continue
     void_carried = round(sum(p.contract.remaining_proration(p.contract.years) for p in t.roster if p.contract and getattr(p.contract, 'void', 0)), 1)
-    return dict(rail=rail(session, league, abbr), years=years, rows=rows, cap_space=years[0]['space'], dead_rows=dead_rows, dead_total=years[0]['dead'], dead_next=years[1]['dead'], largest=largest,
+    # Outstanding FA offers reserve room without becoming signed cap charges.
+    # Use the same available figure as the header, and show the hold separately.
+    from views import cap_focus
+    focus = cap_focus(league, t)
+    years[0]['unreserved_space'] = years[0]['space']
+    years[0]['pending_offers'] = focus['pending_offers']
+    years[0]['space'] = focus['space']
+    return dict(rail=rail(session, league, abbr), years=years, rows=rows, cap_space=focus['space'], pending_offers=focus['pending_offers'], dead_rows=dead_rows, dead_total=years[0]['dead'], dead_next=years[1]['dead'], largest=largest,
                 top51=(not offset and t.phase in __import__('cap_engine').TOP_51_PHASES), pre_roll=bool(offset), tag_year=league.year+1, tags=tag_rows[:4], void_carried=void_carried,
                 june1_rule='Every cut and trade in the offseason is treated as post-June 1: this year\'s proration stays on this year\'s books and the rest lands next year. In season, everything accelerates now.')
 

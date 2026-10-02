@@ -1,12 +1,14 @@
 """Pending free-agent bids affect available room without becoming contracts."""
 
 import unittest
+from unittest.mock import patch
 from league import League
 from gm_engine import GM
 from test_cap_accounting import fixture, player
 import offer_reservations as OR
 import market as MK
 import views_personnel as VP
+import views_frontoffice as VF
 from views import cap_focus, next_year_cap
 
 
@@ -37,6 +39,16 @@ class OfferReservationTests(unittest.TestCase):
         self.assertEqual(OR.held(self.league, 'GB'), 0)
         self.thread['state'] = 'declined'
         self.assertEqual(OR.held(self.league, 'GB'), 0)
+
+    def test_cap_tab_matches_header_and_shows_the_offer_hold(self):
+        with patch.object(VF, 'rail', return_value={}):
+            tab = VF.cap(None, self.league, 'GB')
+        focus = cap_focus(self.league, self.team)
+        first = tab['years'][0]
+        self.assertEqual(tab['cap_space'], focus['space'])
+        self.assertEqual(first['space'], focus['space'])
+        self.assertEqual(first['pending_offers'], focus['pending_offers'])
+        self.assertAlmostEqual(first['unreserved_space'] - first['pending_offers'], first['space'], places=1)
 
     def test_new_offer_cannot_spend_money_held_for_another_player(self):
         second = dict(id=2, pid=self.other.pid, team='GB', kind='fa_offseason',
