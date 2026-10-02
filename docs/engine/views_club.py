@@ -433,16 +433,24 @@ def _player_history(league, p):
             # The saved report is the Regression tab's source of truth. CPU
             # players also carry the same before/after snapshots on their event.
             before, after = report.get('before', x.get('before')), report.get('after', x.get('after'))
-            if _regression_overalls(dict(before=before, after=after)) is None:
+            overalls = _regression_overalls(dict(before=before, after=after))
+            if overalls is None:
                 continue
-            line = f"Regression: -{float(x.get('lost', 0)):g} OVR"
-            if before is not None and after is not None:
-                line += f" ({float(before):g} → {float(after):g})"
-            for attr, (b, a) in (x.get('attrs', report.get('attrs', {})) or {}).items():
-                delta = round(float(a) - float(b), 1)
-                if delta:
-                    label = attr.replace('_rating', '').replace('_', ' ').title()
-                    line += f" · {label} {delta:+g}"
+            before, after = overalls
+            line = f"Regression: {after-before:+d} OVR ({before} → {after})"
+            # Reuse the report/card's position-specific columns and displayed
+            # whole-rating changes, including when reading older saved events.
+            # Historical position takes priority over a later position change.
+            from types import SimpleNamespace
+            attrs = report.get('attrs', x.get('attrs', {})) or {}
+            historical = SimpleNamespace(pos=report.get('pos', x.get('pos', p.pos)),
+                                         ratings={k: a for k, (b, a) in attrs.items()})
+            delta = {k: int(round(a)) - int(round(b)) for k, (b, a) in attrs.items()}
+            for col in attr_cols(historical, delta=delta):
+                for group in (col, col.get('extra') or {}):
+                    for row in group.get('rows', []):
+                        if row.get('delta'):
+                            line += f" · {row['label']} {row['delta']:+d}"
             add(year, 24, f"{year} · Offseason", line)
             continue
         if x.get('kind') not in VL.TAGS: continue
