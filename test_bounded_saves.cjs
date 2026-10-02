@@ -1,0 +1,43 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('docs/app.js','utf8');
+const writes=[],transactions=[],stored=new Map();let closes=0;
+const context={idb:async()=>({close(){closes++;},transaction(){
+  const ops=[];
+  const tx={objectStore:()=>({put(value,key){ops.push(()=>stored.set(key,value));writes.push([key,value]);},delete(key){ops.push(()=>stored.delete(key));}}),
+    complete(){ops.forEach(fn=>fn());this.oncomplete();},fail(){this.error=Error('disk full');this.onabort();}};
+  transactions.push(tx);return tx;
+}})};
+vm.createContext(context);
+vm.runInContext(source.slice(source.indexOf('let saveWriting'),source.indexOf('function saveGame(')),context);
+const tick=()=>new Promise(r=>setImmediate(r));
+(async()=>{
+  const done=[];
+  const request=(kind,value)=>{const p=context.queueSave(kind,value);p.then(()=>done.push(value),()=>{});return p;};
+  const first=request('full','base');await tick();
+  const requests=[];
+  for(let i=0;i<1000;i++)requests.push(request('full',`xp-${i}`));
+  assert.equal(vm.runInContext('pendingSaves.length',context),1);
+  assert.equal(writes.length,1,'slow disk must not start overlapping writes');
+  assert.equal(done.length,0,'superseded requests cannot resolve before durability');
+  requests.push(request('journal','live-1'),request('journal','live-2'));
+  assert.equal(vm.runInContext('pendingSaves.length',context),2);
+  transactions.shift().complete();await tick();await first;
+  assert.equal(writes.at(-1)[1],'xp-999');
+  transactions.shift().complete();await tick();
+  assert.equal(writes.at(-1)[1],'live-2');
+  transactions.shift().complete();await Promise.all(requests);await tick();
+  assert.equal(stored.get('main'),'xp-999');assert.equal(stored.get('live_journal'),'live-2');
+  assert.equal(done.length,1003);assert.equal(closes,3);
+  const active=request('journal','old-live');await tick();
+  const discarded=request('journal','discarded'),replacement=request('full','new-season');
+  transactions.shift().complete();await tick();transactions.shift().complete();
+  await Promise.all([active,discarded,replacement]);
+  assert.equal(stored.get('main'),'new-season');assert.equal(stored.has('live_journal'),false);
+  const failed=request('full','bad'),orphan=request('journal','orphan');await tick();
+  const checked=Promise.all([assert.rejects(failed,/disk full/),assert.rejects(orphan,/disk full/)]);
+  transactions.shift().fail();await checked;await tick();
+  assert.equal(stored.get('main'),'new-season');assert.equal(transactions.length,0);
+  const retry=request('full','recovered');await tick();transactions.shift().complete();await retry;
+  assert.equal(stored.get('main'),'recovered');
+  console.log('Bounded saves: 1,000 queued XP requests, correct full/journal order, durability, failure and retry passed.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

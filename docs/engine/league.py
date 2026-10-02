@@ -55,6 +55,26 @@ PHASES = ('preseason', 'regular', 'playoffs', 'offseason', 'free_agency',
 
 
 # ================================================================== PLAYER
+def compact_game_line(line):
+    """Omitted numeric per-game counters mean zero; keep metadata and evidence.
+
+    def_plays=0 is retained because the legacy rush repair distinguishes a
+    recorded zero from an unavailable opportunity count.
+    """
+    return {k: v for k, v in line.items()
+            if k == 'def_plays' or not isinstance(v, (int, float, np.number))
+            or isinstance(v, (bool, np.bool_)) or v != 0}
+
+
+def compact_game_stats(games):
+    # Replace rows: deleting keys alone leaves their dict capacity allocated.
+    # Process one row at a time rather than copying the entire archive.
+    for book in games.values():
+        for pid, line in book.items():
+            book[pid] = compact_game_line(line)
+    return games
+
+
 class Player:
     """
     One man, for his whole career.
@@ -613,7 +633,10 @@ class League:
                 g['team'] = player.team
                 g['pos'] = player.pos
             for k, v in line.items():
-                if isinstance(v, (int, float)): g[k] = g.get(k, 0) + v
+                if isinstance(v, (int, float)):
+                    total = g.get(k, 0) + v
+                    if total != 0 or k == 'def_plays': g[k] = total
+                    else: g.pop(k, None)
         store = self.post_stats if postseason else self.stats
         store.setdefault(season, {}).setdefault(pid, {})
         book = store[season][pid]
@@ -1158,7 +1181,7 @@ class League:
         L.schedule = [tuple(g) for g in d['schedule']]
         L.stats = {int(k): v for k, v in d['stats'].items()}
         L.post_stats = {int(k): v for k, v in (d.get('post_stats') or {}).items()}
-        L.game_stats = d.get('game_stats') or {}
+        L.game_stats = compact_game_stats(d.get('game_stats') or {})
         L.team_game_stats = d.get('team_game_stats') or {}
         L.standings_history = {int(k): v for k, v
                                in d['standings_history'].items()}

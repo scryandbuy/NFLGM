@@ -177,23 +177,48 @@ async function newGame(abbr) {
 
 // ---------------------------------------------------------------- save / load (IndexedDB)
 function idb() { return new Promise((res, rej) => { const r = indexedDB.open('nflgm', 1); r.onupgradeneeded = () => r.result.createObjectStore('saves'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
-let saveQueue = Promise.resolve();
+let saveWriting = false;
+let pendingSaves = [];
 function queueSave(kind, value) {
-  const write = async () => {
-    const db = await idb();
+  // One active write, latest full snapshot, and at most its following journal.
+  // Superseded callers wait until their replacement is safely written.
+  return new Promise((resolve, reject) => {
+    const replaced = kind === 'full' ? pendingSaves.splice(0) :
+      pendingSaves.at(-1)?.kind === 'journal' ? pendingSaves.splice(-1) : [];
+    const waiters = replaced.flatMap(item => item.waiters);
+    waiters.push({resolve, reject});
+    pendingSaves.push({kind, value, waiters});
+    void drainSaves();
+  });
+}
+async function drainSaves() {
+  if (saveWriting) return;
+  saveWriting = true;
+  while (pendingSaves.length) {
+    const item = pendingSaves.shift();
     try {
-      await new Promise((res, rej) => {
-        const tx = db.transaction('saves', 'readwrite');
-        const saves = tx.objectStore('saves');
-        if (kind === 'full') { saves.put(value, 'main'); saves.delete('live_journal'); }
-        else saves.put(value, 'live_journal');
-        tx.oncomplete = res; tx.onerror = () => rej(tx.error);
-      });
-    } finally { db.close(); }
-  };
-  const pending = saveQueue.then(write, write);
-  saveQueue = pending.catch(() => {});
-  return pending;
+      const db = await idb();
+      try {
+        await new Promise((res, rej) => {
+          const tx = db.transaction('saves', 'readwrite');
+          const saves = tx.objectStore('saves');
+          if (item.kind === 'full') { saves.put(item.value, 'main'); saves.delete('live_journal'); }
+          else saves.put(item.value, 'live_journal');
+          item.value = null; // IndexedDB has cloned it; release our reference.
+          tx.oncomplete = res;
+          tx.onerror = tx.onabort = () => rej(tx.error || new Error('Save transaction aborted'));
+        });
+      } finally { db.close(); }
+      item.waiters.forEach(w => w.resolve());
+    } catch (error) {
+      item.waiters.forEach(w => w.reject(error));
+      // Never attach a journal to the wrong full save after a failed write.
+      if (item.kind === 'full' && pendingSaves[0]?.kind === 'journal') {
+        pendingSaves.shift().waiters.forEach(w => w.reject(error));
+      }
+    } finally { item.value = null; }
+  }
+  saveWriting = false;
 }
 function saveGame(silent = false) {
   autosaveQueued = false;
@@ -1285,15 +1310,39 @@ function renderProgression(v) {
   const page = $('#page'); page.innerHTML = ''; page.className = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
   $('#crumb').textContent = 'Team'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
   secondRow(clubNav(v.rail.club.abbr, true, null), '#club/progression');
-  const reload = () => renderProgression(pyJSON('SESSION.progression()'));
+  const rowNodes = new Map(), rowData = new Map();
+  const reload = () => {
+    v = pyJSON('SESSION.progression()');
+    const metrics = s.querySelectorAll('.report-metrics b');
+    metrics[0].textContent = v.bank_total.toLocaleString();
+    metrics[1].textContent = v.idle;
+    const auto = s.querySelector('.report-controls button');
+    auto.textContent = v.auto_all ? 'Auto-Spend: On for All' : 'Turn Auto-Spend On for All';
+    auto.className = 'btn' + (v.auto_all ? ' go' : '');
+    for (const r of v.rows) {
+      const key = JSON.stringify(r);
+      if (key === rowData.get(r.pid)) continue;
+      const row = drawRow(r), old = rowNodes.get(r.pid);
+      if (old) old.replaceWith(row); else t.append(row);
+      rowNodes.set(r.pid, row); rowData.set(r.pid, key);
+    }
+    const present = new Set(v.rows.map(r => r.pid));
+    for (const [pid, row] of rowNodes) if (!present.has(pid)) {
+      row.remove(); rowNodes.delete(pid); rowData.delete(pid);
+    }
+    queueCeilingNoticeCheck();
+  };
   const s = reportBoard(v.rail.club, 'PROGRESSION', [[v.bank_total.toLocaleString(), 'XP BANKED'], [v.idle, 'READY TO SPEND']]);
   s.append(el('div', { class: 'tools report-controls' }, el('button', { class: 'btn' + (v.auto_all ? ' go' : ''), 'data-tip': 'Every player, spent weekly by the assistants', onclick: () => { notify(pyJSON(`SESSION.club_act('auto_xp', on=${v.auto_all ? 'False' : 'True'})`)); reload(); } }, v.auto_all ? 'Auto-Spend: On for All' : 'Turn Auto-Spend On for All'),
     el('button', { class: 'btn', 'data-tip': 'Spend every bank now, once', onclick: () => { const r = pyJSON(`SESSION.club_act('spend_by_read')`); if (!r.ok) notify(r); reload(); } }, 'Spend All by Read'),
     el('span', { class: 'count', style: 'margin-left:auto' }, 'Open a player for his Development tab')));
   const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Age'), el('th', { class: 'n' }, 'Ovr'), el('th', { class: 'n' }, 'Ceiling'), el('th', { class: 'n', 'data-tip': 'Remaining overall growth; shown as a range when the ceiling is uncertain' }, 'Room'), el('th', { class: 'n' }, 'XP Banked'), el('th', { class: 'n', 'data-tip': 'The cheapest next point' }, 'Next Point'), el('th', { class: 'n' }, 'Bought This Year'), el('th', {}, 'Auto'), el('th', {}, '')));
-  for (const r of v.rows) t.append(el('tr', { class: r.can_buy && !r.auto ? 'report-ready' : '' }, el('td', {}, el('button', { class: 'who', onclick: () => { openPlayer(r.pid, 'Development'); } }, el('div', { class: 'no' }, r.no ?? r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `earning ${r.dev} · ${r.career} bought in his career`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.ceiling ?? '—'), el('td', { class: 'n' }, r.room != null ? r.room : '—'), el('td', { class: 'n' }, r.bank.toLocaleString()), el('td', { class: 'n' }, r.cheapest ? r.cheapest.toLocaleString() : '—'), el('td', { class: 'n' }, r.bought),
+  const drawRow = r => el('tr', { class: r.can_buy && !r.auto ? 'report-ready' : '' }, el('td', {}, el('button', { class: 'who', onclick: () => { openPlayer(r.pid, 'Development'); } }, el('div', { class: 'no' }, r.no ?? r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `earning ${r.dev} · ${r.career} bought in his career`)))), el('td', {}, r.pos), el('td', { class: 'n' }, r.age), el('td', { class: 'n' }, ovrCell(r.ovr)), el('td', { class: 'n' }, r.ceiling ?? '—'), el('td', { class: 'n' }, r.room != null ? r.room : '—'), el('td', { class: 'n' }, r.bank.toLocaleString()), el('td', { class: 'n' }, r.cheapest ? r.cheapest.toLocaleString() : '—'), el('td', { class: 'n' }, r.bought),
     el('td', {}, el('button', { class: 'btn' + (r.auto ? ' go' : ' quiet'), style: 'padding:3px 8px;font-size:13px', onclick: () => { pyJSON(`SESSION.club_act('auto_xp', pid=${JSON.stringify(r.pid)}, on=${r.auto ? 'False' : 'True'})`); reload(); } }, r.auto ? 'On' : 'Off')),
-    el('td', {}, el('button', { class: 'btn', style: 'padding:3px 8px;font-size:13px', disabled: r.can_buy ? null : '', 'data-tip': 'Spend his bank now by the read', onclick: () => { const result = pyJSON(`SESSION.club_act('spend_by_read', pid=${JSON.stringify(r.pid)})`); if (!result.ok) notify(result); reload(); } }, 'Spend'))));
+    el('td', {}, el('button', { class: 'btn', style: 'padding:3px 8px;font-size:13px', disabled: r.can_buy ? null : '', 'data-tip': 'Spend his bank now by the read', onclick: () => { const result = pyJSON(`SESSION.club_act('spend_by_read', pid=${JSON.stringify(r.pid)})`); if (!result.ok) notify(result); reload(); } }, 'Spend')));
+  for (const r of v.rows) {
+    const row = drawRow(r); rowNodes.set(r.pid, row); rowData.set(r.pid, JSON.stringify(r)); t.append(row);
+  }
   s.append(el('div', { class: 'report-table-scroll' }, t)); page.append(s);
 }
 
@@ -3626,6 +3675,7 @@ async function advanceInner() {
     entering = true; updateBootActions();
     try { await newGame(team); }
     catch (e) { entering = false; updateBootActions(); say('Could not start the franchise. Try again. ' + e); return; }
+    saved = {text: null};
     $('#boot').remove(); bootHash(); refresh(); await saveGameNotified();
   };
   $('#resume').onclick = async () => {
@@ -3644,11 +3694,14 @@ async function advanceInner() {
         py.runPython(`SESSION = S.Session.load(_SAVE)`);
       }
     }
+    saved = {text: null};
     $('#boot').remove(); bootHash(); refresh();
     if (journalError) notify({ ok: false, why: 'The latest live plays could not be restored. Your last full save was loaded.' });
     } catch (e) {
       if (!$('#boot')) throw e;
       entering = false; updateBootActions(); say('Could not load this save. You can retry or choose a team to start a new franchise. ' + e);
+    } finally {
+      py.globals.delete('_SAVE'); py.globals.delete('_LIVE_JOURNAL');
     }
   };
   $('#advance').onclick = advance;
@@ -3663,10 +3716,10 @@ async function advanceInner() {
   $('#import').onclick = () => { if (gameplanUnsaved() || gameplanSaving) { warnUnsavedGameplan(); return; } $('#importfile').click(); };
   $('#importfile').onchange = async e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
-    const text = await f.text();
-    try { py.globals.set('_import_text', text); py.runPython(`import session as S\nSESSION = S.Session.load(_import_text)`); await saveGame(); bootHash(); refresh(); notify({ ok: true, line: 'Save loaded.' }); }
+    let text = await f.text();
+    try { py.globals.set('_import_text', text); py.runPython(`import session as S\nSESSION = S.Session.load(_import_text)`); saved = {text: null}; py.globals.delete('_import_text'); text = null; await saveGame(); bootHash(); refresh(); notify({ ok: true, line: 'Save loaded.' }); }
     catch (err) { notify({ ok: false, why: 'That file could not be loaded as a save.' }); }
-    e.target.value = '';
+    finally { py.globals.delete('_import_text'); text = null; e.target.value = ''; }
   };
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }

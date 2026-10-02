@@ -154,7 +154,7 @@ class CoverageRecordingTests(unittest.TestCase):
         for row in (restored.stats[2027]['CB'], restored.game_stats['2027-8-GB-DAL']['CB'],
                     restored.players['CB'].career[2027]):
             for metric in METRICS:
-                self.assertEqual(row['cov_man_short_'+metric], b.p['CB']['cov_man_short_'+metric])
+                self.assertEqual(row.get('cov_man_short_'+metric, 0), b.p['CB']['cov_man_short_'+metric])
             self.assertEqual(row['cov_outside_snaps'], 1)
 
     def test_seeded_fronts_packages_and_calls_keep_rng_and_outcomes(self):
