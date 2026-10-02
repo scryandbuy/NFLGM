@@ -1585,19 +1585,20 @@ function offerForm(t, kind, onDone, preset) {
   const apy = { get value() { return String(apyOf()); } };
   const yrs = el('input', { type: 'number', min: '1', max: '7', value: String(start.years || t.years || 3) });
   const bonus = el('input', { type: 'number', step: '0.5', min: '0', value: start.bonus != null ? String(start.bonus) : String(Math.round((t.ask || 1) * (t.years || 3) * 0.3 * 2) / 2) });
-  const shapeChips = el('div', { class: 'chips' }); let shape = 0.5;
+  const shapeChips = el('div', { class: 'chips' }); let shape = start.front_load == null ? 0.5 : +start.front_load;
   for (const [val, label] of [[0.85, 'Pay It Now'], [0.5, 'League Shape'], [0.15, 'Back-Load']]) shapeChips.append(el('button', { class: 'chip', 'aria-pressed': String(val === shape), onclick: e => { shape = val; shapeChips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); preview(); } }, label));
   const y1 = el('b', {}, '—'), total = el('b', {}, '—'); const hitsRow = el('div', { class: 'hits' }); const yearHits = el('div', { class: 'offer year-hits' });
   const capImpact = el('div', { class: 'extension-impact-slot', 'aria-live': 'polite', hidden: true });
   const preview = () => {
-    const r = pyJSON(`SESSION.personnel_act('offer_preview', pid=${JSON.stringify(t.pid)}, apy=${+apy.value || 0}, years=${+yrs.value || 1}, bonus=${+bonus.value || 0}, front_load=${shape})`);
-    if (!r.ok) { capImpact.hidden = false; capImpact.replaceChildren(el('p', {}, r.why || 'Cap preview unavailable for these terms.')); yearHits.replaceChildren(); hitsRow.replaceChildren(); return; }
+    const r = pyJSON(`SESSION.personnel_act('offer_preview', pid=${JSON.stringify(t.pid)}, apy=${+apy.value || 0}, years=${+yrs.value || 1}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`);
+    if (!r.ok) { interest.textContent = ''; capImpact.hidden = false; capImpact.replaceChildren(el('p', {}, r.why || 'Cap preview unavailable for these terms.')); yearHits.replaceChildren(); hitsRow.replaceChildren(); return; }
     y1.textContent = r.year1 != null ? `$${r.year1.toFixed(1)}m` : '—';
     total.textContent = `$${r.total}m`;
     const sy = f.querySelector('.summary-years'), sa = f.querySelector('.summary-apy');
     if (sy) sy.textContent = String(+yrs.value || 1);
     if (sa) sa.textContent = `$${apyOf().toFixed(1)}m`;
     { const s_ = +salary.value || 0, b = +bonus.value || 0, n = Math.max(1, +yrs.value || 1); breakdown.textContent = `${n} year${n === 1 ? '' : 's'} · $${s_.toFixed(1)}m salary + $${b.toFixed(1)}m signing bonus = $${apyOf().toFixed(1)}m a year, $${(s_ * n + b).toFixed(1)}m annualized total`; if (r.extension) breakdown.textContent += ` · ${r.existing_years} existing year${r.existing_years === 1 ? '' : 's'} retained; cap impact includes the existing deal and extension`; if (r.prorated) breakdown.textContent = `${n === 1 ? 'Remainder of this season' : n + ' seasons'} · $${apyOf().toFixed(1)}m annual rate · $${r.cash_this_season.toFixed(2)}m cash this season (including signing bonus) · $${r.year1.toFixed(2)}m current cap hit`; }
+    interest.textContent = r.interest ? [r.interest.interest, ...(r.interest.reasons || [])].join(' | ') : '';
     capImpact.hidden = !r.extension;
     capImpact.replaceChildren(...(r.extension ? [extensionImpact(r)] : []));
     const visibleHits = r.hits.map((hit, i) => ({ hit, year: r.years[i], void: r.years[i] === r.expiry_year }));
@@ -1607,9 +1608,11 @@ function offerForm(t, kind, onDone, preset) {
     hitsRow.innerHTML = ''; visibleHits.forEach(x => hitsRow.append(el('div', { class: 'hit' }, el('div', { class: 'hbar' }, el('i', { style: `height:${Math.min(100, x.hit / highestHit * 100)}%` })), el('span', {}, `${x.void ? 'Void charge · ' : ''}${x.year}`), el('b', {}, `$${x.hit.toFixed(1)}m`))));
   };
   salary.onchange = yrs.onchange = bonus.onchange = preview; salary.oninput = yrs.oninput = bonus.oninput = preview;
-  const promises = el('div', { class: 'promise' }, el('span', {}, 'Promise:')); const chosen = [];
-  for (const [k, l] of [['starting_role', 'Named the Starter'], ['captaincy', 'Captaincy'], ['no_trade', 'No Trade'], ['extension_by', 'Extension by a Set Year'], ['no_tag', 'No Franchise Tag']]) promises.append(el('button', { class: 'btn quiet', style: 'padding:2px 8px;font-size:14px', 'aria-pressed': 'false', onclick: e => { const i = chosen.indexOf(k); if (i < 0) chosen.push(k); else chosen.splice(i, 1); e.currentTarget.setAttribute('aria-pressed', String(i < 0)); } }, l));
+  const promises = el('div', { class: 'promise' }, el('span', {}, 'Promise:')); const chosen = [...(start.promises || [])];
+  for (const [k, l] of [['starting_role', 'Named the Starter'], ['captaincy', 'Captaincy'], ['no_trade', 'No Trade'], ['extension_by', 'Extension by a Set Year'], ['no_franchise', 'No Franchise Tag']]) promises.append(el('button', { class: 'btn quiet', style: 'padding:2px 8px;font-size:14px', 'aria-pressed': String(chosen.includes(k)), onclick: e => { const i = chosen.indexOf(k); if (i < 0) chosen.push(k); else chosen.splice(i, 1); e.currentTarget.setAttribute('aria-pressed', String(i < 0)); preview(); } }, l));
   const breakdown = el('div', { class: 'count', style: 'padding:0 0 6px' });
+  const interest = el('div', { class: 'count offer-interest', 'aria-live': 'polite' });
+  f.append(interest);
   f.append(
     el('div', { class: 'offer-summary' },
       el('div', {}, el('span', {}, kind === 'extension' ? 'Added years' : 'Years'), el('b', { class: 'summary-years' }, String(start.years || t.years || 3))),

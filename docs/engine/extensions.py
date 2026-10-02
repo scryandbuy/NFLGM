@@ -167,23 +167,23 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
     if tm is None:
         return dict(result='refused', why='no market read on him')
     floor = tm['ask'] * (1.0 - tm['discount'])
-    # the shape: a steep back-load raises what he will take by up to ~6%, a
-    # front-loaded deal lowers it a little (negotiation_engine has the same view)
-    if front_load is not None:
-        import personality as PT
-        fp = (getattr(p, 'traits', None) or {}).get('financial_priority', 50) / 100.0
-        floor *= 1.0 + (0.5 - float(front_load)) * 0.12 * (0.7 + 0.6 * fp)
     if getattr(p, 'morale', None) is not None:
         import morale_system as MS
         ne = MS.negotiation_effect(p.morale)
         floor *= 1.0 + ne['demand_premium']
         if not ne['will_discount']: floor = max(floor, tm['ask'] * (1.0 + ne['demand_premium']) * (1.0 - 0.02))
     team = league.teams[p.team]
-    floor *= CT.term_premium(years, tm['years'])
+    import contract_offer as CO
+    try:
+        package = CO.canonical(league, p, team, dict(apy=apy, years=years, bonus=bonus, front_load=front_load), 'extension')
+        assessment = CO.assess(league, p, team, package, floor, tm['years'], 'extension')
+    except (TypeError, ValueError) as exc:
+        return dict(result='refused', why=str(exc))
+    bonus, front_load = package['bonus'], package['front_load']
     # a number the agent has already agreed to in talks is not re-priced here: the negotiation set the
     # floor with the same morale and shape terms, and a second floor that disagreed by a few cents made
     # an agreed deal 'fall through' and left the thread failing every week
-    if not agreed and apy + 1e-9 < floor * 0.97:
+    if not agreed and not assessment['acceptable']:
         counter = round(floor, 2)
         return dict(result='countered', ask=counter, years=tm['years'], why=f"his agent wants ${counter}m a year over {tm['years']} years")
     if years < 1:
@@ -199,6 +199,7 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
         require_room(league, team, p.pid, c)
     except ValueError as e: return dict(result='refused', why=str(e))
     p.contract = c
+    CO.remember(league, p, c, apy, tm['ask'])
     team.sync_cap()
     MO.shock(league, pid, 'extension_signed')
     if MO.wants_out(p) and p.xp_spent['_request'].get('reason') == 'contract':
@@ -227,8 +228,10 @@ def can_afford_extension(league, team, player, apy, years):
     """
     cap = CAP.get(league.year, 301.2)
     try:
+        import contract_offer as CO
+        offer = CO.canonical(league, player, team, dict(apy=apy, years=years), 'extension')
         preview = build(player, years, apy, cap, team.gm, league,
-                        front_load=CS.choose_shape(team, years))
+                        front_load=offer['front_load'], bonus=offer['bonus'])
     except ValueError:
         return False
     from cap_accounting import next_year_ledger

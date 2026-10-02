@@ -434,17 +434,27 @@ def _thread(league, t):
                 agent_line=f"The agent is {temper} and {pat_word}. He answers {answers}.")
 
 
-def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None):
+def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None, promises=()):
     """What an offer would cost by year: the cap hit each season, the year-one hit, the total."""
     from cap_engine import CAP
     p = league.player(pid); t = league.teams[abbr]
     if p is None: return dict(ok=False, why='no such player')
+    import contract_offer as CO, negotiations as NG
+    thread = NG.open_for(league, pid)
+    kind = thread['kind'] if thread else ('extension' if p.team == abbr and p.contract else 'fa_offseason')
+    try:
+        package = CO.canonical(league, p, t, dict(apy=apy, years=years, bonus=bonus, front_load=front_load, promises=list(promises)), kind)
+        bonus, front_load = package['bonus'], package['front_load']
+        interest = NG._assessment(league, p, thread, package) if thread and thread.get('ask') and thread.get('years') else None
+        interest = ({k: interest[k] for k in ('acceptable', 'ratio', 'interest', 'reasons')} if interest else None)
+    except (TypeError, ValueError, OverflowError) as exc:
+        return dict(ok=False, why=str(exc))
     import practice_squad as PS
     if p.contract is None or (p.team in league.teams and p in PS.squad(league.teams[p.team])):
         import market as MK
         d = MK.signing_terms(league, p, t, float(apy), int(years), CAP.get(league.year, 301.2), float(front_load) if front_load is not None else None, bonus)
         hits = d['cap_hits']
-        return dict(ok=True, hits=hits, years=[d['start_year'] + i for i in range(int(years))], total=round(d['total'], 2), year1=hits[0], cash_this_season=round(d['cash_this_season'], 2), prorated=d['fraction'] < 1, annual_apy=float(apy), dead_if_cut=[])
+        return dict(ok=True, interest=interest, bonus=bonus, front_load=front_load, hits=hits, years=[d['start_year'] + i for i in range(int(years))], total=round(d['total'], 2), year1=hits[0], cash_this_season=round(d['cash_this_season'], 2), prorated=d['fraction'] < 1, annual_apy=float(apy), dead_if_cut=[])
     import extensions as EXT
     try:
         c = EXT.build(p, int(years), float(apy), CAP.get(league.year, 301.2), t.gm, league,
@@ -461,7 +471,7 @@ def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None
     impact = [dict(year=league.year+i, existing=round(charge(p.contract, i), 3),
                    change=round(charge(c, i)-charge(p.contract, i), 3),
                    total=round(charge(c, i), 3)) for i in range(len(hits))]
-    return dict(ok=True, extension=True, existing_years=p.contract.years,
+    return dict(ok=True, interest=interest, bonus=bonus, front_load=front_load, extension=True, existing_years=p.contract.years,
                 hits=hits, years=[league.year + i for i in range(len(hits))],
                 expiry_year=league.year + c.years if expiry else None,
                 total=round(float(apy) * int(years), 2), year1=hits[0], cap_impact=impact,
@@ -493,7 +503,7 @@ def act_match(league, abbr, tid):
         return dict(ok=False, why='no such negotiation')
     rival = thread.get('rival') or {}
     if thread.get('state') == 'match_requested' and rival:
-        why = check_offer(league, abbr, thread, rival['apy'], rival['years'], front_load=0.5)
+        why = check_offer(league, abbr, thread, rival['apy'], rival['years'], bonus=rival.get('bonus'), front_load=rival.get('front_load'))
         if why:
             return dict(ok=False, why=why)
     return NG.match(league, tid)

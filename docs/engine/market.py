@@ -74,25 +74,26 @@ OFFER_SHEETS_A_YEAR = 3            # the real league sees a few; every tendered 
 
 
 class Offer:
-    __slots__ = ('team', 'pid', 'apy', 'years', 'promises', 'phase', 'front_load', 'planning_gain')
+    __slots__ = ('team', 'pid', 'apy', 'years', 'promises', 'phase', 'front_load', 'planning_gain', 'bonus')
 
-    def __init__(self, team, pid, apy, years=3, promises=(), phase=1, front_load=None, planning_gain=None):
+    def __init__(self, team, pid, apy, years=3, promises=(), phase=1, front_load=None, planning_gain=None, bonus=None):
         self.team, self.pid = team, pid
         self.apy, self.years = float(apy), int(years)
         self.promises = list(promises)
         self.phase = phase
         self.front_load = front_load          # 0 back-loaded .. 1 front-loaded; None = the club's habit
         self.planning_gain = planning_gain    # roster value when this CPU bid was priced
+        self.bonus = bonus
 
     def as_dict(self):
-        return dict(apy=self.apy, years=self.years, promises=self.promises, front_load=self.front_load)
+        return dict(apy=self.apy, years=self.years, promises=list(self.promises), front_load=self.front_load, bonus=self.bonus)
 
     def to_save(self):
-        return dict(team=self.team, pid=self.pid, apy=self.apy, years=self.years, promises=list(self.promises), phase=self.phase, front_load=self.front_load, planning_gain=self.planning_gain)
+        return dict(team=self.team, pid=self.pid, apy=self.apy, years=self.years, promises=list(self.promises), phase=self.phase, front_load=self.front_load, planning_gain=self.planning_gain, bonus=self.bonus)
 
     @classmethod
     def from_save(cls, d):
-        return cls(d['team'], d['pid'], d['apy'], d.get('years', 3), d.get('promises', ()), d.get('phase', 1), d.get('front_load'), d.get('planning_gain'))
+        return cls(d['team'], d['pid'], d['apy'], d.get('years', 3), d.get('promises', ()), d.get('phase', 1), d.get('front_load'), d.get('planning_gain'), d.get('bonus'))
 
     def total(self):
         return self.apy * self.years
@@ -119,18 +120,8 @@ def team_context(league, team, player):
 def profile_for(league, player, rng):
     """His hidden weights. Drawn once and kept, so he is the same man in
     phase three as he was in phase one."""
-    if player.morale is None:
-        pass
-    key = getattr(player, '_fa_profile', None)
-    if key is not None:
-        return key
-    row = dict(age=player.age, ovr=player.ovr, madden_position=player.pos)
-    prof = NE.make_profile(row, rng)
-    try:
-        player._fa_profile = prof
-    except AttributeError:
-        pass
-    return prof
+    import contract_offer as CO
+    return CO.profile_for(player)
 
 
 def utility_of(league, player, offer, prof, market_apy, preferred_term=None):
@@ -140,7 +131,14 @@ def utility_of(league, player, offer, prof, market_apy, preferred_term=None):
     row = dict(age=player.age, ovr=player.ovr, madden_position=player.pos,
                financial_priority=(getattr(player, 'traits', None) or {}).get('financial_priority', 50))
     row['preferred_years'] = preferred_term or preferred_years(player, league.year, market_apy, CAP.get(league.year, 301.2))
-    u = NE.utility(offer.as_dict(), row, prof, ctx, market_apy)
+    import contract_offer as CO
+    freeze_offer(league, player, offer)
+    evaluation = CO.assess(league, player, team, offer.as_dict(), market_apy, row['preferred_years'], profile=prof)
+    # Preserve winning/role/home/tax/promises; replace BOTH old money and term
+    # components with the same package valuation used by negotiations.
+    neutral = dict(apy=market_apy, years=row['preferred_years'], promises=list(offer.promises))
+    u = NE.utility(neutral, row, prof, ctx, market_apy) - prof['w']['total'] - prof['w']['years']
+    u += prof['w']['total'] * evaluation['ratio'] + prof['w']['years']
     # the contender thumb: small, and only sometimes
     u += CONTENDER_DISCOUNT * ctx['contender'] * prof['w'].get('winning', 0.1) * 3.0
     # loyalty: his own club's offer gets a thumb on the scale; a mercenary's does not
@@ -148,6 +146,31 @@ def utility_of(league, player, offer, prof, market_apy, preferred_term=None):
     if getattr(player, 'last_team', None) == offer.team:
         u *= 1.0 + PT.own_club_bonus(player)
     return u
+
+
+def freeze_offer(league, player, offer):
+    import contract_offer as CO
+    package = CO.canonical(league, player, league.teams[offer.team], offer.as_dict())
+    offer.bonus, offer.front_load = package['bonus'], package['front_load']
+    return offer
+
+
+def best_offer(league, player, offers, market_apy=None):
+    if not offers: return None
+    value = VAL.value_player(league, player, rng=None) if market_apy is None else None
+    market_apy = market_apy or (value or {}).get('apy', offers[0].apy)
+    profile = profile_for(league, player, None)
+    return max(offers, key=lambda o: utility_of(league, player, o, profile, market_apy))
+
+
+def hold_user_offer(league, player, thread, offer, best):
+    """Full packages, including bonus, decide whether talks stay in contention."""
+    profile = profile_for(league, player, None)
+    mine = Offer(thread['team'], player.pid, offer['apy'], offer['years'],
+                 offer.get('promises', ()), front_load=offer.get('front_load'), bonus=offer.get('bonus'))
+    a = utility_of(league, player, mine, profile, thread['ask'], thread.get('years'))
+    b = utility_of(league, player, best, profile, thread['ask'], thread.get('years'))
+    return a >= b - .18 * max(.1, abs(b))
 
 
 def meter(u, best_u):
@@ -304,12 +327,13 @@ def reconsider_bid(league, player, offer, user_team=None):
     if price < .9:
         return None
     revised = Offer(offer.team, offer.pid, price, offer.years, offer.promises,
-                    offer.phase, offer.front_load, gain)
+                    offer.phase, offer.front_load, gain,
+                    None if offer.bonus is None else offer.bonus * price / offer.apy)
     cap = CAP.get(league.year, 301.2)
     # Evaluate the shaped contract's real first-year hit, while leaving the
     # floor cost of the remaining roster and future retention budget funded.
     hit = signing_terms(league, player, team, price, offer.years, cap,
-                        offer.front_load)['cap_hits'][0]
+                        revised.front_load, revised.bonus)['cap_hits'][0]
     if hit > power(league, team, cap, offer.years) + .0005:
         return None
     return revised
@@ -335,8 +359,8 @@ def refresh_negotiation_rivals(league, bids, user_team):
         others = [o for o in refresh_bids(league, player, bids, user_team)
                   if o.team != thread['team']]
         if others:
-            best = max(others, key=lambda o: o.apy)
-            NG.set_rival(league, player.pid, best.team, best.apy, best.years)
+            best = best_offer(league, player, others)
+            NG.set_rival(league, player.pid, best.team, best.apy, best.years, best.bonus, best.front_load, best.promises)
         else:
             thread['rival'] = None
 
@@ -384,7 +408,10 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
         # March believes somebody will pay him; low late, because by then
         # nobody will.
         reserve = market * (0.96 if phase == 1 else (0.82 if phase == 2 else 0.55))
-        if best.apy < reserve and phase < PHASES:
+        import contract_offer as CO
+        reserve_ok = CO.assess(league, p, league.teams[best.team], best.as_dict(), reserve,
+                               v['years'] if v else best.years, profile=prof)['acceptable']
+        if not reserve_ok and phase < PHASES:
             waiting.append(p)
             continue
 
@@ -392,13 +419,13 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
         if user_team is not None and rng.random() < MATCH_REQUEST_CHANCE:
             theirs = [(u, o) for u, o in scored if o.team == user_team]
             if theirs and theirs[0][1] is not best:
-                gap = (best.apy - theirs[0][1].apy) / max(best.apy, 0.1)
+                gap = (best_u - theirs[0][0]) / max(abs(best_u), 0.1)
                 if 0 < gap <= MATCH_GAP_MAX:
                     messages.append(dict(
                         kind='match_request', pid=p.pid, name=p.name,
                         team=user_team, rival=best.team,
                         their_offer=theirs[0][1].apy, rival_offer=best.apy,
-                        expires_phase=phase,
+                        expires_phase=phase, rival_package=best.to_save(),
                         subject=f"{p.name} asks you to match", body=f"{best.team} have offered {p.name} ${best.apy:.1f}m a year against your ${theirs[0][1].apy:.1f}m. He would rather be with you; match it before the round closes and he signs.", link=f'player:{p.pid}'))
                     waiting.append(p)
                     continue
@@ -422,7 +449,7 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
             messages.append(dict(
                 kind='offer_sheet', pid=p.pid, name=p.name, team=holder,
                 suitor=best.team, offer=round(best.apy, 2),
-                years=best.years, days=RFA_MATCH_DAYS, phase=phase,
+                years=best.years, bonus=best.bonus, front_load=best.front_load, promises=list(best.promises), days=RFA_MATCH_DAYS, phase=phase,
                 subject=f"Offer sheet: {p.name}", body=f"{best.team} have signed {p.name} ({p.pos}, {round(p.ovr)}) to an offer sheet at ${best.apy:.1f}m a year for {best.years} years. Match the offer and he stays; decline and he leaves with no draft compensation.", link=f'player:{p.pid}'))
             waiting.append(p)
             continue
@@ -432,12 +459,14 @@ def resolve_phase(league, pool, offers, phase, rng, user_team=None):
         if power(league, league.teams[best.team], cap) < best.apy * 1.05:
             alt = next((o for _u, o in scored
                         if power(league, league.teams[o.team], cap)
-                        >= o.apy * 1.05), None)
+                        >= o.apy * 1.05 and (phase >= PHASES or
+                        CO.assess(league, p, league.teams[o.team], o.as_dict(), reserve,
+                                  v['years'] if v else o.years, profile=prof)['acceptable'])), None)
             if alt is None:
                 waiting.append(p)
                 continue
             best = alt
-        try: sign(league, p, best, cap)
+        try: sign(league, p, best, cap, market_apy=market)
         except ValueError:
             waiting.append(p)
             continue
@@ -474,14 +503,16 @@ def signing_terms(league, player, team, apy, years, cap, front_load=None, bonus=
                 cap_hits=[round(preview.cap_hit(i), 3) for i in range(years)], total=round(sum(base) + sb, 3))
 
 
-def sign(league, player, offer, cap, bonus=None):
+def sign(league, player, offer, cap, bonus=None, market_apy=None):
     team = league.teams[offer.team]
     import practice_squad as PSQ
     squad_source = player.team if (player.team in league.teams and player.team != offer.team
                                     and player in PSQ.squad(league.teams[player.team])) else None
     if not available_for_signing(player) and squad_source is None:
         raise ValueError('This player is no longer available as a free agent')
-    st = signing_terms(league, player, team, offer.apy, offer.years, cap, offer.front_load, bonus)
+    if bonus is not None: offer.bonus = bonus
+    freeze_offer(league, player, offer)
+    st = signing_terms(league, player, team, offer.apy, offer.years, cap, offer.front_load, offer.bonus)
     base = st['base']
     paid = team.cap.paid_week
     c = Contract(years=offer.years, base=base,
@@ -494,6 +525,9 @@ def sign(league, player, offer, cap, bonus=None):
         c.base.insert(0,0.0); c.rb.insert(0,0.0); c.bonus_schedule.insert(0,0.0)
         c.years+=1; c.start_offset=1; c.signed=league.year+1
     require_room(league, team, player.pid, c)
+    if market_apy is None:
+        quote = VAL.value_player(league, player, side='agent', rng=None)
+        market_apy = (quote or {}).get('apy', offer.apy)
     if player.team and player.fa_class == 'tendered': _unlist(league, player)
     # the incumbent at his spot who is now behind a man the club just paid
     try:
@@ -505,6 +539,8 @@ def sign(league, player, offer, cap, bonus=None):
     except Exception:
         pass
     league.sign(player.pid, offer.team, c, log=not bool(squad_source))
+    import contract_offer as CO
+    CO.remember(league, player, c, offer.apy, market_apy)
     if squad_source:
         # Negotiated practice-squad signings carry the same roster lock as
         # PSQ.poach. The advisor opens this existing negotiation route.
@@ -513,7 +549,9 @@ def sign(league, player, offer, cap, bonus=None):
                    locked_until=player.xp_spent['_poach_lock'])
     player.fa_class = 'signed'
     for k in offer.promises:
-        league.log('promise', pid=player.pid, team=offer.team, kind=k)
+        league.log('promise', pid=player.pid, team=offer.team, promise=k)
+        import negotiations as NG
+        NG.record_promise(league, player.pid, offer.team, k)
 
 
 # ============================================================ THE INBOX
@@ -574,7 +612,13 @@ def _settle_offer_sheet(league, msg, rng, action=None):
     if destination not in league.teams:
         return finish('void')
     try:
-        sign(league, p, Offer(destination, p.pid, price, years, phase=3), cap)
+        # Older sheets lack explicit bonus/shape. Resolve against the original
+        # suitor once, so a matching incumbent cannot change the contract.
+        original = freeze_offer(league, p, Offer(msg['suitor'], p.pid, price, years,
+            bonus=msg.get('bonus'), front_load=msg.get('front_load'), promises=msg.get('promises', ())))
+        msg.update(bonus=original.bonus, front_load=original.front_load)
+        sign(league, p, Offer(destination, p.pid, price, years, phase=3,
+                             bonus=msg.get('bonus'), front_load=msg.get('front_load'), promises=msg.get('promises', ())), cap)
     except ValueError as exc:
         if action == 'match' and msg['team'] == getattr(league, 'user_team', None):
             return dict(ok=False, why=str(exc))  # retain the user's decision
@@ -731,8 +775,8 @@ def run(league, rng, user_team=None, verbose=False):
                 o = t['offers'][-1]
                 others = bids.get(p.pid, [])
                 if others:
-                    best = max(others, key=lambda b: b.apy); NG.set_rival(league, p.pid, best.team, best.apy, best.years)
-                    if o['apy'] >= best.apy * 0.97:
+                    best = best_offer(league, p, others, t['ask']); NG.set_rival(league, p.pid, best.team, best.apy, best.years, best.bonus, best.front_load, best.promises)
+                    if hold_user_offer(league, p, t, o, best):
                         held.append(p)
                 else:
                     held.append(p)
@@ -835,14 +879,14 @@ def open_round(league, rng, phase, user_team=None):
     league.__dict__.setdefault('inbox', [])
     pool = _pool(league)
     bids = ai_bids(league, pool, phase, rng, skip_teams=(user_team,) if user_team else ())
-    league.fa_bids = {pid: [o.to_save() for o in offers] for pid, offers in bids.items()}
+    league.fa_bids = {pid: [freeze_offer(league, league.player(pid), o).to_save() for o in offers] for pid, offers in bids.items()}
     league.fa_bids_phase = phase
     # what the user can see: the best rival on each player he is talking to
     for t in NG._threads(league):
         if t['kind'] == 'fa_offseason' and t['state'] in ('open', 'waiting', 'countered', 'match_requested'):
             others = bids.get(t['pid'], [])
             if others:
-                best = max(others, key=lambda b: b.apy); NG.set_rival(league, t['pid'], best.team, best.apy, best.years)
+                best = best_offer(league, league.player(t['pid']), others, t['ask']); NG.set_rival(league, t['pid'], best.team, best.apy, best.years, best.bonus, best.front_load, best.promises)
     return bids
 
 
@@ -864,8 +908,8 @@ def resolve_round(league, rng, phase, user_team=None):
             if p is None or p not in pool: continue
             o = t['offers'][-1]; others = bids.get(p.pid, [])
             if others:
-                best = max(others, key=lambda b: b.apy); NG.set_rival(league, p.pid, best.team, best.apy, best.years)
-                if o['apy'] >= best.apy * 0.97: held.append(p)
+                best = best_offer(league, p, others, t['ask']); NG.set_rival(league, p.pid, best.team, best.apy, best.years, best.bonus, best.front_load, best.promises)
+                if hold_user_offer(league, p, t, o, best): held.append(p)
             else:
                 held.append(p)
     pool_now = [p for p in pool if p not in held]

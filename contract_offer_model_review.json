@@ -1,0 +1,246 @@
+{
+  "decision": "TECHNICAL GATES PASS; recommend controlled playtesting before broad release",
+  "deployment": "Isolated branch codex/contract-security-model-20261001; not merged into shared integration or pushed",
+  "base_commit": "1ff30cf",
+  "scope": "Contract security and cash valuation, exact offer propagation, persistent preferences, morale memory, live interest preview",
+  "user_rules_preserved": [
+    "No salary guarantees",
+    "Firm refusal to negotiate midseason remains valid",
+    "Declined negotiations cannot be reopened by submitting a longer offer",
+    "Current extension cap and offseason release rules unchanged",
+    "Player and coach variation preserved"
+  ],
+  "fixes": [
+    "Avoidable late salaries are discounted by release risk; post-release friction applies once",
+    "One bounded value drives preference and acceptance",
+    "Stable saved preferences use no live simulation RNG",
+    "Bonus, salary structure and promises survive bids, rivals, counters, matching and reload",
+    "Accepted compensation bargain survives salary rollover for morale; actual market improvement can still trigger concern",
+    "Agent counters meet their own interest preview including morale and promises"
+  ],
+  "tests": {
+    "python_checks_passed": 113,
+    "offer_form_event_checks": "passed",
+    "javascript_syntax": "passed",
+    "browser_build": "114 modules, including both new contract modules",
+    "economic_matrix": {
+      "comparisons": 6912,
+      "accepted": 2632,
+      "discounted_accepted": 1157,
+      "discounted_accepted_security_0.5": 445,
+      "discounted_accepted_security_1.0": 712
+    },
+    "forecast_sensitivity": {
+      "comparisons": 1152,
+      "forecast_changes_decision": 146
+    },
+    "common_horizon": {
+      "comparisons": 1152,
+      "extra_common_years_change_value_gap": 0
+    },
+    "market_runs": 6,
+    "seeds": [
+      481,
+      482,
+      483
+    ],
+    "scope": "One saved league, extension step plus three FA rounds and market close; not six full seasons",
+    "save_reload": "passed in all six runs",
+    "cpu_over_cap": 0,
+    "source_save_untouched": true
+  },
+  "market_means": {
+    "baseline": {
+      "cpu_signings": 372.667,
+      "cpu_extensions": 130.333,
+      "mean_apy": 4.869,
+      "mean_bonus_share": 0.364,
+      "unsigned": 530
+    },
+    "revised": {
+      "cpu_signings": 397.667,
+      "cpu_extensions": 99.667,
+      "mean_apy": 4.912,
+      "mean_bonus_share": 0.364,
+      "unsigned": 513.667
+    }
+  },
+  "market_runs": {
+    "baseline": [
+      {
+        "label": "baseline",
+        "seed": 481,
+        "source_sha256": "0f4d9cc20769c8b08015cac66cc7e41f4ee66c48006820f9106cd6b63f3ea113",
+        "seconds": 83.8,
+        "cpu_signings": 370,
+        "cpu_extensions": 132,
+        "mean_apy": 4.849816216216216,
+        "term_distribution": {
+          "1": 328,
+          "2": 27,
+          "3": 10,
+          "4": 5
+        },
+        "unsigned": 527,
+        "mean_bonus_share": 0.3620909049234421,
+        "cpu_over_cap": [],
+        "maximum_next_year_commitment": 314.1234848771028,
+        "released": 0,
+        "largest_annual_pay": 51.93,
+        "profiles_preserved": 0,
+        "cap": 369.186,
+        "source_untouched": true,
+        "save_reload_pass": true
+      },
+      {
+        "label": "baseline",
+        "seed": 482,
+        "source_sha256": "0f4d9cc20769c8b08015cac66cc7e41f4ee66c48006820f9106cd6b63f3ea113",
+        "seconds": 79.6,
+        "cpu_signings": 353,
+        "cpu_extensions": 137,
+        "mean_apy": 4.762356940509915,
+        "term_distribution": {
+          "2": 28,
+          "1": 316,
+          "4": 2,
+          "3": 7
+        },
+        "unsigned": 546,
+        "mean_bonus_share": 0.368625336183968,
+        "cpu_over_cap": [],
+        "maximum_next_year_commitment": 291.45434405225876,
+        "released": 0,
+        "largest_annual_pay": 35.64,
+        "profiles_preserved": 0,
+        "cap": 369.186,
+        "source_untouched": true,
+        "save_reload_pass": true
+      },
+      {
+        "label": "baseline",
+        "seed": 483,
+        "source_sha256": "0f4d9cc20769c8b08015cac66cc7e41f4ee66c48006820f9106cd6b63f3ea113",
+        "seconds": 88.8,
+        "cpu_signings": 395,
+        "cpu_extensions": 122,
+        "mean_apy": 4.993648101265823,
+        "term_distribution": {
+          "2": 28,
+          "1": 352,
+          "3": 8,
+          "4": 6,
+          "5": 1
+        },
+        "unsigned": 517,
+        "mean_bonus_share": 0.36167202430839657,
+        "cpu_over_cap": [],
+        "maximum_next_year_commitment": 300.98856985722034,
+        "released": 0,
+        "largest_annual_pay": 39.45,
+        "profiles_preserved": 0,
+        "cap": 369.186,
+        "source_untouched": true,
+        "save_reload_pass": true
+      }
+    ],
+    "revised": [
+      {
+        "label": "revised",
+        "seed": 481,
+        "source_sha256": "0f4d9cc20769c8b08015cac66cc7e41f4ee66c48006820f9106cd6b63f3ea113",
+        "seconds": 91.1,
+        "cpu_signings": 377,
+        "cpu_extensions": 106,
+        "mean_apy": 5.081384615384615,
+        "term_distribution": {
+          "1": 329,
+          "2": 37,
+          "4": 4,
+          "3": 6,
+          "5": 1
+        },
+        "unsigned": 530,
+        "mean_bonus_share": 0.36608764076394174,
+        "cpu_over_cap": [],
+        "maximum_next_year_commitment": 301.41534285722037,
+        "released": 0,
+        "largest_annual_pay": 50.17,
+        "profiles_preserved": 259,
+        "cap": 369.186,
+        "source_untouched": true,
+        "save_reload_pass": true
+      },
+      {
+        "label": "revised",
+        "seed": 482,
+        "source_sha256": "0f4d9cc20769c8b08015cac66cc7e41f4ee66c48006820f9106cd6b63f3ea113",
+        "seconds": 90.2,
+        "cpu_signings": 400,
+        "cpu_extensions": 98,
+        "mean_apy": 4.841465,
+        "term_distribution": {
+          "2": 30,
+          "1": 356,
+          "4": 5,
+          "3": 8,
+          "5": 1
+        },
+        "unsigned": 508,
+        "mean_bonus_share": 0.36178681289765496,
+        "cpu_over_cap": [],
+        "maximum_next_year_commitment": 287.03406368380763,
+        "released": 0,
+        "largest_annual_pay": 33.4,
+        "profiles_preserved": 246,
+        "cap": 369.186,
+        "source_untouched": true,
+        "save_reload_pass": true
+      },
+      {
+        "label": "revised",
+        "seed": 483,
+        "source_sha256": "0f4d9cc20769c8b08015cac66cc7e41f4ee66c48006820f9106cd6b63f3ea113",
+        "seconds": 90.8,
+        "cpu_signings": 416,
+        "cpu_extensions": 95,
+        "mean_apy": 4.814548076923077,
+        "term_distribution": {
+          "2": 32,
+          "1": 373,
+          "3": 5,
+          "4": 4,
+          "5": 2
+        },
+        "unsigned": 503,
+        "mean_bonus_share": 0.36389393250769,
+        "cpu_over_cap": [],
+        "maximum_next_year_commitment": 283.32909285722036,
+        "released": 1,
+        "largest_annual_pay": 39.5,
+        "profiles_preserved": 250,
+        "cap": 369.186,
+        "source_untouched": true,
+        "save_reload_pass": true
+      }
+    ]
+  },
+  "balance_review": {
+    "finding": "CPU extensions fell from a mean of 130.333 to 99.667; free-agent signings increased. Mean FA annual pay stayed close and no long-contract pileup appeared.",
+    "diagnosis": "Targeted extension tracing found refusals on strongly backloaded packages and offers below adjusted expectations. These are reasons to review behavior, not to force players to sign.",
+    "caveat": "Stable profiles intentionally stop consuming simulation RNG, so identical seeds no longer imply identical downstream draws. Counts do not isolate a single coefficient.",
+    "recommendation": "Keep firm refusals. Review these market changes in controlled play before publishing; do not tune to an acceptance quota."
+  },
+  "limits": [
+    "Forecast and release-risk coefficients are gameplay assumptions, not empirical measurements",
+    "146 of 1152 forecast-sensitivity cases changed acceptance",
+    "Existing signed contracts without bargain metadata keep legacy morale handling; their original negotiation preferences cannot be reconstructed",
+    "No long multi-season endurance run or browser visual screenshot in this pass"
+  ],
+  "reproduce": [
+    "python -m unittest test_contract_offer_model test_contract_offer_release_gates test_contract_security_integration test_negotiation_stages test_counter_contract_shape test_contract_decisions test_offer_reservations test_underpaid_extension_email test_extension_cap_view test_cap_market_inflation test_contract_terms test_cap_accounting",
+    "node test_contract_security_ui.cjs",
+    "python probe_contract_offer_model.py",
+    "python probe_contract_security_market.py --save <disposable-source-save> --output <results-folder> --seed 481 --label revised"
+  ]
+}

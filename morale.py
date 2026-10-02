@@ -168,7 +168,8 @@ def offseason_contracts(league, rng):
             if not p.contract or p.ovr < 76: continue
             v = VAL.value_player(league, p, side='agent', rng=rng, pool=pool)
             if not v: continue
-            surplus = v['apy'] - p.apy
+            import contract_offer as CO
+            surplus = v['apy'] - CO.pay_anchor(league, p)
             if surplus <= 2.0: continue
             drag = MS.contract_pressure(surplus, v['apy'], on_rookie_deal=(p.draft_round is not None and (league.year - (p.draft_year or league.year)) < 4),
                                         yrs_left=p.contract.years)

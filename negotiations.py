@@ -40,7 +40,7 @@ a starting role not held by week four is broken; an extension_by not signed
 by its year is broken; a tag on a man promised none is broken. Breaking one
 is the morale hit and the trust cost morale_system already defines.
 """
-import numpy as np, itertools
+import numpy as np, itertools, math
 
 _ids = itertools.count(1)
 INSULT = 0.75            # under this share of the ask, talks break off
@@ -105,7 +105,7 @@ def open_talks(league, pid, kind='extension'):
         tm = EXT.terms(league, p, np.random.default_rng(stable_seed(pid)))
         if tm is None:
             return dict(ok=False, why='no market read on him')
-        # an agent can decline to talk in season: a star in his final year who is playing well wants the leverage
+        # A firm refusal to negotiate is independent of package valuation.
         if s['in_season'] and s['star'] and s['final_year'] and s['money'] > 0.55 and s['morale'] >= 40 and (stable_seed(pid) % 100) < 60:
             return dict(ok=True, will_talk=False, mood='deferring', ask=None, years=tm['years'],
                         line=f"{p.name}'s agent says they will talk after the season. He is playing well and they want to see the market first.")
@@ -129,12 +129,14 @@ def open_talks(league, pid, kind='extension'):
                  state='open', offers=[], patience=PATIENCE, opened=_clock(league), ask=round(ask, 2), years=years,
                  mood=mood, due=None, counter=None, rival=None, match_rounds=0, broken_until=0)
         _threads(league).append(t)
+        if kind == 'extension': t['discount'] = tm['discount']
     if kind == 'fa_offseason':
         # a round is open: the agent tells you who else is in, and how much
         bids = (getattr(league, 'fa_bids', None) or {}).get(pid) or []
         if bids:
-            best = max(bids, key=lambda b: b['apy'])
-            set_rival(league, pid, best['team'], best['apy'], best['years'])
+            import market as MK
+            best = MK.best_offer(league, p, [MK.Offer.from_save(b) for b in bids])
+            set_rival(league, pid, best.team, best.apy, best.years, best.bonus, best.front_load, best.promises)
             line += f" {len(bids)} other club{'s' if len(bids) != 1 else ''} {'are' if len(bids) != 1 else 'is'} in on him."
     return dict(ok=True, will_talk=True, thread=t['id'], ask=round(ask, 2), years=years, mood=mood, line=line, patience=t['patience'])
 
@@ -153,15 +155,35 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     if t['state'] == 'match_requested':
         return dict(ok=False, why='Match the competing offer or let him sign with the other team.')
     c = t.get('counter') if t['state'] == 'countered' else None
-    t['counter'] = None                 # this offer replaces the previous decision
     p = league.player(t['pid']); s = _situation(league, p)
     offer = dict(apy=float(apy), years=int(years), bonus=bonus, front_load=front_load, promises=list(promises), when=_clock(league), by='you')
+    import contract_offer as CO
+    try:
+        offer = CO.canonical(league, p, league.teams[t['team']], offer, t['kind'])
+        assessment = _assessment(league, p, t, offer)
+    except (ValueError, TypeError, OverflowError) as exc:
+        return dict(ok=False, why=str(exc))
+    # Validate before consuming patience or replacing a standing counter.
+    from offer_reservations import check_offer
+    why = check_offer(league, t['team'], t, offer['apy'], offer['years'], offer['bonus'], offer['front_load'])
+    if why: return dict(ok=False, why=why)
+    t['counter'] = None
     t['offers'].append(offer)
     _say(t, 'you', f"${float(apy):.1f}m a year over {int(years)}" + (f", {'front' if front_load > 0.5 else 'back' if front_load < 0.5 else 'even'}-loaded" if front_load is not None else '') + (f", with {', '.join(str(x).replace('_', ' ') for x in promises)}" if promises else '') + '.')
+    # HIS OWN NUMBER IS A YES. An offer that meets the agent's standing counter (his money and his years) is the
+    # deal he asked for: it is signed on the spot, whatever the kind of talk or the time of year. It had gone back
+    # into the queue as a fresh offer and the agent took a week to say yes to his own terms.
+    agreed_counter = CO.canonical(league, p, league.teams[t['team']], c, t['kind']) if c else None
+    if (agreed_counter and offer['apy'] + 1e-9 >= agreed_counter['apy'] and offer['years'] == agreed_counter['years']
+            and offer['bonus'] == agreed_counter['bonus'] and offer['front_load'] == agreed_counter['front_load']
+            and set(offer['promises']) == set(agreed_counter['promises'])):
+        result = _accept(league, t, offer, how='counter accepted')
+        if not result.get('ok'): t['counter'] = c
+        return result
     ask = t['ask']
     room = (t['kind'] == 'extension' and not s['in_season'])      # the offseason room: he answers here, and a walk is a walk
     # an insult ends it
-    if apy < INSULT * ask:
+    if assessment['ratio'] < INSULT:
         if room:
             t['state'] = 'declined'; _say(t, 'agent', f"That is an insult. ${apy:.1f}m against ${ask:.1f}m is not a negotiation. He will test the market.")
             return dict(ok=True, state='declined', line=t['log'][-1]['text'])
@@ -169,7 +191,7 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
         _post(league, t, f"{p.name}'s agent has ended talks", f"An offer of ${apy:.1f}m against an ask of ${ask:.1f}m is not a negotiation. He will not take your calls for {BREAK_WEEKS} weeks.")
         return dict(ok=True, state='broken_off')
     # a lowball spends patience
-    if apy < LOWBALL * ask:
+    if assessment['ratio'] < LOWBALL:
         t['patience'] -= 1
         if t['patience'] <= 0:
             if room:
@@ -179,19 +201,10 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
             _post(league, t, f"{p.name}'s agent is done for now", "Three offers under the market. They will revisit it in the offseason.")
             return dict(ok=True, state='broken_off')
     # what he will take, shape and loyalty and morale included (extensions.py knows the floor logic)
-    floor = _floor(league, p, t, offer)
-    # HIS OWN NUMBER IS A YES. An offer that meets the agent's standing counter (his money and his years) is the
-    # deal he asked for: it is signed on the spot, whatever the kind of talk or the time of year. It had gone back
-    # into the queue as a fresh offer and the agent took a week to say yes to his own terms.
-    if (c and apy + 1e-9 >= float(c.get('apy', apy)) and int(years) == int(c.get('years', years))
-            and bonus == c.get('bonus') and front_load == c.get('front_load')
-            and set(promises) == set(c.get('promises', []))):
-        result = _accept(league, t, offer, how='counter accepted')
-        if not result.get('ok'): t['counter'] = c
-        return result
+    floor = _floor(league, p, t, offer, assessment)
     if sign_today and t['kind'] == 'fa_inseason':
         # today means the ask, no discount; and another club may already have him
-        if apy + 1e-9 >= ask and not t.get('rival'):
+        if _assessment(league, p, t, offer, immediate=True)['acceptable'] and not t.get('rival'):
             return _accept(league, t, offer, how='signed today')
         _say(t, 'agent', f"To sign today he wants the ask, ${ask:.1f}m." + (" Another club is also talking to him." if t.get('rival') else ''))
         return dict(ok=True, state='open', line=t['log'][-1]['text'])
@@ -216,32 +229,68 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     return dict(ok=True, state='waiting', due=t['due'], line=t['log'][-1]['text'])
 
 
-def _floor(league, p, t, offer):
+def _assessment(league, p, t, offer, immediate=False):
     import extensions as EXT, personality as PT, morale_system as MS
     ask = t['ask']
     if t['kind'] == 'extension':
-        tm = EXT.terms(league, p, np.random.default_rng(1)) or {}
-        disc = tm.get('discount', 0.0)
+        if 'discount' not in t:
+            tm = EXT.terms(league, p, np.random.default_rng(1)) or {}
+            t['discount'] = tm.get('discount', 0.0)
+        disc = t['discount']
         floor = ask * (1.0 - disc)
     else:
-        floor = ask * 0.96
+        floor = ask * (1.0 if immediate else 0.96)
         # a Recruiter over his position: the club's money reads richer to him
         import staff as ST
         pull, _m = ST.recruit_pull(league.teams[league.user_team], p.pos)
         floor = floor / pull
-    fl = offer.get('front_load')
-    if fl is not None:
-        fp = (getattr(p, 'traits', None) or {}).get('financial_priority', 50) / 100.0
-        floor *= 1.0 + (0.5 - float(fl)) * 0.12 * (0.7 + 0.6 * fp)
     if getattr(p, 'morale', None) is not None:
         ne = MS.negotiation_effect(p.morale); floor *= 1.0 + ne['demand_premium']
+        if t['kind'] == 'extension' and not ne['will_discount']:
+            floor = max(floor, ask * (1.0 + ne['demand_premium']) * .98)
     # promises are worth something to him
-    from contract_terms import term_premium
-    floor *= term_premium(offer['years'], t['years'])
     import negotiation_engine as NE
     for k in offer.get('promises', []):
         floor *= 1.0 - NE.PROMISES.get(k, {}).get('base', 0.0)
-    return floor
+    import contract_offer as CO
+    return CO.assess(league, p, league.teams[t['team']], offer, max(.01, floor), t['years'], t['kind'])
+
+
+def _floor(league, p, t, offer, assessment=None):
+    result = assessment or _assessment(league, p, t, offer)
+    return float(offer['apy']) / max(.000001, result['ratio'])
+
+
+def _rival_gap(league, p, t, offer):
+    if not t.get('rival'): return 0.
+    import market as MK
+    profile = MK.profile_for(league, p, None)
+    mine = MK.Offer(t['team'], p.pid, offer['apy'], offer['years'], bonus=offer.get('bonus'),
+                    front_load=offer.get('front_load'), promises=offer.get('promises', ()))
+    r = t['rival']
+    theirs = MK.Offer(r['team'], p.pid, r['apy'], r['years'], bonus=r.get('bonus'),
+                      front_load=r.get('front_load'), promises=r.get('promises', ()))
+    a = MK.utility_of(league, p, mine, profile, t['ask'], t.get('years'))
+    b = MK.utility_of(league, p, theirs, profile, t['ask'], t.get('years'))
+    return (b - a) / max(.1, abs(b))
+
+
+def _counter_package(league, p, t, offer):
+    """Price the offered term/structure, or return a complete standard option."""
+    import contract_offer as CO
+    candidate = dict(offer)
+    low, high = max(.01, candidate['bonus'] / candidate['years']), max(t['ask'] * 2, candidate['apy'])
+    candidate['apy'] = high
+    assessment = _assessment(league, p, t, candidate)
+    if not assessment['acceptable']:
+        candidate = dict(assessment['reference_package'], promises=list(offer.get('promises', [])))
+        return CO.canonical(league, p, league.teams[t['team']], candidate, t['kind'])
+    for _ in range(22):
+        mid = (low + high) / 2; candidate['apy'] = mid
+        if _assessment(league, p, t, candidate)['acceptable']: high = mid
+        else: low = mid
+    candidate['apy'] = math.ceil((high + .000001) * 100) / 100
+    return CO.canonical(league, p, league.teams[t['team']], candidate, t['kind'])
 
 
 # ------------------------------------------------------------ the advance
@@ -259,7 +308,7 @@ def resolve(league, week=None, fa_step=None):
         p = league.player(t['pid'])
         if p is None or (t['kind'] == 'extension' and p.team != t['team']):
             t['state'] = 'expired'; continue
-        offer = t['offers'][-1]; floor = t.get('pending_floor') or _floor(league, p, t, offer)
+        offer = t['offers'][-1]; floor = _floor(league, p, t, offer)
         out.append((t, _answer(league, t, p, offer, floor)))
     return out
 
@@ -267,15 +316,17 @@ def resolve(league, week=None, fa_step=None):
 def _answer(league, t, p, offer, floor, quiet=False):
     """The agent's decision on the offer in front of him: match request, yes, no, or a counter. quiet=True is the
     offseason room, where the answer is spoken in the thread and nothing goes to the inbox. Returns the state."""
+    import contract_offer as CO
+    offer = CO.canonical(league, p, league.teams[t['team']], offer, t['kind'])
     post = (lambda *a, **k: None) if quiet else (lambda *a, **k: _post(league, t, *a, **k))
     rival = t.get('rival')
-    if t['kind'] == 'fa_offseason' and rival and rival['apy'] > offer['apy'] and t['match_rounds'] < MATCH_ROUNDS \
-            and (rival['apy'] - offer['apy']) / rival['apy'] <= 0.12:
+    gap = _rival_gap(league, p, t, offer)
+    if t['kind'] == 'fa_offseason' and rival and gap > 1e-9 and t['match_rounds'] < MATCH_ROUNDS and gap <= 0.12:
         t['state'] = 'match_requested'; t['counter'] = None; t['due'] = None; t['match_rounds'] += 1; _say(t, 'agent', f"He has a better offer on the table. Match it and he is yours.")
         post(f"{p.name} asks you to match", f"{league.teams[rival['team']].abbr if rival['team'] in league.teams else rival['team']} has offered ${rival['apy']:.1f}m over {rival['years']} years. He would rather be here. Match it and he signs today.",
              payload=dict(rival=rival, thread=t['id'], link=f'negotiation:{t["id"]}'))
         return 'match_requested'
-    if offer['apy'] + 1e-9 >= floor and not (rival and rival['apy'] > offer['apy'] * 1.12):
+    if _assessment(league, p, t, offer)['acceptable'] and gap <= .12:
         r = _accept(league, t, offer, how='agreed', quiet=quiet)
         if not r.get('ok'):
             # the agent agreed but the deal could not be written (cap, eligibility, a roster spot): the
@@ -284,33 +335,40 @@ def _answer(league, t, p, offer, floor, quiet=False):
             post(f"{p.name}: the deal fell through", f"He agreed to your terms but the deal could not be written: {r.get('why') or 'it could not be written'}. Open talks again once that is fixed.")
             return 'failed'
         return r['how']
-    if rival and rival['apy'] > offer['apy'] * 1.12:
+    if rival and gap > .12:
         t['state'] = 'declined'; _say(t, 'agent', 'Another club is well above you and he is going to take it.'); post(f"{p.name} says no", f"Another club is well above you and he is going to take it.")
         return 'declined'
     # a counter: toward the floor, not all the way
-    counter = round(min(t['ask'], floor * (1.0 + 0.03 * max(0, t['patience'] - 1))), 2)    # never above his own ask
-    counter_years = 1 if t['kind'] == 'fa_inseason' else t['years']
-    counter_bonus = offer.get('bonus')
-    if counter_bonus is not None: counter_bonus = min(float(counter_bonus), counter * counter_years)
+    t['counter'] = _counter_package(league, p, t, offer)
+    counter, counter_years, counter_bonus = t['counter']['apy'], t['counter']['years'], t['counter']['bonus']
     t['state'] = 'countered'
-    t['counter'] = dict(apy=counter, years=counter_years, bonus=counter_bonus,
-                        front_load=offer.get('front_load'), promises=list(offer.get('promises', [])))
     _say(t, 'agent', f"Close. He would do it at ${counter:.1f}m a year.")
     post(f"{p.name}'s agent counters at ${counter:.1f}m", f"Over {counter_years} year(s), keeping the offered salary structure. " + (f"Signing bonus: ${counter_bonus:.2f}m. " if counter_bonus is not None else "Signing bonus uses the standard structure. ") + ("He is close." if counter <= offer['apy'] * 1.06 else "There is a gap."),
          payload=dict(counter=t['counter'], thread=t['id'], link=f'negotiation:{t["id"]}'))
     return 'countered'
 
 
-def set_rival(league, pid, team, apy, years):
+def set_rival(league, pid, team, apy, years, bonus=None, front_load=None, promises=()):
     """The market tells the thread another club is in."""
     t = open_for(league, pid, 'fa_offseason') or open_for(league, pid, 'fa_inseason')
-    if t: t['rival'] = dict(team=team, apy=float(apy), years=int(years))
+    if t:
+        import contract_offer as CO
+        t['rival'] = CO.canonical(league, league.player(pid), league.teams[team],
+                                  dict(team=team, apy=float(apy), years=int(years), bonus=bonus,
+                                       front_load=front_load, promises=list(promises)))
 
 
 def match(league, tid):
     t = find(league, tid)
     if t is None or t['state'] != 'match_requested' or not t.get('rival'): return dict(ok=False, why='nothing to match')
-    r = t['rival']; offer = dict(apy=r['apy'], years=r['years'], bonus=None, front_load=0.5, promises=[], when=_clock(league), by='you (matched)')
+    r = t['rival']
+    import contract_offer as CO
+    r = CO.canonical(league, league.player(t['pid']), league.teams[r['team']], r)
+    t['rival'] = r
+    offer = dict(r, when=_clock(league), by='you (matched)')
+    from offer_reservations import check_offer
+    why = check_offer(league, t['team'], t, offer['apy'], offer['years'], offer['bonus'], offer['front_load'])
+    if why: return dict(ok=False, why=why)
     result = _accept(league, t, offer, how='matched and signed')
     if result.get('ok'): t['offers'].append(offer)
     return result
@@ -328,7 +386,8 @@ def withdraw(league, tid):
         r = t['rival']; p = league.player(t['pid'])
         if p is None or p.team is not None or r['team'] not in league.teams:
             return dict(ok=False, why='The competing offer is no longer available.')
-        offer = MK.Offer(r['team'], p.pid, r['apy'], r['years'], front_load=0.5)
+        offer = MK.Offer(r['team'], p.pid, r['apy'], r['years'], bonus=r.get('bonus'),
+                         front_load=r.get('front_load'), promises=r.get('promises', ()))
         try:
             MK.sign(league, p, offer, CAP.get(league.year, 301.2))
             league.teams[r['team']].sync_cap()
@@ -362,7 +421,7 @@ def _accept(league, t, offer, how, quiet=False):
     else:
         team = league.teams[t['team']]; cap = CAP.get(league.year, 301.2)
         o = MK.Offer(t['team'], p.pid, offer['apy'], offer['years'], promises=offer.get('promises', ()), front_load=offer.get('front_load'))
-        try: MK.sign(league, p, o, cap, bonus=offer.get('bonus')); team.sync_cap()
+        try: MK.sign(league, p, o, cap, bonus=offer.get('bonus'), market_apy=t['ask']); team.sync_cap()
         except Exception as e: return dict(ok=False, why=str(e)[:120] or 'the contract could not be written')
     t['state'] = 'accepted'; t['counter'] = None; t['due'] = None; _say(t, 'agent', f"Done. {p.name} is signed.")
     for k in offer.get('promises', []):

@@ -15,6 +15,8 @@ FA_KINDS = frozenset(('fa_offseason', 'fa_inseason'))
 def offer_hit(league, team, player, offer):
     """First cap-year charge of the deal currently offered to a free agent."""
     from market import signing_terms
+    import contract_offer as CO
+    offer = CO.canonical(league, player, team, offer)
 
     terms = signing_terms(
         league, player, team, float(offer['apy']), int(offer['years']),
