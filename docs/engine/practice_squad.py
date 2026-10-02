@@ -79,16 +79,19 @@ def squad_acceptance(league, player):
 
     This is willingness, not eligibility or a promise that another club can
     afford him. It consumes no RNG and never removes an unsigned player.
-    Developmental players retain their existing practice-squad path.
+    Young developmental players retain their practice-squad path, but clear
+    starter-caliber talent seeks an active deal regardless of accrued seasons.
     """
-    if is_young(player):
-        return dict(accepts=True, reason='development_opportunity')
     from market import REPLACEMENT_GRADE
     grade = float(player.ovr)
     if player.pos in ('K', 'P', 'LS'):
         # Specialist overall scales are higher than ordinary roster positions.
         import draft as DFT
         grade = DFT.common_scale(grade, player.pos, DFT.position_scale(league))
+    if is_young(player):
+        accepts = grade < 85.0
+        return dict(accepts=accepts, reason='development_opportunity' if accepts
+                    else 'seeking_active_contract', market_grade=round(grade, 3))
     accepts = grade < REPLACEMENT_GRADE
     return dict(accepts=accepts, reason='practice_opportunity' if accepts
                 else 'seeking_active_contract', market_grade=round(grade, 3))
