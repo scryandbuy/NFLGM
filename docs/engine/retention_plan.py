@@ -20,6 +20,25 @@ def role_inputs(league, team, player, baseline=None, scale=None):
     return _role_read(league,team,player,baseline,scale)[0]
 
 
+def retention_priority(pos, normalized_grade, role_share, departure_loss):
+    """Bounded review order, separate from the transaction's budget benefit.
+
+    Common-scale quality contributes 45 points, expected role 35, and
+    replacement difficulty at most 20. Empty-slot penalties cannot grow
+    without limit and consume a franchise player's first negotiation chance.
+    Apply the existing draft positional premiums (LS shares the specialist
+    tier); a reserve QB still has to earn priority through quality and role.
+    These are decision weights, not fitted probabilities of re-signing.
+    """
+    quality = max(0., min(1., (normalized_grade - 62.5) / 25.))
+    share = max(0., min(1., role_share))
+    loss = max(0., departure_loss)
+    replacement = loss / (loss + 8.)
+    value = DFT.PREMIUM.get(pos, DFT.PREMIUM['P'] if pos == 'LS' else 1.)
+    value = max(0., min(1., value / max(DFT.PREMIUM.values())))
+    return round((45.*quality + 35.*share + 20.*replacement) * value, 4)
+
+
 def _role_read(league, team, player, baseline=None, scale=None):
     report = RN.assess(team) if baseline is None else baseline
     scale = DFT.position_scale(league) if scale is None else scale
@@ -40,7 +59,7 @@ def _role_read(league, team, player, baseline=None, scale=None):
     row=dict(role_share=round(share,4), roles=sorted({r['role'] for r in rows}),
         departure_loss=round(loss,4), replacement_grade=round(replacement,3),
         normalized_grade=round(normalized,3), important=important,
-        importance=round(3.*loss + 12.*share + (normalized-75.)*.7,4))
+        importance=retention_priority(player.pos, normalized, share, loss))
     return row,max(loss,retention)  # unrounded benefit preserves financial thresholds
 
 
