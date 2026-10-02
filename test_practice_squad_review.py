@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 import practice_squad as PS
+from cap_engine import Contract
 
 class RosterReviewTests(unittest.TestCase):
     def test_two_clubs_cannot_sign_the_same_cached_free_agent(self):
@@ -19,7 +20,9 @@ class RosterReviewTests(unittest.TestCase):
         league.sign=sign
         with patch.object(PS,'protected',return_value=False),patch.object(PS,'locked',return_value=False), \
              patch.object(PS,'shunned',return_value=False),patch.object(PS,'squad',side_effect=lambda t:t.ps), \
-             patch('gm_engine.scheme_fit',return_value=0),patch.object(PS.MS,'minimum_salary',return_value=1):
+             patch('gm_engine.scheme_fit',return_value=0),patch.object(PS.MS,'minimum_salary',return_value=1), \
+             patch.object(PS,'minimum_contract',return_value=Contract(1,[1])), \
+             patch('cap_accounting.require_room'), patch.object(PS,'_cpu_move_budget',return_value=True):
             moves=PS.roster_review(league,None,1)
         self.assertEqual(len(moves),1)
         self.assertEqual(released,['AAA'])

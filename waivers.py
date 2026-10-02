@@ -139,7 +139,7 @@ def make_room(league, abbr, p, entry):
     import roster_needs as RN
     team = league.teams[abbr]
     if len(team.active()) < 53:
-        return claim_fits(league, entry, abbr)
+        return claim_fits(league, entry, abbr) and _claim_budget(league, team, p)
     if abbr == getattr(league, 'user_team', None):
         return False  # Only an explicitly named release may open the user's spot.
     # THE MAN WHO GOES IS WORSE THAN THE MAN WHO COMES, AND CHEAP TO CUT. It used to
@@ -169,10 +169,17 @@ def make_room(league, abbr, p, entry):
     for gain, outgoing in ranked:
         if gain < 0.0:
             break
-        if claim_fits(league, entry, abbr, release_pid=outgoing.pid):
+        if (claim_fits(league, entry, abbr, release_pid=outgoing.pid)
+                and _claim_budget(league, team, p, outgoing)):
             league.release(outgoing.pid)
             return True
     return False
+
+
+def _claim_budget(league, team, player, outgoing=None):
+    import practice_squad as PS
+    return PS._cpu_move_budget(league, team, player, claim_contract(league, player, team.abbr),
+                               outgoing, action='waiver_claim')
 
 
 def claim_contract(league, p, abbr):
