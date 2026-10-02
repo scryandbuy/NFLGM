@@ -214,9 +214,9 @@ def play_line(league, p, off_abbr, def_abbr):
         elif p.get('onside'):
             text = f"Onside kick, {'RECOVERED by the kicking team' if p.get('recovered') else 'recovered by ' + off_abbr} at the {spot}."; kind = 'turnover' if p.get('recovered') else 'special'
         else:
-            text = "Kickoff" + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {spot}." if who else f", returned to the {spot}.")); kind = 'special'
+            text = ("Short kickoff" if p.get('short_kick') else "Kickoff") + (", touchback." if p.get('touchback') else (f", returned by {who} {int(round(p.get('ret', 0)))} yards to the {spot}." if who else f", returned to the {spot}.")); kind = 'special'
         if p.get('touchdown'):
-            text = f"Kickoff returned by {who or 'the returner'} {int(round(p.get('ret', 0)))} yards. TOUCHDOWN, {off_abbr}."
+            text = f"{'Short kickoff' if p.get('short_kick') else 'Kickoff'} returned by {who or 'the returner'} {int(round(p.get('ret', 0)))} yards. TOUCHDOWN, {off_abbr}."
             kind = 'score'
         if p.get('ends_period'):
             text += ' Time expires in ' + ('the first half.' if p.get('quarter') == 2 else 'overtime.' if p.get('quarter', 0) >= 5 else 'regulation.')

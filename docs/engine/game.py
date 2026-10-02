@@ -1054,11 +1054,13 @@ def returner_for(ros, state, rate_fn, kind='kr'):
     return ordered[0] if ordered else {}
 
 
-def kickoff_booked(returner, rng, rate_fn, book, from_50=False, kicking=(), receiving=(), kicker=None):
+def kickoff_booked(returner, rng, rate_fn, book, from_50=False, kicking=(), receiving=(), kicker=None,
+                   short_kick_bias=None):
     """Resolve, enforce and book the return once, before the next possession."""
     import events as E
     import kick_returns as KR
-    r = kickoff(returner, rng, rate_fn, from_50=from_50, kicking=kicking, receiving=receiving, kicker=kicker)
+    r = kickoff(returner, rng, rate_fn, from_50=from_50, kicking=kicking, receiving=receiving,
+                kicker=kicker, short_kick_bias=short_kick_bias)
     if not r.get('touchback'):
         KR.enforce_return_flag(r, E.special_teams_penalty_check(rng, 'kickoff', returned=True))
         KR.book_return(book, 'kr', r)
@@ -1067,23 +1069,41 @@ def kickoff_booked(returner, rng, rate_fn, book, from_50=False, kicking=(), rece
     return r
 
 
-def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False, kicking=(), receiving=(), kicker=None):
+def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False, kicking=(), receiving=(), kicker=None,
+            short_kick_bias=None):
     power = rate_fn(kicker, {'kick_power_rating': 1.0}) - AVG if kicker is not None else 0.0
     accuracy = rate_fn(kicker, {'kick_acc_rating': 1.0}) - AVG if kicker is not None else 0.0
     touchback = float(np.clip(KICKOFF['touchback'] + .16 * power + .08 * accuracy, .02, .98))
-    if rng.random() < touchback:
+    skill = rate_fn(returner, {'kick_ret_rating': .45, 'speed_rating': .30, 'juke_move_rating': .25})
+    # Aim high and short only when the coordinator likes the coverage matchup.
+    # The return still resolves normally, so a good returner can punish the call.
+    short = False
+    if short_kick_bias is not None and not from_50:
+        cov = np.mean([rate_fn(p, {'tackle_rating': .55, 'speed_rating': .45}) for p in kicking]) if kicking else AVG
+        block = np.mean([rate_fn(p, {'run_block_rating': .55, 'speed_rating': .45}) for p in receiving]) if receiving else AVG
+        # Coverage players are selected for tackling and return-unit players
+        # for blocking; the average matchup has a built-in ~0.13 rating gap.
+        chance = float(np.clip(.265 + short_kick_bias + 1.2 * (cov - block - .13)
+                               - .25 * (skill - RET_AVG), .04, .55))
+        short = rng.random() < chance
+    if not short and rng.random() < touchback:
         spot = KICKOFF['touchback_from_50'] if from_50 else KICKOFF['touchback_to']
         return dict(type='kickoff', touchback=True, new_yardline=spot)
     import kick_returns as KR
-    skill = rate_fn(returner, {'kick_ret_rating': .45, 'speed_rating': .30, 'juke_move_rating': .25})
     ret = rng.gamma(7.0, KICKOFF['return_mean'] / 7.0) * (1.0 + 0.8 * (skill - RET_AVG))
     # Better placement leaves a smaller return; neutral skill preserves the
     # existing landing point and return distribution without another roll.
     ret *= float(np.clip(1.0 - .15 * accuracy, .90, 1.10))
-    landing = float(np.clip(95. + 6. * power, 90., 98.))
+    if short:
+        # Hang time lets coverage close, while the catch around the own 10
+        # gives the returner enough field to beat a poor coverage unit.
+        ret *= .78
+        landing = float(np.clip(89. + 5. * accuracy, 86., 93.))
+    else:
+        landing = float(np.clip(95. + 6. * power, 90., 98.))
     outcome = KR.resolve(landing, ret, returner or {}, rng, rate_fn, kicking, receiving,
                          event='kick_return', weather=ENV.fumble_mult)
-    return dict(type='kickoff', touchback=False, **outcome)
+    return dict(type='kickoff', touchback=False, short_kick=short, **outcome)
 
 
 def kickoff_for(kicking, receiving, kick_state, receive_state, rng, rate, book):
@@ -1092,7 +1112,8 @@ def kickoff_for(kicking, receiving, kick_state, receive_state, rng, rate, book):
     return kickoff_booked(returner, rng, rate, book,
         kicking=KR.unit(kicking, kick_state, rate),
         receiving=KR.unit(receiving, receive_state, rate, True, returner.get('pid')),
-        kicker=kicking.get('k'))
+        kicker=kicking.get('k'),
+        short_kick_bias=(getattr(kick_state, 'staff_fx', None) or {}).get('short_kick_bias', 0.0))
 
 
 def pending_kick_outcome():
@@ -2643,6 +2664,7 @@ def _terminal_kickoff(dr, kick, before, after, possession, quarter):
     if kick.get('touchdown') or kick.get('fumble_lost') or before <= boundary or after > boundary:
         return
     dr.log.append(dict(type='kickoff', touchback=bool(kick.get('touchback')),
+                       short_kick=bool(kick.get('short_kick')),
                        new_yardline=kick['new_yardline'], ret=float(kick.get('ret', 0) or 0),
                        carrier=kick.get('returner'), clock=before, end_clock=after,
                        possession=possession, quarter=quarter, ends_period=True,

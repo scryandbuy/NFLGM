@@ -708,6 +708,7 @@ class SeasonRunner(StandingsView):
         import staff as ST
         t = self.L.teams[abbr]; st = self.states[abbr]
         st.staff_fx = ST.game_terms(t)
+        st.staff_fx['short_kick_bias'] = ST.short_kick_bias(t)
         if not hasattr(st, 'coach_base'): st.coach_base = dict(st.coach)     # the head coach's own numbers, before any staff edge
         st.coach = dict(st.coach_base)
         if st.staff_fx.get('sharp_off') or st.staff_fx.get('sharp_def'):

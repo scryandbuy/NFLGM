@@ -260,6 +260,17 @@ def kick_noise_mult(team):
     return 1.15 - 0.30 * float(np.clip((rating(team, 'st') - 35.0) / 55.0, 0.0, 1.0))
 
 
+def short_kick_bias(team):
+    """How readily this coordinator trusts coverage to beat a touchback spot."""
+    coordinator = (getattr(team, 'staff', None) or {}).get('st')
+    if coordinator is None:
+        return 0.0
+    specialty = {'coverage units': 0.07, 'kicker management': -0.03}.get(
+        coordinator.specialty, 0.0)
+    return float(np.clip(0.14 * (coordinator.effective() - 60.0) / 50.0
+                         + specialty, -0.13, 0.15))
+
+
 def scout_quality(team):
     """0-1 for scouting.error_sd."""
     return float(np.clip((rating(team, 'scout') - 35.0) / 55.0, 0.0, 1.0))
