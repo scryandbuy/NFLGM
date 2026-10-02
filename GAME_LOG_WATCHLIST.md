@@ -249,3 +249,29 @@ Artifacts: workspace outputs `stacked-box-candidate-20261001.json` and `stacked-
 - Fixed planner mismatch: extra-play and bleed estimates now respect remaining downs. Leading/tied offense does not spend a first-half timeout after a failed third-down conversion beyond the opponent40 simply to enable a punt.
 - Fixed lookahead cliff: with no timeouts, a completion leaving 18+ seconds can budget 12 seconds for hurried setup instead of automatically treating an in-bounds catch with fewer than25 seconds as drive-ending. Thirty-second long-kick scenario now has a continuation option; actual choice still depends on kicker.
 - Watch: 59-yard kick up3 with1:50. Current fourth-down logic DOES compare punt WP against kick WP including missed-kick spot and timeout edge. Representative42% kicker yields FG .7992 vs punt .7919 (go .8128); small-margin calibration concern, not missing wiring. Need actual saved kicker/weather/coach inputs and broader decision study before overriding.
+
+
+## Week 3: Green Bay 24-16 Chicago (reviewed October 1, 2026)
+
+Source: user attachment `507e766b-d918-4234-997a-8e0c7ed95a53/Pasted text.txt`. Season year and build are not specified. Read-only gameplay review; displayed yardages are rounded and cannot certify the raw box score.
+
+### Confirmed presentation inconsistencies
+
+- Q1 10:29: punt from CHI17, 54 yards, six-yard return implies GB35, but the receiving drive starts GB34. That drive's five-yard neutral-zone penalty then shows GB40. Check both drive-heading rounding and special-teams display endpoints; earlier fixes do not prove this particular build contains them.
+- Q1 6:31: a field goal from displayed CHI20 is labeled 36 yards, rather than the displayed spot plus the engine's 17-yard kick offset (37). Likely inconsistent rounding of continuous field position; do not infer that the actual cap/score/stat ledger is corrupt.
+
+### Recurring items to investigate
+
+- First-half intent/clock consistency: GB leads 10-7, uses timeouts at 0:57 and 0:51, completes 12 yards on third-and-16 at 0:45, then waits until 0:11 for fourth-and-four at CHI46 with one timeout still unused. The current timeout guard deliberately avoids stopping a leading/tied stalled first-half drive outside FG territory. It should be reviewed together with the subsequent fourth-down decision: conceding the half and seeking points are different intents. The text alone does not prove what the saved coach/plan chose.
+- Penalties: 17 accepted penalty entries, including four Chicago Delay of Game calls (Q2 9:54, Q3 12:24 and 10:02, Q4 9:22). Inspect presnap frequency, discipline effects, and repeated calls across games before adjusting all penalties.
+- Late lead protection: GB goes for fourth-and-goal at CHI2, up seven at 1:48. A short FG would establish a two-score lead. Going can still be rational with a high conversion estimate and the opponent pinned deep; audit modeled alternatives rather than declaring the penalized sack proves a bad decision.
+- Pass rush: only one non-nullified sack, against GB. Chicago takes none. Keep the pressure/opportunity/workload watch open; a text log cannot establish whether Parsons or other rushers played too little.
+- Negative rushing: one displayed loss across 43 non-nullified designed runs (GB 26 for 88; CHI 17 for 102). Chicago's other negative run was erased by holding. This adds evidence to the watch, but one game does not overturn the prior multi-seed contact calibration.
+
+### Healthy behavior observed
+
+- Final score reconciles: GB three TDs/three PATs/one FG; CHI two TDs/one PAT/one FG with a failed two-point try.
+- Chicago's final drive uses 14-second resets after in-bounds short completions, six seconds after incompletions, and a timeout after the 12-yard completion. This is consistent with two-score urgency.
+- Chicago attempts fourth-and-nine late rather than punting, scores, tries for two down eight, and attempts an onside kick. Green Bay's recovery and final kneel fit Chicago having no timeouts.
+- Six non-nullified screens total: GB one for 13 displayed yards, CHI five for eight. No fourth-down screen recurrence. No new general screen-rate change supported.
+- No evidence for a broad passing, rushing, scoring, or fourth-down conversion retune from this game alone. Prioritize display consistency and investigate clock intent and delay-of-game rates.
