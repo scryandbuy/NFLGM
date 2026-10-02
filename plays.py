@@ -282,9 +282,12 @@ def resolve_throw(qb, depth, separation, pressure, rng, on_run=False,
     # 1.5 (two thirds of attempts), medium at 2.0 against 2.5, deep at 5.3 against 4.5, and the league sat at 2.8
     # against 2.1 once the tag map, field fit and the screen convoy changed who was contested where
     p_int = (1.0 - separation) * INT_BASE * INT_DEPTH[depth] * (1.0 + 2.2 * (AVG - acc)) * (1.0 + 0.9 * (float(def_awr) - DEF_AWR_MEAN))   # a smart defender is where the bad ball ends up
-    if rng.random() < max(0.0, p_int):
-        return dict(result='interception', contested=True, p=p, base=base)
-    return dict(result='incomplete', contested=separation < 0.45, p=p, base=base)
+    int_roll = rng.random()
+    if int_roll < max(0.0, p_int):
+        return dict(result='interception', contested=True, p=p, base=base,
+                    int_roll=int_roll, p_int=max(0.0, p_int))
+    return dict(result='incomplete', contested=separation < 0.45, p=p, base=base,
+                int_roll=int_roll, p_int=max(0.0, p_int))
 
 # ============================================================ THE CATCH
 def resolve_catch(receiver, defender, contested, rng):
@@ -1024,6 +1027,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
             complete = True        # a ball thrown at his numbers three yards
                                    # behind the line is rarely missed
         picked = thr['result'] == 'interception'
+        int_roll, p_int = thr.get('int_roll'), thr.get('p_int', 0.0)
         contested = thr['contested']
     else:
         # Only the NEAREST defender contests - handing the resolver the whole
@@ -1061,7 +1065,9 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         LAST_XCOMP = float(adj)
         # 2.1% is the rate per ATTEMPT, not per incompletion. Applying it to
         # incompletions only produced ~1.1% league-wide.
-        picked = (not complete) and rng.random() < 0.092   # re-anchored with the man path
+        int_roll = rng.random() if not complete else None
+        p_int = 0.092   # re-anchored with the man path
+        picked = int_roll is not None and int_roll < p_int
         contested = z['contested']
         cb = cov
         # the man who arrives second breaks up his share of the throws he
@@ -1069,6 +1075,17 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         if zone_second is not None and rng.random() < 0.45:
             cb = zone_second
 
+    # The existing turnover roll includes average hands. Rescale that same
+    # opportunity for the actual defender, without taxing neutral catches a
+    # second time or consuming an additional random draw. No completed pass
+    # can become an interception (including a rescued screen).
+    dropped_int = False
+    if int_roll is not None:
+        hands = rate(cb, {'catch_rating': 1.0}) if cb is not None else AVG
+        catch_mult = float(np.clip(1.0 + 0.8 * (hands - AVG), 0.5, 1.25))
+        secured = not complete and cb is not None and int_roll < min(1.0, p_int * catch_mult)
+        dropped_int = bool(picked and not secured and not complete and cb is not None)
+        picked = secured
     if picked:
         air = float(np.clip(rng.normal(route_air if route_air is not None else {'short': 5, 'medium': 13, 'deep': 27}.get(depth, 6),
                                        {'short': 3, 'medium': 5, 'deep': 9}.get(depth, 3)),
@@ -1081,15 +1098,15 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
     if not complete:
-        throwaway = bool(p['pressure'] >= 0.35 and not screen and rng.random() < 0.18)
+        throwaway = bool(not dropped_int and p['pressure'] >= 0.35 and not screen and rng.random() < 0.18)
         # A PASS DEFENDED is a defender breaking the ball up, not simply an
         # incompletion - a throw into the dirt is nobody's credit. Real rate:
         # 37.5% of incompletions, 11.4% of attempts, with a league leader
         # around 24 in a season. It is the main counting stat a corner has and
         # this engine resolved the event without recording it, so a defensive
         # back had almost no box score at all.
-        broken = False
-        if not throwaway:
+        broken = dropped_int
+        if not throwaway and not dropped_int:
             broken = rng.random() < (PD_CONTESTED if contested else PD_LOOSE)
         return dict(type='incomplete', yards=0.0, touchdown=False,
                     throwaway=throwaway,

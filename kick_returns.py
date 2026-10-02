@@ -1,6 +1,7 @@
 """Return outcomes shared by kickoffs and punts; all spots face the receiving goal."""
 import numpy as np
 import events
+from matchups import YAC
 
 
 def unit(roster, state, rate, blocking=False, exclude=None):
@@ -27,13 +28,17 @@ def resolve(start, distance, returner, rng, rate, coverage=(), blockers=(), even
     cov = np.mean([rate(p, {'tackle_rating': .55, 'speed_rating': .45}) for p in coverage]) if coverage else .70
     block = np.mean([rate(p, {'run_block_rating': .55, 'speed_rating': .45}) for p in blockers]) if blockers else .70
     gain = min(float(start), max(0., float(distance) * float(np.clip(1 + .40 * (block - cov), .85, 1.15))))
-    fum = events.fumble_check(returner, event, rng, rate, hit_power=float(cov), env_mult=weather) if returner else None
+    # Pick the coverage player making contact before testing his impact.
+    # Speed/tackling still govern return distance; impact governs ball security.
+    tackler = coverage[int(rng.integers(len(coverage)))] if coverage else None
+    impact = rate(tackler, YAC['tackler']['impact']) if tackler is not None else .70
+    fum = events.fumble_check(returner, event, rng, rate, hit_power=impact, env_mult=weather) if returner else None
     result = dict(returner=returner.get('pid'), return_start=float(start), fumble=False, fumble_lost=False)
     if fum:
         # Unforced handling errors occur at the catch. A contact fumble must
         # happen before crossing the goal; no fumble after a touchdown.
         gain = gain * float(rng.uniform(.15, .85)) if fum.get('forced') else 0.
-        tackler = coverage[int(rng.integers(len(coverage)))] if coverage else {}
+        tackler = tackler or {}
         lost = bool(fum['lost'])
         result.update(fumble=True, fumble_lost=lost, fumble_by=returner.get('pid'),
                       fumble_forced=bool(fum.get('forced')), tackler=tackler.get('pid'))
