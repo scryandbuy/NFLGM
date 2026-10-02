@@ -5,6 +5,7 @@ The reserve coefficients are initial policy settings, not fitted NFL estimates.
 Hard transaction legality remains in cap_accounting; this layer prices flexibility.
 """
 import copy
+from statistics import median
 from cap_engine import CAP
 import min_salary as MS
 
@@ -28,6 +29,37 @@ def _charge(contract, index):
     if index < contract.years:
         return contract.cap_hit(index)
     return contract.remaining_proration(index) if index == contract.years else 0.
+
+
+def _retention_estimates(league, keepers):
+    """Conservative renewal placeholders, including raises from rookie pay.
+
+Use the nearest three veteran grades at the same position, excluding the
+player himself and identifiable original rookie deals. This is an observed
+pay comparison, not an agent quote. Rebuild locally so contracts, ratings and
+save/load cannot leave stale estimates; no random valuation or second ledger.
+"""
+    positions = {p.pos for p, _, _ in keepers}
+    peers = {pos: [] for pos in positions}
+    for team in league.teams.values():
+        for q in team.roster:
+            c = q.contract
+            if q.pos not in positions or q.retired or not c or not c.years:
+                continue
+            draft_year = getattr(q, 'draft_year', None)
+            if draft_year is not None and c.signed in (int(draft_year), int(draft_year)+1):
+                continue
+            if q.apy > 0:
+                peers[q.pos].append((q.pid, q.ovr, q.apy))
+    out = []
+    for p, expiry, known_pay in keepers:
+        grade = p.ovr
+        candidates = sorted((row for row in peers[p.pos]
+                             if row[0] != p.pid and abs(row[1]-grade) <= 8),
+                            key=lambda row: (abs(row[1]-grade), str(row[0])))[:3]
+        market_pay = median(row[2] for row in candidates) if candidates else known_pay
+        out.append((p, expiry, max(known_pay, market_pay)))
+    return out
 
 
 def _ledger(league, team, additions, removals, trial_cap):
@@ -96,7 +128,7 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
     rookies = _rookies(league, team, picks)
     ir = {p.pid for p in getattr(team, 'ir', ())}
     contracts = {pid: c for pid, c, _ in ledger.contracts}
-    # Named retention estimates use known pay, not invented agent quotes.
+    # Named retention estimates use current veteran pay, not agent quotes.
     # Only leading players clearly above an existing replacement are held.
     groups = {}
     for p in players.values():
@@ -112,6 +144,9 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
                 # Pay is the contract under evaluation, not the player's old deal.
                 apy = (sum(c.base)+sum(c.rb)+c.sb)/max(1,c.years-c.start_offset)
                 keepers.append((p, c.years, apy))
+    # No renewal falls inside this horizon for longer committed contracts.
+    keepers = _retention_estimates(league, [(p,e,a) for p,e,a in keepers
+                                          if e < start+HORIZON])
 
     patience = _trait(team, 'patience')
     risk = _trait(team, 'risk')
