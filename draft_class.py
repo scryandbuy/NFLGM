@@ -22,8 +22,8 @@ live. Then his attributes are scaled to hit that number: skills move with
 the scale, physicals move at the square root of it, because speed translates
 to the league and technique does not.
 
-WHAT THE FILE DOES NOT HAVE. Dev trait: drawn 65/22/10/3 like the league,
-tilted toward the top of the class. Release (Madden-only): built from short
+WHAT THE FILE DOES NOT HAVE. Dev trait: drawn from the shared development
+curve using position and class rank. Release (Madden-only): built from short
 route running and agility for receivers and backs. Redshirt flags: absent,
 so a senior is 22 and a junior 21, plus a few months.
 """
@@ -95,16 +95,50 @@ def reshape_ratings(ratings, pos, target):
     return shifted((low + high) / 2)
 
 
+DEV_POSITION_WEIGHT = 0.75
+
+
+def development_percentiles(cls):
+    """Blend position quality with class quality before drawing development.
+
+    Raw overall scales differ by position. A class's best tight end should
+    have access to the same tiers as its best receiver, without giving every
+    position's top player identical odds regardless of the class around him.
+    Keep the existing probability curve and specialist policy.
+    """
+    def percentiles(men):
+        ordered = sorted(men, key=lambda p: -p.ovr)
+        result = {}
+        i = 0
+        while i < len(ordered):
+            j = i + 1
+            while j < len(ordered) and ordered[j].ovr == ordered[i].ovr:
+                j += 1
+            rank = (i + j - 1) / 2 / max(1, len(ordered) - 1)
+            for p in ordered[i:j]:
+                result[p.pid] = rank
+            i = j
+        return result
+
+    men = [p for p in cls if p.pos not in ('K', 'P', 'LS')]
+    overall = percentiles(men)
+    groups = collections.defaultdict(list)
+    for p in men:
+        groups[p.pos].append(p)
+    return {pid: DEV_POSITION_WEIGHT * rank + (1 - DEV_POSITION_WEIGHT) * overall[pid]
+            for group in groups.values() for pid, rank in percentiles(group).items()}
+
+
 def shape_class(cls, rng=None):
     import numpy as np
     from draft_balance import tail_target
-    # DEVELOPMENT BY CLASS RANK. The trait is drawn against where a player sits in the whole class, not among his
-    # position: the 200th player draws 200th-of-479 odds whichever position he plays, so a weak position year
-    # yields no star traits there and a strong one several, and the late rounds land near all-normal
+    # Only called when building a new class; saved players are never rerolled.
+    # Position rank leads, while class rank retains stronger/weaker room effects.
     r_ = rng if rng is not None else np.random.default_rng(stable_seed(tuple(sorted(p.pid for p in cls))))
-    ranked = sorted([p for p in cls if p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.ovr); n = len(ranked)
-    for i, p in enumerate(ranked):
-        p.dev = draw_dev(i / max(n - 1, 1), r_, pos=p.pos)
+    ranked = sorted([p for p in cls if p.pos not in ('K', 'P', 'LS')], key=lambda p: -p.ovr)
+    dev_ranks = development_percentiles(cls)
+    for p in ranked:
+        p.dev = draw_dev(dev_ranks[p.pid], r_, pos=p.pos)
     for p in cls:
         if p.pos in ('K', 'P', 'LS'): p.dev = draw_dev(0.5, r_, pos=p.pos)          # specialists: normal or star, off the class ladder
     groups = collections.defaultdict(list)
@@ -243,8 +277,11 @@ def convert(row, pos, target):
 
 
 def draw_dev(rank_pct, rng, pos=None):
-    """Tilted toward the top of the class: rank_pct 0 = best, 1 = last. The tilt is steep (square root of the
-    rank), so the late rounds are nearly all normal: past the midpoint no X-Factor, about 8% star, 1% superstar."""
+    """Draw from a quality percentile: 0 = best, 1 = last.
+
+    New-class shaping blends position and class percentiles. At .4 and below
+    in quality (higher percentiles), the odds settle at 95% normal, 5% star.
+    """
     w = min(1.0, float(rank_pct) / 0.4) ** 0.6              # the top of the class is the first tenth; by the fifth round the bottom table rules
     p = np.array(DEV_TOP) * (1 - w) + np.array(DEV_BOTTOM) * w
     p[3] *= max(0.0, 1.0 - rank_pct / 0.27)              # X-Factor is gone after the fourth round

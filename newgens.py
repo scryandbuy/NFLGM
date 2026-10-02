@@ -3,8 +3,8 @@ NEWGENS: the draft class after the real one.
 
 Built onto the same template the College Football 27 class was mapped to:
 your position counts, the real rookie curve at each position for the pro
-overall, the seed's headroom rule for the ceiling, dev drawn 65/22/10/3
-tilted to the top of the class.
+overall, the seed's headroom rule for the ceiling, and the shared development
+curve weighted toward the top of each position and the whole class.
 
 WHAT VARIES. Class strength. Position and class rolls are drawn at standard
 deviations 1.5 and 0.8, then their combined effect is capped and tapered by
