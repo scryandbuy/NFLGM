@@ -213,7 +213,7 @@ def trade_value(player, val, cap=CAP, contract=None):
     return round(total, 2)
 
 def dead_money_on_trade(contract, year_index):
-    """Selling club eats the remaining prorated bonus. That is the real cost of moving him."""
+    """Bonus charge retained by the seller; assess it against cap relief."""
     if contract is None: return 0.0
     return round(contract.remaining_proration(year_index), 2)
 
@@ -351,18 +351,9 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
     v *= g['own_bias'] if owns else g['target_bias']
     if owns and asset.get('star'):
         v *= float(asset.get('ask', 1.3))            # a starter is not for sale at his value
-    if owns:
-        # THE SELLER'S DEAD MONEY. Moving him accelerates what is left of his
-        # bonus onto this year's cap. That is a real cost of the deal and it
-        # goes into what the seller wants back: at par when he has the room,
-        # above par as it eats into his space. So the other side pays more
-        # to make it worth his while - or, past the point where it kills the
-        # cap (see evaluate), he will not do it at any price.
-        dead = float(asset.get('dead', 0.0) or 0.0)
-        if dead > 0:
-            squeeze = float(np.clip(dead / max(cap_space, 1.0), 0.0, 2.0))
-            v += dead * (1.0 + 0.75 * squeeze)
-    else:
+    # Already-paid bonus is sunk money, not an extra asking price. Its
+    # accelerated cap charge belongs in the before/after ledger.
+    if not owns:
         hit = float(asset.get('inherit', asset['apy']) or 0.0)
         if hit > cap_space: v -= (hit - cap_space) * 1.4
     return v
@@ -370,15 +361,12 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
 
 def cap_blocks(offer, space_a, space_b, gm_a=None, gm_b=None, *, user_a=False, user_b=False):
     """
-    The two ways a trade dies before the assets are weighed. The seller's
-    dead money would put him over the cap, or past the share of his room his
-    contract_focus will stomach (CPU only). Or the buyer cannot fit the inherited hits.
-    Returns the reason, or None.
+    Screen the net current-year cap effect, not gross dead money.
+
+    CPU roster and future-year funding decisions use the full trade projection
+    in the caller. An over-cap team may still make an outgoing-only trade
+    that improves its position without completing the repair.
     """
-    def tol(gm):
-        if isinstance(gm, dict): f = float(gm.get('contract_focus', 0.5))
-        else: f = float(getattr(gm, 'contract_focus', 0.5)) if gm is not None else 0.5
-        return 0.9 - 0.5 * f                    # a cap hawk tolerates 40% of his room, a spender 90%
     # the cap block is about THIS year's books, so post-June 1 only this
     # year's proration counts against the room
     dead_a = sum(float(x.get('dead_now', x.get('dead', 0)) or 0) for x in offer['a_sends'] if x['kind'] == 'player')
@@ -390,12 +378,12 @@ def cap_blocks(offer, space_a, space_b, gm_a=None, gm_b=None, *, user_a=False, u
     # after the deal: space + hits shed - hits taken on - dead eaten
     after_a = space_a + out_a - in_a - dead_a
     after_b = space_b + out_b - in_b - dead_b
-    if not user_a and dead_a > 0 and (after_a < 0 or dead_a > space_a * tol(gm_a)):
-        return 'a_dead_money'
-    if not user_b and dead_b > 0 and (after_b < 0 or dead_b > space_b * tol(gm_b)):
-        return 'b_dead_money'
-    if after_a < 0: return 'a_cannot_fit'
-    if after_b < 0: return 'b_cannot_fit'
+    # Match the authoritative ledger: an acquisition requires room, while a
+    # pick-only return can improve an over-cap seller's position.
+    if after_a < -0.0005 and (in_a > 0 or after_a < space_a - 0.0005):
+        return 'a_cannot_fit'
+    if after_b < -0.0005 and (in_b > 0 or after_b < space_b - 0.0005):
+        return 'b_cannot_fit'
     return None
 
 def evaluate(offer, team_a, team_b, space_a, space_b, gm_a=None, gm_b=None, *, user_a=False, user_b=False):

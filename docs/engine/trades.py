@@ -138,33 +138,29 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
         seed = (stable_seed((getattr(viewer, 'abbr', ''), p.pid)) % 10000) / 10000.0
         seen = p.ovr + fit + (seed - 0.5) * 2.0 * PERCEPTION_SPREAD
         v = dict(v, apy=v['apy'] * (1.0 + 0.045 * (seen - p.ovr)))
-    # THE CAP FACTS OF MOVING HIM. The seller eats every dollar of bonus
-    # still prorated (dead money, this year); the buyer inherits only the
-    # base and roster bonus. Both used to be ignored in favour of the APY.
+    # THE CAP FACTS OF MOVING HIM. The seller keeps the unpaid bonus charge;
+    # the buyer inherits base and roster pay. The full before/after cap
+    # projection decides whether the seller can fund the move.
     c = getattr(p, 'contract', None)
     if c:
         dead_now, dead_next, _s = c.release(0, league.post_june1())
-        # what the seller feels: this year's charge in full, next year's at a
-        # discount because it is a year away and a growing cap absorbs it
-        dead = round(dead_now + 0.6 * dead_next, 2)
+        dead = round(dead_now + dead_next, 2)
     else:
         dead_now, dead = 0.0, 0.0
     inherit = round(c.cap_hit(0) - c.annual_proration-c.earned_base-c.earned_roster, 2) if c else 0.0
-    # WHAT THE BUYER WOULD ACTUALLY PAY. The bonus was paid by the club that
-    # signed him and stays on its books; the buyer carries base and roster
-    # bonus for the years left. So the same man is worth MORE to acquire the
-    # more of his money has already been paid: a $36m-a-year player with a
-    # $20m base is, to the buyer, a $20m-a-year player. His own club keeps
-    # valuing him on the full contract, which is what it is paying.
+    # FUTURE PAY FOR BOTH CLUBS. The old bonus has already been paid. Keeping
+    # him or acquiring him commits only the remaining base and roster pay;
+    # the cap projection separately retains the seller's bonus charge.
     yrs = max(1, int(p.contract_years_left or 1))
-    inherited_apy = (round(sum(c.cap_hit(i) - c.bonus_at(i) for i in range(yrs)) / yrs, 2)
+    inherited_apy = (round(sum(max(0.0, c.cap_hit(i) - c.bonus_at(i)
+                                   - (c.earned_base + c.earned_roster if i == 0 else 0.0))
+                                for i in range(yrs)) / yrs, 2)
                      if c else p.apy)
     from development_value import player_credit
-    row = dict(age=p.age, apy=p.apy, ovr=float(seen),
+    row = dict(age=p.age, apy=inherited_apy, ovr=float(seen),
                contract_years_left=p.contract_years_left, madden_position=p.pos,
                development_credit=player_credit(p))
-    row_buyer = dict(row, apy=inherited_apy)
-    tv_buyer = TE.trade_value(row_buyer, v)
+    tv_buyer = TE.trade_value(row, v)
     # THE STREET AND THE SQUAD ARE THE ALTERNATIVE. Why give a pick for a man when a comparable one is a free
     # agent for salary alone, or already on your practice squad? The buyer grades the best man available to
     # him at the spot the same way he grades the target; if the target is not clearly better, his trade value

@@ -13,15 +13,30 @@ import session as SS
 from league import League, Player
 
 class FreedomTests(unittest.TestCase):
-    def test_dead_money_preference_is_cpu_only_but_cap_is_not(self):
+    def test_dead_money_uses_net_cap_effect_for_cpu_and_user(self):
         asset = dict(kind='player', dead_now=8, inherit=1, out_hit=10)
         offer = dict(a_sends=[asset], a_gets=[])
-        self.assertEqual(TE.cap_blocks(offer,10,100), 'a_dead_money')
+        self.assertIsNone(TE.cap_blocks(offer,10,100))
         self.assertIsNone(TE.cap_blocks(offer,10,100,user_a=True))
-        self.assertEqual(TE.cap_blocks(offer, -3,100,user_a=True), 'a_cannot_fit')
+        self.assertIsNone(TE.cap_blocks(offer,-3,100,user_a=True))
         reverse=dict(a_sends=[],a_gets=[asset])
         self.assertIsNone(TE.cap_blocks(reverse,100,10,user_b=True))
-        self.assertEqual(TE.cap_blocks(reverse,100,10), 'b_dead_money')
+        self.assertIsNone(TE.cap_blocks(reverse,100,10))
+        costly = dict(kind='player', dead_now=16, inherit=1, out_hit=10)
+        self.assertEqual(TE.cap_blocks(dict(a_sends=[costly],a_gets=[]),4,100),'a_cannot_fit')
+        self.assertEqual(TE.cap_blocks(dict(a_sends=[],a_gets=[costly]),100,4),'b_cannot_fit')
+
+    def test_paid_bonus_does_not_raise_seller_asking_price(self):
+        team = dict(win_pct=.5, avg_age=27)
+        player = dict(kind='player', age=29, need=False, star=False,
+                      trade_value=12.0, apy=18.0, inherit=12.0,
+                      out_hit=25.0, dead_now=0.0, dead=0.0)
+        base = TE.team_price(player, team, 10.0, owns=True)
+        player.update(dead_now=20.0, dead=26.0)
+        self.assertEqual(TE.team_price(player, team, 10.0, owns=True), base)
+        # The trade still passes the current-year screen because shedding
+        # $25m in hit exceeds the $20m accelerated charge.
+        self.assertIsNone(TE.cap_blocks(dict(a_sends=[player], a_gets=[]), 10.0, 100.0))
 
     def test_veteran_extension_and_cpu_timing(self):
         L, _, _ = fixture(); p=L.player('GB-QB-0')
