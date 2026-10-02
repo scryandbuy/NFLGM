@@ -319,6 +319,8 @@ def card(session, league, pid):
     # trade value in the scout's words: what the market would pay, and who has asked
     asks = [x for x in getattr(league, 'inbox', []) if x.get('kind') == 'trade_offer' and (x.get('payload') or {}).get('gets') and p.pid in [str(a) for a in (x.get('payload') or {}).get('gets', [])]]
     interest_line = (f"{len(asks)} club{'s' if len(asks) != 1 else ''} have asked about him this season." if asks else 'No club has called about him this season.')
+    if not p.team or p.team != session.user_team:
+        interest_line = ''
     # development: the season's movement and the XP he holds
     career = getattr(p, 'career', {}) or {}
     xp_bank = round(float(getattr(p, 'xp', 0) or 0)); bought = sum(vv for k, vv in (p.xp_spent or {}).items() if not k.startswith('_') and isinstance(vv, (int, float)))
