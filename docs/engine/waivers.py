@@ -133,13 +133,13 @@ def wants(league, abbr, p, week, market=None):
     return GS.claim_value(row, v, team.gm, team.ctx()) > 0.0
 
 
-def make_room(league, abbr, p):
-    """In season the 53 is full: drop the worst man at his spot who is not locked."""
+def make_room(league, abbr, p, entry):
+    """Open a roster spot only when the release and claim fit together."""
     import practice_squad as PSQ
     import roster_needs as RN
     team = league.teams[abbr]
     if len(team.active()) < 53:
-        return True
+        return claim_fits(league, entry, abbr)
     if abbr == getattr(league, 'user_team', None):
         return False  # Only an explicitly named release may open the user's spot.
     # THE MAN WHO GOES IS WORSE THAN THE MAN WHO COMES, AND CHEAP TO CUT. It used to
@@ -163,12 +163,16 @@ def make_room(league, abbr, p):
     # Prefer the release that leaves the coach's playable roster strongest.
     # Searching the bottom few avoids repeatedly scoring an entire roster for
     # every man on the wire.
-    worst = max(sorted(cands, key=lambda q: q.ovr)[:8],
-                key=lambda q: RN.move_gain(team, p, q))
-    if RN.move_gain(team, p, worst) < 0.0:
-        return False
-    league.release(worst.pid)
-    return True
+    ranked = sorted(((RN.move_gain(team, p, q), q)
+                     for q in sorted(cands, key=lambda q: q.ovr)[:8]),
+                    key=lambda row: row[0], reverse=True)
+    for gain, outgoing in ranked:
+        if gain < 0.0:
+            break
+        if claim_fits(league, entry, abbr, release_pid=outgoing.pid):
+            league.release(outgoing.pid)
+            return True
+    return False
 
 
 def claim_contract(league, p, abbr):
@@ -183,10 +187,12 @@ def claim_contract(league, p, abbr):
     return c
 
 
-def claim_fits(league, entry, abbr):
+def claim_fits(league, entry, abbr, release_pid=None):
     from cap_accounting import require_room
     p=league.player(entry['pid'])
-    rel=entry.get('release_if_awarded') if abbr==getattr(league,'user_team',None) else None
+    rel = release_pid
+    if rel is None and abbr == getattr(league, 'user_team', None):
+        rel = entry.get('release_if_awarded')
     try: require_room(league,league.teams[abbr],p.pid,claim_contract(league,p,abbr),release_pid=rel)
     except ValueError: return False
     return True
@@ -315,7 +321,7 @@ def process(league, rng, week, verbose=False):
                 continue
             import practice_squad as _PSQ
             if _PSQ.shunned(p, abbr, league) or getattr(league.teams[abbr], '_moved_week', None) == week: continue     # released him lately, or moved already this week
-            if wants(league, abbr, p, week, market=market) and claim_fits(league,e,abbr) and make_room(league, abbr, p):
+            if wants(league, abbr, p, week, market=market) and make_room(league, abbr, p, e):
                 league.teams[abbr]._moved_week = week
                 award(league, e, abbr); awarded.append((p.pid, abbr))
                 if user in e.get('claims', []) and not user_failed:
