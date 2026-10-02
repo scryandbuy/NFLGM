@@ -768,6 +768,8 @@ class League:
     def trade(self, a, b, a_sends, b_sends):
         """a_sends / b_sends: lists of pid or DraftPick. Refuses, rather than
         half-executes, if any man is not where the deal says he is."""
+        from trade_calendar import require_open
+        require_open(self)
         for item, src in [(x, a) for x in a_sends] + [(x, b) for x in b_sends]:
             if isinstance(item, DraftPick):
                 if item.owner != src or item.used_on or not any(q is item for q in self.teams[src].picks):
