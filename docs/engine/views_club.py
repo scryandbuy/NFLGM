@@ -686,7 +686,10 @@ def act_buy_point(league, abbr, pid, attr):
     if p is None or p.team != abbr: return dict(ok=False, why='not on your roster')
     cost = XP.buy(p, attr, year=league.year, week=league.week, source='You')
     if cost is None:
-        why = ('he is at 99 there' if p.ratings.get(attr, 0) >= 99 else 'that point would take him past his ceiling' if XP.at_ceiling(p, attr) else 'not enough XP')
+        why = ('he is at 99 there' if p.ratings.get(attr, 0) >= 99 else
+               ('he has reached the maximum ceiling; no further attribute purchases are available' if (p.potential or 0) >= 99 else
+                'unlock his ceiling before buying more attributes') if XP.at_ceiling(p) else
+               'that point would take him past his ceiling' if XP.at_ceiling(p, attr) else 'not enough XP')
         return dict(ok=False, why=why)
     return dict(ok=True, line=f"+1 {attr.replace('_rating', '').replace('_', ' ')} for {int(round(cost)):,} XP. {p.name} is a {round(p.ovr)}.", cost=int(round(cost)), ovr=round(p.ovr, 1))
 

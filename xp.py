@@ -353,23 +353,29 @@ def unlock(player, *, year=None, week=None, source=None):
 
 
 def at_ceiling(player, attr=None):
-    """Would one more point (into attr, or the heaviest skill) breach it?"""
+    """Is attribute spending locked, or would this specific point breach it?
+
+    Use the same player-wide threshold as the ceiling notice and AI unlock
+    decision. Once reached, even zero-OVR attributes require an unlock first.
+    """
     import targets as TG
     pot = ceiling(player)
     if pot is None:
         return False
-    if attr is None:
-        w = TG.DEPTH_WEIGHTS.get(player.pos, {})
-        attr = max(w, key=w.get) if w else 'awareness_rating'
-    trial = dict(player.ratings); trial[attr] = trial.get(attr, 70.0) + 1.0
-    return TG.position_score(trial, player.pos) > pot + 1e-6
+    w = TG.DEPTH_WEIGHTS.get(player.pos, {})
+    primary = max(w, key=w.get) if w else 'awareness_rating'
+    for key in dict.fromkeys((primary, attr) if attr is not None else (primary,)):
+        trial = dict(player.ratings); trial[key] = trial.get(key, 70.0) + 1.0
+        if TG.position_score(trial, player.pos) > pot + 1e-6:
+            return True
+    return False
 
 
 def buy(player, attr, *, year=None, week=None, source=None):
     """
     Spend: one point into one attribute. Returns the cost paid, or None if he
-    cannot afford it, the attribute is at 99, or the point would take him
-    past his ceiling. This is the only way a rating goes up through XP, so
+    cannot afford it, the attribute is at 99, spending is locked at his ceiling,
+    or the point would take him past it. This is the only way a rating goes up through XP, so
     the ledger of purchases is always exact.
     """
     cur = player.ratings.get(attr, 70.0)

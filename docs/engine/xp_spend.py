@@ -94,18 +94,6 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
     patience = getattr(gm, 'patience', 0.5)
     sit = situation(team, week)
     guard = 0
-    # a physical he decided to save for last week comes first, and is held
-    # for until it is bought or he ages out of buying physicals
-    target = player.xp_spent.get('_saving_for')
-    if target:
-        if development_age(player) > YOUNG:
-            player.xp_spent.pop('_saving_for', None)
-        elif (paid := XP.buy(player, target, year=year, week=week, source=source)) is not None:
-            out.append(('buy', target, paid))
-            player.xp_spent.pop('_saving_for', None)
-        else:
-            out.append(('save', target, XP.cost_per_point(player, target) - player.xp))
-            return out
     while guard < 200:
         guard += 1
         if XP.at_ceiling(player):
@@ -124,6 +112,19 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
             if weeks_needed <= SAVE_WEEKS * (0.5 + patience) * (1.5 - sit):
                 out.append(('save', None, cost - player.xp))
             break
+        # A queued physical purchase cannot bypass the ceiling or prevent
+        # an affordable unlock. Resume it only after the shared lock clears.
+        target = player.xp_spent.get('_saving_for')
+        if target:
+            if development_age(player) > YOUNG:
+                player.xp_spent.pop('_saving_for', None)
+            elif (paid := XP.buy(player, target, year=year, week=week, source=source)) is not None:
+                out.append(('buy', target, paid))
+                player.xp_spent.pop('_saving_for', None)
+                continue
+            else:
+                out.append(('save', target, max(0.0, XP.cost_per_point(player, target) - player.xp)))
+                break
         attr = choose_attr(player, gm, rng)
         if attr is None:
             break
