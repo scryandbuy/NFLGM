@@ -52,7 +52,8 @@ def draft_year_of(y):
 
 
 def _spring_done(league):
-    return any(x.get('year') == spring_year(league) for x in (getattr(league, 'spring_news', None) or []))
+    return any(x.get('year') == spring_year(league) and x.get('event') != 'Senior Bowl'
+               for x in (getattr(league, 'spring_news', None) or []))
 
 
 def _pool(league):
@@ -335,7 +336,7 @@ def spring(session, league, abbr):
     risers = sorted([m for m in moves if m['delta'] > 0], key=lambda m: -m['delta'])[:12]
     fallers = sorted([m for m in moves if m['delta'] < 0], key=lambda m: m['delta'])[:12]
     events = []
-    for ev in ('combine', 'Senior Bowl', 'pro days', 'visits'):
+    for ev in ('Senior Bowl', 'combine', 'pro days', 'visits'):
         ms = [m for m in moves if m['event'] == ev]
         events.append(dict(event=ev.title() if ev != 'Senior Bowl' else ev, n=len(ms), up=sum(1 for m in ms if m['delta'] > 0), down=sum(1 for m in ms if m['delta'] < 0)))
     visited = []
@@ -354,7 +355,7 @@ def spring(session, league, abbr):
             r['uncovered'] = [f for f in v.get('flags', []) if f in ('medical', 'character') and f not in (pre.get('flags') or [])]
     done = bool(news)
     return dict(rail=rail(session, league, abbr), done=done, events=events, risers=risers, fallers=fallers, visited=visited, flagged=flagged[:40],
-                note=None if done else 'The combine, the Senior Bowl, pro days and the thirty visits happen in the Spring step of the offseason. Name your visits on the board now; the second look is the sharpest read your scouts get.')
+                note=None if _spring_done(league) else 'The Senior Bowl takes place after the conference championships, before the Championship Game. The combine, pro days and the thirty visits follow in the Spring step of the offseason. Name your visits on the board before Spring.')
 
 
 def act_sim_round(session, league, abbr):

@@ -32,16 +32,16 @@ VISITS = 30
 STOCK_MOVE = 15
 
 
-def _log(league, kind, **kw):
+def _log(league, kind, *, year=None, **kw):
     league.spring_news = getattr(league, 'spring_news', None) or []
-    league.spring_news.append(dict(kind=kind, year=league.year, **kw))
+    league.spring_news.append(dict(kind=kind, year=league.year if year is None else year, **kw))
 
 
 def _pool(league):
     return league.draft_pool or getattr(league, 'next_class', [])
 
 
-def _stock_moves(league, event):
+def _stock_moves(league, event, *, year=None):
     """Who moved fifteen or more spots on the consensus board, and which way."""
     moves = []
     for pid, c in (league.consensus or {}).items():
@@ -50,7 +50,7 @@ def _stock_moves(league, event):
             p = league.player(pid)
             if p is not None and p.pos not in ('K', 'P'):      # specialists bounce on the slot curve; nobody writes about it
                 moves.append((p, pr, r))
-                _log(league, 'stock', event=event, pid=pid, name=p.name, pos=p.pos, home_state=home_state(p), frm=pr, to=r,
+                _log(league, 'stock', year=year, event=event, pid=pid, name=p.name, pos=p.pos, home_state=home_state(p), frm=pr, to=r,
                      text=f"{p.name} ({p.pos}, {home_state(p)}) {'rises' if r < pr else 'falls'} from {pr} to {r} after the {event}")
     return moves
 
@@ -236,7 +236,9 @@ def _character(league, abbr, team, p, sd, rng):
 
 def run_spring(league, rng, verbose=False):
     """The whole spring in order. The UI will step it; the calendar runs it whole."""
-    league.spring_news = []
+    # Preserve this class's early Senior Bowl results across the year roll.
+    league.spring_news = [x for x in (getattr(league, 'spring_news', None) or [])
+                          if x.get('year') == league.year and x.get('event') == 'Senior Bowl']
     if not getattr(league, 'consensus', None): SC.consensus(league)
     n_c, m_c = combine(league, rng)
     # The interactive calendar already staged the Senior Bowl after the
@@ -246,6 +248,7 @@ def run_spring(league, rng, verbose=False):
     n_s, m_s = (0, []) if already_held else senior_bowl(league, rng)
     n_p, m_p = pro_days(league, rng)
     n_v, m_v = visits(league, rng)
+    _log(league, 'complete', event='spring')
     out = dict(combine=n_c, senior_bowl_looks=n_s, pro_day_looks=n_p, visit_looks=n_v,
                moves=len(m_c) + len(m_s) + len(m_p) + len(m_v), news=len(league.spring_news))
     if verbose: print('  spring:', out)

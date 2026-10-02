@@ -2475,7 +2475,8 @@ function renderSpring(v) {
   page.className = 'draft-page';
   featureHero(page, v.rail.club, `Draft / ${v.rail.year}`, 'SPRING REPORT', 'What the workouts, pro days, and visits changed.', [[v.visited?.length ?? 0, 'Visits'], [v.done ? v.risers.length + v.fallers.length : '—', 'Stock moves']]);
   const s = el('section', { class: 'sheet c12 draft-surface draft-spring' }, el('h2', {}, 'The Spring', el('small', {}, v.done ? v.events.map(e => `${e.event} ${e.n} moves`).join(' · ') : 'stock moves and flags')));
-  if (!v.done) { s.append(el('div', { class: 'empty' }, v.note)); page.append(s); return; }
+  if (v.note) s.append(el('div', { class: 'empty' }, v.note));
+  if (!v.done) { page.append(s); return; }
   const list = el('div', { class: 'pad' });
   const line = (kind, m) => el('div', { class: 'sprow' }, el('span', { class: 'flag ' + ({ Rises: 'up', Falls: 'dn', Flag: 'med' }[kind] || '') }, kind), el('span', {}, el('b', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + m.pid; } }, m.name), ` (${m.pos}, ${m.home_state}): ${m.line || `${m.frm} to ${m.to} after the ${m.event}`}`));
   for (const m of v.risers) list.append(line('Rises', m));

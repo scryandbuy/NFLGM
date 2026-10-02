@@ -272,6 +272,8 @@ def senior_bowl(league, rng):
     carry the mark on the board, and the user's assistants say who helped himself and who did not."""
     pool = list(getattr(league, 'draft_pool', None) or getattr(league, 'next_class', None) or [])   # in season the class waits in next_class
     if not pool: return []
+    if any(p.xp_spent.get('_senior_bowl') == league.year for p in pool):
+        return []
     cons = getattr(league, 'consensus', None) or {}
     seniors = [p for p in pool if p.age >= 22.5 and p.pos not in ('K', 'P', 'LS')]
     # about 110 invitations: the consensus top of the senior class, with some depth mixed in
@@ -291,6 +293,10 @@ def senior_bowl(league, rng):
     # the consensus moves with the rooms
     try: consensus(league)
     except Exception: pass
+    # Played before the year roll; results belong to the following spring.
+    import spring as SP
+    SP._stock_moves(league, 'Senior Bowl', year=league.year + 1)
+    SP._log(league, 'event', year=league.year + 1, event='Senior Bowl', participants=len(invited))
     moves = []
     if user:
         after = getattr(league, 'scouting', {}).get(user, {}) or {}
