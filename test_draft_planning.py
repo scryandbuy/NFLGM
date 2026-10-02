@@ -112,6 +112,7 @@ class DraftPlanningTests(unittest.TestCase):
 
     def test_expensive_future_contract_matters_only_with_cap_pressure(self):
         L, t = fixture(); L.player('LT0').contract = Contract(3, [40]*3)
+        set_grade(L.player('LT1'), 60)  # no ready replacement already on the roster
         normal = DP.assess(L, 'MIN')['positions']['LT']['contract']
         for pos in ('QB', 'WR', 'CB'): L.player(pos+'0').contract = Contract(3, [100]*3)
         stressed = DP.assess(L, 'MIN')
