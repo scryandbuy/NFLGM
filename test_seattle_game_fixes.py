@@ -140,7 +140,7 @@ class SeattleGameFixes(unittest.TestCase):
             return dict(new_yardline=75, touchback=len(kicks)<3, ret=20, returner='returner')
         with patch.object(G, 'drive_steps', side_effect=drive), patch.object(G, 'kickoff_booked', side_effect=kick), \
              patch.object(G.W, 'draw', return_value=G.W.CLEAR):
-            gen = G.game_steps(self.off, self.defense, np.random.default_rng(3), None, None, None, None)
+            gen = G.game_steps(self.off, self.defense, np.random.default_rng(3), None, None, None, lambda *a: .7)
             try:
                 while True: yielded.append(next(gen))
             except StopIteration as done: res = done.value

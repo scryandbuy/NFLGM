@@ -33,6 +33,9 @@ def _spot_yards(yardline_100):
     return int(math.floor(float(yardline_100) + 0.5))
 
 
+_field_round = _spot_yards
+
+
 def _spot(yardline_100, off_abbr, def_abbr):
     """yardline is yards to the end zone. 60 means own 40."""
     y = _spot_yards(yardline_100)
@@ -46,7 +49,7 @@ def _down(d, togo, yardline):
     if d is None: return ''
     word = {1: '1st', 2: '2nd', 3: '3rd', 4: '4th'}.get(int(d), str(d))
     if yardline is not None and togo is not None and togo >= yardline - 0.01: return f"{word} & Goal"
-    return f"{word} & {int(round(togo))}" if togo is not None else word
+    return f"{word} & {_field_round(togo)}" if togo is not None else word
 
 
 def _yards(y):
@@ -80,14 +83,14 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"{who} {'sneaks' if p.get('sneak') else 'runs'}{(' ' + how) if how else ''} {'to inside the 1' if near_goal_short else 'for ' + yd}"
         if td:
             yl = float(p.get('yardline', 1) or 1)
-            origin = 'inside the 1' if 0 < yl < 1 else f'the {int(round(yl))}'
+            origin = 'inside the 1' if 0 < yl < 1 else f'the {_field_round(yl)}'
             text = f"{who} runs it in from {origin}. TOUCHDOWN."; kind = 'score'
         else:
             kind = cls
             if p.get('broken_tackles'): text += f", breaking {int(p['broken_tackles'])} tackle{'s' if p['broken_tackles'] > 1 else ''}"
             text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
     elif t == 'complete':
-        cls, yd = _yards(p.get('yards', 0))
+        cls, yd = _yards(_field_round(spot) if td and spot >= 1 else p.get('yards', 0))
         if td and 0 < gain < .5: yd = 'less than a yard'
         pre = 'Play action. ' if p.get('play_action') else ''
         press_name = passer or 'the quarterback'
@@ -159,7 +162,7 @@ def play_line(league, p, off_abbr, def_abbr):
                     if p.get('retained'): kind = 'special'
         else:
             _ny = p.get('new_yardline')
-            _down_spot = _spot(100.0 - float(_ny), off_abbr, def_abbr) if _ny is not None else None
+            _down_spot = _spot(float(_ny), def_abbr, off_abbr) if _ny is not None else None
             ret = int(p.get('display_ret', round(p.get('ret', 0))))
             gross = int(p.get('display_gross', round(p.get('gross', 0))))
             # Return resolution can replace earlier display fields with rounded

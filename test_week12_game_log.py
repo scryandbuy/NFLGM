@@ -79,6 +79,8 @@ class Week12Log(unittest.TestCase):
             if punt.get('blocked') or punt.get('touchback'):
                 continue
             kinds.add(punt['how'])
+            self.assertEqual(origin - punt['display_gross'] + punt['display_ret'],
+                             100 - ticker._field_round(punt['new_yardline']))
             text = ticker.play_line(league, punt, 'GB', 'LA')['text']
             gross = int(re.search(r'Punt, (\d+) yards', text)[1])
             returned = re.search(r'returned (\d+) yard', text)
