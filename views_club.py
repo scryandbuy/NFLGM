@@ -101,6 +101,55 @@ def _row(session, league, t, p):
                 stats=_season_line(league, p))
 
 
+def salaries(session, league, abbr):
+    """Contract ledger, using the same charges and release math as transactions."""
+    from cap_engine import CAP
+    from cap_accounting import pre_roll, next_year_ledger
+    t = league.teams[abbr]
+    t.sync_cap()
+    offset = int(pre_roll(league))
+    horizon = max(5, max((p.contract.years + 1 - offset for p in t.roster if p.contract), default=5))
+    indices = list(range(offset, offset + horizon))
+    rows = []
+    for p in t.roster:
+        c = p.contract
+        if c is None: continue
+        annual = []
+        for i in indices:
+            if i < c.years:
+                dead, later, savings = c.release(i, league.post_june1() if i == 0 else True)
+                annual.append(dict(base=float(c.base[i]), roster_bonus=float(c.rb[i]), bonus=float(c.bonus_at(i)),
+                                   hit=float(c.cap_hit(i)), dead=dead, dead_next=later, savings=savings, void=False))
+            elif i == c.years and c.remaining_proration(i):
+                # At expiry all remaining void-year bonus accelerates into one charge.
+                annual.append(dict(base=0., roster_bonus=0., bonus=float(c.remaining_proration(i)),
+                                   hit=float(c.remaining_proration(i)), dead=None, dead_next=None, savings=None, void=True))
+            else: annual.append(None)
+        tags = []
+        if getattr(c, 'rookie', False): tags.append('Rookie Deal')
+        if getattr(p, 'fa_class', None) == 'tagged': tags.append('Franchise Tag')
+        if c.years - offset == 1: tags.append('Final Year')
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr),
+                         left=max(0, c.years-offset), status=' · '.join(tags), annual=annual,
+                         unit='OFF' if p.pos in OFFENSE else 'ST' if p.pos in ('K', 'P', 'LS') else 'DEF'))
+    years = []
+    for j, i in enumerate(indices):
+        year = league.year + i
+        players = sum(r['annual'][j]['hit'] for r in rows if r['annual'][j])
+        dead = float((getattr(t, 'dead_money', {}) or {}).get(year, 0.))
+        limit = float(CAP.get(year, t.cap.cap * 1.055 ** i))
+        committed = players + dead
+        if i == 0:
+            limit, committed, dead = t.cap.limit, t.cap.charges(t.phase), t.cap.dead
+        elif i == 1:
+            limit, committed, _, dead = next_year_ledger(league, t)
+            # Expiry acceleration is already shown on the player's row.
+            dead -= sum(r['annual'][j]['hit'] for r in rows if r['annual'][j] and r['annual'][j]['void'])
+        years.append(dict(year=year, projected=i > 0, players=players, dead=dead,
+                          adjustments=committed-players-dead, committed=committed, limit=limit, space=limit-committed))
+    return dict(rail=rail(session, league, abbr), club_abbr=abbr, mine=abbr == session.user_team, rows=rows, years=years)
+
+
 def _season_line(league, p, year=None):
     """The season line by position, with the advanced numbers the engine keeps."""
     import advanced_stats as AS

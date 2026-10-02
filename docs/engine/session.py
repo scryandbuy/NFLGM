@@ -1294,6 +1294,10 @@ class Session:
         import views_club as VC
         return VC.regression(self, self.L, self.user_team, year=year)
 
+    def club_salaries(self, abbr=None):
+        import views_club as VC
+        return VC.salaries(self, self.L, abbr or self.user_team)
+
     def club_roster(self, abbr=None):
         import views_club as VC
         v = VC.roster(self, self.L, abbr or self.user_team)
