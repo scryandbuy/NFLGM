@@ -170,15 +170,18 @@ class FinancialConsumerTests(unittest.TestCase):
         picks=[DraftPick(2026,r,'GB','GB') for r in (1,2)]; a.picks=picks[:]
         cache={}
         with patch.object(RN,'assess',wraps=RN.assess) as assess, \
+             patch.object(FP,'retention_market',wraps=FP.retention_market) as market, \
              patch.object(FP,'evaluate',return_value=dict(approved=True)) as budget:
             self.assertTrue(TR._financial_trade(L,a,b,[picks[0]],[p.pid],cache))
             count=assess.call_count
             self.assertTrue(TR._financial_trade(L,a,b,[picks[1]],[p.pid],cache))
             self.assertEqual(assess.call_count,count)
+            self.assertEqual(market.call_count,1)
             self.assertEqual(budget.call_args_list[0].kwargs['picks'],[picks[1]])
             self.assertEqual(budget.call_args_list[2].kwargs['picks'],[picks[0]])
             self.assertTrue(TR._financial_trade(L,a,b,[picks[1]],[p.pid]))
             self.assertGreater(assess.call_count,count)
+            self.assertEqual(market.call_count,2)
 
     def test_real_policy_rejects_discretionary_poach_when_only_reserve_remains(self):
         for room, expected in ((1., False), (30., True)):

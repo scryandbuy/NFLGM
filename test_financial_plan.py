@@ -25,6 +25,27 @@ class FinancialPlanTests(unittest.TestCase):
         self.t.sync_cap()
         self.t.cap.dead=self.t.cap.limit-self.t.cap.charges('season')+self.t.cap.dead-amount
 
+    def test_negotiation_market_matches_uncached_projections(self):
+        self.L.player('QB0').contract = Contract(1, [5])
+        market_view = FP.retention_market(self.L)
+        arrival = self.candidate(); arrival.pos = 'WR'; set_grade(arrival, 85)
+        for picks in ([], [DraftPick(self.L.year, 1, 'MIN', 'MIN')]):
+            kw = dict(additions=[(arrival, Contract(3, [4, 6, 8]))], gain=12, picks=picks)
+            self.assertEqual(FP.evaluate(self.L, self.t, **kw),
+                             FP.evaluate(self.L, self.t, market=market_view, **kw))
+
+    def test_new_negotiation_refreshes_peer_pay_and_ratings(self):
+        p = self.L.player('QB0'); p.contract = Contract(1, [1]); set_grade(p, 95)
+        q = copy.deepcopy(p); q.pid = 'veteran'; q.contract = Contract(3, [30]*3)
+        other = Team('DEN', 'Continental West', 'Continental'); other.league = self.L
+        other.roster.append(q); self.L.teams['DEN'] = other
+        previous = FP.retention_market(self.L)
+        before = FP.snapshot(self.L, self.t, market=previous)
+        q.contract = Contract(3, [12]*3); set_grade(q, 94)
+        refreshed = FP.snapshot(self.L, self.t, market=FP.retention_market(self.L))
+        self.assertEqual(refreshed, FP.snapshot(self.L, self.t))
+        self.assertLess(refreshed['years'][1]['retention_reserve'], before['years'][1]['retention_reserve'])
+
     def test_marginal_purchase_rejected_but_major_upgrade_can_use_cushion(self):
         self.room(7)
         p=self.candidate();offer=Contract(1,[4])

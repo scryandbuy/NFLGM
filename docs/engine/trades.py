@@ -633,6 +633,9 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None):
         except ValueError:
             cache[key] = None
             return False
+        if 'retention_market' not in cache:
+            cache['retention_market'] = FP.retention_market(league)
+        market = cache['retention_market']
         states = {}
         for team, sent, received in ((ta, outgoing, incoming), (tb, incoming, outgoing)):
             if team.abbr == getattr(league, 'user_team', None):
@@ -645,7 +648,8 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None):
             projected = [p for p in team.active() if p.pid not in removed] + arrivals
             gain = RN.assess(team, projected)['score'] - RN.assess(team)['score']
             states[team.abbr] = dict(additions=[(p, contracts[p.pid]) for p in arrivals],
-                removals=removed, trial_cap=trial, gain=gain, before=FP.snapshot(league, team))
+                removals=removed, trial_cap=trial, gain=gain, market=market,
+                before=FP.snapshot(league, team, market=market))
         cache[key] = states
     if cache[key] is None:
         return False

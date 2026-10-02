@@ -1,6 +1,8 @@
 CPU GM financial plan — full-calendar verification, 2 October 2026
 
-RESULT: NOT FULLY PASSED. Production code stayed frozen at 1ce274c.
+ORIGINAL AUDIT RESULT: NOT FULLY PASSED. Production code stayed frozen at 1ce274c.
+FOLLOW-UP: all three confirmed defects were fixed and targeted replays passed.
+See the repair verification below; a fresh full multiyear run was not repeated.
 
 Two independent seeds (30105, 30106), all 32 teams controlled by the CPU,
 using actual Session.advance. Games, injuries, development, retirement,
@@ -79,6 +81,51 @@ Reproduction: audit_financial_franchise.py --seed SEED --years2 --output PATH
 (Use --years 2 with a space.) PYTHONHASHSEED=0. Local NetworkX dependency was
 loaded from ../../outputs/team-study-deps. audit_financial_franchise_report.py
 summarizes saved observations; audit_financial_reload.py verifies endpoint saves.
+
+Repair verification, 2 October 2026
+---------------------------------
+Depth: shared complete-move validation now preserves essential backup counts,
+incumbents and recent arrivals. It prices the actual outgoing player once and
+recomputes the resulting roster. The season-opening gate checks usable depth,
+including longer injuries. Essential repairs can try an affordable external
+practice-squad player when free-agent candidates cannot fit the cap.
+
+Specialists: cutdown releases affordable, unprotected healthy duplicates through
+normal waivers. CPU specialist upgrades replace the incumbent instead of cutting
+unrelated depth; locks, recent additions and protected investments remain safe.
+User roster decisions and genuine injury cover are preserved.
+
+Performance: veteran pay observations are reused within one unchanged trade
+negotiation, then discarded. No persistent cache, new randomness or changed
+financial thresholds. The identical Week9 trade-search input produced eight
+trades and byte-equivalent canonical saved state with identical RNG:
+SHA256 33d37b8ed05f0c05bd8a4ced12fa4ae865a37bdc9de8cfad689270530e44a6fb.
+Measured search time: baseline295.43s; corrected95.76s (67.6% reduction in this
+test, not a promise for every advance or machine).
+
+Validation:
+- 99 focused tests passed across financial_plan, financial_consumers,
+  financial_market_routes, specialist_allocation, cpu_depth_repair,
+  roster_cap_recovery, waiver_cap_claim and franchise_roster_gate.
+- Both 2027 opening saves and seed30105's 2028 opening save repaired to32
+  legal53-man rosters, no essential-depth gaps or duplicate/missing package
+  assignments, and no same-team acquisition churn. A second depth pass made0moves.
+- The actual blocked seed30106 2028 save advanced through two normal waiver
+  stops into Week1 and successfully played it. SF acquired real punterP2159.
+  All32 clubs had53 players, legal cap and essential depth; all four-year funded
+  projections were nonnegative. No fabricated players or bypassed calendar gate.
+- Browser engine rebuilt from corrected source; source/shipped module parity
+  verified. Changes(2)'s depth commit cc724ab integrated as41b602f, plus root
+  specialist, finalizer and performance corrections.
+
+Evidence: ../../outputs/financial-fix-validation-20261002/*.json,
+../../outputs/financial-trade-benchmark-baseline.json,
+../../outputs/financial-trade-benchmark-plan.json and
+../../outputs/financial-depth-diagnosis-20261002/fixed-checkpoint-replay.json.
+Reproduce a repair: audit_financial_repairs.py SAVE OUTPUT [--play].
+Limits: original1140-game audit is still the multiyear evidence; the corrections
+were verified with targeted tests, original failure saves and one new Week1,
+not a newly repeated complete two-season sweep.
 The harness now saves failure.json/failed_checkpoint.json on a blocked advance.
 For the original failed run those files were reconstructed from its unchanged
 pre-wire checkpoint and the matching blocked replay. No engine fixes in this

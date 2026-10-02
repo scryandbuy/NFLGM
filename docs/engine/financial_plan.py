@@ -31,7 +31,28 @@ def _charge(contract, index):
     return contract.remaining_proration(index) if index == contract.years else 0.
 
 
-def _retention_estimates(league, keepers):
+def retention_market(league, positions=None):
+    """Immutable pay observations for one negotiation with unchanged league state.
+
+    Callers must discard this after any roster, contract or rating change.
+    Default projections rebuild it; it is never stored on the league or saved.
+    """
+    peers = {}
+    for team in league.teams.values():
+        for q in team.roster:
+            c = q.contract
+            if (positions is not None and q.pos not in positions) or q.retired or not c or not c.years:
+                continue
+            draft_year = getattr(q, 'draft_year', None)
+            if draft_year is not None and c.signed in (int(draft_year), int(draft_year)+1):
+                continue
+            pay = q.apy
+            if pay > 0:
+                peers.setdefault(q.pos, []).append((q.pid, q.ovr, pay))
+    return {pos: tuple(rows) for pos, rows in peers.items()}
+
+
+def _retention_estimates(league, keepers, market=None):
     """Conservative renewal placeholders, including raises from rookie pay.
 
 Use the nearest three veteran grades at the same position, excluding the
@@ -39,22 +60,11 @@ player himself and identifiable original rookie deals. This is an observed
 pay comparison, not an agent quote. Rebuild locally so contracts, ratings and
 save/load cannot leave stale estimates; no random valuation or second ledger.
 """
-    positions = {p.pos for p, _, _ in keepers}
-    peers = {pos: [] for pos in positions}
-    for team in league.teams.values():
-        for q in team.roster:
-            c = q.contract
-            if q.pos not in positions or q.retired or not c or not c.years:
-                continue
-            draft_year = getattr(q, 'draft_year', None)
-            if draft_year is not None and c.signed in (int(draft_year), int(draft_year)+1):
-                continue
-            if q.apy > 0:
-                peers[q.pos].append((q.pid, q.ovr, q.apy))
+    peers = retention_market(league, {p.pos for p, _, _ in keepers}) if market is None else market
     out = []
     for p, expiry, known_pay in keepers:
         grade = p.ovr
-        candidates = sorted((row for row in peers[p.pos]
+        candidates = sorted((row for row in peers.get(p.pos, ())
                              if row[0] != p.pid and abs(row[1]-grade) <= 8),
                             key=lambda row: (abs(row[1]-grade), str(row[0])))[:3]
         market_pay = median(row[2] for row in candidates) if candidates else known_pay
@@ -110,7 +120,7 @@ Unknown slots use the middle of their round, explicitly a forecast.
 
 
 def snapshot(league, team, *, additions=(), removals=(), trial_cap=None,
-             pending=(), picks=None):
+             pending=(), picks=None, market=None):
     """Four actual cap-year rows. Pending (player, Contract) pairs count once.
 
 `picks` optionally supplies the post-trade pick inventory. Current-year raw_room
@@ -146,7 +156,7 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
                 keepers.append((p, c.years, apy))
     # No renewal falls inside this horizon for longer committed contracts.
     keepers = _retention_estimates(league, [(p,e,a) for p,e,a in keepers
-                                          if e < start+HORIZON])
+                                          if e < start+HORIZON], market)
 
     patience = _trait(team, 'patience')
     risk = _trait(team, 'risk')
@@ -217,7 +227,7 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
 
 def evaluate(league, team, *, additions=(), removals=(), trial_cap=None,
              gain=0., essential=False, action='', pending=(), before=None,
-             picks=None):
+             picks=None, market=None):
     """Screen a CPU proposal; callers still perform authoritative legal checks.
 
 Existing unfunded future commitments do not freeze cap-improving moves. A
@@ -225,9 +235,9 @@ meaningful football gain releases a bounded part of the soft reserve; essential
 repairs can release it all, but cannot worsen legal cap debt. `before` may be
 reused only while roster/contracts/phase/pending commitments are unchanged.
 """
-    before = before or snapshot(league,team,pending=pending)
+    before = before or snapshot(league,team,pending=pending,market=market)
     after = snapshot(league,team,additions=additions,removals=removals,
-                     trial_cap=trial_cap,pending=pending,picks=picks)
+                     trial_cap=trial_cap,pending=pending,picks=picks,market=market)
     result = dict(approved=True, reason='approved_normal', action=action,
                   before=before, after=after, reserve_used=0.)
     if team.abbr == getattr(league,'user_team',None):

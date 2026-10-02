@@ -138,6 +138,23 @@ def make_room(league, abbr, p, entry):
     import practice_squad as PSQ
     import roster_needs as RN
     team = league.teams[abbr]
+    # A healthy specialist upgrade replaces the incumbent. Keeping both by
+    # releasing an unrelated player can exhaust the market for another club.
+    incumbents = [q for q in team.active() if q.pos == p.pos and q.out_until is None]
+    if (abbr != getattr(league, 'user_team', None) and p.pos in ('K', 'P', 'LS')
+            and incumbents):
+        if p.out_until is not None:
+            return False
+        recent = PSQ._recent_additions(league, team)
+        for q in sorted(incumbents, key=lambda q: (q.ovr, q.pid)):
+            if (q.pid in recent or q.ovr >= p.ovr - .5 or PSQ.locked(q, league.week)
+                    or PSQ.protected(team, q, league, incoming=p)):
+                continue
+            if (claim_fits(league, entry, abbr, release_pid=q.pid)
+                    and _claim_budget(league, team, p, q)):
+                league.release(q.pid)
+                return True
+        return False
     if len(team.active()) < 53:
         return claim_fits(league, entry, abbr) and _claim_budget(league, team, p)
     if abbr == getattr(league, 'user_team', None):
@@ -153,7 +170,10 @@ def make_room(league, abbr, p, entry):
     import min_salary as MS
     from cap_engine import CAP
     ceiling = MS.minimum_salary(3, CAP.get(league.year, 301.2))
-    def ok(q): return q is not p and not PSQ.locked(q, league.week) and q.ovr < p.ovr - 0.5 and q.dead_if_cut(0) <= ceiling and not PSQ.protected(team, q, league)
+    # Claims must not undo the essential backup repairs made before the wire.
+    # Share their coverage and recent-arrival checks across acquisition routes.
+    safe = {q.pid for q in PSQ._room_candidates(league, team, p)}
+    def ok(q): return q.pid in safe and q.ovr < p.ovr - 0.5 and q.dead_if_cut(0) <= ceiling
     grp = GRP.get(p.pos, p.pos)
     cands = [q for q in team.active() if GRP.get(q.pos, q.pos) == grp and ok(q)]
     if not cands:

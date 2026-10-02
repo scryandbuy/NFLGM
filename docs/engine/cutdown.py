@@ -51,6 +51,32 @@ def rows_for(team):
             for p in team.active()]
 
 
+def trim_specialists(league):
+    """Release affordable healthy duplicates through normal waivers at cutdown.
+
+    Camp competition is over. Keep the best specialist and actual injury cover;
+    do not take roster control from the user or discard protected investments.
+    """
+    import practice_squad as PS
+    cuts = []
+    for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None):
+            continue
+        for pos in ('K', 'P', 'LS'):
+            healthy = sorted((p for p in team.active() if p.pos == pos and p.out_until is None),
+                             key=lambda p: (-p.ovr, p.pid))
+            for p in healthy[1:]:
+                if PS.locked(p, league.week) or PS.protected(team, p, league):
+                    continue
+                saved, _, _ = CT.savings_if_cut(p, league.post_june1())
+                if team.cap_space + saved < -.0005:
+                    continue
+                league.release(p.pid)
+                team.sync_cap()
+                cuts.append((abbr, p))
+    return cuts
+
+
 def run(league, rng, verbose=False):
     """
     Every club to 53. Surplus players are released and reach the market.
@@ -89,19 +115,22 @@ def run(league, rng, verbose=False):
     return cuts, short
 
 
-def _sources(team, report):
+def _sources(team, report, week=None):
     import roster_needs as RN
-    return {pos for role, eligible in RN.role_slots(team)
-            if role in report['uncovered'] for pos in eligible}
+    import practice_squad as PS
+    shortages = PS.essential_depth(team, week=week)['shortages']
+    return ({pos for role, eligible in RN.role_slots(team)
+             if role in report['uncovered'] for pos in eligible}
+            | {pos for pos in POS_CAP if PS.GROUP_OF.get(pos, pos) in shortages})
 
 
-def _replacement_pool(league, team, sources):
+def _replacement_pool(league, team, sources, essential=False):
     import practice_squad as PS
     pool = PS.available_free_agents(league) + [p for p in PS.squad(team)
             if not p.retired and p.out_until is None]
     # Search other squads for an otherwise unavailable starting role, not
     # simply to churn another club's developmental depth into our bench.
-    absent = sources - {p.pos for p in pool}
+    absent = sources if essential else sources - {p.pos for p in pool}
     pool += [p for other in league.teams.values() if other is not team
              for p in PS.squad(other) if p.pos in absent
              and not p.retired and p.out_until is None]
@@ -238,7 +267,7 @@ def fill_short(league, rng, verbose=False):
             if _cross_train_kicker(league, team, report, reserve=reserve):
                 signed += len(team.active()) - before
                 continue
-            sources = _sources(team, report)
+            sources = _sources(team, report, league.week)
             pool = _replacement_pool(league, team, sources)
             pool = [p for p in pool if len(team.by_pos(p.pos)) < POS_CAP.get(p.pos, 4)]
             pool.sort(key=lambda p: (p.pos in sources,
@@ -269,7 +298,7 @@ def repair_shape(league):
         for _ in range(ROSTER_LIMIT):
             report = RN.assess(team)
             if not report['uncovered'] or len(team.active()) != ROSTER_LIMIT: break
-            sources = _sources(team, report)
+            sources = _sources(team, report, league.week)
             pool = _replacement_pool(league, team, sources)
             if not any(p.pos == 'LS' for p in pool) and _convert_long_snapper(league, team, report):
                 fixed += 1
@@ -304,17 +333,54 @@ def repair_shape(league):
     return fixed
 
 
+def repair_depth(league):
+    """Fund essential backups with a net improvement, including full camp rosters.
+
+    Use the same prepared move as weekly repairs: price and approve the exact
+    departure before releasing anyone, then recompute actual depth after arrival.
+    """
+    import practice_squad as PS
+    fixed = 0
+    for abbr, team in league.teams.items():
+        if abbr == getattr(league, 'user_team', None): continue
+        for _ in range(ROSTER_LIMIT):
+            before = PS.essential_depth(team, week=league.week)['shortages']
+            if not before: break
+            sources = {pos for pos in POS_CAP if PS.GROUP_OF.get(pos, pos) in before}
+            pool = sorted(_replacement_pool(league, team, sources, essential=True),
+                          key=lambda p: (bool(p.team and p.team != abbr), -p.ovr, str(p.pid)))
+            moved = False
+            for p in pool:
+                if p.pos not in sources: continue
+                if p.team == abbr:
+                    moved = PS.call_up(league, abbr, p.pid, emergency=True)
+                elif p.team:
+                    moved = PS.poach(league, abbr, p.pid, league.week, essential=True)
+                else:
+                    moved = PS.sign_minimum(league, abbr, p, essential=True)
+                if moved:
+                    after = PS.essential_depth(team, week=league.week)['shortages']
+                    if sum(after.values()) >= sum(before.values()):
+                        raise RuntimeError('Roster depth repair did not improve actual coverage')
+                    fixed += 1
+                    break
+            if not moved: break
+    return fixed
+
+
 def violations(league):
     """Final CPU season-opening constraints, independent of the user's choices."""
     import roster_needs as RN
+    import practice_squad as PS
     problems = []
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None): continue
         team.sync_cap()
         missing = RN.assess(team)['uncovered']
-        if len(team.active()) != ROSTER_LIMIT or team.cap_space < -.0005 or missing:
+        depth = PS.essential_depth(team, week=league.week)['shortages']
+        if len(team.active()) != ROSTER_LIMIT or team.cap_space < -.0005 or missing or depth:
             problems.append(dict(team=abbr, size=len(team.active()),
-                                 cap=round(team.cap_space, 3), missing=list(missing)))
+                                 cap=round(team.cap_space, 3), missing=list(missing), depth=depth))
     return problems
 
 
@@ -333,12 +399,13 @@ def finalize(league, rng, verbose=False, passes=3):
     # Batch and interactive callers must both price all 53, while the league
     # calendar still controls the offseason post-June 1 departure treatment.
     for team in league.teams.values(): team.phase = 'season'
-    total_cut, total_signed = [], 0
+    total_cut, total_signed = trim_specialists(league), 0
     for _ in range(passes):
         cuts, _ = run(league, rng)
         total_cut += cuts
         total_signed += fill_short(league, rng)
         repair_shape(league)
+        repair_depth(league)
         if not violations(league): break
     if verbose:
         print(f'  {len(total_cut)} cut, {total_signed} signed; unresolved: {violations(league)}')
