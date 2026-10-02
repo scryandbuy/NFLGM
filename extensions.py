@@ -26,6 +26,7 @@ men enters his final year.
 """
 from inbox import player_name as inbox_player
 import numpy as np
+import math
 from cap_engine import Contract, CAP, MAX_PRORATION_YEARS
 import contract_structure as CS
 import valuation as VAL
@@ -163,6 +164,9 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
         return dict(result='refused', why='not under contract to a club')
     if not eligible(p, league):
         return dict(result='refused', why='not eligible: more than two years left, or a rookie deal before his third season')
+    if by_ai:
+        why = _ai_refusal(league, p)
+        if why: return dict(result='refused', why=why)
     tm = terms(league, p, rng, pool=pool)
     if tm is None:
         return dict(result='refused', why='no market read on him')
@@ -184,8 +188,16 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
     # floor with the same morale and shape terms, and a second floor that disagreed by a few cents made
     # an agreed deal 'fall through' and left the thread failing every week
     if not agreed and not assessment['acceptable']:
-        counter = round(floor, 2)
-        return dict(result='countered', ask=counter, years=tm['years'], why=f"his agent wants ${counter}m a year over {tm['years']} years")
+        counter = dict(assessment['reference_package'])
+        # Round up the complete neutral package so accepting the published
+        # counter cannot fall a fraction of a cent below its own assessment.
+        price = math.ceil(counter['apy'] * 100) / 100
+        counter['bonus'] *= price / counter['apy']
+        counter['apy'] = price
+        counter = CO.canonical(league, p, team, counter, 'extension')
+        return dict(result='countered', ask=price, years=counter['years'], counter=counter,
+            why=f"his agent wants ${price:.2f}m a year over {counter['years']} years, "
+                f"with ${counter['bonus']:.2f}m signing bonus and evenly distributed new salaries")
     if years < 1:
         return dict(result='refused', why='at least one new year')
     cap = CAP.get(league.year, 301.2)
@@ -220,7 +232,7 @@ def next_year_room(team, cap_next):
     return cap_next - committed - team.cap.dead_next
 
 
-def can_afford_extension(league, team, player, apy, years):
+def can_afford_extension(league, team, player, apy, years, front_load=None, bonus=None):
     """Compare each projected annual cap charge with that year's budget.
 
     Total multi-year cash is not a one-year cap charge. Preserve current-year
@@ -229,9 +241,12 @@ def can_afford_extension(league, team, player, apy, years):
     cap = CAP.get(league.year, 301.2)
     try:
         import contract_offer as CO
-        offer = CO.canonical(league, player, team, dict(apy=apy, years=years), 'extension')
+        offer = CO.canonical(league, player, team, dict(apy=apy, years=years,
+            front_load=front_load, bonus=bonus), 'extension')
         preview = build(player, years, apy, cap, team.gm, league,
                         front_load=offer['front_load'], bonus=offer['bonus'])
+        from cap_accounting import require_room
+        require_room(league, team, player.pid, preview)
     except ValueError:
         return False
     from cap_accounting import next_year_ledger
@@ -251,6 +266,64 @@ def can_afford_extension(league, team, player, apy, years):
         if committed - old + new > limit + .0005 and new > old + .0005:
             return False
     return True
+
+
+def _ai_refusal(league, p):
+    import negotiations as NG
+    if NG.extension_defers(league, p):
+        return 'His agent will not negotiate an extension during the season'
+    for t in reversed(getattr(league, 'negotiations', None) or []):
+        if t.get('pid') == p.pid and t.get('team') == p.team and t.get('kind') == 'extension':
+            if t.get('state') == 'declined' or (t.get('state') == 'broken_off'
+                    and t.get('broken_until', float('inf')) > NG._clock(league)):
+                return 'His extension negotiation is closed'
+            break
+    return None
+
+
+def negotiate_ai(league, p, apy, years, rng=None, pool=None):
+    """One budget, one term, at most four alternative payment packages.
+
+    The club may move cash earlier or add up to ten percentage points of
+    upfront bonus. It never increases its price/term ceiling to force a yes.
+    """
+    import contract_offer as CO
+    if p.team is None or p.team == getattr(league, 'user_team', None):
+        return dict(result='refused', why='CPU negotiations require a CPU team')
+    why = _ai_refusal(league, p)
+    if why: return dict(result='refused', why=why)
+    team = league.teams[p.team]
+    original = CO.canonical(league, p, team, dict(apy=apy, years=years), 'extension')
+    # Assess the original even if its shape misses a budget: a different
+    # payment schedule can fit. No signing happens outside both cap guards.
+    budget, total = float(apy), float(apy) * years
+    max_bonus = min(total * .78, original['bonus'] + total * .10)
+    candidates = [original]
+    seen = set(); last = dict(result='refused', why='No affordable agreement within the club budget')
+    attempts = 0
+    while candidates:
+        package = candidates.pop(0)
+        key = (package['apy'], package['years'], package['bonus'], package['front_load'])
+        if key in seen: continue
+        seen.add(key)
+        if (package['years'] != years or package['apy'] > budget + 1e-9
+                or package['apy'] * years > total + 1e-9 or package['bonus'] > max_bonus + 1e-9):
+            continue
+        if not can_afford_extension(league, team, p, package['apy'], years,
+                                    package['front_load'], package['bonus']):
+            if package is original:
+                candidates.extend([dict(original, front_load=.5), dict(original, front_load=.85),
+                    dict(original, front_load=.5, bonus=min(max_bonus, total*.445))])
+            continue
+        attempts += 1
+        result = extend(league, p.pid, package['apy'], years, rng, by_ai=True,
+                        pool=pool, front_load=package['front_load'], bonus=package['bonus'])
+        last = dict(result, attempts=attempts)
+        if result['result'] in ('accepted', 'refused'): return last
+        if package is original:
+            candidates.extend([dict(original, front_load=.5), dict(original, front_load=.85),
+                dict(original, front_load=.5, bonus=min(max_bonus, total*.445)), result['counter']])
+    return dict(last, attempts=attempts)
 
 
 def ai_round(league, rng, verbose=False):
@@ -294,9 +367,7 @@ def ai_round(league, rng, verbose=False):
             want = 1.0 - 0.06 * rank - 0.10 * max(0.0, gm.youth - 0.5) * (p.age >= 28)
             offer = tm['offer'] * (1.0 + 0.12 * want)
             if offer < floor: continue
-            if not can_afford_extension(league, team, p, min(offer, tm['ask']), tm['years']):
-                continue
-            res = extend(league, p.pid, round(min(offer, tm['ask']), 2), tm['years'], rng, by_ai=True, pool=pool)
+            res = negotiate_ai(league, p, round(min(offer, tm['ask']), 2), tm['years'], rng, pool=pool)
             if res['result'] == 'accepted':
                 n += 1; done.append((abbr, p.name, p.pos, round(p.ovr), res['apy'], res['years']))
                 pool = None  # The next player must see the new signed contract.
@@ -329,8 +400,7 @@ def in_season_round(league, rng, week):
         if tm is None: continue
         offer = tm['offer'] * 1.04
         if offer < tm['ask'] * (1.0 - tm['discount']): continue
-        if not can_afford_extension(league, team, p, min(offer, tm['ask']), tm['years']): continue
-        res = extend(league, p.pid, round(min(offer, tm['ask']), 2), tm['years'], rng, by_ai=True)
+        res = negotiate_ai(league, p, round(min(offer, tm['ask']), 2), tm['years'], rng)
         if res.get('result') == 'accepted': done.append((abbr, p.name, p.pos, res['apy'], res['years']))
     return done
 

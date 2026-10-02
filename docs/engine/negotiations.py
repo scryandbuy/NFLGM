@@ -89,6 +89,15 @@ def _say(t, who, text):
     t.setdefault('log', []).append(dict(who=who, text=text))
 
 
+def extension_defers(league, p, situation=None):
+    """A firm midseason refusal, shared with CPU extension decisions."""
+    if league.phase in ('offseason', 'free_agency', 'camp'):
+        return False  # A saved week number is not an ongoing season.
+    s = situation or _situation(league, p)
+    return (s['in_season'] and s['star'] and s['final_year'] and s['money'] > 0.55
+            and s['morale'] >= 40 and stable_seed(p.pid) % 100 < 60)
+
+
 def open_talks(league, pid, kind='extension'):
     """The agent's ballpark and mood. Costs nothing."""
     import extensions as EXT, valuation as VAL
@@ -106,7 +115,7 @@ def open_talks(league, pid, kind='extension'):
         if tm is None:
             return dict(ok=False, why='no market read on him')
         # A firm refusal to negotiate is independent of package valuation.
-        if s['in_season'] and s['star'] and s['final_year'] and s['money'] > 0.55 and s['morale'] >= 40 and (stable_seed(pid) % 100) < 60:
+        if extension_defers(league, p, s):
             return dict(ok=True, will_talk=False, mood='deferring', ask=None, years=tm['years'],
                         line=f"{p.name}'s agent says they will talk after the season. He is playing well and they want to see the market first.")
         ask = tm['ask']; years = tm['years']

@@ -1,4 +1,5 @@
 import copy
+import json
 import unittest
 from unittest.mock import patch
 import numpy as np
@@ -77,6 +78,13 @@ class SecurityIntegration(unittest.TestCase):
         self.assertTrue(preview['ok'])
         self.assertEqual(preview['interest']['acceptable'], result['acceptable'])
         self.assertAlmostEqual(preview['interest']['ratio'], result['ratio'])
+
+    def test_preview_can_cross_browser_json_bridge_with_numpy_agent_price(self):
+        self.t['ask'] = np.float64(20.)
+        preview = VP.act_offer_preview(self.L, 'GB', self.p.pid, 19, 5, bonus=45, front_load=.5)
+        restored = json.loads(json.dumps(preview))
+        self.assertIsInstance(restored['interest']['acceptable'], bool)
+        self.assertEqual(restored['interest'], preview['interest'])
 
     def test_full_package_can_beat_higher_annual_pay(self):
         profile = CO.profile_for(self.p); profile['w'].update(years=.32, total=.32)

@@ -180,7 +180,7 @@ def compare(offer, reference, beliefs):
     # lose substantially more value. The same number drives every decision.
     equivalent = min(raw_equivalent, offer.apy / (1 - allowance))
     gap = equivalent - reference.apy
-    return dict(preferred=gap >= -1e-9, acceptable=gap >= -1e-9,
+    return dict(preferred=bool(gap >= -1e-9), acceptable=bool(gap >= -1e-9),
                 value_gap=gap / reference.apy, raw_value_gap=raw_gap, max_discount=allowance,
                 equivalent_apy=equivalent, ratio=max(0., equivalent / reference.apy),
                 offer=actual, reference=alternative)

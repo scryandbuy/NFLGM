@@ -1016,8 +1016,7 @@ def convert_tenders(league, rng, phase, user_team=None):
                 apy = max(float(tm['offer']), float(tm['ask']) * (1.0 - tm['discount']))
                 years = int(tm['years'])
                 if power(league, team, cap) < apy * 1.05: continue
-                if not EXT.can_afford_extension(league, team, p, apy, years): continue
-                r = EXT.extend(league, p.pid, apy, years, by_ai=True)
+                r = EXT.negotiate_ai(league, p, apy, years, rng)
                 if r.get('result') != 'accepted': continue
                 p.fa_class = 'under_contract'; p.tender_team = None
                 if p.pid in league.free_agents: league.free_agents.remove(p.pid)

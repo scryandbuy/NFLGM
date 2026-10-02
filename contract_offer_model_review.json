@@ -1,5 +1,5 @@
 {
-  "decision": "TECHNICAL GATES PASS; recommend controlled playtesting before broad release",
+  "decision": "CPU counter-handling release blockers resolved; ready for integration review",
   "deployment": "Isolated branch codex/contract-security-model-20261001; not merged into shared integration or pushed",
   "base_commit": "1ff30cf",
   "scope": "Contract security and cash valuation, exact offer propagation, persistent preferences, morale memory, live interest preview",
@@ -19,7 +19,7 @@
     "Agent counters meet their own interest preview including morale and promises"
   ],
   "tests": {
-    "python_checks_passed": 113,
+    "python_checks_passed": 128,
     "offer_form_event_checks": "passed",
     "javascript_syntax": "passed",
     "browser_build": "114 modules, including both new contract modules",
@@ -229,7 +229,7 @@
     "finding": "CPU extensions fell from a mean of 130.333 to 99.667; free-agent signings increased. Mean FA annual pay stayed close and no long-contract pileup appeared.",
     "diagnosis": "Targeted extension tracing found refusals on strongly backloaded packages and offers below adjusted expectations. These are reasons to review behavior, not to force players to sign.",
     "caveat": "Stable profiles intentionally stop consuming simulation RNG, so identical seeds no longer imply identical downstream draws. Counts do not isolate a single coefficient.",
-    "recommendation": "Keep firm refusals. Review these market changes in controlled play before publishing; do not tune to an acceptance quota."
+    "recommendation": "Bounded CPU counter handling is implemented and validated. No acceptance quota or relaxation of firm refusals. Ready for integration review; retain forecast and long-run limitations."
   },
   "limits": [
     "Forecast and release-risk coefficients are gameplay assumptions, not empirical measurements",
@@ -242,5 +242,156 @@
     "node test_contract_security_ui.cjs",
     "python probe_contract_offer_model.py",
     "python probe_contract_security_market.py --save <disposable-source-save> --output <results-folder> --seed 481 --label revised"
-  ]
+  ],
+  "individual_refusal_audit": {
+    "decision": "HOLD broad release: CPU extension callers discard economic counters and never test affordable alternative payment schedules",
+    "source_commit": "bbc035b",
+    "scope": "Three extension-stage runs of one saved league; seed 481 followed through all three FA rounds and market close",
+    "countered_offer_events": 132,
+    "unique_countered_players": 90,
+    "classification": {
+      "timing_only": 62,
+      "same_apy_bonus_mix": 12,
+      "no_same_apy_solution_in_tested_options": 58
+    },
+    "moving_quotes": 0,
+    "same_run_repeat_attempts": 0,
+    "counter_annual_ask_below_rejected_offer": 74,
+    "findings": [
+      "A countered player is not necessarily making a firm refusal to negotiate or electing free agency. Keep those policies distinct.",
+      "CPU ai_round and in_season_round only handle accepted extension results; economic counters are discarded.",
+      "At unchanged annual pay, years and signing bonus, 62 rejected offers became acceptable and passed current/future cap guards when salary was distributed evenly.",
+      "EXT.extend returns only annual ask and years for counters, omitting the payment structure and bonus underpinning the reference value.",
+      "No moving quote was observed between initial CPU pricing and the actual player assessment in these attempts."
+    ],
+    "recommended_fix": "Return a complete economic counter, and let the CPU consider a small set of payment schedules within its valuation, cap and commitment limits before choosing to walk away. Preserve all hard refusals and do not force an acceptance quota.",
+    "source_save_untouched": true,
+    "raw_reports": [
+      "extension-refusals-481.json",
+      "extension-refusals-482.json",
+      "extension-refusals-483.json"
+    ],
+    "status": "Historical findings; resolved by cpu_counter_fix_validation"
+  },
+  "cpu_counter_fix_validation": {
+    "decision": "CPU counter-handling release blockers resolved; ready for integration review",
+    "deployment": "Isolated branch only; not merged, bundled, or pushed",
+    "changes": [
+      "Complete extension counters include annual pay, years, signing bonus and salary shape",
+      "CPU offseason, weekly and restricted-player extension routes share bounded counter handling",
+      "At most four alternative packages; no increase to original annual-pay or term ceiling",
+      "Bonus flexibility capped at ten percentage points above the initial offer, subject to total cash and cap limits",
+      "Current and projected future cap checks apply to every candidate",
+      "Shared midseason refusal gate and closed-negotiation checks stop retries",
+      "Interest preview returns a native boolean compatible with the browser JSON bridge"
+    ],
+    "tests": {
+      "targeted_python_tests_passed": 128,
+      "ui_event_checks": "passed",
+      "javascript_syntax": "passed",
+      "browser_build_modules": 114,
+      "full_market_runs": 3,
+      "save_reload": "passed all three",
+      "cpu_over_cap": [],
+      "source_save_untouched": true
+    },
+    "market_runs": [
+      {
+        "label": "cpu-counter-final",
+        "seed": 481,
+        "source_sha256": "0f4d9cc20769c8b08015cac66cc7e41f4ee66c48006820f9106cd6b63f3ea113",
+        "seconds": 84.9,
+        "cpu_signings": 353,
+        "cpu_extensions": 131,
+        "mean_apy": 5.1805042492917845,
+        "term_distribution": {
+          "1": 313,
+          "2": 27,
+          "4": 4,
+          "3": 8,
+          "5": 1
+        },
+        "unsigned": 552,
+        "mean_bonus_share": 0.3612649077255194,
+        "cpu_over_cap": [],
+        "maximum_next_year_commitment": 335.52306821043607,
+        "released": 1,
+        "largest_annual_pay": 51.94,
+        "profiles_preserved": 238,
+        "cap": 369.186,
+        "source_untouched": true,
+        "save_reload_pass": true
+      },
+      {
+        "label": "cpu-counter-final",
+        "seed": 482,
+        "source_sha256": "0f4d9cc20769c8b08015cac66cc7e41f4ee66c48006820f9106cd6b63f3ea113",
+        "seconds": 83.8,
+        "cpu_signings": 347,
+        "cpu_extensions": 131,
+        "mean_apy": 4.824025936599424,
+        "term_distribution": {
+          "2": 27,
+          "1": 311,
+          "4": 2,
+          "3": 6,
+          "5": 1
+        },
+        "unsigned": 551,
+        "mean_bonus_share": 0.3690232527769663,
+        "cpu_over_cap": [],
+        "maximum_next_year_commitment": 287.01379991334517,
+        "released": 0,
+        "largest_annual_pay": 34.09,
+        "profiles_preserved": 245,
+        "cap": 369.186,
+        "source_untouched": true,
+        "save_reload_pass": true
+      },
+      {
+        "label": "cpu-counter-final",
+        "seed": 483,
+        "source_sha256": "0f4d9cc20769c8b08015cac66cc7e41f4ee66c48006820f9106cd6b63f3ea113",
+        "seconds": 96.6,
+        "cpu_signings": 398,
+        "cpu_extensions": 115,
+        "mean_apy": 4.9651130653266335,
+        "term_distribution": {
+          "2": 30,
+          "1": 355,
+          "3": 7,
+          "4": 5,
+          "5": 1
+        },
+        "unsigned": 516,
+        "mean_bonus_share": 0.36134791077937867,
+        "cpu_over_cap": [],
+        "maximum_next_year_commitment": 303.4815735437694,
+        "released": 0,
+        "largest_annual_pay": 51.96,
+        "profiles_preserved": 235,
+        "cap": 369.186,
+        "source_untouched": true,
+        "save_reload_pass": true
+      }
+    ],
+    "market_means": {
+      "cpu_extensions": 125.667,
+      "cpu_signings": 366,
+      "mean_apy": 4.99,
+      "mean_bonus_share": 0.364
+    },
+    "detailed_seed_481": {
+      "initial_counter_then_accepted": 27,
+      "still_countered": 11,
+      "maximum_offers_observed": 4,
+      "rescued_deals_with_same_bonus": 26,
+      "all_rescued_deals_within_original_annual_pay_and_years": true
+    },
+    "limits": [
+      "Controlled runs use one saved league and three seeds; not long multi-season endurance testing",
+      "Economic forecast coefficients remain gameplay assumptions",
+      "Integration into the shared branch and publication have not been performed"
+    ]
+  }
 }
