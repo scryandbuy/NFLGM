@@ -98,14 +98,31 @@ def role_grade(player, role, package='11', slot=0):
         return fullback_score(player)
     overall = float(player.get('ovr', 70) if isinstance(player, dict)
                     else getattr(player, 'ovr', 70))
-    if role != 'TE' or str(package) not in ('12', '13', '22') or slot == 0:
+    if role != 'TE':
         return overall
-    ratings = player.get('ratings', player) if isinstance(player, dict) else getattr(player, 'ratings', {})
-    def mean(keys):
-        return sum(float(ratings.get(key, overall)) for key in keys) / len(keys)
-    blocking = mean(('run_block_rating', 'impact_block_rating', 'strength_rating'))
-    receiving = mean(('catch_rating', 'route_run_short_rating', 'cit_rating'))
-    return .55 * overall + .30 * blocking + .15 * receiving
+    import targets as TG
+    ratings = player.get('ratings', player) if isinstance(player, dict) else player.ratings
+    # Partial legacy/test records retain their overall as the missing-attribute baseline.
+    ratings = {k: ratings.get(k, overall) for k in TG.TE_LEGACY_WEIGHTS}
+    return TG.te_role_score(ratings, te_assignment_role(package, slot))
+
+
+def te_assignment_role(package, slot):
+    if str(package) in ('12', '13', '22') and slot > 0:
+        return 'blocking'
+    return 'balanced' if str(package) == '21' else 'receiving'
+
+
+def te_development_role(player, team):
+    """First TE remains a receiving option even in a multiple-TE offense."""
+    package = base_package(getattr(team, 'gm', None))
+    men = sorted([p for p in getattr(team, 'roster', ()) if p.pos == 'TE' and not p.retired],
+                 key=lambda p: -p.ovr)
+    pins = (getattr(team, 'depth_pins', None) or {}).get('TE', [])
+    order = {pid: i for i, pid in enumerate(pins)}
+    men.sort(key=lambda p: order.get(p.pid, len(order)))
+    slot = next((i for i, p in enumerate(men) if p.pid == player.pid), 0)
+    return te_assignment_role(package, slot)
 
 
 def fullback_score(player):

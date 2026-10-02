@@ -661,7 +661,7 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70, snapper=None,
             how = 'fair_catch'
     if touchback:
         return dict(type='punt', blocked=False, touchback=True, how='touchback',
-                    gross=round(float(gross), 1), pooch=pooch,
+                    gross=round(float(yardline_100), 1), pooch=pooch,
                     origin=yardline_100, net=round(float(yardline_100 - 20), 1),
                     new_yardline=80)       # opponent's own 20
     # A return brings the ball OUT, toward the kicking team's goal, so it
@@ -776,6 +776,15 @@ def _shot_td_prob(yardline, offense, defense, rate_fn):
     return float(np.clip(base, 0.02, 0.5))
 
 
+def _shot_sack_prob(offense, defense, rate_fn):
+    """Bounded planning estimate of a sack on the end-zone concept."""
+    blockers = offense.get('ol') or []
+    rushers = (defense.get('dl') or []) + (defense.get('lb') or [])
+    block = float(np.mean([rate_fn(p, {'pass_block_rating': 1.0}) for p in blockers])) if blockers else .7
+    rush = float(np.mean([rate_fn(p, {'finesse_moves_rating': .5, 'power_moves_rating': .5}) for p in rushers])) if rushers else .7
+    return float(np.clip(.09 + .35 * (rush - block), .03, .22))
+
+
 def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half, coach=None, yardline=None):
     """The coach's best option with the seconds left, priced from where he stands: 'kick', 'shot', 'play' (one or
     more snaps, then decide again), or 'kneel'. Before halftime the price is expected points. At the end of the
@@ -818,11 +827,18 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         # Beyond a plausible end-zone throw, keep the safe tied-game option.
         if secs < 6 and yy > 60 and game_end and need == 0:
             return v_kneel
-        p = _shot_td_prob(yy, offense, defense, rate_fn)
+        sack = _shot_sack_prob(offense, defense, rate_fn)
+        p = (1.0 - sack) * _shot_td_prob(yy, offense, defense, rate_fn)
         ev = v_td * p * (0.85 + 0.30 * aggr)
-        live = 1.0 - p - SHOT_INT
-        if secs >= 6:                                                # the throw takes four seconds; an incompletion leaves the kick
-            ev += live * ((1.0 - SHOT_SHORT) * kick_ev(yy) + SHOT_SHORT * (kick_ev(max(1.0, yy - 15.0)) if tos > 0 else 0.0))
+        live = max(0.0, 1.0 - p - SHOT_INT - sack)
+        # A stopped-clock miss costs 6-8 seconds; reserve 3 seconds to line up.
+        # A sack/catch in bounds needs a timeout or time for a field-goal change.
+        kick_after_miss = float(np.clip((secs - 9.0) / 2.0, 0.0, 1.0))
+        kick_after_sack = tos > 0 and secs >= 9 or secs >= 24
+        if kick_after_sack:
+            ev += sack * kick_ev(min(99.0, yy + 8.0))
+        if secs >= 6:
+            ev += live * ((1.0 - SHOT_SHORT) * kick_ev(yy) * kick_after_miss + SHOT_SHORT * (kick_ev(max(1.0, yy - 15.0)) if kick_after_sack else 0.0))
         elif game_end and need == 0:
             # A final-play interception usually ends regulation tied too;
             # it is not an automatic loss. Return touchdowns are possible,
@@ -2009,6 +2025,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     ko = LAST_KICKOFF.pop('r', None)
     if ko is not None and abs(float(ko.get('new_yardline', -1)) - float(start_yardline)) < 0.5:
         dr.log.append(dict(ko, type='kickoff', carrier=ko.get('returner'), clock=ko.get('clock', clock)))
+        wall = HALF if quarter == 2 else 0 if quarter == 4 else None
+        if wall is not None and float(ko.get('clock', clock)) > wall + 120 >= clock:
+            dr._two_min = True
+            dr.log.append(dict(type='two_minute', clock=clock))
         if ko.get('touchdown'):
             dr.result, dr.points, dr.yardline = 'Touchdown', 6, 0.
         elif ko.get('fumble_lost'):
@@ -2555,6 +2575,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
                     if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
+        live_pen = E.contextual_penalty(live_pen, out, oc, rng)
         _prepare_scoring_play(dr, out)
         _prepare_interception(dr.yardline, out)
         _prepare_fumble(dr, out, off_f, def_f, rng, rate_fn, off_state)
@@ -3008,7 +3029,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
             # time under the dynamic kickoff (2024-25); a failed one gives the receiving side the ball near
             # the kicking team's 45.
             my_diff = score[pos] - score['away' if pos == 'home' else 'home']
-            need_after = int(np.ceil(-my_diff / 8.0)) if my_diff < 0 else 0
+            need_after = max(0, -my_diff)  # _onside_call expects points, not number of scores
             try_onside = my_diff < 0 and half_done and clock > 0 and _onside_call(clock, need_after, tos.left.get(pos, 0), (o_st.coach if o_st is not None else None), rng)
             if try_onside:
                 got = rng.random() < KICKOFF['onside_recovery']

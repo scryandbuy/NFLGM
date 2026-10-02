@@ -224,6 +224,41 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
                 nullifies=info['phase'] in ('pre',))
 
 
+def contextual_penalty(pen, out, call, rng):
+    """Keep the rolled flag and offending side, but require a possible live foul.
+
+    Missing evidence in legacy/custom resolvers retains the prior eligibility.
+    No extra flag chance and no cooldown suppressing consecutive penalties.
+    """
+    if pen is None or pen.get('nullifies') or pen['penalty'] == 'Intentional Grounding':
+        return pen
+    kind = out.get('type')
+    released = kind in ('complete', 'incomplete', 'drop', 'interception')
+    contact = kind in ('run', 'complete', 'sack', 'scramble')
+    def allowed(name):
+        if name == 'Roughing the Passer':
+            return released and not out.get('throwaway') and out.get('pressured', True)
+        if name in ('Defensive Pass Interference', 'Offensive Pass Interference', 'Ineligible Downfield Pass'):
+            return released and not out.get('throwaway') and (name != 'Defensive Pass Interference' or float(out.get('air', 1) or 0) > 0)
+        if name == 'Face Mask':
+            return contact
+        return True
+    if allowed(pen['penalty']):
+        return pen
+    side = pen['on_offense']
+    candidates = [(name, rate * (.18 if side else .82) if owner is None else rate)
+                  for name, rate, _, _, owner, phase in PENALTIES
+                  if phase != 'pre' and name != 'Intentional Grounding'
+                  and (owner is None or owner == side)
+                  and (phase != 'pass' or call.get('is_pass')) and allowed(name)]
+    weights = np.array([w for _, w in candidates], float)
+    name = candidates[int(rng.choice(len(candidates), p=weights/weights.sum()))][0]
+    yards = (dpi_yards(rng, out.get('air')) if name == 'Defensive Pass Interference'
+             else 5 if name == 'Illegal Use of Hands' and not side else RULE_YARDS[name])
+    return dict(pen, penalty=name, yards=float(round(yards)), rule_yards=float(round(yards)),
+                auto_first=not side, context_adjusted=True)
+
+
 def special_teams_penalty_check(rng, kind, returned=False, phase=None):
     """Flags on kick snaps and returns, where the scrimmage foul draw does not run."""
     table = {

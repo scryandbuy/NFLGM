@@ -62,6 +62,18 @@ BASE_TTT = 2.72          # the league mean the clock must land on
 # how much longer than the average dropback the ball is held, by the route's depth
 DEF_AWR_MEAN = 0.787          # the league's defenders on awareness; every awareness read on defense is centered here so the league total holds
 HOLD_BY_DEPTH = {'screen': -0.55, 'short': -0.22, 'medium': 0.08, 'deep': 0.40}   # deep sacks ran 24% against a real ~10 at 0.50
+
+
+def sack_loss(rng, depth='medium', pressure_time=2.7, screen=False, hot=False):
+    """Drop depth and time in the pocket set ordinary loss; escapes can lose more."""
+    drop = {'screen': 3.5, 'short': 5.0, 'medium': 6.5, 'deep': 8.0}.get(
+        'screen' if screen else 'short' if hot else depth, 6.5)
+    mean = drop + float(np.clip((pressure_time - 2.5) * 1.2, -1.5, 1.5))
+    loss = rng.normal(mean, 1.8)
+    if rng.random() < .025:
+        loss += rng.uniform(3.0, 7.0)
+    return round(float(np.clip(loss, .5, 18.0)), 1)
+
 SACK_K = 19.3   # was 22.6: the quarterback escape terms are now centered on the starters' mean instead of handing every starter a discount the base was calibrated around            # solved with the hold so the blend lands on the real 6.6%
 # ESPN's pass block win rate is whether a lineman sustains his block for 2.5
 # seconds or longer. Arbitrary on its face, but it is the industry definition
@@ -892,7 +904,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         PASS_TRACE.append(dict(path='clock', time=p['time'], hot=bool(hot),
                                sack=bool(p['sack']), rushers=def_call['rushers']))
     if p['sack']:
-        return dict(type='sack', yards=round(-min(18.0, rng.gamma(2.0, 3.4)), 1), depth=depth, screen=bool(screen), swing=bool(swing),     # real sacks lose 6 to 8; 18 is the extreme, and the gamma tail once produced a 32-yard sack
+        return dict(type='sack', yards=-sack_loss(rng, depth, p['time'], screen, hot), depth=depth, screen=bool(screen), swing=bool(swing),
                     touchdown=False, by=p['beaten_by'], concept=concept,
                     protection=prot_name, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
                     beaten=p.get('beaten'), pressured=True,
