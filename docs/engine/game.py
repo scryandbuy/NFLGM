@@ -23,6 +23,7 @@ alone for kickoffs because the rules changed).
 """
 import copy
 import numpy as np
+import punt_strategy as PST
 import weather as W
 ENV = W.CLEAR
 
@@ -151,7 +152,8 @@ def fourth_zone(yardline_100):
 def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
                          aggression=0.5, timeout_edge=0, use_wp=True,
                          kicker=None, rate_fn=None, must_score=False, half_seconds_left=None, is_home=1,
-                         half_intent=None):
+                         half_intent=None, punter=None, returner=None, snapper=None,
+                         defensive_confidence=0.):
     """
     go, field_goal or punt.
 
@@ -209,9 +211,13 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now and -score_diff not in (7, 8) and -(score_diff + 3) not in (7, 8))
     band, zone = fourth_band(ydstogo), fourth_zone(yardline_100)
     p_table = float(np.clip(GO_RATE[band][zone] * (0.55 + 0.60 * aggression), 0.0, 1.0))     # the observed rates already carry an average coach; the personality term sits around them
+    punt_value = (PST.estimate(yardline_100, punter, returner, rate_fn, PUNT,
+                              ENV.punt_mult, snap_quality(snapper, rate_fn))
+                  if punter is not None and rate_fn is not None else None)
     r = DEC.fourth_down(score_diff, max(1.0, secs_left), yardline_100, ydstogo,
                        fg_prob=kick_chance, aggression=aggression, is_home=is_home, timeout_edge=timeout_edge,
-                       kickoff_yardline=KICKOFF['touchback_to']) if use_wp else None
+                       kickoff_yardline=KICKOFF['touchback_to'],
+                       punt_start=punt_value['receiving_start'] if punt_value else None) if use_wp else None
     if r is not None:
         # the model's edge as a probability: a small edge is a lean, a big one nearly certain, a negative one nearly never
         edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
@@ -240,6 +246,12 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         p_go = float(min(0.85, p_go * min(1.4, np.exp(0.2 * (-lead_scores) * (1.0 + played)))))   # a deficit pushes a little; the table already carries the trailing club's fourth downs, and the chase rule takes over late
     if chasing:
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
+    # Near midfield, a defense earning repeated stops can support either
+    # calculated aggression or a field-position game. Keep score/clock rules
+    # dominant late, and require an actual pin chance for conservative trust.
+    if 40 <= yardline_100 <= 60 and ydstogo <= 4 and secs_left > 300 and not chasing:
+        p_go = float(np.clip(p_go + PST.flow_adjustment(aggression, defensive_confidence,
+                             punt_value['inside20'] if punt_value else 0.), 0, 1))
     if ydstogo > 8 and not chasing:
         p_go *= DEC.fourth_conversion(ydstogo) / DEC.FOURTH_CONV[8]
         if ydstogo >= 15 and (r is None or r.get('go_boost', 0.0) <= 0):
@@ -2098,7 +2110,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                        must_score=must_score, is_home=int(pos == 'home'),
                                        timeout_edge=(timeouts.left.get(pos, 0) - timeouts.left.get('away' if pos == 'home' else 'home', 0)) if timeouts is not None else 0,
                                        half_seconds_left=(dr.clock - half_end if half_end is not None else None),
-                                       half_intent=getattr(dr, '_half_stall_intent', None))
+                                       half_intent=getattr(dr, '_half_stall_intent', None),
+                                       punter=offense.get('p'),
+                                       returner=returner_for(defense, def_state, rate_fn, kind='pr'),
+                                       snapper=snapper_for(offense, off_state),
+                                       defensive_confidence=PST.confidence(off_state))
             if dec == 'field_goal':
                 flag = E.special_teams_penalty_check(rng, 'field_goal')
                 if _kick_presnap_flag(dr, flag, half_end): continue
@@ -2732,6 +2748,7 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
                        start_state=resume_state)
         resume_state = None
         drives.append((pos, dr))
+        PST.record_defense(d_st, dr)
         clock = max(0.0, dr.clock)
         if dr.result != 'End of half': had[pos] = True
         if dr.result == 'Recovered punt': had['away' if pos == 'home' else 'home'] = True
@@ -2803,6 +2820,8 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     before overtime; returns the result dict."""
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
+    for state in (home_state, away_state):
+        if state is not None: state._fourth_defense = []
     pos = 'away'                                   # away receives first
 
     tos = Timeouts()
@@ -2890,6 +2909,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         dr_snaps = dr.plays
         if o_st is not None: o_st.sideline_recovery(dr.plays)
         drives.append((pos, dr))
+        PST.record_defense(d_st, dr)
         clock = max(0.0, dr.clock)
         quarter = min(4, int((GAME - clock) // QUARTER) + 1)
 
