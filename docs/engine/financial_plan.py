@@ -119,13 +119,13 @@ Unknown slots use the middle of their round, explicitly a forecast.
     return rows
 
 
-def snapshot(league, team, *, additions=(), removals=(), trial_cap=None,
-             pending=(), picks=None, market=None):
-    """Four actual cap-year rows. Pending (player, Contract) pairs count once.
+def prepare_snapshot(league, team, *, additions=(), removals=(), trial_cap=None,
+                     pending=(), market=None):
+    """Calculate the roster-dependent part of one unchanged negotiation.
 
-`picks` optionally supplies the post-trade pick inventory. Current-year raw_room
-uses legal accounting; funded_room forecasts retained contracts plus missing
-53-man slots/rookies. Retention is a separate soft, incremental placeholder.
+The result contains values, not player/contract references. Discard it after
+any roster, contract, rating, phase, cap, pending offer or GM-state change.
+Only the hypothetical pick inventory may vary while reusing this projection.
 """
     from cap_accounting import pre_roll
     additions = list(additions)
@@ -135,7 +135,6 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
             if p.pid not in added_ids and p.pid not in roster_ids}
     ledger, players = _ledger(league, team, list(held.values())+additions, removals, trial_cap)
     start = int(pre_roll(league))
-    rookies = _rookies(league, team, picks)
     ir = {p.pid for p in getattr(team, 'ir', ())}
     contracts = {pid: c for pid, c, _ in ledger.contracts}
     # Named retention estimates use current veteran pay, not agent quotes.
@@ -175,20 +174,13 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
         floor = MS.minimum_salary(2, base)*fraction
         alive = [(pid,c) for pid,c in contracts.items() if c.years>index]
         active = sum(pid not in ir or index>0 for pid,c in alive)
-        rookie_hits = [c.cap_hit(year-y) for y,c in rookies if 0<=year-y<c.years]
-        # Drafted players disappear from unused-pick forecasts on selection.
-        rookie_reserve = sum(rookie_hits)
-        vacancies = max(0,53-active-len(rookie_hits))
-        vacancy_reserve = vacancies*floor
         # Draft/camp additions displace paid roster slots, rather than funding
         # a permanent 60- or 90-man roster. Credit at most a minimum salary per
         # excess slot, capped by real net release savings (bonus acceleration
         # included). This is a conservative forecast, never a booked release.
         # Keep IR salaries and all hard current cap charges in the ledger.
-        excess = max(0, active+len(rookie_hits)-53)
         savings = sorted(min(floor, max(0., c.release(index, False)[2]))
                          for pid,c in alive if pid not in ir or index>0)
-        displacement = sum(savings[:excess])
         if index == 0:
             limit = ledger.limit
             charge = ledger.charges(team.phase)
@@ -202,13 +194,47 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
             if index == 1:
                 charge += ledger.dead_next
             full_charge = charge
-        raw = limit-charge
-        funded = limit-full_charge-rookie_reserve-vacancy_reserve+displacement
         # Vacancy costs already fund a replacement, so retain only the premium.
         retention = sum(max(0.,apy-MS.minimum_salary(2,base))*.5
                         for p,expiry,apy in keepers if expiry<=index)
         injury = base * .008 * fraction
         opportunity = base * opportunity_pct
+        rows.append(dict(year=year, limit=limit, charge=charge,
+                         full_charge=full_charge, active=active, floor=floor,
+                         savings=tuple(savings), retention=retention,
+                         injury=injury, opportunity=opportunity))
+    return dict(team=team.abbr, cap_year=league.year+start, phase=league.phase,
+                pending_count=len(held), years=rows)
+
+
+def snapshot(league, team, *, additions=(), removals=(), trial_cap=None,
+             pending=(), picks=None, market=None, prepared=None):
+    """Four actual cap-year rows. Pending (player, Contract) pairs count once.
+
+`picks` optionally supplies the post-trade pick inventory. Current-year raw_room
+uses legal accounting; funded_room forecasts retained contracts plus missing
+53-man slots/rookies. Retention is a separate soft, incremental placeholder.
+`prepared` must describe these exact roster arguments and unchanged team state;
+it is local to one negotiation, never attached to the league or saved.
+"""
+    fixed = prepared if prepared is not None else prepare_snapshot(
+        league, team, additions=additions, removals=removals,
+        trial_cap=trial_cap, pending=pending, market=market)
+    rookies = _rookies(league, team, picks)
+    rows = []
+    for basis in fixed['years']:
+        year, limit, charge = basis['year'], basis['limit'], basis['charge']
+        full_charge, active = basis['full_charge'], basis['active']
+        retention, injury, opportunity = basis['retention'], basis['injury'], basis['opportunity']
+        rookie_hits = [c.cap_hit(year-y) for y,c in rookies if 0<=year-y<c.years]
+        # Keep the original pick order and arithmetic, including displacement.
+        rookie_reserve = sum(rookie_hits)
+        vacancies = max(0,53-active-len(rookie_hits))
+        vacancy_reserve = vacancies*basis['floor']
+        excess = max(0, active+len(rookie_hits)-53)
+        displacement = sum(basis['savings'][:excess])
+        raw = limit-charge
+        funded = limit-full_charge-rookie_reserve-vacancy_reserve+displacement
         row = dict(year=year, limit=limit, raw_room=raw, committed=charge,
                    active_contracts=active, vacant_slots=vacancies,
                    rookie_reserve=rookie_reserve, vacancy_reserve=vacancy_reserve,
@@ -219,25 +245,27 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
                    soft_reserve=retention+injury+opportunity,
                    discretionary_room=funded-retention-injury-opportunity)
         rows.append(row)
-    return dict(team=team.abbr, cap_year=league.year+start, phase=league.phase,
-                years=rows, pending_count=len(held), **{k:rows[0][k] for k in
+    return dict(team=fixed['team'], cap_year=fixed['cap_year'], phase=fixed['phase'],
+                years=rows, pending_count=fixed['pending_count'], **{k:rows[0][k] for k in
                 ('raw_room','funded_room','soft_reserve','discretionary_room',
                  'rookie_reserve','vacancy_reserve','retention_reserve')})
 
 
 def evaluate(league, team, *, additions=(), removals=(), trial_cap=None,
              gain=0., essential=False, action='', pending=(), before=None,
-             picks=None, market=None):
+             picks=None, market=None, prepared_after=None):
     """Screen a CPU proposal; callers still perform authoritative legal checks.
 
 Existing unfunded future commitments do not freeze cap-improving moves. A
 meaningful football gain releases a bounded part of the soft reserve; essential
 repairs can release it all, but cannot worsen legal cap debt. `before` may be
 reused only while roster/contracts/phase/pending commitments are unchanged.
+`prepared_after` follows prepare_snapshot's same-state lifetime requirements.
 """
     before = before or snapshot(league,team,pending=pending,market=market)
     after = snapshot(league,team,additions=additions,removals=removals,
-                     trial_cap=trial_cap,pending=pending,picks=picks,market=market)
+                     trial_cap=trial_cap,pending=pending,picks=picks,market=market,
+                     prepared=prepared_after)
     result = dict(approved=True, reason='approved_normal', action=action,
                   before=before, after=after, reserve_used=0.)
     if team.abbr == getattr(league,'user_team',None):

@@ -751,7 +751,7 @@ def _pick_to_offer(league, team, target, gm, ctx, space):
 MAX_PACKAGE = 5
 
 
-def _financial_trade(league, ta, tb, outgoing, incoming, cache=None):
+def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_gains=None):
     """Price both complete rosters, including any cuts needed for this trade."""
     import cap_accounting as CA
     import financial_plan as FP
@@ -781,9 +781,14 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None):
             trial = CA.trade_projection(league, team.abbr, removed, received)
             contracts = {pid: c for pid, c, _ in trial.contracts}
             projected = [p for p in team.active() if p.pid not in removed] + arrivals
-            gain = RN.assess(team, projected)['score'] - RN.assess(team)['score']
-            states[team.abbr] = dict(additions=[(p, contracts[p.pid]) for p in arrivals],
-                removals=removed, trial_cap=trial, gain=gain, market=market,
+            # Ordinary negotiation has just assessed these exact rosters.
+            # Draft prospects and automatic releases need their own projection.
+            gain = (roster_gains[team.abbr] if roster_gains is not None and not any(releases.values())
+                    else RN.assess(team, projected)['score'] - RN.assess(team)['score'])
+            roster = dict(additions=[(p, contracts[p.pid]) for p in arrivals],
+                          removals=removed, trial_cap=trial, market=market)
+            states[team.abbr] = dict(**roster, gain=gain,
+                prepared_after=FP.prepare_snapshot(league, team, **roster),
                 before=FP.snapshot(league, team, market=market))
         cache[key] = states
     if cache[key] is None:
@@ -794,8 +799,18 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None):
         sent_picks = {id(x) for x in sent if not isinstance(x, str)}
         picks = [pk for pk in team.picks if id(pk) not in sent_picks]
         picks += [x for x in received if not isinstance(x, str)]
-        decision = FP.evaluate(league, team, **cache[key][team.abbr], action='trade', picks=picks)
-        if not decision['approved']:
+        # Different original owners can supply economically identical picks.
+        # FP reads only the ordered unused-pick year/slot forecast, not owner or
+        # provenance. Preserve order (and therefore floating-point sums) exactly.
+        forecast = tuple((pk.year, pk.selection or (int(pk.round)-1)*32+16)
+                         for pk in picks if not pk.used_on and int(pk.year)+1 >= league.year)
+        funding_key = (key, team.abbr, forecast)
+        funding = cache.setdefault('funding_decisions', {})
+        if funding_key not in funding:
+            approved = FP.evaluate(league, team, **cache[key][team.abbr], action='trade', picks=picks)['approved']
+            if len(funding) >= 512: funding.clear()
+            funding[funding_key] = approved
+        if not funding[funding_key]:
             return False
     return True
 
@@ -968,6 +983,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     net_gains = {}
 
     def legal(items):
+        gains = None
         ids = tuple(sorted(x['pid'] for x in items if x['kind'] == 'player'))
         if ids not in valid_players:
             offer = dict(a_sends=[candidates[i] for i in ids], a_gets=[target])
@@ -988,9 +1004,10 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             if net < UPGRADE_GAP or sum(TE.market_price(x) for x in items) > budget + 1e-9:
                 return False
             net_gains[ids] = (net, budget)
+            gains = football['gains']
         if league is not None:
             sent = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in items]
-            return _financial_trade(league, ta, tb, sent, [target['pid']], financial_cache)
+            return _financial_trade(league, ta, tb, sent, [target['pid']], financial_cache, roster_gains=gains)
         return True  # Standalone valuation/search probes have no league ledger.
 
     def visit(start, chosen, paid, cost, value):
