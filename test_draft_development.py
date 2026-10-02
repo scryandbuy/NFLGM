@@ -82,6 +82,7 @@ class GenerationBoundaryTests(unittest.TestCase):
         before = copy.deepcopy(vars(p)) if hasattr(p, '__dict__') else (p.dev, dict(p.ratings), p.potential)
         with patch.object(DC, 'COUNTS', {'TE': 5, 'WR': 5, 'K': 2}):
             NG.build(L, np.random.default_rng(43), 2029)
+        self.assertEqual(NG.upgrade_saved_te_class(L), 0)
         after = copy.deepcopy(vars(p)) if hasattr(p, '__dict__') else (p.dev, dict(p.ratings), p.potential)
         self.assertEqual(before, after)
         saved_devs = {pid: p.dev for pid, p in L.players.items()}

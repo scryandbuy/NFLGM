@@ -15,6 +15,12 @@ TE_NEWGEN_TOP_BOOST = 6.0
 TE_NEWGEN_TAIL_BOOST = 1.0
 
 
+def newgen_te_bonus(rank, count):
+    return (TE_NEWGEN_TAIL_BOOST +
+            (TE_NEWGEN_TOP_BOOST - TE_NEWGEN_TAIL_BOOST) *
+            (1.0 - rank / max(count - 1, 1)))
+
+
 def newgen_position_targets(pos, curve):
     """Give future tight end classes a stronger top without inflating the tail.
 
@@ -25,9 +31,7 @@ def newgen_position_targets(pos, curve):
     values = [float(value) for value in curve]
     if pos != 'TE':
         return values
-    last = max(len(values) - 1, 1)
-    return [value + TE_NEWGEN_TAIL_BOOST
-            + (TE_NEWGEN_TOP_BOOST - TE_NEWGEN_TAIL_BOOST) * (1.0 - i / last)
+    return [value + newgen_te_bonus(i, len(values))
             for i, value in enumerate(values)]
 
 

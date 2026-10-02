@@ -215,6 +215,7 @@ class Session:
                 p.xp_spent['_arm_fixed'] = 2
         except Exception as e:
             import sys; print('arm fix failed:', e, file=sys.stderr)
+        NG.upgrade_saved_te_class(L)
         try: s._backfill_history()
         except Exception as e:
             import sys; print('history backfill failed:', e, file=sys.stderr)

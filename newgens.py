@@ -34,8 +34,57 @@ from functools import lru_cache
 import targets as TG
 import draft_class as DC
 import draft_balance as DB
+from stable import stable_seed
 
 STRENGTH_SD_POS, STRENGTH_SD_CLASS = 1.5, 0.8
+
+
+def upgrade_saved_te_class(league):
+    """Bring an already generated, undrafted future class onto the TE curve.
+
+    Save files retain prospect objects and scouting reads, so changing build()
+    alone would not help the class already on a player's board. This migration
+    runs once per prospect, leaves the live RNG untouched, and refreshes reads.
+    """
+    pool = list(getattr(league, 'next_class', None) or [])
+    if getattr(league, 'draft_pool', None) or not pool:
+        return 0
+    tes = sorted((p for p in pool if p.pos == 'TE' and p.pid.startswith('N')
+                  and p.team is None and int(p.draft_year or 0) > int(league.year)),
+                 key=lambda p: -p.ovr)
+    if not tes:
+        return 0
+    import scouting as SC
+    raised = []
+    for i, p in enumerate(tes):
+        if p.xp_spent.get('_te_newgen_curve') == 1:
+            continue
+        before = p.ovr
+        p.ratings = DC.reshape_ratings(p.ratings, 'TE', before + DB.newgen_te_bonus(i, len(tes)))
+        delta = p.ovr - before
+        if p.potential_range:
+            lo, hi = p.potential_range
+            p.potential_range = (round(min(99.0, max(p.ovr, lo + delta)), 1),
+                                 round(min(99.0, max(p.ovr, hi + delta)), 1))
+        if p.potential is not None:
+            p.potential = round(min(99.0, max(p.ovr, p.potential + delta)), 1)
+        p.xp_spent['_te_newgen_curve'] = 1
+        raised.append(p)
+    if not raised:
+        return 0
+    ranks = DC.development_percentiles(pool)
+    dev_order = {name: i for i, name in enumerate(DC.DEV_ORDER)}
+    for p in raised:
+        draw = DC.draw_dev(ranks[p.pid], np.random.default_rng(stable_seed(('te-dev-upgrade', p.pid))), pos='TE')
+        if dev_order[draw] > dev_order.get(p.dev, 0):
+            p.dev = draw
+        for room in (getattr(league, 'scouting', None) or {}).values():
+            view = room.get(p.pid)
+            if view is not None:
+                SC._refresh(view, p)
+    if getattr(league, 'scouting', None):
+        SC.consensus(league)
+    return len(raised)
 
 
 def _name_pools(cfb_path='cfb27_ratings.csv', seed_path='league_seed_2026.csv'):
@@ -184,6 +233,8 @@ def build(league, rng, draft_year, cfb_path='cfb27_ratings.csv', verbose=False):
             p = LG.Player(pid, name(rng, league, draft_year, pid, names), pos, age, ratings,
                           dev=DC.draw_dev(i / max(n - 1, 1), rng, pos=pos),
                           draft_year=draft_year, entry_year=draft_year)
+            if pos == 'TE':
+                p.xp_spent['_te_newgen_curve'] = 1
             headroom = rng.uniform(2.0, 4.5) + max(0.0, 28.0 - age) * rng.uniform(0.35, 1.15)
             pot = float(np.clip(p.ovr + headroom, p.ovr, 99.0)); spread = rng.uniform(3.0, 11.0)
             p.potential = None

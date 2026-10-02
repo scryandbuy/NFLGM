@@ -1,6 +1,9 @@
 import unittest
 
 import draft_balance as DB
+import newgens as NG
+import scouting as SC
+from league import League, Player
 
 
 class DraftBalanceTest(unittest.TestCase):
@@ -25,6 +28,29 @@ class DraftBalanceTest(unittest.TestCase):
             self.assertAlmostEqual(got, expected)
         self.assertEqual(DB.newgen_position_targets('WR', base), base)
         self.assertEqual(DB.newgen_position_targets('TE', []), [])
+
+    def test_saved_future_class_and_scouting_upgrade_only_once(self):
+        league = League(2028)
+        league.draft_pool = []
+        league.consensus = {}
+        te = Player('N2029TE000', 'Test Prospect', 'TE', 22,
+                    {'catch_rating': 70, 'route_run_short_rating': 70,
+                     'route_run_med_rating': 70, 'route_run_deep_rating': 70,
+                     'run_block_rating': 65, 'pass_block_rating': 65},
+                    dev='normal', potential=80, potential_range=(77, 84), draft_year=2029)
+        league.next_class = [te]
+        view = {'e_phys': 0.0, 'e_skill': 0.0, 'e_pot': 0.0,
+                'reads': 1, 'flags': [], 'cert': .4, 'cert0': .4}
+        league.scouting = {'GB': {te.pid: view}}
+        SC._refresh(view, te)
+        old_ovr, old_read = te.ovr, view['ovr']
+        self.assertEqual(NG.upgrade_saved_te_class(league), 1)
+        self.assertAlmostEqual(te.ovr - old_ovr, 6, places=1)
+        self.assertAlmostEqual(view['ovr'] - old_read, 6, places=1)
+        self.assertGreaterEqual(te.potential, te.ovr)
+        self.assertEqual(league.consensus[te.pid]['ovr'], view['ovr'])
+        self.assertEqual(NG.upgrade_saved_te_class(league), 0)
+        self.assertAlmostEqual(te.ovr - old_ovr, 6, places=1)
 
     def test_top_of_each_position_is_preserved(self):
         for rank in range(6):
