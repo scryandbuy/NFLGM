@@ -33,7 +33,8 @@ class Team:
 
 
 def player(pos, n):
-    return SimpleNamespace(pid=f'{pos}-{n}', pos=pos, ovr=78.0, ratings={})
+    return SimpleNamespace(pid=f'{pos}-{n}', pos=pos, ovr=78.0, age=25,
+                           ratings={})
 
 
 class RosterNeedsTests(unittest.TestCase):
