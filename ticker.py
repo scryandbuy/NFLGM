@@ -28,9 +28,14 @@ def _clock(secs):
     return q, f"{int(rem // 60)}:{int(rem % 60):02d}"
 
 
+def _spot_yards(yardline_100):
+    """Display half yards consistently; five-yard enforcement stays five yards."""
+    return int(math.floor(float(yardline_100) + 0.5))
+
+
 def _spot(yardline_100, off_abbr, def_abbr):
     """yardline is yards to the end zone. 60 means own 40."""
-    y = int(round(yardline_100))
+    y = _spot_yards(yardline_100)
     if 0 < yardline_100 < 1.0: return f"inside the {def_abbr} 1"
     if y > 50: return f"{off_abbr} {max(1, 100 - y)}"
     if y == 50: return "50"
@@ -157,12 +162,27 @@ def play_line(league, p, off_abbr, def_abbr):
             _down_spot = _spot(100.0 - float(_ny), off_abbr, def_abbr) if _ny is not None else None
             ret = int(p.get('display_ret', round(p.get('ret', 0))))
             gross = int(p.get('display_gross', round(p.get('gross', 0))))
+            # Return resolution can replace earlier display fields with rounded
+            # raw return yards. Derive both distances from the actual endpoints
+            # instead, including saved logs carrying those overwritten fields.
+            origin = p.get('yardline', p.get('origin'))
+            if not p.get('touchback') and origin is not None and _ny is not None:
+                if p.get('return_start') is not None:
+                    catch = float(p['return_start'])
+                    end = (catch - float(p.get('ret', 0)) if p.get('penalty') else float(_ny))
+                    landing = 100 - _spot_yards(catch)
+                    gross = _spot_yards(origin) - landing
+                    ret = 100 - _spot_yards(end) - landing
+                elif p.get('how') in ('fair_catch', 'downed'):
+                    gross = _spot_yards(origin) - (100 - _spot_yards(_ny))
+                    ret = 0
             text = f"Punt, {gross} yards" + (", touchback." if p.get('touchback') else (f", returned {ret} yard{'s' if ret != 1 else ''}." if p.get('how') == 'return' and p.get('ret') else (", fair catch." if p.get('how') == 'fair_catch' else (f", downed at the {_down_spot}." if p.get('how') == 'downed' and _down_spot else '.'))))
             kind = 'special'
             if p.get('touchdown'):
                 text += f' TOUCHDOWN, {def_abbr}.'; kind = 'score'
     elif t == 'field_goal':
-        d = int(round(p.get('distance', 0)))
+        d = (_spot_yards(p['yardline']) + 17 if p.get('yardline') is not None
+             else _spot_yards(p.get('distance', 0)))
         text = f"{d}-yard field goal is {'GOOD.' if p.get('made') else 'NO GOOD.'}"
         kind = 'score' if p.get('made') else 'loss'
     elif t == 'extra_point':

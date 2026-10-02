@@ -275,3 +275,24 @@ Source: user attachment `507e766b-d918-4234-997a-8e0c7ed95a53/Pasted text.txt`. 
 - Chicago attempts fourth-and-nine late rather than punting, scores, tries for two down eight, and attempts an onside kick. Green Bay's recovery and final kneel fit Chicago having no timeouts.
 - Six non-nullified screens total: GB one for 13 displayed yards, CHI five for eight. No fourth-down screen recurrence. No new general screen-rate change supported.
 - No evidence for a broad passing, rushing, scoring, or fourth-down conversion retune from this game alone. Prioritize display consistency and investigate clock intent and delay-of-game rates.
+
+
+## Week 3 follow-up: display fix and targeted decision investigation
+
+### Fixed: presentation arithmetic
+
+- `ticker._spot_yards` now rounds half-yard field positions consistently. The former ties-to-even rounding made translated five-yard moves display as four or six yards. Drive headings and snap locations share this formatter.
+- Punt narration now derives gross and returned distances from recorded origin, catch and final spots when available. `kick_returns.resolve` had overwritten the earlier corrected `display_ret` with independently rounded return yardage. Rendering repairs saved raw logs with endpoint metadata too. Return-penalty movement is excluded from the reported return distance.
+- Field-goal text uses the displayed line of scrimmage plus 17, avoiding 36-yard text beside a displayed 20-yard line. Old records without spot metadata retain a distance fallback.
+- Raw yards, possession spots, kick probabilities, outcomes and RNG are unchanged. Already-generated saved text must be recaptured to reflect new formatting; this does not rewrite historical rendered strings on load.
+- Verification: 18 focused tests passed (`test_week3_display`, `test_week12_game_log`, `test_game_log_regressions`), including 500 real return-pipeline trials, flags, saved-field reconstruction, legacy records and no input mutation. The older punt test assumed integer raw receiving spots; updated it to verify the actual displayed arithmetic with fractional return results.
+
+### Investigation conclusions (not implemented in this display patch)
+
+1. **First-half clock intent needs a targeted fix.** Reproduced third-and-16, own 42, up 3, 45 seconds before half, one own timeout. `_timeout_call` refuses the timeout both with no plan and with explicit hurry. Neutral completion time is 34.6 seconds. At the resulting fourth-and-four on opponent 46 with 11 seconds, independent fourth-down logic still goes in 29.8% of uniformly swept random draws with neutral aggression (18.5%-42.3% across aggression 0-1). This confirms inconsistent decision branches, not proof of the exact user coach. Make preserving clock and fourth-down intent share the same half-aware assessment; do not restore indiscriminate timeouts for every stalled leading drive.
+
+2. **Penalty ownership needs a targeted fix; no general rate reduction supported.** `game.drive_steps` supplies defensive awareness as the single discipline input to `events.penalty_check`, so even offensive Delay of Game/False Start odds respond to opposing defensive awareness. Staff offense/defense penalty multipliers are averaged into the crowd-noise parameter, which only changes two offensive presnap foul types. Select discipline/staff effects by the offending side. In three controlled samples of 40,000 checks, delays numbered 212/178/152 as defensive awareness increased 0.60/0.787/0.90; expected 232.4/187.5/160.4. Neutral expectation is 0.31 delays in 66 checks. Four delays is unusual, but these tests do not reproduce league-wide excess or the user's saved team. Avoid a blanket penalty nerf.
+
+3. **Fourth-down evaluation has structural defects; fix before tuning aggression.** `decisions.fourth_down` evaluates a goal-line conversion as first-and-goal at the 1 with unchanged score, rather than a touchdown and ensuing possession. The field-goal success branch also assumes the opponent starts at its 25; the game has varied returns and 35-yard touchbacks. At up 7, opponent 2, 108 seconds, neutral aggression and timeout edge +2, current model prices FG 0.9861 vs go 0.9778 win probability; stochastic caller still goes 15.7% (9.8%-22.2% across aggression 0-1). The logged go decision is possible coach variation, not by itself a bug. Correct scoring/possession branches and verify the valuations before changing go frequency.
+
+Reproducible probes and outputs: `audit_week3_decisions.py` / `.json`. These are isolated context tests, not replay of the user's save. Pass-rush and negative-run observations remain on watch; no fresh broad simulation or tuning was undertaken.

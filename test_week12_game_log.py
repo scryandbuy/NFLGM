@@ -1,5 +1,6 @@
 """GB-LA Week 12: urgency, conversion calls, and punt spot accounting."""
 import unittest
+import re
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -78,14 +79,17 @@ class Week12Log(unittest.TestCase):
             if punt.get('blocked') or punt.get('touchback'):
                 continue
             kinds.add(punt['how'])
-            self.assertEqual(origin - punt['display_gross'] + punt['display_ret'],
-                             100 - punt['new_yardline'])
             text = ticker.play_line(league, punt, 'GB', 'LA')['text']
-            self.assertIn(f"Punt, {punt['display_gross']} yards", text)
+            gross = int(re.search(r'Punt, (\d+) yards', text)[1])
+            returned = re.search(r'returned (\d+) yard', text)
+            ret = int(returned[1]) if returned else 0
+            self.assertEqual(origin - gross + ret,
+                             100 - ticker._spot_yards(punt['new_yardline']))
             if punt['how'] == 'fair_catch':
-                self.assertEqual(punt['display_ret'], 0)
+                self.assertEqual(ret, 0)
             if punt['how'] == 'return':
-                self.assertIn(f"returned {punt['display_ret']} yard", text)
+                if punt['ret']:
+                    self.assertIn(f"returned {ret} yard", text)
         self.assertEqual(kinds, {'return', 'fair_catch', 'downed'})
 
     def test_legacy_punt_logs_still_render(self):

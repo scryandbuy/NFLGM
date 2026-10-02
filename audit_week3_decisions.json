@@ -1,0 +1,75 @@
+{
+  "limitations": "Neutral context probes, not the user save or coach. Decision sweeps enumerate 1000 evenly spaced random thresholds. Penalty sampling is per check, not complete games; crowd/staff neutral.",
+  "halftime_timeouts": {
+    "none": [
+      false,
+      null
+    ],
+    "hurry": [
+      false,
+      null
+    ]
+  },
+  "ordinary_completion_seconds": 34.6,
+  "decision_draws": {
+    "halftime_0.0": {
+      "go": 185,
+      "punt": 815
+    },
+    "late_goal_0.0": {
+      "go": 98,
+      "field_goal": 902
+    },
+    "halftime_0.5": {
+      "go": 298,
+      "punt": 702
+    },
+    "late_goal_0.5": {
+      "go": 157,
+      "field_goal": 843
+    },
+    "halftime_1.0": {
+      "go": 423,
+      "punt": 577
+    },
+    "late_goal_1.0": {
+      "go": 222,
+      "field_goal": 778
+    }
+  },
+  "late_goal_values": {
+    "call": "field_goal",
+    "go_boost": -0.0083,
+    "optimal": "field_goal",
+    "strong": false,
+    "wp_go": 0.9778,
+    "wp_fg": 0.9861,
+    "wp_punt": 0.9532
+  },
+  "delay_checks": [
+    {
+      "defensive_awareness": 0.6,
+      "discipline": 0.5503999999999999,
+      "trials": 40000,
+      "observed_delays": 212,
+      "expected_delays": 232.3737507059298,
+      "expected_in_66_checks": 0.3834166886647842
+    },
+    {
+      "defensive_awareness": 0.787,
+      "discipline": 0.7,
+      "trials": 40000,
+      "observed_delays": 178,
+      "expected_delays": 187.49495764421135,
+      "expected_in_66_checks": 0.3093666801129487
+    },
+    {
+      "defensive_awareness": 0.9,
+      "discipline": 0.7904,
+      "trials": 40000,
+      "observed_delays": 152,
+      "expected_delays": 160.3756869705526,
+      "expected_in_66_checks": 0.2646198835014118
+    }
+  ]
+}
