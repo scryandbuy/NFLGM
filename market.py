@@ -186,25 +186,18 @@ def meter(u, best_u):
 
 # ============================================================ THE AI's BIDS
 def power(league, team, cap, years=1):
-    """
-    Effective spending power: space minus the floor cost of the bodies the
-    club still owes, and now minus what it has already promised NEXT year.
+    """Upper bound for one candidate after funding remaining roster/draft costs.
 
-    A club with four expiring starters has spent most of next year's room in
-    its head before free agency opens. Raw cap space cannot see that, so a
-    rebuilding team and a team about to lose its own core looked identical.
-
-    The forward charge scales with CONTRACT LENGTH, because that is what
-    actually conflicts: a one-year deal blocks nothing and a five-year deal
-    blocks everything. A one-year signing therefore stays cheap for exactly
-    the club that cannot commit, which is also what happens in reality.
+    Full proposed contracts subsequently pass through the shared financial
+    plan. No second APY-based retention deduction is applied here.
     """
-    import min_salary as MS
-    base = team.spending_power(cap, MS.minimum_salary(2, cap), ROSTER_TARGET)
-    if years <= 1:
-        return base
-    owed = team.future_obligation()
-    return base - owed * min(1.0, (years - 1) / 3.0) * FORWARD_WEIGHT
+    import financial_plan as FP
+    budget = FP.snapshot(league, team)
+    row = budget['years'][0]
+    # Candidate fills one projected vacancy. Soft preferences and future
+    # commitments are checked against its actual shaped contract below.
+    slot = row['vacancy_reserve'] / row['vacant_slots'] if row['vacant_slots'] else 0.
+    return budget['funded_room'] + slot
 
 
 def available_for_signing(player):
@@ -287,22 +280,24 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
             cand.append((want, p, round(bid, 2), years))
         # he pursues the men he wants most, and only as many as he can carry
         cand.sort(key=lambda x: -x[0])
-        spend = 0.0
+        pending = []
         targets = 0
         for want, p, bid, years in cand[:MAX_TARGETS[phase] * 2]:
             if targets >= MAX_TARGETS[phase]:
                 break
-            if spend + bid > room * 0.80:
-                continue
-            spend += bid
-            targets += 1
             # the club shapes the deal to its own books: tight now and open
             # later means back-load it, and the reverse means pay it now
-            out.setdefault(p.pid, []).append(
-                Offer(abbr, p.pid, bid, years, phase=phase, front_load=CS.choose_shape(team, years),
-                      planning_gain=gains[p.pid]))
-            if spend >= room * 0.80:
-                break
+            offer = Offer(abbr, p.pid, bid, years, phase=phase,
+                          front_load=CS.choose_shape(team, years), planning_gain=gains[p.pid])
+            preview = offer_contract(league, p, offer)
+            import financial_plan as FP
+            decision = FP.evaluate(league, team, additions=[(p, preview)],
+                                   pending=pending, gain=gains[p.pid], action='fa_bid')
+            if not decision['approved']:
+                continue
+            pending.append((p, preview))
+            targets += 1
+            out.setdefault(p.pid, []).append(offer)
     return out
 
 
@@ -335,6 +330,10 @@ def reconsider_bid(league, player, offer, user_team=None):
     hit = signing_terms(league, player, team, price, offer.years, cap,
                         revised.front_load, revised.bonus)['cap_hits'][0]
     if hit > power(league, team, cap, offer.years) + .0005:
+        return None
+    import financial_plan as FP
+    if not FP.evaluate(league, team, additions=[(player, offer_contract(league, player, revised))],
+                       gain=gain, action='fa_reconsider')['approved']:
         return None
     return revised
 
@@ -503,6 +502,22 @@ def signing_terms(league, player, team, apy, years, cap, front_load=None, bonus=
                 cap_hits=[round(preview.cap_hit(i), 3) for i in range(years)], total=round(sum(base) + sb, 3))
 
 
+def offer_contract(league, player, offer):
+    """Preview exactly the contract sign() will install, including pre-roll."""
+    team = league.teams[offer.team]
+    freeze_offer(league, player, offer)
+    cap = CAP.get(league.year, 301.2)
+    st = signing_terms(league, player, team, offer.apy, offer.years, cap,
+                       offer.front_load, offer.bonus)
+    c = Contract(offer.years, st['base'], signing_bonus=st['signing_bonus'],
+                 signed=league.year, pay_start=team.cap.paid_week, market_cap=cap)
+    from cap_accounting import pre_roll
+    if pre_roll(league):
+        c.base.insert(0,0.); c.rb.insert(0,0.); c.bonus_schedule.insert(0,0.)
+        c.years += 1; c.start_offset=1; c.signed=league.year+1
+    return c
+
+
 def sign(league, player, offer, cap, bonus=None, market_apy=None):
     team = league.teams[offer.team]
     import practice_squad as PSQ
@@ -617,8 +632,18 @@ def _settle_offer_sheet(league, msg, rng, action=None):
         original = freeze_offer(league, p, Offer(msg['suitor'], p.pid, price, years,
             bonus=msg.get('bonus'), front_load=msg.get('front_load'), promises=msg.get('promises', ())))
         msg.update(bonus=original.bonus, front_load=original.front_load)
-        sign(league, p, Offer(destination, p.pid, price, years, phase=3,
-                             bonus=msg.get('bonus'), front_load=msg.get('front_load'), promises=msg.get('promises', ())), cap)
+        proposal = Offer(destination, p.pid, price, years, phase=3,
+                         bonus=msg.get('bonus'), front_load=msg.get('front_load'), promises=msg.get('promises', ()))
+        if destination != getattr(league,'user_team',None):
+            import financial_plan as FP
+            import roster_needs as RN
+            team = league.teams[destination]
+            gain = (RN.assess(team)['score']-RN.assess(team,[q for q in team.active() if q.pid!=p.pid])['score']
+                    if p.team==destination else RN.move_gain(team,p))
+            if not FP.evaluate(league,team,additions=[(p,offer_contract(league,p,proposal))],
+                               gain=gain,action='offer_sheet')['approved']:
+                raise ValueError('CPU financial plan cannot fund this offer sheet')
+        sign(league,p,proposal,cap)
     except ValueError as exc:
         if action == 'match' and msg['team'] == getattr(league, 'user_team', None):
             return dict(ok=False, why=str(exc))  # retain the user's decision
@@ -975,6 +1000,7 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
     cap = CAP.get(league.year, 301.2)
     comps = VAL.pool_from_league(league)
     import roster_needs as RN
+    import financial_plan as FP
     needs_by_team = {abbr: RN.assess(team)['needs'] for abbr, team in league.teams.items()}
     out = []
     for p in sorted([q for q in pool if q.ovr >= REPLACEMENT_GRADE and q.pos not in ('K', 'P', 'LS')], key=lambda q: -q.ovr):
@@ -989,7 +1015,13 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
             # the need: how far below him the club's starter at his spot is
             ps = team.depth.get(p.pos) or []
             gap = p.ovr - (ps[0].ovr if ps else 60.0)
-            score = gap + 10.0 * needs_by_team[abbr].get(p.pos, 0.0) + 0.15 * power(league, team, cap) + rng.normal(0, 1.5)
+            gain = RN.move_gain(team, p)
+            if gain <= 1.: continue
+            proposal = Offer(abbr, p.pid, price, 1, phase=PHASES+1)
+            if not FP.evaluate(league, team, additions=[(p,offer_contract(league,p,proposal))],
+                               gain=gain, action='fa_leftover')['approved']:
+                continue
+            score = gap + 10.0 * needs_by_team[abbr].get(p.pos, 0.0) + rng.normal(0, 1.5)
             if gap < -2: continue
             if score > best_score: best, best_score = team, score
         if best is None: continue
