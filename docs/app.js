@@ -753,7 +753,6 @@ function renderGameDay(v) {
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })())
   : el('div', { class: 'ctrl2' },
-    el('button', { class: 'btn quiet', onclick: () => { shown = 1; shownPlays = 0; draw(); } }, 'Replay from Kickoff'),
     el('button', { class: 'btn', 'data-tip': 'One snap at a time', onclick: nextPlay }, 'Next Play'),
     el('button', { class: 'btn go', 'data-tip': 'Through the end of this drive, or the next one if this one is in', onclick: () => { if (shownPlays != null) { shownPlays = null; } else shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
     el('button', { class: 'btn', 'data-tip': 'Through the end of the quarter', onclick: nextQuarter }, 'Next Quarter'),
