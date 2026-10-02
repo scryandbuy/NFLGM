@@ -54,10 +54,13 @@ class PackageSearchTests(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch.object(TR, '_picks_by_price', return_value=list(bank)))
             costs = {p['pick']: p['market'] for p in bank}
-            stack.enter_context(patch.object(TE, 'pick_value_dollars', side_effect=lambda i, y=0: costs[i]))
+            stack.enter_context(patch.object(TE, 'pick_value_dollars', side_effect=lambda i, y=0, **kw: costs[i]))
             stack.enter_context(patch.object(TE, 'team_price', side_effect=quote))
             if recipient is None:
                 stack.enter_context(patch('roster_needs.assess', side_effect=score))
+            # This exhaustive search fixture has no contracts or league ledger;
+            # cap/future-funding behavior is covered by the integration tests.
+            stack.enter_context(patch.object(TR, '_financial_trade', return_value=True))
             if max_nodes is not None:
                 stack.enter_context(patch.object(TR, 'MAX_PACKAGE_SEARCH', max_nodes))
             team.abbr = 'B'

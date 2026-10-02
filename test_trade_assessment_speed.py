@@ -45,7 +45,7 @@ class TradeAssessmentSpeedTests(unittest.TestCase):
         t = team('12', 'multiple')
         for i, p in enumerate(t.roster):
             p.ovr = 91 - (i % 3) * 9
-        league = SimpleNamespace(teams={'TST': t}, free_agents=[], week=2)
+        league = SimpleNamespace(teams={'TST': t}, free_agents=[], week=2, year=2028, phase='regular')
         def asset(league, t, p, pool, rng, **kwargs):
             return dict(pid=p.pid, trade_value=float(rng.random()))
         with patch.object(TR, 'starter_bar', return_value={}), \

@@ -64,12 +64,13 @@ class DraftIntegrityTests(unittest.TestCase):
             if item['obj'] is pk:
                 return 50.0 if owns else 100.0
             return 10.0 if owns else 20.0
-        with patch.object(D, '_bank', return_value=assets), patch('trade_engine.team_price', side_effect=price), patch('trade_engine.evaluate', return_value=dict(accepted=False, a_gain=3, b_gain=3)) as evaluate:
+        neutral = lambda item: 50.0 if item['obj'] is pk else 20.0
+        with patch.object(D, '_bank', return_value=assets), patch('trade_engine.market_price', side_effect=neutral), patch('trade_engine.team_price', side_effect=price), patch('trade_engine.evaluate', return_value=dict(accepted=False, a_gain=3, b_gain=3)) as evaluate:
             offer, result = D._offer_for('DEN', 'KC', pk, 1.0)
         self.assertTrue(evaluate.called)
         self.assertIsNone(offer)
         self.assertIsNone(result)
-        with patch.object(D, '_bank', return_value=assets), patch('trade_engine.team_price', side_effect=price), patch('trade_engine.evaluate', return_value=dict(accepted=True, a_gain=3, b_gain=3)):
+        with patch.object(D, '_bank', return_value=assets), patch('trade_engine.market_price', side_effect=neutral), patch('trade_engine.team_price', side_effect=price), patch('trade_engine.evaluate', return_value=dict(accepted=True, a_gain=3, b_gain=3)):
             offer, result = D._offer_for('DEN', 'KC', pk, 1.0)
         self.assertEqual(len(offer['a_sends']), 3)
         self.assertTrue(result['accepted'])

@@ -20,6 +20,9 @@ class TradeOfferLifecycleTests(unittest.TestCase):
         self.player = self.L.teams['GB'].roster[-1]
         self.pick = self.L.teams['DEN'].picks[-1]
         self.m = inbox.post_trade_offer(self.L, 'DEN', 'GB', [self.pick], [self.player.pid], 'Depth.', 3)
+        # These synthetic offers exercise mail state, not CPU roster selection.
+        guard = patch('trades.cpu_trade_check', return_value={'approved':True})
+        guard.start(); self.addCleanup(guard.stop)
 
     def reload(self):
         self.s = session.Session.load(self.s.save()); self.L = self.s.L

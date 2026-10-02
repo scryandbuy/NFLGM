@@ -168,7 +168,11 @@ class Draft:
 
     def _pick_asset(self, pk):
         import trades as TR
-        return TR.pick_asset(self.L, pk)
+        asset = TR.pick_asset(self.L, pk)
+        # Draft.year is the season whose picks are on the clock, even after
+        # the league calendar has rolled into the following year.
+        asset['years_out'] = max(0, pk.year - self.year)
+        return asset
 
     def _bank(self, abbr, exclude_pick=None, rng=None):
         """What this club can put into a package: its remaining picks this
@@ -176,6 +180,7 @@ class Draft:
         import trades as TR
         team = self.L.teams[abbr]
         picks = [self._pick_asset(x) for x in team.picks if not x.used_on and x is not exclude_pick
+                 and self.year <= x.year <= self.year + 2
                  and (x.year > self.year or (x.selection or 0) > (self.current().selection if self.current() else 0))]
         surplus, _ = TR.surplus_and_needs(self.L, team, self._pool(), rng if rng is not None else self.rng)
         return picks + list(surplus)
@@ -195,10 +200,13 @@ class Draft:
         # The trade engine prices that concrete opportunity for the buyer;
         # the seller still prices the pick at its ordinary chart value.
         target['draft_target_premium'] = 1.20
-        want = TE.pick_price_dollars(pk.selection) * premium
+        market = TE.market_price(target)
+        want = market * premium
+        market_floor, market_ceiling = .85 * market, 1.35 * market
         bank = sorted(self._bank(buyer, exclude_pick=None, rng=rng), key=lambda x: TE.team_price(x, ctx_a, ta.cap_space, ga, owns=True))
         best = None
         target_checks = {}
+        football_cache, financial_cache = {}, {}
         # Search singles, pairs and triples lazily. Prices are additive, so
         # reject packages outside either club's window before evaluation.
         import itertools
@@ -212,6 +220,9 @@ class Draft:
         def handicap(pkg): return 1.0 + 0.12 * sum(1 for x in pkg if x['kind'] != 'pick' or x.get('years_out', 0) > 0)
         for pkg in itertools.chain(((x,) for x in bank), itertools.combinations(bank, 2),
                                     itertools.combinations(bank, 3)):
+            neutral = sum(TE.market_price(x) for x in pkg)
+            if not market_floor - 1e-9 <= neutral <= market_ceiling + 1e-9:
+                continue
             # NEXT YEAR'S PICK BUYS THE SAME ROUND OR BETTER, this year. A
             # future first goes for a first, a future second for a first or
             # a second. Price alone let a club with nothing left this year
@@ -233,11 +244,41 @@ class Draft:
                 if collateral not in target_checks:
                     target_checks[collateral] = self._trade_target_valid(buyer, offer, pk, target_player)
                 if not target_checks[collateral]: continue
+            if not self._package_valid(buyer, seller, offer, pk, target_player,
+                                       football_cache, financial_cache):
+                continue
             if best is None or paid < best[0]:
                 best = (paid, offer, r)
         if best is None:
             return None, None
         return best[1], best[2]
+
+    def _package_valid(self, buyer, seller, offer, pk, target_player=None,
+                       football_cache=None, financial_cache=None):
+        """Shared roster and funding guards, including the rookie bought here."""
+        import trades as TR
+        import roster_needs as RN
+        ta, tb = self.L.teams[buyer], self.L.teams[seller]
+        sent = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
+        neutral = sum(TE.market_price(x) for x in offer['a_sends'])
+        market = TE.market_price(self._pick_asset(pk))
+        if not .85 * market - 1e-9 <= neutral <= 1.35 * market + 1e-9:
+            return False
+        if any(isinstance(x, str) for x in sent):
+            football = TR.package_football(self.L, ta, tb, sent, [pk],
+                                           prospect=target_player, cache=football_cache)
+            if not football['approved']: return False
+            if buyer != getattr(self.L, 'user_team', None):
+                # CPU player collateral requires a concrete prospect and an
+                # improvement after giving up every player in the package.
+                if target_player is None: return False
+                net = football['gains'][buyer]
+                gross = RN.move_gain(ta, target_player)
+                ceiling = 1.35 * market * min(1., TR._upgrade_budget(net) / TR._upgrade_budget(gross))
+                if net <= .5 or neutral > ceiling + 1e-9: return False
+        # Financial planning includes the acquired pick's actual rookie deal,
+        # plus every future pick and contract on both sides of the exchange.
+        return TR._financial_trade(self.L, ta, tb, sent, [pk], financial_cache)
 
     def _trade_target_valid(self, buyer, offer, pk, target_player):
         """The target must remain the buyer's first choice after paying the roster collateral."""
@@ -257,6 +298,8 @@ class Draft:
         if pk is not self.current() or pk.used_on or pk.owner != seller:
             return None
         if target_player is not None and not self._trade_target_valid(buyer, offer, pk, target_player):
+            return None
+        if not self._package_valid(buyer, seller, offer, pk, target_player):
             return None
         sends = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
         try: self.L.trade(buyer, seller, sends, [pk])
@@ -372,12 +415,12 @@ class Draft:
     def trade_for_pick(self, pk):
         """What the trade tab pre-loads: the pick as the target and its owner's
         asking price in dollars."""
-        return dict(target=pk, owner=pk.owner, market=round(TE.pick_price_dollars(pk.selection), 1))
+        return dict(target=pk, owner=pk.owner, market=round(TE.market_price(self._pick_asset(pk)), 1))
 
     # ------------------------------------------------------------ internals
     def _select(self, pk, p):
-        from cap_engine import CAP
-        cap = CAP.get(self.year + 1, 301.2)
+        from valuation import _league_cap
+        cap = _league_cap(self.L, self.year + 1)
         self.taken.add(p.pid)
         pk.used_on = p.pid
         p.draft_round, p.draft_overall = pk.round, pk.selection

@@ -23,6 +23,7 @@ class TradeFeedbackTests(unittest.TestCase):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
         self.stack.enter_context(patch('valuation.pool_from_league',return_value=[]))
         self.stack.enter_context(patch('trades.persona',return_value={}))
+        self.stack.enter_context(patch('trades.cpu_trade_check',return_value={'approved':True}))
         self.stack.enter_context(patch('cap_accounting.trade_projection',return_value=N(space=lambda phase:110)))
         self.stack.enter_context(patch.object(VP,'_assets',side_effect=lambda L,a,ids,*args,**kw:
             [dict(kind='player',inherit=10,out_hit=10,dead=0) for pid in ids]))

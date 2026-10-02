@@ -99,7 +99,7 @@ class DraftRuntimeTests(unittest.TestCase):
         pk = D.current()
         target, alternative = D.available()[:2]
         incumbent = L.teams['DEN'].roster[0]
-        player_asset = {'kind':'player','pid':incumbent.pid}
+        player_asset = {'kind':'player','pid':incumbent.pid,'trade_value':50.0}
         pick = next(p for p in L.teams['DEN'].picks if p.year == D.year)
         pick_asset = trades.pick_asset(L, pick)
         def price(item, *args, owns=False, **kwargs):
@@ -112,6 +112,7 @@ class DraftRuntimeTests(unittest.TestCase):
              patch.object(DFT, 'board', side_effect=board), \
              patch('trade_engine.pick_price_dollars', return_value=50), \
              patch('trade_engine.team_price', side_effect=price), \
+             patch('trades._financial_trade', return_value=True), \
              patch('trade_engine.evaluate', return_value={'accepted':True,'a_gain':5,'b_gain':5}):
             offer, result = D._offer_for('DEN', pk.owner, pk, 1.0, target_player=target)
         self.assertTrue(result['accepted'])
@@ -124,9 +125,14 @@ class DraftRuntimeTests(unittest.TestCase):
         seller = pk.owner
         target, other = D.available()[:2]
         outgoing = next(p for p in L.teams['DEN'].picks if p.year == D.year)
+        outgoing.selection = pk.selection + 1  # fair adjacent-slot trade for this lifecycle check
         asset = trades.pick_asset(L, outgoing)
         offer = dict(a_sends=[asset], a_gets=[D._pick_asset(pk)])
-        with patch.object(DFT, 'board', return_value=[(100, target)]):
+        # Isolate target/save lifecycle from the synthetic fixture's unrolled
+        # future contracts; market and funding have dedicated regression tests.
+        with patch.object(DFT, 'board', return_value=[(100, target)]), \
+             patch('trade_engine.market_price', return_value=50), \
+             patch('trades._financial_trade', return_value=True):
             ev = D._execute('DEN', seller, offer, pk, target)
         self.assertIsNotNone(ev)
         self.assertEqual(pk.owner, 'DEN')
@@ -161,12 +167,15 @@ class DraftRuntimeTests(unittest.TestCase):
         D.user = pk.owner
         target, other = D.available()[:2]
         outgoing = next(p for p in L.teams['DEN'].picks if p.year == D.year)
+        outgoing.selection = pk.selection + 1
         offer = dict(team='DEN', asks=[pk], sends=[trades.pick_asset(L, outgoing)], target_pid=target.pid)
         with patch('trade_engine.evaluate', return_value={'accepted':True}), \
              patch.object(DFT, 'board', return_value=[(100, other)]):
             self.assertIsNone(D.accept_offer(offer))
         self.assertEqual(pk.owner, D.user)
         with patch('trade_engine.evaluate', return_value={'accepted':True}), \
+             patch('trade_engine.market_price', return_value=50), \
+             patch('trades._financial_trade', return_value=True), \
              patch.object(DFT, 'board', return_value=[(100, target)]):
             self.assertIsNotNone(D.accept_offer(offer))
         self.assertEqual(D.trade_targets[pk.selection], {'buyer':'DEN','pid':target.pid})

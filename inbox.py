@@ -178,6 +178,11 @@ def accept(league, msg_id, user_team):
     if p.get('user_team', user_team) != user_team or p['buyer'] == user_team:
         raise ValueError('this offer belongs to another team')
     sends = [_resolve(league, x, p['buyer']) for x in p['sends']]
+    import trades as TR
+    decision = TR.cpu_trade_check(league, league.teams[p['buyer']], league.teams[user_team],
+                                   sends, p['gets'], buyer=p['buyer'])
+    if not decision['approved']:
+        raise ValueError(decision['why'])
     league.trade(p['buyer'], user_team, sends, p['gets'])
     m['status'] = 'accepted'
     league.log('inbox_trade', buyer=p['buyer'], gets=p['gets'],
