@@ -57,8 +57,8 @@ class CommitmentTests(unittest.TestCase):
 
     def test_contract_hit_cannot_consume_roster_completion_reserve(self):
         p = self.prospect('QB', 'target', 95)
-        with patch.object(M, 'power', return_value=2):
-            self.assertIsNone(M.reconsider_bid(self.L, p, M.Offer('MIN', p.pid, 20, 3)))
+        self.t.cap.dead += self.t.cap_space - 2
+        self.assertIsNone(M.reconsider_bid(self.L, p, M.Offer('MIN', p.pid, 20, 3)))
 
     def test_old_saved_bids_remain_readable(self):
         offer = M.Offer.from_save(dict(team='MIN', pid='p', apy=8, years=1))
@@ -86,8 +86,8 @@ class CommitmentTests(unittest.TestCase):
         thread = dict(id='talk', team='GB', pid=p.pid, kind='fa_offseason', state='waiting',
                       rival=dict(team='MIN', apy=20, years=3))
         self.L.negotiations = [thread]
-        with patch.object(M, 'power', return_value=1):
-            M.refresh_negotiation_rivals(self.L, {p.pid:[M.Offer('MIN', p.pid, 20)]}, 'GB')
+        self.t.cap.dead += self.t.cap_space - 1
+        M.refresh_negotiation_rivals(self.L, {p.pid:[M.Offer('MIN', p.pid, 20)]}, 'GB')
         self.assertIsNone(thread['rival'])
 
     def test_retention_values_control_growth_and_succession_without_hidden_ceiling(self):

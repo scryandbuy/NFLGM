@@ -85,6 +85,16 @@ class FinancialPlanTests(unittest.TestCase):
         self.assertEqual(after['years'][1]['retention_reserve'],0)
         self.assertEqual(before['years'][0]['raw_room'],after['years'][0]['raw_room'])
 
+    def test_rookie_forecast_displaces_minimum_slots_without_changing_legal_room(self):
+        for p in self.t.roster: p.contract=Contract(1,[1])
+        initial=FP.snapshot(self.L,self.t)['years'][0]
+        self.t.picks=[DraftPick(self.L.year-1,r,'MIN','MIN',selection=(r-1)*32+16)
+                      for r in range(1,8)]
+        forecast=FP.snapshot(self.L,self.t)['years'][0]
+        self.assertAlmostEqual(forecast['displacement_credit'],7)
+        self.assertEqual(forecast['raw_room'],initial['raw_room'])
+        self.assertAlmostEqual(forecast['funded_room'],initial['funded_room']-forecast['rookie_reserve']+7)
+
     def test_inspection_pure_and_save_load_identical(self):
         saved=self.L.save()
         first=FP.snapshot(self.L,self.t)

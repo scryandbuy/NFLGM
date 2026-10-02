@@ -62,6 +62,12 @@ class CapCasualtyTradeTests(unittest.TestCase):
                 p.contract = Contract(3, [20]*3, signing_bonus=2)
                 keep.ratings = {k: 60 for k in TG.DEPTH_WEIGHTS['QB']}
                 seller.cap.cap = 25.5 if path == 'run' else 15
+                if path == 'run':
+                    # This two-player fixture must also fund its 51 vacancies.
+                    # Put it $5M short of that target, within one restructure.
+                    import financial_plan as FP
+                    seller.sync_cap()
+                    seller.cap.cap += FP.roster_funding_target(L, seller) - seller.cap_space - 5
                 with patch.object(TR, 'shop_cap_casualty') as shop:
                     getattr(CT, path)(L, self.rng)
                 shop.assert_not_called()

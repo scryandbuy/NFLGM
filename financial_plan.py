@@ -5,9 +5,7 @@ The reserve coefficients are initial policy settings, not fitted NFL estimates.
 Hard transaction legality remains in cap_accounting; this layer prices flexibility.
 """
 import copy
-from collections import Counter
-
-from cap_engine import CAP, Contract, TOP_51_PHASES
+from cap_engine import CAP
 import min_salary as MS
 
 EPS = .0005
@@ -137,6 +135,15 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
         rookie_reserve = sum(rookie_hits)
         vacancies = max(0,53-active-len(rookie_hits))
         vacancy_reserve = vacancies*floor
+        # Draft/camp additions displace paid roster slots, rather than funding
+        # a permanent 60- or 90-man roster. Credit at most a minimum salary per
+        # excess slot, capped by real net release savings (bonus acceleration
+        # included). This is a conservative forecast, never a booked release.
+        # Keep IR salaries and all hard current cap charges in the ledger.
+        excess = max(0, active+len(rookie_hits)-53)
+        savings = sorted(min(floor, max(0., c.release(index, False)[2]))
+                         for pid,c in alive if pid not in ir or index>0)
+        displacement = sum(savings[:excess])
         if index == 0:
             limit = ledger.limit
             charge = ledger.charges(team.phase)
@@ -151,7 +158,7 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
                 charge += ledger.dead_next
             full_charge = charge
         raw = limit-charge
-        funded = limit-full_charge-rookie_reserve-vacancy_reserve
+        funded = limit-full_charge-rookie_reserve-vacancy_reserve+displacement
         # Vacancy costs already fund a replacement, so retain only the premium.
         retention = sum(max(0.,apy-MS.minimum_salary(2,base))*.5
                         for p,expiry,apy in keepers if expiry<=index)
@@ -160,6 +167,7 @@ uses legal accounting; funded_room forecasts retained contracts plus missing
         row = dict(year=year, limit=limit, raw_room=raw, committed=charge,
                    active_contracts=active, vacant_slots=vacancies,
                    rookie_reserve=rookie_reserve, vacancy_reserve=vacancy_reserve,
+                   displacement_credit=displacement,
                    full_roster_adjustment=full_charge-charge,
                    funded_room=funded, retention_reserve=retention,
                    injury_reserve=injury, opportunity_reserve=opportunity,

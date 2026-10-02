@@ -1,0 +1,64 @@
+CPU FINANCIAL PLAN — FIRST IMPLEMENTATION
+Base: 83a381806ebd35ec60d0d21cc6748f8ed9ce8c78
+Branch: codex/gm-financial-plan-20261002
+Collaborator: Review code changes (2)
+
+Scope
+One deterministic four-cap-year preview now informs CPU free-agent offers,
+renewals/options, franchise and RFA tenders, trade packages, waiver claims,
+practice-squad moves, and routine restructure decisions. Each transaction keeps
+the existing authoritative legal cap check. User choices are not subject to CPU
+discretionary preferences. Emergency minimum-roster recovery remains available.
+
+Funding
+The projection includes actual remaining contract charges, dead money, unused
+draft picks, and minimum funding for vacant roster spots. Signed rookies replace
+their pick forecasts. Existing contracts are replaced, not stacked, on renewal.
+IR pay is retained. Excess roster/draft slots receive a conservative displacement
+credit: no more than a minimum salary, and no more than real net release savings.
+This is a forecast, not a booked release or a guarantee of cutting named players.
+Legal cap room never receives that forecast credit.
+
+Joint AI bidding reserves exact candidate contracts within each bid batch.
+Offers are reconsidered against the changed roster before resolution. The shared
+projection is pure and rebuilt from saved roster/GM/contract state; it does not
+persist a second ledger that can become stale. Existing accepted-offer/user
+reservation infrastructure is preserved.
+
+Routine restructures fund identified roster/draft shortfalls only. They no longer
+raise every club to a fixed $12M target. Their future schedule may not worsen
+negative future raw cap room. Existing emergency enforcement remains a separate
+last resort. The new model does not add speculative future carryover.
+
+Initial settings — NOT empirically fitted NFL coefficients
+- Four-year horizon, with 5.5% conservative growth for unpublished future caps.
+- Injury allowance: 0.8% of base cap, scaled by remaining season.
+- Opportunity allowance: continuous GM patience/risk/aggression/security and
+  contender inputs, bounded to 0.3–3.5% of base cap.
+- Retention allowance: a 50% premium over replacement pay for selected leading
+  players with expiring deals, based on known pay. This is not an agent quote.
+- Large roster improvement can release up to 80% of the soft cushion.
+- Emergency required-role repairs can release all soft/completion reserves;
+  existing hard legal checks still apply.
+
+Deliberately not implemented
+Ownership cash limits or CBA cash-floor enforcement. Cap charge, APY and cash
+paid are different measurements; old saves do not supply complete historical
+cash payments. Staff owner_spend and the game's PS salary cap exemption are
+unchanged. No historical cash shortfalls are invented.
+
+Validation and calibration limits
+Behavior tests cover exact schedules, pending bids, future roster funding,
+GM differences, exceptions, atomic refusals, user control and save/load.
+audit_financial_plan.py compares identical initial seed states against an
+immutable baseline through free agency, draft and final roster compliance.
+It advances contracts but skips games, injuries, retirement and regression;
+draft order is synthetic alphabetical. Different acquisitions change later
+random draws. This is an accelerated behavior probe, not a complete season or
+proof of long-term franchise balance.
+
+Outstanding evidence
+Same-date real Week 1/deadline cap panels and actual injury replacement spending
+are still needed for numerical reserve calibration. Year-end carryover must not
+be treated as a Week 1 target. Multiple seeds and multi-season runs remain needed
+before claiming stable long-term talent, spending or competitive balance.

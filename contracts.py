@@ -355,6 +355,12 @@ def run(league, rng, verbose=False):
             # Fund identified roster/draft obligations only, not a generic
             # cushion that the market immediately treats as spending money.
             amount = max(0.,p.contract.base[0]-floor) * min(1.,(need+.001)/freed)
+            import copy
+            preview = copy.deepcopy(p.contract)
+            preview.restructure(0, amount=amount, min_base=floor)
+            if not FP.evaluate(league, team, additions=[(p, preview)],
+                               essential=True, action='fund_roster_restructure')['approved']:
+                continue
             conv, _spread = p.contract.restructure(0, amount=amount, min_base=floor)
             if conv <= 0:
                 continue
