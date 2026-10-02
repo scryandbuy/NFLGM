@@ -269,10 +269,9 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
             # and never two of them in one draft
             if p.pos in POS_CAP_EARLY and any(league.players[pid].pos == p.pos and league.players[pid].team == abbr for pid in taken):
                 slot += 200.0
-            # NO TRIPLE DIPPING. A club that has taken a position in the first three rounds does not take it again
-            # in the top hundred: the need is filled, and the pull that filled it goes with it
-            if selection <= 100 and gap > 0 and any(league.players[pid].pos == p.pos and league.players[pid].team == abbr and (league.players[pid].draft_overall or 999) <= 96 for pid in taken):
-                slot += gap * (0.6 + 2.0 * (1 - trust)) * (0.5 + inflate) + 40.0
+            # All-round soft cost for depth without a useful roster opening.
+            slot += DP.redundancy_penalty(plan, p, grade=my_grade[p.pid],
+                                          gain=gains.get(p.pid, 0.0))
             adjusted_slots[p.pid] = max(1.0, slot)
             rows.append((slot_value(max(1.0, slot)), p))
     # The economic chart has plateaus. Preserve the full scouting/need score
