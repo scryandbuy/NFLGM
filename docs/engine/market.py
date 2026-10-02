@@ -1033,7 +1033,10 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
     comps = VAL.pool_from_league(league)
     import roster_needs as RN
     import financial_plan as FP
-    needs_by_team = {abbr: RN.assess(team)['needs'] for abbr, team in league.teams.items()}
+    # A club's allocation only changes when it signs someone. Reuse that
+    # snapshot across the remaining market instead of rebuilding every
+    # package twice for every player/team pairing.
+    reports = {abbr: RN.assess(team) for abbr, team in league.teams.items()}
     out = []
     for p in sorted([q for q in pool if q.ovr >= REPLACEMENT_GRADE and q.pos not in ('K', 'P', 'LS')], key=lambda q: -q.ovr):
         v = VAL.value_player(league, p, pool=comps, rng=rng)
@@ -1043,22 +1046,23 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
         for abbr, team in league.teams.items():
             if abbr in (user_team,getattr(league,'user_team',None)): continue
             if len(team.active()) >= 90: continue
-            gain = RN.move_gain(team, p)
+            report=reports[abbr]
+            gain = RN.move_gain(team, p, baseline=report)
             if gain <= 1.: continue
             proposal = Offer(abbr, p.pid, price, 1, phase=PHASES+1)
-            if not acquisition_read(league,team,p,proposal,gain,market)['approved']:
+            if not acquisition_read(league,team,p,proposal,gain,market,report)['approved']:
                 continue
             if not FP.evaluate(league, team, additions=[(p,offer_contract(league,p,proposal))],
                                gain=gain, action='fa_leftover')['approved']:
                 continue
-            score = gain + 10.0 * needs_by_team[abbr].get(p.pos, 0.0) + rng.normal(0, 1.5)
+            score = gain + 10.0 * report['needs'].get(p.pos, 0.0) + rng.normal(0, 1.5)
             if score > best_score: best, best_score = team, score
         if best is None: continue
         o = Offer(best.abbr, p.pid, price, 1, phase=PHASES + 1)
         try: sign(league, p, o, cap)
         except ValueError: continue
         best.sync_cap(); out.append((best.abbr, p, o))
-        needs_by_team[best.abbr] = RN.assess(best)['needs']
+        reports[best.abbr] = RN.assess(best)
         league.__dict__.setdefault('fa_signed', []).append((best.abbr, p.pid, o.apy, 1, PHASES + 1))
     return out
 

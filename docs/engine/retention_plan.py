@@ -51,7 +51,11 @@ def candidates(league, team, scale=None):
         if p.contract and p.contract.years >= 2 and row['normalized_grade'] < 80: continue
         if p.age > EXT.AGE_LIMIT.get(p.pos,31)+2: continue
         out.append((p,row))
-    return sorted(out,key=lambda pr:(-pr[1]['importance'],str(pr[0].pid)))
+    # Resolve contracts that have actually expired before buying optional
+    # extra control on men who will already be here next season.
+    return sorted(out,key=lambda pr:((pr[0].contract.years if pr[0].contract else 0)
+                  if league.phase in ('offseason','free_agency') else 0,
+                  -pr[1]['importance'],str(pr[0].pid)))
 
 
 def assess(league, team, player, pool=None, baseline=None, scale=None):

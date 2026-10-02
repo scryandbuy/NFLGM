@@ -33,7 +33,7 @@ import contract_structure as CS
 import valuation as VAL
 import contract_terms as CT
 
-MAX_PER_CLUB = 6                 # a ceiling, not a target; roles, price and agreement set the number
+MAX_PER_CLUB = 6                 # throttle optional early renewals, never unresolved expiries
 AGE_LIMIT = {'QB': 36, 'K': 38, 'P': 38}
 CERTAINTY_DISCOUNT = 0.07
 
@@ -377,7 +377,10 @@ def ai_round(league, rng, verbose=False):
         RP.refresh(league,team,pool=pool)
         n = 0
         for p, inputs in RP.candidates(league,team,scale):
-            if n >= MAX_PER_CLUB: break
+            # Cap/financial/agent checks determine how many expiring men can
+            # stay. An arbitrary renewal count must not send a seventh useful,
+            # affordable incumbent to free agency without a negotiation.
+            if n >= MAX_PER_CLUB and p.contract and p.contract.years > 0: continue
             # Useful reserve retention remains discretionary. Important starting
             # roles receive a real review instead of a coin flip that skips them.
             if inputs['role_share'] < .15 and rng.random() > .25+.25*team.gm.loyalty: continue
