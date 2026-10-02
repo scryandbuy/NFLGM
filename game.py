@@ -1054,11 +1054,11 @@ def returner_for(ros, state, rate_fn, kind='kr'):
     return ordered[0] if ordered else {}
 
 
-def kickoff_booked(returner, rng, rate_fn, book, from_50=False, kicking=(), receiving=()):
+def kickoff_booked(returner, rng, rate_fn, book, from_50=False, kicking=(), receiving=(), kicker=None):
     """Resolve, enforce and book the return once, before the next possession."""
     import events as E
     import kick_returns as KR
-    r = kickoff(returner, rng, rate_fn, from_50=from_50, kicking=kicking, receiving=receiving)
+    r = kickoff(returner, rng, rate_fn, from_50=from_50, kicking=kicking, receiving=receiving, kicker=kicker)
     if not r.get('touchback'):
         KR.enforce_return_flag(r, E.special_teams_penalty_check(rng, 'kickoff', returned=True))
         KR.book_return(book, 'kr', r)
@@ -1067,14 +1067,21 @@ def kickoff_booked(returner, rng, rate_fn, book, from_50=False, kicking=(), rece
     return r
 
 
-def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False, kicking=(), receiving=()):
-    if rng.random() < KICKOFF['touchback']:
+def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False, kicking=(), receiving=(), kicker=None):
+    power = rate_fn(kicker, {'kick_power_rating': 1.0}) - AVG if kicker is not None else 0.0
+    accuracy = rate_fn(kicker, {'kick_acc_rating': 1.0}) - AVG if kicker is not None else 0.0
+    touchback = float(np.clip(KICKOFF['touchback'] + .16 * power + .08 * accuracy, .02, .98))
+    if rng.random() < touchback:
         spot = KICKOFF['touchback_from_50'] if from_50 else KICKOFF['touchback_to']
         return dict(type='kickoff', touchback=True, new_yardline=spot)
     import kick_returns as KR
     skill = rate_fn(returner, {'kick_ret_rating': .45, 'speed_rating': .30, 'juke_move_rating': .25})
     ret = rng.gamma(7.0, KICKOFF['return_mean'] / 7.0) * (1.0 + 0.8 * (skill - RET_AVG))
-    outcome = KR.resolve(95., ret, returner or {}, rng, rate_fn, kicking, receiving,
+    # Better placement leaves a smaller return; neutral skill preserves the
+    # existing landing point and return distribution without another roll.
+    ret *= float(np.clip(1.0 - .15 * accuracy, .90, 1.10))
+    landing = float(np.clip(95. + 6. * power, 90., 98.))
+    outcome = KR.resolve(landing, ret, returner or {}, rng, rate_fn, kicking, receiving,
                          event='kick_return', weather=ENV.fumble_mult)
     return dict(type='kickoff', touchback=False, **outcome)
 
@@ -1084,7 +1091,8 @@ def kickoff_for(kicking, receiving, kick_state, receive_state, rng, rate, book):
     returner = returner_for(receiving, receive_state, rate)
     return kickoff_booked(returner, rng, rate, book,
         kicking=KR.unit(kicking, kick_state, rate),
-        receiving=KR.unit(receiving, receive_state, rate, True, returner.get('pid')))
+        receiving=KR.unit(receiving, receive_state, rate, True, returner.get('pid')),
+        kicker=kicking.get('k'))
 
 
 def pending_kick_outcome():
@@ -2441,7 +2449,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if rng.random() < E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn):
                 _old = out
                 _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pressured', 'coverage_evidence') if k in _old}
-                out = E.resolve_scramble(off_f['qb'], [], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
+                out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
                     if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
