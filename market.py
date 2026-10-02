@@ -686,7 +686,9 @@ def fill_out_rosters(league, pool, rng, verbose=False):
             if len(grp) >= POS_CAP.get(p.pos, 4):
                 continue                  # already deep here
             o = Offer(abbr, p.pid, round(floor, 3), 1, phase=3)
-            try: sign(league, p, o, cap)
+            # These are disposable one-year depth deals made before the draft.
+            # A bonus would become dead cap if the rookie class displaces them.
+            try: sign(league, p, o, cap, bonus=0)
             except ValueError: continue
             team.sync_cap()
             pool.remove(p)
