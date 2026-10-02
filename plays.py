@@ -609,6 +609,10 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
                  rate(d, RUN_BLOCK['defender']['shed']))
             for b, d in contests]
     push = float(np.mean(wins)) if wins else 0.0
+    from run_blocking import support_blocks
+    support_yards, support = support_blocks(off, roles,
+        {DRUSH.player_key(b) for b, _ in contests},
+        {DRUSH.player_key(d) for _, d in contests}, scheme, rate)
     # Same as protection: the per-blocker result already exists and was only
     # ever averaged away. A run block win is beating the man across from you,
     # which is a positive edge.
@@ -619,14 +623,10 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # RBWR): the deterministic edge is the mean, and the rep itself is a
     # draw around it, so a slightly out-rated blocker still wins his share
     rb_reps = [(b.get('pid'), (w + rng.normal(0.0, 0.10)) > RBW_THRESHOLD) for (b, _), w in zip(contests, wins)]
-    # Same in the run game: a surplus blocker is doubling or pulling, not
-    # standing free, so he shares the result of the block that mattered most
-    # rather than banking an automatic win.
-    if len(blockers) > len(wins) and wins:
-        # An extra man at the point of attack usually means that block holds.
-        shared = max(wins) > -0.04
-        engaged = {DRUSH.player_key(b) for b, _ in contests}
-        rb_reps += [(b.get('pid'), shared) for b in blockers if DRUSH.player_key(b) not in engaged]
+    # Surplus linemen climb; skill players execute their actual support job.
+    # Record one contest per blocker, including failed blocks on stuffed runs.
+    rb_reps += [(b['blocker'], b['edge'] + rng.normal(0.0, 0.10) > RBW_THRESHOLD)
+                for b in support]
     fill = np.mean([rate(d, RUN_BLOCK['defender']['fill']) for d in defenders[:7]])
 
     # Slopes cut from 9.0 and 3.2: yards per carry ALLOWED varied across
@@ -635,7 +635,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # so the league lands on 4.52.
     # slope 5.5 to 3.5: the best line in the league was worth two yards before contact on every carry, and with an
     # elite back behind it the club ran for four thousand; a yard is the real gap between the best line and an average one
-    ybc = RUN_BASE + 3.5 * push - 2.0 * (fill - AVG) + rng.normal(0, RUN_NOISE)
+    ybc = RUN_BASE + 3.5 * push - 2.0 * (fill - AVG) + support_yards + rng.normal(0, RUN_NOISE)
     ybc = S.box_run_contact(ybc, def_call['box'], RUN_BASE, RUN_NOISE)
     advantage = S.run_scheme_multiplier(scheme, def_call['front'], ytg, def_call['box'])
     advantage /= S.FRONTS[def_call['front']]['run_fit']
@@ -650,7 +650,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
         ybc /= execution
         return dict(type='run', yards=round(float(ybc), 1), scheme=scheme,
                     broken_tackles=0, touchdown=False, ybc=round(float(ybc), 1),
-                    rb_reps=rb_reps)
+                    rb_reps=rb_reps, run_support=support)
 
     chasers = defenders[len(front):] + defenders[:len(front)]
     # The same wall applies to a run: yards after contact collapse near the
@@ -664,7 +664,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
         after = max(0.0, out['yards'] - ybc)
         out['yards'] = round(ybc + after * _compression(ytg), 1)
     out.update(type='run', scheme=scheme, ybc=round(float(ybc), 1),
-               rb_reps=rb_reps)
+               rb_reps=rb_reps, run_support=support)
     return out
 
 # Fitted on nflverse 2021-24 regular-season turnover returns; 2025 held out.
