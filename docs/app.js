@@ -1104,7 +1104,11 @@ function renderCard(v) {
     right.append(h5('Contract'));
     if (v.contract.by_year.length) right.append(contractTable());
     right.append(el('div', { class: 'kv', style: 'margin-top:8px' }, el('span', {}, 'Market'), el('span', {}, v.market_apy != null ? `About $${v.market_apy}m per year` : '—'), el('span', {}, 'Extension'), el('span', {}, v.ext_eligible ? `Eligible${v.ext_ask != null ? ` · agent's ask ~$${v.ext_ask}m` : ''}` : 'Not yet eligible')));
-    if (!v.free_agent) right.append(h5('Trade Value', "the scout's read"), el('div', { class: 'kv' }, el('span', {}, 'Market'), el('span', {}, v.market), el('span', {}, 'Interest'), el('span', {}, v.interest_line)));
+    if (!v.free_agent) {
+      const tradeRead = el('div', { class: 'kv' }, el('span', {}, 'Market'), el('span', {}, v.market));
+      if (v.actions?.mine && v.interest_line) tradeRead.append(el('span', {}, 'Interest'), el('span', {}, v.interest_line));
+      right.append(h5('Trade Value', "the scout's read"), tradeRead);
+    }
     s.append(el('div', { class: 'body' }, left, mid, right));
     const tiles = el('div', { class: 'tiles' },
       el('div', { class: 'tile' }, el('div', { class: 'h5' }, 'Morale'), el('div', { class: 'word' }, v.morale)),
