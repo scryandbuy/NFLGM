@@ -3819,11 +3819,31 @@ async function advance() {
   }
 }
 
+// A changed hash is rendered by the central route handler. Staying on the
+// same route needs an explicit refresh because no hashchange event will fire.
+function advanceRoute(hash, renderCurrent) {
+  if (location.hash === hash) renderCurrent();
+  else location.hash = hash;
+}
+async function paintBeforeAdvanceSave() {
+  // Advance already queues an autosave through pyJSON. This explicit save
+  // owns that snapshot; let the destination and updated status paint first.
+  // Keep the dirty flag until saveGame captures it: pagehide must still flush.
+  cancelAutosaveSchedule();
+  if (document.visibilityState === 'hidden') return;
+  await new Promise(resolve => {
+    let frame = null, timer = null;
+    const finish = () => { if (frame !== null) cancelAnimationFrame(frame); clearTimeout(timer); resolve(); };
+    timer = setTimeout(finish, 200);
+    frame = requestAnimationFrame(() => { frame = null; clearTimeout(timer); timer = setTimeout(finish, 0); });
+  });
+}
+
 async function advanceInner() {
   if (practiceSaving || practiceSaveRequired) { notify({ok:false, why:'Save your practice results before advancing. Open Practice and retry the save.'}); location.hash = '#gameplan/practice'; return; }
   // a block stops the click: a roster over 53 or under 46 sends you to fix it; a decision opens it
   const blocks = pyJSON('SESSION.blocking()');
-  if (blocks.length && blocks[0].kind === 'live') { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); return; }
+  if (blocks.length && blocks[0].kind === 'live') { advanceRoute('#gameday', () => renderGameDay(pyJSON('SESSION.gameday_view()'))); return; }
   if (blocks.length) { const b = blocks[0]; notify({ ok: false, why: `Blocked: ${b.subject}. ${b.kind === 'cap' ? 'Open Cap to choose your contract moves.' : b.kind === 'roster' ? 'Fix the roster first.' : 'Answer it (or decline) to advance.'}` }); renderRail(pyJSON('SESSION.portal()').rail); if (b.go) location.hash = b.go; else if (b.id != null) location.hash = `#portal/inbox/${b.id}`; return; }
   const adv = $('#advance'); adv.disabled = true;
   await new Promise(r => setTimeout(r, 30));
@@ -3832,13 +3852,14 @@ async function advanceInner() {
   catch (e) { adv.disabled = false; throw e; }
   adv.disabled = false;
   if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
-  else if (r?.next?.go === '#frontoffice/staff/renewals') { location.hash = r.next.go; renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); }
-  else if (r && r.done === 'Practice complete') { practiceSaveRequired = true; try { await saveGame(); practiceSaveRequired = false; } finally { location.hash = '#gameplan/practice'; renderPractice(pyJSON('SESSION.practice_view()')); } return; }
-  else if (r && r.done === 'Cutdown') { location.hash = '#personnel/wire'; renderWire(pyJSON(`SESSION.personnel('waivers')`)); }
-  else if (r && r.done === 'Camp') { location.hash = '#portal'; refresh(); }
-  else if (r && /^Week \d+ live$/.test(r.done)) { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); }
+  else if (r?.next?.go === '#frontoffice/staff/renewals') { advanceRoute(r.next.go, () => renderStaff(pyJSON(`SESSION.frontoffice('staff')`))); }
+  else if (r && r.done === 'Practice complete') { practiceSaveRequired = true; try { await saveGame(); practiceSaveRequired = false; } finally { advanceRoute('#gameplan/practice', () => renderPractice(pyJSON('SESSION.practice_view()'))); } return; }
+  else if (r && r.done === 'Cutdown') { advanceRoute('#personnel/wire', () => renderWire(pyJSON(`SESSION.personnel('waivers')`))); }
+  else if (r && r.done === 'Camp') { advanceRoute('#portal', refresh); }
+  else if (r && /^Week \d+ live$/.test(r.done)) { advanceRoute('#gameday', () => renderGameDay(pyJSON('SESSION.gameday_view()'))); }
   else if (r && /^Week \d+ played$/.test(r.done)) { if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#gameday'; }
-  else if (r && /^Week \d+$/.test(r.done)) { if (location.hash === '' || location.hash.startsWith('#portal')) refresh(); else if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#portal'; } else if (r && /on the clock/.test(r.done)) { location.hash = '#draft/day'; renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); } else refresh();
+  else if (r && /^Week \d+$/.test(r.done)) { if (location.hash === '' || location.hash.startsWith('#portal')) refresh(); else if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#portal'; } else if (r && /on the clock/.test(r.done)) { advanceRoute('#draft/day', () => renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`))); } else refresh();
+  await paintBeforeAdvanceSave();
   await saveGameNotified();
 }
 

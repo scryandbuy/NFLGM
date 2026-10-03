@@ -323,7 +323,7 @@ class Session:
                                  last_dealt=self.draft.last_dealt, auto=self.draft.auto,
                                  level=self.draft.level, scale=self.draft.scale, trade_targets=self.draft.trade_targets)
                             if self.draft_live() else None)
-        return json.dumps(d, default=LG._session_json_default)
+        return json.dumps(d, default=LG._session_json_default, separators=(',', ':'))
 
     def live_journal(self):
         """Small autosave between full saves while the user's game is open."""

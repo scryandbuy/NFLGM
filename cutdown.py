@@ -310,6 +310,7 @@ def repair_shape(league):
                 continue
             candidates = [p for pos in sorted(sources) for p in sorted(
                 (q for q in pool if q.pos == pos), key=lambda q: -q.ovr)[:4]]
+            prepared = RN.assessment_inputs(team, list(team.active()) + candidates)
             best = None
             for p in candidates:
                 contract = PS.minimum_contract(league, team, p)
@@ -319,7 +320,7 @@ def repair_shape(league):
                     if team.cap_space + saved - contract.cap_hit(0) < -.0005: continue
                     try: require_room(league, team, p.pid, contract, release_pid=q.pid)
                     except ValueError: continue
-                    after = RN.assess(team, [r for r in team.active() if r is not q] + [p])
+                    after = RN.assess(team, [r for r in team.active() if r is not q] + [p], prepared=prepared)
                     next_coverage = RN.essential_coverage(team, report=after)
                     if not RN.coverage_not_worse(coverage, next_coverage): continue
                     improvement = sum(coverage['shortages'].values()) - sum(next_coverage['shortages'].values())

@@ -179,7 +179,7 @@ def _chart():
     return f
 
 
-def board(league, abbr, selection, level, taken, scale=None, gm=None, players=None):
+def board(league, abbr, selection, level, taken, scale=None, gm=None, players=None, _grade_cache=None):
     """
     This club's board right now: [(value, player)], best first.
 
@@ -206,7 +206,18 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
     def grade(p, v):
         return (1 - w_pot) * v['ovr'] + w_pot * (v['pot_lo'] + v['pot_hi']) / 2
     # the club grades him for what it runs; the room's board stays raw
-    my_grade = {p.pid: grade(p, mine[p.pid]) + SC.scheme_fit_view(league, abbr, p, mine[p.pid]) for p in left}
+    # Only the synchronous draft action owns this cache. Picks and player
+    # trades change needs/ranks, but not the room's evidence or coach scheme.
+    # Outside that action (including the next UI request), always read anew.
+    cache_key = (abbr, id(gm))
+    if _grade_cache is not None and cache_key in _grade_cache:
+        own_all, cons_all = _grade_cache[cache_key]
+    else:
+        own_all = {p.pid: grade(p, mine[p.pid]) + SC.scheme_fit_view(league, abbr, p, mine[p.pid]) for p in left}
+        cons_all = {p.pid: 0.6 * cons[p.pid]['ovr'] + 0.4 * cons[p.pid]['pot'] for p in left}
+        if _grade_cache is not None:
+            _grade_cache[cache_key] = (own_all, cons_all)
+    my_grade = {p.pid: own_all[p.pid] for p in left}
     # Bound expensive package reassignment while retaining the best options
     # at every position, even when their global grade is outside the top 60.
     shortlist = {p.pid: p for p in sorted(left, key=lambda p: -my_grade[p.pid])[:60]}
@@ -215,7 +226,7 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
             shortlist[p.pid] = p
     gains = DP.prospect_gains(league, abbr, list(shortlist.values()), plan,
                              {p.pid: grade(p, mine[p.pid]) for p in shortlist.values()})
-    cons_grade = {p.pid: 0.6 * cons[p.pid]['ovr'] + 0.4 * cons[p.pid]['pot'] for p in left}
+    cons_grade = {p.pid: cons_all[p.pid] for p in left}
     my_grades_desc = sorted(my_grade.values())
     cons_grades_desc = sorted(cons_grade.values())
     # rank within position group, mine and the room's, then blend the ranks
