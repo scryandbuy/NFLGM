@@ -2303,7 +2303,7 @@ function openStaffTalk(c, v, mode, reload) {
     const ask = owned ? +c.extend_ask : +state.ask;
     const room = owned ? +c.offer_room : +(v.budget.offer_room ?? v.budget.available);
     const incumbent = v.cards.find(x => x.role_key === c.role_key && !x.empty);
-    const unavailable = !owned && (!v.offseason ? 'Hiring opens in the offseason.' : incumbent ? `The ${c.role} job is filled by ${incumbent.name}. Release the incumbent from Current Staff before offering this job.` : ask > room+1e-9 ? 'His asking salary exceeds the available staff budget.' : '');
+    const unavailable = v.staff_locked ? 'Change staff after the current game finishes.' : owned && c.expiring && c.disgruntled ? 'He will not renew after his head-coaching move was blocked.' : !owned && (incumbent ? `The ${c.role} job is filled by ${incumbent.name}. Release the incumbent from Staff Overview before offering this job.` : ask > room+1e-9 ? 'His asking salary exceeds the available staff budget.' : '');
     body.append(el('div', {class:'fo-coach-summary'},
       el('div', {}, el('small', {}, 'RATING'), el('b', {}, c.rating)),
       el('div', {}, el('small', {}, 'PRESTIGE'), el('b', {}, c.prestige)),
@@ -2335,6 +2335,9 @@ function openStaffTalk(c, v, mode, reload) {
     years.required=true; salary.required=true;
     form.append(el('div', {class:'offer'}, el('label', {}, 'Contract years', years),
       owned ? el('label', {}, 'Annual salary ($m)', salary) : el('div', {class:'fo-coach-ask'}, `Offer at his ask: $${ask.toFixed(2)}m per year`)));
+    const projection=el('p',{class:'staff-offer-projection','aria-live':'polite'});
+    const updateProjection=()=>{const offered=owned?Number(salary.value):ask;projection.textContent=Number.isFinite(offered)?`Staff Budget After ${owned?'Renewal':'Hiring'}: $${(room-offered).toFixed(2)}m Available`:'';};
+    salary.oninput=updateProjection;updateProjection();form.append(projection);
     if (unavailable) form.append(el('p', {class:'count'}, unavailable));
     form.append(response, el('div', {class:'acts'}, el('button', {class:'btn go',type:'submit',disabled:unavailable?'':null}, owned ? 'Submit Extension' : 'Offer Contract'), el('button', {class:'btn quiet',type:'button',onclick:close}, owned ? 'Cancel' : 'Leave Interview')));
     body.append(form);
@@ -2347,19 +2350,56 @@ let foStaffRole = 'oc';
 function renderStaff(v) {
   renderRail(v.rail); const page = persPage(); foSecond('staff');
   const reload = () => renderStaff(pyJSON(`SESSION.frontoffice('staff')`));
-  const s = foBoard(v, 'STAFF', [[`$${v.budget.total}m`, 'Budget'], [`$${v.budget.payroll}m`, 'Payroll'], [`$${v.budget.available}m`, 'Available']]);
-  s.append(el('p', {class:'count'}, `Payroll includes head coach $${v.budget.head_coach?.salary || 0}m`), el('div', {class:'h5'}, 'CURRENT STAFF'));
-  const grid = el('div', { class: 'staffgrid', style: 'grid-template-columns:repeat(4,1fr)' });
-  for (const c of v.cards) {
-    if (c.empty) { grid.append(el('div', { class: 'scard open' }, `${c.role_name} · open. Hire from the pool below.`)); continue; }
-    const card = el('div', { class: 'scard' }, el('div', { class: 'role' }, c.role + (c.hc_candidate ? ' · Head-Coaching Candidate' : '') + (c.disgruntled ? ' · Disgruntled' : '')), el('div', { class: 'nm' }, c.name),
-      el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Specialty'), el('span', {}, c.specialty || '—'), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Contract'), el('span', {}, `$${(+c.salary).toFixed(1)}m · Expires ${v.rail.year + c.years}`), el('span', {}, 'Asks'), el('span', {}, `$${(+c.extend_ask).toFixed(1)}m`), el('span', {}, `${c.role.replace(' Coordinator', '')} Rank`), el('span', {}, (c.unit_ranks || []).length ? c.unit_ranks.map(r => `${r}${ord(r)}`).join(' · ') : '—'), el('span', {}, 'Traits'), staffTraits(c)));
-    const acts = el('div', { class: 'acts' });
-    acts.append(el('button', { class: 'btn', onclick: () => openStaffTalk(c, v, 'extend', reload) }, 'Extend'));
-    if (v.offseason) acts.append(el('button', { class: 'btn warn', onclick: () => { if (confirm(`Release ${c.name} from your staff?`)) { notify(pyJSON(`SESSION.frontoffice_act('staff_release', role=${JSON.stringify(c.role_key)})`)); reload(); } } }, 'Release'));
-    card.append(acts); grid.append(card);
+  const requested = location.hash.split('/')[2];
+  const renewalView = requested === 'renewals' || (!requested && v.renewal_step);
+  const expiring = v.cards.filter(c => !c.empty && c.expiring);
+  const unresolved = expiring.filter(c => !c.let_expire);
+  const s = foBoard(v, renewalView ? 'STAFF RENEWALS' : 'STAFF', [[`$${v.budget.total}m`, 'Staff Budget'], [`$${v.budget.payroll}m`, 'Committed / Year'], [`$${v.budget.available}m`, 'Available']]);
+  s.classList.add('staff-board'); applyTeamTheme(s, v.rail.club);
+  s.append(el('p', {class:'staff-budget-note'}, `Includes $${v.budget.head_coach?.salary || 0}m in head coach salary`));
+  const goView = key => { location.hash = `#frontoffice/staff/${key}`; };
+  const tabs = el('div', {class:'staff-view-tabs',role:'tablist','aria-label':'Staff Views'},
+    el('button', {role:'tab',id:'staff-overview-tab','aria-controls':'staff-view-panel','aria-selected':String(!renewalView),onclick:()=>goView('overview')}, 'Staff Overview'),
+    el('button', {role:'tab',id:'staff-renewals-tab','aria-controls':'staff-view-panel','aria-selected':String(renewalView),onclick:()=>goView('renewals')}, `Staff Renewals${unresolved.length ? ` · ${unresolved.length}` : ''}`),
+    el('button', {class:'staff-market-link',onclick:()=>document.getElementById('staff-market')?.scrollIntoView({block:'start',behavior:'smooth'})}, 'Browse Staff Market'));
+  s.append(tabs);
+  if (v.staff_locked) s.append(el('p',{class:'staff-message',role:'status'},'Finish the current game before changing staff.'));
+  const panel=el('div',{id:'staff-view-panel',role:'tabpanel','aria-labelledby':renewalView?'staff-renewals-tab':'staff-overview-tab'});
+  const feedback=el('div',{class:'staff-feedback',role:'status','aria-live':'polite'});
+  const act=(action,c,extra='')=>{const r=pyJSON(`SESSION.frontoffice_act(${JSON.stringify(action)}, role=${JSON.stringify(c.role_key)}${extra})`);if(r.ok)reload();else feedback.textContent=r.why || 'Unable to change this contract.';};
+  if (renewalView) {
+    if(v.renewal_step) panel.append(el('div',{class:'staff-calendar'},'New Year: Cap & Contracts',el('span',{},'›'),el('b',{},'Staff Contracts'),el('span',{},'›'),'Player Re-signings',el('span',{},'›'),'Free Agency'));
+    panel.append(el('div',{class:'staff-section-head'},el('h2',{},'Expiring Contracts'),el('span',{},`${unresolved.length} Decision${unresolved.length===1?'':'s'} Remaining`)));
+    if(!expiring.length) panel.append(el('div',{class:'staff-empty'},el('h3',{},'No Expiring Staff Contracts'),el('p',{},'Your current staff contracts are settled. You can still explore the market.'),v.renewal_step?el('button',{class:'btn go',onclick:()=>advance()},'Advance To Player Re-signings'):el('button',{class:'btn',onclick:()=>goView('overview')},'Review Your Staff')));
+    else {
+      const table=el('table',{class:'staff-renewal-table'},el('thead',{},el('tr',{},...['Staff Member','Current Salary','Annual Ask','Decision',''].map(x=>el('th',{},x)))));
+      const body=el('tbody');
+      for(const c of expiring){
+        const actions=el('div',{class:'acts'});
+        actions.append(el('button',{class:'btn',disabled:v.staff_locked?'':null,onclick:()=>act('staff_expiry',c,`, leave=${c.let_expire?'False':'True'}`)},c.let_expire?'Undo Let Expire':'Let Expire'));
+        actions.append(el('button',{class:'btn go',disabled:v.staff_locked||c.disgruntled?'':null,onclick:()=>openStaffTalk(c,v,'extend',reload)},'Negotiate Renewal'));
+        body.append(el('tr',{},el('td',{},el('b',{},c.name),el('small',{},c.role)),el('td',{class:'money'},`$${(+c.salary).toFixed(2)}m / Yr`),el('td',{class:'money'},`$${(+c.extend_ask).toFixed(2)}m / Yr`),el('td',{class:'staff-expiring'},c.let_expire?'Leaving On Advance':c.disgruntled?'Will Not Renew':'Needs Decision'),el('td',{},actions)));
+      }
+      table.append(body);panel.append(table);
+    }
+    if(v.renewal_step&&expiring.some(c=>c.let_expire))panel.append(el('p',{class:'staff-message'},'Staff marked Let Expire enter the market when you advance. Their jobs will become vacant.'));
+    panel.append(el('div',{class:'staff-review-strip'},el('div',{},el('b',{},'Keep Your Staff, Or Make A Change'),el('small',{},'Compare candidates before deciding on your expiring contracts.')),el('button',{class:'btn',onclick:()=>document.getElementById('staff-market')?.scrollIntoView({block:'start',behavior:'smooth'})},'Explore Replacements')));
+  } else {
+    panel.append(el('div',{class:'staff-section-head'},el('h2',{},'Your Staff'),el('span',{},'Contracts, Specialties & Decisions')));
+    const grid=el('div',{class:'staff-overview-grid'});
+    for(const c of v.cards){
+      if(c.empty){grid.append(el('article',{class:'staff-person staff-vacant'},el('div',{class:'staff-role'},c.role_name),el('h3',{},'Position Open'),el('p',{},'Interview candidates in the staff market.'),el('button',{class:'btn go',onclick:()=>{foStaffRole=c.role_key;reload();document.getElementById('staff-market')?.scrollIntoView({block:'start'});}},'Find Replacement')));continue;}
+      const card=el('article',{class:'staff-person'},el('div',{class:'staff-person-head'},el('div',{},el('div',{class:'staff-role'},c.role),el('h3',{},c.name),el('p',{},c.specialty || 'Generalist')),el('div',{class:'staff-rating'},c.rating,el('small',{},'RATING'))));
+      card.append(el('div',{class:'staff-detail'},`Age ${c.age} · Prestige ${c.prestige}${c.hc_candidate?' · Head-Coaching Candidate':''}${c.disgruntled?' · Disgruntled':''}`),staffTraits(c));
+      card.append(el('div',{class:'staff-contract-line'},el('b',{},`$${(+c.salary).toFixed(2)}m / Year`),el('span',{class:c.expiring?'staff-expiring':''},c.let_expire?'Leaving On Advance':c.expiring?'Contract Expiring':`${c.years} Year${c.years===1?'':'s'} Remaining`)));
+      card.append(el('div',{class:'staff-detail'},`Recent Unit Ranks: ${(c.unit_ranks||[]).map(r=>`${r}${ord(r)}`).join(' · ')||'Not Yet Available'}`));
+      card.append(el('div',{class:'acts'},el('button',{class:'btn',disabled:v.staff_locked||(c.expiring&&c.disgruntled)?'':null,onclick:()=>openStaffTalk(c,v,'extend',reload)},c.expiring?'Negotiate Renewal':'Extend Contract'),el('button',{class:'btn warn',disabled:v.staff_locked?'':null,onclick:()=>{if(confirm(`Release ${c.name}? The ${c.role} job will become vacant immediately.`))act('staff_release',c);}},'Release')));
+      grid.append(card);
+    }
+    panel.append(grid);
+    if(unresolved.length)panel.append(el('div',{class:'staff-review-strip'},el('div',{},el('b',{},`${unresolved.length} Staff Contract${unresolved.length===1?'':'s'} Expiring`),el('small',{},'Review your renewal decisions.')),el('button',{class:'btn go',onclick:()=>goView('renewals')},'Review Renewals')));
   }
-  s.append(grid);
+  panel.append(feedback);s.append(panel);
   // a club wants your coordinator: the conversation
   for (const p of v.poaches) {
     const box = el('div', { class: 'thread', style: 'margin:0 14px 12px;border:1px solid var(--rule)' }, el('div', { class: 'h5', style: 'padding:8px 12px 0' }, 'A Team Wants Your Coordinator', el('span', {}, `${p.to_club.name} · Head Coach`)));
@@ -2375,16 +2415,20 @@ function renderStaff(v) {
     box.append(el('div', { class: 'msg note' }, el('b', {}, 'If you block him: '), p.block_read));
     s.append(box);
   }
-  s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, 'The Pool', el('small', {}, v.offseason ? 'Interview Candidates · Hire Into an Open Job' : 'hiring reopens after the season')));
-  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); const list = el('div', { class: 'pad' }); let role = foStaffRole;
-  const draw = () => { list.innerHTML = ''; const grid2 = el('div', { class: 'staffgrid', style: 'grid-template-columns:repeat(4,1fr);padding:0' });
-    for (const c of v.pools[role]) { const card = el('div', { class: 'scard' }, el('div', { class: 'nm' }, c.name), el('div', { class: 'role', style: 'text-transform:none;letter-spacing:0' }, c.background), el('div', { class: 'kv' }, el('span', {}, 'Rating'), el('b', {}, c.rating), el('span', {}, 'Prestige'), el('b', {}, c.prestige), el('span', {}, 'Age'), el('span', {}, c.age), el('span', {}, 'Asks'), el('span', {}, `$${(+c.ask).toFixed(1)}m`), el('span', {}, 'Traits'), staffTraits(c)),
-        el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openStaffTalk(c, v, 'interview', reload) }, 'Interview')));
-      grid2.append(card); }
-    list.append(grid2); };
-  for (const [k, l] of [['oc', 'Offensive Coordinators'], ['dc', 'Defensive Coordinators'], ['st', 'Special Teams'], ['scout', 'Head Scouts']]) tabs.append(el('button', { 'aria-pressed': String(role === k), onclick: e => { role = k; foStaffRole = k; tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, l));
-  s.append(tabs, list); draw(); page.append(s);
+
+  const market=el('section',{id:'staff-market',class:'staff-market'},el('div',{class:'staff-section-head'},el('h2',{},'Staff Market'),el('span',{},'Interview Candidates · Hire Into An Open Job')));
+  const roleTabs=el('div',{class:'tabs','aria-label':'Candidate Roles'}),count=el('p',{class:'staff-market-count'});
+  const list=el('div',{class:'staff-market-scroll',tabindex:'0',role:'region','aria-label':'Full Staff Market'});
+  const draw=()=>{
+    list.replaceChildren();const candidates=v.pools[foStaffRole]||[];count.textContent=`${candidates.length} Available Candidate${candidates.length===1?'':'s'}`;
+    const table=el('table',{class:'staff-market-table'},el('thead',{},el('tr',{},...['Candidate','Rating','Prestige','Age','Annual Ask',''].map(x=>el('th',{},x))))),body=el('tbody');
+    for(const c of candidates)body.append(el('tr',{},el('td',{},el('b',{},c.name),el('small',{},c.background),staffTraits(c)),el('td',{class:'n'},c.rating),el('td',{class:'n'},c.prestige),el('td',{class:'n'},c.age),el('td',{class:'money'},`$${(+c.ask).toFixed(2)}m`),el('td',{},el('button',{class:'btn',onclick:()=>openStaffTalk(c,v,'interview',reload)},'Interview'))));
+    table.append(body);list.append(candidates.length?table:el('p',{class:'staff-empty'},'No Available Candidates For This Role.'));
+  };
+  for(const [key,label] of [['oc','Offensive Coordinators'],['dc','Defensive Coordinators'],['st','Special Teams'],['scout','Head Scouts']])roleTabs.append(el('button',{'aria-pressed':String(foStaffRole===key),onclick:e=>{foStaffRole=key;roleTabs.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));e.currentTarget.setAttribute('aria-pressed','true');draw();}},label));
+  market.append(roleTabs,count,list);s.append(market);draw();page.append(s);
 }
+
 
 function renderCap(v) {
   renderRail(v.rail); const page = persPage(); foSecond('cap');
@@ -3695,6 +3739,7 @@ async function advanceInner() {
   catch (e) { adv.disabled = false; throw e; }
   adv.disabled = false;
   if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
+  else if (r?.next?.go === '#frontoffice/staff/renewals') { location.hash = r.next.go; renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); }
   else if (r && r.done === 'Practice complete') { practiceSaveRequired = true; try { await saveGame(); practiceSaveRequired = false; } finally { location.hash = '#gameplan/practice'; renderPractice(pyJSON('SESSION.practice_view()')); } return; }
   else if (r && r.done === 'Cutdown') { location.hash = '#personnel/wire'; renderWire(pyJSON(`SESSION.personnel('waivers')`)); }
   else if (r && r.done === 'Camp') { location.hash = '#portal'; refresh(); }

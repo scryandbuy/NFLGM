@@ -2310,6 +2310,45 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .schedule-columns .wk{box-sizing:border-box;height:40px;min-height:0;display:flex;align-items:center;justify-content:center;padding:5px}
 /* Front Office shares the roster/report palette and theme typeface. */
 .fo-board{--fo-rule:#ffffff18;line-height:1.5}
+.staff-board .staff-budget-note{text-align:right;color:var(--ink-3);font-size:12px;margin:12px 0 22px}
+.staff-view-tabs{display:flex;align-items:center;gap:26px;border-bottom:1px solid var(--fo-rule);flex-wrap:wrap}
+.staff-view-tabs button{padding:14px 0;border-bottom:2px solid transparent;color:var(--ink-2);font:500 14px var(--text)}
+.staff-view-tabs button[aria-selected=true]{color:var(--report-accent);border-bottom-color:var(--report-accent)}
+.staff-view-tabs .staff-market-link{margin-left:auto;font-size:13px}
+.staff-section-head{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:26px 0 12px;flex-wrap:wrap}
+.staff-board .staff-section-head h2{padding:0;font:700 13px var(--text);letter-spacing:.07em;text-transform:uppercase}
+.staff-section-head>span,.staff-detail{color:var(--ink-3);font-size:12px}
+.staff-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 40px}
+.staff-person{padding:24px 0;border-bottom:1px solid var(--fo-rule);min-width:0}
+.staff-person-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.staff-role{color:var(--report-accent);font:700 12px var(--text);text-transform:uppercase;letter-spacing:.07em}
+.staff-person h3{font:750 25px var(--text);letter-spacing:-.5px;margin:8px 0;background:none;border:0;padding:0}
+.staff-person p{color:var(--ink-2);font-size:14px;margin:8px 0}
+.staff-rating{font:800 36px var(--text);text-align:right}.staff-rating small{display:block;color:var(--ink-3);font:500 10px var(--text);letter-spacing:.08em;margin-top:4px}
+.staff-person .staff-detail{margin:12px 0}.staff-person>.traits{margin:16px 0}
+.staff-contract-line{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin:22px 0 12px;font-size:13px}
+.staff-contract-line b{font:650 19px var(--text);font-variant-numeric:tabular-nums}
+.staff-expiring{color:var(--report-accent)}.staff-person .acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.staff-board .btn{font-family:var(--text);border-radius:5px;padding:9px 13px;font-size:13px}
+.staff-board .btn.go{background:var(--report-accent);border-color:var(--report-accent);color:var(--team-ink,#111)}
+.staff-review-strip{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:26px;padding:16px 20px;border-left:3px solid var(--report-accent);background:color-mix(in srgb,var(--report-accent) 8%,transparent)}
+.staff-review-strip small{display:block;color:var(--ink-2);font-size:12px;margin-top:6px}
+.staff-calendar{display:flex;gap:13px;flex-wrap:wrap;color:var(--ink-3);font-size:12px;padding:22px 0 0}.staff-calendar b{color:var(--report-accent)}
+.staff-renewal-table,.staff-market-table{border-collapse:collapse;width:100%;font:400 13px var(--text)}
+.staff-renewal-table th,.staff-market-table th{padding:12px 9px;color:var(--ink-2);text-align:left;text-transform:uppercase;font-size:11px;letter-spacing:.05em;font-weight:500;border-bottom:1px solid var(--fo-rule)}
+.staff-renewal-table td,.staff-market-table td{padding:18px 9px;border-bottom:1px solid var(--fo-rule);vertical-align:middle}
+.staff-renewal-table small,.staff-market-table small{display:block;color:var(--ink-3);font-size:12px;margin-top:5px}
+.staff-renewal-table .money,.staff-market-table .money{white-space:nowrap;font-variant-numeric:tabular-nums}
+.staff-renewal-table .acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.staff-market{margin-top:34px;scroll-margin-top:150px;border-top:1px solid var(--fo-rule)}
+.staff-market-count{color:var(--ink-3);font-size:12px;margin:8px 0 14px}
+.staff-market-scroll{max-height:560px;overflow:auto;scrollbar-gutter:stable;scrollbar-color:var(--report-accent) #162127;border:1px solid var(--fo-rule);border-radius:6px}
+.staff-market-table th{position:sticky;top:0;z-index:1;background:#142126}.staff-market-table .n{text-align:right;font-variant-numeric:tabular-nums}.staff-market-table th:nth-child(n+2):nth-child(-n+4){text-align:right}
+.staff-market-table .traits{margin-top:7px}.staff-market-table td:last-child{text-align:right}
+.staff-empty{padding:36px 0}.staff-empty h3{font:700 24px var(--text);margin-bottom:12px}.staff-empty p{color:var(--ink-2);margin-bottom:20px}
+.staff-feedback:empty{display:none}.staff-feedback,.staff-message{margin-top:16px;font-size:13px;color:var(--report-accent)}
+.staff-offer-projection{font:600 15px var(--text);margin:15px 0;color:var(--club-2)}
+@media(max-width:850px){.staff-overview-grid{grid-template-columns:1fr}.staff-view-tabs{gap:17px}.staff-view-tabs .staff-market-link{margin-left:0}.staff-renewal-table thead{display:none}.staff-renewal-table tr{display:grid;grid-template-columns:1fr 1fr;padding:15px 0;border-bottom:1px solid var(--fo-rule);gap:8px}.staff-renewal-table td{padding:5px 0;border:0}.staff-renewal-table td:first-child,.staff-renewal-table td:last-child{grid-column:1/-1}.staff-renewal-table .acts{justify-content:flex-start}.staff-market-table{min-width:660px}}
 .fo-board *{box-sizing:border-box}
 .fo-board .h5{color:var(--report-accent);font:700 12px var(--text);letter-spacing:.08em;margin:24px 0 16px}
 .fo-board .h5 span{display:block;color:var(--ink-3);font:400 12px var(--text);letter-spacing:0;margin-top:7px}

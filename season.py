@@ -846,6 +846,8 @@ class SeasonRunner(StandingsView):
         for t in self.L.teams.values():          # coordinators reach XP through the player's club
             for p in t.roster: p._team_ref = t
         NG.check_promises(self.L, week)        # promises not kept are broken
+        import staff as STF_
+        STF_.midseason_review(self.L, self.rng, week)
         # the assistants' report on next week's opponent, into the inbox now
         if week < 18:
             import gameplan_week as GW

@@ -399,8 +399,8 @@ def carousel(league, rng, new_head_coaches=(), verbose=False):
             c = team.staff.get(role)
             if c is None or c.years > 0: continue
             if abbr == user:
-                if c.disgruntled:
-                    to_pool(team, role, 'contract up, walked after being blocked'); continue
+                # The user resolves these at Staff Contracts, including a coach
+                # who will not renew after a blocked head-coaching move.
                 _post_user(league, team, role, c, 'expiring'); continue
             # re-sign by mood: winners and loyal men stay; a hot name with HC interest walks
             wins = team.record[0]
@@ -540,31 +540,159 @@ def finalize_poaches(league):
     return out
 
 
+def _reviews(league):
+    state = getattr(league, 'staff_reviews', None) or {}
+    if state.get('year') != league.year:
+        state = dict(year=league.year, weeks=[], changes={}, hired={})
+        league.staff_reviews = state
+    return state
+
+
+def midseason_evidence(league, week):
+    """Team-tagged game books; defensive success is *opponent* EPA suppressed.
+
+    Never credit a traded player's old games to his current club. Missing or
+    compacted books provide no evidence rather than an artificial bad rank.
+    """
+    import collections
+    games = {a: [] for a in league.teams}
+    books = getattr(league, 'game_stats', {}) or {}
+    for wk, away, home, ap, hp in league.schedule:
+        if not 1 <= wk <= min(week, 18) or ap is None or hp is None: continue
+        book = books.get(f'{league.year}-{wk}-{home}-{away}') or {}
+        for abbr, opponent, own_score, other_score in ((home, away, hp, ap), (away, home, ap, hp)):
+            own, opp = collections.Counter(), collections.Counter()
+            for line in book.values():
+                target = own if line.get('team') == abbr else opp if line.get('team') == opponent else None
+                if target is not None:
+                    for k in ('pass_epa', 'rush_epa', 'pass_plays', 'rush_plays', 'fg_att', 'fg_made', 'punts', 'punt_net_yds'):
+                        target[k] += float(line.get(k, 0) or 0)
+            games[abbr].append(dict(week=wk, own=own, opp=opp, win=own_score > other_score, loss=own_score < other_score))
+    result = {}
+    for abbr, rows in games.items():
+        rows.sort(key=lambda r: r['week'])
+        if len(rows) < 7: continue
+        summary = dict(games=len(rows), wins=sum(r['win'] for r in rows), recent_losses=sum(r['loss'] for r in rows[-3:]), units={})
+        for role in ('oc', 'dc', 'st'):
+            samples = []
+            for subset, min_plays in ((rows, 240), (rows[-3:], 90)):
+                totals = collections.Counter()
+                for r in subset: totals.update(r['opp' if role == 'dc' else 'own'])
+                if role == 'st':
+                    # Require both specialists to struggle, not one bad kick.
+                    enough = totals['fg_att'] >= (10 if subset is rows else 3) and totals['punts'] >= (20 if subset is rows else 6)
+                    samples.append((totals['fg_made']/totals['fg_att'], totals['punt_net_yds']/totals['punts']) if enough else None)
+                else:
+                    plays = totals['pass_plays'] + totals['rush_plays']
+                    samples.append(((totals['pass_epa'] + totals['rush_epa']) / plays * (-1 if role == 'dc' else 1),) if plays >= min_plays else None)
+            if all(s is not None for s in samples): summary['units'][role] = samples
+        result[abbr] = summary
+    return result
+
+
+def midseason_review(league, rng, week):
+    """Selective coordinator changes between games; never fire the user's staff.
+
+    Three review dates, persistent decisions, one change per club per season.
+    Require sustained poor results despite a credible healthy roster, and an
+    affordable, clearly better available replacement before releasing anyone.
+    """
+    if league.phase != 'regular' or week not in (8, 11, 14): return []
+    state = _reviews(league)
+    if week in state['weeks']: return []
+    state['weeks'].append(week)
+    evidence = midseason_evidence(league, week)
+    if len(evidence) < 20: return []
+    import gameplan_week as GW
+    unit_names = {'oc': ('QB', 'pass block', 'run block', 'receivers', 'tight end', 'backs'),
+                  'dc': ('pass rush', 'run front', 'corners', 'safeties', 'linebackers')}
+    talent, injury = {}, {}
+    for a, t in league.teams.items():
+        healthy, full = GW.unit_grades(league, t), GW.unit_grades(league, t, healthy_only=False)
+        talent[a], injury[a] = {}, {}
+        for role, names in unit_names.items():
+            h, f = [healthy[n] for n in names if healthy.get(n) is not None], [full[n] for n in names if full.get(n) is not None]
+            talent[a][role] = float(np.mean(h)) if len(h) == len(names) else 0
+            injury[a][role] = len(h) < len(f) or (bool(f) and float(np.mean(f)) - talent[a][role] >= 4)
+        specialists = [p for p in t.roster if p.pos in ('K', 'P', 'LS') and not p.retired]
+        talent[a]['st'] = float(np.mean([max((p.ovr for p in specialists if p.pos == pos and p.out_until is None), default=0) for pos in ('K', 'P', 'LS')]))
+        injury[a]['st'] = any(p.out_until is not None for p in specialists)
+        # IR players may be absent from depth charts. Protect units losing a
+        # top player and offenses without their best quarterback.
+        for role, positions in (('oc', OFFENSE_POS), ('dc', {'LEDG', 'REDG', 'DT', 'MIKE', 'WILL', 'SAM', 'CB', 'FS', 'SS'})):
+            men = [p for p in t.roster if p.pos in positions and not p.retired]
+            injured = [p for p in men if p.out_until is not None]
+            injury[a][role] |= any(p.ovr >= 80 for p in injured) or len(injured) >= 3
+        qbs = [p for p in t.roster if p.pos == 'QB' and not p.retired]
+        if qbs and max(qbs, key=lambda p: p.ovr).out_until is not None: injury[a]['oc'] = True
+    moves = []
+    for abbr, team in sorted(league.teams.items()):
+        ev = evidence.get(abbr)
+        if abbr == getattr(league, 'user_team', None) or abbr in state['changes'] or not ev: continue
+        if ev['wins'] / ev['games'] > .4 or ev['recent_losses'] < 2: continue
+        options = []
+        for role in ('oc', 'dc', 'st'):
+            c = team.staff.get(role)
+            if c is None or f'{abbr}:{role}' in state['hired'] or injury[abbr][role]: continue
+            if sum(t[role] > talent[abbr][role] for t in talent.values()) >= 20: continue
+            peers = [e['units'][role] for e in evidence.values() if role in e['units']]
+            values = ev['units'].get(role)
+            if not values or len(peers) < 20: continue
+            # Ties do not create a fictitious bottom-quartile ranking.
+            if not all(sum(p[window][metric] > values[window][metric] for p in peers) >= .75 * len(peers)
+                       for window in (0, 1) for metric in range(len(values[0]))): continue
+            candidates = [x for x in pool_for(league, role)
+                          if x.effective() >= c.effective() + 7 and ask(x) <= room(team, without=role) + 1e-9]
+            if candidates:
+                best = max(candidates, key=lambda x: (x.effective(), -ask(x), x.name))
+                options.append((best.effective() - c.effective(), role, best))
+        if not options: continue
+        patience = float(getattr(team.gm, 'patience', .5))
+        if rng.random() >= float(np.clip(.65 - .4 * patience, .2, .65)): continue
+        _, role, candidate = max(options, key=lambda x: (x[0], x[1]))
+        old = team.staff[role]
+        old_years = old.years
+        release(league, abbr, role, reason='sustained midseason unit underperformance')
+        result = hire(league, abbr, candidate.name, reason='midseason replacement')
+        if not result['ok']:
+            # Defensive rollback: never leave a CPU vacancy if preflight and
+            # execution disagree. Normally unreachable without external edits.
+            league.staff_pool.remove(old); old.team = abbr; old.years = old_years; team.staff[role] = old
+            raise RuntimeError(result['why'])
+        state['changes'][abbr] = dict(role=role, week=week, out=old.name, hired=candidate.name)
+        moves.append(state['changes'][abbr] | dict(team=abbr))
+    return moves
+
+
 # ------------------------------------------------------------ the user's actions
 def extend(league, abbr, role, years=3, salary=None):
     """Extend at his ask (or the salary you name, which he takes if it is at least his ask). Must fit the budget."""
     team = league.teams[abbr]; c = team.staff.get(role)
     if c is None: return dict(ok=False, why='no one in the job')
+    if c.years <= 0 and c.disgruntled:
+        return dict(ok=False, why='He will not renew after his head-coaching move was blocked.')
     a = ask(c); pay = float(salary) if salary is not None else a
     if pay + 1e-9 < a: return dict(ok=False, why=f'he asks ${a:.2f}m', ask=a)
     if pay > room(team, without=role) + 1e-9: return dict(ok=False, why=f'over the staff budget: ${room(team, without=role):.2f}m of room', ask=a, room=room(team, without=role))
     c.years = int(years); c.salary = round(pay, 2); league.log('staff_extend', team=abbr, role=role, name=c.name, salary=c.salary)
+    clear_expiry_choice(league, abbr, role)
     __import__('inbox').reconcile(league)
     return dict(ok=True, name=c.name, years=years, salary=c.salary)
 
 
-def release(league, abbr, role):
+def release(league, abbr, role, *, reason='released by the user'):
     team = league.teams[abbr]; c = team.staff.get(role)
     if c is None: return dict(ok=False, why='no one in the job')
     c.team = None; c.years = 0; league.staff_pool.append(c); team.staff[role] = None
-    league.log('staff_out', team=abbr, role=role, name=c.name, why='released by the user')
+    clear_expiry_choice(league, abbr, role)
+    league.log('staff_out', team=abbr, role=role, name=c.name, why=reason)
     __import__('inbox').reconcile(league)
     return dict(ok=True)
 
 
-def hire(league, abbr, coach_name, years=3):
+def hire(league, abbr, coach_name, years=3, *, reason='hired by the user'):
     team = league.teams[abbr]
-    c = next((x for x in league.staff_pool if x.name == coach_name), None)
+    c = next((x for x in league.staff_pool if x.name == coach_name and x.team is None), None)
     if c is None: return dict(ok=False, why='not in the pool')
     if team.staff.get(c.role) is not None: return dict(ok=False, why=f'{ROLE_NAME[c.role]} job is filled')
     a = ask(c)
@@ -572,9 +700,54 @@ def hire(league, abbr, coach_name, years=3):
     league.staff_pool.remove(c); c.team = abbr; c.years = int(years); c.salary = a; c.history.append((league.year, abbr, c.role)); team.staff[c.role] = c
     c.known = list(c.staff_traits or [])                        # yours now: every trait shows
     iv = getattr(league, 'interviews', None) or {}; iv.pop(c.name, None)
-    league.log('staff_in', team=abbr, role=c.role, name=c.name, why='hired by the user')
+    clear_expiry_choice(league, abbr, c.role)
+    if league.phase == 'regular':
+        _reviews(league)['hired'][f'{abbr}:{c.role}'] = int(league.week or 0)
+    league.log('staff_in', team=abbr, role=c.role, name=c.name, why=reason)
     __import__('inbox').reconcile(league)
     return dict(ok=True, name=c.name, role=c.role)
+
+
+def expiry_choices(league, abbr):
+    state = getattr(league, 'staff_renewals', None) or {}
+    return (state.get('choices') or {}).get(abbr, {}) if state.get('year') == league.year else {}
+
+
+def clear_expiry_choice(league, abbr, role):
+    expiry_choices(league, abbr).pop(role, None)
+
+
+def choose_expiry(league, abbr, role, leave=True):
+    c = league.teams[abbr].staff.get(role)
+    if c is None or c.years > 0:
+        return dict(ok=False, why='This staff contract is not expiring.')
+    if not isinstance(leave, bool):
+        return dict(ok=False, why='Choose whether to let the contract expire.')
+    state = getattr(league, 'staff_renewals', None) or {}
+    if state.get('year') != league.year:
+        state = dict(year=league.year, choices={})
+        league.staff_renewals = state
+    choices = state.setdefault('choices', {}).setdefault(abbr, {})
+    if leave: choices[role] = c.name
+    else: choices.pop(role, None)
+    return dict(ok=True)
+
+
+def unresolved_expirations(league, abbr):
+    choices = expiry_choices(league, abbr)
+    return [r for r, c in league.teams[abbr].staff.items()
+            if c is not None and c.years <= 0 and choices.get(r) != c.name]
+
+
+def finish_renewals(league, abbr):
+    if unresolved_expirations(league, abbr):
+        return dict(ok=False, why='Renew or choose Let Expire for each expiring staff contract.')
+    choices = dict(expiry_choices(league, abbr))
+    for role, name in choices.items():
+        c = league.teams[abbr].staff.get(role)
+        if c is not None and c.name == name and c.years <= 0:
+            release(league, abbr, role, reason='contract expired; user declined renewal')
+    return dict(ok=True)
 
 
 # ------------------------------------------------------------ the interview
@@ -692,7 +865,7 @@ def resolve_references(league, advanced=False):
 
 
 def pool_for(league, role):
-    return sorted([c for c in league.staff_pool if c.role == role], key=lambda c: -(c.rating + 0.3 * c.prestige))
+    return sorted([c for c in league.staff_pool if c.role == role and c.team is None], key=lambda c: -(c.rating + 0.3 * c.prestige))
 
 
 def card(coach, revealed_only=False):
@@ -708,11 +881,14 @@ def card(coach, revealed_only=False):
 # ------------------------------------------------------------ save
 def to_dict(league):
     return dict(pool=[c.to_dict() for c in getattr(league, 'staff_pool', [])],
+                renewals=getattr(league, 'staff_renewals', {}), reviews=getattr(league, 'staff_reviews', {}),
                 teams={a: {r: (c.to_dict() if c else None) for r, c in (getattr(t, 'staff', None) or {}).items()} for a, t in league.teams.items()})
 
 
 def from_dict(league, d):
     if not d: return
+    league.staff_renewals = d.get('renewals') or {}
+    league.staff_reviews = d.get('reviews') or {}
     league.staff_pool = [Coach.from_dict(x) for x in d.get('pool', [])]
     for a, roles in d.get('teams', {}).items():
         if a in league.teams:
