@@ -195,10 +195,11 @@ def _area_background(league, abbr, candidates, views, cons, room):
     Balance the proportion assessed across positions, then prioritize earlier
     consensus tiers. No hidden prospect ability determines who gets checked.
     """
-    if room.get('character') == 'none' or not candidates:
+    if not candidates:
         return 0
     quality = SC.scout_q(league.teams[abbr])
-    budget = max(1, round(len(candidates) * (.07 + .02 * quality)))
+    budget = max(1, round(len(candidates) * (.07 + .02 * quality)
+                          * (.8 if room.get('character') == 'tape' else 1.)))
     totals, known, queues = {}, {}, {}
     for p in candidates:
         totals[p.pos] = totals.get(p.pos, 0) + 1
@@ -303,7 +304,7 @@ def cross_checks(league, completed_week):
             n = int(counts.get(pid, 0))
             room = SC.room(team)
             baseline_weight = .0125 + .0125 * SC.scout_q(team)
-            weight = {'Prospect': .28, 'Position Group': .16, 'Baseline': baseline_weight}[kinds[pid]]
+            weight = {'Prospect': 1.4, 'Position Group': 1.2, 'Baseline': baseline_weight}[kinds[pid]]
             weight *= room['looks_mult'] / (1 + .7 * n)
             room_gain = SC.cert_gain(team)
             weight = min(weight, max(0., INSEASON_CERT_MAX - SC.certainty(view)) / max(.001, room_gain))

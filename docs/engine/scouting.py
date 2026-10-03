@@ -153,8 +153,11 @@ def room(team):
     if STR.has(s, 'small_school'): t['small_school_wide'] = 0.0
     if STR.has(s, 'big_program'): t['small_school_wide'] = 0.8; t['power_bias'] = 1.5
     if STR.has(s, 'character'): t['character'] = 'sharp'
-    if STR.has(s, 'tape'): t['character'] = 'none'
-    if STR.has(s, 'grinder'): t['looks_mult'] = 1.33
+    if STR.has(s, 'tape'):
+        # More film work, fewer and less reliable background conversations.
+        # The wider scouting department still does some reference work.
+        t['character'] = 'tape'; t['looks_mult'] *= 1.18
+    if STR.has(s, 'grinder'): t['looks_mult'] *= 1.33
     if STR.has(s, 'narrow'): t['day3_reads'] = False
     return t
 

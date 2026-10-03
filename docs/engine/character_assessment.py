@@ -65,9 +65,10 @@ def visit(p, abbr, view, room, error_sd):
         return False
     error = max(8., float(error_sd) * 1.5)
     if room.get('character') == 'sharp': error *= .45
+    elif room.get('character') == 'tape': error *= 1.25
     data['work_ethic'] = _read((p.traits or {}).get('work_ethic', 50), error,
         ('work-visit-v1', abbr, p.pid), 'Visit and references')
-    # References can supplement the film read, but the tape-only room has no references.
+    # The tape-first room still gets a visit, but puts less weight on references.
     data['discipline'] = _read(PT.discipline(p), max(6., error),
         ('discipline-visit-v1', abbr, p.pid), 'Film and references')
     _remember(p, abbr, data)
@@ -88,7 +89,7 @@ def background(p, abbr, view, room, error_sd, evidence):
         view['character_skipped'] = 'tape'
     else:
         error = max(14., 22. / math.sqrt(1. + .25 * (n - 1)))
-        error *= .75 if mode == 'sharp' else 1.
+        error *= .75 if mode == 'sharp' else 1.2 if mode == 'tape' else 1.
         error += max(0., float(error_sd) - 3.) * .4
         old = data.get('work_ethic')
         if old is None or (old.get('stage') == 'background' and error < old.get('error', 99)):
@@ -114,6 +115,7 @@ def area_report(p, abbr, view, room, quality):
         return False
     error = 26. - 4. * max(0., min(1., float(quality)))
     if room.get('character') == 'sharp': error *= .85
+    elif room.get('character') == 'tape': error += 4.
     read = _read((p.traits or {}).get('work_ethic', 50), error,
                  ('work-background-v1', abbr, p.pid), 'Area background report')
     read['stage'] = 'background'

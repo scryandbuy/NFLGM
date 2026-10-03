@@ -33,6 +33,22 @@ class CharacterAssessmentTests(unittest.TestCase):
         self.assertEqual(report[1]['confidence'], 'Limited')
         self.assertFalse(any(key in str(report) for key in ('financial_priority', 'loyalty', 'ambition', 'value', 'error')))
 
+    def test_tape_first_scout_trades_background_precision_for_football_looks(self):
+        league, p, view = self.setup_player()
+        league.teams['GB'].staff['scout'].staff_traits = ['tape']
+        room = SC.room(league.teams['GB'])
+        self.assertEqual(room['character'], 'tape')
+        self.assertGreater(room['looks_mult'], 1.)
+        league.teams['GB'].staff['scout'].staff_traits = ['tape', 'grinder']
+        self.assertGreater(SC.room(league.teams['GB'])['looks_mult'], room['looks_mult'])
+        normal = copy.deepcopy(view)
+        self.assertTrue(CA.area_report(p, 'GB', normal, {'character': 'normal'}, .5))
+        self.assertTrue(CA.area_report(p, 'MIN', view, room, .5))
+        self.assertGreater(CA.assessments(view)['work_ethic']['error'],
+                           CA.assessments(normal)['work_ethic']['error'])
+        self.assertTrue(CA.visit(p, 'MIN', view, room, 4))
+        self.assertEqual(CA.report(view)[0]['source'], 'Visit and references')
+
     def test_visit_flags_do_not_change_talent_or_ceiling_and_cannot_reroll(self):
         league, p, view = self.setup_player()
         before = copy.deepcopy(view); rng = np.random.default_rng(5); rng_before = copy.deepcopy(rng.bit_generator.state)
@@ -135,7 +151,7 @@ class CharacterAssessmentTests(unittest.TestCase):
         league.draft_pool = [p]; league.consensus = {p.pid: dict(ovr=75, rank=30)}
         p.name = 'Rookie Example'; p.age = 22; p.xp_spent = {}; p.team = None
         CA.visit(p, 'GB', view, {'character': 'sharp'}, 0)
-        session = N(user_team='GB', draft=None)
+        session = N(user_team='GB', draft=None, stop=('week', 1))
         with patch.object(VD, 'rail', return_value={}):
             card = VD.prospect_card(session, league, 'GB', p.pid)
         self.assertEqual(card['personality'], '')
