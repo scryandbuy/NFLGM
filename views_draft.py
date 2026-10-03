@@ -147,7 +147,7 @@ def board(session, league, abbr):
     import inseason_scouting as ISS
     visit_window = session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'
     return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=coming_season(league) + 1, slot=slot, on_clock=on_clock,
-                visits=visits, visits_max=SP.VISITS, visit_window=visit_window, spring_done=spring_done, scouting_focus=ISS.priorities(league, abbr), scouting_updates=ISS.reports(league, abbr), needs=sorted(needs), user_board=ub, my_slot=_my_first_slot(league, abbr), read=_board_read(league, abbr, rows, ub, needs),
+                visits=visits, visits_max=SP.VISITS, visit_window=visit_window, spring_done=spring_done, scouting_focus=ISS.priorities(league, abbr), scouting_updates=ISS.reports(league, abbr), background_coverage=ISS.background_coverage(league, abbr), needs=sorted(needs), user_board=ub, my_slot=_my_first_slot(league, abbr), read=_board_read(league, abbr, rows, ub, needs),
                 scout=(dict(name=scout.name, rating=round(scout.rating)) if scout else None), live=bool(getattr(session, 'draft', None)),
                 note=None if rows else 'The class is scouted in camp; the board fills once the season begins.')
 

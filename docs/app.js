@@ -2565,6 +2565,11 @@ function renderBoard(v) {
     el('span', { class: 'count' }, `PLAYER DEEP DIVE: ${chosen ? chosen.name : 'Scout selection'}`),
     el('button', { class: 'btn', 'data-tip': 'Select a prospect in the class table first', onclick: () => { if (!boardSel) return; const res = pyJSON(`SESSION.draft_act('scouting_focus', pid=${JSON.stringify(boardSel)})`); if (!res.ok) notify(res); reload(); } }, 'Focus Selected Prospect'),
     el('span', { class: 'count', style: 'margin-left:auto' }, focus.next_report_week ? `Next report: Week ${focus.next_report_week}` : 'Reports resume next season')));
+  if (v.background_coverage) {
+    const bg = v.background_coverage;
+    focusBox.append(el('div', { class: 'pad count', style: 'border-top:1px solid var(--rule-2);padding-top:9px;padding-bottom:9px' },
+      `Background notes: ${bg.assessed} of ${bg.total} prospects. These are tentative assessments, not complete evaluations.`));
+  }
   if (updates.length) {
     const latestWeek = Math.max(...updates.map(r => Number(r.week) || 0));
     const latest = updates.filter(r => Number(r.week) === latestWeek).slice(0, 4);
