@@ -20,7 +20,7 @@ class PracticeIntegrationTests(unittest.TestCase):
         league.schedule=[(1,'MIN','GB',None,None)]
         return Session(league,np.random.default_rng(123),'GB')
 
-    def test_managed_game_keeps_condition_until_practice(self):
+    def test_managed_game_keeps_condition_until_week_advance(self):
         st=game.TeamState({})
         st.defer_recovery=True
         st.cond.cond={'p':63.0}; st.snaps={'p':45}
@@ -84,7 +84,9 @@ class PracticeIntegrationTests(unittest.TestCase):
         available=[]
         runner.require_available=lambda a,w,**kw:available.append((a,w))
         post=Postseason(runner)
-        self.assertIsNotNone(post.run())
+        with patch.object(PI,'recover_week') as recover:
+            self.assertIsNotNone(post.run())
+        self.assertEqual([c.args[1] for c in recover.call_args_list],[20,21,22,23])
         self.assertEqual(counts,[(19,14),(20,8),(21,4),(22,2)])
         self.assertEqual(len(post.games),13)
         self.assertEqual(len(available),26)
@@ -143,7 +145,7 @@ class PracticeIntegrationTests(unittest.TestCase):
 
     def test_saved_plans_and_completion_roundtrip(self):
         s=self.fixture()
-        s.L.practice_state={'version':1,'auto':{'GB':True},'completed':{'2026:1':{'GB':{'players':[]}}},'participants':{'2026:1':{'GB0':'GB'}}}
+        s.L.practice_state={'version':1,'recovery_timing':2,'auto':{'GB':True},'completed':{'2026:1':{'GB':{'players':[]}}},'participants':{'2026:1':{'GB0':'GB'}}}
         before=copy.deepcopy(s.L.practice_state)
         loaded=Session.load(s.save())
         self.assertEqual(before,loaded.L.practice_state)

@@ -213,6 +213,9 @@ class Postseason:
         for i, rnd in enumerate(self.ROUNDS):
             self.schedule_round(rnd)
             self.play_round(rnd, week=19 + i)
+            # Batch postseason has no Session calendar to advance recovery.
+            import practice_integration as PI
+            PI.recover_week(self.r, 20 + i)
             if verbose: print(f'  {self.ROUND_NAMES[rnd]} complete')
         return self.champion
 
