@@ -100,9 +100,7 @@ def _terms(league, team, p, source, pool):
     terms = MK.signing_terms(league, p, team, annual, 1, CAP.get(league.year, 301.2))
     c = Contract(1, terms['base'], signing_bonus=terms['signing_bonus'],
                  signed=league.year, pay_start=team.cap.paid_week)
-    line = f'Estimated one-year ask: ${annual:.2f}m annual rate, about ${c.cap_hit(0):.2f}m remaining cap charge including bonus. Terms require negotiation.'
-    if source == 'ps':
-        line += ' Must join the active roster and stay for three games.'
+    line = f'Estimated remaining cap cost: ${c.cap_hit(0):.2f}m.'
     return c, line
 
 
@@ -145,6 +143,65 @@ def _trade_offer(league, team, p, pool, week):
     return None
 
 
+def performance_case(league, team, p, comparator, internal):
+    """A measured recent weakness plus a credible, attribute-specific role."""
+    if comparator is None: return None
+    recent = sorted((g for g in league.schedule if 1 <= g[0] <= 18 and g[3] is not None
+                     and team.abbr in (g[1], g[2])), reverse=True)[:4]
+    own, opponents = [], []
+    for wk, away, home, ap, hp in recent:
+        game = (getattr(league, 'team_game_stats', {}) or {}).get(f'{league.year}-{wk}-{home}-{away}', {})
+        other = away if home == team.abbr else home
+        if 'dropbacks' in game.get(team.abbr, {}) and 'dropbacks' in game.get(other, {}):
+            own.append(game[team.abbr]); opponents.append(game[other])
+    if len(own) < 3: return None
+    total = lambda rows, key: sum(r.get(key, 0) for r in rows)
+    cases = []
+    if p.pos in ('LT','LG','C','RG','RT') and total(own,'dropbacks') >= 60 and total(own,'sacks') / total(own,'dropbacks') >= .08:
+        cases.append(('pass protection', 'pass_block_rating'))
+    if p.pos in ('DT','LEDG','REDG') and total(opponents,'dropbacks') >= 60 and total(opponents,'pressures') / total(opponents,'dropbacks') < .18:
+        cases.extend([('pass rush','power_moves_rating'),('pass rush','finesse_moves_rating')])
+    if p.pos in ('DT','LEDG','REDG','MIKE','WILL','SAM') and total(opponents,'designed_runs') >= 40 and total(opponents,'designed_run_yards') / total(opponents,'designed_runs') >= 5:
+        cases.append(('run defense','block_shed_rating'))
+    for area, attr in cases:
+        value = p.ratings.get(attr)
+        old = comparator.ratings.get(attr)
+        if value is None or old is None or value < 80 or value < old + 8: continue
+        if any(q.pos == p.pos and q.ratings.get(attr, 0) >= value - 3
+               and _grade(league,team,q) >= _grade(league,team,p)-3 for q in internal): continue
+        if _grade(league,team,p) < _grade(league,team,comparator)-3: continue
+        skill = attr.replace('_rating','').replace('_',' ')
+        return f'Our {area} has struggled over {len(own)} recent games. His {skill} ({round(value)}) could improve the {p.pos} rotation over {comparator.name}.'
+    return None
+
+
+def acquisition_case(league, team, p, report, after, healthy, injured, own_ps, future_case):
+    """Compare the actual assignment, or the first useful reserve, not the weakest stash."""
+    for index, assignment in enumerate(after['assignments']):
+        if assignment['player'] is not p: continue
+        old = report['assignments'][index]
+        if old['player'] is None:
+            return f'Fills the uncovered {assignment["role"]} role.', None
+        if assignment['grade'] >= old['grade'] + 3:
+            return f'Could improve {assignment["role"]} over {old["player"].name}.', old['player']
+    room = sorted([q for q in healthy if q.pos == p.pos],key=lambda q:-_grade(league,team,q))
+    starters = sum(a['player'] is not None and a['player'].pos == p.pos for a in report['assignments'])
+    # Reserve jobs must be near the rotation; improving a fourth-stringer is insufficient.
+    index = max(0, starters if p.pos in ('DT','LEDG','REDG','WR','CB') else min(starters,1))
+    comparator = room[min(index,len(room)-1)] if room else None
+    special = performance_case(league,team,p,comparator,own_ps)
+    if special: return special, comparator
+    if injured and (comparator is None or _grade(league,team,p) >= _grade(league,team,comparator)+3):
+        return f'Adds {p.pos} cover while {injured[0].name} is unavailable.', comparator
+    if future_case: return future_case, comparator
+    if comparator and comparator.age <= 25 and comparator.contract and comparator.contract.years >= 2:
+        if DEV_RANK.get(str(comparator.dev).lower(),0) >= max(1,DEV_RANK.get(str(p.dev).lower(),0)):
+            return None, comparator  # Preserve an established development path.
+    if comparator and _grade(league,team,p) >= _grade(league,team,comparator)+4:
+        return f'Could strengthen the {p.pos} rotation over {comparator.name}.', comparator
+    return None, comparator
+
+
 def candidates(league, week):
     """Rank actionable improvements; max one recommendation per position."""
     import valuation as VAL
@@ -178,19 +235,13 @@ def candidates(league, week):
         if source == 'trade' and PS.locked(p, week):
             continue
         grade = _grade(league, team, p)
-        same = [q for q in healthy if q.pos == p.pos]
         internal = [q for q in own_ps if q.pos == p.pos]
         best_internal = max(internal, key=lambda q: _grade(league, team, q), default=None)
         if best_internal and _grade(league, team, best_internal) >= grade-2:
             continue
         need = report['needs'].get(p.pos, 0)
         dev = DEV.get(str(p.dev).lower())  # public development tier; no hidden ceiling
-        young = bool(dev and p.age <= 25)
-        worst = min((_grade(league, team, q) for q in same), default=55)
-        best = max((_grade(league, team, q) for q in same), default=55)
-        if need < .25 and not (young and grade >= worst+2) and grade < best+4:
-            continue
-        if grade < max(65, worst+2) and not (need >= .9 and grade >= 60):
+        if grade < 65 and not (need >= .9 and grade >= 60):
             continue
         injured = [q for q in full if q.pos == p.pos and not _healthy(q)]
         short = bool(injured and all(isinstance(q.out_until, (int, float)) and q.out_until <= week+2 for q in injured))
@@ -203,7 +254,8 @@ def candidates(league, week):
         after = RN.assess(team, [q for q in healthy if q is not outgoing]+[p], strict_roles=True)
         gain = after['score']-report['score']
         future_case = development_case(league, team, p, full + own_ps)
-        if gain < 2 and not (future_case and gain >= 0):
+        reason, comparator = acquisition_case(league, team, p, report, after, healthy, injured, own_ps, future_case)
+        if not reason or gain < 0:
             continue
         if outgoing and outgoing.age <= 25 and DEV_RANK.get(str(outgoing.dev).lower(), 0):
             # Do not discard controlled young talent for a marginal acquisition.
@@ -216,7 +268,7 @@ def candidates(league, week):
         c, cost_line = _terms(league, team, p, source, pool)
         if c is None:
             continue
-        if need < .25 and not role_improvement(report, after, p) and c.cap_hit(0) > .02*team.cap.limit:
+        if not role_improvement(report, after, p) and c.cap_hit(0) > .01*team.cap.limit:
             continue  # Do not spend starter money on a development-only addition.
         if short and c.cap_hit(0) > 2*max(.1, (18-team.cap.paid_week)/18):
             continue
@@ -238,26 +290,9 @@ def candidates(league, week):
             if not (future_case and c.years >= 2 and pick['round'] >= 6
                     and c.cap_hit(0) <= .01*team.cap.limit):
                 continue
-        if injured:
-            reason = f"{', '.join(q.name for q in injured[:2])} unavailable at {p.pos}. "
-            reason += 'Short-term cover; reassess when he returns.' if short else 'Adds cover while the injured players recover.'
-        elif future_case and gain < 2:
-            reason = future_case
-        else:
-            reason = f'Our coach’s personnel needs more quality or healthy depth at {p.pos}.'
         role = next((a['role'] for a in after['assignments'] if a['player'] is p), None)
-        reason += f' Projects as {role or "a depth option"}; scheme-adjusted grade {grade:.1f}.'
-        room = sorted((q for q in full if q.pos == p.pos), key=lambda q: -_grade(league, team, q))
-        if room:
-            reason += ' Current room: ' + '; '.join(
-                f'{q.name} ({_grade(league, team, q):.1f}, age {int(q.age)}, '
-                f'{DEV.get(str(q.dev).lower(), "Normal")}, '
-                f'{q.contract.years if q.contract else 0} contract years)'
-                for q in room) + '.'
         if source == 'trade' and c.years == 1:
             cost_line += ' Contract expires after this season; keeping him requires a new deal.'
-        if best_internal:
-            reason += f' Internal alternative: {best_internal.name} ({_grade(league, team, best_internal):.1f}).'
         if outgoing:
             cost_line += f' Roster is full: review releasing {outgoing.name}; no release is automatic from this report.'
         if pick:
@@ -272,9 +307,9 @@ def candidates(league, week):
 
 
 def role_improvement(before, after, p):
-    old = {a['role']: a for a in before['assignments']}
-    return any(a['player'] is p and (old[a['role']]['grade'] is None or
-               a['grade'] >= old[a['role']]['grade']+3) for a in after['assignments'])
+    return any(a['player'] is p and (old['grade'] is None or
+               a['grade'] >= old['grade']+3)
+               for old, a in zip(before['assignments'], after['assignments']))
 
 
 def weekly(league, week):
@@ -309,7 +344,7 @@ def weekly(league, week):
     role = next(iter(sides)) if len(sides) == 1 else 'hc'
     coach = team.gm if role == 'hc' else (getattr(team, 'staff', {}) or {}).get(role)
     sender = getattr(coach, 'name', None) or {'oc': 'Offensive Coordinator', 'dc': 'Defensive Coordinator', 'st': 'Special Teams Coordinator', 'hc': 'Coaching Staff'}[role]
-    body = 'We reviewed the active roster, injured players, our practice squad and the available market. These are the moves worth reviewing; no move has been made.'
+    body = 'These moves could address a roster need.'
     msg = IB.post(league, 'roster_report', f'Roster recommendations · Week {target}', body,
                   sender=sender, payload=dict(recommendations=rows, report_week=target), expires_week=target+3)
     msg['week'] = target
@@ -349,7 +384,7 @@ def recommendations(league, message):
                 import trades as TR
                 available = p.team == row['owner'] and league.phase == 'regular' and (league.week or 0) <= TR.TRADE_DEADLINE_WEEK
         row['available'] = bool(available and not row.get('dismissed') and message.get('status') != 'expired')
-        row['status'] = 'Dismissed' if row.get('dismissed') else 'Review opportunity' if row['available'] else 'No longer available'
+        row['status'] = 'Dismissed' if row.get('dismissed') else '' if row['available'] else 'No longer available'
         rows.append(row)
     return rows
 

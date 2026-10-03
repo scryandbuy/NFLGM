@@ -470,10 +470,10 @@ function rosterReportCards(message, reload) {
   for (const r of message.recommendations || []) {
     const card = el('section', {class:'roster-advice-item'});
     card.append(el('div', {class:'inbox-eyebrow'}, labels[r.source] || 'Roster opportunity'),
-      el('h4', {}, `${r.name} · ${r.pos} · ${r.ovr} OVR${r.dev ? ' · ' + r.dev : ''}`),
-      el('p', {}, r.reason), el('p', {class:'roster-advice-cost'}, r.cost),
-      el('div', {class:'from'}, r.status));
-    const acts = el('div', {class:'acts'}, el('a', {class:'btn', href:'#club/player/'+r.pid}, 'View Player'));
+      el('h4', {}, el('a', {href:`#club/player/${r.pid}`}, r.name), ` · ${r.pos} · ${r.ovr} OVR${r.dev ? ' · ' + r.dev : ''}`),
+      el('p', {}, r.reason), el('p', {class:'roster-advice-cost'}, r.cost));
+    if (r.status) card.append(el('div', {class:'from'}, r.status));
+    const acts = el('div', {class:'acts'});
     if (r.available) {
       acts.append(el('button', {class:'btn go', onclick:() => {
         // Refresh availability when clicked, not just when the email was opened.
