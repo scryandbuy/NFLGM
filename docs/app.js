@@ -1492,6 +1492,16 @@ function crest(c, size) { return el('div', { class: 'cr', style: `background:${c
 function notify(r) {
   const feedback = $('#action-feedback');
   const failed = r?.ok === false || !!r?.error || (r?.ok !== true && !!r?.why);
+  const tradeFeedback = $('#trade-action-feedback');
+  if (tradeFeedback) {
+    feedback.hidden = true;
+    $('#action-feedback-text').textContent = '';
+    const text = failed ? (r.why || r.error || r.line || 'That did not work.') : '';
+    tradeState.feedback = {key:tradeFeedbackKey(), text};
+    tradeFeedback.textContent = text === tradeFeedback.dataset.read ? '' : text;
+    tradeFeedback.hidden = !tradeFeedback.textContent;
+    return;
+  }
   feedback.hidden = !failed;
   $('#action-feedback-text').textContent = failed ? (r.why || r.error || r.line || 'That did not work.') : '';
   $('#dismiss-feedback').onclick = () => { feedback.hidden = true; };
@@ -1601,9 +1611,16 @@ function renderTradeSide(v, key, reload) {
   if(!own.surplus.length) surplus.append(el('span',{},'Nothing spare.'));
   notes.append(surplus); box.append(notes); return box;
 }
+function tradeFeedbackKey() {
+  return JSON.stringify([tradeState.other, tradeState.a, tradeState.b]);
+}
 function renderTradeSummary(v,reload) {
   const summary=el('div',{class:'trade-summary'});
   if(v.package) summary.append(el('div',{class:'trade-verdict '+v.package.verdict},el('b',{},`${showAbbr(v.them.club.abbr)}: ${v.package.verdict.toUpperCase()}. `),v.package.read,el('small',{},`${v.package.my_read} Your roster after: ${v.package.roster_after.me} · Your cap after: $${v.package.cap_after.me}m`)));
+  const actionText = tradeState.feedback?.key === tradeFeedbackKey() ? tradeState.feedback.text : '';
+  summary.append(el('div',{id:'trade-action-feedback',class:'trade-verdict blocked',role:'status',
+    'data-read':v.package?.read || '',hidden:(!actionText || actionText===v.package?.read) ? '' : null},
+    actionText===v.package?.read ? '' : actionText));
   const args=()=>`other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)}`;
   const can=v.can_trade&&(tradeState.a.length||tradeState.b.length);
   const actions=el('div',{class:'trade-actions'},el('span',{},`${tradeState.a.length} assets sent · ${tradeState.b.length} received`),
@@ -1615,6 +1632,7 @@ function renderTradeSummary(v,reload) {
 }
 function renderTrades(v) {
   renderRail(v.rail); const page=persPage();persSecond('trades');
+  $('#action-feedback').hidden = true;
   tradeState.other=v.other.abbr;
   tradeState.a=tradeSelection(tradeState.a,v.me);tradeState.b=tradeSelection(tradeState.b,v.them);
   const reload=(persist=false)=>{if(persist && tradeState.counter_id != null){const r=pyJSON(`SESSION.personnel_act('save_trade_counter', msg_id=${Number(tradeState.counter_id)}, other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`);if(!r.ok)notify(r);}const y=window.scrollY;renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));window.scrollTo(0,y);};

@@ -32,7 +32,7 @@ class TradeFeedbackTests(unittest.TestCase):
         result=VP._evaluate(self.L,'GB','NYG',['send1'],[])
         self.assertEqual(result['verdict'],'blocked')
         self.assertFalse(result['would_accept'])
-        self.assertIn('New York',result['read'])
+        self.assertTrue(result['read'].startswith('We '))
         self.assertIn('cap space',result['read'])
         for text in ('b_cannot_fit','deepest','Pickens','Sunday'):
             self.assertNotIn(text,result['read'])

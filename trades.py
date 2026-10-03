@@ -845,15 +845,15 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
     """
     football = package_football(league, ta, tb, outgoing, incoming)
     if not football['approved']:
-        why = {'recent_acquisition': 'The other team is keeping its recently acquired player for now.',
-               'competitive_roster_loss': 'The other team is still competing and this package would weaken its lineup too much. Offer players who fill the lost role or improve another starting role.',
-               'essential_coverage': 'The other team would lose essential positional coverage in this trade.'}[football['reason']]
+        why = {'recent_acquisition': 'We just acquired this player and want to keep him for now.',
+               'competitive_roster_loss': "We're still competing, and this deal would weaken our lineup too much. We'd need a replacement for the player we're giving up or an upgrade at another starting spot.",
+               'essential_coverage': "We can't make this deal without leaving a position short."}[football['reason']]
         return dict(approved=False, why=why)
     if buyer is not None and buyer != getattr(league, 'user_team', None):
         club, sent, received = (ta, outgoing, incoming) if ta.abbr == buyer else (tb, incoming, outgoing)
         gain = football['gains'][buyer]
         if gain < UPGRADE_GAP:
-            return dict(approved=False, why='This offer no longer provides the other team a useful roster upgrade.')
+            return dict(approved=False, why="This offer no longer gives us a useful roster upgrade.")
         pool = VAL.pool_from_league(league)
         def quote(item, viewer):
             if not isinstance(item, str): return pick_asset(league, item)
@@ -869,9 +869,9 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
         premium = 1.40 if TE.window(context(club)) in ('contending', 'win_now') else 1.25
         ceiling = (market * premium + .35) * _upgrade_budget(gain)
         if sum(TE.market_price(x) for x in paid_assets) > ceiling + 1e-9:
-            return dict(approved=False, why='The other team no longer values this package enough to pay that price.')
+            return dict(approved=False, why="We no longer value this package enough to pay that price.")
     if not _financial_trade(league, ta, tb, outgoing, incoming):
-        return dict(approved=False, why='The other team cannot fund this trade and its remaining roster commitments.')
+        return dict(approved=False, why="We can't fund this trade and cover our remaining roster commitments.")
     return dict(approved=True)
 
 
