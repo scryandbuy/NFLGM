@@ -1,5 +1,50 @@
 # Game log watchlist
 
+## Week 13 SEA at GB, 31-15: reviewed October 2, 2026
+
+Source: C:/Users/HP/.codex/attachments/9e113d3c-d428-4ba3-92c1-e3b30ca4388d/Pasted text.txt.
+Season year and build ID absent. Review only; no engine changes.
+
+- Score reconciles: GB four touchdowns/four PATs/one FG; SEA five FGs. Punt
+  distances/returns reconcile to all following receiving spots. Final SEA
+  timeouts at1:54/1:48/1:42 leave zero; GB kneels1:42/1:00/0:18 and ends game.
+- Losing runs: four of44 designed attempts (9.1%, includes a QB sneak, excludes
+  three kneels and erased plays). GB25/125 and SEA19/76 in displayed yards.
+  Positive counterevidence to earlier zero-loss games; do not close the broader
+  distribution watch or reduce overall rushing based on this game.
+- Pass rush: seven sacks across85 dropbacks, GB defense five/SEA defense two.
+  Parsons two, Biles two, Robinson one. Sack losses1/5 againstGB and3/10/5/6/5
+  againstSEA. These do not reproduce the earlier huge-loss/absent-sack concern.
+  Text still cannot establish individual snap share or pressure opportunities.
+- Passing: GB22/39,295 displayed yards,3TD/1INT; SEA22/39, approximately244,
+  0TD/1INT (one completion ends inside the1 and omits an exact gain).
+  Pickens9 catches/195 displayed yards/2TD on14 targets, including69-yard TD.
+  Third downs excluding closing kneel: GB8/14, SEA4/16. Track GB long-down
+  conversions but retain failed plays and opponent differences in the sample.
+- Confirmed rules issue: Q3 11:12 Illegal Shift is treated as a before-snap
+  no-play foul. events.py categorizes every Illegal Shift as 'pre'. Ordinary
+  illegal shifts are live-ball fouls; the specific running-clock/not-all-set
+  exception after a half's two-minute warning becomes a false start and does
+  not apply here. Requires targeted foul timing/enforcement correction; no
+  general penalty-rate reduction. Reference: 2026 NFL rules7-4-2 Item6/7-4-7,
+  https://static.www.nfl.com/image/upload/fl_attachment/league/tqivdkzt9mu6wdgsh1ku.pdf.
+- Narration says 'on the Sundell'/'on the Benefield'. Current source and browser
+  ticker already format named offenders without 'the', so verify producing
+  build or stored text before claiming a fresh code defect.
+- Punting watch:11 punts across25 possessions (two are half/game-ending
+  possessions), opposite the earlier low-punt user log. GB's18-yard punt from
+  SEA45 nets14 after return; other GB punts37/35 yards from its own territory
+  versus one63-yard punt. Investigate punt quality/weather/short-field spread
+  across samples before adjusting the distribution. All spots reconcile here.
+- Kicking watch:6/6 FGs, five at46 or shorter plus SEA60. Three SEA red-zone
+  trips produce3FG; no touchdowns. Q1 fourth-and-goal inside1 settled
+  for17-yardFG merits coach/conversion-value review, not an automatic go rule.
+- Q4 Seattle down19 takes60-yardFG at2:38, reducing deficit to16, then kicks
+  deep with3timeouts. Unlike the earlier futile down34 kick, this reduces the
+  required scoring possessions; deep-versus-onside remains a tactical watch.
+  Hurry completions/sack at3:40/3:26/3:12/2:58/2:44 use14-second intervals.
+
+
 This records evidence from user-supplied games, fixes made, and questions to revisit as more logs arrive. A poor outcome alone does not establish an engine defect. Add new observations to the existing item before changing league-wide balance.
 
 ## Evidence reviewed
