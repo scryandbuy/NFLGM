@@ -553,6 +553,40 @@ def _refresh_retention(league, teams, pool):
             RP.refresh(league, league.teams[abbr], pool=pool)
 
 
+def roster_need_labels(team, week=0):
+    """Display actual package weaknesses separately from reserve shortages.
+
+    A fullback job is not a halfback vacancy. Compatible substitutes count,
+    and a short injury does not turn a returning starter into a trade need.
+    """
+    import roster_needs as RN
+    import practice_squad as PS
+    players = [p for p in team.active() if p.out_until is None or
+               (int(p.out_until) < 99 and int(p.out_until)-week <= 2)]
+    report = RN.assess(team, players)
+    weak, grades, impact = {}, {}, {}
+    for row in report['package_assignments']:
+        role = row['role']
+        grade = row['grade']
+        # Specialist and reserve-depth shopping belongs to the street market.
+        if role in ('K', 'P', 'LS'): continue
+        bar = 81. if role == 'QB' else 76.
+        if grade is not None and grade >= bar-NEED_GAP: continue
+        label = role if row['side']=='offense' else row['sources'][0]
+        if role == 'TE':
+            import offense_roles as OR
+            if OR.te_assignment_role(row['package'], row.get('slot', 0)) == 'blocking':
+                label = 'Blocking TE'
+        weak[label] = weak.get(label, 0.) + row['weight']
+        impact[label] = impact.get(label, 0.) + row['weight'] * (bar - (grade if grade is not None else 55.))
+        grades[label] = min(grades.get(label, 100.), grade if grade is not None else 0.)
+    needs = {label: grades[label] for label, share in weak.items() if share >= .10 and impact[label] >= 3.0}
+    for group, shortage in PS.essential_depth(team, players=players, week=week)['shortages'].items():
+        if group in ('K', 'P', 'LS'): continue
+        if group not in needs: needs[group + ' depth'] = 0.
+    return needs
+
+
 def surplus_and_needs(league, team, pool, rng, n=3):
     """
     Who a club can spare and where it is thin. Surplus is depth behind a
@@ -562,8 +596,14 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     surplus, needs = [], {}
     recent = recent_acquisitions(league, team)
     roster_report = RN.assess(team, [p for p in team.active() if getattr(p, 'out_until', None) is None])
-    roster_needs = roster_report['needs']
-    league_bar = starter_bar(league)
+    import practice_squad as PS
+    coverage = RN.essential_coverage(team, report=roster_report)
+    depth_before = PS.essential_depth(team, players=roster_report['players'])['shortages']
+    role_share = {}
+    for row in roster_report['package_assignments']:
+        if row['player'] is not None:
+            pid = row['player'].pid
+            role_share[pid] = role_share.get(pid, 0.) + row['weight']
     depth = team.depth
     by_group = {}
     for pos, men in depth.items():
@@ -580,7 +620,11 @@ def surplus_and_needs(league, team, pool, rng, n=3):
         men = sorted(men, key=lambda p: -p.ovr)
         if len(men) >= 3:
             for p in men[2:4]:
-                if _young_core(p) or p.pid in recent: continue
+                if _young_core(p) or p.pid in recent or role_share.get(p.pid, 0.) >= .15: continue
+                remaining = [q for q in roster_report['players'] if q.pid != p.pid]
+                if not RN.coverage_not_worse(coverage, RN.essential_coverage(team, players=remaining)): continue
+                depth_after = PS.essential_depth(team, players=remaining)['shortages']
+                if any(value > depth_before.get(group, 0) for group, value in depth_after.items()): continue
                 if men[0].ovr - p.ovr > 3:
                     if RN.departure_loss(team, p, baseline=roster_report) > 6.0:
                         continue  # he is needed for a job this coach actually runs
@@ -589,35 +633,7 @@ def surplus_and_needs(league, team, pool, rng, n=3):
                         a['grp'] = grp
                         surplus.append(a)
 
-    # NEED is a SLOT question, and a SIZE rather than a flag.
-    #
-    # By slot because a group hides exactly the hole worth trading for: lose
-    # your right tackle for the season and the line still contains a
-    # 90-overall left tackle, so the group looks fine while the spot is empty.
-    #
-    # A size because a club with a 74 where the league starts 82s and a club
-    # with a 60 are not the same, and treating them alike meant both chased
-    # the same 71 when only one of them is improved by him.
-    wk_now = int(getattr(league, 'week', 0) or 0)
-    street = {}
-    for pid_ in (getattr(league, 'free_agents', None) or [])[:400]:
-        q_ = league.player(pid_)
-        if q_ is not None and not q_.retired and q_.out_until is None: street[q_.pos] = max(street.get(q_.pos, 0.0), q_.ovr)
-    for pos in set(depth) | set(RN.POSITIONS):
-        men = depth.get(pos, ())
-        # a man out two weeks or less still counts as the club's man at the spot: nobody trades a pick to cover a fortnight
-        fit = [p for p in men if p.out_until is None or (int(p.out_until) < 99 and int(p.out_until) - wk_now <= 2)]
-        have = max((p.ovr for p in fit), default=0.0)
-        # the street counts too: a club does not trade for a spot a free agent fills as well
-        have = max(have, street.get(pos, 0.0) - 2.0)
-        # a hole worth a trade: a real weakness at the premium spots, a gaping one on the interior line, where
-        # clubs live with a 72 and sign a veteran rather than pay a pick
-        gap = NEED_GAP + (5.0 if pos in ('C', 'LG', 'RG') else 2.0 if pos in ('LT', 'RT', 'SS', 'FS', 'MIKE', 'WILL', 'SAM', 'TE') else 0.0)
-        if have < league_bar.get(pos, 75.0) - gap or roster_needs.get(pos, 0.0) >= 0.75:
-            grp = GRP.get(pos, pos)
-            if grp == 'ST': continue                 # a club short a kicker signs one; it does not trade for one
-            if grp not in needs or have < needs[grp]:
-                needs[grp] = have
+    needs = roster_need_labels(team, int(getattr(league, 'week', 0) or 0))
 
     have = {a['pid'] for a in surplus}
     for p in seller_veterans(league, team, roster_report):
