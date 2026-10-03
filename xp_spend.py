@@ -159,7 +159,9 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
 
 
 def spend_week(league, week, rng, user_team=None, verbose=False):
-    """CPU spending every three weeks; user auto-spend weekly. Returns {pid: actions}.
+    """CPU spending every three weeks; user auto-spend weekly, including squads.
+
+    Returns {pid: actions}.
 
     Use the league week so saves, byes, and season changes need no separate
     spending counter. Earnings-rate bookkeeping still advances every week.
@@ -168,9 +170,11 @@ def spend_week(league, week, rng, user_team=None, verbose=False):
     cpu_spend_due = week > 0 and week % CPU_SPEND_INTERVAL == 0
     for abbr, team in league.teams.items():
         gm = team.gm
-        for p in team.roster:
-            if p.retired:
+        seen = set()
+        for p in list(team.roster) + list(getattr(team, 'practice_squad', ())):
+            if p.retired or p.pid in seen:
                 continue
+            seen.add(p.pid)
             p.xp_spent['_weeks'] = p.xp_spent.get('_weeks', 0) + 1
             if abbr == user_team and not p.xp_spent.get('_auto'):
                 continue

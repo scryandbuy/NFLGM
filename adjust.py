@@ -116,20 +116,22 @@ class GameMemory:
 
 
 # ============================================================ DETECTION
-def detect(mem, skill=0.5):
+def detect(mem, skill=0.5, unit=None):
     """
     What is actually happening to us. Returns trends with a confidence, which
     scales with the sample AND with the coach's skill - a sharper coordinator
     reads it off a smaller sample, which is the professional-versus-high-school
     difference the coaching sources describe.
     """
+    if unit not in (None, 'offense', 'defense'):
+        raise ValueError('Unknown coaching unit')
     found = {}
     if mem.series_seen() < MIN_SERIES:
         return found
     need = MIN_EVENTS * (1.4 - 0.8 * skill)
 
     # --- who is beating us, and at what depth ---
-    pd = mem.recent('pass_depth')
+    pd = mem.recent('pass_depth') if unit != 'offense' else []
     if len(pd) >= need:
         by = defaultdict(list)
         for d, g, ok in pd: by[d].append(ok)
@@ -141,7 +143,7 @@ def detect(mem, skill=0.5):
                                           conf=_conf(len(res), need, skill))
 
     # --- one receiver eating us alive ---
-    tg = mem.recent('targets')
+    tg = mem.recent('targets') if unit != 'offense' else []
     if len(tg) >= need:
         by = defaultdict(list)
         for t, g, ok in tg: by[t].append((g, ok))
@@ -154,7 +156,7 @@ def detect(mem, skill=0.5):
                                        conf=_conf(len(res), need, skill))
 
     # --- the run game is gashing us ---
-    rn = mem.recent('run')
+    rn = mem.recent('run') if unit != 'offense' else []
     if len(rn) >= need:
         by = defaultdict(list)
         for sc, g, ok in rn: by[sc].append((g, ok))
@@ -166,7 +168,7 @@ def detect(mem, skill=0.5):
                                 conf=_conf(len(rn), need, skill))
 
     # --- our own protection is failing ---
-    pr = mem.recent('protection')
+    pr = mem.recent('protection') if unit != 'defense' else []
     if len(pr) >= need:
         sacked = np.mean([s for s, _ in pr])
         if sacked >= 0.14:
@@ -175,7 +177,7 @@ def detect(mem, skill=0.5):
                                        conf=_conf(len(pr), need, skill))
 
     # --- we are predictable (self-scout) ---
-    calls = mem.recent('calls')
+    calls = mem.recent('calls') if unit != 'defense' else []
     if len(calls) >= need:
         p = np.mean([c == 'pass' for c in calls])
         if p >= 0.80 or p <= 0.20:

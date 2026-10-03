@@ -191,8 +191,10 @@ class SeasonRunner(StandingsView):
                  plan=asdict(st.plan), base_plan=asdict(st.base_plan),
                  script=dict(st.script.__dict__), coach=copy.deepcopy(st.coach),
                  scheme=copy.deepcopy(st.scheme),
-                 mem=dict(series=st.mem.series, window=st.mem.window,
-                          by_series={str(k): dict(v) for k, v in st.mem.by_series.items()}),
+                 memories={unit: dict(series=mem.series, window=mem.window,
+                          by_series={str(k): dict(v) for k, v in mem.by_series.items()})
+                           for unit, mem in st.memories.items()},
+                 last_adjustment=copy.deepcopy(st.last_adjustment),
                  injuries=copy.deepcopy(st.injuries), out=sorted(st.out),
                  cov_memory=dict(st.cov_memory),
                  staff_fx=copy.deepcopy(getattr(st, 'staff_fx', {})),
@@ -207,6 +209,8 @@ class SeasonRunner(StandingsView):
     @staticmethod
     def _restore_state(st, d):
         import gameplan as GP, adjust as AD
+        identity_skill = float((getattr(st, 'coach_base', None) or st.coach)
+                               .get('adjust_skill', .5))
         st.defer_recovery = d.get('defer_recovery', True)
         if 'roster' in d: st.roster = d['roster']
         st.cond.cond = dict(d.get('cond') or {})
@@ -220,18 +224,34 @@ class SeasonRunner(StandingsView):
         if d.get('plan'): st.plan = GP.Gameplan(**d['plan'])
         if d.get('base_plan'): st.base_plan = GP.Gameplan(**d['base_plan'])
         if d.get('script'): st.script.__dict__.update(d['script'])
-        if 'coach' in d: st.coach = d['coach']
+        if 'coach' in d: st.coach = copy.deepcopy(d['coach'])
         if 'scheme' in d: st.scheme = d['scheme']
-        md = d.get('mem') or {}
-        st.mem = AD.GameMemory(window=md.get('window', 4))
-        st.mem.series = md.get('series', 0)
-        st.mem.by_series = defaultdict(lambda: defaultdict(list),
-                                       {int(k): defaultdict(list, v) for k, v in (md.get('by_series') or {}).items()})
+        # Old `mem` mixed both teams' offensive possessions. It cannot be
+        # assigned a trustworthy perspective; start fresh rather than guess.
+        st.memories = {}
+        for unit in ('offense', 'defense'):
+            md = (d.get('memories') or {}).get(unit) or {}
+            mem = AD.GameMemory(window=md.get('window', 4))
+            mem.series = md.get('series', 0)
+            mem.by_series = defaultdict(lambda: defaultdict(list),
+                    {int(k): defaultdict(list, v) for k, v in (md.get('by_series') or {}).items()})
+            st.memories[unit] = mem
+        st.last_adjustment = (copy.deepcopy(d.get('last_adjustment'))
+                              if d.get('memories') else None)
         st.injuries = list(d.get('injuries') or [])
         st.out = set(d.get('out') or [])
         st.cov_memory = dict(d.get('cov_memory') or {})
         st.staff_fx = d.get('staff_fx') or {}
         st.coach_base = d.get('coach_base') or {}
+        if 'memories' not in d:
+            # A replay can start here without _staff_terms. Old coach skill
+            # included either coordinator's shared bonus; use the unboosted
+            # saved base (or the freshly constructed identity) immediately.
+            baseline = float(st.coach_base.get('adjust_skill', identity_skill))
+            st.coach['adjust_skill'] = baseline
+            for unit in ('off', 'def'):
+                st.coach['adjust_skill_' + unit] = min(1.0, baseline +
+                        (.15 if st.staff_fx.get('sharp_' + unit) else 0.0))
         st.seq = d.get('seq') or {'run_hot': 0.0}
         st.road_noise = d.get('road_noise', 1.0)
         st.road_stamina = d.get('road_stamina', 1.0)
@@ -724,10 +744,16 @@ class SeasonRunner(StandingsView):
         t = self.L.teams[abbr]; st = self.states[abbr]
         st.staff_fx = ST.game_terms(t)
         st.staff_fx['short_kick_bias'] = ST.short_kick_bias(t)
-        if not hasattr(st, 'coach_base'): st.coach_base = dict(st.coach)     # the head coach's own numbers, before any staff edge
+        if not getattr(st, 'coach_base', None):
+            # Older saves can contain an empty base and an already-boosted
+            # coach. Rebuild from the GM where available, not that staff total.
+            st.coach_base = (make_coach(t.gm) if getattr(t, 'gm', None) is not None
+                             else dict(st.coach))
         st.coach = dict(st.coach_base)
-        if st.staff_fx.get('sharp_off') or st.staff_fx.get('sharp_def'):
-            st.coach['adjust_skill'] = min(1.0, float(st.coach_base.get('adjust_skill', 0.5)) + 0.15)
+        baseline = float(st.coach_base.get('adjust_skill', 0.5))
+        for unit in ('off', 'def'):
+            st.coach['adjust_skill_' + unit] = min(1.0, baseline +
+                    (0.15 if st.staff_fx.get('sharp_' + unit) else 0.0))
 
     def play_games(self, week):
         self.prepare_practice(week)

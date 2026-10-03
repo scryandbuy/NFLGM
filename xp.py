@@ -57,8 +57,8 @@ PER_EVENT = {
     'drops':     -60.0,
 
     # ---- ball security ----
-    'fum':       -60.0,
-    'fum_lost':  -140.0,
+    'fumbles':       -60.0,
+    'fumbles_lost':  -140.0,
 
     # ---- defence ----
     # A CORNER HAS ALMOST NO BOX SCORE. He is paid to be thrown at and miss,
@@ -405,8 +405,15 @@ def buy(player, attr, *, year=None, week=None, source=None):
 # ============================================================ EARNING
 def event_xp(line):
     """Raw XP from one stat line - a game, or a season."""
-    return sum(PER_EVENT.get(k, 0.0) * float(v or 0)
-               for k, v in line.items() if isinstance(v, (int, float)))
+    total = sum(PER_EVENT.get(k, 0.0) * float(v or 0)
+                for k, v in line.items() if isinstance(v, (int, float)))
+    # Old stat lines used short names. Prefer the canonical field whenever
+    # present (including an explicit zero), so mixed lines pay only once.
+    for legacy, canonical in (('fum', 'fumbles'), ('fum_lost', 'fumbles_lost')):
+        value = line.get(legacy)
+        if canonical not in line and isinstance(value, (int, float)):
+            total += PER_EVENT[canonical] * float(value or 0)
+    return total
 
 
 def goal_xp(line, table):
