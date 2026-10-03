@@ -111,9 +111,9 @@ def _cap_block_read(reason, other):
     name = club(other)['name']
     messages = {
         'a_dead_money': 'Your front office will not take on the dead-money charge from this trade.',
-        'b_dead_money': f"{name}'s front office will not take on the dead-money charge from this trade.",
+        'b_dead_money': "We won't take on the dead-money charge from this trade.",
         'a_cannot_fit': 'Your team does not have enough cap space for this trade.',
-        'b_cannot_fit': f'{name} does not have enough cap space for this trade.',
+        'b_cannot_fit': "We don't have enough cap space for this trade.",
     }
     reason = {'a_space': 'a_cannot_fit', 'b_space': 'b_cannot_fit'}.get(reason, reason)
     return messages.get(reason, 'This trade cannot proceed under the current cap constraints.')
@@ -141,10 +141,10 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
     g = r['b_gain']
     if r.get('blocked'):
         read = plan_read or _cap_block_read(r['blocked'], other); verdict = 'blocked'
-    elif g >= 4: read = f"{them.abbr} would take this and feel they won it. You are giving more than you need to."; verdict = 'overpay'
-    elif g >= 0.5: read = f"This is fair for {them.abbr}. They would take it."; verdict = 'fair'
-    elif g >= -3: read = f"Close, a touch short for {them.abbr}. A mid-round pick or a depth piece would get it done."; verdict = 'short'
-    else: read = f"Well short. {them.abbr} would not consider this as it stands."; verdict = 'far'
+    elif g >= 4: read = "We'd gladly take this package."; verdict = 'overpay'
+    elif g >= 0.5: read = "This is a fair offer. We'd take it."; verdict = 'fair'
+    elif g >= -3: read = "We're close, but we'd need more in return."; verdict = 'short'
+    else: read = "We wouldn't consider this offer as it stands. We'd need substantially more in return."; verdict = 'far'
     mine = r['a_gain']
     my_read = ('Change the player package or clear cap room before proceeding.' if verdict == 'blocked' else
                'Your assistants like your side of it.' if mine > 1 else
