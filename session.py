@@ -458,8 +458,9 @@ class Session:
         body = ('Your scouting staff has two suggested priorities for the next two games. '
                 'Choose two position groups, or let your scout decide. Every position still gets a small background review.\n\n'
                 + '\n'.join(lines))
-        IB.post(self.L, 'scouting_focus', f'Choose scouting priorities for Weeks {week}-{week + 1}', body,
-                sender='head scout', payload=dict(key=key, focus_week=week, link='draft:board'))
+        message = IB.post(self.L, 'scouting_focus', f'Choose scouting priorities for Weeks {week}-{week + 1}', body,
+                          sender='head scout', payload=dict(key=key, focus_week=week, link='draft:board'))
+        message['week'] = week
 
     def blocking(self):
         import inbox as IB

@@ -28,6 +28,8 @@ class ScoutingDecisionTests(unittest.TestCase):
         mid = messages[0]['id']
         self.assertTrue(any(b['kind'] == 'scouting_focus' for b in session.blocking()))
         self.assertTrue(next(r for r in views._inbox(session.L, limit=None)['rows'] if r['id'] == mid)['block'])
+        session.ROSTER_MAX, session.ROSTER_MIN = 100, 0
+        self.assertIn('scouting priorities', session.advance()['why'])
         self.assertFalse(session.inbox_scout_focus(mid, group1='QB', group2='QB')['ok'])
         self.assertTrue(any(b['kind'] == 'scouting_focus' for b in session.blocking()))
         self.assertTrue(session.inbox_scout_focus(mid, use_scout=True)['ok'])
