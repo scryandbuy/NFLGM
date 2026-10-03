@@ -86,6 +86,8 @@ class PregameTacticsTests(unittest.TestCase):
 
     def test_skip_survives_reload_excludes_accept_all_and_can_restore(self):
         s = Session.load(self.saved)
+        # New games now stop at cutdown; this assertion needs a scheduled game.
+        s.stop = ('week', 1)
         self.assertTrue(s.plan_act('skip', i=0)['ok'])
         view = s.plan_view('this_week')
         self.assertTrue(view['suggestions'][0]['skipped'])
@@ -146,7 +148,7 @@ class ElevationTests(unittest.TestCase):
             r._units('GB')
         position.assert_called_once_with(self.p)
         morale.assert_called_once_with({'speed_rating':62}, self.p)
-        self.assertEqual(build.call_args.args[0], [{'speed_rating':57,'pid':self.p.pid,'pos':'WR','weight':None}])
+        self.assertEqual(build.call_args.args[0], [{'speed_rating':57,'pid':self.p.pid,'pos':'WR','weight':None,'traits':{}}])
 
     def test_playoff_elevation_remains_temporary_after_three_regular_elevations(self):
         self.p.xp_spent['_elevations'] = 3

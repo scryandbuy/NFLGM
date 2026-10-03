@@ -22,7 +22,9 @@ class RosterReviewTests(unittest.TestCase):
              patch.object(PS,'shunned',return_value=False),patch.object(PS,'squad',side_effect=lambda t:t.ps), \
              patch('gm_engine.scheme_fit',return_value=0),patch.object(PS.MS,'minimum_salary',return_value=1), \
              patch.object(PS,'minimum_contract',return_value=Contract(1,[1])), \
-             patch('cap_accounting.require_room'), patch.object(PS,'_cpu_move_budget',return_value=True):
+             patch('cap_accounting.require_room'), patch.object(PS,'_cpu_move_budget',return_value=True), \
+             patch('valuation.pool_from_league', return_value=None), \
+             patch('replacement_contracts.minimum_acceptance', return_value={'accepts': True}):
             moves=PS.roster_review(league,None,1)
         self.assertEqual(len(moves),1)
         self.assertEqual(released,['AAA'])

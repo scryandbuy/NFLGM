@@ -113,6 +113,8 @@ def _funding(league, team, incoming, outgoing, contract):
 def _acquire(league, team, available, positions, desk, week):
     from cap_accounting import require_room
     import cutdown
+    import valuation as VAL
+    from replacement_contracts import minimum_acceptance
     if len(team.active()) > 53:
         return False  # An invalid roster needs cutdown, not another acquisition.
     # Own squad/street first; another squad is a last resort for an unavailable
@@ -123,9 +125,15 @@ def _acquire(league, team, available, positions, desk, week):
     other = [p for t in league.teams.values() if t is not team for p in PS.squad(t)
              if p.pos in positions and not p.retired and p.out_until is None
              and (desk is None or desk.available(p, week))]
+    comps = None
     for pool in (local, other):
         # Affordability is checked for every candidate, not just the highest OVR.
         for p in sorted(pool, key=lambda p: (-p.ovr, p.pid)):
+            if p.team is None:
+                if comps is None:
+                    comps = VAL.pool_from_league(league)
+                if not minimum_acceptance(league, team, p, pool=comps)['accepts']:
+                    continue
             contract = PS.minimum_contract(league, team, p)
             for q in _outgoing(league, team, available, p):
                 funding = _funding(league, team, p, q, contract)
@@ -139,7 +147,7 @@ def _acquire(league, team, available, positions, desk, week):
                 require_room(league, team, p.pid, contract, release_pid=q.pid if q else None)
                 if q:
                     league.release(q.pid)
-                if not cutdown._sign_replacement(league, team, p, contract):
+                if not cutdown._sign_replacement(league, team, p, contract, consent=True):
                     raise FieldabilityError(f'{team.abbr}: emergency signing of {p.name} could not complete')
                 league.log('emergency', pid=p.pid, team=team.abbr, position=p.pos,
                            reason='Game-day availability')
@@ -172,6 +180,8 @@ def settle_roster(league, team, week):
             return False
         removed = {p.pid for p in cuts}
         remaining = [p for p in active if p.pid not in removed]
+        if not PS.preserves_healthy_depth(team, active, remaining):
+            return False
         trial = trade_projection(league, team.abbr, list(removed), [])
         if trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005:
             return False
@@ -207,6 +217,8 @@ def ensure(league, team, desk, week, playoffs=False):
     """CPU repairs are idempotent: only an actual hole can trigger a move."""
     if league.phase in ('regular', 'playoffs'):
         settle_roster(league, team, week)
+    if team.abbr != getattr(league, 'user_team', None):
+        PS.elevate_for_coverage(league, team, week, playoffs=playoffs, desk=desk)
     available = dressed(team, desk, week)
     missing = shortages(available)
     if team.abbr != getattr(league, 'user_team', None):

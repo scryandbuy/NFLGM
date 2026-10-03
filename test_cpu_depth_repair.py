@@ -123,7 +123,10 @@ class DepthRepairTests(unittest.TestCase):
         p=self.arrival(L,'QB','backup',65)
         for q in t.roster:q.contract=Contract(4,[1]*4,signing_bonus=20)
         t.sync_cap();before=list(t.roster)
-        self.assertTrue(PS.sign_minimum(L,t.abbr,p,essential=True))
+        # Inflate incumbent dead money to isolate departure protection, without
+        # also inflating the replacement's asking price through those comps.
+        with patch('valuation.value_player', return_value={'apy': 1.}):
+            self.assertTrue(PS.sign_minimum(L,t.abbr,p,essential=True))
         self.assertEqual(t.roster[:-1],before)
         self.assertEqual(len(t.active()),54)
         self.assertIn(p,t.roster)
