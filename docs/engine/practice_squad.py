@@ -188,10 +188,12 @@ def _cpu_move_budget(league, team, player, contract, outgoing=None, *, essential
                        action=action)['approved']
 
 
-def sign_minimum(league, abbr, player, log=True, essential=False):
+def sign_minimum(league, abbr, player, log=True, essential=False, *, pool=None):
     """Validate ownership and cap; roster cleanup follows the acquisition."""
     team = league.teams[abbr]
     if player not in available_free_agents(league): return False
+    from replacement_contracts import minimum_acceptance
+    if not minimum_acceptance(league, team, player, pool=pool)['accepts']: return False
     contract = minimum_contract(league, team, player)
     allowed, outgoing = _active_move(league, team, player, contract, essential=essential)
     if not allowed: return False
@@ -201,9 +203,11 @@ def sign_minimum(league, abbr, player, log=True, essential=False):
     return True
 
 
-def minimum_fits(league, team, player, essential=False):
+def minimum_fits(league, team, player, essential=False, *, pool=None):
     """Filter unaffordable first choices so a cheaper healthy option is tried."""
     from cap_accounting import require_room
+    from replacement_contracts import minimum_acceptance
+    if not minimum_acceptance(league, team, player, pool=pool)['accepts']: return False
     try:
         require_room(league, team, player.pid, minimum_contract(league, team, player))
     except ValueError:
@@ -236,7 +240,7 @@ def protected(team, q, league, incoming=None):
 
 
 def essential_depth(team, players=None, week=None):
-    """Usable backup coverage, distinct from the ideal 53-man roster shape.
+    """Planning coverage, distinct from players available for the next game.
 
     OL and defensive groups permit positional flexibility. Short absences still
     belong to the club; elevations cover them instead of forcing a release.
@@ -251,6 +255,57 @@ def essential_depth(team, players=None, week=None):
         or int(p.out_until) < 99 and int(p.out_until) - int(week) <= 2))
     return dict(counts=counts, floors=floors,
                 shortages={g:n-counts[g] for g,n in floors.items() if counts[g]<n})
+
+
+def healthy_depth(team, players=None, desk=None, week=None):
+    """Apply the existing coach's reserve needs to actually available players."""
+    players = team.active() if players is None else players
+    available = [p for p in players if not p.retired and
+                 (desk.available(p, week) if desk is not None else p.out_until is None)]
+    return essential_depth(team, available)
+
+
+def preserves_healthy_depth(team, before, after, desk=None, week=None):
+    """A roster move must not create another live backup shortage."""
+    old = healthy_depth(team, before, desk, week)['shortages']
+    new = healthy_depth(team, after, desk, week)['shortages']
+    return all(n <= old.get(group, 0) for group, n in new.items())
+
+
+def elevate_for_coverage(league, team, week, playoffs=False, desk=None):
+    """Temporary CPU cover, ranked by fieldability and the coach's actual needs.
+
+    This never makes a permanent move just because a short absence uses up a
+    player's temporary elevations. The hard game-day gate handles actual
+    fieldability failures through its funded acquisition path.
+    """
+    import game_availability as GA
+    import roster_needs as RN
+    moves = []
+    while len(getattr(team, '_elevated', None) or []) < ELEVATIONS_PER_GAME:
+        available = GA.dressed(team, desk, week)
+        coverage = healthy_depth(team, available)['shortages']
+        hard = GA.shortages(available)
+        candidates = [p for p in squad(team) if not p.retired and p.out_until is None
+                      and (desk is None or desk.available(p, week))
+                      and p not in (getattr(team, '_elevated', None) or [])
+                      and (playoffs or p.xp_spent.get('_elevations', 0) < ELEVATIONS_PER_MAN)
+                      and (coverage.get(GROUP_OF.get(p.pos, p.pos), 0)
+                           or any(p.pos in positions for _, positions, _ in hard))]
+        if not candidates:
+            break
+        needs = RN.assess(team, available)['needs']
+        def priority(p):
+            hard_gain = sum(n for _, _, n in hard) - sum(
+                n for _, _, n in GA.shortages(available + [p]))
+            return (hard_gain, needs.get(p.pos, 0.0),
+                    coverage.get(GROUP_OF.get(p.pos, p.pos), 0), p.ovr, p.pid)
+        p = max(candidates, key=priority)
+        elevated = elevate(league, team.abbr, [p.pid], week, playoffs=playoffs)
+        if not elevated:
+            break
+        moves += [(team.abbr, 'elevate', x) for x in elevated]
+    return moves
 
 
 def _recent_additions(league, team):
@@ -287,6 +342,8 @@ def _room_candidates(league, team, p):
         if not repairing and q.pid in recent: continue
         after = essential_depth(team, [x for x in active if x is not q] + [p], league.week)
         if any(n > before['shortages'].get(g, 0) for g,n in after['shortages'].items()): continue
+        if league.phase in ('regular', 'playoffs') and not preserves_healthy_depth(
+                team, active, [x for x in active if x is not q] + [p]): continue
         if repairing and after['shortages'].get(group, 0) >= before['shortages'][group]: continue
         candidates.append(q)
     def position_priority(q):
@@ -487,6 +544,94 @@ def fill_squads(league, rng, verbose=False):
     return total
 
 
+def replenish_squads(league, rng, week=None, verbose=False):
+    """Weekly CPU recruitment into vacancies, after active-roster movements.
+
+    Existing squad members keep their places. The same willingness and legal
+    limits as manual squad offers apply; a vacant place is not an order to
+    sign somebody. Review once per week, including after a save/load.
+    """
+    import draft as DFT
+    import gm_engine as GE
+    import roster_construction as RC
+    from ceiling_knowledge import observed_range
+    from development_value import development_credit
+
+    week = int(league.week if week is None else week)
+    stamp = [int(league.year), week]
+    notes = getattr(league, 'notes_sent', None)
+    if notes is None:
+        notes = league.notes_sent = {}
+    if notes.get('_ps_recruitment') == stamp:
+        return 0
+    order = [abbr for abbr, team in league.teams.items()
+             if abbr != getattr(league, 'user_team', None) and len(squad(team)) < SIZE]
+    if not order:
+        return 0
+    notes['_ps_recruitment'] = stamp
+    pool = {p.pid: p for p in available_free_agents(league)
+            if squad_acceptance(league, p)['accepts']}
+    if not pool:
+        return 0
+    # Cleared camp cuts may return to their own squad. A deliberate squad
+    # release, or an active addition immediately undone this week, must not
+    # be reversed by the later recruitment pass.
+    recent = [e for e in league.transactions if e.get('year') == league.year
+              and int(e.get('week') or 0) == week]
+    additions = {(e.get('team'), e.get('pid')) for e in recent if e.get('kind') in
+                 ('sign', 'ps_callup', 'ps_poach', 'waiver_claim', 'emergency_sign')}
+    excluded = {(e.get('team'), e.get('pid')) for e in recent
+                if e.get('kind') == 'ps_release' or e.get('kind') == 'release'
+                and (e.get('team'), e.get('pid')) in additions}
+    scale = DFT.position_scale(league)
+    rng.shuffle(order)
+    total = 0
+    for abbr in order:
+        team = league.teams[abbr]
+        gm = team.gm or GE.GM()
+        attempted = set()
+        context = dict(team.ctx())
+        # GM depth valuation expects rating lists and contract horizons,
+        # rather than the Player objects in Team's display context.
+        context['expiring'] = collections.defaultdict(list)
+        for p in team.roster:
+            if not p.retired:
+                context['expiring'][p.pos].append((view_ovr(league, abbr, p),
+                    getattr(p.contract, 'years', 0), p.age))
+        while len(squad(team)) < SIZE:
+            cover = [p for p in team.active() + squad(team)
+                     if not p.retired and p.out_until is None]
+            context['depth'] = collections.defaultdict(list)
+            for p in cover:
+                context['depth'][p.pos].append(view_ovr(league, abbr, p))
+            candidates = []
+            for p in pool.values():
+                if (p.team is not None or p.pid in attempted or (abbr, p.pid) in excluded
+                        or not can_add(team, p, by_ai=True)):
+                    continue
+                grade = view_ovr(league, abbr, p)
+                common = DFT.common_scale(grade, p.pos, scale)
+                slot = RC.slot_value(p.pos, len(context['depth'][p.pos]) + 1, context, gm)
+                now = slot * (.4 + common / 90.0)  # same quality/slot units as allocate
+                growth = development_credit(p.dev, p.age, grade, 1, observed_range(p))
+                asset = dict(now=now, later=now * (1.0 + growth), age=p.age,
+                             pos=p.pos, cost=PAY_YOUNG if is_young(p) else PAY_VET)
+                score = GE.value(asset, gm, context, 'depth')['total']
+                if score > 0:
+                    candidates.append((score, grade, p.pid, p))
+            if not candidates:
+                break
+            _, _, _, player = max(candidates, key=lambda row: row[:3])
+            # A declined/failed offer is tried at most once during this pass.
+            attempted.add(player.pid)
+            if sign_to_squad(league, abbr, player.pid):
+                pool.pop(player.pid)
+                total += 1
+    if verbose:
+        print(f'  practice squads: {total} weekly recruits')
+    return total
+
+
 GROUP_MIN = {'QB': 2, 'HB': 2, 'WR': 4, 'TE': 2, 'OL': 7, 'DL': 6, 'LB': 4, 'DB': 7, 'K': 1, 'P': 1}
 # below this the game cannot dress a side at all; the user's club is filled automatically only here, with a note
 HARD_MIN = {'QB': 1, 'HB': 1, 'WR': 3, 'TE': 1, 'OL': 5, 'DL': 4, 'LB': 3, 'DB': 5, 'K': 1, 'P': 1}
@@ -500,6 +645,9 @@ def keep_groups_whole(league, rng, week):
     import min_salary as MS
     import roster_needs as RN
     from cap_engine import CAP, Contract
+    # One market snapshot for this review; never rebuild all contracts per candidate.
+    import valuation as VAL
+    comps = VAL.pool_from_league(league)
     moves = []
     user = getattr(league, 'user_team', None)
     for abbr, team in league.teams.items():
@@ -517,8 +665,8 @@ def keep_groups_whole(league, rng, week):
                 try:
                     import inbox as IB
                     out_men = [p for p in team.active() if GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is not None]
-                    cands = sorted([p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired and minimum_fits(league, team, p)], key=lambda p: -p.ovr)
-                    fa = sorted([q for q in available_free_agents(league) if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and minimum_fits(league, team, q)], key=lambda q: -q.ovr)[:2]
+                    cands = sorted([p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp and p.out_until is None and not p.retired and minimum_fits(league, team, p, pool=comps)], key=lambda p: -p.ovr)
+                    fa = sorted([q for q in available_free_agents(league) if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and minimum_fits(league, team, q, pool=comps)], key=lambda q: -q.ovr)[:2]
                     key_ = f"short-{grp}-{league.year}-{week}"
                     if not any((mm.get('payload') or {}).get('key') == key_ for mm in getattr(league, 'inbox', [])):
                         sections = [IB.mail_section(title, [[inbox_player(p), p.pos, str(round(p.ovr))] for p in players], ['Player', 'Position', 'OVR']) for title, players in [('Unavailable', out_men[:3]), ('Practice-squad options', cands[:2]), ('Free-agent options', fa)] if players]
@@ -535,7 +683,7 @@ def keep_groups_whole(league, rng, week):
             while short > 0:
                 cands = sorted([p for p in squad(team) if GROUP_OF.get(p.pos, p.pos) == grp
                     and p.out_until is None and not p.retired],
-                    key=lambda p: (not minimum_fits(league, team, p, essential=True), -p.ovr))
+                    key=lambda p: (not minimum_fits(league, team, p, essential=True, pool=comps), -p.ovr))
                 best = next((p for p in cands if call_up(league, abbr, p.pid, emergency=True)), None)
                 if best is not None:
                     moves.append((abbr, 'callup', best.pid)); team._moved_week = wk_
@@ -543,8 +691,8 @@ def keep_groups_whole(league, rng, week):
                     fa = available_free_agents(league)
                     fa = sorted([p for p in fa if GROUP_OF.get(p.pos, p.pos) == grp
                         and not shunned(p, abbr, league)],
-                        key=lambda p: (not minimum_fits(league, team, p, essential=True), -p.ovr))
-                    best = next((p for p in fa if sign_minimum(league, abbr, p, log=False, essential=True)), None)
+                        key=lambda p: (not minimum_fits(league, team, p, essential=True, pool=comps), -p.ovr))
+                    best = next((p for p in fa if sign_minimum(league, abbr, p, log=False, essential=True, pool=comps)), None)
                     if best is None: break
                     team._moved_week = wk_
                     league.log('emergency_sign', pid=best.pid, team=abbr, group=grp)
@@ -569,15 +717,15 @@ def keep_groups_whole(league, rng, week):
             if added >= 2: break
             if current['needs'].get(pos, 0.0) < 0.75: break
             grp = GROUP_OF.get(pos, pos)
-            cands = sorted([q for q in squad(team) if q.pos == pos and q.out_until is None and not q.retired and minimum_fits(league, team, q)], key=lambda q: -q.ovr)
+            cands = sorted([q for q in squad(team) if q.pos == pos and q.out_until is None and not q.retired and minimum_fits(league, team, q, pool=comps)], key=lambda q: -q.ovr)
             if cands and call_up(league, abbr, cands[0].pid, emergency=True):
                 moves.append((abbr, 'callup', cands[0].pid)); added += 1
                 current = RN.assess(team); continue
             fa = available_free_agents(league)
-            fa = [q for q in fa if q and q.pos == pos and q.out_until is None and not q.retired and not shunned(q, abbr, league) and minimum_fits(league, team, q)]
+            fa = [q for q in fa if q and q.pos == pos and q.out_until is None and not q.retired and not shunned(q, abbr, league) and minimum_fits(league, team, q, pool=comps)]
             if not fa: continue
             best = max(fa, key=lambda q: q.ovr)
-            if not sign_minimum(league, abbr, best, log=False, essential=True): continue
+            if not sign_minimum(league, abbr, best, log=False, essential=True, pool=comps): continue
             mn = best.apy
             league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
             moves.append((abbr, 'sign', best.pid)); added += 1
@@ -592,13 +740,13 @@ def keep_groups_whole(league, rng, week):
             best = None
             called_up = False
             for grp in order:
-                cands = sorted([q for q in squad(team) if GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and minimum_fits(league, team, q)], key=lambda q: -q.ovr)
+                cands = sorted([q for q in squad(team) if GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and minimum_fits(league, team, q, pool=comps)], key=lambda q: -q.ovr)
                 if cands and call_up(league, abbr, cands[0].pid, emergency=True):
                     moves.append((abbr, 'callup', cands[0].pid)); added += 1
                     called_up = True
                     break
                 fa = available_free_agents(league)
-                fa = [q for q in fa if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and not shunned(q, abbr, league) and minimum_fits(league, team, q)]
+                fa = [q for q in fa if q and GROUP_OF.get(q.pos, q.pos) == grp and q.out_until is None and not q.retired and not shunned(q, abbr, league) and minimum_fits(league, team, q, pool=comps)]
                 if fa:
                     best = max(fa, key=lambda q: q.ovr + 12.0 * needs.get(q.pos, 0.0))
                     break
@@ -606,7 +754,7 @@ def keep_groups_whole(league, rng, week):
                 continue
             if best is None:
                 break
-            if not sign_minimum(league, abbr, best, log=False, essential=True): break
+            if not sign_minimum(league, abbr, best, log=False, essential=True, pool=comps): break
             mn = best.apy
             league.log('sign', pid=best.pid, team=abbr, apy=mn, years=1)
             moves.append((abbr, 'sign', best.pid)); added += 1
@@ -629,8 +777,10 @@ def roster_review(league, rng, week, user_team=None):
     moves = []
     if league.phase != 'regular' or not (1 <= int(week or 0) <= 17): return moves
     cap = CAP.get(league.year, 301.2)
-    fa_all = [league.player(pid) for pid in league.free_agents]
-    fa_all = [p for p in fa_all if p is not None and not p.retired and p.out_until is None]
+    fa_all = available_free_agents(league)
+    import valuation as VAL
+    from replacement_contracts import minimum_acceptance
+    comps = VAL.pool_from_league(league)
     for abbr, team in league.teams.items():
         if abbr == user_team or team.gm is None: continue
         if (int(week or 0) + (sum(map(ord, abbr)) % 4)) % 4 != 0: continue          # each club's review month falls on a different week
@@ -645,7 +795,8 @@ def roster_review(league, rng, week, user_team=None):
                          and float(getattr(q, 'apy', 0.0) or 0.0) <= MS.minimum_salary(3, cap) + 0.05], key=value)[:5]
         best = None
         for q in bottom:
-            pool = [p for p in fa_all if p.pid in league.free_agents and p.pos == q.pos and not shunned(p, abbr, league)]
+            pool = [p for p in fa_all if p.pid in league.free_agents and p.pos == q.pos
+                    and minimum_acceptance(league, team, p, pool=comps)['accepts']]
             pool += [p for t2, tm in league.teams.items() if t2 != abbr for p in squad(tm)
                      if p.pos == q.pos and not p.retired and p.out_until is None and not shunned(p, abbr, league)]
             if not pool: continue
@@ -688,11 +839,17 @@ def weekly(league, rng, week, user_team=None, playoffs=None):
     squad man to its 53 when nothing on its own squad fits. Rare.
     """
     import contracts as CT
+    if user_team is None: user_team = getattr(league, 'user_team', None)
     if playoffs is None: playoffs = league.phase == 'playoffs'
     moves = keep_groups_whole(league, rng, week)
     moves += roster_review(league, rng, week, user_team=user_team)
     for abbr, team in league.teams.items():
         clear_elevations(team)
+        if abbr != user_team:
+            moves += elevate_for_coverage(league, team, int(week or 0) + 1, playoffs=playoffs)
+            continue
+        # Retain the user's existing emergency help. Ordinary reserve choices
+        # above remain CPU-only; the user's healthy roster is their decision.
         healthy = [p for p in team.active() if p.out_until is None]
         if len(healthy) >= 46:
             continue
@@ -704,12 +861,5 @@ def weekly(league, rng, week, user_team=None, playoffs=None):
         if picks:
             moves += [(abbr, 'elevate', x) for x in elevate(league, abbr, picks, week,
                                                          playoffs=playoffs)]
-        elif abbr != user_team and rng.random() < 0.25:
-            # nothing at home fits: look at everyone else's squad for the thinnest spot
-            thin = min(by_pos, key=by_pos.get) if by_pos else None
-            cands = [p for t2, tm in league.teams.items() if t2 != abbr for p in squad(tm) if p.pos == thin]
-            if cands:
-                p = max(cands, key=lambda p: p.ovr)
-                if poach(league, abbr, p.pid, week, essential=True):
-                    moves.append((abbr, 'poach', p.pid))
+    replenish_squads(league, rng, week)
     return moves
