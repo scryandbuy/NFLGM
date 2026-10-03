@@ -106,7 +106,10 @@ PENALTIES = [
     ('Ineligible Downfield Pass',         0.193,   4.9, 0.00, True,  'pass'),
     ('Intentional Grounding',             0.161,  11.5, 0.00, True,  'pass'),
     ('Defensive Too Many Men on Field',   0.137,   4.4, 0.24, False, 'pre'),
-    ('Illegal Shift',                     0.136,   4.9, 0.00, True,  'pre'),
+    # Rule 7-4-7: ordinary shifts are live-ball fouls, on runs or passes.
+    # The separate not-all-set/running-clock exception after the two-minute
+    # warning is a False Start (7-4-2 Item 6), not every late illegal shift.
+    ('Illegal Shift',                     0.136,   4.9, 0.00, True,  'any'),
     ('Encroachment',                      0.128,   4.7, 0.28, False, 'pre'),
 ]
 PENALTIES_PER_GAME = 11.88

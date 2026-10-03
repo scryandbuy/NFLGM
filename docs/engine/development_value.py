@@ -18,6 +18,7 @@ def development_credit(dev, age, overall, years, visible_range=None):
 
 
 def player_credit(player):
+    from ceiling_knowledge import observed_range
     return development_credit(getattr(player, 'dev', 'normal'), player.age, player.ovr,
                               getattr(getattr(player, 'contract', None), 'years', 0),
-                              getattr(player, 'potential_range', None))
+                              observed_range(player))

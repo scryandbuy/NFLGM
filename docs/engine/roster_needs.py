@@ -477,7 +477,8 @@ def retention_value(team, player, players=None):
     if age > 26 or accrued > 2 or years < 2:
         return dev_credit
     readiness = max(0.0, min(1.0, (float(player.ovr) - 60.0) / 18.0))
-    visible = getattr(player, 'potential_range', None)
+    from ceiling_knowledge import observed_range
+    visible = observed_range(player)
     growth = min(6.0, max(0.0, sum(visible) / 2 - player.ovr)) if visible else 0.0
     belief = float(getattr(getattr(team, 'gm', None), 'dev_belief', .5))
     # Ready young players are unlikely to be safely stashed. Early draft

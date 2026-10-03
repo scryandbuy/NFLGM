@@ -13,7 +13,7 @@ except Exception:
 # ---------------------------------------------------------------- records
 class Season:
     @classmethod
-    def live(cls, div, conf, games, season=None):
+    def live(cls, div, conf, games, season=None, net_touchdowns=None):
         """
         A season in progress.
 
@@ -27,6 +27,7 @@ class Season:
         games:    [(home, away, home_pts, away_pts)] - completed games only
         """
         S = cls.__new__(cls)
+        S.net_touchdowns = dict(net_touchdowns or {})
         S.season = season
         S.DIV, S.CONF = dict(div), dict(conf)
         S.teams = sorted(S.DIV)
@@ -123,14 +124,24 @@ class Season:
         for h, a, hs, as_ in self.games:
             if t == h and hs > as_: beaten.append(a)
             elif t == a and as_ > hs: beaten.append(h)
-        return sum(self.wpct(o) for o in beaten) / len(beaten) if beaten else 0.0
+        return self._opponent_pct(beaten)
 
     def sos(self, t):
-        return sum(self.wpct(o) for o in self.opps[t]) / len(self.opps[t]) if self.opps[t] else 0.0     # no games yet (the new year, before Week 1)
+        return self._opponent_pct(self.opps[t])     # no games yet (the new year, before Week 1)
+
+    def _opponent_pct(self, opponents):
+        return self.pct([sum(self.rec[o][i] for o in opponents) for i in range(3)])
+
+    def net_conf(self, t):
+        return sum((hs - ap if t == h else ap - hs) for h, a, hs, ap in self.games
+                   if t in (h, a) and self.CONF[h] == self.CONF[a])
+
+    def net_td(self, t):
+        return getattr(self, "net_touchdowns", {}).get(t)
 
     def _combined_rank(self, t, pool):
-        pf_rank = sorted(pool, key=lambda x: -self.pf[x]).index(t) + 1
-        pa_rank = sorted(pool, key=lambda x: self.pa[x]).index(t) + 1
+        pf_rank = 1 + sum(self.pf[x] > self.pf[t] for x in pool)
+        pa_rank = 1 + sum(self.pa[x] < self.pa[t] for x in pool)
         return -(pf_rank + pa_rank)                    # higher is better
     def rank_conf(self, t):
         return self._combined_rank(t, [x for x in self.teams if self.CONF[x] == self.CONF[t]])
@@ -149,10 +160,10 @@ class Season:
     def net_all(self, t): return self.pf[t] - self.pa[t]
 
 # ---------------------------------------------------------------- tiebreakers
-def break_tie(S, group, same_division):
+def _tie_winner(S, group, same_division):
     """Returns the group ordered best-to-worst, applying NFL rules in order."""
     group = list(group)
-    if len(group) == 1: return group
+    if len(group) == 1: return group[0]
 
     if same_division:
         # 3+ clubs in the SAME division: head-to-head win pct among the tied clubs.
@@ -160,7 +171,7 @@ def break_tie(S, group, same_division):
         steps = [
             ('head-to-head',   lambda t: S.h2h_pct(t, group)),
             ('division',       lambda t: S.div_pct(t)),
-            ('common',         lambda t: S.common_pct(t, group)),
+            ('common',         lambda t: S.common_pct(t, group, minimum=1)),
             ('conference',     lambda t: S.conf_pct(t)),
             ('strength of victory',  S.sov),
             ('strength of schedule', S.sos),
@@ -168,6 +179,7 @@ def break_tie(S, group, same_division):
             ('league pts rank', S.rank_all),
             ('net common',     lambda t: S.net_common(t, group)),
             ('net points',     S.net_all),
+            ('net touchdowns', S.net_td),
         ]
     else:
         steps = [
@@ -178,8 +190,9 @@ def break_tie(S, group, same_division):
             ('strength of schedule', S.sos),
             ('conf pts rank',  S.rank_conf),
             ('league pts rank', S.rank_all),
-            ('net common',     lambda t: S.net_common(t, group)),
+            ('net conference', S.net_conf),
             ('net points',     S.net_all),
+            ('net touchdowns', S.net_td),
         ]
 
     for name, fn in steps:
@@ -188,10 +201,23 @@ def break_tie(S, group, same_division):
         best = max(vals.values())
         winners = [t for t in group if vals[t] == best]
         if len(winners) < len(group):
-            rest = [t for t in group if t not in winners]
-            return (break_tie(S, winners, same_division) if len(winners) > 1 else winners) + \
-                   (break_tie(S, rest, same_division) if len(rest) > 1 else rest)
-    return sorted(group)          # coin toss: deterministic fallback
+            return _tie_winner(S, winners, same_division)
+    # A reproducible season-specific draw, independent of simulation RNG and
+    # page refreshes. No alphabetic advantage when all football evidence ties.
+    from stable import stable_seed
+    return min(group, key=lambda t: (stable_seed('standings-draw', S.season, t), t))
+
+
+def break_tie(S, group, same_division):
+    """Award one position, then restart with EVERY remaining tied club."""
+    remaining = list(group)
+    result = []
+    while remaining:
+        winner = _tie_winner(S, remaining, same_division)
+        result.append(winner)
+        remaining.remove(winner)
+    return result
+
 
 def order(S, teams, same_division):
     out = []
@@ -224,7 +250,7 @@ def seed_conference(S, conf, n_wc=None):
     while len(wc) < n_wc and pool:
         bydiv = defaultdict(list)
         for t in pool: bydiv[S.DIV[t]].append(t)
-        reps = [order(S, ts, True)[0] for ts in bydiv.values()]
+        reps = [min(ts, key=lambda t: dr[t]) for ts in bydiv.values()]
         best = order(S, reps, False)[0]
         wc.append(best); pool.remove(best)
     return seeds + wc

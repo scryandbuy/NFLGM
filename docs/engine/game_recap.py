@@ -110,7 +110,8 @@ def groups(changes):
         ('Play action',{'play_action_rate'},'off','play action'), ('Motion',{'motion_rate'},'off','motion'),
         ('Tempo',{'tempo'},'off','tempo'), ('Run defense',{'box_bias'},'def','run'),
         ('Pressure calls',{'blitz_lean','blitz_rate'},'def','blitz'), ('Safety shell',{'shell_lean'},'def','shell'),
-        ('Coverage',{'man_rate','zone_aggression','sub_lean'},'def','passing'),
+        ('Coverage',{'man_rate','zone_aggression'},'def','passing'),
+        ('Defensive personnel',{'sub_lean'},'def','personnel'),
         ('Receiver matchup',{'travel','travel_target','bracket'},'def','matchup')]
     used=set(); out=[]
     for label, keys, side, metric in mapping:
@@ -214,13 +215,13 @@ def assessment(rows, kind, defense=False):
     if not n: return 'ungraded', 'No relevant plays were logged, so this choice has no on-field result to assess.'
     value = total / n
     detail = f"{value:.1f} {unit} across {n} {'play' if n == 1 else 'plays'}"
-    if kind == 'protection': detail += f"; {s['sacks']} sack{'s' if s['sacks'] != 1 else ''}"
+    if kind == 'protection': detail = f"{s['pressure']}/{n} dropbacks under pressure or sacked ({value:.1f}%); {s['sacks']} sack{'s' if s['sacks'] != 1 else ''}"
     if n < minimum: return 'limited', f"Too little evidence for a firm verdict: {detail}."
     lower_better = defense or kind == 'protection'
     good = value <= low if lower_better else value >= high
     bad = value >= high if lower_better else value <= low
     # A productive average must not hide giveaways on the selected calls.
-    if not defense and s['turnovers']:
+    if not defense and kind != 'protection' and s['turnovers']:
         detail += f"; {s['turnovers']} turnover" + ('s' if s['turnovers'] != 1 else '')
         if good: return 'mixed', f"Mixed results: productive yardage came with lost possessions ({detail})."
     if good:
@@ -242,7 +243,7 @@ def relative_assessment(previous, rows, kind, defense, verdict, line):
     if abs(gain) < threshold:
         return verdict, line + ' No meaningful change from the first-half rate. Before the adjustment: ' + evidence(previous, kind) + '.'
     improved = gain > 0
-    caveat = (not defense and b['turnovers'] > a['turnovers']) or (
+    caveat = (not defense and kind != 'protection' and b['turnovers'] > a['turnovers']) or (
         kind == 'protection' and b['sacks'] >= 3 and b['sacks'] / bn > a['sacks'] / an + .03)
     grade = ('mixed' if caveat else 'positive') if improved else 'negative'
     label = 'Improved after halftime' if improved else 'Worsened after halftime'
@@ -335,6 +336,46 @@ def clock_control_finding(rows, previous, final_margin):
     return dict(label='Clock control', verdict=grade, text=text)
 
 
+def usage_finding(rows, previous, key, label, change):
+    """Describe recorded choices separately from their effectiveness."""
+    def counts(source):
+        source = [p for p in source if not p.get('nullified') and p.get('type') in SCRIMMAGE]
+        if key == 'play_action':
+            source = [p for p in source if p.get('is_pass') or p['type'] in SCRIMMAGE - {'run'}]
+        known = [p for p in source if key in p and p[key] is not None]
+        selected = [p for p in known if (p[key] in ('nickel', 'dime', 'dollar') if key == 'def_personnel' else bool(p[key]))]
+        return known, selected
+    known, selected = counts(rows)
+    unit = 'sub packages' if key == 'def_personnel' else 'play action'
+    if not known:
+        return dict(label=label, verdict='ungraded', text=f'No recorded {unit} usage; this part of the recommendation cannot be evaluated.')
+    text = f"Recorded {unit}: {len(selected)}/{len(known)} plays ({len(selected)/len(known):.0%})."
+    if previous is not None:
+        old, old_selected = counts(previous)
+        if old:
+            text += f" Before halftime: {len(old_selected)}/{len(old)} ({len(old_selected)/len(old):.0%})."
+            delta = len(selected)/len(known) - len(old_selected)/len(old)
+            text += (' Usage moved in the requested direction.' if delta * change > 0 else ' Usage did not move in the requested direction.')
+        else:
+            text += ' Earlier usage was not recorded.'
+    text += ' Usage alone does not establish effectiveness.'
+    if key == 'play_action':
+        without = [p for p in known if not p[key]]
+        text += ' With play action: ' + evidence(selected, 'passing') + '. Without play action: ' + evidence(without, 'passing') + '.'
+    return dict(label=label, verdict='limited', text=text)
+
+
+def depth_distribution(rows):
+    known = [p for p in rows if not p.get('nullified') and p.get('depth') in ('short', 'medium', 'deep')
+             and (p.get('is_pass') or p.get('type') in SCRIMMAGE - {'run'})]
+    if not known: return 'Passing depth was not recorded.'
+    parts = []
+    for depth, name in [('short', 'Short'), ('medium', 'Intermediate'), ('deep', 'Deep')]:
+        selected = [p for p in known if p['depth'] == depth]
+        parts.append(f'{name}: {len(selected)}/{len(known)} ({len(selected)/len(known):.0%}); ' + evidence(selected, 'passing'))
+    return 'Recorded passing calls — ' + '; '.join(parts) + '.'
+
+
 def assess_choice(changes, own, against, before=None, league=None):
     findings = []
     for label, side, metric in groups(changes):
@@ -344,10 +385,21 @@ def assess_choice(changes, own, against, before=None, league=None):
         if metric == 'tempo':
             findings.append(tempo_finding(own, before[0] if before else [], changes.get('tempo', 0)))
             continue
+        if metric == 'personnel':
+            findings.append(usage_finding(against, before[1] if before is not None else None,
+                                         'def_personnel', label, changes['sub_lean']))
+            continue
+        if metric == 'play action' and changes.get('play_action_rate', 0) < 0:
+            findings.append(usage_finding(own, before[0] if before is not None else None,
+                                         'play_action', label, changes['play_action_rate']))
+            continue
         if metric == 'mix' and 'pass_bias' in changes:
             metric = 'run' if changes['pass_bias'] < 0 else 'passing'
         if metric == 'deep' and changes.get('depth_mix', (0, 0, 0))[2] <= 0:
-            metric = 'passing'
+            text = depth_distribution(own)
+            if before is not None: text += ' Before halftime: ' + depth_distribution(before[0])
+            findings.append(dict(label=label, verdict='limited', text=text + ' These results describe the passing mix; they do not isolate the effect of changing it.'))
+            continue
         if metric == 'shell' and changes.get('shell_lean', 0) < 0: metric = 'single shell'
         if metric == 'blitz' and changes.get('blitz_lean', changes.get('blitz_rate', 0)) < 0: metric = 'passing'
         if metric in ('screens', 'play action', 'motion'):
@@ -380,6 +432,7 @@ def assess_choice(changes, own, against, before=None, league=None):
         if before is not None:
             previous = before[0 if side == 'off' else 1]
             verdict, line = relative_assessment(previous, rows, metric, side == 'def', verdict, line)
+        if label == 'Passing depth': line += ' ' + depth_distribution(rows)
         if label == 'Pressure calls':
             selected = [p for p in rows if p.get('blitz')] if metric == 'blitz' else rows
             line += ' Pass-rush evidence: ' + evidence(selected, 'protection') + '.'
@@ -398,9 +451,9 @@ def conclusion(findings):
         return 'The available findings are incomplete; there is not enough evidence to grade the whole recommendation.'
     if 'negative' in grades and ('positive' in grades or 'mixed' in grades):
         return 'A mixed return: some parts of the plan held up, while others struggled.'
-    if 'negative' in grades: return 'The evaluated parts of the plan struggled; the intended payoff did not show up in those results.'
+    if 'negative' in grades: return 'The measured outcomes were unfavorable; they do not establish that the adjustments caused the results.'
     if 'positive' in grades and 'mixed' not in grades:
-        return 'The evaluated parts of the plan delivered favorable results.'
+        return 'The measured outcomes were favorable; they do not establish that the adjustments caused the results.'
     return 'The results were mixed, with no consistent advantage across the evaluated choices.'
 
 

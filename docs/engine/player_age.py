@@ -143,6 +143,8 @@ def set_date(league, when):
     league.game_date = when.isoformat()
     for player in league.players.values():
         initialize_player(player, league)
+    import ceiling_knowledge as CK
+    CK.sync(league)
 
 
 def sync_session(session):

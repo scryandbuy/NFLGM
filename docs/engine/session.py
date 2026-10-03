@@ -108,6 +108,7 @@ class Session:
         import practice_integration as PI
         PI.migrate(self=s, saved=d)
         if s.post_live is not None: s.L._post_ref = s.post_live
+        PI.migrate_recovery(s, d)
         lp = d.get('_live_pending')
         if lp and s.played and (s.stop[0] == 'week' or (s.stop[0] == 'playoffs' and lp.get('playoffs'))):
             if s.runner is None: s.runner = SN.SeasonRunner(s.L, s.rng)

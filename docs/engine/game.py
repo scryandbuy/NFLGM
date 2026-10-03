@@ -1004,7 +1004,9 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
     trail_window = (60.0 + 40.0 * clock_aggr) if own_left >= 2 else 60.0
     _scored_now = bool(out.get('touchdown') or out.get('defensive_td')) or (t in ('run', 'complete', 'scramble') and float(out.get('yards', 0.0) or 0.0) >= dr.yardline - 0.01)
     if out.get('fumble_lost') or t == 'interception': return False, None
-    _at_warning = secs_in_half > 120 and secs_in_half - play_seconds(t) <= 120 and not getattr(dr, '_two_min', False)
+    # Only live action can make the warning stop this play for free. A huddle
+    # that would reach 2:00 is time a trailing team can still save now.
+    _at_warning = secs_in_half > 120 and secs_in_half - live_play_seconds(out) <= 120 and not getattr(dr, '_two_min', False)
     if timeouts is not None and secs_in_half < 300 and not _scored_now and not _at_warning:
         other = 'away' if pos == 'home' else 'home'
         # nothing to stop after a score (the clock is dead at the whistle) or on the play that reaches the
@@ -2696,6 +2698,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         out['motion'] = bool(oc.get('motion'))
         out['blitzers'] = int(dc.get('blitzers', 0))
         out['shell'] = dc.get('shell'); out['box'] = dc.get('box'); out['personnel'] = oc.get('personnel')
+        out['def_personnel'] = dc.get('personnel')
         out['blitz'] = bool(dc.get('blitz')) or int(dc.get('rushers', 4)) >= 5
         dr.log.append(out)
         for st in (off_state, def_state):

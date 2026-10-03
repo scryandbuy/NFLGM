@@ -345,6 +345,8 @@ def unlock(player, *, year=None, week=None, source=None):
     cost = unlock_cost(player)
     if player.xp < cost:
         return None
+    import ceiling_knowledge as CK
+    CK.sync_player(player)
     player.xp -= cost
     player.potential = min(99.0, pot + 1.0)
     player.xp_spent['_unlocks'] = player.xp_spent.get('_unlocks', 0) + 1
@@ -395,6 +397,8 @@ def buy(player, attr, *, year=None, week=None, source=None):
         # A new arrival counts even if regression previously took him below
         # the same ceiling. Merely viewing a capped player never re-arms this.
         player.xp_spent.pop('_ceiling_notice_ack', None)
+    import ceiling_knowledge as CK
+    CK.sync_player(player)
     return cost
 
 

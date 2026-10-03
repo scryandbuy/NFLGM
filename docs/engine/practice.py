@@ -98,7 +98,7 @@ def recommend_plan(league, runner, abbr, week, *, bye=False):
     schedule = getattr(league,'schedule',[])
     previous_bye = bool(schedule) and week > 1 and not any(w == week-1 and abbr in (a,h)
         for w,a,h,ap,hp in schedule)
-    # Judge the coming practice week, not the condition immediately after Sunday.
+    # Weekly recovery has already happened on advance; assess the condition shown now.
     # One exhausted player should receive protection without resting his whole unit.
     units, individual, reasons = {}, {}, []
     candidates = []
@@ -107,7 +107,7 @@ def recommend_plan(league, runner, abbr, week, *, bye=False):
         healthy = []
         for p in members:
             c,j,saved = _health(league,runner,abbr,p)
-            projected = H.recover_between_games(c,_fitness(p),7,j)
+            projected = c
             if _rehab(runner,abbr,p) or c < 55 or j > .65:
                 individual[p.pid] = 'rest'
                 continue
@@ -172,7 +172,7 @@ def _plan(league,runner,abbr,week,plan,bye):
     base['focus'] = list(dict.fromkeys(pid for pid in plan.get('focus',[]) if pid in ids))[:3]
     return base
 
-def preview(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=False):
+def preview(league, runner, abbr, week, plan=None, *, bye=False):
     key = f'{league.year}:{week}'
     state = getattr(league,'practice_state',None) or {}
     old = state.get('completed',{}).get(key,{}).get(abbr)
@@ -199,10 +199,10 @@ def preview(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=F
         fitness=_fitness(p)
         after_j=max(0.,min(1.,j-shed + (.018*reps if intensity=='hard' else 0.)))
         if mode=='limited': after_j=max(0.,after_j-.008)
-        if bye and not recovery_done: after_j=H.update_jadedness(after_j,0,fitness,bye=True)
-        if mode=='rest' or rehab: after_j=max(0.,j-(.12 if bye and not recovery_done else .04))
-        recovered=c if recovery_done else H.recover_between_games(c,fitness,7,after_j)
-        after_c=max(0.,min(100.,recovered-burden*reps))
+        # A bye's rest relief arrives on calendar advance, once, rather than
+        # stacking individual rest on top of the existing full bye allowance.
+        if mode=='rest' or rehab: after_j=max(0.,j-(0. if bye else .04))
+        after_c=max(0.,min(100.,c-burden*reps))
         streak=int(saved.get('hard_streak',0)) if saved.get('last_key')==f'{league.year}:{week-1}' else 0
         award=_xp_award(league,league.teams[abbr],p,reps,gain,
                         p.pid in plan['focus'],streak if intensity=='hard' else 0)
@@ -225,12 +225,13 @@ def preview(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=F
                          dict(label='Average condition',value=f"{totals['condition']}%"),
                          dict(label='Practice injury risk',value='Low' if totals['expected_injuries'] < .06 else 'Moderate' if totals['expected_injuries'] < .15 else 'High')])
 
-def resolve(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=False):
-    recap=preview(league,runner,abbr,week,plan,bye=bye,recovery_done=recovery_done)
+def resolve(league, runner, abbr, week, plan=None, *, bye=False):
+    recap=preview(league,runner,abbr,week,plan,bye=bye)
     if recap.get('completed'): return recap
     key=f'{league.year}:{week}'
     state=league.__dict__.setdefault('practice_state',{})
     state['version']=1
+    state['recovery_timing']=2
     for field in ('completed','participants'):
         ledger=state.setdefault(field,{})
         for old in list(ledger):
@@ -252,7 +253,11 @@ def resolve(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=F
             continue
         people[p.pid]=abbr
         st.cond.cond[p.pid]=row['condition']; st.jaded[p.pid]=row['jaded']
-        health[p.pid]=dict(condition=row['condition'],jaded=row['jaded'],hard_streak=row['hard_streak'],last_key=key,last_team=abbr)
+        saved_health = health.get(p.pid,{})
+        if not str(saved_health.get('last_key','')).startswith(f'{league.year}:'):
+            saved_health = {}
+        health[p.pid]=dict(saved_health,condition=row['condition'],jaded=row['jaded'],
+                           hard_streak=row['hard_streak'],last_key=key,last_team=abbr)
         p.xp_spent.setdefault('_practice_entry_year',_entry_year(league,p))
         # credit records the bounded award once, without reapplying modifiers.
         p._team_ref=league.teams[abbr]
