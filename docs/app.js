@@ -1432,7 +1432,7 @@ function renderDepth(v) {
   if (depthSide === 'defense') {
     const pk = el('div', { class: 'pkg' }, el('span', {}, `${v.coach_front === 'multiple' ? 'Multiple · ' : ''}${v.defense_shape} · Package`));
     for (const p of v.packages) pk.append(el('button', { 'aria-pressed': String(p === v.package), onclick: () => { depthPkg = p; renderDepth(loadDepth(p)); } }, p));
-    pk.append(el('span', { class: 'snaps' }, 'Drag within a column · double-click opens the player'));
+    pk.append(el('span', { class: 'snaps' }, 'Drag within a column · click a name to open the player'));
     s.append(pk);
     if (v.available_fronts && v.available_fronts.length) {
       const fronts = el('div', { class: 'pkg depth-fronts' }, el('span', {}, 'View front'));
@@ -1460,7 +1460,7 @@ function renderDepth(v) {
       const decide = x.pending && mine ? el('span', { style: 'display:inline-flex;gap:3px;margin-top:4px' }, el('button', { class: 'btn go', style: 'padding:1px 8px;font-size:11px', onclick: e => { e.stopPropagation(); notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(x.pid)}, play=True)`)); reload(); } }, 'Play'), el('button', { class: 'btn', style: 'padding:1px 8px;font-size:11px', onclick: e => { e.stopPropagation(); notify(pyJSON(`SESSION.club_act('hurt_decision', pid=${JSON.stringify(x.pid)}, play=False)`)); reload(); } }, 'Sit')) : null;
       const fitEl = x.flag_word ? el('span', { style: 'display:inline-flex;flex-direction:column;align-items:flex-start;gap:0' }, el('span', { class: 'tag ' + (x.flag === 'out' ? 'out' : 'q') }, x.flag_word), decide || '') : x.elevated ? el('span', { class: 'tag q', 'data-tip': 'Elevated from the practice squad for this game' }, 'Elevated') : x.playing_hurt ? el('span', { class: 'tag q' }, `Playing · ${x.playing_hurt}`) : el('span', { class: 'fit' }, 'Fit ', el('b', { class: fit > 0.05 ? 'up' : fit < -0.05 ? 'dn' : '' }, (fit > 0.05 ? '+' : fit < -0.05 ? '−' : '\u00a0') + Math.abs(fit).toFixed(1)));
       const plate = el('div', { class: 'plate3' + (x.start ? ' start' : '') + (x.flag === 'out' ? ' out' : ''), draggable: mine ? 'true' : 'false', 'data-tip': x.name },
-        el('div', { class: 'row1' }, el('span', { class: 'no' }, String(i+1).padStart(2, '0')), el('span', { class: 'nm' }, surname(x.name) || x.name)),
+        el('div', { class: 'row1' }, el('span', { class: 'no' }, String(i+1).padStart(2, '0')), el('span', { class: 'nm' }, playerMention(x.pid, surname(x.name) || x.name))),
         el('div', { class: 'row2' }, x.sub ? el('span', { class: 'fit' }, x.sub) : fitEl, el('span', { class: 'ov' }, x.ovr)));
       plate.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ pid: x.pid, pos: c.pos })); plate.classList.add('dragging'); });
       plate.addEventListener('dragend', () => plate.classList.remove('dragging'));
