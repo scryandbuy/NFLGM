@@ -1010,9 +1010,21 @@ function renderRoster(v) {
   page.append(sheet);
 }
 
+function characterReport(rows) {
+  const box = el('div', {class:'character-report'});
+  for (const row of rows || []) {
+    const item = el('div', {style:'padding:10px 0;border-bottom:1px solid var(--rule)'},
+      el('b', {}, row.label), el('div', {class: row.status === 'concern' ? 'dn' : row.status === 'strength' ? 'up' : 'muted'}, row.summary),
+      row.source ? el('small', {class:'count'}, `${row.source} · ${row.confidence} confidence`) : '',
+      el('p', {class:'count', style:'margin:4px 0'}, row.explanation));
+    if (row.game_record) item.append(el('p', {class:'count', style:'margin:4px 0'}, row.game_record));
+    box.append(item);
+  }
+  return box;
+}
 const TRAIT_META = {
-  'grinder': { k: 'work', tip: 'Outworks his rating. Gains XP faster and keeps his condition.' }, 'hard worker': { k: 'work', tip: 'Puts in the time. A little more development than most.' },
-  'coasts': { k: 'work-', tip: 'Does the minimum. Develops slower than his talent says he should.' }, 'needs pushing': { k: 'work-', tip: 'Has to be driven. The slowest to improve, and condition slips.' },
+  'grinder': { k: 'work', tip: 'Outworks his rating. Earns development XP faster. This is the work-ethic effect, not an additional bonus.' }, 'hard worker': { k: 'work', tip: 'Puts in the time. A little more development than most.' },
+  'coasts': { k: 'work-', tip: 'Does the minimum. Develops slower than his talent says he should.' }, 'needs pushing': { k: 'work-', tip: 'Has to be driven. Earns development XP more slowly. This does not reduce condition or potential.' },
   'wants to be paid': { k: 'money', tip: 'Money first. He will hold out for market value and will not take a discount.' }, 'money matters': { k: 'money', tip: 'Wants a fair number. Harder to extend cheaply.' },
   'not about the money': { k: 'money-', tip: 'Will leave money on the table for the right situation.' }, 'plays for the love of it': { k: 'money-', tip: 'Money is an afterthought. The easiest player on the roster to extend.' },
   'loyal': { k: 'loyal', tip: 'Wants to finish here. Likely to take less to stay.' }, 'settled': { k: 'loyal', tip: 'Comfortable where he is. Not looking to leave.' },
@@ -1098,6 +1110,7 @@ function renderCard(v) {
       rowsOf(c.rows);
       if (c.extra && c.extra.rows && c.extra.rows.length) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
       if (c.title === 'Mental' && v.personality) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Traits')); const tr = el('div', { class: 'traits' }); v.personality.split(',').map(x => x.trim()).filter(Boolean).forEach(w => { const m = TRAIT_META[w] || { k: 'even', tip: 'Nothing about him stands out.' }; tr.append(el('span', { class: 'trait ' + m.k, 'data-tip': m.tip }, w.replace(/\b\w/g, ch => ch.toUpperCase()))); }); box.append(tr); }
+      if (c.title === 'Mental' && v.character_report) box.append(characterReport(v.character_report));
       if (c.title === 'Mental' && v.schemes) box.append(schemeBlock(v.schemes));
       attrs.append(box);
     }
@@ -1381,7 +1394,7 @@ function renderProspectCard(v) {
   left.append(el('div', { class: 'kv' }, ...v.combine.flatMap(c => [el('span', {}, c.label), el('span', {}, c.v)])));
   left.append(h5('Flags'), el('div', { style: 'padding:4px 0 8px' }, ...(v.words.length ? v.words.map(wordTag) : [el('span', { class: 'muted', style: 'font-size:14.5px' }, 'None')])));
   left.append(h5('Medical'), el('div', { style: 'font-size:15px;color:var(--ink-2);padding-bottom:8px' }, v.medical));
-  if (v.personality) left.append(h5('Character', 'from your visit'), el('div', { style: 'font-size:15px;color:var(--ink-2)' }, v.personality));
+  left.append(h5('Character', 'Your scouting assessments'), characterReport(v.character_report));
   const mid = el('div', {});
   mid.append(h5('Attributes', "your scouts' read"));
   const attrs = el('div', { class: 'attrs' });
@@ -2514,13 +2527,13 @@ function boardHead(label, key, cls, tip, redraw) {
 }
 function drSecond(cur) { secondRow(Object.entries(DR).map(([k, l]) => [l, '#draft/' + k]), '#draft/' + cur); $('#crumb').textContent = 'Draft'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'draft')); }
 function gapCell(g) { if (g == null) return el('span', { class: 'gap' }, '—'); return el('span', { class: 'gap ' + (g > 0 ? 'up' : g < 0 ? 'dn' : '') }, (g > 0 ? '+' : '') + g); }
-function flagTags(fl) { const s = el('span', {}); for (const f of fl || []) { const w = String(f); const key = ({ medical: 'Medical', character: 'Character', visit: 'Visited', visited: 'Visited', riser: 'Riser', faller: 'Faller', 'senior bowl': 'Senior Bowl', 'sr. bowl': 'Senior Bowl', 'small school': 'Small School', underclassman: 'Underclassman', 'pro day': 'Pro Day' })[w.toLowerCase()] || w; s.append(el('span', { class: 'flag ' + (FLAG_CLS[key] || 'ss'), 'data-tip': FLAG_TIPS[key] || null }, key)); } return s; }
+function flagTags(fl) { const s = el('span', {}); for (const f of fl || []) { const w = String(f); const key = ({ medical: 'Medical', character: 'Work ethic concern', work_ethic: 'Work ethic concern', discipline: 'Discipline concern', visit: 'Visited', visited: 'Visited', riser: 'Riser', faller: 'Faller', 'senior bowl': 'Senior Bowl', 'sr. bowl': 'Senior Bowl', 'small school': 'Small School', underclassman: 'Underclassman', 'pro day': 'Pro Day' })[w.toLowerCase()] || w; s.append(el('span', { class: 'flag ' + (FLAG_CLS[key] || 'ss'), 'data-tip': FLAG_TIPS[key] || null }, key)); } return s; }
 const POS_GROUPS = ['All', 'QB', 'HB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'ST'];
 const POS_OF = { QB: ['QB'], HB: ['HB', 'FB'], WR: ['WR'], TE: ['TE'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], DL: ['LEDG', 'DT', 'REDG'], LB: ['MIKE', 'WILL', 'SAM'], DB: ['CB', 'FS', 'SS'], ST: ['K', 'P', 'LS'] };
 
 const NEED_POS = { QB: ['QB'], RB: ['HB', 'FB'], WR: ['WR'], TE: ['TE'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], EDGE: ['LEDG', 'REDG'], DT: ['DT'], LB: ['MIKE', 'WILL', 'SAM'], CB: ['CB'], S: ['FS', 'SS'] };
-const FLAG_TIPS = { Visited: 'You met with this player.', 'Senior Bowl': 'Your scouts saw him at the Senior Bowl.', 'Sr. Bowl': 'Your scouts saw him at the Senior Bowl.', 'Pro Day': 'Your scouts attended his pro day.', Medical: 'Durability concerns.', Character: 'Work ethic concerns.', Riser: 'Up fifteen or more spots on the consensus board this Spring.', Faller: 'Down fifteen or more spots on the consensus board this Spring.', 'Small School': 'Less tape on this player.', Underclassman: 'More room to grow.' };
-const FLAG_CLS = { Medical: 'med', Character: 'chr', Visited: 'vis', Riser: 'up', Faller: 'dn', 'Sr. Bowl': 'sen', 'Senior Bowl': 'sen', 'Small School': 'small', Underclassman: 'under' };
+const FLAG_TIPS = { 'Work ethic concern': 'Scouting concern about preparation; may slow development. See the card for confidence and source.', 'Strong preparation': 'Scouting reports suggest consistent effort; see the card for confidence.', 'Discipline concern': 'Scouting concern about avoidable penalties; not a talent downgrade.', 'Plays under control': 'Scouting reports suggest disciplined play; penalties remain possible.', Visited: 'You met with this player.', 'Senior Bowl': 'Your scouts saw him at the Senior Bowl.', 'Sr. Bowl': 'Your scouts saw him at the Senior Bowl.', 'Pro Day': 'Your scouts attended his pro day.', Medical: 'Durability concerns.', Character: 'Work ethic concerns.', Riser: 'Up fifteen or more spots on the consensus board this Spring.', Faller: 'Down fifteen or more spots on the consensus board this Spring.', 'Small School': 'Less tape on this player.', Underclassman: 'More room to grow.' };
+const FLAG_CLS = { 'Work ethic concern': 'chr', 'Discipline concern': 'chr', 'Strong preparation': 'up', 'Plays under control': 'up', Medical: 'med', Character: 'chr', Visited: 'vis', Riser: 'up', Faller: 'dn', 'Sr. Bowl': 'sen', 'Senior Bowl': 'sen', 'Small School': 'small', Underclassman: 'under' };
 const wordTag = w => el('span', { class: 'flag ' + (FLAG_CLS[w] || ''), 'data-tip': FLAG_TIPS[w] || null }, w);
 
 function renderBoard(v) {

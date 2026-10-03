@@ -1035,7 +1035,9 @@ class League:
         L.players = {pid: Player.from_dict(pd)
                      for pid, pd in d['players'].items()}
         import personality as PT
+        import copy
         for p in L.players.values():
+            p.xp_spent = copy.deepcopy(p.xp_spent or {})
             PT.ensure_discipline(p)
         from newgens import name_history
         L.player_name_history = d.get('player_name_history', {})
@@ -1114,6 +1116,11 @@ class League:
         L.next_class = [L.players[p] for p in d.get('next_class', []) if p in L.players]
         L.class_strength = d.get('class_strength', {})
         L.scouting = d.get('scouting', {}) or {}
+        import character_assessment as CA
+        # Do not mutate the imported JSON when annotating legacy reads.
+        import copy
+        L.scouting = copy.deepcopy(L.scouting)
+        CA.migrate(L)
         L.consensus = d.get('consensus', {}) or {}
         L.spring_news = d.get('spring_news') or []; L.user_visits = d.get('user_visits') or []; L.pick_provenance = d.get('pick_provenance') or {}; L.user_board = d.get('user_board') or {}; L.ps_intent = d.get('ps_intent') or {}; L.interviews = d.get('interviews') or {}; L.user_visit_week = d.get('user_visit_week') or {}; L.notes_sent = d.get('notes_sent') or {}; L.league_notes_sent = d.get('league_notes_sent') or {}
         # older saves: everyone on a roster wears a number

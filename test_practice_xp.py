@@ -71,11 +71,11 @@ class PracticeXPTests(unittest.TestCase):
         q=plan('standard');q['units']['offense']['reps']='starters';q['focus']=[p.pid]
         with patch('practice.BASE_INJURY_RISK',0):
             forecast=P.preview(l,r,'GB',1,q)
-            self.assertAlmostEqual(forecast['players'][0]['xp'],1000)
+            self.assertAlmostEqual(forecast['players'][0]['xp'],800)
             result=P.resolve(l,r,'GB',1,q)
-        self.assertAlmostEqual(p.xp,1000)
+        self.assertAlmostEqual(p.xp,800)  # Low work ethic applies once, before the ceiling.
         self.assertLessEqual(p.xp,1000)
-        self.assertAlmostEqual(p.xp_spent['_earned']['practice'],1000)
+        self.assertAlmostEqual(p.xp_spent['_earned']['practice'],800)
         self.assertLessEqual(p.xp_spent['_earned']['practice'],1000)
         self.assertEqual(result['players'][0]['xp_ceiling'],1000)
         self.assertIn('Rookie',result['players'][0]['xp_explanation'])
@@ -84,7 +84,7 @@ class PracticeXPTests(unittest.TestCase):
         before=copy.deepcopy(r.rng.bit_generator.state)
         self.assertEqual(P.resolve(loaded,r,'GB',1,q),result)
         self.assertEqual(r.rng.bit_generator.state,before)
-        self.assertAlmostEqual(loaded.player(p.pid).xp,1000)
+        self.assertAlmostEqual(loaded.player(p.pid).xp,800)
         loaded.year+=1
         self.assertEqual(P.preview(loaded,r,'GB',1,q)['players'][0]['xp_ceiling'],850)
         # Same roster/plan/modifiers yields identical CPU and user payouts.

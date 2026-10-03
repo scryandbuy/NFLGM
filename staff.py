@@ -808,7 +808,7 @@ def _reveal(league, c, st, pool_keys, question):
            'small_school': 'He has an eye for the small-school player; conference means nothing to him.',
            'big_program': 'He leans toward the big programs and it shows in his grades.',
            'character': 'His character reads have been reliable; his flags land on the right players.',
-           'tape': 'He trusts the tape and skips the character work.',
+           'tape': 'He reads on-field discipline from film but skips preparation interviews and references.',
            'grinder': 'He watches more players than any room in the league.',
            'narrow': 'His board goes three rounds deep and stops.'}
     st['log'].append(dict(who='coach', text=SAY.get(k, STR.tip(k)), trait=k))
