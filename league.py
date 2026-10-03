@@ -980,6 +980,7 @@ class League:
             next_class=[p.pid for p in getattr(self, 'next_class', []) or []],
             class_strength=getattr(self, 'class_strength', {}),
             scouting=getattr(self, 'scouting', {}) or {},
+            scouting_season=getattr(self, 'scouting_season', None) or {},
             consensus=getattr(self, 'consensus', {}) or {},
             spring_news=getattr(self, 'spring_news', None) or [], user_visits=getattr(self, 'user_visits', None) or [], pick_provenance=getattr(self, 'pick_provenance', None) or {}, user_board=getattr(self, 'user_board', None) or {}, ps_intent=getattr(self, 'ps_intent', None) or {}, interviews=getattr(self, 'interviews', None) or {}, user_visit_week=getattr(self, 'user_visit_week', None) or {}, notes_sent=getattr(self, 'notes_sent', None) or {}, league_notes_sent=getattr(self, 'league_notes_sent', None) or {},
             # the wire and the inbox, with any live objects reduced to ids
@@ -1116,6 +1117,7 @@ class League:
         L.next_class = [L.players[p] for p in d.get('next_class', []) if p in L.players]
         L.class_strength = d.get('class_strength', {})
         L.scouting = d.get('scouting', {}) or {}
+        L.scouting_season = copy.deepcopy(d.get('scouting_season', {}) or {})
         import character_assessment as CA
         # Do not mutate the imported JSON when annotating legacy reads.
         import copy

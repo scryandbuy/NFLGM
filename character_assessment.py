@@ -61,7 +61,7 @@ def visit(p, abbr, view, room, error_sd):
     view['character_assessments'] = data
     if room.get('character') == 'none': view['character_skipped'] = 'tape'
     # A saved legacy visit is not permission for a fresh read on reload.
-    if 'work_ethic' in data or room.get('character') == 'none':
+    if ('work_ethic' in data and data['work_ethic'].get('stage') != 'background') or room.get('character') == 'none':
         return False
     error = max(8., float(error_sd) * 1.5)
     if room.get('character') == 'sharp': error *= .45
@@ -72,6 +72,35 @@ def visit(p, abbr, view, room, error_sd):
         ('discipline-visit-v1', abbr, p.pid), 'Film and references')
     _remember(p, abbr, data)
     return True
+
+
+def background(p, abbr, view, room, error_sd, evidence):
+    """Tentative season references and film, weaker than an in-person visit.
+
+    The noise direction stays fixed as evidence grows; no independent rerolls.
+    Stronger previously earned evidence and legacy adjustments remain intact.
+    """
+    data = assessments(view)
+    view['character_assessments'] = data
+    n = max(1, int(evidence))
+    mode = room.get('character', 'normal')
+    if mode == 'none':
+        view['character_skipped'] = 'tape'
+    else:
+        error = max(14., 22. / math.sqrt(1. + .25 * (n - 1)))
+        error *= .75 if mode == 'sharp' else 1.
+        error += max(0., float(error_sd) - 3.) * .4
+        old = data.get('work_ethic')
+        if old is None or (old.get('stage') == 'background' and error < old.get('error', 99)):
+            data['work_ethic'] = _read((p.traits or {}).get('work_ethic', 50), error,
+                ('work-background-v1', abbr, p.pid), 'Background cross-check', n)
+            data['work_ethic']['stage'] = 'background'
+    error = max(12., 17. / math.sqrt(1. + .15 * (n - 1)))
+    old = data.get('discipline')
+    if old is None or error < old.get('error', 99):
+        data['discipline'] = _read(PT.discipline(p), error,
+            ('discipline-film-v1', abbr, p.pid), 'Film cross-check', n)
+    _remember(p, abbr, data)
 
 
 def describe(key, record=None):
@@ -95,6 +124,8 @@ def describe(key, record=None):
         explanation = {'concern': 'May commit more avoidable penalties when involved in the play.',
                        'strength': 'Shows signs of avoiding unnecessary penalties.',
                        'neutral': 'No discipline concern identified; penalties remain possible.'}[status]
+    if record.get('stage') == 'background':
+        explanation = 'Tentative background read. ' + explanation
     return dict(key=key, label=label, status=status, summary=summary,
                 confidence=confidence, source=record.get('source', 'Scouting assessment'),
                 explanation=explanation)
