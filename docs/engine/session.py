@@ -455,11 +455,23 @@ class Session:
         focus = ISS.priorities(self.L, self.user_team)
         suggestions = (focus.get('suggestions') or [])[:2]
         lines = [f"{item['group']}: {item.get('why') or 'worth another look'}" for item in suggestions]
+        previous = [r for r in ISS.reports(self.L, self.user_team) if r.get('week') == week - 1]
+        if previous:
+            movers = sorted(previous, key=lambda r: abs(r['after']['ovr'] - r['before']['ovr']), reverse=True)
+            movers = [r for r in movers if abs(r['after']['ovr'] - r['before']['ovr']) >= 1][:3]
+            summary = (f"Last cross-check: {len(previous)} players reviewed. "
+                       + ("Largest grade changes: " + ', '.join(
+                           f"{r['name']} {r['before']['ovr']:.0f} to {r['after']['ovr']:.0f}" for r in movers) + '. '
+                          if movers else 'No large grade changes this cycle. '))
+        else:
+            summary = ''
         body = ('Your scouting staff has two suggested priorities for the next two games. '
                 'Choose two position groups, or let your scout decide. Every position still gets a small background review.\n\n'
+                + summary + ('\n\n' if summary else '')
                 + '\n'.join(lines))
-        IB.post(self.L, 'scouting_focus', f'Choose scouting priorities for Weeks {week}-{week + 1}', body,
-                sender='head scout', payload=dict(key=key, focus_week=week, link='draft:board'))
+        message = IB.post(self.L, 'scouting_focus', f'Choose scouting priorities for Weeks {week}-{week + 1}', body,
+                          sender='head scout', payload=dict(key=key, focus_week=week, link='draft:board'))
+        message['week'] = week
 
     def blocking(self):
         import inbox as IB
