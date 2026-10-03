@@ -12,7 +12,7 @@ def play(ty='complete',yards=6,clock=2000,**kw):
 
 class RecapTests(unittest.TestCase):
     def setUp(self):
-        self.L=NS(year=2026,week=9,user_team='GB',notes_sent={},inbox=[],
+        self.L=NS(phase="regular", year=2026,week=9,user_team='GB',notes_sent={},inbox=[],
                   teams={'GB':NS(staff={'oc':NS(name='Test Coach')})})
         self.res=dict(home=24,away=17,drives=[
             ('home',drive(1,[play('sack',-6,pressured=True),play('run',8),play(nullified=True,yards=99)])),
@@ -89,7 +89,7 @@ class RecapJudgmentTests(unittest.TestCase):
         self.assertEqual(grade, 'mixed'); self.assertIn('lost possessions', text)
 
     def test_each_advice_has_own_conclusion_and_ot_counts(self):
-        L = NS(year=2026, week=2, user_team='GB', notes_sent={}, inbox=[], teams={'GB':NS(staff={})})
+        L = NS(phase="regular", year=2026, week=2, user_team='GB', notes_sent={}, inbox=[], teams={'GB':NS(staff={})})
         recs = [dict(text='Run it', changes={'pass_bias':-.06}), dict(text='Deep shots', changes={'depth_mix':(-.05,0,.05)})]
         result = dict(home=31, away=24, overtime=True, drives=[
             ('home',drive(1,[play('run',8) for _ in range(6)])),

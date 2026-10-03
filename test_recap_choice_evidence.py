@@ -5,6 +5,56 @@ from test_game_recap import play, drive
 
 
 class RecapChoiceEvidence(unittest.TestCase):
+    def test_protection_is_not_downgraded_by_clean_pocket_interceptions(self):
+        rows = [play(yards=8) for _ in range(38)] + [play('sack', -5)] * 2
+        rows += [play('interception', 0)] * 2
+        grade, text = GR.assessment(rows, 'protection')
+        self.assertEqual(grade, 'positive')
+        self.assertIn('2/42 dropbacks', text)
+        self.assertNotIn('turnover', text)
+        self.assertNotIn('productive yardage', text)
+
+    def test_less_play_action_reports_usage_and_separate_outcomes(self):
+        rows = [play(yards=10, play_action=True)] * 3 + [play(yards=2, play_action=False)] * 9
+        result = GR.assess_choice({'play_action_rate': -.1}, rows, [])[0]
+        self.assertIn('3/12 plays (25%)', result['text'])
+        self.assertIn('10.0 net yards per dropback (3 dropbacks)', result['text'])
+        self.assertIn('2.0 net yards per dropback (9 dropbacks)', result['text'])
+        self.assertEqual(result['verdict'], 'limited')
+
+    def test_shorter_mix_has_depth_specific_evidence(self):
+        rows = [play(yards=3, depth='short')] * 6 + [play(yards=12, depth='medium')] * 3
+        rows += [play(yards=25, depth='deep')]
+        result = GR.assess_choice({'depth_mix': (.1, 0, -.1)}, rows, [])[0]
+        self.assertIn('Short: 6/10 (60%)', result['text'])
+        self.assertIn('Intermediate: 3/10 (30%)', result['text'])
+        self.assertIn('Deep: 1/10 (10%)', result['text'])
+        self.assertEqual(result['verdict'], 'limited')
+
+    def test_personnel_separate_from_coverage_and_legacy_unknown(self):
+        previous = [play(def_personnel='base')] * 8 + [play(def_personnel='nickel')] * 2
+        after = [play(def_personnel='dime')] * 8 + [play(def_personnel='base')] * 2
+        findings = GR.assess_choice({'sub_lean': .2, 'man_rate': -.1}, [], after, ([], previous))
+        personnel = next(f for f in findings if f['label'] == 'Defensive personnel')
+        self.assertIn('8/10 plays (80%)', personnel['text'])
+        self.assertIn('2/10 (20%)', personnel['text'])
+        self.assertIn('requested direction', personnel['text'])
+        legacy = GR.assess_choice({'sub_lean': .2}, [], [play()] * 10)[0]
+        self.assertEqual(legacy['verdict'], 'ungraded')
+
+    def test_drive_records_defensive_package_for_recap(self):
+        from test_game_clock_decisions import ClockDecisions
+        fixture = ClockDecisions()
+        fixture.setUp()
+        for live in (False, True):
+            dr, _, _ = fixture.drive([dict(type='run', yards=1)],
+                                     start=99, clock=1804, live=live)
+            snap = next(p for p in dr.log if p['type'] == 'run')
+            self.assertEqual(snap['def_personnel'], 'nickel')
+
+    def test_positive_summary_does_not_claim_causation(self):
+        self.assertIn('do not establish', GR.conclusion([{'verdict': 'positive'}]))
+
     def test_receiver_review_ignores_yards_to_everyone_else(self):
         lamb = [play(yards=5, target='lamb') for _ in range(4)]
         other = [play(yards=25, target='other', travelled=True) for _ in range(42)]
@@ -90,7 +140,7 @@ class RecapChoiceEvidence(unittest.TestCase):
                                              ([], [play('run',5.7)] * 13)), [])
 
     def test_post_renders_meaningful_declined_advice_separately(self):
-        L = NS(year=2026, week=2, user_team='GB', notes_sent={}, inbox=[], teams={'GB':NS(staff={})})
+        L = NS(phase="regular", year=2026, week=2, user_team='GB', notes_sent={}, inbox=[], teams={'GB':NS(staff={})})
         rec = dict(text='Keep a back in',changes={'protection':'six'},taken=False)
         result = dict(home=17,away=24,drives=[
             ('home',drive(1,[play('sack',-5)] * 3 + [play()] * 10)),

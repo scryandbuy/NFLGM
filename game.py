@@ -2696,6 +2696,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         out['motion'] = bool(oc.get('motion'))
         out['blitzers'] = int(dc.get('blitzers', 0))
         out['shell'] = dc.get('shell'); out['box'] = dc.get('box'); out['personnel'] = oc.get('personnel')
+        out['def_personnel'] = dc.get('personnel')
         out['blitz'] = bool(dc.get('blitz')) or int(dc.get('rushers', 4)) >= 5
         dr.log.append(out)
         for st in (off_state, def_state):

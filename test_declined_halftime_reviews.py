@@ -93,7 +93,7 @@ class DeclinedHalftimeReviews(unittest.TestCase):
         self.assertEqual(len(reviews),3)
 
     def test_post_uses_score_at_drive_not_final_score(self):
-        L = NS(year=2026,week=2,user_team='GB',notes_sent={},inbox=[],teams={'GB':NS(staff={})})
+        L = NS(phase="regular", year=2026,week=2,user_team='GB',notes_sent={},inbox=[],teams={'GB':NS(staff={})})
         d = drive(3,rows(8,'incomplete',clock=900,down=1)); d.score_diff=14
         rec = dict(text='Shorten the game',review_key='clock_control',changes={'tempo':-.2,'pass_bias':-.05})
         result = dict(home=17,away=24,drives=[('home',d)],coaching_review={'halftime_declined':[rec]})
