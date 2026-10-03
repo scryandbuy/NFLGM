@@ -56,6 +56,34 @@ IR_RETURNS_PER_TEAM = 8   # a club may bring back eight in a season
 IR_DESIGNATIONS_PER_PLAYER = 2
 
 
+def clear_recovered(league, week, desks=None):
+    """out_until is the first healthy week, including in existing saves.
+
+    Deterministic reconciliation: do not reroll listings, activate IR players,
+    or repeat CPU transactions when opening a saved decision week.
+    """
+    recovered = set()
+    for p in league.players.values():
+        if p.out_until is not None and int(p.out_until) < 99 and int(p.out_until) <= week:
+            p.out_until = None
+            recovered.add(p.pid)
+        hurt_until = p.xp_spent.get('_hurt_until')
+        if p.out_until is None and hurt_until is not None and int(hurt_until) <= week:
+            p.xp_spent.pop('_hurt_until', None)
+            p.xp_spent.pop('_hurt_desig', None)
+            recovered.add(p.pid)
+    for desk in (desks or {}).values():
+        for pid in recovered:
+            for field in ('status', 'pending', 'playing_hurt'):
+                getattr(desk, field).pop(pid, None)
+    for message in getattr(league, 'inbox', []):
+        if (message.get('kind') == 'injury_decision'
+                and (message.get('payload') or {}).get('pid') in recovered
+                and message.get('status') in ('unread', 'open')):
+            message['status'] = 'done'
+    return recovered
+
+
 def designation(weeks_left, rng, toughness=0.70):
     """
     What the club lists him as this week.
@@ -189,7 +217,7 @@ class InjuryDesk:
         for p in list(team.roster):
             if p.out_until is None:
                 continue
-            left = max(0, int(p.out_until) - week + 1)
+            left = max(0, int(p.out_until) - week)
             if left <= 0:
                 p.out_until = None
                 continue

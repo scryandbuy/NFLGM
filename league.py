@@ -367,8 +367,8 @@ class Team:
         else: p.out_until = 99
         return dict(ok=True, returnable=returnable)
 
-    def activate_from_ir(self, p, week):
-        """Return after the minimum absence and recovery; roster compliance gates advance."""
+    def ir_return_status(self, p, week):
+        """Read-only eligibility shared by the activation button and action."""
         ir = getattr(self, 'ir', None) or []
         if not any(q.pid == p.pid for q in ir): return dict(ok=False, why='he is not on IR')
         if not p.xp_spent.get('_ir_return', False): return dict(ok=False, why='he was placed on IR for the season')
@@ -376,6 +376,14 @@ class Team:
         if p.out_until is not None and int(p.out_until) > int(week or 0): return dict(ok=False, why=f"he is not healthy until week {p.out_until}")
         used = int(getattr(self, 'ir_returns_used', 0) or 0)
         if used >= self.IR_RETURNS: return dict(ok=False, why='the club has used its eight returns this season')
+        return dict(ok=True, returns_left=self.IR_RETURNS - used)
+
+    def activate_from_ir(self, p, week):
+        """Return after the minimum absence and recovery; roster compliance gates advance."""
+        status = self.ir_return_status(p, week)
+        if not status['ok']: return status
+        ir = getattr(self, 'ir', None) or []
+        used = int(getattr(self, 'ir_returns_used', 0) or 0)
         self.ir = [q for q in ir if q.pid != p.pid]; self.ir_returns_used = used + 1; p.out_until = None
         return dict(ok=True, returns_left=self.IR_RETURNS - self.ir_returns_used)
 
