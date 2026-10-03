@@ -764,8 +764,10 @@ def fill_out_rosters(league, pool, rng, verbose=False, user_team=None):
     import min_salary as MS
     import roster_needs as RN
     from cutdown import POS_CAP
+    from replacement_contracts import minimum_acceptance
     cap = CAP.get(league.year, 301.2)
     signed = 0
+    comps = VAL.pool_from_league(league)
     protected = {user_team, getattr(league, 'user_team', None)} - {None}
     for abbr, team in league.teams.items():
         if abbr in protected:
@@ -781,6 +783,8 @@ def fill_out_rosters(league, pool, rng, verbose=False, user_team=None):
         for p in list(avail):
             if need <= 0:
                 break
+            if not minimum_acceptance(league, team, p, pool=comps)['accepts']:
+                continue
             floor = MS.minimum_salary(p.accrued, cap)
             # filling a slot RELEASES reserve, so the test is plain space
             if team.cap_space < floor * 1.05:
