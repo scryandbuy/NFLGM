@@ -19,7 +19,7 @@ class ClockDecisions(unittest.TestCase):
         G.LAST_KICKOFF.clear()
 
     def drive(self, outcomes=(), *, start=36, clock=1820, quarter=2, wall=1800,
-              diff=11, own=1, other=0, down=1, live=False, states=None):
+              diff=11, own=1, other=0, down=1, live=False, states=None, calls=None):
         outcomes = iter(outcomes)
         tos = G.Timeouts(); tos.left = dict(home=own, away=other)
         book = G.StatBook()
@@ -36,7 +36,8 @@ class ClockDecisions(unittest.TestCase):
             if states is None:
                 stack.enter_context(patch.object(G, 'field_units', side_effect=lambda ros, *a, **k: (ros, {})))
             args = (self.off, self.deff, start, clock, quarter, diff,
-                    np.random.default_rng(11), lambda *a: dict(target='wr', **next(outcomes)),
+                    np.random.default_rng(11), lambda *a: ((calls.append(dict(a[2])) if calls is not None else None),
+                               dict(target='wr', **next(outcomes)))[1],
                     lambda *a, **k: dict(is_pass=True, personnel='11', depth='short'),
                     lambda *a, **k: dict(personnel='nickel', front_family='4-3'),
                     lambda *a: .7)
@@ -51,6 +52,24 @@ class ClockDecisions(unittest.TestCase):
             else:
                 dr = G.run_drive(*args, **kw)
         return dr, book, tos
+
+    def test_own_one_halftime_uses_live_run_not_pass_or_safety_knee(self):
+        calls = []
+        dr, _, _ = self.drive([dict(type='run', yards=1)], start=99,
+                              clock=1804, diff=1, calls=calls)
+        self.assertFalse(calls[0]['is_pass'])
+        self.assertEqual(calls[0]['scheme'], 'inside_zone')
+        self.assertEqual(dr.result, 'End of half')
+
+    def test_trailing_half_timeout_not_spent_to_punt(self):
+        dr = NS(down=3, togo=2, yardline=52, score_diff=-1)
+        tos = G.Timeouts()
+        used, who = G._timeout_call(dr, 'complete', {'yards': 0}, tos,
+                                    'home', 1800, 19,
+                                    plan={'choice': 'play', 'hurry': True})
+        self.assertFalse(used)
+        self.assertEqual(tos.left['home'], 3)
+        self.assertEqual(dr._half_stall_intent, 'protect')
 
     def test_reported_halftime_completion_saves_scoring_chance(self):
         # GB at the DAL 36 with 0:20 and one timeout, leading by eleven.
