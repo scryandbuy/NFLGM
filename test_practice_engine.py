@@ -44,14 +44,14 @@ class PracticeTests(unittest.TestCase):
     def test_rest_rehab_legacy_and_bye(self):
         l,r,ps=setup();q=plan('hard');q['individual']={p.pid:'rest' for p in ps}
         r.states['A'].cond.cond[ps[0].pid]=70
-        v=P.resolve(l,r,'A',1,q,recovery_done=True)
+        v=P.resolve(l,r,'A',1,q)
         self.assertEqual(v['totals']['xp'],0);self.assertFalse(v['injuries']);self.assertEqual(r.states['A'].cond.get(ps[0].pid),70)
         l,r,ps=setup();r.desks['A']=NS(playing_hurt={ps[0].pid:{}})
         v=P.preview(l,r,'A',1,plan('hard'))
         row=v['players'][0];self.assertEqual(row['risk'],0);self.assertEqual(row['xp'],0)
         r.states['A'].jaded[ps[1].pid]=.4;r.states['A'].last_snaps={ps[1].pid:60}
         P.resolve(l,r,'A',1,plan('standard'),bye=True)
-        self.assertAlmostEqual(r.states['A'].jaded[ps[1].pid],.28);self.assertFalse(r.states['A'].last_snaps)
+        self.assertAlmostEqual(r.states['A'].jaded[ps[1].pid],.4);self.assertFalse(r.states['A'].last_snaps)
     def test_caps_focus_and_ledger_pruning(self):
         l,r,ps=setup();q=plan('hard');q['focus']=[p.pid for p in ps[:10]]
         l.practice_state={'auto':{'A':True},'completed':{'2023:1':{}},'participants':{'2023:1':{}}}
@@ -68,10 +68,10 @@ class PracticeTests(unittest.TestCase):
         r.states['A'].last_snaps={p.pid:80}
         self.assertEqual(stale,P.preview(l,r,'A',1,plan('standard')))
 
-    def test_coach_uses_recovered_condition_and_individual_protection(self):
+    def test_coach_uses_current_condition_and_individual_protection(self):
         l,r,ps=setup();st=r.states['A']
         for p in ps:
-            st.cond.cond[p.pid]=70
+            st.cond.cond[p.pid]=97
             st.jaded[p.pid]=.04
         q=P.recommend_plan(l,r,'A',4)
         self.assertEqual({v['intensity'] for v in q['units'].values()},{'standard'})
@@ -135,8 +135,8 @@ class PracticeTests(unittest.TestCase):
         rows={x['pid']:x for x in preview['players']}
         for p in (tired,heavy,injured):
             self.assertEqual((rows[p.pid]['xp'],rows[p.pid]['risk']),(0,0))
-        self.assertLess(rows[tired.pid]['jaded'],.20)
-        self.assertGreater(rows[tired.pid]['condition'],72)
+        self.assertEqual(rows[tired.pid]['jaded'],.20)
+        self.assertEqual(rows[tired.pid]['condition'],72)
         self.assertTrue(all(rows[p.pid]['xp']>0 for p in ps[3:]))
         self.assertTrue(all(rows[p.pid]['xp']>0 for p in l.teams['A'].practice_squad))
         result=P.resolve(l,r,'A',6,bye=True)
@@ -194,19 +194,25 @@ class PracticeTests(unittest.TestCase):
             samples=[]
             for seed in range(20):
                 l,r,ps=setup(seed);injuries=0;xp=0;conditions=[];fatigue=[]
+                import practice_integration as PI
+                r.L=l
+                l.schedule=[(w,'A','B',14,21) for w in range(1,19) if w != 10]
                 for week in range(1,19):
                     st=r.states['A']
-                    for i,p in enumerate(ps):
+                    for p in ps:
                         if p.out_until is not None and p.out_until<=week:p.out_until=None
-                        snaps=60 if i<22 else 8
-                        st.last_snaps[p.pid]=snaps
-                        st.cond.cond[p.pid]=max(45,st.cond.get(p.pid)-(28 if i<22 else 5))
-                        st.jaded[p.pid]=H.update_jadedness(st.jaded.get(p.pid,0),snaps,80)
+                    PI.recover_week(r,week)
                     v=P.resolve(l,r,'A',week,None if mode=='adaptive' else plan(mode),bye=week==10)
                     injuries+=len(v['injuries']);xp+=v['totals']['xp']
                     if week>=15:
                         conditions.append(sum(st.cond.get(p.pid) for p in ps[:22])/22)
                         fatigue.append(sum(st.jaded.get(p.pid,0) for p in ps[:22])/22)
+                    if week != 10:
+                        for i,p in enumerate(ps):
+                            snaps=60 if i<22 else 8
+                            st.last_snaps[p.pid]=snaps
+                            st.cond.cond[p.pid]=max(45,st.cond.get(p.pid)-(28 if i<22 else 5))
+                            st.jaded[p.pid]=H.update_jadedness(st.jaded.get(p.pid,0),snaps,80)
                 samples.append((xp,injuries,sum(conditions)/len(conditions),sum(p.xp for p in ps[:22])/22,sum(p.xp for p in ps[22:])/44,sum(fatigue)/len(fatigue)))
             results[mode]=tuple(float(np.mean([v[i] for v in samples])) for i in range(6))
         print('Season workload means (XP, injuries, late starter condition, starter XP, reserve XP, late fatigue):',results)

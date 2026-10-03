@@ -5,7 +5,7 @@ import views
 class PlayoffGameDay(unittest.TestCase):
  def setup_case(self,round=0):
   s=NS(stop=('playoffs',round),played=False,gameday=dict(week=18,scores=[],game=None),post_live=NS(alive={'AFC':{1:'GB'}},exit_round={}),_opponent=lambda w:None)
-  return s,NS()
+  return s,NS(phase='playoffs')
  def test_bye_replaces_week18(self):
   s,l=self.setup_case()
   with patch.object(views,'rail',return_value={}):v=views.gameday(s,l,'GB')
