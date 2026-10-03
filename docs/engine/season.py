@@ -251,6 +251,7 @@ class SeasonRunner(StandingsView):
         IR, brings back whoever has served his four games, and decides who is
         playing through something.
         """
+        IS.clear_recovered(self.L, week, self.desks)
         for abbr, team in self.L.teams.items():
             desk = self.desks[abbr]
             desk.activate_from_ir(self.L, team, week)
@@ -830,6 +831,9 @@ class SeasonRunner(StandingsView):
                 side_ = 'off' if p_.pos in ('QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT') else 'def'
                 if side_max.get(side_, 0) and n_ >= 0.6 * side_max[side_]: p_.xp_spent['_starts'] = int(p_.xp_spent.get('_starts', 0) or 0) + 1
         MO.weekly(self.L, week, results, snaps)
+        # Recovery belongs to the next decision week, before its roster
+        # assessments, assistant report and injury listings are prepared.
+        IS.clear_recovered(self.L, week + 1, self.desks)
         try:
             import club_notes as CN
             CN.returns(self.L, week + 1)

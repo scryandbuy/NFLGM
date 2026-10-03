@@ -242,6 +242,7 @@ class Session:
         if (s.stop[0] == 'playoffs' and len(s.stop) > 1 and int(s.stop[1]) >= 3
                 and s.post_live is not None and len(getattr(s.post_live, 'conf_champs', {}) or {}) == 2):
             s._announce_honors()
+        s._sync_week_health()
         if s.stop[0] == 'week' and not s.played:
             GW.refresh_open_report(L, int(s.stop[1]))
         PA.sync_session(s)
@@ -495,6 +496,7 @@ class Session:
         except Exception: pass
 
     def advance(self):
+        self._sync_week_health()
         PA.sync_session(self)
         # References follow a successful calendar action, not football week numbers.
         blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap', 'roster')]
@@ -515,6 +517,7 @@ class Session:
             if self.runner is not None: self.runner._skip_game = None
             return dict(done='Blocked', next=self.next_label(), why=str(exc))
         if result.get('done') != 'Blocked':
+            self._sync_week_health()
             STF.resolve_references(self.L, advanced=True)
             IB.reconcile(self.L)
         PA.sync_session(self)
@@ -538,6 +541,7 @@ class Session:
                     return dict(done='Blocked', next=self.next_label(), why=self._cpu_roster_block)
                 return dict(done='Cap compliance cuts are on waivers', next=self.next_label())
             self.stop = ('week', 1); self.played = False
+            self._sync_week_health()
             try: GW.post_report(self.L, 1)
             except Exception as e:
                 import sys; print('Week 1 report failed:', e, file=sys.stderr)
@@ -570,9 +574,10 @@ class Session:
             self._finish_live()
             self.runner.roll_week(wk)
             IB.expire(self.L, wk + 1)
-            self._ir_ready_notes(wk + 1)
             self.played = False
             self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs', 0)
+            self._sync_week_health()
+            self._ir_ready_notes(wk + 1)
             if wk >= WEEKS:
                 self._playoff_prep(0)
                 post = self.post_live
@@ -1272,6 +1277,22 @@ class Session:
         L.set_phase('regular')
 
     # ------------------------------------------------------------ helpers
+    def _sync_week_health(self):
+        """Use the displayed decision week for recovery and roster actions."""
+        if self.stop[0] == 'week':
+            week = int(self.stop[1])
+        elif self.stop[0] == 'playoffs' and len(self.stop) > 1 and int(self.stop[1]) < 4:
+            week = 19 + int(self.stop[1])
+        else:
+            return
+        self.L.week = week
+        # Never change a paused game's medical state during replay/load.
+        live = getattr(self.runner, 'live', None) if self.runner else None
+        if live and not live.get('done'):
+            return
+        import injury_status as IS
+        IS.clear_recovered(self.L, week, getattr(self.runner, 'desks', None))
+
     def _ir_ready_notes(self, week):
         """The week a player on IR becomes eligible to come back (four weeks served, healthy, placed with a return),
         one note to the GM; once per stint. Without it the only way to know was to open the IR list and count."""

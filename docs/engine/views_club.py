@@ -66,7 +66,7 @@ def _cond(session, p):
 
 def _status(league, p, t):
     out = []
-    if p.out_until is not None: out.append('Out · season' if int(p.out_until) >= 99 else f"Out · back Wk {int(p.out_until) + 1}")
+    if p.out_until is not None: out.append('Out · season' if int(p.out_until) >= 99 else f"Out · back Wk {int(p.out_until)}")
     if p.contract and p.contract.years <= 1: out.append('Final Year')
     import extensions as EXT
     try:
@@ -210,7 +210,7 @@ def roster(session, league, abbr):
     injured = [_row(session, league, t, p) for p in t.active() if p.out_until is not None]
     return dict(rail=rail(session, league, abbr), groups=groups, count=len(t.active()), cap_total=__import__('views').cap_focus(league,t)['committed'],
                 practice=ps, injured=injured, ps_charge=round(PSQ.ps_charge(t), 1), elevations_used=len(getattr(t, '_elevated', []) or []), elevations_max=PSQ.ELEVATIONS_PER_GAME, per_man_max=PSQ.ELEVATIONS_PER_MAN, playoff_elevations=session.stop[0] == 'playoffs',
-                ir=[dict(_row(session, league, t, p), ir_week=int(p.xp_spent.get('_ir_week', 0) or 0), returnable=bool(p.xp_spent.get('_ir_return', False)), can_activate=bool(t.activate_from_ir.__doc__) and (league.week or 0) - int(p.xp_spent.get('_ir_week', 0) or 0) >= t.IR_MIN_WEEKS and (p.out_until is None or int(p.out_until) <= (league.week or 0)) and bool(p.xp_spent.get('_ir_return', False))) for p in (getattr(t, 'ir', None) or [])],
+                ir=[dict(_row(session, league, t, p), ir_week=int(p.xp_spent.get('_ir_week', 0) or 0), returnable=bool(p.xp_spent.get('_ir_return', False)), can_activate=t.ir_return_status(p, league.week)['ok'], activate_reason=t.ir_return_status(p, league.week).get('why', '')) for p in (getattr(t, 'ir', None) or [])],
                 ir_returns_left=t.IR_RETURNS - int(getattr(t, 'ir_returns_used', 0) or 0), week=league.week)
 
 
@@ -627,7 +627,7 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
                 if desig in ('questionable', 'doubtful') and (pending or hurt_now or p.out_until is not None): pl['flag'] = desig
                 elif p.out_until is not None: pl['flag'] = 'out'
                 else: pl['flag'] = None
-                weeks_left = (max(1, int(p.out_until) - int(league.week or 0) + 1) if p.out_until is not None and int(p.out_until) < 99 else None)   # out_until is the last week he misses; this week counts
+                weeks_left = (max(0, int(p.out_until) - int(league.week or 0)) if p.out_until is not None and int(p.out_until) < 99 else None)
                 pl['flag_word'] = (('Out · season' if p.out_until is not None and int(p.out_until) >= 99 else f"Out · {weeks_left} wk{'s' if weeks_left != 1 else ''}" if weeks_left else 'Out') if pl['flag'] == 'out' else pl['flag'].capitalize() if pl['flag'] else '')
                 pl['elevated'] = p not in t.roster
                 pl['out_week'] = weeks_left
