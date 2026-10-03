@@ -93,7 +93,8 @@ class StaffContracts(unittest.TestCase):
     def test_calendar_indices_stable_and_actual_step_releases_only_choices(self):
         self.assertEqual(Session.OFFSEASON[4][1],'step_staff_contracts')
         self.assertEqual(Session.OFFSEASON[5][1],'step_extensions')
-        self.assertEqual(Session.OFFSEASON[11][1],'step_draft')
+        steps = [step for _label, step in Session.OFFSEASON]
+        self.assertEqual(steps.index('step_draft'), steps.index('step_visits') + 1)
         s=Session.__new__(Session);s.L=self.L;s.user_team='A';s.rng=np.random.default_rng(2)
         for r in ST.ROLES: ST.choose_expiry(self.L,'A',r)
         with patch('waivers.process') as wire:

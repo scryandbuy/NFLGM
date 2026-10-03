@@ -16,7 +16,14 @@ def profile_for(player):
         # A separate ID-keyed generator never advances the simulation stream.
         profile = NE.make_profile(dict(age=player.age), np.random.default_rng(stable_seed(player.pid + ':contract-profile-v1')))
         player.xp_spent['_negotiation_profile'] = copy.deepcopy(profile)
-    return copy.deepcopy(profile)
+    result = copy.deepcopy(profile)
+    # Preferences are stable; credibility changes when the club breaks its word.
+    # Never let an old cached negotiation profile override persisted morale.
+    morale = getattr(player, 'morale', None)
+    if morale is not None:
+        result['trust'] = max(0.0, min(1.0, float(morale.trust)))
+        result['broken'] = len(morale.broken)
+    return result
 
 
 def canonical(league, player, team, offer, kind='fa_offseason'):

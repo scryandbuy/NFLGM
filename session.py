@@ -1343,6 +1343,7 @@ class Session:
         from franchise import clear_undrafted
         clear_undrafted(L, rng)
         L.set_phase('regular')
+        MO.review_captains(L, week=0)
 
     # ------------------------------------------------------------ helpers
     def _sync_week_health(self):

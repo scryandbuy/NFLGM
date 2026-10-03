@@ -46,7 +46,7 @@ class CalendarAwardResumeTests(unittest.TestCase):
             s.advance()
             self.assertEqual(s.stop, ('week', 1))
             self.assertEqual(s.L.phase, 'regular')
-            self.assertEqual(s.L.week, 0)
+            self.assertEqual(s.L.week, 1)  # health is synced to the displayed decision week
             self.assertFalse(s.L.post_june1())
             self.assertTrue(all(t.cap_space >= -0.01 for t in s.L.teams.values()))
             self.assertFalse(pending & {e['pid'] for e in WV.pending(s.L)})

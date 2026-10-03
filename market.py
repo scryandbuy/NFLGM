@@ -127,6 +127,8 @@ def utility_of(league, player, offer, prof, market_apy, preferred_term=None):
                financial_priority=(getattr(player, 'traits', None) or {}).get('financial_priority', 50))
     row['preferred_years'] = preferred_term or preferred_years(player, league.year, market_apy, CAP.get(league.year, 301.2))
     import contract_offer as CO
+    # A profile held by an open bid round must not freeze promise credibility.
+    prof = dict(prof, trust=CO.profile_for(player)['trust'])
     freeze_offer(league, player, offer)
     evaluation = CO.assess(league, player, team, offer.as_dict(), market_apy, row['preferred_years'], profile=prof)
     # Preserve winning/role/home/tax/promises; replace BOTH old money and term
