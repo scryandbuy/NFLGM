@@ -3,7 +3,8 @@
 ## Week 13 SEA at GB, 31-15: reviewed October 2, 2026
 
 Source: C:/Users/HP/.codex/attachments/9e113d3c-d428-4ba3-92c1-e3b30ca4388d/Pasted text.txt.
-Season year and build ID absent. Review only; no engine changes.
+Season year and build ID absent. Initial review made no engine changes;
+the authorized illegal-shift correction below was subsequently implemented.
 
 - Score reconciles: GB four touchdowns/four PATs/one FG; SEA five FGs. Punt
   distances/returns reconcile to all following receiving spots. Final SEA
@@ -25,8 +26,16 @@ Season year and build ID absent. Review only; no engine changes.
   no-play foul. events.py categorizes every Illegal Shift as 'pre'. Ordinary
   illegal shifts are live-ball fouls; the specific running-clock/not-all-set
   exception after a half's two-minute warning becomes a false start and does
-  not apply here. Requires targeted foul timing/enforcement correction; no
-  general penalty-rate reduction. Reference: 2026 NFL rules7-4-2 Item6/7-4-7,
+  not apply here. Fixed October 2: ordinary shifts now use the live-ball path
+  on runs and passes, preserving the foul rate and discipline effects.
+  Accepted penalties erase the play and repeat the down; interceptions and
+  failed fourth downs can stand when the defense declines. Actual play time
+  elapses, and false starts remain separate pre-snap fouls. Verified accepted
+  and declined outcomes, half-distance enforcement, erased touchdowns, late
+  halves, offender narration, and batch/stepped parity. All 93 tests passed
+  across illegal-shift, penalty pace/discipline/yardage, game-log, clock, and
+  Week 3 engine suites. Source fix awaits integration/browser rebuild.
+  Reference: 2026 NFL rules7-4-2 Item6/7-4-7,
   https://static.www.nfl.com/image/upload/fl_attachment/league/tqivdkzt9mu6wdgsh1ku.pdf.
 - Narration says 'on the Sundell'/'on the Benefield'. Current source and browser
   ticker already format named offenders without 'the', so verify producing
