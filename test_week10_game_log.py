@@ -48,7 +48,8 @@ class Week10GameLogTests(unittest.TestCase):
         league = NS(player=lambda pid: NS(name=names[pid]) if pid in names else None)
         td = ticker.play_line(league, dict(type='complete', passer='qb', yards=.3,
                                            touchdown=True, yardline=.3), 'GB', 'ARI')['text']
-        self.assertIn('less than a yard. TOUCHDOWN', td)
+        self.assertIn('touchdown', td.lower())
+        self.assertIn('inside the 1', td)
         self.assertNotIn('no gain', td)
         short = ticker.play_line(league, dict(type='run', yards=1.9,
                                               yardline=2.3), 'GB', 'ARI')['text']

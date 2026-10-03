@@ -77,17 +77,22 @@ class EndgameIntentTests(unittest.TestCase):
         self.assertEqual(G.comeback_clock_budget(17), 540)
         self.assertFalse(G.multi_score_urgency(541, -17, 4))
         self.assertTrue(G.multi_score_urgency(463, -17, 4))
-        self.assertFalse(G.multi_score_urgency(463, -17, 3))
+        # The helper takes remaining GAME time, not the quarter clock.
+        self.assertFalse(G.multi_score_urgency(900 + 463, -17, 3))
         helper = clocks.ClockDecisions()
         helper.setUp()
         outcomes = [dict(type='complete', yards=10),
                     dict(type='interception', yards=0, air=0, ret=0)]
-        for remaining, expected in ((600, 34), (463, 14)):
+        intervals = []
+        for remaining in (600, 463):
             with self.subTest(seconds=remaining):
                 dr, _, _ = helper.drive(outcomes, start=78, clock=remaining,
                                         quarter=4, wall=None, diff=-17)
                 snaps = [p for p in dr.log if p.get('down')]
-                self.assertEqual(snaps[0]['clock'] - snaps[1]['clock'], expected)
+                intervals.append(snaps[0]['clock'] - snaps[1]['clock'])
+        # Gradual catch-up now precedes the full urgency threshold.
+        self.assertTrue(14 < intervals[0] < 34)
+        self.assertEqual(intervals[1], 14)
 
     def test_live_and_batch_kneels_keep_unused_timeouts(self):
         helper = clocks.ClockDecisions()

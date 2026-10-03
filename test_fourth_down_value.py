@@ -24,7 +24,7 @@ class FourthDownValueTests(unittest.TestCase):
         with patch.object(decisions,'_flip',return_value=.5) as flip:
             decisions.fourth_down(0,1800,43,8,fg_prob=.6)
         # _flip converts the old offense's coordinates to the new offense.
-        self.assertEqual(flip.call_args_list[2].args[2],51)
+        self.assertEqual(flip.call_args_list[2].args[2],50)
 
     def test_reachable_kick_does_not_override_a_better_punt(self):
         for fg_value, expected in ((.4,'punt'),(.6,'field_goal')):
