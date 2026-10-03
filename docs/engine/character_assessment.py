@@ -69,7 +69,9 @@ def visit(p, abbr, view, room, error_sd):
     # reliable earlier observation with a weaker one.
     # Keep the interview's precision tied to the room's scouting quality.
     # A flat floor made most weak and strong rooms produce the same read.
-    base_error = 5.5 + 1.25 * max(0., float(error_sd))
+    # The middle-quality room retains its previous visit precision (6.8
+    # after the 15% gain); weaker and stronger rooms diverge around it.
+    base_error = 5.0 + .8 * max(0., float(error_sd))
     if room.get('character') == 'sharp': base_error *= .45
     elif room.get('character') == 'tape': base_error *= 1.25
     error = min(base_error, float(prior.get('error', base_error)) if prior else base_error) * .85

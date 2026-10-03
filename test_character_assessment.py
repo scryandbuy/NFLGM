@@ -86,6 +86,8 @@ class CharacterAssessmentTests(unittest.TestCase):
         for quality in ('weak', 'middle', 'strong'):
             self.assertGreater(reads[(quality, 'tape')], reads[(quality, 'normal')])
             self.assertLess(reads[(quality, 'sharp')], reads[(quality, 'normal')])
+        self.assertAlmostEqual(reads[('middle', 'normal')], 6.8)
+        self.assertAlmostEqual(reads[('middle', 'tape')], 8.5)
 
     def test_visit_improves_prior_read_without_raising_work_ethic(self):
         p = N(pid='visit-prior', traits={'work_ethic': 40, 'discipline': 50}, xp_spent={})
