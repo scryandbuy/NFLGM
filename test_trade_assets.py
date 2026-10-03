@@ -17,6 +17,19 @@ class TradeAssetTests(unittest.TestCase):
         self.assertEqual(VP._evaluate(self.s.L,'GB','DEN',a,b), VP._evaluate(self.s.L,'GB','DEN',typed,[dict(kind='player',id=b[0])]))
         self.assertEqual(VP.act_ask(self.s.L,'GB','DEN',a,b),VP.act_ask(self.s.L,'GB','DEN',typed,[dict(kind='player',id=b[0])]))
 
+    def test_trade_view_keeps_far_future_picks_available_to_counteroffers(self):
+        from league import DraftPick
+        for abbr in ('GB','DEN'):
+            team=self.s.L.teams[abbr]
+            pick=DraftPick(year=self.s.L.year+3,round=1,original=abbr,owner=abbr)
+            team.picks.append(pick)
+            try:
+                view=self.s.personnel('trades',other='DEN')
+                side='me' if abbr=='GB' else 'them'
+                self.assertIn(f'{pick.year}-1-{abbr}',[p['id'] for p in view[side]['picks']])
+            finally:
+                team.picks.remove(pick)
+
     def test_type_ownership_and_duplicate_validation(self):
         pid=self.v['me']['roster'][0]['pid']
         self.assertEqual(VP._trade_ids(self.s.L,'GB',[pid,dict(kind='player',id=pid)]),[pid])

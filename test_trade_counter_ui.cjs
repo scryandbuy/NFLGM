@@ -1,0 +1,13 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const src=fs.readFileSync('docs/app.js','utf8');
+const code=src.slice(src.indexOf('function tradeSelection('),src.indexOf('function tradePickerState('));
+const ctx={};vm.createContext(ctx);vm.runInContext(code,ctx);
+const existing=[{kind:'player',id:'P0959'},{kind:'player',id:'C22171'}];
+const adds=['2029-2-GB','2031-1-GB'];
+const own={roster:existing.map(x=>({pid:x.id})),picks:adds.map(id=>({id}))};
+assert.deepEqual(Array.from(ctx.tradeCounterSelection(existing,adds,own),x=>x.id),['P0959','C22171',...adds]);
+const before=JSON.stringify(existing);
+assert.throws(()=>ctx.tradeCounterSelection(existing,adds,{...own,picks:own.picks.slice(0,1)}),/full counteroffer/);
+assert.equal(JSON.stringify(existing),before,'missing asset never applies a partial offer');
+assert.equal(ctx.tradeCounterSelection(existing,[...adds,adds[0]],own).length,4,'duplicates are not added twice');
+console.log('Full counteroffer retained; missing future pick refuses partial application.');

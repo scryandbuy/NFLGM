@@ -1523,6 +1523,14 @@ function tradeSelection(items, own) {
   }
   return result;
 }
+function tradeCounterSelection(existing, adds, own) {
+  const requested = [...existing, ...(adds || []).map(id => ({kind:'pick', id}))];
+  const selected = tradeSelection(requested, own);
+  if (requested.some(item => !selected.some(x => String(x.id) === String(typeof item === 'object' ? item.id : item)))) {
+    throw new Error('The full counteroffer is no longer available. Refresh the trade screen and ask again. Your offer has not changed.');
+  }
+  return selected;
+}
 function tradePickerState(key) {
   tradeState.pickers ||= {};
   return tradeState.pickers[key] ||= {mode:'players', query:'', scroll:0};
@@ -1600,7 +1608,7 @@ function renderTradeSummary(v,reload) {
   const can=v.can_trade&&(tradeState.a.length||tradeState.b.length);
   const actions=el('div',{class:'trade-actions'},el('span',{},`${tradeState.a.length} assets sent · ${tradeState.b.length} received`),
     el('button',{class:'btn go',disabled:can?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('propose', ${args()}${tradeState.counter_id != null ? ', counter_id='+Number(tradeState.counter_id) : ''})`);notify(r);if(r.done){tradeState.a=[];tradeState.b=[];tradeState.counter_id=null;}tradeState.offers=null;reload();}},'Propose'),
-    el('button',{class:'btn',disabled:v.can_trade&&tradeState.b.length?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('ask', ${args()})`);notify(r);if(!r.ok)return;tradeState.a=tradeSelection([...tradeState.a,...(r.adds||[]).map(id=>({kind:'pick',id}))],v.me);tradeState.offers=null;reload(true);}},'Ask What They Want'),
+    el('button',{class:'btn',disabled:v.can_trade&&tradeState.b.length?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('ask', ${args()})`);if(!r.ok){notify(r);return;}try{tradeState.a=tradeCounterSelection(tradeState.a,r.adds,v.me);}catch(e){notify({ok:false,why:e.message});return;}notify(r);tradeState.offers=null;reload(true);}},'Ask What They Want'),
     el('button',{class:'btn',disabled:v.can_trade&&tradeState.a.length===1&&tradeState.a[0].kind==='player'?null:'',onclick:()=>{const pid=tradeState.a[0].id;const r=pyJSON(`SESSION.personnel_act('gather', pid=${JSON.stringify(pid)})`);notify(r);tradeState.offers={...r,pid};reload();}},'Gather Offers'),
     el('button',{class:'btn quiet',onclick:()=>{tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload(true);}},'Clear'));
   summary.append(actions);return summary;

@@ -84,10 +84,10 @@ def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
         q = D.current(); draft_live = dict(slot=f"{q.round}.{q.selection - 32 * (q.round - 1):02d}", sel=q.selection, team=q.owner)
     return dict(rail=rail(session, league, abbr), draft_live=draft_live, clubs=[club(c) for c in CLUBS if c != abbr], other=club(other),
                 me=dict(club=club(abbr), cap=round(me.cap_space, 1), roster=[_plate(league, p) for p in sorted(me.active(), key=lambda p: -p.ovr)],
-                        picks=[_pick_row(league, pk) for pk in sorted(me.picks, key=lambda k: (k.year, k.round)) if not pk.used_on and pk.year <= league.year + 2],
+                        picks=[_pick_row(league, pk) for pk in sorted(me.picks, key=lambda k: (k.year, k.round)) if not pk.used_on],
                         surplus=[dict(pid=x['pid'], why=_surplus_why(league, me, x)) for x in my_surplus], needs=sorted(my_needs)),
                 them=dict(club=club(other), cap=round(them.cap_space, 1), roster=[_plate(league, p) for p in sorted(them.active(), key=lambda p: -p.ovr)],
-                          picks=[_pick_row(league, pk) for pk in sorted(them.picks, key=lambda k: (k.year, k.round)) if not pk.used_on and pk.year <= league.year + 2],
+                          picks=[_pick_row(league, pk) for pk in sorted(them.picks, key=lambda k: (k.year, k.round)) if not pk.used_on],
                           surplus=[dict(pid=x['pid'], why=_surplus_why(league, them, x)) for x in their_surplus], needs=sorted(their_needs),
                           coach=them.gm.name if them.gm else '', prestige=round(getattr(them.gm, 'prestige', 50)) if them.gm else None),
                 package=pkg, cap_year=league.year, can_trade=can_trade, deadline_week=TR.TRADE_DEADLINE_WEEK, balance=f"{len([x for x in a_sends if _trade_player(league, x)])} for {len([x for x in b_sends if _trade_player(league, x)])}",
@@ -273,6 +273,15 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     initial = evaluate([])
     if initial.get('blocked'):
         return dict(ok=False, adds=[], why=_cap_block_read(initial['blocked'], other))
+    def plan_check(ids):
+        sent = [_find_pick(league, abbr, x) or x for x in ids]
+        received = [_find_pick(league, other, x) or x for x in b_sends]
+        return TR.cpu_trade_check(league, me, them, sent, received)
+    # Picks cannot replace a lost starter. Use the same roster/funding gates
+    # as Propose before promising that a larger pick package fixes the deal.
+    decision = plan_check(a_sends)
+    if not decision['approved']:
+        return dict(ok=False, adds=[], why=decision['why'])
     # Selling GMs accept deterministically above 0.9, not at the old 0.5 preview threshold.
     if initial['b_gain'] > 0.9: return dict(ok=True, adds=[], line=f"{other} would take it as it is.")
     candidates = []
@@ -308,6 +317,9 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     final = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends + [x[1] for x in chosen], pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
     if final.get('blocked') or final['b_gain'] <= 0.9:
         return dict(ok=False, adds=[], why='No acceptable counteroffer was found. Your offer has not changed.')
+    decision = plan_check(a_sends + [x[1] for x in chosen])
+    if not decision['approved']:
+        return dict(ok=False, adds=[], why=decision['why'])
     labels = [_pick_row(league, x[0])['label'] for x in chosen]
     return dict(ok=True, adds=[x[1] for x in chosen], line=f"{other} would do it if you add " + ', '.join(labels) + '.')
 

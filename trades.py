@@ -529,6 +529,15 @@ def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache
         if any(value > before.get(role, 0) + 1e-6 for role, value in after.items()):
             result.update(approved=False, reason='essential_coverage')
             break
+        # A playoff race is not a liquidation window. Grade the complete
+        # projected lineup, so redundant receivers/backs do not compensate
+        # for losing a major starter merely by adding their asset prices.
+        # Genuine sellers can still exchange current quality for future picks.
+        if (league.phase in ('regular', 'playoffs') and removed
+                and TE.window(context(team)) not in ('rebuilding', 'retooling')
+                and result['gains'][team.abbr] < -UPGRADE_GAP):
+            result.update(approved=False, reason='competitive_roster_loss')
+            break
     cache[key] = result
     return result
 
@@ -820,9 +829,9 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
     """
     football = package_football(league, ta, tb, outgoing, incoming)
     if not football['approved']:
-        why = ('The other team is keeping its recently acquired player for now.'
-               if football['reason'] == 'recent_acquisition' else
-               'The other team would lose essential positional coverage in this trade.')
+        why = {'recent_acquisition': 'The other team is keeping its recently acquired player for now.',
+               'competitive_roster_loss': 'The other team is still competing and this package would weaken its lineup too much. Offer players who fill the lost role or improve another starting role.',
+               'essential_coverage': 'The other team would lose essential positional coverage in this trade.'}[football['reason']]
         return dict(approved=False, why=why)
     if buyer is not None and buyer != getattr(league, 'user_team', None):
         club, sent, received = (ta, outgoing, incoming) if ta.abbr == buyer else (tb, incoming, outgoing)
