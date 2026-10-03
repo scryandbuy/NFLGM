@@ -2,7 +2,7 @@
 club_notes.py - the inbox items about your own club.
 
 Written by the weekly roll and the season's turns, from state the engine already keeps:
-- the injury report after each game, with who steps in
+- the injury report after each game
 - a man back from injury, and whether his spot is still his
 - a player turning unhappy, with his reason, before it becomes a trade request
 - milestones: a rookie's first start, a 100th start, a season line passing a round number
@@ -62,8 +62,7 @@ def _injury_report(league, t, week, results):
         span = ('for the season' if x.get('season_ending') or weeks >= 10 else f"{weeks} week{'s' if weeks != 1 else ''}") if weeks else 'a week'
         kind = str(x.get('injury') or 'injury').replace('_', ' ')
         line = f"{inbox_player(p)} ({p.pos}) is out {span} ({kind})"
-        if was_starter and nxt is not None: line += f"; {inbox_player(nxt, _surname(nxt.name))} ({round(nxt.ovr)}) steps in"
-        elif was_starter: line += '; there is nobody behind him at the spot'
+        if was_starter and nxt is None: line += '; there is nobody behind him at the spot'
         lines.append(line + '.')
     if lines and _once(league, f"inj-{league.year}-{week}"):
         IB.post(league, 'injury', f"Injury report · {_period(week)}" + (f": {len(lines)} down" if len(lines) > 1 else f": {inbox_player(league.player(hurt[0]['pid']), _surname(league.player(hurt[0]['pid']).name))}"), '\n'.join(lines) + '\nThe depth chart has been updated.', sender='trainers', payload=dict(link='club:depth'))
