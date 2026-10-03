@@ -444,3 +444,39 @@ Final validation used fresh seeds102041/102042 after the final seam-area correct
 | Sack rate, attempts+sacks denominator | 7.11% | 6.91% |
 
 **Balance status: structural tests/build pass; full register NOT certified.** Earlier baseline32-game samples were25.11/24.89 points perteam and1.24%/0.99%40+ pass rates; final validation uses different seeds, so these differences are not clean causal estimates. Fresh-roster YAC/scoring remain elevated and warrant a dedicated calibration follow-up; the developed-save sample stays close to its prior yardage/scoring level. Long gains remain possible. Do not claim this fix alone has reduced league-wide explosive frequency or solved scoring. Preserve this concern in the running watchlist instead of applying an untested broad offense reduction.
+
+
+## October 2: four-chat character, discipline and work-ethic balance audit
+
+**Decision: retain the current character/work-ethic/discipline coefficients. No broad balance adjustment is justified by this comparison. Full-register certification is still not claimed.** One confirmed performance issue was corrected: deferred snap preparation no longer copies unselected reserve players' rating dictionaries. Sixteen paired full games preserved exact scores, logs, stat books and final RNG state; the isolated benchmark improved from 6.022s to 4.979s (17.3%).
+
+### Gameplay and persistence
+
+Changes (4) compared baseline c14c945 game/events/return enforcement with the completed character implementation, holding current practice/coaching preparation equal. Four fresh-league rounds cover all32teams once perround in each mode:64 baseline +64 new games. These are independent fresh-roster slices, not a continuous full season. Normal SeasonRunner preparation, availability and stat recording were exercised.
+
+| Metric | Before | After |
+| --- | ---: | ---: |
+| Total points/game |54.016|53.516|
+| Accepted flags/game |11.375|11.766|
+| Designed-run YPC |4.678|4.669|
+| Net yards/dropback |6.611|6.630|
+| Completion percentage |64.065|64.121|
+| Sack percentage |6.326|6.703|
+| Interception percentage |2.344|2.028|
+
+Paired total-scoring delta -0.5 has approximate95% margin4.90; accepted-flags delta+0.391 has margin1.059. This sample does not establish a broad gameplay shift. Zero invalid eleven-player selections, inactive offenders or penalty log/stat count/yard mismatches were found. Actual batch/live full logs and stat books matched; single-session midgame JSON save/replay/finish also matched. A2300-player legacy migration preserved input data, previous traits, XP, development and potential, with identical generated/migrated discipline and stable reload.
+
+Before the copy optimization, production game-call time was23.652s/32.943s over64games (about+0.145s/game). The separate raw-game optimization benchmark is not directly subtractable from those timings. Browser responsiveness and longer-season runtime remain worth monitoring.
+
+### Development and CPU decisions
+
+This chat compared standard/balanced practice forecasts on three seeded32-team rosters,2114players each. League-wide XP changed -0.111%,+0.014%,-0.114%; team changes across96 observations ranged -2.142%..+2.085%.360 paired practice-only18week cohorts covered ten positions, four development tiers, three experience levels and work ethic15/50/85, spending every third week. Neutral work ethic preserved exact XP/growth/purchases/unspent balances. Low/high work ethic changed XP to0.86x/1.14x; average OVR growth was0.605/0.701/0.811 for low/neutral/high. Random upgrade choices mean higher XP is not a guarantee of higher OVR in every individual sample. Ceilings held. A66-player18week resolved-practice comparison preserved health, injuries and RNG state.31 additional cadence/practice/identity/development tests passed.
+
+Changes (2) compared288 CPU draft boards:three classes of482prospects, all32teams and draft slots20/100/200, identical football reads and availability. Top choice changed7times(2.43%), each toward lower observed character cost and a previously second/third-ranked prospect. Average top-ten overlap9.861/10;24 paired actual CPU picks matched boards. Visits/boards preserved talent, potential, XP, traits and scouting RNG; save/load retained assessments.48 character/draft checks passed. These are decision snapshots, not full-draft or longitudinal calibration. Largest OVR difference7.2 was a cross-position QB versus edge comparison where roster/positional value had already placed the QB third; do not describe it as character overriding7.2 points between otherwise equivalent players.
+
+### Follow-up watches — investigate, not automatic tuning
+
+- Scoring and touchdown/field-goal drive rates exceeded targets in both versions. Wide win margins and low overtime also persist. They remain broader existing calibration questions.
+- New sample additionally missed punt-drive percentage(29.576 versus29.9 minimum), negative-run percentage(6.809 versus7.04 minimum) and FG accuracy(89.058 versus88 maximum). Baseline missed other nearby thresholds, including drives, plays, injuries and kickoff touchbacks. Check more continuous-season evidence before attributing a threshold crossing to discipline or changing global coefficients.
+- Monitor penalty mix and offender roles, net drive effects, simulation speed, long-term character-driven draft behavior, and whether club observations refine at a believable pace.
+- Reproduction: audit_discipline_production.py, audit_work_ethic_balance.py, audit_character_draft.py. Evidence in parent rev/outputs: discipline-production-audit.json, discipline-copy-optimization.json, work-ethic-balance-20261002.json, character-draft-balance.json. Combined gameplay/practice suite passed144 checks before optimization; changes (4)'s198 checks and this chat's32 integration checks passed after optimization. Counts overlap and must not be summed as unique tests.
