@@ -1042,9 +1042,8 @@ function characterReport(rows) {
   for (const row of rows || []) {
     const item = el('div', {style:'padding:10px 0;border-bottom:1px solid var(--rule)'},
       el('b', {}, row.label), el('div', {class: row.status === 'concern' ? 'dn' : row.status === 'strength' ? 'up' : 'muted'}, row.summary),
-      row.source ? el('small', {class:'count'}, `${row.source} · ${row.confidence} confidence`) : '',
-      el('p', {class:'count', style:'margin:4px 0'}, row.explanation));
-    if (row.game_record) item.append(el('p', {class:'count', style:'margin:4px 0'}, row.game_record));
+      row.source ? el('small', {class:'count'}, `${row.source} · ${row.confidence} confidence`) : '');
+    if (row.explanation) item.append(el('p', {class:'count', style:'margin:4px 0'}, row.explanation));
     box.append(item);
   }
   return box;
