@@ -2416,7 +2416,7 @@ function renderStaff(v) {
       const card=el('article',{class:'staff-person'},el('div',{class:'staff-person-head'},el('div',{},el('div',{class:'staff-role'},c.role),el('h3',{},c.name),el('p',{},c.specialty || 'Generalist')),el('div',{class:'staff-rating'},c.rating,el('small',{},'RATING'))));
       card.append(el('div',{class:'staff-detail'},`Age ${c.age} · Prestige ${c.prestige}${c.hc_candidate?' · Head-Coaching Candidate':''}${c.disgruntled?' · Disgruntled':''}`),staffTraits(c));
       card.append(el('div',{class:'staff-contract-line'},el('b',{},`$${(+c.salary).toFixed(2)}m / Year`),el('span',{class:c.expiring?'staff-expiring':''},c.let_expire?'Leaving On Advance':c.expiring?'Contract Expiring':`${c.years} Year${c.years===1?'':'s'} Remaining`)));
-      card.append(el('div',{class:'staff-detail'},`Recent Unit Ranks: ${(c.unit_ranks||[]).map(r=>`${r}${ord(r)}`).join(' · ')||'Not Yet Available'}`));
+      if(c.role_key !== 'scout') card.append(el('div',{class:'staff-detail'},`Recent Unit Ranks: ${(c.unit_ranks||[]).map(r=>`${r}${ord(r)}`).join(' · ')||'Not Yet Available'}`));
       card.append(el('div',{class:'acts'},el('button',{class:'btn',disabled:v.staff_locked||(c.expiring&&c.disgruntled)?'':null,onclick:()=>openStaffTalk(c,v,'extend',reload)},c.expiring?'Negotiate Renewal':'Extend Contract'),el('button',{class:'btn warn',disabled:v.staff_locked?'':null,onclick:()=>{if(confirm(`Release ${c.name}? The ${c.role} job will become vacant immediately.`))act('staff_release',c);}},'Release')));
       grid.append(card);
     }
