@@ -210,8 +210,8 @@ def play_line(league, p, off_abbr, def_abbr):
         ending = (', loss of down.' if p.get('penalty') == 'Intentional Grounding' and not p.get('safety') else
                   ', automatic first down.' if (p.get('auto_first') and not p.get('on_offense') and not p.get('on_try')) else '.')
         offender = _nm(league, p.get('offender_pid'))
-        owner = f'{offender} ({side})' if offender else side
-        text = f"Penalty, {p.get('penalty', 'flag')} on the {owner}, {ydtxt}" + ending
+        owner = f'{offender} ({side})' if offender else f'the {side}'
+        text = f"Penalty, {p.get('penalty', 'flag')} on {owner}, {ydtxt}" + ending
         kind = 'neutral'
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None

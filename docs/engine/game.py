@@ -1004,13 +1004,22 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
     trail_window = (60.0 + 40.0 * clock_aggr) if own_left >= 2 else 60.0
     _scored_now = bool(out.get('touchdown') or out.get('defensive_td')) or (t in ('run', 'complete', 'scramble') and float(out.get('yards', 0.0) or 0.0) >= dr.yardline - 0.01)
     if out.get('fumble_lost') or t == 'interception': return False, None
-    _at_warning = secs_in_half > 120 and secs_in_half - play_seconds(t) <= 120 and not getattr(dr, '_two_min', False)
+    # Only live action can make the warning stop this play for free. A huddle
+    # that would reach 2:00 is time a trailing team can still save now.
+    _at_warning = secs_in_half > 120 and secs_in_half - live_play_seconds(out) <= 120 and not getattr(dr, '_two_min', False)
     if timeouts is not None and secs_in_half < 300 and not _scored_now and not _at_warning:
         other = 'away' if pos == 'home' else 'home'
         # nothing to stop after a score (the clock is dead at the whistle) or on the play that reaches the
         # two-minute warning (the warning stops it for free)
         in_bounds = t in ('run', 'scramble', 'complete', 'sack')          # the clock runs after these; nothing to stop after an incompletion
         failed_third = getattr(dr, 'down', 1) >= 3 and float(out.get('yards', 0) or 0) < getattr(dr, 'togo', 10)
+        # A last-half possession outside scoring range is over after a failed
+        # third down. Do not buy the opponent another snap by stopping the clock
+        # just to punt, including when trailing before halftime.
+        if (half_end is not None and failed_third and secs_in_half <= 20
+                and dr.yardline - float(out.get('yards', 0) or 0) >= 50):
+            dr._half_stall_intent = 'protect'
+            return False, None
         if (half_end is not None and dr.score_diff >= 0 and failed_third
                 and dr.yardline - float(out.get('yards', 0) or 0) > 40):
             attacking = plan is not None and plan.get('hurry', True) and plan.get('choice') != 'kneel'
@@ -2472,6 +2481,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # real backed-up rates and nothing is decided for him after the call.
         if dr.yardline >= 91 and oc.get('is_pass'):
             oc = dict(oc, backed_up=True)
+        # A knee from the own one would be a safety. When the halftime plan
+        # is to end the period, use a live inside run instead of falling back
+        # to an ordinary pass. Normal blocking, fumbles and injuries still apply.
+        if (half_end is not None and secs_in_half <= PLAY_SECS
+                and dr.yardline >= 99 and dr.down < 4
+                and _pl is not None and _pl['choice'] == 'kneel'):
+            oc = dict(oc, is_pass=False, scheme='inside_zone',
+                      play_action=False, rpo=False)
+
         # THE COVERAGE CALL NEVER FIRED IN A GAME. call_defense only consults
         # coverage_call when it is handed both the defence AND rate_fn, and this
         # passed the defence alone - so every real game fell back to the shell
@@ -2503,10 +2521,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # with nothing reading the difference.
         try:
             import playcall as PC
+            saved_clock_run = dict(oc) if (half_end is not None and secs_in_half <= PLAY_SECS
+                and dr.yardline >= 99 and dr.down < 4 and _pl is not None
+                and _pl['choice'] == 'kneel') else None
             oc, checked = PC.audible(oc, dc, offense, rate_fn, rng,
                                      score_diff=dr.score_diff, secs_left=dr.clock,
                                      family_mix=(off_state.plan.run_scheme_mix
                                                  if off_state is not None and off_state.plan is not None else None))
+            if saved_clock_run is not None:
+                oc, checked = saved_clock_run, None
             if checked and late_lean >= 6.0 and not oc.get('is_pass') and dr.togo > 1.5:
                 oc['is_pass'] = True; checked = None          # a light box is no reason to run in the two-minute drill; the check stays a pass
             if checked:
@@ -2675,6 +2698,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         out['motion'] = bool(oc.get('motion'))
         out['blitzers'] = int(dc.get('blitzers', 0))
         out['shell'] = dc.get('shell'); out['box'] = dc.get('box'); out['personnel'] = oc.get('personnel')
+        out['def_personnel'] = dc.get('personnel')
         out['blitz'] = bool(dc.get('blitz')) or int(dc.get('rushers', 4)) >= 5
         dr.log.append(out)
         for st in (off_state, def_state):
