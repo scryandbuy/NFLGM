@@ -132,9 +132,8 @@ def _clock(league, session):
 
 def _division_place(league, abbr):
     t = league.teams[abbr]
-    div = [x for x in league.teams.values() if x.division == t.division]
-    div.sort(key=lambda x: (-(x.record[0] + 0.5 * x.record[2]), x.record[1]))
-    i = next(i for i, x in enumerate(div) if x.abbr == abbr) + 1
+    from season import StandingsView
+    i = StandingsView(league).standings()[abbr]['div_rank']
     return f"{i}{'st' if i == 1 else 'nd' if i == 2 else 'rd' if i == 3 else 'th'} {t.division}"
 
 
@@ -499,7 +498,9 @@ def _scout_rank(league, t):
 def _division_standings(league, abbr):
     t = league.teams[abbr]
     rows = []
-    for x in sorted((x for x in league.teams.values() if x.division == t.division), key=lambda x: (-(x.record[0] + 0.5 * x.record[2]), x.record[1])):
+    from season import StandingsView
+    ranks = StandingsView(league).standings()
+    for x in sorted((x for x in league.teams.values() if x.division == t.division), key=lambda x: ranks[x.abbr]['div_rank']):
         pf, pa = _points(league, x.abbr)
         rows.append(dict(club=club(x.abbr), w=x.record[0], l=x.record[1], t=x.record[2], pf=pf, pa=pa, pd=pf - pa, me=x.abbr == abbr, form=_form(league, x.abbr)))
     return dict(division=t.division, rows=rows)
