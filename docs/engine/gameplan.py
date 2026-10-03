@@ -167,7 +167,12 @@ def apply_change(plan, param, value, skill, urgency=0.5, note='', quarter=1):
         v = np.array(value, float); v = np.clip(v, 0.02, None); v /= v.sum()
         g.depth_mix = tuple(v)
     elif param in ('pass_bias', 'box_bias'):
-        setattr(g, param, float(np.clip(getattr(g, param) + value, -0.45, 0.45)))
+        before = getattr(g, param)
+        after = float(np.clip(before + value, -0.45, 0.45))
+        if after == before:
+            return plan, False
+        setattr(g, param, after)
+        value = after - before       # report the actual change at a bound
     elif param in ('man_rate', 'blitz_rate', 'tempo', 'play_action_rate'):
         setattr(g, param, float(np.clip(getattr(g, param) + value, 0.0, 1.0)))
     else:
@@ -242,7 +247,6 @@ COUNTER_TO_PLAN = {
                     ('shell_weights', {'cover_2': .12, 'cover_4': .10})],
     'run':         [('box_bias', 0.22), ('front_pref', ['bear', 'tite'])],
     'protection':  [('protection', 'seven'), ('depth_mix', (0.80, 0.16, 0.04))],
-    'predictable': [('pass_bias', 0.0)],      # handled by forcing a mix
 }
 
 def adjust_plan(plan, counter, skill, urgency=0.5, quarter=1):
@@ -255,6 +259,13 @@ def adjust_plan(plan, counter, skill, urgency=0.5, quarter=1):
         return plan, []
     trig = counter.get('trigger')
     steps = COUNTER_TO_PLAN.get(trig) or COUNTER_TO_PLAN.get(counter.get('kind'), [])
+    if trig == 'predictable' or counter.get('kind') == 'predictable':
+        # Self-scout identifies our repeated call, not the opponent's. Nudge
+        # away from it without replacing the coach's identity or the caller's
+        # down/clock decisions. Near an even split this changes pass frequency
+        # by at most about eight points; it does not force the next play.
+        shift = {'pass': -0.08, 'run': 0.08}.get(counter.get('target'))
+        steps = [('pass_bias', shift)] if shift is not None else []
     applied = []
     g = plan
     # A change already in effect is not made again. Without this the same

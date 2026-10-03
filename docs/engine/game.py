@@ -1268,14 +1268,14 @@ class TeamState:
         self.base_plan = self.plan.copy()
         self.coach = coach or {}
         self.scheme = scheme
-        self.mem = AD.GameMemory()
+        self.memories = {unit: AD.GameMemory() for unit in ('offense', 'defense')}
         # Walsh's opener, run before the defence can counter. Off-script
         # performance is measurably worse for some callers: Shanahan's 2022
         # San Francisco had +0.32 passing EPA on script and -0.10 off it.
         self.script = AD.Script(length=int((coach or {}).get('script_length', 15)),
                                 off_script_skill=float((coach or {}).get(
                                     'off_script_skill', 0.5)))
-        self.last_adjustment = None      # what the OTHER side just did to us
+        self.last_adjustment = None      # our latest defensive counter, for their counter-punch
         self.chart = None
         self.cond = H.Condition(policy)
         self.jaded = {}          # pid -> 0-1, carries across a season
@@ -1360,11 +1360,18 @@ class TeamState:
             for _ in range(max(0, int(snaps * 0.55)) // 6):
                 self.cond.rest(pid)
 
-    def new_series(self):
-        self.mem.new_series()
+    def new_series(self, *, unit):
+        self.memories[unit].new_series()
 
-    def observe(self, off_call, def_call, outcome):
-        self.mem.record(off_call, def_call, outcome)
+    def observe(self, off_call, def_call, outcome, *, unit):
+        # Own offense supplies protection/self-scouting; opponent offense
+        # supplies the defensive coordinator's targets and tendencies.
+        self.memories[unit].record(off_call, def_call, outcome)
+
+    def adjustment_skill(self, unit):
+        suffix = {'offense': 'off', 'defense': 'def'}[unit]
+        return float(self.coach.get('adjust_skill_' + suffix,
+                                    self.coach.get('adjust_skill', 0.5)))
 
     def remember_coverage(self, call, yards, sack=False, turnover=False):
         """
@@ -1386,21 +1393,21 @@ class TeamState:
         self.cov_memory[call] = float(np.clip(
             self.cov_memory.get(call, 0.0) - good, -1.2, 1.2))
 
-    def adjust(self, quarter=1, rng=None):
+    def adjust(self, quarter=1, rng=None, *, unit):
         """Read the trends and modify THE PLAN. Returns what changed."""
         if rng is None:
             import numpy as _np
             rng = _np.random.default_rng()
         import adjust as AD, gameplan as GP
-        skill = float(self.coach.get('adjust_skill', 0.5))
+        skill = self.adjustment_skill(unit)
         aggr = float(self.coach.get('adjust_willingness', 0.5))
-        trends = AD.detect(self.mem, skill=skill)
+        trends = AD.detect(self.memories[unit], skill=skill, unit=unit)
         ctr = AD.respond(trends, skill=skill, aggressiveness=aggr,
                          rng=rng)
         if not ctr:
             return []
         self.plan, applied = GP.adjust_plan(self.plan, ctr, skill, 0.55, quarter)
-        if applied:
+        if applied and unit == 'defense':
             self.last_adjustment = ctr
         return applied
 
@@ -1451,7 +1458,7 @@ class TeamState:
             travel, target, bracket = self.plan.travel, self.plan.travel_target, self.plan.bracket
             self.plan = self.base_plan.copy()
             self.plan.travel, self.plan.travel_target, self.plan.bracket = travel, target, bracket
-        self.mem = AD.GameMemory()
+        self.memories = {unit: AD.GameMemory() for unit in ('offense', 'defense')}
         self.last_adjustment = None
         self.seq = {'run_hot': 0.0}
         # The opener belongs to one game. Keep the coach's script and skill,
@@ -2186,9 +2193,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dr.log.append(dict(type='penalty', **ko['penalty']))
     # Adjustment happens AFTER EACH SERIES, which is what the coaches describe:
     # "If you wait until halftime to make your adjustments, you're too late."
-    for st in (off_state, def_state):
+    for st, unit in ((off_state, 'offense'), (def_state, 'defense')):
         if st is not None:
-            st.new_series()
+            st.new_series(unit=unit)
             # Adjustment is considered every series but does not fire every
             # series. Calling it unconditionally on ~11 drives produced 5.56
             # plan changes per team per game against the ~3 the standalone
@@ -2199,7 +2206,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             # compared to another and a real regression was indistinguishable
             # from noise. The register swung four rows between identical runs.
             if rng.random() < 0.55:
-                st.adjust(quarter, rng)
+                st.adjust(quarter, rng, unit=unit)
 
     import advanced_stats as AS
     pending = None                        # the last scrimmage play, waiting for its after-state
@@ -2564,7 +2571,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             their = def_state.last_adjustment if def_state is not None else None
             ch = AD.cheater_available(their)
             if ch and not (late_lean or last_shot) and rng.random() < 0.20 + 0.55 * float(
-                    off_state.coach.get('adjust_skill', 0.5)):
+                    off_state.adjustment_skill('offense')):
                 if ch['call'] == 'run':
                     oc['is_pass'] = False
                     import playcall as PC
@@ -2701,8 +2708,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         out['def_personnel'] = dc.get('personnel')
         out['blitz'] = bool(dc.get('blitz')) or int(dc.get('rushers', 4)) >= 5
         dr.log.append(out)
-        for st in (off_state, def_state):
-            if st is not None: st.observe(oc, dc, out)
+        for st, unit in ((off_state, 'offense'), (def_state, 'defense')):
+            if st is not None: st.observe(oc, dc, out, unit=unit)
 
         # INJURIES: EVERY MAN ON THE FIELD ROLLS ONCE A SNAP, at his position's real share of the
         # league's injuries, with the man who took the hit rolling harder. The old roll touched only
