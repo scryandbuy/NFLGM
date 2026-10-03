@@ -32,7 +32,7 @@ class Rankings(unittest.TestCase):
         log=[dict(type='complete',yards=40),dict(type='sack',yards=-8),dict(type='scramble',yards=7),dict(type='kneel',yards=-1),dict(type='penalty',yards=15),dict(type='complete',yards=99,nullified=True),dict(type='interception',yards=50)]
         res=dict(drives=[('home',NS(log=log,result="Punt"))])
         for _ in range(2):G.record_team_performance(l,'A','B',1,res)
-        self.assertEqual(l.team_game_stats['2027-1-A-B']['A'],dict(pass_yds=32,rush_yds=6,touchdowns=0))
+        self.assertEqual(l.team_game_stats['2027-1-A-B']['A'],dict(pass_yds=32,rush_yds=6,touchdowns=0,dropbacks=4,sacks=1,pressures=1,designed_runs=0,designed_run_yards=0))
     def test_exact_tie_and_rounding(self):
         l=self.league();self.game(l,1,'A','B',20,20,p=200,r=80)
         rows=G.performance_table(l,'A','B');self.assertEqual(rows[0]['mine'],rows[0]['theirs'])
