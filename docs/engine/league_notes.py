@@ -46,11 +46,10 @@ def _max_wins(t): return _wins(t) + (GAMES - _played(t))
 
 
 # ------------------------------------------------------------ the standings
-def standings(league, week):
-    """Clinches and eliminations that are mathematically settled as of this week."""
-    if week < 13: return
-    user = getattr(league, 'user_team', None)
+def clinch_status(league, week):
+    """Read-only clinch flags shared by standings tables and league notices."""
     teams = list(league.teams.values())
+    statuses = {}
     # Before the last game, use pessimistic bounds: ties can still beat us.
     # At completion use exactly the same seeding/tiebreakers as the bracket.
     final = None
@@ -86,6 +85,22 @@ def standings(league, week):
                 in_field = t.abbr in seeds
                 out_field = not in_field
                 bye = bool(seeds) and seeds[0] == t.abbr
+            statuses[t.abbr] = dict(division=div_in, playoffs=in_field,
+                                    eliminated=out_field and not in_field, bye=bye)
+    return statuses
+
+
+def standings(league, week):
+    """Clinches and eliminations that are mathematically settled as of this week."""
+    if week < 13: return
+    user = getattr(league, 'user_team', None)
+    teams = list(league.teams.values())
+    statuses = clinch_status(league, week)
+    for conf in sorted({_conf(league, t) for t in teams}):
+        for t in (t for t in teams if _conf(league, t) == conf):
+            flags = statuses[t.abbr]
+            div_in, in_field, out_field, bye = (flags[k] for k in
+                                               ('division', 'playoffs', 'eliminated', 'bye'))
             notices = []
             for flag, prefix, wording in (
                 (div_in, 'div', f'clinch the {t.division}'),

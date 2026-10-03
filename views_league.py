@@ -48,6 +48,35 @@ def _past(session, league, abbr, page, year):
     return out
 
 
+def _clinch_marker(flags):
+    return next((code for key, code in (('bye', 'z'), ('division', 'y'),
+                ('playoffs', 'x'), ('eliminated', 'e')) if flags.get(key)), '')
+
+
+def _past_clinches(past):
+    """Enrich old full snapshots from their final seeds, never this year's race."""
+    import copy
+    out = copy.deepcopy(past)
+    rows = out.get('league_rows') or []
+    if not rows or not all(sum(r.get(k, 0) for k in ('w', 'l', 't')) >= 17 for r in rows):
+        return out
+    marks = {}
+    for conf in out.get('picture') or []:
+        seeds = conf.get('seeds') or []
+        if len(seeds) != 7: continue
+        for r in (out.get('conferences') or {}).get(conf['conf'], []):
+            marks[r['club']['abbr']] = 'e'
+        for r in seeds:
+            marks[r['club']['abbr']] = 'z' if r['seed'] == 1 else 'y' if r['seed'] <= 4 else 'x'
+    groups = [rows] + [d['rows'] for d in out.get('divisions', [])]
+    conferences = out.get('conferences') or {}
+    if isinstance(conferences, dict): groups += list(conferences.values())
+    for group in groups:
+        for r in group:
+            if r['club']['abbr'] in marks: r['clinch'] = marks[r['club']['abbr']]
+    return out
+
+
 def standings(session, league, abbr, year=None):
     yr = int(year) if year else int(league.year)
     if yr != int(league.year):
@@ -55,7 +84,7 @@ def standings(session, league, abbr, year=None):
         if past is not None:
             if past.get('thin') and not past.get('divisions') and past.get('league_rows'):
                 past['divisions'] = _thin_divisions(league, past['league_rows'])      # a snapshot kept before the division cut
-            return past
+            return _past_clinches(past)
         # no snapshot (a season closed before snapshots existed): the records the league kept
         hist = (getattr(league, 'standings_history', {}) or {}).get(yr) or {}
         rows = []
@@ -81,6 +110,8 @@ def standings(session, league, abbr, year=None):
         seeds = r.seeds() if r is not None else {}
     except Exception: seeds = {}
     ranks_prev = getattr(league, '_rank_prev', {}) or {}
+    from league_notes import clinch_status
+    clinches = clinch_status(league, league.week)
     divs = []
     for name in DIVS:
         rows = []
@@ -89,6 +120,7 @@ def standings(session, league, abbr, year=None):
             w, l, d = t.record; pf, pa = _points(league, t.abbr)
             s = st.get(t.abbr, {})
             rows.append(dict(club=club(t.abbr), w=w, l=l, t=d, pct=s.get('pct', round((w + 0.5 * d) / max(1, w + l + d), 3)), pf=pf, pa=pa, pd=pf - pa, form=_form(league, t.abbr), me=(t.abbr == abbr), div_rank=s.get('div_rank'),
+                            clinch=_clinch_marker(clinches.get(t.abbr, {})),
                             div_rec=_div_record(league, t), arrow=_rank_move(league, t.abbr, s.get('div_rank'))))
         rows.sort(key=lambda x: (x['div_rank'] or 9, -x['pct'], -x['pd']))
         divs.append(dict(name=name, rows=rows))

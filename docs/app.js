@@ -2890,6 +2890,12 @@ const LG = { standings: 'Standings', schedule: 'Schedule', bracket: 'Playoffs', 
 function lgSecond(cur) { secondRow(Object.entries(LG).map(([k, l]) => [l, '#league/' + k]), '#league/' + cur); $('#crumb').textContent = 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'league')); }
 const TAGCLS = { Trade: 'trade', Signing: 'sign', Release: 'cut', Draft: 'draft', Extension: 'contract', Waivers: 'wire', 'Call-Up': 'squad', 'Practice Squad': 'squad', 'Injured Reserve': 'wire', IR: 'wire', Retirement: 'retire', Fired: 'cut', Hired: 'staff', Staff: 'staff', 'Franchise Tag': 'tagg', Restructure: 'contract', 'Position Change': 'squad', 'Hall of Fame': 'hall', Season: 'season' };
 
+const CLINCH_LABELS = {x:'Clinched playoff berth', y:'Clinched division', z:'Clinched first-round bye and home-field advantage', e:'Eliminated from playoff contention'};
+function standingsClub(r) {
+  const name = el('span', {class:'standings-team'}, clubLink(r.club.abbr, r.club.name));
+  if (CLINCH_LABELS[r.clinch]) name.append(el('span', {class:'clinch', 'data-tip':CLINCH_LABELS[r.clinch], 'aria-label':CLINCH_LABELS[r.clinch]}, r.clinch));
+  return name;
+}
 function standingsRecord(r) { return `${r.w}\u2013${r.l}${r.t ? '\u2013' + r.t : ''}`; }
 function renderStandings(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('standings');
@@ -2907,7 +2913,7 @@ function renderStandings(v) {
   board.querySelector('.standings-period').append(year); s.append(controls); layout.append(s); board.append(layout);
   if (v.thin) {
     const grid = el('div', { class: 'divgrid' });
-    for (const d of (v.divisions || [])) { const t = el('table', { class: 'grid' }, el('thead', {}, el('tr', {}, el('th', {}, d.name), el('th', { class: 'n' }, 'W–L'), el('th', { class: 'n' }, 'Pct')))); const tb = el('tbody'); for (const r of d.rows) tb.append(el('tr', {}, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n mono' }, r.record), el('td', { class: 'n mono' }, String(r.pct.toFixed(3)).replace(/^0/, '')))); t.append(tb); grid.append(t); }
+    for (const d of (v.divisions || [])) { const t = el('table', { class: 'grid' }, el('thead', {}, el('tr', {}, el('th', {}, d.name), el('th', { class: 'n' }, 'W–L'), el('th', { class: 'n' }, 'Pct')))); const tb = el('tbody'); for (const r of d.rows) tb.append(el('tr', {}, el('td', {class:'standings-team-cell'}, standingsClub(r)), el('td', { class: 'n mono' }, r.record), el('td', { class: 'n mono' }, String(r.pct.toFixed(3)).replace(/^0/, '')))); t.append(tb); grid.append(t); }
     s.append(grid); if (!v.league_rows.length) s.append(el('div', { class: 'empty' }, 'No standings are kept for that season.')); for (const n of (v.notes || []).filter(Boolean)) s.append(el('div', { class: 'count', style: 'padding:6px 14px' }, n)); page.append(board); return; }
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const k of ['Divisions', 'Conference', 'League', 'Playoff Picture']) tabs.append(el('button', { 'aria-pressed': String(standingsView === k), onclick: () => { standingsView = k; renderStandings(v); } }, k)); controls.append(tabs);
   const conferences = Object.keys(v.conferences || {});
@@ -2926,23 +2932,24 @@ function renderStandings(v) {
   if (standingsView === 'Conference') {
     for (const conf of [standingsConference]) {
       const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, conf), el('th', { class: 'n' }, 'Seed'), el('th', { class: 'n' }, 'Record'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Strength of victory' }, 'SOV'), el('th', { class: 'n', 'data-tip': 'Strength of schedule' }, 'SOS'), el('th', {}, 'Form')));
-      for (const r of v.conferences[conf]) t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.seed ? el('span', { class: 'seed ' + (r.seed === 1 ? 'bye' : 'in') + (r.me ? ' me' : '') }, r.seed) : ''), el('td', { class: 'n standings-record' }, standingsRecord(r)), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), pd(r), el('td', { class: 'n' }, r.sov != null ? r.sov.toFixed(3).replace(/^0/, '') : '—'), el('td', { class: 'n' }, r.sos != null ? r.sos.toFixed(3).replace(/^0/, '') : '—'), el('td', {}, formDots(r.form))));
+      for (const r of v.conferences[conf]) t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', {class:'standings-team-cell'}, standingsClub(r)), el('td', { class: 'n' }, r.seed ? el('span', { class: 'seed ' + (r.seed === 1 ? 'bye' : 'in') + (r.me ? ' me' : '') }, r.seed) : ''), el('td', { class: 'n standings-record' }, standingsRecord(r)), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), pd(r), el('td', { class: 'n' }, r.sov != null ? r.sov.toFixed(3).replace(/^0/, '') : '—'), el('td', { class: 'n' }, r.sos != null ? r.sos.toFixed(3).replace(/^0/, '') : '—'), el('td', {}, formDots(r.form))));
       s.append(t);
     }
   } else if (standingsView === 'League') {
-    const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Team'), el('th', { class: 'n' }, 'Record'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n' }, 'PF'), el('th', { class: 'n' }, 'PA'), el('th', { class: 'n' }, 'PD'), el('th', {}, 'Form')));
-    v.league_rows.forEach((r, i) => t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', { class: 'n' }, i + 1), el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n standings-record' }, standingsRecord(r)), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', {}, formDots(r.form)))));
+    const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {class:'standings-team-cell'}, 'Team'), el('th', { class: 'n' }, 'Record'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n' }, 'PF'), el('th', { class: 'n' }, 'PA'), el('th', { class: 'n' }, 'PD'), el('th', {}, 'Form')));
+    v.league_rows.forEach((r, i) => t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', { class: 'n' }, i + 1), el('td', {class:'standings-team-cell'}, standingsClub(r)), el('td', { class: 'n standings-record' }, standingsRecord(r)), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', {}, formDots(r.form)))));
     s.append(t);
   } else {
     const grid = el('div', { class: 'divgrid' });
     for (const d of v.divisions.filter(d => d.name.startsWith(standingsConference))) {
       const box = el('div', { class: 'divbox' }, el('h4', {}, d.name)); const t = el('table', { class: 'tbl' });
-      t.append(el('tr', {}, el('th', {}, 'Team'), el('th', { class: 'n' }, 'Record'), el('th', {}, 'Form'), el('th', { class: 'n', 'data-tip': 'Points for' }, 'PF'), el('th', { class: 'n', 'data-tip': 'Points against' }, 'PA'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Record inside the division' }, 'Div'), el('th', { class: 'n', 'data-tip': 'Moved since last week' }, '')));
-      for (const r of d.rows) t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n standings-record' }, standingsRecord(r)), el('td', {}, formDots(r.form)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', { class: 'n' }, r.div_rec), el('td', { class: 'n' }, arrow(r))));
+      t.append(el('tr', {}, el('th', {class:'standings-team-cell'}, 'Team'), el('th', { class: 'n' }, 'Record'), el('th', {}, 'Form'), el('th', { class: 'n', 'data-tip': 'Points for' }, 'PF'), el('th', { class: 'n', 'data-tip': 'Points against' }, 'PA'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Record inside the division' }, 'Div'), el('th', { class: 'n', 'data-tip': 'Moved since last week' }, '')));
+      for (const r of d.rows) t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', {class:'standings-team-cell'}, standingsClub(r)), el('td', { class: 'n standings-record' }, standingsRecord(r)), el('td', {}, formDots(r.form)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', { class: 'n' }, r.div_rec), el('td', { class: 'n' }, arrow(r))));
       box.append(t); grid.append(box);
     }
     s.append(grid);
   }
+  s.append(el('div', {class:'legend-line'}, 'x - Playoff berth / y - Division / z - First-round bye, home field / e - Eliminated'));
   if (v.notes.length) s.append(el('div', { class: 'legend-line' }, 'Ties: ' + v.notes.join(' ')));
   page.append(board);
 }
@@ -3324,7 +3331,7 @@ function renderStats(v) {
   if (statsTab === 'Leaders' || statsTab === 'Advanced') {
     const boxes = statsTab === 'Leaders' ? v.boxes : v.advanced;
     const grid = el('div', { class: 'leaders' });
-    for (const b of boxes) { const box = el('div', { class: 'lbox' }, el('h4', {}, b.title, el('small', {}, b.unit || ''))); if (b.note) box.append(el('p', { class: 'muted', style: 'padding:0 12px;font-size:12px;line-height:1.5' }, b.note)); b.rows.slice(0, 5).forEach((r, i) => box.append(statsTeamRow('div', r, el('span', { class: 'r' }, i + 1), nm(r), el('span', { class: 'v' }, r.v)))); grid.append(box); }
+    for (const b of boxes) { const box = el('div', { class: 'lbox' }, el('h4', {}, b.title)); if (b.note) box.append(el('p', { class: 'muted', style: 'padding:0 12px;font-size:12px;line-height:1.5' }, b.note)); b.rows.slice(0, 5).forEach((r, i) => box.append(statsTeamRow('div', r, el('span', { class: 'r' }, i + 1), nm(r), el('span', { class: 'v' }, r.v)))); grid.append(box); }
     if (!boxes.length) grid.append(el('div', { class: 'empty' }, 'No games played this season yet.'));
     s.append(grid);
   } else if (statsTab === 'Team') {

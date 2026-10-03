@@ -3083,3 +3083,10 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .standings-board .standings-picture .tbl td{font-size:16px;height:48px;padding:13px 10px}
 .standings-board .standings-picture small{font-size:14px}
 @media(max-width:650px){.standings-board{padding:18px 12px}.standings-board .tbl th,.standings-board .tbl td{padding:10px 6px}.standings-main{overflow-x:auto}.standings-controls .tabs{gap:3px}.standings-controls .tabs button{padding:10px 8px}}
+
+/* Align standings values with their headings, including the second column. */
+.standings-board .tbl th.n,.standings-board .tbl td.n{text-align:center}
+.standings-board .tbl .standings-team-cell{text-align:left}
+.standings-board .tbl .form{justify-content:center}
+.standings-team{display:inline-flex;align-items:center;gap:5px}
+.standings-team .clinch{color:var(--ink-2);margin-left:0;font-size:12px;font-weight:700}
