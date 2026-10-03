@@ -34,7 +34,7 @@ def _power(p):
 POT_ERR_CAP = 7.0        # the most a room's read of a ceiling can be off
 
 # CERTAINTY. How much of a player a room has seen, 0 to 1, kept on the view and never shown. It starts where the
-# first read's information starts (more on the top half of the class, less deep and at small schools), and every
+# first read's information starts (more on publicly visible prospects, less deep and at small schools), and every
 # look raises it by an amount the head scout sets: a great head scout learns more from the same Senior Bowl than
 # a poor one. The room's remaining error and the width of its ceiling read both follow it.
 CERT_START_TOP, CERT_START_DEEP, CERT_SMALL_SCHOOL = 0.35, 0.22, -0.06
@@ -74,6 +74,28 @@ def tape(p):
     return float(np.clip(t, -15.0, 15.0))       # the class builder's gems and busts carry up to fifteen
 
 
+def _tape_fade(view, p):
+    fade = max(TAPE_FLOOR, 1.0 - 0.25 * (float(view.get('reads', 1) or 1) - 1.0))
+    if 'visited' in (view.get('flags') or []):
+        fade = min(fade, 0.25 if p.xp_spent.get('_tape_role') else 0.5)
+    return fade
+
+
+def scouted_ratings(p, view, growth=0.0):
+    """One room's observed attributes, shared by its card and its decisions.
+
+    Growth is an explicit draft projection; the card always shows the current
+    read. Medical concern belongs in the overall risk adjustment, not every
+    individual attribute.
+    """
+    import xp as XP
+    physical = float(view.get('e_phys', 0.0) or 0.0)
+    skill = float(view.get('e_skill', 0.0) or 0.0) + tape(p) * _tape_fade(view, p)
+    return {key: float(np.clip(float(value) + growth +
+            (physical if key in XP.PHYSICAL or key in XP.TOOLS else skill), 30.0, 99.0))
+            for key, value in p.ratings.items()}
+
+
 def _refresh(view, p):
     """The numbers a room sees, from the truth, the tape, and its own errors."""
     lo, hi = p.potential_range if p.potential_range else (p.ovr, p.ovr + 3)
@@ -84,12 +106,8 @@ def _refresh(view, p):
     left = (1.0 - c) / max(0.05, 1.0 - c0)
     if 'e_skill0' in view: view['e_skill'] = float(view['e_skill0']) * left
     if 'e_pot0' in view: view['e_pot'] = float(np.clip(float(view['e_pot0']) * left, -POT_ERR_CAP, POT_ERR_CAP))
-    fade = max(TAPE_FLOOR, 1.0 - 0.25 * (n - 1.0))
-    if 'visited' in (view.get('flags') or []):
-        # A VISIT IS THE LOOK THAT SEES THROUGH TAPE. In the building, on the board, in the interview, a room learns
-        # most of what the film hid: three-quarters of a gem's or a bust's tape, half of an ordinary player's
-        fade = min(fade, 0.25 if p.xp_spent.get('_tape_role') else 0.5)
-    tp = tape(p) * fade
+    # A visit sees through most of the film's shared error, but not all of it.
+    tp = tape(p) * _tape_fade(view, p)
     view['ovr'] = round(float(np.clip(p.ovr + view['e_phys'] + view['e_skill'] + tp + adj, 30, 99)), 1)
     # a room's ceiling read is bounded: nobody sees a 59 as a 97. The ceiling error is capped and the ceiling
     # itself cannot sit more than eighteen points above what the room sees today
@@ -186,11 +204,22 @@ def scout(league, rng):
     league.draft_pool, plus league.consensus = {pid: dict(ovr, pot, rank)}.
     """
     pool = league.draft_pool or getattr(league, 'next_class', [])
-    # men few rooms watched carry a wider first read: the back half of the
-    # class by true value, and small-school men more so. The spring's second
-    # looks move them most, which is where the helium comes from.
-    by_val = sorted(pool, key=lambda p: -p.ovr)
-    deep = {p.pid for p in by_val[len(by_val) // 2:]}
+    # Initial coverage follows a noisy public film reputation and the draft
+    # value of each position. Rooms cannot sort the class by hidden true OVR
+    # before doing any scouting, and a high specialist rating does not crowd
+    # out a less polished tackle or quarterback.
+    import draft as DRAFT
+    groups = {}
+    for p in pool:
+        film = p.ovr + tape(p) + float(np.random.default_rng(
+            stable_seed(('draft-film-exposure-v1', p.pid))).normal(0.0, 5.0))
+        groups.setdefault(DRAFT.SLOT_GROUP.get(p.pos, p.pos), []).append((film, p))
+    public_slot = {}
+    for prospects in groups.values():
+        for rank, (_, p) in enumerate(sorted(prospects, key=lambda row: (-row[0], row[1].pid))):
+            public_slot[p.pid] = DRAFT.expected_slot(p.pos, rank)
+    by_exposure = sorted(pool, key=lambda p: (public_slot[p.pid], p.pid))
+    deep = {p.pid for p in by_exposure[len(by_exposure) // 2:]}
     views = {}
     for abbr, team in league.teams.items():
         sd = error_sd(team.gm, team); R = room(team)
@@ -260,14 +289,10 @@ def scheme_fit_view(league, abbr, p, view):
     """How the prospect grades in this club's scheme, ON THE ROOM'S READ: the scouted attribute vector (the true
     ratings shifted by the room's physical and skill errors) run through the same fit function the roster uses.
     As uncertain as the estimate it is built from; a visit tightens both."""
-    import gm_engine as GE, xp as XP
+    import gm_engine as GE
     team = league.teams.get(abbr)
     if team is None or view is None: return 0.0
-    e_p, e_s = float(view.get('e_phys', 0.0) or 0.0), float(view.get('e_skill', 0.0) or 0.0)
-    fade = max(TAPE_FLOOR, 1.0 - 0.25 * (float(view.get('reads', 1) or 1) - 1.0))
-    if 'visited' in (view.get('flags') or []): fade = min(fade, 0.25 if p.xp_spent.get('_tape_role') else 0.5)
-    e_s += tape(p) * fade
-    seen = {k: float(np.clip(v + (e_p if (k in XP.PHYSICAL or k in XP.TOOLS) else e_s), 30.0, 99.0)) for k, v in p.ratings.items()}
+    seen = scouted_ratings(p, view)
     try: return round(float(GE.scheme_fit(seen, p.pos, team)), 1)
     except Exception: return 0.0
 

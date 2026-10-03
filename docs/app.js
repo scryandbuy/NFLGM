@@ -1390,7 +1390,7 @@ function renderProspectCard(v) {
     el('div', { class: 'jersey', style: 'background:var(--sheet-3);color:var(--ink)' }, v.pos),
     el('div', {}, el('div', { class: 'hname' }, v.name.toUpperCase()),
       el('div', { class: 'hline' }, el('b', {}, v.pos), ` · ${v.cls_year} · ${v.age}${v.size ? ' · ' + v.size : ''} · Home State: ${v.home_state}${v.small ? ' · Small School' : ''}${v.taken ? ' · Drafted' : ''}`),
-      el('div', { class: 'hfacts' }, el('div', { 'data-tip': "The league's grade, same scale as yours" }, el('span', {}, 'Consensus'), el('b', {}, v.cons != null ? `${v.cons}${v.cons_rank ? ' · #' + v.cons_rank : ''}` : '—')), el('div', { 'data-tip': "Yours minus the league's. Positive means the league undervalues him" }, el('span', {}, 'Gap'), el('b', { style: v.gap > 0 ? 'color:var(--ok)' : v.gap < 0 ? 'color:var(--danger)' : '' }, v.gap != null ? (v.gap > 0 ? '+' : '') + v.gap : '—')), el('div', { 'data-tip': 'Where the league expects him to go' }, el('span', {}, 'Projected'), el('b', {}, v.proj_range)), el('div', {}, el('span', {}, 'Your Board'), el('b', {}, v.dnd ? 'Do Not Draft' : v.on_board ? `#${v.on_board}` : 'Not placed')), el('div', {}, el('span', {}, 'Read'), el('b', { style: 'color:var(--ink-2)' }, v.confidence)))),
+      el('div', { class: 'hfacts' }, el('div', { 'data-tip': "The league's grade, same scale as yours" }, el('span', {}, 'Consensus'), el('b', {}, v.cons != null ? `${v.cons}${v.cons_rank ? ' · #' + v.cons_rank : ''}` : '—')), el('div', { 'data-tip': "Yours minus the league's. Positive means the league undervalues him" }, el('span', {}, 'Gap'), el('b', { style: v.gap > 0 ? 'color:var(--ok)' : v.gap < 0 ? 'color:var(--danger)' : '' }, v.gap != null ? (v.gap > 0 ? '+' : '') + v.gap : '—')), el('div', { 'data-tip': 'Where the league expects him to go' }, el('span', {}, 'Projected'), el('b', {}, v.proj_range)), el('div', {}, el('span', {}, 'Your Board'), el('b', {}, v.dnd ? 'Do Not Draft' : v.on_board ? `#${v.on_board}` : 'Not placed')), el('div', { 'data-tip': 'How much football evidence your scouts have gathered' }, el('span', {}, 'Football Read'), el('b', { style: 'color:var(--ink-2)' }, v.confidence)), el('div', {}, el('span', {}, 'Visit'), el('b', { style: 'color:var(--ink-2)' }, v.visit_status || 'Not visited')))),
     el('div', { class: 'ovrbig' }, el('b', { 'data-tip': "Your scouts' read. Carries error; a visit tightens it" }, v.mine), el('span', {}, 'Estimated Overall · your scouts'), (v.fit || 0) !== 0 ? el('div', { class: 'pot', 'data-tip': "How he grades in your scheme, on your scouts' read" }, `In your scheme ${v.scheme_ovr} · `, el('span', { class: 'fit ' + (v.fit > 0 ? 'p' : 'm') }, (v.fit > 0 ? '+' : '') + v.fit.toFixed(1))) : '', el('div', { class: 'pot', 'data-tip': 'Where he can grow to. Wide means your scouts are unsure' }, `Ceiling ${v.ceiling}${v.my_round ? ' · Your Grade ' + v.my_round : ''}`))));
   const acts = el('div', { class: 'ctabs' }, el('span', { style: 'font-family:var(--display);font-weight:700;color:var(--ink-3);padding:8px 0' }, 'Prospect Card'));
   const a = el('div', { class: 'acts' });
@@ -2575,12 +2575,25 @@ function renderBoard(v) {
   }
   if (updates.length) {
     const latestWeek = Math.max(...updates.map(r => Number(r.week) || 0));
-    const latest = updates.filter(r => Number(r.week) === latestWeek).slice(0, 4);
+    const importance = { Prospect: 0, 'Position Group': 1, Baseline: 2 };
+    const latest = updates.filter(r => Number(r.week) === latestWeek).sort((a, b) =>
+      (importance[a.focus] ?? 3) - (importance[b.focus] ?? 3) ||
+      Math.abs((b.after?.ovr || 0) - (b.before?.ovr || 0)) - Math.abs((a.after?.ovr || 0) - (a.before?.ovr || 0)));
     const report = el('div', { class: 'pad', style: 'border-top:1px solid var(--rule-2)' }, el('b', {}, `SCOUTING UPDATE / WEEK ${latestWeek}`));
-    for (const row of latest) report.append(el('div', { style: 'padding:7px 0;border-bottom:1px solid var(--rule-2)' },
-      el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + row.pid; } }, row.name),
-      ` / ${row.pos} / ${row.focus} / Estimated overall ${Math.round(row.before.ovr)} to ${Math.round(row.after.ovr)}`,
-      row.character?.length ? ` / ${row.character.filter(c => c.status !== 'neutral').map(c => c.summary + ' (' + c.confidence + ' confidence)').join('; ') || 'background checked'}` : ''));
+    const rows = el('div', {});
+    let expanded = false;
+    const toggle = el('button', { class: 'btn quiet', style: 'margin-top:8px', onclick: () => { expanded = !expanded; drawUpdates(); } });
+    const drawUpdates = () => {
+      rows.innerHTML = '';
+      for (const row of (expanded ? latest : latest.slice(0, 4))) rows.append(el('div', { style: 'padding:7px 0;border-bottom:1px solid var(--rule-2)' },
+        el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + row.pid; } }, row.name),
+        ` / ${row.pos} / ${row.focus} / Estimated overall ${Math.round(row.before.ovr)} to ${Math.round(row.after.ovr)}`,
+        row.character?.length ? ` / ${row.character.filter(c => c.status !== 'neutral').map(c => c.summary + ' (' + c.confidence + ' confidence)').join('; ') || 'background checked'}` : ''));
+      toggle.textContent = expanded ? 'Show fewer updates' : `Show all ${latest.length} updates`;
+    };
+    drawUpdates();
+    report.append(rows);
+    if (latest.length > 4) report.append(toggle);
     focusBox.append(report);
   } else focusBox.append(el('div', { class: 'pad count' }, 'Your first cross-check arrives after Week 2. Your scout continues working without weekly input.'));
   page.append(focusBox);

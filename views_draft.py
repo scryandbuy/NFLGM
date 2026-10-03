@@ -243,37 +243,37 @@ def prospect_card(session, league, abbr, pid):
     taken_now = bool(getattr(session, 'draft', None) is not None and p.pid in getattr(session.draft, 'taken', set())) or bool(p.team)
     if row is None: return dict(error='your scouts have no read on him')
     view = league.scouting[abbr][p.pid]
-    e_phys = float(view.get('e_phys', 0.0)); e_skill = float(view.get('e_skill', 0.0))
-    # the whole rating set as your scouts see it, for the scheme rows
-    import xp as XP_
-    seen_ratings = {k: float(max(20.0, min(99.0, float(v_) + (e_phys if (k in XP_.PHYSICAL or k in XP_.TOOLS) else e_skill)))) for k, v_ in p.ratings.items()}
+    # The card, scheme fit, roster evaluation and trade guard all use this
+    # room's same observed attribute vector. No true rating is shown.
+    seen_ratings = SC.scouted_ratings(p, view)
     fam = VC.FAM.get(p.pos, 'DB')
-    def col(keys, err):
+    def col(keys):
         rows = []
         for k, label in keys:
-            true = p.ratings.get(k)
-            if true is None: continue
-            seen = int(round(max(20, min(99, float(true) + err))))
+            if k not in seen_ratings: continue
+            seen = int(round(seen_ratings[k]))
             rows.append(dict(key=k, label=label, v=seen, tier=('hi' if seen >= 85 else 'md' if seen >= 72 else 'lo')))   # 'md', not 'mid': .mid is the game-day midfield layout and centred the row
         return rows
-    phys = dict(title='Physical', rows=col(VC.ATTR['phys'], e_phys), extra=None)
-    if fam == 'DB': skill = dict(title='Coverage', rows=col(VC.ATTR['coverage'], e_skill), extra=dict(title='Run Defense', rows=col(VC.ATTR['rundef'], e_skill)))
-    elif fam in ('LB', 'DL'): skill = dict(title=VC.SKILL_TITLE.get(fam, 'Skill'), rows=col([k for k in VC.ATTR[fam] if k[0] not in ('tackle_rating', 'hit_power_rating', 'pursuit_rating', 'block_shed_rating')], e_skill), extra=dict(title='Run Defense', rows=col(VC.ATTR['rundef'], e_skill)))
-    else: skill = dict(title=VC.SKILL_TITLE.get(fam, 'Skill'), rows=col(VC.ATTR.get(fam, VC.ATTR['DB']), e_skill), extra=None)
-    mental = dict(title='Mental', rows=col(VC.ATTR['mental'], e_skill), extra=None)
+    phys = dict(title='Physical', rows=col(VC.ATTR['phys']), extra=None)
+    if fam == 'DB': skill = dict(title='Coverage', rows=col(VC.ATTR['coverage']), extra=dict(title='Run Defense', rows=col(VC.ATTR['rundef'])))
+    elif fam in ('LB', 'DL'): skill = dict(title=VC.SKILL_TITLE.get(fam, 'Skill'), rows=col([k for k in VC.ATTR[fam] if k[0] not in ('tackle_rating', 'hit_power_rating', 'pursuit_rating', 'block_shed_rating')]), extra=dict(title='Run Defense', rows=col(VC.ATTR['rundef'])))
+    else: skill = dict(title=VC.SKILL_TITLE.get(fam, 'Skill'), rows=col(VC.ATTR.get(fam, VC.ATTR['DB'])), extra=None)
+    mental = dict(title='Mental', rows=col(VC.ATTR['mental']), extra=None)
     comb = getattr(p, 'combine', None) or {}
     combine = [dict(label=l, v=(f"{comb[k]:.2f}" if k in ('forty', 'shuttle') and comb.get(k) is not None else (f"{comb[k]:.1f}\"" if k == 'vertical' and comb.get(k) is not None else (str(comb[k]) if comb.get(k) is not None else '—')))) for k, l in (('forty', 'Forty'), ('vertical', 'Vertical'), ('bench', 'Bench'), ('shuttle', 'Shuttle'))]
     ub = getattr(league, 'user_board', None) or {}
     on_board = (ub.get('order') or []).index(p.pid) + 1 if p.pid in (ub.get('order') or []) else None
     reads = int(view.get('reads', 1) or 1)
-    confidence = 'Visited' if 'visited' in (view.get('flags') or []) else 'Visit scheduled' if p.pid in (getattr(league, 'user_visits', None) or []) else 'Not visited'
+    certainty = SC.certainty(view)
+    confidence = 'Strong' if certainty >= .75 else 'Moderate' if certainty >= .5 else 'Limited'
+    visit_status = 'Visited' if 'visited' in (view.get('flags') or []) else 'Scheduled' if p.pid in (getattr(league, 'user_visits', None) or []) else 'Not visited'
     return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], fit=row.get('fit', 0.0), scheme_ovr=row.get('scheme_ovr'), home_state=row['home_state'],
                 small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
-                words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine,
+                words=row['words'], visited=row['visited'], scheduled=row['scheduled'], taken=row['taken'], cols=[phys, skill, mental], combine=combine,
                 medical=('Concern found at visit' if 'medical' in (view.get('flags') or []) else 'No concern found at visit' if 'visited' in (view.get('flags') or []) else 'Unknown until visit'),
                 on_clock=bool(getattr(session, 'draft', None) is not None and not session.draft.done and session.draft.on_user() and not taken_now),
                 schemes=VC.scheme_rows(seen_ratings, p.pos, VC._club_arch(league, abbr, p.pos)),
-                reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality='', character_report=row['character_report'], spring_done=_spring_done(league), visit_window=(session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'),
+                reads=reads, confidence=confidence, visit_status=visit_status, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality='', character_report=row['character_report'], spring_done=_spring_done(league), visit_window=(session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'),
                 read=_prospect_read(league, abbr, p, row, view))
 
 

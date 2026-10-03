@@ -232,7 +232,9 @@ def visits(league, rng):
                            R=SC.room(team), team=team); looks += 1
             v['flags'] = list(set(v.get('flags', []) + ['visited']))
             SC._refresh(v, p)                                   # the visit's read, with most of the tape seen through
-            _character(league, abbr, team, p, sd * 0.7, rng)
+            # Character's visit model applies its own interview precision;
+            # pass the room's raw error so scout quality remains calibrated.
+            _character(league, abbr, team, p, sd, rng)
             _medical(league, abbr, team, p, rng)
     SC.consensus(league)
     return looks, _stock_moves(league, 'visits')

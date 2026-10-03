@@ -265,8 +265,12 @@ class Draft:
         if not .85 * market - 1e-9 <= neutral <= 1.35 * market + 1e-9:
             return False
         if any(isinstance(x, str) for x in sent):
+            import draft_plan as DP
+            # The buyer prices the rookie it has scouted, not the hidden
+            # player object it will receive after making the pick.
+            observed = DP.observed_prospect(self.L, buyer, target_player) if target_player is not None else None
             football = TR.package_football(self.L, ta, tb, sent, [pk],
-                                           prospect=target_player, cache=football_cache)
+                                           prospect=observed, cache=football_cache)
             if not football['approved']: return False
             seller_reserve = football.get('reserves', {}).get(seller, 0.)
             if seller_reserve:
@@ -279,7 +283,7 @@ class Draft:
                 # improvement after giving up every player in the package.
                 if target_player is None: return False
                 net = football['gains'][buyer]
-                gross = RN.move_gain(ta, target_player)
+                gross = RN.move_gain(ta, observed)
                 ceiling = 1.35 * market * min(1., TR._upgrade_budget(net) / TR._upgrade_budget(gross))
                 if net <= .5 or neutral > ceiling + 1e-9: return False
         # Financial planning includes the acquired pick's actual rookie deal,

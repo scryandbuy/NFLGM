@@ -193,22 +193,21 @@ def assess(league, abbr, level=None, players=None):
 
 def prospect_gains(league, abbr, prospects, plan, grades):
     """Evaluate the scouting room's player, including its attribute uncertainty."""
-    from types import SimpleNamespace
-    import scouting as SC
-    import xp as XP
     seen = []
     for p in prospects:
         view = league.scouting[abbr][p.pid]
-        e_phys, e_skill = float(view.get('e_phys', 0) or 0), float(view.get('e_skill', 0) or 0)
-        fade = max(SC.TAPE_FLOOR, 1.0 - .25 * (float(view.get('reads', 1) or 1) - 1))
-        if 'visited' in (view.get('flags') or []):
-            fade = min(fade, .25 if p.xp_spent.get('_tape_role') else .5)
-        e_skill += SC.tape(p) * fade
         growth = min(6.0, max(0.0, grades[p.pid] - float(view['ovr'])))
-        ratings = {k: min(99.0, max(30.0, float(v) + growth +
-                    (e_phys if k in XP.PHYSICAL or k in XP.TOOLS else e_skill)))
-                   for k, v in p.ratings.items()}
-        seen.append(SimpleNamespace(pid=p.pid, pos=p.pos, ratings=ratings,
-                                    ovr=float(view['ovr'])+growth, out_until=None,
-                                    weight=getattr(p, 'weight', None)))
+        seen.append(observed_prospect(league, abbr, p, growth=growth))
     return RN.candidate_gains(plan['_roster'], seen, baseline=plan['_roster_report'])
+
+
+def observed_prospect(league, abbr, prospect, growth=0.0):
+    """A temporary rookie on this club's read, never the hidden player object."""
+    from types import SimpleNamespace
+    import scouting as SC
+    view = league.scouting[abbr][prospect.pid]
+    return SimpleNamespace(pid=prospect.pid, pos=prospect.pos,
+                           ratings=SC.scouted_ratings(prospect, view, growth=growth),
+                           ovr=float(view['ovr']) + growth, out_until=None,
+                           retired=False,
+                           weight=getattr(prospect, 'weight', None))

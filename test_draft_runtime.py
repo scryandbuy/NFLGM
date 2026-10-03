@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import draft as DFT
 import draft_day
+import draft_plan
 import session
 import trades
 
@@ -101,6 +102,33 @@ class DraftRuntimeTests(unittest.TestCase):
         self.assertIn(incumbent.pid, observed[0])
         self.assertNotIn(incumbent.pid, observed[1])
         self.assertEqual([p.pid for p in buyer.roster], original_roster)
+
+    def test_draft_trade_guard_uses_buyer_scouted_rookie(self):
+        s = self.fresh()
+        D, L = s.draft, s.L
+        buyer = 'DEN'
+        target = D.available()[0]
+        pk = D.current()
+        player = L.teams[buyer].roster[0]
+        offer = {'a_sends': [{'kind': 'player', 'pid': player.pid}],
+                 'a_gets': [D._pick_asset(pk)]}
+        view = L.scouting[buyer][target.pid]
+        import scouting as SC
+        expected = SC.scouted_ratings(target, view)
+        observed = draft_plan.observed_prospect(L, buyer, target)
+        actual_assessment = trades.package_football(
+            L, L.teams[buyer], L.teams[pk.owner], [player.pid], [pk], prospect=observed)
+        self.assertIn(buyer, actual_assessment['gains'])
+        with patch('trade_engine.market_price', return_value=50.0), \
+             patch('trades.package_football', return_value={
+                 'approved': True, 'gains': {buyer: 2.0}, 'reserves': {}}) as football, \
+             patch('roster_needs.move_gain', return_value=2.0) as gross, \
+             patch('trades._financial_trade', return_value=True):
+            self.assertTrue(D._package_valid(buyer, pk.owner, offer, pk, target))
+        proxy = football.call_args.kwargs['prospect']
+        self.assertIsNot(proxy, target)
+        self.assertEqual(proxy.ratings, expected)
+        self.assertIs(gross.call_args.args[1], proxy)
 
     def test_offer_search_skips_bad_player_collateral_but_keeps_viable_pick_package(self):
         s = self.fresh()
