@@ -38,8 +38,8 @@ POT_ERR_CAP = 7.0        # the most a room's read of a ceiling can be off
 # look raises it by an amount the head scout sets: a great head scout learns more from the same Senior Bowl than
 # a poor one. The room's remaining error and the width of its ceiling read both follow it.
 CERT_START_TOP, CERT_START_DEEP, CERT_SMALL_SCHOOL = 0.35, 0.22, -0.06
-CERT_LOOK_BASE, CERT_LOOK_SCOUT = 0.10, 0.12          # a look adds base + scout share × head-scout quality
-CERT_VISIT_MULT, CERT_COMBINE, CERT_MAX = 1.6, 0.08, 0.92
+CERT_LOOK_BASE, CERT_LOOK_SCOUT = 0.09, 0.16          # a look adds base + scout share × head-scout quality
+CERT_VISIT_GAIN, CERT_COMBINE, CERT_MAX = 0.15, 0.12, 0.92
 
 
 def scout_q(team):
@@ -156,7 +156,7 @@ def room(team):
     if STR.has(s, 'tape'):
         # More film work, fewer and less reliable background conversations.
         # The wider scouting department still does some reference work.
-        t['character'] = 'tape'; t['looks_mult'] *= 1.18
+        t['character'] = 'tape'; t['looks_mult'] *= 1.28
     if STR.has(s, 'grinder'): t['looks_mult'] *= 1.33
     if STR.has(s, 'narrow'): t['day3_reads'] = False
     return t

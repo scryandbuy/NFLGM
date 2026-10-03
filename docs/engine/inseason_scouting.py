@@ -190,7 +190,7 @@ def background_coverage(league, abbr):
 def _area_background(league, abbr, candidates, views, cons, room):
     """Finite background work across the class, without extra football looks.
 
-    Around 7-9% of the class fits in a cycle's area-report workload, depending
+    Around 1.5-8.5% of the class fits in a cycle's area-report workload, depending
     on scout quality. This is a workload setting, not an NFL coverage quota.
     Balance the proportion assessed across positions, then prioritize earlier
     consensus tiers. No hidden prospect ability determines who gets checked.
@@ -198,8 +198,8 @@ def _area_background(league, abbr, candidates, views, cons, room):
     if not candidates:
         return 0
     quality = SC.scout_q(league.teams[abbr])
-    budget = max(1, round(len(candidates) * (.07 + .02 * quality)
-                          * (.8 if room.get('character') == 'tape' else 1.)))
+    budget = max(1, round(len(candidates) * (.015 + .07 * quality)
+                          * (.72 if room.get('character') == 'tape' else 1.)))
     totals, known, queues = {}, {}, {}
     for p in candidates:
         totals[p.pos] = totals.get(p.pos, 0) + 1

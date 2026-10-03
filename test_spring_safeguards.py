@@ -7,6 +7,7 @@ import spring as SP
 import scouting as SC
 import views_draft as VD
 from session import Session
+from test_cap_accounting import fixture, player
 
 class SpringSafeguards(unittest.TestCase):
     def league(self, news):
@@ -69,5 +70,26 @@ class SpringSafeguards(unittest.TestCase):
         self.assertGreater(sum(i<60 for i in invited),30)
         self.assertGreater(sum(60<=i<120 for i in invited),25)
         self.assertGreater(sum(i>=120 for i in invited),20)
+
+    def test_visit_improves_reports_without_changing_prospect_talent(self):
+        league=fixture(); p=player(league)
+        league.teams={'GB':league.teams['GB']}; league.user_team='GB'
+        league.draft_pool=[p]; league.user_visits=[p.pid]
+        league.consensus={p.pid:dict(rank=1)}
+        p.traits={'work_ethic':55,'discipline':55}
+        p.potential_range=(70,85)
+        view=dict(e_phys=0.,e_skill=0.,e_pot=0.,reads=1.,flags=[],cert=.5,cert0=.35)
+        SC._refresh(view,p)
+        league.scouting={'GB':{p.pid:view}}
+        import character_assessment as CA
+        CA.background(p,'GB',view,{'character':'normal'},4.,1)
+        before_error=CA.assessments(view)['work_ethic']['error']
+        true_before=(p.ovr,copy.deepcopy(p.ratings),copy.deepcopy(p.traits),p.potential_range)
+        with patch('draft.league_starter_level',return_value={}), patch.object(SC,'consensus',return_value={}):
+            looks,_=SP.visits(league,np.random.default_rng(23))
+        self.assertEqual(looks,1)
+        self.assertAlmostEqual(SC.certainty(view),.575)
+        self.assertLessEqual(CA.assessments(view)['work_ethic']['error'],before_error*.85)
+        self.assertEqual((p.ovr,p.ratings,p.traits,p.potential_range),true_before)
 
 if __name__=='__main__':unittest.main()

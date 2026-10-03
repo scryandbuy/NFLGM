@@ -63,13 +63,20 @@ def visit(p, abbr, view, room, error_sd):
     # A saved legacy visit is not permission for a fresh read on reload.
     if ('work_ethic' in data and data['work_ethic'].get('stage') != 'background') or room.get('character') == 'none':
         return False
-    error = max(8., float(error_sd) * 1.5)
-    if room.get('character') == 'sharp': error *= .45
-    elif room.get('character') == 'tape': error *= 1.25
+    prior = data.get('work_ethic')
+    # The interview is a stronger source than a tentative background note.
+    # The visit tightens that read by another 15%, never replacing a more
+    # reliable earlier observation with a weaker one.
+    base_error = max(8., float(error_sd) * 1.5)
+    if room.get('character') == 'sharp': base_error *= .45
+    elif room.get('character') == 'tape': base_error *= 1.25
+    error = min(base_error, float(prior.get('error', base_error)) if prior else base_error) * .85
     data['work_ethic'] = _read((p.traits or {}).get('work_ethic', 50), error,
         ('work-visit-v1', abbr, p.pid), 'Visit and references')
     # The tape-first room still gets a visit, but puts less weight on references.
-    data['discipline'] = _read(PT.discipline(p), max(6., error),
+    disc_prior = data.get('discipline')
+    disc_error = min(max(6., error), float(disc_prior.get('error', error)) if disc_prior else error)
+    data['discipline'] = _read(PT.discipline(p), disc_error,
         ('discipline-visit-v1', abbr, p.pid), 'Film and references')
     _remember(p, abbr, data)
     return True

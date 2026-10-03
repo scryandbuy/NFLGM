@@ -12,7 +12,7 @@ things by where it was and how it weighs what everyone saw.
               GM fears risk.
   senior bowl ~110 seniors. A club attends by need at the position and by
               its scouting budget; attending rooms get a sharper second read.
-  pro days    each club takes ~25 more looks at men at its positions of need.
+  pro days    each club reviews workouts broadly, with extra attention at its positions of need.
   visits      the thirty: the AI picks men around its pick range; the user
               names his own (league.user_visits). The sharpest read there is.
   character   a room that looked hard reads his work ethic, with error; a
@@ -27,7 +27,7 @@ import draft_plan as DP
 
 COMBINE_INVITES = 330
 SENIOR_BOWL = 110
-PRO_DAY_LOOKS = 70
+PRO_DAY_LOOKS = 200
 VISITS = 30
 STOCK_MOVE = 15
 
@@ -225,7 +225,11 @@ def visits(league, rng):
             # what the room thought before the visit, kept so the change shows
             import character_assessment as CA
             v['pre_visit'] = dict(ovr=float(v.get('ovr', 0) or 0), lo=float(v.get('pot_lo', 0) or 0), hi=float(v.get('pot_hi', 0) or 0), rank=(cons.get(p.pid, {}) or {}).get('rank'), flags=list(v.get('flags', [])), character_flags=CA.flags(v))
-            SC.second_look(v, p, sd * 0.55, rng, weight=SC.CERT_VISIT_MULT, R=SC.room(team), team=team); looks += 1
+            # A private visit raises this room's football certainty by 15%
+            # of what it knew going in. The resulting grade may move either way.
+            visit_weight = SC.certainty(v) * SC.CERT_VISIT_GAIN / max(.001, SC.cert_gain(team))
+            SC.second_look(v, p, sd * 0.55, rng, weight=visit_weight,
+                           R=SC.room(team), team=team); looks += 1
             v['flags'] = list(set(v.get('flags', []) + ['visited']))
             SC._refresh(v, p)                                   # the visit's read, with most of the tape seen through
             _character(league, abbr, team, p, sd * 0.7, rng)
