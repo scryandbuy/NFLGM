@@ -56,14 +56,20 @@ def enforce_return_flag(result, flag):
     Once the kicking team recovers, decline a receiving-team foul and keep
     possession. An accepted return foul erases a return touchdown.
     """
-    if not flag or result.get('fumble_lost'): return
+    if not flag: return
+    import penalty_players as PP
+    if result.get('fumble_lost'):
+        if result.get('declined_penalty'):
+            result.setdefault('other_declined_penalties', []).append(result['declined_penalty'])
+        result['declined_penalty'] = PP.decision(flag, False)
+        return
     spot = max(result['new_yardline'], result.get('return_start', result['new_yardline']) - result.get('ret', 0) / 2)
     walk = min(float(flag['yards']), (100 - spot) / 2)
     result['ret'] = round(max(0., result.get('return_start', spot) - spot), 1)
     result['display_ret'] = int(round(result['ret']))
     result['new_yardline'] = min(99., spot + walk)
     result['touchdown'] = False
-    result['penalty'] = dict(flag, yards=walk)
+    result['penalty'] = PP.decision(dict(flag, yards=walk), True)
 
 
 def book_return(book, kind, result):

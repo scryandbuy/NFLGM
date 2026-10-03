@@ -206,6 +206,9 @@ def scout(league, rng):
             v[p.pid] = dict(e_phys=e_phys, e_skill=e_skill, e_pot=e_pot, reads=1, flags=[], cert=float(c0), cert0=float(c0),
                             e_skill0=e_skill, e_pot0=e_pot)
             _refresh(v[p.pid], p)
+            import character_assessment as CA
+            CA.film(p, abbr, v[p.pid], small_school=not _power(p))
+            if R['character'] == 'none': v[p.pid]['character_skipped'] = 'tape'
         views[abbr] = v
     cons = {}
     for p in pool:

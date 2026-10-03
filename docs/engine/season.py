@@ -269,7 +269,7 @@ class SeasonRunner(StandingsView):
         # Elevated men dress under the same health and effective-rating rules.
         import game_availability as GA
         rows = [dict(MO.effective_ratings_from(PC.effective_ratings(p), p),
-                     pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None))
+                     pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None), traits=dict(p.traits or {}))
                 for p in GA.dressed(t, desk, self.week)]
         # a man playing hurt plays with the injury's hit on his ratings this Sunday
         if desk is not None and desk.playing_hurt:
@@ -846,6 +846,8 @@ class SeasonRunner(StandingsView):
         for t in self.L.teams.values():          # coordinators reach XP through the player's club
             for p in t.roster: p._team_ref = t
         NG.check_promises(self.L, week)        # promises not kept are broken
+        import staff as STF_
+        STF_.midseason_review(self.L, self.rng, week)
         # the assistants' report on next week's opponent, into the inbox now
         if week < 18:
             import gameplan_week as GW

@@ -302,10 +302,10 @@ def staff(session, league, abbr):
     for role in ('oc', 'dc', 'st', 'scout'):
         c = (getattr(t, 'staff', None) or {}).get(role)
         if c is None: cards.append(dict(role=role, role_key=role, role_name=ST.ROLE_NAME.get(role, role), empty=True)); continue
-        cd = ST.card(c); cd.update(role_key=role, disgruntled=bool(getattr(c, 'disgruntled', False)), extend_ask=round(ST.ask(c), 2), offer_room=round(ST.room(t, without=role), 2)); cards.append(cd)
+        cd = ST.card(c); cd.update(role_key=role, expiring=c.years <= 0, let_expire=ST.expiry_choices(league, abbr).get(role) == c.name, disgruntled=bool(getattr(c, 'disgruntled', False)), extend_ask=round(ST.ask(c), 2), offer_room=round(ST.room(t, without=role), 2)); cards.append(cd)
     pools = {}
     for role in ('oc', 'dc', 'st', 'scout'):
-        pools[role] = [dict(ST.card(c, revealed_only=True), role_key=role, background=(('Head-coaching candidate' if getattr(c, 'hc_candidate', False) else 'Coordinator' if role != 'scout' else 'Scout') + (f" · {c.specialty}" if getattr(c, 'specialty', None) else ''))) for c in ST.pool_for(league, role)[:8]]
+        pools[role] = [dict(ST.card(c, revealed_only=True), role_key=role, background=(('Head-coaching candidate' if getattr(c, 'hc_candidate', False) else 'Coordinator' if role != 'scout' else 'Scout') + (f" · {c.specialty}" if getattr(c, 'specialty', None) else ''))) for c in ST.pool_for(league, role)]
     poaches = []
     for p in (getattr(league, 'poaches', None) or []):
         if p.get('team') != abbr or p.get('state') != 'open': continue
@@ -321,7 +321,14 @@ def staff(session, league, abbr):
                             block_read=f"he stays through {league.year + int(c.years)}, coaches worse for the year, and leaves when his contract ends. {league.teams[p['to']].abbr} hires someone else."))
     return dict(rail=rail(session, league, abbr), cards=cards, pools=pools, poaches=poaches,
                 budget=dict(total=round(ST.budget(t), 1), payroll=round(ST.payroll(t), 1), available=round(ST.room(t), 1), offer_room=round(ST.room(t), 2), head_coach=dict(name=(t.gm.name if t.gm else None), salary=round(ST.hc_pay(t.gm), 1) if t.gm else 0.0)),
-                offseason=(league.phase != 'regular'))
+                offseason=(league.phase != 'regular'),
+                renewal_step=session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_staff_contracts',
+                staff_locked=bool(getattr(getattr(session, 'runner', None), 'live', None) and not session.runner.live.get('done', False)))
+
+
+def act_staff_expiry(league, abbr, role, leave=True):
+    import staff as ST
+    return ST.choose_expiry(league, abbr, role, leave)
 
 
 def act_staff_extend(league, abbr, role, years=3, salary=None):

@@ -28,20 +28,21 @@ def _entry_year(league, p):
     return int(league.year) - max(0, int(getattr(p, 'accrued', 0) or 0))
 
 def _xp_award(league, team, p, reps, gain, focused, streak):
-    import staff as ST
+    import staff as ST, personality as PT
     experience = max(0, int(league.year) - _entry_year(league, p))
     ceiling = WEEKLY_XP_CEILINGS[min(experience, len(WEEKLY_XP_CEILINGS)-1)]
     clamp = lambda value: max(0., min(1., float(value)))
     factors = dict(development=clamp(XP.modifier(p)/max(XP.DEV_MULT.values())),
                    coaching=clamp(ST.xp_mult(team, p)/MAX_COACH_XP_MULT),
                    reps=clamp(reps/1.25*max(1.,gain)/(1.+.22*streak)),
-                   focus=1. if focused else 2./3., intensity=clamp(gain))
+                   focus=1. if focused else 2./3., intensity=clamp(gain),
+                   work_ethic=PT.xp_mult(p))
     fraction = 1.
     for value in factors.values(): fraction *= value
     award = min(ceiling, max(0., ceiling*fraction))
     experience_word = 'Rookie' if experience == 0 else f'Year {experience+1}'
     explanation = (f'{experience_word}: {ceiling:,.0f} XP weekly ceiling. '
-                   + '; '.join(f'{name.title()} {value:.0%}' for name,value in factors.items())
+                   + '; '.join(f'{name.replace("_", " ").title()} {value:.0%}' for name,value in factors.items())
                    + f'. Award capped at {ceiling:,.0f} XP.')
     return dict(xp=award, xp_ceiling=ceiling, xp_experience=experience,
                 xp_factors=factors, xp_explanation=explanation)
@@ -261,6 +262,9 @@ def resolve(league, runner, abbr, week, plan=None, *, bye=False, recovery_done=F
         paid=min(row['xp'],credited)
         if paid != credited: p.xp_spent['_earned']['practice']-=credited-paid
         p.xp+=paid
+        if row['reps'] > 0 and row['xp'] > 0 and not row['rehab']:
+            import character_assessment as CA
+            CA.observe_practice(p, abbr, league.year, week)
         if row['risk'] and runner.rng.random()<row['risk']:
             duration=runner.rng.random()
             weeks=1 if duration<.92 else 2 if duration<.99 else 4

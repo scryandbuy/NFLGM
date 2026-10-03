@@ -38,8 +38,8 @@ SCOUT = {
     'floor':        dict(name='Sees the Floor',        fam='neg', pair='ceiling',   tip='The ceiling range is wide and low; he undersells development and steers you to safe picks.'),
     'small_school': dict(name='Small-School Eye',      fam='pos', pair='school',    tip='Prospects outside the power conferences carry no extra error in his room.'),
     'big_program':  dict(name='Big-Program Bias',      fam='neg', pair='school',    tip='Small-school reads are wider still, and power-conference players grade a point or two high.'),
-    'character':    dict(name='Character Judge',       fam='pos', pair='character', tip='The visit\'s character read is reliable; his flags are rarely wrong.'),
-    'tape':         dict(name='Trusts the Tape',       fam='neg', pair='character', tip='He skips the character read. Visits sharpen the ratings but never produce a flag.'),
+    'character':    dict(name='Character Judge',       fam='pos', pair='character', tip='More reliable work-ethic and discipline assessments from visits and references. Still fallible.'),
+    'tape':         dict(name='Trusts the Tape',       fam='neg', pair='character', tip='Skips character interviews and references. Can assess discipline on film, but leaves work ethic unassessed.'),
     'grinder':      dict(name='Grinder',               fam='pos', pair='looks',     tip='More looks a season; more prospects reach a second read without a visit.'),
     'narrow':       dict(name='Narrow Board',          fam='neg', pair='looks',     tip='His room truly scouts the first three rounds; day-three reads stay as wide as the first look.'),
 }

@@ -5,7 +5,7 @@ PERSONALITY.
 Four hidden traits on every man, 0-100, drawn once and fixed for his career.
 Each multiplies one thing that already exists:
 
-  work_ethic          XP earned, 0.8x to 1.2x. The dev tier is still the ceiling.
+  work_ethic          XP earned, 0.8x to 1.2x. Dev tier and potential remain separate.
   financial_priority  the agent's ask, -5% to +5% of market, and the certainty
                       discount he gives on an extension, which shrinks to
                       nothing for a man who wants every dollar
@@ -84,7 +84,45 @@ def reconcile_all(league):
 def ensure(p, rng):
     if not getattr(p, 'traits', None):
         p.traits = draw(rng)
+    ensure_discipline(p)
     return p.traits
+
+
+def ensure_discipline(p):
+    """Persist once, without consuming the league RNG or rerolling old traits."""
+    if not getattr(p, 'traits', None):
+        p.traits = draw(np.random.default_rng(stable_seed(('personality', p.pid))))
+    if 'discipline' not in p.traits:
+        p.traits = dict(p.traits)
+        rng = np.random.default_rng(stable_seed(('discipline-v1', p.pid)))
+        p.traits['discipline'] = float(np.clip(rng.normal(50, 18), 3, 97))
+    return discipline(p)
+
+
+def discipline(p):
+    """Read-only neutral fallback for custom players; loading/creation persists it."""
+    traits = (p.get('traits') if isinstance(p, dict) else getattr(p, 'traits', None)) or {}
+    value = traits.get('discipline', p.get('discipline', 50) if isinstance(p, dict) else 50)
+    try:
+        value = float(value)
+        return max(0., min(100., value)) if np.isfinite(value) else 50.
+    except (TypeError, ValueError):
+        return 50.
+
+
+def penalty_multiplier(p, penalty_name):
+    """Relative risk, applied only to a player eligible to commit this foul."""
+    strength = {
+        'Unnecessary Roughness': .20, 'Unsportsmanlike Conduct': .20,
+        'Roughing the Passer': .20, 'Roughing the Kicker': .20,
+        'False Start': .10, 'Defensive Offside': .10, 'Offside': .10,
+        'Encroachment': .10, 'Neutral Zone Infraction': .10,
+        'Offensive Holding': .05, 'Defensive Holding': .05, 'Holding': .05,
+        'Return Holding': .05, 'Defensive Pass Interference': .05,
+        'Offensive Pass Interference': .05, 'Illegal Contact': .05,
+        'Face Mask': .05, 'Illegal Use of Hands': .05, 'Illegal Block in Back': .05,
+    }.get(penalty_name, 0.)
+    return 1. + strength * (50. - discipline(p)) / 50.
 
 
 def words(traits):
@@ -147,16 +185,17 @@ def assign_all(league, rng):
     se = _slot_expect_factory(league)
     n = 0
     for p in league.players.values():
-        if getattr(p, 'traits', None): continue
-        pri = priors_from_record(league, p, se) if p.team else {}
-        p.traits = draw(rng, pri); n += 1
+        if not getattr(p, 'traits', None):
+            pri = priors_from_record(league, p, se) if p.team else {}
+            p.traits = draw(rng, pri); n += 1
+        ensure_discipline(p)
     return n
 
 
 # ------------------------------------------------------------ the multipliers
 def xp_mult(p):
     t = getattr(p, 'traits', None)
-    return 1.0 if not t else 0.8 + 0.4 * (t['work_ethic'] / 100.0)
+    return 1.0 if not t else 0.8 + 0.4 * (t.get('work_ethic', 50) / 100.0)
 
 
 def ask_mult(p):

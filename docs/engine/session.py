@@ -353,7 +353,7 @@ class Session:
         ('Coaching Carousel', 'step_coaching'),
         ('Retirements and Development', 'step_retire'),
         ('New Year: Cap and Contracts', 'step_roll'),
-        ('Offseason Waivers', 'step_waivers_1'),
+        ('Staff Contracts', 'step_staff_contracts'),
         ('Re-sign: Tags and Tenders', 'step_extensions'),
         ('Free Agency: Round 1', 'step_fa_1'),
         ('Free Agency: Round 2', 'step_fa_2'),
@@ -421,6 +421,9 @@ class Session:
             return dict(title='Finish the Draft on Auto', sub=f"or make your pick at {pk.round}.{((pk.selection - 1) % 32) + 1} on Draft Day" if pk else '')
         title, _ = self.OFFSEASON[i]
         name = self.OFFSEASON[i][1]
+        if name == 'step_staff_contracts':
+            n = len(STF.unresolved_expirations(self.L, self.user_team))
+            return dict(title='Staff Contracts', sub=f'{n} renewal decision(s) remaining', go='#frontoffice/staff/renewals')
         if name == 'step_extensions':
             try:
                 sh = TG.user_resign_sheet(self.L)
@@ -444,6 +447,10 @@ class Session:
             return [dict(id=None, subject='Your game is still being played: finish it first', kind='live', go='#gameday')]
         """Decisions that must be made before the next stop. Empty list = nothing blocks."""
         out = []
+        if self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] == 'step_staff_contracts':
+            if STF.unresolved_expirations(self.L, self.user_team):
+                out.append(dict(id=None, kind='staff_contract', go='#frontoffice/staff/renewals',
+                                subject='Renew or choose Let Expire for each expiring staff contract'))
         if self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] == 'step_extensions':
             pending = TG.pending_tender_cost(self.L)
             room = TG.power(self.L, self.L.teams[self.user_team], TG.CAP.get(self.L.year, 301.2))
@@ -499,7 +506,7 @@ class Session:
         self._sync_week_health()
         PA.sync_session(self)
         # References follow a successful calendar action, not football week numbers.
-        blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap', 'roster')]
+        blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap', 'roster', 'staff_contract')]
         if blocks:
             return dict(done='Blocked', next=self.next_label(), why=blocks[0]['subject'])
         from game_availability import FieldabilityError
@@ -1059,6 +1066,14 @@ class Session:
         L, rng = self.L, self.rng
         WV.process(L, rng, 0)
 
+    def step_staff_contracts(self):
+        result = STF.finish_renewals(self.L, self.user_team)
+        if not result['ok']:
+            raise ValueError(result['why'])
+        # This step replaces the formerly skipped waiver slot. Retain any
+        # genuine pending claims without shifting saved calendar indices.
+        self.step_waivers_1()
+
     def step_extensions(self):
         L, rng = self.L, self.rng
         MO.check_resolutions(L, week=None); MO.clear_free_agents(L); prune_pool(L, rng)
@@ -1118,6 +1133,13 @@ class Session:
         self._skip_empty_offseason_waivers()
         PA.sync_session(self)
         name = self.OFFSEASON[self.stop[1]][1]
+        if name == 'step_staff_contracts':
+            WV.notify_user(self.L, WV.pending(self.L), 0, digest=True)
+            n = len(STF.unresolved_expirations(self.L, self.user_team))
+            IE.post(self.L, f'staff-renewals-{self.L.year}', 'staff', 'Staff Contracts',
+                    f'{n} staff contract(s) need a decision. Review renewals or explore the staff market before player re-signings.',
+                    sender='Front Office', payload=dict(link='front_office:staff'))
+            return
         if name == 'step_cutdown':
             for t in self.L.teams.values(): t.phase = 'season'
             return
@@ -1497,14 +1519,22 @@ class Session:
     def frontoffice_act(self, action, **kw):
         import views_frontoffice as VF
         identity_action = action in ('apply_identity', 'set_identity', 'apply_archetype')
+        staff_action = action in ('staff_release', 'staff_hire', 'staff_extend', 'staff_expiry', 'poach')
         live = getattr(self.runner, 'live', None) if self.runner else None
         if identity_action and live and not live.get('done', False):
             return dict(ok=False, why='Change team identity after the current game finishes.')
+        if staff_action and live and not live.get('done', False):
+            return dict(ok=False, why='Change staff after the current game finishes.')
         fn = getattr(VF, 'act_' + action, None)
         if fn is None: return dict(ok=False, why='unknown action')
         r = fn(self.L, self.user_team, **kw)
         if identity_action and isinstance(r, dict) and r.get('ok') and self.runner:
             self.runner.refresh(self.user_team)
+        if staff_action and isinstance(r, dict) and r.get('ok'):
+            self.save_dirty = True
+            if self.runner:
+                self.runner.refresh(self.user_team)
+                self.runner._staff_terms(self.user_team)
         return r if isinstance(r, dict) else dict(ok=bool(r))
 
     # ---- draft

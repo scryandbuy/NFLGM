@@ -250,6 +250,9 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
                       .6 * position['depth'], .75 * position['future'])
             need_pull = gap * (0.6 + 2.0 * (1 - trust)) * (0.5 + inflate)
             slot -= min(18.0 if selection <= 100 else 32.0, max(0.0, need_pull))
+            # Character knowledge changes willingness to invest, not perceived talent.
+            import character_assessment as CA
+            slot += 4.0 * CA.draft_risk(mine[p.pid], gm)
             # a hot seat wants the older, readier man
             slot -= heat * (p.age - 21.5) * 6.0
             if p.pos in POS_CAP_EARLY and len(d.get(p.pos, [])) >= POS_CAP_EARLY[p.pos]:

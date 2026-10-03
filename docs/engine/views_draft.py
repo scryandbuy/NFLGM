@@ -84,7 +84,8 @@ def _prospect(league, abbr, p, taken=()):
     _when = getattr(league, 'user_visit_week', None) or {}
     visit_locked = bool(p.pid in (getattr(league, 'user_visits', None) or []) and _when.get(p.pid) != f"{league.year}-{league.week}-{league.phase}")
     if getattr(p, 'age', 22) >= 22 and any(x.get('pid') == p.pid and x.get('event') == 'Senior Bowl' for x in (getattr(league, 'spring_news', None) or [])): words.append('Sr. Bowl')
-    if 'character' in flags: words.append('Character')
+    import character_assessment as CA
+    words.extend(CA.flags(v))
     if 'medical' in flags: words.append('Medical')
     if not SC._power(p): words.append('Small School')
     if getattr(p, 'age', 22) < 21.5: words.append('Underclassman')
@@ -96,7 +97,7 @@ def _prospect(league, abbr, p, taken=()):
     rk = c.get('rank') if c else None
     proj_range = (f"{max(1, rk - 4)}–{rk + 4}" if rk and rk <= 224 else '—')
     return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), home_state=home_state(p), small=(not SC._power(p)), visited=('visited' in flags or p.pid in (getattr(league, 'user_visits', None) or [])),
-                cls_year=cls_year, size=size, words=words, proj_range=proj_range, visit_move=visit_move, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
+                cls_year=cls_year, size=size, words=words, character_report=CA.report(v), proj_range=proj_range, visit_move=visit_move, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
                 forty=(round(float(comb['forty']), 2) if comb.get('forty') else None), vert=(round(float(comb['vert']), 1) if comb.get('vert') else None),
@@ -181,7 +182,7 @@ def _user_board(league, rows):
     placed = [byid[pid] for pid in order]
     # tiers by my grade: first-round grades, second-round grades, the rest
     def tier(r): return 1 if (r.get('my_rank') or 999) <= 32 else 2 if (r.get('my_rank') or 999) <= 64 else 3
-    return dict(order=[dict(pid=r['pid'], tier=tier(r)) for r in placed], dnd=[dict(pid=pid, why=(', '.join(w for w in byid[pid]['words'] if w in ('Medical', 'Character')) or 'your call')) for pid in dnd], saved=bool(ub.get('order')))
+    return dict(order=[dict(pid=r['pid'], tier=tier(r)) for r in placed], dnd=[dict(pid=pid, why=(', '.join(w for w in byid[pid]['words'] if w in ('Medical', 'Work ethic concern', 'Discipline concern')) or 'your call')) for pid in dnd], saved=bool(ub.get('order')))
 
 
 def _board_read(league, abbr, rows, ub, needs):
@@ -262,15 +263,13 @@ def prospect_card(session, league, abbr, pid):
     on_board = (ub.get('order') or []).index(p.pid) + 1 if p.pid in (ub.get('order') or []) else None
     reads = int(view.get('reads', 1) or 1)
     confidence = 'Visited' if ('visited' in (view.get('flags') or []) or p.pid in (getattr(league, 'user_visits', None) or [])) else 'Not visited'
-    import personality as PT
-    words = PT.words(getattr(p, 'traits', None) or {}) if getattr(p, 'traits', None) and 'Character' in row['words'] else ''
     return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], fit=row.get('fit', 0.0), scheme_ovr=row.get('scheme_ovr'), home_state=row['home_state'],
                 small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
                 words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine,
                 medical=('Concern found at visit' if 'medical' in (view.get('flags') or []) else 'No concern found at visit' if 'visited' in (view.get('flags') or []) else 'Unknown until visit'),
                 on_clock=bool(getattr(session, 'draft', None) is not None and not session.draft.done and session.draft.on_user() and not taken_now),
                 schemes=VC.scheme_rows(seen_ratings, p.pos, VC._club_arch(league, abbr, p.pos)),
-                reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality=words, spring_done=_spring_done(league),
+                reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality='', character_report=row['character_report'], spring_done=_spring_done(league),
                 read=_prospect_read(league, abbr, p, row, view))
 
 
@@ -286,7 +285,9 @@ def _prospect_read(league, abbr, p, row, view):
     lo, hi = row['ceiling'].split('–') if '–' in row['ceiling'] else (None, None)
     if lo and hi and int(hi) - int(lo) >= 8: parts.append('the ceiling is wide, which is the room saying it does not know yet')
     if 'Medical' in row['words']: parts.append('the medical is a real concern and the later he goes the more it explains')
-    if 'Character' in row['words']: parts.append('the character flag came out of our own visit')
+    for report in row.get('character_report', []):
+        if report['status'] in ('concern', 'strength'):
+            parts.append(f"{report['summary']} ({report['confidence'].lower()} confidence): {report['explanation'].rstrip('.')}")
     if 'Small School' in row['words']: parts.append('the small-school tape makes every number here softer')
     if not row['visited'] and not _spring_done(league): parts.append('a visit would tighten this read')
     return sentence('. '.join(parts) + '.')
@@ -321,7 +322,9 @@ def spring(session, league, abbr):
     # flags your room uncovered at visits this spring, folded into the player's line
     uncovered = {}
     for x in news:
-        if x.get('kind') == 'flag': uncovered.setdefault(x['pid'], []).append(x.get('flag'))
+        if x.get('kind') == 'flag':
+            label = {'character': 'work ethic', 'work_ethic': 'work ethic'}.get(x.get('flag'), x.get('flag'))
+            if label and label not in uncovered.setdefault(x['pid'], []): uncovered[x['pid']].append(label)
     EVENT_WORDS = {'combine': 'the combine', 'Senior Bowl': 'the Senior Bowl', 'pro days': 'his pro day', 'visits': 'the visit'}
     for m in moves:
         ev = EVENT_WORDS.get(m['event'], m['event']); fl = uncovered.get(m['pid'], [])
@@ -356,6 +359,8 @@ def spring(session, league, abbr):
         if pre:
             r['before'] = dict(mine=round(float(pre.get('ovr', 0) or 0)), ceiling=f"{round(float(pre.get('lo', 0) or 0))}–{round(float(pre.get('hi', 0) or 0))}", cons_rank=pre.get('rank'))
             r['uncovered'] = [f for f in v.get('flags', []) if f in ('medical', 'character') and f not in (pre.get('flags') or [])]
+            import character_assessment as CA
+            r['uncovered'] += [f for f in CA.flags(v) if f not in (pre.get('character_flags') or [])]
     done = bool(news)
     return dict(rail=rail(session, league, abbr), done=done, events=events, risers=risers, fallers=fallers, visited=visited, flagged=flagged[:40],
                 note=None if _spring_done(league) else 'The Senior Bowl takes place after the conference championships, before the Championship Game. The combine, pro days and the thirty visits follow in the Spring step of the offseason. Name your visits on the board before Spring.')

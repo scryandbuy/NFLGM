@@ -142,7 +142,8 @@ def dpi_yards(rng, air_yards=None):
 def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
                   air_yards=None, noise=1.0, hurry=False, *,
                   offense_discipline=None, defense_discipline=None,
-                  offense_multiplier=1.0, defense_multiplier=1.0):
+                  offense_multiplier=1.0, defense_multiplier=1.0,
+                  offense_players=(), defense_players=(), outcome=None, timing=None):
     """
     Returns a penalty or None. discipline is the offending unit's rating on
     0-1; the league rate of 7.03% of plays sits at average discipline.
@@ -185,10 +186,33 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
     def_rating = discipline if defense_discipline is None else defense_discipline
     off_factor = max(0.0, (1 + 1.6 * (AVG - off_rating)) * offense_multiplier)
     def_factor = max(0.0, (1 + 1.6 * (AVG - def_rating)) * defense_multiplier)
-    either_factor = .18 * off_factor + .82 * def_factor
+    import penalty_players as PP
+    profiles, factors = {}, {}
     for k, i in enumerate(ok):
-        side = PEN_INFO[_names[i]]['offense']
-        per_play[k] *= off_factor if side is True else def_factor if side is False else either_factor
+        name = _names[i]
+        side = PEN_INFO[name]['offense']
+        if timing == 'pre' and PEN_INFO[name]['phase'] != 'pre':
+            per_play[k] = 0.
+            continue
+        pair = []
+        for on_off, rows, base in ((True, offense_players, off_factor), (False, defense_players, def_factor)):
+            if side is not None and side != on_off:
+                pair.append(0.)
+                continue
+            prof = profiles[name, on_off] = PP.profile(name, rows, outcome)
+            eligible = bool(prof) or not rows or name in PP.TEAM_FOULS
+            pair.append(base * PP.factor(prof) if eligible else 0.)
+        factors[name] = pair
+        per_play[k] *= pair[0] if side is True else pair[1] if side is False else .18 * pair[0] + .82 * pair[1]
+    # Split pre-snap/live checks without increasing the marginal flag rate.
+    # The live check only runs after surviving the pre-snap check.
+    pre = np.array([PEN_INFO[_names[i]]['phase'] == 'pre' for i in ok])
+    if timing == 'live':
+        survived = max(.01, 1. - float(per_play[pre].sum()))
+        per_play[pre] = 0.
+        per_play /= survived
+    elif timing == 'pre':
+        per_play[~pre] = 0.
     p = per_play.sum()
     if rng.random() >= max(0.0, p):
         return None
@@ -210,21 +234,24 @@ def penalty_check(rng, phase='any', is_pass=True, discipline=0.70, AVG=0.70,
         # value here reaches exactly 56%. The gap is the untracked long tail
         # (the 20 types cover 10.96 of the real 11.88 per game), which skews
         # defensive. These specific fouls go against the defence more often.
+        off_factor, def_factor = factors[name]
+        either_factor = .18 * off_factor + .82 * def_factor
         on_off = rng.random() < (.18 * off_factor / either_factor if either_factor else .18)
     if name == 'Illegal Use of Hands' and not on_off:
         yds = 5.0                         # defensive use of hands is five, offensive is ten
     # the rulebook's automatic first down: every defensive foul except the pre-snap fives
     # (offside, neutral zone, encroachment, too many men) and delay-type fouls; never an offensive foul
     AUTO = {'Defensive Pass Interference', 'Defensive Holding', 'Roughing the Passer', 'Illegal Contact', 'Unnecessary Roughness', 'Face Mask', 'Illegal Use of Hands'}
-    return dict(penalty=name, yards=float(int(round(float(yds)))), rule_yards=float(yds),
+    flag = dict(penalty=name, yards=float(int(round(float(yds)))), rule_yards=float(yds),
                 on_offense=bool(on_off),
                 auto_first=(not on_off) and (name in AUTO),
                 # only a dead-ball, pre-snap foul is decided before the snap; holding, OPI, an ineligible man downfield
                 # and a block above the waist happen DURING the play, which runs and is then wiped in the book
                 nullifies=info['phase'] in ('pre',))
+    return PP.attribute(flag, profiles[name, bool(on_off)], rng) if offense_players or defense_players else flag
 
 
-def contextual_penalty(pen, out, call, rng):
+def contextual_penalty(pen, out, call, rng, offense_players=(), defense_players=()):
     """Keep the rolled flag and offending side, but require a possible live foul.
 
     Missing evidence in legacy/custom resolvers retains the prior eligibility.
@@ -251,15 +278,23 @@ def contextual_penalty(pen, out, call, rng):
                   if phase != 'pre' and name != 'Intentional Grounding'
                   and (owner is None or owner == side)
                   and (phase != 'pass' or call.get('is_pass')) and allowed(name)]
+    import penalty_players as PP
+    rows = offense_players if side else defense_players
+    profiles = {name: PP.profile(name, rows, out) for name, _ in candidates}
+    candidates = [(name, w * PP.factor(profiles[name])) for name, w in candidates
+                  if not rows or profiles[name] or name in PP.TEAM_FOULS]
+    if not candidates: return None
     weights = np.array([w for _, w in candidates], float)
     name = candidates[int(rng.choice(len(candidates), p=weights/weights.sum()))][0]
     yards = (dpi_yards(rng, out.get('air')) if name == 'Defensive Pass Interference'
              else 5 if name == 'Illegal Use of Hands' and not side else RULE_YARDS[name])
-    return dict(pen, penalty=name, yards=float(round(yards)), rule_yards=float(round(yards)),
+    flag = dict(pen, penalty=name, yards=float(round(yards)), rule_yards=float(round(yards)),
                 auto_first=not side, context_adjusted=True)
+    return PP.attribute(flag, profiles[name], rng) if rows else flag
 
 
-def special_teams_penalty_check(rng, kind, returned=False, phase=None):
+def special_teams_penalty_check(rng, kind, returned=False, phase=None,
+                                offense_players=(), defense_players=()):
     """Flags on kick snaps and returns, where the scrimmage foul draw does not run."""
     table = {
         'punt': [('False Start', .012, True, 'pre', 5, False),
@@ -279,10 +314,16 @@ def special_teams_penalty_check(rng, kind, returned=False, phase=None):
     if phase is not None:
         table = [entry for entry in table if entry[3] == phase]
     roll = rng.random()
+    import penalty_players as PP
     for name, chance, on_offense, phase, yards, auto_first in table:
+        rows = offense_players if on_offense else defense_players
+        profile = PP.profile(name, rows)
+        chance *= PP.factor(profile)
+        if rows and not profile and name not in PP.TEAM_FOULS: chance = 0.
         if roll < chance:
-            return dict(penalty=name, yards=float(yards), rule_yards=float(yards),
+            flag = dict(penalty=name, yards=float(yards), rule_yards=float(yards),
                         on_offense=on_offense, phase=phase, auto_first=auto_first,
                         nullifies=phase == 'pre')
+            return PP.attribute(flag, profile, rng) if rows else flag
         roll -= chance
     return None

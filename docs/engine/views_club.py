@@ -285,7 +285,12 @@ def card(session, league, pid):
             grades.append(dict(pos='Nickel', ovr=round(float(TG.position_score(dict(p.ratings, speed_rating=p.ratings.get('agility_rating', 70)), 'CB', getattr(user, 'scheme', None)))), mine=False, tax=0))
         except Exception: pass
     import personality as PT
-    words = PT.words(getattr(p, 'traits', None) or {}) if getattr(p, 'traits', None) else ''
+    # Preparation and discipline show this user's knowledge, not hidden truth.
+    words = PT.words({k: v for k, v in (getattr(p, 'traits', None) or {}).items()
+                      if k not in ('work_ethic', 'discipline')}) if getattr(p, 'traits', None) else ''
+    import character_assessment as CA
+    character_report = CA.player_report(p, session.user_team,
+        (getattr(league, 'stats', {}) or {}).get(league.year, {}).get(p.pid, {}))
     # role and snaps: where he sits on his club's depth chart, and his share of the club's snaps this season
     role = None; snap_share = None; snaps = None
     if t is not None:
@@ -348,7 +353,7 @@ def card(session, league, pid):
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), morale=morale_word(p), morale_v=round(m.value) if m is not None else None,
                 contract=(dict(per_year=0.0, years=0, hit=0.0, penalty=0.0, penalty_next=0.0, by_year=[]) if p.team is None else dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), by_year=years)),
                 free_agent=(p.team is None), on_wire=bool(p.team is None and p.contract is not None),
-                interest=interest, cols=cols, grades=grades, personality=words, status=_status(league, p, t) if t else '',
+                interest=interest, cols=cols, grades=grades, personality=words, character_report=character_report, status=_status(league, p, t) if t else '',
                 schemes=scheme_rows(p.ratings, p.pos, _club_arch(league, getattr(session, 'user_team', None), p.pos)),
                 cond=_cond(session, p), out=p.out_until, season=cur, games=int(S.get('games', 0) or 0), seasons=seasons,
                 market=market, interest_line=interest_line, dev_line=dev_line, morale_line=_morale_line(p),

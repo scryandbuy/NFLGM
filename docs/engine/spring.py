@@ -191,7 +191,8 @@ def visits(league, rng):
             v = league.scouting[abbr].get(p.pid)
             if v is None: continue
             # what the room thought before the visit, kept so the change shows
-            v['pre_visit'] = dict(ovr=float(v.get('ovr', 0) or 0), lo=float(v.get('pot_lo', 0) or 0), hi=float(v.get('pot_hi', 0) or 0), rank=(cons.get(p.pid, {}) or {}).get('rank'), flags=list(v.get('flags', [])))
+            import character_assessment as CA
+            v['pre_visit'] = dict(ovr=float(v.get('ovr', 0) or 0), lo=float(v.get('pot_lo', 0) or 0), hi=float(v.get('pot_hi', 0) or 0), rank=(cons.get(p.pid, {}) or {}).get('rank'), flags=list(v.get('flags', [])), character_flags=CA.flags(v))
             SC.second_look(v, p, sd * 0.55, rng, weight=SC.CERT_VISIT_MULT, R=SC.room(team), team=team); looks += 1
             v['flags'] = list(set(v.get('flags', []) + ['visited']))
             SC._refresh(v, p)                                   # the visit's read, with most of the tape seen through
@@ -220,20 +221,18 @@ def _medical(league, abbr, team, p, rng):
 
 
 def _character(league, abbr, team, p, sd, rng):
-    """A room that looked hard reads his work ethic, with error; a low read is a concern on its board."""
-    import personality as PT
+    """Learn risk separately from football ability; repeated visits cannot reroll it."""
+    import character_assessment as CA
     v = league.scouting[abbr][p.pid]
-    if 'character_read' in v: return
     R = SC.room(team)
-    if R['character'] == 'none': return                    # Trusts the Tape: the visit sharpens the ratings and stops there
-    read = PT.scout_read(p, (sd / 4.0) * (0.35 if R['character'] == 'sharp' else 1.0), rng)['work_ethic']
-    v['character_read'] = round(read)
-    if read < 35:
-        v['adj'] = v.get('adj', 0.0) - 2.0
-        v['flags'] = list(set(v.get('flags', []) + ['character']))
-        if abbr == getattr(league, 'user_team', None):
-            _log(league, 'flag', event='visit', flag='character', pid=p.pid, name=p.name, pos=p.pos, home_state=home_state(p), text=f"Uncovered a character flag at the {p.name} visit")
-        SC._refresh(v, p)
+    CA.film(p, abbr, v, small_school=not SC._power(p))
+    changed = CA.visit(p, abbr, v, R, sd)
+    if changed and abbr == getattr(league, 'user_team', None):
+        for report in CA.report(v):
+            if report['status'] == 'concern':
+                _log(league, 'flag', event='visit', flag=report['key'], pid=p.pid,
+                     name=p.name, pos=p.pos, home_state=home_state(p),
+                     text=f"{p.name}: {report['summary']} ({report['confidence'].lower()} confidence)")
 
 
 def run_spring(league, rng, verbose=False):
