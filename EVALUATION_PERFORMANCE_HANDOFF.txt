@@ -1,0 +1,75 @@
+Advance evaluation reuse
+========================
+Base production state: fa7211d; branch also contains audit-only d158dcf.
+Worktree: C:\Users\HP\Documents\Codex\2026-09-28\rev\work\nflgm-scouting-three-class
+
+Scope: approved performance items 1 and 2. No integration checkout, bundle,
+browser routing, save format, simulation coefficients or candidate limits changed.
+
+Changes
+-------
+- valuation.py: explicit, nested-safe comparison batches reuse deterministic
+  raw contract comparisons and position/window groups. Each pool is already a
+  fixed comparison snapshot. Replacement pools receive independent reads.
+  At most four pool versions remain in memory; all are discarded on return or
+  exception. Returned value dictionaries are independent. Window RNG draws,
+  cap checks, asks, contract terms and other live adjustments remain outside
+  this cache. Comparison pools must not be edited in place within a batch;
+  the decorated production callers replace them after applicable signings.
+- trades.run, market.ai_bids, extensions.ai_round/in_season_round opt into this
+  batch lifetime. Existing market quote, roster and retention guards remain.
+- roster_needs.py: an assessment retains its planning player dictionaries;
+  candidate additions/removals only copy changed position groups. Defensive
+  variants share job rankings inside a single proposed roster, while each
+  lineup independently reserves eleven distinct players. Candidates, role
+  eligibility, weighting, scores and tie ordering are unchanged.
+
+Verification
+------------
+test_advance_evaluation_reuse.py checks cached/uncached prices and RNG,
+dictionary independence, replacement pools, cleanup, bounded retention,
+candidate additions/swaps/removals across fronts, and new ratings/coach reads.
+Existing roster, package, trade, retention, financial and cutdown tests were
+also run. The old test_trade_assessment_speed fixture failed on pristine
+fa7211d: it omitted retired, and its exact one-assessment expectation predates
+coverage safeguards. Repaired the fixture and compared call counts with the
+full-reassessment reference instead, retaining outcome/RNG equality checks.
+
+Paired fresh-process production probes are in:
+C:\Users\HP\Documents\Codex\2026-09-28\rev\outputs\evaluation-reuse-fa7211d
+Fixture SHA-256: 3fea913757501a3c2a4c6bd071cc07f2a32b23d36805e9f1a5e4e4f6bc0a4363
+Each baseline/optimized pair compares result, entire saved-state and RNG hashes.
+Cases: awards Advance (includes trades), all-team candidate evaluation, CPU FA
+bids, CPU extensions, and roster finalization. These share a real end-of-2027
+offseason-0 fixture. Component probes are not full FA/cutdown calendar stages;
+in particular this fixture is not a fresh 70-man camp roster.
+
+This is native Python evidence on a shared machine, not a browser benchmark
+or a blanket percentage promise. The JSON results contain the individual times.
+The existing isolated scouting audit continued unchanged during this work.
+
+Reproduction
+------------
+Set PYTHONHASHSEED=0 and the normal project dependency path. Run
+audit_evaluation_equivalence.py with --code-root pointing to either baseline
+or optimized checkout, --fixture pointing to the copied fixture.json, --case
+awards/candidates/bids/extensions/cutdown, and a distinct --output JSON path.
+The script changes the loaded in-memory league, never the supplied save.
+
+Final results
+-------------
+All five pairs have EXACTLY equal result, full saved-state and RNG hashes.
+                             Before     After     Reduction
+Awards Advance               15.699s    13.238s    15.7%
+All-team candidate gains     22.378s    16.631s    25.7%
+CPU free-agent bids          25.896s    19.653s    24.1%
+CPU extensions               58.668s    53.688s     8.5%
+Roster finalization           6.696s     6.324s     5.5%
+
+103 unique targeted tests passed: the main 103-test run passed 102 with one
+pre-existing fixture error, then the repaired comparison test passed on its
+own. The five new tests also passed their separate rerun. No production
+changes were made after these runs. git diff --check passed.
+
+Changes (2) and (4) confirmed their audits are read-only with no file overlap.
+Integration remained clean at fa7211d throughout the paired probes.

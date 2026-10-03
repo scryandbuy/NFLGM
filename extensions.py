@@ -365,6 +365,7 @@ def negotiate_ai(league, p, apy, years, rng=None, pool=None):
     return dict(last, attempts=attempts)
 
 
+@VAL.comparison_batch()
 def ai_round(league, rng, verbose=False):
     """Review real package jobs before reserves; agreement still needs both sides."""
     import retention_plan as RP
@@ -417,6 +418,7 @@ def _pursue_retention(league, team, p, rng, pool=None, scale=None):
     return res
 
 
+@VAL.comparison_batch()
 def in_season_round(league, rng, week):
     """Clubs extend in September through December too: each week a few clubs get one of their expiring starters
     done ahead of the market. Real clubs sign dozens of in-season extensions a year; this engine signed none."""

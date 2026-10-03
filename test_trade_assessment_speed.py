@@ -45,6 +45,7 @@ class TradeAssessmentSpeedTests(unittest.TestCase):
         t = team('12', 'multiple')
         for i, p in enumerate(t.roster):
             p.ovr = 91 - (i % 3) * 9
+            p.retired = False
         league = SimpleNamespace(teams={'TST': t}, free_agents=[], week=2, year=2028, phase='regular')
         def asset(league, t, p, pool, rng, **kwargs):
             return dict(pid=p.pid, trade_value=float(rng.random()))
@@ -54,14 +55,18 @@ class TradeAssessmentSpeedTests(unittest.TestCase):
             for injured in (False, True):
                 t.roster[0].out_until = 9 if injured else None
                 old_rng = np.random.default_rng(921)
-                with patch.object(RN, 'departure_loss', side_effect=full_loss):
+                with patch.object(RN, 'departure_loss', side_effect=full_loss), \
+                     patch.object(RN, 'assess', wraps=RN.assess) as reference_assess:
                     expected = TR.surplus_and_needs(league, t, {}, old_rng)
+                    reference_calls = reference_assess.call_count
                 new_rng = np.random.default_rng(921)
                 with patch.object(RN, 'assess', wraps=RN.assess) as assess:
                     actual = TR.surplus_and_needs(league, t, {}, new_rng)
                 self.assertEqual(actual, expected)
                 self.assertEqual(new_rng.bit_generator.state, old_rng.bit_generator.state)
-                self.assertEqual(assess.call_count, 1)
+                # Coverage safeguards legitimately reassess proposed removals;
+                # the cached loss must save work without bypassing those guards.
+                self.assertLess(assess.call_count, reference_calls)
 
 
 if __name__ == '__main__':

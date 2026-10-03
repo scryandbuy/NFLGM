@@ -1219,6 +1219,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
     return False
 
 
+@VAL.comparison_batch()
 def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_to_user=True):
     """
     Clubs shop their surplus. A deal goes through only when both sides price
