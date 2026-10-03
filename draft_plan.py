@@ -44,7 +44,8 @@ class _Roster:
 def _reserve_grade(player, team, belief):
     """Conservative, visible growth credit, shared by depth and succession."""
     grade = RN._grade(player, team)
-    pr = getattr(player, 'potential_range', None)
+    from ceiling_knowledge import observed_range
+    pr = observed_range(player)
     if getattr(player, 'age', 25) <= 26 and pr:
         grade += min(6.0, max(0.0, sum(pr) / 2 - player.ovr)) * (.5 + .5 * belief)
     from development_value import player_credit

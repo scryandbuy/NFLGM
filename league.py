@@ -666,6 +666,9 @@ class League:
             p = self.player(pid)
             if p is not None:
                 p.record_season(season, book)
+        if line.get('snaps') and self.player(pid) is not None:
+            import ceiling_knowledge as CK
+            CK.sync_player(self.player(pid), self)
 
     def leaders(self, season, stat, n=10):
         book = self.stats.get(season, {})
@@ -1178,6 +1181,8 @@ class League:
         import specialist_reserve as SR
         SR.migrate(L, d.get('ls_reserve_version'))
         PA.migrate(L, d)
+        import ceiling_knowledge as CK
+        CK.sync(L)
         return L
 
     def __repr__(self):
@@ -1544,6 +1549,8 @@ def build_league(seed_csv='league_seed_2026.csv', year=2026, rng=None,
     import player_age as PA
     for p in L.players.values():
         PA.initialize_player(p, L, use_seed=True)
+    import ceiling_knowledge as CK
+    CK.sync(L)
     return L
 
 

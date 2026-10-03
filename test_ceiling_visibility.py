@@ -15,6 +15,11 @@ class CeilingVisibilityTests(unittest.TestCase):
     def setUp(self):
         self.L = fixture()
         self.p = player(self.L)
+        # These tests exercise an unconfirmed rookie estimate. Veterans now
+        # correctly reveal their ceiling at 28 under the new knowledge rules.
+        self.p.age = 22
+        self.p.accrued = 0
+        self.p.entry_year = 2026
         self.p.ratings = {k: 70.0 for k in TG.DEPTH_WEIGHTS['QB']}
         self.p.potential = 70.5
         self.p.potential_range = (70, 75)
