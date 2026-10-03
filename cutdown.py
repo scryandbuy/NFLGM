@@ -128,9 +128,13 @@ def _sources(team, report, week=None):
             | {pos for pos in POS_CAP if PS.GROUP_OF.get(pos, pos) in shortages})
 
 
-def _replacement_pool(league, team, sources, essential=False):
+def _replacement_pool(league, team, sources, essential=False, *, comps=None):
     import practice_squad as PS
-    pool = PS.available_free_agents(league) + [p for p in PS.squad(team)
+    import valuation as VAL
+    from replacement_contracts import minimum_acceptance
+    if comps is None: comps = VAL.pool_from_league(league)
+    pool = [p for p in PS.available_free_agents(league)
+            if minimum_acceptance(league, team, p, pool=comps)['accepts']] + [p for p in PS.squad(team)
             if not p.retired and p.out_until is None]
     # Search other squads for an otherwise unavailable starting role, not
     # simply to churn another club's developmental depth into our bench.
@@ -141,12 +145,15 @@ def _replacement_pool(league, team, sources, essential=False):
     return pool
 
 
-def _sign_replacement(league, team, player, contract):
+def _sign_replacement(league, team, player, contract, *, consent=False, comps=None):
     import practice_squad as PS
     if player.team == team.abbr:
         return PS.call_up(league, team.abbr, player.pid)
     if player.team:
         return PS.poach(league, team.abbr, player.pid, league.week)
+    from replacement_contracts import minimum_acceptance
+    if player not in PS.available_free_agents(league): return False
+    if not consent and not minimum_acceptance(league, team, player, pool=comps)['accepts']: return False
     league.sign(player.pid, team.abbr, contract)
     return True
 
@@ -242,10 +249,13 @@ def _cross_train_kicker(league, team, report, reserve=0.0):
             if best is None or key > best[0]: best = (key, p, q, contract)
     if best is None: return False
     _, p, q, contract = best
+    from replacement_contracts import minimum_acceptance
+    if contract is not None and not minimum_acceptance(league, team, p)['accepts']:
+        return False
     if q:
         league.release(q.pid)
     if contract is not None:
-        if not _sign_replacement(league, team, p, contract):
+        if not _sign_replacement(league, team, p, contract, consent=True):
             raise RuntimeError('Validated kicker replacement became unavailable')
     PC.change_position(league, p.pid, 'K')
     team.sync_cap()
@@ -334,8 +344,10 @@ def repair_shape(league):
                     continue
                 break
             _, p, q, contract = best
+            from replacement_contracts import minimum_acceptance
+            if not minimum_acceptance(league, team, p)['accepts']: break
             league.release(q.pid)
-            if not _sign_replacement(league, team, p, contract):
+            if not _sign_replacement(league, team, p, contract, consent=True):
                 raise RuntimeError('Validated roster replacement became unavailable')
             team.sync_cap()
             fixed += 1
@@ -349,6 +361,8 @@ def repair_depth(league):
     departure before releasing anyone, then recompute actual depth after arrival.
     """
     import practice_squad as PS
+    import valuation as VAL
+    comps = VAL.pool_from_league(league)
     fixed = 0
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None): continue
@@ -356,8 +370,8 @@ def repair_depth(league):
             before = PS.essential_depth(team, week=league.week)['shortages']
             if not before: break
             sources = {pos for pos in POS_CAP if PS.GROUP_OF.get(pos, pos) in before}
-            pool = sorted(_replacement_pool(league, team, sources, essential=True),
-                          key=lambda p: (not PS.minimum_fits(league, team, p, essential=True),
+            pool = sorted(_replacement_pool(league, team, sources, essential=True, comps=comps),
+                          key=lambda p: (not PS.minimum_fits(league, team, p, essential=True, pool=comps),
                                          bool(p.team and p.team != abbr), -p.ovr, str(p.pid)))
             moved = False
             for p in pool:
@@ -367,7 +381,7 @@ def repair_depth(league):
                 elif p.team:
                     moved = PS.poach(league, abbr, p.pid, league.week, essential=True)
                 else:
-                    moved = PS.sign_minimum(league, abbr, p, essential=True)
+                    moved = PS.sign_minimum(league, abbr, p, essential=True, pool=comps)
                 if moved:
                     after = PS.essential_depth(team, week=league.week)['shortages']
                     if sum(after.values()) >= sum(before.values()):

@@ -336,6 +336,40 @@ class InjuryDesk:
                 if p.pid not in kept:
                     continue
                 cuts = [q for q in projected if q.pid not in kept]
+                if not PSQ.preserves_healthy_depth(team, current,
+                        [q for q in projected if q.pid in kept]):
+                    # The general 53-man selector counts an injured incumbent
+                    # as part of the future roster. Do not remove his live
+                    # insurance to activate an unrelated returning player.
+                    # A normal one-player activation can instead use another
+                    # surplus spot; larger unsettled rosters wait for cleanup.
+                    if len(cuts) != 1:
+                        continue
+                    report = RN.assess(team)
+                    options = sorted((q for q in projected if q is not p
+                                      and q.out_until is None
+                                      and not PSQ.locked(q, week)
+                                      and not PSQ.protected(team, q, league)),
+                                     key=lambda q: (RN.departure_loss(team, q, report)
+                                                    + RN.retention_value(team, q), q.pid))
+                    alternative = None
+                    old_missing, old_quality = RN.lineup_strength(team, current)
+                    for q in options:
+                        remaining = [x for x in projected if x is not q]
+                        if not PSQ.preserves_healthy_depth(team, current, remaining):
+                            continue
+                        missing, quality = RN.lineup_strength(team, remaining)
+                        if missing > old_missing or quality < old_quality - .5:
+                            continue
+                        trial = trade_projection(league, team.abbr, [q.pid], [])
+                        if trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005:
+                            continue
+                        alternative = q
+                        break
+                    if alternative is None:
+                        continue
+                    cuts = [alternative]
+                    kept = {q.pid for q in projected if q is not alternative}
                 if len(projected) - len(cuts) > 53:
                     continue
                 if any(PSQ.locked(q, week) or PSQ.protected(team, q, league) for q in cuts):
