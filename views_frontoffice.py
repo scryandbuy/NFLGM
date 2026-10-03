@@ -719,7 +719,9 @@ def build_exit_meetings(session, league, abbr):
     store = league.__dict__.setdefault('exit_meetings', {})
     user = getattr(league, 'user_team', None)
     slot = str(year) if abbr == user else f"{abbr}-{year}"
-    if slot in store: return store[slot]
+    if slot in store:
+        return [m for m in store[slot] if (league.player(m['pid']) is not None and league.player(m['pid']).pos not in ('K', 'P'))]
+    eligible = [p for p in t.active() if p.pos not in ('K', 'P')]
     meetings = []
     seen = set()
     def add(kind, p, quote, options):
@@ -727,7 +729,7 @@ def build_exit_meetings(session, league, abbr):
         seen.add(p.pid); meetings.append(dict(pid=p.pid, kind=kind, quote=quote, options=options, answer=None, said=None))
     starters = {pos: (ps[0] if ps else None) for pos, ps in t.depth.items()}
     # 1. the man who wants out
-    for p in sorted(t.active(), key=lambda q: -q.ovr):
+    for p in sorted(eligible, key=lambda q: -q.ovr):
         if MO.wants_out(p):
             why = MO.request_reason(p)
             q = {'role': "I'm not going to sit behind somebody another year. I want to be somewhere I play.", 'contract': "I've been underpaid here for two years and everybody knows it. Fix it or move me.", 'losing': "I've got a few years left and I want to spend them winning. Are we going to?"}[why]
@@ -736,7 +738,7 @@ def build_exit_meetings(session, league, abbr):
                                     dict(key='earn', label='Earn it', sub='No promise; he leaves the room angrier', cost='brush')])
             break
     # 2. the expiring starter
-    exp = sorted([p for p in t.active() if p.contract and p.contract.years <= 1 and starters.get(p.pos) is p and p.ovr >= 76 and p.pos not in ('K', 'P', 'LS')], key=lambda q: -q.ovr)
+    exp = sorted([p for p in eligible if p.contract and p.contract.years <= 1 and starters.get(p.pos) is p and p.ovr >= 76 and p.pos not in ('K', 'P', 'LS')], key=lambda q: -q.ovr)
     for p in exp[:2]:
         add('expiring', p, f"My deal's up. I'd like to stay, but I'm not going to wait on you into March. Am I coming back?",
             [dict(key='deal', label="We'll get a deal done before the market", sub='An extension by the new year goes on the ledger', cost='promise:extension_by'),
@@ -744,7 +746,7 @@ def build_exit_meetings(session, league, abbr):
              dict(key='honest_no', label="We're going a different way", sub='He knows where he stands and stops waiting', cost='heard')])
     # 3. the young man behind a veteran
     for pos, ps in t.depth.items():
-        if len(ps) < 2: continue
+        if pos in ('K', 'P') or len(ps) < 2: continue
         s0, s1 = ps[0], ps[1]
         if s1.age <= 25 and s0.age >= 29 and s1.ovr >= s0.ovr - 3 and s1.pid not in seen:
             add('young', s1, f"I'm ready. {surname(s0.name)} is {int(s0.age)}. When do I get my shot?",
@@ -753,7 +755,7 @@ def build_exit_meetings(session, league, abbr):
                  dict(key='truth', label="You're the plan for next year, not this one", sub='Told straight; he takes it', cost='heard')])
             break
     # 4. the star with two years left
-    for p in sorted(t.active(), key=lambda q: -q.ovr):
+    for p in sorted(eligible, key=lambda q: -q.ovr):
         if p.contract and p.contract.years == 2 and p.ovr >= 84 and p.age <= 30 and p.pid not in seen:
             add('star', p, "I'm the best player in this building and I'm on a deal from three years ago. Are we doing this in the spring?",
                 [dict(key='spring', label="We'll extend you this offseason", sub='An extension promise by the new year', cost='promise:extension_by'),
@@ -766,7 +768,7 @@ def build_exit_meetings(session, league, abbr):
         if m_ is None: return 60.0
         val = getattr(m_, 'value', 60.0)
         return float(val() if callable(val) else val)
-    for p in sorted(t.active(), key=_mv):
+    for p in sorted(eligible, key=_mv):
         mv = _mv(p)
         if mv < 42 and p.age >= 27 and p.pid not in seen and not MO.wants_out(p):
             add('unhappy', p, "This year wore on me. I need to know the room's going to be different, or I need to know now.",
@@ -799,7 +801,7 @@ def exit_interviews(session, league, abbr, year=None):
         rows = []
         for mt in ms:
             p = league.player(mt['pid'])
-            if p is None: continue
+            if p is None or p.pos in ('K', 'P'): continue
             rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), years=(p.contract.years if p.contract else 0), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1),
                              kind=mt['kind'], quote=mt['quote'], options=mt['options'], answer=mt.get('answer') or 'unanswered', said=mt.get('said') or "The meeting came and went without an answer."))
         return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=_years(league), past=True, meetings=rows, open=0)
@@ -807,7 +809,7 @@ def exit_interviews(session, league, abbr, year=None):
     rows = []
     for mt in ms:
         p = league.player(mt['pid'])
-        if p is None: continue
+        if p is None or p.pos in ('K', 'P'): continue
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), years=(p.contract.years if p.contract else 0), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1),
                          kind=mt['kind'], quote=mt['quote'], options=mt['options'], answer=mt.get('answer'), said=mt.get('said')))
     return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, years=_years(league), past=False, pending=(not ms), meetings=rows, open=sum(1 for r in rows if not r['answer']))

@@ -3137,7 +3137,7 @@ function renderReview(v) {
   men.append(el('div', { class: 'h5', style: 'padding:6px 14px 0' }, 'Above expectations')); for (const p of v.exceeded) men.append(cardOf(p));
   if (!v.exceeded.length) men.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'No players have sufficient evidence of exceeding role expectations.'));
   if (v.short.length) { men.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Below expectations')); for (const p of v.short) men.append(cardOf(p)); }
-  men.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'Compared with players in the same role. Limited evidence is left ungraded; older seasons require saved expectations.'));
+
   content.append(men);
   if (!v.cap) { content.append(el('section', { class: 'sheet c4' }, el('h2', {}, 'Next Year'), el('div', { class: 'count', style: 'padding:8px 14px' }, 'The money from that year was not kept.'))); return; }
   const money = el('section', { class: 'sheet c4' }, el('h2', {}, 'Next Year', el('small', {}, `$${v.cap.limit}m cap`)));
@@ -3157,7 +3157,7 @@ function renderExit(v) {
   renderRail(v.rail); const page=persPage(); foSecond('exit');
   const meetings=v.meetings || [], pending=meetings.filter(m=>!m.answer).length;
   const board=foBoard(v,'EXIT MEETINGS',meetings.length ? [[pending,'Open'],[meetings.length-pending,'Answered']] : []);
-  board.append(foYears(v,y=>renderExit(pyJSON(`SESSION.frontoffice('exit_interviews', year=${y})`))),el('p',{class:'count'},'Each player will remember what you tell him. A promise goes on the ledger.')); page.append(board);
+  board.append(foYears(v,y=>renderExit(pyJSON(`SESSION.frontoffice('exit_interviews', year=${y})`)))); page.append(board);
   if(!meetings.length) { board.append(el('div',{class:'empty fo-empty'},(v.not_yet || v.pending) ? `The ${v.year} meetings come after your team's season.` : v.missing ? `No meetings were kept for ${v.year}.` : 'Nobody asked for a meeting this year.')); return; }
   if(!meetings.some(m=>m.pid===exitSelected)) exitSelected=meetings.find(m=>!m.answer)?.pid || meetings[0].pid;
   const queue=el('div',{class:'fo-queue'}), conversation=el('div',{class:'fo-conversation'});
