@@ -66,6 +66,21 @@ import os
 
 import numpy as np
 
+FG_HOLDER_DEPTH = 7.0
+
+
+def field_goal_distance(yardline):
+    return float(yardline) + FG_HOLDER_DEPTH + 10.0
+
+
+def missed_field_goal_start(yardline):
+    """Receiving distance to goal on an ordinary, unreturned missed kick.
+
+    Rule 11-4-2: the spot of the kick, or the receiving 20 if closer to
+    its goal. Blocked/returned kicks use their actual play outcome instead.
+    """
+    return float(np.clip(100.0 - float(yardline) - FG_HOLDER_DEPTH, 1.0, 80.0))
+
 _D = os.path.dirname(os.path.abspath(__file__))
 _M = json.load(open(os.path.join(_D, 'wp_model.json')))
 COEF = np.array(_M['coef'])
@@ -184,11 +199,11 @@ def fourth_down(score_diff, seconds_left, yardline_100, ydstogo,
     wp_go = p_conv * wp_conv + (1 - p_conv) * wp_fail
 
     # ---- field goal ----
-    dist = yardline_100 + 17
+    dist = field_goal_distance(yardline_100)
     if fg_prob is None:
         fg_prob = float(np.clip(1.02 - 0.0095 * max(0, dist - 20), 0.02, 0.985))
     wp_made = after_score(3)
-    wp_miss = _flip(score_diff, seconds_left - 6, min(99, yardline_100 + 8),
+    wp_miss = _flip(score_diff, seconds_left - 6, 100 - missed_field_goal_start(yardline_100),
                     is_home=is_home, timeout_edge=-timeout_edge)
     wp_fg = fg_prob * wp_made + (1 - fg_prob) * wp_miss
     if dist > 65:

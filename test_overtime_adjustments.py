@@ -69,7 +69,7 @@ class BreakFlowTests(unittest.TestCase):
     @patch('halftime.recommendations')
     def test_finish_helper_handles_both_stops(self,mock):
         mock.side_effect=self.suggestions
-        s=Session.__new__(Session);s.runner=self.runner();s._capture_gameday=lambda w:None
+        s=Session.__new__(Session);s.L=NS(phase='regular');s.runner=self.runner();s._capture_gameday=lambda w:None
         self.assertTrue(s._finish_live());self.assertTrue(s.runner.live['done'])
 
     def test_recommendation_stats_count_pressure_once_and_scramble_as_pass(self):

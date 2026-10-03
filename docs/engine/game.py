@@ -25,6 +25,7 @@ import copy
 import numpy as np
 import punt_strategy as PST
 import weather as W
+from decisions import field_goal_distance, missed_field_goal_start
 ENV = W.CLEAR
 
 # ============================================================ CLOCK
@@ -102,8 +103,17 @@ def multi_score_urgency(seconds, score_diff, quarter, chasing=False):
             and seconds <= comeback_clock_budget(-score_diff))
 
 
-def comeback_pace(seconds, score_diff, quarter):
+def comeback_pace(seconds, score_diff, quarter, *, yardline=75, timeouts=3, tempo=.5):
     """Gradual second-half acceleration; seconds is remaining game time."""
+    if quarter == 4 and -8 <= score_diff < -3 and seconds > 0:
+        # A touchdown is needed, and a stalled drive may leave another
+        # possession necessary. Budget for the remaining field AND a reply,
+        # rather than spending normal huddle time until the two-minute drill.
+        # This only adjusts pace; the coach still chooses runs, passes and kicks.
+        reserve = 90.0 + max(0.0, 120.0 - 30.0 * np.clip(timeouts, 0, 3))
+        snap_budget = (max(0.0, yardline) / 6.0 + 2.0) * 30.0
+        start = min(600.0, (snap_budget + reserve) * (1.0 + .15 * (tempo - .5)))
+        return float(np.clip((start - seconds) / max(1.0, start - 120.0), 0, 1))
     if quarter not in (3, 4) or score_diff >= -8 or not comeback_viable(seconds, -score_diff):
         return 0.0
     scores = int(np.ceil(-score_diff / 8.0))
@@ -203,7 +213,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     a rule. The field goal is taken only when three points change the number of scores the club still needs.
     """
     import decisions as DEC
-    distance = yardline_100 + 17
+    distance = field_goal_distance(yardline_100)
     kick_chance = fg_probability(distance, kicker, rate_fn)
     kick_chance *= ENV.kick_mult if distance >= 35 else 1.0 - 0.3 * (1.0 - ENV.kick_mult)
     minimum = 0.42 if secs_left > 300 or score_diff >= 0 else 0.25
@@ -393,7 +403,7 @@ def kick_probability(dist, kicker, rate_fn, snapper=None):
 
 
 def attempt_field_goal(yardline_100, kicker, rng, rate_fn, snapper=None):
-    dist = yardline_100 + 17
+    dist = field_goal_distance(yardline_100)
     made = rng.random() < kick_probability(dist, kicker, rate_fn, snapper)
     return dict(type='field_goal', distance=dist, made=made,
                 points=3 if made else 0)
@@ -815,8 +825,8 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         floor_line = 0.0                                           # behind, any chance beats none; tied, the kneel's coin flip is the bar
     else:
         v_kick, v_td, v_kneel, floor_line = 3.0, 6.95, 0.0, HAIL_MARY_LINE
-    def kick_ev(yy): return v_kick * fg_probability(yy + 17.0, kicker, rate_fn)
-    p_fg = fg_probability(y + 17.0, kicker, rate_fn)
+    def kick_ev(yy): return v_kick * fg_probability(field_goal_distance(yy), kicker, rate_fn)
+    p_fg = fg_probability(field_goal_distance(y), kicker, rate_fn)
     p_td = _shot_td_prob(y, offense, defense, rate_fn)
     evs = {'kneel': v_kneel}
     if secs_in_half >= 1: evs['kick'] = kick_ev(y)
@@ -1111,7 +1121,8 @@ def _penalty_ready_clock(dr, pen, half_end=None, *, before_snap=False,
     start = dr.clock
     ready = min(dr.play_clock, max(0.0, play_seconds(
         result or 'run', hurry=hurry, tempo=tempo,
-        catchup=comeback_pace(secs, dr.score_diff, dr.quarter)) - 6.0))
+        catchup=comeback_pace(secs, dr.score_diff, dr.quarter,
+            yardline=dr.yardline, timeouts=getattr(dr, '_own_timeouts', 3), tempo=tempo)) - 6.0))
     # A warning interrupts ready-for-play runoff, but never erases live action.
     if not getattr(dr, '_two_min', False) and secs > 120:
         ready = min(ready, secs - 120.0)
@@ -1458,7 +1469,8 @@ def _ep_play_stands(dr, out):
 def _resolve_live_penalty(dr, pen, out, oc):
     """
     A foul during or after the play. Returns 'replaced' if the penalty is taken instead of the play, 'added' if
-    it is tacked on after it, None if declined.
+    it is tacked on after it, 'enforced' for a retained gain with live-foul
+    down enforcement already applied, None if declined.
 
     THE RULE: the side that did not foul looks at both outcomes, the play standing and the penalty enforced, and
     takes whichever is better for it. Both are whole game states (down, distance, spot, possession) valued in
@@ -1493,6 +1505,32 @@ def _resolve_live_penalty(dr, pen, out, oc):
         pen['on_try'] = True
         return 'added'
     if pen['on_offense']:
+        if (pen['penalty'] == 'Face Mask'
+                and out.get('type') in ('complete', 'run', 'scramble')
+                and 0 < spot_gain < dr.yardline
+                and not out.get('fumble_lost')):
+            # A contact foul at the end of the advance is enforced there.
+            # Retain the gain for statistics (GSIS Penalty Plays 2A), then
+            # repeat the down unless the NET gain still earns a first down.
+            # Do not treat this live foul as a dead-ball foul after a first down.
+            spot = dr.yardline - spot_gain
+            walk = min(yards, (100.0 - spot) / 2.0)
+            net = spot_gain - walk
+            first = net >= dr.togo
+            ep_enf = _ep_state(1 if first else dr.down,
+                min(10.0, spot + walk) if first else dr.togo - net, spot + walk)
+            if ep_enf >= _ep_play_stands(dr, out):
+                return None
+            pen['yards'] = walk
+            dr.yardline = spot + walk
+            dr.best = min(dr.best, dr.yardline)
+            out['converted'] = first
+            if first:
+                dr.down, dr.togo = 1, min(10.0, dr.yardline)
+                dr.first_downs += 1
+            else:
+                dr.togo -= net
+            return 'enforced'
         if pen['penalty'] == 'Intentional Grounding':
             yards = max(yards, float(out.get('throwback', 0.0) or 0.0))
             pen['yards'] = yards
@@ -2091,6 +2129,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # 10. THE KNEEL. With the ball and no time to use it, out of range, a club takes a knee: the first half at
         # any score, the second half when it is not behind. Real clubs do not throw from their own 35 at 0:04.
         secs_left_half = dr.clock - wall
+        dr._own_timeouts = timeouts.left.get(pos, 0) if timeouts is not None else 0
         chasing = chasing or multi_score_urgency(secs_left_half, dr.score_diff, dr.quarter)
         opp_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 0
         if (half_end is None and dr.quarter == 4 and dr.score_diff > 0
@@ -2585,10 +2624,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             taken = _resolve_live_penalty(dr, live_pen, out, oc)
             if taken in ('replaced', 'added') and not live_pen.get('on_offense'):
                 dr.untimed = True; dr.untimed_at = len(dr.log) + 1     # the penalty entry appended next is the last thing in the log
-            if taken == 'replaced':
-                # accepted in place of the play: the down is replayed and the snap does not count, but the
-                # play-by-play keeps the play it wiped (marked), so a reader sees the pass the flag came on
-                if live_pen['penalty'] == 'Intentional Grounding':
+            if taken in ('replaced', 'enforced'):
+                # Both paths already applied field/down enforcement. Only a
+                # previous-spot replacement erases the snap's statistics.
+                if taken == 'enforced':
+                    if book is not None:
+                        book.record(out, off_f, def_f, rng)
+                        if out.get('fumble'): book.record_fumble(out)
+                    pending = (out, off_f, def_f, _snap_state)
+                elif live_pen['penalty'] == 'Intentional Grounding':
                     if book is not None: book.record(out, off_f, def_f, rng)
                 else:
                     dr.plays -= 1
@@ -2665,7 +2709,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         tempo = off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5
         elapsed = play_seconds(t, hurry=hurry, timeout=used, tempo=tempo,
                                urgent=multi_score_urgency(secs_in_half, dr.score_diff, dr.quarter, chasing),
-                               catchup=comeback_pace(secs_in_half, dr.score_diff, dr.quarter)) + live_seconds - 6.0
+                               catchup=comeback_pace(secs_in_half, dr.score_diff, dr.quarter,
+                                   yardline=after_play.yardline, timeouts=dr._own_timeouts,
+                                   tempo=tempo)) + live_seconds - 6.0
         # A deliberate bleed may wait for a later kick, but it cannot silently
         # consume that kick while holding a timeout. Live action still costs
         # its own live time; no time is restored when the play ends the half.
@@ -2883,6 +2929,8 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
             _terminal_kickoff(dr, kick, before, clock, other, 5)
         elif dr.result == 'Punt':
             start = getattr(dr, 'next_yardline', 75)
+        elif dr.result == 'Missed field goal':
+            start = missed_field_goal_start(dr.yardline)
         elif dr.result in ('Turnover', 'Turnover on downs'):
             start = float(np.clip(100 - dr.yardline, 1, 99))
         else:
@@ -3057,7 +3105,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         elif dr.result in ('Turnover', 'Turnover on downs'):
             start = float(np.clip(100 - dr.yardline, 1, 99))
         elif dr.result == 'Missed field goal':
-            start = float(np.clip(100 - dr.yardline - 8, 1, 99))
+            start = missed_field_goal_start(dr.yardline)
         elif dr.result == 'Safety':
             # the free kick: the side that gave it up punts from its 20 and the scoring side takes over around its own 40
             start = float(np.clip(rng.normal(60.0, 6.0), 45.0, 75.0))
