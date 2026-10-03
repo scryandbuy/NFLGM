@@ -751,7 +751,7 @@ class Session:
                     m = MO.ensure(p)
                     if m is not None:
                         m.apply('major_award' if k in ('mvp', 'opoy', 'dpoy', 'oroy', 'droy', 'protector') else 'all_pro' if k == 'all_pro_1' else 'all_pro_2')
-                    if p.team == self.user_team: mine.append([inbox_player(p), names.get(k, k) if k not in ('all_pro_1', 'all_pro_2') else ('All-Pro first team' if k == 'all_pro_1' else 'All-Pro second team')])
+                    if p.team == self.user_team: mine.append([inbox_player(p), names.get(k, k) if k not in ('all_pro_1', 'all_pro_2') else ('All-Pro First Team' if k == 'all_pro_1' else 'All-Pro Second Team')])
                 if k not in ('all_pro_1', 'all_pro_2'):
                     p = self.L.player(getattr(ws[0], 'pid', ws[0])) if not hasattr(ws[0], 'pid') else ws[0]
                     if p is not None: lines.append([names.get(k, k), inbox_player(p), p.pos, p.team])
