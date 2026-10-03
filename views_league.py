@@ -92,6 +92,13 @@ def standings(session, league, abbr, year=None):
                             div_rec=_div_record(league, t), arrow=_rank_move(league, t.abbr, s.get('div_rank'))))
         rows.sort(key=lambda x: (x['div_rank'] or 9, -x['pct'], -x['pd']))
         divs.append(dict(name=name, rows=rows))
+    # Extend the same conference procedure beyond the seven playoff places,
+    # so the hunt list and conference table do not invent a separate tie order.
+    S_ = r.season_state() if r is not None else None
+    if S_ is not None:
+        import standings_and_seeding as SS
+        seeds = {c: SS.seed_conference(S_, c, n_wc=len(S_.teams))
+                 for c in ('Continental', 'United')}
     picture = []
     for conf in ('Continental', 'United'):
         sd = seeds.get(conf) or []
@@ -100,13 +107,12 @@ def standings(session, league, abbr, year=None):
             t = league.teams[a]; w, l, d = t.record
             rows.append(dict(seed=i, club=club(a), record=f"{w}–{l}" + (f"–{d}" if d else ''), bye=(i == 1), div_winner=(i <= 4), me=(a == abbr)))
         # in the hunt: the next three by pct outside the seven
-        outside = sorted([t for t in league.teams.values() if t.conf == conf and t.abbr not in sd[:7]], key=lambda t: -(t.record[0] + 0.5 * t.record[2]) / max(1, sum(t.record)))
+        outside = [league.teams[a] for a in sd[7:]]
         hunt = [dict(club=club(t.abbr), record=f"{t.record[0]}–{t.record[1]}" + (f"–{t.record[2]}" if t.record[2] else ''), me=(t.abbr == abbr)) for t in outside[:3]]
         picture.append(dict(conf=conf, seeds=rows, hunt=hunt))
     played = sum(1 for g in league.schedule if g[3] is not None)
     # the conference table, and a tiebreak note for clubs tied on pct within a division
     conf_rows = {}
-    S_ = r.season_state() if r is not None else None
     for conf in ('Continental', 'United'):
         rows = [x for d in divs for x in d['rows'] if league.teams[x['club']['abbr']].conf == conf]
         sd = seeds.get(conf) or []
@@ -127,14 +133,10 @@ def standings(session, league, abbr, year=None):
                 if len(grp) < 2 or pct == 0: continue
                 first = next(x for x in d['rows'] if x['club']['abbr'] in grp)['club']['abbr']
                 others = [a for a in grp if a != first]
-                h2h = S_.h2h_pct(first, grp)
-                if h2h is not None and h2h > 0.5: why = 'head-to-head'
-                elif any(abs(S_.sov(first) - S_.sov(a)) > 1e-9 for a in others): why = 'strength of victory'
-                elif any(abs(S_.sos(first) - S_.sos(a)) > 1e-9 for a in others): why = 'strength of schedule'
-                else: why = 'the later tiebreakers'
-                notes.append(f"{d['name']}: {' and '.join(grp)} tied at {pct:.3f}; {first} ahead on {why}.")
+                notes.append(f"{d['name']}: {' and '.join(grp)} tied at {pct:.3f}; {first} leads under the division tiebreaking procedure.")
+
     # the whole league by pct, and remember this week's division ranks for next week's arrows
-    league_rows = sorted([x for d in divs for x in d['rows']], key=lambda x: (-x['pct'], -x['pd']))
+    league_rows = sorted([x for d in divs for x in d['rows']], key=lambda x: (-x['pct'], x['div_rank'] or 9, -x['pd']))
     if getattr(league, '_rank_week', None) != league.week:
         league._rank_prev = {x['club']['abbr']: x['div_rank'] for d in divs for x in d['rows'] if x['div_rank']}; league._rank_week = league.week
     return dict(rail=rail(session, league, abbr), divisions=divs, picture=picture, games_played=played, week=league.week, conferences=conf_rows, notes=notes, league_rows=league_rows, year=int(league.year), years=_years(league))

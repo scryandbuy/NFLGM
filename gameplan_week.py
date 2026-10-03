@@ -555,9 +555,13 @@ def refresh_open_report(league, week):
 
 # Season performance is separate from the roster grades used by scouting.
 def record_team_performance(league, home, away, week, res):
-    rows = {a: dict(pass_yds=0.0, rush_yds=0.0) for a in (home, away)}
+    rows = {a: dict(pass_yds=0.0, rush_yds=0.0, touchdowns=0) for a in (home, away)}
     for side, drive in res['drives']:
         row = rows[home if side == 'home' else away]
+        if drive.result in ('Touchdown', 'Defensive touchdown'):
+            scorer = home if side == 'home' else away
+            if drive.result == 'Defensive touchdown': scorer = away if side == 'home' else home
+            rows[scorer]['touchdowns'] += 1
         for play in drive.log:
             if not isinstance(play, dict) or play.get('nullified'): continue
             kind = play.get('type')
