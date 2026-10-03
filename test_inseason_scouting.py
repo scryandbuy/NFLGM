@@ -129,14 +129,16 @@ class InseasonScoutingTests(unittest.TestCase):
         self.assertTrue(all('medical' not in v['flags'] and 'visited' not in v['flags'] for v in L.scouting['MIN'].values()))
         self.assertLessEqual(len(IS.reports(L, 'MIN')), 270)
 
-    def test_only_selected_prospects_receive_new_knowledge_and_groups_rotate(self):
+    def test_only_selected_prospects_receive_football_looks_and_groups_rotate(self):
         L, _ = setup()
         IS.set_priorities(L, 'MIN', group1='Receivers', group2='Edge', prospect_pid='rookie-QB1')
         before = copy.deepcopy(L.scouting['MIN'])
         first = IS.cross_checks(L, 2)['MIN']
         selected = {r['pid'] for r in first}
         for pid, v in L.scouting['MIN'].items():
-            if pid not in selected: self.assertEqual(v, before[pid])
+            if pid not in selected:
+                self.assertEqual({k: val for k, val in v.items() if k != 'character_assessments'},
+                                 {k: val for k, val in before[pid].items() if k != 'character_assessments'})
         second = IS.cross_checks(L, 4)['MIN']
         self.assertFalse({r['pid'] for r in first if r['pos'] == 'WR'} & {r['pid'] for r in second if r['pos'] == 'WR'})
 

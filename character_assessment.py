@@ -103,6 +103,26 @@ def background(p, abbr, view, room, error_sd, evidence):
     _remember(p, abbr, data)
 
 
+def area_report(p, abbr, view, room, quality):
+    """One coarse background summary, separate from a football cross-check.
+
+    Existing stronger/legacy knowledge wins. This broad first pass remains
+    Limited even with a Character Judge; visits and focused work refine it.
+    """
+    data = assessments(view)
+    if room.get('character') == 'none' or 'work_ethic' in data:
+        return False
+    error = 26. - 4. * max(0., min(1., float(quality)))
+    if room.get('character') == 'sharp': error *= .85
+    read = _read((p.traits or {}).get('work_ethic', 50), error,
+                 ('work-background-v1', abbr, p.pid), 'Area background report')
+    read['stage'] = 'background'
+    data['work_ethic'] = read
+    view['character_assessments'] = data
+    _remember(p, abbr, {'work_ethic': read})
+    return True
+
+
 def describe(key, record=None):
     label = 'Work ethic' if key == 'work_ethic' else 'Discipline'
     if not record:

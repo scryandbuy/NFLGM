@@ -174,6 +174,56 @@ def reports(league, abbr):
     return copy.deepcopy(_saved(league, _pool(league)).get('clubs', {}).get(abbr, {}).get('reports', []))
 
 
+def background_coverage(league, abbr):
+    """Safe coverage counts, separate from football certainty or hidden traits."""
+    views = (getattr(league, 'scouting', None) or {}).get(abbr, {})
+    candidates = _choices(league, abbr, _pool(league))
+    counts = dict(total=len(candidates), assessed=0, limited=0, moderate=0, strong=0)
+    for p in candidates:
+        record = CA.assessments(views[p.pid]).get('work_ethic')
+        if record is not None:
+            counts['assessed'] += 1
+            counts[CA.describe('work_ethic', record)['confidence'].lower()] += 1
+    return counts
+
+
+def _area_background(league, abbr, candidates, views, cons, room):
+    """Finite background work across the class, without extra football looks.
+
+    Around 7-9% of the class fits in a cycle's area-report workload, depending
+    on scout quality. This is a workload setting, not an NFL coverage quota.
+    Balance the proportion assessed across positions, then prioritize earlier
+    consensus tiers. No hidden prospect ability determines who gets checked.
+    """
+    if room.get('character') == 'none' or not candidates:
+        return 0
+    quality = SC.scout_q(league.teams[abbr])
+    budget = max(1, round(len(candidates) * (.07 + .02 * quality)))
+    totals, known, queues = {}, {}, {}
+    for p in candidates:
+        totals[p.pos] = totals.get(p.pos, 0) + 1
+        if 'work_ethic' in CA.assessments(views[p.pid]):
+            known[p.pos] = known.get(p.pos, 0) + 1
+        else:
+            queues.setdefault(p.pos, []).append(p)
+    def order(p):
+        rank = cons.get(p.pid, {}).get('rank') or 999
+        tier = 0 if rank <= 100 else 1 if rank <= 224 else 2
+        return (tier, stable_seed(('area-coverage-v1', abbr, p.pid)), p.pid)
+    for queue in queues.values():
+        queue.sort(key=order, reverse=True)
+    completed = 0
+    for _ in range(budget):
+        available = [pos for pos, queue in queues.items() if queue]
+        if not available: break
+        pos = min(available, key=lambda pos: (known.get(pos, 0) / totals[pos], pos))
+        p = queues[pos].pop()
+        if CA.area_report(p, abbr, views[p.pid], room, quality):
+            known[pos] = known.get(pos, 0) + 1
+            completed += 1
+    return completed
+
+
 def decision_resolved(league, week, abbr=None):
     """Read-only calendar marker, independent of deletable Inbox messages."""
     abbr = abbr or getattr(league, 'user_team', None)
@@ -268,6 +318,7 @@ def cross_checks(league, completed_week):
                               focus=kinds[pid],
                               before=before, after=_estimate(view), character=CA.report(view)))
         row['last_week'] = week
+        _area_background(league, abbr, candidates, views, cons, SC.room(team))
         row.setdefault('focus_history', []).append(dict(week=week, group1=choice['group1'], group2=choice['group2']))
         if abbr == getattr(league, 'user_team', None):
             row.setdefault('reports', []).extend(batch)
