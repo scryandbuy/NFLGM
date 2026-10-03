@@ -944,11 +944,11 @@ class Session:
                     opp = aw if hm == x else hm; mine_, theirs = (hp, ap) if hm == x else (ap, hp)
                     steps.append(f"{nm(opp)} {mine_}-{theirs} in the {PS.Postseason.ROUND_NAMES[r_].replace(' Round', '')}")
                 if x in seed_of and seed_of[x] == 1: steps.insert(0, 'The first-round bye')
-                return '\n'.join(steps) if steps else 'The conference'
+                return '; '.join(steps) + '.' if steps else 'The conference.'
             conf_of = {t: cf for cf, sd in (getattr(post, 'seeds', {}) or {}).items() for t in sd}
             lines = [f"Championship Game {site['numeral']} is set: {nm(a)} against {nm(h)}, at {site['stadium']} in {site['city']}.",
-                     f"{nm(a)}, the {seed_of.get(a, '?')} seed out of the {conf_of.get(a, '')}, finished {rec(a)}. Road to the final:\n{road(a)}",
-                     f"{nm(h)}, the {seed_of.get(h, '?')} seed out of the {conf_of.get(h, '')}, finished {rec(h)}. Road to the final:\n{road(h)}"]
+                     f"{nm(a)}, the {seed_of.get(a, '?')} seed out of the {conf_of.get(a, '')}, finished {rec(a)}. Road to the final: {road(a)}",
+                     f"{nm(h)}, the {seed_of.get(h, '?')} seed out of the {conf_of.get(h, '')}, finished {rec(h)}. Road to the final: {road(h)}"]
             if user in (h, a): lines.append("You are in it. The game plan is on your desk.")
             return f"Championship Game {site['numeral']}: {nm(a)} vs {nm(h)} at {site['stadium']}", '\n\n'.join(lines)
         games = [f"{tag(a)} at {tag(h)}, {STADIUM.get(h, nm(h))}" for c, h, a in ms]

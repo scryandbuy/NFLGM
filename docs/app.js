@@ -339,17 +339,32 @@ function renderMailBody(message) {
     }
     return body;
   }
-  // Legacy rows are substrings of the original body. Preserve per-occurrence
-  // player IDs (including namesakes) while translating their UTF-16 offsets.
+  // Keep original text slices so saved player-reference offsets still resolve.
+  // Blank lines separate paragraphs; ordinary single line breaks wrap as prose.
   const text = message.body || '';
   let cursor = 0;
-  for (const row of message.body_rows || [text]) {
-    const start = text.indexOf(row, cursor);
-    const refs = start < 0 ? [] : (message.mentions?.body || [])
+  const appendText = (parent, tag, row, start) => {
+    const refs = (message.mentions?.body || [])
       .filter(ref => ref.start >= start && ref.end <= start + row.length)
       .map(ref => ({...ref, start:ref.start-start, end:ref.end-start}));
-    if (start >= 0) cursor = start + row.length;
-    body.append(el('div', {class:'mail-body-row'}, messageText({body:row, mentions:{body:refs}}, 'body')));
+    parent.append(el(tag, {class:'mail-prose'}, messageText({body:row, mentions:{body:refs}}, 'body')));
+  };
+  for (const paragraph of text.split(/\r?\n[ \t]*\r?\n/)) {
+    const start = text.indexOf(paragraph, cursor);
+    cursor = start + paragraph.length;
+    if (!paragraph.trim()) continue;
+    const lines = paragraph.split(/\r?\n/).filter(line => line.trim());
+    if (lines.length && lines.every(line => /^\s*[-*\u2022]\s+/.test(line))) {
+      const list = el('ul', {class:'mail-prose-list'});
+      let offset = start;
+      for (const line of lines) {
+        const lineStart = text.indexOf(line, offset);
+        const prefix = line.match(/^\s*[-*\u2022]\s+/)[0].length;
+        appendText(list, 'li', line.slice(prefix), lineStart + prefix);
+        offset = lineStart + line.length;
+      }
+      body.append(list);
+    } else appendText(body, 'p', paragraph, start);
   }
   return body;
 }

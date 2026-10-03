@@ -3052,3 +3052,14 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .protection-detail{border-top:1px solid var(--rule);padding-top:9px;margin-top:12px;font:400 12px/1.5 var(--text);color:var(--ink-3)}
 .protection-detail strong{color:var(--ink)}
 @media(max-width:420px){.protection-card .protection-groups{grid-template-columns:1fr}.protection-group+.protection-group{border-left:0;padding-left:0}}
+
+/* Ordinary inbox copy reads as paragraphs, not separated table rows. */
+.inbox-board .mailbox .pane .mail-content{margin-top:18px;line-height:1.6}
+.mail-content .mail-prose{margin:0 0 12px;white-space:normal;overflow-wrap:anywhere}
+.mail-content .mail-prose:last-child{margin-bottom:0}
+.mail-content .mail-prose-list{margin:0 0 12px;padding-left:22px}
+.mail-content .mail-prose-list .mail-prose{margin:3px 0}
+.mail-content .mail-intro{margin-bottom:14px;white-space:normal}
+.mail-content .mail-section{margin:16px 0}
+.mail-content .mail-body-row{white-space:normal}
+.mail-content .mail-body-row + .mail-body-row{margin-top:5px;padding-top:0;border-top:0}
