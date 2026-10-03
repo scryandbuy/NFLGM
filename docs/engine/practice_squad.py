@@ -497,7 +497,7 @@ def udfa_camp(league, rng, verbose=False):
         import inbox as IB
         left = [p for p in udfa if not p.team]
         if user and left:
-            top = sorted(left, key=lambda p: -p.ovr)[:5]
+            top = sorted(left, key=lambda p: (-view_ovr(league, user, p), p.pid))[:5]
             IB.post(league, 'club', f"{len(left)} undrafted rookies are on the market", f"{len(left)} undrafted rookies remain unsigned and will sign for the minimum. Sign to the roster or practice squad from Free Agency; the Undrafted filter shows them.", sender='assistants', payload=dict(link='fa', mail_sections=[IB.mail_section('Your scouts’ best available', [[inbox_player(p), p.pos, str(round(view_ovr(league, user, p)))] for p in top], ['Player', 'Position', 'Scouted OVR'])]))
     except Exception as e:
         import sys; print('udfa note failed:', e, file=sys.stderr)

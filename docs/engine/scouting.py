@@ -40,6 +40,7 @@ POT_ERR_CAP = 7.0        # the most a room's read of a ceiling can be off
 CERT_START_TOP, CERT_START_DEEP, CERT_SMALL_SCHOOL = 0.35, 0.22, -0.06
 CERT_LOOK_BASE, CERT_LOOK_SCOUT = 0.09, 0.16          # a look adds base + scout share × head-scout quality
 CERT_VISIT_GAIN, CERT_COMBINE, CERT_MAX = 0.15, 0.12, 0.92
+OBSERVED_GRADE_VERSION = 1
 
 
 def scout_q(team):
@@ -90,10 +91,44 @@ def scouted_ratings(p, view, growth=0.0):
     """
     import xp as XP
     physical = float(view.get('e_phys', 0.0) or 0.0)
-    skill = float(view.get('e_skill', 0.0) or 0.0) + tape(p) * _tape_fade(view, p)
+    # Evidence creation owns tape draws. Reading or migrating an old report
+    # must not invent a missing shared error or consume any random stream.
+    known_tape = float(np.clip((getattr(p, 'xp_spent', None) or {}).get('_tape', 0.0), -15.0, 15.0))
+    skill = float(view.get('e_skill', 0.0) or 0.0) + known_tape * _tape_fade(view, p)
     return {key: float(np.clip(float(value) + growth +
             (physical if key in XP.PHYSICAL or key in XP.TOOLS else skill), 30.0, 99.0))
             for key, value in p.ratings.items()}
+
+
+def observed_overall(p, view):
+    """Summarize this room's attributes, with its separate saved risk discount."""
+    import targets as TG
+    return round(float(np.clip(TG.position_score(scouted_ratings(p, view), p.pos)
+                               + float(view.get('adj', 0.0) or 0.0), 30, 99)), 1)
+
+
+def migrate(league):
+    """Reconcile old current-class summaries without earning new evidence.
+
+    Retain errors, certainty, ceiling bounds, visits and historical reports.
+    Already drafted players' old reads are historical, not current ability.
+    """
+    prospects = {p.pid: p for name in ('draft_pool', 'next_class')
+                 for p in (getattr(league, name, None) or [])
+                 if not p.team and not getattr(p, 'draft_overall', None)}
+    changed = False
+    for room in (getattr(league, 'scouting', None) or {}).values():
+        for pid, view in room.items():
+            p = prospects.get(pid)
+            if (p is None or view.get('observed_grade_version') == OBSERVED_GRADE_VERSION
+                    or not all(key in view for key in ('e_phys', 'e_skill', 'ovr'))):
+                continue
+            view['ovr'] = observed_overall(p, view)
+            view['observed_grade_version'] = OBSERVED_GRADE_VERSION
+            changed = True
+    if changed:
+        consensus(league)
+    return changed
 
 
 def _refresh(view, p):
@@ -108,7 +143,8 @@ def _refresh(view, p):
     if 'e_pot0' in view: view['e_pot'] = float(np.clip(float(view['e_pot0']) * left, -POT_ERR_CAP, POT_ERR_CAP))
     # A visit sees through most of the film's shared error, but not all of it.
     tp = tape(p) * _tape_fade(view, p)
-    view['ovr'] = round(float(np.clip(p.ovr + view['e_phys'] + view['e_skill'] + tp + adj, 30, 99)), 1)
+    view['ovr'] = observed_overall(p, view)
+    view['observed_grade_version'] = OBSERVED_GRADE_VERSION
     # a room's ceiling read is bounded: nobody sees a 59 as a 97. The ceiling error is capped and the ceiling
     # itself cannot sit more than eighteen points above what the room sees today
     e_pot = float(np.clip(view.get('e_pot', 0.0) or 0.0, -POT_ERR_CAP, POT_ERR_CAP)); view['e_pot'] = e_pot

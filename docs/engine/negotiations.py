@@ -281,10 +281,10 @@ def _assessment(league, p, t, offer, immediate=False):
         if t['kind'] == 'extension' and not ne['will_discount']:
             floor = max(floor, ask * (1.0 + ne['demand_premium']) * .98)
     # promises are worth something to him
-    import negotiation_engine as NE
+    import negotiation_engine as NE, contract_offer as CO
+    trust = CO.profile_for(p)['trust']
     for k in offer.get('promises', []):
-        floor *= 1.0 - NE.PROMISES.get(k, {}).get('base', 0.0)
-    import contract_offer as CO
+        floor *= 1.0 - NE.PROMISES.get(k, {}).get('base', 0.0) * trust
     return CO.assess(league, p, league.teams[t['team']], offer, max(.01, floor), t['years'], t['kind'])
 
 
@@ -482,7 +482,35 @@ def record_promise(league, pid, team, kind, year=None, source=None):
     if existing is not None: return existing
     p = league.player(pid)
     orig = (int(getattr(p.contract, 'signed', 0) or 0), int(p.contract.years)) if p is not None and p.contract is not None else None
-    league.promises.append(dict(pid=pid, team=team, kind=kind, made=league.year, year=year or (league.year + 1 if kind == 'extension_by' else None), status='open', source=source, orig=orig))
+    pr = dict(pid=pid, team=team, kind=kind, made=league.year, year=year or (league.year + 1 if kind == 'extension_by' else None), status='open', source=source, orig=orig)
+    if kind in ('starting_role', 'captaincy'):
+        week = int(getattr(league, 'week', 0) or 0)
+        regular = getattr(league, 'phase', None) == 'regular'
+        next_season = source == 'exit' or getattr(league, 'phase', None) == 'playoffs'
+        # Leave time to establish a role or make the appointment this season.
+        last_start = 14 if kind == 'starting_role' else 17
+        if regular and week > last_start: next_season = True
+        pr['opportunity_year'] = int(year or (league.year + int(next_season)))
+        this_season = regular and pr['opportunity_year'] == league.year
+        if kind == 'starting_role':
+            pr['evaluate_week'] = max(4, week + 4) if this_season else 4
+            pr['keep_week'] = min(18, max(8, pr['evaluate_week'] + (4 if this_season else 0)))
+        else:
+            pr['evaluate_week'] = max(2, week + 1) if this_season else 2
+    league.promises.append(pr)
+    return pr
+
+
+def promise_opportunity(pr):
+    """Persist missing legacy timing once, without rewriting terminal outcomes.
+
+    Exit conversations offer next camp's job. Old captain commitments explicitly
+    waited until the following season; other old starting commitments used week 4.
+    """
+    if pr.get('kind') not in ('starting_role', 'captaincy'): return
+    pr.setdefault('opportunity_year', int(pr['made']) + int(pr.get('source') == 'exit' or pr['kind'] == 'captaincy'))
+    pr.setdefault('evaluate_week', 4 if pr['kind'] == 'starting_role' else 2)
+    if pr['kind'] == 'starting_role': pr.setdefault('keep_week', 8)
 
 
 def check_promises(league, week):
@@ -509,8 +537,13 @@ def check_promises(league, week):
             else: pr['status'] = 'void'; continue
         else:
             ok = None
-            if pr['kind'] == 'starting_role' and week and week >= 4:
-                ps = team.depth.get(p.pos, []); ok = bool(ps) and ps[0] is p
+            promise_opportunity(pr)
+            opportunity = (league.phase == 'regular' and week and 1 <= week <= 18
+                           and league.year >= pr.get('opportunity_year', league.year)
+                           and week >= pr.get('evaluate_week', 0))
+            if pr['kind'] == 'starting_role' and opportunity:
+                import morale as MO
+                ok = MO.has_starting_role(team, p)
                 if p.out_until is not None: ok = None                     # hurt players are not judged
             elif pr['kind'] == 'extension_by':
                 cur = (int(getattr(p.contract, 'signed', 0) or 0), int(p.contract.years)) if p.contract is not None else None
@@ -521,8 +554,9 @@ def check_promises(league, week):
             elif pr['kind'] == 'no_franchise' and getattr(p, 'tagged_year', None) == league.year:
                 ok = False
             elif pr['kind'] == 'captaincy':
-                if p.xp_spent.get('_captain'): ok = True
-                elif league.year > int(pr['made']) and week and week >= 2: ok = False        # the season started and he is not wearing it
+                import morale as MO
+                if MO.is_captain(p, pr['team']): ok = True
+                elif opportunity: ok = False                            # his opportunity came and he is not wearing it
             elif pr['kind'] == 'no_trade' and league.year > int(pr['made']) + 1:
                 ok = True                                              # a full season kept
         if ok is False:
@@ -532,14 +566,23 @@ def check_promises(league, week):
             league.log('promise_broken', pid=p.pid, team=pr['team'], promise=pr['kind'])
             broken.append(pr)
             _promise_words(league, p, pr, kept=False)
-        elif ok is True and (pr['kind'] != 'starting_role' or (week and week >= 8)):
-            pr['status'] = 'kept'
-            if p.morale is not None:
-                try: p.morale.apply('promise_kept')
-                except Exception: pass
-            league.log('promise_kept', pid=p.pid, team=pr['team'], promise=pr['kind'])
-            _promise_words(league, p, pr, kept=True)
+        elif ok is True and (pr['kind'] != 'starting_role' or (week and week >= pr.get('keep_week', 8))):
+            keep_promise(league, p, pr)
     return broken
+
+
+def keep_promise(league, p, pr):
+    """Resolve an actual fulfillment once, also used by captain appointments."""
+    if pr.get('status') != 'open': return
+    key = tuple(pr.get(k) for k in ('pid', 'team', 'kind', 'made', 'year'))
+    if any(other is not pr and other.get('status') in ('kept', 'broken') and
+           tuple(other.get(k) for k in ('pid', 'team', 'kind', 'made', 'year')) == key
+           for other in getattr(league, 'promises', []) or []):
+        pr['status'] = 'superseded'; return
+    pr['status'] = 'kept'
+    if p.morale is not None: p.morale.apply('promise_kept')
+    league.log('promise_kept', pid=p.pid, team=pr['team'], promise=pr['kind'])
+    _promise_words(league, p, pr, kept=True)
 
 
 def _promise_words(league, p, pr, kept):

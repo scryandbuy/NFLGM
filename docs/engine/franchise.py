@@ -268,6 +268,7 @@ class Franchise:
         log['waiver_claims'] += claims
         log['practice_squad'] = PSQ.fill_squads(L, rng)
         log['udfa_cleared'] = clear_undrafted(L, rng)
+        MO.review_captains(L, week=0)
         log['cut_to_53'] = len(cut)
         log['filled'] = filled
 

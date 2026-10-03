@@ -3,6 +3,7 @@
 Reads are saved per club. Views never roll new information or expose hidden traits.
 Local seeded reads do not perturb the draft, practice, or game random streams.
 """
+import copy
 import math
 import numpy as np
 from stable import stable_seed
@@ -20,9 +21,7 @@ def migrate(league):
             data = assessments(view)
             if not data: continue
             view['character_assessments'] = data
-            bank = p.xp_spent.setdefault('_character_observations', {}).setdefault(abbr, {})
-            for key, record in data.items():
-                bank.setdefault(key, record)
+            _remember(p, abbr, data)
 
 
 def _read(value, error, seed, source, evidence=1):
@@ -43,8 +42,17 @@ def assessments(view):
 
 
 def _remember(p, abbr, reads):
-    bank = p.xp_spent.setdefault('_character_observations', {})
-    bank.setdefault(abbr, {}).update(reads)
+    bank = p.xp_spent.setdefault('_character_observations', {}).setdefault(abbr, {})
+    for key, record in reads.items():
+        old = bank.get(key)
+        error = float(record.get('error', 20))
+        old_error = float(old.get('error', 20)) if old else float('inf')
+        # Another source cannot erase a more precise earned assessment.
+        # At the precision floor, retain updates to the same source's evidence.
+        if (old is None or error < old_error or
+                error == old_error and record.get('source') == old.get('source')
+                and record.get('evidence', 1) >= old.get('evidence', 1)):
+            bank[key] = copy.deepcopy(record)
 
 
 def film(p, abbr, view, *, small_school=False):

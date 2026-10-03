@@ -91,7 +91,22 @@ class Ballot:
             yield p, line
 
     def is_rookie(self, p):
-        return p.accrued == 0 or p.entry_year == self.year
+        # Contract-service accrual is not rookie eligibility: a reserve can
+        # play in an earlier season without earning an accrued season.
+        participation = ('games', 'snaps', 'pass_att', 'rush_att', 'tgt',
+                         'tackles', 'sacks', 'def_plays', 'pb_snaps', 'rb_snaps',
+                         'fg_att', 'xp_att', 'punts', 'kr', 'pr')
+        prior = list((getattr(p, 'career', None) or {}).items())
+        prior += [(year, book.get(p.pid, {})) for year, book in self.L.stats.items()]
+        for year, line in prior:
+            if int(year) < self.year and any(_g(line, key) > 0 for key in participation):
+                return False
+        entry = getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)
+        if entry is not None:
+            return int(entry) == self.year
+        # Legacy players without an entry/draft year can still qualify when
+        # neither saved participation nor service establishes an earlier year.
+        return getattr(p, 'accrued', 0) == 0
 
     # ---- scoring ------------------------------------------------------
     def passer_score(self, line):
@@ -118,14 +133,17 @@ class Ballot:
                 + 2.5 * _g(line, 'rec'))
 
     def rush_score(self, line):
-        """The DPOY marker: sacks first, TFL and hits alongside."""
+        """Front-seven production, including their recorded plays in coverage."""
+        # Use the existing role-development scale for ball production (3 PD,
+        # 8 INT), retaining the award's established rush/tackle/FF weights.
         return (3.0 * _g(line, 'sacks') + 1.0 * _g(line, 'pressures')
-                + 0.6 * _g(line, 'tackles') + 4.0 * _g(line, 'ff'))
+                + 0.6 * _g(line, 'tackles') + 4.0 * _g(line, 'ff')
+                + 3.0 * _g(line, 'pass_def') + 8.0 * _g(line, 'int_def'))
 
     def cover_score(self, line):
         """The other axis. Gilmore 2019 led the league in INT and PD."""
         return (8.0 * _g(line, 'int_def') + 0.5 * _g(line, 'tackles')
-                + 3.0 * _g(line, 'ff'))
+                + 3.0 * _g(line, 'ff') + 3.0 * _g(line, 'pass_def'))
 
     def def_score(self, p, line):
         if p.pos in COVERAGE_POS:
@@ -230,11 +248,10 @@ class Ballot:
         for abbr, t in self.teams.items():
             if self.rec_rank.get(abbr, 99) > 10:
                 continue
-            if not t.history:
-                prev = 0.5           # year one has nothing to improve on
-            else:
-                prev = t.history[-1]['win_pct'] if len(t.history) < 2 \
-                    else t.history[-2]['win_pct']
+            # Honors can be announced before this year's history is appended.
+            # Select the actual previous season in either calendar state.
+            prev = next((row['win_pct'] for row in reversed(t.history)
+                         if int(row.get('year', -1)) == self.year - 1), 0.5)
             gain = t.win_pct - prev
             if gain < 0:
                 continue
@@ -260,8 +277,9 @@ class Ballot:
                     continue
                 sacks += _g(line, 'sacks_allowed')
                 rush += _g(line, 'rush_yds')
-                pts += 6.0 * (_g(line, 'rush_td') + _g(line, 'rec_td')
-                              + _g(line, 'pass_td'))
+                # A passing touchdown is already counted for its receiver.
+                # Team offensive TD production counts each score once.
+                pts += 6.0 * (_g(line, 'rush_td') + _g(line, 'rec_td'))
             team_ctx[abbr] = (sacks, rush, pts)
         if not team_ctx:
             return None

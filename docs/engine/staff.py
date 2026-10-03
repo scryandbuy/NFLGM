@@ -327,24 +327,44 @@ def season_end(league, unit_ranks_by_team):
 
 
 def unit_ranks(league, year):
-    """Per club: offense rank (for the OC), defense rank (DC), kicking rank (ST) from the season's team stats."""
-    import advanced_stats as AS
-    S = league.stats.get(year, {})
+    """Evaluate regular-season work for the team that actually received it.
+
+    Season totals cannot reconstruct a traded player's team splits. Missing
+    game books therefore leave a club unranked rather than assigning its
+    current roster's past production to the current staff.
+    """
+    import collections
+    totals = {a: collections.Counter() for a in league.teams}
+    recorded = {a: set() for a in league.teams}
+    for key, book in (getattr(league, 'game_stats', None) or {}).items():
+        parts = key.split('-')
+        if len(parts) != 4 or parts[0] != str(year): continue
+        try: week = int(parts[1])
+        except ValueError: continue
+        if not 1 <= week <= 18: continue
+        for abbr in parts[2:]:
+            if abbr not in totals: continue
+            if not any(line.get('team') == abbr for line in book.values()): continue
+            totals[abbr].update(_unit_book_totals(book, abbr))
+            recorded[abbr].add(key)
+    missing = set()
+    if year == league.year:
+        for wk, away, home, ap, hp in getattr(league, 'schedule', ()):
+            if not 1 <= wk <= 18 or ap is None or hp is None: continue
+            key = f'{year}-{wk}-{home}-{away}'
+            for abbr in (away, home):
+                if key not in recorded.get(abbr, ()): missing.add(abbr)
     off, deff, st = {}, {}, {}
-    for abbr, team in league.teams.items():
-        pids = {p.pid for p in team.roster}
-        lines = [S[pid] for pid in pids if pid in S]
-        o = sum(l.get('pass_epa', 0) + l.get('rush_epa', 0) for l in lines); n = sum(l.get('pass_plays', 0) + l.get('rush_plays', 0) for l in lines)
-        off[abbr] = o / n if n else 0.0
-        d = sum(l.get('def_epa', 0) for l in lines); dn = sum(l.get('def_plays', 0) for l in lines)
-        deff[abbr] = d / dn if dn else 0.0
-        fga = sum(l.get('fg_att', 0) for l in lines); fgm = sum(l.get('fg_made', 0) for l in lines)
-        st[abbr] = (fgm / fga if fga else 0.8) + 0.001 * sum(l.get('punt_net', 0) for l in lines)
-    # a club with no plays on record for the year has no rank: before the season's first game every club
-    # sat at zero and was still numbered 1 to 32 in roster order, so the new season opened on invented ranks
-    played = {abbr for abbr, team in league.teams.items() if any(pid in S for pid in {p.pid for p in team.roster})}
+    for abbr, line in totals.items():
+        if abbr in missing: continue
+        n = line['pass_plays'] + line['rush_plays']
+        if n: off[abbr] = (line['pass_epa'] + line['rush_epa']) / n
+        if line['def_plays']: deff[abbr] = line['def_epa'] / line['def_plays']
+        fga, punts = line['fg_att'], line['punts']
+        if fga or punts:
+            st[abbr] = (line['fg_made'] / fga if fga else 0.8) + 0.001 * (line['punt_net_yds'] / punts if punts else 0.0)
     def rank(d):
-        order = sorted((a for a in d if a in played), key=lambda a: -d[a]); return {a: i + 1 for i, a in enumerate(order)}
+        order = sorted(d, key=lambda a: -d[a]); return {a: i + 1 for i, a in enumerate(order)}
     ro, rd, rs = rank(off), rank(deff), rank(st)
     return {abbr: {'oc': ro.get(abbr), 'dc': rd.get(abbr), 'st': rs.get(abbr)} for abbr in league.teams}
 
@@ -548,6 +568,20 @@ def _reviews(league):
     return state
 
 
+def _unit_book_totals(book, abbr):
+    """Shared annual/midseason evidence, attributed at game time."""
+    import collections
+    totals = collections.Counter()
+    for line in book.values():
+        if line.get('team') != abbr: continue
+        for key in ('pass_epa', 'rush_epa', 'pass_plays', 'rush_plays',
+                    'def_epa', 'def_plays', 'fg_att', 'fg_made', 'punts'):
+            totals[key] += float(line.get(key, 0) or 0)
+        # Canonical zero is authoritative; only genuinely old rows use alias.
+        totals['punt_net_yds'] += float(line.get('punt_net_yds', line.get('punt_net', 0)) or 0)
+    return totals
+
+
 def midseason_evidence(league, week):
     """Team-tagged game books; defensive success is *opponent* EPA suppressed.
 
@@ -561,13 +595,9 @@ def midseason_evidence(league, week):
         if not 1 <= wk <= min(week, 18) or ap is None or hp is None: continue
         book = books.get(f'{league.year}-{wk}-{home}-{away}') or {}
         for abbr, opponent, own_score, other_score in ((home, away, hp, ap), (away, home, ap, hp)):
-            own, opp = collections.Counter(), collections.Counter()
-            for line in book.values():
-                target = own if line.get('team') == abbr else opp if line.get('team') == opponent else None
-                if target is not None:
-                    for k in ('pass_epa', 'rush_epa', 'pass_plays', 'rush_plays', 'fg_att', 'fg_made', 'punts', 'punt_net_yds'):
-                        target[k] += float(line.get(k, 0) or 0)
-            games[abbr].append(dict(week=wk, own=own, opp=opp, win=own_score > other_score, loss=own_score < other_score))
+            games[abbr].append(dict(week=wk, own=_unit_book_totals(book, abbr),
+                                    opp=_unit_book_totals(book, opponent),
+                                    win=own_score > other_score, loss=own_score < other_score))
     result = {}
     for abbr, rows in games.items():
         rows.sort(key=lambda r: r['week'])

@@ -8,6 +8,7 @@ show, as plain dicts, and the actions their buttons call.
 from views import jersey
 import numpy as np
 from views import club, money, morale_word, player_plate, rail, transaction_when
+import morale as MO
 
 GROUPS = [('QB', ['QB']), ('HB', ['HB']), ('FB', ['FB']), ('WR', ['WR']), ('TE', ['TE']), ('LT', ['LT']), ('LG', ['LG']), ('C', ['C']), ('RG', ['RG']), ('RT', ['RT']),
           ('LEDG', ['LEDG']), ('DT', ['DT']), ('REDG', ['REDG']), ('MIKE', ['MIKE']), ('WILL', ['WILL']), ('SAM', ['SAM']), ('CB', ['CB']), ('FS', ['FS']), ('SS', ['SS']),
@@ -351,10 +352,15 @@ def card(session, league, pid):
                 schemes=scheme_rows(p.ratings, p.pos, _club_arch(league, getattr(session, 'user_team', None), p.pos)),
                 cond=_cond(session, p), out=p.out_until, season=cur, games=int(S.get('games', 0) or 0), seasons=seasons,
                 market=market, interest_line=interest_line, dev_line=dev_line, morale_line=_morale_line(p),
-                history=_player_history(league, p),
+                history=_player_history(league, p), captain=MO.is_captain(p),
                 actions=dict(mine=(p.team == session.user_team), extend_eligible=_ext_ok(league, p), can_cut=(p.team == session.user_team),
+                             can_captain=MO.can_name_captain(league, session.user_team, p),
                              ps_ok=(p.team == session.user_team and t is not None and __import__('practice_squad').can_add(t, p)), vested=(int(p.accrued or 0) >= 4),
                              hurt=(p.out_until is not None), on_ir=(t is not None and any(q.pid == p.pid for q in (getattr(t, 'ir', None) or [])))))
+
+
+def act_captain(league, abbr, pid, on=True):
+    return MO.set_captain(league, abbr, pid, on)
 
 
 def _market_words(league, p, quote):

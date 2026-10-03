@@ -883,6 +883,7 @@ class SeasonRunner(StandingsView):
         NG.resolve(self.L, week=week)          # agents get back to you
         for t in self.L.teams.values():          # coordinators reach XP through the player's club
             for p in t.roster: p._team_ref = t
+        MO.review_captains(self.L, week=week)
         NG.check_promises(self.L, week)        # promises not kept are broken
         import staff as STF_
         STF_.midseason_review(self.L, self.rng, week)

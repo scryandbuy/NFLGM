@@ -33,6 +33,92 @@ def ensure(p):
     return p.morale
 
 
+def is_captain(p, team=None):
+    """Captaincy belongs to a club, not to a player after he changes teams."""
+    club = team or getattr(p, 'team', None)
+    memory = getattr(p, 'xp_spent', None) or {}
+    return bool(club and p.team == club and memory.get('_captain') and
+                memory.get('_captain_team', club) == club)
+
+
+def can_name_captain(league, abbr, p):
+    team = league.teams.get(abbr)
+    return bool(team and p is not None and p.team == abbr and not p.retired and
+                any(q.pid == p.pid for q in team.roster + team.ir))
+
+
+def has_starting_role(team, p):
+    """The installed base lineup, including multiple WR/DT/CB jobs and pins.
+
+    Share the chart/game assignment engines. Incomplete offensive personnel
+    cannot establish an eleven-man lineup and are not evidence of a broken word.
+    """
+    import offense_roles as OR, defense_roles as DR, targets as TG
+    pins = getattr(team, 'depth_pins', None) or {}
+    depth = {}
+    for pos, men in team.depth.items():
+        ranked = sorted(men, key=lambda q: -TG.position_score(q.ratings, pos, team.scheme))
+        order = {pid: i for i, pid in enumerate(pins.get(pos, []))}
+        if order: ranked.sort(key=lambda q: order.get(q.pid, 10**6))
+        depth[pos] = ranked
+    gm = getattr(team, 'gm', None)
+    if p.pos in OR.OFFENSE:
+        try: rows = OR.assign({pos: men for pos, men in depth.items() if pos in OR.OFFENSE}, OR.base_package(gm))
+        except ValueError: return None
+        return any(q.pid == p.pid for _, q in rows)
+    if p.pos in DR.DEFENSE:
+        rows = DR.assign(DR.available_depth(depth), DR.coach_front(gm), 'Base', pins)
+        return any(row['player'] is not None and row['player'].pid == p.pid for row in rows)
+    return bool(depth.get(p.pos)) and depth[p.pos][0].pid == p.pid
+
+
+def set_captain(league, abbr, pid, on=True):
+    """Explicit club appointment; no quota, roster move or contract consequence."""
+    p = league.player(pid)
+    if not can_name_captain(league, abbr, p):
+        return dict(ok=False, why='Only a player on your roster or injured reserve can be named captain.')
+    if not isinstance(on, bool): return dict(ok=False, why='Choose whether to name or remove the captain.')
+    if p.xp_spent is None: p.xp_spent = {}
+    was = is_captain(p, abbr)
+    p.xp_spent['_captain'] = on
+    p.xp_spent['_captain_team'] = abbr
+    if on:
+        # Repeated clicks, save/load and remove/reappoint cannot farm morale.
+        rewarded = p.xp_spent.setdefault('_captain_rewarded', [])
+        if not was and abbr not in rewarded: ensure(p).apply('named_captain')
+        if abbr not in rewarded: rewarded.append(abbr)
+        import negotiations as NG
+        for pr in getattr(league, 'promises', []) or []:
+            if pr.get('pid') == pid and pr.get('team') == abbr and pr.get('kind') == 'captaincy':
+                NG.keep_promise(league, p, pr)
+    if was != on: league.log('captain_named' if on else 'captain_removed', pid=pid, team=abbr)
+    return dict(ok=True, captain=on, name=p.name,
+                line=f'{p.name} is a captain.' if on else f'{p.name} is no longer a captain.')
+
+
+def review_captains(league, week=None):
+    """CPU clubs act on their own commitments when the season arrives.
+
+    Veterans can lead while injured. A younger player needs an established
+    starting role; a promise does not force retention, promotion or a quota.
+    The GM's existing negotiation choices determine who receives a commitment.
+    """
+    if league.phase == 'playoffs' or (week != 0 and league.phase not in ('regular', 'preseason')): return []
+    import negotiations as NG
+    named = []
+    for pr in getattr(league, 'promises', []) or []:
+        if pr.get('status') != 'open' or pr.get('kind') != 'captaincy': continue
+        abbr = pr.get('team')
+        if abbr == getattr(league, 'user_team', None): continue
+        NG.promise_opportunity(pr)
+        if league.year < pr['opportunity_year']: continue
+        p = league.player(pr['pid'])
+        if not can_name_captain(league, abbr, p): continue
+        if not is_captain(p, abbr) and int(p.accrued or 0) < 2 and has_starting_role(league.teams[abbr], p) is not True: continue
+        if set_captain(league, abbr, p.pid)['ok']: named.append(p.pid)
+    return named
+
+
 def entitlement_of(team, p, cache=None):
     """cache: a per-club dict for one tick, so the depth chart and the pay
     order at each spot are built once a week rather than once per man."""
@@ -124,7 +210,7 @@ def weekly(league, week, results, snaps_by_pid, game_lines=None):
 def _room_pass(team):
     import pandas as pd
     rows = [dict(pid=p.pid, grp=GROUP.get(p.pos, p.pos), ovr=p.ovr, years_exp=p.accrued or 0,
-                 is_captain=bool(p.xp_spent.get('_captain', False))) for p in team.active()]
+                 is_captain=is_captain(p, team.abbr)) for p in team.active()]
     if len(rows) < 2: return
     morales = {p.pid: ensure(p) for p in team.active()}
     MS.locker_room_pass(pd.DataFrame(rows), morales)
@@ -200,7 +286,7 @@ def effective_ratings(p):
 def status(p, team=None):
     m = getattr(p, 'morale', None)
     if m is None: return 'settled'
-    return MS.status(m, p.ovr, bool(p.xp_spent.get('_captain', False)))
+    return MS.status(m, p.ovr, is_captain(p))
 
 
 REQUEST_FLOOR = 28.0       # under this at season's end he rolls

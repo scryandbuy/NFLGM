@@ -230,6 +230,8 @@ class Player:
         p.contract = contract_from_dict(d.get('contract'))
         p.morale = morale_from_dict(d.get('morale'))
         p.career = {int(k): v for k, v in (d.get('career') or {}).items()}
+        if p.team and (p.xp_spent or {}).get('_captain') and '_captain_team' not in p.xp_spent:
+            p.xp_spent = dict(p.xp_spent, _captain_team=p.team)
         PB.restore_background(p)
         if p.pos == 'TE' and d.get('te_rating_version', 0) < 1:
             import position_change as PC
@@ -1127,6 +1129,8 @@ class League:
         L.scouting = copy.deepcopy(L.scouting)
         CA.migrate(L)
         L.consensus = d.get('consensus', {}) or {}
+        import scouting as SC
+        SC.migrate(L)
         L.spring_news = d.get('spring_news') or []; L.user_visits = d.get('user_visits') or []; L.pick_provenance = d.get('pick_provenance') or {}; L.user_board = d.get('user_board') or {}; L.ps_intent = d.get('ps_intent') or {}; L.interviews = d.get('interviews') or {}; L.user_visit_week = d.get('user_visit_week') or {}; L.notes_sent = d.get('notes_sent') or {}; L.league_notes_sent = d.get('league_notes_sent') or {}
         # older saves: everyone on a roster wears a number
         for t in L.teams.values():
