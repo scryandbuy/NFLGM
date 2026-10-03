@@ -2003,7 +2003,9 @@ class _PendingSnap:
                    for p, role, active in self.calls if active}
         def transformed(value):
             if isinstance(value, dict):
-                if value.get('pid') in changed: return changed[value['pid']]
+                # Reserve dictionaries contain many ratings but need no work:
+                # only selected participants receive a state transformation.
+                if 'pid' in value: return changed.get(value['pid'], value)
                 return {k: transformed(v) for k, v in value.items()}
             if isinstance(value, list): return [transformed(v) for v in value]
             if isinstance(value, tuple): return tuple(transformed(v) for v in value)
