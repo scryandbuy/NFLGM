@@ -107,12 +107,22 @@ def senior_bowl(league, rng):
 
 
 def completed(league, year=None):
-    """Explicit completion, with legacy evidence from completed spring events."""
+    """A finished visit stage, including springs completed by older builds."""
     year = league.year if year is None else year
-    return any(x.get('year') == year and
-               ((x.get('kind') == 'complete' and x.get('event') == 'spring') or
-                x.get('event') in ('pro days', 'visits', 'visit'))
-               for x in (getattr(league, 'spring_news', None) or []))
+    news = [x for x in (getattr(league, 'spring_news', None) or []) if x.get('year') == year]
+    if any(x.get('kind') == 'complete' and x.get('event') == 'spring' for x in news):
+        return True
+    # Old saves may lack the explicit completion marker. A new staged spring
+    # carries pre_visits, so pro-day news cannot prematurely lock its visits.
+    return (not any(x.get('kind') == 'stage' and x.get('event') == 'pre_visits' for x in news)
+            and any(x.get('event') in ('pro days', 'visits', 'visit') for x in news))
+
+
+def pre_visits_completed(league, year=None):
+    year = league.year if year is None else year
+    return completed(league, year) or any(
+        x.get('year') == year and x.get('kind') == 'stage' and x.get('event') == 'pre_visits'
+        for x in (getattr(league, 'spring_news', None) or []))
 
 
 def pro_days(league, rng):
@@ -171,6 +181,27 @@ def _visit_targets(league, abbr, pool, plan):
                 p = queue.pop(0); chosen.append(p); seen.add(p.pid); added = True
         if not added:
             break
+    return chosen
+
+
+def fill_user_visits(league, abbr):
+    """Let the scout use unassigned visits after the user's selections close."""
+    if not abbr or completed(league): return list(getattr(league, 'user_visits', None) or [])
+    chosen = list(dict.fromkeys(getattr(league, 'user_visits', None) or []))[:VISITS]
+    if len(chosen) >= VISITS: return chosen
+    import draft as DFT
+    pool = _pool(league)
+    plan = DP.assess(league, abbr, DFT.league_starter_level(league))
+    suggested = _visit_targets(league, abbr, pool, plan)
+    # Pick windows can contain fewer than thirty prospects. Fill the remaining
+    # seats from the scout's board instead of wasting visits.
+    remaining = sorted(pool, key=lambda p: (-(league.scouting.get(abbr, {}).get(p.pid, {}).get('ovr', 0)),
+                                            (league.consensus or {}).get(p.pid, {}).get('rank', 9999)))
+    for p in suggested + remaining:
+        if p.pid not in chosen:
+            chosen.append(p.pid)
+            if len(chosen) == VISITS: break
+    league.user_visits = chosen
     return chosen
 
 
@@ -235,8 +266,9 @@ def _character(league, abbr, team, p, sd, rng):
                      text=f"{p.name}: {report['summary']} ({report['confidence'].lower()} confidence)")
 
 
-def run_spring(league, rng, verbose=False):
-    """The whole spring in order. The UI will step it; the calendar runs it whole."""
+def run_pre_visits(league, rng):
+    """Run workouts, then leave a decision window before private visits."""
+    if pre_visits_completed(league): return dict(already_completed=True)
     # Preserve this class's early Senior Bowl results across the year roll.
     if completed(league):
         return dict(already_completed=True)
@@ -250,10 +282,29 @@ def run_spring(league, rng, verbose=False):
     already_held = any(p.xp_spent.get('_senior_bowl') in (league.year, league.year - 1) for p in pool)
     n_s, m_s = (0, []) if already_held else senior_bowl(league, rng)
     n_p, m_p = pro_days(league, rng)
+    _log(league, 'stage', event='pre_visits')
+    return dict(combine=n_c, senior_bowl_looks=n_s, pro_day_looks=n_p,
+                moves=len(m_c) + len(m_s) + len(m_p))
+
+
+def run_visits(league, rng):
+    """Resolve selected visits once the club has seen the workouts."""
+    if completed(league): return dict(already_completed=True)
+    if not pre_visits_completed(league):
+        raise ValueError('Combine and pro days must finish before visits.')
     n_v, m_v = visits(league, rng)
     _log(league, 'complete', event='spring')
-    out = dict(combine=n_c, senior_bowl_looks=n_s, pro_day_looks=n_p, visit_looks=n_v,
-               moves=len(m_c) + len(m_s) + len(m_p) + len(m_v), news=len(league.spring_news))
+    return dict(visit_looks=n_v, moves=len(m_v), news=len(league.spring_news))
+
+
+def run_spring(league, rng, verbose=False):
+    """One-shot path for batch franchise simulations."""
+    if completed(league): return dict(already_completed=True)
+    pre = run_pre_visits(league, rng)
+    visit = run_visits(league, rng)
+    out = dict(combine=pre.get('combine', 0), senior_bowl_looks=pre.get('senior_bowl_looks', 0),
+               pro_day_looks=pre.get('pro_day_looks', 0), visit_looks=visit.get('visit_looks', 0),
+               moves=pre.get('moves', 0) + visit.get('moves', 0), news=len(league.spring_news))
     if verbose: print('  spring:', out)
     return out
 

@@ -97,7 +97,7 @@ class OffseasonCalendarTests(unittest.TestCase):
 
     def test_later_cutdown_blocks_without_changing_roster_or_rng(self):
         s = self.fresh()
-        s.stop = ('offseason', 13)
+        s.stop = ('offseason', 14)
         # The previous season's played flag must not bypass the camp guard.
         s.played = True
         roster = [p.pid for p in s.L.teams['GB'].active()]
@@ -105,7 +105,7 @@ class OffseasonCalendarTests(unittest.TestCase):
         state = copy.deepcopy(s.rng.bit_generator.state)
         self.assertTrue(any(b['kind'] == 'roster' for b in s.blocking()))
         self.assertEqual(s.advance()['done'], 'Blocked')
-        self.assertEqual(s.stop, ('offseason', 13))
+        self.assertEqual(s.stop, ('offseason', 14))
         self.assertEqual(roster, [p.pid for p in s.L.teams['GB'].active()])
         self.assertEqual(state, s.rng.bit_generator.state)
 
@@ -116,23 +116,23 @@ class OffseasonCalendarTests(unittest.TestCase):
         s.L.draft_pool, s.L.next_class = s.L.next_class, []
         pk = next(pk for pk in s.L.teams['GB'].picks if pk.year == s.L.year - 1)
         pk.selection = 1
-        s.stop = ('offseason', 11)
+        s.stop = ('offseason', 12)
         s.advance()
         self.assertTrue(s.draft_live())
         result = views_draft.act_pick(s, s.L, 'GB', s.L.draft_pool[0].pid)
         self.assertTrue(result['done'])
-        self.assertEqual(s.stop, ('offseason', 12))
+        self.assertEqual(s.stop, ('offseason', 13))
         history = json.loads(json.dumps(s.L.last_draft))
         self.assertEqual(len(history['results']), 1)
         s = SS.Session.load(s.save())
         with patch.object(s, 'step_camp'), patch.object(SS.TRD, 'run'):
             s.advance()
-        self.assertEqual(s.stop, ('offseason', 13))
+        self.assertEqual(s.stop, ('offseason', 14))
         self.assertEqual(s.L.last_draft, history)
         # Legacy saves left at the draft stop must retain the same history too.
-        s.stop = ('offseason', 11)
+        s.stop = ('offseason', 12)
         s.advance()
-        self.assertEqual(s.stop, ('offseason', 12))
+        self.assertEqual(s.stop, ('offseason', 13))
         self.assertEqual(s.L.last_draft, history)
 
 

@@ -40,4 +40,23 @@ class SpringSafeguards(unittest.TestCase):
         L=self.league([dict(year=2027,event='spring',kind='complete')])
         self.assertFalse(SP.completed(L))
 
+    def test_workouts_leave_a_visit_window_before_spring_is_complete(self):
+        L=self.league([dict(year=2028,event='pre_visits',kind='stage')])
+        self.assertTrue(SP.pre_visits_completed(L))
+        self.assertFalse(SP.completed(L))
+        SP.set_user_visits(L,['p2'])
+        self.assertEqual(L.user_visits,['p2'])
+
+    def test_senior_bowl_invites_high_middle_and_lower_ranked_seniors(self):
+        people=[SimpleNamespace(pid=f'p{i}',age=23,pos='WR',xp_spent={}) for i in range(180)]
+        L=SimpleNamespace(year=2027,user_team=None,draft_pool=people,next_class=[],
+                          consensus={p.pid:dict(rank=i+1) for i,p in enumerate(people)},
+                          scouting={},teams={},spring_news=[])
+        SC.senior_bowl(L,np.random.default_rng(17),event_year=2028)
+        invited=[i for i,p in enumerate(people) if p.xp_spent.get('_senior_bowl')==2027]
+        self.assertEqual(len(invited),110)
+        self.assertGreater(sum(i<60 for i in invited),30)
+        self.assertGreater(sum(60<=i<120 for i in invited),25)
+        self.assertGreater(sum(i>=120 for i in invited),20)
+
 if __name__=='__main__':unittest.main()

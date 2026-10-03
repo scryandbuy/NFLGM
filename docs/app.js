@@ -123,7 +123,7 @@ async function bootEngine() {
 }
 
 function cutPenaltyText(v, year) { return `$${v.penalty.toFixed(1)}m ${year == null ? 'this year' : year}${v.penalty_next ? ` + $${v.penalty_next.toFixed(1)}m ${year == null ? 'next year' : year + 1}` : ''}`; }
-const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'practice_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_offer_sheet', 'inbox_hurt_action', 'inbox_mark_all', 'inbox_read', 'inbox_later', 'inbox_delete', 'inbox_clear_read']);
+const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act', 'draft_act', 'plan_act', 'practice_act', 'plan_take_all', 'trade_offer_answer', 'resign_act', 'exit_answer', 'inbox_offer_sheet', 'inbox_hurt_action', 'inbox_scout_focus', 'inbox_mark_all', 'inbox_read', 'inbox_later', 'inbox_delete', 'inbox_clear_read']);
 const READ_ONLY_ACTIONS = new Set(['personnel_act:ask', 'personnel_act:gather', 'personnel_act:offer_preview', 'frontoffice_act:restructure_preview', 'draft_act:read_trade_up', 'draft_act:offers', 'plan_act:save', 'plan_act:save_failed']);
 AUTO_SAVE_METHODS.add('inbox_roster_dismiss');
 AUTO_SAVE_METHODS.add('dismiss_ceiling_notice');
@@ -452,6 +452,17 @@ function renderInbox(v) {
     if (m.kind === 'roster_report') pane.append(rosterReportCards(m, reload));
     if (m.kind === 'trade_offer') pane.append(el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openTradeOffer(cur.id, reload) }, cur.decide ? 'Open Trade Offer' : 'View Trade Offer')));
     else if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
+    else if (cur.decide && m.kind === 'scouting_focus') {
+      const f = m.scouting_focus || {}, suggested = f.suggestions || [], groups = f.groups || [];
+      const choice = (value) => { const sel = el('select', { class:'find', style:'max-width:240px' }); for (const g of groups) sel.append(el('option', { value:g, selected:g === value ? '' : null }, g)); return sel; };
+      const first = choice(suggested[0]?.group || f.group1 || groups[0]);
+      const second = choice(suggested[1]?.group || f.group2 || groups[1]);
+      const actions = el('div', { class:'acts', style:'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px' },
+        el('span', { class:'count' }, 'Focus 1'), first, el('span', { class:'count' }, 'Focus 2'), second,
+        el('button', { class:'btn go', onclick: () => { const r = pyJSON(`SESSION.inbox_scout_focus(${Number(m.id)}, group1=${JSON.stringify(first.value)}, group2=${JSON.stringify(second.value)})`); if (!r.ok) notify(r); else reload(); } }, 'Choose Focus'),
+        el('button', { class:'btn', onclick: () => { const r = pyJSON(`SESSION.inbox_scout_focus(${Number(m.id)}, use_scout=True)`); if (!r.ok) notify(r); else reload(); } }, 'Let Scout Decide'));
+      pane.append(actions);
+    }
     else if (m.kind === 'injury_decision' && ['unread', 'open'].includes(m.status) && m.pid) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=True)`)); reload(); } }, 'Play Him'), el('button', { class: 'btn', onclick: () => { notify(pyJSON(`SESSION.inbox_hurt_action(${Number(m.id)}, play=False)`)); reload(); } }, 'Sit Him'), hasPlayerReference(m,m.pid) ? null : el('a', { class: 'btn quiet', href: '#club/player/' + m.pid }, 'His Card')));
     else if (cur.decide && m.kind === 'offer_sheet') pane.append(offerSheetActions(cur.id, reload));
     else if (cur.decide && m.kind === 'roster' && m.link) pane.append(el('div',{class:'acts'},el('a',{class:'btn go',href:linkHash(m.link)},'Manage Roster →'),el('a',{class:'btn quiet',href:'#club/ps'},'View Practice Squad')));
@@ -1383,7 +1394,7 @@ function renderProspectCard(v) {
   if (!v.taken) {
     if (v.on_clock) a.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.draft_act('pick', pid=${JSON.stringify(v.pid)})`); notify(r); if (r.ok) location.hash = '#draft/day'; } }, 'Draft Player'));
     a.append(v.on_board ? el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(v.pid)})`); reload(); } }, 'Take Off Your Board') : el('button', { class: 'btn' + (v.on_clock ? '' : ' go'), onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(v.pid)})`); reload(); } }, 'Add to Your Board'));
-    if (!v.spring_done) a.append(el('button', { class: 'btn' + (v.visited ? ' go' : ''), 'data-tip': v.visited ? 'Cancel the visit' : 'Scout this player further', onclick: () => { const r = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(v.pid)})`); if (!r.ok) notify(r); reload(); } }, v.visited ? 'Visiting' : 'Visit'));
+    if (v.visit_window) a.append(el('button', { class: 'btn' + (v.scheduled ? ' go' : ''), 'data-tip': v.scheduled ? 'Cancel the scheduled visit' : 'Schedule a private visit', onclick: () => { const r = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(v.pid)})`); if (!r.ok) notify(r); reload(); } }, v.scheduled ? 'Cancel Visit' : 'Schedule Visit'));
     a.append(el('button', { class: 'btn quiet', 'data-tip': 'Keep him off your board on draft day', onclick: () => { pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(v.pid)})`); const cur = pyJSON(`SESSION.draft_view('board')`).user_board.dnd.map(x => x.pid); pyJSON(`SESSION.draft_act('board', dnd=${JSON.stringify(cur.concat([v.pid]))})`); reload(); } }, 'Do Not Draft'));
   }
   a.append(el('button', { class: 'btn quiet', onclick: () => history.back() }, 'Back'));
@@ -2532,8 +2543,8 @@ const POS_GROUPS = ['All', 'QB', 'HB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'ST']
 const POS_OF = { QB: ['QB'], HB: ['HB', 'FB'], WR: ['WR'], TE: ['TE'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], DL: ['LEDG', 'DT', 'REDG'], LB: ['MIKE', 'WILL', 'SAM'], DB: ['CB', 'FS', 'SS'], ST: ['K', 'P', 'LS'] };
 
 const NEED_POS = { QB: ['QB'], RB: ['HB', 'FB'], WR: ['WR'], TE: ['TE'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], EDGE: ['LEDG', 'REDG'], DT: ['DT'], LB: ['MIKE', 'WILL', 'SAM'], CB: ['CB'], S: ['FS', 'SS'] };
-const FLAG_TIPS = { 'Work ethic concern': 'Scouting concern about preparation; may slow development. See the card for confidence and source.', 'Strong preparation': 'Scouting reports suggest consistent effort; see the card for confidence.', 'Discipline concern': 'Scouting concern about avoidable penalties; not a talent downgrade.', 'Plays under control': 'Scouting reports suggest disciplined play; penalties remain possible.', Visited: 'You met with this player.', 'Senior Bowl': 'Your scouts saw him at the Senior Bowl.', 'Sr. Bowl': 'Your scouts saw him at the Senior Bowl.', 'Pro Day': 'Your scouts attended his pro day.', Medical: 'Durability concerns.', Character: 'Work ethic concerns.', Riser: 'Up fifteen or more spots on the consensus board this Spring.', Faller: 'Down fifteen or more spots on the consensus board this Spring.', 'Small School': 'Less tape on this player.', Underclassman: 'More room to grow.' };
-const FLAG_CLS = { 'Work ethic concern': 'chr', 'Discipline concern': 'chr', 'Strong preparation': 'up', 'Plays under control': 'up', Medical: 'med', Character: 'chr', Visited: 'vis', Riser: 'up', Faller: 'dn', 'Sr. Bowl': 'sen', 'Senior Bowl': 'sen', 'Small School': 'small', Underclassman: 'under' };
+const FLAG_TIPS = { 'Work ethic concern': 'Scouting concern about preparation; may slow development. See the card for confidence and source.', 'Strong preparation': 'Scouting reports suggest consistent effort; see the card for confidence.', 'Discipline concern': 'Scouting concern about avoidable penalties; not a talent downgrade.', 'Plays under control': 'Scouting reports suggest disciplined play; penalties remain possible.', Visited: 'You met with this player.', Scheduled: 'A private visit is scheduled but has not happened yet.', 'Senior Bowl': 'Your scouts saw him at the Senior Bowl.', 'Sr. Bowl': 'Your scouts saw him at the Senior Bowl.', 'Pro Day': 'Your scouts attended his pro day.', Medical: 'Durability concerns.', Character: 'Work ethic concerns.', Riser: 'Up fifteen or more spots on the consensus board this Spring.', Faller: 'Down fifteen or more spots on the consensus board this Spring.', 'Small School': 'Less tape on this player.', Underclassman: 'More room to grow.' };
+const FLAG_CLS = { 'Work ethic concern': 'chr', 'Discipline concern': 'chr', 'Strong preparation': 'up', 'Plays under control': 'up', Medical: 'med', Character: 'chr', Visited: 'vis', Scheduled: 'sen', Riser: 'up', Faller: 'dn', 'Sr. Bowl': 'sen', 'Senior Bowl': 'sen', 'Small School': 'small', Underclassman: 'under' };
 const wordTag = w => el('span', { class: 'flag ' + (FLAG_CLS[w] || ''), 'data-tip': FLAG_TIPS[w] || null }, w);
 
 function renderBoard(v) {
@@ -2546,7 +2557,26 @@ function renderBoard(v) {
     el('div', {}, el('span', {}, 'TEAM NEEDS'), el('strong', {}, v.needs.slice(0, 4).join(' · ') || 'Best player available')),
     el('div', {}, el('span', {}, 'YOUR BOARD'), el('strong', {}, `${onBoard.size} ranked · ${dnd.size} do not draft`)),
     el('div', {}, el('span', {}, 'SCOUTING'), el('strong', {}, v.scout ? `${v.scout.name} · ${v.scout.rating}` : 'Your scouting room'))));
-  const s = el('section', { class: 'sheet c12 draft-surface draft-board' }, el('h2', {}, 'Scouting Board', el('small', {}, 'Visits are locked in at Advance.')));
+  const focus = v.scouting_focus || {}, updates = v.scouting_updates || [];
+  const focusBox = el('section', { class: 'sheet c12 draft-surface' }, el('h2', {}, 'In-Season Scouting', el('small', {}, 'Every position gets a small scouting review each cycle. Your two chosen groups get more attention.')));
+  const chosen = v.rows.find(r => r.pid === focus.prospect_pid);
+  focusBox.append(el('div', { class: 'pad', style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
+    el('span', { class: 'count' }, 'CURRENT FOCUS'), el('b', {}, [focus.group1, focus.group2].filter(Boolean).join(' + ') || 'Awaiting scout decision'),
+    el('span', { class: 'count' }, `PLAYER DEEP DIVE: ${chosen ? chosen.name : 'Scout selection'}`),
+    el('button', { class: 'btn', 'data-tip': 'Select a prospect in the class table first', onclick: () => { if (!boardSel) return; const res = pyJSON(`SESSION.draft_act('scouting_focus', pid=${JSON.stringify(boardSel)})`); if (!res.ok) notify(res); reload(); } }, 'Focus Selected Prospect'),
+    el('span', { class: 'count', style: 'margin-left:auto' }, focus.next_report_week ? `Next report: Week ${focus.next_report_week}` : 'Reports resume next season')));
+  if (updates.length) {
+    const latestWeek = Math.max(...updates.map(r => Number(r.week) || 0));
+    const latest = updates.filter(r => Number(r.week) === latestWeek).slice(0, 4);
+    const report = el('div', { class: 'pad', style: 'border-top:1px solid var(--rule-2)' }, el('b', {}, `SCOUTING UPDATE / WEEK ${latestWeek}`));
+    for (const row of latest) report.append(el('div', { style: 'padding:7px 0;border-bottom:1px solid var(--rule-2)' },
+      el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + row.pid; } }, row.name),
+      ` / ${row.pos} / ${row.focus} / Estimated overall ${Math.round(row.before.ovr)} to ${Math.round(row.after.ovr)}`,
+      row.character?.length ? ` / ${row.character.filter(c => c.status !== 'neutral').map(c => c.summary + ' (' + c.confidence + ' confidence)').join('; ') || 'background checked'}` : ''));
+    focusBox.append(report);
+  } else focusBox.append(el('div', { class: 'pad count' }, 'Your first cross-check arrives after Week 2. Your scout continues working without weekly input.'));
+  page.append(focusBox);
+  const s = el('section', { class: 'sheet c12 draft-surface draft-board' }, el('h2', {}, 'Scouting Board', el('small', {}, v.visit_window ? 'Choose private visits after the workouts. Unused slots go to your scout at Advance.' : 'The board updates as your scouts make new reads.')));
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   const taken = v.rows.filter(r => r.taken).length;
   if (taken) tabs.append(el('label', { class: 'chk', style: 'margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink-2)' }, el('input', { type: 'checkbox', checked: boardHideTaken ? '' : null, onchange: e => { boardHideTaken = e.target.checked; boardPage = 0; draw(); } }), 'Hide drafted'));
@@ -2563,7 +2593,7 @@ function renderBoard(v) {
   filt.append(el('span', { style: 'width:1px;background:var(--rule-2);margin:0 6px' }));
   for (const [k, label, tip] of [['needs', 'Needs', `Your needs: ${v.needs.join(', ') || 'none'}`], ['early', 'Rounds 1–3', 'Consensus in the first 96'], ['late', '4–7', 'Consensus after the first 96'], ['small', 'Small School', 'Outside the power conferences: your read is wider on these players']]) filt.append(el('button', { class: 'btn' + (boardFilt[k] ? ' go' : ''), 'data-tip': tip, onclick: () => { boardFilt[k] = !boardFilt[k]; if (k === 'early' && boardFilt.early) boardFilt.late = false; if (k === 'late' && boardFilt.late) boardFilt.early = false; boardPage = 0; renderBoard(v); } }, label));
   const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Prospect', value: boardQuery }); search.oninput = () => { boardQuery = search.value; boardPage = 0; draw(); }; filt.append(search);
-  const visitText = () => `Visits ${v.visits.length} of ${v.visits_max}` + (v.spring_done ? ' · the spring has run' : ' · Visits must be scheduled by Step 11 in the Offseason.');
+  const visitText = () => `Visits ${v.visits.length} of ${v.visits_max}` + (v.spring_done ? ' · completed' : v.visit_window ? ' · schedule by Advance' : ' · available after Combine and Pro Days');
   const visitTally = el('span', { class: 'count', style: 'margin-left:auto;align-self:center' }, visitText());
   filt.append(visitTally);
   s.append(filt);
@@ -2582,14 +2612,14 @@ function renderBoard(v) {
     const pageRows = sorted.slice(boardPage * PAGE, (boardPage + 1) * PAGE);
     for (const r of pageRows) tbl.append(el('tr', { class: (r.visited ? 'visited' : '') + (boardSel === r.pid ? ' sel' : ''), style: r.taken ? 'opacity:.4' : '', onclick: e => { if (e.target.closest('button')) return; boardSel = boardSel === r.pid ? null : r.pid; draw(); drawFoot(); } },
       el('td', { class: 'n' }, r.my_rank), el('td', {}, el('button', { class: 'who', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, `${r.pos} · ${r.cls_year}${r.size ? ' · ' + r.size : ''}`)))), el('td', {}, r.pos), el('td', {}, r.home_state), el('td', { class: 'n' }, ovrCell(r.mine), r.visit_move && r.visit_move.mine_from !== r.mine ? el('small', { class: 'count', style: 'display:block;font-size:11px', 'data-tip': `Your read moved from ${r.visit_move.mine_from} to ${r.mine} at the visit` }, `was ${r.visit_move.mine_from}`) : ''), el('td', { class: 'n' }, el('span', {}, r.scheme_ovr ?? r.mine), (r.fit || 0) !== 0 ? el('small', { class: 'fit ' + (r.fit > 0.05 ? 'p' : r.fit < -0.05 ? 'm' : 'z'), style: 'display:block;font-size:11.5px' }, (r.fit > 0 ? '+' : '') + r.fit.toFixed(1)) : ''), el('td', { class: 'n' }, r.ceiling), el('td', { class: 'n' }, r.cons != null ? r.cons : '—'), el('td', { class: 'n' }, gapCell(r.gap)), el('td', { class: 'n' }, r.proj_range), el('td', {}, ...r.words.map(wordTag)),
-      el('td', {}, el('div', { style: 'display:flex;gap:4px' }, (v.spring_done || r.visit_locked) ? '' : el('button', { class: 'btn' + (r.visited ? ' go' : ''), style: 'width:auto;padding:2px 8px;font-size:14px', 'data-tip': r.visited ? 'Cancel the visit' : 'Scout this player further', onclick: e => { e.stopPropagation(); const res = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(r.pid)})`); if (!res.ok) { notify(res); return; } v.visits = res.visits; r.visited = res.visits.includes(r.pid); r.words = r.visited ? ['Visited', ...r.words.filter(w => w !== 'Visited')] : r.words.filter(w => w !== 'Visited'); visitTally.textContent = visitText(); visitedTabCount.textContent = v.rows.filter(x => x.visited).length; draw(); } }, r.visited ? 'Visiting' : 'Visit'),
-        onBoard.has(r.pid) ? el('span', { class: 'badge-sm' }, `#${v.user_board.order.findIndex(x => x.pid === r.pid) + 1}`) : el('button', { class: 'btn', style: 'width:auto;padding:2px 8px;font-size:14px', 'data-tip': 'Add to Draft Board', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(r.pid)})`); reload(); } }, 'Add')))));
+      el('td', {}, el('div', { style: 'display:flex;gap:4px' }, !v.visit_window ? '' : el('button', { class: 'btn' + (r.scheduled ? ' go' : ''), style: 'width:auto;padding:2px 8px;font-size:14px', 'data-tip': r.scheduled ? 'Cancel the scheduled visit' : 'Schedule a private visit', onclick: e => { e.stopPropagation(); const res = pyJSON(`SESSION.draft_act('visit', pid=${JSON.stringify(r.pid)})`); if (!res.ok) { notify(res); return; } v.visits = res.visits; r.scheduled = res.visits.includes(r.pid); r.words = r.scheduled ? ['Scheduled', ...r.words.filter(w => w !== 'Scheduled')] : r.words.filter(w => w !== 'Scheduled'); visitTally.textContent = visitText(); draw(); } }, r.scheduled ? 'Cancel' : 'Visit'),
+        onBoard.has(r.pid) ? el('span', { class: 'badge-sm' }, `#${v.user_board.order.findIndex(x => x.pid === r.pid) + 1}`) : el('button', { class: 'btn', style: 'width:auto;padding:2px 8px;font-size:14px', 'data-tip': 'Add to Draft Board', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(r.pid)})`); reload(); } }, 'Add'), el('button', { class: 'btn quiet', style: 'width:auto;padding:2px 8px;font-size:14px', 'data-tip': 'Put on Do Not Draft list', onclick: e => { e.stopPropagation(); const d = v.user_board.dnd.map(x => x.pid); if (!d.includes(r.pid)) d.push(r.pid); pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(r.pid)})`); pyJSON(`SESSION.draft_act('board', dnd=${JSON.stringify(d)})`); reload(); } }, 'DND')))));
     if (!rows.length) tbl.append(el('tr', {}, el('td', { colspan: '11' }, el('div', { class: 'empty' }, 'Nobody matches the filter.'))));
   };
   const foot = el('div', { class: 'foot' });
   const drawFoot = () => { foot.innerHTML = ''; const r = v.rows.find(x => x.pid === boardSel);
     if (v.on_clock) foot.append(el('button', { class: 'btn go', disabled: (r && !r.taken) ? null : '', onclick: () => { const rr = pyJSON(`SESSION.draft_act('pick', pid=${JSON.stringify(boardSel)})`); notify(rr); if (rr.ok) location.hash = '#draft/day'; } }, 'Draft Player'));
-    foot.append(el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(boardSel)})`); reload(); } }, 'Add to Your Board'), el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { location.hash = '#club/player/' + boardSel; } }, 'Prospect Card'), el('span', { class: 'count', style: 'margin-left:auto' }, r ? `${r.name} · ${r.pos} · ${r.home_state}` : 'Click a row to select a prospect')); };
+    foot.append(el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { pyJSON(`SESSION.draft_act('board', add=${JSON.stringify(boardSel)})`); reload(); } }, 'Add to Your Board'), el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { const d = v.user_board.dnd.map(x => x.pid); if (!d.includes(boardSel)) d.push(boardSel); pyJSON(`SESSION.draft_act('board', remove=${JSON.stringify(boardSel)})`); pyJSON(`SESSION.draft_act('board', dnd=${JSON.stringify(d)})`); reload(); } }, 'Do Not Draft'), el('button', { class: 'btn', disabled: r ? null : '', onclick: () => { location.hash = '#club/player/' + boardSel; } }, 'Prospect Card'), el('span', { class: 'count', style: 'margin-left:auto' }, r ? `${r.name} · ${r.pos} · ${r.home_state}` : 'Click a row to select a prospect')); };
   s.append(el('div', { class: 'board-wrap' }, tbl), foot); draw(); drawFoot();
   page.append(s);
 }

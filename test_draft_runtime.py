@@ -17,7 +17,7 @@ class DraftRuntimeTests(unittest.TestCase):
         L.year = 2027
         L.phase = 'offseason'
         L.season_closed_year = 2026
-        s.stop = ('offseason', 11)
+        s.stop = ('offseason', 12)
         L.draft_pool, L.next_class = L.next_class, []
         order = sorted(L.teams)
         for t in L.teams.values():

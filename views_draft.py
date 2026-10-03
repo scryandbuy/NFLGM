@@ -75,14 +75,16 @@ def _prospect(league, abbr, p, taken=()):
     import scouting as SC
     # the words the board shows for what the room knows
     words = []
-    if 'visited' in flags or p.pid in (getattr(league, 'user_visits', None) or []): words.append('Visited')
+    visited = 'visited' in flags
+    scheduled = not visited and p.pid in (getattr(league, 'user_visits', None) or [])
+    if visited: words.append('Visited')
+    elif scheduled: words.append('Scheduled')
     pre = v.get('pre_visit') if isinstance(v, dict) else None
     visit_move = None
     if pre and 'visited' in flags:
         visit_move = dict(mine_from=round(float(pre.get('ovr', 0) or 0)), ceiling_from=f"{round(float(pre.get('lo', 0) or 0))}–{round(float(pre.get('hi', 0) or 0))}", rank_from=pre.get('rank'))
     if p.xp_spent.get('_senior_bowl') in (league.year, league.year - 1): words.append('Senior Bowl')
-    _when = getattr(league, 'user_visit_week', None) or {}
-    visit_locked = bool(p.pid in (getattr(league, 'user_visits', None) or []) and _when.get(p.pid) != f"{league.year}-{league.week}-{league.phase}")
+    visit_locked = visited
     if getattr(p, 'age', 22) >= 22 and any(x.get('pid') == p.pid and x.get('event') == 'Senior Bowl' for x in (getattr(league, 'spring_news', None) or [])): words.append('Sr. Bowl')
     import character_assessment as CA
     words.extend(CA.flags(v))
@@ -96,7 +98,7 @@ def _prospect(league, abbr, p, taken=()):
     h = getattr(p, 'height', None); size = (f"{int(h) // 12}'{int(h) % 12}\" {int(getattr(p, 'weight', 0) or 0)}".strip() if h else '')
     rk = c.get('rank') if c else None
     proj_range = (f"{max(1, rk - 4)}–{rk + 4}" if rk and rk <= 224 else '—')
-    return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), home_state=home_state(p), small=(not SC._power(p)), visited=('visited' in flags or p.pid in (getattr(league, 'user_visits', None) or [])),
+    return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), home_state=home_state(p), small=(not SC._power(p)), visited=visited, scheduled=scheduled,
                 cls_year=cls_year, size=size, words=words, character_report=CA.report(v), proj_range=proj_range, visit_move=visit_move, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
@@ -142,8 +144,10 @@ def board(session, league, abbr):
     except Exception: slot = None
     D_ = getattr(session, 'draft', None)
     on_clock = bool(D_ is not None and not D_.done and D_.on_user())
+    import inseason_scouting as ISS
+    visit_window = session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'
     return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=coming_season(league) + 1, slot=slot, on_clock=on_clock,
-                visits=visits, visits_max=SP.VISITS, spring_done=spring_done, needs=sorted(needs), user_board=ub, my_slot=_my_first_slot(league, abbr), read=_board_read(league, abbr, rows, ub, needs),
+                visits=visits, visits_max=SP.VISITS, visit_window=visit_window, spring_done=spring_done, scouting_focus=ISS.priorities(league, abbr), scouting_updates=ISS.reports(league, abbr), needs=sorted(needs), user_board=ub, my_slot=_my_first_slot(league, abbr), read=_board_read(league, abbr, rows, ub, needs),
                 scout=(dict(name=scout.name, rating=round(scout.rating)) if scout else None), live=bool(getattr(session, 'draft', None)),
                 note=None if rows else 'The class is scouted in camp; the board fills once the season begins.')
 
@@ -262,14 +266,14 @@ def prospect_card(session, league, abbr, pid):
     ub = getattr(league, 'user_board', None) or {}
     on_board = (ub.get('order') or []).index(p.pid) + 1 if p.pid in (ub.get('order') or []) else None
     reads = int(view.get('reads', 1) or 1)
-    confidence = 'Visited' if ('visited' in (view.get('flags') or []) or p.pid in (getattr(league, 'user_visits', None) or [])) else 'Not visited'
+    confidence = 'Visited' if 'visited' in (view.get('flags') or []) else 'Visit scheduled' if p.pid in (getattr(league, 'user_visits', None) or []) else 'Not visited'
     return dict(rail=rail(session, league, abbr), pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), cls_year=row['cls_year'], size=row['size'], fit=row.get('fit', 0.0), scheme_ovr=row.get('scheme_ovr'), home_state=row['home_state'],
                 small=row['small'], mine=row['mine'], ceiling=row['ceiling'], cons=row['cons'], cons_rank=row['cons_rank'], gap=row['gap'], proj_range=row['proj_range'], my_rank=row.get('my_rank'), my_round=(f"R{min(7, (row['my_rank'] - 1) // 32 + 1)}" if row.get('my_rank') else None),
                 words=row['words'], visited=row['visited'], taken=row['taken'], cols=[phys, skill, mental], combine=combine,
                 medical=('Concern found at visit' if 'medical' in (view.get('flags') or []) else 'No concern found at visit' if 'visited' in (view.get('flags') or []) else 'Unknown until visit'),
                 on_clock=bool(getattr(session, 'draft', None) is not None and not session.draft.done and session.draft.on_user() and not taken_now),
                 schemes=VC.scheme_rows(seen_ratings, p.pos, VC._club_arch(league, abbr, p.pos)),
-                reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality='', character_report=row['character_report'], spring_done=_spring_done(league),
+                reads=reads, confidence=confidence, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality='', character_report=row['character_report'], spring_done=_spring_done(league), visit_window=(session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'),
                 read=_prospect_read(league, abbr, p, row, view))
 
 
@@ -294,20 +298,29 @@ def _prospect_read(league, abbr, p, row, view):
 
 
 def act_visit(session, league, abbr, pid):
-    """Name a visit, or cancel one named this week. Once the week rolls a visit is locked in: the scouts have made the call."""
+    """Schedule or cancel a visit after the workouts and before advancing."""
     import spring as SP
     if _spring_done(league):
         return dict(ok=False, why='Spring visits are complete; selections are locked.', locked=True,
                     visits=list(getattr(league, 'user_visits', None) or []))
+    if session.stop[0] != 'offseason' or session.OFFSEASON[session.stop[1]][1] != 'step_visits':
+        return dict(ok=False, why='Visits can be scheduled after Combine and Pro Days, before advancing to the Draft.', locked=True,
+                    visits=list(getattr(league, 'user_visits', None) or []))
     cur = list(getattr(league, 'user_visits', None) or [])
-    when = league.__dict__.setdefault('user_visit_week', {})
-    stamp = f"{league.year}-{league.week}-{league.phase}"
     if pid in cur:
-        if when.get(pid) != stamp: return dict(ok=False, why='that visit is locked in; visits can only be cancelled the week they are named', visits=cur, locked=True)
-        cur.remove(pid); when.pop(pid, None); SP.set_user_visits(league, cur); return dict(ok=True, line='Visit cancelled.', visits=cur)
+        cur.remove(pid); SP.set_user_visits(league, cur); return dict(ok=True, visits=cur)
     if len(cur) >= SP.VISITS: return dict(ok=False, why=f'all {SP.VISITS} visits are spoken for', visits=cur)
-    cur.append(pid); when[pid] = stamp; SP.set_user_visits(league, cur); p = league.player(pid)
-    return dict(ok=True, line=f"{p.name if p else pid} gets a visit ({len(cur)} of {SP.VISITS}). Locks in when the week rolls.", visits=cur)
+    if pid not in {p.pid for p in _pool(league)}: return dict(ok=False, why='That prospect is not in the current class.', visits=cur)
+    cur.append(pid); SP.set_user_visits(league, cur)
+    return dict(ok=True, visits=cur)
+
+
+def act_scouting_focus(session, league, abbr, pid=None):
+    import inseason_scouting as ISS
+    try:
+        return dict(ok=True, focus=ISS.set_priorities(league, abbr, prospect_pid=pid))
+    except ValueError as exc:
+        return dict(ok=False, why=str(exc))
 
 
 def spring(session, league, abbr):
@@ -350,7 +363,7 @@ def spring(session, league, abbr):
         p = pool.get(pid) or league.player(pid)
         if p is None: continue
         r = _prospect(league, abbr, p)
-        if r: visited.append(r)
+        if r and r['visited']: visited.append(r)
     flagged = flag_lines
     # the visits table: what the second look changed, before and after
     for r in visited:
@@ -363,7 +376,7 @@ def spring(session, league, abbr):
             r['uncovered'] += [f for f in CA.flags(v) if f not in (pre.get('character_flags') or [])]
     done = bool(news)
     return dict(rail=rail(session, league, abbr), done=done, events=events, risers=risers, fallers=fallers, visited=visited, flagged=flagged[:40],
-                note=None if _spring_done(league) else 'The Senior Bowl takes place after the conference championships, before the Championship Game. The combine, pro days and the thirty visits follow in the Spring step of the offseason. Name your visits on the board before Spring.')
+                note=None if _spring_done(league) else 'The Senior Bowl takes place after the conference championships. Combine and pro day results arrive first; schedule private visits on the board before advancing to the Draft.')
 
 
 def act_sim_round(session, league, abbr):
