@@ -1,0 +1,79 @@
+Character / discipline implementation handoff — 2026-10-02
+
+Base: c14c94562c07299cb57a96989333296f300bef13
+Branch: codex/character-discipline-20261002
+Source commits, in order:
+  890f9f4 Persistent discipline trait and bounded penalty multipliers
+  01b5706 Observed scouting, CPU draft risk, practice learning, UI
+  1ff716c Eligible on-field penalty risks and persistent attribution
+  Final handoff commit: browser module registration and this note
+
+Ownership / integration
+Engine commit 1ff716c is the cherry-pick of changes (4)'s 325c9af.
+Do not also cherry-pick 325c9af or ae5ea9c (duplicate foundation).
+Both new modules are registered in build_web.py.
+Source only: main integration chat owns browser build, release and publication.
+Keep main's later work; do not replace its checkout or copy old generated assets.
+
+Behavior
+- Existing hard worker/grinder/coasts/needs pushing labels share work_ethic.
+  Work ethic applies its existing 0.8–1.2 XP multiplier once. Bounded practice
+  no longer cancels it; weekly ceiling remains. No extra condition modifier,
+  talent downgrade, development-tier change, or potential downgrade.
+- Discipline is a separate persisted trait. Migration preserves previous
+  personality, development, potential, XP and league RNG state.
+- Actual eligible on-field players determine individual penalty risk and
+  attribution. Awareness and coaching retain their existing effects.
+  Team delay/substitution fouls are not blamed on a random player.
+  Accepted/declined flags and enforced yards persist; dead-ball false starts
+  do not charge a snap or fatigue. Special teams use selected healthy units.
+- Scouting separates work ethic and discipline, with source/confidence/unknown.
+  Trusts the Tape reads film discipline, skips interview/reference preparation.
+  Character Judge improves reference accuracy. Prospect cards do not reveal
+  hidden personality values. Existing legacy grade adjustments are preserved
+  without double-charging CPU character risk. CPU draft decisions use observed
+  risk, separately from football grade and potential.
+- Three participating practice weeks provide an initial club-specific work
+  ethic read, refined with experience. One penalty is not a character verdict.
+  Player cards show factual seasonal penalty counts separately from assessment.
+  No exposure-adjusted inference is claimed from raw penalty rates.
+- Scheme training, leadership changes, suspensions and off-field events remain
+  outside the approved implementation scope.
+
+Verification
+Own pre-integration suite: 69 Python checks plus character UI and player-link UI.
+Draft save/resume and first-game/reloaded staff XP: 2 additional checks passed.
+Changes (4): 198 engine checks passed before integration.
+Combined checkout: 144 checks passed:
+  python -m unittest test_character_traits test_character_assessment
+    test_penalty_discipline test_penalty_yardage test_penalty_pace
+    test_practice_xp test_practice_engine test_game_log_regressions
+    test_game_clock_decisions test_kickoff_clock test_defensive_returns
+    test_kick_return_outcomes -q
+UI checks: node test_character_ui.cjs; node --check docs/app.js.
+Browser import closure verified: 123 modules, no missing local imports.
+Real saved league: 3,821 existing players retained prior traits/dev/potential/XP;
+previous scouting grade fields preserved. No user save modified.
+Fresh league: 482 prospects across 32 scouting rooms received film reads and
+unknown preparation until observed.
+Actual simulated game -> season stats -> save/load -> player assessment:
+14 flagged players retained the correct counts/yards and no invented assessment.
+Existing ResourceWarnings about unclosed data files remain unrelated.
+
+Balance and performance watch
+Artifact: outputs/penalty-discipline-final.json in the parent rev workspace.
+Reproduce: python audit_penalty_discipline.py --games 32 --baseline c14c945
+            --output PATH.json
+128 games total, four recurring roster matchups; not full-season calibration.
+                      Points   Accepted flags   Enforced yards   Runtime/32
+Baseline              60.438   10.688           78.579           8.675s
+Neutral discipline    56.750   10.781           79.959          11.904s
+All discipline 0      57.938   12.656           97.587          12.377s
+All discipline 100    54.156    9.625           69.472          12.311s
+Accepted flags here count type=penalty log entries (scrimmage and logged ST).
+Committed player counts also include declined flags; they are not enforced yards.
+Neutral scoring delta -3.688 has approximate paired 95% margin 6.538; this small
+sample does not establish a scoring shift. Roughly +0.10 seconds/game (~37%)
+in this harness. Track larger-season runtime and scoring alongside penalty mix,
+offender roles, draft risk strength, and practice XP over subsequent game logs.
+Do not retune football behavior merely to match this small sample.

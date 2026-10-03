@@ -5,7 +5,7 @@ PERSONALITY.
 Four hidden traits on every man, 0-100, drawn once and fixed for his career.
 Each multiplies one thing that already exists:
 
-  work_ethic          XP earned, 0.8x to 1.2x. The dev tier is still the ceiling.
+  work_ethic          XP earned, 0.8x to 1.2x. Dev tier and potential remain separate.
   financial_priority  the agent's ask, -5% to +5% of market, and the certainty
                       discount he gives on an extension, which shrinks to
                       nothing for a man who wants every dollar
