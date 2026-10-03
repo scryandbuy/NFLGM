@@ -135,6 +135,7 @@ def _post(league, user, t, subject, body, mine_subject=None):
 # ------------------------------------------------------------ the week's big result
 def big_result(league, week, results):
     """The week's biggest game elsewhere, and what it did to your division."""
+    if int(week) == 22: return  # The championship result and MVP have one dedicated announcement.
     user = getattr(league, 'user_team', None)
     if not user or not results: return
     me = league.teams[user]

@@ -243,6 +243,11 @@ class Session:
         if (s.stop[0] == 'playoffs' and len(s.stop) > 1 and int(s.stop[1]) >= 3
                 and s.post_live is not None and len(getattr(s.post_live, 'conf_champs', {}) or {}) == 2):
             s._announce_honors()
+        if s.stop == ('offseason', 0):
+            s.stop = ('offseason', 1)  # Retired awards stop; retain all later save indices.
+        finished_post = getattr(s, 'post_live', None) or getattr(s, 'post', None)
+        if finished_post is not None and getattr(finished_post, 'champion', None):
+            AW.announce_championship(s.L, finished_post)
         s._sync_week_health()
         if s.stop[0] == 'week' and not s.played:
             GW.refresh_open_report(L, int(s.stop[1]))
@@ -430,14 +435,14 @@ class Session:
             try:
                 sh = TG.user_resign_sheet(self.L)
                 tag_s = ('tag placed' if sh['tag_used'] else ('no tag' if sh['tag_choice'] == 'none' else 'no tag yet'))
-                return dict(title='Franchise Tag and Re-Sign', sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)} · {len(sh['ufa'])} unrestricted, {len(sh['rfa'])} restricted · {tag_s}")
+                return dict(title='Franchise Tag and Re-Sign', sub=f"Offseason Step {max(1, i)} of {len(self.OFFSEASON) - 1} · {len(sh['ufa'])} unrestricted, {len(sh['rfa'])} restricted · {tag_s}")
             except Exception: pass
         if name in self.FA_STEPS or name == 'step_fa_close':
             n = len([x for x in self.L.free_agents if self.L.player(x)])
             import negotiations as NG
             mine = sum(1 for t in NG._threads(self.L) if t['kind'] == 'fa_offseason' and t['state'] in ('waiting', 'countered', 'match_requested'))
-            return dict(title=('Close the Market' if name == 'step_fa_close' else f"Close Round {self.FA_STEPS[name]}"), sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)} · {n} on the market · {mine} offer{'s' if mine != 1 else ''} out")
-        return dict(title=title, sub=f"Offseason Step {i + 1} of {len(self.OFFSEASON)}")
+            return dict(title=('Close the Market' if name == 'step_fa_close' else f"Close Round {self.FA_STEPS[name]}"), sub=f"Offseason Step {max(1, i)} of {len(self.OFFSEASON) - 1} · {n} on the market · {mine} offer{'s' if mine != 1 else ''} out")
+        return dict(title=title, sub=f"Offseason Step {max(1, i)} of {len(self.OFFSEASON) - 1}")
 
     ROSTER_MAX, ROSTER_MIN = 53, 46
 
@@ -567,6 +572,8 @@ class Session:
         return result
 
     def _advance(self):
+        if self.stop == ('offseason', 0):
+            self.stop = ('offseason', 1)
         if self._skip_empty_offseason_waivers():
             self._open_fa_if_due()
             return dict(done='No offseason waivers to resolve', next=self.next_label())
@@ -1009,32 +1016,23 @@ class Session:
         MO.postseason(self.L, self.post); CP.top_up(self.L, self.rng); PC.offseason(self.L)
         self.post_live = None
         self._offseason_condition_reset()
-        self.stop = ('offseason', 0)
+        AW.announce_championship(self.L, self.post)
+        self.stop = ('offseason', 1)
         return dict(done='Playoffs', champion=self.post.champion, next=self.next_label())
 
     # ---- the offseason steps, the same code as franchise.play_year in the same order
     def step_awards(self):
-        """Close the season's awards, adding the Championship Game MVP to the announced regular-season ballot."""
+        """Finalize season records before coaching turnover; legacy entry point retained."""
         L, rng = self.L, self.rng
-        PA.offseason(L, 0)
-        honors_announced = L.year in L.awards
-        self.votes = self._recorded_votes() if honors_announced else AW.vote(L)
-        try:
-            self.votes['sb_mvp'] = AW.championship_game_mvp(L, self.post, L.year)
-            if self.votes['sb_mvp']: L.awards[L.year]['sb_mvp'] = getattr(self.votes['sb_mvp'], 'pid', self.votes['sb_mvp'])
-        except Exception: pass
-        try:
-            import morale as MO
-            XP.pay_awards(L, self.votes)
-            for k, who in self.votes.items():
-                if k in ('coty',) or not who: continue
-                if honors_announced and k != 'sb_mvp': continue
-                for w in (who if isinstance(who, list) else [who]):
-                    p = L.player(getattr(w, 'pid', w)) if not hasattr(w, 'pid') else w
-                    m = MO.ensure(p) if p is not None else None
-                    if m is not None: m.apply('major_award' if k in ('mvp', 'opoy', 'dpoy', 'oroy', 'droy', 'protector', 'sb_mvp') else 'all_pro' if k == 'all_pro_1' else 'all_pro_2')
-        except Exception as e:
-            import sys; print('award pay failed:', e, file=sys.stderr)
+        history = L.__dict__.setdefault('history', {}).setdefault(str(L.year), {})
+        # Old builds already finalized this work before reaching Coaching.
+        if history.get('season_finalized') or history.get('awards'):
+            self.votes = self._recorded_votes()
+            return
+        if L.year not in L.awards:
+            self._announce_honors()
+        AW.announce_championship(L, self.post)
+        self.votes = self._recorded_votes()
         CP.season_prestige(L, self.post, coty_team=self.votes.get('coty'))
         STF.season_end(L, STF.unit_ranks(L, L.year))
         AL.close_season(L, L.year, self.post, self.votes)
@@ -1051,9 +1049,12 @@ class Session:
         except Exception as e:
             import sys; print('league_notes season_end failed:', e, file=sys.stderr)
 
+        history['season_finalized'] = True
+
     def step_coaching(self):
         """STEP 2: the coaching carousel, all of it here. Every club rolls its head coach now (none rolled during the
         playoffs or at the close), the searching clubs hire, and the coordinators and position coaches move."""
+        self.step_awards()  # Finalize outgoing staff and season records before turnover.
         self.fired = self._black_monday(list(self.L.teams))
         STF.carousel(self.L, self.rng, new_head_coaches=[a for a, _bg in (self.fired or [])])
         import league_notes as LN

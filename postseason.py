@@ -148,6 +148,8 @@ class Postseason:
         self.L.log('playoff', round=rnd, conf=conf, winner=win, loser=lose, score=f"{res['home']}-{res['away']}")
         if rnd == 'SB':
             self.champion = win
+            import awards as AW
+            AW.announce_championship(self.L, self)
         elif rnd == 'CONF':
             self.conf_champs[conf] = win; self.finalists[conf] = win
             self.alive[conf] = {s: t for s, t in self.alive[conf].items() if t == win}
