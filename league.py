@@ -1034,6 +1034,9 @@ class League:
         L.game_date = d.get('game_date') or PA.stop_date(L.year, d.get('_stop'), week=L.week, phase=L.phase).isoformat()
         L.players = {pid: Player.from_dict(pd)
                      for pid, pd in d['players'].items()}
+        import personality as PT
+        for p in L.players.values():
+            PT.ensure_discipline(p)
         from newgens import name_history
         L.player_name_history = d.get('player_name_history', {})
         L.player_name_history = name_history(L)
