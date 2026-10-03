@@ -187,10 +187,11 @@ def _visit_targets(league, abbr, pool, plan):
 def fill_user_visits(league, abbr):
     """Let the scout use unassigned visits after the user's selections close."""
     if not abbr or completed(league): return list(getattr(league, 'user_visits', None) or [])
-    chosen = list(dict.fromkeys(getattr(league, 'user_visits', None) or []))[:VISITS]
+    pool = _pool(league)
+    valid = {p.pid for p in pool}
+    chosen = [pid for pid in dict.fromkeys(getattr(league, 'user_visits', None) or []) if pid in valid][:VISITS]
     if len(chosen) >= VISITS: return chosen
     import draft as DFT
-    pool = _pool(league)
     plan = DP.assess(league, abbr, DFT.league_starter_level(league))
     suggested = _visit_targets(league, abbr, pool, plan)
     # Pick windows can contain fewer than thirty prospects. Fill the remaining
@@ -301,6 +302,7 @@ def run_spring(league, rng, verbose=False):
     """One-shot path for batch franchise simulations."""
     if completed(league): return dict(already_completed=True)
     pre = run_pre_visits(league, rng)
+    fill_user_visits(league, getattr(league, 'user_team', None))
     visit = run_visits(league, rng)
     out = dict(combine=pre.get('combine', 0), senior_bowl_looks=pre.get('senior_bowl_looks', 0),
                pro_day_looks=pre.get('pro_day_looks', 0), visit_looks=visit.get('visit_looks', 0),

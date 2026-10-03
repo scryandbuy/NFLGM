@@ -47,6 +47,17 @@ class SpringSafeguards(unittest.TestCase):
         SP.set_user_visits(L,['p2'])
         self.assertEqual(L.user_visits,['p2'])
 
+    def test_visit_scheduling_is_open_only_at_private_visits_stop(self):
+        L=self.league([dict(year=2028,event='pre_visits',kind='stage')])
+        L.user_visits=[];L.draft_pool=[SimpleNamespace(pid='p2')];L.next_class=[]
+        s=SimpleNamespace(stop=('offseason',11),OFFSEASON=Session.OFFSEASON)
+        self.assertTrue(VD.act_visit(s,L,'GB','p2')['ok'])
+        self.assertEqual(L.user_visits,['p2'])
+        self.assertTrue(VD.act_visit(s,L,'GB','p2')['ok'])
+        self.assertEqual(L.user_visits,[])
+        s.stop=('offseason',12)
+        self.assertFalse(VD.act_visit(s,L,'GB','p2')['ok'])
+
     def test_senior_bowl_invites_high_middle_and_lower_ranked_seniors(self):
         people=[SimpleNamespace(pid=f'p{i}',age=23,pos='WR',xp_spent={}) for i in range(180)]
         L=SimpleNamespace(year=2027,user_team=None,draft_pool=people,next_class=[],

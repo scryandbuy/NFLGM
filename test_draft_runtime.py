@@ -30,6 +30,15 @@ class DraftRuntimeTests(unittest.TestCase):
     def fresh(self):
         return session.Session.load(self.initial)
 
+    def test_current_class_arm_and_leg_tools_survive_save_reload(self):
+        s = session.Session.new('GB', seed=92)
+        before = {p.pid: p.ratings['throw_power_rating' if p.pos == 'QB' else 'kick_power_rating']
+                  for p in s.L.next_class if p.pos in ('QB', 'K', 'P')}
+        loaded = session.Session.load(s.save())
+        after = {p.pid: p.ratings['throw_power_rating' if p.pos == 'QB' else 'kick_power_rating']
+                 for p in loaded.L.next_class if p.pos in ('QB', 'K', 'P')}
+        self.assertEqual(before, after)
+
     def test_potential_and_benchmarks_survive_cpu_user_picks_and_resume(self):
         s = self.fresh()
         D = s.draft

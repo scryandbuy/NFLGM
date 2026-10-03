@@ -333,6 +333,10 @@ def build(league, rng, path='cfb27_ratings.csv', seed_path='league_seed_2026.csv
     import xp as XP
     for p in out:
         XP.resolve_potential(p, rng)
+        if p.pos in ('QB', 'K', 'P'):
+            # Current classes preserve the college arm/leg tool in convert().
+            # The save loader's one-time correction is only for older classes.
+            p.xp_spent['_arm_fixed'] = 2
     league.draft_pool = out
     for p in out:
         import player_age as PA

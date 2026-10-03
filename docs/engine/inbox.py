@@ -229,7 +229,8 @@ def news(league, subject, body, payload=None):
 
 
 DECISION_KINDS = {'trade_offer', 'match_request', 'gameplan', 'game_plan',
-                  'offer_sheet', 'contract_year', 'injury_decision', 'roster', 'exit'}
+                  'offer_sheet', 'contract_year', 'injury_decision', 'roster', 'exit',
+                  'scouting_focus'}
 
 
 def is_decision(message):

@@ -36,7 +36,7 @@ from stadium_names import TEAM_NAMES as CLUB_NAME
 CLUB_DISPLAY_ABBR = {'LAC': 'CA', 'NYG': 'NY', 'NYJ': 'NJ'}
 INBOX_TAG = {'trade_offer': 'Trade', 'trade': 'Trade', 'extension': 'Contract', 'contract': 'Contract', 'contract_year': 'Contract', 'negotiation': 'Contract', 'waiver': 'Wire', 'waivers': 'Wire', 'wire': 'Wire',
              'squad': 'Squad', 'practice_squad': 'Squad', 'game': 'Game', 'result': 'Game', 'scouting': 'Scouting', 'spring': 'Scouting', 'morale': 'Locker Room', 'trade_request': 'Locker Room',
-             'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad', 'league': 'League', 'trade_done': 'Trade', 'waiver_notice': 'Wire', 'waiver_digest': 'Wire', 'injury_decision': 'Trainers', 'ir_ready': 'Trainers', 'injury': 'Trainers', 'roster': 'Roster', 'review': 'Season Review', 'exit': 'Exit Meetings'}
+             'gameplan': 'Assistants', 'game_plan': 'Assistants', 'owner': 'Owner', 'staff': 'Staff', 'offer_sheet': 'Contract', 'match_request': 'Contract', 'injury': 'Squad', 'league': 'League', 'trade_done': 'Trade', 'waiver_notice': 'Wire', 'waiver_digest': 'Wire', 'injury_decision': 'Trainers', 'ir_ready': 'Trainers', 'injury': 'Trainers', 'roster': 'Roster', 'review': 'Season Review', 'exit': 'Exit Meetings', 'scouting_focus': 'Scouting'}
 from inbox import is_decision, DECISION_KINDS
 DECIDE_KINDS = DECISION_KINDS | {'staff'}
 INBOX_TAG['roster_report'] = 'Assistants'
@@ -415,7 +415,7 @@ def _payload(pl):
     return out
 
 
-BLOCK_KINDS = {'roster', 'trade_offer', 'match_request', 'staff', 'offer_sheet'}
+BLOCK_KINDS = {'roster', 'trade_offer', 'match_request', 'staff', 'offer_sheet', 'scouting_focus'}
 
 
 def _inbox(league, limit=14):
@@ -423,7 +423,7 @@ def _inbox(league, limit=14):
     rows = []
     for m in (sorted(box, key=lambda m: -m['id'])[:limit] if limit else sorted(box, key=lambda m: -m['id'])):
         rows.append(dict(id=m['id'], subject=m['subject'], body=(m.get('body') or '')[:140], tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), decide=(is_decision(m)),
-                         block=(is_decision(m) and (m.get('kind') in ('roster', 'trade_offer', 'offer_sheet') or bool((m.get('payload') or {}).get('poach')))),
+                         block=(is_decision(m) and (m.get('kind') in ('roster', 'trade_offer', 'offer_sheet', 'scouting_focus') or bool((m.get('payload') or {}).get('poach')))),
                          kind=m.get('kind'), unread=m.get('status') == 'unread', week=m.get('week'), year=m.get('year'), sender=m.get('sender'), **{'from': m.get('sender')}, when=__import__('inbox').date_label(m)))
     return dict(rows=rows, total=len(box), unread=sum(1 for m in box if m.get('status') == 'unread'), decide=sum(1 for m in box if is_decision(m)))
 

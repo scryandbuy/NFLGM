@@ -360,6 +360,7 @@ class Session:
         ('Free Agency: Round 3', 'step_fa_3'),
         ('Free Agency: Market Closes', 'step_fa_close'),
         ('The Spring: Combine and Pro Days', 'step_spring'),
+        ('The Spring: Private Visits', 'step_visits'),
         ('The Draft', 'step_draft'),
         ('Camp and Next Year\'s Class', 'step_camp'),
         ('Cut-Down to 53', 'step_cutdown'),
@@ -439,8 +440,30 @@ class Session:
 
     ROSTER_MAX, ROSTER_MIN = 53, 46
 
+    def _ensure_scout_focus(self):
+        """Offer a two-week scouting decision before the next game window."""
+        if self.stop[0] != 'week' or self.stop[1] > 17 or self.stop[1] % 2 != 1:
+            return
+        import inseason_scouting as ISS
+        import inbox as IB
+        week = self.stop[1]
+        key = f'scout-focus-{self.L.year}-{week}'
+        if any((m.get('payload') or {}).get('key') == key for m in getattr(self.L, 'inbox', [])):
+            return
+        if ISS.decision_resolved(self.L, week):
+            return
+        focus = ISS.priorities(self.L, self.user_team)
+        suggestions = (focus.get('suggestions') or [])[:2]
+        lines = [f"{item['group']}: {item.get('why') or 'worth another look'}" for item in suggestions]
+        body = ('Your scouting staff has two suggested priorities for the next two games. '
+                'Choose two position groups, or let your scout decide. Every position still gets a small background review.\n\n'
+                + '\n'.join(lines))
+        IB.post(self.L, 'scouting_focus', f'Choose scouting priorities for Weeks {week}-{week + 1}', body,
+                sender='head scout', payload=dict(key=key, focus_week=week, link='draft:board'))
+
     def blocking(self):
         import inbox as IB
+        self._ensure_scout_focus()
         IB.reconcile(self.L)
         lv = getattr(self.runner, 'live', None) if self.runner is not None else None
         if lv is not None and not lv['done']:
@@ -491,7 +514,7 @@ class Session:
                                 subject=f'You are ${over:.2f}m over the cap: restructure or release players before advancing'))
         for m in getattr(self.L, 'inbox', []):
             if IB.is_decision(m):
-                if m.get('kind') == 'trade_offer' or (m.get('payload') or {}).get('poach') or (m.get('kind') == 'offer_sheet' and m.get('team') == self.user_team):
+                if m.get('kind') in ('trade_offer', 'scouting_focus') or (m.get('payload') or {}).get('poach') or (m.get('kind') == 'offer_sheet' and m.get('team') == self.user_team):
                     out.append(dict(id=m.get('id'), subject=m.get('subject'), kind=m.get('kind')))
         return out
 
@@ -506,7 +529,7 @@ class Session:
         self._sync_week_health()
         PA.sync_session(self)
         # References follow a successful calendar action, not football week numbers.
-        blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap', 'roster', 'staff_contract')]
+        blocks = [b for b in self.blocking() if b['kind'] in ('offer_sheet', 'cap', 'roster', 'staff_contract', 'scouting_focus')]
         if blocks:
             return dict(done='Blocked', next=self.next_label(), why=blocks[0]['subject'])
         from game_availability import FieldabilityError
@@ -549,6 +572,7 @@ class Session:
                 return dict(done='Cap compliance cuts are on waivers', next=self.next_label())
             self.stop = ('week', 1); self.played = False
             self._sync_week_health()
+            self._ensure_scout_focus()
             try: GW.post_report(self.L, 1)
             except Exception as e:
                 import sys; print('Week 1 report failed:', e, file=sys.stderr)
@@ -580,9 +604,12 @@ class Session:
             # the squads, the trade window) and the calendar moves on
             self._finish_live()
             self.runner.roll_week(wk)
+            import inseason_scouting as ISS
+            ISS.cross_checks(self.L, wk)
             IB.expire(self.L, wk + 1)
             self.played = False
             self.stop = ('week', wk + 1) if wk < WEEKS else ('playoffs', 0)
+            self._ensure_scout_focus()
             self._sync_week_health()
             self._ir_ready_notes(wk + 1)
             if wk >= WEEKS:
@@ -1180,12 +1207,18 @@ class Session:
 
     def step_spring(self):
         L, rng = self.L, self.rng
-        if SP.completed(L): return
+        if SP.pre_visits_completed(L) or SP.completed(L): return
         if getattr(L, 'next_class', None):
             L.draft_pool = L.next_class; L.next_class = []
         else:
             DC.build(L, rng, draft_year=L.year); SC.scout(L, rng)
-        SP.run_spring(L, rng)
+        SP.run_pre_visits(L, rng)
+
+    def step_visits(self):
+        L, rng = self.L, self.rng
+        if SP.completed(L): return
+        SP.fill_user_visits(L, self.user_team)
+        SP.run_visits(L, rng)
 
     def step_draft(self):
         """The draft with you at the buttons. Sims to your first pick and stops; Draft Day
@@ -1652,10 +1685,30 @@ class Session:
         if m is None: return dict(error='no such message')
         pl = m.get('payload') or {}
         import roster_advisor as RA
-        return dict(id=m['id'], mentions=m.get('mentions', {}), entities=m.get('entities') or IB.entity_references(self.L, m['subject']+'\n'+(m.get('body') or ''), pl), status=m.get('status'), subject=m['subject'], body=m.get('body') or '', body_rows=IB.body_rows(self.L, m), tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'), recap=pl.get('recap'), snap_counts=pl.get('snap_counts'),
+        import inseason_scouting as ISS
+        scouting_focus = ISS.priorities(self.L, self.user_team) if m.get('kind') == 'scouting_focus' else None
+        return dict(id=m['id'], mentions=m.get('mentions', {}), entities=m.get('entities') or IB.entity_references(self.L, m['subject']+'\n'+(m.get('body') or ''), pl), status=m.get('status'), subject=m['subject'], body=m.get('body') or '', body_rows=IB.body_rows(self.L, m), tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'), recap=pl.get('recap'), snap_counts=pl.get('snap_counts'), scouting_focus=scouting_focus,
                     mail_sections=pl.get('mail_sections'), mail_intro=pl.get('mail_intro'),
                     recommendations=RA.recommendations(self.L, m) if m.get('kind') == 'roster_report' else [],
                     **{'from': m.get('sender')}, when=IB.date_label(m), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=IB.is_decision(m))
+
+    def inbox_scout_focus(self, mid, group1=None, group2=None, use_scout=False):
+        import inseason_scouting as ISS
+        import inbox as IB
+        m = next((m for m in getattr(self.L, 'inbox', []) if m.get('id') == int(mid)), None)
+        if m is None or m.get('kind') != 'scouting_focus' or not IB.is_decision(m):
+            return dict(ok=False, why='This scouting decision is no longer open.')
+        week = (m.get('payload') or {}).get('focus_week')
+        if self.stop[0] != 'week' or self.stop[1] != week:
+            return dict(ok=False, why='This scouting window has passed.')
+        try:
+            focus = ISS.set_priorities(self.L, self.user_team, group1=group1, group2=group2,
+                                       use_scout=bool(use_scout))
+        except ValueError as exc:
+            return dict(ok=False, why=str(exc))
+        ISS.mark_decision_resolved(self.L, week)
+        m['status'] = 'done'
+        return dict(ok=True, focus=focus)
 
     def inbox_roster_dismiss(self, mid, pid):
         import roster_advisor as RA

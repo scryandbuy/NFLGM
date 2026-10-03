@@ -283,9 +283,22 @@ def senior_bowl(league, rng, *, event_year=None):
         return []
     cons = getattr(league, 'consensus', None) or {}
     seniors = [p for p in pool if p.age >= 22.5 and p.pos not in ('K', 'P', 'LS')]
-    # about 110 invitations: the consensus top of the senior class, with some depth mixed in
+    # A broad senior showcase: established top prospects, middle-round players,
+    # and overlooked seniors all have a route to an invitation. It gives every
+    # room another look regardless of its in-season focus.
     ranked = sorted(seniors, key=lambda p: (cons.get(p.pid, {}).get('rank') or 999))
-    invited = ranked[:80] + [p for p in ranked[80:] if rng.random() < 0.15][:35]
+    target = min(110, len(ranked))
+    cut1, cut2 = len(ranked) // 3, 2 * len(ranked) // 3
+    bands = (ranked[:cut1], ranked[cut1:cut2], ranked[cut2:])
+    invited = []
+    for band, share in zip(bands, (0.40, 0.35, 0.25)):
+        take = min(len(band), round(target * share))
+        if take:
+            invited.extend(band[int(i)] for i in rng.choice(len(band), size=take, replace=False))
+    if len(invited) < target:
+        picked = {p.pid for p in invited}
+        remaining = [p for p in ranked if p.pid not in picked]
+        invited.extend(remaining[int(i)] for i in rng.choice(len(remaining), size=target - len(invited), replace=False))
     user = getattr(league, 'user_team', None)
     before = {p.pid: (getattr(league, 'scouting', {}).get(user, {}).get(p.pid, {}) or {}).get('ovr') for p in invited} if user else {}
     for abbr, team in league.teams.items():

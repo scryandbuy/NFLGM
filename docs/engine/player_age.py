@@ -13,7 +13,7 @@ VERSION = 1
 # Dates are simulation calendar anchors, not a claim about a real schedule.
 OFFSEASON_DATES = ((2, 15), (2, 20), (2, 25), (3, 10), (3, 11),
                    (3, 12), (3, 20), (3, 27), (4, 3), (4, 10),
-                   (4, 17), (4, 27), (7, 25), (8, 25))
+                   (4, 17), (4, 22), (4, 27), (7, 25), (8, 25))
 
 
 def anniversary(born, year):
