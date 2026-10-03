@@ -137,10 +137,10 @@ def area_report(p, abbr, view, room, quality):
 
 
 def describe(key, record=None):
-    label = 'Work ethic' if key == 'work_ethic' else 'Discipline'
+    label = 'Work Ethic' if key == 'work_ethic' else 'Discipline'
     if not record:
         return dict(key=key, label=label, status='unknown', summary='Not assessed',
-                    confidence=None, source=None, explanation='No assessment is available.')
+                    confidence=None, source=None, explanation='')
     value, error = float(record.get('value', 50)), float(record.get('error', 20))
     confidence = 'Strong' if error <= 7 else 'Moderate' if error <= 13 else 'Limited'
     low, high = (42, 58) if key == 'work_ethic' else (35, 70)
@@ -211,15 +211,4 @@ def observe_practice(p, abbr, year, week):
 def player_report(p, abbr, stats=None):
     """Only this club's saved knowledge, never the hidden personality values."""
     data = (p.xp_spent.get('_character_observations') or {}).get(abbr, {})
-    rows = [describe(k, data.get(k)) for k in KEYS]
-    stats = stats or {}
-    opportunities = int(stats.get('penalty_opportunities', 0) or 0)
-    if opportunities:
-        committed = int(stats.get('penalties_committed', 0) or 0)
-        accepted = int(stats.get('penalties_accepted', 0) or 0)
-        yards = float(stats.get('penalty_yards', 0) or 0)
-        rows[1]['game_record'] = (f'{committed} committed, {accepted} accepted, '
-                                  f'{yards:g} enforced yards across {opportunities} eligible play checks this season.')
-        # Raw counts alone do not establish character: positions, opponents,
-        # staff, and foul opportunities differ. Keep the assessment separate.
-    return rows
+    return [describe(k, data.get(k)) for k in KEYS]

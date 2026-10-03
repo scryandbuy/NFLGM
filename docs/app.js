@@ -339,17 +339,32 @@ function renderMailBody(message) {
     }
     return body;
   }
-  // Legacy rows are substrings of the original body. Preserve per-occurrence
-  // player IDs (including namesakes) while translating their UTF-16 offsets.
+  // Keep original text slices so saved player-reference offsets still resolve.
+  // Blank lines separate paragraphs; ordinary single line breaks wrap as prose.
   const text = message.body || '';
   let cursor = 0;
-  for (const row of message.body_rows || [text]) {
-    const start = text.indexOf(row, cursor);
-    const refs = start < 0 ? [] : (message.mentions?.body || [])
+  const appendText = (parent, tag, row, start) => {
+    const refs = (message.mentions?.body || [])
       .filter(ref => ref.start >= start && ref.end <= start + row.length)
       .map(ref => ({...ref, start:ref.start-start, end:ref.end-start}));
-    if (start >= 0) cursor = start + row.length;
-    body.append(el('div', {class:'mail-body-row'}, messageText({body:row, mentions:{body:refs}}, 'body')));
+    parent.append(el(tag, {class:'mail-prose'}, messageText({body:row, mentions:{body:refs}}, 'body')));
+  };
+  for (const paragraph of text.split(/\r?\n[ \t]*\r?\n/)) {
+    const start = text.indexOf(paragraph, cursor);
+    cursor = start + paragraph.length;
+    if (!paragraph.trim()) continue;
+    const lines = paragraph.split(/\r?\n/).filter(line => line.trim());
+    if (lines.length && lines.every(line => /^\s*[-*\u2022]\s+/.test(line))) {
+      const list = el('ul', {class:'mail-prose-list'});
+      let offset = start;
+      for (const line of lines) {
+        const lineStart = text.indexOf(line, offset);
+        const prefix = line.match(/^\s*[-*\u2022]\s+/)[0].length;
+        appendText(list, 'li', line.slice(prefix), lineStart + prefix);
+        offset = lineStart + line.length;
+      }
+      body.append(list);
+    } else appendText(body, 'p', paragraph, start);
   }
   return body;
 }
@@ -444,11 +459,12 @@ function renderInbox(v) {
   const pane = el('div', { class: 'pane' });
   if (cur) {
     const m = pyJSON(`SESSION.inbox_message(${cur.id})`);
+    const playoffMail = m.link === 'league:bracket';
     NameLinks.scope(pane, m.entities);
-    pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
+    pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},playoffMail ? '' : m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
     const structuredRecap = m.recap || m.snap_counts || (m.kind === 'result' && (m.body || '').includes('PREGAME PLAN\n'));
     const messageBody = structuredRecap ? renderRecapBody(m) : renderMailBody(m);
-    pane.append(el('h3', {}, messageText(m,'subject')), el('div', { class: 'from' }, `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), messageBody);
+    pane.append(el('h3', {}, messageText(m,'subject')), el('div', { class: 'from' }, playoffMail ? (m.when || '') : `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), messageBody);
     if (m.kind === 'roster_report') pane.append(rosterReportCards(m, reload));
     if (m.kind === 'trade_offer') pane.append(el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openTradeOffer(cur.id, reload) }, cur.decide ? 'Open Trade Offer' : 'View Trade Offer')));
     else if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
@@ -1026,9 +1042,8 @@ function characterReport(rows) {
   for (const row of rows || []) {
     const item = el('div', {style:'padding:10px 0;border-bottom:1px solid var(--rule)'},
       el('b', {}, row.label), el('div', {class: row.status === 'concern' ? 'dn' : row.status === 'strength' ? 'up' : 'muted'}, row.summary),
-      row.source ? el('small', {class:'count'}, `${row.source} · ${row.confidence} confidence`) : '',
-      el('p', {class:'count', style:'margin:4px 0'}, row.explanation));
-    if (row.game_record) item.append(el('p', {class:'count', style:'margin:4px 0'}, row.game_record));
+      row.source ? el('small', {class:'count'}, `${row.source} · ${row.confidence} confidence`) : '');
+    if (row.explanation) item.append(el('p', {class:'count', style:'margin:4px 0'}, row.explanation));
     box.append(item);
   }
   return box;
@@ -2874,12 +2889,13 @@ const LG = { standings: 'Standings', schedule: 'Schedule', bracket: 'Playoffs', 
 function lgSecond(cur) { secondRow(Object.entries(LG).map(([k, l]) => [l, '#league/' + k]), '#league/' + cur); $('#crumb').textContent = 'League'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'league')); }
 const TAGCLS = { Trade: 'trade', Signing: 'sign', Release: 'cut', Draft: 'draft', Extension: 'contract', Waivers: 'wire', 'Call-Up': 'squad', 'Practice Squad': 'squad', 'Injured Reserve': 'wire', IR: 'wire', Retirement: 'retire', Fired: 'cut', Hired: 'staff', Staff: 'staff', 'Franchise Tag': 'tagg', Restructure: 'contract', 'Position Change': 'squad', 'Hall of Fame': 'hall', Season: 'season' };
 
+function standingsRecord(r) { return `${r.w}\u2013${r.l}${r.t ? '\u2013' + r.t : ''}`; }
 function renderStandings(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('standings');
   const board = el('section', {class:'standings-board c12'});
   board.style.setProperty('--stand-team', v.rail.club.color || '#203731');
   board.style.setProperty('--stand-accent', v.rail.club.accent || '#ffb612');
-  board.append(el('header', {class:'standings-hero'}, el('div', {}, el('small', {}, 'LEAGUE'), el('h1', {}, 'STANDINGS')), el('div', {class:'standings-period'}, el('b', {}, `${v.year} SEASON`))));
+  board.append(el('header', {class:'standings-hero'}, el('div', {}, el('small', {}, 'LEAGUE'), el('h1', {}, 'STANDINGS')), el('div', {class:'standings-period'})));
   const layout = el('div', {class:'standings-layout'});
   const s = el('section', {class:'standings-main'});
   const controls = el('div', {class:'standings-controls'});
@@ -2887,38 +2903,50 @@ function renderStandings(v) {
   const year = el('select', {class:'team-picker standings-year', 'aria-label':'Standings season', disabled:years.length < 2 ? '' : null});
   for (const y of years) year.append(el('option', {value:y, selected:y === Number(v.year) ? '' : null}, y));
   year.onchange = () => renderStandings(pyJSON(`SESSION.league_view('standings', year=${Number(year.value)})`));
-  controls.append(year); s.append(controls); layout.append(s); board.append(layout);
+  board.querySelector('.standings-period').append(year); s.append(controls); layout.append(s); board.append(layout);
   if (v.thin) {
     const grid = el('div', { class: 'divgrid' });
     for (const d of (v.divisions || [])) { const t = el('table', { class: 'grid' }, el('thead', {}, el('tr', {}, el('th', {}, d.name), el('th', { class: 'n' }, 'W–L'), el('th', { class: 'n' }, 'Pct')))); const tb = el('tbody'); for (const r of d.rows) tb.append(el('tr', {}, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n mono' }, r.record), el('td', { class: 'n mono' }, String(r.pct.toFixed(3)).replace(/^0/, '')))); t.append(tb); grid.append(t); }
     s.append(grid); if (!v.league_rows.length) s.append(el('div', { class: 'empty' }, 'No standings are kept for that season.')); for (const n of (v.notes || []).filter(Boolean)) s.append(el('div', { class: 'count', style: 'padding:6px 14px' }, n)); page.append(board); return; }
-  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const k of ['Divisions', 'Conference', 'League']) tabs.append(el('button', { 'aria-pressed': String(standingsView === k), onclick: () => { standingsView = k; renderStandings(v); } }, k)); controls.append(tabs);
+  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const k of ['Divisions', 'Conference', 'League', 'Playoff Picture']) tabs.append(el('button', { 'aria-pressed': String(standingsView === k), onclick: () => { standingsView = k; renderStandings(v); } }, k)); controls.append(tabs);
+  const conferences = Object.keys(v.conferences || {});
+  if (!conferences.includes(standingsConference)) standingsConference = conferences.find(c => (v.conferences[c] || []).some(r => r.me)) || conferences[0];
+  if (standingsView !== 'League') {
+    const filters = el('div', {class:'standings-conferences'});
+    for (const conf of conferences) filters.append(el('button', {class:'btn', 'aria-pressed':String(conf === standingsConference), onclick:()=>{standingsConference=conf;renderStandings(v);}}, conf));
+    s.append(filters);
+  }
+  if (standingsView === 'Playoff Picture') {
+    s.append(pictureSheet({...v, picture:(v.picture || []).filter(c => c.conf === standingsConference)}));
+    page.append(board); return;
+  }
   const arrow = r => r.arrow > 0 ? el('span', { class: 'arr up' }, `▲${r.arrow}`) : r.arrow < 0 ? el('span', { class: 'arr dn' }, `▼${-r.arrow}`) : el('span', { class: 'arr' }, '–');
   const pd = r => el('td', { class: 'n', style: r.pd > 0 ? 'color:var(--ok)' : r.pd < 0 ? 'color:var(--danger)' : '' }, (r.pd > 0 ? '+' : '') + r.pd);
   if (standingsView === 'Conference') {
-    for (const conf of ['Continental', 'United']) {
-      const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, conf), el('th', { class: 'n' }, 'Seed'), el('th', { class: 'n' }, 'W'), el('th', { class: 'n' }, 'L'), el('th', { class: 'n' }, 'T'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Strength of victory' }, 'SOV'), el('th', { class: 'n', 'data-tip': 'Strength of schedule' }, 'SOS'), el('th', {}, 'Form')));
-      for (const r of v.conferences[conf]) t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.seed ? el('span', { class: 'seed ' + (r.seed === 1 ? 'bye' : 'in') + (r.me ? ' me' : '') }, r.seed) : ''), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', { class: 'n' }, r.t), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), pd(r), el('td', { class: 'n' }, r.sov != null ? r.sov.toFixed(3).replace(/^0/, '') : '—'), el('td', { class: 'n' }, r.sos != null ? r.sos.toFixed(3).replace(/^0/, '') : '—'), el('td', {}, formDots(r.form))));
+    for (const conf of [standingsConference]) {
+      const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, conf), el('th', { class: 'n' }, 'Seed'), el('th', { class: 'n' }, 'Record'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Strength of victory' }, 'SOV'), el('th', { class: 'n', 'data-tip': 'Strength of schedule' }, 'SOS'), el('th', {}, 'Form')));
+      for (const r of v.conferences[conf]) t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.seed ? el('span', { class: 'seed ' + (r.seed === 1 ? 'bye' : 'in') + (r.me ? ' me' : '') }, r.seed) : ''), el('td', { class: 'n standings-record' }, standingsRecord(r)), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), pd(r), el('td', { class: 'n' }, r.sov != null ? r.sov.toFixed(3).replace(/^0/, '') : '—'), el('td', { class: 'n' }, r.sos != null ? r.sos.toFixed(3).replace(/^0/, '') : '—'), el('td', {}, formDots(r.form))));
       s.append(t);
     }
   } else if (standingsView === 'League') {
-    const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Team'), el('th', { class: 'n' }, 'W'), el('th', { class: 'n' }, 'L'), el('th', { class: 'n' }, 'T'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n' }, 'PF'), el('th', { class: 'n' }, 'PA'), el('th', { class: 'n' }, 'PD'), el('th', {}, 'Form')));
-    v.league_rows.forEach((r, i) => t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', { class: 'n' }, i + 1), el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', { class: 'n' }, r.t), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', {}, formDots(r.form)))));
+    const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Team'), el('th', { class: 'n' }, 'Record'), el('th', { class: 'n' }, 'Pct'), el('th', { class: 'n' }, 'PF'), el('th', { class: 'n' }, 'PA'), el('th', { class: 'n' }, 'PD'), el('th', {}, 'Form')));
+    v.league_rows.forEach((r, i) => t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', { class: 'n' }, i + 1), el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n standings-record' }, standingsRecord(r)), el('td', { class: 'n' }, r.pct.toFixed(3).replace(/^0/, '')), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', {}, formDots(r.form)))));
     s.append(t);
   } else {
     const grid = el('div', { class: 'divgrid' });
-    for (const d of v.divisions) {
+    for (const d of v.divisions.filter(d => d.name.startsWith(standingsConference))) {
       const box = el('div', { class: 'divbox' }, el('h4', {}, d.name)); const t = el('table', { class: 'tbl' });
-      t.append(el('tr', {}, el('th', {}, 'Team'), el('th', { class: 'n' }, 'W'), el('th', { class: 'n' }, 'L'), el('th', {}, 'Form'), el('th', { class: 'n', 'data-tip': 'Points for' }, 'PF'), el('th', { class: 'n', 'data-tip': 'Points against' }, 'PA'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Record inside the division' }, 'Div'), el('th', { class: 'n', 'data-tip': 'Moved since last week' }, '')));
-      for (const r of d.rows) t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.w), el('td', { class: 'n' }, r.l), el('td', {}, formDots(r.form)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', { class: 'n' }, r.div_rec), el('td', { class: 'n' }, arrow(r))));
+      t.append(el('tr', {}, el('th', {}, 'Team'), el('th', { class: 'n' }, 'Record'), el('th', {}, 'Form'), el('th', { class: 'n', 'data-tip': 'Points for' }, 'PF'), el('th', { class: 'n', 'data-tip': 'Points against' }, 'PA'), el('th', { class: 'n', 'data-tip': 'Point differential' }, 'PD'), el('th', { class: 'n', 'data-tip': 'Record inside the division' }, 'Div'), el('th', { class: 'n', 'data-tip': 'Moved since last week' }, '')));
+      for (const r of d.rows) t.append(el('tr', { class: r.me ? 'standings-user' : '' }, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n standings-record' }, standingsRecord(r)), el('td', {}, formDots(r.form)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), pd(r), el('td', { class: 'n' }, r.div_rec), el('td', { class: 'n' }, arrow(r))));
       box.append(t); grid.append(box);
     }
     s.append(grid);
   }
   if (v.notes.length) s.append(el('div', { class: 'legend-line' }, 'Ties: ' + v.notes.join(' ')));
-  layout.append(pictureSheet(v)); page.append(board);
+  page.append(board);
 }
 let standingsView = 'Divisions';
+let standingsConference = null;
 function pictureSheet(v) {
   const r = el('section', { class: 'standings-picture' }, el('h2', {}, 'Playoff Picture', el('small', {}, v.past ? 'Final seeds' : v.games_played ? 'Seeds as of today' : 'Preseason · provisional order')));
   for (const c of v.picture) {
@@ -3137,7 +3165,7 @@ function renderReview(v) {
   men.append(el('div', { class: 'h5', style: 'padding:6px 14px 0' }, 'Above expectations')); for (const p of v.exceeded) men.append(cardOf(p));
   if (!v.exceeded.length) men.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'No players have sufficient evidence of exceeding role expectations.'));
   if (v.short.length) { men.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Below expectations')); for (const p of v.short) men.append(cardOf(p)); }
-  men.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'Compared with players in the same role. Limited evidence is left ungraded; older seasons require saved expectations.'));
+
   content.append(men);
   if (!v.cap) { content.append(el('section', { class: 'sheet c4' }, el('h2', {}, 'Next Year'), el('div', { class: 'count', style: 'padding:8px 14px' }, 'The money from that year was not kept.'))); return; }
   const money = el('section', { class: 'sheet c4' }, el('h2', {}, 'Next Year', el('small', {}, `$${v.cap.limit}m cap`)));
@@ -3157,7 +3185,7 @@ function renderExit(v) {
   renderRail(v.rail); const page=persPage(); foSecond('exit');
   const meetings=v.meetings || [], pending=meetings.filter(m=>!m.answer).length;
   const board=foBoard(v,'EXIT MEETINGS',meetings.length ? [[pending,'Open'],[meetings.length-pending,'Answered']] : []);
-  board.append(foYears(v,y=>renderExit(pyJSON(`SESSION.frontoffice('exit_interviews', year=${y})`))),el('p',{class:'count'},'Each player will remember what you tell him. A promise goes on the ledger.')); page.append(board);
+  board.append(foYears(v,y=>renderExit(pyJSON(`SESSION.frontoffice('exit_interviews', year=${y})`)))); page.append(board);
   if(!meetings.length) { board.append(el('div',{class:'empty fo-empty'},(v.not_yet || v.pending) ? `The ${v.year} meetings come after your team's season.` : v.missing ? `No meetings were kept for ${v.year}.` : 'Nobody asked for a meeting this year.')); return; }
   if(!meetings.some(m=>m.pid===exitSelected)) exitSelected=meetings.find(m=>!m.answer)?.pid || meetings[0].pid;
   const queue=el('div',{class:'fo-queue'}), conversation=el('div',{class:'fo-conversation'});
@@ -3790,11 +3818,31 @@ async function advance() {
   }
 }
 
+// A changed hash is rendered by the central route handler. Staying on the
+// same route needs an explicit refresh because no hashchange event will fire.
+function advanceRoute(hash, renderCurrent) {
+  if (location.hash === hash) renderCurrent();
+  else location.hash = hash;
+}
+async function paintBeforeAdvanceSave() {
+  // Advance already queues an autosave through pyJSON. This explicit save
+  // owns that snapshot; let the destination and updated status paint first.
+  // Keep the dirty flag until saveGame captures it: pagehide must still flush.
+  cancelAutosaveSchedule();
+  if (document.visibilityState === 'hidden') return;
+  await new Promise(resolve => {
+    let frame = null, timer = null;
+    const finish = () => { if (frame !== null) cancelAnimationFrame(frame); clearTimeout(timer); resolve(); };
+    timer = setTimeout(finish, 200);
+    frame = requestAnimationFrame(() => { frame = null; clearTimeout(timer); timer = setTimeout(finish, 0); });
+  });
+}
+
 async function advanceInner() {
   if (practiceSaving || practiceSaveRequired) { notify({ok:false, why:'Save your practice results before advancing. Open Practice and retry the save.'}); location.hash = '#gameplan/practice'; return; }
   // a block stops the click: a roster over 53 or under 46 sends you to fix it; a decision opens it
   const blocks = pyJSON('SESSION.blocking()');
-  if (blocks.length && blocks[0].kind === 'live') { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); return; }
+  if (blocks.length && blocks[0].kind === 'live') { advanceRoute('#gameday', () => renderGameDay(pyJSON('SESSION.gameday_view()'))); return; }
   if (blocks.length) { const b = blocks[0]; notify({ ok: false, why: `Blocked: ${b.subject}. ${b.kind === 'cap' ? 'Open Cap to choose your contract moves.' : b.kind === 'roster' ? 'Fix the roster first.' : 'Answer it (or decline) to advance.'}` }); renderRail(pyJSON('SESSION.portal()').rail); if (b.go) location.hash = b.go; else if (b.id != null) location.hash = `#portal/inbox/${b.id}`; return; }
   const adv = $('#advance'); adv.disabled = true;
   await new Promise(r => setTimeout(r, 30));
@@ -3803,13 +3851,14 @@ async function advanceInner() {
   catch (e) { adv.disabled = false; throw e; }
   adv.disabled = false;
   if (r && r.done === 'Blocked') { notify({ ok: false, why: r.why }); }
-  else if (r?.next?.go === '#frontoffice/staff/renewals') { location.hash = r.next.go; renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); }
-  else if (r && r.done === 'Practice complete') { practiceSaveRequired = true; try { await saveGame(); practiceSaveRequired = false; } finally { location.hash = '#gameplan/practice'; renderPractice(pyJSON('SESSION.practice_view()')); } return; }
-  else if (r && r.done === 'Cutdown') { location.hash = '#personnel/wire'; renderWire(pyJSON(`SESSION.personnel('waivers')`)); }
-  else if (r && r.done === 'Camp') { location.hash = '#portal'; refresh(); }
-  else if (r && /^Week \d+ live$/.test(r.done)) { location.hash = '#gameday'; renderGameDay(pyJSON('SESSION.gameday_view()')); }
+  else if (r?.next?.go === '#frontoffice/staff/renewals') { advanceRoute(r.next.go, () => renderStaff(pyJSON(`SESSION.frontoffice('staff')`))); }
+  else if (r && r.done === 'Practice complete') { practiceSaveRequired = true; try { await saveGame(); practiceSaveRequired = false; } finally { advanceRoute('#gameplan/practice', () => renderPractice(pyJSON('SESSION.practice_view()'))); } return; }
+  else if (r && r.done === 'Cutdown') { advanceRoute('#personnel/wire', () => renderWire(pyJSON(`SESSION.personnel('waivers')`))); }
+  else if (r && r.done === 'Camp') { advanceRoute('#portal', refresh); }
+  else if (r && /^Week \d+ live$/.test(r.done)) { advanceRoute('#gameday', () => renderGameDay(pyJSON('SESSION.gameday_view()'))); }
   else if (r && /^Week \d+ played$/.test(r.done)) { if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#gameday'; }
-  else if (r && /^Week \d+$/.test(r.done)) { if (location.hash === '' || location.hash.startsWith('#portal')) refresh(); else if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#portal'; } else if (r && /on the clock/.test(r.done)) { location.hash = '#draft/day'; renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); } else refresh();
+  else if (r && /^Week \d+$/.test(r.done)) { if (location.hash === '' || location.hash.startsWith('#portal')) refresh(); else if (location.hash === '#gameday') renderGameDay(pyJSON('SESSION.gameday_view()')); else location.hash = '#portal'; } else if (r && /on the clock/.test(r.done)) { advanceRoute('#draft/day', () => renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`))); } else refresh();
+  await paintBeforeAdvanceSave();
   await saveGameNotified();
 }
 

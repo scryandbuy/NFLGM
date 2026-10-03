@@ -12,6 +12,44 @@ a spread, because that spread is the range a negotiation argues inside.
 """
 import pandas as pd, numpy as np
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
+
+# Comparison DataFrames are fixed snapshots within an AI decision batch.
+# Cache only their deterministic math, never live cap/roster checks or draws.
+_COMPARISONS = ContextVar('valuation_comparisons', default=None)
+
+
+@contextmanager
+def comparison_batch():
+    """Reuse fixed comp snapshots for one call; nested calls share its lifetime.
+
+    Callers must replace, rather than edit, a comparison DataFrame when market
+    inputs change. No result survives the outer call, including exceptions.
+    """
+    if _COMPARISONS.get() is not None:
+        yield
+        return
+    token = _COMPARISONS.set({})
+    try:
+        yield
+    finally:
+        _COMPARISONS.reset(token)
+
+
+def _comparison_read(pool):
+    batch = _COMPARISONS.get()
+    if batch is None:
+        return None
+    # Retain the frame so its id cannot be reused during this batch. A long
+    # signing round replaces its pool frequently; don't retain every version.
+    key = id(pool)
+    if key not in batch:
+        if len(batch) >= 4:
+            del batch[next(iter(batch))]
+        batch[key] = {'pool': pool, 'groups': {}, 'raw': {}}
+    return batch[key]
+
 _D = os.path.dirname(os.path.abspath(__file__))
 def _p(n): return os.path.join(_D, n)
 
@@ -138,6 +176,35 @@ def comp_set(row, pool, window=None):
     `window` is how many years back a signing still counts. Narrow flatters
     the player, wide flatters the club.
     """
+    cached = _comparison_read(pool)
+    group_key = (row['grp'], window)
+    c = cached['groups'].get(group_key) if cached is not None else None
+    if c is None:
+        c = _comparison_group(row, pool, window)
+        if cached is not None:
+            cached['groups'][group_key] = c
+
+    w = _weights(c, row)
+    s = w.sum()
+    if s < 1e-9:
+        return None
+    n_eff = float(s ** 2 / (w ** 2).sum())
+
+    # An outlier's thin comparison set widens exactly as before.
+    for use_age, use_prod in ((False, True), (False, False)):
+        if n_eff >= THIN_COMPS:
+            break
+        w2 = _weights(c, row, use_age=use_age, use_prod=use_prod)
+        s2 = w2.sum()
+        if s2 <= 1e-9:
+            continue
+        n2 = float(s2 ** 2 / (w2 ** 2).sum())
+        if n2 > n_eff:
+            w, n_eff = w2, n2
+    return c, w / w.sum()
+
+
+def _comparison_group(row, pool, window):
     c = pool[pool.grp == row['grp']]
     # NEVER fall back across positions. This used to widen to the whole league
     # when a group had under 25 men, and there are only 32 kickers - so a
@@ -153,33 +220,15 @@ def comp_set(row, pool, window=None):
         if len(recent) >= max(12, len(c) // 3):
             c = recent
 
-    w = _weights(c, row)
-    s = w.sum()
-    if s < 1e-9:
-        return None
-    n_eff = float(s ** 2 / (w ** 2).sum())
-
-    # AN OUTLIER HAS NO PEERS HIS OWN AGE. Widen rather than hand back a
-    # meaningless range: drop age first, then production, and price him
-    # against everyone at his position near his rating.
-    # Drop AGE first, then production. The rating band is never loosened:
-    # widening it pulled mediocre players into an elite man's comp set and
-    # took Myles Garrett from $44.8M to $24M against a real $40M. An outlier
-    # is priced against everyone at his position NEAR HIS RATING, whatever
-    # their age - which is exactly what an agent would argue.
-    for use_age, use_prod in ((False, True), (False, False)):
-        if n_eff >= THIN_COMPS:
-            break
-        w2 = _weights(c, row, use_age=use_age, use_prod=use_prod)
-        s2 = w2.sum()
-        if s2 <= 1e-9:
-            continue
-        n2 = float(s2 ** 2 / (w2 ** 2).sum())
-        if n2 > n_eff:
-            w, n_eff = w2, n2
-    return c, w / w.sum()
+    return c
 
 def raw_value(row, pool, window=None):
+    cached = _comparison_read(pool)
+    key = (window, row['grp'], row['ovr'], row['age'],
+           *(row[f] for f in FACTORS)) if cached is not None else None
+    if cached is not None and key in cached['raw']:
+        centre, spread, deltas, n_eff = cached['raw'][key]
+        return dict(centre), spread, dict(deltas), n_eff
     r = comp_set(row, pool, window)
     if r is None: return None
     c, w = r
@@ -189,7 +238,10 @@ def raw_value(row, pool, window=None):
     n_eff = float(1.0/ (w**2).sum())
     deltas = {f: float(row[f] -
                        (w * c[f]).sum()) for f in FACTORS}
-    return centre, np.sqrt(max(var, 0)), deltas, n_eff
+    result = centre, np.sqrt(max(var, 0)), deltas, n_eff
+    if cached is not None:
+        cached['raw'][key] = (dict(centre), result[1], dict(deltas), n_eff)
+    return result
 
 # fit the adjustment coefficients on the league itself
 rows = []

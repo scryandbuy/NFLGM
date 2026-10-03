@@ -323,7 +323,7 @@ class Session:
                                  last_dealt=self.draft.last_dealt, auto=self.draft.auto,
                                  level=self.draft.level, scale=self.draft.scale, trade_targets=self.draft.trade_targets)
                             if self.draft_live() else None)
-        return json.dumps(d, default=LG._session_json_default)
+        return json.dumps(d, default=LG._session_json_default, separators=(',', ':'))
 
     def live_journal(self):
         """Small autosave between full saves while the user's game is open."""
@@ -751,7 +751,7 @@ class Session:
                     m = MO.ensure(p)
                     if m is not None:
                         m.apply('major_award' if k in ('mvp', 'opoy', 'dpoy', 'oroy', 'droy', 'protector') else 'all_pro' if k == 'all_pro_1' else 'all_pro_2')
-                    if p.team == self.user_team: mine.append([inbox_player(p), names.get(k, k) if k not in ('all_pro_1', 'all_pro_2') else ('All-Pro first team' if k == 'all_pro_1' else 'All-Pro second team')])
+                    if p.team == self.user_team: mine.append([inbox_player(p), names.get(k, k) if k not in ('all_pro_1', 'all_pro_2') else ('All-Pro First Team' if k == 'all_pro_1' else 'All-Pro Second Team')])
                 if k not in ('all_pro_1', 'all_pro_2'):
                     p = self.L.player(getattr(ws[0], 'pid', ws[0])) if not hasattr(ws[0], 'pid') else ws[0]
                     if p is not None: lines.append([names.get(k, k), inbox_player(p), p.pos, p.team])
@@ -930,7 +930,7 @@ class Session:
         seed_of = {}
         for c, sd in (getattr(post, 'seeds', {}) or {}).items():
             for i, x in enumerate(sd): seed_of[x] = i + 1
-        def tag(x): return f"the {seed_of[x]} seed {nm(x)} ({rec(x)})" if x in seed_of else f"{nm(x)} ({rec(x)})"
+        def tag(x): return f"The {seed_of[x]} seed {nm(x)} ({rec(x)})" if x in seed_of else f"{nm(x)} ({rec(x)})"
         wk_ = 19 + PS.Postseason.ROUNDS.index(rnd)
         name = PS.Postseason.ROUND_NAMES[rnd]
         if rnd == 'SB':
@@ -943,12 +943,12 @@ class Session:
                 for (r_, cf, hm, aw, hp, ap) in won:
                     opp = aw if hm == x else hm; mine_, theirs = (hp, ap) if hm == x else (ap, hp)
                     steps.append(f"{nm(opp)} {mine_}-{theirs} in the {PS.Postseason.ROUND_NAMES[r_].replace(' Round', '')}")
-                if x in seed_of and seed_of[x] == 1: steps.insert(0, 'the first-round bye')
-                return '\n'.join(steps) if steps else 'the conference'
+                if x in seed_of and seed_of[x] == 1: steps.insert(0, 'The first-round bye')
+                return '; '.join(steps) + '.' if steps else 'The conference.'
             conf_of = {t: cf for cf, sd in (getattr(post, 'seeds', {}) or {}).items() for t in sd}
             lines = [f"Championship Game {site['numeral']} is set: {nm(a)} against {nm(h)}, at {site['stadium']} in {site['city']}.",
-                     f"{nm(a)}, the {seed_of.get(a, '?')} seed out of the {conf_of.get(a, '')}, finished {rec(a)}. Road to the final:\n{road(a)}",
-                     f"{nm(h)}, the {seed_of.get(h, '?')} seed out of the {conf_of.get(h, '')}, finished {rec(h)}. Road to the final:\n{road(h)}"]
+                     f"{nm(a)}, the {seed_of.get(a, '?')} seed out of the {conf_of.get(a, '')}, finished {rec(a)}. Road to the final: {road(a)}",
+                     f"{nm(h)}, the {seed_of.get(h, '?')} seed out of the {conf_of.get(h, '')}, finished {rec(h)}. Road to the final: {road(h)}"]
             if user in (h, a): lines.append("You are in it. The game plan is on your desk.")
             return f"Championship Game {site['numeral']}: {nm(a)} vs {nm(h)} at {site['stadium']}", '\n\n'.join(lines)
         games = [f"{tag(a)} at {tag(h)}, {STADIUM.get(h, nm(h))}" for c, h, a in ms]
@@ -957,9 +957,9 @@ class Session:
             opener = f"Your {name} game: {'at ' + nm(h) + ', ' + STADIUM.get(h, '') if a == user else 'vs ' + nm(a) + ' at home'}. They finished {rec(h if a == user else a)}."
         else:
             alive = {t for al in post.alive.values() for t in al.values()}
-            opener = f"You have the bye this round; the winner of the worst surviving seed's game comes to you." if user in alive else "Your season is over."
-        subject = {'WC': f"Wild Card Weekend: {len(ms)} games", 'DIV': f"Divisional Round: {len(ms)} games", 'CONF': "Conference Championships: the two finals"}[rnd]
-        return subject, opener + ('\n\nThe round\n' + '\n'.join(games) if games else '')
+            opener = f"You have the bye this round; the winner of the worst surviving seed's game comes to you." if user in alive else ""
+        subject = {'WC': f"Wild Card Weekend: {len(ms)} games", 'DIV': f"Divisional Round: {len(ms)} games", 'CONF': "Conference Championships"}[rnd]
+        return subject, '\n\n'.join(part for part in (opener, 'The round\n' + '\n'.join(games) if games else '') if part)
 
     def _close_playoffs(self):
         """After the Championship Game: the champion, the draft order, the firings, and into the offseason."""

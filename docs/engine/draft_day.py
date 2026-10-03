@@ -22,6 +22,7 @@ personality, or the user goes to the trade tab with any pick pre-loaded
 (trade_for_pick). Outside the draft, clubs may come to the user unprompted;
 that lives in the trade window, not here.
 """
+from functools import wraps
 import draft as DFT
 import trade_engine as TE
 
@@ -31,6 +32,20 @@ _MARKET = {int(k): v for k, v in json.load(open(os.path.join(os.path.dirname(os.
 TRADE_GATE = {1: 0.40, 2: 0.30, 3: 0.22, 4: 0.08, 5: 0.05, 6: 0.04, 7: 0.04}
 LOOKAHEAD = 12                 # how many slots down a buyer can come from
 PREMIUM_UP = 1.06              # buyers overpay to move up; the market curve already carries most of it
+
+
+def _decision_batch(method):
+    """Reuse evidence only during one synchronous draft command, never across UI turns."""
+    @wraps(method)
+    def run(self, *args, **kwargs):
+        if getattr(self, '_board_cache', None) is not None:
+            return method(self, *args, **kwargs)
+        self._board_cache, self._draft_grade_cache = {}, {}
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            self._board_cache = self._draft_grade_cache = None
+    return run
 
 
 class Draft:
@@ -71,7 +86,14 @@ class Draft:
     def board_for(self, abbr, gm=None):
         pk = self.current()
         sel = pk.selection if pk else 1
-        return DFT.board(self.L, abbr, sel, self.level, self.taken, self.scale, gm=gm)
+        cache = getattr(self, '_board_cache', None)
+        key = (abbr, sel, id(gm))
+        if cache is not None and key in cache:
+            return list(cache[key])
+        rows = DFT.board(self.L, abbr, sel, self.level, self.taken, self.scale, gm=gm,
+                         _grade_cache=getattr(self, '_draft_grade_cache', None))
+        if cache is not None: cache[key] = tuple(rows)
+        return rows
 
     def user_pick(self):
         """Honor explicit board priorities, then draft for roster needs like the CPU."""
@@ -86,6 +108,7 @@ class Draft:
         return next((p for _, p in self.board_for(self.user) if p.pid in available), None)
 
     # ------------------------------------------------------------ the buttons
+    @_decision_batch
     def sim_pick(self):
         """One selection. Returns ('user',) when it is the user's turn and
         auto-pick is off, else ('pick', selection, team, player) or
@@ -124,6 +147,7 @@ class Draft:
         self._select(pk, p)
         return ('pick', pk.selection, self.user, p)
 
+    @_decision_batch
     def sim_to_user(self):
         out = []
         while not self.done:
@@ -132,6 +156,7 @@ class Draft:
             out.append(ev)
         return out
 
+    @_decision_batch
     def sim_round(self):
         pk = self.current()
         if pk is None: return []
@@ -142,6 +167,7 @@ class Draft:
             out.append(ev)
         return out
 
+    @_decision_batch
     def sim_all(self):
         out = []
         while not self.done:
@@ -301,7 +327,8 @@ class Draft:
             return False
         projected = [p for p in roster if p.pid not in outgoing]
         rows = DFT.board(self.L, buyer, pk.selection, self.level, self.taken,
-                         self.scale, players=projected)
+                         self.scale, players=projected,
+                         _grade_cache=getattr(self, '_draft_grade_cache', None))
         return bool(rows and rows[0][1].pid == target_player.pid)
 
     def _execute(self, buyer, seller, offer, pk, target_player=None):
@@ -314,6 +341,7 @@ class Draft:
         sends = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
         try: self.L.trade(buyer, seller, sends, [pk])
         except ValueError: return None
+        if getattr(self, '_board_cache', None) is not None: self._board_cache.clear()
         if target_player is not None:
             self.trade_targets[pk.selection] = dict(buyer=buyer, pid=target_player.pid)
         self.dealt.add(frozenset((seller, buyer))); self.last_dealt = buyer
@@ -372,6 +400,7 @@ class Draft:
             return None
         return self._execute(buyer, seller, offer, pk, target)
 
+    @_decision_batch
     def gather_offers(self, pk):
         """
         Every AI club's answer for one of the user's picks: the package it
@@ -403,6 +432,7 @@ class Draft:
         offers.sort(key=lambda o: -o['value'])
         return offers
 
+    @_decision_batch
     def accept_offer(self, offer):
         pk = offer['asks'][0]
         if pk is not self.current() or pk.used_on:
@@ -429,6 +459,7 @@ class Draft:
 
     # ------------------------------------------------------------ internals
     def _select(self, pk, p):
+        if getattr(self, '_board_cache', None) is not None: self._board_cache.clear()
         from valuation import _league_cap
         cap = _league_cap(self.L, self.year + 1)
         self.taken.add(p.pid)

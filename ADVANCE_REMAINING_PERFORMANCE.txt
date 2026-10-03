@@ -1,0 +1,39 @@
+ADVANCE PERFORMANCE ITEMS 3-6
+=============================
+Owned worktree: C:\Users\HP\Documents\Codex\2026-09-28\rev\work\nflgm-scouting-three-class
+Branch: codex/advance-performance-remaining-20261003
+Baseline: integrated043094b plus completed items1-2 cherrypick a8d8585 (original b2d8e70).
+Other threads' checkouts and working changes were not touched.
+
+3 Draft: synchronous command-scoped stable scouting/scheme/consensus grade reuse,
+plus identical board-request reuse until a pick or player trade. Rankings, taken
+players, current selection, roster needs, candidate gains, financial checks and
+trade randomness retain their original logic and order. Grades expire when the
+command returns or raises, so later coaching/scouting/user changes are reread.
+Whole-board results invalidate at each pick/trade; returned lists are independent.
+
+4 Cutdown/waivers: prepare fixed native/role grades and the defensive planning
+profile inside each repair search. Every proposed lineup is still assigned and
+all coverage/cap/retention safeguards still run. The next mutated roster starts
+fresh. This speeds improve_cutdown and repair_shape, including both waiver safety
+passes. Neither before-claims nor after-claims finalization was removed.
+
+5 Browser Advance: changed hashes render through the central route handler;
+unchanged hashes refresh directly. Live game, draft, camp, staff, practice and
+waiver destinations no longer render twice. Practice still saves before rendering
+its result so success/retry state remains accurate.
+
+6 Save payload and responsiveness: compact JSON removes separator whitespace only,
+retaining schema, all history, RNG and live replay. Old saves still load unchanged.
+Normal Advance lets the destination paint before explicit serialization, with a
+200ms fallback for throttled frames and no paint wait when hidden. The dirty flag
+remains visible to pagehide until saveGame captures it. Existing bounded/coalesced
+IndexedDB writes and journal durability remain unchanged. This is the compact-save
+first step described in the review; it does not implement a worker, partial-section
+storage or historical pruning. Python serialization still runs on the UI thread.
+
+Verification so far: 98 targeted Python tests, plus Node navigation, autosave paint,
+and bounded write queue scenarios. Full save/replay, failure cleanup, unchanged
+boards after different picks and trade invalidation covered. Full paired probes
+are in outputs/advance-remaining-043094b. Native timings are shared-machine
+observations, not browser/Pyodide speed guarantees.

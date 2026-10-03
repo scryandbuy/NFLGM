@@ -3052,3 +3052,34 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .protection-detail{border-top:1px solid var(--rule);padding-top:9px;margin-top:12px;font:400 12px/1.5 var(--text);color:var(--ink-3)}
 .protection-detail strong{color:var(--ink)}
 @media(max-width:420px){.protection-card .protection-groups{grid-template-columns:1fr}.protection-group+.protection-group{border-left:0;padding-left:0}}
+
+/* Ordinary inbox copy reads as paragraphs, not separated table rows. */
+.inbox-board .mailbox .pane .mail-content{margin-top:18px;line-height:1.6}
+.mail-content .mail-prose{margin:0 0 12px;white-space:normal;overflow-wrap:anywhere}
+.mail-content .mail-prose:last-child{margin-bottom:0}
+.mail-content .mail-prose-list{margin:0 0 12px;padding-left:22px}
+.mail-content .mail-prose-list .mail-prose{margin:3px 0}
+.mail-content .mail-intro{margin-bottom:14px;white-space:normal}
+.mail-content .mail-section{margin:16px 0}
+.mail-content .mail-body-row{white-space:normal}
+.mail-content .mail-body-row + .mail-body-row{margin-top:5px;padding-top:0;border-top:0}
+
+/* Readable standings: full-width tables and a dedicated playoff view. */
+.standings-layout{display:block}
+.standings-board .divgrid{grid-template-columns:minmax(0,1fr);gap:28px}
+.standings-board .standings-year{font-size:15px;padding:10px 32px 10px 14px!important}
+.standings-controls .tabs button{font-size:15px;padding:12px 16px}
+.standings-conferences{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
+.standings-conferences .btn{font-size:15px;padding:8px 15px;border-radius:5px}
+.standings-conferences .btn[aria-pressed=true]{background:var(--sheet-3);color:var(--ink);border-color:var(--rule-hi)}
+.standings-board .divbox h4{font-size:18px;text-transform:none;letter-spacing:0;color:var(--ink);padding:0 0 12px}
+.standings-board .divbox h4:after{display:none}
+.standings-board .tbl th,.standings-board .grid th{font-size:12px;padding:9px 10px;background:#ffffff03}
+.standings-board .tbl td,.standings-board .grid td{font-size:16px;padding:13px 10px;height:48px}
+.standings-board .tbl{margin-bottom:18px}
+.standings-board .standings-record{font-weight:700!important;white-space:nowrap}
+.standings-board .club-link{font-size:inherit}
+.standings-board .standings-picture{border:0;background:none;padding:0}
+.standings-board .standings-picture .tbl td{font-size:16px;height:48px;padding:13px 10px}
+.standings-board .standings-picture small{font-size:14px}
+@media(max-width:650px){.standings-board{padding:18px 12px}.standings-board .tbl th,.standings-board .tbl td{padding:10px 6px}.standings-main{overflow-x:auto}.standings-controls .tabs{gap:3px}.standings-controls .tabs button{padding:10px 8px}}

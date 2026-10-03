@@ -170,7 +170,10 @@ class CharacterAssessmentTests(unittest.TestCase):
         report = CA.player_report(p, 'GB', {'penalty_opportunities': 30, 'penalties_committed': 1,
                                            'penalties_accepted': 0, 'penalty_yards': 0})[1]
         self.assertEqual(report['status'], 'strength')
-        self.assertIn('1 committed, 0 accepted, 0 enforced', report['game_record'])
+        self.assertEqual(report, CA.player_report(p, 'GB')[1])
+        self.assertNotIn('game_record', report)
+        self.assertEqual(CA.player_report(p, 'GB')[0]['label'], 'Work Ethic')
+        self.assertEqual(CA.describe('discipline')['explanation'], '')
 
     def test_prospect_card_never_reveals_true_traits(self):
         import views_draft as VD

@@ -219,7 +219,7 @@ def _offensive_rows(depth, package):
     return rows
 
 
-def _defensive_rows(depth, variant, gm, role_grades):
+def _defensive_rows(depth, variant, gm, role_grades, ranked=None):
     """Each package independently assigns eleven distinct physical players."""
     slots = variant['slots']
     used, rows = set(), []
@@ -229,23 +229,33 @@ def _defensive_rows(depth, variant, gm, role_grades):
     for i, slot in sorted(enumerate(slots), key=lambda pair: (priority.get(pair[1]['role'], 2), pair[0])):
         role = slot['role']; specialist = slot.get('specialist')
         sources = tuple(slot.get('sources', DR.ROLE_SOURCES[role]))
-        candidates = [p for pos in sources for p in depth.get(pos, ()) if p['pid'] not in used]
         def grade(p):
             key = (p['pid'], role, specialist)
             if key not in role_grades:
                 role_grades[key] = DR.candidate_grade(p, role, specialist=specialist, gm=gm)
             return role_grades[key]
-        player = max(candidates, key=lambda p: (grade(p), -sources.index(p['pos']), str(p['pid'])), default=None)
+        if ranked is None:
+            candidates = [p for pos in sources for p in depth.get(pos, ()) if p['pid'] not in used]
+            player = max(candidates, key=lambda p: (grade(p), -sources.index(p['pos']), str(p['pid'])), default=None)
+        else:
+            # Variants repeat the same jobs. Rank each eligible pool once for
+            # this projected roster; each package still reserves distinct men.
+            job = (role, specialist, sources)
+            if job not in ranked:
+                candidates = [p for pos in sources for p in depth.get(pos, ())]
+                ranked[job] = sorted(candidates, key=lambda p: (
+                    grade(p), -sources.index(p['pos']), str(p['pid'])), reverse=True)
+            player = next((p for p in ranked[job] if p['pid'] not in used), None)
         if player is not None: used.add(player['pid'])
         result[i] = dict(slot, sources=sources, player=player,
                          grade=grade(player) if player is not None else None)
     return [result[i] for i in range(len(slots))]
 
 
-def _package_rows(team, players, grades, profile, role_grades, side=None):
+def _package_rows(team, players, grades, profile, role_grades, side=None, depth=None):
     gm = getattr(team, 'gm', None)
     by_pid = {p.pid: p for p in players}
-    depth = _planning_depth(players, grades)
+    depth = _planning_depth(players, grades) if depth is None else depth
     out = []
     if side in (None, 'offense'):
         for package, weight in OR.expected_package_weights(gm, depth).items():
@@ -259,8 +269,9 @@ def _package_rows(team, players, grades, profile, role_grades, side=None):
                                 side='offense', front=None, package=package, weight=weight,
                                 variant='offense:' + package))
     if side in (None, 'defense'):
+        ranked = {}
         for index, variant in enumerate(profile['variants']):
-            for row in _defensive_rows(depth, variant, gm, role_grades):
+            for row in _defensive_rows(depth, variant, gm, role_grades, ranked):
                 p = row['player']
                 out.append(dict(row, player=by_pid[p['pid']] if p else None,
                                 side='defense', front=variant['front'], package=variant['package'],
@@ -300,7 +311,17 @@ def _depth_accounting(team, players, grades):
     return score, needs
 
 
-def assess(team, players=None, strict_roles=False):
+def assessment_inputs(team, players):
+    """Prepare fixed player/coach inputs for a single synchronous repair search.
+
+    Discard after any roster, rating, position or coaching mutation. Callers
+    still assign every proposed lineup and evaluate every coverage rule.
+    """
+    return dict(team=team, grades={p.pid: _grade(p, team) for p in players},
+                profile=DR.planning_profile(getattr(team, 'gm', None)), role_grades={})
+
+
+def assess(team, players=None, strict_roles=False, *, prepared=None):
     """Shared base chart, weighted package quality, and reserve-depth needs.
 
     Package weights sum to one separately for each side of the ball. A player
@@ -308,11 +329,15 @@ def assess(team, players=None, strict_roles=False):
     may reuse this snapshot for candidate_gains until roster/coach/ratings change.
     """
     players = tuple(team.active() if players is None else players)
-    grades = {p.pid: _grade(p, team) for p in players}
+    if prepared is not None and prepared['team'] is not team:
+        raise ValueError('Assessment inputs belong to another team')
+    grades = ({p.pid: prepared['grades'][p.pid] for p in players} if prepared is not None
+              else {p.pid: _grade(p, team) for p in players})
     report = _base_assess(team, players, strict_roles, grades)
-    profile = DR.planning_profile(getattr(team, 'gm', None))
-    role_grades = {}
-    rows = _package_rows(team, players, grades, profile, role_grades)
+    profile = prepared['profile'] if prepared is not None else DR.planning_profile(getattr(team, 'gm', None))
+    role_grades = prepared['role_grades'] if prepared is not None else {}
+    depth = _planning_depth(players, grades)
+    rows = _package_rows(team, players, grades, profile, role_grades, depth=depth)
     # The summary chart must describe the same choices as the package planner.
     # Preserve specialist rows and the extra nickel corner without reranking LBs
     # by their saved MIKE/WILL label.
@@ -349,7 +374,8 @@ def assess(team, players=None, strict_roles=False):
     scores = {side: _quality([row for row in rows if row['side']==side]) for side in ('offense','defense')}
     report.update(needs=needs, score=depth_score+sum(scores.values()), players=players,
                   package_assignments=rows, package_needs=package_needs, package_demand=demand,
-                  _grades=grades, _role_grades=role_grades, _profile=profile, _package_scores=scores)
+                  _grades=grades, _role_grades=role_grades, _profile=profile, _package_scores=scores,
+                  _planning_depth=depth)
     return report
 
 
@@ -397,6 +423,24 @@ def coverage_not_worse(before, after):
     return all(value <= before['shortages'].get(key, 0.0) + 1e-9
                for key, value in after['shortages'].items())
 
+def _changed_depth(before, grades, arrival=None, departure=None):
+    """Copy only changed position groups from one caller-owned roster read."""
+    saved = before.get('_planning_depth')
+    if saved is None:
+        saved = _planning_depth(before['players'], before['_grades'])
+    removed = {p.pid for p in (arrival, departure) if p is not None}
+    depth = dict(saved)
+    for pos, men in saved.items():
+        if any(p['pid'] in removed for p in men):
+            depth[pos] = [p for p in men if p['pid'] not in removed]
+    if arrival is not None:
+        row = dict(getattr(arrival, 'ratings', {}) or {}, pid=arrival.pid,
+                   pos=arrival.pos, ovr=float(arrival.ovr), weight=getattr(arrival, 'weight', None))
+        depth[arrival.pos] = list(depth.get(arrival.pos, ())) + [row]
+        depth[arrival.pos].sort(key=lambda p: (-grades[p['pid']], str(p['pid'])))
+    return depth
+
+
 def move_gain(team, arrival, departure=None, baseline=None):
     """Marginal package/depth value; a supplied snapshot avoids repeated setup."""
     before = assess(team) if baseline is None else baseline
@@ -406,9 +450,10 @@ def move_gain(team, arrival, departure=None, baseline=None):
     role_grades = {key: value for key, value in before['_role_grades'].items() if key[0] != arrival.pid}
     affected = {arrival.pos} | ({departure.pos} if departure is not None else set())
     scores = dict(before['_package_scores'])
+    depth = _changed_depth(before, grades, arrival, departure)
     for side, positions in (('offense', OR.OFFENSE), ('defense', DR.DEFENSE)):
         if affected & positions:
-            scores[side] = _quality(_package_rows(team, players, grades, before['_profile'], role_grades, side))
+            scores[side] = _quality(_package_rows(team, players, grades, before['_profile'], role_grades, side, depth))
     depth_score, _ = _depth_accounting(team, players, grades)
     return depth_score + sum(scores.values()) - before['score']
 
@@ -424,7 +469,8 @@ def departure_loss(team, departure, baseline=None):
     players = [p for p in before['players'] if p.pid != departure.pid]
     grades = before['_grades']
     role_grades = dict(before['_role_grades'])
-    rows = _package_rows(team, players, grades, before['_profile'], role_grades)
+    depth = _changed_depth(before, grades, departure=departure)
+    rows = _package_rows(team, players, grades, before['_profile'], role_grades, depth=depth)
     depth_score, _ = _depth_accounting(team, players, grades)
     scores = {side: _quality([row for row in rows if row['side'] == side])
               for side in ('offense', 'defense')}
@@ -554,17 +600,18 @@ def improve_cutdown(team, keep_ids, limit=53, available=None):
                 + sum(max(0, floor - sum(counts[pos] for pos in GROUPS[group]))
                       for group, floor in group_floors.items()))
 
+    prepared = assessment_inputs(team, pool)
     for _ in range(3):
         kept = [p for p in pool if p.pid in keep_ids]
-        base = assess(team, kept)['score']
+        base = assess(team, kept, prepared=prepared)['score']
         missing = shortage(kept)
         best = None
-        arrivals = [(assess(team, kept + [p])['score'] - base + retention[p.pid], p)
+        arrivals = [(assess(team, kept + [p], prepared=prepared)['score'] - base + retention[p.pid], p)
                     for p in pool if p.pid not in keep_ids]
         arrivals = [p for gain, p in sorted(arrivals, key=lambda row: -row[0])[:8]
                     if gain > 1.0]
         departures = sorted(kept,
-                            key=lambda p: base - assess(team, [q for q in kept if q.pid != p.pid])['score']
+                            key=lambda p: base - assess(team, [q for q in kept if q.pid != p.pid], prepared=prepared)['score']
                             + retention[p.pid])[:16]
         for arrival in arrivals:
             for departure in departures:
@@ -572,7 +619,7 @@ def improve_cutdown(team, keep_ids, limit=53, available=None):
                 if shortage(proposed) > missing:
                     continue
                 dead_delta = max(0.0, departure.dead_if_cut(0) - arrival.dead_if_cut(0))
-                gain = (assess(team, proposed)['score'] - base - 0.5 * dead_delta
+                gain = (assess(team, proposed, prepared=prepared)['score'] - base - 0.5 * dead_delta
                         + retention[arrival.pid] - retention[departure.pid])
                 if gain > 2.0 and (best is None or gain > best[0]):
                     best = (gain, arrival.pid, departure.pid)

@@ -265,6 +265,7 @@ def _prefer_affordable_alternatives(candidates, gains):
     return ordered
 
 
+@VAL.comparison_batch()
 def ai_bids(league, pool, phase, rng, skip_teams=()):
     import contract_structure as CS
     import roster_needs as RN
