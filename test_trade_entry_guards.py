@@ -67,7 +67,9 @@ class TradeEntryGuardTests(unittest.TestCase):
         result=TR.package_football(self.L,self.a,self.b,outgoing,[])
         self.assertTrue(result['approved'])
         self.L.user_team=None
-        self.assertFalse(TR.package_football(self.L,self.a,self.b,outgoing,[])['approved'])
+        cpu=TR.package_football(self.L,self.a,self.b,outgoing,[])
+        self.assertTrue(cpu['approved'])
+        self.assertGreater(cpu['reserves']['GB'],0)
 
 
 if __name__=='__main__': unittest.main()

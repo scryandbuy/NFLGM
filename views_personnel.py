@@ -277,13 +277,16 @@ def act_ask(league, abbr, other, a_sends, b_sends):
         sent = [_find_pick(league, abbr, x) or x for x in ids]
         received = [_find_pick(league, other, x) or x for x in b_sends]
         return TR.cpu_trade_check(league, me, them, sent, received)
-    # Picks cannot replace a lost starter. Use the same roster/funding gates
-    # as Propose before promising that a larger pick package fixes the deal.
+    # Use the same roster and funding checks as Propose before promising that
+    # a larger pick package fixes the deal. The seller may choose future value
+    # if its remaining roster still covers the essential jobs.
     decision = plan_check(a_sends)
-    if not decision['approved']:
+    if not decision['approved'] and not decision.get('needs_more'):
         return dict(ok=False, adds=[], why=decision['why'])
+    required_gain = max(0.9, float(decision.get('required_gain', 0.9)))
     # Selling GMs accept deterministically above 0.9, not at the old 0.5 preview threshold.
-    if initial['b_gain'] > 0.9: return dict(ok=True, adds=[], line=f"{other} would take it as it is.")
+    if decision['approved'] and initial['b_gain'] > required_gain:
+        return dict(ok=True, adds=[], line=f"{other} would take it as it is.")
     candidates = []
     for pk in me.picks:
         pid = f"{pk.year}-{pk.round}-{pk.original}"
@@ -301,11 +304,11 @@ def act_ask(league, abbr, other, a_sends, b_sends):
                 result = evaluate([candidates[j][2] for j in package])
                 if result.get('blocked'): continue
                 cost = initial['a_gain'] - result['a_gain']
-                if result['b_gain'] > 0.9:
+                if result['b_gain'] > required_gain:
                     key = (cost, size, package)
                     if best is None or key < best[0]: best = (key, package)
                 else:
-                    pending.append((max(0, 0.91 - result['b_gain']), cost, package))
+                    pending.append((max(0, required_gain + .01 - result['b_gain']), cost, package))
         pending.sort()
         frontier = [row[2] for row in pending[:64]]
         if not frontier: break
@@ -315,7 +318,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     # Reprice the complete offer exactly as Propose will, then verify the final package.
     rng = _rng(league, 11)
     final = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends + [x[1] for x in chosen], pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
-    if final.get('blocked') or final['b_gain'] <= 0.9:
+    if final.get('blocked') or final['b_gain'] <= required_gain:
         return dict(ok=False, adds=[], why='No acceptable counteroffer was found. Your offer has not changed.')
     decision = plan_check(a_sends + [x[1] for x in chosen])
     if not decision['approved']:

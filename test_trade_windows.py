@@ -136,12 +136,27 @@ class TradeWindows(unittest.TestCase):
         with patch.object(TR.VAL,'pool_from_league',side_effect=AssertionError('must stop before market work')):
             self.assertEqual(TR.run(league,np.random.default_rng(9)),[])
 
-    def test_losing_record_does_not_put_young_core_on_star_list(self):
+    def test_young_core_can_be_asked_about_at_a_premium(self):
         league,team,vet=league_fixture();vet.age=25;vet.contract=Contract(3,[3]*3)
         with patch.object(TR,'player_asset',side_effect=lambda l,t,p,*a,**k:dict(pid=p.pid,trade_value=10)):
             offers=TR.stars_at(league,team,{},np.random.default_rng(1),'WR')
         self.assertTrue(TR._young_core(vet))
-        self.assertNotIn(vet.pid,{a['pid'] for a in offers})
+        offer=next(a for a in offers if a['pid']==vet.pid)
+        self.assertTrue(offer['star'])
+        self.assertGreater(offer['ask'],1.0)
+
+    def test_contender_quarterback_and_elite_receiver_can_be_asked_about(self):
+        league,team,receiver=league_fixture();team.record=[6,2,0]
+        quarterback=league.players['QB0']
+        for p in (quarterback,receiver):
+            p.age=26
+            p.contract=Contract(3,[10]*3)
+            p.ratings={k:96 for k in TG.DEPTH_WEIGHTS[p.pos]}
+        with patch.object(TR,'player_asset',side_effect=lambda l,t,p,*a,**k:dict(pid=p.pid,trade_value=30)):
+            for group,p in (('QB',quarterback),('WR',receiver)):
+                offers=TR.stars_at(league,team,{},np.random.default_rng(1),group)
+                offer=next(a for a in offers if a['pid']==p.pid)
+                self.assertGreater(offer['ask'],1.0)
 
     def test_ui_and_cpu_context_use_same_window(self):
         _,team,_=league_fixture()

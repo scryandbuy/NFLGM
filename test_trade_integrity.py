@@ -85,8 +85,8 @@ class TradeIntegrityTests(unittest.TestCase):
         L=league(a,b)
         prospect=player('WILL','prospect',90);prospect.retired=False
         result=TR.package_football(L,a,b,[wr[2].pid,wr[3].pid],[],prospect=prospect)
-        self.assertFalse(result['approved'])
-        self.assertEqual(result['reason'],'essential_coverage')
+        self.assertTrue(result['approved'])
+        self.assertGreater(result['reserves']['SEA'],0)
 
     def test_rational_seller_may_lose_score_without_losing_coverage(self):
         a,b=roster('A'),roster('B'); L=league(a,b)
@@ -102,7 +102,8 @@ class TradeIntegrityTests(unittest.TestCase):
         L=league(a,b);L.phase='regular';L.week=9
         incoming=next(p for p in b.roster if p.pos=='CB');incoming.ovr=90
         result=TR.package_football(L,a,b,[lbs[3].pid],[incoming.pid])
-        self.assertFalse(result['approved'])
+        self.assertTrue(result['approved'])
+        self.assertGreater(result['reserves']['PHI'],0)
 
     def test_miami_cannot_flip_new_arrival_next_window_but_can_after_trial(self):
         a,b=roster('MIA'),roster('LV');L=league(a,b)
@@ -110,7 +111,7 @@ class TradeIntegrityTests(unittest.TestCase):
         L.transactions=[dict(kind='trade',year=2028,week=22,phase='free_agency',
                              a='MIA',b='LA',a_sends=[],b_sends=[p.pid])]
         self.assertIn(p.pid,TR.recent_acquisitions(L,a))
-        self.assertEqual(TR.package_football(L,a,b,[p.pid],[])['reason'],'recent_acquisition')
+        self.assertGreater(TR.package_football(L,a,b,[p.pid],[])['reserves']['MIA'],0)
         L.phase='regular';L.week=4
         self.assertNotIn(p.pid,TR.recent_acquisitions(L,a))
 

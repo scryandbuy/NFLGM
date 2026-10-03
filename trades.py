@@ -494,15 +494,16 @@ def _coverage(team, players, week=None, report=None):
 def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache=None):
     """Assess both complete rosters, not the target in isolation.
 
-    Sellers may exchange present quality for picks, but neither CPU can leave
-    new essential holes. A draft buyer includes the player it intends to pick.
+    Sellers may exchange present quality for picks. Lost lineup quality and
+    uncovered roles raise their asking price instead of vetoing a deal. A
+    draft buyer includes the player it intends to pick.
     """
     import roster_needs as RN
     cache = {} if cache is None else cache
     key = (ta.abbr, tb.abbr, tuple(sorted(x for x in outgoing if isinstance(x, str))),
            tuple(sorted(x for x in incoming if isinstance(x, str))), getattr(prospect, 'pid', None))
     if key in cache: return cache[key]
-    result = dict(approved=True, gains={}, reason='approved')
+    result = dict(approved=True, gains={}, reserves={}, reason='approved')
     week = int(league.week or 0) if league.phase in ('regular', 'playoffs') else None
     for team, sent, received in ((ta, outgoing, incoming), (tb, incoming, outgoing)):
         if prospect is not None:
@@ -521,23 +522,27 @@ def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache
         baseline, before, recent = cache[baseline_key]
         after_report = RN.assess(team, projected)
         result['gains'][team.abbr] = after_report['score'] - baseline['score']
-        if team.abbr == getattr(league, 'user_team', None): continue
-        if removed & recent:
-            result.update(approved=False, reason='recent_acquisition')
-            break
+        if team.abbr == getattr(league, 'user_team', None):
+            result['reserves'][team.abbr] = 0.0
+            continue
         after = _coverage(team, projected, week, after_report)
-        if any(value > before.get(role, 0) + 1e-6 for role, value in after.items()):
-            result.update(approved=False, reason='essential_coverage')
-            break
-        # A playoff race is not a liquidation window. Grade the complete
-        # projected lineup, so redundant receivers/backs do not compensate
-        # for losing a major starter merely by adding their asset prices.
-        # Genuine sellers can still exchange current quality for future picks.
-        if (league.phase in ('regular', 'playoffs') and removed
-                and TE.window(context(team)) not in ('rebuilding', 'retooling')
-                and result['gains'][team.abbr] < -UPGRADE_GAP):
-            result.update(approved=False, reason='competitive_roster_loss')
-            break
+        depth_gap = sum(max(0., value - before.get(role, 0.)) for role, value in after.items()
+                        if role.startswith('depth:'))
+        role_gap = sum(max(0., value - before.get(role, 0.)) for role, value in after.items()
+                       if role.startswith('role:'))
+        # Role and head-count reports overlap. Price the larger repair job,
+        # rather than charging twice for the same missing player.
+        repair = min(12., 4. * max(depth_gap, role_gap / 2.))
+        loss = max(0., -result['gains'][team.abbr])
+        window = TE.window(context(team))
+        urgency = .16  # Every relied-on starter costs more to replace.
+        if window in ('contending', 'win_now') and league.phase in ('regular', 'playoffs'):
+            urgency += .08
+        elif window in ('rebuilding', 'retooling'):
+            urgency -= .06
+        lineup = min(8., urgency * loss) if removed else 0.
+        recent_cost = 3. if removed & recent else 0.
+        result['reserves'][team.abbr] = round(repair + lineup + recent_cost, 2)
     cache[key] = result
     return result
 
@@ -684,27 +689,19 @@ def stars_at(league, team, pool, rng, grp, viewer=None):
     """
     The men a club is NOT trying to move: its best one or two at a group.
     They are available the way anyone is available - at a price. A
-    contending club asks 60% over what it thinks he is worth and will not
-    move its quarterback; a rebuilding one asks a little over and listens.
+    contending club asks 60% over what it thinks he is worth; a rebuilding
+    one asks a little over and listens. Every player can be discussed.
     """
     out = []
     men = sorted((p for pos, ps in team.depth.items() if GRP.get(pos, pos) == grp for p in ps
                   if p.out_until is None), key=lambda p: -p.ovr)[:2]
     wdw = TE.window(context(team))
     import morale as MO
-    recent = recent_acquisitions(league, team)
     for p in men:
-        if p.pid in recent: continue
         wants_out = MO.wants_out(p)
-        # A MAN WHO ASKED OUT is available where he was untouchable, and his
-        # club takes a fair offer where it wanted a premium. The price does
-        # not move: buyers pay what he is worth, they just get to buy him.
-        if not wants_out:
-            if _young_core(p): continue
-            if p.pos == 'QB' and wdw in ('contending', 'win_now'):
-                continue                              # the one man not for sale
-            if p.ovr >= 95 and p.age < 30 and wdw in ('contending', 'win_now'):
-                continue                              # nor is a 95 in his prime
+        # A request to leave removes the owner's premium. Age, contract,
+        # position, team window and the package still determine whether a
+        # buyer can make an acceptable offer; none is an absolute exemption.
         a = player_asset(league, team, p, pool, rng, viewer=viewer or team)
         if a:
             a['grp'] = grp; a['star'] = True; a['ask'] = 1.0 if wants_out else STAR_ASK[wdw]
@@ -845,10 +842,33 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
     """
     football = package_football(league, ta, tb, outgoing, incoming)
     if not football['approved']:
-        why = {'recent_acquisition': 'We just acquired this player and want to keep him for now.',
-               'competitive_roster_loss': "We're still competing, and this deal would weaken our lineup too much. We'd need a replacement for the player we're giving up or an upgrade at another starting spot.",
-               'essential_coverage': "We can't make this deal without leaving a position short."}[football['reason']]
-        return dict(approved=False, why=why)
+        return dict(approved=False, why='The current package cannot be completed.')
+    if getattr(league, 'user_team', None) in (ta.abbr, tb.abbr):
+        seller = tb if tb.abbr != league.user_team else ta
+        reserve = football.get('reserves', {}).get(seller.abbr, 0.)
+        if reserve > 0:
+            pool = VAL.pool_from_league(league)
+            def assets(team, other, items):
+                out = []
+                for item in items:
+                    if not isinstance(item, str): out.append(pick_asset(league, item)); continue
+                    player = league.player(item)
+                    if player is None: return None
+                    out.append(player_asset(league, team, player, pool, None, viewer=other))
+                return out
+            a_sends, b_sends = assets(ta, tb, outgoing), assets(tb, ta, incoming)
+            if a_sends is None or b_sends is None or any(x is None for x in a_sends + b_sends):
+                return dict(approved=False, why='A player in this offer is no longer available.')
+            valuation = TE.evaluate(dict(a_sends=a_sends, a_gets=b_sends),
+                                    context(ta), context(tb), ta.cap_space, tb.cap_space,
+                                    persona(ta.gm), persona(tb.gm),
+                                    user_a=ta.abbr == league.user_team,
+                                    user_b=tb.abbr == league.user_team)
+            if not valuation.get('blocked'):
+                gain = valuation['a_gain'] if seller is ta else valuation['b_gain']
+                if gain + 1e-9 < reserve:
+                    return dict(approved=False, needs_more=True, required_gain=reserve,
+                                why=f"We'd need more value to replace what this trade takes from our lineup.")
     if buyer is not None and buyer != getattr(league, 'user_team', None):
         club, sent, received = (ta, outgoing, incoming) if ta.abbr == buyer else (tb, incoming, outgoing)
         gain = football['gains'][buyer]
@@ -1020,6 +1040,10 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             sent = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in items]
             football = package_football(league, ta, tb, sent, [target['pid']], cache=football_cache)
             if not football['approved']: return False
+            seller_reserve = football.get('reserves', {}).get(tb.abbr, 0.)
+            seller_value = sum(TE.team_price(x, ctx_b, sb, gb, owns=False) for x in items)
+            if seller_value - ask + 1e-9 < seller_reserve:
+                return False
             net = football['gains'][ta.abbr]
             budget = (market * prem + .35) * _upgrade_budget(net)
             if net < UPGRADE_GAP or sum(TE.market_price(x) for x in items) > budget + 1e-9:

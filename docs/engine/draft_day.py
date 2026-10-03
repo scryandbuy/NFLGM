@@ -268,6 +268,12 @@ class Draft:
             football = TR.package_football(self.L, ta, tb, sent, [pk],
                                            prospect=target_player, cache=football_cache)
             if not football['approved']: return False
+            seller_reserve = football.get('reserves', {}).get(seller, 0.)
+            if seller_reserve:
+                result = TE.evaluate(offer, ta.ctx(), tb.ctx(), ta.cap_space, tb.cap_space,
+                                     TR.persona(ta.gm), TR.persona(tb.gm))
+                if result.get('blocked') or result['b_gain'] + 1e-9 < seller_reserve:
+                    return False
             if buyer != getattr(self.L, 'user_team', None):
                 # CPU player collateral requires a concrete prospect and an
                 # improvement after giving up every player in the package.
