@@ -133,8 +133,6 @@ def assess(league, abbr, level=None, players=None):
         control = [(float(p.ovr), int(getattr(getattr(p, 'contract', None), 'years', 4)),
                     float(getattr(p, 'age', 25))) for p in incumbents]
         succession = 12.0 * GM.future_need({'expiring': {pos: control}}, pos, horizon=2)
-        if pos == 'QB' and any(getattr(p, 'age', 25) >= 34 for p in incumbents):
-            succession = max(succession, 8.0)
         exposed = sum(yrs <= 1 or age + 2 >= (34 if pos == 'QB' else 31)
                       for _, yrs, age in control)
         # A young reserve is a possible successor, not a promise to reach his

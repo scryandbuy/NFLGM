@@ -328,9 +328,15 @@ def future_need(team, pos, horizon=3):
     loss = 0.0
     for ovr, yrs_left, age in rows:
         gone_soon = yrs_left <= horizon - 1
-        ageing_out = age + horizon >= 31
-        if gone_soon or ageing_out:
-            loss += max(0.0, (ovr - 68) / 24.0) * (1.0 if gone_soon else 0.6)
+        if pos == 'QB':
+            # Quarterbacks can remain effective well into their thirties.
+            # Anticipate succession gradually rather than turning a healthy,
+            # controlled 30-year-old star into an immediate draft hole.
+            ageing_risk = float(np.clip((age + horizon - 34.0) / 6.0, 0.0, 1.0))
+        else:
+            ageing_risk = 0.6 if age + horizon >= 31 else 0.0
+        if gone_soon or ageing_risk:
+            loss += max(0.0, (ovr - 68) / 24.0) * (1.0 if gone_soon else ageing_risk)
     scarcity = 1.0 - REPLACEABILITY.get(pos, 0.6)
     return float(np.clip(loss * (0.5 + 0.9 * scarcity), 0.0, 1.0))
 

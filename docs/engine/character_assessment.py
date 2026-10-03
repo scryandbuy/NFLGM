@@ -67,7 +67,9 @@ def visit(p, abbr, view, room, error_sd):
     # The interview is a stronger source than a tentative background note.
     # The visit tightens that read by another 15%, never replacing a more
     # reliable earlier observation with a weaker one.
-    base_error = max(8., float(error_sd) * 1.5)
+    # Keep the interview's precision tied to the room's scouting quality.
+    # A flat floor made most weak and strong rooms produce the same read.
+    base_error = 5.5 + 1.25 * max(0., float(error_sd))
     if room.get('character') == 'sharp': base_error *= .45
     elif room.get('character') == 'tape': base_error *= 1.25
     error = min(base_error, float(prior.get('error', base_error)) if prior else base_error) * .85

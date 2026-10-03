@@ -101,6 +101,34 @@ class DraftPlanningTests(unittest.TestCase):
         self.assertGreaterEqual(exposed, 6)
         self.assertLess(covered, 6)
 
+    def test_controlled_prime_qb_does_not_trigger_premature_succession(self):
+        L, t = fixture(); starter = L.player('QB0'); reserve = L.player('QB1')
+        set_grade(starter, 94); set_grade(reserve, 60)
+        for age, years in ((30.91, 5), (31.58, 7)):
+            starter.age = age; starter.contract = Contract(years, [20] * years)
+            plan = DP.assess(L, 'MIN')['positions']['QB']
+            self.assertEqual(plan['succession'], 0)
+            self.assertEqual(plan['future'], 0)
+
+    def test_qb_succession_rises_with_age_or_expiring_control(self):
+        L, t = fixture(); starter = L.player('QB0'); reserve = L.player('QB1')
+        set_grade(starter, 94); set_grade(reserve, 60)
+        starter.contract = Contract(5, [20] * 5)
+        starter.age = 31
+        controlled_board = dict((p.pid, score) for score, p in D.board(L, 'MIN', 10, {}, set()))
+        scores = []
+        for age in (31, 34, 35, 37):
+            starter.age = age
+            scores.append(DP.assess(L, 'MIN')['positions']['QB']['succession'])
+        self.assertEqual(scores[0], 0)
+        self.assertLess(scores[1], 6)
+        self.assertLess(scores[1], scores[2])
+        self.assertLess(scores[2], scores[3])
+        aged_board = dict((p.pid, score) for score, p in D.board(L, 'MIN', 10, {}, set()))
+        self.assertGreater(aged_board['rookie-QB0'], controlled_board['rookie-QB0'])
+        starter.age = 31; starter.contract = Contract(1, [20])
+        self.assertGreater(DP.assess(L, 'MIN')['positions']['QB']['succession'], 6)
+
     def test_one_successor_cannot_cover_multiple_expiring_receivers(self):
         L, t = fixture()
         for p in t.by_pos('WR')[:3]: p.contract = Contract(1, [1])

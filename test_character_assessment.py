@@ -72,6 +72,31 @@ class CharacterAssessmentTests(unittest.TestCase):
                 errors[mode].append(abs(view['character_assessments']['work_ethic']['value']-50))
         self.assertLess(np.mean(errors['sharp']), .6*np.mean(errors['normal']))
 
+    def test_visit_precision_preserves_scout_quality_and_room_tradeoff(self):
+        p = N(pid='visit-quality', traits={'work_ethic': 50, 'discipline': 50}, xp_spent={})
+        reads = {}
+        for quality, sd in (('weak', 5.25), ('middle', 3.75), ('strong', 2.25)):
+            for mode in ('normal', 'tape', 'sharp'):
+                view = {}
+                self.assertTrue(CA.visit(p, 'GB', view, {'character': mode}, sd))
+                reads[(quality, mode)] = view['character_assessments']['work_ethic']['error']
+        for mode in ('normal', 'tape', 'sharp'):
+            self.assertGreater(reads[('weak', mode)], reads[('middle', mode)])
+            self.assertGreater(reads[('middle', mode)], reads[('strong', mode)])
+        for quality in ('weak', 'middle', 'strong'):
+            self.assertGreater(reads[(quality, 'tape')], reads[(quality, 'normal')])
+            self.assertLess(reads[(quality, 'sharp')], reads[(quality, 'normal')])
+
+    def test_visit_improves_prior_read_without_raising_work_ethic(self):
+        p = N(pid='visit-prior', traits={'work_ethic': 40, 'discipline': 50}, xp_spent={})
+        view = {'character_assessments': {'work_ethic': dict(value=48, error=4., stage='background')}}
+        self.assertTrue(CA.visit(p, 'GB', view, {'character': 'normal'}, 5.25))
+        self.assertAlmostEqual(view['character_assessments']['work_ethic']['error'], 3.4)
+        self.assertEqual(p.traits['work_ethic'], 40)
+        saved = copy.deepcopy(view)
+        self.assertFalse(CA.visit(p, 'GB', view, {'character': 'normal'}, 2.25))
+        self.assertEqual(view, saved)
+
     def test_cpu_risk_uses_knowledge_not_hidden_truth(self):
         _, p, view = self.setup_player()
         gm = N(risk=.5)
