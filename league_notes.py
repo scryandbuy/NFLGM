@@ -145,7 +145,7 @@ def big_result(league, week, results):
         # THE PLAYOFFS. Records mean nothing now: the winner moves on, the loser is done
         NEXT = {19: 'the Divisional Round', 20: 'the Conference Finals', 21: f'Championship Game {_sb_numeral(league)}', 22: None}
         nxt = NEXT.get(int(week))
-        line += f". {win.abbr} {'are champions' if nxt is None else 'advance to ' + nxt}; {lose.abbr} are eliminated"
+        line += f". {win.abbr} {'are champions' if nxt is None else 'advance to ' + nxt}"
     elif me.division in (th.division, ta.division):
         rival = th if th.division == me.division else ta
         line += f". {rival.abbr} are {rival.record[0]}–{rival.record[1]} in your division; you are {me.record[0]}–{me.record[1]}"
