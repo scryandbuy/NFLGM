@@ -532,7 +532,7 @@ def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache
                        if role.startswith('role:'))
         # Role and head-count reports overlap. Price the larger repair job,
         # rather than charging twice for the same missing player.
-        repair = min(12., 4. * max(depth_gap, role_gap / 2.))
+        repair = min(12., 4. * max(depth_gap, role_gap / 2.)) if removed else 0.
         loss = max(0., -result['gains'][team.abbr])
         window = TE.window(context(team))
         urgency = .16  # Every relied-on starter costs more to replace.
