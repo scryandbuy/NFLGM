@@ -59,7 +59,9 @@ class GameLogRegressions(unittest.TestCase):
         def cd(*args, **kwargs):
             return dict(personnel='nickel', front_family='4-3')
         G.LAST_KICKOFF.clear()
-        with patch.object(E, 'penalty_check', side_effect=lambda *a, **k: next(flags, None)), \
+        # Fixture flags are one per attempted snap; production now checks
+        # pre-snap and live risk separately against actual participants.
+        with patch.object(E, 'penalty_check', side_effect=lambda *a, **k: None if k.get('timing') == 'live' else next(flags, None)), \
              patch.object(E, 'fumble_check', return_value=None), \
              patch.object(G, 'field_units', side_effect=lambda ros, *a, **k: (ros, {})), \
              patch.object(G, 'end_of_half_plan', side_effect=plan or (lambda *a, **k: None)), \

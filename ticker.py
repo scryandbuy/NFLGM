@@ -209,7 +209,9 @@ def play_line(league, p, off_abbr, def_abbr):
             ydtxt += ', before the next snap; no play occurred'
         ending = (', loss of down.' if p.get('penalty') == 'Intentional Grounding' and not p.get('safety') else
                   ', automatic first down.' if (p.get('auto_first') and not p.get('on_offense') and not p.get('on_try')) else '.')
-        text = f"Penalty, {p.get('penalty', 'flag')} on the {side}, {ydtxt}" + ending
+        offender = _nm(league, p.get('offender_pid'))
+        owner = f'{offender} ({side})' if offender else side
+        text = f"Penalty, {p.get('penalty', 'flag')} on the {owner}, {ydtxt}" + ending
         kind = 'neutral'
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None
@@ -266,6 +268,11 @@ def play_line(league, p, off_abbr, def_abbr):
     if p.get('nullified'):
         text = (text.rstrip('.') + '. Play nullified by penalty.') if text else 'Play nullified by penalty.'
         kind = 'neutral'
+    declined = list(p.get('other_declined_penalties') or [])
+    if p.get('declined_penalty'): declined.append(p['declined_penalty'])
+    for flag in declined:
+        who = _nm(league, flag.get('offender_pid'))
+        text += f" {flag.get('penalty', 'Penalty')}{' on ' + who if who else ''}, declined."
     return dict(head=head, text=text, kind=kind, type=t, made=p.get('made'), safety=bool(p.get('safety')), nullified=bool(p.get('nullified')))
 
 

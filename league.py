@@ -628,7 +628,7 @@ class League:
         immediately instead of being frozen at load."""
         import rosters as R
         t = self.teams[abbr]
-        return R.build_roster_rows([dict(p.ratings, pid=p.pid, pos=p.pos)
+        return R.build_roster_rows([dict(p.ratings, pid=p.pid, pos=p.pos, traits=dict(p.traits or {}))
                                     for p in t.active()
                                     if p.out_until is None], t.scheme,
                                    pins=getattr(t, 'depth_pins', None),

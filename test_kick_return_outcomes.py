@@ -74,7 +74,9 @@ class ReturnTests(unittest.TestCase):
     def test_decline_return_flag_when_kicking_team_recovers(self):
         r=dict(new_yardline=60,ret=10,fumble_lost=True)
         before=copy.deepcopy(r);KR.enforce_return_flag(r,dict(yards=10))
-        self.assertEqual(r,before)
+        self.assertEqual({k:v for k,v in r.items() if k != 'declined_penalty'}, before)
+        self.assertTrue(r['declined_penalty']['declined'])
+        self.assertEqual(r['declined_penalty']['enforced_yards'], 0.)
 
     def test_units_exclude_injured_and_duplicate_players(self):
         man=dict(pid='a',pos='CB');inj=dict(pid='b',pos='CB')

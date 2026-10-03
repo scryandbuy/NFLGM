@@ -23,6 +23,7 @@ alone for kickoffs because the rules changed).
 """
 import copy
 import numpy as np
+import penalty_players as PP
 import punt_strategy as PST
 import weather as W
 from decisions import field_goal_distance, missed_field_goal_start
@@ -449,15 +450,19 @@ def two_point_decision(lead_after_td, quarter, secs_left=None,
                       aggression=aggression)
     return r['call'] == 'two'
 
-def attempt_extra_point(kicker, rng, rate_fn, snapper=None, distance=33):
+def attempt_extra_point(kicker, rng, rate_fn, snapper=None, distance=33,
+                        offense_players=(), defense_players=(), book=None):
     import events as E
-    flag = E.special_teams_penalty_check(rng, 'extra_point')
+    PP.book_opportunities(book, list(offense_players) + list(defense_players))
+    flag = E.special_teams_penalty_check(rng, 'extra_point', offense_players=offense_players, defense_players=defense_players)
+    declined = None
     if flag and flag['on_offense']:
         distance += flag['yards']
     chance = kick_probability(distance, kicker, rate_fn, snapper)
     made = rng.random() < chance
     if flag and not flag['on_offense']:
         if made:
+            declined = PP.decision(flag, False); PP.book_flag(book, declined)
             flag = None                        # keep the point, decline the offside flag
         else:
             spot = max(0.5, distance - 18.0)
@@ -466,7 +471,8 @@ def attempt_extra_point(kicker, rng, rate_fn, snapper=None, distance=33):
             distance -= walk
             chance = kick_probability(distance, kicker, rate_fn, snapper)
             made = rng.random() < chance       # replay the untimed try
-    return dict(type='extra_point', distance=distance, penalty=flag, made=bool(made),
+    if flag: PP.decision(flag, True); PP.book_flag(book, flag)
+    return dict(type='extra_point', distance=distance, penalty=flag, declined_penalty=declined, made=bool(made),
                 points=1 if made else 0)
 
 def offensive_leans(state):
@@ -504,7 +510,7 @@ def apply_defensive_plan(call, state, rng):
 
 
 def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
-                      rate_fn, off_state=None, def_state=None, start_yardline=2, _retry=False):
+                      rate_fn, off_state=None, def_state=None, start_yardline=2, _retry=False, book=None):
     """
     One snap from the two. Deliberately NOT fed to state.observe: the
     adjustment engine reads a rolling four-series window of normal downs, and
@@ -512,9 +518,6 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
     """
     import gameplan as GP
     import events as E
-    flag = None if _retry else E.special_teams_penalty_check(rng, 'two_point')
-    if flag and flag['on_offense']:
-        start_yardline += flag['yards']
     try_yards = max(1, int(np.ceil(start_yardline)))
     oc = call_off(1, try_yards, 0, try_yards, rng, offense=offense, rate_fn=rate_fn,
                   lean=offensive_leans(off_state))
@@ -526,24 +529,43 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
     apply_defensive_plan(dc, def_state, rng)
     if def_state is not None:
         def_state.rotation_context = dict(down=4, to_go=try_yards, score_diff=0)
-    off_f, _ = field_units(offense, off_state, rng, True, oc.get('personnel'))
-    def_f, _ = field_units(defense, def_state, rng, False, dc.get('personnel'),
+    pending_off = _PendingSnap(off_state) if off_state is not None else None
+    pending_def = _PendingSnap(def_state) if def_state is not None else None
+    off_f, _ = field_units(offense, pending_off, rng, True, oc.get('personnel'))
+    def_f, _ = field_units(defense, pending_def, rng, False, dc.get('personnel'),
                            front_family=dc.get('front_family'))
+    off_rows, def_rows = PP.unit(off_f, True), PP.unit(def_f, False)
+    PP.book_opportunities(book, off_rows + def_rows)
+    flag = None if _retry else E.special_teams_penalty_check(rng, 'two_point', offense_players=off_rows, defense_players=def_rows)
+    if flag and flag['on_offense']:
+        # An untimed false start moves the try before its actual play.
+        flag['yards'] = min(flag['yards'], (100. - start_yardline) / 2.)
+        PP.decision(flag, True); PP.book_flag(book, flag)
+        retry = attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
+                                  rate_fn, off_state, def_state, start_yardline + flag['yards'], _retry=True, book=book)
+        retry['penalty'] = flag
+        return retry
+    if pending_off is not None: off_f = pending_off.commit(off_f)
+    if pending_def is not None: def_f = pending_def.commit(def_f)
     # The package has already selected and recorded the carrier's snap.
     out = resolve_fn(off_f, def_f, oc, dc, try_yards, rng)
     good = out.get('type') in ('run', 'complete', 'scramble') and \
            float(np.round(out.get('yards', 0.0))) >= start_yardline
+    declined = None
     if flag and not flag['on_offense']:
         if good:
+            declined = PP.decision(flag, False); PP.book_flag(book, declined)
             flag = None                         # the offense keeps the successful free play
         else:
             walk = min(flag['yards'], start_yardline / 2.0)
             flag['yards'] = walk
             retry = attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
-                                      rate_fn, off_state, def_state, start_yardline - walk, _retry=True)
+                                      rate_fn, off_state, def_state, start_yardline - walk, _retry=True, book=book)
+            PP.decision(flag, True); PP.book_flag(book, flag)
             retry['penalty'] = flag
             return retry
-    return dict(type='two_point', play=out.get('type'), from_yardline=start_yardline, penalty=flag, made=bool(good),
+    if flag: PP.decision(flag, True); PP.book_flag(book, flag)
+    return dict(type='two_point', play=out.get('type'), from_yardline=start_yardline, penalty=flag, declined_penalty=declined, made=bool(good),
                 points=2 if good else 0)
 
 # ============================================================ PUNTS
@@ -1160,7 +1182,10 @@ def kickoff_booked(returner, rng, rate_fn, book, from_50=False, kicking=(), rece
     r = kickoff(returner, rng, rate_fn, from_50=from_50, kicking=kicking, receiving=receiving,
                 kicker=kicker, short_kick_bias=short_kick_bias)
     if not r.get('touchback'):
-        KR.enforce_return_flag(r, E.special_teams_penalty_check(rng, 'kickoff', returned=True))
+        rows = [('ST', p) for p in receiving]
+        PP.book_opportunities(book, rows)
+        KR.enforce_return_flag(r, E.special_teams_penalty_check(rng, 'kickoff', returned=True, offense_players=rows))
+        PP.book_flag(book, r.get('penalty') or r.get('declined_penalty'))
         KR.book_return(book, 'kr', r)
     r['returner'] = (returner or {}).get('pid')
     LAST_KICKOFF['r'] = r
@@ -1742,7 +1767,32 @@ def _enforce_turnover_penalty(dr, pen):
     dr.log_pen_after = 0.0
     dr.log_pen_first = False
 
-def _kick_presnap_flag(dr, pen, half_end=None):
+def kick_penalty_units(offense, defense, off_state, def_state, kind, rate_fn):
+    """A fixed, healthy kick unit; no reserve can influence its foul risk."""
+    import kick_returns as KR
+    unavailable = getattr(off_state, 'out', set())
+    snapper = snapper_for(offense, off_state)
+    candidates = [snapper, offense.get('p' if kind == 'punt' else 'k')]
+    if kind != 'punt': candidates.append(_healthy_quarterback(offense, off_state))
+    candidates += [p for p in offense.get('ol', []) if not snapper or p.get('pos') != 'C']
+    candidates += KR.unit(offense, off_state, rate_fn, True)
+    chosen = list({p['pid']: p for p in candidates if p and p.get('pid') and p['pid'] not in unavailable}.values())[:11]
+    off_rows = [(p.get('pos', 'ST'), p) for p in chosen]
+    unavailable = getattr(def_state, 'out', set())
+    candidates = [(k.upper(), p) for k in ('dl', 'lb', 'db') for p in defense.get(k, [])
+                  if p and p.get('pid') and p['pid'] not in unavailable]
+    def_rows = list({p['pid']: (role, p) for role, p in candidates}.values())[:11]
+    return off_rows, def_rows
+
+
+def kick_flag(rng, kind, offense, defense, off_state, def_state, rate_fn, book):
+    import events as E
+    off_rows, def_rows = kick_penalty_units(offense, defense, off_state, def_state, kind, rate_fn)
+    PP.book_opportunities(book, off_rows + def_rows)
+    return E.special_teams_penalty_check(rng, kind, offense_players=off_rows, defense_players=def_rows)
+
+
+def _kick_presnap_flag(dr, pen, half_end=None, book=None):
     """A pre-snap kick foul keeps the same down and lets the coach decide again."""
     if not pen or pen.get('phase') != 'pre': return False
     clock_before = dr.clock
@@ -1758,6 +1808,7 @@ def _kick_presnap_flag(dr, pen, half_end=None):
             dr.first_downs += 1
         dr.untimed = True; dr.untimed_at = len(dr.log) + 1
     pen['yards'] = walk
+    PP.decision(pen, True); PP.book_flag(book, pen)
     dr.log.append(dict(type='penalty', timing='before_snap', clock=clock_before, **pen))
     wall = half_end if half_end is not None else 0.0
     if clock_before - wall > 120 >= dr.clock - wall and not getattr(dr, '_two_min', False):
@@ -1765,31 +1816,40 @@ def _kick_presnap_flag(dr, pen, half_end=None):
         dr.log.append(dict(type='two_minute', clock=dr.clock))
     return True
 
-def _kick_roughing(dr, pen, kick):
+def _kick_roughing(dr, pen, kick, book=None):
     """Accept roughing when the failed kick or punt is worse than a first down."""
-    if not pen or pen.get('phase') != 'kick' or kick.get('made') or kick.get('blocked'): return False
+    if not pen or pen.get('phase') != 'kick': return False
+    if kick.get('made') or kick.get('blocked'):
+        kick['declined_penalty'] = PP.decision(pen, False); PP.book_flag(book, pen)
+        return False
     kick['nullified'] = True
     dr.log.append(kick)
     walk = min(pen['yards'], dr.yardline / 2.0)
     pen['yards'] = walk
+    PP.decision(pen, True); PP.book_flag(book, pen)
     dr.yardline -= walk
     dr.down, dr.togo = 1, min(10.0, dr.yardline)
     dr.first_downs += 1
     dr.log.append(dict(type='penalty', **pen))
     return True
 
-def _kick_offside(dr, pen, kick):
+def _kick_offside(dr, pen, kick, book=None):
     """The kicking side may keep a made FG or a good punt; otherwise it can replay the down."""
-    if not pen or pen.get('phase') != 'kick_offside' or kick.get('made'):
+    if not pen or pen.get('phase') != 'kick_offside':
+        return False
+    if kick.get('made'):
+        kick['declined_penalty'] = PP.decision(pen, False); PP.book_flag(book, pen)
         return False
     walk = min(pen['yards'], dr.yardline / 2.0)
     if kick.get('type') == 'punt' and not kick.get('blocked') and walk < dr.togo:
+        kick['declined_penalty'] = PP.decision(pen, False); PP.book_flag(book, pen)
         return False
     kick['nullified'] = True
     dr.log.append(kick)
     dr.yardline -= walk
     dr.togo -= walk
     pen['yards'] = walk
+    PP.decision(pen, True); PP.book_flag(book, pen)
     if dr.togo <= 0:
         dr.down, dr.togo = 1, min(10.0, dr.yardline)
         dr.first_downs += 1
@@ -1912,6 +1972,43 @@ def field_units(roster, state, rng, is_offense, package=None, front_family=None)
         for pid in positions:
             row['players'][pid] = row['players'].get(pid, 0) + 1
     return result, positions
+
+
+class _PendingSnap:
+    """Select once; commit workload only when a snap actually happens."""
+    def __init__(self, state):
+        self.original = state
+        self.calls = []
+        self.snap_counts = {}
+
+    def __getattr__(self, key):
+        return getattr(self.original, key)
+
+    def snap(self, player, position, on_field=True):
+        self.calls.append((player, position, on_field))
+
+    def state(self, player, position):
+        return player
+
+    def commit(self, unit):
+        for player, position, on_field in self.calls:
+            self.original.snap(player, position, on_field)
+        if not hasattr(self.original, 'snap_counts'): self.original.snap_counts = {}
+        for side, counts in self.snap_counts.items():
+            row = self.original.snap_counts.setdefault(side, dict(total=0, players={}))
+            row['total'] += counts['total']
+            for pid, n in counts['players'].items():
+                row['players'][pid] = row['players'].get(pid, 0) + n
+        changed = {p.get('pid'): self.original.state(p, role)
+                   for p, role, active in self.calls if active}
+        def transformed(value):
+            if isinstance(value, dict):
+                if value.get('pid') in changed: return changed[value['pid']]
+                return {k: transformed(v) for k, v in value.items()}
+            if isinstance(value, list): return [transformed(v) for v in value]
+            if isinstance(value, tuple): return tuple(transformed(v) for v in value)
+            return value
+        return {k: transformed(v) if k != 'depth' else v for k, v in unit.items()}
 
 
 def _field_units(roster, state, rng, is_offense, package=None, front_family=None):
@@ -2208,15 +2305,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4 and (_plan.get('hurry', True) or clock_kick_time or secs_in_half <= 14)
         _kick_old = ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) and dr.yardline <= 37 and dr.down < 4 and clock_kick_time and _plan is None
         if _kick_by_plan or _kick_old:
-            flag = E.special_teams_penalty_check(rng, 'field_goal')
-            if _kick_presnap_flag(dr, flag, half_end): continue
+            flag = kick_flag(rng, 'field_goal', offense, defense, off_state, def_state, rate_fn, book)
+            if _kick_presnap_flag(dr, flag, half_end, book): continue
             fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
                                     snapper=snapper_for(offense, off_state))
             fg.update(clock=dr.clock, down=dr.down, ydstogo=dr.togo, yardline=dr.yardline)
-            if _kick_roughing(dr, flag, fg):
+            if _kick_roughing(dr, flag, fg, book):
                 dr.clock -= play_seconds('field_goal')
                 continue
-            if _kick_offside(dr, flag, fg):
+            if _kick_offside(dr, flag, fg, book):
                 dr.clock -= play_seconds('field_goal')
                 continue
             if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
@@ -2239,15 +2336,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                        snapper=snapper_for(offense, off_state),
                                        defensive_confidence=PST.confidence(off_state))
             if dec == 'field_goal':
-                flag = E.special_teams_penalty_check(rng, 'field_goal')
-                if _kick_presnap_flag(dr, flag, half_end): continue
+                flag = kick_flag(rng, 'field_goal', offense, defense, off_state, def_state, rate_fn, book)
+                if _kick_presnap_flag(dr, flag, half_end, book): continue
                 fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
                                         snapper=snapper_for(offense, off_state))
                 fg.update(clock=dr.clock, down=dr.down, ydstogo=dr.togo, yardline=dr.yardline)
-                if _kick_roughing(dr, flag, fg):
+                if _kick_roughing(dr, flag, fg, book):
                     dr.clock -= play_seconds('field_goal')
                     continue
-                if _kick_offside(dr, flag, fg):
+                if _kick_offside(dr, flag, fg, book):
                     dr.clock -= play_seconds('field_goal')
                     continue
                 if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
@@ -2255,8 +2352,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
                 dr.points = fg['points']; dr.log.append(fg); break
             if dec == 'punt':
-                flag = E.special_teams_penalty_check(rng, 'punt')
-                if _kick_presnap_flag(dr, flag, half_end): continue
+                flag = kick_flag(rng, 'punt', offense, defense, off_state, def_state, rate_fn, book)
+                if _kick_presnap_flag(dr, flag, half_end, book): continue
                 returner = returner_for(defense, def_state, rate_fn, kind='pr')
                 import kick_returns as KR
                 p = punt(dr.yardline, (offense.get('p') or {}),
@@ -2269,14 +2366,18 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                          return_coverage=KR.unit(offense, off_state, rate_fn),
                          return_blockers=KR.unit(defense, def_state, rate_fn, True, returner.get('pid')))
                 p.update(clock=dr.clock, down=dr.down, ydstogo=dr.togo, yardline=dr.yardline)
-                if _kick_roughing(dr, flag, p):
+                if _kick_roughing(dr, flag, p, book):
                     dr.clock -= play_seconds('punt')
                     continue
-                if _kick_offside(dr, flag, p):
+                if _kick_offside(dr, flag, p, book):
                     dr.clock -= play_seconds('punt')
                     continue
                 if p.get('how') == 'return':
-                    KR.enforce_return_flag(p, E.special_teams_penalty_check(rng, 'punt', returned=True, phase='return'))
+                    return_rows = [('ST', m) for m in KR.unit(defense, def_state, rate_fn, True, returner.get('pid'))]
+                    PP.book_opportunities(book, return_rows)
+                    return_flag = E.special_teams_penalty_check(rng, 'punt', returned=True, phase='return', defense_players=return_rows)
+                    KR.enforce_return_flag(p, return_flag)
+                    if return_flag: PP.book_flag(book, p.get('penalty') or p.get('declined_penalty'))
                     # Return penalties change the next spot, not punt yardage.
                     p['net'] = round(p['gross'] - p.get('ret', 0), 1)
                 if book is not None:
@@ -2467,29 +2568,31 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # real ~3.4 - and drives died four yards and a third of a first down
         # short of real. The non-nullifying fouls are held here and resolved
         # after the play, where the offence decides whether to take them.
-        # Apply each staff's discipline to its own unit; crowd noise is separate.
+        # Select actual participants once, before a flag, without charging a snap.
+        if def_state is not None:
+            def_state.rotation_context = dict(down=dr.down, to_go=dr.togo, score_diff=dr.score_diff)
+        pending_off = _PendingSnap(off_state) if off_state is not None else None
+        pending_def = _PendingSnap(def_state) if def_state is not None else None
+        off_f, off_pos = field_units(offense, pending_off, rng, True, oc.get('personnel'))
+        def_f, def_pos = field_units(defense, pending_def, rng, False,
+                                    dc.get('personnel'), front_family=dc.get('front_family'))
+        off_rows, def_rows = PP.unit(off_f, True), PP.unit(def_f, False)
+        PP.book_opportunities(book, off_rows + def_rows)
+        # Awareness and staff retain their existing effects; hidden discipline
+        # modifies eligible individual foul hazards separately in events.py.
         fx_o = getattr(off_state, 'staff_fx', None) or {}; fx_d = getattr(def_state, 'staff_fx', None) or {}
-        # the defense's discipline carries its awareness: the smart unit jumps offside and grabs less
-        import defense_roles as DR
-        _dc = DR.counts(dc.get('front_family', '4-3'), dc.get('personnel', 'nickel'))
-        _dmen = ((defense.get('db') or [])[:_dc['db']] +
-                 (defense.get('lb') or [])[:_dc['lb']] +
-                 (defense.get('dl') or [])[:_dc['dl']])
+        _dmen = [p for _, p in def_rows]
         d_awr = float(np.mean([rate_fn(d, {'awareness_rating': 1.0}) for d in _dmen])) if _dmen else 0.70
-        import offense_roles as OR
-        _oc = OR.PACKAGES.get(oc.get('personnel'), OR.PACKAGES['11'])
-        _omen = ([offense.get('qb')] + ([offense.get('rb')] if _oc['HB'] else [])
-                 + ((offense.get('depth') or {}).get('FB', [])[:1] if _oc['FB'] else [])
-                 + (offense.get('ol') or [])[:5]
-                 + (offense.get('wr') or [])[:_oc['WR']] + (offense.get('te') or [])[:_oc['TE']])
-        _omen = [p for p in _omen if p]
+        _omen = [p for _, p in off_rows]
         o_awr = float(np.mean([rate_fn(p, {'awareness_rating': 1.0}) for p in _omen])) if _omen else 0.70
         _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
-        pen = E.penalty_check(rng, phase='any', is_pass=oc['is_pass'],
+        penalty_context = dict(is_pass=oc['is_pass'],
                               offense_discipline=float(np.clip(0.70 + 0.8 * (o_awr - 0.787), 0.5, 0.9)),
                               defense_discipline=float(np.clip(0.70 + 0.8 * (d_awr - 0.787), 0.5, 0.9)),
                               offense_multiplier=fx_o.get('pen_off', 1.0), defense_multiplier=fx_d.get('pen_def', 1.0),
-                              noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0), hurry=_in_drill)
+                              noise=(getattr(off_state, 'road_noise', 1.0) if off_state is not None else 1.0), hurry=_in_drill,
+                              offense_players=off_rows, defense_players=def_rows)
+        pen = E.penalty_check(rng, timing='pre', **penalty_context)
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
             penalty_clock = dr.clock
@@ -2514,29 +2617,21 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     dr.yardline -= gained; dr.togo -= gained
                     if dr.togo <= 0:
                         dr.down, dr.togo = 1, min(10, dr.yardline); dr.first_downs += 1
+            PP.decision(pen, True); PP.book_flag(book, pen)
             dr.log.append(dict(type='penalty', timing='before_snap', clock=penalty_clock, **pen))
             if penalty_clock - wall > 120 >= dr.clock - wall and not getattr(dr, '_two_min', False):
                 dr._two_min = True
                 dr.log.append(dict(type='two_minute', clock=dr.clock))
             continue
 
-        # field the units for THIS snap - condition, injuries and rotation
-        if def_state is not None:
-            def_state.rotation_context = dict(down=dr.down, to_go=dr.togo,
-                                              score_diff=dr.score_diff)
-        off_f, off_pos = field_units(offense, off_state, rng, True,
-                                     oc.get('personnel'))
-        def_f, def_pos = field_units(defense, def_state, rng, False,
-                                     dc.get('personnel'), front_family=dc.get('front_family'))
+        if pending_off is not None: off_f = pending_off.commit(off_f)
+        if pending_def is not None: def_f = pending_def.commit(def_f)
 
         # the back who actually carries it
         # the back who carries it is the back on the field: the rotation in
         # field_units decides who that is
         oc['execution_mod'] = script_mod
         out = resolve_fn(off_f, def_f, oc, dc, ytg_i, rng)
-        if live_pen is None and out.get('throwaway') and rng.random() < 0.12:
-            live_pen = dict(penalty='Intentional Grounding', yards=10.0, rule_yards=10.0,
-                            on_offense=True, auto_first=False, nullifies=False)
         # the situation rides with the play, for the ticker and the probes
         if isinstance(out, dict):
             out['down'] = dr.down; out['ydstogo'] = dr.togo; out['yardline'] = dr.yardline; out['clock'] = dr.clock
@@ -2614,14 +2709,30 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
                     if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
-        live_pen = E.contextual_penalty(live_pen, out, oc, rng)
+        if live_pen is None:
+            live_pen = E.penalty_check(rng, timing='live', outcome=out, **penalty_context)
+        if live_pen is None and out.get('throwaway') and rng.random() < 0.12:
+            live_pen = dict(penalty='Intentional Grounding', yards=10.0, rule_yards=10.0,
+                            on_offense=True, auto_first=False, nullifies=False)
+            live_pen = PP.attribute(live_pen, PP.profile('Intentional Grounding', off_rows), rng)
+        live_pen = E.contextual_penalty(live_pen, out, oc, rng, off_rows, def_rows)
         _prepare_scoring_play(dr, out)
         _prepare_interception(dr.yardline, out)
         _prepare_fumble(dr, out, off_f, def_f, rng, rate_fn, off_state)
         live_seconds = live_play_seconds(out)
         out['live_seconds'] = live_seconds
         if live_pen is not None:
+            original_foul = live_pen['penalty']
             taken = _resolve_live_penalty(dr, live_pen, out, oc)
+            if live_pen['penalty'] != original_foul:
+                rows = off_rows if live_pen['on_offense'] else def_rows
+                live_pen = PP.attribute(live_pen, PP.profile(live_pen['penalty'], rows, out), rng)
+            PP.decision(live_pen, taken in ('replaced', 'enforced', 'added'))
+            PP.book_flag(book, live_pen)
+            if live_pen['declined']:
+                # Keep declined evidence on the play, without creating an
+                # enforced-penalty row in legacy team aggregate consumers.
+                out['declined_penalty'] = dict(live_pen)
             if taken in ('replaced', 'added') and not live_pen.get('on_offense'):
                 dr.untimed = True; dr.untimed_at = len(dr.log) + 1     # the penalty entry appended next is the last thing in the log
             if taken in ('replaced', 'enforced'):
@@ -2787,10 +2898,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             return base + abs(try_penalty) if try_penalty < 0 else base - min(try_penalty, base / 2.0)
         if two_point_decision(margin + 6, dr.quarter, dr.clock):
             t = attempt_two_point(try_off, try_def, rng, resolve_fn, call_off,
-                                  call_def, rate_fn, try_os, try_ds, start_yardline=try_spot(2))
+                                  call_def, rate_fn, try_os, try_ds, start_yardline=try_spot(2), book=book)
         else:
+            try_orows, try_drows = kick_penalty_units(try_off, try_def, try_os, try_ds, 'extra_point', rate_fn)
             t = attempt_extra_point(try_off.get('k') or {}, rng, rate_fn,
-                                    snapper=snapper_for(try_off, try_os), distance=try_spot(15) + 18)
+                                    snapper=snapper_for(try_off, try_os), distance=try_spot(15) + 18,
+                                    offense_players=try_orows, defense_players=try_drows, book=book)
             if book is not None: book.special('xp', (try_off.get('k') or {}).get('pid'), **t)
         dr.points += (-1 if defending else 1) * t['points']
         if defending: t['scoring_side'] = 'defense'

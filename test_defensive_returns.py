@@ -93,7 +93,8 @@ class DefensiveReturns(unittest.TestCase):
         self.assertEqual(b.p[pid]['fum_ret_yds'],38)
         self.assertEqual((b.p[pid]['fum_rec'],b.p[pid]['fum_ret_td']),(1,1))
         self.assertEqual((b.p['wr2']['fumbles_lost'],b.p['wr2']['rec_yds'],b.p['wr2']['rec_td']),(1,8,0))
-        self.assertNotIn('wr1',b.p)
+        # He was on the field (penalty exposure), but did not catch or fumble.
+        self.assertEqual((b.p['wr1']['rec'], b.p['wr1']['fumbles'], b.p['wr1']['rec_yds']), (0, 0, 0))
         self.assertEqual(b.p['cb']['ff'],1)
         self.assertEqual((b.p['qb']['pass_yds'],b.p['qb']['pass_td']),(8,0))
         self.assertLess(b.p['qb']['pass_epa'],-6.95)

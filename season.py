@@ -269,7 +269,7 @@ class SeasonRunner(StandingsView):
         # Elevated men dress under the same health and effective-rating rules.
         import game_availability as GA
         rows = [dict(MO.effective_ratings_from(PC.effective_ratings(p), p),
-                     pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None))
+                     pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None), traits=dict(p.traits or {}))
                 for p in GA.dressed(t, desk, self.week)]
         # a man playing hurt plays with the injury's hit on his ratings this Sunday
         if desk is not None and desk.playing_hurt:
