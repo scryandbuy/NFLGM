@@ -162,6 +162,8 @@ class BlockingOpportunityTests(unittest.TestCase):
                     out = P._pass_play(off, defense, oc, dc, 50, rng)
                 self.assertTrue(protect.called)
                 self.assertEqual(len(out['pb_opportunities']), len(protect.call_args.args[0]))
+                self.assertEqual({r[0] for r in out['pb_award']}, {r[0] for r in out['pb_reps']})
+                self.assertNotIn('pb_model', out)  # internal model stays out of play logs
                 seen.add((out['type'], bool(out.get('screen'))))
         self.assertTrue({('sack', False), ('incomplete', False), ('interception', False),
                          ('drop', False), ('complete', False), ('complete', True)} <= seen, seen)

@@ -151,18 +151,13 @@ class Ballot:
         return self.rush_score(line)
 
     def line_score(self, p, line):
+        """Individual execution against the actual assignment's difficulty.
+
+        Missing legacy matchup evidence keeps its original contribution.
+        Protector adds the user's team context separately below.
         """
-        A lineman's own play. ESPN's win rates plus the sacks he gave up,
-        with sacks weighted above pressures the way PFF weights them.
-        """
-        pb, rb = _g(line, 'pb_snaps'), _g(line, 'rb_snaps')
-        if pb < 150:
-            return None
-        pbwr = _g(line, 'pb_wins') / pb
-        rbwr = _g(line, 'rb_wins') / rb if rb else 0.0
-        per = (3.0 * _g(line, 'sacks_allowed')
-               + 1.0 * _g(line, 'pressures_allowed')) / pb
-        return 100.0 * pbwr + 45.0 * rbwr - 260.0 * per
+        from blocking_evaluation import line_score
+        return line_score(line)
 
     # ================================================== the awards
     def mvp(self):
