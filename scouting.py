@@ -82,6 +82,11 @@ def _tape_fade(view, p):
     return fade
 
 
+def _scalar_clip(value, low, high):
+    """Clamp one number without NumPy's array conversion on every attribute."""
+    return low if value < low else high if value > high else value
+
+
 def scouted_ratings(p, view, growth=0.0):
     """One room's observed attributes, shared by its card and its decisions.
 
@@ -93,9 +98,9 @@ def scouted_ratings(p, view, growth=0.0):
     physical = float(view.get('e_phys', 0.0) or 0.0)
     # Evidence creation owns tape draws. Reading or migrating an old report
     # must not invent a missing shared error or consume any random stream.
-    known_tape = float(np.clip((getattr(p, 'xp_spent', None) or {}).get('_tape', 0.0), -15.0, 15.0))
+    known_tape = float(_scalar_clip((getattr(p, 'xp_spent', None) or {}).get('_tape', 0.0), -15.0, 15.0))
     skill = float(view.get('e_skill', 0.0) or 0.0) + known_tape * _tape_fade(view, p)
-    return {key: float(np.clip(float(value) + growth +
+    return {key: float(_scalar_clip(float(value) + growth +
             (physical if key in XP.PHYSICAL or key in XP.TOOLS else skill), 30.0, 99.0))
             for key, value in p.ratings.items()}
 
@@ -321,14 +326,14 @@ def view(league, abbr, pid):
     return league.scouting[abbr][pid]
 
 
-def scheme_fit_view(league, abbr, p, view):
+def scheme_fit_view(league, abbr, p, view, seen=None):
     """How the prospect grades in this club's scheme, ON THE ROOM'S READ: the scouted attribute vector (the true
     ratings shifted by the room's physical and skill errors) run through the same fit function the roster uses.
     As uncertain as the estimate it is built from; a visit tightens both."""
     import gm_engine as GE
     team = league.teams.get(abbr)
     if team is None or view is None: return 0.0
-    seen = scouted_ratings(p, view)
+    if seen is None: seen = scouted_ratings(p, view)
     try: return round(float(GE.scheme_fit(seen, p.pos, team)), 1)
     except Exception: return 0.0
 

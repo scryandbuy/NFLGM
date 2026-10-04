@@ -61,7 +61,7 @@ _PLANNING_SITUATIONS = (
 )
 
 
-def expected_package_weights(gm, depth):
+def expected_package_weights(gm, depth, _cache=None):
     """Expected calls for a projected roster, with the coach's intent retained.
 
     Use the same roster and situational adjustments as the game caller. Half
@@ -80,6 +80,12 @@ def expected_package_weights(gm, depth):
                      ol=offensive_line,
                      wr=(depth.get('WR') or [])[:6] + (depth.get('TE') or [])[:3] + backs[:1])
     identity = ID.read_identity(projected, rate)
+    # A recruiting pass evaluates many arrivals against the same playing
+    # identity. Key the short-lived cache by the actual inputs to the weight
+    # integration, so changes to read_identity cannot silently stale it.
+    cache_key = (tuple(base.items()), tuple(sorted(identity.items())))
+    if _cache is not None and cache_key in _cache:
+        return _cache[cache_key]
     adjusted = ID.personnel_weights(identity, base)
     estimate = dict.fromkeys(base, 0.0)
     for down, distance, yards_to_endzone, score_diff, seconds_left, share in _PLANNING_SITUATIONS:
@@ -89,6 +95,8 @@ def expected_package_weights(gm, depth):
             total = sum(situational.values())
             for package, weight in situational.items():
                 estimate[package] += .5 * share * weight / total
+    if _cache is not None:
+        _cache[cache_key] = estimate
     return estimate
 
 

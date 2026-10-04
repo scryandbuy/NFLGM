@@ -210,7 +210,8 @@ def recruit_priority(gain):
     return float(np.clip(float(gain) / 12.0, 0.0, 1.5))
 
 
-def acquisition_read(league, team, player, offer, gain, reference_apy=None, baseline=None):
+def acquisition_read(league, team, player, offer, gain, reference_apy=None, baseline=None,
+                     after_package_rows=None):
     """Compare a marginal job upgrade with its complete cash commitment.
 
     A discounted veteran can be useful behind a star. Premium reserve spending
@@ -222,7 +223,14 @@ def acquisition_read(league, team, player, offer, gain, reference_apy=None, base
     preview=offer_contract(league,player,offer)
     cash=sum(preview.base)+sum(preview.rb)+preview.sb
     before=RN.assess(team) if baseline is None else baseline
-    after=RN.assess(team,[p for p in before['players'] if p.pid!=player.pid]+[player])
+    projected_players=[p for p in before['players'] if p.pid!=player.pid]+[player]
+    if after_package_rows is None:
+        after=RN.assess(team,projected_players)
+    else:
+        changed_sides={r['side'] for r in after_package_rows}
+        after=dict(players=projected_players,
+                   package_assignments=[r for r in before['package_assignments']
+                                        if r['side'] not in changed_sides] + after_package_rows)
     def shares(report):
         result={}
         for r in report['package_assignments']:
@@ -1044,6 +1052,8 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
     # snapshot across the remaining market instead of rebuilding every
     # package twice for every player/team pairing.
     reports = {abbr: RN.assess(team) for abbr, team in league.teams.items()}
+    retention_market = None
+    budget_before = {}
     out = []
     for p in sorted([q for q in pool if q.ovr >= REPLACEMENT_GRADE and q.pos not in ('K', 'P', 'LS')], key=lambda q: -q.ovr):
         v = VAL.value_player(league, p, pool=comps, rng=rng)
@@ -1054,13 +1064,20 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
             if abbr in (user_team,getattr(league,'user_team',None)): continue
             if len(team.active()) >= 90: continue
             report=reports[abbr]
-            gain = RN.move_gain(team, p, baseline=report)
+            gain, after_rows = RN.move_gain(team, p, baseline=report,
+                                            return_package_rows=True)
             if gain <= 1.: continue
             proposal = Offer(abbr, p.pid, price, 1, phase=PHASES+1)
-            if not acquisition_read(league,team,p,proposal,gain,market,report)['approved']:
+            if not acquisition_read(league,team,p,proposal,gain,market,report,
+                                    after_package_rows=after_rows)['approved']:
                 continue
+            if retention_market is None:
+                retention_market = FP.retention_market(league)
+            if abbr not in budget_before:
+                budget_before[abbr] = FP.snapshot(league, team, market=retention_market)
             if not FP.evaluate(league, team, additions=[(p,offer_contract(league,p,proposal))],
-                               gain=gain, action='fa_leftover')['approved']:
+                               gain=gain, action='fa_leftover', market=retention_market,
+                               before=budget_before[abbr])['approved']:
                 continue
             score = gain + 10.0 * report['needs'].get(p.pos, 0.0) + rng.normal(0, 1.5)
             if score > best_score: best, best_score = team, score
@@ -1070,6 +1087,10 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
         except ValueError: continue
         best.sync_cap(); out.append((best.abbr, p, o))
         reports[best.abbr] = RN.assess(best)
+        # A new contract changes league pay comparisons and the winner's cap.
+        # Discard every preview before considering the next player.
+        retention_market = None
+        budget_before.clear()
         league.__dict__.setdefault('fa_signed', []).append((best.abbr, p.pid, o.apy, 1, PHASES + 1))
     return out
 

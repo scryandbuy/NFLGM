@@ -68,12 +68,12 @@ def _prospect(league, abbr, p, taken=()):
     mine = round(float(v['ovr']))
     cons = round(float(c['ovr'])) if c else None
     gap = (mine - cons) if cons is not None else None
-    import scouting as _SC
-    fit = _SC.scheme_fit_view(league, abbr, p, v)                 # in your scheme, on your scouts' read
+    import scouting as SC
+    seen_ratings = SC.scouted_ratings(p, v)
+    fit = SC.scheme_fit_view(league, abbr, p, v, seen=seen_ratings)  # in your scheme, on your scouts' read
     scheme_ovr = round(float(v['ovr']) + fit)
     comb = getattr(p, 'combine', None) or {}
     flags = list(v.get('flags') or [])
-    import scouting as SC
     # the words the board shows for what the room knows
     words = []
     visited = 'visited' in flags
@@ -101,7 +101,7 @@ def _prospect(league, abbr, p, taken=()):
     proj_range = (f"{max(1, rk - 4)}–{rk + 4}" if rk and rk <= 224 else '—')
     return dict(pid=p.pid, name=p.name, pos=p.pos,
                 filter_positions=list(PR.fa_positions(dict(pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None),
-                                                          ratings=SC.scouted_ratings(p, v)), league.teams[abbr])),
+                                                          ratings=seen_ratings), league.teams[abbr])),
                 age=int(p.age), home_state=home_state(p), small=(not SC._power(p)), visited=visited, scheduled=scheduled,
                 cls_year=cls_year, size=size, words=words, character_report=CA.report(v), proj_range=proj_range, visit_move=visit_move, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",

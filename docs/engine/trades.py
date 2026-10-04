@@ -343,6 +343,9 @@ def street_alternative(league, team, target, baseline, cache, comps):
         cache[key] = [(p, gains[p.pid]) for p in sorted(candidates,
                       key=lambda p: -gains[p.pid])]
     cap = CAP.get(league.year, 301.2)
+    # The buyer's funded room is unchanged while comparing street options.
+    # Build its financial snapshot only if a comparable candidate reaches it.
+    funded_power = None
     for candidate, gain in cache[key]:
         if candidate.team is not None or candidate.pid not in league.free_agents:
             continue
@@ -358,7 +361,9 @@ def street_alternative(league, team, target, baseline, cache, comps):
         # Extra years or a much dearer FA are not equivalent contract terms.
         if years != player.contract_years_left or quote['apy'] > player.apy * 1.05:
             continue
-        if MK.power(league, team, cap, years) < quote['apy'] * 1.05:
+        if funded_power is None:
+            funded_power = MK.power(league, team, cap, years)
+        if funded_power < quote['apy'] * 1.05:
             continue
         terms = MK.signing_terms(league, candidate, team, quote['apy'], years, cap)
         room = raw_room(league, team) - held(league, team.abbr, exclude_pid=candidate.pid)
@@ -855,7 +860,8 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_g
     return True
 
 
-def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
+def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None,
+                    pool=None, football_cache=None, financial_cache=None):
     """Revalidate interactive transactions against today's CPU plan.
 
     The user controls their own roster. A CPU seller may exchange quality for
@@ -867,14 +873,14 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
         CA.require_trade_room(league, ta.abbr, tb.abbr, outgoing, incoming)
     except ValueError as exc:
         return dict(approved=False, why=str(exc))
-    football = package_football(league, ta, tb, outgoing, incoming)
+    football = package_football(league, ta, tb, outgoing, incoming, cache=football_cache)
     if not football['approved']:
         return dict(approved=False, why='The current package cannot be completed.')
     if getattr(league, 'user_team', None) in (ta.abbr, tb.abbr):
         seller = tb if tb.abbr != league.user_team else ta
         reserve = football.get('reserves', {}).get(seller.abbr, 0.)
         if reserve > 0:
-            pool = VAL.pool_from_league(league)
+            pool = pool if pool is not None else VAL.pool_from_league(league)
             def assets(team, other, items):
                 out = []
                 for item in items:
@@ -901,7 +907,7 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
         gain = football['gains'][buyer]
         if gain < UPGRADE_GAP:
             return dict(approved=False, why="This offer no longer gives us a useful roster upgrade.")
-        pool = VAL.pool_from_league(league)
+        pool = pool if pool is not None else VAL.pool_from_league(league)
         def quote(item, viewer):
             if not isinstance(item, str): return pick_asset(league, item)
             p = league.player(item)
@@ -917,7 +923,7 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
         ceiling = (market * premium + .35) * _upgrade_budget(gain)
         if sum(TE.market_price(x) for x in paid_assets) > ceiling + 1e-9:
             return dict(approved=False, why="We no longer value this package enough to pay that price.")
-    if not _financial_trade(league, ta, tb, outgoing, incoming):
+    if not _financial_trade(league, ta, tb, outgoing, incoming, cache=financial_cache):
         return dict(approved=False, why="The roster benefit doesn't justify the financial risk for us.")
     return dict(approved=True, required_gain=football.get('reserves', {}).get(tb.abbr if ta.abbr == getattr(league, 'user_team', None) else ta.abbr, 0.))
 

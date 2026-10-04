@@ -26,6 +26,8 @@ class MarketCloseBonusTests(unittest.TestCase):
     def test_minimum_depth_signings_have_no_bonus(self):
         pool = [self.player]
         with patch('roster_needs.assess', return_value={'needs': {'WR': 1.0}}), \
+             patch.object(market.VAL, 'pool_from_league', return_value=[]), \
+             patch('replacement_contracts.minimum_acceptance', return_value={'accepts': True}), \
              patch.object(market, 'sign') as sign:
             self.assertEqual(market.fill_out_rosters(self.league, pool, self.rng), 1)
             self.assertEqual(sign.call_args.kwargs['bonus'], 0)
@@ -34,8 +36,10 @@ class MarketCloseBonusTests(unittest.TestCase):
         self.player.ovr = 82.0
         with patch('roster_needs.assess', return_value={
                  'needs': {'WR': 1.0}, 'players': (), 'package_assignments': []}), \
-             patch('roster_needs.move_gain', return_value=12), \
+             patch('roster_needs.move_gain', return_value=(12, [])), \
              patch('financial_plan.evaluate', return_value={'approved': True}), \
+             patch('financial_plan.retention_market', return_value={}), \
+             patch('financial_plan.snapshot', return_value={}), \
              patch.object(market, 'power', return_value=50), \
              patch.object(market, 'offer_contract', return_value=Contract(1,[4.2])), \
              patch.object(market.VAL, 'pool_from_league', return_value=[]), \

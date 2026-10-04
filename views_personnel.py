@@ -119,13 +119,14 @@ def _cap_block_read(reason, other):
     return messages.get(reason, 'This trade cannot proceed under the current cap constraints.')
 
 
-def _evaluate(league, abbr, other, a_sends, b_sends):
+def _evaluate(league, abbr, other, a_sends, b_sends, *, pool=None,
+              football_cache=None, financial_cache=None):
     """Both clubs price the package. Returns the read in words, never the dollars."""
     a_sends = _trade_ids(league, abbr, a_sends)
     b_sends = _trade_ids(league, other, b_sends)
     import trades as TR, trade_engine as TE, valuation as VAL
     me, them = league.teams[abbr], league.teams[other]
-    rng = _rng(league, 5); pool = VAL.pool_from_league(league)
+    rng = _rng(league, 5); pool = pool if pool is not None else VAL.pool_from_league(league)
     ga, gb = TR.persona(me.gm), TR.persona(them.gm)
     offer_a = dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me))
     r = TE.evaluate(offer_a, me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
@@ -134,7 +135,9 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
     if not r.get('blocked'):
         items_a = [x if _trade_player(league, x) else _find_pick(league, abbr, x) for x in a_sends]
         items_b = [x if _trade_player(league, x) else _find_pick(league, other, x) for x in b_sends]
-        decision = TR.cpu_trade_check(league, me, them, items_a, items_b)
+        decision = TR.cpu_trade_check(league, me, them, items_a, items_b,
+                                      pool=pool, football_cache=football_cache,
+                                      financial_cache=financial_cache)
         required_gain = max(required_gain, float(decision.get('required_gain', 0.)))
         if not decision['approved']:
             r = dict(r, blocked='cpu_plan', accepted=False)
@@ -367,6 +370,9 @@ def act_gather(league, abbr, pid):
     mine = _assets(league, abbr, [pid], pool, rng, viewer=None)
     my_value = sum(x.get('trade_value', 0.0) for x in mine) if mine else 0.0
     offers = []
+    # The click sees one immutable league state. Reuse only within this action;
+    # the financial cache still tests each distinct package of draft picks.
+    football_cache, financial_cache = {}, {}
     for other, them in league.teams.items():
         if other == abbr: continue
         gb = TR.persona(them.gm)
@@ -389,21 +395,30 @@ def act_gather(league, abbr, pid):
             k = (kind, it if kind != 'pick' else f"{it.year}-{it.round}-{it.original}")
             if k not in asset_cache: asset_cache[k] = TR.pick_asset(league, it) if kind == 'pick' else TR.player_asset(league, them, league.player(it), pool, rng)
             return asset_cache[k]
-        for pkg in cands[:24]:
+        scored = []
+        for original_index, pkg in enumerate(cands[:24]):
             gets = [asset_of(kind, it) for kind, it in pkg]
             r = TE.evaluate(dict(a_sends=sends_them, a_gets=gets), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
             if r.get('blocked') or r['b_gain'] < 0.5: continue
+            scored.append((original_index, pkg, r))
+        # The old loop ultimately kept the valid offer with the highest
+        # seller gain. Test that offer first and preserve original-order ties.
+        scored.sort(key=lambda row: (-row[2]['a_gain'], row[0]))
+        for _original_index, pkg, r in scored:
             ids = [f'{it.year}-{it.round}-{it.original}' if kind == 'pick' else it for kind, it in pkg]
             # Match Propose's checks and deterministic GM decision, including
             # the same valuation RNG sequence. Never advertise a rejected deal.
-            if _evaluate(league, abbr, other, [pid], ids)['verdict'] == 'blocked': continue
+            if _evaluate(league, abbr, other, [pid], ids, pool=pool,
+                         football_cache=football_cache,
+                         financial_cache=financial_cache)['verdict'] == 'blocked': continue
             answer_rng = _rng(league, 11)
             answer = TE.evaluate(dict(
                 a_sends=_assets(league, abbr, [pid], pool, answer_rng, viewer=them),
                 a_gets=_assets(league, other, ids, pool, answer_rng, viewer=me)),
                 me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
             if answer.get('blocked') or not TR.will_accept(answer['b_gain'], answer_rng, gb['aggression'], selling=True): continue
-            if best is None or r['a_gain'] > best[1]['a_gain']: best = (pkg, r)
+            best = (pkg, r)
+            break
         if best:
             pkg, r = best
             items = [(_pick_row(league, it) if kind == 'pick' else None) for kind, it in pkg]

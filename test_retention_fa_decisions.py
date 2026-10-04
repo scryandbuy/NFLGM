@@ -249,19 +249,32 @@ class RetentionRecruitmentTests(unittest.TestCase):
         for i,p in enumerate(self.t.by_pos('WR')):set_grade(p,95 if i==0 else 55)
         pool=[self.arrival('WR',85,'first'),self.arrival('WR',82,'second')]
         original=RN.move_gain;observed=[]
-        def gain(team,p,departure=None,baseline=None):
+        def gain(team,p,departure=None,baseline=None,**kwargs):
             # Compare the reused snapshot to the actual current roster, not
             # to another cached result. The second bid must see the first deal.
             self.assertIsNotNone(baseline)
             self.assertEqual({q.pid for q in baseline['players']},{q.pid for q in team.active()})
             self.assertAlmostEqual(baseline['score'],RN.assess(team)['score'])
             observed.append((p.pid,{q.pid for q in baseline['players']}))
-            return original(team,p,departure,baseline)
+            return original(team,p,departure,baseline,**kwargs)
         with patch.object(RN,'move_gain',side_effect=gain), \
              patch.object(MK.VAL,'value_player',return_value=dict(apy=10.,years=2)):
             signed=MK.sign_the_leftovers(self.L,pool,self.rng)
         self.assertEqual(len(signed),2)
         self.assertTrue(any(pid=='second' and 'first' in roster for pid,roster in observed))
+
+    def test_late_market_reused_package_rows_match_full_acquisition_read(self):
+        for pos in ('WR', 'CB', 'TE'):
+            with self.subTest(position=pos):
+                player=self.arrival(pos,85,'arrival_'+pos)
+                baseline=RN.assess(self.t)
+                gain,rows=RN.move_gain(self.t,player,baseline=baseline,
+                                       return_package_rows=True)
+                offer=MK.Offer(self.t.abbr,player.pid,8.,1)
+                full=MK.acquisition_read(self.L,self.t,player,offer,gain,8.,baseline)
+                reused=MK.acquisition_read(self.L,self.t,player,offer,gain,8.,baseline,
+                                           after_package_rows=rows)
+                self.assertEqual(reused,full)
 
     def test_fill_skips_unaffordable_veteran_and_signs_cheaper_rookie(self):
         self.L,self.t=recovery.RecoveryTests().roster()

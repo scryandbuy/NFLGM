@@ -252,13 +252,14 @@ def _defensive_rows(depth, variant, gm, role_grades, ranked=None):
     return [result[i] for i in range(len(slots))]
 
 
-def _package_rows(team, players, grades, profile, role_grades, side=None, depth=None):
+def _package_rows(team, players, grades, profile, role_grades, side=None, depth=None,
+                  weight_cache=None):
     gm = getattr(team, 'gm', None)
     by_pid = {p.pid: p for p in players}
     depth = _planning_depth(players, grades) if depth is None else depth
     out = []
     if side in (None, 'offense'):
-        for package, weight in OR.expected_package_weights(gm, depth).items():
+        for package, weight in OR.expected_package_weights(gm, depth, weight_cache).items():
             for row in _offensive_rows(depth, package):
                 p = row['player']
                 grade = None
@@ -285,13 +286,16 @@ def _quality(rows):
                                 if row['grade'] is not None else -20.0) for row in rows)
 
 
-def _depth_accounting(team, players, grades):
+def _depth_accounting(team, players, grades, floors_snapshot=None):
     from types import SimpleNamespace
     depth = {pos: [] for pos in POSITIONS}
     for p in players: depth.setdefault(p.pos, []).append(p)
-    for men in depth.values(): men.sort(key=lambda p: -grades[p.pid])
-    projected = SimpleNamespace(gm=getattr(team, 'gm', None), depth=depth)
-    floors, group_floors = roster_floors(projected)
+    if floors_snapshot is None:
+        for men in depth.values(): men.sort(key=lambda p: -grades[p.pid])
+        projected = SimpleNamespace(gm=getattr(team, 'gm', None), depth=depth)
+        floors, group_floors = roster_floors(projected)
+    else:
+        floors, group_floors = floors_snapshot
     counts = Counter(p.pos for p in players)
     needs = {pos: 0.0 for pos in POSITIONS}; score = 0.0
     for pos, floor in floors.items():
@@ -441,8 +445,14 @@ def _changed_depth(before, grades, arrival=None, departure=None):
     return depth
 
 
-def move_gain(team, arrival, departure=None, baseline=None):
-    """Marginal package/depth value; a supplied snapshot avoids repeated setup."""
+def move_gain(team, arrival, departure=None, baseline=None, *,
+              _floors_snapshot=None, _weight_cache=None, return_package_rows=False):
+    """Marginal package/depth value; optionally return recalculated package rows.
+
+    Those rows belong only to the changed side of the ball. The caller may
+    combine them with unchanged rows from the same current baseline, but must
+    discard them after any roster, rating, or coach change.
+    """
     before = assess(team) if baseline is None else baseline
     players = [p for p in before['players'] if p.pid != arrival.pid
                and (departure is None or p.pid != departure.pid)] + [arrival]
@@ -451,11 +461,17 @@ def move_gain(team, arrival, departure=None, baseline=None):
     affected = {arrival.pos} | ({departure.pos} if departure is not None else set())
     scores = dict(before['_package_scores'])
     depth = _changed_depth(before, grades, arrival, departure)
+    changed_rows = []
     for side, positions in (('offense', OR.OFFENSE), ('defense', DR.DEFENSE)):
         if affected & positions:
-            scores[side] = _quality(_package_rows(team, players, grades, before['_profile'], role_grades, side, depth))
-    depth_score, _ = _depth_accounting(team, players, grades)
-    return depth_score + sum(scores.values()) - before['score']
+            rows = _package_rows(team, players, grades, before['_profile'],
+                                 role_grades, side, depth, _weight_cache)
+            scores[side] = _quality(rows)
+            if return_package_rows:
+                changed_rows.extend(rows)
+    depth_score, _ = _depth_accounting(team, players, grades, _floors_snapshot)
+    gain = depth_score + sum(scores.values()) - before['score']
+    return (gain, changed_rows) if return_package_rows else gain
 
 
 def departure_loss(team, departure, baseline=None):
@@ -480,7 +496,26 @@ def departure_loss(team, departure, baseline=None):
 def candidate_gains(team, players, baseline=None):
     """Evaluate a candidate pool against one explicit, short-lived snapshot."""
     baseline = assess(team) if baseline is None else baseline
-    return {p.pid: move_gain(team, p, baseline=baseline) for p in players}
+    players = tuple(players)
+    floors_snapshot = None
+    weight_cache = {}
+    if any(p.pos not in OR.OFFENSE for p in players):
+        # A defensive or special-teams arrival cannot change which back or
+        # tight end fills this coach's offensive FB job. Reuse those floors
+        # only within this candidate pass; the next roster/coach read starts
+        # with a fresh baseline and a fresh snapshot.
+        from types import SimpleNamespace
+        projected_depth = {pos: [] for pos in POSITIONS}
+        for p in baseline['players']:
+            projected_depth.setdefault(p.pos, []).append(p)
+        for men in projected_depth.values():
+            men.sort(key=lambda p: -baseline['_grades'][p.pid])
+        projected = SimpleNamespace(gm=getattr(team, 'gm', None), depth=projected_depth)
+        floors_snapshot = roster_floors(projected)
+    return {p.pid: move_gain(team, p, baseline=baseline,
+                             _floors_snapshot=(floors_snapshot if p.pos not in OR.OFFENSE else None),
+                             _weight_cache=weight_cache)
+            for p in players}
 
 
 def lineup_strength(team, players):
