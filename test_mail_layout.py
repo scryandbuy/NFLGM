@@ -10,6 +10,24 @@ from test_cap_accounting import fixture, player
 
 
 class MailLayoutTests(unittest.TestCase):
+    def test_one_for_one_offer_has_both_teams_and_player_links(self):
+        league=fixture(); league.user_team='GB'
+        player(league,'a'); player(league,'b')
+        msg=IB.post_trade_offer(league,'MIN','GB',['a'],['b'],'Roster upgrade.',7)
+        layout=IB.mail_layout(msg)
+        self.assertEqual(layout['mail_layout'],'trade')
+        sections=layout['mail_sections']
+        self.assertEqual([x['team'] for x in sections],['MIN','GB'])
+        self.assertEqual([x['rows'][0][0]['mentions'][0]['id'] for x in sections],['b','a'])
+
+    def test_saved_one_for_one_completion_is_split_without_mutating_mail(self):
+        msg=dict(kind='trade_done',body='You send Alex Smith (WR) to MIN for Ben Jones (CB).',payload={},entities=[])
+        original=copy.deepcopy(msg)
+        layout=IB.mail_layout(msg)
+        self.assertEqual(layout['mail_layout'],'trade')
+        self.assertEqual([x['rows'][0][0]['text'] for x in layout['mail_sections']],['Alex Smith (WR)','Ben Jones (CB)'])
+        self.assertEqual(msg,original)
+
     def test_completed_cpu_trade_keeps_received_sides_and_links_after_reload(self):
         from league import DraftPick
         from cap_engine import Contract

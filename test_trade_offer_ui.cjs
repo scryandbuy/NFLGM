@@ -14,7 +14,7 @@ function setup({ok=true, status='open', counter=null, hash='#portal/inbox'}={}) 
     pyJSON:query=>{calls.push(query);if(query.includes('trade_offer_view'))return v;if(query==='SESSION.portal()')return {rail:{}};if(query.includes('trade_offer_answer'))return {ok,counter:draft};return {};},
     notify:()=>{},renderRail:()=>rails++,renderTrades:()=>reloads++};
   vm.createContext(ctx);vm.runInContext(code,ctx);ctx.openTradeOffer(7,()=>reloads++);
-  const walk=node=>[node,...(node.children||[]).filter(x=>typeof x==='object').flatMap(walk)];
+  const walk=node=>[node,...(node.children||[]).filter(x=>x && typeof x==='object').flatMap(walk)];
   const buttons=()=>walk(body[0]).filter(x=>x.tag==='button');
   const click=text=>{const b=buttons().find(x=>x.children.includes(text));assert.ok(b,text);b.attrs.onclick();};
   return {ctx,body,calls,themes,click,buttons,draft,rails:()=>rails,reloads:()=>reloads};

@@ -15,8 +15,8 @@ console.log('Full counteroffer retained; missing future pick refuses partial app
 const swapExisting=[...existing,{kind:'pick',id:adds[0]}];
 assert.deepEqual(Array.from(ctx.tradeCounterSelection(swapExisting,[adds[1]],own,[adds[0]]),x=>x.id),['P0959','C22171',adds[1]]);
 assert.equal(swapExisting.length,3,'counter does not mutate original selection');
-assert.ok(src.includes('Apply Counteroffer'));
-assert.ok(src.includes('Keep My Offer'));
+assert.ok(src.includes('Add to Trade'));
+assert.ok(src.includes('Cancel'));
 const dialogs=[];
 ctx.el=(tag,attrs,...children)=>({tag,attrs:attrs||{},children,append(...xs){this.children.push(...xs)},addEventListener(){},showModal(){},focus(){},close(){this.closed=true}});
 ctx.document={body:{append(x){dialogs.push(x)}}};

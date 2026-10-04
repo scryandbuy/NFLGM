@@ -256,10 +256,9 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     except ValueError as e: return dict(ok=False, done=False, why=str(e))
     if counter is not None: counter['state'] = 'accepted'
     import inbox as IB
-    if len(a_items) + len(b_items) > 2:
-        IB.post(league, 'trade_done', f"Trade with {other} is done", f"The trade with {other} is complete.", sender=other, payload=dict(mail_sections=[IB.mail_section('You Send', _words(league, a_items)), IB.mail_section('You Receive', _words(league, b_items))]))
-    else:
-        IB.post(league, 'trade_done', f"Trade with {other} is done", f"You send {', '.join(_words(league, a_items))} to {other} for {', '.join(_words(league, b_items))}.", sender=other)
+    IB.post(league, 'trade_done', f"Trade with {other} is done", '', sender=other,
+            payload=dict(user_team=abbr, mail_layout='trade',
+                         mail_sections=IB.trade_sections(abbr, other, _words(league, a_items), _words(league, b_items))))
     return dict(ok=True, done=True, why=f"Done. {them.abbr} accepts.")
 
 
@@ -394,6 +393,16 @@ def act_gather(league, abbr, pid):
             gets = [asset_of(kind, it) for kind, it in pkg]
             r = TE.evaluate(dict(a_sends=sends_them, a_gets=gets), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
             if r.get('blocked') or r['b_gain'] < 0.5: continue
+            ids = [f'{it.year}-{it.round}-{it.original}' if kind == 'pick' else it for kind, it in pkg]
+            # Match Propose's checks and deterministic GM decision, including
+            # the same valuation RNG sequence. Never advertise a rejected deal.
+            if _evaluate(league, abbr, other, [pid], ids)['verdict'] == 'blocked': continue
+            answer_rng = _rng(league, 11)
+            answer = TE.evaluate(dict(
+                a_sends=_assets(league, abbr, [pid], pool, answer_rng, viewer=them),
+                a_gets=_assets(league, other, ids, pool, answer_rng, viewer=me)),
+                me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
+            if answer.get('blocked') or not TR.will_accept(answer['b_gain'], answer_rng, gb['aggression'], selling=True): continue
             if best is None or r['a_gain'] > best[1]['a_gain']: best = (pkg, r)
         if best:
             pkg, r = best

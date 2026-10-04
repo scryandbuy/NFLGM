@@ -862,6 +862,11 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
     picks; an outstanding CPU purchase must still be a useful, funded upgrade.
     No new willingness roll is drawn when the user accepts an inbox offer.
     """
+    import cap_accounting as CA
+    try:
+        CA.require_trade_room(league, ta.abbr, tb.abbr, outgoing, incoming)
+    except ValueError as exc:
+        return dict(approved=False, why=str(exc))
     football = package_football(league, ta, tb, outgoing, incoming)
     if not football['approved']:
         return dict(approved=False, why='The current package cannot be completed.')
@@ -913,7 +918,7 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
         if sum(TE.market_price(x) for x in paid_assets) > ceiling + 1e-9:
             return dict(approved=False, why="We no longer value this package enough to pay that price.")
     if not _financial_trade(league, ta, tb, outgoing, incoming):
-        return dict(approved=False, why="We can't fund this trade and cover our remaining roster commitments.")
+        return dict(approved=False, why="The roster benefit doesn't justify the financial risk for us.")
     return dict(approved=True, required_gain=football.get('reserves', {}).get(tb.abbr if ta.abbr == getattr(league, 'user_team', None) else ta.abbr, 0.))
 
 
