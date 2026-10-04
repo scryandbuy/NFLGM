@@ -90,6 +90,35 @@ def mail_layout(message):
         if len(keep) != len(columns):
             section['columns'] = [columns[i] for i in keep]
             section['rows'] = [[row[i] for i in keep if i < len(row)] for row in section['rows']]
+    if message.get('kind') == 'trade_offer' and not payload.get('mail_sections'):
+        refs = message.get('entities') or []
+        def saved_asset(item):
+            if isinstance(item, dict) and item.get('pick'):
+                from views import draft_year
+                return f"{draft_year(item['year'])} R{item['round']} ({item['original']})"
+            return next((r['name'] for r in refs if r.get('kind') == 'player' and r.get('id') == item), None)
+        sends = [saved_asset(x) for x in payload.get('sends', [])]
+        gets = [saved_asset(x) for x in payload.get('gets', [])]
+        if sends and gets and all(x is not None for x in sends + gets) and payload.get('buyer') and payload.get('user_team'):
+            sections = trade_sections(payload['buyer'], payload['user_team'], sends, gets)
+            for section in sections:
+                section['rows'] = [[dict(text=value, mentions=reference_spans(value, refs, [])) for value in row] for row in section['rows']]
+            payload.update(mail_sections=sections, mail_intro=dict(text='', mentions=[]), mail_layout='trade')
+            return payload
+    if message.get('kind') == 'trade_done' and not payload.get('mail_sections'):
+        old = re.fullmatch(r'You send (.+) to ([A-Z]+) for (.+)\.', message.get('body') or '')
+        if old:
+            sent, other, received = old.groups()
+            sides = []
+            for text in (sent, received):
+                assets = re.findall(r'(?:^|, )(.+?\([^)]*\)|\d{4} R\d+)(?=, |$)', text)
+                if ', '.join(assets) != text: return payload
+                sides.append(assets)
+            sections = [mail_section('You Send', sides[0]), mail_section('You Receive', sides[1])]
+            for section in sections:
+                section['rows'] = [[dict(text=value, mentions=reference_spans(value, message.get('entities') or [], [])) for value in row] for row in section['rows']]
+            payload.update(mail_sections=sections, mail_intro=dict(text='', mentions=[]), mail_layout='trade')
+            return payload
     if message.get('kind') != 'league' or payload.get('mail_sections'): return payload
     match = re.fullmatch(r'([A-Z]+) and ([A-Z]+) make a trade', message.get('subject', ''))
     if not match: return payload
@@ -186,19 +215,16 @@ def post_trade_offer(league, buyer, user_team, sends, gets, why, expires_week):
     names = ', '.join(player_name(league.players[g]) for g in gets)
     body = (f"{league.teams[buyer].name if hasattr(league.teams[buyer], 'name') else buyer} would like "
             f"{names}. {why}")
-    sections = []
-    if len(sends) + len(gets) > 2:
-        def asset(x):
-            if isinstance(x, str):
-                p = league.player(x)
-                return f'{player_name(p)} ({p.pos})' if p is not None else x
-            from views import draft_year
-            return f'{draft_year(x.year)} R{x.round} ({x.original})'
-        body = why
-        sections = [mail_section('You Send', [asset(x) for x in gets]),
-                    mail_section('You Receive', [asset(x) for x in sends])]
+    def asset(x):
+        if isinstance(x, str):
+            p = league.player(x)
+            return f'{player_name(p)} ({p.pos})' if p is not None else x
+        from views import draft_year
+        return f'{draft_year(x.year)} R{x.round} ({x.original})'
+    body = why
+    sections = trade_sections(buyer, user_team, [asset(x) for x in sends], [asset(x) for x in gets])
     return post(league, 'trade_offer', f'Trade offer from {buyer} for {names}', body, sender=buyer,
-                payload=dict(buyer=buyer, user_team=user_team, sends=[key(x) for x in sends], gets=list(gets), mail_sections=sections),
+                payload=dict(buyer=buyer, user_team=user_team, sends=[key(x) for x in sends], gets=list(gets), mail_sections=sections, mail_layout='trade'),
                 expires_week=expires_week)
 
 
