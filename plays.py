@@ -427,10 +427,11 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
         # Re-set for runs once defences stopped carrying box adjustments
         # from game to game: with the ratchet gone, explosive runs ran 3.6%
         # against 2.46 and ypc 4.9 against 4.52, all of it after contact
-        # Receiving YAC stayed about half a yard high after the completion
-        # correction. Recenter tackle contests in space; the rushing branch
-        # and the rating-based separation between players remain unchanged.
-        base = 0.165 if not in_space else 0.195
+        # Assignment-based pursuit now draws the actual nearby defenders,
+        # lifting receiving YAC above the league reference. Recenter only
+        # open-field tackle contests; rushing and the rating differences
+        # between each carrier and defender remain unchanged.
+        base = 0.165 if not in_space else 0.230
         ramp = 0.115 if not in_space else 0.113
         p_break = logistic(edge(atk, wrap) - base - ramp * i, k=7.0)
         if rng.random() > p_break:
