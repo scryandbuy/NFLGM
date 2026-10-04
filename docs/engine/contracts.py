@@ -26,6 +26,7 @@ this year and keeps the player. Running cuts first released an 88-overall
 receiver to save twenty million, which is not a thing a front office does -
 it reworks him and lets go of somebody the roster can absorb losing.
 """
+from cap_engine import forecast_cap
 import numpy as np
 
 import gm_engine as GM
@@ -471,7 +472,7 @@ def restructure_preview(league, pid, amount=None, void_years=0):
     from cap_accounting import pre_roll
     index = 1 if pre_roll(league) else 0
     if c.years <= index: return dict(ok=False, why='No remaining salary to restructure')
-    cap = CAP.get(league.year+index, CAP.get(league.year,301.2)*1.055**index)
+    cap = forecast_cap(league, league.year+index)
     floor = max(MS.minimum_salary(p.accrued or 0, cap), c.earned_base if index==0 else 0.0)
     max_conv = max(0.0, c.base[index] - floor)
     conv = max_conv if amount is None else float(min(max(0.0, amount), max_conv))

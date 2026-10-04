@@ -599,6 +599,7 @@ class League:
         self.age_calendar_version = 1
         self.age_migration = {}
         self.regression_applied_years = []
+        self.retirement_applied_years = []
         self.cap_history = {2026: CAP[2026]}
         self.phase = 'preseason'
         self.week = 0
@@ -968,6 +969,7 @@ class League:
             year=self.year, phase=self.phase, week=self.week,
             game_date=self.game_date, age_calendar_version=self.age_calendar_version,
             age_migration=self.age_migration, regression_applied_years=self.regression_applied_years,
+            retirement_applied_years=self.retirement_applied_years,
             cap_history={str(y): cap for y, cap in self.cap_history.items()},
             players={pid: p.to_dict() for pid, p in self.players.items()},
             player_name_history=name_history(self), newgen_name_cursor=self.newgen_name_cursor,
@@ -1034,6 +1036,7 @@ class League:
         rush_stats_migration.migrate(d)
         d = PB.migrate_saved_backgrounds(d)
         L = cls(d['year'])
+        L.retirement_applied_years = list(d.get('retirement_applied_years', sorted({t['year'] for t in d.get('transactions', []) if t.get('kind') == 'retire'})))
         L.rush_accounting_repair = d.get('rush_accounting_repair', {})
         saved_caps = {int(y): float(cap) for y, cap in (d.get('cap_history') or {}).items()}
         L.phase, L.week = d['phase'], d['week']
