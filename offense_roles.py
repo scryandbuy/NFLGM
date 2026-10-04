@@ -149,6 +149,19 @@ def roster_depth(roster):
     return depth
 
 
+def back_quality_gaps(candidates):
+    """Rest tolerance from comparable HB grades, without reordering the chart.
+
+    Use the same twenty-point scale as defensive rotation. Emergency players
+    are graded at the back's job, not at their own (possibly unrelated) spot.
+    """
+    import targets as TG
+    grades = [TG.position_score(p.get('ratings', p) if isinstance(p, dict)
+                                else p.ratings, 'HB') for p in candidates]
+    return [max(-1.0, min(1.0, (grade - max(grades[rank + 1:], default=grade)) / 20.0))
+            for rank, grade in enumerate(grades)]
+
+
 def assign(depth, package, excluded=(), rng=None, state=None):
     """Select eleven unique players, using healthy depth for missing roles.
 
@@ -194,8 +207,9 @@ def assign(depth, package, excluded=(), rng=None, state=None):
                 chosen = max(spare, key=fullback_score)
                 candidates = [chosen] + [p for p in candidates if pid(p) != pid(chosen)]
         if state is not None and rng is not None and role != 'QB':
+            back_gaps = back_quality_gaps(candidates) if role == 'HB' else None
             for rank, p in enumerate(candidates):
-                gap = 0.75 if role == 'HB' and rank == 0 else 0.6 if rank == 0 else 0.3 if rank == 1 else 0.0
+                gap = back_gaps[rank] if back_gaps is not None else 0.6 if rank == 0 else 0.3 if rank == 1 else 0.0
                 needs_rest = state.cond.needs_rest(pid(p), position(p), rng,
                                                    p.get('stamina_rating', 70.0), gap)
                 # Keep the lead TE in both single- and multiple-TE packages.

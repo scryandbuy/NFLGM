@@ -165,7 +165,9 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zon
     # read's weight
     def rgrade(p):
         r = p['receiver']; pos = r.get('pos')
-        try: o = float(rate_fn(r, RECV_GRADE))
+        # The shared rate function returns 0-1, whereas these role offsets
+        # are rating points. Keep quarterback read-profile inputs normalized.
+        try: o = 100.0 * float(rate_fn(r, RECV_GRADE))
         except Exception: o = 70.0
         # the tight end reads a step higher than his receiving grade alone says: the middle of the field is his
         # (the room took 17 to 19% of targets against a real 21)

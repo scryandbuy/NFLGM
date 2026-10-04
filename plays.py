@@ -170,7 +170,9 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
 
     if not wins:
         return dict(time=6.0, pressure=0.0, sack=False, beaten_by=None, beaten=None,
-                    move=None, pb_reps=[(b.get('pid'),True) for b in blockers], pr_reps=[], pb_helpers=[])
+                    move=None, pb_reps=[], pr_reps=[], pb_helpers=[],
+                    pb_opportunities=[(b.get('pid'), 'unengaged')
+                                      for b in sorted(blockers, key=DRUSH.player_key)])
     t_arrive, move, winner, loser = min(wins, key=lambda x: x[0])
 
     # EVERY rep, not just the one that ended the play. The resolver already
@@ -179,14 +181,19 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
     # A pass block win is ESPN's definition: the blocker sustains for 2.5
     # seconds or longer.
     # The primary blocker and his helpers share the actual assisted result.
-    # A truly unengaged blocker has no defeated matchup to charge to him.
+    # An unengaged blocker has no contested opportunity: neither win nor loss.
     engaged = {DRUSH.player_key(b) for _t, _m, _r, b in wins if b}
     reps = [(b.get('pid'), t >= PBW_THRESHOLD) for t, _m, _r, b in wins if b]
     rush_reps = [(r.get('pid'), t < PBW_THRESHOLD) for t, _m, r, b in wins if b and r is not None]
     reps += [(h.get('pid'), held) for h, _r, held in helper_reps]
     engaged.update(DRUSH.player_key(h) for h, _r, _held in helper_reps)
-    reps += [(b.get('pid'), True) for b in sorted(blockers, key=DRUSH.player_key)
-             if DRUSH.player_key(b) not in engaged]
+    assisted = {DRUSH.player_key(h) for h, _r, _held in helper_reps}
+    for i, primary in enumerate(matched):
+        if primary and (helpers[i] or (chip is not None and chip[1] == i)):
+            assisted.add(DRUSH.player_key(primary))
+    opportunities = [(b.get('pid'), 'unengaged' if DRUSH.player_key(b) not in engaged
+                       else 'assisted' if DRUSH.player_key(b) in assisted else 'solo')
+                     for b in sorted(blockers, key=DRUSH.player_key)]
 
     # the QB's own escapability buys time once someone arrives
     if qb is not None:
@@ -214,7 +221,7 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
     return dict(time=round(float(t_arrive), 2), pressure=round(pressure, 3),
                 sack=bool(sack), beaten_by=winner.get('pid'),
                 beaten=loser.get('pid') if loser else None, move=move,
-                pb_reps=reps, pr_reps=rush_reps,
+                pb_reps=reps, pb_opportunities=opportunities, pr_reps=rush_reps,
                 pb_helpers=[(h.get('pid'), r.get('pid')) for h, r, _held in helper_reps])
 
 # ============================================================ MAN COVERAGE
@@ -916,7 +923,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     if p['sack']:
         return dict(type='sack', yards=-sack_loss(rng, depth, p['time'], screen, hot), depth=depth, screen=bool(screen), swing=bool(swing),
                     touchdown=False, by=p['beaten_by'], concept=concept,
-                    protection=prot_name, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
+                    protection=prot_name, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
                     beaten=p.get('beaten'), pressured=True,
                     coverage_evidence=_coverage_evidence(rush_plan['coverage']))
 
@@ -1136,7 +1143,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     air=round(air, 1),
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
+                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
     if not complete:
         throwaway = bool(not dropped_int and p['pressure'] >= 0.35 and not screen and rng.random() < 0.18)
         # A PASS DEFENDED is a defender breaking the ball up, not simply an
@@ -1153,7 +1160,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     throwback=round(float(max(0.0, rng.normal(6.0, 3.0))), 1) if throwaway else 0.0,
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=None if throwaway else tgt.get('pid'),
-                    read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
+                    read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
                     pass_def=(cb.get('pid') if broken and cb else None),
                     pressured=bool(p['pressure'] >= 0.35))
     # A contested ball that already survived the throw should not face the full
@@ -1162,7 +1169,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         return dict(type='drop', yards=0.0, touchdown=False,
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    read=read_kind, pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
+                    read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
 
     # Real air yards average 7.8 with 5.2 after the catch. Short throws were
     # landing at 4.0 and dragging yards per dropback to 4.2 against a real 6.18.
@@ -1207,7 +1214,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, depth=depth,
                     target=tgt.get('pid'), read=read_kind,
-                    separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
+                    separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
     # Real YAC by throw depth: behind the line 8.63, short 3.97, medium 3.48,
     # deep 5.31 - a U-shape, because a screen has blockers in front and a deep
     # ball is caught past everyone, while an intermediate throw is caught in
@@ -1269,4 +1276,4 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                 in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing),
                 coverage=def_call.get('coverage') or def_call['shell'],
                 protection=prot_name, depth=depth, target=tgt.get('pid'),
-                read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
+                read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))

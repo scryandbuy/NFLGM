@@ -194,8 +194,11 @@ class ProtectionPressureTests(unittest.TestCase):
             self.assertEqual(len(protect.call_args.args[0]),7)
             self.assertEqual(protect.call_args.kwargs['protection'],'seven')
             self.assertIs(select.call_args.kwargs['rng'],rng)
-            self.assertEqual(len({pid for pid,won in out['pb_reps']}),7)
-            self.assertEqual(len(out['pb_reps']),7)
+            opportunities = dict(out['pb_opportunities'])
+            self.assertEqual(len(opportunities), 7)
+            contested = {pid for pid, kind in opportunities.items() if kind != 'unengaged'}
+            self.assertEqual({pid for pid, won in out['pb_reps']}, contested)
+            self.assertEqual(len(out['pb_reps']), len(contested))
 
 
 if __name__ == '__main__':unittest.main()

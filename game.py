@@ -2088,9 +2088,11 @@ def _field_units(roster, state, rng, is_offense, package=None, front_family=None
                 # snaps and take 55-60% of carries.
                 if key == 'rb':
                     backs = [b for b in (roster.get('backs') or [p]) if b and b.get('pid') not in state.out] or [p]
+                    import offense_roles as OR
+                    gaps = OR.back_quality_gaps(backs)
                     pick = None
                     for rank, b in enumerate(backs):
-                        gap = 0.75 if rank == 0 and len(backs) > 1 else (0.3 if rank == 1 else 0.0)  # a coach commits to his lead back, short of riding him (353-carry seasons); the third back is an emergency
+                        gap = gaps[rank]
                         if not state.cond.needs_rest(b.get('pid'), 'HB', rng, b.get('stamina_rating', 70.0), gap):
                             pick = b; break
                     p = pick or backs[0]
@@ -2737,7 +2739,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if t == 'sack':
             if rng.random() < E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn):
                 _old = out
-                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pressured', 'coverage_evidence') if k in _old}
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pb_opportunities', 'pressured', 'coverage_evidence') if k in _old}
                 out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
@@ -3336,6 +3338,8 @@ class StatBook:
                 # source tracks them and there is no standard definition, and
                 # run block win rate is the real version of that idea.
                 pb_snaps=0, pb_wins=0, sacks_allowed=0, pressures_allowed=0,
+                pb_solo_snaps=0, pb_solo_wins=0, pb_assisted_snaps=0, pb_assisted_wins=0,
+                pb_unengaged_snaps=0,
                 # ---- advanced ----
                 pass_epa=0.0, pass_plays=0, rush_epa=0.0, rush_plays=0, rec_epa=0.0, def_epa=0.0, def_plays=0,
                 xcomp=0.0, cpoe_att=0, pr_reps=0, pr_wins=0, sep_total=0.0, sep_n=0, st_epa=0.0,
@@ -3407,6 +3411,20 @@ class StatBook:
             l['pb_wins'] += 1 if won else 0
             if not won and out.get('pressured'):
                 l['pressures_allowed'] += 1
+        # Only new explicit opportunity evidence has a solo/assisted split.
+        # Legacy lines retain their existing totals without an inferred split.
+        outcomes = dict(out.get('pb_reps') or ())
+        seen_opportunities = set()
+        for pid, kind in out.get('pb_opportunities') or ():
+            if not pid or pid in seen_opportunities:
+                continue
+            seen_opportunities.add(pid)
+            if kind == 'unengaged':
+                self._get(pid)['pb_unengaged_snaps'] += 1
+            elif kind in ('solo', 'assisted') and pid in outcomes:
+                line = self._get(pid)
+                line['pb_' + kind + '_snaps'] += 1
+                line['pb_' + kind + '_wins'] += int(bool(outcomes[pid]))
         for pid, won in out.get('rb_reps') or ():
             l = self._get(pid)
             l['rb_snaps'] += 1
