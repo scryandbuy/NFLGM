@@ -97,6 +97,39 @@ const NameLinks = (() => {
 })();
 // End shared identity navigation.
 
+async function loadEngineFiles(manifest, fs, fetchFile = fetch, progress = say) {
+  const files = [...manifest.modules.map(m => m + '.py'), ...manifest.data];
+  const pending = new Array(files.length);
+  const concurrency = Math.min(8, files.length);
+  const request = i => {
+    const file = files[i];
+    pending[i] = (async () => {
+      try {
+        const response = await fetchFile(ENGINE + file + '?v=' + (manifest.build || '0'));
+        if (!response.ok) return { missing: true };
+        const data = file.endsWith('.py') || file.endsWith('.json')
+          ? await response.text() : new Uint8Array(await response.arrayBuffer());
+        return { data };
+      } catch (error) {
+        // Consume failures in manifest order, just like the serial loader.
+        return { error };
+      }
+    })();
+  };
+  for (let i = 0; i < concurrency; i++) request(i);
+  let loaded = 0;
+  for (let i = 0; i < files.length; i++) {
+    const result = await pending[i];
+    pending[i] = null;
+    if (result.error) throw result.error;
+    if (i + concurrency < files.length) request(i + concurrency);
+    if (result.missing) { progress('missing ' + files[i]); continue; }
+    fs.writeFile('/' + files[i], result.data);
+    loaded++;
+    progress('loading engine… ' + files[i], 18 + 62 * loaded / files.length);
+  }
+}
+
 async function bootEngine() {
   say('booting Python…', 4);
   const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.29.5/full/pyodide.mjs');
@@ -108,15 +141,7 @@ async function bootEngine() {
   // the browser's ten-minute cache expires
   const manifest = await (await fetch(ENGINE + 'manifest.json?t=' + Date.now(), { cache: 'no-store' })).json();
   window.ENGINE_BUILD = (manifest.build || '0').slice(0, 7);
-  const files = [...manifest.modules.map(m => m + '.py'), ...manifest.data];
-  let n = 0;
-  for (const f of files) {
-    const r = await fetch(ENGINE + f + '?v=' + (manifest.build || '0'));
-    if (!r.ok) { say('missing ' + f); continue; }
-    if (f.endsWith('.py') || f.endsWith('.json')) py.FS.writeFile('/' + f, await r.text());
-    else py.FS.writeFile('/' + f, new Uint8Array(await r.arrayBuffer()));
-    n++; say('loading engine… ' + f, 18 + 62 * n / files.length);
-  }
+  await loadEngineFiles(manifest, py.FS);
   py.runPython(`import sys, os; sys.path.insert(0, '/'); os.chdir('/')`);
   py.runPython(`import json, session as S\nSESSION = None\ndef _j(x): return json.dumps(x)`);
   say('engine ready.', 84);
