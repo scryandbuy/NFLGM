@@ -10,6 +10,66 @@ from test_cap_accounting import fixture, player
 
 
 class MailLayoutTests(unittest.TestCase):
+    def test_completed_cpu_trade_keeps_received_sides_and_links_after_reload(self):
+        from league import DraftPick
+        from cap_engine import Contract
+        league=fixture(); league.user_team='KC'
+        a=player(league,'a','GB',Contract(1,[2]))
+        b=player(league,'b','MIN',Contract(1,[2]))
+        a.name=b.name='Mike Smith'
+        pick=DraftPick(2027,1,'GB','GB'); league.teams['GB'].picks.append(pick)
+        league.trade('GB','MIN',['a',pick],['b'])
+        saved=League.load(league.save())
+        msg=saved.inbox[-1]; layout=IB.mail_layout(msg)
+        self.assertEqual(layout['mail_layout'],'trade')
+        gb, mn=layout['mail_sections']
+        self.assertEqual((gb['team'],mn['team']),('GB','MIN'))
+        self.assertEqual(gb['rows'][0][0]['mentions'][0]['id'],'b')
+        self.assertEqual(mn['rows'][0][0]['mentions'][0]['id'],'a')
+        self.assertEqual(len(mn['rows']),2)
+        self.assertIn('2027 first-round pick',mn['rows'][1][0]['text'])
+        self.assertFalse(IB.is_decision(msg))
+
+    def test_old_cpu_trade_renders_sections_without_rewriting_mail(self):
+        league=fixture(); a=player(league,'a'); a.name='Mike Smith'
+        msg=IB.news(league,'GB and MIN make a trade',
+            'GB send Mike Smith (QB, 85), a 2027 first-round pick to MIN for a 2028 second-round pick.')
+        before=copy.deepcopy(msg)
+        layout=IB.mail_layout(msg)
+        gb, mn=layout['mail_sections']
+        self.assertEqual(gb['rows'][0][0]['text'],'a 2028 second-round pick')
+        self.assertEqual(len(mn['rows']),2)
+        self.assertEqual(mn['rows'][0][0]['mentions'][0]['id'],'a')
+        self.assertEqual(msg,before)
+        msg['body']='An unexpected legacy format.'
+        self.assertNotIn('mail_sections',IB.mail_layout(msg))
+
+    def test_old_regression_hides_loss_column_without_mutating_save(self):
+        league=fixture(); a=player(league,'a')
+        msg=IB.post(league,'club','What age took','Summary',payload=dict(link='club:regression',
+            mail_sections=[IB.mail_section('Regression',[[IB.player_name(a),'QB','-1.2']],['Player','Position','OVR lost'])]))
+        before=copy.deepcopy(msg)
+        section=IB.mail_layout(msg)['mail_sections'][0]
+        self.assertEqual(section['columns'],['Player','Position'])
+        self.assertEqual(len(section['rows'][0]),2)
+        self.assertEqual(section['rows'][0][0]['mentions'][0]['id'],'a')
+        self.assertEqual(msg,before)
+
+    def test_new_regression_email_has_only_player_and_position(self):
+        import ast
+        from pathlib import Path
+        league=fixture(); p=player(league,'a')
+        league.regression={str(league.year):{'a':{'lost':1.2}}}
+        tree=ast.parse(Path('session.py').read_text(encoding='utf-8'))
+        method=next(n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='step_retire')
+        report=next(n for n in method.body if isinstance(n,ast.Try))
+        env=dict(self=NS(L=league,rng=None,user_team='GB'),IB=IB,inbox_player=IB.player_name,
+                 RG=NS(run=lambda *a,**k:None))
+        exec(compile(ast.Module(body=[report],type_ignores=[]),'regression-email','exec'),env)
+        section=league.inbox[-1]['payload']['mail_sections'][0]
+        self.assertEqual(section['columns'],['Player','Position'])
+        self.assertEqual(len(section['rows'][0]),2)
+
     def test_structured_cells_keep_namesake_ids_and_utf16_offsets_after_load(self):
         league = fixture()
         a, b = player(league, 'a'), player(league, 'b')

@@ -3090,3 +3090,9 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .standings-board .tbl .form{justify-content:center}
 .standings-team{display:inline-flex;align-items:center;gap:5px}
 .standings-team .clinch{color:var(--ink-2);margin-left:0;font-size:12px;font-weight:700}
+
+.mail-content.mail-trade{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.mail-trade .mail-intro{grid-column:1/-1}
+.mail-trade .mail-section{margin:0;min-width:0}
+.mail-trade .mail-body-row{padding:10px 0;overflow-wrap:anywhere}
+@media(max-width:700px){.mail-content.mail-trade{grid-template-columns:minmax(0,1fr)}}

@@ -67,6 +67,49 @@ def mail_section(title, rows, columns=()):
                 rows=[list(row) if isinstance(row, (list, tuple)) else [row] for row in rows])
 
 
+def trade_sections(a, b, a_sends, b_sends):
+    from stadium_names import TEAM_NAMES
+    sections = []
+    for team, received in ((a, b_sends), (b, a_sends)):
+        section = mail_section(f'{TEAM_NAMES.get(team, team)} Receive', received or ['No assets'])
+        section['team'] = team
+        sections.append(section)
+    return sections
+
+
+def mail_layout(message):
+    """Display old structured regression mail and legacy CPU trades consistently."""
+    import copy
+    import re
+    payload = dict(message.get('payload') or {})
+    regression = payload.get('link') == 'club:regression' and payload.get('mail_sections')
+    if regression: payload['mail_sections'] = copy.deepcopy(payload['mail_sections'])
+    for section in (payload.get('mail_sections') or []) if regression else []:
+        columns = section.get('columns') or []
+        keep = [i for i, name in enumerate(columns) if name.lower() != 'ovr lost']
+        if len(keep) != len(columns):
+            section['columns'] = [columns[i] for i in keep]
+            section['rows'] = [[row[i] for i in keep if i < len(row)] for row in section['rows']]
+    if message.get('kind') != 'league' or payload.get('mail_sections'): return payload
+    match = re.fullmatch(r'([A-Z]+) and ([A-Z]+) make a trade', message.get('subject', ''))
+    if not match: return payload
+    a, b = match.groups()
+    body = message.get('body') or ''
+    parts = re.fullmatch(re.escape(a) + r' send (.+) to ' + re.escape(b) + r' for (.+)\.', body)
+    if not parts: return payload
+    sides = []
+    for side in parts.groups():
+        if side == 'nothing': sides.append([]); continue
+        assets = re.findall(r'(?:^|, )(.+?\([^)]*\)|a \d{4} [^,]+?-round pick)(?=, |$)', side)
+        if ', '.join(assets) != side: return payload
+        sides.append(assets)
+    sections = trade_sections(a, b, *sides)
+    for section in sections:
+        section['rows'] = [[dict(text=value, mentions=reference_spans(value, message.get('entities') or [], [])) for value in row] for row in section['rows']]
+    payload.update(mail_sections=sections, mail_intro=dict(text='', mentions=[]), mail_layout='trade')
+    return payload
+
+
 def post(league, kind, subject, body, sender=None, payload=None, expires_week=None):
     payload = dict(payload or {})
     sections = payload.get('mail_sections')
@@ -85,6 +128,7 @@ def post(league, kind, subject, body, sender=None, payload=None, expires_week=No
                                      [' | '.join(str(value) for value in row) for row in rows]))
             normalized.append(dict(title=section.get('title') or '', columns=section.get('columns') or [],
                                    rows=[[cell(value) for value in row] for row in rows]))
+            if section.get('team'): normalized[-1]['team'] = section['team']
         payload['mail_sections'] = normalized
         body = '\n\n'.join(chunks)
     subject, subject_refs = _mentions(subject)

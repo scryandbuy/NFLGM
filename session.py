@@ -1074,9 +1074,9 @@ class Session:
             rec = (getattr(self.L, 'regression', {}) or {}).get(str(self.L.year), {})
             from views import surname
             hit = sorted([(v['lost'], pid) for pid, v in rec.items() if v['lost'] >= 0.5], reverse=True)
-            rows = [[inbox_player(self.L.player(pid)), self.L.player(pid).pos, f'−{lost:.1f}'] for lost, pid in hit if self.L.player(pid)]
+            rows = [[inbox_player(self.L.player(pid)), self.L.player(pid).pos] for lost, pid in hit if self.L.player(pid)]
             body = (f"{len(hit)} of your players lost ground with age. " if hit else "None of your players lost ground with age this year. ") + "The full attribute analysis is on the Regression page."
-            IB.post(self.L, 'club', f"Going into {self.L.year + 1}: what age took", body, sender='assistants', payload=dict(link='club:regression', mail_sections=[IB.mail_section('Regression', rows, ['Player', 'Position', 'OVR lost'])] if rows else []))
+            IB.post(self.L, 'club', f"Going into {self.L.year + 1}: what age took", body, sender='assistants', payload=dict(link='club:regression', mail_sections=[IB.mail_section('Regression', rows, ['Player', 'Position'])] if rows else []))
         except Exception as e:
             import sys; print('regression report failed:', e, file=sys.stderr)
         RT.run(L, rng); AL.hall_vote(L, L.year)
@@ -1702,8 +1702,9 @@ class Session:
         import roster_advisor as RA
         import inseason_scouting as ISS
         scouting_focus = ISS.priorities(self.L, self.user_team) if m.get('kind') == 'scouting_focus' else None
+        layout = IB.mail_layout(m)
         return dict(id=m['id'], mentions=m.get('mentions', {}), entities=m.get('entities') or IB.entity_references(self.L, m['subject']+'\n'+(m.get('body') or ''), pl), status=m.get('status'), subject=m['subject'], body=m.get('body') or '', body_rows=IB.body_rows(self.L, m), tag=views.INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), kind=m.get('kind'), from_=m.get('sender'), pid=pl.get('pid'), recap=pl.get('recap'), snap_counts=pl.get('snap_counts'), scouting_focus=scouting_focus,
-                    mail_sections=pl.get('mail_sections'), mail_intro=pl.get('mail_intro'),
+                    **{k: layout.get(k) for k in ('mail_sections', 'mail_intro', 'mail_layout')},
                     recommendations=RA.recommendations(self.L, m) if m.get('kind') == 'roster_report' else [],
                     **{'from': m.get('sender')}, when=IB.date_label(m), link=(pl.get('link') or (f"player:{pl['pid']}" if pl.get('pid') else None)), decide=IB.is_decision(m))
 

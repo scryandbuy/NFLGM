@@ -346,11 +346,12 @@ function messageText(message, field) {
 
 function renderMailBody(message) {
   const cellText = cell => messageText({body:cell.text, mentions:{body:cell.mentions || []}}, 'body');
-  const body = el('div', {class:'mbody mail-content'});
+  const body = el('div', {class:'mbody mail-content' + (message.mail_layout === 'trade' ? ' mail-trade' : '')});
   if (message.mail_sections?.length) {
     if (message.mail_intro?.text) body.append(el('p', {class:'mail-intro'}, cellText(message.mail_intro)));
     for (const section of message.mail_sections) {
-      const block = el('section', {class:'mail-section'});
+      const block = el('section', {class:'mail-section' + (message.mail_layout === 'trade' ? ' trade-offer-side' : '')});
+      if (message.mail_layout === 'trade' && section.team) applyTeamTheme(block, {abbr:section.team});
       if (section.title) block.append(el('h4', {}, section.title));
       if (section.columns?.length) {
         const table = el('table', {class:'mail-table'});
@@ -3072,7 +3073,7 @@ function renderRegression(v) {
   $('#crumb').textContent = 'Team'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'club'));
   secondRow(clubNav(v.club.abbr, true, null), '#club/regression');
   const s = reportBoard(v.club, 'REGRESSION', [[v.hit, 'PLAYERS DECLINED'], [v.total_lost ? `-${v.total_lost}` : '0', 'OVERALL POINTS']]);
-  s.append(el('div', { class: 'report-controls' }, scheduleSeasonPicker(v, y => renderRegression(pyJSON(`SESSION.club_regression(year=${y})`))), el('span', { class: 'count' }, `Going into ${v.year + 1}`)));
+  s.append(el('div', { class: 'report-controls' }, scheduleSeasonPicker(v, y => renderRegression(pyJSON(`SESSION.club_regression(year=${y})`)))));
   if (v.empty) { s.append(el('div', { class: 'empty' }, 'Regression is recorded during Retirements and Development.')); page.append(s); return; }
   // One row per player who lost overall; details open above the page.
   const tbl = el('table', { class: 'tbl' });
@@ -3094,7 +3095,7 @@ function regressionPopup(v, r) {
   const box = el('section', { class: 'popbox reg-popbox', role: 'dialog', 'aria-modal': 'true', 'aria-label': `${r.name} rating changes`, style: `--reg-accent:${teamTheme(v.club).accent}` });
   const close = el('button', { class: 'btn', type: 'button', onclick: () => back.remove() }, 'Close');
   box.append(el('header', { class: 'reg-pop-head' },
-    el('div', {}, el('small', {}, `${v.club.name} · REGRESSION`), el('h2', {}, r.name.toUpperCase()), el('p', {}, `${r.pos} · Age ${r.age} · Going into ${v.year + 1}`)),
+    el('div', {}, el('small', {}, `${v.club.name} · REGRESSION`), el('h2', {}, r.name.toUpperCase()), el('p', {}, `${r.pos} · Age ${r.age}`)),
     el('div', { class: 'reg-pop-score' }, el('span', {}, 'OVERALL'), el('strong', {}, `${r.before} → ${r.after}`), el('b', { class: r.delta < 0 ? 'loss' : 'gain' }, `${r.delta > 0 ? '+' : ''}${r.delta} OVR`)), close));
   if (r.partial) box.append(el('p', { class: 'reg-pop-note' }, 'This older record contains only ratings that changed.'));
   const groups = [], seen = new Set();
