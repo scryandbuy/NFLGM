@@ -1690,7 +1690,7 @@ function tradeFeedbackKey() {
   return JSON.stringify([tradeState.other, tradeState.a, tradeState.b]);
 }
 function showTradeResult(result, view, sent, received) {
-  const dialog=el('dialog',{class:'retain-dialog','aria-labelledby':'trade-result-title'});
+  const dialog=el('dialog',{class:'retain-dialog trade-dialog','aria-labelledby':'trade-result-title'});
   const body=el('div',{class:'retain-dialog-body'},el('h2',{id:'trade-result-title'},result.done?'Trade Accepted':'Trade Rejected'));
   if(result.done){
     for(const [team,own,assets] of [[view.them.club.abbr,view.me,sent],[view.me.club.abbr,view.them,received]]){
@@ -1710,7 +1710,7 @@ function showTradeResult(result, view, sent, received) {
 }
 function showTradeCounter(result, view, reload) {
   if(!(result.adds?.length || result.removes?.length)){notify(result);return;}
-  const dialog=el('dialog',{class:'retain-dialog','aria-labelledby':'trade-request-title'});
+  const dialog=el('dialog',{class:'retain-dialog trade-dialog','aria-labelledby':'trade-request-title'});
   const cancel=el('button',{class:'btn',onclick:()=>dialog.close()},'Cancel');
   const apply=el('button',{class:'btn go',onclick:()=>{
     try{tradeState.a=tradeCounterSelection(tradeState.a,result.adds,view.me,result.removes);}

@@ -3109,3 +3109,11 @@ dialog.retain-dialog::backdrop{background:#05090dbb}
 dialog.retain-dialog .retain-dialog-body h2{color:var(--ink);padding:0 0 16px}
 dialog.retain-dialog .retain-dialog-body p{color:var(--ink-2);font-size:15px;line-height:1.5;margin:0}
 dialog.retain-dialog .retain-dialog-actions{flex-wrap:wrap}
+
+/* Consistent trade results, requested terms, and incoming-offer popups. */
+.trade-offer-overlay{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:#05090dbb;overflow:auto}
+.trade-offer-overlay .trade-offer-sheet{margin:auto;width:min(920px,100%);max-height:calc(100dvh - 32px)!important;overflow:auto;background:var(--sheet);color:var(--ink);border:1px solid var(--rule);border-radius:8px;box-shadow:0 24px 80px #0008}
+.trade-offer-sheet::before,.trade-offer-sheet::after{display:none}
+.trade-dialog .retain-dialog-body h3{color:var(--ink);margin:14px 0 8px}
+.trade-dialog .retain-dialog-body ul{padding-left:20px;color:var(--ink-2);line-height:1.6}
+.trade-dialog .btn:not(.go){background:var(--sheet-2);color:var(--ink);border-color:var(--rule-2)}
