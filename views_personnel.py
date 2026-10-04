@@ -393,6 +393,16 @@ def act_gather(league, abbr, pid):
             gets = [asset_of(kind, it) for kind, it in pkg]
             r = TE.evaluate(dict(a_sends=sends_them, a_gets=gets), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
             if r.get('blocked') or r['b_gain'] < 0.5: continue
+            ids = [f'{it.year}-{it.round}-{it.original}' if kind == 'pick' else it for kind, it in pkg]
+            # Match Propose's checks and deterministic GM decision, including
+            # the same valuation RNG sequence. Never advertise a rejected deal.
+            if _evaluate(league, abbr, other, [pid], ids)['verdict'] == 'blocked': continue
+            answer_rng = _rng(league, 11)
+            answer = TE.evaluate(dict(
+                a_sends=_assets(league, abbr, [pid], pool, answer_rng, viewer=them),
+                a_gets=_assets(league, other, ids, pool, answer_rng, viewer=me)),
+                me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
+            if answer.get('blocked') or not TR.will_accept(answer['b_gain'], answer_rng, gb['aggression'], selling=True): continue
             if best is None or r['a_gain'] > best[1]['a_gain']: best = (pkg, r)
         if best:
             pkg, r = best

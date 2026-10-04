@@ -4,6 +4,7 @@ Pure projections: no RNG, transaction, save mutation, or cash-floor enforcement.
 The reserve coefficients are initial policy settings, not fitted NFL estimates.
 Hard transaction legality remains in cap_accounting; this layer prices flexibility.
 """
+from cap_engine import forecast_cap
 import copy
 from statistics import median
 from cap_engine import CAP
@@ -31,7 +32,7 @@ def _cap(league, team, year):
         return float(history[year])
     if year <= 2026 and year in CAP:
         return float(CAP[year])
-    return float(team.cap.cap * 1.055 ** (year - league.year))
+    return forecast_cap(league, year)
 
 
 def _charge(contract, index):
@@ -279,6 +280,26 @@ reused only while roster/contracts/phase/pending commitments are unchanged.
                   before=before, after=after, reserve_used=0.)
     if team.abbr == getattr(league,'user_team',None):
         result['reason']='user_control'
+        return result
+    if action == 'trade':
+        # Concrete roster/rookie costs matter more than optional cushions.
+        # Forecast uncertainty discounts distant years, but risk never saturates.
+        # Only cap_accounting decides current-year transaction legality.
+        risk = 0.
+        for i, (b, a) in enumerate(zip(before['years'], after['years'])):
+            def gaps(row):
+                concrete = max(0., -row['funded_room'])
+                cushion = max(0., row['soft_reserve'] - max(0., row['funded_room']))
+                return concrete, cushion
+            old_concrete, old_cushion = gaps(b)
+            new_concrete, new_cushion = gaps(a)
+            concrete = max(0., new_concrete - old_concrete)
+            cushion = max(0., new_cushion - old_cushion)
+            weight = 300. if i == 0 else 100.
+            risk += (weight * concrete + 40. * cushion) / max(1., a['limit']) / (i + 1)
+        tolerance = 2. + 4. * _trait(team, 'aggression') + max(0., float(gain)) * .5
+        result.update(approved=risk <= tolerance, forecast_risk=risk,
+                      reason='approved_trade_risk' if risk <= tolerance else 'trade_financial_preference')
         return result
     benefit = max(0.,float(gain))
     # Package-score units, already used by roster_needs candidate valuation.

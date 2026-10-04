@@ -39,6 +39,25 @@ def project_cap(year, last_year, last_cap, rng=None, media_years=()):
         g += MEDIA_BUMP
     return round(last_cap * (1 + g), 3)
 
+def forecast_cap(league, year):
+    """Deterministic baseline forecast; actual future growth still varies by save."""
+    history = getattr(league, 'cap_history', {}) or {}
+    current = int(league.year)
+    def known(y):
+        return history.get(y, history.get(str(y)))
+    if known(year) is not None:
+        return float(known(year))
+    if year <= 2026 and year in CAP:
+        return float(CAP[year])
+    value = known(current)
+    if value is None:
+        teams = getattr(league, 'teams', {})
+        value = next((t.cap.cap for t in teams.values() if getattr(t, 'cap', None)), CAP.get(current, 301.2))
+    for y in range(current + 1, year + 1):
+        value = known(y) if known(y) is not None else round(value * (1 + BASE_GROWTH + (MEDIA_BUMP if (y - 2024) % MEDIA_CYCLE == 0 else 0)), 3)
+    return float(value)
+
+
 # ---------------------------------------------------------------- contracts
 MAX_PRORATION_YEARS = 5
 

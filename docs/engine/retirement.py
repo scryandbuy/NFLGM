@@ -123,40 +123,23 @@ AGE_HAZARD = {
 }
 
 
+def interpolate(table, age):
+    keys = sorted(table)
+    return float(np.interp(float(age), keys, [table[k] for k in keys]))
+
+
 def age_hazard(age):
-    a = int(round(age))
-    if a < min(AGE_HAZARD): return AGE_HAZARD[min(AGE_HAZARD)]
-    if a > max(AGE_HAZARD): return 0.85
-    return AGE_HAZARD[a]
+    return interpolate(AGE_HAZARD | {41: .85}, age)
 
 
 def pos_factor(pos, age):
-    """
-    How this position ages against the league. Kept from the real curves: a
-    back at 29 sits at .32 where the league mean is near .21, so he carries a
-    factor above one; a specialist sits well below.
-    """
-    a = int(round(age))
-    mine = base_hazard(pos, a)
-    vals = []
-    for g in HAZARD:
-        if g == 'SPEC':
-            continue                    # specialists would drag the mean down
-        tbl = HAZARD[g]
-        k = min(max(a, min(tbl)), max(tbl))
-        vals.append(tbl[k])
-    mean = float(np.mean(vals)) if vals else mine
-    return float(np.clip(mine / max(mean, 1e-6), 0.45, 1.9))
+    mine = base_hazard(pos, age)
+    mean = float(np.mean([interpolate(t, age) for g, t in HAZARD.items() if g != 'SPEC']))
+    return float(np.clip(mine / max(mean, 1e-6), .45, 1.9))
 
 
 def base_hazard(pos, age):
-    """Position-and-age hazard, with the ends of the curve held flat."""
-    tbl = HAZARD.get(POS_GROUP.get(pos, 'LB'), HAZARD['LB'])
-    a = int(round(age))
-    if a in tbl:
-        return tbl[a]
-    lo, hi = min(tbl), max(tbl)
-    return tbl[lo] if a < lo else tbl[hi]
+    return interpolate(HAZARD.get(POS_GROUP.get(pos, 'LB'), HAZARD['LB']), age)
 
 
 def chance(player, games=0, ovr=None, league_avg_ovr=72.0, snaps=None):
@@ -173,19 +156,16 @@ def chance(player, games=0, ovr=None, league_avg_ovr=72.0, snaps=None):
     season_age = review_age(player)
     h = age_hazard(season_age) * pos_factor(player.pos, season_age)
     if ovr is not None:
-        # A good player keeps getting paid, and the reasons to stop arrive
-        # later for him. Steeper before thirty, shallower after, so an aging
-        # star can still go while a young one effectively cannot.
-        gap = ovr - league_avg_ovr
-        if season_age < 30:
-            h *= float(np.clip(1.0 - 0.090 * gap, 0.015, 2.2))
-        else:
-            h *= float(np.clip(1.0 - 0.045 * gap, 0.15, 2.2))
-    # hidden, drawn at creation: some men are finished at 28 and some play to
-    # 38, and nothing on their rating sheet says which
-    h /= max(0.45, player.longevity)
-    if season_age >= 39:
-        h = max(h, 0.45)
+        # Fixed reference avoids draft-class strength changing veteran decisions.
+        # Ease quality protection down from ages 30 through 36, without a cliff.
+        gap = ovr - 74.0
+        maturity = float(np.clip((season_age - 30.0) / 6.0, 0, 1))
+        slope = .090 - .045 * maturity
+        floor = .015 + .135 * maturity
+        h *= float(np.clip(1.0 - slope * gap, floor, 2.2))
+    h /= float(np.clip(player.longevity, .75, 1.35))
+    old_age_floor = .45 * float(np.clip((season_age - 37.0) / 2.0, 0, 1))
+    h = max(h, old_age_floor)
     return float(np.clip(h, 0.0, 0.95))
 
 
@@ -196,26 +176,22 @@ def run(league, rng, verbose=False):
     a hole his club then has to fill.
     """
     year = league.year
-    ovrs = [p.ovr for p in league.players.values() if not p.retired]
-    avg = float(np.mean(ovrs)) if ovrs else 72.0
+    completed = getattr(league, 'retirement_applied_years', [])
+    if year in completed:
+        return []
     stats = league.stats.get(year, {})
-
-    # ONLY MEN WHO WERE ACTUALLY IN THE LEAGUE.
-    # The seed carries 66 players a club, well past a 53-man limit, and
-    # cut-down is not built yet - so roughly a dozen men per team never take a
-    # snap all year. Those are CUTS, not retirements, and running the hazard
-    # over them retired 37% of the league against a real 18.7%. They are left
-    # alone here and belong to the cut-down step when it exists.
-    ACTIVE = 53
-    eligible = set()
+    eligible = set(league.free_agents)
     for t in league.teams.values():
-        ranked = sorted(t.active(), key=lambda p: -p.ovr)[:ACTIVE]
-        eligible.update(p.pid for p in ranked)
-    eligible.update(pid for pid in league.free_agents)
+        for group in (t.roster, t.ir, t.practice_squad):
+            eligible.update(p.pid for p in group)
+    # Roster membership takes precedence over stale draft-pool membership.
+    prospects = {p.pid for p in getattr(league, 'next_class', []) or []}
+    eligible -= prospects
+    ovrs = [p.ovr for p in league.players.values() if not p.retired and p.pid in eligible]
 
     retired = []
     for p in list(league.players.values()):
-        if p.retired or p.pid not in eligible:
+        if p.retired or p.pid not in eligible or p.xp_spent.get('_retirement_checked_year') == year:
             continue
         line = stats.get(p.pid, {})
         games = float(line.get('games', 0) or 0)
@@ -223,10 +199,12 @@ def run(league, rng, verbose=False):
         # Both are passed through unused - see the note on AGE_HAZARD. They
         # stay on the call so injury history can join them here later without
         # another signature change.
-        if rng.random() < chance(p, games, p.ovr, avg, snaps):
+        retires = rng.random() < chance(p, games, p.ovr, snaps=snaps)
+        p.xp_spent['_retirement_checked_year'] = year
+        if retires:
             p.retired = True; p.retired_year = league.year
             t = league.teams.get(p.team)
-            if t and p in t.roster:
+            if t:
                 from cap_accounting import settle_week
                 settle_week(league,18)
                 if p.contract:
@@ -239,7 +217,9 @@ def run(league, rng, verbose=False):
                     # where the roll then erased it.
                     from cap_accounting import depart
                     depart(league, t, p.contract, june1=True)
-                t.roster.remove(p)
+                for group in (t.roster, t.ir, t.practice_squad, getattr(t, '_elevated', [])):
+                    if p in group:
+                        group.remove(p)
                 t.sync_cap()
             if p.pid in league.free_agents:
                 league.free_agents.remove(p.pid)
@@ -247,6 +227,7 @@ def run(league, rng, verbose=False):
             retired.append(p)
             league.log('retire', pid=p.pid, name=p.name, pos=p.pos,
                        age=round(p.age, 1), ovr=round(p.ovr, 1))
+    league.retirement_applied_years = list(completed) + [year]
     if verbose:
         print(f'  {len(retired)} retired '
               f'({100.0 * len(retired) / max(len(ovrs), 1):.1f}% of the league)')

@@ -138,7 +138,8 @@ def market_price(asset):
     return max(0., float(asset.get('trade_value', 0.) or 0.))
 
 # ---------------------------------------------------------------- player value
-STAR_PREMIUM = 0.50     # share of a proven player's market salary his certainty is worth, per year, at the elite tier
+STAR_PREMIUM = 0.50     # proven ability premium, with diminishing credit for future control
+CONTROL_CERTAINTY = (1.0, .35, .15, .05, .025, .0125)
 # specialists do not fetch premium picks whatever their overall: kickers and
 # punters go for late-round picks in the real market, full stop
 # what the trade market pays by position, relative to the man's overall: interior linemen, linebackers and
@@ -198,8 +199,8 @@ def trade_value(player, val, cap=CAP, contract=None):
         surplus = worth * decline - apy
         if elite > 0:
             surplus = max(surplus, floor)
-        total += surplus * (0.90 ** k)                      # future years discounted
-        total += STAR_PREMIUM * worth * decline * tier * (0.90 ** k)
+        total += surplus * (0.75 ** k)                      # future years discounted
+        total += STAR_PREMIUM * worth * decline * tier * CONTROL_CERTAINTY[k]
     # SCARCITY. A backup's paper surplus (market minus salary over his years) is not what the league pays
     # for him: a 71 or a 75 is on the street for the minimum, so his surplus is worth a fraction until he is a
     # starter. Real compensation for depth is a sixth or a seventh (Kaleb Johnson for a 2028 sixth, Irvin Charles
@@ -318,9 +319,14 @@ def window(team):
 # how each type of club prices a future pick versus a player who helps today
 WINDOW_PICK_BIAS = {'contending': .70, 'win_now': .55, 'middling': 1.00,
                     'retooling': 1.25, 'rebuilding': 1.45}
-# a club chasing a title pays UP for a 31-year-old; a rebuild discounts him hard
+# Competitive windows gradually change how clubs value veteran help.
 WINDOW_AGE_BIAS  = {'contending': 1.18, 'win_now': 1.35, 'middling': 1.00,
-                    'retooling': 0.78, 'rebuilding': 0.58}   # applied to players 30+
+                    'retooling': 0.78, 'rebuilding': 0.58}
+
+def veteran_window_factor(age, competitive_window):
+    """Phase in veteran preference from 30 to 33; base value owns physical aging."""
+    progress = float(np.clip((float(age) - 30.0) / 3.0, 0.0, 1.0))
+    return 1.0 + (WINDOW_AGE_BIAS[competitive_window] - 1.0) * progress
 
 def team_price(asset, team, cap_space, gm=None, owns=False):
     """
@@ -333,9 +339,13 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
     if asset['kind'] == 'pick':
         # He PAYS the market price; what he thinks it is worth is separate and
         # only decides whether he wants the deal.
-        v = pick_belief_dollars(asset['pick'], asset.get('years_out', 0),
-                                cap=asset.get('cap', CAP), lens=g['pick_lens'])
-        v *= max(0.75, WINDOW_PICK_BIAS[wdw] * (1.25 - 0.45*g['aggression']))
+        market = pick_price_dollars(asset['pick'], asset.get('years_out', 0), cap=asset.get('cap', CAP))
+        belief = pick_belief_dollars(asset['pick'], asset.get('years_out', 0),
+                                    cap=asset.get('cap', CAP), lens=g['pick_lens'])
+        # GM preference moves price around the market anchor; it cannot erase
+        # most of a first's exchange value before roster costs are considered.
+        v = market * float(np.clip(.75 + .25 * belief / max(market, .01), .85, 1.15))
+        v *= float(np.clip(WINDOW_PICK_BIAS[wdw] * (1.25 - 0.45*g['aggression']), .85, 1.15))
         # On the clock a buyer may value this exact selection above an
         # interchangeable chart pick because his target will be gone later.
         if not owns:
@@ -344,13 +354,18 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
     # the owner values him on the full contract he is paying; a buyer on the
     # base and roster bonus he would inherit, the bonus having been paid
     v = asset['trade_value'] if owns else asset.get('trade_value_buyer', asset['trade_value'])
-    if asset['age'] >= 30: v *= WINDOW_AGE_BIAS[wdw]
+    v *= veteran_window_factor(asset['age'], wdw)
     # ``need`` describes the receiving club's hole.  A buyer wanting a
     # player cannot make that player more indispensable to his current club.
     if asset['need'] and not owns: v *= 1.18
-    v *= g['own_bias'] if owns else g['target_bias']
-    if owns and asset.get('star'):
-        v *= float(asset.get('ask', 1.3))            # a starter is not for sale at his value
+    if owns:
+        owner = g['own_bias']
+        willingness = float(asset.get('seller_ask', 1.0))
+        # Both positive factors express attachment: do not charge twice.
+        # A seller discount remains a discount, including rebuilding clubs.
+        v *= owner if owner < 1.0 or v <= 0 else max(owner, willingness)
+    else:
+        v *= g['target_bias']
     # Already-paid bonus is sunk money, not an extra asking price. Its
     # accelerated cap charge belongs in the before/after ledger.
     if not owns:
@@ -400,6 +415,7 @@ def evaluate(offer, team_a, team_b, space_a, space_b, gm_a=None, gm_b=None, *, u
     b_out = sum(team_price(x, team_b, space_b, gm_b, owns=True)  for x in offer['a_gets'])
     b_in  = sum(team_price(x, team_b, space_b, gm_b, owns=False) for x in offer['a_sends'])
     return dict(a_gain=round(a_in - a_out, 2), b_gain=round(b_in - b_out, 2),
+                b_in=round(b_in, 2), b_out=round(b_out, 2),
                 accepted=(a_in - a_out) > 0.5 and (b_in - b_out) > 0.5)
 
 # ---------------------------------------------------------------- demo

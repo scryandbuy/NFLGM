@@ -25,6 +25,7 @@ THE USER. extend(league, pid, apy, years) returns accepted, countered or
 refused with the agent's reasoning; the inbox gets a note when one of his
 men enters his final year.
 """
+from cap_engine import forecast_cap
 from inbox import player_name as inbox_player
 import numpy as np
 import math
@@ -279,7 +280,7 @@ def can_afford_extension(league, team, player, apy, years, front_load=None, bonu
         if i == 1:
             limit, committed = limit_next, committed_next
         else:
-            limit = CAP.get(league.year + i, cap * 1.055 ** i)
+            limit = forecast_cap(league, league.year+i)
             committed = sum(charge(p.contract, i) for p in team.roster)
         old = charge(player.contract, i)
         new = charge(preview, i)

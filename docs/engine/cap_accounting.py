@@ -1,4 +1,5 @@
 """Shared cap transactions. Game calendar and emergency exceptions stay intact."""
+from cap_engine import forecast_cap
 import copy
 from cap_engine import CAP, TeamCap
 
@@ -103,7 +104,7 @@ def require_squad_room(league, team, player):
 
 def next_year_ledger(league, team):
     team.sync_cap()
-    base=CAP.get(league.year+1,CAP.get(league.year,301.2)*1.055)
+    base=forecast_cap(league, league.year+1)
     rollover=max(0.0,team.cap.space('season'))
     dead=team.cap.dead_next+sum(p.contract.remaining_proration(1) for p in team.roster
                               if p.contract and p.contract.years==1)

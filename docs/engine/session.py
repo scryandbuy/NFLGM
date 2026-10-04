@@ -1200,7 +1200,6 @@ class Session:
             rows = [[inbox_player(L.player(r['pid']), r['name']), r['pos'], str(r.get('ovr', '—'))] + ([f"${r[price]}m"] if price else []) for r in sheet[kind]]
             if rows: sections.append(IB.mail_section(title, rows, ['Player', 'Position', 'OVR'] + (['Tag price' if kind == 'ufa' else 'Tender price'] if price else [])))
         sections.append(IB.mail_section('Before advancing', [
-            'One franchise tag, or none. Untagged unrestricted players without new deals enter the market.',
             'Tender restricted players in Retain Players to keep matching rights. Untendered players enter the market unrestricted.']))
         IE.post(L, key_, 'contract', "Re-sign: your tag and tenders", f"You can commit about ${sheet['room']}m after the minimums you still owe.", sender='front office', payload=dict(key=key_, link='personnel:retain', mail_sections=sections))
 
