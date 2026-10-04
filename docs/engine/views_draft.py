@@ -599,7 +599,7 @@ def picks(session, league, abbr):
         tm = league.teams.get(p.team) if p.team else None
         role = 'Retired' if p.retired else ('Free Agent' if tm is None else _role_word(tm, p))
         results.append(dict(pid=p.pid, name=p.name, pos=p.pos, home_state=home_state(p), year=x.get('year'), pick=f"{x.get('round')}.{((x.get('selection') or 1) - 1) % 32 + 1}", sel=x.get('selection'), team=club(x.get('team')) if x.get('team') in league.teams else None,
-                            dev=getattr(p, 'dev', 'normal'), ovr=round(p.ovr), drafted_at=(round(float(x['ovr_then'])) if x.get('ovr_then') is not None else None), cons_was=x.get('consensus_rank'), status=role, now=(club(p.team) if p.team in league.teams else None)))
+                            dev=x.get('dev_then'), ovr=(round(float(x['ovr_then'])) if x.get('ovr_then') is not None else None), drafted_at=(round(float(x['ovr_then'])) if x.get('ovr_then') is not None else None), cons_was=x.get('consensus_rank'), status=role, now=(club(p.team) if p.team in league.teams else None)))
     results.sort(key=lambda r: (-(r['year'] or 0), r['sel'] or 999))
     from views import draft_year
     # WHICH DRAFT THE RESULTS TAB OPENS ON. The draft held this offseason, if it has been; otherwise the coming
@@ -607,7 +607,7 @@ def picks(session, league, abbr):
     # opened on last year's draft all through the new season as if it were this year's.
     held_this_offseason = _held_this_offseason(league)
     default_year = draft_year_of(ld['year']) if held_this_offseason else draft_year_of(coming_season(league))
-    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], last=(_results(league, ld) if (ld and held_this_offseason) else None), results=results[:400], result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division,
+    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], last=(_results(league, ld) if (ld and held_this_offseason) else None), results=results, result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division,
                 default_year=default_year, default_held=held_this_offseason)
 
 

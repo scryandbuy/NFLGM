@@ -23,6 +23,28 @@ class CharacterAssessmentTests(unittest.TestCase):
         league.teams['GB'].staff = {'scout': N(staff_traits=[])}
         return league, p, view
 
+    def test_old_prospect_gets_stable_display_read_without_trait_or_risk_change(self):
+        league, p, view = self.setup_player()
+        league.draft_pool = [p]
+        traits = copy.deepcopy(p.traits)
+        original = copy.deepcopy(view)
+        CA.migrate(league)
+        self.assertEqual(CA.report(view)[1]['source'], 'Film assessment')
+        self.assertEqual(CA.report(view)[0]['summary'], 'Not assessed')
+        self.assertEqual(p.traits, traits)
+        self.assertEqual(CA.draft_risk(view, N(risk=.5)), CA.draft_risk(original, N(risk=.5)))
+        saved = copy.deepcopy(view)
+        CA.migrate(league)
+        self.assertEqual(view, saved)
+
+    def test_old_prospect_keeps_existing_discipline_read(self):
+        league, p, view = self.setup_player()
+        league.draft_pool = [p]
+        CA.film(p, 'GB', view)
+        saved = copy.deepcopy(view)
+        CA.migrate(league)
+        self.assertEqual(view, saved)
+
     def test_tape_room_sees_film_but_no_preparation_or_secret_personality(self):
         _, p, view = self.setup_player()
         CA.film(p, 'GB', view)

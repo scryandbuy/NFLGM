@@ -13,12 +13,24 @@ KEYS = ('work_ethic', 'discipline')
 
 
 def migrate(league):
-    """Retain already-earned legacy knowledge and grades; no new scouting rolls."""
+    """Preserve earned knowledge; backfill missing baseline prospect film reads."""
+    prospects = {p.pid for p in list(getattr(league, "draft_pool", []) or []) + list(getattr(league, "next_class", []) or [])}
     for abbr, views in (getattr(league, 'scouting', None) or {}).items():
         for pid, view in views.items():
             p = league.players.get(pid)
             if p is None: continue
             data = assessments(view)
+            if pid in prospects and 'discipline' not in data:
+                saved = (p.xp_spent.get('_character_observations') or {}).get(abbr, {}).get('discipline')
+                if saved:
+                    data['discipline'] = copy.deepcopy(saved)
+                else:
+                    from scouting import _power
+                    baseline = {}
+                    film(p, abbr, baseline, small_school=not _power(p))
+                    data['discipline'] = baseline['character_assessments']['discipline']
+                    # Display repair must not reprice an already-scouted class.
+                    data['discipline']['display_backfill'] = True
             if not data: continue
             view['character_assessments'] = data
             _remember(p, abbr, data)
@@ -191,7 +203,7 @@ def draft_risk(view, gm):
     """Grade-equivalent risk cost for the CPU decision, not a talent downgrade."""
     cost = 0.
     for key, record in assessments(view).items():
-        if key not in KEYS or record.get('legacy_adjusted'): continue
+        if key not in KEYS or record.get('legacy_adjusted') or record.get('display_backfill'): continue
         value = float(record.get('value', 50))
         confidence = max(.25, min(1., 1. - float(record.get('error', 20)) / 30.))
         weight = 1.5 if key == 'work_ethic' else .75
