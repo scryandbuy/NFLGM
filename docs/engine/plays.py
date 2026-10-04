@@ -465,11 +465,10 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
         out['tackler'] = stopped_by.get('pid') if stopped_by and not out['touchdown'] else None
     return out
 
-RUN_BASE = 2.05
-# The live franchise register had 10.4% negative runs and 4.31 yards per carry.
-# A small increase in yards before contact reduces backfield losses while
-# leaving blocking matchups, run schemes, and the after-contact tail intact.
-# Preserve the existing contest noise and after-contact behavior.
+RUN_BASE = 1.95
+# The 2.05 baseline was calibrated before support blocks contributed yards.
+# Recenter it after that addition; keep the matchup, scheme, box, and
+# after-contact effects intact.
 RUN_NOISE = 1.33
 
 # ============================================================ RUN PLAY
