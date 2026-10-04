@@ -89,21 +89,21 @@ def book_special(book, dr, last, offense):
         raise ValueError('Special-teams EPA requires the resolved kick event')
     before = ep(last.get('down', 4), last.get('ydstogo', dr.togo), last.get('yardline', dr.yardline))
     if last.get('blocked'):
-        pid = (offense.get('p') or {}).get('pid')
+        pid = last.get('punter_pid') or (offense.get('p') or {}).get('pid')
         value = dr.points if dr.points else ep(1, dr.togo, dr.yardline) if last.get('retained') else -ep(1, 10, last['new_yardline'])
         v = value - before
     elif last.get('type') == 'punt' and last.get('touchdown'):
-        v = -TD_VALUE - before; pid = (offense.get('p') or {}).get('pid')
+        v = -TD_VALUE - before; pid = last.get('punter_pid') or (offense.get('p') or {}).get('pid')
     elif last.get('type') == 'punt' and last.get('fumble_lost'):
         v = ep(1, 10, 100 - last['new_yardline']) - before
-        pid = (offense.get('p') or {}).get('pid')
+        pid = last.get('punter_pid') or (offense.get('p') or {}).get('pid')
     elif dr.result == 'Field goal':
-        v = 3.0 - before; pid = (offense.get('k') or {}).get('pid')
+        v = 3.0 - before; pid = last.get('kicker_pid') or (offense.get('k') or {}).get('pid')
     elif dr.result == 'Missed field goal':
-        v = -ep(1, 10, 100.0 - max(20.0, dr.yardline + 7.0)) - before; pid = (offense.get('k') or {}).get('pid')
+        v = -ep(1, 10, 100.0 - max(20.0, dr.yardline + 7.0)) - before; pid = last.get('kicker_pid') or (offense.get('k') or {}).get('pid')
     else:
         spot = float(last['new_yardline'])
-        v = -ep(1, 10, spot) - before; pid = (offense.get('p') or {}).get('pid')
+        v = -ep(1, 10, spot) - before; pid = last.get('punter_pid') or (offense.get('p') or {}).get('pid')
     if isinstance(last, dict): last['epa'] = round(v, 3)
     if book is not None and pid:
         s = book._get(pid); s['st_epa'] = s.get('st_epa', 0.0) + v

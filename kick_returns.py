@@ -28,12 +28,26 @@ def resolve(start, distance, returner, rng, rate, coverage=(), blockers=(), even
     cov = np.mean([rate(p, {'tackle_rating': .55, 'speed_rating': .45}) for p in coverage]) if coverage else .70
     block = np.mean([rate(p, {'run_block_rating': .55, 'speed_rating': .45}) for p in blockers]) if blockers else .70
     gain = min(float(start), max(0., float(distance) * float(np.clip(1 + .40 * (block - cov), .85, 1.15))))
+    # Rare lanes expose the last covering defenders. Ordinary gains stay
+    # unchanged; open-field chances use the existing tackle/pursuit engine.
+    breakout = False
+    if returner and coverage and 12 <= gain < start:
+        skill = rate(returner, {'kick_ret_rating': .5, 'bcv_rating': .25, 'accel_rating': .25})
+        chance = float(np.clip(.045 + .12 * (skill - .8) + .15 * (block - cov), .008, .09))
+        if rng.random() < chance:
+            import plays
+            pursuers = sorted(coverage, key=lambda p: -rate(p, YAC['tackler']['angle']))[:2]
+            chase = plays.resolve_yards_after(returner, pursuers, start, rng,
+                                             contact_at=gain, in_space=True, track_tackler=True)
+            gain = chase['yards']
+            breakout = True
     # Pick the coverage player making contact before testing his impact.
     # Speed/tackling still govern return distance; impact governs ball security.
     tackler = coverage[int(rng.integers(len(coverage)))] if coverage else None
     impact = rate(tackler, YAC['tackler']['impact']) if tackler is not None else .70
     fum = events.fumble_check(returner, event, rng, rate, hit_power=impact, env_mult=weather) if returner else None
-    result = dict(returner=returner.get('pid'), return_start=float(start), fumble=False, fumble_lost=False)
+    result = dict(returner=returner.get('pid'), return_start=float(start), fumble=False, fumble_lost=False,
+                  breakaway_opportunity=breakout)
     if fum:
         # Unforced handling errors occur at the catch. A contact fumble must
         # happen before crossing the goal; no fumble after a touchdown.

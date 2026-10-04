@@ -1241,11 +1241,16 @@ def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False, kicking=(), receivi
 def kickoff_for(kicking, receiving, kick_state, receive_state, rng, rate, book):
     import kick_returns as KR
     returner = returner_for(receiving, receive_state, rate)
-    return kickoff_booked(returner, rng, rate, book,
-        kicking=KR.unit(kicking, kick_state, rate),
-        receiving=KR.unit(receiving, receive_state, rate, True, returner.get('pid')),
-        kicker=kicking.get('k'),
+    coverage = KR.unit(kicking, kick_state, rate)
+    blockers = KR.unit(receiving, receive_state, rate, True, returner.get('pid'))
+    kicker = specialist_for(kicking, kick_state, 'K', rate)
+    result = kickoff_booked(returner, rng, rate, book,
+        kicking=coverage, receiving=blockers, kicker=kicker,
         short_kick_bias=(getattr(kick_state, 'staff_fx', None) or {}).get('short_kick_bias', 0.0))
+    if not result.get('touchback'):
+        special_injuries(kick_state, coverage + [kicker], rng, rate, ENV.week, contact=.8)
+        special_injuries(receive_state, blockers + [returner], rng, rate, ENV.week, contact=.8)
+    return result
 
 
 def pending_kick_outcome():
@@ -1319,7 +1324,7 @@ class TeamState:
         pid = player.get('pid', position)
         return H.apply_state(player, self.cond.get(pid))
 
-    def hurt(self, player, position, contact, rng, rate_fn, week=1):
+    def hurt(self, player, position, contact, rng, rate_fn, week=1, risk_scale=.96):
         import health as H
         pid = player.get('pid', position)
         # A man already ruled out cannot be hurt again. Without this the same
@@ -1328,7 +1333,7 @@ class TeamState:
             return None
         inj = H.roll_injury(player, position, contact, rng, rate_fn,
                             condition=self.cond.get(pid),
-                            jaded=self.jaded.get(pid, 0.0))
+                            jaded=self.jaded.get(pid, 0.0), risk_scale=risk_scale)
         if inj:
             inj['week'] = week
             self.injuries.append(inj)
@@ -1400,6 +1405,11 @@ class TeamState:
             rng = _np.random.default_rng()
         import adjust as AD, gameplan as GP
         skill = self.adjustment_skill(unit)
+        # Communication can postpone a series response without changing the
+        # coach's skill or erasing observations. Explicit user plans bypass it.
+        delay = max(1.0, float(getattr(self, 'road_adjust_delay', 1.0)))
+        if delay > 1.0 and rng.random() >= 1.0 / delay:
+            return []
         aggr = float(self.coach.get('adjust_willingness', 0.5))
         trends = AD.detect(self.memories[unit], skill=skill, unit=unit)
         ctr = AD.respond(trends, skill=skill, aggressiveness=aggr,
@@ -1783,12 +1793,57 @@ def _enforce_turnover_penalty(dr, pen):
     dr.log_pen_after = 0.0
     dr.log_pen_first = False
 
+def specialist_for(roster, state, position, rate_fn):
+    """Use healthy specialist depth, then the best available emergency leg."""
+    out = getattr(state, 'out', set())
+    preferred = [roster.get(position.lower())] + list((roster.get('depth') or {}).get(position, []))
+    for p in preferred:
+        if p and p.get('pid') not in out:
+            return p
+    candidates = [p for group in (roster.get('depth') or {}).values() for p in group
+                  if p and p.get('pid') not in out]
+    if not candidates:
+        candidates = [p for key in ('ol', 'wr', 'lb', 'db') for p in roster.get(key, [])
+                      if p and p.get('pid') not in out]
+    return max(candidates, key=lambda p: rate_fn(p, {'kick_power_rating': .5, 'kick_acc_rating': .5}), default={})
+
+
+def special_injuries(state, players, rng, rate_fn, week, contact=.35):
+    """Small contact exposure, funded by reduced scrimmage injury risk.
+
+    A special-teams rep carries one tenth of the existing per-snap hazard;
+    scrimmage hazard is reduced four percent. Deduplicate multi-role players.
+    Injury severity/recovery and existing durability/fatigue still apply.
+    """
+    if state is None:
+        return []
+    injuries = []
+    for p in {p['pid']: p for p in players if p and p.get('pid')}.values():
+        injury = state.hurt(p, p.get('pos', 'ST'), contact, rng, rate_fn, week, risk_scale=.1)
+        if injury:
+            injury['source'] = 'special_teams'
+            injuries.append(injury)
+    return injuries
+
+
+def kick_injuries(offense, defense, off_state, def_state, kind, rng, rate_fn, week, returned=False):
+    off, deff = kick_penalty_units(offense, defense, off_state, def_state, kind, rate_fn)
+    if returned:
+        import kick_returns as KR
+        returner = returner_for(defense, def_state, rate_fn, kind='pr')
+        off = [('ST', p) for p in KR.unit(offense, off_state, rate_fn)] + [
+            ('P', specialist_for(offense, off_state, 'P', rate_fn))]
+        deff = [('ST', p) for p in KR.unit(defense, def_state, rate_fn, True, returner.get('pid'))] + [('RET', returner)]
+    return (special_injuries(off_state, [p for _, p in off], rng, rate_fn, week, .8 if returned else .35)
+            + special_injuries(def_state, [p for _, p in deff], rng, rate_fn, week, .8 if returned else .35))
+
+
 def kick_penalty_units(offense, defense, off_state, def_state, kind, rate_fn):
     """A fixed, healthy kick unit; no reserve can influence its foul risk."""
     import kick_returns as KR
     unavailable = getattr(off_state, 'out', set())
     snapper = snapper_for(offense, off_state)
-    candidates = [snapper, offense.get('p' if kind == 'punt' else 'k')]
+    candidates = [snapper, specialist_for(offense, off_state, 'P' if kind == 'punt' else 'K', rate_fn)]
     if kind != 'punt': candidates.append(_healthy_quarterback(offense, off_state))
     candidates += [p for p in offense.get('ol', []) if not snapper or p.get('pos') != 'C']
     candidates += KR.unit(offense, off_state, rate_fn, True)
@@ -2327,8 +2382,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if _kick_by_plan or _kick_old:
             flag = kick_flag(rng, 'field_goal', offense, defense, off_state, def_state, rate_fn, book)
             if _kick_presnap_flag(dr, flag, half_end, book): continue
-            fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
+            fg = attempt_field_goal(dr.yardline, specialist_for(offense, off_state, 'K', rate_fn), rng, rate_fn,
                                     snapper=snapper_for(offense, off_state))
+            fg['kicker_pid'] = specialist_for(offense, off_state, 'K', rate_fn).get('pid')
+            fg['injuries'] = kick_injuries(offense, defense, off_state, def_state, 'field_goal', rng, rate_fn, week)
             fg.update(clock=dr.clock, down=dr.down, ydstogo=dr.togo, yardline=dr.yardline)
             if _kick_roughing(dr, flag, fg, book):
                 dr.clock -= play_seconds('field_goal')
@@ -2336,7 +2393,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if _kick_offside(dr, flag, fg, book):
                 dr.clock -= play_seconds('field_goal')
                 continue
-            if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
+            if book is not None: book.special('fg', fg['kicker_pid'], **fg)
             dr.clock -= min(dr.clock, play_seconds('field_goal'))
             dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
             dr.points = fg['points']; dr.log.append(fg); break
@@ -2346,7 +2403,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             aggr4 = float(off_state.coach.get('fourth_down', aggression)) if off_state is not None and off_state.coach else aggression
             dec = fourth_down_decision(dr.yardline, dr.togo, dr.score_diff,
                                        dr.clock, rng, aggr4,
-                                       kicker=(offense.get('k') or {}), rate_fn=rate_fn,
+                                       kicker=specialist_for(offense, off_state, 'K', rate_fn), rate_fn=rate_fn,
                                        must_score=must_score, is_home=int(pos == 'home'),
                                        timeout_edge=(timeouts.left.get(pos, 0) - timeouts.left.get('away' if pos == 'home' else 'home', 0)) if timeouts is not None else 0,
                                        half_seconds_left=(dr.clock - half_end if half_end is not None else None),
@@ -2358,8 +2415,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if dec == 'field_goal':
                 flag = kick_flag(rng, 'field_goal', offense, defense, off_state, def_state, rate_fn, book)
                 if _kick_presnap_flag(dr, flag, half_end, book): continue
-                fg = attempt_field_goal(dr.yardline, (offense.get('k') or {}), rng, rate_fn,
+                fg = attempt_field_goal(dr.yardline, specialist_for(offense, off_state, 'K', rate_fn), rng, rate_fn,
                                         snapper=snapper_for(offense, off_state))
+                fg['kicker_pid'] = specialist_for(offense, off_state, 'K', rate_fn).get('pid')
+                fg['injuries'] = kick_injuries(offense, defense, off_state, def_state, 'field_goal', rng, rate_fn, week)
                 fg.update(clock=dr.clock, down=dr.down, ydstogo=dr.togo, yardline=dr.yardline)
                 if _kick_roughing(dr, flag, fg, book):
                     dr.clock -= play_seconds('field_goal')
@@ -2367,7 +2426,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 if _kick_offside(dr, flag, fg, book):
                     dr.clock -= play_seconds('field_goal')
                     continue
-                if book is not None: book.special('fg', (offense.get('k') or {}).get('pid'), **fg)
+                if book is not None: book.special('fg', fg['kicker_pid'], **fg)
                 dr.clock -= play_seconds('field_goal')
                 dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
                 dr.points = fg['points']; dr.log.append(fg); break
@@ -2376,15 +2435,17 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 if _kick_presnap_flag(dr, flag, half_end, book): continue
                 returner = returner_for(defense, def_state, rate_fn, kind='pr')
                 import kick_returns as KR
-                p = punt(dr.yardline, (offense.get('p') or {}),
+                p = punt(dr.yardline, specialist_for(offense, off_state, 'P', rate_fn),
                          returner, rng, rate_fn,
                          snapper=snapper_for(offense, off_state),
-                         kicking=[m for m in (offense.get('ol', []) + [offense.get('p')])
+                         kicking=[m for m in (offense.get('ol', []) + [specialist_for(offense, off_state, 'P', rate_fn)])
                                   if m and (off_state is None or m.get('pid') not in off_state.out)],
                          receiving=[m for m in (defense.get('dl', []) + defense.get('lb', []))
                                     if m and (def_state is None or m.get('pid') not in def_state.out)],
                          return_coverage=KR.unit(offense, off_state, rate_fn),
                          return_blockers=KR.unit(defense, def_state, rate_fn, True, returner.get('pid')))
+                p['punter_pid'] = specialist_for(offense, off_state, 'P', rate_fn).get('pid')
+                p['injuries'] = kick_injuries(offense, defense, off_state, def_state, 'punt', rng, rate_fn, week, returned=p.get('how') == 'return')
                 p.update(clock=dr.clock, down=dr.down, ydstogo=dr.togo, yardline=dr.yardline)
                 if _kick_roughing(dr, flag, p, book):
                     dr.clock -= play_seconds('punt')
@@ -2401,7 +2462,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     # Return penalties change the next spot, not punt yardage.
                     p['net'] = round(p['gross'] - p.get('ret', 0), 1)
                 if book is not None:
-                    book.special('punt', (offense.get('p') or {}).get('pid'), **p)
+                    book.special('punt', p['punter_pid'], **p)
                     if p.get('how') == 'return' or (p.get('ret') and not p.get('touchback')):
                         KR.book_return(book, 'pr', p)
                 _tick(dr, return_seconds(p, play_seconds('punt'), setup=5.0))
@@ -2940,10 +3001,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                   call_def, rate_fn, try_os, try_ds, start_yardline=try_spot(2), book=book)
         else:
             try_orows, try_drows = kick_penalty_units(try_off, try_def, try_os, try_ds, 'extra_point', rate_fn)
-            t = attempt_extra_point(try_off.get('k') or {}, rng, rate_fn,
+            try_kicker = specialist_for(try_off, try_os, 'K', rate_fn)
+            t = attempt_extra_point(try_kicker, rng, rate_fn,
                                     snapper=snapper_for(try_off, try_os), distance=try_spot(15) + 18,
                                     offense_players=try_orows, defense_players=try_drows, book=book)
-            if book is not None: book.special('xp', (try_off.get('k') or {}).get('pid'), **t)
+            t['injuries'] = kick_injuries(try_off, try_def, try_os, try_ds, 'extra_point', rng, rate_fn, week)
+            if book is not None: book.special('xp', try_kicker.get('pid'), **t)
         dr.points += (-1 if defending else 1) * t['points']
         if defending: t['scoring_side'] = 'defense'
         dr.try_result = t
@@ -3129,8 +3192,10 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     _P.ENV = ENV
     if away_state is not None:
         away_state.road_noise = ENV.road_false_start; away_state.road_stamina = ENV.road_stamina
+        away_state.road_adjust_delay = ENV.road_adjust_delay
     if home_state is not None:
         home_state.road_noise = 1.0; home_state.road_stamina = 1.0
+        home_state.road_adjust_delay = 1.0
     LAST_KICKOFF.clear()
     kick = kickoff_for(home, away, home_state, away_state, rng, rate_fn, book)
     start = kick['new_yardline']

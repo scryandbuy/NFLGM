@@ -254,9 +254,9 @@ def injury_chance(player, position, contact, rate_fn, condition=100.0,
     return float(np.clip(p, 0.0, 0.10))
 
 def roll_injury(player, position, contact, rng, rate_fn, condition=100.0,
-                jaded=0.0, AVG=0.70, snaps_per_game=65.0):
+                jaded=0.0, AVG=0.70, snaps_per_game=65.0, risk_scale=1.0):
     if rng.random() >= injury_chance(player, position, contact, rate_fn,
-                                     condition, jaded, AVG, snaps_per_game):
+                                     condition, jaded, AVG, snaps_per_game) * float(np.clip(risk_scale, 0, 1)):
         return None
     kind = _it[int(rng.choice(len(_it), p=_ip))]
     sev = _isev[kind]
