@@ -3102,3 +3102,10 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .trade-interest-track span {display:block;height:100%;background:#ef5963;border-radius:inherit;transition:width .18s ease;}
 .trade-interest[data-band="medium"] .trade-interest-track span {background:#f0bc39;}
 .trade-interest[data-band="high"] .trade-interest-track span {background:#38bb8b;}
+
+/* Trade dialogs share the application palette and stay centered in the viewport. */
+dialog.retain-dialog{position:fixed;inset:0;margin:auto;width:min(520px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:0;background:var(--sheet);color:var(--ink);border:1px solid var(--rule);border-radius:8px;font-family:var(--text);box-shadow:0 24px 80px #0008}
+dialog.retain-dialog::backdrop{background:#05090dbb}
+dialog.retain-dialog .retain-dialog-body h2{color:var(--ink);padding:0 0 16px}
+dialog.retain-dialog .retain-dialog-body p{color:var(--ink-2);font-size:15px;line-height:1.5;margin:0}
+dialog.retain-dialog .retain-dialog-actions{flex-wrap:wrap}

@@ -1710,14 +1710,14 @@ function showTradeResult(result, view, sent, received) {
 }
 function showTradeCounter(result, view, reload) {
   if(!(result.adds?.length || result.removes?.length)){notify(result);return;}
-  const dialog=el('dialog',{class:'retain-dialog'});
-  const cancel=el('button',{class:'btn',onclick:()=>dialog.close()},'Keep My Offer');
+  const dialog=el('dialog',{class:'retain-dialog','aria-labelledby':'trade-request-title'});
+  const cancel=el('button',{class:'btn',onclick:()=>dialog.close()},'Cancel');
   const apply=el('button',{class:'btn go',onclick:()=>{
     try{tradeState.a=tradeCounterSelection(tradeState.a,result.adds,view.me,result.removes);}
     catch(e){notify({ok:false,why:e.message});return;}
     tradeState.offers=null;dialog.close();reload(true);
-  }},'Apply Counteroffer');
-  dialog.append(el('div',{class:'retain-dialog-body'},el('h2',{},'Counteroffer'),el('p',{},result.line)),el('div',{class:'retain-dialog-actions'},cancel,apply));
+  }},'Add to Trade');
+  dialog.append(el('div',{class:'retain-dialog-body'},el('h2',{id:'trade-request-title'},'What They Want'),el('p',{},result.line)),el('div',{class:'retain-dialog-actions'},cancel,apply));
   dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();cancel.focus();
 }
 function renderTradeSummary(v,reload) {
