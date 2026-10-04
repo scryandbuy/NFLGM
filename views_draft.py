@@ -5,6 +5,7 @@ buttons do. Prospects are seen through YOUR scouts' eyes; the true rating is
 never shown.
 """
 from views import club, rail
+import player_roles as PR
 
 SLOT = lambda pk: f"{pk.round}.{((pk.selection - 1) % 32) + 1}" if pk.selection else f"R{pk.round}"
 
@@ -98,7 +99,10 @@ def _prospect(league, abbr, p, taken=()):
     h = getattr(p, 'height', None); size = (f"{int(h) // 12}'{int(h) % 12}\" {int(getattr(p, 'weight', 0) or 0)}".strip() if h else '')
     rk = c.get('rank') if c else None
     proj_range = (f"{max(1, rk - 4)}–{rk + 4}" if rk and rk <= 224 else '—')
-    return dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), home_state=home_state(p), small=(not SC._power(p)), visited=visited, scheduled=scheduled,
+    return dict(pid=p.pid, name=p.name, pos=p.pos,
+                filter_positions=list(PR.fa_positions(dict(pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None),
+                                                          ratings=SC.scouted_ratings(p, v)), league.teams[abbr])),
+                age=int(p.age), home_state=home_state(p), small=(not SC._power(p)), visited=visited, scheduled=scheduled,
                 cls_year=cls_year, size=size, words=words, character_report=CA.report(v), proj_range=proj_range, visit_move=visit_move, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
@@ -146,7 +150,7 @@ def board(session, league, abbr):
     on_clock = bool(D_ is not None and not D_.done and D_.on_user())
     import inseason_scouting as ISS
     visit_window = session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'
-    return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), year=coming_season(league) + 1, slot=slot, on_clock=on_clock,
+    return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows), position_filters=PR.fa_position_filters(t), year=coming_season(league) + 1, slot=slot, on_clock=on_clock,
                 visits=visits, visits_max=SP.VISITS, visit_window=visit_window, spring_done=spring_done, scouting_focus=ISS.priorities(league, abbr), scouting_updates=ISS.reports(league, abbr), background_coverage=ISS.background_coverage(league, abbr), needs=sorted(needs), user_board=ub, my_slot=_my_first_slot(league, abbr), read=_board_read(league, abbr, rows, ub, needs),
                 scout=(dict(name=scout.name, rating=round(scout.rating)) if scout else None), live=bool(getattr(session, 'draft', None)),
                 note=None if rows else 'The class is scouted in camp; the board fills once the season begins.')

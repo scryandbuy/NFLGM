@@ -450,6 +450,11 @@ function renderRecapBody(message) {
   return body;
 }
 
+function inboxByline(tag, sender, when = '') {
+  const category = String(tag || '').trim(), from = String(sender || '').trim();
+  return [category, from.toLowerCase() === category.toLowerCase() ? '' : from, when].filter(Boolean).join(' · ');
+}
+
 function renderInbox(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.className = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
@@ -479,7 +484,7 @@ function renderInbox(v) {
   const box = el('div', { class: 'mailbox' });
   const list = el('div', { class: 'list' });
   for (const r of rows) list.append(el('button', { type:'button', 'aria-pressed':String(r.id === mailSel), class: 'row' + (r.unread ? ' unread' : '') + (r.block ? ' block' : '') + (r.id === mailSel ? ' sel' : ''), onclick: () => { mailSel = r.id; if (r.unread) pyJSON(`SESSION.inbox_read(${r.id})`); const keepList = list.scrollTop, keepPage = window.scrollY; renderInbox(pyJSON('SESSION.inbox_view()')); const nl = document.querySelector('.mailbox .list'); if (nl) nl.scrollTop = keepList; window.scrollTo(0, keepPage); } },
-    el('span', { class: 'dot' }), el('div', { style: 'min-width:0' }, el('div',{class:'inbox-label' + (r.block ? ' urgent' : '')},r.block ? 'Action Required' : r.decide ? 'Decision' : r.tag), el('div', { class: 'subj' }, r.subject), el('div',{class:'inbox-preview'},r.body), el('div', { class: 'from' }, `${r.tag}${r.from ? ' · ' + r.from : ''}`)), el('span', { class: 'meta' }, r.when || '')));
+    el('span', { class: 'dot' }), el('div', { style: 'min-width:0' }, el('div',{class:'inbox-label' + (r.block ? ' urgent' : '')},r.block ? 'Action Required' : r.decide ? 'Decision' : r.tag), el('div', { class: 'subj' }, r.subject), el('div',{class:'inbox-preview'},r.body), el('div', { class: 'from' }, inboxByline(r.tag, r.from))), el('span', { class: 'meta' }, r.when || '')));
   if (!rows.length) list.append(el('div', { class: 'empty' }, inboxFilter === 'all' ? 'Nothing yet.' : inboxFilter === 'decide' ? 'Nothing waiting on a decision.' : inboxFilter === 'league' ? 'Nothing from around the league yet.' : 'All read.'));
   const pane = el('div', { class: 'pane' });
   if (cur) {
@@ -489,7 +494,7 @@ function renderInbox(v) {
     pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},playoffMail ? '' : m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
     const structuredRecap = m.recap || m.snap_counts || (m.kind === 'result' && (m.body || '').includes('PREGAME PLAN\n'));
     const messageBody = structuredRecap ? renderRecapBody(m) : renderMailBody(m);
-    pane.append(el('h3', {}, messageText(m,'subject')), el('div', { class: 'from' }, playoffMail ? (m.when || '') : `${m.tag || cur.tag}${m.from ? ' · ' + m.from : ''}${m.when ? ' · ' + m.when : ''}`), messageBody);
+    pane.append(el('h3', {}, messageText(m,'subject')), el('div', { class: 'from' }, playoffMail ? (m.when || '') : inboxByline(m.tag || cur.tag, m.from, m.when)), messageBody);
     if (m.kind === 'roster_report') pane.append(rosterReportCards(m, reload));
     if (m.kind === 'trade_offer') pane.append(el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openTradeOffer(cur.id, reload) }, cur.decide ? 'Open Trade Offer' : 'View Trade Offer')));
     else if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
@@ -512,7 +517,7 @@ function renderInbox(v) {
       if (destination) pane.append(el('div', { class: 'acts' }, el('a', { class: 'btn go', href: destination }, m.kind === 'match_request' || m.kind === 'offer_sheet' ? 'View Player' : 'Handle Decision')));
     }
     else if (m.link && !(m.link.startsWith('player:') && hasPlayerReference(m,m.link.slice(7))) && !(m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60)))) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn' + (m.kind === 'negotiation' ? ' go' : ''), href: linkHash(m.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There')));
-    if (cur.decide) pane.append(el('div',{class:'inbox-decision-note'},'This decision stays open until it is resolved.'));
+    if (cur.decide && m.kind !== 'trade_offer') pane.append(el('div',{class:'inbox-decision-note'},'This decision stays open until it is resolved.'));
   } else pane.append(el('div', { class: 'empty' }, 'Select a message.'));
   box.append(list, pane); s.append(box); page.append(s);
 }
@@ -1839,7 +1844,7 @@ function openTradeOffer(id, after) {
     applyTeamTheme(c, team);
     for (const x of items) c.append(el('div', { class: 'trade-offer-asset' + (x.gone ? ' gone' : '') },
       el('span', { class: 'trade-offer-position' }, x.kind === 'pick' ? 'PICK' : x.pos || '—'),
-      el('div', { class: 'nm' }, x.label, el('small', {}, x.gone ? 'No longer available' : x.kind === 'player' ? `Age ${x.age} · $${x.apy}m per year` : 'Draft capital')),
+      el('div', { class: 'nm' }, x.label, x.gone || x.kind === 'player' ? el('small', {}, x.gone ? 'No longer available' : `Age ${x.age} · $${x.apy}m per year`) : null),
       x.kind === 'player' ? el('b', {}, `${x.ovr} OVR`) : ''));
     if (!items.length) c.append(el('div', { class: 'empty' }, 'No assets'));
     return c;
@@ -2556,7 +2561,7 @@ function renderCap(v) {
 // ---------------------------------------------------------------- Draft
 const DR = { board: 'Your Board', spring: 'Spring Report', day: 'Draft Day', picks: 'Picks', results: 'Results' };
 let boardRound = null, boardHideTaken = false;
-let boardPos = 'All', boardFilt = { early: false, late: false, small: false, needs: false }, boardTab = 'class', boardQuery = '', boardSel = null, boardPage = 0, boardSort = 'rank', boardDir = 1;
+let boardPos = 'All', boardPosition = '', boardFilt = { early: false, late: false, small: false, needs: false }, boardTab = 'class', boardQuery = '', boardSel = null, boardPage = 0, boardSort = 'rank', boardDir = 1;
 // THE BOARD'S SORT. Every column but Flags sorts; click a head to sort by it, click again to flip. Numbers sort high
 // first, text A to Z, blanks last either way.
 const BOARD_KEYS = {
@@ -2651,7 +2656,23 @@ function renderBoard(v) {
   s.append(tabs);
   if (boardTab === 'board') { s.append(yourBoard(v, reload)); page.append(s); return; }
   const filt = el('div', { class: 'filt-pos' });
-  for (const g of ['All', 'QB', 'OL', 'WR', 'EDGE', 'CB']) filt.append(el('button', { class: 'btn' + (boardPos === g ? ' go' : ''), onclick: () => { boardPos = g; boardPage = 0; renderBoard(v); } }, g));
+  const groups = faFilterGroups(v);
+  const group = groups.find(g => g.group === boardPos);
+  if (boardPosition && !group?.positions.some(p => p.key === boardPosition)) boardPosition = '';
+  const groupChips = el('div', { class: 'chips fa-group-options', 'aria-label': 'Position group' });
+  for (const g of ['All', ...groups.map(g => g.group)]) groupChips.append(el('button', {
+    class: 'chip', 'aria-pressed': String(boardPos === g),
+    onclick: () => { boardPos = g; boardPosition = ''; boardPage = 0; renderBoard(v); }
+  }, g));
+  filt.append(groupChips);
+  if (group && group.positions.length > 1) {
+    const positions = el('div', { class: 'chips fa-position-options', 'aria-label': 'Individual position' });
+    for (const p of [{ key: '', label: `All ${boardPos}` }, ...group.positions]) positions.append(el('button', {
+      class: 'chip', 'aria-pressed': String(boardPosition === p.key),
+      onclick: () => { boardPosition = p.key; boardPage = 0; renderBoard(v); }
+    }, `${p.label} (${v.rows.filter(r => faMatchesPosition(r, group, p.key)).length})`));
+    filt.append(positions);
+  }
   filt.append(el('span', { style: 'width:1px;background:var(--rule-2);margin:0 6px' }));
   for (const [k, label, tip] of [['needs', 'Needs', `Your needs: ${v.needs.join(', ') || 'none'}`], ['early', 'Rounds 1–3', 'Consensus in the first 96'], ['late', '4–7', 'Consensus after the first 96'], ['small', 'Small School', 'Outside the power conferences: your read is wider on these players']]) filt.append(el('button', { class: 'btn' + (boardFilt[k] ? ' go' : ''), 'data-tip': tip, onclick: () => { boardFilt[k] = !boardFilt[k]; if (k === 'early' && boardFilt.early) boardFilt.late = false; if (k === 'late' && boardFilt.late) boardFilt.early = false; boardPage = 0; renderBoard(v); } }, label));
   const search = el('input', { type: 'search', class: 'find', placeholder: 'Find a Prospect', value: boardQuery }); search.oninput = () => { boardQuery = search.value; boardPage = 0; draw(); }; filt.append(search);
@@ -2665,9 +2686,9 @@ function renderBoard(v) {
     tbl.innerHTML = '';
     const H = (label, key, cls, tip) => boardHead(label, key, cls, tip, draw);
     tbl.append(el('tr', {}, H('#', 'rank', 'n', 'Your board order'), H('Prospect', 'name', '', ''), H('Pos', 'pos', '', ''), H('Home State', 'home_state', '', 'Fictional player background'), H('Estimated Overall', 'mine', 'n', "Your scouts' read. Carries error; a visit tightens it"), H('Scheme Ovr', 'scheme', 'n', "How he grades in your scheme, on your scouts' read; the league's grade does not move"), H('Ceiling', 'ceiling', 'n', 'Where he can grow to. Wide means your scouts are unsure'), H('Consensus', 'cons', 'n', "The league's grade, same scale as yours"), H('Gap', 'gap', 'n', "Yours minus the league's. Positive means the league undervalues him"), H('Proj.', 'proj', 'n', 'Where the league expects him to go'), el('th', {}, 'Flags'), el('th', {}, '')));
-    const q = boardQuery.trim().toLowerCase(); const GROUP = { QB: ['QB'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], WR: ['WR', 'TE'], EDGE: ['LEDG', 'REDG', 'DT'], CB: ['CB', 'FS', 'SS'] };
+    const q = boardQuery.trim().toLowerCase();
     const needPos = new Set(v.needs.flatMap(g => NEED_POS[g] || []));
-    const rows = v.rows.filter(r => (!boardHideTaken || !r.taken) && (boardTab !== 'visited' || r.visited) && (boardPos === 'All' || (GROUP[boardPos] || []).includes(r.pos)) && (!boardFilt.needs || needPos.has(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.late || (r.cons_rank != null && r.cons_rank > 96)) && (!boardFilt.small || r.small) && (!q || r.name.toLowerCase().includes(q) || (r.home_state || '').toLowerCase().includes(q)));
+    const rows = v.rows.filter(r => (!boardHideTaken || !r.taken) && (boardTab !== 'visited' || r.visited) && faMatchesPosition(r, group, boardPosition) && (!boardFilt.needs || needPos.has(r.pos)) && (!boardFilt.early || (r.cons_rank != null && r.cons_rank <= 96)) && (!boardFilt.late || (r.cons_rank != null && r.cons_rank > 96)) && (!boardFilt.small || r.small) && (!q || r.name.toLowerCase().includes(q) || (r.home_state || '').toLowerCase().includes(q)));
     const sorted = boardSortRows(rows);
     const PAGE = 100, pages = Math.max(1, Math.ceil(rows.length / PAGE)); if (boardPage >= pages) boardPage = pages - 1; if (boardPage < 0) boardPage = 0;
     pager.innerHTML = ''; pager.append(el('button', { class: 'btn', disabled: boardPage === 0 ? '' : null, onclick: () => { boardPage--; draw(); } }, '‹ Prev'), el('span', { class: 'count' }, `${rows.length ? boardPage * PAGE + 1 : 0}–${Math.min(rows.length, (boardPage + 1) * PAGE)} of ${rows.length}`), el('button', { class: 'btn', disabled: boardPage >= pages - 1 ? '' : null, onclick: () => { boardPage++; draw(); } }, 'Next ›'));
