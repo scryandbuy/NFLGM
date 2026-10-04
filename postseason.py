@@ -264,7 +264,7 @@ def set_draft_order(league, post, year=None):
 
 
 # ================================================================== FIRING
-def run_firings(league, rng, pool=None, verbose=False, clubs=None):
+def run_firings(league, rng, pool=None, verbose=False, clubs=None, *, season_year=None, context=None):
     """
     Every club rolls its own chance off accumulated pressure. No quota, no
     target turnover - the league lands where it lands, which is the point of
@@ -277,11 +277,17 @@ def run_firings(league, rng, pool=None, verbose=False, clubs=None):
     pool = pool if pool is not None else []
     fired = []
     done = league.__dict__.setdefault('_firings_rolled', {})
-    yr = str(league.year); rolled = done.setdefault(yr, [])
+    yr = str(league.year if season_year is None else season_year); rolled = done.setdefault(yr, [])
+    context = context or {}
+    records = context.get('records', {})
+    histories = context.get('histories', {})
+    def pct(abbr, team):
+        rec = records.get(abbr)
+        return (rec[0] + .5 * rec[2]) / max(1, sum(rec)) if rec else team.win_pct
     strengths = {a: t.roster_strength() for a, t in league.teams.items()}
     lo, hi = min(strengths.values()), max(strengths.values())
     # the clubs searching in the same week compete for the same names; the worst record moves first
-    order = sorted(league.teams.items(), key=lambda kv: kv[1].win_pct)
+    order = sorted(league.teams.items(), key=lambda kv: pct(*kv))
     for abbr, t in order:
         if t.gm is None:
             continue
@@ -292,12 +298,12 @@ def run_firings(league, rng, pool=None, verbose=False, clubs=None):
         rp = (strengths[abbr] - lo) / (hi - lo) if hi > lo else 0.5
         qb = t.starter('QB')
         qb_dev = bool(qb and qb.age <= 25 and qb.ovr >= 78)
-        chance = FM.fire_chance_offseason(t.hist(), rp, qb_dev)
+        chance = FM.fire_chance_offseason(histories.get(abbr) or t.hist(), rp, qb_dev)
         if rng.random() < chance:
             if abbr == getattr(league, 'user_team', None):
                 continue                      # the user is the man; his seat is his own story
             import coaching_pool as CP
-            hired, reasons = CP.fire_and_hire(league, t, rng, verbose)
+            hired, reasons = CP.fire_and_hire(league, t, rng, verbose, season_year=season_year, season_record=records.get(abbr))
             bg = hired.background if hired is not None else 'pending a search'
             fired.append((abbr, bg))
             league.__dict__.setdefault('_fired_this_year', {}).setdefault(yr, []).append((abbr, bg))

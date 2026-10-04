@@ -25,7 +25,7 @@ class CutdownPlanTimingTests(unittest.TestCase):
     def test_new_game_and_waivers_do_not_open_week_one_surfaces_or_actions(self):
         s = self.fresh()
         self.assertEqual(self.reports(s), [])
-        for stop in [('cutdown',), ('wire',), ('offseason', 13)]:
+        for stop in [('cutdown',), ('wire',), ('offseason', 11)]:
             s.stop = stop
             before = copy.deepcopy(getattr(s.L, 'user_week_plan', None))
             with patch.object(GW, 'opponent_report', side_effect=AssertionError('too early')):

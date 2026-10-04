@@ -73,7 +73,7 @@ class CalendarAwardResumeTests(unittest.TestCase):
                    'all_pro_2': [qbs[1]], 'coty': 'GB'}
         s.L.awards[s.L.year] = {'mvp': qbs[0].pid, 'all_pro_1': [qbs[0].pid],
                                'all_pro_2': [qbs[1].pid], 'coty': 'GB'}
-        s.stop = ('offseason', 2)
+        s.stop = ('offseason', 1)
         s.L.set_phase('offseason')
         s.rng = np.random.default_rng(0)
         return s, qbs[0].pid
@@ -135,7 +135,7 @@ class CalendarAwardResumeTests(unittest.TestCase):
         self.assertIn(s.L.year, s.L.awards)
         letter.assert_called_once()
         s = SS.Session.load(s.save())
-        s.post = SimpleNamespace()
+        s.post = SimpleNamespace(champion=None)
         self.assertEqual(s.votes['mvp'].pid, p.pid)
         with patch.object(SS.AW, 'vote', side_effect=AssertionError('regular honors must not be revoted')), \
                 patch.object(SS.AW, 'championship_game_mvp', return_value=None), \

@@ -18,6 +18,7 @@ MODULES.append('penalty_players')
 MODULES.append('ceiling_knowledge')
 MODULES.append('replacement_contracts')
 MODULES.append('blocking_evaluation')
+MODULES.append('offseason_calendar')
 DATA = ['newgen_shape.json', 'league_seed_2026.csv', 'schedule_2026.csv', 'cfb27_ratings.csv', 'aging_curves.json', 'pick_values.json', 'wp_model.json', 'production_scores.json', 'free_agent_pool.csv', 'original_player_name_hashes.json']
 os.makedirs(OUT, exist_ok=True)
 def _check_imports():

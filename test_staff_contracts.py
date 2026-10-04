@@ -90,9 +90,9 @@ class StaffContracts(unittest.TestCase):
         self.assertFalse(ST.hire(L,'A','Employed')['ok'])
         self.assertFalse(v['staff_locked'])
 
-    def test_calendar_indices_stable_and_actual_step_releases_only_choices(self):
-        self.assertEqual(Session.OFFSEASON[4][1],'step_staff_contracts')
-        self.assertEqual(Session.OFFSEASON[5][1],'step_extensions')
+    def test_combined_calendar_and_actual_step_releases_only_choices(self):
+        self.assertEqual(Session.OFFSEASON[2][1],'step_coaching')
+        self.assertEqual(Session.OFFSEASON[3][1],'step_extensions')
         steps = [step for _label, step in Session.OFFSEASON]
         self.assertEqual(steps.index('step_draft'), steps.index('step_visits') + 1)
         s=Session.__new__(Session);s.L=self.L;s.user_team='A';s.rng=np.random.default_rng(2)

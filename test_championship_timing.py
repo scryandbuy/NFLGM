@@ -19,10 +19,14 @@ class ChampionshipTiming(unittest.TestCase):
  def test_missing_final_not_invented(self):
   l,p=self.fixture();l.game_stats.pop('2028-22-GB-CA');self.assertIsNone(A.announce_championship(l,p));self.assertFalse(l.history['2028'].get('championship_announced'))
  def test_finalize_before_firing(self):
-  s=Session.__new__(Session);s.L=N(teams={'GB':None});s.rng=None;calls=[]
-  s.step_awards=lambda:calls.append('finalize');s._black_monday=lambda teams:calls.append('fire') or []
-  with patch('session.STF.carousel',side_effect=lambda *a,**k:calls.append('hire')),patch('league_notes.coaching_summary'):s.step_coaching()
-  self.assertEqual(calls,['finalize','fire','hire'])
+  s=Session.__new__(Session);s.L=N(year=2028,teams={'GB':None});s.rng=None;calls=[]
+  s.stop=('offseason',1);s.offseason_progress={'year':2028};s._offseason_trade_pass=lambda:None
+  s.step_awards=lambda:calls.append('finalize');s.step_retire=lambda:calls.append('develop')
+  def roll():calls.append('roll');s.L.year+=1
+  s.step_roll=roll;s._black_monday=lambda teams,**kw:calls.append('fire') or []
+  with patch('session.OC.team_context',return_value={}),patch('session.PA.offseason'),patch('session.STF.carousel',side_effect=lambda *a,**k:calls.append('hire')),patch('league_notes.coaching_summary'):
+   s.step_development_roll();s.stop=('offseason',2);s._open_coaching()
+  self.assertEqual(calls,['finalize','develop','roll','fire','hire'])
  def test_legacy_finalization_not_repeated(self):
   s=Session.__new__(Session);s.L=N(year=2028,history={'2028':{'awards':{'done':True}}});s.rng=None;s._recorded_votes=lambda:{'mvp':'old'}
   with patch('session.CP.season_prestige') as prestige:s.step_awards()

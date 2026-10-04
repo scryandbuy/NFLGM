@@ -73,10 +73,10 @@ class Birthdays(unittest.TestCase):
         self.assertLess(p.age - old_age, .1)
         PA.offseason(L, 11)
         self.assertEqual(int(p.age), 27)
-        PA.offseason(L, 12)
+        PA.offseason(L, 13)  # July camp is after this player's May birthday.
         self.assertEqual(int(p.age), 28)
         fixed = p.development_age
-        PA.offseason(L, 12)
+        PA.offseason(L, 13)
         self.assertEqual(fixed, p.development_age)
 
     def test_calendar_is_monotonic_and_repeated_steps_do_not_age_twice(self):
@@ -122,7 +122,7 @@ class Birthdays(unittest.TestCase):
         q = restored.player(p.pid)
         self.assertEqual(q.birth_date, '2001-05-31')
         self.assertEqual(int(q.age), 26)  # March 2028, birthday still ahead.
-        PA.offseason(restored, 12)
+        PA.offseason(restored, 13)  # July camp, after the May birthday.
         self.assertEqual(int(q.age), 27)
         self.assertEqual((q.ratings, q.xp, q.accrued), (p.ratings, 1234, 6))
         self.assertEqual(state, rng.bit_generator.state)

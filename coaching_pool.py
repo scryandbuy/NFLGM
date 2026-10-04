@@ -333,13 +333,14 @@ def owner_hire(league, team, rng, verbose=False):
     return hired, reasons
 
 
-def fire_and_hire(league, team, rng, verbose=False):
+def fire_and_hire(league, team, rng, verbose=False, *, season_year=None, season_record=None):
     """The whole change: the old man to the pool (or retirement), the owner
     picks, the club's scheme becomes the new man's."""
+    record = list(team.record if season_record is None else season_record)
     old = team.gm
     if old is not None:
         league.log('fire', team=team.abbr, coach=old.name, role='hc',
-                   tenure=int(getattr(team, 'tenure', 0) or 0), record=list(team.record))
+                   tenure=int(getattr(team, 'tenure', 0) or 0), record=record)
         old.tenure = 0
         if getattr(old, 'age', 50) >= RETIRE_AGE - 3 and rng.random() < 0.5:
             league.log('coach_retire', team=team.abbr, coach=old.name, name=old.name)
@@ -349,7 +350,7 @@ def fire_and_hire(league, team, rng, verbose=False):
             pool(league).append(old)
     team._just_fired = old
     import almanac as AL
-    AL.coach_fired(league, team.abbr, league.year)
+    AL.coach_fired(league, team.abbr, league.year if season_year is None else season_year)
     hired, reasons = owner_hire(league, team, rng, verbose)
     team._just_fired = None
     if hired is None:
@@ -371,7 +372,7 @@ def fire_and_hire(league, team, rng, verbose=False):
     moves = PC.convert_misfits(league, team, rng, verbose=verbose)
     reasons['conversions'] = len(moves)
     league.log('gm_change', team=team.abbr, hired=hired.name, background=hired.background,
-               win_pct=round(team.win_pct, 3), **reasons)
+               win_pct=round((record[0] + .5 * record[2]) / max(1, sum(record)), 3), **reasons)
     return hired, reasons
 
 

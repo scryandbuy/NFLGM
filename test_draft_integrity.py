@@ -81,7 +81,7 @@ class DraftIntegrityTests(unittest.TestCase):
         L.year = 2027
         L.phase = 'offseason'
         L.season_closed_year = 2026
-        s.stop = ('offseason', 11)
+        s.stop = ('offseason', 9)
         L.draft_pool, L.next_class = L.next_class, []
         for i, pk in enumerate([pk for pk in L.teams['KC'].picks if pk.year == 2026][:2], 1):
             pk.selection = i
@@ -121,7 +121,7 @@ class DraftIntegrityTests(unittest.TestCase):
         L.year = 2027
         L.phase = 'offseason'
         L.season_closed_year = 2026
-        s.stop = ('offseason', 11)
+        s.stop = ('offseason', 9)
         L.draft_pool, L.next_class = L.next_class, []
         pk = next(pk for pk in L.teams['KC'].picks if pk.year == 2026)
         pk.selection = 1

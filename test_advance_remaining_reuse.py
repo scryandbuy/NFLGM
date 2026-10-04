@@ -9,7 +9,7 @@ class DraftReuseTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         s=session.Session.new('GB',seed=91);L=s.L
-        L.year=2027;L.phase='offseason';L.season_closed_year=2026;s.stop=('offseason',12)
+        L.year=2027;L.phase='offseason';L.season_closed_year=2026;s.stop=('offseason',10)
         L.draft_pool,L.next_class=L.next_class,[];order=sorted(L.teams)
         for t in L.teams.values():
             for pk in t.picks:

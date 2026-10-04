@@ -370,7 +370,7 @@ def unit_ranks(league, year):
 
 
 # ------------------------------------------------------------ the carousel
-def carousel(league, rng, new_head_coaches=(), verbose=False):
+def carousel(league, rng, new_head_coaches=(), verbose=False, *, season_records=None):
     """
     After the head-coaching moves. Returns the log of changes.
       1. a new head coach brings a coordinator on his side; the sitting one goes to the pool
@@ -419,11 +419,11 @@ def carousel(league, rng, new_head_coaches=(), verbose=False):
             c = team.staff.get(role)
             if c is None or c.years > 0: continue
             if abbr == user:
-                # The user resolves these at Staff Contracts, including a coach
+                # The user resolves these during the carousel, including a coach
                 # who will not renew after a blocked head-coaching move.
                 _post_user(league, team, role, c, 'expiring'); continue
             # re-sign by mood: winners and loyal men stay; a hot name with HC interest walks
-            wins = team.record[0]
+            wins = (season_records or {}).get(abbr, team.record)[0]
             # most assistants re-sign: the walk rate on an expiring deal runs about a quarter,
             # higher for a hot name with head-coaching interest and on a losing club
             stay = 0.74 + 0.02 * (wins - 8) + 0.25 * (c.traits.get('loyalty', 50) / 100.0 - 0.5) - (0.35 if c.hc_candidate else 0.0)

@@ -7,7 +7,7 @@ class OffseasonGameDayTests(unittest.TestCase):
     def fixture(self,phase='offseason'):
         s=Session.__new__(Session)
         s.L=SimpleNamespace(phase=phase,year=2028)
-        s.user_team='GB';s.stop=('offseason',11);s.played=True
+        s.user_team='GB';s.stop=('offseason',9);s.played=True
         s.gameday=dict(week=22,scores=[],game=None)
         s.gamedays={'2027-22':s.gameday}
         s.runner=Mock();s.runner.live={'done':False}

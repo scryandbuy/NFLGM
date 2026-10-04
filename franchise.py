@@ -145,7 +145,7 @@ class Franchise:
         runner = SN.run_season(L, rng)
         log['standings'] = runner.standings()
 
-        post, order, fired = PS.close_season(L, runner, rng)
+        post, order, fired = PS.close_season(L, runner, rng, fire=False)
         MO.postseason(L, post)
         CP.top_up(L, rng)                    # retirements out of the pool, new men in
         PC.offseason(L)                      # camp: four games of learning for every man mid-move
@@ -161,8 +161,6 @@ class Franchise:
         # THE STAFF: unit ranks land on the coordinators, prestige moves,
         # contracts run down, then the carousel after the head-coaching moves
         STF.season_end(L, STF.unit_ranks(L, L.year))
-        PA.offseason(L, 1)
-        log['staff_moves'] = len(STF.carousel(L, rng, new_head_coaches=[a for a, _bg in fired]))
         AL.close_season(L, L.year, post, votes)      # the almanac: leaders, records, the coaching ledger
         log['awards'] = {k: (v.name if hasattr(v, 'name') else v)
                          for k, v in votes.items() if not isinstance(v, list)}
@@ -179,6 +177,10 @@ class Franchise:
         log['hall'] = [p.name for p, _ in AL.hall_vote(L, L.year)]
         RG.run(L, rng, tick_age=False)
 
+        import offseason_calendar as OC
+        coaching_context = OC.team_context(L)
+        completed_year = L.year
+        PA.offseason(L, 3)
         L.roll_year(rng)
         # NEXT YEAR'S SLATE. The real 2026 schedule was loaded once and never
         # replaced, so every later season found all 272 games already scored
@@ -193,6 +195,12 @@ class Franchise:
         cuts, res = CT.run(L, rng)
         CT.enforce(L, rng)
         log['cuts'], log['restructures'] = len(cuts), len(res)
+        # The same post-rollover carousel as the interactive calendar. Decisions
+        # retain the outgoing season's record; contracts belong to the new year.
+        fired = PS.run_firings(L, rng, season_year=completed_year, context=coaching_context)
+        log['fired'] = len(fired)
+        log['staff_moves'] = len(STF.carousel(L, rng, new_head_coaches=[a for a, _bg in fired],
+                                             season_records=coaching_context['records']))
         # the offseason releases go through the wire before free agency opens
         WV.notify_user(L, WV.pending(L), 0, digest=True)
         log['waiver_claims'] = len(WV.process(L, rng, 0))

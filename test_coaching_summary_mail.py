@@ -80,8 +80,8 @@ class CoachingSummaryMail(unittest.TestCase):
     def test_step_posts_after_pending_hires_are_resolved(self):
         from session import Session
         league = self.league()
-        session = NS(L=league, rng=None)
-        def black_monday(clubs):
+        session = NS(L=league, rng=None, _offseason_state=lambda:dict(year=2026), _offseason_trade_pass=lambda:None)
+        def black_monday(clubs, **kwargs):
             self.tx(league, 'fire', coach='Outgoing Coach')
             self.tx(league, 'gm_search', waiting_on='Incoming Coach')
             return [('MIN', 'offense')]
@@ -91,7 +91,7 @@ class CoachingSummaryMail(unittest.TestCase):
             self.assertFalse(league.inbox)
             self.tx(league, 'gm_change', hired='Incoming Coach')
         with patch('staff.carousel', side_effect=carousel):
-            Session.step_coaching(session)
+            Session._open_coaching(session)
         self.assertEqual(len(league.inbox), 1)
         self.assertIn('Outgoing Coach — Fired', league.inbox[0]['body'])
         self.assertIn('Incoming Coach — Hired', league.inbox[0]['body'])

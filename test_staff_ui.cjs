@@ -34,5 +34,5 @@ assert.equal(buttons('Let Expire').length,1);assert.equal(buttons('Release').len
 assert.ok(button('Explore Replacements'));button('Let Expire').attrs.onclick();assert.ok(calls.some(c=>c.includes('staff_expiry')&&c.includes('leave=True')));
 v.cards[0].let_expire=true;render();assert.ok(button('Undo Let Expire'));
 v.staff_locked=true;render();assert.equal(button('Negotiate Renewal').attrs.disabled,'');assert.equal(button('Undo Let Expire').attrs.disabled,'');
-v=fixture();v.renewal_step=true;render();assert.ok(text(page).includes('No Expiring Staff Contracts'));button('Advance To Player Re-signings').attrs.onclick();assert.ok(calls.includes('advance'));
+v=fixture();v.renewal_step=true;render();assert.ok(!text(page).includes('New Year: Cap & Contracts'));assert.ok(!walk(page).some(n=>n.attrs.class==='staff-calendar'));assert.ok(text(page).includes('No Expiring Staff Contracts'));button('Advance To Player Re-signings').attrs.onclick();assert.ok(calls.includes('advance'));
 console.log('Staff UI passed: overview/renewals, midseason controls, all 17 candidates, expiry/undo, live lock, empty-state advance.');

@@ -2442,7 +2442,6 @@ function renderStaff(v) {
   const feedback=el('div',{class:'staff-feedback',role:'status','aria-live':'polite'});
   const act=(action,c,extra='')=>{const r=pyJSON(`SESSION.frontoffice_act(${JSON.stringify(action)}, role=${JSON.stringify(c.role_key)}${extra})`);if(r.ok)reload();else feedback.textContent=r.why || 'Unable to change this contract.';};
   if (renewalView) {
-    if(v.renewal_step) panel.append(el('div',{class:'staff-calendar'},'New Year: Cap & Contracts',el('span',{},'›'),el('b',{},'Staff Contracts'),el('span',{},'›'),'Player Re-signings',el('span',{},'›'),'Free Agency'));
     panel.append(el('div',{class:'staff-section-head'},el('h2',{},'Expiring Contracts'),el('span',{},`${unresolved.length} Decision${unresolved.length===1?'':'s'} Remaining`)));
     if(!expiring.length) panel.append(el('div',{class:'staff-empty'},el('h3',{},'No Expiring Staff Contracts'),el('p',{},'Your current staff contracts are settled. You can still explore the market.'),v.renewal_step?el('button',{class:'btn go',onclick:()=>advance()},'Advance To Player Re-signings'):el('button',{class:'btn',onclick:()=>goView('overview')},'Review Your Staff')));
     else {

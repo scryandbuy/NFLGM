@@ -322,7 +322,7 @@ def staff(session, league, abbr):
     return dict(rail=rail(session, league, abbr), cards=cards, pools=pools, poaches=poaches,
                 budget=dict(total=round(ST.budget(t), 1), payroll=round(ST.payroll(t), 1), available=round(ST.room(t), 1), offer_room=round(ST.room(t), 2), head_coach=dict(name=(t.gm.name if t.gm else None), salary=round(ST.hc_pay(t.gm), 1) if t.gm else 0.0)),
                 offseason=(league.phase != 'regular'),
-                renewal_step=session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_staff_contracts',
+                renewal_step=session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_coaching',
                 staff_locked=bool(getattr(getattr(session, 'runner', None), 'live', None) and not session.runner.live.get('done', False)))
 
 
