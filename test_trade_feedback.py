@@ -56,6 +56,16 @@ class TradeFeedbackTests(unittest.TestCase):
             result=VP._evaluate(self.L,'GB','NYG',['send1'],['incoming'])
         self.assertEqual(result['cap_after'],{'me':94.2,'them':6.8})
 
+    def test_green_interest_is_not_acceptance(self):
+        with patch('trade_engine.evaluate', return_value=dict(a_gain=1,b_gain=-2,accepted=False,b_in=18,b_out=20)), patch('trades.cpu_trade_check',return_value=dict(approved=False,needs_more=True,required_gain=1,why='We need more value.')):
+            result=VP._evaluate(self.L,'GB','NYG',['send1'],['incoming'])
+        # Green starts before the true asking price, and never controls a trade.
+        with patch('trade_engine.evaluate', return_value=dict(a_gain=1,b_gain=-1,accepted=False,b_in=20,b_out=21)), patch('trades.cpu_trade_check',return_value=dict(approved=False,needs_more=True,required_gain=1,why='We need more value.')):
+            higher=VP._evaluate(self.L,'GB','NYG',['send1'],['incoming'])
+        self.assertGreater(higher['interest'],result['interest'])
+        self.assertEqual(higher['interest_band'],'high')
+        self.assertFalse(higher['would_accept'])
+
     def test_all_reasons_and_unknown_codes_have_safe_text(self):
         for reason in ('a_dead_money','b_dead_money','a_cannot_fit','b_cannot_fit','a_space','b_space','unknown_internal_reason'):
             with self.subTest(reason=reason):

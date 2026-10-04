@@ -11,3 +11,28 @@ assert.throws(()=>ctx.tradeCounterSelection(existing,adds,{...own,picks:own.pick
 assert.equal(JSON.stringify(existing),before,'missing asset never applies a partial offer');
 assert.equal(ctx.tradeCounterSelection(existing,[...adds,adds[0]],own).length,4,'duplicates are not added twice');
 console.log('Full counteroffer retained; missing future pick refuses partial application.');
+
+const swapExisting=[...existing,{kind:'pick',id:adds[0]}];
+assert.deepEqual(Array.from(ctx.tradeCounterSelection(swapExisting,[adds[1]],own,[adds[0]]),x=>x.id),['P0959','C22171',adds[1]]);
+assert.equal(swapExisting.length,3,'counter does not mutate original selection');
+assert.ok(src.includes('Apply Counteroffer'));
+assert.ok(src.includes('Keep My Offer'));
+const dialogs=[];
+ctx.el=(tag,attrs,...children)=>({tag,attrs:attrs||{},children,append(...xs){this.children.push(...xs)},addEventListener(){},showModal(){},focus(){},close(){this.closed=true}});
+ctx.document={body:{append(x){dialogs.push(x)}}};
+ctx.notify=()=>{};ctx.pyJSON=()=>{throw new Error('counter must not submit a trade')};
+ctx.tradeState={a:swapExisting.map(x=>({...x})),offers:[]};
+let reloads=0;
+vm.runInContext(src.slice(src.indexOf('function showTradeCounter('),src.indexOf('function renderTradeSummary(')),ctx);
+const counter={adds:[adds[1]],removes:[adds[0]],line:'Replace lower picks with a higher pick.'};
+ctx.showTradeCounter(counter,{me:own},()=>reloads++);
+assert.deepEqual(Array.from(ctx.tradeState.a,x=>x.id),swapExisting.map(x=>x.id),'opening counter leaves offer intact');
+const actions=dialogs.at(-1).children[1].children;
+actions[0].attrs.onclick();
+assert.deepEqual(Array.from(ctx.tradeState.a,x=>x.id),swapExisting.map(x=>x.id),'cancel leaves offer intact');
+assert.equal(reloads,0);
+ctx.showTradeCounter(counter,{me:own},()=>reloads++);
+dialogs.at(-1).children[1].children[1].attrs.onclick();
+assert.deepEqual(Array.from(ctx.tradeState.a,x=>x.id),['P0959','C22171',adds[1]],'explicit apply preserves players and swaps picks');
+assert.equal(reloads,1);
+console.log('Counter cancel/apply verified; no automatic proposal.');

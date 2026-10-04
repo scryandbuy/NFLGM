@@ -26,7 +26,7 @@ class FinancialPlanTests(unittest.TestCase):
         with patch.dict(CAP, {self.L.year: 500., self.L.year+1: 900.}):
             before = FP.snapshot(self.L, self.t)
             self.assertAlmostEqual(before['years'][0]['injury_reserve'], current*.008)
-            self.assertAlmostEqual(before['years'][1]['injury_reserve'], current*1.055*.008)
+            self.assertAlmostEqual(before['years'][1]['injury_reserve'], round(current*1.075, 3)*.008)
             loaded = League.load(self.L.save())
             self.assertEqual(before, FP.snapshot(loaded, loaded.teams[self.t.abbr]))
 

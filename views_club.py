@@ -1,3 +1,4 @@
+from cap_engine import forecast_cap
 from inbox import player_name as inbox_player
 from player_background import home_state
 from stable import stable_seed
@@ -132,7 +133,7 @@ def salaries(session, league, abbr):
         year = league.year + i
         players = sum(r['annual'][j]['hit'] for r in rows if r['annual'][j])
         dead = float((getattr(t, 'dead_money', {}) or {}).get(year, 0.))
-        limit = float(CAP.get(year, t.cap.cap * 1.055 ** i))
+        limit = forecast_cap(league, year)
         committed = players + dead
         if i == 0:
             limit, committed, dead = t.cap.limit, t.cap.charges(t.phase), t.cap.dead
@@ -196,7 +197,7 @@ def roster(session, league, abbr):
     for title, poss in GROUPS:
         men = [p for p in t.active() if p.pos in poss]
         men.sort(key=lambda p: (poss.index(p.pos), -p.ovr))
-        if men: groups.append(dict(title=title, rows=[_row(session, league, t, p) for p in men]))
+        groups.append(dict(title=title, side=('offense' if poss[0] in OFFENSE else 'special' if poss[0] in ('K', 'P', 'LS') else 'defense'), rows=[_row(session, league, t, p) for p in men]))
     import practice_squad as PSQ
     ps = []
     for p in PSQ.squad(t):

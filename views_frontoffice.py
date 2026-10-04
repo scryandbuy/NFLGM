@@ -1,3 +1,4 @@
+from cap_engine import forecast_cap
 from inbox import player_name as inbox_player
 from stable import stable_seed
 """
@@ -391,7 +392,7 @@ def cap(session, league, abbr):
         dm = getattr(t, 'dead_money', None)
         if isinstance(dm, dict): dead = float(dm.get(yr, 0.0) or 0.0)
         elif i == 0: dead = float(getattr(t.cap, 'dead', 0.0) or 0.0) if hasattr(t, 'cap') else 0.0
-        limit = CAP.get(yr, CAP.get(league.year, 301.2) * (1.055 ** i))
+        limit = forecast_cap(league, yr)
         rollover = 0.0
         if i == 0 and hasattr(t, 'cap'):
             # this year as the ledger has it: the league cap plus what rolled in from last year

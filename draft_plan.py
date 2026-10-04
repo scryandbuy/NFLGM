@@ -4,6 +4,7 @@ Reuse the coach's role assignments and GM future-needs model. A roster-depth
 shortage is not a vacant starting job, and an IR designation is not a departure.
 Scores are on the draft board's existing 0..12 need scale.
 """
+from cap_engine import forecast_cap
 from collections import defaultdict
 from math import ceil
 import gm_engine as GM
@@ -93,7 +94,7 @@ def assess(league, abbr, level=None, players=None):
 
     # Project committed money without mutating a cap ledger or settling pay.
     year = int(getattr(league, 'year', 2026))
-    limit = float(CAP.get(year + 1, CAP.get(year, 301.2) * 1.055))
+    limit = forecast_cap(league, year+1)
     committed = float(getattr(getattr(team, 'cap', None), 'dead_next', 0.0))
     for p in men:
         c = getattr(p, 'contract', None)

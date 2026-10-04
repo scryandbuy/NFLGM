@@ -3096,3 +3096,9 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .mail-trade .mail-section{margin:0;min-width:0}
 .mail-trade .mail-body-row{padding:10px 0;overflow-wrap:anywhere}
 @media(max-width:700px){.mail-content.mail-trade{grid-template-columns:minmax(0,1fr)}}
+.trade-interest {width:112px;flex:0 0 112px;}
+.trade-interest small {display:block;font-size:11px;color:var(--ink-3);margin-bottom:5px;}
+.trade-interest-track {height:7px;border-radius:8px;background:#ffffff14;overflow:hidden;}
+.trade-interest-track span {display:block;height:100%;background:#ef5963;border-radius:inherit;transition:width .18s ease;}
+.trade-interest[data-band="medium"] .trade-interest-track span {background:#f0bc39;}
+.trade-interest[data-band="high"] .trade-interest-track span {background:#38bb8b;}

@@ -1,3 +1,4 @@
+from cap_engine import forecast_cap
 from stable import stable_seed
 """
 VIEWS. One function per page, returning a plain dict the browser renders.
@@ -444,7 +445,7 @@ def _cap(league, t):
         if i==0: limit,committed=t.cap.limit,t.cap.charges(t.phase)
         elif i==1: limit,committed,_,_=next_year_ledger(league,t)
         else:
-            limit=CAP.get(yr+i,CAP.get(yr,301.2)*1.055**i)
+            limit=forecast_cap(league, yr+i)
             committed=sum(p.contract.cap_hit(i) if p.contract.years>i else p.contract.remaining_proration(i) if p.contract.years==i else 0.0 for p in t.roster if p.contract)
         years.append(dict(year=yr+i,cap=round(limit,1),committed=round(committed,1)))
     f=cap_focus(league,t)

@@ -173,9 +173,9 @@ class Franchise:
         log['dev_up'] = sum(1 for m in moved if m[1] == 'up')
         log['dev_down'] = sum(1 for m in moved if m[1] == 'down')
 
+        RG.run(L, rng, tick_age=False)
         log['retired'] = len(RT.run(L, rng))
         log['hall'] = [p.name for p, _ in AL.hall_vote(L, L.year)]
-        RG.run(L, rng, tick_age=False)
 
         import offseason_calendar as OC
         coaching_context = OC.team_context(L)

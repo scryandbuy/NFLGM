@@ -130,21 +130,28 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
     offer_a = dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me))
     r = TE.evaluate(offer_a, me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
     plan_read = None
+    required_gain = 0.9
     if not r.get('blocked'):
         items_a = [x if _trade_player(league, x) else _find_pick(league, abbr, x) for x in a_sends]
         items_b = [x if _trade_player(league, x) else _find_pick(league, other, x) for x in b_sends]
         decision = TR.cpu_trade_check(league, me, them, items_a, items_b)
+        required_gain = max(required_gain, float(decision.get('required_gain', 0.)))
         if not decision['approved']:
             r = dict(r, blocked='cpu_plan', accepted=False)
             plan_read = decision['why']
+    # Broad, deterministic interest estimate, not acceptance probability.
+    target = max(1., float(r.get('b_out', 0.)) + required_gain)
+    ratio = max(0., float(r.get('b_in', 0.))) / target
+    interest = int(min(95, max(0, round(70 * ratio))))
+    interest_band = 'low' if interest < 45 else 'medium' if interest < 63 else 'high'
     # words for their side
     g = r['b_gain']
     if r.get('blocked'):
-        read = plan_read or _cap_block_read(r['blocked'], other); verdict = 'blocked'
-    elif g >= 4: read = "We'd gladly take this package."; verdict = 'overpay'
-    elif g >= 0.5: read = "This is a fair offer. We'd take it."; verdict = 'fair'
+        read = ("We need more value in return." if r['blocked'] == 'cpu_plan' and decision.get('needs_more') and r['b_gain'] < -3 else plan_read) or _cap_block_read(r['blocked'], other); verdict = 'blocked'
+    elif g >= 4: read = "Strong offer; we're interested."; verdict = 'overpay'
+    elif g >= 0.5: read = "Competitive offer; we're interested."; verdict = 'fair'
     elif g >= -3: read = "We're close, but we'd need more in return."; verdict = 'short'
-    else: read = "We wouldn't consider this offer as it stands. We'd need substantially more in return."; verdict = 'far'
+    else: read = "We need substantially more value in return."; verdict = 'far'
     mine = r['a_gain']
     my_read = ('Change the player package or clear cap room before proceeding.' if verdict == 'blocked' else
                'Your assistants like your side of it.' if mine > 1 else
@@ -160,7 +167,7 @@ def _evaluate(league, abbr, other, a_sends, b_sends):
         extra.append(f"Your {pos} depth after this trade: {len(healthy)} healthy player{'s' if len(healthy) != 1 else ''}.")
     my_read += (' ' + ' '.join(extra) if extra else '')
     # roster counts after
-    return dict(verdict=verdict, read=read, my_read=my_read, roster_after=dict(me=len(me.active()) - len([x for x in a_sends if _trade_player(league, x)]) + len([x for x in b_sends if _trade_player(league, x)]),
+    return dict(verdict=verdict, read=read, my_read=my_read, interest=interest, interest_band=interest_band, roster_after=dict(me=len(me.active()) - len([x for x in a_sends if _trade_player(league, x)]) + len([x for x in b_sends if _trade_player(league, x)]),
                                                                               them=len(them.active()) + len([x for x in a_sends if _trade_player(league, x)]) - len([x for x in b_sends if _trade_player(league, x)])),
                 cap_after=dict(
                     me=round(__import__('cap_accounting').trade_projection(league, me.abbr, a_sends, b_sends).space(me.phase), 1),
@@ -244,7 +251,7 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     yes = TR.will_accept(r['b_gain'], rng, TR.persona(them.gm)['aggression'], selling=True)
     if not yes:
         if counter is not None: counter['state'] = 'declined'
-        return dict(ok=True, done=False, why=f"{them.abbr} declines. " + ev['read'])
+        return dict(ok=True, done=False, why=(ev['read'] if ev['verdict'] in ('short', 'far') else "We are not ready to accept this offer."))
     try: league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
     except ValueError as e: return dict(ok=False, done=False, why=str(e))
     if counter is not None: counter['state'] = 'accepted'
@@ -284,9 +291,6 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     if not decision['approved'] and not decision.get('needs_more'):
         return dict(ok=False, adds=[], why=decision['why'])
     required_gain = max(0.9, float(decision.get('required_gain', 0.9)))
-    # Selling GMs accept deterministically above 0.9, not at the old 0.5 preview threshold.
-    if decision['approved'] and initial['b_gain'] > required_gain:
-        return dict(ok=True, adds=[], line=f"{other} would take it as it is.")
     candidates = []
     for pk in me.picks:
         pid = f"{pk.year}-{pk.round}-{pk.original}"
@@ -294,6 +298,32 @@ def act_ask(league, abbr, other, a_sends, b_sends):
             asset = TR.pick_asset(league, pk)
             if asset is not None: candidates.append((pk, pid, asset))
     candidates.sort(key=lambda x: (x[0].year, x[0].round, x[1]))
+    def alternative_ids(original, ids):
+        seller_ask = max(0.0, -TE.evaluate(dict(a_sends=[], a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)['b_gain'])
+        alternative = TR.seller_pick_counter(original, [x[2] for x in candidates], them.ctx(), gb, them.cap_space,
+                                             seller_ask=seller_ask)
+        if not alternative: return ids
+        def asset_id(a):
+            if a['kind'] == 'player': return a['pid']
+            pk = a['obj']
+            return f"{pk.year}-{pk.round}-{pk.original}"
+        alt_ids = [asset_id(a) for a in alternative]
+        check = TE.evaluate(dict(a_sends=alternative, a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
+        if not check.get('blocked') and check['b_gain'] > required_gain and plan_check(alt_ids)['approved']:
+            return alt_ids
+        return ids
+    def response(ids):
+        adds = [x for x in ids if x not in a_sends]
+        removes = [x for x in a_sends if x not in ids]
+        if not adds and not removes:
+            return dict(ok=True, adds=[], removes=[], line=f"{other} would take it as it is.")
+        add_labels = [_pick_row(league, _find_pick(league, abbr, x))['label'] for x in adds]
+        remove_labels = [_pick_row(league, _find_pick(league, abbr, x))['label'] for x in removes]
+        line = f"{other} proposes adding " + ', '.join(add_labels)
+        if removes: line += ' in place of ' + ', '.join(remove_labels)
+        return dict(ok=True, adds=adds, removes=removes, line=line + '.')
+    if decision['approved'] and initial['b_gain'] > required_gain:
+        return response(alternative_ids(outgoing, a_sends))
     # Bounded beam search explores combinations instead of repeatedly taking the first late pick.
     frontier = [()]; best = None
     for size in range(1, min(4, len(candidates)) + 1):
@@ -303,7 +333,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
                 package = prefix + (i,)
                 result = evaluate([candidates[j][2] for j in package])
                 if result.get('blocked'): continue
-                cost = initial['a_gain'] - result['a_gain']
+                cost = result['b_gain'] - initial['b_gain']  # Seller values compensation; never read the buyer's private gain.
                 if result['b_gain'] > required_gain:
                     key = (cost, size, package)
                     if best is None or key < best[0]: best = (key, package)
@@ -323,8 +353,8 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     decision = plan_check(a_sends + [x[1] for x in chosen])
     if not decision['approved']:
         return dict(ok=False, adds=[], why=decision['why'])
-    labels = [_pick_row(league, x[0])['label'] for x in chosen]
-    return dict(ok=True, adds=[x[1] for x in chosen], line=f"{other} would do it if you add " + ', '.join(labels) + '.')
+    final_ids = a_sends + [x[1] for x in chosen]
+    return response(alternative_ids(outgoing + [x[2] for x in chosen], final_ids))
 
 
 def act_gather(league, abbr, pid):

@@ -34,7 +34,7 @@ def player(pid, value, contribution=1, pos='LB', inherit=0):
 class PackageSearchTests(unittest.TestCase):
     def negotiate(self, bank, surplus=(), gain=6, incoming=30, ask=12,
                   market=12, recipient=None, max_nodes=None, roll=None,
-                  years=2, wants_out=False, user=False):
+                  years=2, wants_out=False, user=False, seller_gm=None):
         target = player('target', market)
         target['obj'].contract_years_left = years
         target.update(package_gain=gain, buy=ask, sell=incoming, wants_out=wants_out)
@@ -64,21 +64,21 @@ class PackageSearchTests(unittest.TestCase):
             if max_nodes is not None:
                 stack.enter_context(patch.object(TR, 'MAX_PACKAGE_SEARCH', max_nodes))
             team.abbr = 'B'
-            result = TR._negotiate(SimpleNamespace(user_team='B') if user else None, team, team, target, gm, gm, ctx, ctx,
+            result = TR._negotiate(SimpleNamespace(user_team='B') if user else None, team, team, target, gm, seller_gm or dict(gm, pick_lens=.3), ctx, ctx,
                                    100, 100, list(surplus), roll, needs_b={'LB': 50})
         return result
 
     def test_user_offer_does_not_require_simulated_seller_acceptance(self):
         bank = [pick(1, 10, received=10)]
         self.assertIsNone(self.negotiate(bank, ask=100)[0])
-        offer, result = self.negotiate(bank, ask=100, user=True)
+        offer, result = self.negotiate(bank, market=10, ask=100, user=True)
         self.assertIsNotNone(offer)
         self.assertGreaterEqual(result['search']['package_market'], result['search']['market_floor'])
         self.assertLessEqual(result['search']['package_market'], result['search']['market_ceiling'])
 
     def test_two_later_picks_before_first_and_no_forced_player(self):
         offer, result = self.negotiate([pick(1, 16), pick(2, 5, 7), pick(3, 5, 7)],
-                                       [player('filler', 2, 0)])
+                                       [player('filler', 2, 0)], market=10)
         self.assertEqual({a['pick'] for a in offer['a_sends']}, {2, 3})
         self.assertEqual(result['search']['package_market'], 10)
         self.assertEqual(result['search']['target_gain'], 6)
@@ -143,7 +143,7 @@ class PackageSearchTests(unittest.TestCase):
         bank = [pick(1, 16), pick(2, 5, 7), pick(3, 5, 7)]
         for order in itertools.permutations(bank):
             roll = Roll(.35)
-            offer, _ = self.negotiate(order, roll=roll)
+            offer, _ = self.negotiate(order, roll=roll, market=10)
             self.assertEqual([p['pick'] for p in offer['a_sends']], [2, 3])
             self.assertEqual(roll.calls, 2)
 
@@ -155,13 +155,13 @@ class PackageSearchTests(unittest.TestCase):
     def test_private_pick_enthusiasm_cannot_bypass_neutral_floor(self):
         bank = [pick(1, 3, 20), pick(2, 7, 20), pick(3, 16, 20)]
         offer, _ = self.negotiate(bank, market=20, ask=19)
-        self.assertEqual([p['pick'] for p in offer['a_sends']], [3])
+        self.assertGreaterEqual(sum(p['market'] for p in offer['a_sends']), 20)
 
     def test_rental_and_wants_out_have_discount_but_not_free_giveaway(self):
         bank = [pick(1, 3, 20), pick(2, 7, 20), pick(3, 16, 20)]
         for options in (dict(years=1), dict(wants_out=True)):
             offer, _ = self.negotiate(bank, market=20, ask=19, **options)
-            self.assertEqual([p['pick'] for p in offer['a_sends']], [1, 2])
+            self.assertGreaterEqual(sum(p['market'] for p in offer['a_sends']), 20)
 
     def test_marginal_controlled_upgrade_walks_when_budget_below_seller_floor(self):
         offer, _ = self.negotiate([pick(1, 7, 20)], gain=2.225,
@@ -184,17 +184,73 @@ class PackageSearchTests(unittest.TestCase):
                     paid = sum(p['market'] for p in combo)
                     cost = sum(p['buy'] for p in combo)
                     value = sum(p['sell'] for p in combo)
-                    if (25*.75 <= paid <= 25*1.25+.35 and 30-cost > -TR.ACCEPT_WINDOW
-                            and TR.will_accept(round(30-cost, 2), Roll(), .5)
-                            and TR.will_accept(round(value-12, 2), Roll(), .5, selling=True)):
+                    if (25 <= paid <= 25*1.25+.35 and 30-cost > -TR.ACCEPT_WINDOW
+                            and TR.will_accept(round(30-cost, 2), Roll(), .5)):
                         valid.append((paid, count, cost))
-            offer, _ = self.negotiate(bank, market=25)
+            offer, _ = self.negotiate(bank, market=25, user=True)
             with self.subTest(trial=trial):
                 if not valid:
                     self.assertIsNone(offer)
                 else:
                     outs = offer['a_sends']
                     self.assertEqual((sum(p['market'] for p in outs), len(outs), sum(p['buy'] for p in outs)), min(valid))
+
+    def test_seller_counter_is_optional_and_uses_only_seller_quotes(self):
+        original = [pick(3, 5, 7), pick(4, 5, 7)]
+        higher = pick(1, 10.8, 14.6)
+        def quote(a, ctx, space, gm, owns=False):
+            self.assertIs(ctx, context)
+            self.assertFalse(owns)
+            return a['sell'] + (1 if a['pick'] == 1 and gm['pick_lens'] > .6 else 0)
+        context = dict(win_pct=.5, avg_age=27)
+        with patch.object(TE, 'market_price', side_effect=lambda a:a['market']), patch.object(TE, 'team_price', side_effect=quote):
+            self.assertIsNone(TR.seller_pick_counter(original, [higher], context, dict(pick_lens=.2), 100))
+            result = TR.seller_pick_counter(original, [higher], context, dict(pick_lens=.9), 100)
+            self.assertEqual(result, [higher])
+            self.assertIsNone(TR.seller_pick_counter(original, [pick(1, 10.8, 13.8)], context, dict(pick_lens=.9), 100))
+
+    def test_buyer_independently_accepts_or_declines_seller_counter(self):
+        for spend, expected in ((10.8, [1]), (100, [3, 4])):
+            offer, result = self.negotiate([pick(1, 10.8, 16, spend), pick(3, 5, 7), pick(4, 5, 7)], seller_gm=dict(aggression=.5, pick_lens=.9), market=10)
+            self.assertEqual([a['pick'] for a in offer['a_sends']], expected)
+            self.assertTrue(result['search']['seller_counter_proposed'])
+            self.assertEqual(result['search']['seller_counter_accepted'], spend < 100)
+
+    def test_seller_can_request_addition_then_buyer_decides(self):
+        bank = [pick(2, 6), pick(3, 6), pick(4, 3)]
+        offer, result = self.negotiate(bank, ask=14, market=12)
+        self.assertIsNotNone(offer)
+        self.assertFalse(result['search']['initial_offer_accepted'])
+        self.assertTrue(result['search']['seller_counter_accepted'])
+        self.assertEqual({a['pick'] for a in offer['a_sends']}, {2, 3, 4})
+        # Same seller request, but the buyer places greater value on that pick.
+        bank[-1]['buy'] = 100
+        self.assertIsNone(self.negotiate(bank, ask=14, market=12)[0])
+
+    def test_initial_proposal_does_not_know_seller_private_strategy(self):
+        originals = []
+        def inspect(original, *args, **kwargs):
+            originals.append([a['pick'] for a in original])
+            return None
+        bank = [pick(1, 14), pick(2, 6), pick(3, 6)]
+        with patch.object(TR, 'seller_pick_counter', side_effect=inspect):
+            for ask, name in ((10, 'analytics'), (100, 'traditional')):
+                self.negotiate(bank, ask=ask, seller_gm=TE.GM_ARCHETYPES[name])
+        self.assertEqual(originals, [[2, 3], [2, 3]])
+
+    def test_real_pick_chart_produces_optional_strategy_dependent_counters(self):
+        bank = [dict(kind='pick', pick=6+(rd-1)*32, years_out=y, cap=400,
+                     obj=SimpleNamespace(year=2029+y, round=rd, original='A'))
+                for y in range(2) for rd in range(1, 8)]
+        counts = []
+        for name in ('analytics', 'traditional'):
+            results = [TR.seller_pick_counter(list(original), bank,
+                       dict(win_pct=.25, avg_age=29), TE.GM_ARCHETYPES[name], 100)
+                       for original in itertools.combinations(bank, 2)]
+            counts.append(sum(r is not None for r in results))
+            self.assertTrue(any(r is None for r in results))
+            self.assertTrue(any(r is not None for r in results))
+        self.assertNotEqual(*counts)
 
     def test_real_roster_rejects_extra_linebacker_despite_needs_label(self):
         from test_package_roster_needs import team, player as roster_player

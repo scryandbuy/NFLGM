@@ -98,6 +98,24 @@ def persona(gm):
         archetype='derived')
 
 
+SELLER_ASK = {'contending': 1.12, 'win_now': 1.10, 'middling': 1.06,
+              'retooling': 1.03, 'rebuilding': 1.00}
+
+
+def seller_willingness(team, p):
+    """Route-independent attachment; roster replacement costs are priced separately."""
+    import morale as MO
+    if MO.wants_out(p):
+        return dict(seller_ask=1.0, seller_status='requested_move')
+    group = GRP.get(p.pos, p.pos)
+    men = sorted((q for pos, players in team.depth.items()
+                  if GRP.get(pos, pos) == group for q in players
+                  if q.out_until is None), key=lambda q: (-q.ovr, q.pid))[:2]
+    core = p.ovr >= 80 and any(q.pid == p.pid for q in men)
+    return dict(seller_ask=SELLER_ASK[TE.window(context(team))] if core else 1.0,
+                seller_status='core' if core else 'ordinary')
+
+
 def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     """
     Price him as he would be ON THE VIEWING CLUB'S ROSTER.
@@ -177,7 +195,7 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
                 need=need, trade_value=TE.trade_value(row, v),
                 trade_value_buyer=round(max(0.0, tv_buyer), 2),
                 seen_ovr=round(float(seen), 1), obj=p, dead=dead, out_hit=(c.cap_hit(0)-c.earned_base-c.earned_roster if c else 0.0), dead_now=dead_now,
-                inherit=inherit, inherited_apy=inherited_apy)
+                inherit=inherit, inherited_apy=inherited_apy, **seller_willingness(team, p))
 
 
 def _street_alternative(league, viewer, p):
@@ -542,7 +560,12 @@ def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache
             urgency -= .06
         lineup = min(8., urgency * loss) if removed else 0.
         recent_cost = 3. if removed & recent else 0.
-        result['reserves'][team.abbr] = round(repair + lineup + recent_cost, 2)
+        # Coverage and quality describe the same departing player's loss.
+        # Price the larger concern, with more time to repair it in offseason.
+        repair_cost = max(repair, lineup)
+        if league.phase in ('offseason', 'free_agency', 'draft', 'camp'):
+            repair_cost = min(4., repair_cost * .5)
+        result['reserves'][team.abbr] = round(repair_cost + recent_cost, 2)
     cache[key] = result
     return result
 
@@ -682,20 +705,19 @@ def surplus_and_needs(league, team, pool, rng, n=3):
     return surplus[:n + sum(1 for x in surplus if x.get('wants_out') or x.get('retention_shop'))], needs
 
 
-STAR_ASK = {'contending': 1.60, 'win_now': 1.45, 'middling': 1.30, 'retooling': 1.15, 'rebuilding': 1.05}
+STAR_ASK = SELLER_ASK  # Compatibility for callers inspecting the willingness scale.
 
 
 def stars_at(league, team, pool, rng, grp, viewer=None):
     """
     The men a club is NOT trying to move: its best one or two at a group.
     They are available the way anyone is available - at a price. A
-    contending club asks 60% over what it thinks he is worth; a rebuilding
-    one asks a little over and listens. Every player can be discussed.
+    club uses the same seller willingness as a manually proposed target.
+    The star flag controls pursuit budgets, never a separate seller price.
     """
     out = []
     men = sorted((p for pos, ps in team.depth.items() if GRP.get(pos, pos) == grp for p in ps
                   if p.out_until is None), key=lambda p: -p.ovr)[:2]
-    wdw = TE.window(context(team))
     import morale as MO
     for p in men:
         wants_out = MO.wants_out(p)
@@ -704,7 +726,7 @@ def stars_at(league, team, pool, rng, grp, viewer=None):
         # buyer can make an acceptable offer; none is an absolute exemption.
         a = player_asset(league, team, p, pool, rng, viewer=viewer or team)
         if a:
-            a['grp'] = grp; a['star'] = True; a['ask'] = 1.0 if wants_out else STAR_ASK[wdw]
+            a['grp'] = grp; a['star'] = True
             if wants_out: a['wants_out'] = True
             out.append(a)
     return out
@@ -868,7 +890,7 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
                 gain = valuation['a_gain'] if seller is ta else valuation['b_gain']
                 if gain + 1e-9 < reserve:
                     return dict(approved=False, needs_more=True, required_gain=reserve,
-                                why=f"We'd need more value to replace what this trade takes from our lineup.")
+                                why="We need more value to replace this starter.")
     if buyer is not None and buyer != getattr(league, 'user_team', None):
         club, sent, received = (ta, outgoing, incoming) if ta.abbr == buyer else (tb, incoming, outgoing)
         gain = football['gains'][buyer]
@@ -892,11 +914,12 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None):
             return dict(approved=False, why="We no longer value this package enough to pay that price.")
     if not _financial_trade(league, ta, tb, outgoing, incoming):
         return dict(approved=False, why="We can't fund this trade and cover our remaining roster commitments.")
-    return dict(approved=True)
+    return dict(approved=True, required_gain=football.get('reserves', {}).get(tb.abbr if ta.abbr == getattr(league, 'user_team', None) else ta.abbr, 0.))
 
 
 MAX_PACKAGE_SEARCH = 50000  # fail closed on pathological pick-hoarding banks
 MAX_PACKAGE_ROSTER_CHECKS = 64  # also bound costly role assignments
+
 
 
 def _upgrade_budget(gain):
@@ -923,14 +946,94 @@ def _market_floor(target):
                float(target.get('retention_floor', 0.) or 0.))
 
 
+def seller_package_assessment(assets, seller_ctx, seller_gm, seller_space):
+    """Seller-only package assessment, not trade legality.
+
+    Existing team_price continuously values contracts, players and picks
+    using this club's philosophy and window. Quality and preference are
+    diagnostics, never a second bonus or a replacement for financial checks.
+    """
+    gm = dict(TE.GM_ARCHETYPES['balanced'], **(seller_gm or {}))
+    shifted = TE.situational_shift(gm, seller_ctx)
+    values = [TE.team_price(a, seller_ctx, seller_space, gm, owns=False) for a in assets]
+    picks = [(a, v) for a, v in zip(assets, values) if a['kind'] == 'pick']
+    pick_value = sum(max(0., v) for a, v in picks)
+    quality = sum(max(0., v) * (1. - min(223., max(0., a['pick'] - 1)) / 223.)
+                  for a, v in picks) / max(.0001, pick_value)
+    window = TE.window(seller_ctx)
+    preference = max(-1., min(1., 2 * shifted['pick_lens'] - 1 +
+        (.15 if window in ('contending', 'win_now') else -.15 if window in ('rebuilding', 'retooling') else 0.)))
+    return dict(value=sum(values), pick_value=pick_value, quality=quality,
+                preference=preference, utility=sum(values),
+                market=sum(TE.market_price(a) for a in assets))
+
+
+def seller_pick_counter(original_assets, available_picks, seller_ctx, seller_gm,
+                        seller_space, seller_ask=None):
+    """Optionally request a better package using only the seller's assessment.
+
+    More premium picks are one alternative, not a required conversion. Asking
+    for extra public value costs utility; patience and an already strong offer
+    raise the improvement needed to reopen negotiation. Buyer approval remains
+    separate. Public request bounds are 15% for optional refinements and 35%
+    when compensation is inadequate; neither guarantees buyer acceptance.
+    """
+    from itertools import combinations
+    gm = dict(TE.GM_ARCHETYPES['balanced'], **(seller_gm or {}))
+    def key(a):
+        p = a['obj']
+        return (p.year, p.round, p.original)
+    picks = sorted((a for a in original_assets if a['kind'] == 'pick'), key=key)
+    original_keys = {key(a) for a in picks}
+    base = seller_package_assessment(original_assets, seller_ctx, gm, seller_space)
+    if base['market'] <= 0 or base['value'] <= 0:
+        return None
+    friction = base['value'] * (.006 + .014 * gm['patience'])
+    if seller_ask is not None:
+        friction += max(0., base['value'] - seller_ask) * .10
+    needs_more = seller_ask is not None and base['value'] < seller_ask
+    best, checked, seen = None, 0, set()
+    for incoming in sorted((a for a in available_picks if a['kind'] == 'pick'), key=key):
+        if key(incoming) in original_keys or key(incoming) in seen:
+            continue
+        seen.add(key(incoming))
+        sizes = ([0] if needs_more and len(original_assets) < MAX_PACKAGE else []) + list(range(2, len(picks) + 1))
+        for count in sizes:
+            for removed in combinations(picks, count):
+                checked += 1
+                if checked > 5000:
+                    return best[1] if best else None
+                if any(incoming['pick'] >= a['pick'] for a in removed):
+                    continue
+                removed_keys = {key(a) for a in removed}
+                alternative = [a for a in original_assets if a['kind'] != 'pick' or key(a) not in removed_keys] + [incoming]
+                assessment = seller_package_assessment(alternative, seller_ctx, gm, seller_space)
+                if assessment['market'] > base['market'] * (1.35 if needs_more else 1.15) + 1e-9:
+                    continue
+                improvement = assessment['utility'] - base['utility'] - max(0., assessment['market'] - base['market'])
+                if needs_more:
+                    if assessment['value'] + 1e-9 < seller_ask:
+                        continue
+                    rank = (-assessment['market'], improvement, -len(alternative))
+                else:
+                    if improvement <= friction + 1e-9 or assessment['value'] < base['value'] - 1e-9:
+                        continue
+                    rank = (improvement, -assessment['market'], -len(alternative))
+                if best is None or rank > best[0]:
+                    best = (rank, alternative)
+    return best[1] if best else None
+
+
 def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
                rng, needs_b=None):
-    """Find the cheapest acceptable complete offer, up to five assets.
+    """Find an acceptable complete offer, with optional seller-selected pick counters.
 
-    Prices and willingness are fixed for this negotiation. Compare alternate
-    combinations instead of adding an expensive pick to a failed offer.
+    Initial proposals use public market values and the buyer's own budget.
+    The seller independently reviews the selected package and may counter.
+    Neither side's private prices guide the other side's package search.
     Positive costs, suffix value bounds and a node budget bound the work. If
-    the budget is exhausted, decline rather than return an unproven overpay.
+    the initial budget is exhausted, decline rather than return an unproven
+    overpay. An optional seller counter is separately evaluated by the buyer.
     ``needs_b`` remains for caller compatibility; actual recipient roles decide
     whether an outgoing player helps, including combinations of players.
     """
@@ -987,7 +1090,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             continue
         seen.add(key)
         buyer = TE.team_price(asset, ctx_a, sa, ga, owns=True)
-        seller = TE.team_price(asset, ctx_b, sb, gb, owns=False)
+        seller = paid  # proposal search uses public currency, not the receiver's private quote
         # Salary dumps and negative-value sweeteners need a separate market;
         # this ordinary upgrade search spends only useful, positive assets.
         if 0 < paid <= ceiling and buyer >= 0 and seller > 0:
@@ -1009,7 +1112,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     def accepts_b(value):
         return user_seller or will_accept(round(value - ask, 2), roll_b, gb['aggression'], selling=True)
 
-    # Upper bound on what any remaining k assets could bring the seller.
+    # Upper bound on remaining public compensation for the initial proposal.
     # Ignoring their costs/cap/role fit is optimistic and therefore safe for
     # pruning: no valid cheaper package is removed by this bound.
     n = len(bank)
@@ -1023,7 +1126,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     football_cache = {}
     net_gains = {}
 
-    def legal(items):
+    def legal(items, seller_review=False):
         gains = None
         ids = tuple(sorted(x['pid'] for x in items if x['kind'] == 'player'))
         if ids not in valid_players:
@@ -1042,7 +1145,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             if not football['approved']: return False
             seller_reserve = football.get('reserves', {}).get(tb.abbr, 0.)
             seller_value = sum(TE.team_price(x, ctx_b, sb, gb, owns=False) for x in items)
-            if seller_value - ask + 1e-9 < seller_reserve:
+            if seller_review and seller_value - ask + 1e-9 < seller_reserve:
                 return False
             net = football['gains'][ta.abbr]
             budget = (market * prem + .35) * _upgrade_budget(net)
@@ -1063,7 +1166,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             return
         if not accepts_a(cost):
             return  # every remaining asset has a nonnegative buyer cost
-        if chosen and paid + 1e-9 >= floor and accepts_b(value):
+        if chosen and paid + 1e-9 >= max(floor, market):
             items = [bank[i][4] for i in chosen]
             if legal(items):
                 rank = (paid, len(chosen), cost, tuple(bank[i][3] for i in chosen))
@@ -1073,7 +1176,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             if exhausted:
                 return
         left = MAX_PACKAGE - len(chosen)
-        if not left or not accepts_b(value + upper[start][left]):
+        if left <= 0 or value + upper[start][left] + 1e-9 < max(floor, market):
             return
         limit = min(ceiling, best[0][0] if best else ceiling)
         for i in range(start, n):
@@ -1088,6 +1191,28 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     visit(0, (), 0.0, 0.0, 0.0)
     if exhausted or best is None:
         return None, None
+    baseline = best
+    initial_value = sum(TE.team_price(a, ctx_b, sb, gb, owns=False) for a in baseline[1])
+    initial_accepted = accepts_b(initial_value) and legal(baseline[1], seller_review=True)
+    # The seller chooses a request without seeing the buyer's private prices.
+    # The buyer then independently accepts. The original remains an option
+    # only if the seller independently accepted it.
+    reservation = ask
+    if league is not None and hasattr(league, 'teams'):
+        sent = [a['obj'] if a['kind'] == 'pick' else a['pid'] for a in baseline[1]]
+        report = package_football(league, ta, tb, sent, [target['pid']], cache=football_cache)
+        reservation += report.get('reserves', {}).get(tb.abbr, 0.)
+    counter = seller_pick_counter(best[1], raw, ctx_b, gb, sb, seller_ask=reservation) if not user_seller else None
+    counter_accepted = False
+    if counter is not None:
+        paid = sum(TE.market_price(a) for a in counter)
+        cost = sum(TE.team_price(a, ctx_a, sa, ga, owns=True) for a in counter)
+        value = sum(TE.team_price(a, ctx_b, sb, gb, owns=False) for a in counter)
+        if floor <= paid + 1e-9 and paid <= ceiling + 1e-9 and accepts_a(cost) and accepts_b(value) and legal(counter, seller_review=True):
+            best = ((paid, len(counter), cost, ()), counter)
+            counter_accepted = True
+    if not initial_accepted and not counter_accepted:
+        return None, None
     offer = dict(a_sends=best[1], a_gets=[target])
     result = TE.evaluate(offer, ctx_a, ctx_b, sa, sb, ga, gb, user_b=user_seller)
     selected = tuple(sorted(x['pid'] for x in best[1] if x['kind'] == 'player'))
@@ -1096,7 +1221,13 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         target_gain=round(float(gain), 3), target_market=round(market, 3),
         net_gain=round(float(net_gain), 3), acceptance='bounded_gm_willingness',
         market_floor=round(floor, 3), market_ceiling=round(min(ceiling, net_ceiling), 3),
-        package_market=round(best[0][0], 3), candidates=n, nodes=nodes,
+        package_market=round(best[0][0], 3), cheapest_market=round(baseline[0][0], 3),
+        initial_offer_market=round(baseline[0][0], 3),
+        initial_offer_assets=[a['pid'] if a['kind'] == 'player' else
+            (a['obj'].year, a['obj'].round, a['obj'].original) for a in baseline[1]],
+        initial_offer_accepted=initial_accepted,
+        seller_counter_proposed=counter is not None, seller_counter_accepted=counter_accepted,
+        candidates=n, nodes=nodes,
         buyer_target_price=round(value_in, 3), seller_ask=round(ask, 3))
     return offer, result
 

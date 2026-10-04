@@ -78,7 +78,8 @@ class TradeOfferLifecycleTests(unittest.TestCase):
         with patch.object(VP, '_evaluate', return_value=dict(verdict='fair', read='Need more.')), patch('trades.will_accept', return_value=False):
             for counter_id in (None, self.m['id']):
                 r = self.s.personnel_act('propose', other='DEN', a_sends=draft['a'], b_sends=draft['b'], counter_id=counter_id)
-                self.assertTrue(r['ok']); self.assertFalse(r['done']); self.assertIn('declines', r['why'])
+                self.assertTrue(r['ok']); self.assertFalse(r['done'])
+                self.assertEqual(r['why'], 'We are not ready to accept this offer.')
         self.assertEqual(len(self.L.inbox), before)
         self.reload(); self.assert_closed('countered')
         self.assertEqual(self.m['payload']['counter']['state'], 'declined')

@@ -1,22 +1,20 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const src=fs.readFileSync('docs/app.js','utf8');
-const code=src.slice(src.indexOf('function notify('),src.indexOf('// Each team owns'))+
-  src.slice(src.indexOf('function tradeFeedbackKey('),src.indexOf('function renderTrades('));
-const nodes={'#action-feedback':{hidden:false},'#action-feedback-text':{textContent:'old'},'#dismiss-feedback':{}};
-const ctx={JSON,tradeState:{other:'ARI',a:[],b:[]},showAbbr:x=>x,$:s=>nodes[s],
- el:(tag,attrs={},...children)=>{const e={tag,attrs,children,textContent:children.filter(x=>typeof x==='string').join(''),hidden:attrs.hidden!=null,dataset:{read:attrs['data-read']},append(...xs){this.children.push(...xs);}};if(attrs.id)nodes['#'+attrs.id]=e;return e;}};
+const code=src.slice(src.indexOf('function showTradeResult('),src.indexOf('function renderTrades('));
+const dialogs=[];
+const ctx={JSON,Number,tradeState:{other:'BAL',a:[{kind:'player',id:'brown'}],b:[{kind:'player',id:'hamilton'}]},showAbbr:x=>x,
+ document:{body:{append(x){dialogs.push(x);}}},
+ el:(tag,attrs={},...children)=>({tag,attrs,children,append(...xs){this.children.push(...xs)},addEventListener(){},showModal(){this.open=true},focus(){},close(){this.open=false}})};
 vm.createContext(ctx);vm.runInContext(code,ctx);
-const message="We're still competing, and this deal would weaken our lineup too much.";
-const view={can_trade:true,them:{club:{abbr:'ARI'}},package:{read:message,verdict:'blocked',my_read:'Change the package.',roster_after:{me:53},cap_after:{me:10}}};
-ctx.renderTradeSummary(view,()=>{});ctx.notify({ok:false,why:message});
-assert.equal(nodes['#action-feedback'].hidden,true,'no top notification');
-assert.equal(nodes['#trade-action-feedback'].hidden,true,'existing bottom verdict is not duplicated');
-ctx.notify({ok:false,why:'The full counteroffer is no longer available.'});
-assert.equal(nodes['#trade-action-feedback'].hidden,false,'distinct failures remain visible at bottom');
-ctx.renderTradeSummary(view,()=>{});
-assert.equal(nodes['#trade-action-feedback'].hidden,false,'failure survives unchanged rerender');
-ctx.tradeState.a=[{kind:'player',id:'new-player'}];ctx.renderTradeSummary(view,()=>{});
-assert.equal(nodes['#trade-action-feedback'].hidden,true,'editing package clears stale action feedback');
-delete nodes['#trade-action-feedback'];ctx.notify({ok:false,why:'Save failed.'});
-assert.equal(nodes['#action-feedback'].hidden,false,'other screens retain their error feedback');
-console.log('Trade feedback: bottom only, no duplicate, rerender persistence, stale clearing, other pages preserved.');
+const view={can_trade:true,me:{club:{abbr:'GB'},roster:[{pid:'brown',name:'Isaac Brown'}],picks:[]},them:{club:{abbr:'BAL'},roster:[{pid:'hamilton',name:'Kyle Hamilton'}],picks:[]},package:{interest:65,interest_band:'high',read:'Need more value',my_read:'unwanted text'}};
+const tree=ctx.renderTradeSummary(view,()=>{});
+assert(!JSON.stringify(tree).includes('unwanted text'));
+const actions=tree.children[0];const propose=actions.children.findIndex(x=>x.children?.includes('Propose'));
+assert.equal(actions.children[propose-1].attrs.class,'trade-interest');
+assert.equal(actions.children[propose-1].attrs['data-band'],'high');
+ctx.showTradeResult({done:false,why:'We need more value.'},view,[],[]);
+assert(JSON.stringify(dialogs.at(-1)).includes('Trade Rejected'));
+assert(!JSON.stringify(dialogs.at(-1)).includes('roster after'));
+ctx.showTradeResult({done:true},view,ctx.tradeState.a,ctx.tradeState.b);
+const text=JSON.stringify(dialogs.at(-1));for(const value of ['Trade Accepted','GB receives','BAL receives','Isaac Brown','Kyle Hamilton'])assert(text.includes(value));
+console.log('Trade bar placement, popup rejection and accepted package verified.');

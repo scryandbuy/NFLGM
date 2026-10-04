@@ -1024,7 +1024,8 @@ function renderRoster(v) {
     const rowsFor = () => clubTab === 'ps' ? [{ title: 'Practice Squad', rows: v.practice }] : clubTab === 'ir' ? [{ title: `Injured Reserve · ${v.ir_returns_left} returns left`, rows: v.ir || [] }] : clubTab === 'injured' ? [{ title: 'Injured', rows: v.injured }] : v.groups;
     for (const g of rowsFor()) {
       const rows = g.rows.filter(r => (rosterSide === 'All' || r.side === rosterSide.toLowerCase().replace('specialists', 'special')) && (!q || r.name.toLowerCase().includes(q) || (r.home_state || '').toLowerCase().includes(q) || r.pos.toLowerCase() === q));
-      if (!rows.length) continue;
+      const emptyPosition = !g.rows.length && g.side && (rosterSide === 'All' || g.side === rosterSide.toLowerCase().replace('specialists', 'special')) && (!q || g.title.toLowerCase() === q);
+      if (!rows.length && !emptyPosition) continue;
       tbl.append(el('tr', { class: 'grp' }, el('td', { colspan: String(heads.length) }, `${g.title} · ${rows.length}`)));
       for (const r of rows) {
         shown++;
@@ -1607,8 +1608,8 @@ function tradeSelection(items, own) {
   }
   return result;
 }
-function tradeCounterSelection(existing, adds, own) {
-  const requested = [...existing, ...(adds || []).map(id => ({kind:'pick', id}))];
+function tradeCounterSelection(existing, adds, own, removes = []) {
+  const requested = [...existing.filter(x => !removes.some(id => String(id) === String(x.id))), ...(adds || []).map(id => ({kind:'pick', id}))];
   const selected = tradeSelection(requested, own);
   if (requested.some(item => !selected.some(x => String(x.id) === String(typeof item === 'object' ? item.id : item)))) {
     throw new Error('The full counteroffer is no longer available. Refresh the trade screen and ask again. Your offer has not changed.');
@@ -1688,18 +1689,45 @@ function renderTradeSide(v, key, reload) {
 function tradeFeedbackKey() {
   return JSON.stringify([tradeState.other, tradeState.a, tradeState.b]);
 }
+function showTradeResult(result, view, sent, received) {
+  const dialog=el('dialog',{class:'retain-dialog','aria-labelledby':'trade-result-title'});
+  const body=el('div',{class:'retain-dialog-body'},el('h2',{id:'trade-result-title'},result.done?'Trade Accepted':'Trade Rejected'));
+  if(result.done){
+    for(const [team,own,assets] of [[view.them.club.abbr,view.me,sent],[view.me.club.abbr,view.them,received]]){
+      body.append(el('h3',{},`${showAbbr(team)} receives`));
+      const list=el('ul',{});
+      for(const asset of assets){
+        const item=asset.kind==='player'?own.roster.find(p=>String(p.pid)===String(asset.id)):own.picks.find(p=>String(p.id)===String(asset.id));
+        if(item)list.append(el('li',{},asset.kind==='player'?(item.name||item.short):item.words));
+      }
+      body.append(assets.length?list:el('p',{},'No assets'));
+    }
+  }else body.append(el('p',{},result.why||view.package?.read||'The offer was declined.'));
+  const close=el('button',{class:'btn go',onclick:()=>dialog.close()},'Close');
+  dialog.append(body,el('div',{class:'retain-dialog-actions'},close));
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+  document.body.append(dialog);dialog.showModal();close.focus();
+}
+function showTradeCounter(result, view, reload) {
+  if(!(result.adds?.length || result.removes?.length)){notify(result);return;}
+  const dialog=el('dialog',{class:'retain-dialog'});
+  const cancel=el('button',{class:'btn',onclick:()=>dialog.close()},'Keep My Offer');
+  const apply=el('button',{class:'btn go',onclick:()=>{
+    try{tradeState.a=tradeCounterSelection(tradeState.a,result.adds,view.me,result.removes);}
+    catch(e){notify({ok:false,why:e.message});return;}
+    tradeState.offers=null;dialog.close();reload(true);
+  }},'Apply Counteroffer');
+  dialog.append(el('div',{class:'retain-dialog-body'},el('h2',{},'Counteroffer'),el('p',{},result.line)),el('div',{class:'retain-dialog-actions'},cancel,apply));
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();cancel.focus();
+}
 function renderTradeSummary(v,reload) {
   const summary=el('div',{class:'trade-summary'});
-  if(v.package) summary.append(el('div',{class:'trade-verdict '+v.package.verdict},el('b',{},`${showAbbr(v.them.club.abbr)}: ${v.package.verdict.toUpperCase()}. `),v.package.read,el('small',{},`${v.package.my_read} Your roster after: ${v.package.roster_after.me} · Your cap after: $${v.package.cap_after.me}m`)));
-  const actionText = tradeState.feedback?.key === tradeFeedbackKey() ? tradeState.feedback.text : '';
-  summary.append(el('div',{id:'trade-action-feedback',class:'trade-verdict blocked',role:'status',
-    'data-read':v.package?.read || '',hidden:(!actionText || actionText===v.package?.read) ? '' : null},
-    actionText===v.package?.read ? '' : actionText));
   const args=()=>`other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)}`;
   const can=v.can_trade&&(tradeState.a.length||tradeState.b.length);
   const actions=el('div',{class:'trade-actions'},el('span',{},`${tradeState.a.length} assets sent · ${tradeState.b.length} received`),
-    el('button',{class:'btn go',disabled:can?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('propose', ${args()}${tradeState.counter_id != null ? ', counter_id='+Number(tradeState.counter_id) : ''})`);notify(r);if(r.done){tradeState.a=[];tradeState.b=[];tradeState.counter_id=null;}tradeState.offers=null;reload();}},'Propose'),
-    el('button',{class:'btn',disabled:v.can_trade&&tradeState.b.length?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('ask', ${args()})`);if(!r.ok){notify(r);return;}try{tradeState.a=tradeCounterSelection(tradeState.a,r.adds,v.me);}catch(e){notify({ok:false,why:e.message});return;}notify(r);tradeState.offers=null;reload(true);}},'Ask What They Want'),
+    el('div',{class:'trade-interest','data-band':v.package?.interest_band||'low',title:'Estimated interest � acceptance varies by team','aria-label':'Estimated trade interest'},el('small',{},'Interest'),el('div',{class:'trade-interest-track'},el('span',{style:`width:${Number(v.package?.interest||0)}%` }))),
+    el('button',{class:'btn go',disabled:can?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('propose', ${args()}${tradeState.counter_id != null ? ', counter_id='+Number(tradeState.counter_id) : ''})`);const sent=[...tradeState.a],received=[...tradeState.b];if(r.done){tradeState.a=[];tradeState.b=[];tradeState.counter_id=null;}tradeState.feedback=null;tradeState.offers=null;reload();showTradeResult(r,v,sent,received);}},'Propose'),
+    el('button',{class:'btn',disabled:v.can_trade&&tradeState.b.length?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('ask', ${args()})`);if(!r.ok){notify(r);return;}showTradeCounter(r,v,reload);}},'Ask What They Want'),
     el('button',{class:'btn',disabled:v.can_trade&&tradeState.a.length===1&&tradeState.a[0].kind==='player'?null:'',onclick:()=>{const pid=tradeState.a[0].id;const r=pyJSON(`SESSION.personnel_act('gather', pid=${JSON.stringify(pid)})`);notify(r);tradeState.offers={...r,pid};reload();}},'Gather Offers'),
     el('button',{class:'btn quiet',onclick:()=>{tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload(true);}},'Clear'));
   summary.append(actions);return summary;

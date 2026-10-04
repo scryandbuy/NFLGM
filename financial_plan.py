@@ -4,6 +4,7 @@ Pure projections: no RNG, transaction, save mutation, or cash-floor enforcement.
 The reserve coefficients are initial policy settings, not fitted NFL estimates.
 Hard transaction legality remains in cap_accounting; this layer prices flexibility.
 """
+from cap_engine import forecast_cap
 import copy
 from statistics import median
 from cap_engine import CAP
@@ -31,7 +32,7 @@ def _cap(league, team, year):
         return float(history[year])
     if year <= 2026 and year in CAP:
         return float(CAP[year])
-    return float(team.cap.cap * 1.055 ** (year - league.year))
+    return forecast_cap(league, year)
 
 
 def _charge(contract, index):
