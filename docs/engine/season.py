@@ -201,6 +201,7 @@ class SeasonRunner(StandingsView):
                  coach_base=copy.deepcopy(getattr(st, 'coach_base', {})),
                  seq=copy.deepcopy(getattr(st, 'seq', {})),
                  road_noise=getattr(st, 'road_noise', 1.0),
+                 road_adjust_delay=getattr(st, 'road_adjust_delay', 1.0),
                  road_stamina=getattr(st, 'road_stamina', 1.0))
         if include_roster:
             d['roster'] = copy.deepcopy(st.roster)
@@ -254,6 +255,7 @@ class SeasonRunner(StandingsView):
                         (.15 if st.staff_fx.get('sharp_' + unit) else 0.0))
         st.seq = d.get('seq') or {'run_hot': 0.0}
         st.road_noise = d.get('road_noise', 1.0)
+        st.road_adjust_delay = d.get('road_adjust_delay', 1.0)
         st.road_stamina = d.get('road_stamina', 1.0)
 
     def save_state(self):
@@ -722,7 +724,7 @@ class SeasonRunner(StandingsView):
             k_ = f"_inj_count_{inj.get('kind')}"; p.xp_spent[k_] = int(p.xp_spent.get(k_, 0) or 0) + 1
             p.injury_history.append(dict(year=self.L.year, week=week,
                                          weeks_out=weeks, kind=inj['kind'],
-                                         season_ending=inj['season_ending']))
+                                         season_ending=inj['season_ending'], source=inj.get('source', 'game')))
             self.L.log('injury', pid=p.pid, team=p.team, weeks=weeks,
                        injury=inj['kind'])
         import game_recap as GR

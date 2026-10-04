@@ -349,8 +349,8 @@ def championship_game_mvp(league, post, season=None):
         return None
     _r, _c, home, away, _hp, _ap = sb[0]
     year = season or league.year
-    key = next((k for k in league.game_stats
-                if k.startswith(f'{year}-') and home in k and away in k), None)
+    key = next((k for k in (f'{year}-22-{home}-{away}', f'{year}-22-{away}-{home}')
+                if k in league.game_stats), None)
     if key is None:
         return None
     winner = post.champion
@@ -412,3 +412,34 @@ if __name__ == '__main__':
     print('\nAll-Pro 1st team:')
     for p in res['all_pro_1']:
         print(f'   {p.pos:5s} {p.name:24s} {p.team}')
+
+
+def announce_championship(league, post):
+    """Publish the final and its MVP once, after the game book is recorded."""
+    if post is None or not post.champion:
+        return None
+    year = int(league.year)
+    history = league.__dict__.setdefault('history', {}).setdefault(str(year), {})
+    if history.get('championship_announced'):
+        return league.player((league.awards.get(year) or {}).get('sb_mvp'))
+    winner = championship_game_mvp(league, post, year)
+    if winner is None:
+        return None  # Missing historical game evidence is not an award.
+    import xp as XP, morale as MO, inbox as IB
+    ballot = league.awards.setdefault(year, {})
+    already_paid = 'sb_mvp' in (getattr(league, 'awards_paid', {}) or {}).get(str(year), [])
+    ballot['sb_mvp'] = winner.pid
+    XP.pay_awards(league, {'sb_mvp': winner}, year=year)
+    if not already_paid:
+        mood = MO.ensure(winner)
+        if mood is not None: mood.apply('major_award')
+    game = next(g for g in post.games if g[0] == 'SB')
+    _, _, home, away, hp, ap = game
+    loser = away if post.champion == home else home
+    from views import CLUB_NAME
+    name = lambda abbr: CLUB_NAME.get(abbr, abbr)
+    IB.post(league, 'league', f"{name(post.champion)} win the Championship Game",
+            f"{name(post.champion)} beat {name(loser)} {max(hp, ap)}–{min(hp, ap)}.\n\nChampionship Game MVP: {IB.player_name(winner)} ({winner.pos}).",
+            sender='league', payload=dict(link='league:awards'))
+    history['championship_announced'] = True
+    return winner
