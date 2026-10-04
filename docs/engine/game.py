@@ -2736,10 +2736,14 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
 
         t = out['type']
         # a collapsed pocket is not automatically a sack - a mobile QB runs
+        if out.get('pb_award'):
+            # Expected sack charges follow the same escape opportunity as
+            # actual charges; pressure evidence survives a QB escape.
+            out['pb_sack_survival'] = 1. - E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn)
         if t == 'sack':
             if rng.random() < E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn):
                 _old = out
-                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pb_opportunities', 'pressured', 'coverage_evidence') if k in _old}
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pb_opportunities', 'pb_award', 'pb_sack_survival', 'pressured', 'coverage_evidence') if k in _old}
                 out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
@@ -3340,6 +3344,8 @@ class StatBook:
                 pb_snaps=0, pb_wins=0, sacks_allowed=0, pressures_allowed=0,
                 pb_solo_snaps=0, pb_solo_wins=0, pb_assisted_snaps=0, pb_assisted_wins=0,
                 pb_unengaged_snaps=0,
+                pb_eval_snaps=0, pb_expected_wins=0., pb_expected_pressures=0., pb_expected_sacks=0.,
+                rb_eval_snaps=0, rb_expected_wins=0.,
                 # ---- advanced ----
                 pass_epa=0.0, pass_plays=0, rush_epa=0.0, rush_plays=0, rec_epa=0.0, def_epa=0.0, def_plays=0,
                 xcomp=0.0, cpoe_att=0, pr_reps=0, pr_wins=0, sep_total=0.0, sep_n=0, st_epa=0.0,
@@ -3429,6 +3435,27 @@ class StatBook:
             l = self._get(pid)
             l['rb_snaps'] += 1
             l['rb_wins'] += 1 if won else 0
+        # Only actual, non-nullified contests carry assignment expectations.
+        # Legacy aggregates do not receive fabricated matchup history.
+        seen_award = set()
+        for pid, wins, pressures, sacks in out.get('pb_award') or ():
+            if pid not in outcomes or pid in seen_award:
+                continue
+            seen_award.add(pid)
+            line = self._get(pid)
+            line['pb_eval_snaps'] += 1
+            line['pb_expected_wins'] += wins
+            line['pb_expected_pressures'] += pressures
+            line['pb_expected_sacks'] += sacks * out.get('pb_sack_survival', 1.)
+        run_outcomes = dict(out.get('rb_reps') or ())
+        seen_award = set()
+        for pid, wins in out.get('rb_award') or ():
+            if pid not in run_outcomes or pid in seen_award:
+                continue
+            seen_award.add(pid)
+            line = self._get(pid)
+            line['rb_eval_snaps'] += 1
+            line['rb_expected_wins'] += wins
         # THE RUSH. Every rusher's rep is booked; a rusher who won his rep on a play the quarterback was pressured on
         # is credited the pressure (the blocker who lost it already carries the pressure allowed)
         for pid, won in out.get('pr_reps') or ():
