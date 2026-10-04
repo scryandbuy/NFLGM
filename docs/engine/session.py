@@ -19,6 +19,7 @@ decision the Portal shows on the button.
 """
 import json, numpy as np
 import player_age as PA
+import offseason_calendar as OC
 from views import CLUB_NAME as CLUB_NAME_
 import league as LG, season as SN, postseason as PS, awards as AW, coaching_pool as CP, position_change as PC
 import morale as MO, staff as STF, almanac as AL, xp as XP, dev_roll as DR, retirement as RT, regression as RG
@@ -45,6 +46,7 @@ class Session:
         self.post_live = None
         self.post = None; self.order = None; self.fired = []; self.votes = None
         self.standings = None
+        self.offseason_progress = {}
         # where we are: ('week', n) | ('playoffs',) | ('offseason', i)
         self.stop = getattr(league, '_stop', None) or ('week', 1)
         self.gameday = None
@@ -86,7 +88,7 @@ class Session:
         s = cls(L, rng_, d.get('_user_team'))
         s.votes = s._recorded_votes()
         if d.get('_week_book') is not None: L.week_book = d['_week_book']
-        s.stop = tuple(d.get('_stop', ['week', 1]))
+        s.stop, s.offseason_progress = OC.saved_progress(d)
         if (s.stop[0] in ('cutdown', 'wire') or
                 (s.stop[0] == 'offseason' and s.OFFSEASON[s.stop[1]][1] == 'step_cutdown')):
             for t in L.teams.values(): t.phase = 'season'
@@ -140,12 +142,11 @@ class Session:
                 lose = away if (hs or 0) >= (as_ or 0) else home
                 s.post.exit_round[lose] = rnd
             # a closed postseason in the offseason belongs to the season that just ended: the year itself until the
-            # New Year step has run (awards, carousel, retirements), and the year before after it. The old rule read
+            # combined retirement/rollover has run, and the year before after it. The old rule read
             # the league's week, which the offseason keeps at 22, and stamped last season's bracket with the new year;
             # that made the new year look closed and its review and meetings appear before it was played
-            roll_i = next((i for i, (_n, fn) in enumerate(cls.OFFSEASON) if fn == 'step_roll'), 3)
             if s.post.champion and s.stop[0] == 'offseason':
-                right = int(L.year) if int(s.stop[1]) <= roll_i else int(L.year) - 1
+                right = int(s.offseason_progress.get('year', int(L.year) - (int(s.stop[1]) >= 2)))
                 if s.post.year is None or int(s.post.year) != right: s.post.year = right
                 if getattr(L, 'season_closed_year', None) != right: L.season_closed_year = right
             elif s.post.champion and s.stop[0] == 'week' and s.post.year is not None and int(s.post.year) >= int(L.year):
@@ -244,7 +245,7 @@ class Session:
                 and s.post_live is not None and len(getattr(s.post_live, 'conf_champs', {}) or {}) == 2):
             s._announce_honors()
         if s.stop == ('offseason', 0):
-            s.stop = ('offseason', 1)  # Retired awards stop; retain all later save indices.
+            s.stop = ('offseason', 1)  # Awards are finalized with the outgoing season.
         finished_post = getattr(s, 'post_live', None) or getattr(s, 'post', None)
         if finished_post is not None and getattr(finished_post, 'champion', None):
             AW.announce_championship(s.L, finished_post)
@@ -302,6 +303,8 @@ class Session:
                                       playoffs=bool(lv.get('playoffs')), start=lv['start'],
                                       actions=lv['actions'])
         d['_stop'] = list(self.stop)
+        d['_offseason_calendar_version'] = OC.VERSION
+        d['_offseason_progress'] = getattr(self, 'offseason_progress', {})
         d['_rng_state'] = self.rng.bit_generator.state
         # Keep a seed for older builds without advancing the live generator merely to save the game.
         d['_seed_state'] = stable_seed(json.dumps(d['_rng_state'], sort_keys=True))
@@ -354,23 +357,7 @@ class Session:
         return True
 
     # ------------------------------------------------------------ the calendar
-    OFFSEASON = [
-        ('Season Awards', 'step_awards'),
-        ('Coaching Carousel', 'step_coaching'),
-        ('Retirements and Development', 'step_retire'),
-        ('New Year: Cap and Contracts', 'step_roll'),
-        ('Staff Contracts', 'step_staff_contracts'),
-        ('Re-sign: Tags and Tenders', 'step_extensions'),
-        ('Free Agency: Round 1', 'step_fa_1'),
-        ('Free Agency: Round 2', 'step_fa_2'),
-        ('Free Agency: Round 3', 'step_fa_3'),
-        ('Free Agency: Market Closes', 'step_fa_close'),
-        ('The Spring: Combine and Pro Days', 'step_spring'),
-        ('The Spring: Private Visits', 'step_visits'),
-        ('The Draft', 'step_draft'),
-        ('Camp and Next Year\'s Class', 'step_camp'),
-        ('Cut-Down to 53', 'step_cutdown'),
-    ]
+    OFFSEASON = OC.STEPS
 
     def next_label(self):
         k = self.stop[0]
@@ -428,9 +415,9 @@ class Session:
             return dict(title='Finish the Draft on Auto', sub=f"or make your pick at {pk.round}.{((pk.selection - 1) % 32) + 1} on Draft Day" if pk else '')
         title, _ = self.OFFSEASON[i]
         name = self.OFFSEASON[i][1]
-        if name == 'step_staff_contracts':
+        if name == 'step_coaching':
             n = len(STF.unresolved_expirations(self.L, self.user_team))
-            return dict(title='Staff Contracts', sub=f'{n} renewal decision(s) remaining', go='#frontoffice/staff/renewals')
+            return dict(title='Coaching Carousel', sub=f'Offseason Step 2 of {len(self.OFFSEASON) - 1} · {n} renewal decision(s) remaining', go='#frontoffice/staff/renewals')
         if name == 'step_extensions':
             try:
                 sh = TG.user_resign_sheet(self.L)
@@ -488,7 +475,7 @@ class Session:
             return [dict(id=None, subject='Your game is still being played: finish it first', kind='live', go='#gameday')]
         """Decisions that must be made before the next stop. Empty list = nothing blocks."""
         out = []
-        if self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] == 'step_staff_contracts':
+        if self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] == 'step_coaching':
             if STF.unresolved_expirations(self.L, self.user_team):
                 out.append(dict(id=None, kind='staff_contract', go='#frontoffice/staff/renewals',
                                 subject='Renew or choose Let Expire for each expiring staff contract'))
@@ -718,11 +705,8 @@ class Session:
             # TRADES ARE NOT A STEP. The clubs deal with each other whenever the window is open: a light pass at every
             # offseason stop (a quarter of the league picks up the phone each time), the way the season's weeks carry a
             # trickle up to the deadline, so the wire shows trades landing all year rather than in one batch
-            try:
-                if self.OFFSEASON[i][1] not in ('step_draft', 'step_cutdown'):
-                    TRD.run(self.L, self.rng, rounds=1, activity=0.25, exclude=(self.user_team,) if self.user_team else ())
-            except Exception as e:
-                import sys; print('offseason trade pass failed:', e, file=sys.stderr)
+            if self.OFFSEASON[i][1] not in ('step_draft', 'step_cutdown'):
+                self._offseason_trade_pass()
             self._league_log_notes()
             if self.draft_live():
                 return dict(done='The Draft is on the clock', next=self.next_label())
@@ -831,12 +815,12 @@ class Session:
         except Exception as e:
             import sys; print('senior bowl failed:', e, file=sys.stderr)
 
-    def _black_monday(self, clubs):
+    def _black_monday(self, clubs, *, season_year=None, context=None):
         """The clubs roll their firings, and a new head coach comes for his staff, which can mean a request for one of
         your coordinators. Runs once, at Step 2 of the offseason."""
         fired = []
         try:
-            fired = PS.run_firings(self.L, self.rng, clubs=list(clubs))
+            fired = PS.run_firings(self.L, self.rng, clubs=list(clubs), season_year=season_year, context=context)
             for abbr, bg in fired:
                 t = self.L.teams[abbr]
                 who = (t.gm.name + ' takes over.') if t.gm else ('The search is on; ' + (f"they are waiting on {self.L.pending_hires[abbr]['first']}." if abbr in (getattr(self.L, 'pending_hires', None) or {}) else 'a name is coming.'))
@@ -1017,6 +1001,7 @@ class Session:
         self.post_live = None
         self._offseason_condition_reset()
         AW.announce_championship(self.L, self.post)
+        self.offseason_progress = dict(year=int(self.L.year))
         self.stop = ('offseason', 1)
         return dict(done='Playoffs', champion=self.post.champion, next=self.next_label())
 
@@ -1051,18 +1036,61 @@ class Session:
 
         history['season_finalized'] = True
 
-    def step_coaching(self):
-        """STEP 2: the coaching carousel, all of it here. Every club rolls its head coach now (none rolled during the
-        playoffs or at the close), the searching clubs hire, and the coordinators and position coaches move."""
-        self.step_awards()  # Finalize outgoing staff and season records before turnover.
-        self.fired = self._black_monday(list(self.L.teams))
-        STF.carousel(self.L, self.rng, new_head_coaches=[a for a, _bg in (self.fired or [])])
+    def _offseason_state(self):
+        expected = int(self.L.year) - (self.stop[0] == 'offseason' and int(self.stop[1]) >= 2)
+        state = getattr(self, 'offseason_progress', None) or {}
+        if (state.get('roll_done') or state.get('year_rolled')) and state.get('year') == int(self.L.year) - 1 and self.stop == ('offseason', 1):
+            return state  # A retry after rollover must not roll contracts again.
+        if state.get('year') != expected:
+            state = dict(year=expected)
+            self.offseason_progress = state
+        return state
+
+    def _offseason_trade_pass(self):
+        try:
+            TRD.run(self.L, self.rng, rounds=1, activity=0.25, exclude=(self.user_team,) if self.user_team else ())
+        except Exception as e:
+            import sys; print('offseason trade pass failed:', e, file=sys.stderr)
+
+    def step_development_roll(self):
+        """Close the outgoing season, develop/retire, then roll into the new year."""
+        state = self._offseason_state()
+        if not state.get('development_done'):
+            self.step_awards()
+            self.step_retire()
+            state['development_done'] = True
+        if not state.get('development_market_done'):
+            # Combining visible stops must not remove an existing CPU market pass.
+            self._offseason_trade_pass()
+            state['development_market_done'] = True
+        if not state.get('roll_done'):
+            if 'coaching_context' not in state:
+                state['coaching_context'] = OC.team_context(self.L)
+            PA.offseason(self.L, 3, calendar_year=state['year'] + 1)
+            self.step_roll()
+            state['roll_done'] = True
+
+    def _open_coaching(self):
+        """Open the market once, before the user makes renewal/replacement choices."""
+        state = self._offseason_state()
+        if state.get('coaching_done'):
+            return
+        context = state.get('coaching_context') or {}
+        self.fired = self._black_monday(list(self.L.teams), season_year=state['year'], context=context)
+        STF.carousel(self.L, self.rng, new_head_coaches=[a for a, _bg in (self.fired or [])],
+                     season_records=context.get('records'))
         import league_notes as LN
         LN.coaching_summary(self.L)
+        self._offseason_trade_pass()
+        state['coaching_done'] = True
+
+    def step_coaching(self):
+        self._open_coaching()
+        self.step_staff_contracts()
 
     def step_retire(self):
-        """STEP 3: retirements and development, all of it here. Age takes what it takes, development traits roll,
-        players retire, the Hall votes, and the year ticks."""
+        """Outgoing-season development, regression, retirements and Hall voting.
+        The enclosing calendar step rolls the year after this finishes."""
         L, rng = self.L, self.rng
         PA.offseason(L, 2)
         # Judge the season's performance against ratings before physical aging,
@@ -1086,22 +1114,31 @@ class Session:
             import sys; print('league_notes retire failed:', e, file=sys.stderr)
 
     def step_roll(self):
-        self.L.user_tag_choice = None          # a new year, a new tag
-        self.L.user_tenders = []
-        self.L.user_no_tender = []
         L, rng = self.L, self.rng
-        L.roll_year(rng)
-        (getattr(L, 'exit_meetings', None) or {}).pop(str(L.year), None)          # the new year has no meetings yet
-        ((getattr(L, 'history', None) or {}).get(str(L.year)) or {}).pop('review', None)   # and no review
-        try:
-            import negotiations as NG
-            NG.check_promises(L, week=0)       # the new year: extension promises are judged here
-        except Exception as e:
-            import sys; print('promise check failed:', e, file=sys.stderr)
-        ranks = SCH.division_ranks(L, self.standings); SCH.new_season(L, ranks, rng)
-        for t in L.teams.values(): t.record = [0, 0, 0]
-        L.advance_contracts()
-        CT.run(L, rng); CT.enforce(L, rng)
+        state = self._offseason_state()
+        if not state.get('year_rolled'):
+            L.user_tag_choice = None          # a new year, a new tag
+            L.user_tenders = []
+            L.user_no_tender = []
+            L.roll_year(rng)
+            state['year_rolled'] = True
+            (getattr(L, 'exit_meetings', None) or {}).pop(str(L.year), None)
+            ((getattr(L, 'history', None) or {}).get(str(L.year)) or {}).pop('review', None)
+            try:
+                import negotiations as NG
+                NG.check_promises(L, week=0)
+            except Exception as e:
+                import sys; print('promise check failed:', e, file=sys.stderr)
+        if not state.get('schedule_ready'):
+            ranks = SCH.division_ranks(L, self.standings); SCH.new_season(L, ranks, rng)
+            for t in L.teams.values(): t.record = [0, 0, 0]
+            state['schedule_ready'] = True
+        if not state.get('contracts_advanced'):
+            L.advance_contracts()
+            state['contracts_advanced'] = True
+        if not state.get('cap_cleanup_done'):
+            CT.run(L, rng); CT.enforce(L, rng)
+            state['cap_cleanup_done'] = True
 
     def step_waivers_1(self):
         L, rng = self.L, self.rng
@@ -1111,8 +1148,7 @@ class Session:
         result = STF.finish_renewals(self.L, self.user_team)
         if not result['ok']:
             raise ValueError(result['why'])
-        # This step replaces the formerly skipped waiver slot. Retain any
-        # genuine pending claims without shifting saved calendar indices.
+        # Renewals close with the carousel; retain any genuine pending claims.
         self.step_waivers_1()
 
     def step_extensions(self):
@@ -1174,10 +1210,11 @@ class Session:
         self._skip_empty_offseason_waivers()
         PA.sync_session(self)
         name = self.OFFSEASON[self.stop[1]][1]
-        if name == 'step_staff_contracts':
+        if name == 'step_coaching':
+            self._open_coaching()
             WV.notify_user(self.L, WV.pending(self.L), 0, digest=True)
             n = len(STF.unresolved_expirations(self.L, self.user_team))
-            IE.post(self.L, f'staff-renewals-{self.L.year}', 'staff', 'Staff Contracts',
+            IE.post(self.L, f'staff-renewals-{self.L.year}', 'staff', 'Coaching Carousel',
                     f'{n} staff contract(s) need a decision. Review renewals or explore the staff market before player re-signings.',
                     sender='Front Office', payload=dict(link='front_office:staff'))
             return

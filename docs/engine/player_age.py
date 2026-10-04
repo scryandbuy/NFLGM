@@ -54,11 +54,14 @@ def week_date(year, week):
     return start + timedelta(weeks=max(1, int(week)) - 1)
 
 
-def stop_date(year, stop, *, week=0, phase='preseason'):
+def stop_date(year, stop, *, week=0, phase='preseason', calendar_version=0):
     if stop:
         kind = stop[0]
         if kind == 'offseason':
             index = int(stop[1])
+            if calendar_version:
+                from offseason_calendar import AGE_INDICES
+                index = AGE_INDICES[index]
             # League.year changes while step 3 executes, not on January 1.
             return date(int(year) + (index <= 3), *OFFSEASON_DATES[index])
         if kind == 'week':
@@ -149,7 +152,11 @@ def set_date(league, when):
 
 def sync_session(session):
     L = session.L
-    set_date(L, stop_date(L.year, session.stop, week=L.week, phase=L.phase))
+    stop = session.stop
+    progress = getattr(session, 'offseason_progress', None) or {}
+    if stop == ('offseason', 1) and progress.get('year_rolled') and progress.get('year') == L.year - 1:
+        stop = ('offseason', 2)  # a saved retry after rollover is already in March of this year
+    set_date(L, stop_date(L.year, stop, week=L.week, phase=L.phase, calendar_version=1))
 
 
 def game_week(league, week):
@@ -163,7 +170,8 @@ def offseason(league, index, *, calendar_year=None):
 
 def migrate(league, saved):
     league.game_date = saved.get('game_date') or stop_date(
-        league.year, saved.get('_stop'), week=league.week, phase=league.phase).isoformat()
+        league.year, saved.get('_stop'), week=league.week, phase=league.phase,
+        calendar_version=saved.get('_offseason_calendar_version', 0)).isoformat()
     repaired = 0
     stop = saved.get('_stop') or ()
     in_season = stop[0] in ('week', 'playoffs') if stop else league.phase in ('regular', 'playoffs')
