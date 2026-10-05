@@ -63,8 +63,8 @@ class CalendarMapping(unittest.TestCase):
         observed=[]
         with patch.object(PS.FM, 'fire_chance_offseason', side_effect=lambda hist,*_: observed.append(hist) or 0):
             PS.run_firings(L, np.random.default_rng(4), season_year=2028, context=context)
-        self.assertEqual(observed, [{'win_pct':3/17,'qb_continuity':False},
-                                    {'win_pct':14/17,'qb_continuity':False}])
+        self.assertEqual(observed, [{'win_pct':3/17,'qb_continuity':False,'owner_patience':.5},
+                                    {'win_pct':14/17,'qb_continuity':False,'owner_patience':.5}])
         self.assertEqual(L._firings_rolled, {'2028':['Loser','Winner']})
 
     def test_interrupted_rollover_retries_without_advancing_year_or_contracts_twice(self):
