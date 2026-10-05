@@ -61,6 +61,20 @@ def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=
     return float(s)
 
 
+def emergency_sack_elapsed(out, seconds, elapsed, *, awareness=.7, tempo=.5, reset_draw=.5):
+    """Time for one hurried reset; never shorten the sack's live action."""
+    live = live_play_seconds(out)
+    if seconds <= live or elapsed < seconds:
+        return elapsed
+    loss = max(0., -float(out.get('yards', 0.) or 0.))
+    # Getting the QB up, retrieving the ball and setting the line takes time.
+    # Deeper routes and lost yardage make that harder. Even good QBs can fail.
+    route_return = {'short': 0., 'medium': 1., 'deep': 2.}.get(out.get('depth'), 0.)
+    reset = (4.5 + 4. * float(np.clip(reset_draw, 0., 1.)) + .18 * loss
+             + route_return + 2. * (.7 - awareness) + (.5 - tempo))
+    return min(elapsed, live + max(4., reset))
+
+
 def receiver_won_read(out):
     """Reward explosive gains or useful catches with clearly open separation."""
     gain = float(out.get('yards') or 0)
@@ -3114,6 +3128,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                catchup=comeback_pace(secs_in_half, dr.score_diff, dr.quarter,
                                    yardline=after_play.yardline, timeouts=dr._own_timeouts,
                                    tempo=tempo)) + live_seconds - 6.0
+        if (t == 'sack' and dr.quarter == 4 and -8 <= dr.score_diff < 0
+                and 0 < secs_in_half <= 20 and elapsed >= secs_in_half
+                and hurry and not used and not late_injury and not added_penalty
+                and not _fourth_fail and not scoring_safety):
+            elapsed = emergency_sack_elapsed(out, secs_in_half, elapsed,
+                awareness=rate_fn(offense['qb'], {'awareness_rating': 1.0}),
+                tempo=tempo, reset_draw=rng.random())
         # A deliberate bleed may wait for a later kick, but it cannot silently
         # consume that kick while holding a timeout. Live action still costs
         # its own live time; no time is restored when the play ends the half.
