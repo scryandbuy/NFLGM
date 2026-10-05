@@ -1191,6 +1191,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         if not throwaway and not dropped_int:
             broken = rng.random() < (PD_CONTESTED if contested else PD_LOOSE)
         return dict(type='incomplete', yards=0.0, touchdown=False,
+                    intended_air=float(route_air if route_air is not None else {'short': 5, 'medium': 13, 'deep': 27}.get(depth, 6)),
                     throwaway=throwaway,
                     throwback=round(float(max(0.0, rng.normal(6.0, 3.0))), 1) if throwaway else 0.0,
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
@@ -1202,6 +1203,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # contested-catch gate again; drops were running at 8.7% against a real ~5%.
     if not resolve_catch(tgt, cb, contested and rng.random() < 0.45, rng, in_man=in_man):
         return dict(type='drop', yards=0.0, touchdown=False,
+                    intended_air=float(route_air if route_air is not None else {'short': 5, 'medium': 13, 'deep': 27}.get(depth, 6)),
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))

@@ -38,6 +38,10 @@ HALF = 1800
 GAME = 3600
 
 def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=0.5, urgent=False, catchup=0.0):
+    # Dead-ball preparation consumes no game-clock time. The caller replaces
+    # this six-second baseline with the resolved live action duration.
+    if result in ('incomplete', 'drop', 'spike'):
+        return 6.0
     s = SEC.get(result, 25.0)
     if clock_stopped: s = min(s, 8.0)
     if not clock_stopped and not hurry and not timeout and result in ('complete', 'run', 'scramble', 'sack'):
@@ -65,10 +69,28 @@ def live_play_seconds(out):
     catch. These deterministic estimates consume no simulation RNG.
     """
     yards = max(0.0, float(out.get('yards', 0.0) or 0.0))
-    if out.get('type') == 'complete' and out.get('air') is not None:
-        air = min(yards, max(0.0, float(out['air'])))
-        throw = max(0.0, float(out.get('ttt', 2.7) or 2.7))
-        duration = max(throw + air / 20.0, air / 8.0) + (yards - air) / 8.0
+    kind = out.get('type')
+    throw = max(0.0, float(out.get('ttt', 2.7) or 2.7))
+    if kind == 'complete' and not any(k in out for k in ('air', 'intended_air', 'depth')):
+        duration = 1.0 + yards / 8.0  # older/minimal records lack passing detail
+    elif kind in ('complete', 'incomplete', 'drop', 'interception'):
+        air = out.get('air', out.get('intended_air'))
+        if air is None:
+            air = {'short': 5., 'medium': 13., 'deep': 27.}.get(out.get('depth'), 0.)
+        air = max(0.0, float(air))
+        if out.get('throwaway'):
+            duration = throw + 1.0
+        else:
+            if kind == 'complete':
+                air = min(yards, air)
+            duration = max(throw + air / 20.0, air / 8.0)
+            if kind == 'complete':
+                duration += max(0.0, yards - air) / 8.0
+    elif kind == 'scramble':
+        # Pocket time precedes the escape and downfield running.
+        duration = throw + 1.0 + yards / 8.0
+    elif kind == 'sack':
+        duration = throw + 1.0
     else:
         duration = 1.0 + yards / 8.0
     return float(np.ceil(max(6.0, duration)))
@@ -2915,7 +2937,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if t == 'sack':
             if rng.random() < E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn):
                 _old = out
-                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pb_opportunities', 'pb_award', 'pb_sack_survival', 'pressured', 'coverage_evidence') if k in _old}
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pb_opportunities', 'pb_award', 'pb_sack_survival', 'pressured', 'coverage_evidence', 'ttt') if k in _old}
                 out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
