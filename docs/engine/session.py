@@ -533,7 +533,8 @@ class Session:
         try:
             import league_notes as LN
             fa_now = self.stop[0] == 'offseason' and self.OFFSEASON[self.stop[1]][1] in (*self.FA_STEPS, 'step_fa_close')
-            LN.transactions(self.L, self.L.week or 0, skip_signings=fa_now)
+            pre_fa = self.stop[0] == 'offseason' and self.stop[1] < next(i for i, step in enumerate(self.OFFSEASON) if step[1] == 'step_fa_1')
+            LN.transactions(self.L, self.L.week or 0, skip_signings=fa_now, pre_fa=pre_fa)
         except Exception: pass
 
     def advance(self):

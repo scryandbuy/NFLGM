@@ -231,15 +231,22 @@ def big_result(league, week, results):
 
 
 # ------------------------------------------------------------ the log
-def transactions(league, week, skip_signings=False):
+def transactions(league, week, skip_signings=False, pre_fa=False):
     """Since the last roll: star extensions and signings elsewhere, tags, coaching changes. During a free-agency
     round the round's own note carries the signings (skip_signings), so the inbox is not one message a deal."""
     user = getattr(league, 'user_team', None)
     led = _ledger(league); start = int(led.get('_tx_idx', 0) or 0)
     new = league.transactions[start:]
     led['_tx_idx'] = len(league.transactions)
+    summaries = {'extension': [], 'franchise_tag': []}
     for x in new:
         k = x.get('kind'); team = x.get('team')
+        if pre_fa and k in summaries:
+            p = league.player(x.get('pid'))
+            if p is not None:
+                terms = (f"{x.get('years')} years · ${float(x.get('apy') or 0):.1f}m per year" if k == 'extension' else f"${float(x.get('price') or 0):.1f}m")
+                summaries[k].append([f"{team} · {inbox_player(p)} · {p.pos} · {terms}"])
+            continue
         if team == user: continue
         if k in ('extension', 'sign'):
             if skip_signings and k == 'sign': continue
@@ -254,6 +261,24 @@ def transactions(league, week, skip_signings=False):
             IE.post(league, f"coach-hire-{x.get('year', league.year)}-{team}-{x.get('hired')}", 'league', f"{team} hire {x.get('hired')}", f"{team} have a new head coach and general manager: {x.get('hired')}" + (f", {x.get('background')}" if x.get('background') else '') + '.', payload=dict(link='league:coaching'))
         elif k == 'staff_in' and x.get('why') and 'head' in str(x.get('why')).lower():
             IB.news(league, f"{team} hire {x.get('name')}", f"{team} hire {x.get('name')}: {x.get('why')}.", payload=dict(link='league:coaching'))
+
+
+    for kind, rows in summaries.items():
+        if not rows: continue
+        key = f'pre-fa-{kind}-{league.year}'
+        old = next((m for m in getattr(league, 'inbox', []) if (m.get('payload') or {}).get('digest_key') == key), None)
+        prior = (old.get('payload') or {}).get('digest_rows', []) if old else led.get(key, [])
+        rows = prior + rows
+        led[key] = rows
+        title = 'Extensions' if kind == 'extension' else 'Franchise tags'
+        msg = IB.news(league, f'{title} · {league.year}', '', payload=dict(
+            digest_key=key, digest_rows=rows, link='league:transactions',
+            mail_sections=[IB.mail_section(title, rows)]))
+        if old is not None:
+            league.inbox.remove(msg)
+            identity = old['id']
+            old.update(msg)
+            old['id'] = identity
 
 
 def coaching_summary(league):
