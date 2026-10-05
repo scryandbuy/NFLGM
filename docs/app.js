@@ -3818,6 +3818,7 @@ function renderThisWeek(v) {
     group.append(options); groups.append(group);
   }
   prot.append(groups, el('div', { class: 'protection-detail', 'aria-live': 'polite' }, el('strong', {}, protectionWords[v.protection.value] || v.protection.value), ' - ', protectionDescriptions[v.protection.value] || ''));
+  if (v.protection.recommended) prot.append(el('div', { class: 'protection-detail count' }, `Recommended this week: ${protectionWords[v.protection.recommended] || v.protection.recommended}. ${v.protection.why || ''}`));
   dec.append(prot);
   const shadowWord = v.travel ? (v.travel_target ? `${v.my_cb1 ? v.my_cb1.name : 'CB1'} on ${v.travel_target.name}` : `${v.my_cb1 ? v.my_cb1.name : 'CB1'} follows their best receiver`) : 'Corners stay by side';
   const tr = el('div', { class: 'dcard' }, el('div', { class: 'k' }, 'Coverage · Shadow Their WR1?'), el('div', { class: 's' }, shadowWord));

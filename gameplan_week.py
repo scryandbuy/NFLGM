@@ -273,6 +273,25 @@ def protection_suggestion(league, me, opp, week, read=None, opponent_tendencies=
         changes=dict(protection='empty', depth_mix=(+.05, -.02, -.03)))
 
 
+def protection_choice(league, me, opp, week, read=None, tape=None):
+    """Select this matchup's starting protection even without an advice card."""
+    read = protection_read(league, me, opp, week) if read is None else read
+    tape = tendencies(league, opp.abbr) if tape is None else tape
+    recommendation = protection_suggestion(league, me, opp, week, read, tape)
+    if recommendation:
+        return dict(value=recommendation['changes']['protection'], why=read['why'] or recommendation['why'])
+    rows = read['matchups']
+    interior = [r for r in rows if r['role'] in ('LG', 'C', 'RG') and r['gap'] >= 4]
+    if interior and sum(r['gap'] >= 4 for r in rows) >= 2:
+        return dict(value='full_slide', why='Several blocking matchups need help, including inside. Slide the line together and let the back handle the opposite edge.')
+    edge = next((r for r in rows if r['role'] in ('LT', 'RT') and r['gap'] >= 6), None)
+    if edge:
+        return dict(value='six', why=f"Keep the back in to help against {edge['rusher']}; {edge['blocker']} has the tougher edge matchup.")
+    if tape and tape['blitz'] >= .28 and interior:
+        return dict(value='full_slide', why='Their frequent pressure threatens an interior matchup that already needs help. Keep the line working together.')
+    return dict(value='half_slide', why='Half slide gives us help on one side and man assignments on the other, without committing the whole line to one direction.')
+
+
 def scouting_suggestions(league, me, opp, all_grades=None):
     """Cautious roster and coach reads before the opponent has current-season tape.
 
@@ -373,7 +392,8 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
         sug('offence', 'Attack their corners: lean deep and outside', f"their corners rank {rc[0]} of {n}, our receivers {my_wr[0]}", {'depth_mix': (-0.08, +0.03, +0.05), 'pass_bias': +0.04}, priority=matchup(rc[0]-16, 20-my_wr[0]))
     if rf and rf[0] >= 22:
         sug('offence', 'Run it: their front does not hold up', f"their run front ranks {rf[0]} of {n}", {'pass_bias': -0.06}, priority=matchup(rf[0]-16))
-    protection = protection_suggestion(league, me, opp, week, opponent_tendencies=tr)
+    protection_matchups = protection_read(league, me, opp, week)
+    protection = protection_suggestion(league, me, opp, week, read=protection_matchups, opponent_tendencies=tr)
     if protection:
         suggestions.append(protection)
     if tr and tr['blitz'] >= 0.20:
@@ -402,7 +422,7 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
         sug('defence', 'Quick game: sit on the short routes', f"deep on only {tr['deep']*100:.0f}% of a pass-heavy offence", {'zone_aggression': +0.15}, priority=evidence((.18-tr['deep'])/.05, pass_sample, 40))
     wrs = [p for p in opp.depth.get('WR', []) if p.out_until is None]
     if len(wrs) >= 2 and wrs[0].ovr >= 88 and wrs[0].ovr - wrs[1].ovr >= 5:
-        sug('defence', f'Take away {wrs[0].name}: shadow him, bracket on the shots', f"a {wrs[0].ovr:.0f} with a {wrs[1].ovr:.0f} behind him", {'travel': True, 'bracket': wrs[0].pid})
+        sug('defence', f'Take away {wrs[0].name}: shadow him, bracket on the shots', f"a {wrs[0].ovr:.0f} with a {wrs[1].ovr:.0f} behind him", {'travel': True, 'travel_target': wrs[0].pid, 'bracket': wrs[0].pid})
     if owr and owr[0] >= 24 and my_cb and my_cb[0] <= 12:
         sug('defence', 'Our corners can hold them one-on-one: more man, more pressure', f"their receivers rank {owr[0]}, our corners {my_cb[0]}", {'man_rate': +0.10, 'blitz_rate': +0.04}, priority=matchup(owr[0]-16, 16-my_cb[0]))
 
@@ -421,7 +441,8 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
                 tendencies=tr, my_tendencies=tm, units=ur_opp, my_units=ur_me,
                 stars=[dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr)) for p in stars + rushers],
                 injured=[dict(pid=p.pid, name=p.name, pos=p.pos, back=p.out_until) for p in hurt][:6],
-                strengths=strengths, weaknesses=weaknesses, suggestions=resolve(suggestions), forecast=forecast)
+                strengths=strengths, weaknesses=weaknesses, suggestions=resolve(suggestions), forecast=forecast,
+                protection_choice=protection_choice(league, me, opp, week, protection_matchups, tr))
 
 
 def _is_home(league, a, b, week):
@@ -475,6 +496,9 @@ def apply_changes(plan, base, changes):
 def ai_plan(league, state, me_abbr, opp_abbr, week, rng):
     """An AI coordinator takes the report's suggestions by his skill and willingness."""
     rep = opponent_report(league, me_abbr, opp_abbr, week)
+    if rep.get('protection_choice'):
+        state.plan.protection = rep['protection_choice']['value']
+        state.plan.protection_locked = True
     will = float(state.coach.get('adjust_willingness', 0.5))
     team = league.teams[me_abbr]
     import staff as ST
@@ -488,11 +512,32 @@ def ai_plan(league, state, me_abbr, opp_abbr, week, rng):
     return rep, taken
 
 
+def saved_changes(league, week):
+    """Read saved choices, restoring the named target in older shadow advice."""
+    wp = getattr(league, 'user_week_plan', None) or {}
+    if wp.get('year') != league.year or wp.get('week') != week:
+        return {}
+    changes = dict(wp.get('changes', {}))
+    if wp.get('automatic_protection'):
+        changes.setdefault('protection', wp['automatic_protection'])
+    if changes.get('travel') and 'travel_target' not in changes:
+        targets = {ch.get('travel_target') or ch.get('bracket') for ch in wp.get('suggestions', {}).values()
+                   if ch.get('travel') and (ch.get('travel_target') or ch.get('bracket'))}
+        if len(targets) == 1:
+            changes['travel_target'] = targets.pop()
+    return changes
+
+
 def user_plan(league, state, week):
     """The user's saved week: changes he accepted or made, applied to the plan the game reads."""
-    wp = getattr(league, 'user_week_plan', None)
-    if not wp or wp.get('week') != week or wp.get('year') != league.year: return []
-    ch = wp.get('changes', {})
+    ch = saved_changes(league, week)
+    user = getattr(league, 'user_team', None)
+    opponent = next((away if home == user else home for wk, away, home, *_ in getattr(league, 'schedule', [])
+                     if wk == week and user in (away, home)), None) if user else None
+    if 'protection' not in ch and user and opponent and opponent in league.teams and user in league.teams:
+        choice = protection_choice(league, league.teams[user], league.teams[opponent], week)
+        state.plan.protection = choice['value']
+        state.plan.protection_locked = True
     apply_changes(state.plan, state.base_plan, ch)
     # the game-week calls the GM made himself are his: kickoff does not re-decide them
     state.plan.travel_locked = 'travel' in ch

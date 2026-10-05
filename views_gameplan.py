@@ -65,9 +65,8 @@ def _week(session, league):
 
 
 def _saved(league, week):
-    wp = getattr(league, 'user_week_plan', None)
-    if wp and wp.get('week') == week and wp.get('year') == league.year: return dict(wp.get('changes', {}))
-    return {}
+    import gameplan_week as GW
+    return GW.saved_changes(league, week)
 
 
 def _taken(league, week):
@@ -88,10 +87,17 @@ def status(session, league, abbr):
 
 
 def act_save(session, league, abbr):
+    import gameplan_week as GW
     week = _week(session, league)
+    protection = _saved(league, week).get('protection')
+    opp = session._opponent(week)
+    if protection is None and opp:
+        protection = GW.protection_choice(league, league.teams[abbr], league.teams[opp[0]], week)['value']
     manual, suggestions = _parts(league, week)
     _write(league, week, manual, suggestions)
     league.user_week_plan.update(locked=True, dirty=False)
+    if protection:
+        league.user_week_plan['automatic_protection'] = protection
     return dict(ok=True, line='Game plan saved for Sunday.')
 
 
@@ -126,10 +132,12 @@ def this_week(session, league, abbr):
     opp = session._opponent(wk)
     if opp is None: return dict(rail=r, off=True, bye=True, note=f"{__import__('views').transaction_period(dict(week=wk))} is your bye.")
     opp_abbr, away = opp
-    base = _base_plan(session, league, abbr)
+    base = _base_plan(session, league, abbr).copy()
+    rep = GW.opponent_report(league, abbr, opp_abbr, wk)
+    protection_choice = rep['protection_choice']
+    base.protection = protection_choice['value']
     changes = _saved(league, wk)
     plan = _preview(base, changes)
-    rep = GW.opponent_report(league, abbr, opp_abbr, wk)
     leans = []
     # where the assistants would put each lean, from the suggestions not yet taken (the gold ghost)
     ghost = {}
@@ -167,7 +175,7 @@ def this_week(session, league, abbr):
     t = league.teams[abbr]
     return dict(rail=r, off=False, week=wk, opp=club(opp_abbr), away=away, leans=leans, plan_state=status(session, league, abbr),
                 depth=dict(base=[round(float(x), 3) for x in base.depth_mix], value=[round(float(x), 3) for x in plan.depth_mix], labels=list(DEPTH_LABELS)),
-                protection=dict(base=base.protection, value=plan.protection, options=[dict(key=k, word=PROT_WORDS[k]) for k in PROTECTIONS]),
+                protection=dict(base=base.protection, value=plan.protection, recommended=protection_choice['value'], why=protection_choice['why'], options=[dict(key=k, word=PROT_WORDS[k]) for k in PROTECTIONS]),
                 travel=bool(plan.travel), travel_target=(dict(pid=tp.pid, name=tp.name) if (tp := league.player(changes.get('travel_target'))) else None), my_cb1=_cb1(league, t), bracket=(dict(pid=bp.pid, name=bp.name) if bp else None), their_wrs=their_wrs, wr_out=wr_out,
                 suggestions=sugg, changes={k: (list(v) if isinstance(v, tuple) else v) for k, v in changes.items()},
                 coordinators=dict(oc=_coord(t, 'oc'), dc=_coord(t, 'dc')), coach=rep['coach'], forecast=rep.get('forecast'))
@@ -232,11 +240,15 @@ def _parts(league, week):
 
 def _write(league, week, manual, suggestions):
     import gameplan_week as GW
+    previous = getattr(league, 'user_week_plan', None) or {}
+    automatic = previous.get('automatic_protection') if previous.get('year') == league.year and previous.get('week') == week else None
     combined = {}
     for changes in suggestions.values(): combined = _merge(combined, changes)
     combined.update(manual)  # an explicit GM instruction wins over advice
     wp = GW.set_user_plan(league, week, combined, taken=list(suggestions))
     wp.update(manual=manual, suggestions=suggestions, locked=False, dirty=True)
+    if automatic:
+        wp['automatic_protection'] = automatic
 
 
 def _suggestion(session, league, abbr, i):
@@ -258,6 +270,11 @@ def act_take(session, league, abbr, i):
                 if conflicts(suggestion, dict(side=suggestion.get('side'), changes=changes))]
     for text in replaced:
         suggestions.pop(text)
+    # Accepting named coverage advice is a new explicit coverage decision.
+    # An older No Shadow/other receiver selection must not silently defeat it.
+    for key in ('travel', 'travel_target', 'bracket'):
+        if key in suggestion['changes']:
+            manual.pop(key, None)
     suggestions[suggestion['text']] = dict(suggestion['changes'])
     _write(league, wk, manual, suggestions)
     league.user_week_plan['skipped'] = [x for x in _skipped(league, wk) if x != suggestion['text']]
@@ -325,6 +342,7 @@ def act_set_decision(session, league, abbr, key, value):
 
 def act_reset(session, league, abbr):
     _write(league, _week(session, league), {}, {})
+    league.user_week_plan.pop('automatic_protection', None)
     return dict(ok=True, line="Back to the coordinators' plan.")
 
 

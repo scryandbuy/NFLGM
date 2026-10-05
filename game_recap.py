@@ -12,7 +12,8 @@ def capture(league, state, week):
     wp = getattr(league, 'user_week_plan', None) or {}
     if wp.get('year') != league.year or wp.get('week') != week:
         return dict(changes={}, taken=[])
-    changes = {k: copy.deepcopy(v) for k, v in wp.get('changes', {}).items()
+    import gameplan_week as GW
+    changes = {k: copy.deepcopy(v) for k, v in GW.saved_changes(league, week).items()
                if hasattr(state.plan, k)}
     return dict(changes=changes, taken=list(wp.get('taken', [])),
                 recommendations=[dict(text=text,
