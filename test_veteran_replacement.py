@@ -109,5 +109,76 @@ class ReplacementTests(unittest.TestCase):
         self.assertEqual(after['asset_cost'], 0)
         self.assertLess(after['immediate_gain'], before['immediate_gain'])
 
+    def test_public_production_survives_empty_new_season_but_current_form_wins(self):
+        line = dict(pb_snaps=400, pb_wins=390, pressures_allowed=2, sacks_allowed=0,
+                    rb_snaps=250, rb_wins=220)
+        self.L.stats[self.L.year] = {self.old.pid: line}
+        self.L.set_phase('offseason')
+        self.L.season_closed_year = self.L.year
+        before = self.read(4.)
+        self.L.year += 1
+        self.L.stats[self.L.year] = {}
+        after = self.read(4.)
+        self.assertGreater(before['performance_confidence'], 0)
+        self.assertEqual(before['performance_confidence'], after['performance_confidence'])
+        self.assertEqual(before['continuity_cost'], after['continuity_cost'])
+        # A played current season is authoritative; do not cherry-pick the
+        # stronger old season to resist a replacement despite current form.
+        self.L.set_phase('regular')
+        self.L.stats[self.L.year] = {self.old.pid:dict(line, pb_snaps=1, rb_snaps=0)}
+        current = self.read(4.)
+        self.assertLess(current['performance_confidence'], after['performance_confidence'])
+
+    def test_complete_replacement_preference_has_no_calendar_stub_year(self):
+        self.L.set_phase('offseason')
+        for stub in (False, True):
+            for future_years in (1, 2):
+                self.L.season_closed_year = self.L.year
+                self.old.age = 23.; self.old.accrued = 1; self.old.dev = 'superstar'
+                self.old.contract = Contract(future_years+1,
+                    [0 if stub else 6]+[6]*future_years,
+                    start_offset=int(stub), earned_base=0 if stub else 6)
+                self.contract = Contract(2,[0,20],start_offset=1)
+                before_contracts = copy.deepcopy([p.to_dict() for p in self.t.roster])
+                before = self.read(8.)
+                self.assertEqual([p.to_dict() for p in self.t.roster], before_contracts)
+                for p in self.t.roster:
+                    if p.contract: p.contract.advance()
+                self.contract.advance()
+                self.L.year += 1
+                after = self.read(8.)
+                for key in ('approved','net_gain','retention_change','aging_cost',
+                            'released_asset_value','asset_cost','immediate_gain'):
+                    self.assertEqual(before[key], after[key], (stub, future_years, key))
+
+    def test_completed_production_resists_marginal_change_but_allows_upgrade(self):
+        self.L.set_phase('offseason')
+        self.L.season_closed_year = self.L.year-1
+        self.L.stats[self.L.year] = {}
+        self.L.stats[self.L.year-1] = {self.old.pid: dict(
+            pb_snaps=400, pb_wins=390, pressures_allowed=2, sacks_allowed=0,
+            rb_snaps=250, rb_wins=220)}
+        productive = self.read(4.)
+        self.assertFalse(productive['approved'], productive)
+        self.assertTrue(self.read(8.)['approved'])
+        # With no public completed-season evidence, the same marginal move
+        # may be sensible. Missing evidence is not fabricated production.
+        self.L.stats[self.L.year-1] = {}
+        unknown = self.read(4.)
+        self.assertTrue(unknown['approved'], unknown)
+        self.assertEqual(unknown['performance_confidence'], 0.)
+
+    def test_release_option_uses_same_remaining_service_and_cash_as_trade(self):
+        import trades as TR
+        self.L.week = 9; self.t.cap.paid_week = 9
+        self.old.contract = Contract(2,[6,15],earned_base=3)
+        with patch.object(VM.MK.VAL,'value_player',return_value=self.quote):
+            read=self.read(8.)
+            expected=TR.player_asset(self.L,self.t,self.old,None,None)
+        self.assertEqual(read['released_asset_value'],expected['trade_value'])
+        self.old.contract = Contract(1,[6],earned_base=6)
+        self.t.cap.paid_week = 18
+        self.assertEqual(self.read(8.)['released_asset_value'],0)
+
 
 if __name__ == '__main__': unittest.main()

@@ -60,6 +60,13 @@ def _performance(league, player, cache):
     import dev_evaluation as DE
     if 'performance_rows' not in cache:
         book = (getattr(league, 'stats', {}) or {}).get(league.year, {})
+        # Rollover creates an empty new-season book, not new evidence about
+        # the incumbent. Use the latest completed season until play supplies
+        # a current book; never blend an older good season into current form.
+        if not book:
+            completed = getattr(league, 'season_closed_year', None)
+            if completed is not None and int(completed) < int(league.year):
+                book = (getattr(league, 'stats', {}) or {}).get(int(completed), {})
         rows = {pid: row for pid, line in book.items()
                 if (p := league.player(pid)) is not None
                 and (row := DE.assessment(p, line)) is not None}
@@ -77,6 +84,18 @@ def _performance(league, player, cache):
     return percentile, row['confidence']
 
 
+def _service_view(league, player, contract=None):
+    """Public retention/aging view with calendar stubs removed, without mutation."""
+    view = copy.copy(player)
+    c = player.contract if contract is None else contract
+    if c is not None:
+        view.contract = copy.copy(c)
+        start = max(int(getattr(c, 'start_offset', 0) or 0),
+                    int(getattr(league, 'season_closed_year', None) == league.year))
+        view.contract.years = max(0, c.years-start)
+    return view
+
+
 def replacement_read(league, team, incoming, outgoing, contract, gain, report,
                      quote, *, cache=None):
     """Preference for a complete replacement versus standing pat, in roster points.
@@ -90,7 +109,6 @@ def replacement_read(league, team, incoming, outgoing, contract, gain, report,
         return dict(approved=True, net_gain=gain, immediate_gain=gain,
                     reason='open_roster_place')
     import regression as REG
-    import trade_engine as TE
     from types import SimpleNamespace
     from trade_calendar import trading_open
     cache = {} if cache is None else cache
@@ -98,10 +116,14 @@ def replacement_read(league, team, incoming, outgoing, contract, gain, report,
     trait = lambda k: max(0., min(1., float(getattr(gm, k, .5))))
     youth, patience, aggression = trait('youth'), trait('patience'), trait('aggression')
     share = min(1., _shares(report).get(outgoing.pid, 0.))
-    signed = copy.copy(incoming)
-    signed.contract = contract
-    retention = (RN.retention_value(team, signed, report['players'])
-                 - RN.retention_value(team, outgoing, report['players']))
+    signed = _service_view(league, incoming, contract)
+    incumbent = _service_view(league, outgoing)
+    roster_key = ('service_roster', team.abbr, tuple(p.pid for p in report['players']))
+    if roster_key not in cache:
+        cache[roster_key] = [_service_view(league, p) for p in report['players']]
+    retained_players = cache[roster_key]
+    retention = (RN.retention_value(team, signed, retained_players)
+                 - RN.retention_value(team, incumbent, retained_players))
     def age_loss(p):
         key = ('aging', p.pid)
         if key not in cache:
@@ -109,7 +131,8 @@ def replacement_read(league, team, incoming, outgoing, contract, gain, report,
             cache[key] = REG.decline(q, SimpleNamespace(normal=lambda *a: 1.), age=p.age + 1)
         return cache[key]
     # Expiring players have only a renewal option, not guaranteed future control.
-    horizon = 1. if max(contract.years, outgoing.contract.years if outgoing.contract else 0) > 1 else .25
+    horizon = 1. if max(signed.contract.years,
+                       incumbent.contract.years if incumbent.contract else 0) > 1 else .25
     aging = (age_loss(incoming) - age_loss(outgoing)) * share * horizon * (.5 + youth)
     key = ('performance', outgoing.pid)
     if key not in cache: cache[key] = _performance(league, outgoing, cache)
@@ -120,15 +143,13 @@ def replacement_read(league, team, incoming, outgoing, contract, gain, report,
     key = ('asset', outgoing.pid)
     if key not in cache:
         v = MK.VAL.value_player(league, outgoing, side='team', rng=None, pool=cache.get('quote_pool'))
-        c = outgoing.contract
-        if v and c:
-            remaining = sum(max(0., c.base[i] + c.rb[i]
-                - (c.earned_base + c.earned_roster if i == 0 else 0.)) for i in range(c.years))
-            from development_value import player_credit
-            asset = TE.trade_value(dict(age=outgoing.age, apy=remaining / max(1, c.years),
-                ovr=outgoing.ovr, contract_years_left=c.years, madden_position=outgoing.pos,
-                development_credit=player_credit(outgoing)), v)
-            cache[key] = max(0., asset), float(v['apy'])
+        if v and outgoing.contract:
+            # Use the same remaining-service, actual annual pay and public
+            # development quote as a trade. This is an option value, not an
+            # invented buyer or a promise that the club can recover it.
+            import trades as TR
+            asset = TR.player_asset(league, team, outgoing, cache.get('quote_pool'), None)
+            cache[key] = max(0., asset['trade_value']) if asset else 0., float(v['apy'])
         else:
             cache[key] = 0., float(quote['apy'])
     asset, old_quote = cache[key]
