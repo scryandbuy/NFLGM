@@ -599,12 +599,13 @@ def retention_value(team, player, players=None):
                + exposure + (1.0 if succession else 0.0) * readiness + dev_credit)
 
 
-def select_cutdown(team, rows, limit=53):
+def select_cutdown(team, rows, limit=53, available=None):
     """Choose 53 with coach-aware depth and a playable-lineup safeguard."""
     import roster_construction as RC
     raw_rows = rows
-    by_pid = {p.pid: p for p in team.active()}
-    retention = {pid: retention_value(team, p) for pid, p in by_pid.items()}
+    available = list(team.active() if available is None else available)
+    by_pid = {p.pid: p for p in available}
+    retention = {pid: retention_value(team, p, available) for pid, p in by_pid.items()}
     # Only the allocation proxy changes; displayed ratings and game grades
     # are untouched. Carry the same preference through the final safeguard.
     rows = [dict(row, ovr=row['ovr'] + retention.get(row['pid'], 0.0)) for row in rows]
@@ -612,7 +613,7 @@ def select_cutdown(team, rows, limit=53):
     selected, _ = RC.allocate(rows, team.ctx(), team.gm, limit=limit,
                               minimums=floors, group_minimums=group_floors)
     row_ids = {row['pid'] for row in rows}
-    pool = [p for p in team.active() if p.pid in row_ids]
+    pool = [p for p in available if p.pid in row_ids]
     selected_ids = improve_cutdown(team, (row['pid'] for row in selected),
                                     limit=limit, available=pool)
     baseline, _ = RC.allocate(raw_rows, team.ctx(), team.gm, limit=limit)

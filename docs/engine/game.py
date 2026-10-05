@@ -593,6 +593,22 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
     off_f, _ = field_units(offense, pending_off, rng, True, oc.get('personnel'))
     def_f, _ = field_units(defense, pending_def, rng, False, dc.get('personnel'),
                            front_family=dc.get('front_family'))
+    # Empty tries need an intentional QB carry, just like ordinary snaps.
+    # Back-bearing tries retain their existing carrier choice.
+    if (not oc.get('is_pass') and off_f.get('rb') is None
+            and not oc.get('sneak') and not oc.get('qb_run')):
+        import schemes as SC
+        import offense_roles as OR
+        oc['qb_run_aggression'] = 1. - float((getattr(off_state, 'coach', None) or {}).get('starter_protection', .5))
+        qb_pid = off_f['qb'].get('pid')
+        backups = [p for p in OR.roster_depth(offense).get('QB', [])
+                   if p.get('pid') != qb_pid and (off_state is None or p.get('pid') not in off_state.out)]
+        chance = SC.designed_qb_run_chance(off_f, def_f, oc, dc, rate_fn,
+            condition=off_state.cond.get(qb_pid) if off_state is not None else 100.,
+            healthy_backups=len(backups))
+        oc['qb_run'] = bool(chance and rng.random() < chance)
+        if oc['qb_run']: oc['qb_run_chance'] = chance
+        SC.answer_empty_run(off_f, oc, try_yards, rng, rate_fn)
     off_rows, def_rows = PP.unit(off_f, True), PP.unit(def_f, False)
     PP.book_opportunities(book, off_rows + def_rows)
     flag = None if _retry else E.special_teams_penalty_check(rng, 'two_point', offense_players=off_rows, defense_players=def_rows)
@@ -2912,6 +2928,15 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if protect_half:
             oc = dict(oc, is_pass=False, scheme='inside_zone',
                       play_action=False, rpo=False)
+            # Choose the back before the defense answers and participants
+            # are selected. Empty would force either QB exposure or a pass
+            # when the coach explicitly wants a safe clock-burning handoff.
+            import schemes as SC
+            if SC.PERSONNEL_OFF.get(oc.get('personnel'), {}).get('rb') == 0:
+                import formations as FM
+                oc['personnel'] = '11'
+                oc['formation'] = FM.choose_formation('11', rng, down=dr.down,
+                    ydstogo=dr.togo, score_diff=dr.score_diff, secs_left=secs_in_half)
 
         # THE COVERAGE CALL NEVER FIRED IN A GAME. call_defense only consults
         # coverage_call when it is handed both the defence AND rate_fn, and this
@@ -3057,6 +3082,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if oc['qb_run']:
             oc['qb_run_chance'] = run_chance
             oc['play_action'] = False; oc['rpo'] = False
+        SC.answer_empty_run(off_f, oc, ytg_i, rng, rate_fn)
         _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
         penalty_context = dict(is_pass=oc['is_pass'],
                               offense_discipline=float(np.clip(0.70 + 0.8 * (o_awr - 0.787), 0.5, 0.9)),
@@ -3129,7 +3155,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # assignment. Keep one actual defender for contact, fumbles
                 # and the final book, just as on a voluntary scramble.
                 from plays import _likely_tackler
-                out['tackler'] = _likely_tackler(def_f, out, rng, pass_play=True)
+                if 'tackler' not in out:
+                    out['tackler'] = _likely_tackler(def_f, out, rng, pass_play=True)
         actual_qb_run = (out.get('type') == 'run' and
                          (out.get('carrier_pid') or out.get('carrier')) == qb_pid)
         if actual_qb_run and not out.get('sneak') and not out.get('qb_run'):

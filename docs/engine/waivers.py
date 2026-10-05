@@ -165,6 +165,15 @@ def make_room(league, abbr, p, entry):
                 return True
         return False
     if claim_fits(league, entry, abbr) and _claim_budget(league, team, p):
+        if (abbr != getattr(league, 'user_team', None) and len(team.active()) >= 53
+                and team.gm is not None):
+            import cutdown as CD
+            available = team.active() + [p]
+            # A club may win a claim while temporarily above 53, but should
+            # not claim a man its imminent roster selection would release.
+            if p.pid not in RN.select_cutdown(
+                    team, CD.rows_for(team, available), 53, available=available):
+                return False
         return True  # Roster overflow is settled at the normal roster gate.
     if abbr == getattr(league, 'user_team', None):
         return False  # Only an explicitly named release may open the user's spot.

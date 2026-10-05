@@ -166,7 +166,7 @@ def seller_willingness(team, p):
                 seller_status='core' if core else 'ordinary')
 
 
-def player_asset(league, team, p, pool, rng, need=False, viewer=None):
+def player_asset(league, team, p, pool, rng, need=None, viewer=None):
     """
     Price him as he would be ON THE VIEWING CLUB'S ROSTER.
 
@@ -256,6 +256,9 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
             cheaper = max(0.0, alt_cost - inherited_apy)          # what the target saves against the alternative's price
             if edge <= 1.5: tv_buyer = min(tv_buyer, 0.15 * tv_buyer + 0.5 * cheaper)
             elif edge <= 4.0: tv_buyer = min(tv_buyer, 0.55 * tv_buyer + 0.5 * cheaper)
+    if need is None:
+        need = (viewer is not None and viewer is not team
+                and receiving_need(viewer, p, int(getattr(league, 'week', 0) or 0)))
     return dict(kind='player', pid=p.pid, pos=p.pos, age=p.age, apy=p.apy,
                 need=need, trade_value=TE.trade_value(row, v),
                 trade_value_buyer=round(max(0.0, tv_buyer), 2),
@@ -686,17 +689,9 @@ def _refresh_retention(league, teams, pool):
             RP.refresh(league, league.teams[abbr], pool=pool)
 
 
-def roster_need_labels(team, week=0):
-    """Display actual package weaknesses separately from reserve shortages.
-
-    A fullback job is not a halfback vacancy. Compatible substitutes count,
-    and a short injury does not turn a returning starter into a trade need.
-    """
-    import roster_needs as RN
+def _trade_need_state(team, players, report, week):
+    """The same actual weaknesses drive the need labels and buying premium."""
     import practice_squad as PS
-    players = [p for p in team.active() if p.out_until is None or
-               (int(p.out_until) < 99 and int(p.out_until)-week <= 2)]
-    report = RN.assess(team, players)
     weak, grades, impact = {}, {}, {}
     for row in report['package_assignments']:
         role = row['role']
@@ -713,11 +708,50 @@ def roster_need_labels(team, week=0):
         weak[label] = weak.get(label, 0.) + row['weight']
         impact[label] = impact.get(label, 0.) + row['weight'] * (bar - (grade if grade is not None else 55.))
         grades[label] = min(grades.get(label, 100.), grade if grade is not None else 0.)
-    needs = {label: grades[label] for label, share in weak.items() if share >= .10 and impact[label] >= 3.0}
-    for group, shortage in PS.essential_depth(team, players=players, week=week)['shortages'].items():
-        if group in ('K', 'P', 'LS'): continue
+    meaningful = {label: value for label, value in impact.items()
+                  if weak[label] >= .10 and value >= 3.0}
+    needs = {label: grades[label] for label in meaningful}
+    shortages = {group: shortage for group, shortage in
+                 PS.essential_depth(team, players=players, week=week)['shortages'].items()
+                 if group not in ('K', 'P', 'LS')}
+    for group in shortages:
         if group not in needs: needs[group + ' depth'] = 0.
-    return needs
+    return dict(labels=needs, weakness=meaningful, shortages=shortages)
+
+
+def _trade_need_players(team, week):
+    return [p for p in team.active() if p.out_until is None or
+            (int(p.out_until) < 99 and int(p.out_until)-week <= 2)]
+
+
+def roster_need_labels(team, week=0):
+    """Display package weaknesses and reserve shortages, including returnees."""
+    import roster_needs as RN
+    players = _trade_need_players(team, week)
+    return _trade_need_state(team, players, RN.assess(team, players), week)['labels']
+
+
+def receiving_need(team, player, week=0):
+    """Does this arrival relieve an actual hole, beyond being an upgrade?
+
+    Keep short injury returnees in the alternative roster. Assign complete
+    packages so a halfback does not inherit an unrelated fullback need and
+    a compatible substitute can genuinely cover another football role.
+    Contract costs and future control remain in the separate trade checks.
+    """
+    import roster_needs as RN
+    if player.pos in ('K', 'P', 'LS') or player.out_until is not None:
+        return False
+    players = _trade_need_players(team, week)
+    if any(p.pid == player.pid for p in players):
+        return False
+    before = _trade_need_state(team, players, RN.assess(team, players), week)
+    if not before['labels']:
+        return False
+    after_players = players + [player]
+    after = _trade_need_state(team, after_players, RN.assess(team, after_players), week)
+    return (sum(after['weakness'].values()) < sum(before['weakness'].values()) - 1e-9
+            or sum(after['shortages'].values()) < sum(before['shortages'].values()))
 
 
 def surplus_and_needs(league, team, pool, rng, n=3):
@@ -935,7 +969,7 @@ def _portfolio_trade_check(league, ta, tb, outgoing, incoming, cache=None, *,
             key = ('portfolio_quote', team.abbr, other.abbr, item)
             if key not in cache:
                 p = league.player(item)
-                cache[key] = (player_asset(league, team, p, pool, None, need=True, viewer=other)
+                cache[key] = (player_asset(league, team, p, pool, None, viewer=other)
                               if p is not None else None)
             result.append(cache[key])
         return result
@@ -1253,8 +1287,16 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
 
     if candidates:
         base = roster_score(())
-        raw += [x for pid, x in candidates.items()
-                if user_seller or roster_score((pid,)) > base + 1e-6]
+        for pid, asset in candidates.items():
+            if not user_seller and roster_score((pid,)) <= base + 1e-6:
+                continue
+            if league is not None and hasattr(league, 'teams'):
+                # Surplus quotes describe the owner's roster. The other club
+                # can need this player even when his owner can spare him.
+                asset = dict(asset, need=receiving_need(
+                    tb, asset['obj'], int(getattr(league, 'week', 0) or 0)))
+                candidates[pid] = asset
+            raw.append(asset)
         if exhausted:
             return None, None
 
@@ -1505,8 +1547,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
         limit = 90 if offseason and buyer.phase != 'season' else 53
         if len(buyer.active()) >= limit or RN.move_gain(buyer, player) <= .5:
             continue
-        target = player_asset(league, seller, player, pool, rng,
-                              need=True, viewer=buyer)
+        target = player_asset(league, seller, player, pool, rng, viewer=buyer)
         if target is None:
             continue
         try:
@@ -1650,7 +1691,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 if not want_a:
                     continue
                 target = want_a[0]
-                target['need'] = True
+                target['need'] = receiving_need(ta, target['obj'], int(getattr(league, 'week', 0) or 0))
                 # SWEETEN UNTIL HE TAKES IT. A single cheapest-pick offer came
                 # within a tenth of a point on deal after deal - the seller
                 # valued his man at 5.97 and the pick at 5.84 - and every one
@@ -1744,7 +1785,8 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             want = [x for x in want if not street_alternative(league, ta, x, report, alternatives, pool)]
             if not want:
                 continue
-            target = dict(want[0]); target['need'] = True
+            target = dict(want[0])
+            target['need'] = receiving_need(ta, target['obj'], int(getattr(league, 'week', 0) or 0))
             offer, res = _negotiate(league, ta, tu, target, ga, gu, ctx_a, ctx_u,
                                     cap_space[a], cap_space[u], sa, rng)
             if offer is None:

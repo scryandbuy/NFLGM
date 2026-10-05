@@ -435,6 +435,33 @@ def designed_qb_run_chance(offense, defense, call, def_call, rate_fn, *,
     return float(np.clip(choice, 0., .32))
 
 
+def answer_empty_run(offense, call, yards_to_endzone, rng, rate_fn):
+    """An empty package cannot hand off after the coach declines a QB keep."""
+    if (call.get('is_pass') or call.get('sneak') or call.get('qb_run')
+            or offense.get('rb') is not None):
+        return False
+    import playcall as PC
+    import identity as ID
+    down, distance = call.get('down', 1), call.get('ydstogo', 10)
+    job = PC.pick_job(down, distance, yards_to_endzone,
+                      call.get('score_diff', 0), call.get('seconds'), rng)
+    # Keep the selected eleven and the defense's answer. This is a pass
+    # audible, not a late substitution or a back invented by the resolver.
+    concept = PC.call_pass(offense, job, rate_fn, rng,
+                           allow_screen=down != 4 or distance <= 2)
+    base = CONCEPTS[concept]['depth']
+    mix = {'deep': (.26, .28, .46), 'medium': (.51, .42, .07),
+           'short': (.86, .12, .02)}[base]
+    mix = ID.situational_depth(mix, yards_to_endzone, down, distance)
+    call.update(is_pass=True, qb_run=False, play_action=False, rpo=False,
+                screen=concept == 'screen', concept=concept, job=job,
+                depth=str(rng.choice(['short', 'medium', 'deep'], p=mix)),
+                empty_run_audible=True)
+    call.pop('scheme', None)
+    call.pop('qb_run_chance', None)
+    return True
+
+
 def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
                  secs_left=None, offense=None, rate_fn=None, lean=None):
     """Full offensive call: personnel, formation, pass or run, and the concept.

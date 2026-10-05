@@ -450,7 +450,7 @@ def act_gather(league, abbr, pid):
         asset_cache = {}
         def asset_of(kind, it):
             k = (kind, it if kind != 'pick' else f"{it.year}-{it.round}-{it.original}")
-            if k not in asset_cache: asset_cache[k] = TR.pick_asset(league, it) if kind == 'pick' else TR.player_asset(league, them, league.player(it), pool, rng)
+            if k not in asset_cache: asset_cache[k] = TR.pick_asset(league, it) if kind == 'pick' else TR.player_asset(league, them, league.player(it), pool, rng, viewer=me)
             return asset_cache[k]
         scored = []
         for original_index, pkg in enumerate(cands[:24]):

@@ -67,6 +67,8 @@ def apply(out, qb, call, rng, rate_fn, coach=None, condition=100):
     # A designed run already describes its first contact point. A safe ending
     # cannot keep its after-contact yards while pretending that hit vanished.
     clear = min(original, float(out.get('ybc', 0.) or 0.)) if kind == 'run' else original
+    if kind == 'scramble' and out.get('pre_goal_contact_yards') is not None:
+        clear = min(clear, float(out['pre_goal_contact_yards']))
     if clear < 3.:
         return out
     mobility = rate_fn(qb, {'speed_rating': .4, 'accel_rating': .3, 'agility_rating': .3})
@@ -145,6 +147,11 @@ def apply(out, qb, call, rng, rate_fn, coach=None, condition=100):
         evidence['pursuer_pid'] = tackler
     if 'broken_tackles' in out:
         out['broken_tackles'] = 0
+    if kind == 'scramble' and 'pre_goal_contact_yards' in out:
+        evidence['avoided_contact_yards'] = out.pop('pre_goal_contact_yards')
+        evidence['avoided_contact_by'] = out.pop('pre_goal_contact_by', None)
+        if out.get('scramble_contact'):
+            out['scramble_contact'] = dict(out['scramble_contact'], avoided=True, broken=False, burst=0.)
     if 'ybc' in out:
         out['ybc'] = min(gain, float(out['ybc']))
     evidence.update(final_yards=gain, yards_given_up=round(original - gain, 1),
