@@ -3314,13 +3314,13 @@ function renderBracket(v) {
 function bracketTree(v) {
   // one team's line on a card: seed, stripe, abbreviation, score; the winner carries the marker, the loser dims
   const line = (c, seed, pts, done, won, me, record) => el('div', { class: 'bk-line' + (done ? (won ? ' win' : ' lose') : '') + (me ? ' me' : '') },
-    el('span', { class: 'sd' }, seed || ''), el('span', { class: 'str', style: `background:${c.color}` }), el('span', { class: 'ab' }, showAbbr(c.abbr)), el('span', { class: 'rec' }, done ? '' : record || ''), el('b', {}, done ? (won ? '▸ ' : '') + pts : ''));
+    el('span', { class: 'sd' }, seed || ''), el('span', { class: 'str', style: `background:${c.color}` }), el('span', { class: 'ab' }, showAbbr(c.abbr)), done ? el('b', { class: 'score' }, (won ? '▸ ' : '') + pts) : el('span', { class: 'rec' }, record || ''));
   const gameCard = (g, cls) => g ? el('div', { class: 'bk-game ' + (cls || '') + (g.me ? ' mine' : '') + (g.done ? ' done' : ''), style: `--match-accent:${g.done ? (g.winner === g.home.abbr ? g.home.accent : g.away.accent) : g.home.accent};--match-base:${g.done ? (g.winner === g.home.abbr ? g.home.color : g.away.color) : g.home.color}` },
     line(g.away, g.away_seed, g.as_, g.done, g.winner === g.away.abbr, g.away.abbr === v.rail.club.abbr, g.away_record),
     line(g.home, g.home_seed, g.hs, g.done, g.winner === g.home.abbr, g.home.abbr === v.rail.club.abbr, g.home_record),
-    el('div', { class: 'foot' }, g.done ? 'Final' : g.round === 'SB' ? '' : `at ${g.home.name}`, g.round === 'SB' ? '' : el('span', {}, g.stadium || '')))
+    el('div', { class: 'foot' }, g.done ? 'Final' : g.round === 'SB' ? 'Championship Game' : (g.stadium || `${g.home.name} Stadium`)))
     : el('div', { class: 'bk-game tbd ' + (cls || '') }, el('div', { class: 'bk-line' }, el('span', { class: 'sd' }, ''), el('span', { class: 'str' }), el('span', { class: 'ab' }, 'TBD')), el('div', { class: 'bk-line' }, el('span', { class: 'sd' }, ''), el('span', { class: 'str' }), el('span', { class: 'ab' }, 'TBD')), el('div', { class: 'foot' }, 'to be decided'));
-  const byeCard = (b, cls) => b ? el('div', { class: 'bk-game bye ' + cls + (b.me ? ' mine' : ''), style: `--match-accent:${b.club.accent};--match-base:${b.club.color}` }, line(b.club, 1, null, false, false, b.me, null), el('div', { class: 'foot' }, 'First-round bye')) : el('div', { class: cls });
+  const byeCard = (b, cls) => b ? el('div', { class: 'bk-game bye ' + cls + (b.me ? ' mine' : ''), style: `--match-accent:${b.club.accent};--match-base:${b.club.color}` }, line(b.club, b.seed || 1, null, false, false, b.me, b.record), el('div', { class: 'foot' }, 'First-round bye')) : el('div', { class: cls });
   const tree = el('div', { class: 'bk-tree' });
   const side = (c, flip) => {
     // three wild card games plus the bye in one column; two divisional games; the championship. Rows are the tree's
@@ -3336,7 +3336,7 @@ function bracketTree(v) {
   if (continental) tree.append(...side(continental, false));
   // the middle: the Championship Game, its site, the champion beneath it
   const sb = el('div', { class: 'bk-col bk-final', 'data-name': `Championship Game ${v.site ? v.site.numeral : ''}` },
-    el('div', { class: 'bk-slot s8' }, el('div', { class: 'bk-site' }, v.site ? `${v.site.stadium} · ${v.site.city}` : ''), gameCard(v.final, 'sb'),
+    el('div', { class: 'bk-slot s8' }, el('div', { class: 'bk-site' }, v.site ? (v.site.stadium || v.site.city) : ''), gameCard(v.final, 'sb'),
       v.champion ? el('div', { class: 'bk-champ', style: `--c1:${v.champion.color};--c2:${v.champion.accent}` }, el('span', {}, v.champion.name), el('small', {}, 'Champions')) : ''));
   tree.append(el('div', { class: 'bk-join j8' }, el('i', {})), sb, el('div', { class: 'bk-join j8 r' }, el('i', {})));
   if (united) tree.append(...side(united, true));
