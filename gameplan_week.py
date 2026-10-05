@@ -18,6 +18,7 @@ Nothing carries to the next week: the plan the game reads is base plus the
 week's changes, and the state's plan resets when the game ends.
 """
 import numpy as np, collections, re
+from coaching_choices import evidence, resolve
 
 TEND_KEYS = ('plays', 'passes', 'pa', 'motion', 'deep', 'fourth_go', 'fourth_opp', 'def_snaps', 'blitz', 'man', 'two_high', 'box8', 'shadow', 'bracket')
 TWO_HIGH = {'cover_2', 'cover_4', 'cover_6', 'two_man', 'tampa_2', 'quarters'}
@@ -249,7 +250,7 @@ def protection_suggestion(league, me, opp, week, read=None, opponent_tendencies=
         return dict(side='offence',
             text='Full Slide: coordinate protection against their interior rush' if slide else
                  'Protect: more six-man protection and the quick game',
-            why=read['why'], changes=dict(protection='full_slide' if slide else 'six',
+            why=read['why'], _priority=2.5 + min(2.5, max(0, max((r['gap'] for r in rows), default=0))/10), changes=dict(protection='full_slide' if slide else 'six',
                                          depth_mix=(+.08, -.05, -.03)))
     # Absence of trouble is insufficient: require clean recent protection,
     # favorable line matchups, low observed blitzing and a useful extra target.
@@ -357,46 +358,53 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
     hurt = [p for t_ in (opp,) for pos, ps in t_.depth.items() for p in ps[:1] if p.out_until is not None]
 
     # ---- suggestions on offence (against their defence)
-    def sug(side, text, why, changes):
-        suggestions.append(dict(side=side, text=text, why=why, changes=changes))
+    def sug(side, text, why, changes, priority=1.0):
+        suggestions.append(dict(side=side, text=text, why=why, changes=changes, _priority=priority))
+    counts = getattr(league, 'tendencies', {}).get(league.year, {}).get(opp_abbr, {})
+    # Missing legacy counts get a cautious one-game weight, never a full-season one.
+    pass_sample = counts.get('passes', 25)
+    def_sample = counts.get('def_snaps', 50)
+    play_sample = counts.get('plays', 50)
+    def matchup(*advantages):
+        return 1.0 + sum(max(0, x) for x in advantages) / 12.0
     rc = ur_opp.get('corners'); rr = ur_opp.get('pass rush'); rf = ur_opp.get('run front'); rs = ur_opp.get('safeties'); rl = ur_opp.get('linebackers')
     my_wr = ur_me.get('receivers'); my_ol = ur_me.get('pass block'); my_rb = ur_me.get('backs')
     if rc and rc[0] >= 22 and my_wr and my_wr[0] <= 16:
-        sug('offence', 'Attack their corners: lean deep and outside', f"their corners rank {rc[0]} of {n}, our receivers {my_wr[0]}", {'depth_mix': (-0.08, +0.03, +0.05), 'pass_bias': +0.04})
+        sug('offence', 'Attack their corners: lean deep and outside', f"their corners rank {rc[0]} of {n}, our receivers {my_wr[0]}", {'depth_mix': (-0.08, +0.03, +0.05), 'pass_bias': +0.04}, priority=matchup(rc[0]-16, 20-my_wr[0]))
     if rf and rf[0] >= 22:
-        sug('offence', 'Run it: their front does not hold up', f"their run front ranks {rf[0]} of {n}", {'pass_bias': -0.06})
+        sug('offence', 'Run it: their front does not hold up', f"their run front ranks {rf[0]} of {n}", {'pass_bias': -0.06}, priority=matchup(rf[0]-16))
     protection = protection_suggestion(league, me, opp, week, opponent_tendencies=tr)
     if protection:
         suggestions.append(protection)
     if tr and tr['blitz'] >= 0.20:
-        sug('offence', 'They bring pressure: screens and quick throws, less play action', f"blitz on {tr['blitz']*100:.0f}% of snaps", {'depth_mix': (+0.06, -0.04, -0.02), 'play_action_rate': -0.06, 'screen_boost': +0.03})
+        sug('offence', 'They bring pressure: screens and quick throws, less play action', f"blitz on {tr['blitz']*100:.0f}% of snaps", {'depth_mix': (+0.06, -0.04, -0.02), 'play_action_rate': -0.06, 'screen_boost': +0.03}, priority=evidence(tr['blitz']/.10, def_sample, 60))
     if tr and tr['two_high'] >= 0.55:
-        sug('offence', 'They live in two-high: run it and work underneath', f"two-high on {tr['two_high']*100:.0f}% of snaps", {'pass_bias': -0.05, 'depth_mix': (+0.05, +0.02, -0.07)})
+        sug('offence', 'They live in two-high: run it and work underneath', f"two-high on {tr['two_high']*100:.0f}% of snaps", {'pass_bias': -0.05, 'depth_mix': (+0.05, +0.02, -0.07)}, priority=evidence((tr['two_high']-.35)/.12, def_sample, 60))
     if tr and tr['two_high'] <= 0.30 and tr['box8'] >= 0.25:
-        sug('offence', 'Single-high and a loaded box: take the shots outside', f"eight in the box on {tr['box8']*100:.0f}% of snaps", {'pass_bias': +0.05, 'depth_mix': (-0.05, 0.0, +0.05), 'play_action_rate': +0.05})
+        sug('offence', 'Single-high and a loaded box: take the shots outside', f"eight in the box on {tr['box8']*100:.0f}% of snaps", {'pass_bias': +0.05, 'depth_mix': (-0.05, 0.0, +0.05), 'play_action_rate': +0.05}, priority=evidence((tr['box8']-.10)/.10 + (.40-tr['two_high'])/.15, def_sample, 60))
     if tr and tr['man'] >= 0.45 and my_rb and my_rb[0] <= 10:
-        sug('offence', 'Man coverage: motion and the back out of the backfield', f"man on {tr['man']*100:.0f}% of pass snaps", {'motion_rate': +0.08})
+        sug('offence', 'Man coverage: motion and the back out of the backfield', f"man on {tr['man']*100:.0f}% of pass snaps", {'motion_rate': +0.08}, priority=evidence(tr['man']/.25, def_sample, 60))
 
     # ---- suggestions on defence (against their offence)
     oq = ur_opp.get('QB'); ob = ur_opp.get('pass block'); orb = ur_opp.get('run block'); owr = ur_opp.get('receivers')
     my_cb = ur_me.get('corners'); my_rush = ur_me.get('pass rush')
     if ob and ob[0] >= 22 and my_rush and my_rush[0] <= 14:
-        sug('defence', 'Bring it: their line cannot block us', f"their pass blocking ranks {ob[0]}, our rush {my_rush[0]}", {'blitz_rate': +0.05})
+        sug('defence', 'Bring it: their line cannot block us', f"their pass blocking ranks {ob[0]}, our rush {my_rush[0]}", {'blitz_rate': +0.05}, priority=matchup(ob[0]-16, 18-my_rush[0]))
     if oq and oq[0] >= 20:
-        sug('defence', 'Load the box and make their quarterback beat us', f"their quarterback ranks {oq[0]} of {n}", {'box_bias': +0.12, 'man_rate': +0.08})
+        sug('defence', 'Load the box and make their quarterback beat us', f"their quarterback ranks {oq[0]} of {n}", {'box_bias': +0.12, 'man_rate': +0.08}, priority=matchup(oq[0]-16))
     if orb and orb[0] <= 8 and tr and tr['pass_rate'] <= 0.52:
-        sug('defence', 'They want to run: heavier box, stay disciplined', f"pass rate {tr['pass_rate']*100:.0f}%, run blocking ranks {orb[0]}", {'box_bias': +0.12, 'blitz_rate': -0.03})
+        sug('defence', 'They want to run: heavier box, stay disciplined', f"pass rate {tr['pass_rate']*100:.0f}%, run blocking ranks {orb[0]}", {'box_bias': +0.12, 'blitz_rate': -0.03}, priority=matchup(12-orb[0]) + evidence((.60-tr['pass_rate'])/.08, play_sample, 80))
     if tr and tr['pa_rate'] >= 0.17:
-        sug('defence', 'Play action heavy: safeties stay home', f"play action on {tr['pa_rate']*100:.0f}% of dropbacks", {'zone_aggression': -0.15, 'box_bias': -0.05})
+        sug('defence', 'Play action heavy: safeties stay home', f"play action on {tr['pa_rate']*100:.0f}% of dropbacks", {'zone_aggression': -0.15, 'box_bias': -0.05}, priority=evidence(tr['pa_rate']/.08, pass_sample, 40))
     if tr and tr['deep'] >= 0.15:
-        sug('defence', 'They take shots: two-high and carry the verticals', f"deep on {tr['deep']*100:.0f}% of throws", {'shell_lean': +0.15, 'zone_aggression': -0.10})
+        sug('defence', 'They take shots: two-high and carry the verticals', f"deep on {tr['deep']*100:.0f}% of throws", {'shell_lean': +0.15, 'zone_aggression': -0.10}, priority=evidence(tr['deep']/.07, pass_sample, 40))
     if tr and tr['deep'] <= 0.09 and tr['pass_rate'] >= 0.58:
-        sug('defence', 'Quick game: sit on the short routes', f"deep on only {tr['deep']*100:.0f}% of a pass-heavy offence", {'zone_aggression': +0.15})
+        sug('defence', 'Quick game: sit on the short routes', f"deep on only {tr['deep']*100:.0f}% of a pass-heavy offence", {'zone_aggression': +0.15}, priority=evidence((.18-tr['deep'])/.05, pass_sample, 40))
     wrs = [p for p in opp.depth.get('WR', []) if p.out_until is None]
     if len(wrs) >= 2 and wrs[0].ovr >= 88 and wrs[0].ovr - wrs[1].ovr >= 5:
         sug('defence', f'Take away {wrs[0].name}: shadow him, bracket on the shots', f"a {wrs[0].ovr:.0f} with a {wrs[1].ovr:.0f} behind him", {'travel': True, 'bracket': wrs[0].pid})
     if owr and owr[0] >= 24 and my_cb and my_cb[0] <= 12:
-        sug('defence', 'Our corners can hold them one-on-one: more man, more pressure', f"their receivers rank {owr[0]}, our corners {my_cb[0]}", {'man_rate': +0.10, 'blitz_rate': +0.04})
+        sug('defence', 'Our corners can hold them one-on-one: more man, more pressure', f"their receivers rank {owr[0]}, our corners {my_cb[0]}", {'man_rate': +0.10, 'blitz_rate': +0.04}, priority=matchup(owr[0]-16, 16-my_cb[0]))
 
     if tr is None:
         suggestions.extend(scouting_suggestions(league, me, opp, all_grades))
@@ -405,7 +413,7 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
     home_abbr = opp_abbr if _is_home(league, opp_abbr, me_abbr, week) else me_abbr
     forecast = game_forecast(league, home_abbr, week)
     if forecast.get('weather_risk', 0) >= 0.3:
-        sug('offence', 'Weather coming: lean to the run, shorten the passing game', forecast['text'], {'pass_bias': -0.04, 'depth_mix': (+0.05, 0.0, -0.05)})
+        sug('offence', 'Weather coming: lean to the run, shorten the passing game', forecast['text'], {'pass_bias': -0.04, 'depth_mix': (+0.05, 0.0, -0.05)}, priority=1.0 + min(4.0, 4*forecast['weather_risk']))
 
     return dict(week=week, me=me_abbr, opp=opp_abbr,
                 coach=dict(name=opp.gm.name if opp.gm else None, prestige=round(getattr(opp.gm, 'prestige', 0)) if opp.gm else None,
@@ -413,7 +421,7 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
                 tendencies=tr, my_tendencies=tm, units=ur_opp, my_units=ur_me,
                 stars=[dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr)) for p in stars + rushers],
                 injured=[dict(pid=p.pid, name=p.name, pos=p.pos, back=p.out_until) for p in hurt][:6],
-                strengths=strengths, weaknesses=weaknesses, suggestions=suggestions, forecast=forecast)
+                strengths=strengths, weaknesses=weaknesses, suggestions=resolve(suggestions), forecast=forecast)
 
 
 def _is_home(league, a, b, week):
@@ -435,7 +443,7 @@ def _forecast(home_abbr, week):
 
 
 # ------------------------------------------------------------ applying it
-RANGE = {'pass_bias': 0.10, 'play_action_rate': 0.12, 'motion_rate': 0.15, 'tempo': 0.15, 'blitz_rate': 0.10, 'box_bias': 0.25,
+RANGE = {'pass_bias': 0.10, 'play_action_rate': 0.12, 'motion_rate': 0.15, 'tempo': 0.15, 'blitz_rate': 0.10, 'blitz_lean': 0.10, 'box_bias': 0.25,
          'man_rate': 0.20, 'shell_lean': 0.25, 'zone_aggression': 0.25}
 
 

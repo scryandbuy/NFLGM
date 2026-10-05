@@ -248,13 +248,23 @@ def _suggestion(session, league, abbr, i):
 
 
 def act_take(session, league, abbr, i):
+    from coaching_choices import conflicts
     wk = _week(session, league); suggestion = _suggestion(session, league, abbr, i)
     if suggestion is None: return dict(ok=False, why='that suggestion is gone')
     manual, suggestions = _parts(league, wk)
+    # An explicit acceptance replaces opposing advice saved by an older build
+    # or an earlier report. Manual instructions retain their normal precedence.
+    replaced = [text for text, changes in suggestions.items()
+                if conflicts(suggestion, dict(side=suggestion.get('side'), changes=changes))]
+    for text in replaced:
+        suggestions.pop(text)
     suggestions[suggestion['text']] = dict(suggestion['changes'])
     _write(league, wk, manual, suggestions)
     league.user_week_plan['skipped'] = [x for x in _skipped(league, wk) if x != suggestion['text']]
-    return dict(ok=True, line=f"Taken: {suggestion['text']}.")
+    line = f"Taken: {suggestion['text']}."
+    if replaced:
+        line += ' Replaced conflicting advice: ' + '; '.join(replaced) + '.'
+    return dict(ok=True, line=line)
 
 
 def act_untake(session, league, abbr, i):

@@ -5,6 +5,7 @@ carries the same shape as a pregame one (side, text, why, changes) so the GM acc
 same way, and what he accepts is applied to the plan the second half reads.
 """
 import numpy as np
+from coaching_choices import evidence, resolve
 
 SCRIM = ('run', 'scramble', 'complete', 'incomplete', 'drop', 'interception', 'sack')
 
@@ -45,22 +46,56 @@ def first_half(drives, me_side, legacy=False):
     return me, them
 
 
-def recommendations(league, me_abbr, opp_abbr, drives, me_side, score, plan, base, period='halftime', legacy=False):
+def recommendations(league, me_abbr, opp_abbr, drives, me_side, score, plan, base, period='halftime', legacy=False, coherent=True):
     """What the assistants would change at the break. Returns a list of dict(side, text, why, changes)."""
     me, them = first_half(drives, me_side, legacy=legacy)
     out = []
     def sug(side, text, why, changes, review_key):
-        out.append(dict(side=side, text=text, why=why, changes=changes, review_key=review_key))
+        out.append(dict(side=side, text=text, why=why, changes=changes, review_key=review_key, _priority=priorities[review_key]))
     ypc = me['run_yds'] / me['runs'] if me['runs'] >= 6 else None
     ypa = me['pass_yds'] / me['passes'] if me['passes'] >= 8 else None
     tx = (score.get(me_side, 0) or 0) - (score.get('away' if me_side == 'home' else 'home', 0) or 0)
+    # Compare severity and sample size before selecting compatible adjustments.
+    # Score pressure matters more as the deficit/lead grows; a few successful
+    # plays cannot routinely overrule the need to chase or protect that lead.
+    def rate(row, numerator, denominator):
+        return row[numerator] / max(1, row[denominator])
+    pressure = (me['sacks'] + me['pressures']) / max(1, me['passes'])
+    opp_pressure = (them['sacks'] + them['pressures']) / max(1, them['passes'])
+    priorities = {
+        'run_working': evidence(((ypc or 0)-4)/1.2, me['runs'], 8),
+        'run_stalled': evidence((4-(ypc or 0))/1.0, me['runs'], 8),
+        'protection': evidence(pressure/.15, me['passes'], 12),
+        'deep_stalled': evidence(3, me['deep'], 4),
+        'deep_working': evidence(rate(me,'deep_yds','deep')/12, me['deep'], 4),
+        'screens_stalled': evidence(3-rate(me,'screen_yds','screens'), me['screens'], 4),
+        'blitz_opportunity': evidence(rate(me,'blitz_yds','blitz_faced')/4, me['blitz_faced'], 6),
+        'third_offense': evidence((.45-rate(me,'third_conv','third'))/.12, me['third'], 6),
+        'turnovers': evidence(me['int']+me['fum'], me['snaps'], 25),
+        'run_defense': evidence((rate(them,'run_yds','runs')-3.5)/1.2, them['runs'], 8),
+        'pass_defense': evidence((rate(them,'pass_yds','passes')-5)/2, them['passes'], 12),
+        'deep_defense': evidence(rate(them,'deep_yds','deep')/10, them['deep'], 4),
+        'pressure_defense': evidence((.25-opp_pressure)/.08, them['passes'], 12),
+        'third_defense': evidence((rate(them,'third_conv','third')-.35)/.12, them['third'], 6),
+        'screens_defense': evidence(rate(them,'screen_yds','screens')/3, them['screens'], 4),
+        'hurry': 4 + max(0, -tx)/7,
+        'clock_control': 4 + max(0, tx)/7,
+    }
     # ---- offense: what is and is not working
     if ypc is not None and ypc >= 5.2 and me['runs'] < me['passes']:
         sug('offence', 'Stay on the ground: the run is working', f"{ypc:.1f} a carry on {me['runs']} runs; we have thrown {me['passes']} times", {'pass_bias': -0.06, 'heavy_lean': +0.4}, 'run_working')
     if ypc is not None and ypc <= 2.6 and me['runs'] >= 8:
         sug('offence', 'The run is not there: throw more, spread them out', f"{ypc:.1f} a carry on {me['runs']} runs", {'pass_bias': +0.06, 'heavy_lean': -0.4}, 'run_stalled')
     if me['passes'] >= 10 and me['sacks'] + me['pressures'] >= 0.35 * me['passes']:
-        sug('offence', 'Protect: keep a back in, quick game, screens', f"pressure or a sack on {me['sacks'] + me['pressures']} of {me['passes']} dropbacks", {'protection': 'six', 'depth_mix': (+0.08, -0.05, -0.03), 'screen_boost': +0.03, 'heavy_lean': +0.3}, 'protection')
+        screens_failed = coherent and me['screens'] >= 3 and rate(me, 'screen_yds', 'screens') <= 1.0
+        changes = {'protection': 'six', 'depth_mix': (+0.08, -0.05, -0.03), 'heavy_lean': +0.3}
+        title = 'Protect: keep a back in, quick game'
+        if not screens_failed:
+            title += ', screens'
+            changes['screen_boost'] = +0.03
+        # Protecting the QB does not require retrying screens that this same
+        # half has shown to be ineffective. Keep the useful protection option.
+        sug('offence', title, f"pressure or a sack on {me['sacks'] + me['pressures']} of {me['passes']} dropbacks", changes, 'protection')
     if me['deep'] >= 3 and me['deep_cmp'] == 0:
         sug('offence', 'Stop taking the shots: work the intermediate game', f"0 for {me['deep']} on throws twenty yards down the field", {'depth_mix': (+0.02, +0.06, -0.08)}, 'deep_stalled')
     if me['deep'] >= 2 and me['deep_cmp'] >= 2 and me['deep_yds'] >= 60:
@@ -98,4 +133,8 @@ def recommendations(league, me_abbr, opp_abbr, drives, me_side, score, plan, bas
     if period == 'overtime':
         for suggestion in out:
             suggestion['why'] = suggestion['why'].replace('in the half', 'in regulation').replace('at the half', 'after regulation')
-    return out[:6]
+    if not coherent:
+        # Old live saves replay choices by index. Preserve their historical
+        # list and changes until that game ends, including the six-row cutoff.
+        return [{k: v for k, v in s.items() if k != '_priority'} for s in out[:6]]
+    return resolve(out, limit=6)

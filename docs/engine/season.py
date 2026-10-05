@@ -491,7 +491,7 @@ class SeasonRunner(StandingsView):
                     if me == user: GW.user_plan(self.L, st, week)
                     else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
                 except Exception: pass
-            start = dict(adjustment_version=2, rng=copy.deepcopy(self.rng.bit_generator.state),
+            start = dict(adjustment_version=3, rng=copy.deepcopy(self.rng.bit_generator.state),
                          states={side: self._state_data(self.states[side], include_roster=True)
                                   for side in (home, away)})
             import game_recap as GR
@@ -571,7 +571,7 @@ class SeasonRunner(StandingsView):
         lv['adjustment_base'] = st.plan.copy()
         if period == 'halftime':
             lv['half_plan_before'] = dict(protection=getattr(st.plan, 'protection', None))
-        try: recs = HT.recommendations(self.L, user, opp, lv['drives'], me_side, lv['score'], st.plan, st.base_plan, period=period, legacy=lv['start'].get('adjustment_version', 1) < 2)
+        try: recs = HT.recommendations(self.L, user, opp, lv['drives'], me_side, lv['score'], st.plan, st.base_plan, period=period, legacy=lv['start'].get('adjustment_version', 1) < 2, coherent=lv['start'].get('adjustment_version', 1) >= 3)
         except Exception as e:
             import sys; print('halftime read failed:', e, file=sys.stderr); recs = []
         for i, r in enumerate(recs): r['i'] = i; r['taken'] = False
@@ -586,15 +586,19 @@ class SeasonRunner(StandingsView):
         if i < 0 or i >= len(recs): return False
         r = recs[i]; user = getattr(self.L, 'user_team', None); st = self.states.get(user)
         if r['taken'] == bool(on) or st is None: return True
+        def applicable(changes):
+            # Version 1/2 saves predate the blitz-lean wiring fix. Replaying a
+            # formerly ignored delta would change already-played second halves.
+            return {k: v for k, v in changes.items() if k != 'blitz_lean'} if lv['start'].get('adjustment_version', 1) < 3 else changes
         if lv['start'].get('adjustment_version', 1) < 2:
             # Preserve the action semantics of saves created before reversible break choices.
             ch = r['changes'] if on else {k: (tuple(-x for x in v) if isinstance(v, (tuple, list)) else (-v if isinstance(v, (int, float)) else st.base_plan.__dict__.get(k, v))) for k, v in r['changes'].items()}
-            GW.apply_changes(st.plan, st.base_plan, ch); r['taken'] = bool(on)
+            GW.apply_changes(st.plan, st.base_plan, applicable(ch)); r['taken'] = bool(on)
         else:
             r['taken'] = bool(on)
             st.plan = lv['adjustment_base'].copy()
             for accepted in recs:
-                if accepted['taken']: GW.apply_changes(st.plan, st.base_plan, accepted['changes'])
+                if accepted['taken']: GW.apply_changes(st.plan, st.base_plan, applicable(accepted['changes']))
         lv['half_taken'] = [x['text'] for x in recs if x['taken']]
         if not getattr(self, '_replaying_live', False): lv['actions'].append(('half_take', i, bool(on)))
         return True
