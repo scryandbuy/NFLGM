@@ -84,9 +84,14 @@ def _prospect(league, abbr, p, taken=()):
     visit_move = None
     if pre and 'visited' in flags:
         visit_move = dict(mine_from=round(float(pre.get('ovr', 0) or 0)), ceiling_from=f"{round(float(pre.get('lo', 0) or 0))}–{round(float(pre.get('hi', 0) or 0))}", rank_from=pre.get('rank'))
-    if p.xp_spent.get('_senior_bowl') in (league.year, league.year - 1): words.append('Senior Bowl')
+    # Old saves recorded attendance only through spring news. Either source
+    # establishes the same event; never emit a second abbreviated flag.
+    senior_bowl = p.xp_spent.get('_senior_bowl') in (league.year, league.year - 1)
+    legacy_senior_bowl = getattr(p, 'age', 22) >= 22 and any(
+        x.get('pid') == p.pid and x.get('event') == 'Senior Bowl'
+        for x in (getattr(league, 'spring_news', None) or []))
+    if senior_bowl or legacy_senior_bowl: words.append('Senior Bowl')
     visit_locked = visited
-    if getattr(p, 'age', 22) >= 22 and any(x.get('pid') == p.pid and x.get('event') == 'Senior Bowl' for x in (getattr(league, 'spring_news', None) or [])): words.append('Sr. Bowl')
     import character_assessment as CA
     words.extend(CA.flags(v))
     if 'medical' in flags: words.append('Medical')

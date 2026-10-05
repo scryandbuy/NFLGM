@@ -20,3 +20,7 @@ assert.ok(src.includes('characterReport(v.character_report)'));
 assert.ok(!src.includes('Gains XP faster and keeps his condition'));
 assert.ok(!src.includes('The slowest to improve, and condition slips'));
 console.log('Character UI: concise unknown reads, no penalty row, and preserved assessment context.');
+vm.runInContext(src.slice(src.indexOf('function flagTags('),src.indexOf('function renderBoard(')),context);
+const flags=context.flagTags(['Senior Bowl','Sr. Bowl','senior bowl','Medical','medical']);
+assert.deepEqual(flags.children.map(n=>n.children[0]),['Senior Bowl','Medical']);
+console.log('Legacy Senior Bowl aliases display once; unrelated flags remain.');

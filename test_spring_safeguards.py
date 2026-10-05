@@ -10,6 +10,20 @@ from session import Session
 from test_cap_accounting import fixture, player
 
 class SpringSafeguards(unittest.TestCase):
+    def test_senior_bowl_flag_combines_attendance_and_legacy_news(self):
+        L=fixture(); p=player(L,'prospect'); p.age=23
+        L.scouting={'GB':{p.pid:dict(ovr=75,pot_lo=80,pot_hi=90)}}
+        L.consensus={p.pid:dict(ovr=76,rank=20)}
+        for marker,news,expected in [(True,True,1),(True,False,1),(False,True,1),(False,False,0)]:
+            with self.subTest(marker=marker,news=news):
+                p.xp_spent.pop('_senior_bowl',None)
+                if marker: p.xp_spent['_senior_bowl']=L.year-1
+                L.spring_news=[dict(pid=p.pid,event='Senior Bowl')] if news else []
+                with patch.object(SC,'scheme_fit_view',return_value=0):
+                    words=VD._prospect(L,'GB',p)['words']
+                self.assertEqual(words.count('Senior Bowl'),expected)
+                self.assertNotIn('Sr. Bowl',words)
+
     def league(self, news):
         return SimpleNamespace(year=2028, phase='free_agency', season_closed_year=2027,
                                spring_news=news, user_visits=['p1'])
