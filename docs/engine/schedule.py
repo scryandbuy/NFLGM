@@ -183,7 +183,7 @@ def assign_weeks(games, div, seed=0, restarts=30, iters=60000):
         m = nx.max_weight_matching(G, maxcardinality=True)
         if len(m) != 16: continue
         fixed = {}
-        for u, v in m:
+        for u, v in sorted(m, key=lambda edge: tuple(sorted(edge))):
             cands = [i for i, (h, a, _) in enumerate(games) if {h, a} == {u, v}]
             fixed[rng.choice(cands)] = 18
         free = [i for i in range(n) if i not in fixed]
@@ -270,7 +270,7 @@ def assign_weeks(games, div, seed=0, restarts=30, iters=60000):
         stall = 0; freeset = set(free)
         for it in range(6000):
             if cur == 0 or stall > 600: break
-            pool = [i for i in guilty if i in freeset]
+            pool = [i for i in sorted(guilty) if i in freeset]
             if not pool: break
             i = rng.choice(pool); h1, a1, _ = games[i]; w1 = wk[i]
             moved = False

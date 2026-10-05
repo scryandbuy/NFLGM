@@ -56,6 +56,7 @@ def team_evidence(team, *, record=None, history=None, season_year=None):
         # Existing public age/current-ability rule. It supports continuity;
         # it does not assert statistical improvement or read hidden potential.
         hist['qb_continuity'] = bool(qb and qb.age <= 25 and qb.ovr >= 78)
+    hist.setdefault('owner_patience', float(getattr(team, 'owner_patience', .5)))
     return hist
 
 
@@ -76,6 +77,7 @@ def pressure(hist, roster_pct=0.5, qb_dev=None):
         tenure         full seasons completed in the chair
         playoff_drought years since the team last made the playoffs
         expected_pct   what this roster should win (from roster strength)
+        owner_patience how long this owner allows the plan to develop
     roster_pct: talent level 0-1. A bad record with a bad roster is survivable.
     qb_dev: legacy override for young established starter continuity. When
         omitted, use the same captured public evidence as the owner view.
@@ -111,6 +113,11 @@ def pressure(hist, roster_pct=0.5, qb_dev=None):
     # existing rule does not establish that his play improved this season.
     if qb_dev is None: qb_dev = hist.get('qb_continuity', False)
     if qb_dev: p *= 0.55
+
+    # Owners can reasonably differ on the same season without turning
+    # patience into immunity or making an impatient owner fire by rule.
+    patience = float(np.clip(hist.get('owner_patience', .5), 0., 1.))
+    p *= 1. + .4 * (.5 - patience)
 
     # Soft saturation, not a hard clip. Clipping at 1.0 meant every severe case
     # pinned at maximum and the tenure multiplier had nothing left to act on -
