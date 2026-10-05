@@ -380,7 +380,7 @@ class Session:
                 return dict(title=(f"Advance to Week {wk + 1}" if wk < WEEKS else 'Advance to the Playoffs'), sub=(f"Week {wk} is in the books"), played=True)
             if self._practice_pending():
                 return dict(title='Run Practice', sub=f'Week {wk} preparation', played=False)
-            return dict(title=f"Sim Week {wk}", sub=(f"{'at' if opp and opp[1] else 'vs'} {opp[0]}" if opp else 'Bye Week'), played=False)
+            return dict(title=f"Play Week {wk}", sub=(f"{'at' if opp and opp[1] else 'vs'} {opp[0]}" if opp else 'Bye Week'), played=False)
         if k == 'playoffs':
             rnd_i = int(self.stop[1]) if len(self.stop) > 1 else 0
             lv = getattr(self.runner, 'live', None) if self.runner is not None else None
