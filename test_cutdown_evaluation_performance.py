@@ -11,6 +11,26 @@ from test_roster_needs import Team, player
 
 
 class CutdownEvaluationTests(unittest.TestCase):
+    def test_no_qualifying_arrival_skips_departure_scoring_but_upgrade_still_enters(self):
+        from test_waiver_ir_projection import fixture
+        for grade, improves in ((40., False), (99., True)):
+            with self.subTest(grade=grade):
+                _, team, incoming, _, _ = fixture()
+                incoming.pos = 'WR'
+                incoming.ratings = {k: grade for k in incoming.ratings}
+                kept = team.active()
+                self.assertEqual(len(kept), 53)
+                original = {p.pid for p in kept}
+                with patch.object(RN, 'assess', wraps=RN.assess) as assess:
+                    selected = RN.improve_cutdown(team, original, available=kept + [incoming])
+                self.assertEqual(len(selected), 53)
+                self.assertEqual(incoming.pid in selected, improves)
+                if not improves:
+                    self.assertEqual(selected, original)
+                    # Only the unchanged roster and proposed arrival are read;
+                    # there is no reason to evaluate53 hypothetical departures.
+                    self.assertEqual(assess.call_count, 2)
+
     def test_failed_repair_stops_when_nothing_changes_but_retries_after_a_move(self):
         for progress in (False, True):
             league = SimpleNamespace(teams={}, transactions=[])

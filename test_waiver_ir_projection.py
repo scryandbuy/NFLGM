@@ -1,7 +1,9 @@
 """Waiver decisions must include the CPU's already-eligible IR returns."""
 import copy
+import random
 import unittest
 from unittest.mock import patch
+import numpy as np
 
 from cap_engine import Contract
 from gm_engine import GM
@@ -102,6 +104,27 @@ class WaiverIRProjectionTests(unittest.TestCase):
         plan = self.project(league, team, incoming)
         self.assertTrue(plan['returns'])
         self.assertEqual(before, state(league, team))
+
+    def test_preview_preserves_container_identity_and_live_random_streams(self):
+        league, team, incoming, _, _ = fixture(90.)
+        second = league.players['LT0']
+        second.xp_spent.update(_ir_week=5, _ir_return=True)
+        team.ir.append(second)
+        league.rng = np.random.default_rng(8045)
+        identity = lambda: (id(team.cap), id(team.cap.contracts), id(team.roster),
+                            id(team.ir), id(team.practice_squad), id(league.players),
+                            tuple((pid, id(p), id(p._team_ref), id(p.contract))
+                                  for pid, p in league.players.items()))
+        refs, before = identity(), state(league, team)
+        generator = copy.deepcopy(league.rng.bit_generator.state)
+        numpy_state, python_state = np.random.get_state(), random.getstate()
+        plan = self.project(league, team, incoming)
+        self.assertEqual(len(plan['returns']), 2)
+        self.assertEqual(identity(), refs)
+        self.assertEqual(state(league, team), before)
+        self.assertEqual(league.rng.bit_generator.state, generator)
+        np.testing.assert_equal(np.random.get_state(), numpy_state)
+        self.assertEqual(random.getstate(), python_state)
 
     def test_multiple_returns_consume_only_remaining_designations_in_order(self):
         league, team, incoming, first, entry = fixture(90.)
