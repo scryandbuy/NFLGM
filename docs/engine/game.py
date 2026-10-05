@@ -1046,25 +1046,34 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
             # snaps. A timeout now saves one clock-run snap's worth of time; the value is that saving times the
             # odds of the stop. After a first down the odds are low and the offense has three chances left, so the
             # timeout waits; on third and long it is worth spending.
-            nd = int(getattr(dr, 'down', 1)); togo = float(getattr(dr, 'togo', 10.0))
+            # The live drive still describes the snap. Price the defense's
+            # timeout from the resulting spot and new series instead.
+            gained = float(np.round(float(out.get('yards', 0) or 0)))
+            old_down = int(getattr(dr, 'down', 1))
+            old_togo = float(getattr(dr, 'togo', 10.0))
+            next_spot = max(.5, dr.yardline - gained)
+            converted_now = gained >= old_togo - .01
+            nd = 1 if converted_now else old_down + 1
+            togo = min(10., next_spot) if converted_now else old_togo - gained
+            remaining_seconds = max(0., secs_in_half - live_play_seconds(out))
             remaining = max(1, 4 - nd)                          # snaps before the punt, counting the one just run as done
             p_stop = 0.28 if nd <= 1 else (0.40 if togo >= 4 else 0.25) if nd == 2 else (0.62 if togo >= 7 else 0.48 if togo >= 3 else 0.32)
             later = 0.65 * PLAY_SECS_RUN + 0.35 * PLAY_SECS                  # a later snap stops the clock itself a third of the time
-            after_with = max(0.0, secs_in_half - PLAY_SECS * min(remaining, tos_d) - later * max(0, remaining - tos_d) - 6.0)
-            after_without = max(0.0, secs_in_half - PLAY_SECS_RUN - later * (remaining - 1) - 6.0)
+            after_with = max(0.0, remaining_seconds - PLAY_SECS * min(remaining, tos_d) - later * max(0, remaining - tos_d) - 6.0)
+            after_without = max(0.0, remaining_seconds - PLAY_SECS_RUN - later * (remaining - 1) - 6.0)
             # what the defense gets if the series fails: a possession, worth less when it needs touchdowns (down
             # two scores a field-goal drive is nearly nothing to it)
             need_td = 0.35 if dr.score_diff >= 9 else 1.0
             d_gain = need_td * (_possession_value(after_with, max(0, tos_d - min(remaining, tos_d))) - _possession_value(after_without, tos_d))
             # ...and what the offense gets if the series lives: the stopped clock is its time too, and it is the one
             # driving. Past midfield with the clock short, that is most of the value of the stop handed to them.
-            o_gain = 0.6 * (_possession_value(after_with + 12.0, timeouts.left.get(pos, 0)) - _possession_value(after_without + 12.0, timeouts.left.get(pos, 0))) * (1.4 if dr.yardline <= 50 else 0.7)
+            o_gain = 0.6 * (_possession_value(after_with + 12.0, timeouts.left.get(pos, 0)) - _possession_value(after_without + 12.0, timeouts.left.get(pos, 0))) * (1.4 if next_spot <= 50 else 0.7)
             gain = p_stop * d_gain - (1.0 - p_stop) * o_gain
             # ...AGAINST WAITING FOR THIRD DOWN. With snaps still to come, the timeout can be held for the series'
             # last one, where the stop is likelier and every timeout is still in hand; a conversion in between
             # costs nothing. The timeout is spent now only when now beats that.
             if remaining > 1:
-                secs_3rd = secs_in_half - PLAY_SECS_RUN - later * (remaining - 2)
+                secs_3rd = remaining_seconds - PLAY_SECS_RUN - later * (remaining - 2)
                 if secs_3rd > 6:
                     w3 = max(0.0, secs_3rd - PLAY_SECS - 6.0); wo3 = max(0.0, secs_3rd - PLAY_SECS_RUN - 6.0)
                     gain_later = 0.50 * need_td * (_possession_value(w3, tos_d - 1) - _possession_value(wo3, tos_d))

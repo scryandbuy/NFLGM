@@ -47,3 +47,11 @@ class QuickKickTests(unittest.TestCase):
         h=clocks.ClockDecisions();h.setUp()
         dr,_,_=h.drive(start=62,clock=1809,diff=17,own=3,other=0)
         self.assertEqual(dr.log[0]['type'],'kneel')
+
+    def test_halftime_defense_rechecks_conversion_and_field_position(self):
+        t=G.Timeouts()
+        dr=NS(down=3,togo=7,yardline=83,score_diff=6,quarter=2)
+        result=G._timeout_call(dr,'complete',dict(yards=34),t,'home',1800,59,
+                              plan=dict(choice='play',hurry=False))
+        self.assertEqual(result,(False,None))
+        self.assertEqual(t.left['away'],3)
