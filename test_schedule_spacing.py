@@ -1,5 +1,9 @@
 """Schedule-only checks: no multi-season gameplay simulation required."""
 import csv
+import json
+import os
+import subprocess
+import sys
 import unittest
 from collections import Counter
 from pathlib import Path
@@ -82,6 +86,28 @@ class ScheduleSpacingTests(unittest.TestCase):
         first = S.assign_weeks(games, self.div, seed=42)
         self.assertEqual(S.rematch_violations(games, first[0]), [])
         self.assertEqual(S.assign_weeks(games, self.div, seed=42), first)
+
+    def test_same_seed_has_same_weeks_across_python_processes(self):
+        script = '''
+import csv, json, schedule as S
+with open('schedule_2026.csv') as f:
+    rows = list(csv.DictReader(f))
+div = {r['home_team']: r['home_div'] for r in rows}
+rank = {t: i + 1 for d in S.DIVS
+        for i, t in enumerate(sorted(t for t, v in div.items() if v == d))}
+games = S.build_matchups(2028, div, rank)
+weeks, byes = S.assign_weeks(games, div, seed=42)
+print(json.dumps([sorted(weeks.items()), sorted(byes.items())]))
+'''
+        outputs = []
+        for hash_seed in ('1', '2', '17'):
+            env = dict(os.environ, PYTHONHASHSEED=hash_seed)
+            result = subprocess.run([sys.executable, '-c', script],
+                                    cwd=Path(__file__).parent, env=env,
+                                    capture_output=True, text=True, check=True, timeout=30)
+            outputs.append(json.loads(result.stdout))
+        self.assertEqual(outputs[0], outputs[1])
+        self.assertEqual(outputs[0], outputs[2])
 
     def test_invalid_solver_result_cannot_replace_existing_schedule(self):
         league = self.league(2028)
