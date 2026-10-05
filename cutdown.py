@@ -129,14 +129,15 @@ def _sources(team, report, week=None):
             | {pos for pos in POS_CAP if PS.GROUP_OF.get(pos, pos) in shortages})
 
 
-def _replacement_pool(league, team, sources, essential=False, *, comps=None):
+def _replacement_pool(league, team, sources, essential=False, *, comps=None, only_sources=False):
     import practice_squad as PS
     import valuation as VAL
     from replacement_contracts import minimum_acceptance
     if comps is None: comps = VAL.pool_from_league(league)
     pool = [p for p in PS.available_free_agents(league)
-            if minimum_acceptance(league, team, p, pool=comps)['accepts']] + [p for p in PS.squad(team)
-            if not p.retired and p.out_until is None]
+            if (not only_sources or p.pos in sources)
+            and minimum_acceptance(league, team, p, pool=comps)['accepts']] + [p for p in PS.squad(team)
+            if not p.retired and p.out_until is None and (not only_sources or p.pos in sources)]
     # Search other squads for an otherwise unavailable starting role, not
     # simply to churn another club's developmental depth into our bench.
     absent = sources if essential else sources - {p.pos for p in pool}
@@ -202,7 +203,7 @@ def _cross_train_kicker(league, team, report, reserve=0.0):
     from cap_accounting import require_room
     if team.abbr == getattr(league, 'user_team', None) or 'K' not in report['uncovered']:
         return False
-    if any(p.pos == 'K' for p in _replacement_pool(league, team, {'K'})):
+    if any(p.pos == 'K' for p in _replacement_pool(league, team, {'K'}, only_sources=True)):
         return False  # Exhaust normal kicker signings/poaches first.
     active = team.active()
     starters = {row['player'].pid for row in report['assignments'] if row['player'] is not None}
@@ -210,7 +211,7 @@ def _cross_train_kicker(league, team, report, reserve=0.0):
               if row.get('year') == league.year and row.get('team') == team.abbr
               and row.get('kind') in ('sign', 'ps_callup', 'ps_poach')
               and 0 <= int(league.week or 0) - int(row.get('week') or 0) <= 3}
-    pool = [p for p in active + _replacement_pool(league, team, {'P'})
+    pool = [p for p in active + _replacement_pool(league, team, {'P'}, only_sources=True)
             if p.pos == 'P' and not p.retired and p.out_until is None]
     best = None
     for p in pool:
@@ -315,7 +316,7 @@ def repair_shape(league):
             coverage = RN.essential_coverage(team, report=report)
             if not coverage['shortages'] or len(team.active()) != ROSTER_LIMIT: break
             sources = _sources(team, report, league.week) | {pos for eligible in coverage['sources'].values() for pos in eligible}
-            pool = _replacement_pool(league, team, sources)
+            pool = _replacement_pool(league, team, sources, only_sources=True)
             if not any(p.pos == 'LS' for p in pool) and _convert_long_snapper(league, team, report):
                 fixed += 1
                 continue
@@ -372,7 +373,7 @@ def repair_depth(league):
             before = PS.essential_depth(team, week=league.week)['shortages']
             if not before: break
             sources = {pos for pos in POS_CAP if PS.GROUP_OF.get(pos, pos) in before}
-            pool = sorted(_replacement_pool(league, team, sources, essential=True, comps=comps),
+            pool = sorted(_replacement_pool(league, team, sources, essential=True, comps=comps, only_sources=True),
                           key=lambda p: (not PS.minimum_fits(league, team, p, essential=True, pool=comps),
                                          bool(p.team and p.team != abbr), -p.ovr, str(p.pid)))
             moved = False
@@ -430,12 +431,19 @@ def finalize(league, rng, verbose=False, passes=3):
     for team in league.teams.values(): team.phase = 'season'
     total_cut, total_signed = trim_specialists(league), 0
     for _ in range(passes):
+        transaction_count = len(getattr(league, 'transactions', ()))
         cuts, _ = run(league, rng)
         total_cut += cuts
-        total_signed += fill_short(league, rng)
-        repair_shape(league)
-        repair_depth(league)
+        signed = fill_short(league, rng)
+        total_signed += signed
+        shape = repair_shape(league)
+        depth = repair_depth(league)
         if not violations(league): break
+        # These searches are deterministic. Repeating an unchanged, failed
+        # pass cannot find a new solution; leave its violations for the gate.
+        if (not cuts and not signed and not shape and not depth
+                and len(getattr(league, 'transactions', ())) == transaction_count):
+            break
     if verbose:
         print(f'  {len(total_cut)} cut, {total_signed} signed; unresolved: {violations(league)}')
     return total_cut, total_signed

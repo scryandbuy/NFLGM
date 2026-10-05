@@ -6,10 +6,23 @@ from unittest.mock import patch
 
 import roster_needs as RN
 import waivers as WV
+import cutdown as CD
 from test_roster_needs import Team, player
 
 
 class CutdownEvaluationTests(unittest.TestCase):
+    def test_failed_repair_stops_when_nothing_changes_but_retries_after_a_move(self):
+        for progress in (False, True):
+            league = SimpleNamespace(teams={}, transactions=[])
+            with patch.object(CD, 'trim_specialists', return_value=[]), \
+                 patch.object(CD, 'run', return_value=([], [])) as run, \
+                 patch.object(CD, 'fill_short', return_value=0), \
+                 patch.object(CD, 'repair_shape', side_effect=[1, 0] if progress else [0]), \
+                 patch.object(CD, 'repair_depth', return_value=0), \
+                 patch.object(CD, 'violations', return_value=[{'missing': ['K']}]):
+                self.assertEqual(CD.finalize(league, None), ([], 0))
+                self.assertEqual(run.call_count, 2 if progress else 1)
+
     def test_score_matches_full_report_for_fronts_packages_and_missing_roles(self):
         pool = [player(pos, n) for pos in RN.POSITIONS for n in range(3)]
         for i, p in enumerate(pool):

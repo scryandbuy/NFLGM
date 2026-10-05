@@ -27,6 +27,7 @@ is how a real wire works.
 from inbox import player_name as inbox_player
 import collections
 import numpy as np
+import valuation as VAL
 
 VESTED = 4
 DEADLINE_WEEK = 9
@@ -114,8 +115,8 @@ def wants(league, abbr, p, week, market=None, *, _assessments=None):
     if p.ovr < incumbent + 3.0:
         baseline = None
         if _assessments is not None:
-            # Only the read-only notification sweep shares these snapshots.
-            # Awarding claims changes rosters and must use fresh assessments.
+            # The caller owns this sweep and discards snapshots on a move.
+            # No assessment survives the notification or claim-award call.
             if abbr not in _assessments:
                 _assessments[abbr] = RN.assess(team)
             baseline = _assessments[abbr]
@@ -191,7 +192,8 @@ def make_room(league, abbr, p, entry):
     # Prefer the release that leaves the coach's playable roster strongest.
     # Searching the bottom few avoids repeatedly scoring an entire roster for
     # every man on the wire.
-    ranked = sorted(((RN.move_gain(team, p, q), q)
+    baseline = RN.assess(team)
+    ranked = sorted(((RN.move_gain(team, p, q, baseline=baseline), q)
                      for q in sorted(cands, key=lambda q: q.ovr)[:8]),
                     key=lambda row: row[0], reverse=True)
     for gain, outgoing in ranked:
@@ -312,6 +314,7 @@ def user_withdraw(league, pid):
 def done_ids(awarded): return {pid for pid, _ in awarded}
 
 
+@VAL.comparison_batch()
 def process(league, rng, week, verbose=False):
     """
     Award every man on the wire: AI clubs decide, the user's claim (if any)
@@ -330,6 +333,7 @@ def process(league, rng, week, verbose=False):
     processed = {e['pid'] for e in ents}
     import valuation as VAL
     pool = VAL.pool_from_league(league) if ents else None
+    assessments = {}
     for e in list(ents):
         user_failed = False
         p = league.player(e['pid'])
@@ -352,15 +356,23 @@ def process(league, rng, week, verbose=False):
                     rel = e.get('release_if_awarded')
                     active = league.teams[user].active()
                     if len(active) < 53 or (len(active) == 53 and rel and league.player(rel) in active):
-                        award(league, e, user); awarded.append((p.pid, user)); break
+                        award(league, e, user); awarded.append((p.pid, user))
+                        assessments.clear()
+                        break
                     user_failed = True
                     IB.post(league, 'waiver_notice', f"Claim failed: {inbox_player(p)}", f"Your claim on {inbox_player(p)} ({p.pos}) could not be processed: no roster spot could be opened for him. The claim window has closed; he may join another club or clear to free agency.", sender='league')
                 continue
             import practice_squad as _PSQ
             if _PSQ.shunned(p, abbr, league) or getattr(league.teams[abbr], '_moved_week', None) == week: continue     # released him lately, or moved already this week
-            if wants(league, abbr, p, week, market=market) and make_room(league, abbr, p, e):
+            if not wants(league, abbr, p, week, market=market, _assessments=assessments):
+                continue
+            # make_room may release a player. Expire this club's read before
+            # trying it, even if no claim is ultimately awarded.
+            assessments.pop(abbr, None)
+            if make_room(league, abbr, p, e):
                 league.teams[abbr]._moved_week = week
                 award(league, e, abbr); awarded.append((p.pid, abbr))
+                assessments.clear()
                 if user in e.get('claims', []) and not user_failed:
                     import inbox as IB
                     IB.post(league, 'waiver_notice', f"Claim lost: {inbox_player(p)} to {abbr}", f"You claimed {inbox_player(p)} ({p.pos}) and {abbr} held the higher priority. He is theirs.", sender='league')
@@ -380,6 +392,7 @@ def process(league, rng, week, verbose=False):
                 to = next(a for pid_, a in awarded if pid_ == p.pid)
                 if club == user: IB.post(league, 'waiver_notice', f"{inbox_player(p)} claimed by {to}", f"You waived {inbox_player(p)} for the practice squad and {to} claimed him off the wire. He is theirs.", sender='assistants')
             elif PSQ.sign_to_squad(league, club, p.pid):          # sign_to_squad logs the move
+                assessments.clear()
                 if club == user: IB.post(league, 'waiver_notice', f"{inbox_player(p)} cleared to the practice squad", f"{inbox_player(p)} cleared waivers and is on your practice squad.", sender='assistants')
             elif club == user: IB.post(league, 'waiver_notice', f"{inbox_player(p)} cleared, no room on the squad", f"{inbox_player(p)} cleared waivers but the squad had no room for him under its rules; he is a free agent.", sender='assistants')
     # Close availability for this batch, including its digest, never results.
