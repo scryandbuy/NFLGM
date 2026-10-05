@@ -50,17 +50,24 @@ class TradeEntryGuardTests(unittest.TestCase):
         self.assertEqual(self.L.inbox[0]['status'],'accepted')
 
     def test_stale_buyer_upgrade_is_rejected_without_new_willingness_roll(self):
-        with patch.object(TR,'package_football',return_value=dict(approved=True,gains={'DEN':0.})), \
+        # This fixture tests the CPU decision after the separate cap-legality gate.
+        with patch('cap_accounting.require_trade_room') as legality, \
+             patch.object(TR,'package_football',return_value=dict(approved=True,gains={'DEN':0.})), \
              patch.object(TR,'_financial_trade') as funding, patch.object(TR,'will_accept') as roll:
             result=TR.cpu_trade_check(self.L,self.b,self.a,[],[self.pid],buyer='DEN')
         self.assertFalse(result['approved']);self.assertIn('upgrade',result['why'])
+        legality.assert_called_once_with(self.L,'DEN','GB',[],[self.pid])
         roll.assert_not_called();funding.assert_not_called()
 
     def test_manual_cpu_future_funding_failure_is_rejected(self):
-        with patch.object(TR,'package_football',return_value=dict(approved=True,gains={})), \
-             patch.object(TR,'_financial_trade',return_value=False):
+        with patch('cap_accounting.require_trade_room') as legality, \
+             patch.object(TR,'package_football',return_value=dict(approved=True,gains={})), \
+             patch.object(TR,'_financial_trade',return_value=False) as funding:
             result=TR.cpu_trade_check(self.L,self.a,self.b,[],[])
-        self.assertFalse(result['approved']);self.assertIn('fund',result['why'])
+        self.assertFalse(result['approved'])
+        self.assertEqual(result['why'],"The roster benefit doesn't justify the financial risk for us.")
+        funding.assert_called_once()
+        legality.assert_called_once_with(self.L,'GB','DEN',[],[])
 
     def test_user_can_choose_to_empty_own_position(self):
         outgoing=[p.pid for p in self.a.roster if p.pos=='WR']

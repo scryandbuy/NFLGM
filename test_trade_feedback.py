@@ -16,7 +16,8 @@ class TradeFeedbackTests(unittest.TestCase):
             'incoming': N(pid='incoming', name='Incoming Receiver', pos='WR', team='NYG', out_until=None),
         }
         def team(abbr, space):
-            return N(abbr=abbr, gm=None, cap_space=space, picks=[], phase='season', ctx=lambda: {},
+            return N(abbr=abbr, gm=None, cap_space=space, picks=[], phase='season',
+                     ctx=lambda: dict(win_pct=.5, avg_age=26),
                      active=lambda: [p for p in self.players.values() if p.team == abbr])
         self.L=N(year=2026, week=4, teams={'GB':team('GB',100), 'NYG':team('NYG',1)},
                  player=self.players.get)
@@ -26,7 +27,8 @@ class TradeFeedbackTests(unittest.TestCase):
         self.stack.enter_context(patch('trades.cpu_trade_check',return_value={'approved':True}))
         self.stack.enter_context(patch('cap_accounting.trade_projection',return_value=N(space=lambda phase:110)))
         self.stack.enter_context(patch.object(VP,'_assets',side_effect=lambda L,a,ids,*args,**kw:
-            [dict(kind='player',inherit=10,out_hit=10,dead=0) for pid in ids]))
+            [dict(kind='player',inherit=10,out_hit=10,dead=0,
+                  trade_value=10,age=26,need=False,apy=10) for pid in ids]))
 
     def test_actual_receiving_cap_block_is_readable_and_not_an_overpay(self):
         result=VP._evaluate(self.L,'GB','NYG',['send1'],[])
