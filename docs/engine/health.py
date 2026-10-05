@@ -55,8 +55,9 @@ import numpy as np
 # What a single snap ASKS of the player. An all-out pass rush or a carry with
 # contact costs far more than a pass-block set. This is FM's role-intensity
 # idea, and it is what makes the defensive front rotate while the line does not.
-# Solved so that equilibrium share = recovery / (recovery + intensity)
-# reproduces the real league snap shares above.
+# These are workload weights, not desired snap shares. Players also recover
+# while the opposite unit plays, so a one-unit equilibrium formula cannot
+# establish NFL participation rates.
 SNAP_INTENSITY = {
     'C': 0.190, 'LG': 0.224, 'RG': 0.224, 'QB': 0.255, 'LT': 0.258, 'RT': 0.258,
     'SS': 0.422, 'FS': 0.484, 'CB': 0.536,
@@ -69,8 +70,8 @@ SNAP_INTENSITY = {
     'TE': 1.257, 'HB': 1.32, 'FB': 2.333,     # HB re-solved once the back rotated by condition: 1.66 left the lead at 52% of snaps against a real 65
     'K': 0.02, 'P': 0.02, 'LS': 0.02,
 }
-# Solved so the emergent shares land ON the real league values rather than
-# 14 points above them across the board.
+# Recovery for one physical snap spent on the sideline. Selection also needs
+# proactive breathers for repeated burst roles; recovery alone sets no quota.
 SIDELINE_RECOVERY = 0.62
 
 # ============================================================ CONDITION
@@ -93,6 +94,12 @@ class Condition:
         self.cond[pid] = max(0.0, self.get(pid) - cost * 4.2)
         self.snaps[pid] = self.snaps.get(pid, 0) + 1
 
+    def add_running_work(self, pid, stamina=70.0, effort=1.0):
+        """Finish a QB snap that became a scramble after its initial charge."""
+        extra = (SNAP_INTENSITY['HB'] - SNAP_INTENSITY['QB']) * effort
+        extra *= 1.0 - 0.45 * ((stamina - 50.0) / 50.0)
+        self.cond[pid] = max(0.0, self.get(pid) - extra * 4.2)
+
     def rest(self, pid, position=None):
         """
         A snap on the sideline. Recovery is a FIXED rate - a man recovers at
@@ -114,9 +121,19 @@ class Condition:
         a marginal starter at the same condition.
         """
         c = self.get(pid)
-        # A high trigger means even a low-intensity man eventually needs a
-        # breather; a low one means only the spent come off. At 78 the
-        # equilibrium was capped for cheap positions and centres played 97.5%.
+        if position in ('LEDG', 'REDG', 'DT', 'HB'):
+            # Repeated explosive work warrants a breather before deep fatigue.
+            # The former full-condition denominator rarely rotated a front
+            # player within an ordinary series once bench recovery was correct.
+            # A better starter can stay a little longer, never indefinitely;
+            # the next eligible reserve and game context supply quality_gap.
+            policy = float(np.clip(getattr(self, 'breather_policy', self.policy), 0., 1.))
+            trigger = min(98., 96.0 + 6.0 * (policy - .5) \
+                      - 4.0 * float(np.clip(quality_gap, -1.0, 1.25)))
+            if c >= trigger: return False
+            return rng.random() < float(np.clip((trigger - c) / 10.0, 0., .95))
+        # Low-intensity and continuity-sensitive roles retain their existing
+        # fatigue policy; a defensive-front breather is not an OL substitution.
         trigger = 92.0 - 20.0 * (1.0 - self.policy) \
                   - 12.0 * float(np.clip(quality_gap, -1, 1.25))
         if c >= trigger: return False

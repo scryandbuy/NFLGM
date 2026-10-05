@@ -125,7 +125,7 @@ PROTECTION_HELP = RM.HELP
 OFFBALL_PICKUP = .05
 
 def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=None,
-                       protection='five', _defer_award=False):
+                       protection='five', _defer_award=False, slide_side='right'):
     """
     Returns time available, whether a sack happened, and pressure 0-1.
     Each rusher races his blocker; the FASTEST win sets the clock.
@@ -139,7 +139,7 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
         inferred = DRUSH.assignments({'dl':rushers})
         by_id = {DRUSH.player_key(a['player']):a for a in inferred}
         assignments = [by_id[DRUSH.player_key(r)] for r in rushers]
-    matched = DRUSH.protection_pairs(blockers, assignments)
+    matched = DRUSH.protection_pairs(blockers, assignments, protection, slide_side)
     moves, attacks, threats = [], [], []
     for i, (r, b) in enumerate(zip(rushers, matched)):
         pw = rate(r, PASS_RUSH['rusher']['power'])
@@ -215,7 +215,7 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
     model['evaluations'] = [(pid, remap[i], mean, primary) for pid, i, mean, primary in model['evaluations']]
     if not wins:
         return dict(time=6.0, pressure=0.0, sack=False, beaten_by=None, beaten=None,
-                    move=None, pb_reps=[], pr_reps=[], pb_helpers=[], pb_award=[], pb_model=model,
+                    move=None, pb_reps=[], pr_reps=[], pb_helpers=[], pb_award=[], pb_model=model, free_rushers=[],
                     pb_opportunities=[(b.get('pid'), 'unengaged')
                                       for b in sorted(blockers, key=DRUSH.player_key)])
     first = min(t for t, _m, _r, _b in wins)
@@ -274,7 +274,7 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
                 sack=bool(sack), beaten_by=winner.get('pid'),
                 beaten=loser.get('pid') if loser else None, move=move,
                 pb_reps=reps, pb_opportunities=opportunities, pb_award=award, pb_model=model, pr_reps=rush_reps,
-                finish_scale=finish,
+                finish_scale=finish, free_rushers=sorted(r.get('pid') for _, _, r, b in wins if b is None and r.get('pid')),
                 rush_arrivals=[(r.get('pid'), float(t) * model['qb_scale']) for t, _m, r, _b in wins],
                 pb_helpers=[(h.get('pid'), r.get('pid')) for h, r, _held in helper_reps])
 
@@ -696,7 +696,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     second_level = sorted((a for a in roles if DRUSH.player_key(a['player']) not in front_ids),
                           key=lambda a: (not a['alignment'].startswith('offball_'), a['alignment'], DRUSH.player_key(a['player'])))
     defenders = front + [a['player'] for a in second_level]
-    matched = DRUSH.protection_pairs(blockers, front_roles)
+    matched = DRUSH.protection_pairs(blockers, front_roles, protection='run')
     contests = [(b, a['player']) for b, a in zip(matched, front_roles) if b is not None]
 
     wins = [edge(rate(b, RUN_BLOCK['blocker'][key]),
@@ -873,6 +873,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         pressures.update(pid for pid, _credit in RM.credited_sackers(out))
     out['pressure_severity'] = timing.get('severity', 0.)
     out['pressure_release'] = release
+    out['escape_lanes'] = timing.get('escape_lanes')
     out['rush_pressures'] = sorted(pressures)
     out['pressured'] = bool(pressures)
     return out
@@ -963,10 +964,11 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
     kept_in = {id(x) for x in extras}
     import defensive_rush as DRUSH
     rush_plan = DRUSH.select_rush(deff, def_call, rng=rng)
+    slide_side = DRUSH.protection_slide_side(DRUSH.assignments(deff, def_call))
     rushers = rush_plan['rushers']
     def_call = dict(def_call, rushers=len(rushers))
     prot = S.protection_math(prot_name, len(rushers))
-    matched = DRUSH.protection_pairs(blockers, rush_plan['assignments'])
+    matched = DRUSH.protection_pairs(blockers, rush_plan['assignments'], prot_name, slide_side)
     # THE CHIP. On a five-man protection with a good blocking tight end or
     # back releasing, he chips the edge rusher who most out-rates his tackle
     # on the way into his route, about a fifth of the time and more when that
@@ -991,7 +993,7 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
                     chip = (max(cands, key=lambda x: x.get('pass_block_rating', 60)), worst)
 
     p = resolve_protection(blockers, rushers, rng, qb=off['qb'], chip=chip,
-                           assignments=rush_plan['assignments'], protection=prot_name, _defer_award=True)
+                           assignments=rush_plan['assignments'], protection=prot_name, _defer_award=True, slide_side=slide_side)
     award_time_scale = 1.
     # A protection scheme is worth real time against a blitz, and a simulated
     # pressure makes the line set for a front that never comes.
@@ -1017,13 +1019,21 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
     # deep game were sacked at the same rate against a real ~3% and ~10%.
     # Free rushers force the ball out. That is what a hot route IS, and it is
     # the real answer to a blitz - not simply eating the sack.
-    hot = prot['hot']
+    # A same-side overload can leave a free defender even when total bodies
+    # match. The quick answer follows actual assignments, not only the count.
+    hot = bool(p.get('free_rushers')) or prot['hot']
     if hot:
         depth = 'short'
         p['pressure'] = min(1.0, p['pressure'] + 0.20)
 
     # The quick answer changes the required hold time before the sack roll.
     hold = HOLD_BY_DEPTH.get('screen' if screen else depth, 0.0)
+    import events as E
+    adjusted_arrivals = [(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])]
+    escape_lanes = E.escape_lane_evidence(deff, rush_plan, adjusted_arrivals,
+        min(BASE_TTT + hold, p['time']), rate)
+    if pressure_context is not None:
+        pressure_context['escape_lanes'] = escape_lanes
     if off_call.get('_pressure_timing_version', 2) >= 2:
         # Use the same unrounded arrivals and planned release for the read,
         # throw and pressure credit. A late checkdown does not rewind the dropback.
@@ -1177,7 +1187,7 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         screen=screen, hot=hot, swing=swing, time_available=p['time'],
         down=off_call.get('down', 1), distance=need,
         seconds=off_call.get('seconds'), margin=off_call.get('score_diff', 0),
-        aggression=off_call.get('qb_run_aggression', .5), man=bool(in_man))
+        aggression=off_call.get('qb_run_aggression', .5), man=bool(in_man), escape_lanes=escape_lanes)
     if run_chance and rng.random() < run_chance:
         out = E.resolve_scramble(off['qb'], deff['dl'] + deff['lb'] + deff['db'], ytg, rng, rate)
         out.update(scramble_kind='decision', scramble_chance=run_chance,

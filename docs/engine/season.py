@@ -187,6 +187,8 @@ class SeasonRunner(StandingsView):
         d = dict(defer_recovery=getattr(st, "defer_recovery", False),
                  cond=dict(st.cond.cond), cond_snaps=dict(st.cond.snaps),
                  cond_policy=st.cond.policy, jaded=dict(st.jaded),
+                 recovery_events=getattr(st, 'recovery_events', 0),
+                 recovery_accounted=dict(getattr(st, 'recovery_accounted', {})),
                  snaps=dict(st.snaps), last_snaps=dict(getattr(st, 'last_snaps', {}) or {}),
                  snap_counts=copy.deepcopy(getattr(st, 'snap_counts', {})),
                  last_snap_counts=copy.deepcopy(getattr(st, 'last_snap_counts', {})),
@@ -219,6 +221,8 @@ class SeasonRunner(StandingsView):
         st.cond.cond = dict(d.get('cond') or {})
         st.cond.snaps = dict(d.get('cond_snaps') or {})
         st.cond.policy = d.get('cond_policy', st.cond.policy)
+        st.recovery_events = int(d.get('recovery_events', 0))
+        st.recovery_accounted = dict(d.get('recovery_accounted') or {})
         st.jaded = dict(d.get('jaded') or {})
         st.snaps = dict(d.get('snaps') or {})
         st.last_snaps = dict(d.get('last_snaps') or {})
@@ -228,6 +232,7 @@ class SeasonRunner(StandingsView):
         if d.get('base_plan'): st.base_plan = GP.Gameplan(**d['base_plan'])
         if d.get('script'): st.script.__dict__.update(d['script'])
         if 'coach' in d: st.coach = copy.deepcopy(d['coach'])
+        st.refresh_rotation_policy()
         if 'scheme' in d: st.scheme = d['scheme']
         # Old `mem` mixed both teams' offensive possessions. It cannot be
         # assigned a trustworthy perspective; start fresh rather than guess.
