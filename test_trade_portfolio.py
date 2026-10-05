@@ -123,6 +123,12 @@ class PortfolioTests(unittest.TestCase):
         self.assertLess(second['cost'],third['cost'])
 
     def test_executed_multi_position_sequence_preserves_last_option_when_exposed(self):
+        self._purchase_sequence(needs=True)
+
+    def test_previous_luxury_sequence_no_longer_gets_unearned_hole_premium(self):
+        self._purchase_sequence(needs=False)
+
+    def _purchase_sequence(self, needs):
         import trades as TR
         # Controlled offered players/comps, not a claim about offers in a
         # saved league. Keep real pick prices, public grades, contract costs,
@@ -140,11 +146,22 @@ class PortfolioTests(unittest.TestCase):
             seller.roster.append(p);arrivals.append(p)
         quote=lambda league,p,**kwargs: {'apy':{'WR':12.5,'CB':12.,'HB':14.}[p.pos]}
         original_hb=list(self.t.by_pos('HB'))
+        if needs:
+            # These clubs actually lack viable players in the purchased roles.
+            # The original 82-grade incumbent version used to get a hole
+            # premium merely because the CPU selected an upgrade.
+            for p in self.t.roster:
+                if p.pos in ('WR','CB','HB'):set_grade(p,65)
         with patch.object(TR.VAL,'value_player',side_effect=quote):
             intact=TR._portfolio_trade_check(self.L,self.t,seller,[picks[-1]],[arrivals[-1].pid])
+            if not needs:
+                self.assertFalse(intact['approved'])
+                self.assertGreater(TP.RN.move_gain(self.t,arrivals[-1]),TR.UPGRADE_GAP)
+                self.assertEqual(self.t.picks,picks)
+                return
             self.assertTrue(intact['approved'])
             for pick,p in zip(picks[:2],arrivals[:2]):
-                # Both are material upgrades over retained 82-grade starters;
+                # Both are material upgrades over retained weak starters;
                 # an affordable contract alone cannot establish that fact.
                 self.assertGreater(TP.RN.move_gain(self.t,p),TR.UPGRADE_GAP)
                 read=TR._portfolio_trade_check(self.L,self.t,seller,[pick],[p.pid])
@@ -168,6 +185,7 @@ class PortfolioTests(unittest.TestCase):
             healthy=copy.deepcopy(self.L);buyer=healthy.teams[self.t.abbr]
             for p in buyer.roster:
                 p.age=23.;p.contract=Contract(5,[1.]*5)
+                if p.pos in ('WR','CB','HB'):set_grade(p,max(82,p.ovr))
             read=TR._portfolio_trade_check(healthy,buyer,healthy.teams['DEN'],
                                           [buyer.picks[0]],[arrivals[-1].pid])
             self.assertTrue(read['approved'])
