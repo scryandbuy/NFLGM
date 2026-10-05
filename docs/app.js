@@ -2634,7 +2634,7 @@ function renderBoard(v) {
     el('div', {}, el('span', {}, 'YOUR BOARD'), el('strong', {}, `${onBoard.size} ranked · ${dnd.size} do not draft`)),
     el('div', {}, el('span', {}, 'SCOUTING'), el('strong', {}, v.scout ? `${v.scout.name} · ${v.scout.rating}` : 'Your scouting room'))));
   const focus = v.scouting_focus || {}, updates = v.scouting_updates || [];
-  const focusBox = el('section', { class: 'sheet c12 draft-surface' }, el('h2', {}, 'In-Season Scouting', el('small', {}, 'Every position gets a small scouting review each cycle. Your two chosen groups get more attention.')));
+  const focusBox = el('section', { class: 'sheet c12 draft-surface' }, el('h2', {}, 'In-Season Scouting'));
   const chosen = v.rows.find(r => r.pid === focus.prospect_pid);
   focusBox.append(el('div', { class: 'pad', style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
     el('span', { class: 'count' }, 'CURRENT FOCUS'), el('b', {}, [focus.group1, focus.group2].filter(Boolean).join(' + ') || 'Awaiting scout decision'),
@@ -2647,10 +2647,10 @@ function renderBoard(v) {
   if (updates.length) {
     const weeks = [...new Set(updates.map(r => Number(r.week)))].sort((a,b)=>b-a);
     focusBox.append(el('div', {class:'pad'}, el('button', {class:'btn go', onclick:()=> {
-      const dialog=el('dialog',{class:'retain-dialog trade-dialog',style:'margin:auto;width:min(720px,94vw);background:var(--sheet,#101b20);color:var(--ink,#edf1f6)'});
+      const dialog=el('dialog',{class:'retain-dialog trade-dialog',style:'margin:auto;width:min(760px,94vw);background:var(--sheet,#101b20);color:var(--ink,#edf1f6)'});
       const close=el('button',{class:'btn',onclick:()=>dialog.close()},'Close');
       const picker=el('select',{'aria-label':'Scouting report week'},...weeks.map((w,i)=>el('option',{value:w},`Week ${w}${i===0?' · Latest':''}`)));
-      const rows=el('div',{style:'max-height:55vh;overflow-y:auto','aria-live':'polite'});
+      const rows=el('div',{style:'max-height:55vh;overflow-y:auto;scrollbar-gutter:stable;padding-right:18px','aria-live':'polite'});
       const draw=()=> {
         rows.replaceChildren();
         const order={Prospect:0,'Position Group':1,Baseline:2};
@@ -3851,7 +3851,6 @@ function renderReport(v) {
   const ut = el('div', {class:'report-unit-rankings'}, el('div', { class: 'h5' }, 'Team Rankings'), el('div', { class: 'side-row head' }, el('span', {}), el('span', { class: 'colhead' }, showAbbr(v.rail.club.abbr)), el('span', { class: 'colhead' }, showAbbr(v.opp.abbr))));
   const rk = r => el('span', { class: 'rk ' + (r == null ? '' : r <= 8 ? 'good' : r >= 24 ? 'bad' : 'mid-rk'), style: 'font-size:17px' }, r == null ? '—' : `${r}${ord(r)}`);
   for (const r of v.unit_table) ut.append(el('div', { class: 'side-row', title: r.metric }, el('span', { class: 'lab' }, r.label), el('span', {title:r.mine_value==null?'Complete season statistics unavailable':`${r.mine_value} ${r.metric}`}, rk(r.mine)), el('span', {title:r.theirs_value==null?'Complete season statistics unavailable':`${r.theirs_value} ${r.metric}`}, rk(r.theirs))));
-  ut.append(el('div', {class:'muted', style:'font-size:11px;margin-top:8px'}, 'Regular season � per game � passing yards include sack losses. � means complete statistics are unavailable.'));
   const men = el('div', { class: 'report-players' }, el('div', { class: 'h5' }, 'Players Who Matter')); applyTeamTheme(men, v.opp); for (const p of v.stars) men.append(el('div', { class: 'plate', style: 'margin-bottom:4px;cursor:pointer', onclick: () => { location.hash = '#club/player/' + p.pid; } }, el('div', { class: 'no' }, p.pos), el('div', { class: 'nm' }, p.name, el('small', {}, p.pos)), el('div', { class: 'ov' }, p.ovr)));
   if (v.injured && v.injured.length) { men.append(el('div', { class: 'h5', style: 'margin-top:10px' }, 'Their Injuries')); for (const x of v.injured) men.append(el('div', { style: 'font-size:15px;color:var(--ink-2);padding:2px 0' }, typeof x === 'string' ? x : `${x.name} (${x.pos})${x.back ? ' · out to week ' + x.back : ' · out'}`)); }
   two.append(ut, men); s.append(two);
