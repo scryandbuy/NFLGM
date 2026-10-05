@@ -7,6 +7,17 @@ from test_game_clock_decisions import ClockDecisions
 
 
 class ChampionshipTimeout(unittest.TestCase):
+    def test_rounding_preserves_penalties_reversals_and_kick_labels(self):
+        for off, defense in [('GB', 'PIT'), ('PIT', 'GB')]:
+            for start in (20.5, 37.5, 49.5, 50.5, 52.5, 80.5):
+                self.assertEqual(ticker.display_drive_yards(start, start-15, off, defense), 15)
+                self.assertEqual(ticker._spot(start, off, defense),
+                                 ticker._spot(100-start, defense, off))
+                line = ticker.play_line(SimpleNamespace(player=lambda pid: None),
+                    dict(type='field_goal', yardline=start, made=True), off, defense)
+                distance = ticker.display_field_position(start, off, defense) + 17
+                self.assertIn(f'{distance}-yard field goal', line['text'])
+
     def test_scoring_safeguard_cannot_override_protecting_clock(self):
         for live in (False, True):
             h = ClockDecisions(); h.setUp()
@@ -38,7 +49,11 @@ class ChampionshipTimeout(unittest.TestCase):
                                  {'drives': [('home', dr)]}, 'GB', 'PIT')
         text = rows[0]['lines'][1]['text']
         self.assertIn('15 yards', text)
-        self.assertIn('GB 47.5 to PIT 37.5', text)
+        self.assertNotIn('Enforced from', text)
+        self.assertEqual(ticker._spot(52.5, 'GB', 'PIT'), 'GB 47')
+        self.assertEqual(ticker._spot(37.5, 'GB', 'PIT'), 'PIT 38')
+        for start in (20.5, 37.5, 49.5, 50.5, 52.5, 80.5):
+            self.assertEqual(ticker.display_drive_yards(start, start-15), 15)
         self.assertEqual(log, original)
         direct = dict(log[1], enforcement_start=60, enforcement_end=45)
         self.assertNotIn('Enforced from', ticker.play_line(

@@ -8,6 +8,18 @@ import league_notes as LN
 
 
 class CoachingSummaryMail(unittest.TestCase):
+    def test_saved_summary_renders_as_sections_and_cells(self):
+        message = dict(subject='Coaching carousel summary · 2030 offseason',
+            body='The coaching carousel has run.\nHired (1)\nArizona — Defensive Coordinator — Test Coach — Hired (from the pool)\nJobs still open (1)\nGreen Bay — Head Coach', payload={})
+        before = copy.deepcopy(message)
+        layout = IB.mail_layout(message)
+        self.assertEqual(len(layout['mail_sections']), 2)
+        hired = layout['mail_sections'][0]
+        self.assertEqual(hired['columns'], ['Team', 'Role', 'Coach', 'Details'])
+        self.assertEqual([c['text'] for c in hired['rows'][0]],
+                         ['Arizona', 'Defensive Coordinator', 'Test Coach', ''])
+        self.assertEqual(message, before)
+
     def league(self):
         return NS(year=2027, week=0, phase='offseason', user_team='GB', players={},
                   inbox=[], notes_sent={}, transactions=[],

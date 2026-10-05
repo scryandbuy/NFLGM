@@ -80,6 +80,6 @@ class SpotDisplayTests(unittest.TestCase):
             self.assertEqual(ticker._spot(y,'CAR','GB'),ticker._spot(100-y,'GB','CAR'))
     def test_touchdown_drive_length_matches_start_label(self):
         self.assertEqual(ticker._spot(93.5,'GB','CAR'),'GB 7')
-        self.assertEqual(ticker.display_drive_yards(93.5,0),93)
-        self.assertEqual(ticker._spot(60.5,'CAR','GB'),'CAR 40')
-        self.assertEqual(ticker.display_drive_yards(60.5,0),60)
+        self.assertEqual(ticker.display_drive_yards(93.5,0,'GB','CAR'),93)
+        self.assertEqual(ticker._spot(60.5,'CAR','GB'),'CAR 39')
+        self.assertEqual(ticker.display_drive_yards(60.5,0,'CAR','GB'),61)

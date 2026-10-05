@@ -82,6 +82,27 @@ def mail_layout(message):
     import copy
     import re
     payload = dict(message.get('payload') or {})
+    if str(message.get('subject', '')).startswith('Coaching carousel summary') and not payload.get('mail_sections'):
+        lines = payload.get('body_rows') or str(message.get('body') or '').splitlines()
+        sections = []
+        section = None
+        for line in lines:
+            line = str(line).strip()
+            if re.fullmatch(r'(Hired|Fired / released / replaced|Other departures|Jobs still open) \(\d+\)', line):
+                title = line.replace('Fired / released / replaced', 'Departures').replace('Other departures', 'Other Changes')
+                section = dict(title=title, columns=['Team', 'Role', 'Coach', 'Details'], rows=[])
+                sections.append(section)
+            elif section is not None and line and line != 'None':
+                cells = line.split(' — ', 3)
+                cells += [''] * (4-len(cells))
+                if section['title'].startswith('Hired'):
+                    cells[3] = re.sub(r'^Hired(?: \((.*)\))?$', lambda m: m.group(1) or '', cells[3])
+                    if cells[3] == 'from the pool': cells[3] = ''
+                section['rows'].append([dict(text=value, mentions=reference_spans(value, message.get('entities') or [], [])) for value in cells])
+        if sections:
+            payload.update(mail_sections=[s for s in sections if s['rows']],
+                           mail_intro=dict(text='Coaching changes this offseason.' if any(s['rows'] for s in sections) else 'No coaching changes this offseason.', mentions=[]))
+            return payload
     if payload.get('link') == 'league:bracket' and not payload.get('mail_sections'):
         # Older playoff letters used single newlines, which the prose renderer
         # correctly treats as wrapping. Recover only that exact saved format.

@@ -38,9 +38,8 @@ _field_round = _spot_yards
 
 def _spot(yardline_100, off_abbr, def_abbr):
     """yardline is yards to the end zone. 60 means own 40."""
-    # Round distance from the nearest goal, independent of possession.
-    y = (100 - _spot_yards(100 - yardline_100) if yardline_100 > 50
-         else _spot_yards(yardline_100))
+    # One coordinate system throughout a possession, including across midfield.
+    y = display_field_position(yardline_100, off_abbr, def_abbr)
     if 0 < yardline_100 < 1.0: return f"inside the {def_abbr} 1"
     if y > 50: return f"{off_abbr} {max(1, 100 - y)}"
     if y == 50: return "50"
@@ -61,10 +60,10 @@ def _yards(y):
     return ('loss', f"a loss of {-y} yard{'s' if -y != 1 else ''}")
 
 
-def _display_gain(spot, gain):
+def _display_gain(spot, gain, off_abbr="", def_abbr=""):
     """Narrate movement between rounded field labels; leave stored stats alone."""
     def coordinate(y):
-        return 100 - _spot_yards(100 - y) if y > 50 else _spot_yards(y)
+        return display_field_position(y, off_abbr, def_abbr)
     applied = float(round(float(gain)))
     finish = float(spot) - applied
     if not 1 <= finish <= 99:
@@ -85,7 +84,7 @@ def play_line(league, p, off_abbr, def_abbr):
     td = bool(p.get('touchdown') and not p.get('defensive_td'))
     spot = float(p.get('yardline') or 0)
     gain = float(p.get('yards') or 0)
-    shown_gain = (_display_gain(spot, gain) if p.get('yardline') is not None
+    shown_gain = (_display_gain(spot, gain, off_abbr, def_abbr) if p.get('yardline') is not None
                   and not td and not p.get('nullified') else gain)
     near_goal_short = (t in ('run', 'complete', 'scramble') and not td and not p.get('nullified')
                        and 0 < gain < spot and 0 < spot - round(gain) < 1)
@@ -186,23 +185,23 @@ def play_line(league, p, off_abbr, def_abbr):
             # instead, including saved logs carrying those overwritten fields.
             origin = p.get('yardline', p.get('origin'))
             if p.get('touchback') and origin is not None:
-                gross = _spot_yards(origin)  # A rolling touchback ends at the goal line.
+                gross = display_field_position(origin, off_abbr, def_abbr)  # A rolling touchback ends at the goal line.
             if not p.get('touchback') and origin is not None and _ny is not None:
                 if p.get('return_start') is not None:
                     catch = float(p['return_start'])
                     end = (catch - float(p.get('ret', 0)) if p.get('penalty') else float(_ny))
-                    landing = 100 - _spot_yards(catch)
-                    gross = _spot_yards(origin) - landing
-                    ret = 100 - _spot_yards(end) - landing
+                    landing = 100 - display_field_position(catch, def_abbr, off_abbr)
+                    gross = display_field_position(origin, off_abbr, def_abbr) - landing
+                    ret = 100 - display_field_position(end, def_abbr, off_abbr) - landing
                 elif p.get('how') in ('fair_catch', 'downed'):
-                    gross = _spot_yards(origin) - (100 - _spot_yards(_ny))
+                    gross = display_field_position(origin, off_abbr, def_abbr) - (100 - display_field_position(_ny, def_abbr, off_abbr))
                     ret = 0
             text = f"Punt, {gross} yards" + (", touchback." if p.get('touchback') else (f", returned {ret} yard{'s' if ret != 1 else ''}." if p.get('how') == 'return' and p.get('ret') else (", fair catch." if p.get('how') == 'fair_catch' else (f", downed at the {_down_spot}." if p.get('how') == 'downed' and _down_spot else '.'))))
             kind = 'special'
             if p.get('touchdown'):
                 text += f' TOUCHDOWN, {def_abbr}.'; kind = 'score'
     elif t == 'field_goal':
-        d = (_spot_yards(p['yardline']) + 17 if p.get('yardline') is not None
+        d = (display_field_position(p['yardline'], off_abbr, def_abbr) + 17 if p.get('yardline') is not None
              else _spot_yards(p.get('distance', 0)))
         text = f"{d}-yard field goal is {'GOOD.' if p.get('made') else 'NO GOOD.'}"
         if p.get('kickoff_penalty'):
@@ -230,11 +229,6 @@ def play_line(league, p, off_abbr, def_abbr):
         offender = _nm(league, p.get('offender_pid'))
         owner = f'{offender} ({side})' if offender else f'the {side}'
         text = f"Penalty, {p.get('penalty', 'flag')} on {owner}, {ydtxt}" + ending
-        start, end = p.get('enforcement_start'), p.get('enforcement_end')
-        if start is not None and end is not None and abs(abs(display_field_position(start) - display_field_position(end)) - yds) > .01:
-            def precise_spot(y):
-                return f"{off_abbr} {100-y:g}" if y > 50 else 'midfield' if y == 50 else f"{def_abbr} {y:g}"
-            text += f" Enforced from {precise_spot(start)} to {precise_spot(end)} (field labels rounded)."
         kind = 'neutral'
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None
@@ -315,11 +309,16 @@ def drive_result(dr, overtime=False):
     return dr.result
 
 
-def display_field_position(yardline):
-    return (100 - _spot_yards(100 - yardline) if yardline > 50 else _spot_yards(yardline))
+def display_field_position(yardline, off_abbr="", def_abbr=""):
+    # Fix the rounding direction to the field, not the nearest goal or the
+    # possession. This preserves whole-yard enforcement across midfield and
+    # keeps the same physical label when possession changes.
+    if off_abbr > def_abbr:
+        return 100 - _spot_yards(100 - yardline)
+    return _spot_yards(yardline)
 
-def display_drive_yards(start, end):
-    return display_field_position(start) - display_field_position(end)
+def display_drive_yards(start, end, off_abbr="", def_abbr=""):
+    return display_field_position(start, off_abbr, def_abbr) - display_field_position(end, off_abbr, def_abbr)
 
 def offensive_drive_end(dr):
     """Exclude defensive return yards from offensive drive progress."""
@@ -347,28 +346,10 @@ def write_game(league, res, home, away):
     out = []
     for i, (pos, dr) in enumerate(res['drives']):
         off = home if pos == 'home' else away; deff = away if pos == 'home' else home
-        display_log = []
-        for p in dr.log:
-            if not isinstance(p, dict):
-                continue
-            # Older saves lack enforcement coordinates. Infer only an explicit
-            # post-play foul following a retained scrimmage play.
-            if p.get('type') == 'penalty' and p.get('enforcement_start') is None and display_log:
-                import events as E
-                previous = display_log[-1]
-                if (E.PEN_INFO.get(p.get('penalty'), {}).get('phase') == 'post'
-                        and previous.get('type') in ('run', 'complete', 'scramble', 'sack')
-                        and previous.get('yardline') is not None
-                        and not any(previous.get(k) for k in ('nullified', 'touchdown', 'fumble_lost'))
-                        and not p.get('on_try')):
-                    start = float(previous['yardline']) - round(float(previous.get('yards', 0) or 0))
-                    end = start + float(p.get('yards', 0)) * (1 if p.get('on_offense') else -1)
-                    p = dict(p, enforcement_start=start, enforcement_end=end)
-            display_log.append(p)
         lines = [x for x in (play_line(league, p,
                  home if p.get('possession', pos) == 'home' else away,
                  away if p.get('possession', pos) == 'home' else home)
-                 for p in display_log) if x]
+                 for p in dr.log if isinstance(p, dict)) if x]
         real = [p for p in dr.log if isinstance(p, dict) and not p.get('nullified') and p.get('type') in ('run', 'complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble', 'kneel', 'spike', 'punt', 'field_goal')]
         yards = sum(float(p.get('yards', 0) or 0) for p in real if p.get('type') in ('run', 'complete', 'sack', 'scramble', 'kneel'))
         q = int(getattr(dr, 'quarter', 1) or 1)
