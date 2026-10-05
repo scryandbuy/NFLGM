@@ -1,7 +1,12 @@
 const fs = require('fs'), vm = require('vm'), assert = require('node:assert/strict');
 const src = fs.readFileSync('docs/app.js', 'utf8');
 class Element {
-  constructor(tag, attrs = {}, ...children) { this.tag=tag; this.attrs=attrs; this.children=children; this.style={}; this.classList={add(){},toggle(){}}; this.value=attrs.value || ''; }
+  constructor(tag, attrs = {}, ...children) { this.nodeType=1; this.tag=tag; this.attrs={}; this.children=children; this.style={}; this.classList={add(){},toggle(){}}; this.value=attrs.value || ''; for(const [k,v] of Object.entries(attrs)) if(v!=null) this.setAttribute(k,v); }
+  setAttribute(k,v) { this.attrs[k]=String(v); }
+  set className(v) { this.attrs.class=v; }
+  addEventListener(k,v) { this.attrs['on'+k]=v; }
+  get disabled() { return Object.hasOwn(this.attrs,'disabled'); }
+  click() { if(!this.disabled) this.attrs.onclick?.(); }
   append(...children) { this.children.push(...children); }
   set innerHTML(_) { this.children=[]; }
 }
@@ -15,6 +20,11 @@ const ctx={console, el:(...args)=>new Element(...args), renderRail(){}, lgSecond
   teamTheme:()=>({}), coachingMoveRow:r=>new Element('div',{class:'coach'},r.person),
   showTransactionTrade(){}, copyText:s=>{copied=s;}, location:{}};
 vm.createContext(ctx);
+// Run the production element helper. Browser boolean attributes are enabled
+// by presence, including disabled="false", and block ordinary button clicks.
+ctx.document={createElement:tag=>new Element(tag),createTextNode:text=>text};
+vm.runInContext(src.slice(src.indexOf('const el ='),src.indexOf('const esc ='))+'\nglobalThis.el = el;',ctx);
+assert.equal(ctx.el('button',{disabled:false}).disabled,true);
 vm.runInContext(src.slice(src.indexOf('function teamCapPlanning('),src.indexOf('function renderTeam(')),ctx);
 const cap={year:2029,space:7.8,committed:390,limit:401.6,next:false,next_year:2030,committed_next:374.5,limit_next:437.8};
 assert.equal(ctx.teamCapPlanning(cap).year,2030);
@@ -34,7 +44,12 @@ for (const label of ['Tkl', 'Sacks']) {
   assert.ok(h.children[0].attrs.style.includes('text-align:right'));
 }
 const button=label=>nodes(page).find(n=>n.tag==='button'&&text(n)===label);
-button('Next').attrs.onclick();assert.equal(bodyRows().length,40);assert.ok(text(page).includes('41–80 of 145'));
+assert.equal(button('Previous').disabled,true);assert.equal(button('Next').disabled,false);
+button('Next').click();assert.equal(bodyRows().length,40);assert.ok(text(page).includes('41–80 of 145'));
+assert.equal(button('Previous').disabled,false);
+button('Next').click();button('Next').click();assert.ok(text(page).includes('121–145 of 145'));
+assert.equal(button('Next').disabled,true);button('Next').click();assert.ok(text(page).includes('121–145 of 145'));
+button('Previous').click();assert.ok(text(page).includes('81–120 of 145'));
 button('Sacks').attrs.onclick();assert.ok(text(bodyRows()[0]).includes('Nic Scourton'));assert.equal(bodyRows().length,40);
 const search=nodes(page).find(n=>n.tag==='input');search.value='scourton';search.oninput();assert.equal(bodyRows().length,1);assert.ok(text(page).includes('1–1 of 1'));
 search.value='';search.oninput();button('Sacks').attrs.onclick();assert.ok(!text(bodyRows()[0]).includes('Nic Scourton'));
@@ -53,8 +68,12 @@ vm.runInContext(src.slice(src.indexOf('function transactionPage('),src.indexOf("
 ctx.renderTransactions({rail:{club:{abbr:'GB',name:'Green Bay'}},groups:['Signings'],my_division:'United North'});
 const transactionRows=()=>nodes(page).filter(n=>n.attrs.class==='transaction-row');
 assert.equal(transactionRows().length,60);
-button('Older').attrs.onclick();assert.equal(transactionRows().length,60);assert.ok(text(page).includes('61–120 of 155'));
-button('Older').attrs.onclick();assert.equal(transactionRows().length,35);assert.ok(text(page).includes('121–155 of 155'));
+assert.equal(button('Newer').disabled,true);assert.equal(button('Older').disabled,false);
+button('Older').click();assert.equal(transactionRows().length,60);assert.ok(text(page).includes('61–120 of 155'));
+assert.equal(button('Newer').disabled,false);
+button('Older').click();assert.equal(transactionRows().length,35);assert.ok(text(page).includes('121–155 of 155'));
+assert.equal(button('Older').disabled,true);button('Older').click();assert.ok(text(page).includes('121–155 of 155'));
+button('Newer').click();assert.ok(text(page).includes('61–120 of 155'));
 const txSearch=nodes(page).find(n=>n.tag==='input');txSearch.value='Will Johnson';txSearch.oninput();assert.equal(transactionRows().length,1);assert.ok(text(page).includes('Will Johnson'));
 txSearch.value='';txSearch.oninput();button('Copy').attrs.onclick();assert.equal(copied.split('\n').length,155);assert.equal(transactionRows().length,60);
 assert.ok(requests.some(x=>x.includes('offset=120, n=60')));

@@ -3446,8 +3446,8 @@ function renderTransactions(v) {
     }
     if (!rows.length) list.append(el('div', { class: 'empty' }, 'Nothing matches.'));
     if (result.total) list.append(el('div', { class: 'foot' },
-      el('button', { class: 'btn quiet', disabled: txOffset === 0, onclick: () => { txOffset = Math.max(0, txOffset - 60); draw(); } }, 'Newer'),
-      el('button', { class: 'btn quiet', disabled: txOffset + rows.length >= result.total, onclick: () => { txOffset += 60; draw(); } }, 'Older'),
+      el('button', { class: 'btn quiet', disabled: txOffset === 0 ? '' : null, onclick: () => { txOffset = Math.max(0, txOffset - 60); draw(); } }, 'Newer'),
+      el('button', { class: 'btn quiet', disabled: txOffset + rows.length >= result.total ? '' : null, onclick: () => { txOffset += 60; draw(); } }, 'Older'),
       el('span', { class: 'count' }, `${txOffset + 1}–${txOffset + rows.length} of ${result.total}`),
       el('span', { class: 'count', style: 'margin-left:auto' }, 'Most recent first')));
   };
@@ -3520,8 +3520,8 @@ function renderStats(v) {
       if (!visible.length) t.append(el('tr', {}, el('td', {colspan:String(columns.length + (team ? 2 : 3))}, el('div', {class:'empty'}, state.query ? 'Nothing matches.' : 'No statistics retained for this season.'))));
       body.append(t);
       if (all.length) body.append(el('div', {class:'foot'},
-        el('button', {class:'btn quiet', disabled:state.page === 0, onclick:() => {state.page--; draw();}}, 'Previous'),
-        el('button', {class:'btn quiet', disabled:start + size >= all.length, onclick:() => {state.page++; draw();}}, 'Next'),
+        el('button', {class:'btn quiet', disabled:state.page === 0 ? '' : null, onclick:() => {state.page--; draw();}}, 'Previous'),
+        el('button', {class:'btn quiet', disabled:start + size >= all.length ? '' : null, onclick:() => {state.page++; draw();}}, 'Next'),
         el('span', {class:'count'}, `${start + 1}–${start + visible.length} of ${all.length}`)));
     };
     search.oninput = () => {state.query = search.value; state.page = 0; draw();};
