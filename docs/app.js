@@ -2341,6 +2341,7 @@ function renderOwner(v) {
   renderRail(v.rail); const page=persPage(); foSecond('owner');
   const s=foBoard(v,'OWNER',[[v.job,'Job security']]);
   const left=el('div',{},el('div',{class:'fo-owner-name'},v.owner?.name || 'Owner',el('span',{class:'fo-status'},v.mood)));
+  if(v.mood_reason) left.append(el('p',{class:'muted'},v.mood_reason));
   const facts=el('div',{class:'fo-summary'});
   for(const [value,label] of [[v.expects,'This year'],[v.draft_word,'Draft approach'],[`${Math.round(v.expected_pct*100)}%`,'Target win rate']]) facts.append(el('div',{},el('b',{},value),el('span',{},label)));
   left.append(facts,el('div',{class:'h5'},'SEASON EXPECTATION'),el('div',{class:'fo-summary'},el('div',{},el('b',{},v.prev_pct == null ? '—' : `${Math.round(v.prev_pct*100)}%`),el('span',{},'Last season')),el('div',{},el('b',{},v.drought ? `${v.drought} years` : 'None'),el('span',{},'Playoff drought'))));

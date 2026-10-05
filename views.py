@@ -495,10 +495,47 @@ def _front_office(league, t):
 
 
 def _owner_mood(t):
-    w, l, _ = t.record
-    if w + l == 0: return 'Settled'
-    pct = w / (w + l)
-    return 'Pleased' if pct >= 0.65 else 'Settled' if pct >= 0.45 else 'Restless' if pct >= 0.3 else 'Angry'
+    return _owner_assessment(t)['mood']
+
+
+def _owner_assessment(t):
+    """Read-only reaction to results against this roster's seasonal expectation.
+
+    Patience changes the evidence needed for a strong reaction. It neither
+    alters the expectation after losses nor forces an employment decision.
+    A neutral owner's eight-game prior matches the existing history model,
+    but is centered on the stated expectation, not another season's results.
+    """
+    w, losses, ties = t.record
+    games = w + losses + ties
+    expected = float(t.expected_pct)
+    patience = float(np.clip(getattr(t, 'owner_patience', .5), 0, 1))
+    confidence = games / (games + 4.0 + 8.0 * patience)
+    pct = (w + .5 * ties) / games if games else expected
+    gap = pct - expected
+    league = getattr(t, 'league', None)
+    year = getattr(league, 'year', None)
+    standing = (getattr(league, 'standings_history', {}) or {}).get(year, {}).get(t.abbr, {})
+    champion = isinstance(standing, dict) and standing.get('exit') == 'SB_WIN'
+    # Labels represent roughly one or three confidence-adjusted wins over a
+    # full schedule, rather than a universal winning-percentage threshold.
+    evidence_wins = 17 * gap * confidence
+    mood = ('Pleased' if champion or evidence_wins >= 1 else
+            'Angry' if evidence_wins <= -3 else
+            'Restless' if evidence_wins <= -1 else 'Settled')
+    if champion:
+        reason = 'The Championship Game win delivered the ultimate result.'
+    elif not games:
+        reason = 'No games played yet; the owner is waiting to judge this season.'
+    else:
+        pace = (w + .5 * ties) - expected * games
+        reason = (f'Results are close to the expected pace through {games} games.' if abs(pace) < .25 else
+                  f'Results are {abs(pace):.1f} wins {"ahead of" if pace > 0 else "behind"} the expected pace through {games} games.')
+        if games < 4: reason += ' It is still a small sample.'
+        elif mood == 'Settled' and pace < -.25 and patience >= .6:
+            reason += ' This patient owner is allowing more time.'
+    return dict(mood=mood, reason=reason, expected_pct=expected, actual_pct=pct,
+                games=games, confidence=confidence, evidence_wins=evidence_wins)
 
 
 def _scout_rank(league, t):
