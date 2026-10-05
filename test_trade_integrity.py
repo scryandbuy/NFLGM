@@ -183,7 +183,11 @@ class TradeIntegrityTests(unittest.TestCase):
         decisions=[]; evaluate=FP.evaluate
         def capture(*args,**kw):
             result=evaluate(*args,**kw);decisions.append(result);return result
-        with patch.dict(L.cap_history,{2027:100.}), patch.object(FP,'evaluate',side_effect=capture):
+        # This isolates incremental rookie funding. The deliberately unequal
+        # picks need not pass the separate portfolio/willingness assessment,
+        # which has its own complete-package entry-path tests.
+        with patch.dict(L.cap_history,{2027:100.}), patch.object(FP,'evaluate',side_effect=capture), \
+             patch.object(TR,'_portfolio_trade_check',return_value=dict(approved=True,costs={})):
             self.assertTrue(TR._financial_trade(L,a,b,[outgoing],[incoming]))
             upgrade=decisions[0]
             before,after=upgrade['before']['years'][1],upgrade['after']['years'][1]
