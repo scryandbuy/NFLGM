@@ -18,7 +18,7 @@ class FranchiseRosterGateTests(unittest.TestCase):
             cuts, filled, claims = franchise.settle_final_rosters(league, rng)
         self.assertEqual((cuts, filled, claims), (['first', 'second'], 3, 1))
         self.assertEqual(finalize.call_count, 2)
-        process.assert_called_once_with(league, rng, 0)
+        process.assert_called_once_with(league, rng, 0, entries=[{'pid': 'rookie'}])
         violations.assert_called_once_with(league)
 
     def test_unplayable_roster_blocks_batch_season(self):

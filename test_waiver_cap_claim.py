@@ -56,8 +56,27 @@ class WaiverCapClaimTests(unittest.TestCase):
              patch('inbox.pending', return_value=[]):
             return waivers.process(league, np.random.default_rng(1), 10)
 
-    def test_rejects_claim_when_required_cut_creates_cap_violation(self):
-        league, team, bad, _, incoming = fixture(.12)
+    def test_user_can_claim_while_already_over_53_but_not_over_cap(self):
+        for space, expected in ((1.0, True), (.02, False)):
+            with self.subTest(space=space):
+                league, team, _, _, incoming = fixture(space)
+                league.user_team = 'GB'
+                extra = Player('extra', 'extra', 'C', 26, {'test_ovr': 70},
+                               team='GB', contract=Contract(1, [1.0]), accrued=5)
+                league.players[extra.pid] = extra
+                team.roster.append(extra)
+                team.sync_cap()
+                team.cap.cap = team.cap.charges('regular') + space
+                self.assertTrue(waivers.user_claim(league, incoming.pid))
+                before = {p.pid for p in team.active()}
+                awarded = self.run_wire(league)
+                self.assertEqual(bool(awarded), expected)
+                self.assertEqual({p.pid for p in team.active()},
+                                 before | ({incoming.pid} if expected else set()))
+                self.assertGreaterEqual(team.cap_space, 0)
+
+    def test_rejects_claim_when_neither_claim_nor_release_fits(self):
+        league, team, bad, _, incoming = fixture(.02)
         awarded = self.run_wire(league)
         self.assertEqual(awarded, [])
         self.assertEqual(bad.team, 'GB')
@@ -65,17 +84,17 @@ class WaiverCapClaimTests(unittest.TestCase):
         self.assertEqual(len(team.active()), 53)
         self.assertGreaterEqual(team.cap_space, 0)
 
-    def test_awards_claim_when_combined_release_and_contract_fit(self):
+    def test_affordable_cpu_claim_does_not_force_a_release(self):
         league, team, bad, _, incoming = fixture(.30)
         awarded = self.run_wire(league)
         self.assertEqual(awarded, [(incoming.pid, 'GB')])
-        self.assertIsNone(bad.team)
+        self.assertEqual(bad.team, 'GB')
         self.assertEqual(incoming.team, 'GB')
-        self.assertEqual(len(team.active()), 53)
+        self.assertEqual(len(team.active()), 54)
         self.assertGreaterEqual(team.cap_space, 0)
 
     def test_tries_next_eligible_cut_when_preferred_cut_cannot_fit(self):
-        league, team, bad, good, incoming = fixture(.12, second_candidate=True)
+        league, team, bad, good, incoming = fixture(.02, second_candidate=True)
         awarded = self.run_wire(league)
         self.assertEqual(awarded, [(incoming.pid, 'GB')])
         self.assertEqual(bad.team, 'GB')

@@ -44,9 +44,9 @@ class PSDecisionAudit(unittest.TestCase):
                 self.assertEqual(before-after,{chosen})
                 self.assertEqual(len(after),53)
             else:
-                self.assertEqual(result,[])
-                self.assertEqual(after,before)
-                self.assertIsNone(p.team)
+                self.assertEqual(result,[(p.pid,'GB')])
+                self.assertEqual(after,before | {p.pid})
+                self.assertEqual(len(after),54)
 
     def test_retired_free_agent_cannot_join_squad(self):
         league=fixture(); p=player(league,team=None); p.retired=True

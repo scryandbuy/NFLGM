@@ -15,8 +15,8 @@ including his own club's.
 THE CONTRACT TRAVELS. A claimed man arrives on the terms he signed, base
 and roster bonus, on the claiming club's cap. The waiving club has already
 eaten his remaining bonus as dead money the moment it released him. A
-claiming club must have a spot on the 53 in season; the AI clears one by
-releasing its worst man at the position.
+claiming club must afford the inherited contract. Temporary roster overflow
+is allowed; the roster must be settled before playing or advancing.
 
 THE USER. Every waived man the user might want is a notice in the inbox,
 with the player, his contract and the user's claim priority; claim from the
@@ -143,7 +143,7 @@ def wants(league, abbr, p, week, market=None, *, _assessments=None):
 
 
 def make_room(league, abbr, p, entry):
-    """Open a roster spot only when the release and claim fit together."""
+    """Afford a claim; evaluate an optional replacement when needed."""
     import practice_squad as PSQ
     import roster_needs as RN
     team = league.teams[abbr]
@@ -164,8 +164,8 @@ def make_room(league, abbr, p, entry):
                 league.release(q.pid)
                 return True
         return False
-    if len(team.active()) < 53:
-        return claim_fits(league, entry, abbr) and _claim_budget(league, team, p)
+    if claim_fits(league, entry, abbr) and _claim_budget(league, team, p):
+        return True  # Roster overflow is settled at the normal roster gate.
     if abbr == getattr(league, 'user_team', None):
         return False  # Only an explicitly named release may open the user's spot.
     # THE MAN WHO GOES IS WORSE THAN THE MAN WHO COMES, AND CHEAP TO CUT. It used to
@@ -293,7 +293,7 @@ def notify_user(league, entries, week, digest=False):
 
 def user_claim(league, pid, release_pid=None):
     """The user claims from the inbox. Awarded at the next advance by priority. release_pid
-    names the man to cut if the claim is awarded and the roster is full."""
+    optionally names a player to release if awarded; no release is required."""
     user = getattr(league, 'user_team', None)
     for e in pending(league):
         if e['pid'] == pid and user:
@@ -355,15 +355,9 @@ def process(league, rng, week, verbose=False, *, entries=None):
                         user_failed = True
                         IB.post(league,'waiver_notice',f'Claim failed: {inbox_player(p)}','The inherited contract does not fit under your cap.',sender='league')
                         continue
-                    # Only the user's explicitly named active player may be cut.
-                    rel = e.get('release_if_awarded')
-                    active = league.teams[user].active()
-                    if len(active) < 53 or (len(active) == 53 and rel and league.player(rel) in active):
-                        award(league, e, user); awarded.append((p.pid, user))
-                        assessments.clear()
-                        break
-                    user_failed = True
-                    IB.post(league, 'waiver_notice', f"Claim failed: {inbox_player(p)}", f"Your claim on {inbox_player(p)} ({p.pos}) could not be processed: no roster spot could be opened for him. The claim window has closed; he may join another club or clear to free agency.", sender='league')
+                    award(league, e, user); awarded.append((p.pid, user))
+                    assessments.clear()
+                    break
                 continue
             import practice_squad as _PSQ
             if _PSQ.shunned(p, abbr, league) or getattr(league.teams[abbr], '_moved_week', None) == week: continue     # released him lately, or moved already this week

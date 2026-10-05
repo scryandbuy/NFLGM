@@ -2200,19 +2200,14 @@ function renderWire(v) {
   }
   if (!rows.length && wireTab !== 'outbound') tbl.append(el('tr', {}, el('td', { colspan: '10' }, el('div', { class: 'empty' }, wireTab === 'wire' ? 'The wire is clear.' : wireTab === 'claims' ? 'No claims in.' : 'Nothing awarded yet this week.'))));
   left.append(tbl);
-  left.append(el('div', { class: 'foot' }, el('span', { class: 'count' }, v.roster_full ? `A claim needs a roster spot: you are at ${v.roster}` : `Roster ${v.roster} · a claim fills the open spot`)));
+  left.append(el('div', { class: 'foot' }, el('span', { class: 'count' }, `Roster ${v.roster}`)));
   page.append(left);
   const right = el('section', { class: 'sheet c4' });
   const claim = wireClaim ? v.rows.find(r => r.pid === wireClaim) : null;
   if (claim) {
     right.append(el('h2', {}, 'Your Claim', el('small', {}, claim.name)));
     right.append(el('div', { class: 'read', style: 'margin:10px 12px' }, el('b', {}, 'Assistants: '), claim.read || ''));
-    let releasePid = null;
-    if (v.roster_full) {
-      right.append(el('div', { class: 'h5', style: 'padding:0 12px' }, 'If Awarded, Release'));
-      const sel = el('select', { class: 'btn', style: 'margin:6px 12px;width:calc(100% - 24px)' }); for (const c of v.cut_options) sel.append(el('option', { value: c.pid }, `${c.name} · ${c.pos} · ${c.ovr} · Penalty $${c.penalty}m`)); releasePid = v.cut_options.length ? v.cut_options[0].pid : null; sel.onchange = () => { releasePid = sel.value; }; right.append(sel);
-    }
-    right.append(el('div', { class: 'acts', style: 'padding:6px 12px 12px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('claim', pid=${JSON.stringify(claim.pid)}${releasePid ? ', release_pid=' + JSON.stringify(releasePid) : ''})`)); wireClaim = null; reload(); } }, 'Put In the Claim'), el('button', { class: 'btn quiet', onclick: () => { wireClaim = null; renderWire(v); } }, 'Cancel')));
+    right.append(el('div', { class: 'acts', style: 'padding:6px 12px 12px' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON(`SESSION.personnel_act('claim', pid=${JSON.stringify(claim.pid)})`)); wireClaim = null; reload(); } }, 'Put In the Claim'), el('button', { class: 'btn quiet', onclick: () => { wireClaim = null; renderWire(v); } }, 'Cancel')));
   } else if (v.claims.length) {
     right.append(el('h2', {}, 'Your Claim', el('small', {}, v.claims.map(c => c.name).join(', '))));
     for (const c of v.claims) right.append(el('div', { class: 'read', style: 'margin:10px 12px' }, el('b', {}, 'Assistants: '), c.read || ''), el('div', { class: 'acts', style: 'padding:0 12px 10px' }, el('button', { class: 'btn quiet', onclick: () => { notify(pyJSON(`SESSION.personnel_act('withdraw_claim', pid=${JSON.stringify(c.pid)})`)); reload(); } }, 'Withdraw Claim')));
