@@ -85,7 +85,7 @@ def returns(league, week):
         if p is None or p.retired or p.team != t.abbr or p.out_until is not None or any(q.pid == pid for q in (getattr(t, 'ir', None) or [])): continue
         if not _once(league, f"back-{p.pid}-{league.year}-{week}"): continue
         where = f'available at {p.pos}'
-        IB.post(league, 'injury', f"{inbox_player(p)} cleared to play", f"{inbox_player(p)} ({p.pos}) is back from his injury and {where}. Set the depth chart if you want him elsewhere.", sender='trainers', payload=dict(link='club:depth'))
+        IB.post(league, 'injury', f"{inbox_player(p)} cleared to play", f"{inbox_player(p)} ({p.pos}) is back from his injury and {where}.", sender='trainers', payload=dict(link='club:depth'))
 
 
 def _honors(league, t, week):
