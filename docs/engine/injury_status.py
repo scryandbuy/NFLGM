@@ -288,7 +288,9 @@ class InjuryDesk:
             for message in IB.pending(league, 'injury_decision'):
                 if (message.get('payload') or {}).get('pid') == pid: message['status'] = 'done'
             p = league.player(pid)
-            if p is None: self.pending.pop(pid, None); continue
+            if p is None or p.retired or p.team != team.abbr:
+                self.pending.pop(pid, None)
+                continue
             if will_play(d, rng): self.play_through(league, team, p, d)
             else: self.pending.pop(pid, None)
 
@@ -297,7 +299,10 @@ class InjuryDesk:
         out = []
         for pid, d in list(self.playing_hurt.items()):
             p = league.player(pid)
-            if p is None: continue
+            if p is None or p.retired or p.team != team.abbr:
+                self.playing_hurt.pop(pid, None)
+                self.status.pop(pid, None)
+                continue
             hits, risk = hurt_profile(p, d)
             if rng.random() < risk:
                 weeks = int(rng.integers(FLARE_WEEKS[0], FLARE_WEEKS[1] + 1))

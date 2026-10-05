@@ -50,6 +50,8 @@ def _injury_report(league, t, week, results):
     led = _ledger(league); start = int(led.get('_inj_idx', 0) or 0)
     hurt = [x for x in league.transactions[start:] if x.get('kind') == 'injury' and x.get('team') == t.abbr]
     led['_inj_idx'] = len(league.transactions)
+    hurt = [x for x in hurt if (p := league.player(x.get('pid'))) is not None
+            and p.team == t.abbr and not p.retired]
     if not hurt: return
     lines = []
     for x in hurt:
