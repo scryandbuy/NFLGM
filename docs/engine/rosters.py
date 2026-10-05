@@ -53,6 +53,7 @@ def load_league(path=SEED, scheme=None, rigidity=None):
 def _player(row):
     """One player as the engine wants him: pid, position, and every rating."""
     p = {'pid': str(row['pid']), 'pos': row['madden_position']}
+    if pd.notna(row.get('age')): p['age'] = float(row['age'])
     if pd.notna(row.get('weight')): p['weight'] = float(row['weight'])
     for c in RATING_COLS:
         v = row.get(c)

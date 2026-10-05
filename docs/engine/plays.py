@@ -845,20 +845,23 @@ def moving_throw(call, *, screen=False, swing=False, hot=False):
 
 
 def _pass_play(off, deff, off_call, def_call, ytg, rng):
-    out = _resolve_pass_play(off, deff, off_call, def_call, ytg, rng)
+    timing = {}
+    out = _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context=timing)
     arrivals = out.pop('rush_arrivals', [])
     # Count arrival before the concept's release window, not every quick
     # block win. Screens/quick throws can escape a win; late sacks still count.
-    release = BASE_TTT + HOLD_BY_DEPTH.get('screen' if out.get('screen') else out.get('depth', 'medium'), 0.)
+    release = timing.get('release', BASE_TTT + HOLD_BY_DEPTH.get('screen' if out.get('screen') else out.get('depth', 'medium'), 0.))
     pressures = {pid for pid, arrival in arrivals if pid and arrival <= release}
     if out.get('type') == 'sack' and out.get('by'):
         pressures.add(out['by'])
+    out['pressure_severity'] = timing.get('severity', 0.)
+    out['pressure_release'] = release
     out['rush_pressures'] = sorted(pressures)
     out['pressured'] = bool(pressures)
     return out
 
 
-def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng):
+def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context=None):
     depth = off_call.get('depth', 'short')
     ok = available_depths(ytg)
     if depth not in ok: depth = ok[-1]
@@ -990,6 +993,15 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng):
 
     # The quick answer changes the required hold time before the sack roll.
     hold = HOLD_BY_DEPTH.get('screen' if screen else depth, 0.0)
+    if off_call.get('_pressure_timing_version', 2) >= 2:
+        # Use the same unrounded arrivals and planned release for the read,
+        # throw and pressure credit. A late checkdown does not rewind the dropback.
+        release = BASE_TTT + hold
+        arrival = min((t * award_time_scale for _, t in p.get('rush_arrivals', [])), default=release)
+        severity = float(np.clip((release - arrival) / release, 0., 1.))
+        p['pressure'] = min(1., severity + (.20 if hot else 0.))
+        if pressure_context is not None:
+            pressure_context.update(release=release, severity=severity)
     p['sack'] = rng.random() < float(np.clip(SACK_K * np.exp(-2.40 * (p['time'] - hold)) * p.get('finish_scale', 1.), 0, .85))
     if hot:
         p['sack'] = p['sack'] and rng.random() < 0.35

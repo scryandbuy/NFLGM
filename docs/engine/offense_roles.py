@@ -197,11 +197,13 @@ def assign(depth, package, excluded=(), rng=None, state=None):
             candidates = [p for men in pools.values() for p in men if pid(p) not in used]
         if not candidates:
             raise ValueError('Cannot field eleven unique healthy offensive players')
+        rested = getattr(state, 'resting_starters', set()) if state is not None else set()
+        candidates.sort(key=lambda p: pid(p) in rested)
         chosen = candidates[0]
         if role == 'TE' and slot > 0 and str(package) in ('12', '13', '22'):
             own = [p for p in candidates if position(p) == 'TE']
             if own:
-                chosen = max(own, key=lambda p: role_grade(p, role, package, slot))
+                chosen = max(own, key=lambda p: (pid(p) not in rested, role_grade(p, role, package, slot)))
                 candidates = [chosen] + [p for p in candidates if pid(p) != pid(chosen)]
         if role == 'FB' and position(chosen) != 'FB':
             # A blocking TE can be the better second back. Preserve the lead

@@ -375,6 +375,8 @@ def rotation_choice(row, reserves, state, rng):
     if state is None or rng is None or not reserves:
         return starter
     candidates = [starter] + reserves
+    rested = getattr(state, 'resting_starters', set())
+    candidates.sort(key=lambda p: pid(p) in rested)
     grades = [candidate_grade(p, row['role']) for p in candidates]
     context = getattr(state, 'rotation_context', {}) or {}
     important = (row['role'] in EDGE_ROLES and context.get('down', 1) >= 3

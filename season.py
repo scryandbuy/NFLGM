@@ -82,6 +82,7 @@ def make_coach(gm):
     return dict(
         adjust_skill=float(np.clip(0.35 + 0.5 * gm.board_trust, .1, .95)),
         adjust_willingness=float(np.clip(gm.aggression, .1, .95)),
+        starter_protection=float(np.clip(1. - gm.aggression, 0., 1.)),
         feature_receivers=float(np.clip(1. - getattr(gm, 'scheme_rigidity', .5), 0., 1.)),
         man_rate=float(np.clip(getattr(gm, 'coverage', 0.25), 0.0, 1.0)),
         shell_lean=float(getattr(gm, 'shell', 0.5)),
@@ -306,7 +307,7 @@ class SeasonRunner(StandingsView):
         # Elevated men dress under the same health and effective-rating rules.
         import game_availability as GA
         rows = [dict(MO.effective_ratings_from(PC.effective_ratings(p), p),
-                     pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None), traits=dict(p.traits or {}))
+                     pid=p.pid, pos=p.pos, age=p.age, weight=getattr(p, 'weight', None), traits=dict(p.traits or {}))
                 for p in GA.dressed(t, desk, self.week)]
         # a man playing hurt plays with the injury's hit on his ratings this Sunday
         if desk is not None and desk.playing_hurt:
@@ -492,13 +493,13 @@ class SeasonRunner(StandingsView):
                     if me == user: GW.user_plan(self.L, st, week)
                     else: GW.ai_plan(self.L, st, me, opp, week, self.rng)
                 except Exception: pass
-            start = dict(adjustment_version=3, rng=copy.deepcopy(self.rng.bit_generator.state),
+            start = dict(engine_version=2, adjustment_version=3, rng=copy.deepcopy(self.rng.bit_generator.state),
                          states={side: self._state_data(self.states[side], include_roster=True)
                                   for side in (home, away)})
             import game_recap as GR
             if user in (home, away): start['pregame_review'] = GR.capture(self.L, self.states[user], week)
         book = G.StatBook(); self._book = book
-        gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book, playoffs=playoffs, venue=self._venue(week, playoffs))
+        gen = G.game_steps(hr, ar, self.rng, P.resolve_play, self.co, self.cd, P.rate, home_state=self.states[home], away_state=self.states[away], week=week, book=book, playoffs=playoffs, venue=self._venue(week, playoffs), engine_version=start.get('engine_version', 1))
         self.live = dict(gen=gen, home=home, away=away, week=week, book=book, drives=[], current=None, pos='away', score={'home': 0, 'away': 0}, at='kick', done=False, res=None, halftime_open=False, adjustment_period=None, playoffs=playoffs, on_close=on_close, start=start, actions=[])
         return self.live
 

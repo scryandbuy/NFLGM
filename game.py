@@ -1552,6 +1552,8 @@ class TeamState:
     def end_game(self, rng, expected_snaps=45.0, bye=False):
         """Recovery and jadedness roll forward between games."""
         import health as H
+        self.resting_starters = set()
+        self.rest_draws = {}
         self.last_snaps = dict(self.snaps)     # keep the game log readable
         self.last_snap_counts = {unit: dict(total=row['total'], players=dict(row['players']))
                                  for unit, row in self.snap_counts.items()}
@@ -2801,6 +2803,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             def_state.rotation_context = dict(down=dr.down, to_go=dr.togo, score_diff=dr.score_diff)
         pending_off = _PendingSnap(off_state) if off_state is not None else None
         pending_def = _PendingSnap(def_state) if def_state is not None else None
+        oc['_pressure_timing_version'] = getattr(off_state, 'engine_version', 2)
         off_f, off_pos = field_units(offense, pending_off, rng, True, oc.get('personnel'))
         def_f, def_pos = field_units(defense, pending_def, rng, False,
                                     dc.get('personnel'), front_family=dc.get('front_family'))
@@ -3341,14 +3344,18 @@ def play_game(*args, **kwargs):
 
 def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
               home_aggr=0.5, away_aggr=0.5, book=None,
-              home_state=None, away_state=None, week=1, playoffs=False, venue=None):
+              home_state=None, away_state=None, week=1, playoffs=False, venue=None, engine_version=2):
     """A full 60-minute game as a generator. Yields ('snap', dr) after every logged entry, ('drive', pos, dr, score)
     when a possession ends, ('halftime', score) at the break before the second-half kick, ('overtime', score)
     before overtime; returns the result dict."""
     score = {'home': 0, 'away': 0}
     drives, clock, quarter = [], GAME, 1
     for state in (home_state, away_state):
-        if state is not None: state._fourth_defense = []
+        if state is not None:
+            state.engine_version = engine_version
+            state._fourth_defense = []
+            state.rest_draws = {}
+            state.resting_starters = set()
     pos = 'away'                                   # away receives first
 
     tos = Timeouts()
@@ -3429,6 +3436,9 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
 
         o_st = home_state if pos == 'home' else away_state
         d_st = away_state if pos == 'home' else home_state
+        import game_substitutions as SUB
+        off = SUB.for_possession(off, o_st, clock, sd, rng, playoffs)
+        deff = SUB.for_possession(deff, d_st, clock, -sd, rng, playoffs)
         # the unit that just came off recovers while the other side plays
         if d_st is not None: d_st.sideline_recovery(dr_snaps if 'dr_snaps' in dir() else 30)
         dr = yield from drive_steps(off, deff, start, clock, quarter, sd, rng,
@@ -3510,6 +3520,8 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     # overtime
     ot = None
     if score['home'] == score['away']:
+        for state in (home_state, away_state):
+            if state is not None: state.resting_starters = set()
         yield ('overtime', dict(score))
         first = 'away' if rng.random() < 0.5 else 'home'
         score, ot_drives, ot = yield from overtime_steps(
