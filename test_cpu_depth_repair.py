@@ -138,6 +138,34 @@ class DepthRepairTests(unittest.TestCase):
         self.assertTrue(PS.sign_minimum(L,t.abbr,p))
         self.assertIn(recent,t.roster); self.assertIn(p,t.roster)
 
+    def test_traded_depth_gets_trial_before_optional_replacement(self):
+        L,t=self.fixture(); recent=t.by_pos('WR')[-1];set_grade(recent,60)
+        L.transactions.append(dict(kind='trade', year=L.year, week=22,
+            phase='free_agency', a=t.abbr, b='DEN', a_sends=[], b_sends=[recent.pid]))
+        p=self.arrival(L,'WR','upgrade',95)
+        self.assertNotIn(recent,list(PS._room_candidates(L,t,p)))
+        L.week=4
+        self.assertIn(recent,list(PS._room_candidates(L,t,p)))
+
+    def test_offseason_signing_and_claim_protection_survive_week_reset(self):
+        for kind in ('sign','waiver_claim'):
+            with self.subTest(kind=kind):
+                L,t=self.fixture(); recent=t.by_pos('WR')[-1];set_grade(recent,60)
+                L.transactions.append(dict(kind=kind,year=L.year,week=22,
+                    phase='free_agency',team=t.abbr,pid=recent.pid))
+                p=self.arrival(L,'WR','upgrade',95)
+                self.assertNotIn(recent,list(PS._room_candidates(L,t,p)))
+
+    def test_urgent_coverage_can_use_recent_surplus_without_cutting_starter(self):
+        L,t=self.fixture(); recent=t.by_pos('WR')[-1];set_grade(recent,60)
+        self.move_position(t.by_pos('QB')[-1],'RT')
+        L.transactions.append(dict(kind='trade',year=L.year,week=1,
+            phase='regular',a=t.abbr,b='DEN',a_sends=[],b_sends=[recent.pid]))
+        p=self.arrival(L,'QB','needed-backup',65)
+        candidates=list(PS._room_candidates(L,t,p))
+        self.assertIn(recent,candidates)
+        self.assertNotIn(t.by_pos('QB')[0],candidates)
+
     def test_healthy_specialist_upgrade_replaces_specialist_not_unrelated_depth(self):
         L,t=self.fixture(); old=t.by_pos('P')[0]
         p=self.arrival(L,'P','new-punter',95)

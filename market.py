@@ -243,7 +243,9 @@ def acquisition_read(league, team, player, offer, gain, reference_apy=None, base
     old,new=shares(before),shares(after)
     displaced=sum(p.contract.remaining_proration(0) for p in before['players']
         if p.contract and old.get(p.pid,0.)>=.15 and new.get(p.pid,0.)<old[p.pid]*.5)
-    annual=(cash+displaced)/max(1,preview.years)
+    # The pre-roll placeholder carries no salary or playing season. Counting
+    # it as service would halve a one-year offer's apparent annual cost.
+    annual=(cash+displaced)/max(1,preview.years-preview.start_offset)
     cap=CAP.get(league.year,301.2)
     cheap=annual<=1.25*MS.minimum_salary(player.accrued or 0,cap)
     if reference_apy is None:

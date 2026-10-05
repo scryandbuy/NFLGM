@@ -169,16 +169,36 @@ class TradeIntegrityTests(unittest.TestCase):
     def test_draft_trade_checks_real_future_rookie_commitments(self):
         from session import Session
         from cap_accounting import require_trade_room
+        import financial_plan as FP
+        from league import DraftPick
         s=Session.new('GB',seed=45);L=s.L;L.user_team=None
         a,b=L.teams['GB'],L.teams['DEN']
         # Both clubs own next spring's selections. Trading picks is legal on
-        # today's ledger, but a tighter future cap cannot fund an earlier pick.
+        # today's ledger. The existing future deficit is not a second charge
+        # against a modest upgrade, but its actual extra rookie cost is priced.
         outgoing=next(p for p in a.picks if p.year==2026 and p.round==2)
         incoming=next(p for p in b.picks if p.year==2026 and p.round==2)
         outgoing.selection=43;incoming.selection=36
         require_trade_room(L,a.abbr,b.abbr,[outgoing],[incoming],{})
-        with patch.dict(L.cap_history,{2027:100.}):
-            self.assertFalse(TR._financial_trade(L,a,b,[outgoing],[incoming]))
+        decisions=[]; evaluate=FP.evaluate
+        def capture(*args,**kw):
+            result=evaluate(*args,**kw);decisions.append(result);return result
+        with patch.dict(L.cap_history,{2027:100.}), patch.object(FP,'evaluate',side_effect=capture):
+            self.assertTrue(TR._financial_trade(L,a,b,[outgoing],[incoming]))
+            upgrade=decisions[0]
+            before,after=upgrade['before']['years'][1],upgrade['after']['years'][1]
+            self.assertLess(before['funded_room'],0)
+            self.assertGreater(after['rookie_reserve'],before['rookie_reserve'])
+            self.assertLess(after['funded_room'],before['funded_room'])
+            self.assertGreater(upgrade['forecast_risk'],0)
+            # A controlled inventory with eight early firsts establishes the
+            # restraint boundary; it is not a claim that anyone offered it.
+            expensive=[DraftPick(2026,1,f'origin-{n}',b.abbr,selection=n+1) for n in range(8)]
+            b.picks.extend(expensive);decisions.clear()
+            self.assertFalse(TR._financial_trade(L,a,b,[outgoing],expensive))
+            self.assertGreater(decisions[0]['forecast_risk'],upgrade['forecast_risk'])
+            self.assertEqual(decisions[0]['reason'],'trade_financial_preference')
+        self.assertIn(outgoing,a.picks);self.assertIn(incoming,b.picks)
 
     def test_gm_willingness_still_allows_bounded_marginal_disagreement(self):
         self.assertTrue(TR.will_accept(-.1,Roll(0),.8))

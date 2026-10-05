@@ -242,11 +242,27 @@ class RecoveryTests(unittest.TestCase):
 
     def test_new_compliance_waivers_keep_user_claim_opportunity(self):
         L,t=self.roster(); s=Session(L,self.rng(),'GB')
-        def new_cut(*args): L.waivers=[dict(pid='new-cut')]
-        with patch.object(CD,'finalize',side_effect=new_cut), patch('waivers.notify_user') as note, patch('waivers.process') as process:
-            self.assertFalse(s.step_clear_wire())
-            note.assert_called_once(); process.assert_not_called()
-        self.assertNotEqual(L.phase,'regular')
+        import waivers as WV
+        opening=dict(pid='opening-cut',claims=['GB'])
+        new=dict(pid='new-cut',claims=[],user_notified=False)
+        L.waivers=[opening]
+        def new_cut(*args):
+            if new not in L.waivers:L.waivers.append(new)
+        def award(*args,entries):
+            self.assertEqual(entries,[opening])
+            for entry in entries:L.waivers.remove(entry)
+            return []
+        with patch.object(CD,'finalize',side_effect=new_cut), \
+             patch.object(CD,'violations',return_value=[]), \
+             patch.object(WV,'notify_user') as note, patch.object(WV,'process',side_effect=award) as process, \
+             patch('veteran_market.review'), patch.object(PS,'fill_squads'), \
+             patch('franchise.clear_undrafted'), patch('morale.review_captains'):
+            self.assertIsNone(s.step_clear_wire())
+            process.assert_called_once()
+            note.assert_called_once_with(L,[new],1,digest=True)
+        self.assertEqual(L.waivers,[new])
+        self.assertEqual(new['claims'],[])
+        self.assertEqual(L.phase,'regular')
 
     def test_already_valid_roster_is_unchanged(self):
         L,t=self.roster(); before=[(p.pid,copy.deepcopy(p.contract.base)) for p in t.roster]

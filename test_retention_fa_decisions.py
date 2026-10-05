@@ -304,6 +304,21 @@ class RetentionRecruitmentTests(unittest.TestCase):
         self.assertEqual(read['annual_economic_cost'],6.)
         self.assertFalse(read['approved'])
 
+    def test_empty_preroll_year_does_not_discount_acquisition_cost_or_verdict(self):
+        p=self.arrival('WR',83)
+        for years in (1,3):
+            for gain in (2.,12.):
+                with self.subTest(years=years,gain=gain):
+                    offer=MK.Offer(self.t.abbr,p.pid,12.,years,bonus=3.,front_load=.5)
+                    self.L.set_phase('free_agency');self.L.season_closed_year=self.L.year-1
+                    normal=MK.acquisition_read(self.L,self.t,p,offer,gain,reference_apy=12.)
+                    self.L.set_phase('offseason');self.L.season_closed_year=self.L.year
+                    preview=MK.offer_contract(self.L,p,offer)
+                    self.assertEqual(preview.start_offset,1)
+                    deferred=MK.acquisition_read(self.L,self.t,p,offer,gain,reference_apy=12.)
+                    self.assertEqual(deferred,normal)
+                    self.assertEqual(deferred['approved'],gain==12.)
+
     def test_near_equivalent_cheaper_alternative_gets_first_look_not_a_veto(self):
         expensive=self.arrival('WR',90,'premium');cheap=self.arrival('WR',89,'value')
         other=self.arrival('CB',90,'corner')

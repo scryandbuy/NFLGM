@@ -67,6 +67,7 @@ class VeteranMarketTests(unittest.TestCase):
         self.L.transactions.append(dict(year=self.L.year, week=22, phase='free_agency',
             kind='trade', a='MIN', b='GB', a_sends=[], b_sends=['WR0']))
         self.assertIn('WR0', VM.recent_commitments(self.L, self.t, 0))
+        self.L.set_phase('regular')
         self.assertIn('WR0', VM.recent_commitments(self.L, self.t, 3))
         self.assertNotIn('WR0', VM.recent_commitments(self.L, self.t, 4))
 
@@ -79,6 +80,20 @@ class VeteranMarketTests(unittest.TestCase):
         self.L.transactions.append(dict(year=self.L.year, week=0, phase='free_agency',
             kind='waiver_claim', pid='WR1', team='MIN'))
         self.assertIn('WR1', VM.recent_commitments(self.L, self.t, 0))
+
+    def test_commitments_survive_offseason_rollover_but_not_completed_season(self):
+        self.L.set_phase('free_agency')
+        self.L.transactions=[dict(year=self.L.year-1,week=22,phase='offseason',
+            kind='trade',a='MIN',b='GB',a_sends=[],b_sends=['WR0'])]
+        self.assertIn('WR0',VM.recent_commitments(self.L,self.t,0))
+        self.assertIn('WR0',VM.PS._recent_additions(self.L,self.t))
+        self.L.set_phase('regular');self.L.week=1
+        self.assertIn('WR0',VM.recent_commitments(self.L,self.t,1))
+        self.L.week=4
+        self.assertNotIn('WR0',VM.recent_commitments(self.L,self.t,4))
+        self.L.transactions.append(dict(year=self.L.year,week=18,phase='regular',kind='game'))
+        self.L.set_phase('offseason')
+        self.assertNotIn('WR0',VM.recent_commitments(self.L,self.t,0))
 
     def test_user_pending_waivers_injuries_and_talks_are_protected(self):
         p = self.candidate()
