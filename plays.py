@@ -873,6 +873,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         pressures.update(pid for pid, _credit in RM.credited_sackers(out))
     out['pressure_severity'] = timing.get('severity', 0.)
     out['pressure_release'] = release
+    out['escape_lanes'] = timing.get('escape_lanes')
     out['rush_pressures'] = sorted(pressures)
     out['pressured'] = bool(pressures)
     return out
@@ -1024,6 +1025,12 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
 
     # The quick answer changes the required hold time before the sack roll.
     hold = HOLD_BY_DEPTH.get('screen' if screen else depth, 0.0)
+    import events as E
+    adjusted_arrivals = [(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])]
+    escape_lanes = E.escape_lane_evidence(deff, rush_plan, adjusted_arrivals,
+        min(BASE_TTT + hold, p['time']), rate)
+    if pressure_context is not None:
+        pressure_context['escape_lanes'] = escape_lanes
     if off_call.get('_pressure_timing_version', 2) >= 2:
         # Use the same unrounded arrivals and planned release for the read,
         # throw and pressure credit. A late checkdown does not rewind the dropback.
@@ -1177,7 +1184,7 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         screen=screen, hot=hot, swing=swing, time_available=p['time'],
         down=off_call.get('down', 1), distance=need,
         seconds=off_call.get('seconds'), margin=off_call.get('score_diff', 0),
-        aggression=off_call.get('qb_run_aggression', .5), man=bool(in_man))
+        aggression=off_call.get('qb_run_aggression', .5), man=bool(in_man), escape_lanes=escape_lanes)
     if run_chance and rng.random() < run_chance:
         out = E.resolve_scramble(off['qb'], deff['dl'] + deff['lb'] + deff['db'], ytg, rng, rate)
         out.update(scramble_kind='decision', scramble_chance=run_chance,

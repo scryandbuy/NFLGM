@@ -596,6 +596,10 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
     if pending_def is not None: def_f = pending_def.commit(def_f)
     # The package has already selected and recorded the carrier's snap.
     out = resolve_fn(off_f, def_f, oc, dc, try_yards, rng)
+    if off_state is not None and out.get('type') == 'scramble':
+        qb = off_f['qb']
+        off_state.cond.add_running_work(qb.get('pid'), qb.get('stamina_rating', 70.),
+                                       effort=getattr(off_state, 'road_stamina', 1.))
     good = out.get('type') in ('run', 'complete', 'scramble') and \
            float(np.round(out.get('yards', 0.0))) >= start_yardline
     declined = None
@@ -2948,6 +2952,25 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             out['down'] = dr.down; out['ydstogo'] = dr.togo; out['yardline'] = dr.yardline; out['clock'] = dr.clock
             out['passer'] = off_f['qb'].get('pid') if out.get('is_pass') or out.get('type') in ('complete', 'incomplete', 'interception', 'drop', 'sack', 'scramble') else None
             _snap_state = (dr.down, dr.togo, dr.yardline)
+        # Settle the escape before observation and injury checks. Running
+        # changes the workload on this snap, not the number of snaps played.
+        if out.get('pb_award') or out.get('type') == 'sack':
+            escape = E.scramble_chance(off_f['qb'], 1.0, out.get('ttt', 1.4), rate_fn,
+                                      escape_lanes=out.get('escape_lanes'))
+            if out.get('pb_award'):
+                out['pb_sack_survival'] = 1. - escape
+            if out.get('type') == 'sack' and rng.random() < escape:
+                # Keep call/protection evidence, discard the provisional sack
+                # winner and credit. StatBook sees only the final outcome.
+                head = {k: v for k, v in out.items()
+                        if k not in ('type', 'yards', 'touchdown', 'by', 'sack_credits', 'beaten')}
+                out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn)
+                out.update({k: v for k, v in head.items() if k not in out})
+                out['scramble_kind'] = 'escape'
+        if off_state is not None and out.get('type') == 'scramble' and not oc.get('qb_run'):
+            qb = off_f['qb']
+            off_state.cond.add_running_work(qb.get('pid'), qb.get('stamina_rating', 70.),
+                                           effort=getattr(off_state, 'road_stamina', 1.))
         dr.plays += 1
         if off_state is not None:
             seq = getattr(off_state, 'seq', None)
@@ -3015,20 +3038,6 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         snap_injuries = [i for i in dr.log[injury_log_start:] if i.get('type') == 'injury']
         late_injury = bool(snap_injuries and dr.quarter in (2, 4) and getattr(dr, '_two_min', False))
         t = out['type']
-        # a collapsed pocket is not automatically a sack - a mobile QB runs
-        if out.get('pb_award'):
-            # Expected sack charges follow the same escape opportunity as
-            # actual charges; pressure evidence survives a QB escape.
-            out['pb_sack_survival'] = 1. - E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn)
-        if t == 'sack':
-            if rng.random() < E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn):
-                _old = out
-                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'rush_pressures', 'pb_reps', 'pb_opportunities', 'pb_award', 'pb_sack_survival', 'pressured', 'coverage_evidence', 'ttt') if k in _old}
-                out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
-                out['scramble_kind'] = 'escape'
-                t = 'scramble'
-                for _i in range(len(dr.log) - 1, -1, -1):
-                    if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
         if live_pen is None:
             live_pen = E.penalty_check(rng, timing='live', outcome=out, **penalty_context)
         if live_pen is None and out.get('throwaway') and rng.random() < 0.12:

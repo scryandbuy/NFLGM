@@ -93,6 +93,12 @@ class Condition:
         self.cond[pid] = max(0.0, self.get(pid) - cost * 4.2)
         self.snaps[pid] = self.snaps.get(pid, 0) + 1
 
+    def add_running_work(self, pid, stamina=70.0, effort=1.0):
+        """Finish a QB snap that became a scramble after its initial charge."""
+        extra = (SNAP_INTENSITY['HB'] - SNAP_INTENSITY['QB']) * effort
+        extra *= 1.0 - 0.45 * ((stamina - 50.0) / 50.0)
+        self.cond[pid] = max(0.0, self.get(pid) - extra * 4.2)
+
     def rest(self, pid, position=None):
         """
         A snap on the sideline. Recovery is a FIXED rate - a man recovers at

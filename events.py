@@ -28,7 +28,54 @@ SACK_ESCAPE_BASE = 0.0512
 SCRAMBLE = dict(mean=7.00, sd=6.07, median=6, p10=1, p90=14, max=61,
                 pct_10plus=0.248, pct_20plus=0.043, first_down_rate=0.483)
 
-def scramble_chance(qb, pressure, time_available, rate_fn, AVG=0.70):
+def escape_lane_evidence(defense, rush_plan, arrivals, decision_time, rate_fn):
+    """Outside escape control from the selected men and their actual jobs.
+
+    Arrival is a proxy for disengagement, not a tracked path or a claim that
+    every fast rush maintains contain. Dropped edges use their coverage side.
+    No extra random draw and no off-field players enter the decision.
+    """
+    import defensive_rush as DR
+    rushing = {DR.player_key(a['player']): a for a in rush_plan['assignments']}
+    covering = {DR.player_key(a['player']): a
+                for a in rush_plan['coverage'].get('defensive_assignments', [])}
+    arrival_by = dict(arrivals)
+    lanes = {'left': [], 'right': []}
+    for a in DR.assignments(defense):
+        if a['alignment'] not in DR.EDGES:
+            continue
+        p = a['player']; key = DR.player_key(p)
+        job = rushing.get(key) or covering.get(key)
+        if job is None:
+            continue
+        side = 'right' if 'right' in job['alignment'] else 'left' if 'left' in job['alignment'] else None
+        if side is None:
+            continue  # A middle drop does not own both outside lanes.
+        arrival = arrival_by.get(p.get('pid'))
+        available = (float(np.clip(decision_time + .5 - arrival, 0., 1.))
+                     if key in rushing and arrival is not None else 0. if key in rushing else 1.)
+        grade = rate_fn(p, {'pursuit_rating': .4, 'play_rec_rating': .3,
+                            'speed_rating': .2, 'accel_rating': .1})
+        lanes[side].append(dict(pid=p.get('pid'), grade=float(grade), available=available))
+    return lanes
+
+
+def escape_lane_factor(mobility, lanes):
+    if lanes is None:
+        return 1.  # Legacy/direct callers without assignment evidence.
+    factors = []
+    for side in ('left', 'right'):
+        threats = lanes.get(side, [])
+        # The QB may choose the less controlled side; one good edge cannot
+        # seal the entire pocket. Keep pursuit effects bounded and probabilistic.
+        # An open lane is already allowed by the underlying scramble choice;
+        # do not add a second bonus simply because an edge remains blocked.
+        factors.append(min((float(np.clip(1. - 1.8 * (d['grade'] - mobility) * d['available'], .65, 1.2))
+                            for d in threats), default=1.))
+    return max(factors)
+
+
+def scramble_chance(qb, pressure, time_available, rate_fn, AVG=0.70, *, escape_lanes=None):
     """
     A scramble is what a mobile QB does INSTEAD of taking the sack. Without it
     every collapsed pocket becomes a sack regardless of who is playing.
@@ -38,12 +85,13 @@ def scramble_chance(qb, pressure, time_available, rate_fn, AVG=0.70):
                        'accel_rating': .15, 'break_sack_rating': .15})
     p = SACK_ESCAPE_BASE * (1.0 + 3.2 * (mob - AVG))
     p *= 0.55 + 1.30 * pressure          # he scrambles because he has to
+    p *= escape_lane_factor(mob, escape_lanes)
     return float(np.clip(p, 0.0, 0.42))
 
 def pocket_run_chance(qb, defenders, rate_fn, *, separation, pressure,
                       read='first', screen=False, hot=False, swing=False,
                       time_available=2.5, down=1, distance=10, seconds=None,
-                      margin=0, aggression=.5, man=False):
+                      margin=0, aggression=.5, man=False, escape_lanes=None):
     """Choose a run after reading coverage, before resolving any throw.
 
     Public movement ratings describe whether running is a useful alternative.
@@ -69,6 +117,7 @@ def pocket_run_chance(qb, defenders, rate_fn, *, separation, pressure,
     lane = float(np.clip(1. - 1.8 * (pursuit - mobility) - .035 * max(0, len(support) - 4), .35, 1.35))
     if man: lane = min(1.4, lane * 1.15)
     choice = willingness * window * pressure_pull * lane * (.8 + .4 * float(np.clip(aggression, 0., 1.)))
+    choice *= escape_lane_factor(mobility, escape_lanes)
     if down == 4 and distance > 5:
         choice *= max(.12, 5. / distance)  # Running short also loses the ball.
     if seconds is not None and seconds <= 20 and margin <= 0:

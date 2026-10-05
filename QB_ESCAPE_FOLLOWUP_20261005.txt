@@ -1,0 +1,110 @@
+QB scramble workload and containment follow-up — October 5, 2026
+
+Scope / football rationale
+Mobile quarterbacks should weigh the open throw, actual escape defenders,
+distance/clock, and their coach's willingness to expose them. Running consumes
+more work than standing in the pocket. A good edge on one side should not seal
+the other side; blocked edges cannot contribute as though already disengaged.
+Coaches retain different run aggressiveness and starter protection preferences.
+No named-player exceptions, positional sack bonuses, global passing/YAC changes,
+or held fatigue candidate dcf3ae6 are included.
+
+Implemented
+- Voluntary scrambles and sack escapes charge the existing HB-minus-QB workload
+  difference using the selected quarterback's stamina and road effort. No extra
+  participation/snap is counted. Designed carries are not charged twice.
+- Resolve sack escapes before observation and injury checks. Preserve pressure
+  and protection evidence, discard provisional sack credits on an escape.
+- Two-point scrambles also receive running workload. Pre-snap retries do not
+  count as physical work; actual played/replayed attempts each do.
+- Both escape paths receive compact left/right evidence from actual on-field
+  edge assignments, arrival availability, pursuit/recognition/speed/acceleration,
+  and the coverage side assigned to a dropped edge. Middle drops do not own both
+  outside lanes. Open/fully blocked lanes remain neutral, not automatic bonuses.
+- Existing open-throw, quick-answer, clock, fourth-down and coach gates remain.
+
+Controlled evidence
+74 focused tests passed across QB workload/designed runs, rush accounting,
+free arrivals, protection balance, live duration, save/resume and penalty pace.
+Independent review: 43 focused tests passed, no remaining structural blocker.
+Tests exercise weak/strong contain, one open side, dropped/inactive edges,
+selected backup and stamina, nullified physical scrambles, two-point retries,
+successful escape removing half sacks, failed escape preserving them, and
+live/instant consistency. A full final-build game also produced identical
+live/instant scores, player books, conditions, injuries and play trace.
+
+For an85-mobility fixture, weak40 edges versus strong95 available edges change
+voluntary run probability15.62% ->10.15%, conditional sack escape16.00% ->10.40%.
+These are decision weights in a controlled situation, not per-dropback targets.
+One existing70-stamina neutral-effort snap: normal QB condition99.12178;
+scramble/designed carry95.45392, with exactly one physical snap.
+
+Observed isolated-game outcomes (current 2029 saved rosters, fresh conditions)
+16 games, one game per club; no season advance or save rewrite.
+                      Prior baseline    Final candidate
+Designed QB carries       58                  49
+Scrambles                 72                  89
+Sacks / total credit      93 /93               85 /85
+Points per team           24.625               25.46875
+All recorded injuries     26                  13
+QB injuries                0                   0
+Final examples: Jackson4 designed/7 scrambles; Hurts4/7; Allen2/6; Goff0/2.
+Jackson/Hurts condition at recorded run choices reached77.2/75.9. These are
+future saved players, not a replay of their real2024 seasons. Existing backup
+appearances include plausible late-game protection; no QB injury caused them.
+Original comparison reused the earlier16-game baseline; matching seeds do not
+hold downstream plays constant after probabilities/event ordering change.
+No claim that score/injury differences are causal estimates or calibrated rates.
+First draft with an open-lane15% bonus was rejected before final build.
+
+Protection review — remains a separate football decision issue
+Primary pairing always assigns tackles to edges, then interiors, then off-ball
+rushers. Protection labels influence help/timing but not primary pair allocation.
+In prior4,800 equal-athlete protection races, a six-rusher/five-blocker look gave
+LB672/674 raw sacks; adding a sixth blocker reduced LB to10/58. Raw races exclude
+hot answers, final throws and escapes. This explains a structural opportunity
+advantage; it does not justify directly nerfing linebacker/DT sack rates.
+Three-interior base fronts also legitimately create more DT rush opportunities.
+Next protection work should model who the slide accounts for, the free/hot
+defender and reachable assignments, preserving coaching disagreement and help
+tradeoffs. Do not automatically drop a nose tackle merely to favor two edges.
+
+Real-world research / definitions
+Reproducible independent analysis of2024nflverse regular season,272games:
+- Roster-QB scramble rushing outcomes:1,060plays,7QB fumbles(0.66%),7.86yds/play.
+- Non-scrambleQB runs excluding kneels/tries/aborted:785plays,18fumbles(2.29%).
+  Requiring recorded run direction removes7exchange-like records:778plays,
+  11fumbles(1.41%),4.06creditedyds/play. This still includes sneaks and is a
+  proxy for designed runs, not a film-charted clean category.
+- Sacks:1,308plays,161QB fumbles(12.31%). Do not spread strip-sack fumbles
+  across every rushing scramble. Player IDs were matched to the actual fumbler.
+Inputs: https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_2024.csv.gz
+https://github.com/nflverse/nflverse-data/releases/download/rosters/roster_2024.csv
+
+SIS-authored2019 research using injuries since2017 reports about0.4% injuries
+per designedQB run(1/246), excluding sneaks/scrambles/kneels. Old data and an
+insufficiently documented severity denominator cannot set current missed-game
+hazards. More exposure is not the same as a higher per-play hazard.
+https://www.sharpfootballanalysis.com/analysis/designed-quarterback-runs-lamar-jackson/
+PFF's true-scramble category includes subsequent passes and sacks. Its roughly
+15% of passplays is not a target for official rushing scramble outcomes.
+https://www.pff.com/news/nfl-data-study-components-quarterback-play-scrambling
+
+Unresolved / not claimed fully calibrated
+- Arrival time is a proxy for disengagement, not tracked leverage, rush overshoot
+  or an explicit contain call. The availability window and bounded grade slope
+  are football modeling assumptions, not estimated real-world coefficients.
+- HB-equivalent carry workload remains the existing game design; research does
+  not establish that exact fatigue amount for quarterbacks.
+- Keep monitoring QB rushing volume, scoring, sack roles and fatigue.16games
+  cannot establish injury/fumble rates or long-term workload balance.
+- Fumble base rates, contact/slide/out-of-bounds injury distinctions were not
+  recalibrated here. The real-world comparison supports separating them and
+  measuring actual simulated outcomes by QB/ball security before changing rates.
+- No multi-season run, public deployment or push performed.
+
+Evidence: outputs/qb-scramble-followup-20261005/
+comparison.json, qb-final16.json, qb-final-live.json, qb-game-trace.py,
+independent-review.txt, primary-qb-rushing-evidence.md,
+primary-pbp-analysis.py, primary-pbp-2024-results.json (including play IDs,
+descriptions, exclusions, player splits, input hashes and sensitivity checks).
