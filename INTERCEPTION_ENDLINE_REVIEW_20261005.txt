@@ -1,0 +1,64 @@
+Interception end-line correction - October 5, 2026
+
+Isolated source base: 0b4c49c (the combined study's gameplay baseline).
+Branch: codex/interception-endline-20261005.
+The ongoing diagnostic studies were not modified or restarted.
+
+OBSERVED DEFECT
+Interception air depth was drawn before the return without a legal-field
+check. defensive_return then clipped any catch beyond the back of the end
+zone to -10 and preserved the turnover. Shared full 2026 regular seasons
+contain 3 such cases in seed93031 and 5 in seed93032.
+Examples: LV-LA week7, yardline8/air24; LAC-ARI week1,18.4/31;
+LA-SF,6.6/25.8. NYJ-GB24.2/35 also illustrates why the actual fractional
+field spot, not the rounded play-selection distance, must set the boundary.
+
+One observed illegal catch produced a pick-six and its made extra point:
+7 direct recorded points, or0.0129points/team in that272-game seed. This
+is not a counterfactual score estimate: an incompletion changes possession,
+clock and subsequent play. It cannot explain the overall scoring elevation.
+
+FOOTBALL RULE / DESIGN
+A completed or intercepted pass requires an inbounds catch. The end line
+is ten yards beyond the goal line. A location on or beyond it cannot become
+a defensive return. Legal end-zone interceptions may still be touchbacks
+or returns. This is field legality, independent of coaching preferences.
+No global interception, return, completion or scoring coefficient changes.
+2026 NFL Rulebook, Rules1-1-1 and8-1-3:
+https://static.www.nfl.com/image/upload/fl_attachment/league/tqivdkzt9mu6wdgsh1ku.pdf
+
+IMPLEMENTATION
+game.py supplies exact field_yardline before ordinary and two-point play
+resolution. plays.py keeps the existing air draw and tests the unrounded
+catch coordinate before invoking the return resolver. On/beyond-end-line
+results become incomplete, with end_line_incomplete and out_of_bounds
+metadata; no defender interception/return credit, no forced pass breakup,
+and no fabricated intentional-throwaway/grounding intent. Protection,
+pressure, target and play evidence remain available. Legal catches retain
+the existing distribution and return model; fractional catch spots now use
+the actual field location consistently. ticker.py describes the incompletion.
+
+CONTROLLED VERIFICATION
+68 focused tests pass, including8new boundary tests. Actual pass resolver
+fixtures cover the reported cases, just-inside/exact/just-outside boundary,
+identically rounded air values with different legal results, exact fractional
+spot propagation, direct/legacy callers, legal touchbacks and defensive TDs,
+StatBook without false interception/score, live/fast equality, defensive
+roughing enforcement and two-point tries. Existing defender catching,
+coverage recording, turnover/register/UI and goal-line fumble checks pass.
+Independent source/test review found no blocker. diff--check clean.
+
+REMAINING UNCERTAINTY
+The source has not been used in the running multi-season diagnostic baseline.
+Aggregate scoring and injury calibration remain unresolved. Main should
+integrate/rebuild after preserving that baseline's results, then run the
+affected combined gates. No fresh long simulation or browser build here.
+
+COMMAND
+python -m unittest test_interception_endline test_defensive_returns
+ test_defensive_return_register test_defensive_return_ui
+ test_hit_power_defender_catch test_coverage_recording test_goal_line_fumbles -q
+
+Evidence: outputs/coordinated-gameplay-review-20261005/scoring-year1-review.md
+and scoring-year1-details.json; early individual evidence is also retained
+in scoring-early-geometry.json.

@@ -624,6 +624,7 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
     if pending_def is not None: def_f = pending_def.commit(def_f)
     _recovery_finish(recovery_before)
     # The package has already selected and recorded the carrier's snap.
+    oc['field_yardline'] = float(start_yardline)
     out = resolve_fn(off_f, def_f, oc, dc, try_yards, rng)
     if off_state is not None and (out.get('type') == 'scramble' or
             (out.get('type') == 'run' and
@@ -3130,6 +3131,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
 
         # The called carrier and blockers are the selected, state-adjusted men.
         oc['execution_mod'] = script_mod
+        oc['field_yardline'] = float(dr.yardline)
         out = resolve_fn(off_f, def_f, oc, dc, ytg_i, rng)
         # the situation rides with the play, for the ticker and the probes
         if isinstance(out, dict):

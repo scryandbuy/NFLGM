@@ -1312,13 +1312,25 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         air = float(np.clip(rng.normal(route_air if route_air is not None else {'short': 5, 'medium': 13, 'deep': 27}.get(depth, 6),
                                        {'short': 3, 'medium': 5, 'deep': 9}.get(depth, 3)),
                             -3 if screen else 1, 48))
-        returning = defensive_return(float(ytg) - air, 'int', cb,
-            [off['qb']] + list(off.get('ol') or []) + receivers, rng, rate)
-        return dict(type='interception', yards=0.0, touchdown=False,
+        # The drive uses rounded distance for play selection, but the end
+        # line belongs to the actual field spot. A catch on or beyond that
+        # boundary is incomplete; clipping it back into the end zone would
+        # create a turnover (and possibly a return touchdown) out of bounds.
+        catch_spot = float(off_call.get('field_yardline', ytg)) - air
+        result = dict(type='interception', yards=0.0, touchdown=False,
                     air=round(air, 1),
+                    catch_yardline=catch_spot,
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
+                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
+        if catch_spot <= -10.0:
+            result.pop('by')
+            result.update(type='incomplete', intended_air=air, pass_def=None,
+                          throwaway=False, out_of_bounds=True, end_line_incomplete=True)
+            return result
+        returning = defensive_return(catch_spot, 'int', cb,
+            [off['qb']] + list(off.get('ol') or []) + receivers, rng, rate)
+        return result | returning
     if not complete:
         throwaway = False  # Throwaway intent was resolved before accuracy/turnovers.
         # A PASS DEFENDED is a defender breaking the ball up, not simply an
