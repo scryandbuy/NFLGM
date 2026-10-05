@@ -1,0 +1,61 @@
+Empty-backfield QB decision follow-up - 2026-10-05
+
+Base: 42e597c01463bd211cebeadb81bfb1d255ffde77, combined source.
+Branch: codex/empty-qb-run-followup-20261005.
+
+OBSERVED
+The retained reviewed16 sample has 54 actual tagged QB runs but only 48
+approved QB keeps in the caller trace. Six other called runs used the QB
+after the keep choice was false: Burrow 2, Cooper Rush 2, Daniel Jones 1,
+JJ Simmons 1. The resolver used the QB whenever no HB was selected. This
+bypassed the existing coach, clock, fatigue and backup-availability choice.
+Examples: Rush on second-and-28 and Simmons up 20 with 178 seconds left
+and no healthy backup. These are data observations, not player-name rules.
+
+FOOTBALL DECISION
+An empty run needs an intentional QB carry. Preserve athletic-QB keeps and
+different coach risk tolerances, but a rejected keep needs a viable pass
+with those same eleven players. No late HB substitution or fabricated
+handoff. Clock-protection intent instead selects back-bearing personnel
+before the defense answers. Sneaks remain their separate short-yardage call.
+
+CHANGE
+schemes.answer_empty_run uses the existing situation/ability pass caller
+when there is no back and no approved QB keep. It preserves personnel and
+defensive assignments, removes fake handoff/play-action intent, and runs
+before ordinary penalty classification and snap commitment. An approved
+keep, ordinary handoff, sneak or existing pass adds no random draws here.
+Empty two-point tries follow the same decision with the actual healthy
+QB-backup count. An already explicitly chosen try keep is retained. Running
+work remains charged once. No changes to scramble resolution, broad run,
+scoring, fumble or injury coefficients.
+
+CONTROLLED EVIDENCE
+109 focused tests passed, including six new empty-run tests. Gates cover
+approved/declined keeps, actual eleven, no fake HB, handoff/sneak/pass
+restraint, fourth-and-long pass concept, correct QB running work, live/fast
+parity, two-point backup availability, explicit try keeps, and defensive
+answer seeing the clock-protection back-bearing package. Existing designed
+QB, contact, escape, personnel, recovery, clock and half-sack tests pass.
+Independent read-only review found no additional candidate defect.
+
+UNRESOLVED / SHARED VALIDATION
+This does not establish league QB workload or fumble/injury calibration.
+The reviewed16 scoring rise is real in that paired sample: +178 points,
+mainly offensive TDs. All scoreboards, 24 long passing TD final distances
+and five pick-six book credits reconcile. Individual pursuit geometry was
+not fully retained. Main owns one combined study after this fix, Changes4's
+scramble pre-goal-line contact work and the remaining Changes2 roster fix.
+No additional season simulations were run for this caller correction.
+
+Detailed retained-output reports in outputs/fatigue-rotation-followup-20261005:
+scoring-reviewed-diagnosis.md
+long-score-geometry-audit.md
+qb-final-risk-findings.md
+
+Test command:
+python -m unittest test_empty_qb_runs test_designed_qb_runs test_qb_contact
+ test_qb_contact_integration test_qb_escape_workload test_offense_personnel
+ test_drive_recovery test_game_clock_decisions test_shared_sacks -q
+
+Browser rebuild is intentionally left to the main combined integration.
