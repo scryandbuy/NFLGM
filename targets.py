@@ -176,6 +176,20 @@ RECV_GRADE = {'catch_rating': 0.20, 'route_run_short_rating': 0.15, 'route_run_m
               'accel_rating': 0.08, 'release_rating': 0.10, 'cit_rating': 0.10}
 
 
+def is_checkdown_option(pair):
+    """A late read is an outlet only when that player's actual route is short.
+
+    Explicit geometry wins over semantic labels, especially on fourth down.
+    Older direct callers without geometry retain backs/known outlet jobs.
+    """
+    if pair.get('route_air') is not None:
+        return float(pair['route_air']) <= 6.0
+    if pair.get('route_depth') is not None:
+        return pair['route_depth'] == 'short'
+    return (pair.get('concept_role') in _OUTLET_ROLES or
+            pair['receiver'].get('pos') in ('HB', 'FB'))
+
+
 def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zone=False,
                   down=1, ydstogo=10, pressure=0.0):
     """
@@ -268,11 +282,18 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zon
         progression = [j for j in order if conversion_weights[j] >= 0.5] or order
 
     if kind == 'checkdown':
-        # the back is the usual outlet but not the only one - a tight end or
-        # an underneath receiver sits down too. Always taking the last man gave
-        # the back 27% of all targets against a real ~10%.
-        late = order[-2:] if len(order) > 2 else order
-        i = late[int(rng.integers(0, len(late)))]
+        # A back, TE or WR can be the outlet, but the bottom of a randomized
+        # progression is not necessarily running an underneath route. Keep
+        # the existing player/coach preferences among the actual outlets.
+        outlets = [j for j in order if is_checkdown_option(pairs[j])]
+        if outlets:
+            i = outlets[0]
+        else:
+            # Maximum protection/vertical patterns can leave no checkdown.
+            # The QB can still take a deeper option; it is evaluated as that
+            # read rather than receiving a short-outlet completion benefit.
+            kind = 'second' if len(progression) > 1 else 'first'
+            i = progression[1] if len(progression) > 1 else progression[0]
     elif kind == 'designed':
         i = progression[0]
     elif kind == 'second':

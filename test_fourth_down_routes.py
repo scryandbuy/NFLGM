@@ -17,14 +17,18 @@ class FourthDownRoutes(unittest.TestCase):
     def setUpClass(cls):
         cls.teams = R.load_league()
 
-    def play(self, seed, need=16, down=4, depth='short', concept='curl_flat', rushers=4):
+    def play(self, seed, need=16, down=4, depth='short', concept='curl_flat', rushers=4, fielded=False):
         rng = np.random.default_rng(seed)
+        offense, defense = self.teams['GB'], self.teams['DEN']
+        if fielded:
+            offense, _ = G.field_units(offense, None, rng, True, '11')
+            defense, _ = G.field_units(defense, None, rng, False, 'nickel', '3-4')
         oc = dict(is_pass=True, personnel='11', depth=depth, concept=concept,
                   down=down, ydstogo=need, play_action=False, shotgun=True,
                   protection_pref='empty')
         dc = S.call_defense(oc, down, need, rng, yards_to_endzone=16)
         dc.update(rushers=rushers, blitzers=max(0, rushers - 4), sim_pressure=False)
-        return P._pass_play(self.teams['GB'], self.teams['DEN'], oc, dc, 16, rng)
+        return P._pass_play(offense, defense, oc, dc, 16, rng)
 
     def test_leading_team_still_calls_for_conversion_on_fourth(self):
         for lead in (-14, -5, 5, 14):
@@ -104,8 +108,13 @@ class FourthDownRoutes(unittest.TestCase):
                 return original(pairs, *args, **kwargs)
             with patch.object(T, 'select_target', side_effect=read):
                 for seed in range(20):
-                    self.play(seed, need=need, depth='medium')
-                    if captured: break
+                    captured.clear()
+                    self.play(seed, need=need, depth='medium', fielded=True)
+                    # An actual free rusher can trigger the separately tested
+                    # hot-route exception. This control needs a protected
+                    # conversion pattern, not whichever seed gets there first.
+                    if captured and all('route_air' in p for p in captured):
+                        break
             primary = [p for p in captured if p['receiver'].get('pos') not in ('HB', 'FB')
                        and not p.get('late')]
             self.assertTrue(primary)

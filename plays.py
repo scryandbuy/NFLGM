@@ -1122,25 +1122,36 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         travel=def_call.get('travel'))
 
     LAST_TRAVEL = bool(travelled)
+    # Establish the concept's outlet before the read, using only receivers
+    # actually released by protection. Picking a late read cannot turn a
+    # vertical route into a short checkdown after the QB has chosen it.
+    for pr in pairs:
+        if chip is not None and pr['receiver'] is chip[0]:
+            pr['late'] = True
+    TG.assign_concept_roles(pairs, concept, depth)
     # every man in the pattern gets his own separation from his own matchup
     for pr in pairs:
         pr_depth = 'short' if pr['receiver'].get('pos') in ('HB', 'FB') and depth != 'short' else depth
-        if chip is not None and pr['receiver'] is chip[0]:
-            pr['late'] = True                       # he chipped on the way out
         if conversion_route and not hot and not swing:
             # Backs and delayed releases remain underneath outlets. Other
             # routes break at/beyond the sticks, bounded by the end zone.
             outlet = pr['receiver'].get('pos') in ('HB', 'FB') or pr.get('late')
             pr['route_air'] = (2.6 if outlet else min(float(ytg) + 2.0,
                 max(need + 1.0, {'short': 6.3, 'medium': 10.3, 'deep': 23.4}[pr_depth])))
+            if outlet:
+                pr_depth = 'short'
+        elif not screen and pr.get('concept_role') in ('flat', 'back', 'check'):
+            # These jobs are the concept's underneath outlet, regardless of
+            # whether it is filled by a back, tight end or wide receiver.
+            pr['route_air'] = 2.6
+            pr_depth = 'short'
+        pr['route_depth'] = pr_depth
         pr['separation'] = resolve_man(pr['receiver'], pr['defender'], pr_depth,
                                        p['time'], rng)
         # a bracketed man is squeezed, not erased - an elite receiver doubled
         # still beats an average one singled
         if def_call.get('bracket') == pr['receiver'].get('pid'):
             pr['separation'] *= 0.72; pr['bracket'] = True        # and the read goes elsewhere more often (targets.select_target)
-
-    TG.assign_concept_roles(pairs, concept, depth)
 
     tgt, cov, read_kind, sep_raw = TG.select_target(
         pairs, off['qb'], concept, rng, rate, plan=off_call.get('plan'), red_zone=(ytg <= 10),
@@ -1160,9 +1171,7 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         depth = 'short'                          # the back's route is a check, a flat, a swing
     route_pair = next((pr for pr in pairs if pr['receiver'] is tgt), {})
     route_air = route_pair.get('route_air')
-    if route_air is not None and (read_kind == 'checkdown' or route_pair.get('late')):
-        route_air = min(route_air, 2.6)
-        depth = 'short'
+    depth = route_pair.get('route_depth', depth)
     rmod = TG.READ_MODIFIER.get(read_kind, TG.READ_MODIFIER['first'])
 
     # PER-PAIRING, not per-defence. The man who ends up targeted may be in man

@@ -1,0 +1,104 @@
+CHECKDOWN ROUTES: SHORT-OUTLET BENEFIT REQUIRES AN ACTUAL SHORT ROUTE
+Base: 87ffe02, after the isolated man deep-help correction.
+
+Football motivation and alternatives
+A quarterback may work through a progression to a back, TE or WR underneath.
+A later read is not automatically a checkdown: a vertical receiver cannot
+receive the accuracy benefit of a short outlet merely because he was drawn
+late in a randomized progression. If protection keeps the outlet in, the QB
+must retain the cost/risk of throwing deeper, scrambling or throwing away.
+The existing QB read profile, coaching preferences, imperfect openness reads,
+receiver skill differences and defensive response remain in place. There is
+no target-share cap or across-the-board reduction to WR1 preference.
+
+Observed evidence
+Retained 2026 logs include Howse checkdown/deep/four-verts TD at 21 air yards
+(seed 93031, W8 CIN-TEN, drive 9/play 9), and checkdown/deep/dagger/two-man
+intended 27 yards (W7 BAL-CIN, drive 6/play 13).
+
+Before correction, a natural direct resolver call (GB-DEN, deep four-verts,
+down 1, seed 1) picks WR P0964, labels checkdown, travels 24 air yards and
+receives the 1.29 checkdown completion modifier. That initial reproduction
+uses raw roster pools; independent matched diagnostics below use genuinely
+fielded 11-personnel/nickel units and confirm this is not a raw-fixture artifact.
+
+Mechanism
+select_target previously selected either of the bottom two receivers in a
+random weighted order for checkdown, without checking route depth or role.
+Only fourth-down plays had explicit route_air metadata. On ordinary WR/TE
+routes, the checkdown label could keep the medium/deep throw and its large
+accuracy bonus. The receiver was not actually on an underneath route.
+
+Correction
+- Identify concept flat/back/check jobs before separation and target choice.
+  Their existing outlet distance is 2.6 yards and separation uses short depth.
+- Record route depth for every eligible receiver; protection's retained
+  blockers never reappear as checkdown candidates.
+- Checkdown chooses the first actual short outlet in the already sampled,
+  player/coach-weighted progression. Explicit route distance takes priority
+  over position or a semantic outlet label, including fourth-down routes.
+- With no outlet, use an existing deeper progression choice as a second read
+  (first when only one receiver exists), without the checkdown modifier.
+- Use the selected player's established route depth/air at the throw.
+  Do not reinterpret a vertical as short only after selecting a checkdown.
+- Explicit fourth-down delayed releases remain short before separation;
+  normal conversion routes retain their required depth. Screens/swings retain
+  their behind-the-line identity.
+
+Controlled evidence: 1,200 paired fielded pass calls
+400 independently seeded calls each for CIN, GB and DEN, same static rosters,
+fixed varied concepts/depths and natural defensive calls, all at 60 yards to
+goal. Baseline source was frozen from 87ffe02 in a separate process. This is
+not a schedule, full game, season, or league calibration.
+
+                         CIN             GB              DEN
+Medium/deep checkdowns    17 -> 0         24 -> 0         20 -> 0
+Completions             206 -> 220      201 -> 214      193 -> 214
+Sacks                    51 -> 51        55 -> 55        41 -> 41
+Yards/attempt          9.83 -> 9.30     8.99 -> 7.65     8.48 -> 7.35
+Air/catch              7.81 -> 6.60     7.63 -> 5.50     7.86 -> 5.31
+YAC/catch              8.04 -> 7.51     7.08 -> 6.33     7.13 -> 6.53
+Passing TD                5 -> 4          0 -> 0          2 -> 2
+Leader target share   34.04 -> 34.74   24.07 -> 25.38   31.16 -> 32.16 percent
+
+Every pair has identical protection time, pressure-release, pressure-severity
+and sack outcome. The correction does not rewind a dropback already spent
+waiting on deeper reads. Genuine WR, TE and HB outlets remain viable.
+
+Verification
+108 focused tests passed, covering targets/concepts, fourth-down routes,
+coverage/pursuit, legal interceptions and QB contact integration.
+New test_checkdown_routes.py has 12 focused tests: route authority, actual
+outlets, no-outlet deeper choices, coach/elite preferences, natural resolver
+reproduction, pre-separation geometry, max-protection and injured-player
+exclusion, conversion routes/delayed TE, and screen/swing identity.
+
+An existing fourth-down fixture failed on the unchanged 87ffe02 resolver:
+it passed raw roster pools and assumed the first captured pattern was not a
+hot-route exception. That conversion-specific control now fields actual
+eleven-personnel units and selects a protected conversion pattern. Separate
+hot-route tests remain. No engine behavior was altered to satisfy that fixture.
+
+Unresolved balance, explicitly not claimed fixed
+The broad 2026 leader-share concentration is not solved: leader shares rise
+slightly in the direct-call sample. Short-checkdown completion is high at
+approximately 89-96% in these three static-roster cases. Correcting geometry
+raises completions while reducing air/YAC per catch; the existing accuracy
+modifier still needs representative calibration. Neither a new share quota
+nor a generic ordinal-rank reduction is justified here. Target priorities,
+route opportunities, defense response and aggregate passing balance remain
+open for the coordinated review. No full-game scoring conclusion follows
+from seven versus six passing TDs at a fixed field position.
+
+Frozen study source, build artifacts and save schema were not changed.
+Main owns combined integration and validation; this is an isolated candidate.
+
+Evidence in workspace outputs/nonseason-followup-20261005:
+team-target-mechanism-review.md and team-target-mechanism-probe.py/.json;
+team-target-paired-baseline.json and team-target-paired-candidate.json.
+Full-season receiver distribution: coordinated-gameplay-review-20261005/
+wr-year1-review.md and .json.
+
+Coaching references (conceptual mechanics, not numerical calibration):
+https://blogs.usafootball.com/blog/7433/the-spacing-pass-concept/1000
+https://blogs.usafootball.com/blog/6127/how-to-teach-the-progression-passing-game-to-your-players
