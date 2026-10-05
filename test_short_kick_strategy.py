@@ -60,7 +60,8 @@ class ShortKickTests(unittest.TestCase):
     def test_live_kick_uses_staff_plan_and_marks_short_kick(self):
         kicking = {'k': self.kicker, 'kr': self.returner}
         receiving = {'kr': self.returner}
-        state = SimpleNamespace(staff_fx={'short_kick_bias': 0.12}, out=set())
+        state = game.TeamState(kicking)
+        state.staff_fx = {'short_kick_bias': 0.12}
         with patch.object(game, 'kickoff_booked', return_value={'touchback': False}) as booked:
             game.kickoff_for(kicking, receiving, state, None, np.random.default_rng(4), rate, None)
         self.assertEqual(booked.call_args.kwargs['short_kick_bias'], 0.12)
