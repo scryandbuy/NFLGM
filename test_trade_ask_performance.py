@@ -1,11 +1,13 @@
 """A read-only counter search may reuse context, never a later request."""
 import copy
 import unittest
+from contextlib import ExitStack
 from unittest.mock import patch
+import numpy as np
 
 from cap_engine import Contract
 from league import DraftPick, Team
-from test_draft_planning import fixture
+from test_draft_planning import fixture, set_grade
 import trades as TR
 import trade_engine as TE
 import trade_portfolio as TP
@@ -13,6 +15,52 @@ import views_personnel as VP
 
 
 class AskSnapshotTests(unittest.TestCase):
+    def test_negotiation_callbacks_are_pure_and_cached_search_matches_default(self):
+        L,a=fixture();L.user_team='GB'
+        for p in a.roster:p.contract=Contract(1,[1.]);p.age=27.
+        b=Team('DEN','Continental West','Continental');b.league=L
+        b.gm=copy.deepcopy(a.gm);b.record=[2,14,0];L.teams[b.abbr]=b
+        L.set_phase('free_agency')
+        p=copy.deepcopy(a.by_pos('HB')[0]);p.pid='arrival';p.team=b.abbr
+        p.age=28.;p.contract=Contract(3,[10.]*3);set_grade(p,93)
+        b.roster.append(p);L.players[p.pid]=p
+        a.picks += [DraftPick(2026,r,str(r),a.abbr) for r in range(1,8)]
+        callbacks={name:getattr(TR,name) for name in
+                   ('package_football','_portfolio_trade_check','_financial_trade')}
+        counts={name:0 for name in callbacks}
+        def guard(name):
+            def checked(*args,**kwargs):
+                saved=L.save()
+                result=callbacks[name](*args,**kwargs)
+                self.assertEqual(L.save(),saved,name)
+                counts[name]+=1
+                return result
+            return checked
+        with patch.object(TR.VAL,'value_player',return_value={'apy':14}), ExitStack() as stack:
+            for name in callbacks:stack.enter_context(patch.object(TR,name,side_effect=guard(name)))
+            for phase,cleanup in (('free_agency',{}),('regular',{a.abbr:['HB2']})):
+                L.set_phase(phase);L.week=2
+                if phase=='regular':
+                    for pick in a.picks:pick.year=L.year
+                # Production currently returns no immediate cleanup in any
+                # phase. Also exercise a supplied nonempty cleanup projection
+                # so its temporary ledger cannot contaminate cached rosters.
+                with patch.object(L,'_trade_roster_releases',return_value=cleanup):
+                    target=TR.player_asset(L,b,p,[],None,need=True,viewer=a)
+                    target['package_gain']=TP.RN.move_gain(a,p)
+                    args=(L,a,b,target,TR.persona(a.gm),TR.persona(b.gm),
+                          TR.context(a),TR.context(b),a.cap_space,b.cap_space,[])
+                    seed=np.random.default_rng(71)
+                    saved=L.save();old_counts=dict(counts)
+                    actual=TR._negotiate(*args,seed)
+                    reference_rng=np.random.default_rng(71)
+                    with patch.object(TP,'readonly_cache',side_effect=dict):
+                        reference=TR._negotiate(*args,reference_rng)
+                    self.assertEqual(actual,reference)
+                    self.assertEqual(seed.bit_generator.state,reference_rng.bit_generator.state)
+                    self.assertEqual(L.save(),saved)
+                    self.assertTrue(all(counts[k]>n+1 for k,n in old_counts.items()))
+
     def test_readonly_portfolio_cache_matches_validating_reads_and_is_discarded(self):
         L,t=fixture()
         for p in t.roster:p.contract=Contract(1,[1.])
