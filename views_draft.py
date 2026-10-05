@@ -73,7 +73,7 @@ def _prospect(league, abbr, p, taken=()):
     fit = SC.scheme_fit_view(league, abbr, p, v, seen=seen_ratings)  # in your scheme, on your scouts' read
     scheme_ovr = round(float(v['ovr']) + fit)
     comb = getattr(p, 'combine', None) or {}
-    flags = list(v.get('flags') or [])
+    flags = [f for f in (v.get('flags') or []) if f not in ('character', 'work_ethic', 'discipline')]
     # the words the board shows for what the room knows
     words = []
     visited = 'visited' in flags
@@ -345,6 +345,11 @@ def spring(session, league, abbr):
     uncovered = {}
     for x in news:
         if x.get('kind') == 'flag':
+            import character_assessment as CA
+            expected = {'character': 'Work ethic concern', 'work_ethic': 'Work ethic concern',
+                        'discipline': 'Discipline concern'}.get(x.get('flag'))
+            view = (getattr(league, 'scouting', {}) or {}).get(abbr, {}).get(x['pid'], {})
+            if expected and expected not in CA.flags(view): continue
             label = {'character': 'work ethic', 'work_ethic': 'work ethic'}.get(x.get('flag'), x.get('flag'))
             if label and label not in uncovered.setdefault(x['pid'], []): uncovered[x['pid']].append(label)
     EVENT_WORDS = {'combine': 'the combine', 'Senior Bowl': 'the Senior Bowl', 'pro days': 'his pro day', 'visits': 'the visit'}
@@ -380,7 +385,7 @@ def spring(session, league, abbr):
         pre = v.get('pre_visit')
         if pre:
             r['before'] = dict(mine=round(float(pre.get('ovr', 0) or 0)), ceiling=f"{round(float(pre.get('lo', 0) or 0))}–{round(float(pre.get('hi', 0) or 0))}", cons_rank=pre.get('rank'))
-            r['uncovered'] = [f for f in v.get('flags', []) if f in ('medical', 'character') and f not in (pre.get('flags') or [])]
+            r['uncovered'] = [f for f in v.get('flags', []) if f == 'medical' and f not in (pre.get('flags') or [])]
             import character_assessment as CA
             r['uncovered'] += [f for f in CA.flags(v) if f not in (pre.get('character_flags') or [])]
     done = bool(news)
@@ -715,12 +720,14 @@ def class_csv(session, league, abbr):
     rows = [head]
     for p in sorted(pool, key=lambda p: -p.ovr):
         c = cons.get(p.pid, {}) or {}; v = views.get(p.pid) or {}
+        import character_assessment as CA
+        visible_flags = [f for f in (v.get('flags') or []) if f not in ('character', 'work_ethic', 'discipline')] + CA.flags(v)
         lo, hi = (p.potential_range or (p.ovr, p.ovr))
         rows.append([p.name, p.pos, int(p.age), home_state(p), getattr(p, 'class_year', '') or '', round(float(p.ovr)), round(float(lo)), round(float(hi)), VC.DEV_WORD.get(str(p.dev).lower(), p.dev),
                      round(float(p.xp_spent.get('_tape', 0) or 0), 1), p.xp_spent.get('_tape_role', ''),
                      c.get('rank', ''), (round(float(c['ovr'])) if c.get('ovr') else ''), (round(float(v['ovr'])) if v.get('ovr') else ''),
                      (round(float(v['pot_lo'])) if v.get('pot_lo') else ''), (round(float(v['pot_hi'])) if v.get('pot_hi') else ''),
-                     (round(float(v.get('cert', 0) or 0), 2) if v else ''), ' '.join(v.get('flags', []) or [])]
+                     (round(float(v.get('cert', 0) or 0), 2) if v else ''), ' '.join(visible_flags)]
                     + [round(float(p.ratings.get(k, 0))) for k in attrs])
     def cell(x):
         x = '' if x is None else str(x)

@@ -1055,7 +1055,7 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
     retention_market = None
     budget_before = {}
     out = []
-    for p in sorted([q for q in pool if q.ovr >= REPLACEMENT_GRADE and q.pos not in ('K', 'P', 'LS')], key=lambda q: -q.ovr):
+    for p in sorted([q for q in pool if q.ovr >= REPLACEMENT_GRADE], key=lambda q: -q.ovr):
         v = VAL.value_player(league, p, pool=comps, rng=rng)
         market = v['apy'] if v else 3.0
         price = round(max(market * 0.70, 1.5), 2)

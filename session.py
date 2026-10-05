@@ -1330,6 +1330,8 @@ class Session:
 
     def step_camp(self):
         L, rng = self.L, self.rng
+        import veteran_market as VM
+        VM.review(L, rng, 'camp', user_team=self.user_team)
         PSQ.udfa_camp(L, rng)
         MK.fill_out_rosters(L, [p for p in MK._pool(L) if p.team is None], rng)
         NG.build(L, rng, draft_year=L.year + 1); SC.scout(L, rng)
@@ -1359,6 +1361,8 @@ class Session:
         opening = list(WV.pending(L))
         CD.finalize(L, rng)
         WV.process(L, rng, 0, entries=opening)
+        import veteran_market as VM
+        VM.review(L, rng, 'wire', user_team=self.user_team)
         CD.finalize(L, rng)
         problems = CD.violations(L)
         if problems:

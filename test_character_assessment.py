@@ -213,6 +213,20 @@ class CharacterAssessmentTests(unittest.TestCase):
         self.assertNotIn('follows the money', str(card))
         self.assertNotIn('wants the ball', str(card))
 
+    def test_prospect_card_hides_tentative_and_legacy_badges(self):
+        import views_draft as VD
+        league, p, view = self.setup_player()
+        league.draft_pool = [p]; league.consensus = {p.pid: dict(ovr=75, rank=30)}
+        p.age = 22; p.team = None
+        view.update(flags=['character', 'discipline'], character_read=10)
+        CA.film(p, 'GB', view)
+        session = N(user_team='GB', draft=None, stop=('week', 1))
+        with patch.object(VD, 'rail', return_value={}):
+            card = VD.prospect_card(session, league, 'GB', p.pid)
+        self.assertNotIn('Work ethic concern', card['words'])
+        self.assertNotIn('Discipline concern', card['words'])
+        self.assertEqual(len(card['character_report']), 2)
+
     def test_practice_work_ethic_and_dev_have_independent_bounded_effects(self):
         import practice as P
         import xp

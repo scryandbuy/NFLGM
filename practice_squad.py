@@ -843,6 +843,8 @@ def weekly(league, rng, week, user_team=None, playoffs=None):
     if user_team is None: user_team = getattr(league, 'user_team', None)
     if playoffs is None: playoffs = league.phase == 'playoffs'
     moves = keep_groups_whole(league, rng, week)
+    import veteran_market as VM
+    moves += VM.review(league, rng, 'weekly', week=week, user_team=user_team)
     moves += roster_review(league, rng, week, user_team=user_team)
     for abbr, team in league.teams.items():
         clear_elevations(team)

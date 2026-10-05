@@ -100,6 +100,7 @@ class MarketCloseBonusTests(unittest.TestCase):
 
         game = session.Session.__new__(session.Session)
         game.L = league
+        game.user_team = league.user_team
         game.rng = np.random.default_rng(3)
         with patch.object(session.PSQ, 'udfa_camp', side_effect=sign_rookie), \
              patch.object(session.NG, 'build'), \
