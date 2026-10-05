@@ -1081,6 +1081,11 @@ def _onside_call(clock, need, my_tos, coach, rng):
     return v_onside > v_deep
 
 
+def _has_two_minute_warning(dr):
+    """OT retains quarter=5; its effective period controls warning timing."""
+    return getattr(dr, 'clock_period', getattr(dr, 'quarter', 4)) in (2, 4)
+
+
 def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None, plan=None, dcoach=None):
     """Who spends a timeout after this play, if anyone. The trailing side spends them to get the ball back; the
     driving side to keep the clock alive. Neither wastes one early. Returns (used, used_by).
@@ -1107,7 +1112,7 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
     if out.get('fumble_lost') or t == 'interception': return False, None
     # Only live action can make the warning stop this play for free. A huddle
     # that would reach 2:00 is time a trailing team can still save now.
-    _at_warning = secs_in_half > 120 and secs_in_half - live_play_seconds(out) <= 120 and not getattr(dr, '_two_min', False)
+    _at_warning = _has_two_minute_warning(dr) and secs_in_half > 120 and secs_in_half - live_play_seconds(out) <= 120 and not getattr(dr, '_two_min', False)
     if timeouts is not None and secs_in_half < 300 and not _scored_now and not _at_warning:
         other = 'away' if pos == 'home' else 'home'
         # nothing to stop after a score (the clock is dead at the whistle) or on the play that reaches the
@@ -1203,20 +1208,20 @@ def _tick(dr, secs):
     dr.clock = float(np.ceil(dr.clock - 1e-9))                          # whole seconds
 
 
-def _kneel_interval(seconds, down, opponent_timeouts):
+def _kneel_interval(seconds, down, opponent_timeouts, *, warning_pending=True):
     """Live knee takes two seconds; only a retained possession can run clock.
 
     Return remaining seconds, whether the defense uses a timeout, and whether
     the two-minute warning stops this interval. Shared by planning/execution.
     """
     live_end = max(0.0, seconds - 2.0)
-    warning = seconds > 120 >= live_end
+    warning = warning_pending and seconds > 120 >= live_end
     if live_end == 0 or down >= 4 or warning:
         return live_end, False, warning
     if opponent_timeouts > 0:
         return live_end, True, False
     end = max(0.0, live_end - 40.0)
-    if live_end > 120 >= end:
+    if warning_pending and live_end > 120 >= end:
         return 120.0, False, True
     return end, False, False
 
@@ -1230,7 +1235,8 @@ def _can_kneel_out(dr, seconds, opponent_timeouts):
         yardline += 1
         if yardline >= 100:
             return False
-        seconds, used, _ = _kneel_interval(seconds, down, opponent_timeouts)
+        seconds, used, _ = _kneel_interval(seconds, down, opponent_timeouts,
+            warning_pending=_has_two_minute_warning(dr) and not getattr(dr, '_two_min', False))
         opponent_timeouts -= int(used)
         if seconds <= 0:
             return True
@@ -1241,7 +1247,7 @@ def _injury_timeout(dr, injuries, out, timeouts, pos, half_end, live_end,
                     off_state=None, def_state=None, foul=False):
     """Administer post-warning injury timeouts after down/spot enforcement."""
     wall = half_end if half_end is not None else 0.
-    if (not injuries or timeouts is None or getattr(dr, 'clock_period', dr.quarter) not in (2, 4)
+    if (not injuries or timeouts is None or not _has_two_minute_warning(dr)
             or not getattr(dr, '_two_min', False) or live_end <= wall
             or dr.result in ('Touchdown', 'Safety', 'Turnover on downs')
             or out.get('fumble_lost') or out.get('type') == 'interception'):
@@ -1303,7 +1309,7 @@ def _delay_clock_expired(dr, half_end=None):
     wall = half_end if half_end is not None else 0.
     boundaries = [edge for edge in (2700., 1800., 900., 0.) if wall <= edge < start]
     warning = wall + 120.
-    if dr.quarter in (2, 4) and not getattr(dr, '_two_min', False) and warning < start:
+    if _has_two_minute_warning(dr) and not getattr(dr, '_two_min', False) and warning <= start:
         boundaries.append(warning)
     boundary = max(boundaries, default=wall)
     if start - remaining <= boundary:
@@ -1348,14 +1354,14 @@ def _penalty_ready_clock(dr, pen, half_end=None, *, before_snap=False,
         catchup=comeback_pace(secs, dr.score_diff, dr.quarter,
             yardline=dr.yardline, timeouts=getattr(dr, '_own_timeouts', 3), tempo=tempo)) - 6.0))
     # A warning interrupts ready-for-play runoff, but never erases live action.
-    if not getattr(dr, '_two_min', False) and secs > 120:
+    if _has_two_minute_warning(dr) and not getattr(dr, '_two_min', False) and secs > 120:
         ready = min(ready, secs - 120.0)
     _tick(dr, ready)
     dr.clock = max(wall, dr.clock)
     pen['ready_seconds'] = start - dr.clock
     dr.runoff_charged = start - dr.clock
     boundary = any(start > edge >= dr.clock for edge in (2700.0, 1800.0, 900.0, 0.0))
-    warning = secs > 120 and dr.clock - wall <= 120
+    warning = _has_two_minute_warning(dr) and not getattr(dr, '_two_min', False) and secs > 120 and dr.clock - wall <= 120
     dr.clock_running = not boundary and not warning
 
 
@@ -2196,7 +2202,7 @@ def _kick_presnap_flag(dr, pen, half_end=None, book=None):
     PP.decision(pen, True); PP.book_flag(book, pen)
     dr.log.append(dict(type='penalty', timing='before_snap', clock=clock_before, **pen))
     wall = half_end if half_end is not None else 0.0
-    if clock_before - wall > 120 >= dr.clock - wall and not getattr(dr, '_two_min', False):
+    if _has_two_minute_warning(dr) and clock_before - wall > 120 >= dr.clock - wall and not getattr(dr, '_two_min', False):
         dr._two_min = True
         dr.log.append(dict(type='two_minute', clock=dr.clock))
     return True
@@ -2599,7 +2605,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     # OT keeps quarter=5 for game identity, while its timing follows the
     # effective period. OT clocks count down to zero, even in the second OT.
     warning_wall = half_end if half_end is not None else (HALF if quarter == 2 else 0)
-    if dr.clock_period in (2, 4) and clock - warning_wall <= 120:
+    if _has_two_minute_warning(dr) and clock - warning_wall <= 120:
         dr._two_min = True
     if start_state is not None:
         dr.down, dr.togo = start_state
@@ -2608,8 +2614,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     ko = LAST_KICKOFF.pop('r', None)
     if ko is not None and abs(float(ko.get('new_yardline', -1)) - float(start_yardline)) < 0.5:
         dr.log.append(dict(ko, type='kickoff', carrier=ko.get('returner'), clock=ko.get('clock', clock)))
-        wall = HALF if quarter == 2 else 0 if quarter == 4 else None
-        if wall is not None and float(ko.get('clock', clock)) > wall + 120 >= clock:
+        wall = warning_wall
+        if _has_two_minute_warning(dr) and float(ko.get('clock', clock)) > wall + 120 >= clock:
             dr._two_min = True
             dr.log.append(dict(type='two_minute', clock=clock))
         if ko.get('touchdown'):
@@ -2707,7 +2713,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dr.log.append(out)
             if book is not None:
                 book.record(out, off_f, def_f, rng)
-            remaining, stopped, warning = _kneel_interval(secs_left_half, dr.down, opp_tos)
+            remaining, stopped, warning = _kneel_interval(secs_left_half, dr.down, opp_tos,
+                warning_pending=_has_two_minute_warning(dr) and not getattr(dr, '_two_min', False))
             dr.plays += 1
             _advance(dr, -1)
             dr.clock = wall + remaining
@@ -3127,7 +3134,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                         dr.down, dr.togo = 1, min(10, dr.yardline); dr.first_downs += 1
             PP.decision(pen, True); PP.book_flag(book, pen)
             dr.log.append(dict(type='penalty', timing='before_snap', clock=penalty_clock, **pen))
-            if penalty_clock - wall > 120 >= dr.clock - wall and not getattr(dr, '_two_min', False):
+            if _has_two_minute_warning(dr) and penalty_clock - wall > 120 >= dr.clock - wall and not getattr(dr, '_two_min', False):
                 dr._two_min = True
                 dr.log.append(dict(type='two_minute', clock=dr.clock))
             continue
@@ -3245,7 +3252,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     if inj_: dr.log.append(dict(type='injury', pid=d.get('pid'), pos=def_pos.get(d.get('pid'), 'CB'), kind=inj_.get('kind'), weeks=inj_.get('weeks_out'), side='def', clock=dr.clock))
 
         snap_injuries = [i for i in dr.log[injury_log_start:] if i.get('type') == 'injury']
-        late_injury = bool(snap_injuries and dr.clock_period in (2, 4) and getattr(dr, '_two_min', False))
+        late_injury = bool(snap_injuries and _has_two_minute_warning(dr) and getattr(dr, '_two_min', False))
         t = out['type']
         if live_pen is None:
             live_pen = E.penalty_check(rng, timing='live', outcome=out, **penalty_context)
@@ -3309,7 +3316,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     _injury_timeout(dr, snap_injuries, out, timeouts, pos, half_end,
                         max(wall, live_start - live_seconds), off_state, def_state, foul=True)
                 after_p = (dr.clock - half_end) if half_end is not None else dr.clock
-                if secs_in_half_p > 120 >= after_p and not getattr(dr, '_two_min', False):
+                if _has_two_minute_warning(dr) and secs_in_half_p > 120 >= after_p and not getattr(dr, '_two_min', False):
                     dr._two_min = True
                     dr.log.append(dict(type='two_minute', clock=dr.clock))
                 # Grounding spends the down even though its throwaway is
@@ -3420,7 +3427,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         after_clock = dr.clock - half_end if half_end is not None else dr.clock
         if used and used_by:
             dr.log.append(dict(type='timeout', side=used_by, side_abbr=(getattr(off_state if used_by == pos else def_state, 'abbr', None) or used_by.upper()), left=timeouts.left.get(used_by, 0), clock=dr.clock))
-        if before_clock > 120 >= after_clock and not getattr(dr, '_two_min', False):
+        if _has_two_minute_warning(dr) and before_clock > 120 >= after_clock and not getattr(dr, '_two_min', False):
             # Stop between plays at 2:00, or after the live play if it crosses
             # 2:00 itself. Never charge the subsequent huddle past the warning.
             if not added_penalty:
