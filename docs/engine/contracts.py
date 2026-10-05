@@ -121,6 +121,25 @@ def roster_reserve(team, cap, roster_target=53):
     return max(0, roster_target - len(team.active())) * MS.minimum_salary(2, cap) * remaining * 1.05
 
 
+def funded_release_value(need, saved, replacement_cost, lineup_cost, dead, contract_focus=0.5):
+    """Value a cap release against the *remaining funded roster*, not gross cash.
+
+    A cut that frees $40m when the club needs $7m to field 53 players has not
+    solved six times as much of the immediate problem as a $16m cut. The
+    remainder still has some value for later signings and injuries, especially
+    to a cap-conscious GM, but cannot by itself justify losing a much better
+    starter. The caller prices the player's role, contract control, and dead
+    money separately; this function only prices useful funding.
+    """
+    net = max(0.0, saved - replacement_cost)
+    funded = min(max(0.0, need), net)
+    future = max(0.0, net - funded)
+    focus = float(np.clip(contract_focus, 0.0, 1.0))
+    flexibility = (0.05 + 0.12 * focus) * future
+    squeeze = float(np.clip(1.0 - need / 60.0, 0.3, 1.0))
+    return funded + flexibility - lineup_cost * squeeze - dead * 0.35
+
+
 def enforce(league, rng, verbose=False, target=0.5, roster_target=None):
     """
     roster_target: when given, a club must end with enough room to sign every
@@ -276,7 +295,9 @@ def _fix_one(league, team, rng, target, roster_target=None):
                 continue
             cost = release_cost(p)
             if cost is None: continue
-            value = saved - replacement_cost - cost * squeeze - dead * 0.35
+            value = funded_release_value(
+                need, saved, replacement_cost, cost, dead,
+                getattr(team.gm, 'contract_focus', 0.5) if team.gm else 0.5)
             if rel is None or value > rel[0]:
                 rel = (value, p, saved)
         # --- choose. A restructure that covers the need wins; otherwise the

@@ -26,6 +26,30 @@ class ProtectionPressureTests(unittest.TestCase):
         return P.resolve_protection(self.blockers if blockers is None else blockers,
             plan['rushers'], np.random.default_rng(seed), assignments=plan['assignments'], **kwargs)
 
+    def test_matched_offball_blitzer_has_pickup_time_but_free_rush_is_unchanged(self):
+        rusher = dict(pid='blitzer', pos='MIKE', power_moves_rating=72,
+                      finesse_moves_rating=72, strength_rating=72,
+                      accel_rating=85, agility_rating=80, block_shed_rating=70,
+                      pursuit_rating=85, tackle_rating=80, speed_rating=85)
+        center = blocker('C', 75)
+        def rush(alignment, blockers):
+            assignment = [dict(player=rusher, role='MIKE', group='lb',
+                               alignment=alignment)]
+            return P.resolve_protection(blockers, [rusher], np.random.default_rng(14),
+                assignments=assignment)
+        matched = rush('offball_middle', [center])
+        edge = rush('left_edge', [center])
+        free = rush('offball_middle', [])
+        with patch.object(P, 'OFFBALL_PICKUP', 0.):
+            old_matched = rush('offball_middle', [center])
+            old_edge = rush('left_edge', [center])
+            old_free = rush('offball_middle', [])
+        self.assertGreater(matched['time'], old_matched['time'])
+        self.assertGreater(matched['pb_model']['means'][0],
+                           old_matched['pb_model']['means'][0])
+        self.assertEqual(edge, old_edge)  # a line-of-scrimmage rusher is not slowed
+        self.assertEqual(free, old_free)  # a genuinely free blitzer still wins fast
+
     def test_retained_helpers_change_actual_clock_pressure_sacks_and_winner(self):
         five = [self.resolve(seed=i) for i in range(800)]
         seven = [self.resolve(self.blockers + [blocker('TE'), blocker('HB')], seed=i,

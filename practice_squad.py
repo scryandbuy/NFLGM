@@ -74,8 +74,26 @@ def can_add(team, p, *, by_ai=False):
     return True
 
 
+def _recent_active_role(league, player):
+    """Public playing time from this season or the one just completed."""
+    career = getattr(player, 'career', None) or {}
+    for year in (league.year, league.year - 1):
+        line = career.get(year) or career.get(str(year)) or {}
+        if player.pos == 'K' and (line.get('fg_att', 0) >= 15
+                                  or line.get('xp_att', 0) >= 25):
+            return True
+        if player.pos == 'P' and line.get('punts', 0) >= 30:
+            return True
+        if player.pos not in ('K', 'P', 'LS') and (
+                line.get('snaps', 0) >= 400
+                or line.get('pass_att', 0) >= 150
+                or line.get('tgt', 0) >= 50):
+            return True
+    return False
+
+
 def squad_acceptance(league, player):
-    """A veteran with active-contract caliber waits for an active offer.
+    """A player with current active-contract caliber waits for an active offer.
 
     This is willingness, not eligibility or a promise that another club can
     afford him. It consumes no RNG and never removes an unsigned player.
@@ -83,16 +101,30 @@ def squad_acceptance(league, player):
     starter-caliber talent seeks an active deal regardless of accrued seasons.
     """
     from market import REPLACEMENT_GRADE
-    grade = float(player.ovr)
+    raw_grade = float(player.ovr)
+    grade = raw_grade
     if player.pos in ('K', 'P', 'LS'):
         # Specialist overall scales are higher than ordinary roster positions.
         import draft as DFT
         grade = DFT.common_scale(grade, player.pos, DFT.position_scale(league))
+    # A specialist's position-normalized grade is useful for comparing squad
+    # candidates, but loses the evidence that a recent active kicker or punter
+    # can still seek a 53-man job. Field players need both a credible current
+    # grade and substantial recent playing time; an old productive season or
+    # emergency snaps at a now-marginal grade do not close the squad path.
+    recent_role = _recent_active_role(league, player)
+    active_caliber_specialist = (player.pos in ('K', 'P') and
+                                 (raw_grade >= 90.0 or
+                                  raw_grade >= 86.0 and recent_role))
+    active_caliber_field = (player.pos not in ('K', 'P', 'LS') and
+                            raw_grade >= 75.0 and recent_role)
     if is_young(player):
-        accepts = grade < 85.0
+        accepts = (grade < 85.0 and not active_caliber_specialist
+                   and not active_caliber_field)
         return dict(accepts=accepts, reason='development_opportunity' if accepts
                     else 'seeking_active_contract', market_grade=round(grade, 3))
-    accepts = grade < REPLACEMENT_GRADE
+    accepts = (grade < REPLACEMENT_GRADE and not active_caliber_specialist
+               and not active_caliber_field)
     return dict(accepts=accepts, reason='practice_opportunity' if accepts
                 else 'seeking_active_contract', market_grade=round(grade, 3))
 

@@ -12,6 +12,7 @@ from cap_engine import CAP, Contract
 from league import Team
 from test_cap_accounting import fixture, player
 from test_draft_planning import fixture as roster_fixture
+from test_draft_planning import set_grade
 from session import Session
 
 
@@ -50,6 +51,75 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn(p, t.roster)
         self.assertEqual(p.contract.years, years)
         self.assertGreaterEqual(t.cap_space+.0005, CT.roster_reserve(t, CAP.get(L.year,301.2)))
+
+    def short_cap_roster(self):
+        """A 46-man club can fund its last seven spots with one surplus cut."""
+        L,t=self.roster()
+        for pos in ('CB','WR','DT','HB','TE','SS','SAM'):
+            t.roster.remove(t.by_pos(pos)[-1])
+        for p in t.active(): p.contract=Contract(1,[1.0])
+        qb=t.by_pos('QB')[0]; reserve_qb=t.by_pos('QB')[1]
+        lt=t.by_pos('LT')[-1]
+        set_grade(qb, 91); set_grade(reserve_qb, 67)
+        set_grade(t.by_pos('LT')[0], 87); set_grade(lt, 78)
+        qb.contract=Contract(1,[42.48])
+        lt.contract=Contract(1,[16.963])
+        t.sync_cap(); t.cap.cap=t.cap.charges(t.phase)+1.104
+        self.assertEqual(len(t.active()),46)
+        return L,t,qb,lt
+
+    def test_final_funding_cuts_redundant_tackle_before_starting_qb(self):
+        L,t,qb,lt=self.short_cap_roster()
+        before=RN.assess(t)['score']
+        self.assertLess(RN.assess(t,[p for p in t.active() if p is not qb])['score'],before-15)
+        self.assertAlmostEqual(RN.assess(t,[p for p in t.active() if p is not lt])['score'],before)
+        with patch('trades.shop_cap_casualty',return_value=False):
+            CT._fix_one(L,t,self.rng(),0,roster_target=53)
+        self.assertIn(qb,t.active())
+        self.assertNotIn(lt,t.active())
+        self.assertGreaterEqual(t.cap_space+.0005,CT.roster_reserve(t,CAP.get(L.year,301.2)))
+
+    def test_injured_backup_makes_starting_qb_more_important(self):
+        L,t,qb,lt=self.short_cap_roster()
+        t.by_pos('QB')[-1].out_until=8
+        with patch('trades.shop_cap_casualty',return_value=False):
+            CT._fix_one(L,t,self.rng(),0,roster_target=53)
+        self.assertIn(qb,t.active())
+        self.assertNotIn(lt,t.active())
+
+    def test_credible_successor_allows_expensive_qb_release(self):
+        L,t,qb,lt=self.short_cap_roster()
+        qb.age=36
+        set_grade(t.by_pos('QB')[-1],95)
+        set_grade(t.by_pos('LT')[0],75)
+        set_grade(lt,95)
+        t.gm.contract_focus=1.0
+        with patch('trades.shop_cap_casualty',return_value=False):
+            CT._fix_one(L,t,self.rng(),0,roster_target=53)
+        self.assertNotIn(qb,t.active())
+        self.assertIn(lt,t.active())
+        self.assertGreaterEqual(t.cap_space+.0005,CT.roster_reserve(t,CAP.get(L.year,301.2)))
+
+    def test_cap_focus_changes_marginal_release_choice(self):
+        low_small=CT.funded_release_value(7,17,1,0,0,contract_focus=.1)
+        low_large=CT.funded_release_value(7,42,1,3,0,contract_focus=.1)
+        high_small=CT.funded_release_value(7,17,1,0,0,contract_focus=1.)
+        high_large=CT.funded_release_value(7,42,1,3,0,contract_focus=1.)
+        self.assertGreater(low_small,low_large)
+        self.assertGreater(high_large,high_small)
+
+    def test_campbell_darrisaw_tackle_tradeoff_preserves_control(self):
+        L,t,qb,old_tackle=self.short_cap_roster()
+        young=t.by_pos('LT')[0]
+        young.age=25; young.accrued=2; young.contract=Contract(3,[1.1]*3)
+        old_tackle.age=32; set_grade(old_tackle,89)
+        # The veteran has a slight present-day edge, but the young tackle's
+        # cheap control and playable grade matter when funding the full club.
+        t.sync_cap(); t.cap.cap=t.cap.charges(t.phase)+1.104
+        with patch('trades.shop_cap_casualty',return_value=False):
+            CT._fix_one(L,t,self.rng(),0,roster_target=53)
+        self.assertIn(young,t.active())
+        self.assertNotIn(old_tackle,t.active())
 
     def test_restructure_quote_matches_five_year_proration_limit(self):
         L = fixture(); p = player(L, contract=Contract(7, [20]*7))

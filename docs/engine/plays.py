@@ -119,6 +119,10 @@ SCREEN_FREE_BLK = 8.0       # ...more behind good linemen, fewer behind bad
 # A retained helper buys time in his assigned matchup, scaled by blocking
 # ability. Extra helpers on that same matchup have diminishing value.
 PROTECTION_HELP = RM.HELP
+# An off-ball blitzer must close the gap before engaging a protection player.
+# That approach gives an assigned blocker a small setup advantage; an
+# unblocked rusher still reaches the quarterback through the free-run path.
+OFFBALL_PICKUP = .05
 
 def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=None,
                        protection='five', _defer_award=False):
@@ -137,12 +141,13 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
         assignments = [by_id[DRUSH.player_key(r)] for r in rushers]
     matched = DRUSH.protection_pairs(blockers, assignments)
     moves, attacks, threats = [], [], []
-    for r, b in zip(rushers, matched):
+    for i, (r, b) in enumerate(zip(rushers, matched)):
         pw = rate(r, PASS_RUSH['rusher']['power'])
         fn = rate(r, PASS_RUSH['rusher']['finesse'])
         move = 'power' if pw >= fn else 'finesse'
         moves.append(move); attacks.append(max(pw, fn))
-        threats.append(max(pw, fn) - rate(b, PASS_RUSH['blocker'][move]) if b else 1.0)
+        pickup = OFFBALL_PICKUP if assignments[i]['alignment'].startswith('offball_') else 0.
+        threats.append(max(pw, fn) - rate(b, PASS_RUSH['blocker'][move]) - pickup if b else 1.0)
     helpers = DRUSH.protection_helpers(blockers, assignments, matched, threats, protection)
     helper_reps = []
     wins = []
@@ -159,7 +164,8 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
         if b is None:                      # unblocked - a free runner
             model['free'].append(i)
             wins.append((0.6, move, r, None)); continue
-        dfn = rate(b, PASS_RUSH['blocker'][move])
+        pickup = OFFBALL_PICKUP if assignments[i]['alignment'].startswith('offball_') else 0.
+        dfn = rate(b, PASS_RUSH['blocker'][move]) + pickup
         chip_bonus = 0.
         if chip is not None and chip[1] == i:
             # The releasing helper can miss the contact. A failed chip still
@@ -181,7 +187,7 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
                          for j, h in enumerate(helpers[i]))
         mean = RM.arrival_mean(atk, dfn, RUSHER_BASE)
         model['means'][i] = mean * (1. + assistance)
-        reference_defense = BE.REFERENCE
+        reference_defense = BE.REFERENCE + pickup
         reference_defense += chip_bonus
         primary_mean = RM.arrival_mean(atk, reference_defense, RUSHER_BASE) * (1. + assistance)
         model['evaluations'].append((b.get('pid'), i, primary_mean, True))

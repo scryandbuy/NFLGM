@@ -52,21 +52,27 @@ class DevReviewTests(unittest.TestCase):
         self.assertEqual({p.pid:p.xp_spent for p in a.players.values()},
                          {pid:b.player(pid).xp_spent for pid in a.players})
 
-    def test_two_poor_seasons_required_and_demotion_resets_evidence(self):
+    def test_first_poor_season_and_consecutive_annual_demotions(self):
         l=league_fixture();rng=N(random=lambda:.9999);p=l.player('3')
         DR.run(l,{},rng)
-        self.assertEqual(p.dev,'superstar')
-        self.assertEqual(p.xp_spent['_dev_review'][-1]['chance_down'],0)
-        next_year(l);DR.run(l,{},rng)
         self.assertEqual(p.dev,'star')
+        self.assertGreater(p.xp_spent['_dev_review'][-1]['chance_down'],0)
+        self.assertEqual(p.xp_spent['_dev_review'][-1]['poor_seasons'],1)
+        self.assertEqual(p.xp_spent['_dev_review'][-1]['reason'],
+                         'Credible season below role expectations')
+        self.assertEqual(len([x for x in l.transactions if x['kind']=='dev_trait'
+                              and x['pid']==p.pid]),1)
+        next_year(l);DR.run(l,{},rng)
+        self.assertEqual(p.dev,'normal')
         record=p.xp_spent['_dev_review'][-1]
         self.assertGreater(record['chance_down'],0)
-        self.assertEqual(record['poor_seasons'],0)
+        self.assertEqual(record['poor_seasons'],2)
         self.assertIn('2 consecutive',record['reason'])
         next_year(l);DR.run(l,{},rng)
-        self.assertEqual(p.dev,'star')
+        self.assertEqual(p.dev,'normal')
+        self.assertEqual(p.xp_spent['_dev_review'][-1]['chance_down'],0)
 
-    def test_injury_small_sample_good_season_and_role_change_break_streak(self):
+    def test_injury_small_sample_good_season_and_role_change_protect_current_year(self):
         for alteration in ('injury','missing','role','good','proxy'):
             with self.subTest(alteration=alteration):
                 l=league_fixture();rng=N(random=lambda:.9999)
@@ -78,10 +84,27 @@ class DevReviewTests(unittest.TestCase):
                 elif alteration=='good':row['score']=99
                 elif alteration=='proxy':row['credible']=False
                 DR.run(l,{},rng)
-                self.assertEqual(l.player('3').dev,'superstar')
+                self.assertEqual(l.player('3').dev,'star')
+                self.assertEqual(l.player('3').xp_spent['_dev_review'][-1]['chance_down'],0)
                 next_year(l);l.stats[l.year]['3']=dict(score=0,confidence=1.,group='QB')
                 DR.run(l,{},rng)
-                self.assertEqual(l.player('3').dev,'superstar')
+                self.assertEqual(l.player('3').dev,'normal')
+
+    def test_single_poor_season_is_a_chance_not_an_automatic_demotion(self):
+        l=league_fixture();p=l.player('3')
+        DR.run(l,{},N(random=lambda:.5))
+        self.assertEqual(p.dev,'superstar')
+        chance=p.xp_spent['_dev_review'][-1]['chance_down']
+        self.assertGreater(chance,0)
+        self.assertLessEqual(chance,.4)
+
+    def test_legacy_demotion_reset_does_not_create_a_waiting_year(self):
+        l=league_fixture();p=l.player('3')
+        p.xp_spent['_dev_review']=[dict(year=l.year-1,group='QB',poor_seasons=0,
+                                      previous_dev='xfactor',dev='superstar')]
+        l=League.load(l.save())
+        DR.run(l,{},N(random=lambda:.9999))
+        self.assertEqual(l.player('3').dev,'star')
 
     def test_save_reload_repeated_call_and_evidence_bound(self):
         l=league_fixture();rng=np.random.default_rng(24)

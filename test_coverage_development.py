@@ -62,17 +62,17 @@ class CoverageDevelopmentTests(unittest.TestCase):
         self.assertTrue(all(r['credible'] for r in rows))
         for r in rows:self.assertEqual(r['score'],0.)
 
-    def test_two_seasons_then_save_reload_idempotence(self):
+    def test_annual_demotion_then_save_reload_idempotence(self):
         from league import League
         l=fixture()
         for i in range(6):add(l,str(i),'CB',line(cmp=25+i*10,air=200+i*100),ovr=70+i*4,dev='superstar')
         bad=l.player('5');rng=N(random=lambda:.999999)
-        DR.run(l,{},rng);self.assertEqual(bad.dev,'superstar')
+        DR.run(l,{},rng);self.assertEqual(bad.dev,'star')
         self.assertEqual(bad.xp_spent['_dev_review'][-1]['poor_seasons'],1)
         old=l.year;l.year+=1;l.stats[l.year]=copy.deepcopy(l.stats[old])
-        DR.run(l,{},rng);self.assertEqual(bad.dev,'star')
+        DR.run(l,{},rng);self.assertEqual(bad.dev,'normal')
         loaded=League.load(l.save());DR.run(loaded,{},rng)
-        self.assertEqual(loaded.player('5').dev,'star')
+        self.assertEqual(loaded.player('5').dev,'normal')
         self.assertEqual(len(loaded.player('5').xp_spent['_dev_review']),2)
 
     def test_legacy_evidence_never_starts_coverage_downgrade(self):

@@ -3016,6 +3016,12 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 if secs_in_half_p > 120 >= after_p and not getattr(dr, '_two_min', False):
                     dr._two_min = True
                     dr.log.append(dict(type='two_minute', clock=dr.clock))
+                # Grounding spends the down even though its throwaway is
+                # replaced by enforcement. On fourth down the accepted foul
+                # ends this possession; continuing would allow a fifth snap.
+                if dr.result is None and dr.down > 4:
+                    dr.result = 'End of half' if dr.clock <= wall else 'Turnover on downs'
+                    break
                 continue
             if taken == 'added':
                 penalty_entry = dict(type='penalty', **live_pen)

@@ -48,8 +48,8 @@ DEV = {'normal': 1.00, 'star': 1.55, 'superstar': 2.20, 'xfactor': 3.00}
 DEV_ORDER = ['normal', 'star', 'superstar', 'xfactor']
 DEV_P = [0.65, 0.22, 0.10, 0.03]
 
-# Annual performance and honors affect upgrades; sustained credible poor play
-# is required for demotion. The major-award reward remains guaranteed.
+# Annual performance and honors affect upgrades; credible poor play in the
+# current season can cause demotion. The major-award reward remains guaranteed.
 # Protector is one lineman out of 160 starters, rarer than a first-team slot
 # at a position, so it sits above All-Pro 1st and under the player-of-the-year
 # awards. Championship Game MVP is one game and usually lands on a man who already
@@ -64,16 +64,16 @@ AWARD_WEIGHT = {'mvp': 0.40, 'opoy': 0.30, 'dpoy': 0.30, 'protector': 0.25,
 # already at the top, where it instead locks the trait against demotion.
 GUARANTEED_UPGRADE = {'mvp', 'oroy', 'droy', 'opoy', 'dpoy'}
 
-# Retain the existing general probability scale. Demotions now additionally
-# require multi-season evidence; old annual churn targets no longer apply.
+# Retain the existing general probability scale. Each season is reassessed;
+# repeated poor play can increase the odds but is not required for demotion.
 TRAIT_SCALE = 0.6
 
 def trait_move_chances(dev, age, production, expected, awards=(), *,
                        poor_seasons=0, elite_seasons=0, confidence=1.0):
     """
     Returns (chance_up, chance_down) for this offseason.
-    Rising needs convincing performance or honours. Falling needs consecutive
-    credible poor seasons. Physical aging belongs to the separate regression.
+    Rising needs convincing performance or honours. Falling needs credible poor
+    play this season. Physical aging belongs to the separate regression.
     """
     over = production - expected
     tier = DEV_ORDER.index(dev)
@@ -96,13 +96,14 @@ def trait_move_chances(dev, age, production, expected, awards=(), *,
     up = float(np.clip(up * TRAIT_SCALE, 0.0, 0.55))
 
     # No random demotion for meeting expectations, playing well, age alone,
-    # a single bad year, an inconclusive sample, or a season with honours.
-    if (tier == 0 or poor_seasons < 2 or confidence < .75 or awards
+    # an inconclusive sample, or a season with honours. One credible poor year
+    # is enough, including the year immediately after a previous demotion.
+    if (tier == 0 or poor_seasons < 1 or confidence < .75 or awards
             or production >= .50 or over >= -.15):
         down = 0.0
     else:
         shortfall = max(0.0, -over - .15)
-        persistence = min(1.3, 1.0 + .15 * (poor_seasons - 2))
+        persistence = min(1.3, 1.0 + .15 * max(0, poor_seasons - 2))
         down = shortfall * 1.6 * (1.0 + .25*tier) * persistence * confidence
         down = float(np.clip(down * TRAIT_SCALE, 0.0, .40))
     return up, down

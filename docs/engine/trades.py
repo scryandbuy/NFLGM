@@ -570,6 +570,39 @@ def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache
         repair_cost = max(repair, lineup)
         if league.phase in ('offseason', 'free_agency', 'draft', 'camp'):
             repair_cost = min(4., repair_cost * .5)
+        # After other departures, losing the next relied-on starter can be
+        # much costlier than an offseason depth repair.  Price the lineup
+        # cliff against today's roster, so replacements already acquired
+        # reduce it and an adequate offer can always clear it.  The asset
+        # quote separately carries age, contract control and GM pick taste.
+        impact_rate = (.34 if window in ('contending', 'win_now') else
+                       .30 if window == 'middling' else .26)
+        impact_cost = max(0., loss - 8.) * impact_rate
+        if impact_cost and removed:
+            cap_limit = float(getattr(getattr(team, 'cap', None), 'limit',
+                                      getattr(TE, 'CAP', 300.)) or 300.)
+            for pid in removed:
+                player = league.player(pid)
+                contract = getattr(player, 'contract', None)
+                if (contract is not None and int(getattr(contract, 'years', 0) or 0) >= 2
+                        and float(getattr(player, 'ovr', 0.) or 0.) >= 80.
+                        and callable(getattr(player, 'cap_hit', None))
+                        and float(player.cap_hit()) <= .03 * cap_limit):
+                    # In a multi-player package, the score loss may belong to
+                    # somebody else.  Award control value only when this man
+                    # contributes materially to the lineup on his own.
+                    if len(removed) > 1:
+                        solo_key = ('solo_loss', team.abbr, pid)
+                        if solo_key not in cache:
+                            solo_roster = [p for p in old if p.pid != pid]
+                            cache[solo_key] = max(0., baseline['score'] -
+                                                  RN.assess(team, solo_roster, score_only=True))
+                        if cache[solo_key] <= 8.:
+                            continue
+                    impact_cost += 1.2
+                    break
+        impact_cost = min(8., impact_cost)
+        repair_cost = max(repair_cost, impact_cost)
         result['reserves'][team.abbr] = round(repair_cost + recent_cost, 2)
     cache[key] = result
     return result

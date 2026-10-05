@@ -1,7 +1,7 @@
 """One annual development review, before physical regression.
 
 Compare role-appropriate performance with peers, sharing ranks for ties.
-Only consecutive, credible poor seasons can cause a demotion. Small samples
+Each credible poor season can cause a demotion. Small samples
 are inconclusive; they must not masquerade as evidence of declining talent.
 """
 from player_age import review_age
@@ -65,7 +65,8 @@ def run(league, votes, rng, season=None, verbose=False):
         if PE.GUARANTEED_UPGRADE & honours:
             reason = 'Major season award: ' + ', '.join(a.upper() for a in sorted(PE.GUARANTEED_UPGRADE & honours))
         elif change == 'down':
-            reason = f'{poor_seasons} consecutive credible seasons below role expectations'
+            reason = ('Credible season below role expectations' if poor_seasons == 1 else
+                      f'{poor_seasons} consecutive credible seasons below role expectations')
         elif honours:
             reason = 'Season honors: ' + ', '.join(a.replace('_', ' ').upper() for a in sorted(honours))
         elif change == 'up':
@@ -77,7 +78,7 @@ def run(league, votes, rng, season=None, verbose=False):
         else:
             reason = 'Performance does not justify a downgrade'
         record = dict(year=year, group=group, production=round(pr,4), expected=round(ex,4),
-                      confidence=round(confidence,4), poor_seasons=0 if change=='down' else poor_seasons,
+                      confidence=round(confidence,4), poor_seasons=poor_seasons,
                       elite_seasons=elite_seasons, previous_dev=before, dev=p.dev,
                       chance_up=round(c_up,6), chance_down=round(c_down,6),
                       awards=sorted(honours), reason=reason)
