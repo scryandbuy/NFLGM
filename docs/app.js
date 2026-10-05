@@ -2638,8 +2638,6 @@ function renderBoard(v) {
   const chosen = v.rows.find(r => r.pid === focus.prospect_pid);
   focusBox.append(el('div', { class: 'pad', style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
     el('span', { class: 'count' }, 'CURRENT FOCUS'), el('b', {}, [focus.group1, focus.group2].filter(Boolean).join(' + ') || 'Awaiting scout decision'),
-    el('span', { class: 'count' }, `PLAYER DEEP DIVE: ${chosen ? chosen.name : 'Scout selection'}`),
-    el('button', { class: 'btn', 'data-tip': 'Select a prospect in the class table first', onclick: () => { if (!boardSel) return; const res = pyJSON(`SESSION.draft_act('scouting_focus', pid=${JSON.stringify(boardSel)})`); if (!res.ok) notify(res); reload(); } }, 'Focus Selected Prospect'),
     el('span', { class: 'count', style: 'margin-left:auto' }, focus.next_report_week ? `Next report: Week ${focus.next_report_week}` : 'Reports resume next season')));
   if (v.background_coverage) {
     const bg = v.background_coverage;
@@ -2647,27 +2645,30 @@ function renderBoard(v) {
       `Background notes: ${bg.assessed} of ${bg.total} prospects. These are tentative assessments, not complete evaluations.`));
   }
   if (updates.length) {
-    const latestWeek = Math.max(...updates.map(r => Number(r.week) || 0));
-    const importance = { Prospect: 0, 'Position Group': 1, Baseline: 2 };
-    const latest = updates.filter(r => Number(r.week) === latestWeek).sort((a, b) =>
-      (importance[a.focus] ?? 3) - (importance[b.focus] ?? 3) ||
-      Math.abs((b.after?.ovr || 0) - (b.before?.ovr || 0)) - Math.abs((a.after?.ovr || 0) - (a.before?.ovr || 0)));
-    const report = el('div', { class: 'pad', style: 'border-top:1px solid var(--rule-2)' }, el('b', {}, `SCOUTING UPDATE / WEEK ${latestWeek}`));
-    const rows = el('div', {});
-    let expanded = false;
-    const toggle = el('button', { class: 'btn quiet', style: 'margin-top:8px', onclick: () => { expanded = !expanded; drawUpdates(); } });
-    const drawUpdates = () => {
-      rows.innerHTML = '';
-      for (const row of (expanded ? latest : latest.slice(0, 4))) rows.append(el('div', { style: 'padding:7px 0;border-bottom:1px solid var(--rule-2)' },
-        el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + row.pid; } }, row.name),
-        ` / ${row.pos} / ${row.focus} / Estimated overall ${Math.round(row.before.ovr)} to ${Math.round(row.after.ovr)}`,
-        row.character?.length ? ` / ${row.character.filter(c => c.status !== 'neutral').map(c => c.summary + ' (' + c.confidence + ' confidence)').join('; ') || 'background checked'}` : ''));
-      toggle.textContent = expanded ? 'Show fewer updates' : `Show all ${latest.length} updates`;
-    };
-    drawUpdates();
-    report.append(rows);
-    if (latest.length > 4) report.append(toggle);
-    focusBox.append(report);
+    const weeks = [...new Set(updates.map(r => Number(r.week)))].sort((a,b)=>b-a);
+    focusBox.append(el('div', {class:'pad'}, el('button', {class:'btn go', onclick:()=> {
+      const dialog=el('dialog',{class:'retain-dialog trade-dialog',style:'margin:auto;width:min(720px,94vw);background:var(--sheet,#101b20);color:var(--ink,#edf1f6)'});
+      const close=el('button',{class:'btn',onclick:()=>dialog.close()},'Close');
+      const picker=el('select',{'aria-label':'Scouting report week'},...weeks.map((w,i)=>el('option',{value:w},`Week ${w}${i===0?' · Latest':''}`)));
+      const rows=el('div',{style:'max-height:55vh;overflow-y:auto','aria-live':'polite'});
+      const draw=()=> {
+        rows.replaceChildren();
+        const order={Prospect:0,'Position Group':1,Baseline:2};
+        for(const r of updates.filter(r=>Number(r.week)===Number(picker.value)).sort((a,b)=>(order[a.focus]??3)-(order[b.focus]??3))) {
+          const name=el('button',{class:'who',onclick:()=>{dialog.close();location.hash='#club/player/'+r.pid;}},r.name);
+          const label={Prospect:'Individual Focus','Position Group':'Position Focus',Baseline:'General Scouting'}[r.focus]||r.focus;
+          rows.append(el('div',{style:'padding:14px 0;border-bottom:1px solid var(--rule-2)'},
+            el('div',{style:'display:flex;justify-content:space-between;gap:16px'},name,el('b',{},`${Math.round(r.before.ovr)} → ${Math.round(r.after.ovr)}`)),
+            el('div',{class:'count'},`${r.pos} · ${label}`),
+            ...((r.character||[]).filter(c=>c.status!=='neutral').map(c=>el('div',{},`${c.summary} · ${c.confidence} confidence`)))));
+        }
+        rows.scrollTop=0;
+      };
+      picker.onchange=draw;draw();
+      dialog.append(el('div',{class:'retain-dialog-body'},el('h2',{},'Scouting Update'),
+        el('div',{style:'display:flex;align-items:center;justify-content:space-between;margin:16px 0'},picker,el('span',{class:'count'},'Estimated overall')),rows),el('div',{class:'retain-dialog-actions'},close));
+      dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();close.focus();
+    }},`Scouting Update · Week ${weeks[0]}`)));
   } else focusBox.append(el('div', { class: 'pad count' }, 'Your first cross-check arrives after Week 2. Your scout continues working without weekly input.'));
   page.append(focusBox);
   const s = el('section', { class: 'sheet c12 draft-surface draft-board' });

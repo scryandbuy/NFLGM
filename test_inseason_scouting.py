@@ -60,6 +60,15 @@ class InseasonScoutingTests(unittest.TestCase):
         self.assertNotEqual(chosen['prospect_pid'], specialist.pid)
         self.assertNotIn('Specialists', (chosen['group1'], chosen['group2']))
 
+    def test_individual_selection_uses_saved_reads_and_is_stable(self):
+        L, _ = setup()
+        first = IS._defaults(L, 'MIN', IS._pool(L))['prospect_pid']
+        for p in L.next_class:
+            p.potential = 99
+            p.ratings = {k: 99 for k in p.ratings}
+        self.assertEqual(first, IS._defaults(L, 'MIN', IS._pool(L))['prospect_pid'])
+        self.assertNotIn(next(p.pos for p in L.next_class if p.pid == first), ('K','P','LS'))
+
     def test_selection_and_reading_are_read_only_except_saved_priorities(self):
         L, _ = setup()
         before = copy.deepcopy(L.to_dict())
@@ -271,10 +280,10 @@ class InseasonScoutingTests(unittest.TestCase):
         self.assertEqual(set(coverage), {p.pos for p in L.next_class})
         self.assertEqual(sum(coverage.values()), len(coverage))
         with patch.object(SC, 'scout_q', return_value=1.):
-            IS.cross_checks(strong, 2)
+            strong_rows = IS.cross_checks(strong, 2)['MIN']
         self.assertEqual(strong.scouting_season['clubs']['MIN']['baseline_positions'], coverage)
         for row in weak_rows:
-            if row['focus'] != 'Baseline': continue
+            if row['focus'] != 'Baseline' or not any(r['pid'] == row['pid'] and r['focus'] == 'Baseline' for r in strong_rows): continue
             pid = row['pid']
             weak_gain = SC.certainty(L.scouting['MIN'][pid]) - SC.certainty(before[pid])
             strong_gain = SC.certainty(strong.scouting['MIN'][pid]) - SC.certainty(before[pid])

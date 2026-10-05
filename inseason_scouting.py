@@ -103,11 +103,23 @@ def _defaults(league, abbr, pool):
         if not any(s['group'] == g for s in suggestions):
             suggestions.append(dict(group=g, why='No scouted prospects available in this group yet.'))
     group1, group2 = [s['group'] for s in suggestions]
-    candidates = [p for p in choices if p.pos in GROUPS[group1]]
+    candidates = [p for p in choices if p.pos not in GROUPS['Specialists']]
+    quality = SC.scout_q(league.teams[abbr])
+    cycle = (max(1, int(getattr(league, 'week', 1))) - 1) // 2
     def target_key(p):
+        view = mine[p.pid]
         rank = cons.get(p.pid, {}).get('rank') or 999
-        distance = min((abs(rank - slot) + 4 * (rd - 1) for slot, rd in windows), default=abs(rank - 240))
-        return (distance, -float(mine[p.pid].get('ovr', 0)), p.pid)
+        distance = min((abs(rank-slot) for slot, rd in windows), default=abs(rank-240))
+        need = float(positions.get(p.pos, {}).get('need', 0))
+        overall = float(view.get('ovr', 55))
+        ceiling = (float(view.get('pot_lo', overall)) + float(view.get('pot_hi', overall))) / 2
+        # Saved estimates only. Better scouts make less noisy judgments;
+        # local deterministic variation cannot be rerolled by reopening the UI.
+        noise = np.random.default_rng(stable_seed(('scout-target', abbr, league.year, cycle, p.pid))).uniform(-1, 1)
+        score = need * 3 + .65 * (overall-55) + .35 * (ceiling-55)
+        score -= min(20, distance * .12)
+        score += noise * (1-quality) * 18
+        return (-score, p.pid)
     prospect = min(candidates, key=target_key) if candidates else None
     return dict(group1=group1, group2=group2, prospect_pid=prospect.pid if prospect else None,
                 suggestions=suggestions)

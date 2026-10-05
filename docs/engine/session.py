@@ -448,6 +448,13 @@ class Session:
         focus = ISS.priorities(self.L, self.user_team)
         suggestions = (focus.get('suggestions') or [])[:2]
         lines = [f"{item['group']}: {item.get('why') or 'worth another look'}" for item in suggestions]
+        target = next((p for p in ISS._pool(self.L) if p.pid == focus['prospect_pid']), None)
+        if target is not None:
+            view = self.L.scouting.get(self.user_team, {}).get(target.pid, {})
+            lines.append(f"Individual focus: {target.name} · {target.pos}. "
+                         f"Estimated overall {round(view.get('ovr', 0))}; ceiling "
+                         f"{round(view.get('pot_lo', 0))}–{round(view.get('pot_hi', 0))}.")
+
         previous = [r for r in ISS.reports(self.L, self.user_team) if r.get('week') == week - 1]
         if previous:
             movers = sorted(previous, key=lambda r: abs(r['after']['ovr'] - r['before']['ovr']), reverse=True)
@@ -1751,8 +1758,9 @@ class Session:
         if self.stop[0] != 'week' or self.stop[1] != week:
             return dict(ok=False, why='This scouting window has passed.')
         try:
+            target = ISS._defaults(self.L, self.user_team, ISS._pool(self.L))['prospect_pid']
             focus = ISS.set_priorities(self.L, self.user_team, group1=group1, group2=group2,
-                                       use_scout=bool(use_scout))
+                                       use_scout=bool(use_scout), prospect_pid=target)
         except ValueError as exc:
             return dict(ok=False, why=str(exc))
         ISS.mark_decision_resolved(self.L, week)
