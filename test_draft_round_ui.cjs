@@ -21,7 +21,8 @@ function view(round) {
 }
 let page, latest=view(1), ok=true;
 const commands=[];
-const ctx={el,boardRound:null,offersCache:null,location:{hash:'#draft/day'},
+const ctx={el,boardRound:null,offersCache:null,draftRunning:null,location:{hash:'#draft/day'},
+  runDraftBatch(name,round){commands.push(name);assert.equal(round,1);ctx.boardRound=null;ctx.renderDraftDay(latest);},
   renderRail(){},drSecond(){},featureHero(){},notify(){},ord:()=> 'th',showAbbr:x=>x,
   teamTheme:()=>({base:club.color,accent:club.accent}),
   persPage:()=>page=el('main'),draftAvailableSources:new Map(),

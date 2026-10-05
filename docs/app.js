@@ -2831,6 +2831,81 @@ function draftAvailableView(v) {
   return {key, source, rows, top, label, note: note + ' This selector changes the list and manual Draft button; automatic picks use your saved priorities, then the GM’s scouting and roster assessment.', read};
 }
 
+let draftRunning = null;
+function draftPaint() {
+  return new Promise(resolve => {
+    let frame = null;
+    const timer = setTimeout(() => { if (frame !== null) cancelAnimationFrame(frame); resolve(); }, 200);
+    frame = requestAnimationFrame(() => { clearTimeout(timer); setTimeout(resolve, 0); });
+  });
+}
+async function completeDraftBatch({step, paint, progress, stopped, save}) {
+  let result = null, picks = 0, error = null, saveError = null, interrupted = false;
+  try {
+    while (true) {
+      await paint();
+      if (stopped()) { interrupted = true; break; }
+      result = step();
+      picks += result.picks || 0;
+      progress(picks, false);
+      if (result.complete || result.ok === false) break;
+    }
+  } catch (e) { error = e; }
+  finally {
+    progress(picks, true);
+    await paint();
+    try { await save(); } catch (e) { saveError = e; }
+  }
+  return {result, picks, error, saveError, interrupted};
+}
+function guardDraftRoute() {
+  if (!draftRunning) return false;
+  history.replaceState(null, '', draftRunning.hash);
+  return true;
+}
+async function runDraftBatch(mode, round) {
+  if (draftRunning) return;
+  const state = {hash:location.hash, stop:false};
+  draftRunning = state;
+  const status = el('p', {'aria-live':'polite'}, 'Preparing the next pick…');
+  const stop = el('button', {class:'btn', onclick:()=>{state.stop=true;stop.disabled=true;status.textContent='Stopping after this pick…';}}, 'Stop after this pick');
+  const overlay = el('div', {role:'dialog', 'aria-modal':'true', 'aria-label':'Draft simulation', style:'position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#0008'},
+    el('section', {class:'sheet', style:'padding:24px;max-width:420px'}, el('h2',{},'Draft in progress'), status, stop));
+  const locked = [...document.body.children].map(node=>[node,node.inert]);
+  locked.forEach(([node])=>{node.inert=true;});
+  document.body.append(overlay); stop.focus();
+  cancelAutosaveSchedule();
+  let outcome;
+  try {
+    outcome = await completeDraftBatch({
+      step:()=>{
+        // Mark dirty before entering Python, including a partially failed pick.
+        // No scheduled per-pick save; pagehide can still capture completed work.
+        autosaveQueued = true;
+        return pyJSON(`SESSION.draft_batch_step(${JSON.stringify(mode)}, round=${Number(round)})`);
+      },
+      paint:draftPaint,
+      progress:(picks,saving)=>{status.textContent=saving ? `Saving ${picks} completed pick${picks===1?'':'s'}…` : `${picks} pick${picks===1?'':'s'} completed…`; if(saving)stop.disabled=true;},
+      stopped:()=>state.stop,
+      save:()=>saveGame()
+    });
+  } finally {
+    overlay.remove(); locked.forEach(([node,inert])=>{node.inert=inert;}); draftRunning=null;
+  }
+  boardRound = null; offersCache = null;
+  if (outcome.saveError) {
+    autosaveQueued = true;
+    notify({ok:false,why:'The draft stopped, but saving failed. Your completed picks are still here. Use Save to retry. '+String(outcome.saveError)});
+  } else if (outcome.error) notify({ok:false,why:'The draft stopped and completed picks were saved. '+String(outcome.error)});
+  else if (outcome.interrupted) notify({ok:true,line:`Stopped after ${outcome.picks} picks. Your progress is saved.`});
+  else notify(outcome.result);
+  if (outcome.result?.done) location.hash='#draft/picks';
+  else renderDraftDay(pyJSON("SESSION.draft_view('draft_day')"));
+}
+if (typeof window !== 'undefined') window.addEventListener('beforeunload', event=>{
+  if (draftRunning) {event.preventDefault();event.returnValue='';}
+});
+
 function renderDraftDay(v) {
   renderRail(v.rail); const page = persPage(); drSecond('day');
   page.className = 'draft-page';
@@ -2841,7 +2916,7 @@ function renderDraftDay(v) {
     if (v.last) { s.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, `${v.last.year} Draft Results`, el('small', {}, `${v.last.rows.length} picks · ${v.last.trades} trades`))); const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Pick'), el('th', {}, 'Team'), el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Consensus'))); for (const r of v.last.rows) t.append(el('tr', { style: r.mine ? 'background:var(--sheet-2)' : '' }, el('td', {}, r.slot), el('td', {}, stripe(r.team.abbr, r.team.name)), el('td', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name), el('td', {}, r.pos), el('td', { class: 'n' }, r.cons_rank ?? '—'))); s.append(t); }
     page.append(s); return;
   }
-  const act = (name, extra) => { const r = pyJSON(`SESSION.draft_act(${JSON.stringify(name)}${extra ? ', ' + extra : ''})`); notify(r); if (r.done) { location.hash = '#draft/picks'; return; } if (r.ok !== false && ['sim_to_me', 'sim_round', 'sim_pick_one', 'pick'].includes(name)) boardRound = null; reload(); };
+  const act = (name, extra) => { if (draftRunning) return; if (['sim_to_me','sim_round','sim_draft'].includes(name)) return runDraftBatch(name,v.current.round); const r = pyJSON(`SESSION.draft_act(${JSON.stringify(name)}${extra ? ', ' + extra : ''})`); notify(r); if (r.done) { location.hash = '#draft/picks'; return; } if (r.ok !== false && ['sim_to_me', 'sim_round', 'sim_pick_one', 'pick'].includes(name)) boardRound = null; reload(); };
   const cur = v.current;
   const left = el('section', { class: 'sheet c8 draft-surface draft-clock' });
   // the clock
@@ -3998,6 +4073,9 @@ function refresh() {
 function bootHash() { if (location.hash && location.hash !== '#portal') history.replaceState(null, '', '#portal'); }
 
 async function advance() {
+  if (draftRunning) return;
+  const batch = pyJSON('dict(active=SESSION.draft is not None, round=SESSION.draft.current().round if SESSION.draft is not None and SESSION.draft.current() is not None else 0)');
+  if (batch?.active) return runDraftBatch('sim_draft', batch.round);
   syncGameplanState();
   if (gameplanUnsaved() || gameplanSaving) { location.hash = '#gameplan/week'; warnUnsavedGameplan(); return; }
   try { await advanceInner(); }
@@ -4137,7 +4215,7 @@ async function advanceInner() {
   };
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
-  window.addEventListener('hashchange', event => { if (guardGameplanRoute(event)) return; if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.inbox_view()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'salaries') renderSalaries(pyJSON(`SESSION.club_salaries(${JSON.stringify(abbr)})`)); else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/salaries') renderSalaries(pyJSON('SESSION.club_salaries()')); else if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'practice') renderPractice(pyJSON('SESSION.practice_view()')); else if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'salaries') renderSalaries(pyJSON(`SESSION.club_salaries(${JSON.stringify(abbr)})`)); else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
+  window.addEventListener('hashchange', event => { if (guardDraftRoute(event) || guardGameplanRoute(event)) return; if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.inbox_view()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'salaries') renderSalaries(pyJSON(`SESSION.club_salaries(${JSON.stringify(abbr)})`)); else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/salaries') renderSalaries(pyJSON('SESSION.club_salaries()')); else if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'practice') renderPractice(pyJSON('SESSION.practice_view()')); else if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'salaries') renderSalaries(pyJSON(`SESSION.club_salaries(${JSON.stringify(abbr)})`)); else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
     else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'retain') renderRetain(pyJSON(`SESSION.personnel('retain')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; tradeState.counter_id = null; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();
 

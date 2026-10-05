@@ -1652,6 +1652,45 @@ class Session:
         r = fn(self, self.L, self.user_team, **kw)
         return r if isinstance(r, dict) else dict(ok=bool(r))
 
+    def draft_batch_step(self, mode, round=None):
+        """One original draft decision, allowing the browser to paint between picks.
+
+        The caller owns the batch's starting round and final save. No live
+        simulation generator or temporary auto setting is left in a save.
+        """
+        D = self.draft
+        if mode not in ('sim_to_me', 'sim_round', 'sim_draft'):
+            return dict(ok=False, complete=True, why='unknown draft simulation')
+        if D is None:
+            return dict(ok=False, complete=True, why='no draft on')
+        if mode == 'sim_round' and round is None:
+            return dict(ok=False, complete=True, why='starting round is required')
+        if D.done:
+            self._draft_over()
+            return dict(ok=True, complete=True, done=True, picks=0, line='The draft is over.')
+        if mode != 'sim_draft' and (D.on_user() or
+                mode == 'sim_round' and D.current().round != int(round)):
+            return dict(ok=True, complete=True, picks=0,
+                        line='You are on the clock.' if D.on_user() else 'Round complete.')
+        before = D.i
+        auto = D.auto
+        try:
+            D.auto = mode == 'sim_draft'
+            event = D.sim_pick()
+        finally:
+            D.auto = auto
+        picks = D.i - before
+        if D.done:
+            self._draft_over()
+            return dict(ok=True, complete=True, done=True, picks=picks, line='The draft is over.')
+        if mode == 'sim_draft' and event[0] == 'user':
+            return dict(ok=False, complete=True, picks=picks,
+                        why='Every available prospect is on Do Not Draft; choose a player to continue')
+        complete = mode != 'sim_draft' and (D.on_user() or
+                    mode == 'sim_round' and D.current().round != int(round))
+        return dict(ok=True, complete=complete, picks=picks, selection=D.current().selection,
+                    line='You are on the clock.' if D.on_user() else 'Round complete.' if complete else 'Pick made.')
+
     # ---- league
     def league_view(self, page, **kw):
         import views_league as VL
