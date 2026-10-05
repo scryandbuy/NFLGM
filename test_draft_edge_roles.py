@@ -138,7 +138,8 @@ class DraftEdgeRoleTests(unittest.TestCase):
                 p.contract = Contract(1, [2])
             expiring = DP.assess(league, 'MIN')
             self.assertGreater(expiring['positions']['LEDG']['future'], 6)
-            self.assertEqual(DP.redundancy_penalty(expiring, weak, grade=70), 0)
+            self.assertLess(DP.redundancy_penalty(expiring, weak, grade=70),
+                            DP.redundancy_penalty(controlled, weak, grade=70))
 
     def test_returning_ir_edges_remain_in_plan_without_mutating_availability(self):
         for front in ('4-3', '3-4'):

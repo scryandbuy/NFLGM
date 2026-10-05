@@ -184,6 +184,17 @@ def _reserve_qb_penalty(selection):
     return 60.0 * min(1.0, max(0.0, (112.0 - selection) / 32.0))
 
 
+def scouted_grade(league, abbr, prospect, gm=None):
+    """The club's football estimate, including its own development preference."""
+    gm = gm or league.teams[abbr].gm
+    belief = float(getattr(gm, 'dev_belief', .5))
+    heat = 1. - float(getattr(gm, 'job_security', .6))
+    weight = min(.5, .30 + .25 * belief * (1. - .8 * heat))
+    view = league.scouting[abbr][prospect.pid]
+    return ((1. - weight) * view['ovr'] + weight * (view['pot_lo'] + view['pot_hi']) / 2.
+            + SC.scheme_fit_view(league, abbr, prospect, view))
+
+
 def board(league, abbr, selection, level, taken, scale=None, gm=None, players=None, _grade_cache=None):
     """
     This club's board right now: [(value, player)], best first.
@@ -284,7 +295,9 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
                     # Discourage early reserve investments. Developmental
                     # quarterbacks become gradually more attractive across
                     # the round-three boundary; real QB needs bypass this.
-                    slot += (_reserve_qb_penalty(selection) if p.pos == 'QB' else
+                    slot += (_reserve_qb_penalty(selection) *
+                             (1. - min(1., max(position['starter'] / 4., position['future'] / 6.)))
+                             if p.pos == 'QB' else
                              (60.0 if selection <= 96 else (200.0 if p.pos in ('K', 'P') else 0.0)))
             # and never two of them in one draft
             if p.pos in POS_CAP_EARLY and any(league.players[pid].pos == p.pos and league.players[pid].team == abbr for pid in taken):
@@ -292,6 +305,8 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
             # All-round soft cost for depth without a useful roster opening.
             slot += DP.redundancy_penalty(plan, p, grade=my_grade[p.pid],
                                           gain=gains.get(p.pid, 0.0))
+            slot += DP.commitment_penalty(plan, p, my_grade[p.pid] - w_pot *
+                                          ((mine[p.pid]['pot_lo'] + mine[p.pid]['pot_hi']) / 2 - mine[p.pid]['ovr']))
             adjusted_slots[p.pid] = max(1.0, slot)
             rows.append((slot_value(max(1.0, slot)), p))
     # The economic chart has plateaus. Preserve the full scouting/need score

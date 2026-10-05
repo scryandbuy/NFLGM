@@ -67,6 +67,40 @@ def _family_reserve_grade(player, team, belief, family):
     return max(grades)
 
 
+def return_chance(player, gm, pressure=0.0, stats=None):
+    """Planning uncertainty, not an extension offer or guaranteed departure."""
+    years = getattr(getattr(player, 'contract', None), 'years', 0)
+    if years > 1: return 1.0
+    if years <= 0: return 0.0
+    age = float(getattr(player, 'age', 25))
+    prime = 32 if player.pos == 'QB' else 28
+    quality = max(-.15, min(.15, (player.ovr - 76.) / 60.))
+    chance = (.45 + quality + .20 * (getattr(gm, 'loyalty', .5) - .5)
+              - .25 * pressure - .07 * max(0., age - prime))
+    if getattr(getattr(player, 'morale', None), 'requested', False): chance -= .25
+    # Only established production changes this expectation; no hidden ceiling.
+    stats = stats or {}
+    attempts = stats.get('pass_att', 0) or 0
+    if player.pos == 'QB' and attempts >= 200:
+        efficiency = ((stats.get('pass_yds', 0) or 0) + 20 * (stats.get('pass_td', 0) or 0)
+                      - 45 * (stats.get('ints', 0) or 0)) / attempts
+        chance += max(-.20, min(.10, (efficiency - 6.) * .10))
+    return max(.05, min(.75, chance))
+
+
+def commitment_penalty(plan, prospect, ready_grade):
+    """Discount a blocked role, while allowing a clearly better prospect."""
+    row = plan['positions'][prospect.pos]
+    room = row.get('retention', {})
+    strength = room.get('commitment', 0.0)
+    if strength <= 0: return 0.0
+    improvement = max(0., ready_grade - room.get('incumbent_grade', ready_grade))
+    relief = min(1., improvement / 5.)
+    gm = getattr(plan.get('_roster'), 'gm', None)
+    trust = float(getattr(gm, 'board_trust', .5))
+    return 12. * strength * (1. - .35 * trust) * (1. - relief)
+
+
 def redundancy_penalty(plan, prospect, grade=None, gain=0.0):
     """Soft draft-slot cost for another player with no useful roster opening.
 
@@ -80,6 +114,12 @@ def redundancy_penalty(plan, prospect, grade=None, gain=0.0):
     room = position.get('retention', {})
     excess = max(0.0, room.get('occupied', 0.0) + 1.0 -
                  room.get('capacity', 1.0) - min(1.0, position['future'] / 12.0))
+    gm = getattr(plan.get('_roster'), 'gm', None)
+    competition_allowance = .5 + .5 * float(getattr(gm, 'dev_belief', .5))
+    headcount = room.get('competition', position.get('family_count', position.get('count', 0)))
+    competition = max(0., headcount + 1. - room.get('capacity', 1.)
+                      - competition_allowance)
+    excess = max(excess, competition)
     if excess <= 0:
         return 0.0
     # An identifiable role improvement is a replacement plan. Merely being
@@ -116,6 +156,8 @@ def assess(league, abbr, level=None, players=None):
             committed += c.cap_hit(1) if c.years > 1 else c.remaining_proration(1)
     pressure = max(0.0, min(1.0, (committed / max(limit, 1.0) - .80) / .20))
     belief = float(getattr(proxy.gm, 'dev_belief', .5))
+    saved_stats = getattr(league, 'stats', {}) or {}
+    prior_stats = saved_stats.get(year - 1, saved_stats.get(str(year - 1), {}))
     positions = {}
     for family in RN.PLANNING_FAMILIES:
         pos = family[0]
@@ -151,7 +193,15 @@ def assess(league, abbr, level=None, players=None):
         incumbents = [row['player'] for row in assignments if row['player'] is not None]
         control = [(float(p.ovr), int(getattr(getattr(p, 'contract', None), 'years', 4)),
                     float(getattr(p, 'age', 25))) for p in incumbents]
-        succession = 12.0 * GM.future_need({'expiring': {pos: control}}, pos, horizon=2)
+        # A good expiring starter may be retained. Age-related succession
+        # remains even if a short extension is plausible.
+        succession = 0.0
+        for p, line in zip(incumbents, control):
+            full = GM.future_need({'expiring': {pos: [line]}}, pos, horizon=2)
+            aging = GM.future_need({'expiring': {pos: [(line[0], 4, line[2])]}}, pos, horizon=2)
+            chance = return_chance(p, proxy.gm, pressure, prior_stats.get(p.pid))
+            succession += max(aging, full * (1. - chance))
+        succession = 12. * min(1., succession)
         exposed = sum(yrs <= 1 or age + 2 >= (34 if pos == 'QB' else 31)
                       for _, yrs, age in control)
         # A young reserve is a possible successor, not a promise to reach his
@@ -192,15 +242,38 @@ def assess(league, abbr, level=None, players=None):
         if pos in ('FB', 'K', 'P', 'LS'):
             capacity = max(floor, len(assignments), ceil(demand - 1e-6))
         occupied = 0.0
+        competition = 0.0
         reserve_grades = []
         for p in family_men:
             grade = _family_reserve_grade(p, proxy, belief, family)
             reserve_grades.append(grade)
             quality = max(0.0, min(1.0, (grade - (bar - 12.0)) / 8.0))
             years = getattr(getattr(p, 'contract', None), 'years', 4)
-            retained = .35 if years <= 1 else 1.0
+            retained = (.35 + .4 * return_chance(p, proxy.gm, pressure, prior_stats.get(p.pid))
+                        if years <= 1 else 1.0)
+            # Developmental players use real roster/practice opportunities,
+            # even when none is yet a dependable future starter.
+            recent_pick = (getattr(p, 'draft_overall', None) is not None
+                           and getattr(getattr(p, 'contract', None), 'signed', None) == year
+                           and getattr(p, 'accrued', 0) == 0)
+            if recent_pick: quality = max(quality, 1.0)
+            elif years >= 2 and getattr(p, 'age', 30) <= 25 and grade >= bar - 12.:
+                quality = max(quality, .65)
             occupied += quality * retained
-        retention = dict(capacity=capacity, occupied=round(occupied, 4),
+            if quality > 0:
+                competition += (1.0 if years > 1 else
+                                .75 + .25 * return_chance(p, proxy.gm, pressure, prior_stats.get(p.pid)))
+        commitments = []
+        for p in incumbents:
+            years = getattr(getattr(p, 'contract', None), 'years', 0)
+            grade = RN._grade(p, proxy)
+            age_room = max(0., min(1., ((35 if pos == 'QB' else 32) - p.age) / 4.))
+            commitments.append(min(1., max(0., (years - 1) / 3.)) * age_room
+                               * min(1., max(0., (grade - bar + 4.) / 8.)))
+        commitment = min(commitments, default=0.) * (1. - min(1., future / 12.))
+        retention = dict(capacity=capacity, occupied=round(occupied, 4), competition=competition,
+                         commitment=commitment,
+                         incumbent_grade=min((RN._grade(p, proxy) for p in incumbents), default=0.),
                          best_grade=max(reserve_grades, default=0.0))
         shared = dict(starter=round(starter, 4), depth=round(depth, 4),
                               succession=round(succession, 4), contract=round(contract, 4),

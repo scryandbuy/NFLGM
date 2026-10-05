@@ -200,6 +200,34 @@ class Draft:
         asset['years_out'] = max(0, pk.year - self.year)
         return asset
 
+    def _target_asset(self, buyer, pk, prospect=None):
+        """Price the preference over waiting, using only this room's board."""
+        asset = self._pick_asset(pk)
+        asset['draft_target_premium'] = 1.0
+        if prospect is None: return asset
+        team = self.L.teams[buyer]
+        later = [p.selection for p in team.picks if not p.used_on
+                 and p.year == self.year and p.selection and p.selection > pk.selection]
+        own_slot = min(later, default=pk.selection + LOOKAHEAD)
+        distance = max(1, own_slot - pk.selection)
+        rows = self.board_for(buyer)
+        # Consensus is a probability cue, not knowledge of another GM's plan.
+        alternatives = [(value, p) for value, p in rows if p.pid != prospect.pid
+                        and self.L.consensus[p.pid].get('rank', 999) >= own_slot - max(3, distance * .25)]
+        if not alternatives: alternatives = [(value, p) for value, p in rows if p.pid != prospect.pid]
+        if not alternatives: return asset
+        alt_value, alternative = alternatives[0]
+        target_value = next((value for value, p in rows if p.pid == prospect.pid), alt_value)
+        grade_edge = max(0., DFT.scouted_grade(self.L, buyer, prospect)
+                         - DFT.scouted_grade(self.L, buyer, alternative))
+        board_edge = max(0., (target_value - alt_value) / max(.01, target_value))
+        expected = self.L.consensus[prospect.pid].get('rank', own_slot)
+        risk_lost = max(.15, min(1., .5 + (own_slot - expected) / max(8., 2. * distance)))
+        aggression = float(getattr(team.gm, 'aggression', .5))
+        premium = min(.40, (.02 + .10 * aggression + .035 * grade_edge + .20 * board_edge) * risk_lost)
+        asset['draft_target_premium'] = 1. + premium
+        return asset
+
     def _bank(self, abbr, exclude_pick=None, rng=None):
         """What this club can put into a package: its remaining picks this
         year and the picks after, and its surplus players."""
@@ -221,11 +249,7 @@ class Draft:
         L = self.L; ta, tb = L.teams[buyer], L.teams[seller]
         ga, gb = TR.persona(ta.gm), TR.persona(tb.gm)
         ctx_a, ctx_b = ta.ctx(), tb.ctx()
-        target = self._pick_asset(pk)
-        # This buyer has a player he expects to lose before its own pick.
-        # The trade engine prices that concrete opportunity for the buyer;
-        # the seller still prices the pick at its ordinary chart value.
-        target['draft_target_premium'] = 1.20
+        target = self._target_asset(buyer, pk, target_player)
         market = TE.market_price(target)
         want = market * premium
         market_floor, market_ceiling = .85 * market, 1.35 * market
@@ -272,7 +296,7 @@ class Draft:
                     target_checks[collateral] = self._trade_target_valid(buyer, offer, pk, target_player)
                 if not target_checks[collateral]: continue
             if not self._package_valid(buyer, seller, offer, pk, target_player,
-                                       football_cache, financial_cache):
+                                       football_cache, financial_cache, recheck_willingness=False):
                 continue
             if best is None or paid < best[0]:
                 best = (paid, offer, r)
@@ -281,11 +305,17 @@ class Draft:
         return best[1], best[2]
 
     def _package_valid(self, buyer, seller, offer, pk, target_player=None,
-                       football_cache=None, financial_cache=None):
+                       football_cache=None, financial_cache=None, recheck_willingness=True):
         """Shared roster and funding guards, including the rookie bought here."""
         import trades as TR
         import roster_needs as RN
         ta, tb = self.L.teams[buyer], self.L.teams[seller]
+        if recheck_willingness and target_player is not None and buyer != self.user:
+            current = dict(a_sends=offer['a_sends'],
+                           a_gets=[self._target_asset(buyer, pk, target_player)])
+            result = TE.evaluate(current, ta.ctx(), tb.ctx(), ta.cap_space, tb.cap_space,
+                                 TR.persona(ta.gm), TR.persona(tb.gm))
+            if not result.get('accepted'): return False
         sent = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
         neutral = sum(TE.market_price(x) for x in offer['a_sends'])
         market = TE.market_price(self._pick_asset(pk))
@@ -440,10 +470,9 @@ class Draft:
             return None
         import trades as TR
         buyer, seller = self.L.teams[offer['team']], self.L.teams[self.user]
-        target = self._pick_asset(pk)
-        target['draft_target_premium'] = 1.20
-        package = dict(a_sends=offer['sends'], a_gets=[target])
         target_player = self.L.players.get(offer.get('target_pid'))
+        target = self._target_asset(buyer.abbr, pk, target_player)
+        package = dict(a_sends=offer['sends'], a_gets=[target])
         if target_player is None:
             return None
         r = TE.evaluate(package, buyer.ctx(), seller.ctx(), buyer.cap_space, seller.cap_space,
