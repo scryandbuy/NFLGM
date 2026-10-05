@@ -387,12 +387,13 @@ def card(session, league, pid):
             grades.append(dict(pos='Nickel', ovr=round(float(TG.position_score(dict(p.ratings, speed_rating=p.ratings.get('agility_rating', 70)), 'CB', getattr(user, 'scheme', None)))), mine=False, tax=0))
         except Exception: pass
     import personality as PT
-    # Preparation and discipline show this user's knowledge, not hidden truth.
+    # Own players show actual traits; outside players retain scouting knowledge.
     words = PT.words({k: v for k, v in (getattr(p, 'traits', None) or {}).items()
                       if k not in ('work_ethic', 'discipline')}) if getattr(p, 'traits', None) else ''
     import character_assessment as CA
-    character_report = CA.player_report(p, session.user_team,
-        (getattr(league, 'stats', {}) or {}).get(league.year, {}).get(p.pid, {}))
+    character_report = (CA.owned_player_report(p) if p.team == session.user_team else
+        CA.player_report(p, session.user_team,
+            (getattr(league, 'stats', {}) or {}).get(league.year, {}).get(p.pid, {})))
     # role and snaps: where he sits on his club's depth chart, and his share of the club's snaps this season
     role = None
     if t is not None:

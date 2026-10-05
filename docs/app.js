@@ -1186,6 +1186,7 @@ function renderCard(v) {
       if (participation.injury_note) playingTime.append(el('small', {class:'count'}, participation.injury_note));
     } else playingTime.append(el('span', {}, v.snaps || 'None yet this season'));
     left.append(playingTime);
+    left.append(characterReport(v.character_report));
     const mid = el('div', {});
     mid.append(h5('Attributes'));
     const attrs = el('div', { class: 'attrs' });
@@ -1195,7 +1196,6 @@ function renderCard(v) {
       rowsOf(c.rows);
       if (c.extra && c.extra.rows && c.extra.rows.length) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, c.extra.title)); rowsOf(c.extra.rows); }
       if (c.title === 'Mental' && v.personality) { box.append(el('div', { class: 'h5', style: 'margin:12px 0 4px' }, 'Traits')); const tr = el('div', { class: 'traits' }); v.personality.split(',').map(x => x.trim()).filter(Boolean).forEach(w => { const m = TRAIT_META[w] || { k: 'even', tip: 'Nothing about him stands out.' }; tr.append(el('span', { class: 'trait ' + m.k, 'data-tip': m.tip }, w.replace(/\b\w/g, ch => ch.toUpperCase()))); }); box.append(tr); }
-      if (c.title === 'Mental' && v.character_report) box.append(characterReport(v.character_report));
       if (c.title === 'Mental' && v.schemes) box.append(schemeBlock(v.schemes));
       attrs.append(box);
     }

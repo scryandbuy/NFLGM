@@ -252,3 +252,23 @@ def player_report(p, abbr, stats=None):
     """Only this club's saved knowledge, never the hidden personality values."""
     data = (p.xp_spent.get('_character_observations') or {}).get(abbr, {})
     return [describe(k, data.get(k)) for k in KEYS]
+
+
+def owned_player_report(p):
+    """The owning club knows its player's actual preparation and discipline."""
+    import personality as PT
+    traits = getattr(p, 'traits', None) or {}
+    rows = []
+    for key in KEYS:
+        value = float(PT.discipline(p) if key == 'discipline' else traits.get(key, 50))
+        row = describe(key, dict(value=value, error=0))
+        if key == 'work_ethic':
+            label = {'concern': 'Inconsistent preparation', 'neutral': 'Steady preparation',
+                     'strength': 'Strong preparation habits'}[row['status']]
+        else:
+            label = {'concern': 'Undisciplined', 'neutral': 'Average discipline',
+                     'strength': 'Disciplined'}[row['status']]
+        row.update(value=round(value), summary=f'{round(value)} · {label}',
+                   confidence=None, source=None, explanation='')
+        rows.append(row)
+    return rows
