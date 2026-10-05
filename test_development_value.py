@@ -46,8 +46,8 @@ class DevelopmentValueTests(unittest.TestCase):
         import trades
         from cap_engine import Contract
         p=self.player();p.contract=Contract(4,[2]*4);p.contract_years_left=4;p.fa_class=None
-        p.apy=2;p.team='GB';p.name='Prospect'
-        team=NS(abbr='GB');league=NS(post_june1=lambda:True)
+        p.apy=2;p.team='GB';p.name='Prospect';p.xp_spent={}
+        team=NS(abbr='GB',depth={});league=NS(post_june1=lambda:True)
         with patch.object(trades.VAL,'value_player',return_value={'apy':8}):
             a=trades.player_asset(league,team,p,None,None)
             p.dev='xfactor'

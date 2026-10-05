@@ -41,6 +41,8 @@ class VeteranMarketTests(unittest.TestCase):
         records = [tx for tx in self.L.transactions if tx.get('pid') == p.pid and tx['kind'] == 'sign']
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]['market_stage'], 'wire')
+        self.assertTrue(records[0]['replacement_assessment']['approved'])
+        self.assertIn('released_asset_value', records[0]['replacement_assessment'])
 
     def test_reviews_survive_save_reload_without_repeating(self):
         self.candidate()
