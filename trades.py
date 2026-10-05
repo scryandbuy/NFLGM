@@ -192,7 +192,7 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     row = dict(age=p.age, apy=inherited_apy, ovr=float(seen),
                contract_years_left=years, contract_costs=costs,
                first_year_fraction=fraction, madden_position=p.pos,
-               development_credit=player_credit(p))
+               development_credit=player_credit(p, years=years))
     tv_buyer = TE.trade_value(row, v)
     # THE STREET AND THE SQUAD ARE THE ALTERNATIVE. Why give a pick for a man when a comparable one is a free
     # agent for salary alone, or already on your practice squad? The buyer grades the best man available to

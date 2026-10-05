@@ -121,6 +121,30 @@ class RemainingControlTests(unittest.TestCase):
                 self.assertEqual(TR._market_floor(retained), after['trade_value'])
                 self.L.year -= 1
 
+    def test_public_development_credit_uses_actual_future_control(self):
+        self.L.phase = 'offseason'
+        self.L.season_closed_year = self.L.year
+        self.player.age = 23
+        self.player.dev = 'xfactor'
+        for stub in (False, True):
+            self.player.contract = Contract(2, [0 if stub else 6, 6],
+                earned_base=0 if stub else 6, start_offset=int(stub))
+            saved_contract = copy.deepcopy(vars(self.player.contract))
+            before = TR.player_asset(self.L, self.seller, self.player, None, None)
+            self.assertEqual(vars(self.player.contract), saved_contract)
+            self.player.contract.advance()
+            self.L.year += 1
+            after = TR.player_asset(self.L, self.seller, self.player, None, None)
+            self.assertEqual(before['trade_value'], after['trade_value'])
+            self.player.dev = 'normal'
+            ordinary = TR.player_asset(self.L, self.seller, self.player, None, None)
+            self.assertGreater(after['trade_value'], ordinary['trade_value'])
+            self.player.dev = 'xfactor'
+            self.L.year -= 1
+        from development_value import player_credit
+        self.assertGreater(player_credit(self.player, years=3),
+                           player_credit(self.player, years=1))
+
     def test_lower_rental_price_allows_cheap_help_but_rejects_full_season_price(self):
         row = dict(age=31, ovr=88, madden_position='WR', apy=6,
                    contract_years_left=1, contract_costs=[3], first_year_fraction=.5)

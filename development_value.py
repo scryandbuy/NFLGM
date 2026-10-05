@@ -17,8 +17,10 @@ def development_credit(dev, age, overall, years, visible_range=None):
     return tier * youth * control * min(1., room / 10.)
 
 
-def player_credit(player):
+def player_credit(player, *, years=None):
+    """Public growth evidence over the caller's valued service years, if known."""
     from ceiling_knowledge import observed_range
     return development_credit(getattr(player, 'dev', 'normal'), player.age, player.ovr,
-                              getattr(getattr(player, 'contract', None), 'years', 0),
+                              (getattr(getattr(player, 'contract', None), 'years', 0)
+                               if years is None else years),
                               observed_range(player))
