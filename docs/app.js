@@ -2946,9 +2946,9 @@ function renderTeam(v) {
   secondRow(clubNav(v.club.abbr, false, null), `#league/team/${v.club.abbr}`);
   const select = clubSelect(v.club.abbr, a => { const m = pyJSON('SESSION.club_list()').find(c => c.abbr === a); location.hash = m && m.mine ? '#club' : `#league/team/${a}`; });
   page.append(el('header', { class: 'team-profile-hero c12' }, el('div', { class: 'team-profile-intro' }, crest(v.club, 72), el('div', {}, el('div', { class: 'feature-kicker' }, `LEAGUE / ${v.place}`), el('h1', {}, v.club.name), el('p', {}, `${v.coach?.name || 'Head coach open'} · ${v.identity.offense} offense · ${v.identity.defense} defense`))), el('div', { class: 'team-profile-select' }, select)));
-  page.append(el('div', { class: 'team-profile-metrics c12' }, ...[[v.record, 'Record'], [v.ranks.offense ? `${v.ranks.offense}${ord(v.ranks.offense)}` : '—', 'Offense'], [v.ranks.defense ? `${v.ranks.defense}${ord(v.ranks.defense)}` : '—', 'Defense'], [`$${v.cap.space}m`, 'Cap space']].map(([value, label]) => el('div', {}, el('strong', {}, value), el('span', {}, label)))));
+  page.append(el('div', { class: 'team-profile-metrics c12' }, ...[[v.record, `${v.season_year} record`], [v.ranks.offense ? `${v.ranks.offense}${ord(v.ranks.offense)}` : '—', 'Offense'], [v.ranks.defense ? `${v.ranks.defense}${ord(v.ranks.defense)}` : '—', 'Defense'], [`$${v.cap.space}m`, `${v.cap.year} cap space`]].map(([value, label]) => el('div', {}, el('strong', {}, value), el('span', {}, label)))));
   const left = el('section', { class: 'sheet c8 team-profile-main' });
-  left.append(el('div', { class: 'team-profile-detail' }, el('span', {}, 'NEXT YEAR', el('b', {}, `$${v.cap.committed_next}m of $${v.cap.limit_next}m committed`)), el('span', {}, 'ROSTER', el('b', {}, `${v.roster_n} active · ${v.ps_n} practice squad${v.ir_n ? ` · ${v.ir_n} IR` : ''}`))));
+  left.append(el('div', { class: 'team-profile-detail' }, el('span', {}, `${v.cap.year} CAP PLANNING`, el('b', {}, `$${v.cap.committed}m of $${v.cap.limit}m committed${v.cap.pending_offers ? ` · $${v.cap.pending_offers}m reserved for offers` : ''}`)), el('span', {}, 'ROSTER', el('b', {}, `${v.roster_n} active · ${v.ps_n} practice squad${v.ir_n ? ` · ${v.ir_n} IR` : ''}`))));
   // the coaches
   const h5 = (t, sub) => el('div', { class: 'h5' }, t, sub ? el('span', {}, sub) : '');
   const st = el('div', { class: 'pad' }, h5('Coaching', `${v.identity.offense} · ${v.identity.defense}`));
@@ -3224,7 +3224,7 @@ function renderTeamSchedule(v) {
   s.append(el('div',{class:'report-controls'},el('button',{class:'btn',onclick:()=>renderSchedule(pyJSON(`SESSION.league_view('schedule', year=${Number(v.year)})`))},'League Schedule')),scheduleContent(v)); page.append(s);
 }
 
-let txGroup = 'All', txClub = 'all', txQuery = '', txShown = 60;
+let txGroup = 'All', txClub = 'all', txQuery = '', txOffset = 0;
 // THE SEASON REVIEW. The morning after: a hero in the club's colors with the record against the ask and the
 // seventeen results as a strip, the owner's word, the units as ranked bars, the men who rose and fell as cards,
 // next year's money as one bar, and the assistants' three notes.
@@ -3361,6 +3361,7 @@ function coachingMoveRow(c) {
     el('span', { class: 'detail' }, c.detail || ''));
 }
 function filteredTransactions(v) {
+  if (v.filtered) return v.rows;
   const q = txQuery.trim().toLowerCase();
   const rows = txGroup === 'Coaching' ? (v.coaching_moves || []).map(c => ({...c, team:c.club, mine:c.club.abbr === v.rail.club.abbr,
     group:'Coaching', tag:c.action, line:`${c.club.name} ${c.action}: ${c.person} · ${c.role}${c.detail ? ' · '+c.detail : ''}`, coaching:true})) : v.rows;
@@ -3393,25 +3394,29 @@ function showTransactionTrade(row) {
   dialog.addEventListener('close', () => dialog.remove(), {once:true});
   document.body.append(dialog); dialog.showModal(); close.focus();
 }
+function transactionPage(limit = 60) {
+  const n = limit === null ? 'None' : String(limit);
+  return pyJSON(`SESSION.league_view('transactions', group=${JSON.stringify(txGroup)}, club_filter=${JSON.stringify(txClub)}, query=${JSON.stringify(txQuery)}, offset=${limit === null ? 0 : txOffset}, n=${n})`);
+}
 function renderTransactions(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('transactions');
   const copyTx = el('button', { class: 'btn quiet transaction-copy', 'data-tip': 'Copy the list as filtered, every entry, as text', onclick: () => {
-    const lines = filteredTransactions(v).map(r => [r.year, transactionWhen(r), r.tag, showTeamText(r.line)].filter(Boolean).join(' · '));
+    const lines = transactionPage(null).rows.map(r => [r.year, transactionWhen(r), r.tag, showTeamText(r.line)].filter(Boolean).join(' · '));
     copyText(lines.join('\n'), copyTx); } }, 'Copy');
   const s = leagueBoard(v, 'TRANSACTIONS', ''); s.classList.add('transactions-board');
   const tabs = el('div', { class: 'tabs transaction-tabs' });
-  for (const g of ['All', ...v.groups]) tabs.append(el('button', { 'aria-pressed': String(txGroup === g), onclick: () => { txGroup = g; txShown = 60; renderTransactions(v); } }, g));
-  const clubs = el('div', { class: 'chips' }); for (const [k, label] of [['all', 'All Teams'], ['mine', v.rail.club.name], ['div', v.my_division]]) clubs.append(el('button', { class: 'chip', 'aria-pressed': String(txClub === k), onclick: () => { txClub = k; txShown = 60; renderTransactions(v); } }, label));
-  const search = el('input', { type: 'search', class: 'find', 'aria-label':'Find a player, coach or team', placeholder: 'Find a player, coach or team', value: txQuery }); search.oninput = () => { txQuery = search.value; txShown = 60; draw(); };
+  for (const g of ['All', ...v.groups]) tabs.append(el('button', { 'aria-pressed': String(txGroup === g), onclick: () => { txGroup = g; txOffset = 0; renderTransactions(v); } }, g));
+  const clubs = el('div', { class: 'chips' }); for (const [k, label] of [['all', 'All Teams'], ['mine', v.rail.club.name], ['div', v.my_division]]) clubs.append(el('button', { class: 'chip', 'aria-pressed': String(txClub === k), onclick: () => { txClub = k; txOffset = 0; renderTransactions(v); } }, label));
+  const search = el('input', { type: 'search', class: 'find', 'aria-label':'Find a player, coach or team', placeholder: 'Find a player, coach or team', value: txQuery }); search.oninput = () => { txQuery = search.value; txOffset = 0; draw(); };
   s.append(tabs, el('div', { class: 'tools' }, clubs, search, copyTx));
   const list = el('div', {class:'league-transactions'}); s.append(list);
   const draw = () => {
-    list.innerHTML = ''; const rows = filteredTransactions(v);
+    list.innerHTML = ''; const result = transactionPage(60); const rows = result.rows;
     list.classList.toggle('league-coach-moves', txGroup === 'Coaching');
     if (txGroup !== 'Coaching' && rows.length) list.append(el('div',{class:'transaction-columns','aria-hidden':'true'},...['WHEN','TEAM','MOVE','PLAYER / COACH','DETAILS',''].map(label=>el('span',{},label))));
-    for (const r of rows.slice(0, txShown)) {
+    for (const r of rows) {
       if (r.coaching) { list.append(coachingMoveRow(r)); continue; }
-      const link = r.link === 'trade' ? el('button', { class: 'transaction-open', onclick:()=>showTransactionTrade(r), 'aria-label':'View trade', 'data-tip':'View trade' }, '›') : r.link === 'carousel' ? el('button', { class:'transaction-open', 'aria-label':'View coaching transactions', 'data-tip':'View coaching transactions', onclick:()=>{txGroup='Coaching';txShown=60;renderTransactions(v);} }, '›') : el('span', {});
+      const link = r.link === 'trade' ? el('button', { class: 'transaction-open', onclick:()=>showTransactionTrade(r), 'aria-label':'View trade', 'data-tip':'View trade' }, '›') : r.link === 'carousel' ? el('button', { class:'transaction-open', 'aria-label':'View coaching transactions', 'data-tip':'View coaching transactions', onclick:()=>{txGroup='Coaching';txOffset=0;renderTransactions(v);} }, '›') : el('span', {});
       const theme = teamTheme(r.team || {});
       list.append(el('div', { class: 'transaction-row', style:`--transaction-base:${theme.base};--transaction-accent:${theme.accent};--transaction-readable:${theme.readable}` },
         el('time', {}, String(r.year ?? ''), el('small',{},transactionWhen(r))),
@@ -3421,7 +3426,11 @@ function renderTransactions(v) {
         el('div',{class:'transaction-detail'},r.detail || '',r.detail_secondary ? el('small',{},r.detail_secondary) : ''),link));
     }
     if (!rows.length) list.append(el('div', { class: 'empty' }, 'Nothing matches.'));
-    if (rows.length) list.append(el('div', { class: 'foot' }, rows.length > txShown ? el('button', { class: 'btn quiet', onclick: () => { txShown += 60; draw(); } }, 'Older') : '', el('span', { class: 'count' }, `${Math.min(txShown, rows.length)} of ${rows.length}`),el('span',{class:'count',style:'margin-left:auto'},'Most recent first')));
+    if (result.total) list.append(el('div', { class: 'foot' },
+      el('button', { class: 'btn quiet', disabled: txOffset === 0, onclick: () => { txOffset = Math.max(0, txOffset - 60); draw(); } }, 'Newer'),
+      el('button', { class: 'btn quiet', disabled: txOffset + rows.length >= result.total, onclick: () => { txOffset += 60; draw(); } }, 'Older'),
+      el('span', { class: 'count' }, `${txOffset + 1}–${txOffset + rows.length} of ${result.total}`),
+      el('span', { class: 'count', style: 'margin-left:auto' }, 'Most recent first')));
   };
   draw(); leagueFinish(s,page);
 }
@@ -3432,34 +3441,74 @@ function statsTeamRow(tag, player, ...children) {
   applyTeamTheme(row, player.club || { abbr: player.team });
   return row;
 }
+function sortedStatsRows(rows, state) {
+  const q = state.query.trim().toLowerCase();
+  const filtered = rows.filter(r => !q || [r.name, r.pos, r.team, r.team_name, showAbbr(r.team), r.club?.name].filter(Boolean).join(' ').toLowerCase().includes(q));
+  if (state.sort === null) return filtered;
+  const value = r => {
+    if (state.sort === 'name' || state.sort === 'team') return String(r[state.sort] || '').toLowerCase();
+    const raw = r.row[state.sort];
+    if (typeof raw === 'number') return raw;
+    const n = parseFloat(String(raw).replaceAll(',', ''));
+    return Number.isFinite(n) ? n : null;
+  };
+  return filtered.sort((a, b) => {
+    const x = value(a), y = value(b);
+    if (x === null || y === null) return x === y ? a.name.localeCompare(b.name) : x === null ? 1 : -1;
+    const d = typeof x === 'string' ? x.localeCompare(y) : x - y;
+    return (state.ascending ? d : -d) || a.name.localeCompare(b.name);
+  });
+}
 function renderStats(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('stats');
-  const s = leagueBoard(v, 'STATS', `${v.year} · Through Week ${v.week ?? '—'}`);
+  const s = leagueBoard(v, 'STATS', `${v.year} · Regular season${v.week ? ' · Through Week ' + Math.min(18, v.week) : ''}`);
   s.classList.add('stats-board');
-  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' }); for (const k of ['Leaders', 'Passing', 'Rushing', 'Receiving', 'Defense', 'Blocking', 'Advanced', 'Team']) tabs.append(el('button', { 'aria-pressed': String(statsTab === k), onclick: () => { statsTab = k; renderStats(v); } }, k));
-  const yrs=el('div',{class:'league-year-tools'},leagueYear(v,y=>renderStats(pyJSON(`SESSION.league_view('stats', year=${y})`))),el('a',{class:'btn',href:'#league/almanac'},'Career Stats →'));
-  tabs.append(yrs); s.append(tabs);
-  if(v.note) s.append(el('div',{class:'read'},v.note));
-  const nm = r => el('div', { class: 'nm', style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name, el('small', {}, `${r.pos} · ${showAbbr(r.team)}`));
+  const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
+  for (const k of ['Leaders', 'Passing', 'Rushing', 'Receiving', 'Defense', 'Blocking', 'Advanced', 'Team']) tabs.append(el('button', { 'aria-pressed': String(statsTab === k), onclick: () => { statsTab = k; renderStats(v); } }, k));
+  tabs.append(el('div', {class:'league-year-tools'}, leagueYear(v, y => renderStats(pyJSON(`SESSION.league_view('stats', year=${y})`))), el('a', {class:'btn', href:'#league/almanac'}, 'Career Stats →'))); s.append(tabs);
+  if (v.note) s.append(el('div', {class:'read'}, v.note));
+  const nm = r => el('div', {class:'nm', style:'cursor:pointer', onclick:() => {location.hash = '#club/player/' + r.pid;}}, r.name, el('small', {}, `${r.pos} · ${showAbbr(r.team)}`));
   if (statsTab === 'Leaders' || statsTab === 'Advanced') {
     const boxes = statsTab === 'Leaders' ? v.boxes : v.advanced;
-    const grid = el('div', { class: 'leaders' });
-    for (const b of boxes) { const box = el('div', { class: 'lbox' }, el('h4', {}, b.title)); if (b.note) box.append(el('p', { class: 'muted', style: 'padding:0 12px;font-size:12px;line-height:1.5' }, b.note)); b.rows.slice(0, 5).forEach((r, i) => box.append(statsTeamRow('div', r, el('span', { class: 'r' }, i + 1), nm(r), el('span', { class: 'v' }, r.v)))); grid.append(box); }
-    if (!boxes.length) grid.append(el('div', { class: 'empty' }, 'No games played this season yet.'));
+    const grid = el('div', {class:'leaders'});
+    for (const b of boxes) {
+      const box = el('div', {class:'lbox'}, el('h4', {}, b.title));
+      if (statsTab === 'Advanced' && b.unit?.startsWith('min ')) box.append(el('p', {class:'muted', style:'padding:0 12px;font-size:12px'}, b.unit));
+      if (b.note) box.append(el('p', {class:'muted', style:'padding:0 12px;font-size:12px;line-height:1.5'}, b.note));
+      b.rows.slice(0, 5).forEach((r, i) => box.append(statsTeamRow('div', r, el('span', {class:'r'}, i + 1), nm(r), el('span', {class:'v'}, r.v)))); grid.append(box);
+    }
+    if (!boxes.length) grid.append(el('div', {class:'empty'}, 'No qualifying statistics retained for this season.'));
     s.append(grid);
-  } else if (statsTab === 'Team') {
-    const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', {}, 'Team'), el('th', { class: 'n' }, 'PF/G'), el('th', { class: 'n' }, 'PA/G'), el('th', { class: 'n' }, 'Yds/G'), el('th', { class: 'n' }, 'Pass/G'), el('th', { class: 'n' }, 'Rush/G'), el('th', { class: 'n' }, 'EPA/Play'), el('th', { class: 'n' }, 'Sacks'), el('th', { class: 'n' }, 'INT')));
-    if(!v.team.length) t.append(el('tr',{},el('td',{colspan:'9'},'Team statistics were not retained for this season.')));
-    for (const r of v.team) t.append(statsTeamRow('tr', r, el('td', {}, clubLink(r.club.abbr, r.club.name)), el('td', { class: 'n' }, r.pf), el('td', { class: 'n' }, r.pa), el('td', { class: 'n' }, r.ypg), el('td', { class: 'n' }, r.pyds), el('td', { class: 'n' }, r.ryds), el('td', { class: 'n', style: r.epa > 0 ? 'color:var(--ok)' : r.epa < 0 ? 'color:var(--danger)' : '' }, (r.epa > 0 ? '+' : '') + r.epa.toFixed(2)), el('td', { class: 'n' }, r.sacks), el('td', { class: 'n' }, r.ints)));
-    s.append(t);
   } else {
-    const tb = v.tables[statsTab.toLowerCase()];
-    const t = el('table', { class: 'tbl' }); t.append(el('tr', {}, el('th', { class: 'n' }, '#'), el('th', {}, 'Player'), el('th', {}, 'Team'), ...tb.cols.map(c => el('th', { class: 'n' }, c))));
-    tb.rows.forEach((r, i) => t.append(statsTeamRow('tr', r, el('td', { class: 'n' }, i + 1), el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name))), el('td', {}, r.team ? stripe(r.team) : ''), ...r.row.map(x => el('td', { class: 'n' }, String(x))))));
-    if (!tb.rows.length) t.append(el('tr', {}, el('td', { colspan: String(3 + tb.cols.length) }, el('div', { class: 'empty' }, 'No games played this season yet.'))));
-    s.append(t);
+    const team = statsTab === 'Team';
+    const columns = team ? ['PF/G', 'PA/G', 'Yds/G', 'Pass/G', 'Rush/G', 'EPA/Play', 'Sacks', 'INT'] : v.tables[statsTab.toLowerCase()].cols;
+    const rows = team ? v.team.map(r => ({...r, name:r.club.name, team:r.club.abbr, row:[r.pf, r.pa, r.ypg, r.pyds, r.ryds, r.epa, r.sacks, r.ints]})) : v.tables[statsTab.toLowerCase()].rows;
+    const key = `${v.year}/${statsTab}`;
+    if (renderStats.tableState?.key !== key) renderStats.tableState = {key, query:'', page:0, sort:null, ascending:false};
+    const state = renderStats.tableState, body = el('div', {});
+    const search = el('input', {type:'search', class:'find', 'aria-label':'Find a player, position or team', placeholder:team ? 'Find a team' : 'Find a player, position or team', value:state.query});
+    const draw = () => {
+      body.innerHTML = '';
+      const all = sortedStatsRows(rows, state), size = 40;
+      state.page = Math.min(state.page, Math.max(0, Math.ceil(all.length / size) - 1));
+      const start = state.page * size, visible = all.slice(start, start + size);
+      const t = el('table', {class:'tbl'});
+      const heading = (label, sort) => el('th', {'aria-sort':state.sort === sort ? state.ascending ? 'ascending' : 'descending' : 'none'}, el('button', {class:'btn quiet', 'aria-label':`Sort by ${label}`, onclick:() => {state.ascending = state.sort === sort ? !state.ascending : typeof sort === 'string'; state.sort = sort; state.page = 0; draw();}}, label));
+      t.append(el('tr', {}, el('th', {class:'n'}, '#'), heading(team ? 'Team' : 'Player', 'name'), ...(team ? [] : [heading('Team', 'team')]), ...columns.map((c, i) => heading(c, i))));
+      visible.forEach((r, i) => t.append(statsTeamRow('tr', r, el('td', {class:'n'}, start + i + 1),
+        el('td', {}, team ? clubLink(r.club.abbr, r.club.name) : el('button', {class:'who', onclick:() => {location.hash = '#club/player/' + r.pid;}}, el('div', {class:'no'}, r.pos), el('div', {class:'nm'}, r.name))),
+        ...(team ? [] : [el('td', {}, r.team ? stripe(r.team) : '')]), ...r.row.map((x, j) => el('td', {class:'n'}, team && j === 5 ? `${x > 0 ? '+' : ''}${x.toFixed(2)}` : String(x))))));
+      if (!visible.length) t.append(el('tr', {}, el('td', {colspan:String(columns.length + (team ? 2 : 3))}, el('div', {class:'empty'}, state.query ? 'Nothing matches.' : 'No statistics retained for this season.'))));
+      body.append(t);
+      if (all.length) body.append(el('div', {class:'foot'},
+        el('button', {class:'btn quiet', disabled:state.page === 0, onclick:() => {state.page--; draw();}}, 'Previous'),
+        el('button', {class:'btn quiet', disabled:start + size >= all.length, onclick:() => {state.page++; draw();}}, 'Next'),
+        el('span', {class:'count'}, `${start + 1}–${start + visible.length} of ${all.length}`)));
+    };
+    search.oninput = () => {state.query = search.value; state.page = 0; draw();};
+    s.append(el('div', {class:'tools'}, search), body); draw();
   }
-  leagueFinish(s,page);
+  leagueFinish(s, page);
 }
 
 let allProTab='All-Pro First Team';
