@@ -2671,7 +2671,7 @@ function renderBoard(v) {
     focusBox.append(report);
   } else focusBox.append(el('div', { class: 'pad count' }, 'Your first cross-check arrives after Week 2. Your scout continues working without weekly input.'));
   page.append(focusBox);
-  const s = el('section', { class: 'sheet c12 draft-surface draft-board' }, el('h2', {}, 'Scouting Board', el('small', {}, v.visit_window ? 'Choose private visits after the workouts. Unused slots go to your scout at Advance.' : 'The board updates as your scouts make new reads.')));
+  const s = el('section', { class: 'sheet c12 draft-surface draft-board' });
   const tabs = el('div', { class: 'tabs', style: 'padding:8px 14px 0' });
   const taken = v.rows.filter(r => r.taken).length;
   if (taken) tabs.append(el('label', { class: 'chk', style: 'margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink-2)' }, el('input', { type: 'checkbox', checked: boardHideTaken ? '' : null, onchange: e => { boardHideTaken = e.target.checked; boardPage = 0; draw(); } }), 'Hide drafted'));
@@ -2681,7 +2681,8 @@ function renderBoard(v) {
     if (k === 'visited') visitedTabCount = count;
     tabs.append(el('button', { 'aria-pressed': String(boardTab === k), onclick: () => { boardTab = k; renderBoard(v); } }, l + ' ', count));
   }
-  s.append(tabs);
+  s.append(el('header', { class: 'draft-board-header' }, el('h2', {}, 'Scouting Board'), tabs));
+  if (v.visit_window) s.append(el('div', { class: 'draft-board-note' }, 'Choose private visits after the workouts. Unused slots go to your scout at Advance.'));
   if (boardTab === 'board') { s.append(yourBoard(v, reload)); page.append(s); return; }
   const filt = el('div', { class: 'filt-pos' });
   const groups = faFilterGroups(v);

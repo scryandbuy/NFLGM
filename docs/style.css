@@ -2756,6 +2756,11 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .draft-surface .tabs button{font:650 13px var(--text);color:#a7bbc5;border:0;border-bottom:3px solid transparent;padding:14px 11px;background:none}
 .draft-surface .tabs button[aria-pressed="true"]{color:#f7fafb;border-bottom-color:var(--team-accent);background:color-mix(in srgb,var(--team-accent) 8%,transparent)}
 .draft-surface .tabs em{font:650 10px var(--text);background:#ffffff15;padding:3px 6px;border-radius:4px;color:#dce6e9}
+/* Scouting title and board controls share one header. */
+.draft-board-header{display:flex;align-items:center;justify-content:space-between;gap:8px 24px;flex-wrap:wrap;border-bottom:1px solid #ffffff1a;padding:0 20px}
+.draft-board .draft-board-header h2{margin:0;padding:18px 0;border:0;flex:0 0 auto}
+.draft-board .draft-board-header .tabs{margin:0 0 0 auto;padding:0!important;border:0;align-items:center;justify-content:flex-end;min-width:0;max-width:100%}
+.draft-board-header .chk{white-space:nowrap}
 .draft-board .filt-pos,.draft-results .tools{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:17px 20px;background:#ffffff03;border-bottom:1px solid #ffffff12}
 .draft-board .filt-pos .find,.draft-results .find{margin-left:auto;min-width:210px}
 .draft-surface .tools{background:transparent;border-bottom:1px solid #ffffff13}
