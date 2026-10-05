@@ -93,7 +93,8 @@ def _prospect(league, abbr, p, taken=()):
     if senior_bowl or legacy_senior_bowl: words.append('Senior Bowl')
     visit_locked = visited
     import character_assessment as CA
-    words.extend(CA.flags(v))
+    flag_tips = CA.board_flags(v)
+    words.extend(flag_tips)
     if 'medical' in flags: words.append('Medical')
     if not SC._power(p): words.append('Small School')
     if getattr(p, 'age', 22) < 21.5: words.append('Underclassman')
@@ -108,7 +109,7 @@ def _prospect(league, abbr, p, taken=()):
                 filter_positions=list(PR.fa_positions(dict(pid=p.pid, pos=p.pos, weight=getattr(p, 'weight', None),
                                                           ratings=seen_ratings), league.teams[abbr])),
                 age=int(p.age), home_state=home_state(p), small=(not SC._power(p)), visited=visited, scheduled=scheduled,
-                cls_year=cls_year, size=size, words=words, character_report=CA.report(v), proj_range=proj_range, visit_move=visit_move, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
+                cls_year=cls_year, size=size, words=words, flag_tips=flag_tips, character_report=CA.report(v), proj_range=proj_range, visit_move=visit_move, my_round=None, visit_locked=visit_locked, fit=fit, scheme_ovr=scheme_ovr,
                 proj=(f"R{min(7, (c['rank'] - 1) // 32 + 1)}" if c and c.get('rank') else '—'), mine=mine, ceiling=f"{round(float(v['pot_lo']))}–{round(float(v['pot_hi']))}",
                 cons=cons, cons_rank=(c.get('rank') if c else None), gap=gap, reads=int(v.get('reads', 1) or 1), flags=flags,
                 forty=(round(float(comb['forty']), 2) if comb.get('forty') else None), vert=(round(float(comb['vert']), 1) if comb.get('vert') else None),
@@ -282,7 +283,7 @@ def prospect_card(session, league, abbr, pid):
                 medical=('Concern found at visit' if 'medical' in (view.get('flags') or []) else 'No concern found at visit' if 'visited' in (view.get('flags') or []) else 'Unknown until visit'),
                 on_clock=bool(getattr(session, 'draft', None) is not None and not session.draft.done and session.draft.on_user() and not taken_now),
                 schemes=VC.scheme_rows(seen_ratings, p.pos, VC._club_arch(league, abbr, p.pos)),
-                reads=reads, confidence=confidence, visit_status=visit_status, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality='', character_report=row['character_report'], spring_done=_spring_done(league), visit_window=(session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'),
+                reads=reads, confidence=confidence, visit_status=visit_status, on_board=on_board, dnd=(p.pid in (ub.get('dnd') or [])), personality='', character_report=row['character_report'], flag_tips=row['flag_tips'], spring_done=_spring_done(league), visit_window=(session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'),
                 read=_prospect_read(league, abbr, p, row, view))
 
 
