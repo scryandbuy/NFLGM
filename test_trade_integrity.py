@@ -44,6 +44,7 @@ class TradeIntegrityTests(unittest.TestCase):
         L = league(a,b)
         D = object.__new__(draft_day.Draft)
         D.L, D.year = L,2027
+        D.user = L.user_team
         return D, pk(slot,'B')
 
     def test_ten_cannot_buy_pick39_with_108_140_204_even_if_gm_loves_late_picks(self):
