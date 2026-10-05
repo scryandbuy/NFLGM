@@ -1241,7 +1241,7 @@ def _injury_timeout(dr, injuries, out, timeouts, pos, half_end, live_end,
                     off_state=None, def_state=None, foul=False):
     """Administer post-warning injury timeouts after down/spot enforcement."""
     wall = half_end if half_end is not None else 0.
-    if (not injuries or timeouts is None or dr.quarter not in (2, 4)
+    if (not injuries or timeouts is None or getattr(dr, 'clock_period', dr.quarter) not in (2, 4)
             or not getattr(dr, '_two_min', False) or live_end <= wall
             or dr.result in ('Touchdown', 'Safety', 'Turnover on downs')
             or out.get('fumble_lost') or out.get('type') == 'interception'):
@@ -2596,7 +2596,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     dr.clock_period = clock_period if clock_period is not None else quarter
     recovery_before = _recovery_start(off_state, def_state)
     dr.field_goal_wins = field_goal_wins
-    if quarter in (2, 4) and clock - (1800 if quarter == 2 else 0) <= 120:
+    # OT keeps quarter=5 for game identity, while its timing follows the
+    # effective period. OT clocks count down to zero, even in the second OT.
+    warning_wall = half_end if half_end is not None else (HALF if quarter == 2 else 0)
+    if dr.clock_period in (2, 4) and clock - warning_wall <= 120:
         dr._two_min = True
     if start_state is not None:
         dr.down, dr.togo = start_state
@@ -3242,7 +3245,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     if inj_: dr.log.append(dict(type='injury', pid=d.get('pid'), pos=def_pos.get(d.get('pid'), 'CB'), kind=inj_.get('kind'), weeks=inj_.get('weeks_out'), side='def', clock=dr.clock))
 
         snap_injuries = [i for i in dr.log[injury_log_start:] if i.get('type') == 'injury']
-        late_injury = bool(snap_injuries and dr.quarter in (2, 4) and getattr(dr, '_two_min', False))
+        late_injury = bool(snap_injuries and dr.clock_period in (2, 4) and getattr(dr, '_two_min', False))
         t = out['type']
         if live_pen is None:
             live_pen = E.penalty_check(rng, timing='live', outcome=out, **penalty_context)

@@ -1,0 +1,30 @@
+Overtime injury clock correction
+
+Observed: seed 93032, 2026 Week 12 LA-GB, overtime drive 25, GB LG P0918
+was injured at 22 seconds. The log had no mandatory injury timeout; a later
+discretionary timeout masked part of the missing administration.
+
+Cause: overtime drives retain raw quarter 5. Injury handling checked only
+raw quarters 2 and 4 despite the driver supplying an effective clock_period.
+Possessions starting below 2:00 also failed to initialize the warning state.
+
+Correction: initialize the warning and administer injuries using the existing
+effective period. Preserve a zero-ending OT clock, including postseason OT 2.
+No injury probability, recovery, player rating or discretionary coaching change.
+Regular OT follows fourth-quarter timing; postseason OT 1/3 remains exempt,
+and OT 2/4 uses late-half timing.
+
+Primary rule: 2026 NFL Rule 16-1-3(e), 16-1-4(g)-(h), referring to Rule 4-5.
+https://static.www.nfl.com/image/upload/fl_attachment/league/tqivdkzt9mu6wdgsh1ku.pdf
+
+Controlled evidence: 9 dedicated tests pass, including actual live/instant
+drive injury rows, available/excess timeouts, offensive runoff, repeated excess
+penalty, defensive/stopped-clock controls, regulation 2/4 and postseason 1-4.
+All OT fixtures use production raw quarter 5 and omit half_end.
+Combined clock/FG/injury/delay/kickoff gate: 53 tests passed.
+
+Limits: saved games are unchanged. This is not an injury-rate calibration.
+Separate existing warning-entry defects were found in delay, kickoff and
+post-play warning paths and are being handled independently. This correction
+establishes post-warning injury administration; it does not claim complete
+OT warning consistency until that follow-up is integrated.
