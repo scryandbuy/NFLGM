@@ -143,8 +143,18 @@ def _evaluate(league, abbr, other, a_sends, b_sends, *, pool=None,
             r = dict(r, blocked='cpu_plan', accepted=False)
             plan_read = decision['why']
     # Broad, deterministic interest estimate, not acceptance probability.
-    target = max(1., float(r.get('b_out', 0.)) + required_gain)
-    ratio = max(0., float(r.get('b_in', 0.))) / target
+    # A cap veto omits valuation totals. Quote the package for the meter;
+    # this does not override trade eligibility.
+    b_out = r.get('b_out')
+    b_in = r.get('b_in')
+    if b_out is None:
+        b_out = sum(TE.team_price(x, them.ctx(), them.cap_space, gb, owns=True)
+                    for x in offer_a['a_gets'])
+    if b_in is None:
+        b_in = sum(TE.team_price(x, them.ctx(), them.cap_space, gb, owns=False)
+                   for x in offer_a['a_sends'])
+    target = max(1., float(b_out) + required_gain)
+    ratio = max(0., float(b_in)) / target
     interest = int(min(95, max(0, round(70 * ratio))))
     interest_band = 'low' if interest < 45 else 'medium' if interest < 63 else 'high'
     # words for their side

@@ -3127,3 +3127,9 @@ dialog.retain-dialog .retain-dialog-actions{flex-wrap:wrap}
 .draft-surface .tbl td.prospect-flags{width:230px;max-width:230px;white-space:normal}
 .prospect-flag-list{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:5px;min-width:150px;max-width:230px;margin:0 auto}
 .prospect-flag-list .flag{margin:0;white-space:nowrap;line-height:1.25}
+
+/* Keep scouting notes readable in the narrow prospect sidebar. */
+.character-report-item{padding:8px 0;line-height:1.4;border-bottom:1px solid var(--rule);text-align:left}
+.character-report-item:last-child{border-bottom:0}
+.character-report-item>b{display:block;margin-bottom:2px}
+.character-report-source,.character-report-explanation{display:block;margin:4px 0 0;padding:0;color:var(--muted);font-size:13px;line-height:1.4;text-align:left}

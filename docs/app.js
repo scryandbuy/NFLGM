@@ -1072,10 +1072,10 @@ function renderRoster(v) {
 function characterReport(rows) {
   const box = el('div', {class:'character-report'});
   for (const row of rows || []) {
-    const item = el('div', {style:'padding:10px 0;border-bottom:1px solid var(--rule)'},
+    const item = el('div', {class:'character-report-item'},
       el('b', {}, row.label), el('div', {class: row.status === 'concern' ? 'dn' : row.status === 'strength' ? 'up' : 'muted'}, row.summary),
-      row.source ? el('small', {class:'count'}, `${row.source} · ${row.confidence} confidence`) : '');
-    if (row.explanation) item.append(el('p', {class:'count', style:'margin:4px 0'}, row.explanation));
+      row.source ? el('small', {class:'character-report-source'}, `${row.source} · ${row.confidence} confidence`) : '');
+    if (row.explanation) item.append(el('p', {class:'character-report-explanation'}, row.explanation));
     box.append(item);
   }
   return box;
@@ -1456,7 +1456,7 @@ function renderProspectCard(v) {
   left.append(el('div', { class: 'kv' }, ...v.combine.flatMap(c => [el('span', {}, c.label), el('span', {}, c.v)])));
   left.append(h5('Flags'), el('div', { style: 'padding:4px 0 8px' }, ...(v.words.length ? v.words.map(wordTag) : [el('span', { class: 'muted', style: 'font-size:14.5px' }, 'None')])));
   left.append(h5('Medical'), el('div', { style: 'font-size:15px;color:var(--ink-2);padding-bottom:8px' }, v.medical));
-  left.append(h5('Character', 'Your scouting assessments'), characterReport(v.character_report));
+  left.append(characterReport(v.character_report));
   const mid = el('div', {});
   mid.append(h5('Attributes', "your scouts' read"));
   const attrs = el('div', { class: 'attrs' });
@@ -1626,7 +1626,7 @@ function tradeAssetRow(own, asset, remove, onChange, side) {
   const name = asset.kind === 'player' ? p.short : p.words;
   const row = el('div', {class:'trade-asset' + (remove ? ' selected' : ''), draggable: remove ? null : 'true'},
     el('span', {class:'trade-number'}, asset.kind === 'player' ? (jerseyNo(p.no) ?? p.pos) : `R${p.round}`),
-    el('div', {class:'trade-name'}, name, el('small', {}, asset.kind === 'player' ? `${p.pos} · ${p.yrs} yrs · $${p.hit}m hit${remove ? ` · $${p.penalty}m penalty` : ''}` : `${p.own_words}${p.proj ? ' · ' + p.proj : ''}`)),
+    el('div', {class:'trade-name'}, asset.kind === 'player' ? playerMention(p.pid, name) : name, el('small', {}, asset.kind === 'player' ? `${p.pos} · ${p.yrs} yrs · $${p.hit}m hit${remove ? ` · $${p.penalty}m penalty` : ''}` : `${p.own_words}${p.proj ? ' · ' + p.proj : ''}`)),
     el('b', {class:'trade-rating'}, asset.kind === 'player' ? p.ovr : ''),
     el('button', {class:'btn trade-add', 'aria-label':`${remove ? 'Remove' : 'Add'} ${name}`, onclick:() => onChange(asset, remove)}, remove ? '×' : '+'));
   if (!remove) row.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', JSON.stringify({side, asset})));
@@ -1698,7 +1698,7 @@ function showTradeResult(result, view, sent, received) {
       const list=el('ul',{});
       for(const asset of assets){
         const item=asset.kind==='player'?own.roster.find(p=>String(p.pid)===String(asset.id)):own.picks.find(p=>String(p.id)===String(asset.id));
-        if(item)list.append(el('li',{},asset.kind==='player'?(item.name||item.short):item.words));
+        if(item){const label=asset.kind==='player'?playerMention(item.pid,item.name||item.short):item.words;if(asset.kind==='player')label.addEventListener('click',()=>dialog.close());list.append(el('li',{},label));}
       }
       body.append(assets.length?list:el('p',{},'No assets'));
     }
@@ -1873,7 +1873,7 @@ function openTradeOffer(id, after) {
     applyTeamTheme(c, team);
     for (const x of items) c.append(el('div', { class: 'trade-offer-asset' + (x.gone ? ' gone' : '') },
       el('span', { class: 'trade-offer-position' }, x.kind === 'pick' ? 'PICK' : x.pos || '—'),
-      el('div', { class: 'nm' }, x.label, x.gone || x.kind === 'player' ? el('small', {}, x.gone ? 'No longer available' : `Age ${x.age} · $${x.apy}m per year`) : null),
+      el('div', { class: 'nm' }, x.kind === 'player' ? el('a', {class:'entity-link', href:'#club/player/'+encodeURIComponent(x.id), onclick:()=>overlay.remove()}, x.label) : x.label, x.gone || x.kind === 'player' ? el('small', {}, x.gone ? 'No longer available' : `Age ${x.age} · $${x.apy}m per year`) : null),
       x.kind === 'player' ? el('b', {}, `${x.ovr} OVR`) : ''));
     if (!items.length) c.append(el('div', { class: 'empty' }, 'No assets'));
     return c;
@@ -2620,7 +2620,7 @@ const POS_GROUPS = ['All', 'QB', 'HB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'ST']
 const POS_OF = { QB: ['QB'], HB: ['HB', 'FB'], WR: ['WR'], TE: ['TE'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], DL: ['LEDG', 'DT', 'REDG'], LB: ['MIKE', 'WILL', 'SAM'], DB: ['CB', 'FS', 'SS'], ST: ['K', 'P', 'LS'] };
 
 const NEED_POS = { QB: ['QB'], RB: ['HB', 'FB'], WR: ['WR'], TE: ['TE'], OL: ['LT', 'LG', 'C', 'RG', 'RT'], EDGE: ['LEDG', 'REDG'], DT: ['DT'], LB: ['MIKE', 'WILL', 'SAM'], CB: ['CB'], S: ['FS', 'SS'] };
-const FLAG_TIPS = { 'Work ethic concern': 'Scouting concern about preparation; may slow development. See the card for confidence and source.', 'Strong preparation': 'Scouting reports suggest consistent effort; see the card for confidence.', 'Discipline concern': 'Scouting concern about avoidable penalties; not a talent downgrade.', 'Plays under control': 'Scouting reports suggest disciplined play; penalties remain possible.', Visited: 'You met with this player.', Scheduled: 'A private visit is scheduled but has not happened yet.', 'Senior Bowl': 'Your scouts saw him at the Senior Bowl.', 'Sr. Bowl': 'Your scouts saw him at the Senior Bowl.', 'Pro Day': 'Your scouts attended his pro day.', Medical: 'Durability concerns.', Character: 'Work ethic concerns.', Riser: 'Up fifteen or more spots on the consensus board this Spring.', Faller: 'Down fifteen or more spots on the consensus board this Spring.', 'Small School': 'Less tape on this player.', Underclassman: 'More room to grow.' };
+const FLAG_TIPS = { 'Work ethic concern': 'Scouting concern about preparation; may slow development.', 'Strong preparation': 'Scouting reports suggest consistent effort.', 'Discipline concern': 'Scouting concern about avoidable penalties.', 'Plays under control': 'Scouting reports suggest disciplined play.', Visited: 'You met with this player.', Scheduled: 'A private visit is scheduled but has not happened yet.', 'Senior Bowl': 'Your scouts saw him at the Senior Bowl.', 'Sr. Bowl': 'Your scouts saw him at the Senior Bowl.', 'Pro Day': 'Your scouts attended his pro day.', Medical: 'Durability concerns.', Character: 'Work ethic concerns.', Riser: 'Up fifteen or more spots on the consensus board this Spring.', Faller: 'Down fifteen or more spots on the consensus board this Spring.', 'Small School': 'Less tape on this player.', Underclassman: 'More room to grow.' };
 const FLAG_CLS = { 'Work ethic concern': 'chr', 'Discipline concern': 'chr', 'Strong preparation': 'up', 'Plays under control': 'up', Medical: 'med', Character: 'chr', Visited: 'vis', Scheduled: 'sen', Riser: 'up', Faller: 'dn', 'Sr. Bowl': 'sen', 'Senior Bowl': 'sen', 'Small School': 'small', Underclassman: 'under' };
 const wordTag = w => el('span', { class: 'flag ' + (FLAG_CLS[w] || ''), 'data-tip': FLAG_TIPS[w] || null }, w);
 

@@ -1552,7 +1552,7 @@ class Session:
         pl = m.get('payload') or {}; buyer = pl.get('buyer')
         def item(x, owner):
             if isinstance(x, dict) and x.get('pick'):
-                return dict(kind='pick', id=f"{x['year']}-{x['round']}-{x['original']}", label=f"{x['year']} round {x['round']} pick" + (f" (from {x['original']})" if x.get('original') and x['original'] != owner else ''), sel=x.get('selection'))
+                return dict(kind='pick', id=f"{x['year']}-{x['round']}-{x['original']}", label=f"{__import__('views').draft_year(x['year'])} round {x['round']} pick" + (f" (from {x['original']})" if x.get('original') and x['original'] != owner else ''), sel=x.get('selection'))
             p = self.L.player(x)
             if p is None: return dict(kind='player', id=str(x), label=str(x))
             return dict(kind='player', id=p.pid, label=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), gone=(p.team != owner))

@@ -176,7 +176,7 @@ def describe(key, record=None):
                    'neutral': 'No concern identified'}[status]
         explanation = {'concern': 'May commit more avoidable penalties when involved in the play.',
                        'strength': 'Shows signs of avoiding unnecessary penalties.',
-                       'neutral': 'No discipline concern identified; penalties remain possible.'}[status]
+                       'neutral': 'No discipline concern identified.'}[status]
     if record.get('stage') == 'background':
         explanation = 'Tentative background read. ' + explanation
     return dict(key=key, label=label, status=status, summary=summary,
