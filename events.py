@@ -125,10 +125,35 @@ def pocket_run_chance(qb, defenders, rate_fn, *, separation, pressure,
     return float(np.clip(choice, 0., .32))
 
 
+def _scramble_pursuer(players, yards, rng, rate_fn, exclude=None):
+    """Coarse pursuit opportunity from the live unit, never an off-field name.
+
+    Close pursuit can include a lineman catching the QB from behind. Further
+    downfield, underneath and secondary defenders have better opportunities.
+    These are role weights, not tracked coordinates or guaranteed contact.
+    """
+    pool = sorted((p for p in players if p.get('pid') != exclude), key=lambda p: str(p.get('pid', '')))
+    if not pool: return None
+    weights = []
+    for p in pool:
+        pos = p.get('pos')
+        front = pos in ('DT', 'NT', 'LE', 'RE', 'LEDG', 'REDG', 'DE')
+        backer = pos in ('MIKE', 'WILL', 'SAM', 'MLB', 'OLB', 'LB')
+        role = ((3.0 if yards <= 3 else 1.0 if yards <= 8 else .2) if front else
+                (2.0 if yards <= 8 else 1.0) if backer else (1.0 if yards <= 3 else 2.0))
+        pursuit = rate_fn(p, {'pursuit_rating': .5, 'speed_rating': .3, 'accel_rating': .2})
+        weights.append(role * max(.2, .6 + pursuit))
+    weights = np.asarray(weights, float)
+    return pool[int(rng.choice(len(pool), p=weights/weights.sum()))]
+
+
 def resolve_scramble(qb, tacklers, yards_to_endzone, rng, rate_fn, AVG=0.70):
     """
-    Gamma-shaped to match the real distribution: mean 7.00, sd 6.07, median 6,
-    right tail to 61. A scramble is never negative in the data.
+    Existing escape-distance draw, followed by a live pursuit contact contest.
+    Untouched crossing ends the play. Breaking a tackle short of the plane can
+    add a small burst; that earlier contact remains available to fumble logic.
+    The contact/burst parameters are disclosed model assumptions, not a new
+    empirical fit of the original scramble distribution.
     """
     mob = rate_fn(qb, {'speed_rating': .45, 'accel_rating': .30,
                        'agility_rating': .25})
@@ -144,8 +169,31 @@ def resolve_scramble(qb, tacklers, yards_to_endzone, rng, rate_fn, AVG=0.70):
                                for p in unique.values()]))
         y *= float(np.clip(1.0 - .40 * (chase - AVG), .85, 1.20))
     y = float(np.clip(y, 0.0, min(yards_to_endzone, SCRAMBLE['max'])))
-    return dict(type='scramble', yards=round(y, 1),
-                touchdown=y >= yards_to_endzone, by=qb.get('pid'))
+    out = dict(type='scramble', yards=round(y, 1),
+               touchdown=y >= yards_to_endzone, by=qb.get('pid'))
+    if y >= yards_to_endzone or not unique:
+        out['tackler'] = None
+        return out
+    first = _scramble_pursuer(list(unique.values()), y, rng, rate_fn)
+    if first is None: return out
+    contact = float(y)
+    power = rate_fn(qb, {'break_tackle_rating': .6, 'strength_rating': .4})
+    elusive = rate_fn(qb, {'agility_rating': .5, 'accel_rating': .3, 'speed_rating': .2})
+    wrap = rate_fn(first, {'tackle_rating': .7, 'pursuit_rating': .3})
+    chance = float(np.clip(.12 + .60 * (power - wrap) + .25 * (elusive - wrap), .02, .40))
+    broken = bool(rng.random() < chance)
+    out.update(pre_goal_contact_yards=contact, pre_goal_contact_by=first.get('pid'),
+               tackler=first.get('pid'), scramble_contact=dict(version=1,
+               first_contact_yards=contact, defender=first.get('pid'), break_chance=chance,
+               broken=broken, burst=0.))
+    if broken:
+        burst = float(np.clip(rng.gamma(1.5, 1.5) * (1. + .6 * (mob - wrap)), .1, 8.))
+        final = min(float(yards_to_endzone), float(SCRAMBLE['max']), contact + burst)
+        out.update(yards=round(final, 1), touchdown=final >= yards_to_endzone, broken_tackles=1)
+        out['scramble_contact']['burst'] = final - contact
+        second = _scramble_pursuer(list(unique.values()), final, rng, rate_fn, exclude=first.get('pid')) if not out['touchdown'] else None
+        out['tackler'] = second.get('pid') if second else None
+    return out
 
 # ============================================================ FUMBLES
 # Rates per play by event type, straight from the data.

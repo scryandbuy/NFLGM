@@ -3129,7 +3129,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # assignment. Keep one actual defender for contact, fumbles
                 # and the final book, just as on a voluntary scramble.
                 from plays import _likely_tackler
-                out['tackler'] = _likely_tackler(def_f, out, rng, pass_play=True)
+                if 'tackler' not in out:
+                    out['tackler'] = _likely_tackler(def_f, out, rng, pass_play=True)
         actual_qb_run = (out.get('type') == 'run' and
                          (out.get('carrier_pid') or out.get('carrier')) == qb_pid)
         if actual_qb_run and not out.get('sneak') and not out.get('qb_run'):
