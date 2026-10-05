@@ -27,7 +27,7 @@ class SnapCountUnitTests(unittest.TestCase):
     def test_zero_snaps_elevation_cross_unit_and_immutable_mail(self):
         ps = [NS(pid=str(i), name=f'Player {i}', pos=pos) for i, pos in enumerate(['QB','WR','LEDG','CB','K','HB'])]
         team = NS(active=lambda:ps[:5], _elevated=[ps[5]])
-        league = NS(year=2027, week=19, user_team='GB', teams={'GB':team},
+        league = NS(year=2027, week=19, phase='playoffs', user_team='GB', teams={'GB':team},
                     notes_sent={}, inbox=[], player=lambda pid:next(p for p in ps if p.pid==pid))
         counts = dict(offense=dict(total=82,players={'0':82,'1':51,'5':6}),
                       defense=dict(total=75,players={'2':70,'1':1}))
@@ -89,6 +89,17 @@ class SnapCountSimulationTests(unittest.TestCase):
 
     def test_live_halftime_reload_and_finish_matches_uninterrupted(self):
         s=Session.load(self.saved); s.L.set_phase('regular'); s.L.week=1; s.stop=('week',1); s.played=True
+        # Session.new starts with a camp roster. Make legal cuts before kickoff;
+        # the real user gate must remain active during this replay test.
+        import cutdown
+        import roster_needs as RN
+        import game_availability as GA
+        team=s.L.teams['GB']
+        kept=RN.select_cutdown(team,cutdown.rows_for(team),53)
+        for p in list(team.active()):
+            if p.pid not in kept: s.L.release(p.pid)
+        self.assertEqual(len(team.active()),53)
+        self.assertEqual(GA.shortages(GA.dressed(team,None,1)),[])
         s.runner=SeasonRunner(s.L,s.rng); s.runner.open_live('GB','MIN',1)
         s.runner.live_step('half')
         self.assertEqual(s.runner.live['at'],'halftime')
