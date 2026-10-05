@@ -2335,7 +2335,7 @@ function renderOwner(v) {
   const budget=el('div',{class:'fo-summary'});
   for(const [value,label] of [[v.staff_budget.total,'Total budget'],[v.staff_budget.payroll,'Current payroll'],[v.staff_budget.available,'Available']]) budget.append(el('div',{},el('b',{},`$${value}m`),el('span',{},label)));
   s.append(budget,el('div',{class:'bar fo-budget'},el('i',{style:`width:${Math.max(0,Math.min(100,v.staff_budget.payroll/Math.max(1,v.staff_budget.total)*100))}%`})),el('p',{class:'count'},'Payroll includes the head coach.'),el('div',{class:'h5'},'SEASON REVIEWS'));
-  for(const x of v.reviews) s.append(el('div',{class:'fo-history'},el('b',{},x.year),el('span',{},`${x.record || ''} · ${x.line || ''}`)));
+  for(const x of v.reviews) s.append(el('div',{class:'fo-history'},el('b',{},x.year),el('span',{},[x.record, x.line].filter(Boolean).join(' · '))));
   if(!v.reviews.length) s.append(el('p',{class:'count'},'Reviews appear after each season.'));
   s.append(el('a',{class:'btn fo-review-link',href:'#frontoffice/review'},'View Season Review')); page.append(s);
 }
@@ -3275,20 +3275,28 @@ function renderReview(v) {
 
 // EXIT MEETINGS. A room, one man at a time: his question in his own words, his contract on the table, and your
 // answers with what each one costs. Once you answer, his reply stays on the card.
+function exitPlayerDetails(m) {
+  const details = [];
+  if (m.pos) details.push(m.pos);
+  if (m.age != null) details.push(`Age ${m.age}`);
+  if (m.ovr != null) details.push(`${m.ovr} OVR`);
+  if (m.years != null) details.push(m.years ? `${m.years} years left${m.apy != null ? ` at $${m.apy}m` : ''}` : 'Contract up');
+  return details.join(' · ');
+}
 let exitSelected = null;
 function renderExit(v) {
   renderRail(v.rail); const page=persPage(); foSecond('exit');
   const meetings=v.meetings || [], pending=meetings.filter(m=>!m.answer).length;
-  const board=foBoard(v,'EXIT MEETINGS',meetings.length ? [[pending,'Open'],[meetings.length-pending,'Answered']] : []);
+  const board=foBoard(v,'EXIT MEETINGS',meetings.length ? [[pending,v.past ? 'Unanswered' : 'Open'],[meetings.length-pending,'Answered']] : []);
   board.append(foYears(v,y=>renderExit(pyJSON(`SESSION.frontoffice('exit_interviews', year=${y})`)))); page.append(board);
   if(!meetings.length) { board.append(el('div',{class:'empty fo-empty'},(v.not_yet || v.pending) ? `The ${v.year} meetings come after your team's season.` : v.missing ? `No meetings were kept for ${v.year}.` : 'Nobody asked for a meeting this year.')); return; }
   if(!meetings.some(m=>m.pid===exitSelected)) exitSelected=meetings.find(m=>!m.answer)?.pid || meetings[0].pid;
   const queue=el('div',{class:'fo-queue'}), conversation=el('div',{class:'fo-conversation'});
   const draw=()=>{
     queue.replaceChildren(el('div',{class:'h5'},'MEETING QUEUE')); conversation.replaceChildren();
-    for(const m of meetings) queue.append(el('button',{class:'fo-meeting'+(m.pid===exitSelected?' selected':''),onclick:()=>{exitSelected=m.pid;draw();}},el('b',{},m.no ?? m.pos),el('span',{},m.name,el('small',{},m.pos)),el('small',{},m.answer?'Answered':'Open')));
+    for(const m of meetings) queue.append(el('button',{class:'fo-meeting'+(m.pid===exitSelected?' selected':''),onclick:()=>{exitSelected=m.pid;draw();}},el('b',{},m.no ?? m.pos ?? '—'),el('span',{},m.name,el('small',{},m.pos)),el('small',{},m.answer?'Answered':v.past?'Unanswered':'Open')));
     const m=meetings.find(x=>x.pid===exitSelected);
-    conversation.append(el('div',{class:'xm-who'},el('div',{class:'plate',style:'background:var(--report-team);color:var(--ink)'},m.no ?? m.pos),el('div',{},el('button',{class:'fo-player-link',onclick:()=>{location.hash='#club/player/'+m.pid;}},m.name),el('div',{class:'ln'},`${m.pos} · ${m.age} · ${m.ovr} OVR · ${m.years ? `${m.years} years left at $${m.apy}m` : 'Contract up'}`))),el('div',{class:'xm-quote'},m.quote));
+    conversation.append(el('div',{class:'xm-who'},el('div',{class:'plate',style:'background:var(--report-team);color:var(--ink)'},m.no ?? m.pos ?? '—'),el('div',{},el('button',{class:'fo-player-link',onclick:()=>{location.hash='#club/player/'+m.pid;}},m.name),el('div',{class:'ln'},exitPlayerDetails(m)))),el('p',{class:'count'},m.context_note || ''),el('div',{class:'xm-quote'},m.quote));
     if(m.answer) {const option=m.options.find(o=>o.key===m.answer); conversation.append(el('div',{class:'xm-said'},el('p',{},'You: ',el('b',{},option?.label || m.answer)),el('p',{},m.said || ''))); return;}
     if(v.past) {conversation.append(el('p',{class:'count'},'No response was recorded.'));return;}
     const options=el('div',{class:'xm-opts'}); let selected=null;

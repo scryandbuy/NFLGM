@@ -1,0 +1,14 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync('docs/app.js', 'utf8');
+const start = source.indexOf('function exitPlayerDetails(');
+const end = source.indexOf('let exitSelected =', start);
+const context = {};
+vm.runInNewContext(source.slice(start, end), context);
+assert.equal(context.exitPlayerDetails({pos:'QB',age:null,ovr:null,years:null,apy:null}), 'QB');
+assert.equal(context.exitPlayerDetails({pos:null,age:null,ovr:null,years:null,apy:null}), '');
+assert.equal(context.exitPlayerDetails({pos:'WR',age:24,ovr:82,years:2,apy:9.3}), 'WR · Age 24 · 82 OVR · 2 years left at $9.3m');
+assert.equal(context.exitPlayerDetails({pos:'QB',years:0,apy:0}), 'QB · Contract up');
+assert.equal(context.exitPlayerDetails({pos:'QB',years:2,apy:null}), 'QB · 2 years left');
+console.log('Exit meeting historical detail formatting passed.');
