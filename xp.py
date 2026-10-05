@@ -331,6 +331,12 @@ def unlock_cost(player):
             * (1.0 + AGE_SLOPE * years))
 
 
+def points_bought_in_year(player, year):
+    """Count dated attribute purchases only; legacy undated totals are not seasonal."""
+    return sum(1 for row in (player.xp_spent or {}).get('_purchases', [])
+               if row.get('kind') == 'buy' and row.get('year') == year)
+
+
 def _record_purchase(player, kind, cost, *, attr=None, year=None, week=None, source=None):
     """Keep dated XP purchases with the player's existing, saved XP ledger."""
     player.xp_spent.setdefault('_purchases', []).append(dict(

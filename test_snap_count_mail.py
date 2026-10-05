@@ -78,6 +78,12 @@ class SnapCountSimulationTests(unittest.TestCase):
         data=self.check_report(s,'MIN','GB')
         saved=s.save()
         loaded=Session.load(saved)
+        for team in ('MIN', 'GB'):
+            recorded = loaded.L.team_game_stats['2026-19-MIN-GB'][team]
+            self.assertEqual(recorded['snap_counts'], s.runner.states[team].last_snap_counts)
+            self.assertTrue(recorded['snap_roster'])
+            s.runner.states[team].last_snap_counts['offense']['total'] = 0
+            self.assertGreater(recorded['snap_counts']['offense']['total'], 0)
         self.assertEqual(next(m['payload']['snap_counts'] for m in loaded.L.inbox if m['payload'].get('snap_counts')),data)
         self.assertIsNone(GR.post_snap_counts(loaded.L,'MIN','GB',19,loaded.runner.states,True))
 

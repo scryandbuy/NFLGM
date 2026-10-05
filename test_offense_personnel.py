@@ -120,11 +120,11 @@ class OffensivePersonnelTests(unittest.TestCase):
                             gm=SimpleNamespace(def_front='4-3',off_personnel='11'))
         t.active = lambda: t.roster
         league = SimpleNamespace(teams={'TST':t},week=1)
-        session = SimpleNamespace(runner=None)
+        session = SimpleNamespace(runner=None, user_team='TST')
         healthy = [dict(p.ratings) for p in t.roster if p.out_until is None]
         healthy.append(dict(healthy[0], pid='CB0', pos='CB'))
         assembled = RO.build_roster_rows(healthy,pins=pins)
-        with patch.object(VC,'rail',return_value={}), patch.object(VC,'_fit',return_value=0), \
+        with patch.object(VC,'rail',return_value={}), patch.object(VC,'user_player_grade',return_value=dict(ovr=70,fit=0)), \
              patch.object(VC,'player_plate',side_effect=lambda p:{'pid':p.pid}):
             for package in OR.PACKAGES:
                 t.gm.off_personnel = package
