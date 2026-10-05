@@ -73,6 +73,24 @@ class ProtectorScoringTests(unittest.TestCase):
 
 
 class DefensiveEvidenceTests(unittest.TestCase):
+    def test_half_sack_credit_survives_awards_and_award_card_text(self):
+        import views_league as VL
+        for pos in ('LEDG','MIKE'):
+            with self.subTest(pos=pos):
+                a,b=player('a',pos),player('b',pos)
+                l=league([a,b],{'a':dict(sacks=12,tackles=60),
+                                'b':dict(sacks=12.5,tackles=60)})
+                ballot=AW.Ballot(l)
+                self.assertAlmostEqual(ballot.def_score(b,l.stats[2028]['b'])-
+                                       ballot.def_score(a,l.stats[2028]['a']),1.5)
+                self.assertIs(ballot.dpoy(),b)
+                self.assertIs(ballot.droy(),b)
+                self.assertIn('12.5 sacks',VL._award_line(l,b,2028))
+                l.game_stats={'2028-22-A-B':{'a':dict(sacks=1), 'b':dict(sacks=1.5)}}
+                post=NS(champion='A',games=[('SB','', 'A','B',21,14)])
+                self.assertIs(AW.championship_game_mvp(l,post,2028),b)
+                self.assertIn('1.5',VL._sb_line(l,b,2028))
+
     def test_zero_canonical_ball_production_matches_absent_fields(self):
         ballot = AW.Ballot(league())
         for pos in ('MIKE', 'CB'):
