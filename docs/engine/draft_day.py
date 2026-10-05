@@ -263,6 +263,7 @@ class Draft:
             paid *= handicap(pkg)
             if best is not None and paid >= best[0]: continue
             offer = dict(a_sends=list(pkg), a_gets=[target])
+            if buyer != self.user and TR.trade_was_rejected(self.L, buyer, seller, pkg, [target]): continue
             r = TE.evaluate(offer, ctx_a, ctx_b, ta.cap_space, tb.cap_space, ga, gb)
             if not r.get('accepted'): continue
             if target_player is not None:

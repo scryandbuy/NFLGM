@@ -68,6 +68,12 @@ class PackageSearchTests(unittest.TestCase):
                                    100, 100, list(surplus), roll, needs_b={'LB': 50})
         return result
 
+    def test_rejected_package_is_not_selected_again(self):
+        with patch.object(TR, 'trade_was_rejected', return_value=True):
+            offer, result = self.negotiate([pick(1, 10, received=10)], market=10, user=True)
+        self.assertIsNone(offer)
+        self.assertIsNone(result)
+
     def test_user_offer_does_not_require_simulated_seller_acceptance(self):
         bank = [pick(1, 10, received=10)]
         self.assertIsNone(self.negotiate(bank, ask=100)[0])

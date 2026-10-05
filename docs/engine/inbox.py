@@ -251,6 +251,8 @@ def post_trade_offer(league, buyer, user_team, sends, gets, why, expires_week):
     sends: assets the buyer gives (pids or DraftPick objects); gets: pids the
     buyer wants from the user. Stored as ids so the inbox survives a save.
     """
+    import trades as TR
+    if TR.trade_was_rejected(league, buyer, user_team, sends, gets): return None
     def key(x):
         return x if isinstance(x, str) else dict(pick=True, year=x.year, round=x.round,
                                                   original=x.original, selection=x.selection)
@@ -305,6 +307,11 @@ def accept(league, msg_id, user_team):
 def decline(league, msg_id):
     m = next((m for m in _box(league) if m['id'] == msg_id), None)
     if m is not None and m['status'] in ('unread', 'open'):
+        if m.get('kind') == 'trade_offer':
+            import trades as TR
+            p = m.get('payload') or {}
+            if all(k in p for k in ('buyer', 'user_team', 'sends', 'gets')):
+                TR.remember_trade_rejection(league, p['buyer'], p['user_team'], p['sends'], p['gets'])
         m['status'] = 'declined'
     return m
 

@@ -38,6 +38,54 @@ import valuation as VAL
 from trade_calendar import TRADE_DEADLINE_WEEK, trading_open
 
 
+
+def _rejected_package_key(a, b, sends, gets):
+    import json
+    import re
+    def asset(x):
+        if isinstance(x, dict) and x.get('kind') in ('pick', 'player'):
+            return asset(x['obj'] if x['kind'] == 'pick' else x['pid'])
+        if isinstance(x, str):
+            match = re.fullmatch(r'(\d{4})-(\d+)-(.+)', x)
+            return ['pick', int(match[1]), int(match[2]), match[3]] if match else ['player', x]
+        if isinstance(x, dict):
+            return ['pick', int(x['year']), int(x['round']), x['original']]
+        if hasattr(x, 'pid'): return ['player', x.pid]
+        return ['pick', int(x.year), int(x.round), x.original]
+    sides = [[str(a), sorted([asset(x) for x in sends])],
+             [str(b), sorted([asset(x) for x in gets])]]
+    return json.dumps(sorted(sides), separators=(',', ':'))
+
+
+def _rejected_packages(league):
+    # Persist independently of inbox deletion using the existing saved ledger.
+    if getattr(league, 'league_notes_sent', None) is None:
+        league.league_notes_sent = {}
+    ledger = league.league_notes_sent
+    year = int(league.year)
+    record = ledger.get('_rejected_trade_packages')
+    if not isinstance(record, dict) or record.get('year') != year:
+        record = dict(year=year, packages={})
+        ledger['_rejected_trade_packages'] = record
+        for message in getattr(league, 'inbox', []):
+            payload = message.get('payload') or {}
+            if (message.get('kind') == 'trade_offer' and message.get('status') == 'declined'
+                    and message.get('year') == year
+                    and all(k in payload for k in ('buyer', 'user_team', 'sends', 'gets'))):
+                record['packages'][_rejected_package_key(payload['buyer'], payload['user_team'],
+                    payload['sends'], payload['gets'])] = True
+    return record['packages']
+
+
+def trade_was_rejected(league, a, b, sends, gets):
+    return hasattr(league, 'year') and _rejected_package_key(a, b, sends, gets) in _rejected_packages(league)
+
+
+def remember_trade_rejection(league, a, b, sends, gets):
+    if hasattr(league, 'year'):
+        _rejected_packages(league)[_rejected_package_key(a, b, sends, gets)] = True
+
+
 def context(team):
     ctx = team.ctx()
     return ctx if 'games_played' in ctx else dict(ctx, **TE.race_context(team))
@@ -1171,6 +1219,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     net_gains = {}
 
     def legal(items, seller_review=False):
+        if trade_was_rejected(league, ta.abbr, tb.abbr, items, [target]): return False
         gains = None
         ids = tuple(sorted(x['pid'] for x in items if x['kind'] == 'player'))
         if ids not in valid_players:
@@ -1238,6 +1287,8 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     baseline = best
     initial_value = sum(TE.team_price(a, ctx_b, sb, gb, owns=False) for a in baseline[1])
     initial_accepted = accepts_b(initial_value) and legal(baseline[1], seller_review=True)
+    if not initial_accepted and not user_seller:
+        remember_trade_rejection(league, ta.abbr, tb.abbr, baseline[1], [target])
     # The seller chooses a request without seeing the buyer's private prices.
     # The buyer then independently accepts. The original remains an option
     # only if the seller independently accepted it.
@@ -1255,6 +1306,8 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         if floor <= paid + 1e-9 and paid <= ceiling + 1e-9 and accepts_a(cost) and accepts_b(value) and legal(counter, seller_review=True):
             best = ((paid, len(counter), cost, ()), counter)
             counter_accepted = True
+    if counter is not None and not counter_accepted and not user_seller:
+        remember_trade_rejection(league, ta.abbr, tb.abbr, counter, [target])
     if not initial_accepted and not counter_accepted:
         return None, None
     offer = dict(a_sends=best[1], a_gets=[target])
@@ -1375,6 +1428,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
                 value = sum(x[3] for x in package)
                 if cost > budget or market > ceiling or (not forced and value <= ask + .9):
                     continue
+                if trade_was_rejected(league, seller.abbr, abbr, [player.pid], [x[0] for x in package]): continue
                 rank = (value, market, -count)
                 if best is None or rank > best[0]:
                     best = (rank, [x[0] for x in package])

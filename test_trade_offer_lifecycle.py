@@ -28,6 +28,19 @@ class TradeOfferLifecycleTests(unittest.TestCase):
         self.s = session.Session.load(self.s.save()); self.L = self.s.L
         self.m = next(m for m in self.L.inbox if m['id'] == self.m['id'])
 
+    def test_declined_package_cannot_be_reoffered_after_save_or_deletion(self):
+        import trades
+        inbox.decline(self.L, self.m['id'])
+        self.reload()
+        self.L.inbox.clear()
+        self.assertTrue(trades.trade_was_rejected(self.L, 'GB', 'DEN',
+            [self.player.pid], [self.pick]))
+        self.assertIsNone(inbox.post_trade_offer(self.L, 'DEN', 'GB',
+            [self.pick], [self.player.pid], 'Again.', 4))
+        self.L.year += 1
+        self.assertFalse(trades.trade_was_rejected(self.L, 'DEN', 'GB',
+            [self.pick], [self.player.pid]))
+
     def assert_closed(self, status):
         self.assertEqual(self.m['status'], status)
         self.assertFalse(inbox.is_decision(self.m))
