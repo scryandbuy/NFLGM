@@ -100,7 +100,7 @@ class EscapeLanes(unittest.TestCase):
 
 
 class ScrambleWorkload(unittest.TestCase):
-    def drive(self, result='scramble', live=False, backup=False, stamina=70, escape=1., nullified=False):
+    def drive(self, result='scramble', live=False, backup=False, stamina=70, escape=1., nullified=False, short=False):
         off, defense = offense(), unit('4-3', 'nickel')
         for p in off['depth']['QB']: p['stamina_rating'] = stamina
         state, dst = G.TeamState(off), G.TeamState(defense)
@@ -115,7 +115,8 @@ class ScrambleWorkload(unittest.TestCase):
         lanes = {'left': [dict(pid='edge', grade=.9, available=1)], 'right': []}
         def resolve(o, d, oc, dc, ytg, rng):
             return dict(type='run' if result=='designed' else 'sack' if result=='escape' else result,
-                yards=-5. if result=='escape' else 45., touchdown=result!='escape', target='WR0', carrier_pid=o['qb']['pid'],
+                yards=-5. if result=='escape' else 0. if result in ('drop','interception') else 45.,
+                touchdown=result not in ('escape','drop','interception'), target='WR0', carrier_pid=o['qb']['pid'],
                 qb_run=result=='designed', by='edge', sack_credits=[('edge', .5), ('other', .5)],
                 pb_award=[('LT', .5, .2, .1)], rush_pressures=['edge'], escape_lanes=lanes,
                 is_pass=result!='designed')
@@ -130,10 +131,10 @@ class ScrambleWorkload(unittest.TestCase):
             stack.enter_context(patch.object(E, 'penalty_check', side_effect=penalty))
             stack.enter_context(patch.object(E, 'fumble_check', return_value=None))
             check = stack.enter_context(patch.object(E, 'scramble_chance', return_value=escape))
-            stack.enter_context(patch.object(E, 'resolve_scramble', return_value=dict(type='scramble', yards=45., touchdown=True, by='backup' if backup else 'QB')))
+            stack.enter_context(patch.object(E, 'resolve_scramble', return_value=dict(type='scramble', yards=1. if short else 45., touchdown=not short, by='backup' if backup else 'QB')))
             stack.enter_context(patch.object(state, 'hurt', side_effect=hurt))
             stack.enter_context(patch.object(dst, 'hurt', return_value=None))
-            args = (off, defense, 45, 1 if nullified or not escape else 700, 3, 0, np.random.default_rng(51), resolve, co,
+            args = (off, defense, 45, 1 if nullified or not escape or short else 700, 3, 0, np.random.default_rng(51), resolve, co,
                     lambda *a, **kw: dict(call('4-3', 'nickel'), front='4-3', box=6), P.rate)
             kw = dict(off_state=state, def_state=dst, book=book)
             if live:
@@ -172,6 +173,19 @@ class ScrambleWorkload(unittest.TestCase):
         self.assertEqual(play['pb_sack_survival'], 0.)
         self.assertEqual(book.p['QB']['rush_att'], 1)
         self.assertEqual(sum(p.get('sacks', 0) for p in book.p.values()), 0.)
+
+    def test_non_scoring_escape_keeps_the_actual_contact_defender(self):
+        _, dr, book, _ = self.drive('escape', short=True)
+        play = next(p for p in dr.log if p.get('scramble_kind') == 'escape')
+        self.assertIsNotNone(play.get('tackler'))
+        self.assertEqual(book.p[play['tackler']]['tackles'],1)
+
+    def test_drop_and_interception_still_expose_live_players_to_injury_checks(self):
+        for outcome in ('drop','interception'):
+            state, dr, book, hits = self.drive(outcome, escape=0.)
+            self.assertTrue(hits, outcome)
+            self.assertEqual(hits[0][0:2], ('QB',1.))
+            self.assertEqual(state.cond.snaps['QB'],1)
 
     def test_incremental_work_does_not_add_snap_and_respects_condition_floor(self):
         state = H.Condition(); state.play('QB', 'QB', 90, 1.1)

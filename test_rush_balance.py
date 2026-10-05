@@ -37,7 +37,11 @@ class RushBalanceTests(unittest.TestCase):
         threats=[.6 if a['alignment']=='left_interior' else t for a,t in zip(aa,threats)]
         self.assertEqual(assigned(threats),'left_interior')
         missing=list(pairs);missing[0]=None
-        self.assertFalse(any(D.protection_helpers(men,aa,missing,threats)))
+        help_=D.protection_helpers(men,aa,missing,threats)
+        # The back/tackle must address the reachable free edge first. The
+        # center cannot get there and can still assist an interior block.
+        self.assertFalse(any(h['pid'] in ('HB','RT') for hs in help_ for h in hs))
+        self.assertTrue(all(a['alignment'] in D.INTERIOR for a,hs in zip(aa,help_) if hs))
 
     def test_elite_upgrade_survives_extra_help_and_improves_front(self):
         rows=[]

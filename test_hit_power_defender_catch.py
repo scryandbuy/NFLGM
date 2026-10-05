@@ -76,7 +76,10 @@ class HitPowerTests(unittest.TestCase):
                         P.rate, [dict(pid='D', hit_power_rating=hit)], event=event)
                         for seed in range(6000)]
                 counts.append(sum(r['fumble'] for r in rows))
-                self.assertTrue(all(r['ret'] == 25 for r in rows if not r['fumble']))
+                # Ordinary returns retain their distance; the separately
+                # modeled breakaway branch can legitimately add yards.
+                self.assertTrue(all(r['ret'] == 25 for r in rows
+                                    if not r['fumble'] and not r.get('breakaway_opportunity')))
                 self.assertTrue(all(0 <= r['new_yardline'] <= 90 for r in rows))
             self.assertLess(counts[0], counts[1])
             self.assertLess(counts[1], counts[2])

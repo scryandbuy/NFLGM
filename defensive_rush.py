@@ -1,4 +1,5 @@
 """Pure on-field rush selection and protection matching, independent of list order."""
+from functools import lru_cache
 
 GROUPS = ('dl', 'lb', 'db')
 EDGES = ('left_edge', 'right_edge')
@@ -160,7 +161,7 @@ def select_rush(defense, call, rng=None):
     return dict(rushers=[a['player'] for a in selected], assignments=selected, coverage=coverage)
 
 
-def protection_pairs(blockers, rush_assignments):
+def _run_pairs(blockers, rush_assignments):
     """Defensive left faces offensive right. Edges get tackles before helpers."""
     unique = {player_key(b): b for b in blockers if b}
     used, pairs = set(), {}
@@ -186,6 +187,88 @@ def protection_pairs(blockers, rush_assignments):
     return [pairs[i] for i in range(len(rush_assignments))]
 
 
+def protection_slide_side(front):
+    """Set from the visible front, before knowing who actually rushes."""
+    weights = {'left': 0., 'right': 0.}
+    for a in front:
+        side = 'left' if 'left' in a['alignment'] else 'right' if 'right' in a['alignment'] else None
+        if side:
+            weights[side] += 1. if a['alignment'] in EDGES + INTERIOR else .35 if a['alignment'].startswith('offball') else 0.
+    # Ties set toward the offensive left (defensive right).
+    return 'left' if weights['left'] > weights['right'] else 'right'
+
+
+@lru_cache(maxsize=256)
+def _pass_pair_indices(positions, alignments, protection, slide_side):
+    """Reachable gap responsibilities; costs are not sack odds or talent.
+
+    Slide sides protect inside out. BOB keeps linemen on the front and a
+    retained back scans linebackers. An overload can leave an outside hot
+    defender instead of automatically sacrificing the last LB in a list.
+    """
+    spots = {'nose': 0., 'left_interior': -1.5, 'right_interior': 1.5,
+             'left_edge': -3.5, 'right_edge': 3.5, 'offball_middle': 0.,
+             'offball_left': -1.5, 'offball_right': 1.5,
+             'corner_left': -6., 'corner_right': 6., 'deep_left': -3.5, 'deep_right': 3.5}
+    line = {'RT': -3., 'RG': -1.5, 'C': 0., 'LG': 1.5, 'LT': 3.}
+    costs, priorities = [], []
+    for alignment in alignments:
+        side = 'left' if 'left' in alignment else 'right' if 'right' in alignment else None
+        sliding = protection == 'six_slide' or (protection in ('half_slide', 'five') and (side == slide_side or side is None))
+        inside = alignment in INTERIOR or alignment.startswith('offball')
+        priority = (14. if inside else 5.) if sliding else (12. if alignment in EDGES + INTERIOR else 5.)
+        if side == slide_side: priority += .5
+        priorities.append(100. + priority)
+        row = []
+        for pos in positions:
+            cost = None
+            if pos in line:
+                x = spots.get(alignment)
+                # Slot side is not charted; a tackle may fan out, but a
+                # guard/center cannot teleport to a wide slot defender.
+                if alignment == 'slot':
+                    cost = 3. if pos in ('LT', 'RT') else None
+                elif x is not None:
+                    distance = abs(line[pos] - x)
+                    if distance <= 1.6 or (sliding and pos in ('LG', 'RG') and distance <= 2.1):
+                        cost = distance + (1. if alignment.startswith('offball') else 0.)
+                        if pos == 'C' and alignment != 'nose': cost += .15
+            elif pos in ('HB', 'FB'):
+                cost = 4. if alignment.startswith('offball') or alignment == 'slot' else 6. if alignment in EDGES else 9.
+            elif pos == 'TE':
+                if alignment in EDGES or alignment == 'slot': cost = 5.
+                elif alignment in ('offball_left', 'offball_right'): cost = 7.
+            row.append(cost)
+        costs.append(row)
+
+    @lru_cache(maxsize=None)
+    def solve(i, used):
+        if i == len(alignments): return 0., ()
+        score, rest = solve(i + 1, used)
+        best = (score + priorities[i], (-1,) + rest)
+        for j, cost in enumerate(costs[i]):
+            if cost is None or used & (1 << j): continue
+            score, rest = solve(i + 1, used | (1 << j))
+            option = (score + cost, (j,) + rest)
+            if option < best: best = option
+        return best
+    return solve(0, 0)[1]
+
+
+def protection_pairs(blockers, rush_assignments, protection='five', slide_side='right'):
+    if protection == 'run':
+        return _run_pairs(blockers, rush_assignments)
+    men = sorted({player_key(b): b for b in blockers if b}.values(), key=player_key)
+    order = sorted(range(len(rush_assignments)),
+                   key=lambda i: (rush_assignments[i]['alignment'], player_key(rush_assignments[i]['player'])))
+    indices = _pass_pair_indices(tuple(b.get('pos') for b in men),
+        tuple(rush_assignments[i]['alignment'] for i in order), protection, slide_side)
+    result = [None] * len(rush_assignments)
+    for i, j in zip(order, indices):
+        if j >= 0: result[i] = men[j]
+    return result
+
+
 def protection_helpers(blockers, rush_assignments, matched, threats, protection='five'):
     """Assign spare blockers by reachable gap and known matchup before any rolls.
 
@@ -196,10 +279,6 @@ def protection_helpers(blockers, rush_assignments, matched, threats, protection=
     engaged = {player_key(b) for b in matched if b is not None}
     spare = {player_key(b): b for b in blockers if b and player_key(b) not in engaged}
     help_by = [[] for _ in rush_assignments]
-    # A spare man must account for an uncovered rush before doubling anybody.
-    # Usually protection_pairs has already used him; keep direct callers safe.
-    if any(b is None for b in matched):
-        return help_by
     reach = {'C': INTERIOR, 'LG': ('right_interior', 'nose', 'right_edge'),
              'RG': ('left_interior', 'nose', 'left_edge'),
              'LT': ('right_edge', 'right_interior'), 'RT': ('left_edge', 'left_interior'),
@@ -208,6 +287,11 @@ def protection_helpers(blockers, rush_assignments, matched, threats, protection=
     for b in sorted(spare.values(), key=lambda b: (order.get(b.get('pos'), 5), player_key(b))):
         pos = b.get('pos')
         allowed = reach.get(pos, EDGES + INTERIOR + ('offball_left', 'offball_right', 'offball_middle', 'slot'))
+        # A reachable free rush must be picked up, not doubled past. A center
+        # cannot reach a wide hot defender, but can still help his own guard.
+        if any(primary is None and a['alignment'] in allowed
+               for a, primary in zip(rush_assignments, matched)):
+            continue
         candidates = [i for i, a in enumerate(rush_assignments)
                       if matched[i] is not None and a['alignment'] in allowed]
         if not candidates:

@@ -2967,6 +2967,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn)
                 out.update({k: v for k, v in head.items() if k not in out})
                 out['scramble_kind'] = 'escape'
+                # The late escape bypasses resolve_play's normal tackler
+                # assignment. Keep one actual defender for contact, fumbles
+                # and the final book, just as on a voluntary scramble.
+                from plays import _likely_tackler
+                out['tackler'] = _likely_tackler(def_f, out, rng, pass_play=True)
         if off_state is not None and out.get('type') == 'scramble' and not oc.get('qb_run'):
             qb = off_f['qb']
             off_state.cond.add_running_work(qb.get('pid'), qb.get('stamina_rating', 70.),
@@ -3019,7 +3024,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # the ball carrier and one random defender, so backs and the top wideout took half the league's
         # injuries and no lineman was ever hurt; the position table (health.INJURY_SHARE) now sets the
         # distribution by construction and the total is solved with health._RULED_OUT_SHARE.
-        if out['type'] in ('run', 'complete', 'sack', 'scramble', 'incomplete'):
+        if out['type'] in ('run', 'complete', 'sack', 'scramble', 'incomplete', 'drop', 'interception'):
             hit_pid = None
             if out['type'] in ('sack', 'scramble'): hit_pid = off_f['qb'].get('pid')
             elif out['type'] == 'run': hit_pid = out.get('carrier_pid') or out.get('carrier') or (off_f['qb'] if out.get('sneak') else (off_f.get('rb') or off_f['qb'])).get('pid')
