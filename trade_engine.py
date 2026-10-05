@@ -161,6 +161,10 @@ def trade_value(player, val, cap=CAP, contract=None):
     age = float(player.get('age', 27) or 27)
     apy = float(player.get('apy', 0) or 0)
     worth = float(val['apy'])
+    # Runtime quotes carry the remaining cash in each controlled year. The
+    # average-cost fallback keeps standalone valuation callers compatible.
+    costs = player.get('contract_costs')
+    first_fraction = float(np.clip(player.get('first_year_fraction', 1.0), 0., 1.))
 
     # A PROVEN PLAYER IS WORTH MORE THAN HIS CAP SURPLUS. Surplus alone said a
     # 90 paid at market was worth nothing in a trade, so any first-round pick
@@ -196,11 +200,13 @@ def trade_value(player, val, cap=CAP, contract=None):
         # so applying a decline in year 0 double-counts it. Decline only applies
         # to the years ahead, and gently.
         decline = 1.0 if k == 0 else float(np.clip(1.0 - max(0.0, age + k - 28) * 0.032, 0.45, 1.0))
-        surplus = worth * decline - apy
+        fraction = first_fraction if k == 0 else 1.0
+        cost = float(costs[k]) if costs is not None and k < len(costs) else apy
+        surplus = worth * decline * fraction - cost
         if elite > 0:
-            surplus = max(surplus, floor)
+            surplus = max(surplus, floor * fraction)
         total += surplus * (0.75 ** k)                      # future years discounted
-        total += STAR_PREMIUM * worth * decline * tier * CONTROL_CERTAINTY[k]
+        total += STAR_PREMIUM * worth * decline * tier * CONTROL_CERTAINTY[k] * fraction
     # SCARCITY. A backup's paper surplus (market minus salary over his years) is not what the league pays
     # for him: a 71 or a 75 is on the street for the minimum, so his surplus is worth a fraction until he is a
     # starter. Real compensation for depth is a sixth or a seventh (Kaleb Johnson for a 2028 sixth, Irvin Charles

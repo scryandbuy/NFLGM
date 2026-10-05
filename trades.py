@@ -128,6 +128,21 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     """
     if not p.contract or p.contract_years_left <= 0 or p.fa_class == 'tendered':
         return None  # Unsigned rights are not a transferable playing contract.
+    c = p.contract
+    # Before rollover, contracts still include the completed season. New
+    # next-season signings can also carry a zero-service calendar stub.
+    closed = getattr(league, 'season_closed_year', None) == league.year
+    start = max(int(getattr(c, 'start_offset', 0) or 0), int(closed))
+    years = max(0, int(p.contract_years_left) - start)
+    if not years:
+        return None
+    fraction = 1.0
+    if not start and league.phase in ('regular', 'playoffs', 'playoffs_closed'):
+        # Earned/base is not a clock: trading a player resets earned pay and
+        # reduces his base. The settled week survives that transfer.
+        paid = getattr(getattr(team, 'cap', None), 'paid_week',
+                       max(0, int(getattr(league, 'week', 0) or 0) - 1))
+        fraction = max(0., min(1., (18 - max(paid, c.pay_start)) / 18.))
     v = VAL.value_player(league, p, side='team', pool=pool, rng=rng)
     if not v:
         return None
@@ -169,14 +184,14 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     # FUTURE PAY FOR BOTH CLUBS. The old bonus has already been paid. Keeping
     # him or acquiring him commits only the remaining base and roster pay;
     # the cap projection separately retains the seller's bonus charge.
-    yrs = max(1, int(p.contract_years_left or 1))
-    inherited_apy = (round(sum(max(0.0, c.cap_hit(i) - c.bonus_at(i)
-                                   - (c.earned_base + c.earned_roster if i == 0 else 0.0))
-                                for i in range(yrs)) / yrs, 2)
-                     if c else p.apy)
+    costs = [max(0.0, c.cap_hit(i) - c.bonus_at(i)
+                 - (c.earned_base + c.earned_roster if i == 0 else 0.0))
+             for i in range(start, start + years)]
+    inherited_apy = round(sum(costs) / years, 2)
     from development_value import player_credit
     row = dict(age=p.age, apy=inherited_apy, ovr=float(seen),
-               contract_years_left=p.contract_years_left, madden_position=p.pos,
+               contract_years_left=years, contract_costs=costs,
+               first_year_fraction=fraction, madden_position=p.pos,
                development_credit=player_credit(p))
     tv_buyer = TE.trade_value(row, v)
     # THE STREET AND THE SQUAD ARE THE ALTERNATIVE. Why give a pick for a man when a comparable one is a free
@@ -195,7 +210,9 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
                 need=need, trade_value=TE.trade_value(row, v),
                 trade_value_buyer=round(max(0.0, tv_buyer), 2),
                 seen_ovr=round(float(seen), 1), obj=p, dead=dead, out_hit=(c.cap_hit(0)-c.earned_base-c.earned_roster if c else 0.0), dead_now=dead_now,
-                inherit=inherit, inherited_apy=inherited_apy, **seller_willingness(team, p))
+                inherit=inherit, inherited_apy=inherited_apy,
+                first_year_fraction=fraction, valued_contract_years=years,
+                **seller_willingness(team, p))
 
 
 def _street_alternative(league, viewer, p):
