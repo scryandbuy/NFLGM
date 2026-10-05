@@ -1204,7 +1204,8 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         seconds=off_call.get('seconds'), margin=off_call.get('score_diff', 0),
         aggression=off_call.get('qb_run_aggression', .5), man=bool(in_man), escape_lanes=escape_lanes)
     if run_chance and rng.random() < run_chance:
-        out = E.resolve_scramble(off['qb'], deff['dl'] + deff['lb'] + deff['db'], ytg, rng, rate)
+        out = E.resolve_scramble(off['qb'], deff['dl'] + deff['lb'] + deff['db'],
+                                off_call.get('scramble_goal_distance', ytg), rng, rate)
         out.update(scramble_kind='decision', scramble_chance=run_chance,
                    scramble_read=read_kind, separation=sep_raw,
                    depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence,

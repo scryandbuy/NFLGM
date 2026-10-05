@@ -3157,6 +3157,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # The called carrier and blockers are the selected, state-adjusted men.
         oc['execution_mod'] = script_mod
         oc['field_yardline'] = float(dr.yardline)
+        # Contact must stop at the physical goal plane, even while legacy
+        # play selection uses the rounded field distance.
+        oc['scramble_goal_distance'] = float(dr.yardline)
         out = resolve_fn(off_f, def_f, oc, dc, ytg_i, rng)
         # the situation rides with the play, for the ticker and the probes
         if isinstance(out, dict):
@@ -3175,7 +3178,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # winner and credit. StatBook sees only the final outcome.
                 head = {k: v for k, v in out.items()
                         if k not in ('type', 'yards', 'touchdown', 'by', 'sack_credits', 'beaten')}
-                out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn)
+                out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], float(dr.yardline), rng, rate_fn)
                 out.update({k: v for k, v in head.items() if k not in out})
                 out['scramble_kind'] = 'escape'
                 # The late escape bypasses resolve_play's normal tackler
