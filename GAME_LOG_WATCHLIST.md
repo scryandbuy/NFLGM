@@ -1,5 +1,57 @@
 # Game log watchlist
 
+## October 5 follow-up: designed runs, rush credit and broader evidence
+
+This section supersedes the earlier open implementation notes below; historical
+observations remain for comparison. Evidence is in the shared workspace under
+`outputs/franchise-followup-2029`.
+
+- **Designed QB runs are now implemented**, following the user's explicit
+  request after the initial audit. Selection uses the actual healthy QB's
+  mobility, ball security, condition, supporting personnel, defense, game
+  situation and coach aggression. It is part of called rushing plays, with
+  normal blocking, fatigue, fumble and injury consequences. In 32 paired games,
+  87 designed QB runs gained 425.7 yards, with three losses and one lost fumble.
+  Pocket passers did not acquire a mobile starter's opportunities. QB-specific
+  opportunity distributions remain a multi-seed watch, not a fixed carry quota.
+- **Unblocked rushers now compete on path and closing attributes.** Fixed equal
+  arrival times previously favored the first defender in a list. Controlled
+  two-free-rusher plays distribute opportunities between the LB and slot rusher;
+  a single free rusher no longer effectively reaches every QB in 0.6 seconds.
+  Alignment geometry and the 0.12-second shared-finish window are modeling
+  assumptions. Blocked rush contests retain their prior calculations.
+- **Half sacks are recorded for two distinct near-simultaneous finishers.**
+  Each gets 0.5 and the team/QB sack total remains one. Escapes and nullified
+  plays do not retain sack credits. Fractional awards, history and narration
+  are covered. League positional distribution still needs longer observation;
+  this correction does not establish that edge/DT/LB shares are calibrated.
+- **A kicking coach clamp error is corrected.** A favorable coach could lower
+  an elite short-kick probability from 0.995 to 0.990. Matching the upper bounds
+  fixes that reversal without changing the distance curve. The saved 51/51
+  under-50 streak includes both clubs across 20 GB games; the full saved 2029
+  league made 86.8%. No general kicking accuracy reduction was warranted by
+  those observations alone.
+- **Two full 272-game fresh-roster registers remain above the scoring target:**
+  26.49 and 26.41 points per team. Punt-ending drives are 30.75%/30.55%, sacks
+  7.26%/6.89%, FG accuracy 84.59%/85.35%, designed-run losses 8.76%/8.73%, and
+  rushing explosives 2.23%/2.22%. Scoring, offensive volume and FG-ending drive
+  rates remain open; overtime/ties and margin measures vary by seed. These are
+  not all-green registers. Do not lower all rushing/passing to hide a pace or
+  opportunity problem. The original 26.16-to-27.45 paired rise used identical
+  fresh rosters and therefore cannot be explained by player development.
+- **Four-year save evidence does not show uniform offensive talent inflation.**
+  Actual points/team rose 20.19 to 24.04, but passing YPA fell 7.14 to 7.00 and
+  rushing YPC fell 4.54 to 4.41. Engine revisions and volume changed during this
+  playthrough. A 16-game matched current-code comparison of fresh versus 2029
+  roster/coaching contexts produced 26.22 versus 24.44 points/team, with wide
+  uncertainty. This is not an isolated aging experiment. Specialist accuracy
+  growth and full talent distributions still need a longer controlled run.
+- **Awards and development remain distinct watches.** Positive production is
+  required for major awards, and annual DEV can fall after a first credible poor
+  season. Repeated LB defensive awards and RB offensive awards are not proof of
+  incorrect winners; opportunity and scoring weights still need monitoring.
+  Historical seasons were not replayed or their awards silently reassigned.
+
 ## October 5 implementation follow-up
 
 The confirmed gameplay defects from the full-season audit are corrected in the
