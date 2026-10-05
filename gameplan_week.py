@@ -20,7 +20,7 @@ week's changes, and the state's plan resets when the game ends.
 import numpy as np, collections, re
 from coaching_choices import evidence, resolve
 
-TEND_KEYS = ('plays', 'passes', 'pa', 'motion', 'deep', 'fourth_go', 'fourth_opp', 'def_snaps', 'blitz', 'man', 'two_high', 'box8', 'shadow', 'bracket')
+TEND_KEYS = ('plays', 'passes', 'pa', 'motion', 'deep', 'fourth_go', 'fourth_opp', 'def_snaps', 'def_pass_snaps', 'measured_man', 'blitz', 'man', 'two_high', 'box8', 'shadow', 'bracket')
 TWO_HIGH = {'cover_2', 'cover_4', 'cover_6', 'two_man', 'tampa_2', 'quarters'}
 
 
@@ -43,6 +43,13 @@ def record_game(league, home, away, res):
             to['motion'] += bool(l.get('motion'))
             if l.get('down') == 4: to['fourth_opp'] += 1; to['fourth_go'] += 1
             td['blitz'] += bool(l.get('blitz')); td['man'] += bool(l.get('in_man')) if l.get('is_pass') else 0
+            # Keep paired evidence from the same observed calls. Old saves
+            # have a man numerator but no defensive pass denominator; never
+            # combine that historical numerator with only newly logged passes.
+            # A sack with no observed receiver matchup is unknown, not zone.
+            if l.get('is_pass') and 'in_man' in l:
+                td['def_pass_snaps'] += 1
+                td['measured_man'] += bool(l.get('in_man'))
             td['two_high'] += (l.get('shell') in TWO_HIGH); td['box8'] += (l.get('box') or 7) >= 8
             td['shadow'] += bool(l.get('travelled')); td['bracket'] += bool(l.get('bracketed'))
         # a punt or a kick on fourth down is a fourth-down opportunity declined
@@ -56,7 +63,8 @@ def tendencies(league, abbr):
     if not T or T.get('plays', 0) < 40: return None
     p, ps, ds = T['plays'], max(1, T['passes']), max(1, T['def_snaps'])
     return dict(pass_rate=T['passes'] / p, pa_rate=T['pa'] / ps, motion=T['motion'] / p, deep=T['deep'] / ps,
-                fourth_go=T['fourth_go'] / max(1, T['fourth_opp']), blitz=T['blitz'] / ds, man=T['man'] / max(1, ds * 0.55),
+                fourth_go=T['fourth_go'] / max(1, T['fourth_opp']), blitz=T['blitz'] / ds,
+                man=(T['measured_man'] / T['def_pass_snaps'] if T.get('def_pass_snaps') else None),
                 two_high=T['two_high'] / ds, box8=T['box8'] / ds, shadow=T['shadow'] / ds, bracket=T['bracket'] / ds, games=sum(league.teams[abbr].record) if abbr in league.teams else 0)
 
 
@@ -402,8 +410,8 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
         sug('offence', 'They live in two-high: run it and work underneath', f"two-high on {tr['two_high']*100:.0f}% of snaps", {'pass_bias': -0.05, 'depth_mix': (+0.05, +0.02, -0.07)}, priority=evidence((tr['two_high']-.35)/.12, def_sample, 60))
     if tr and tr['two_high'] <= 0.30 and tr['box8'] >= 0.25:
         sug('offence', 'Single-high and a loaded box: take the shots outside', f"eight in the box on {tr['box8']*100:.0f}% of snaps", {'pass_bias': +0.05, 'depth_mix': (-0.05, 0.0, +0.05), 'play_action_rate': +0.05}, priority=evidence((tr['box8']-.10)/.10 + (.40-tr['two_high'])/.15, def_sample, 60))
-    if tr and tr['man'] >= 0.45 and my_rb and my_rb[0] <= 10:
-        sug('offence', 'Man coverage: motion and the back out of the backfield', f"man on {tr['man']*100:.0f}% of pass snaps", {'motion_rate': +0.08}, priority=evidence(tr['man']/.25, def_sample, 60))
+    if tr and tr['man'] is not None and tr['man'] >= 0.45 and my_rb and my_rb[0] <= 10:
+        sug('offence', 'Man coverage: motion and the back out of the backfield', f"man on {tr['man']*100:.0f}% of observed pass matchups", {'motion_rate': +0.08}, priority=evidence(tr['man']/.25, counts.get('def_pass_snaps', 0), 60))
 
     # ---- suggestions on defence (against their offence)
     oq = ur_opp.get('QB'); ob = ur_opp.get('pass block'); orb = ur_opp.get('run block'); owr = ur_opp.get('receivers')

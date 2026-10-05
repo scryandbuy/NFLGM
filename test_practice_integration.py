@@ -76,7 +76,7 @@ class PracticeIntegrationTests(unittest.TestCase):
         from postseason import Postseason
         seeds={c:[f'{c}{i}' for i in range(1,8)] for c in ('Continental','United')}
         teams={a:NS(win_pct=.7) for sd in seeds.values() for a in sd}
-        league=NS(year=2026,teams=teams,schedule=[],log=lambda *a,**k:None)
+        league=NS(year=2026,teams=teams,schedule=[],game_stats={},log=lambda *a,**k:None)
         counts=[]
         runner=NS(L=league,seeds=lambda:seeds,
                   play=lambda *a,**k:dict(home=21,away=14))

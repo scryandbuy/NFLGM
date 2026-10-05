@@ -35,6 +35,8 @@ class ContextTests(unittest.TestCase):
         rows=[dict(type='run',yards=20,blitz=True)]*10
         rows += [dict(type='complete',yards=3,blitz=True,pressured=False)]*5
         findings=G.assess_choice({'blitz_lean':1},[],rows)
-        self.assertEqual(len(findings),1)
-        self.assertEqual(findings[0]['label'],'Pass-rush pressure')
-        self.assertEqual(findings[0]['verdict'],'limited')
+        self.assertEqual(len(findings),2)
+        pressure=next(f for f in findings if f['label']=='Pass-rush pressure')
+        cost=next(f for f in findings if f['label']=='Pressure calls')
+        self.assertEqual(pressure['verdict'],'limited')
+        self.assertEqual(cost['verdict'],'negative')

@@ -361,7 +361,7 @@ def report(session, league, abbr):
     def tend(t):
         if not t: return None
         return dict(pass_rate=round(t['pass_rate'] * 100), pa_rate=round(t['pa_rate'] * 100), motion=round(t['motion'] * 100), deep=round(t['deep'] * 100), fourth_go=round(t['fourth_go'] * 100),
-                    blitz=round(t['blitz'] * 100), man=round(min(1.0, t['man']) * 100), two_high=round(t['two_high'] * 100), box8=round(t['box8'] * 100), games=int(t['games']))
+                    blitz=round(t['blitz'] * 100), man=(round(t['man'] * 100) if t['man'] is not None else None), two_high=round(t['two_high'] * 100), box8=round(t['box8'] * 100), games=int(t['games']))
     lg = _league_tend(league)
     units = [dict(unit=u, rank=v[0] if v else None, of=v[1] if v else n) for u, v in (rep['units'] or {}).items()]
     mine = [dict(unit=u, rank=v[0] if v else None, of=v[1] if v else n) for u, v in (rep['my_units'] or {}).items()]
@@ -391,4 +391,5 @@ def _league_tend(league):
     rows = [t for t in rows if t]
     if not rows: return None
     keys = ('pass_rate', 'pa_rate', 'motion', 'deep', 'fourth_go', 'blitz', 'man', 'two_high', 'box8')
-    return {k: round(float(np.mean([min(1.0, t[k]) for t in rows])) * 100) for k in keys}
+    return {k: (round(float(np.mean([min(1.0, t[k]) for t in rows if t[k] is not None])) * 100)
+                if any(t[k] is not None for t in rows) else None) for k in keys}

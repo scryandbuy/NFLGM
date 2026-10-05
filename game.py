@@ -2919,6 +2919,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # the back who carries it is the back on the field: the rotation in
         # field_units decides who that is
         oc['execution_mod'] = script_mod
+        # Season callers carry a coach snapshot rather than the GM object.
+        # Its public starter-protection preference is the inverse aggression
+        # already used for resting players; a cautious coach discourages hits.
+        if off_state is not None:
+            oc['qb_run_aggression'] = 1. - float((off_state.coach or {}).get('starter_protection', .5))
         out = resolve_fn(off_f, def_f, oc, dc, ytg_i, rng)
         # the situation rides with the play, for the ticker and the probes
         if isinstance(out, dict):
@@ -3002,6 +3007,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 _old = out
                 _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'rush_pressures', 'pb_reps', 'pb_opportunities', 'pb_award', 'pb_sack_survival', 'pressured', 'coverage_evidence', 'ttt') if k in _old}
                 out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
+                out['scramble_kind'] = 'escape'
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
                     if dr.log[_i] is _old: dr.log[_i] = out; break          # replace the play itself, not whatever was logged after it
