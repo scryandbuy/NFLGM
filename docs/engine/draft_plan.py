@@ -53,6 +53,20 @@ def _reserve_grade(player, team, belief):
     return grade + 2.0 * player_credit(player)
 
 
+def _family_reserve_grade(player, team, belief, family):
+    if len(family) == 1:
+        return _reserve_grade(player, team, belief)
+    # Read either eligible side without changing the saved player/transition.
+    # A native label must not decide whether the same reserve occupies a job.
+    from copy import copy
+    grades = []
+    for pos in family:
+        view = copy(player)
+        view.pos = pos
+        grades.append(_reserve_grade(view, team, belief))
+    return max(grades)
+
+
 def redundancy_penalty(plan, prospect, grade=None, gain=0.0):
     """Soft draft-slot cost for another player with no useful roster opening.
 
@@ -103,15 +117,19 @@ def assess(league, abbr, level=None, players=None):
     pressure = max(0.0, min(1.0, (committed / max(limit, 1.0) - .80) / .20))
     belief = float(getattr(proxy.gm, 'dev_belief', .5))
     positions = {}
-    for pos in RN.POSITIONS:
-        bar = max(81.0 if pos == 'QB' else 76.0, float(level.get(pos, 0.0)) - 2.5)
-        assignments = roles[pos]
+    for family in RN.PLANNING_FAMILIES:
+        pos = family[0]
+        bar = max(81.0 if pos == 'QB' else 76.0,
+                  sum(float(level.get(p, 0.0)) for p in family) / len(family) - 2.5)
+        assignments = [row for p in family for row in roles[p]]
+        family_men = [p for native in family for p in by_pos.get(native, ())]
+        floor = RN.planning_floor(floors, family)
         # Worst hole at this position within each package, averaged by usage.
         # Taking the maximum over all packages treats an occasional TE3 as
         # just as urgent as the every-down quarterback.
         package_gaps = {}
         for row in report['package_assignments']:
-            if row['sources'][0] != pos:
+            if row['sources'][0] not in family:
                 continue
             key = row['variant']
             gap = 12.0 if row['player'] is None else min(12.0, max(0.0, bar - row['grade']))
@@ -120,14 +138,14 @@ def assess(league, abbr, level=None, players=None):
         if pos in ('K', 'P', 'LS'):
             starter = max((12.0 if row['player'] is None else min(12.0, max(0.0, bar-row['grade']))
                            for row in assignments), default=0.0)
-        count = report['counts'].get(pos, 0)
-        depth = min(12.0, 3.0 * max(0, floors[pos] - count))
+        count = sum(report['counts'].get(p, 0) for p in family)
+        depth = min(12.0, 3.0 * max(0, floor - count))
         for group, minimum in group_floors.items():
             if pos in RN.GROUPS[group]:
                 short = max(0, minimum - sum(report['counts'].get(p, 0) for p in RN.GROUPS[group]))
                 depth = max(depth, min(5.0, float(short)))
-        reserves = [p for p in by_pos.get(pos, ()) if p.pid not in used]
-        if reserves and floors[pos] > len(assignments):
+        reserves = [p for p in family_men if p.pid not in used]
+        if reserves and floor > len(assignments):
             depth = max(depth, min(3.0, max(0.0, 68.0 - max(p.ovr for p in reserves)) / 4))
 
         incumbents = [row['player'] for row in assignments if row['player'] is not None]
@@ -143,7 +161,9 @@ def assess(league, abbr, level=None, players=None):
             c = getattr(p, 'contract', None)
             if c is not None and c.years < 2:
                 continue
-            grade = _reserve_grade(p, proxy, belief)
+            if len(family) > 1 and getattr(p, 'age', 25) + 2 >= 31:
+                continue  # another aging edge is not long-term succession cover
+            grade = _family_reserve_grade(p, proxy, belief, family)
             successors.append(max(0.0, min(1.0, (grade - (bar - 8)) / 8)))
         cover = sum(sorted(successors, reverse=True)[:max(1, exposed)]) / max(1, exposed)
         succession *= 1.0 - min(1.0, cover)
@@ -160,19 +180,21 @@ def assess(league, abbr, level=None, players=None):
         # after the club has already drafted his successor.
         contract *= 1.0 - min(1.0, cover)
         future = max(succession, contract)
-        exposure = min(1.0, report['package_demand'].get(pos, 0.0) / max(1, len(assignments)))
+        demand = sum(report['package_demand'].get(p, 0.0) for p in family)
+        exposure = min(1.0, demand / max(1, len(assignments)))
         if pos not in ('K', 'P', 'LS'):
             future *= exposure
         need = max(starter, .6 * depth, .75 * future)
-        demand = report['package_demand'].get(pos, 0.0)
-        capacity = max(floors[pos], len(assignments),
-                       ceil(demand - 1e-6) + 1 if demand >= .25 else 0)
+        # Fractional package use must not unlock an entire extra reserve when
+        # it crosses an integer. Interchangeable edges share two reserve jobs.
+        capacity = max(floor, len(assignments),
+                       demand + len(family) if demand >= .25 else 0)
         if pos in ('FB', 'K', 'P', 'LS'):
-            capacity = max(floors[pos], len(assignments), ceil(demand - 1e-6))
+            capacity = max(floor, len(assignments), ceil(demand - 1e-6))
         occupied = 0.0
         reserve_grades = []
-        for p in by_pos.get(pos, ()):
-            grade = _reserve_grade(p, proxy, belief)
+        for p in family_men:
+            grade = _family_reserve_grade(p, proxy, belief, family)
             reserve_grades.append(grade)
             quality = max(0.0, min(1.0, (grade - (bar - 12.0)) / 8.0))
             years = getattr(getattr(p, 'contract', None), 'years', 4)
@@ -180,12 +202,17 @@ def assess(league, abbr, level=None, players=None):
             occupied += quality * retained
         retention = dict(capacity=capacity, occupied=round(occupied, 4),
                          best_grade=max(reserve_grades, default=0.0))
-        positions[pos] = dict(starter=round(starter, 4), depth=round(depth, 4),
+        shared = dict(starter=round(starter, 4), depth=round(depth, 4),
                               succession=round(succession, 4), contract=round(contract, 4),
                               future=round(future, 4), need=round(min(12.0, need), 4),
-                              count=count, starters=len(assignments),
                               expiring=sum(yrs <= 1 for _, yrs, _ in control),
                               retention=retention)
+        for native in family:
+            positions[native] = dict(shared, count=report['counts'].get(native, 0),
+                                     starters=len(roles[native]))
+            if len(family) > 1:
+                positions[native].update(family=family, family_count=count,
+                                         family_starters=len(assignments))
     return dict(positions=positions, players=men, assignments=report['assignments'],
                 roster_score=report['score'], committed_next=committed,
                 cap_pressure=pressure, package_demand=report['package_demand'],

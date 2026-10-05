@@ -179,6 +179,11 @@ def _chart():
     return f
 
 
+def _reserve_qb_penalty(selection):
+    """Ease developmental-QB spending across the old round-three boundary."""
+    return 60.0 * min(1.0, max(0.0, (112.0 - selection) / 32.0))
+
+
 def board(league, abbr, selection, level, taken, scale=None, gm=None, players=None, _grade_cache=None):
     """
     This club's board right now: [(value, player)], best first.
@@ -276,10 +281,11 @@ def board(league, abbr, selection, level, taken, scale=None, gm=None, players=No
                     position = plan['positions'][p.pos]
                     hole = position['starter'] > 0 or position['future'] >= 6.0
                 if not hole:
-                    # no club drafts a second kicker, a second punter or a
-                    # backup quarterback on day one or two; late, a cheap
-                    # developmental arm is fine
-                    slot += 60.0 if selection <= 96 else (200.0 if p.pos in ('K', 'P') else 0.0)
+                    # Discourage early reserve investments. Developmental
+                    # quarterbacks become gradually more attractive across
+                    # the round-three boundary; real QB needs bypass this.
+                    slot += (_reserve_qb_penalty(selection) if p.pos == 'QB' else
+                             (60.0 if selection <= 96 else (200.0 if p.pos in ('K', 'P') else 0.0)))
             # and never two of them in one draft
             if p.pos in POS_CAP_EARLY and any(league.players[pid].pos == p.pos and league.players[pid].team == abbr for pid in taken):
                 slot += 200.0

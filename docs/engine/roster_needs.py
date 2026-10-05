@@ -20,6 +20,23 @@ GROUPS = {
     'ST': ('K', 'P', 'LS'),
 }
 
+# Recruiting/depth value follows interchangeable football jobs. Keep these
+# separate from roster_floors: roster construction/cutdown policy is unchanged.
+EDGE_FAMILY = ('LEDG', 'REDG')
+PLANNING_FAMILIES = tuple((EDGE_FAMILY if pos == 'LEDG' else (pos,))
+                          for pos in POSITIONS if pos != 'REDG')
+
+
+def planning_floor(floors, family):
+    return sum(floors[pos] for pos in family)
+
+
+def planning_shortages(counts, floors):
+    """One shortage per job family, without a phantom vacant edge side."""
+    for family in PLANNING_FAMILIES:
+        yield family, max(0, planning_floor(floors, family) -
+                          sum(counts.get(pos, 0) for pos in family))
+
 
 def role_slots(team):
     """Starting jobs for this coach's base offense and defense."""
@@ -159,10 +176,11 @@ def _base_assess(team, players=None, strict_roles=False, grades=None):
     counts = Counter(p.pos for p in players)
     floors, group_floors = roster_floors(team)
     front = DR.coach_front(getattr(team, 'gm', None))
-    for pos, floor in floors.items():
-        if counts[pos] < floor:
-            needs[pos] = max(needs[pos], min(1.0, 0.55 + 0.2 * (floor - counts[pos])))
-            quality -= 4.0 * (floor - counts[pos])
+    for family, short in planning_shortages(counts, floors):
+        if short:
+            for pos in family:
+                needs[pos] = max(needs[pos], min(1.0, 0.55 + 0.2 * short))
+            quality -= 4.0 * short
     for group, floor in group_floors.items():
         short = max(0, floor - sum(counts[pos] for pos in GROUPS[group]))
         if short:
@@ -298,10 +316,10 @@ def _depth_accounting(team, players, grades, floors_snapshot=None):
         floors, group_floors = floors_snapshot
     counts = Counter(p.pos for p in players)
     needs = {pos: 0.0 for pos in POSITIONS}; score = 0.0
-    for pos, floor in floors.items():
-        short = max(0, floor - counts[pos])
+    for family, short in planning_shortages(counts, floors):
         if short:
-            needs[pos] = min(1.0, .55 + .2 * short)
+            for pos in family:
+                needs[pos] = min(1.0, .55 + .2 * short)
             score -= 4.0 * short
     for group, floor in group_floors.items():
         short = max(0, floor - sum(counts[pos] for pos in GROUPS[group]))
