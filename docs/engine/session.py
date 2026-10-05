@@ -451,9 +451,9 @@ class Session:
         target = next((p for p in ISS._pool(self.L) if p.pid == focus['prospect_pid']), None)
         if target is not None:
             view = self.L.scouting.get(self.user_team, {}).get(target.pid, {})
-            lines.append(f"Individual focus: {target.name} · {target.pos}. "
+            lines.append(f"Individual focus: {target.name} Â· {target.pos}. "
                          f"Estimated overall {round(view.get('ovr', 0))}; ceiling "
-                         f"{round(view.get('pot_lo', 0))}–{round(view.get('pot_hi', 0))}.")
+                         f"{round(view.get('pot_lo', 0))}â€“{round(view.get('pot_hi', 0))}.")
 
         previous = [r for r in ISS.reports(self.L, self.user_team) if r.get('week') == week - 1]
         if previous:

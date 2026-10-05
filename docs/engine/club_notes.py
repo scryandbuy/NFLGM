@@ -138,13 +138,66 @@ def _morale(league, t, week):
                 IB.post(league, 'morale', f"{inbox_player(p)} {word}", f"{inbox_player(p)} ({p.pos}, {round(p.ovr)}) {word}: {reason}. Left alone this becomes a trade request. A talk, more snaps or a new deal are the ways to turn it.", sender='assistants', payload=dict(link=f'player:{p.pid}'))
 
 
+def _first_start_line(league, team, player, week):
+    """Read the finished game's line, never the season total or scratch book."""
+    prefix = f'{league.year}-{int(week)}-'
+    line = None
+    for key, book in (getattr(league, 'game_stats', None) or {}).items():
+        if key.startswith(prefix) and team.abbr in key[len(prefix):].split('-'):
+            if player.pid in book:
+                line = book[player.pid]
+                break
+    if line is None:
+        return ''
+    d = line
+    def n(key): return float(d.get(key, 0) or 0)
+    pos = player.pos
+    if pos in ('LT', 'LG', 'C', 'RG', 'RT'):
+        blocks = []
+        if n('pb_snaps'):
+            blocks.append(f"Pass blocking: {n('pb_wins'):g}/{n('pb_snaps'):g} wins; "
+                          f"{n('pressures_allowed'):g} pressures and {n('sacks_allowed'):g} sacks allowed.")
+        if n('rb_snaps'):
+            blocks.append(f"Run blocking: {n('rb_wins'):g}/{n('rb_snaps'):g} wins.")
+        return '\n'.join(blocks)
+    if pos == 'QB':
+        text = (f"Passing: {n('pass_cmp'):g}/{n('pass_att'):g}, {n('pass_yds'):g} yards, "
+                f"{n('pass_td'):g} TD, {n('ints'):g} INT.")
+        if n('rush_att'):
+            text += f"\nRushing: {n('rush_att'):g} carries, {n('rush_yds'):g} yards, {n('rush_td'):g} TD."
+        return text
+    if pos in ('HB', 'FB', 'WR', 'TE'):
+        rows = []
+        if pos in ('HB', 'FB') or n('rush_att'):
+            rows.append(f"Rushing: {n('rush_att'):g} carries, {n('rush_yds'):g} yards, {n('rush_td'):g} TD.")
+        rows.append(f"Receiving: {n('rec'):g} catches on {n('tgt'):g} targets, {n('rec_yds'):g} yards, {n('rec_td'):g} TD.")
+        if n('fumbles_lost'): rows[-1] += f" Fumbles lost: {n('fumbles_lost'):g}."
+        return '\n'.join(rows)
+    if pos == 'K':
+        return f"Kicking: {n('fg_made'):g}/{n('fg_att'):g} field goals; {n('xp_made'):g}/{n('xp_att'):g} extra points."
+    if pos == 'P':
+        if not n('punts'): return 'Punting: 0 punts.'
+        return (f"Punting: {n('punts'):g} punts, {n('punt_yds') / n('punts'):.1f} yards per punt, "
+                f"{n('punt_net_yds') / n('punts'):.1f} net; {n('punt_in20'):g} inside the 20.")
+    if pos == 'LS':
+        return f"Special teams: {n('snaps'):g} long snaps."
+    text = (f"Defense: {n('tackles'):g} tackles, {n('sacks'):g} sacks, "
+            f"{n('pressures'):g} pressures; {n('int_def'):g} interceptions, {n('pass_def'):g} passes defended.")
+    if n('ff') or n('fum_rec'):
+        text += f"\n{n('ff'):g} forced fumbles, {n('fum_rec'):g} fumble recoveries."
+    return text
+
+
 def _milestones(league, t, week):
     if int(week or 0) > 18: return                               # season milestones are regular-season numbers; playoff lines sit in their own book
     bk = league.stats.get(league.year, {}) if getattr(league, 'stats', None) else {}
     for p in t.active():
         gs = int(p.xp_spent.get('_starts', 0) or 0)
         if gs == 1 and (p.accrued or 0) <= 1 and float(p.age) <= 24.0 and _once(league, f"first-start-{p.pid}"):
-            IB.post(league, 'result', f"{inbox_player(p)} makes his first start", f"{inbox_player(p)} ({p.pos}) started his first game for you in {_period(week)}.", sender='assistants')
+            body = f"{inbox_player(p)} ({p.pos}) started his first game for you in {_period(week)}."
+            stats = _first_start_line(league, t, p, week)
+            if stats: body += '\n\n' + stats
+            IB.post(league, 'result', f"{inbox_player(p)} makes his first start", body, sender='assistants')
         if gs in (50, 100, 150, 200) and _once(league, f"starts-{gs}-{p.pid}"):
             IB.post(league, 'result', f"{inbox_player(p)}'s {gs}th start", f"{inbox_player(p)} ({p.pos}) made his {gs}th career start in {_period(week)}.", sender='assistants')
         d = bk.get(p.pid) or {}
