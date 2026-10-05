@@ -67,6 +67,16 @@ class LeagueAuditFixes(unittest.TestCase):
         self.assertEqual(v['tables']['receiving']['rows'][0]['pid'], 'Target only')
         self.assertEqual(v['tables']['defense']['rows'][0]['pid'], 'Pressure only')
 
+    def test_historical_snapshot_keeps_identity_when_player_was_pruned(self):
+        self.player('Current record', 'WR', dict(rec=80, tgt=110, rec_yds=1000), year=2028)
+        old = dict(pid='Pruned', name='Retired Player', pos='WR', team='MIN', row=[100,90,1200,8,'13.3',0,17])
+        self.L.history['2028'] = {'stats':dict(boxes=[{'retained':True}], tables={'receiving':{'cols':[], 'rows':[old]}}, team=[])}
+        before = copy.deepcopy(self.L.history)
+        v = V.stats(None, self.L, 'GB', 2028)
+        self.assertEqual(v['boxes'], [{'retained':True}])
+        self.assertIn(old, v['tables']['receiving']['rows'])
+        self.assertEqual(self.L.history, before)
+
     def test_trade_search_retains_both_teams_and_division(self):
         self.L.transactions = [dict(kind='trade', year=2029, a='KC', b='GB', a_sends=[], b_sends=[])]
         v = V.transactions(None, self.L, 'GB', group='Trades', club_filter='div', query='GB')
@@ -99,10 +109,24 @@ class LeagueAuditFixes(unittest.TestCase):
     def test_blocking_award_reports_known_context_without_inventing_assignment_data(self):
         p = self.player('Blocker', 'LT', dict(pb_snaps=600, pb_wins=570, rb_snaps=300, rb_wins=210, sacks_allowed=4, pressures_allowed=11))
         self.player('Back', 'HB', dict(rush_yds=1200, rush_td=10, rec_td=2))
+        self.L.game_stats = {'2029-1-GB-KC':{
+            'Blocker':dict(team='GB', sacks_allowed=4),
+            'Back':dict(team='GB', rush_yds=1200, rush_td=10, rec_td=2)}}
         line = V._award_line(self.L, p, 2029)
         self.assertIn('4 sacks, 11 pressures allowed', line)
         self.assertIn('Team: 1,200 rush yds, 12 offensive TD, 4 sacks allowed, 10–7', line)
         self.assertNotIn('Assignment evidence', line)
+
+    def test_blocking_award_club_context_follows_games_after_trade(self):
+        p = self.player('Blocker', 'LT', dict(pb_snaps=600, pb_wins=570))
+        self.player('Departed back', 'HB', dict(rush_yds=1500, rush_td=12), team='KC')
+        self.L.game_stats = {
+            '2029-1-GB-KC':{'Departed back':dict(team='GB', rush_yds=1000, rush_td=8)},
+            '2029-2-KC-MIN':{'Departed back':dict(team='KC', rush_yds=500, rush_td=4)},
+            '2029-19-GB-KC':{'Departed back':dict(team='GB', rush_yds=200, rush_td=2)}}
+        self.assertIn('Team: 1,000 rush yds, 8 offensive TD', V._award_line(self.L, p, 2029))
+        self.L.game_stats['2029-1-GB-KC']['Departed back'].pop('team')
+        self.assertNotIn('Team:', V._award_line(self.L, p, 2029))
 
     def test_historical_byes_follow_selected_week_and_do_not_invent_missing_weeks(self):
         game = lambda w,a,h:dict(week=w, away={'abbr':a}, home={'abbr':h}, ap=10, hp=20, done=True)

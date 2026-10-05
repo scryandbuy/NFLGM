@@ -3493,7 +3493,7 @@ function renderStats(v) {
       state.page = Math.min(state.page, Math.max(0, Math.ceil(all.length / size) - 1));
       const start = state.page * size, visible = all.slice(start, start + size);
       const t = el('table', {class:'tbl'});
-      const heading = (label, sort) => el('th', {'aria-sort':state.sort === sort ? state.ascending ? 'ascending' : 'descending' : 'none'}, el('button', {class:'btn quiet', 'aria-label':`Sort by ${label}`, onclick:() => {state.ascending = state.sort === sort ? !state.ascending : typeof sort === 'string'; state.sort = sort; state.page = 0; draw();}}, label));
+      const heading = (label, sort) => el('th', {class:typeof sort === 'number' ? 'n' : '', 'aria-sort':state.sort === sort ? state.ascending ? 'ascending' : 'descending' : 'none'}, el('button', {class:'btn quiet', style:typeof sort === 'number' ? 'text-align:right;padding-right:0' : 'text-align:left;padding-left:0', 'aria-label':`Sort by ${label}`, onclick:() => {state.ascending = state.sort === sort ? !state.ascending : typeof sort === 'string'; state.sort = sort; state.page = 0; draw();}}, label));
       t.append(el('tr', {}, el('th', {class:'n'}, '#'), heading(team ? 'Team' : 'Player', 'name'), ...(team ? [] : [heading('Team', 'team')]), ...columns.map((c, i) => heading(c, i))));
       visible.forEach((r, i) => t.append(statsTeamRow('tr', r, el('td', {class:'n'}, start + i + 1),
         el('td', {}, team ? clubLink(r.club.abbr, r.club.name) : el('button', {class:'who', onclick:() => {location.hash = '#club/player/' + r.pid;}}, el('div', {class:'no'}, r.pos), el('div', {class:'nm'}, r.name))),

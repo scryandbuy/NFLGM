@@ -21,6 +21,11 @@ const view={rail:{club:{}},year:2029,week:22,years:[2029],tables:{defense:{cols:
 vm.runInContext("statsTab='Defense'",ctx);ctx.renderStats(view);
 const bodyRows=()=>nodes(page).filter(n=>n.tag==='tr'&&n.attrs.class==='stats-team-row');
 assert.equal(bodyRows().length,40);
+for (const label of ['Tkl', 'Sacks']) {
+  const h=nodes(page).find(n=>n.tag==='th'&&text(n)===label);
+  assert.equal(h.attrs.class,'n');
+  assert.ok(h.children[0].attrs.style.includes('text-align:right'));
+}
 const button=label=>nodes(page).find(n=>n.tag==='button'&&text(n)===label);
 button('Next').attrs.onclick();assert.equal(bodyRows().length,40);assert.ok(text(page).includes('41–80 of 145'));
 button('Sacks').attrs.onclick();assert.ok(text(bodyRows()[0]).includes('Nic Scourton'));assert.equal(bodyRows().length,40);

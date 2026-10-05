@@ -560,7 +560,13 @@ def stats(session, league, abbr, year=None):
     if saved is not None:
         # Rebuild player tables that older snapshots truncated, while retaining
         # historical club totals and identity captured before roster turnover.
-        saved.update(boxes=boxes, advanced=adv, tables=tables, week=18)
+        for name, table_view in tables.items():
+            retained = (saved.get('tables', {}).get(name) or {}).get('rows', [])
+            known = {r['pid'] for r in table_view['rows']}
+            # A pruned legacy player may survive only in the snapshot. Keep
+            # that known row rather than discard his recorded season.
+            table_view['rows'].extend(dict(r) for r in retained if r['pid'] not in known)
+        saved.update(advanced=adv, tables=tables, week=18)
         return saved
     return result
 
@@ -650,9 +656,12 @@ def _award_line(league, p, yr):
         # Only describe retained assignment evidence; older seasons have none.
         n = l.get('pb_eval_snaps', 0)
         if n: parts.append(f"Assignment evidence: {int(n)} pass-block reps, {l.get('pb_expected_wins', 0) / n * 100:.1f}% reference win expectation")
-        if p.team in league.teams:
-            book = league.stats.get(yr, {})
-            lines = [ln for pid, ln in book.items() if (who := _season_player(league, league.player(pid), yr)) and who.team == p.team]
+        game_lines = [line for key, lines in (getattr(league, 'game_stats', {}) or {}).items()
+                      if key.startswith(f'{yr}-') and 1 <= int(key.split('-')[1]) <= 18 for line in lines.values()]
+        # Club evidence follows the team that received each play, even when a
+        # player moved. Without those affiliations, omit unavailable context.
+        if p.team in league.teams and game_lines and all(x.get('team') for x in game_lines):
+            lines = [ln for ln in game_lines if ln['team'] == p.team]
             rush = sum(x.get('rush_yds', 0) for x in lines)
             td = sum(x.get('rush_td', 0) + x.get('rec_td', 0) for x in lines)
             allowed = sum(x.get('sacks_allowed', 0) for x in lines)
