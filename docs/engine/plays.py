@@ -861,6 +861,20 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     return out
 
 
+def throwaway_probability(qb, down, pressure, separation, screen=False):
+    """A pre-throw escape choice, not a label attached to a failed pass."""
+    if screen or pressure < .35:
+        return 0.0
+    awareness = rate(qb, {'awareness_rating': 1.0})
+    covered = float(np.clip((.7 - separation) / .5, 0., 1.))
+    chance = (.02 + .09 * covered) * float(np.clip(pressure, .35, 1.))
+    if down == 4:
+        # Surrendering possession is usually worse than a contested attempt.
+        # A small awareness-sensitive error rate retains imperfect decisions.
+        chance *= .02 + .06 * (1. - float(np.clip(awareness, 0., 1.)))
+    return chance
+
+
 def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context=None):
     depth = off_call.get('depth', 'short')
     ok = available_depths(ytg)
@@ -1138,6 +1152,19 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
     coverage_evidence = _coverage_evidence(in_coverage, pairs, cov, zone_second, in_man, zone_hole)
     if depth == 'short' and not screen and not swing:
         cmult *= SHORT_PASS_COMPLETION
+    escape_chance = throwaway_probability(off['qb'], off_call.get('down', 1),
+                                              p['pressure'], sep_raw, screen)
+    if escape_chance and rng.random() < escape_chance:
+        return dict(type='incomplete', yards=0.0, touchdown=False, throwaway=True,
+                    throwback=round(float(max(0., rng.normal(6., 3.))), 1),
+                    intended_air=0., depth=depth, in_man=bool(in_man),
+                    coverage_evidence=coverage_evidence, screen=False, swing=bool(swing),
+                    coverage=def_call.get('coverage') or def_call['shell'],
+                    concept=concept, protection=prot_name, target=None, read='throwaway',
+                    pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []),
+                    pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []),
+                    rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])],
+                    ttt=round(float(p['time']), 3), pass_def=None, pressured=True)
     on_run = moving_throw(off_call, screen=screen, swing=swing, hot=hot)
     if in_man:
         cb = cov
@@ -1238,7 +1265,7 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
                     by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
     if not complete:
-        throwaway = bool(not dropped_int and p['pressure'] >= 0.35 and not screen and rng.random() < 0.18)
+        throwaway = False  # Throwaway intent was resolved before accuracy/turnovers.
         # A PASS DEFENDED is a defender breaking the ball up, not simply an
         # incompletion - a throw into the dirt is nobody's credit. Real rate:
         # 37.5% of incompletions, 11.4% of attempts, with a league leader
