@@ -201,11 +201,49 @@ class CapCasualtyTradeTests(unittest.TestCase):
         self.assertIn(p.team, ('DEN', 'KC'))
         self.assertEqual(keep.team, 'MIN')
 
-    def test_buyer_keeps_cleanup_reserve_instead_of_immediately_recutting(self):
-        L, seller, p, _ = setup_market()
-        for abbr in ('DEN', 'KC'):
-            L.teams[abbr].cap.cap = 25; L.teams[abbr].cap.rollover = 0
-        self.assertFalse(TR.shop_cap_casualty(L, seller, p, self.rng))
+    def test_buyer_funds_actual_roster_and_does_not_immediately_recut(self):
+        import financial_plan as FP
+        from test_roster_cap_recovery import RecoveryTests
+        base=RecoveryTests().roster()[1]
+        for size,room,approved in ((52,25.,True),(45,20.,False)):
+            with self.subTest(size=size,room=room):
+                L,seller,p,_=setup_market();buyer=L.teams['DEN']
+                L.teams['KC'].picks=[]
+                players=copy.deepcopy(base.roster)
+                players.remove(next(q for q in players if q.pid=='QB1'))
+                for q in sorted([q for q in players if q.pos!='QB'],key=lambda q:q.ovr)[:52-size]:
+                    players.remove(q)
+                for q in players:
+                    q.pid='DEN-'+q.pid;q.team=buyer.abbr;q._team_ref=buyer
+                    q.contract=Contract(1,[1]);buyer.roster.append(q);L.players[q.pid]=q
+                buyer.sync_cap()
+                # Keep the real league salary scale; committed dead money,
+                # rather than a fictional $25m league cap, limits buying room.
+                buyer.cap.dead=buyer.cap.limit-buyer.cap.charges(buyer.phase)-room
+                decisions=[];evaluate=FP.evaluate
+                def capture(league,team,**kw):
+                    result=evaluate(league,team,**kw)
+                    if team is buyer:decisions.append(result)
+                    return result
+                with patch.object(FP,'evaluate',side_effect=capture):
+                    self.assertEqual(TR.shop_cap_casualty(L,seller,p,self.rng),approved)
+                if approved:
+                    self.assertEqual(p.team,buyer.abbr)
+                    self.assertGreaterEqual(FP.snapshot(L,buyer)['funded_room'],0)
+                    # A generic $12m cushion is not required. Prove that both
+                    # real cleanup paths retain this funded acquisition.
+                    self.assertLess(buyer.cap_space,CT.TARGET_ROOM)
+                    before=list(L.transactions)
+                    CT.run(L,self.rng);CT.enforce(L,self.rng)
+                    self.assertEqual(p.team,buyer.abbr)
+                    self.assertEqual(L.transactions,before)
+                else:
+                    self.assertEqual(p.team,seller.abbr)
+                    self.assertEqual(len(buyer.active()),size)
+                    self.assertEqual(L.transactions,[])
+                    self.assertTrue(decisions)
+                    self.assertLess(decisions[-1]['after']['funded_room'],0)
+                    self.assertEqual(decisions[-1]['reason'],'trade_financial_preference')
 
     def test_labeled_previous_season_upcoming_pick_is_available(self):
         L, seller, p, _ = setup_market()
