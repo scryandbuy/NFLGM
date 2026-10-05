@@ -937,7 +937,7 @@ table.rank .edge.me{color:var(--club-2)}table.rank .edge.them{color:var(--opp)}t
 .man .no{width:30px;height:30px;font-family:var(--display);font-weight:800;font-size:14px;color:#fff;display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 78%,50% 100%,0 78%)}
 .m-right{display:flex;flex-direction:column}
 
-/* the scouting board is wide: measurables and flags keep to one line, the sheet scrolls sideways before anything overlaps */
+/* Preserve the data columns on small screens; flag groups wrap within their own column. */
 .board-wrap{overflow-x:auto}
 .board-wrap .tbl{min-width:1180px}
 .board-wrap .tbl th{position:static}      /* a sticky header inside a sideways-scrolling wrapper floats into the rows */
@@ -3117,3 +3117,8 @@ dialog.retain-dialog .retain-dialog-actions{flex-wrap:wrap}
 .trade-dialog .retain-dialog-body h3{color:var(--ink);margin:14px 0 8px}
 .trade-dialog .retain-dialog-body ul{padding-left:20px;color:var(--ink-2);line-height:1.6}
 .trade-dialog .btn:not(.go){background:var(--sheet-2);color:var(--ink);border-color:var(--rule-2)}
+
+/* Prospect flags wrap as complete chips instead of widening the scouting table. */
+.draft-surface .tbl td.prospect-flags{width:230px;max-width:230px;white-space:normal}
+.prospect-flag-list{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:5px;min-width:150px;max-width:230px;margin:0 auto}
+.prospect-flag-list .flag{margin:0;white-space:nowrap;line-height:1.25}
