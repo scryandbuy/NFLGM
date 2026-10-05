@@ -46,10 +46,10 @@ POS_CAP = {'QB': 3, 'HB': 4, 'FB': 2, 'WR': 7, 'TE': 4,
            'CB': 6, 'FS': 3, 'SS': 3, 'K': 1, 'P': 1, 'LS': 1}
 
 
-def rows_for(team):
+def rows_for(team, players=None):
     """The shape roster_construction wants."""
     return [dict(pos=p.pos, ovr=p.ovr, pid=p.pid, name=p.name, dead=float(p.dead_if_cut(0)) if p.contract else 0.0, age=float(p.age))
-            for p in team.active()]
+            for p in (team.active() if players is None else players)]
 
 
 def trim_specialists_for_team(league, team):
