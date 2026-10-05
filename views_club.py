@@ -59,9 +59,10 @@ def _cond(session, p):
     except Exception: return 100
 
 
-def _status(league, p, t):
+def _status(league, p, t, injury_only=False):
     out = []
     if p.out_until is not None: out.append('Out · season' if int(p.out_until) >= 99 else f"Out · back Wk {int(p.out_until)}")
+    if injury_only: return ' · '.join(out)
     if p.contract and p.contract.years <= 1: out.append('Final Year')
     import extensions as EXT
     try:
@@ -89,7 +90,7 @@ def _row(session, league, t, p):
     ceiling = ceiling_read(p, league)
     return dict(pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, side=('offense' if p.pos in OFFENSE else 'special' if p.pos in ('K', 'P', 'LS') else 'defense'), age=int(p.age), ovr=round(p.ovr), fit=round(_fit(league, t, p), 1),
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), cond=_cond(session, p), morale=morale_word(p), yrs=yrs,
-                hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), status=_status(league, p, t),
+                hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), status=_status(league, p, t), injury_status=_status(league, p, t, injury_only=True),
                 home_state=home_state(p), season_no=max(1, league.year - (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) + 1) if (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) else None,
                 # ratings view
                 pot=None if ceiling['ceiling_estimated'] else ceiling['ceiling'], pot_range=ceiling['ceiling_range'],
