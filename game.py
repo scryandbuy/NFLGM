@@ -1081,9 +1081,20 @@ def _onside_call(clock, need, my_tos, coach, rng):
     return v_onside > v_deep
 
 
+def _effective_clock_period(dr):
+    """A legacy undifferentiated overtime drive uses regular-season timing."""
+    quarter = getattr(dr, 'quarter', 4)
+    return getattr(dr, 'clock_period', 4 if quarter >= 5 else quarter)
+
+
 def _has_two_minute_warning(dr):
     """OT retains quarter=5; its effective period controls warning timing."""
-    return getattr(dr, 'clock_period', getattr(dr, 'quarter', 4)) in (2, 4)
+    return _effective_clock_period(dr) in (2, 4)
+
+
+def _late_penalty_restart(dr, seconds):
+    period = _effective_clock_period(dr)
+    return (period == 2 and seconds <= 120.0) or (period == 4 and seconds <= 300.0)
 
 
 def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None, plan=None, dcoach=None):
@@ -1344,9 +1355,9 @@ def _penalty_ready_clock(dr, pen, half_end=None, *, before_snap=False,
         live_start > edge >= dr.clock for edge in (2700.0, 1800.0, 900.0, 0.0))
     runs = was_running if before_snap else result in ('run', 'complete', 'scramble', 'sack')
     # Fourth-period offensive pre-snap fouls start on the snap even before 5:00.
-    late = secs <= (120.0 if dr.quarter <= 2 else 300.0)
+    late = _late_penalty_restart(dr, secs)
     if (not runs or timeout or late or period_ended or dr.result is not None
-            or (before_snap and pen['on_offense'] and dr.quarter >= 4)):
+            or (before_snap and pen['on_offense'] and _effective_clock_period(dr) == 4)):
         return
     start = dr.clock
     ready = min(dr.play_clock, max(0.0, play_seconds(
@@ -3301,7 +3312,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 _plan_p = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half_p - PLAY_SECS, coach=(off_state.coach if off_state is not None else None)) if secs_in_half_p - PLAY_SECS > 4 else None
                 # No timeout is needed when the enforced foul already starts on
                 # the snap. Keep timeout inventory for subsequent live downs.
-                late_penalty = secs_in_half_p - live_seconds <= (120.0 if dr.quarter <= 2 else 300.0)
+                late_penalty = _late_penalty_restart(dr, secs_in_half_p - live_seconds)
                 used_p, used_by_p = (False, None) if late_penalty or late_injury else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
                 hurry_p = hurry_for_snap(secs_in_half_p, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing)
                 live_start = dr.clock
@@ -3361,7 +3372,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         after_play.clock = dr.clock - live_seconds
         _plan_to = end_of_half_plan(after_play, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None)) if _secs_after > 0 and after_play.result is None and after_play.down <= 4 else None
         added_penalty = live_pen is not None and taken == 'added'
-        late_penalty = added_penalty and secs_in_half - live_seconds <= (120.0 if dr.quarter <= 2 else 300.0)
+        late_penalty = added_penalty and _late_penalty_restart(dr, secs_in_half - live_seconds)
         oob_snap = (not out.get('fumble_out_of_bounds') and
                     QC.oob_stops_until_snap(out, dr.clock_period, _secs_after))
         _fourth_fail = after_play.down > 4 and after_play.result is None

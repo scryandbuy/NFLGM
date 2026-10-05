@@ -1,0 +1,26 @@
+Overtime penalty restart: bounded follow-up
+
+Concrete controlled defect, not inferred from an aggregate: in a playoff OT
+drive starting at 240 seconds, accepted holding on a six-second in-bounds play
+left the next snap at 234 seconds in effective periods 1, 2 and 3. It should
+restart on ready, consuming the existing 25-second ready interval to 209.
+Period 4 properly retains the snap restart at 234. Live and instant drives
+reproduced the same wrong outcome. No saved game with this exact event is claimed.
+
+Football basis: NFL 2026 Rule 4-3-2(e), 16-1-3(e), 16-1-4(h).
+https://static.www.nfl.com/image/upload/fl_attachment/league/tqivdkzt9mu6wdgsh1ku.pdf
+Restart exceptions apply after the first-half warning or in the last five
+minutes of the second half. Offensive pre-snap fouls have the separate fourth
+period/regular OT exception. Raw quarter 5 cannot determine the playoff phase.
+
+Change: shared effective-period helper and late-penalty predicate govern ready
+restart and both drive penalty timing paths. Explicit clock_period governs
+playoff OT. Legacy undifferentiated OT calls default to regular-OT period 4.
+Existing ready duration, timeout choices and coach preferences are preserved.
+
+Six new parameterized tests pass: periods 1-4; run/completion; live/instant;
+offensive pre-snap fouls; first/third-period final two minutes; real second-
+period warning; incompletion, stopped clock and timeout restraint.
+Existing penalty/warning/injury/clock gate also passes (48 tests).
+This fixes restart rules, not overall pace, scoring, or overtime frequency.
+Multi-overtime timeout inventories are being handled in a separate follow-up.
