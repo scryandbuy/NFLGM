@@ -635,6 +635,16 @@ def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache
             urgency -= .06
         lineup = min(8., urgency * loss) if removed else 0.
         recent_cost = 3. if removed & recent else 0.
+        import retention_plan as RP
+        # Include actual incoming players when checking whether a renewed
+        # role still exists. A pick is not an already acquired replacement.
+        continuity = RP.extension_continuity(league, team, removed, baseline, cache=cache)
+        if continuity['players'] and any(p is not None for p in arrivals):
+            intent_players = projected + [p for p in old if p.pid in removed]
+            intent_report = RN.assess(team, intent_players)
+            continuity = RP.extension_continuity(league, team, removed, intent_report, cache=cache)
+        result.setdefault('extension_continuity', {})[team.abbr] = continuity
+        recent_cost = max(recent_cost, continuity['reserve'])
         # Coverage and quality describe the same departing player's loss.
         # Price the larger concern, with more time to repair it in offseason.
         repair_cost = max(repair, lineup)
@@ -1101,7 +1111,7 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None,
                 if gain + 1e-9 < reserve:
                     return dict(approved=False, needs_more=True, required_gain=reserve,
                                 portfolio_costs=portfolio['costs'], portfolio_gains=portfolio.get('margins', {}),
-                                why="We need more value to replace this starter.")
+                                why="We need more value to give up this player's role.")
     if buyer is not None and buyer != getattr(league, 'user_team', None):
         club, sent, received = (ta, outgoing, incoming) if ta.abbr == buyer else (tb, incoming, outgoing)
         gain = football['gains'][buyer]

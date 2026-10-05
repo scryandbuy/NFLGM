@@ -185,6 +185,139 @@ def ir_eligible(weeks_out):
     return weeks_out >= IR_MIN_WEEKS
 
 
+def _ir_return_cuts(league, team, p, week):
+    """The CPU's existing single-return preflight; no committed roster changes."""
+    import cutdown as CD
+    import roster_needs as RN
+    import practice_squad as PSQ
+    from cap_accounting import trade_projection
+    from offer_reservations import held
+    old_ir = list(team.ir)
+    old_used = int(getattr(team, 'ir_returns_used', 0) or 0)
+    old_until = p.out_until
+    current = team.active()
+    cuts = []
+    accepted = False
+    try:
+        r = team.activate_from_ir(p, week)
+        if not r.get('ok'):
+            return None
+        projected = team.active()
+        kept = (RN.select_cutdown(team, CD.rows_for(team), 53)
+                if len(projected) > 53 else {q.pid for q in projected})
+        if p.pid not in kept:
+            return None
+        cuts = [q for q in projected if q.pid not in kept]
+        if not PSQ.preserves_healthy_depth(team, current,
+                [q for q in projected if q.pid in kept]):
+            # The general 53-man selector counts an injured incumbent
+            # as part of the future roster. Do not remove his live
+            # insurance to activate an unrelated returning player.
+            # A normal one-player activation can instead use another
+            # surplus spot; larger unsettled rosters wait for cleanup.
+            if len(cuts) != 1:
+                return None
+            report = RN.assess(team)
+            options = sorted((q for q in projected if q is not p
+                              and q.out_until is None
+                              and not PSQ.locked(q, week)
+                              and not PSQ.protected(team, q, league)),
+                             key=lambda q: (RN.departure_loss(team, q, report)
+                                            + RN.retention_value(team, q), q.pid))
+            alternative = None
+            old_missing, old_quality = RN.lineup_strength(team, current)
+            for q in options:
+                remaining = [x for x in projected if x is not q]
+                if not PSQ.preserves_healthy_depth(team, current, remaining):
+                    continue
+                missing, quality = RN.lineup_strength(team, remaining)
+                if missing > old_missing or quality < old_quality - .5:
+                    continue
+                trial = trade_projection(league, team.abbr, [q.pid], [])
+                if trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005:
+                    continue
+                alternative = q
+                break
+            if alternative is None:
+                return None
+            cuts = [alternative]
+            kept = {q.pid for q in projected if q is not alternative}
+        if len(projected) - len(cuts) > 53:
+            return None
+        if any(PSQ.locked(q, week) or PSQ.protected(team, q, league) for q in cuts):
+            return None
+        missing, quality = RN.lineup_strength(team, [q for q in projected if q.pid in kept])
+        old_missing, old_quality = RN.lineup_strength(team, current)
+        if missing > old_missing or quality < old_quality - .5:
+            return None
+        trial = trade_projection(league, team.abbr, [q.pid for q in cuts], [])
+        if trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005:
+            return None
+        accepted = True
+    finally:
+        team.ir = old_ir
+        team.ir_returns_used = old_used
+        p.out_until = old_until
+    return cuts if accepted else None
+
+
+def project_ir_returns(league, team, week, *, additions=(), removals=()):
+    """Preview the CPU's imminent returns on an isolated roster/cap ledger.
+
+    Share the real activation preflight, including return order/limits, healthy
+    depth, protected players and release charges. Nothing is activated or
+    released on the live league, and no injury uncertainty is rerolled.
+    """
+    import copy
+    from cap_accounting import trade_projection
+    shadow = copy.copy(league)
+    club = copy.copy(team)
+    shadow.teams = dict(league.teams, **{team.abbr: club})
+    shadow.players = dict(league.players)
+    club.league = shadow
+    club.cap = copy.copy(team.cap)
+    copied = {p.pid: copy.copy(p) for p in team.roster + team.practice_squad}
+    for p in copied.values():
+        p._team_ref = club
+    shadow.players.update(copied)
+    club.roster = [copied[p.pid] for p in team.roster]
+    club.practice_squad = [copied[p.pid] for p in team.practice_squad]
+    club.ir = [copied[p.pid] for p in (team.ir or [])]
+    club.ir_returns_used = int(getattr(team, 'ir_returns_used', 0) or 0)
+    for p, contract in additions:
+        incoming = copy.copy(p)
+        incoming.team, incoming.contract, incoming._team_ref = team.abbr, contract, club
+        shadow.players[p.pid] = incoming
+        club.roster.append(incoming)
+
+    def remove(pids):
+        # Carry earned salary and dead money into every subsequent return's
+        # preflight, without calling the live release/waiver/email machinery.
+        club.cap = trade_projection(shadow, club.abbr, list(pids), [])
+        club.roster = [p for p in club.roster if p.pid not in pids]
+        club.ir = [p for p in club.ir if p.pid not in pids]
+        club.sync_cap()
+
+    if removals:
+        remove(set(removals))
+    returned, released = [], []
+    if team.abbr != getattr(league, 'user_team', None):
+        for p in list(club.ir):
+            cuts = _ir_return_cuts(shadow, club, p, week)
+            if cuts is None:
+                continue
+            club.activate_from_ir(p, week)
+            cut_ids = {q.pid for q in cuts}
+            remove(cut_ids)
+            returned.append(p.pid)
+            released.extend(q.pid for q in cuts)
+    club.sync_cap()
+    return dict(active={p.pid for p in club.active()}, returns=returned,
+                cuts=released, returns_used=club.ir_returns_used,
+                charges=club.cap.charges(club.phase), dead=club.cap.dead,
+                dead_next=club.cap.dead_next)
+
+
 class InjuryDesk:
     """
     One club's injury paperwork for a season: who is listed as what, who is on
@@ -312,86 +445,12 @@ class InjuryDesk:
         return out
 
     def activate_from_ir(self, league, team, week):
-        """
-        Bring back whoever has served his four games, while returns remain.
-        """
+        """Bring back eligible players while preserving the playable roster."""
         back = []
-        if team.abbr == getattr(league, 'user_team', None): return back        # the GM activates his own
-        import cutdown as CD
-        import roster_needs as RN
-        import practice_squad as PSQ
-        from cap_accounting import trade_projection
-        from offer_reservations import held
+        if team.abbr == getattr(league, 'user_team', None): return back
         for p in list(getattr(team, 'ir', None) or []):
-            # Preview the same full-roster assessment used at cutdown. Restore
-            # eligibility state before committing any release or return charge.
-            old_ir = list(team.ir)
-            old_used = int(getattr(team, 'ir_returns_used', 0) or 0)
-            old_until = p.out_until
-            current = team.active()
-            cuts = []
-            accepted = False
-            try:
-                r = team.activate_from_ir(p, week)
-                if not r.get('ok'):
-                    continue
-                projected = team.active()
-                kept = (RN.select_cutdown(team, CD.rows_for(team), 53)
-                        if len(projected) > 53 else {q.pid for q in projected})
-                if p.pid not in kept:
-                    continue
-                cuts = [q for q in projected if q.pid not in kept]
-                if not PSQ.preserves_healthy_depth(team, current,
-                        [q for q in projected if q.pid in kept]):
-                    # The general 53-man selector counts an injured incumbent
-                    # as part of the future roster. Do not remove his live
-                    # insurance to activate an unrelated returning player.
-                    # A normal one-player activation can instead use another
-                    # surplus spot; larger unsettled rosters wait for cleanup.
-                    if len(cuts) != 1:
-                        continue
-                    report = RN.assess(team)
-                    options = sorted((q for q in projected if q is not p
-                                      and q.out_until is None
-                                      and not PSQ.locked(q, week)
-                                      and not PSQ.protected(team, q, league)),
-                                     key=lambda q: (RN.departure_loss(team, q, report)
-                                                    + RN.retention_value(team, q), q.pid))
-                    alternative = None
-                    old_missing, old_quality = RN.lineup_strength(team, current)
-                    for q in options:
-                        remaining = [x for x in projected if x is not q]
-                        if not PSQ.preserves_healthy_depth(team, current, remaining):
-                            continue
-                        missing, quality = RN.lineup_strength(team, remaining)
-                        if missing > old_missing or quality < old_quality - .5:
-                            continue
-                        trial = trade_projection(league, team.abbr, [q.pid], [])
-                        if trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005:
-                            continue
-                        alternative = q
-                        break
-                    if alternative is None:
-                        continue
-                    cuts = [alternative]
-                    kept = {q.pid for q in projected if q is not alternative}
-                if len(projected) - len(cuts) > 53:
-                    continue
-                if any(PSQ.locked(q, week) or PSQ.protected(team, q, league) for q in cuts):
-                    continue
-                missing, quality = RN.lineup_strength(team, [q for q in projected if q.pid in kept])
-                old_missing, old_quality = RN.lineup_strength(team, current)
-                if missing > old_missing or quality < old_quality - .5:
-                    continue
-                trial = trade_projection(league, team.abbr, [q.pid for q in cuts], [])
-                if trial.charges(team.phase) + held(league, team.abbr) > trial.limit + .0005:
-                    continue
-                accepted = True
-            finally:
-                team.ir = old_ir
-                team.ir_returns_used = old_used
-                p.out_until = old_until
-            if not accepted:
+            cuts = _ir_return_cuts(league, team, p, week)
+            if cuts is None:
                 continue
             # Eligibility and every required release have passed preflight.
             r = team.activate_from_ir(p, week)

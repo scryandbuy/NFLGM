@@ -241,7 +241,9 @@ def extend(league, pid, apy, years, rng=None, by_ai=False, front_load=None, agre
         p.xp_spent.pop('_contract_concern', None)
         if p.morale is not None:
             p.morale._contract_drag = 0.0
-    league.log('extension', pid=pid, team=p.team, apy=round(apy, 2), years=years, ai=by_ai, front_load=front_load)
+    import retention_plan as RP
+    league.log('extension', pid=pid, team=p.team, apy=round(apy, 2), years=years, ai=by_ai,
+               front_load=front_load, role_intent=RP.committed_role(team, p))
     __import__('inbox').reconcile(league)
     return dict(result='accepted', apy=round(apy, 2), years=years, contract=c,
                 front_load=front_load, pay_concern_resolved=pay_concern)

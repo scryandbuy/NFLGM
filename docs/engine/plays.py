@@ -1122,25 +1122,36 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         travel=def_call.get('travel'))
 
     LAST_TRAVEL = bool(travelled)
+    # Establish the concept's outlet before the read, using only receivers
+    # actually released by protection. Picking a late read cannot turn a
+    # vertical route into a short checkdown after the QB has chosen it.
+    for pr in pairs:
+        if chip is not None and pr['receiver'] is chip[0]:
+            pr['late'] = True
+    TG.assign_concept_roles(pairs, concept, depth)
     # every man in the pattern gets his own separation from his own matchup
     for pr in pairs:
         pr_depth = 'short' if pr['receiver'].get('pos') in ('HB', 'FB') and depth != 'short' else depth
-        if chip is not None and pr['receiver'] is chip[0]:
-            pr['late'] = True                       # he chipped on the way out
         if conversion_route and not hot and not swing:
             # Backs and delayed releases remain underneath outlets. Other
             # routes break at/beyond the sticks, bounded by the end zone.
             outlet = pr['receiver'].get('pos') in ('HB', 'FB') or pr.get('late')
             pr['route_air'] = (2.6 if outlet else min(float(ytg) + 2.0,
                 max(need + 1.0, {'short': 6.3, 'medium': 10.3, 'deep': 23.4}[pr_depth])))
+            if outlet:
+                pr_depth = 'short'
+        elif not screen and pr.get('concept_role') in ('flat', 'back', 'check'):
+            # These jobs are the concept's underneath outlet, regardless of
+            # whether it is filled by a back, tight end or wide receiver.
+            pr['route_air'] = 2.6
+            pr_depth = 'short'
+        pr['route_depth'] = pr_depth
         pr['separation'] = resolve_man(pr['receiver'], pr['defender'], pr_depth,
                                        p['time'], rng)
         # a bracketed man is squeezed, not erased - an elite receiver doubled
         # still beats an average one singled
         if def_call.get('bracket') == pr['receiver'].get('pid'):
             pr['separation'] *= 0.72; pr['bracket'] = True        # and the read goes elsewhere more often (targets.select_target)
-
-    TG.assign_concept_roles(pairs, concept, depth)
 
     tgt, cov, read_kind, sep_raw = TG.select_target(
         pairs, off['qb'], concept, rng, rate, plan=off_call.get('plan'), red_zone=(ytg <= 10),
@@ -1160,9 +1171,7 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         depth = 'short'                          # the back's route is a check, a flat, a swing
     route_pair = next((pr for pr in pairs if pr['receiver'] is tgt), {})
     route_air = route_pair.get('route_air')
-    if route_air is not None and (read_kind == 'checkdown' or route_pair.get('late')):
-        route_air = min(route_air, 2.6)
-        depth = 'short'
+    depth = route_pair.get('route_depth', depth)
     rmod = TG.READ_MODIFIER.get(read_kind, TG.READ_MODIFIER['first'])
 
     # PER-PAIRING, not per-defence. The man who ends up targeted may be in man
@@ -1195,7 +1204,8 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         seconds=off_call.get('seconds'), margin=off_call.get('score_diff', 0),
         aggression=off_call.get('qb_run_aggression', .5), man=bool(in_man), escape_lanes=escape_lanes)
     if run_chance and rng.random() < run_chance:
-        out = E.resolve_scramble(off['qb'], deff['dl'] + deff['lb'] + deff['db'], ytg, rng, rate)
+        out = E.resolve_scramble(off['qb'], deff['dl'] + deff['lb'] + deff['db'],
+                                off_call.get('scramble_goal_distance', ytg), rng, rate)
         out.update(scramble_kind='decision', scramble_chance=run_chance,
                    scramble_read=read_kind, separation=sep_raw,
                    depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence,
@@ -1312,13 +1322,25 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         air = float(np.clip(rng.normal(route_air if route_air is not None else {'short': 5, 'medium': 13, 'deep': 27}.get(depth, 6),
                                        {'short': 3, 'medium': 5, 'deep': 9}.get(depth, 3)),
                             -3 if screen else 1, 48))
-        returning = defensive_return(float(ytg) - air, 'int', cb,
-            [off['qb']] + list(off.get('ol') or []) + receivers, rng, rate)
-        return dict(type='interception', yards=0.0, touchdown=False,
+        # The drive uses rounded distance for play selection, but the end
+        # line belongs to the actual field spot. A catch on or beyond that
+        # boundary is incomplete; clipping it back into the end zone would
+        # create a turnover (and possibly a return touchdown) out of bounds.
+        catch_spot = float(off_call.get('field_yardline', ytg)) - air
+        result = dict(type='interception', yards=0.0, touchdown=False,
                     air=round(air, 1),
+                    catch_yardline=catch_spot,
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
+                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
+        if catch_spot <= -10.0:
+            result.pop('by')
+            result.update(type='incomplete', intended_air=air, pass_def=None,
+                          throwaway=False, out_of_bounds=True, end_line_incomplete=True)
+            return result
+        returning = defensive_return(catch_spot, 'int', cb,
+            [off['qb']] + list(off.get('ol') or []) + receivers, rng, rate)
+        return result | returning
     if not complete:
         throwaway = False  # Throwaway intent was resolved before accuracy/turnovers.
         # A PASS DEFENDED is a defender breaking the ball up, not simply an

@@ -57,6 +57,20 @@ def assignments(defense, call=None):
     return sorted(out, key=lambda a: (a.get('alignment', ''), a.get('role', ''), player_key(a['player'])))
 
 
+def man_deep_help(rows, call):
+    """The called man coverage's post/halves, before underneath matchups.
+
+    Rush selection, receiver assignments and pursuit must agree on these
+    players. An extra eligible receiver cannot silently consume the post.
+    ``assignments`` supplies the stable alignment order used by rush selection.
+    """
+    name = call.get('coverage') or call.get('shell', 'cover_3')
+    safeties = [a for a in rows if a['alignment'].startswith('deep_')]
+    if name in ('cover_1', 'cover_1_robber'):
+        return safeties[:1]
+    return safeties if name == 'two_man' else []
+
+
 def _coverage_grade(a, call):
     """Value the underneath job vacated by an exchange rusher."""
     p = a['player']
@@ -104,7 +118,8 @@ def select_rush(defense, call, rng=None):
     corners = [a for a in rows if a['alignment'].startswith('corner_')]
     # Preserve the shell's designated deep bodies; explicit pressures may
     # exchange underneath players, not silently erase a deep half/quarter.
-    deep = ([] if cov == 'cover_0' else safeties[:1] if cov in ('cover_1','cover_1_robber','cover_3','cover_3_mable') else safeties)
+    deep = (man_deep_help(rows, call) if cov in ('cover_1', 'cover_1_robber', 'two_man')
+            else [] if cov == 'cover_0' else safeties[:1] if cov in ('cover_3','cover_3_mable') else safeties)
     if cov in ('cover_3','cover_3_mable','cover_4'):
         deep += corners[:2]
     elif cov == 'cover_6':

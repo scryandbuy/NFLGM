@@ -126,7 +126,7 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
     matchup. In zone the 'defender' is the nearest man to the window rather
     than an assignment, which the zone resolver then uses.
     """
-    from defensive_rush import player_key, assignments
+    from defensive_rush import player_key, assignments, man_deep_help
     rows = assignments(defense, def_call)
     cbs = [a['player'] for a in rows if a['alignment'].startswith('corner_') or a['alignment'] == 'slot']
     safs = [a['player'] for a in rows if a['alignment'].startswith('deep_')]
@@ -140,8 +140,18 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
     # plays one principle to each side, which is what cover 6 and mable ARE,
     # so every pairing carries its own.
     import coverage_call as CC
-    under = def_call.get('under', 'man' if def_call.get('man') else 'zone')
+    name = def_call.get('coverage') or def_call.get('shell', 'cover_3')
+    default_under = ('man' if def_call['man'] else 'zone') if 'man' in def_call else CC.COVERAGES.get(name, {}).get('under', 'zone')
+    under = def_call.get('under', default_under)
     is_man = (under == 'man') if not isinstance(under, tuple) else True
+
+    # Keep the post/halves that rush selection protected. TE and extra-slot
+    # matchups use the underneath players; they cannot take the deep helper
+    # and leave a different, low-hole safety to stand in for him after a catch.
+    all_safs = safs
+    deep_help = [a['player'] for a in man_deep_help(rows, def_call)] if is_man else []
+    deep_ids = {player_key(p) for p in deep_help}
+    safs = [p for p in all_safs if player_key(p) not in deep_ids]
 
     # does the top corner travel with their best man
     wr1 = None
@@ -177,6 +187,15 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
             pid = player_key(d)
             if pid not in used:
                 used.add(pid); return d
+        # After reserving deep help, an extra slot/TE may exhaust his first
+        # matchup group. Use another free underneath defender before giving
+        # an already occupied man two receivers. Keep zone's provisional
+        # pairings and genuinely outnumbered coverage on their existing path.
+        if deep_ids:
+            for d in cbs + safs + lbs:
+                pid = player_key(d)
+                if pid not in used:
+                    used.add(pid); return d
         return pool[-1] if pool else None
 
     for a in aligned:
@@ -232,7 +251,8 @@ def assign_coverage(aligned, defense, def_call, rng, rate_fn,
                                   {'under': under}, a.get('side')) == 'man')))
     # the zone layer needs the whole coverage unit, not only the pairings
     for pr in pairs:
-        pr['_unit'] = dict(cbs=cbs, safs=safs, lbs=lbs, sides=sides)
+        pr['_unit'] = dict(cbs=cbs, safs=all_safs, lbs=lbs, sides=sides,
+                           man_deep=deep_help)
     return pairs, bool(travel)
 
 

@@ -20,6 +20,78 @@ def role_inputs(league, team, player, baseline=None, scale=None):
     return _role_read(league,team,player,baseline,scale)[0]
 
 
+def committed_role(team, player, report=None):
+    """Public roster intent saved only when a new contract is actually signed."""
+    report = RN.assess(team) if report is None else report
+    share = sum(r['weight'] for r in report['package_assignments']
+                if r['player'] is not None and r['player'].pid == player.pid)
+    if player.pos in ('K', 'P', 'LS') and team.by_pos(player.pos)[:1] == [player]:
+        share = 1.
+    return dict(role_share=round(min(1., share), 4),
+                departure_loss=round(max(0., RN.departure_loss(team, player, report)), 4))
+
+
+def extension_continuity(league, team, removed, report, *, cache=None):
+    """A finite preference for an unchanged, recently renewed football role.
+
+    This is not bonus repayment, a trade ban, or a promise of an available bid.
+    Existing asset quotes price age/control/pay and the joint financial preview
+    accounts for dead money. A lost starting role, reduced depth need, request,
+    or cap casualty can reduce this separate preference for following the plan.
+    """
+    import morale
+    if not removed or float(team.cap_space) < -.0005:
+        return dict(reserve=0., players=[])
+    cache = {} if cache is None else cache
+    key = ('extension_intents', team.abbr)
+    if key not in cache:
+        year, week = int(league.year), int(league.week or 0)
+        offseason = league.phase not in ('regular', 'playoffs')
+        intents, waiting = {}, set()
+        for tx in reversed(getattr(league, 'transactions', ())):
+            ey, ew = int(tx.get('year', year)), int(tx.get('week') or 0)
+            phase = tx.get('phase')
+            if offseason:
+                if phase in ('regular', 'playoffs') or ey < year - 1: break
+            elif ey != year or (phase == 'regular' and week - ew > 3): break
+            elif phase != 'regular' and week > 3: break
+            if tx.get('team') != team.abbr: continue
+            pid = tx.get('pid')
+            if tx.get('kind') == 'extension' and pid not in intents:
+                intents[pid] = tx.get('role_intent')
+                if intents[pid] is None: waiting.add(pid)
+            elif tx.get('kind') == 'cpu_retention_decision' and pid in waiting:
+                # Older saves may contain the actual pre-extension assessment.
+                # With no recorded intent, do not invent the earlier roster.
+                if 'role_share' in tx and 'departure_loss' in tx:
+                    intents[pid] = {k: tx[k] for k in ('role_share', 'departure_loss')}
+                waiting.remove(pid)
+        cache[key] = intents
+    gm = team.gm
+    trait = lambda name: max(0., min(1., float(getattr(gm, name, .5))))
+    # Reuse the acquisition-continuity scale in trades. These are soft GM
+    # preferences, not empirical odds or an extra charge for a paid bonus.
+    weight = .5 + .5*trait('patience') + .25*trait('loyalty') - .25*trait('aggression')
+    players = []
+    for p in report['players']:
+        prior = cache[key].get(p.pid)
+        if p.pid not in removed or not prior or morale.wants_out(p): continue
+        now = committed_role(team, p, report)
+        share, loss = float(prior['role_share']), float(prior['departure_loss'])
+        # A starting plan is measured by the actual assignments it retains.
+        # Rotational DTs and other reserves can matter despite few starts;
+        # use the same marginal depth value that supported their renewal.
+        if share >= .15:
+            same_role = min(1., now['role_share'] / share)
+        else:
+            same_role = min(1., now['departure_loss'] / loss) if loss > 0 else 0.
+        importance = min(1., max(share / .15, loss / 2.))
+        reserve = 3. * weight * importance * same_role
+        players.append(dict(pid=p.pid, prior=prior, current=now,
+                            same_role=round(same_role, 4), reserve=round(reserve, 4)))
+    return dict(reserve=round(min(6., sum(p['reserve'] for p in players)), 4), players=players)
+
+
 def retention_priority(pos, normalized_grade, role_share, departure_loss):
     """Bounded review order, separate from the transaction's budget benefit.
 

@@ -668,6 +668,11 @@ def improve_cutdown(team, keep_ids, limit=53, available=None):
                     for p in pool if p.pid not in keep_ids]
         arrivals = [p for gain, p in sorted(arrivals, key=lambda row: -row[0])[:8]
                     if gain > 1.0]
+        if not arrivals:
+            # No incoming player can enter the swap loop. Ranking every
+            # possible departure would rescore the roster without changing
+            # the result, particularly for near-complete IR/waiver rosters.
+            break
         departures = sorted(kept,
                             key=lambda p: base - assess(team, [q for q in kept if q.pid != p.pid], prepared=prepared, score_only=True)
                             + retention[p.pid])[:16]

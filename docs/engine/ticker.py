@@ -127,7 +127,9 @@ def play_line(league, p, off_abbr, def_abbr):
             text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
     elif t == 'incomplete':
         pd = _nm(league, p.get('pass_def'))
-        if p.get('throwaway'):
+        if p.get('end_line_incomplete'):
+            text = f"{passer or 'The quarterback'} throws beyond the back of the end zone. Incomplete."
+        elif p.get('throwaway'):
             text = f"{passer or 'The quarterback'} throws the ball away under pressure."
         else:
             text = f"{passer or 'The quarterback'} throws to {target or 'his receiver'}, incomplete" + (f". {pd} breaks it up." if pd else ('. Under pressure.' if p.get('pressured') else '.'))
