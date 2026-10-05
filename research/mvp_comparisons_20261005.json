@@ -1,0 +1,207 @@
+{
+  "note": "Controlled scores, not observed simulation winners. Historical cards use headline production only; fumble loss fields are deliberately absent for all players because this comparison did not validate complete possession-loss books.",
+  "controlled": {
+    "all_purpose_under_2000": {
+      "winner": "Challenger",
+      "players": {
+        "Passer": {
+          "position": "QB",
+          "team_win_pct": 0.7058823529411765,
+          "line": {
+            "pass_att": 550,
+            "pass_cmp": 350,
+            "pass_yds": 4000,
+            "pass_td": 32,
+            "ints": 10
+          },
+          "mvp_score": 2705.676
+        },
+        "Challenger": {
+          "position": "HB",
+          "team_win_pct": 0.5882352941176471,
+          "line": {
+            "rush_yds": 1650,
+            "rush_td": 16,
+            "rec": 70,
+            "rec_yds": 600,
+            "rec_td": 4
+          },
+          "mvp_score": 2899.779
+        }
+      }
+    },
+    "ordinary_back": {
+      "winner": "Passer",
+      "players": {
+        "Passer": {
+          "position": "QB",
+          "team_win_pct": 0.7058823529411765,
+          "line": {
+            "pass_att": 550,
+            "pass_cmp": 350,
+            "pass_yds": 4000,
+            "pass_td": 32,
+            "ints": 10
+          },
+          "mvp_score": 2705.676
+        },
+        "Challenger": {
+          "position": "HB",
+          "team_win_pct": 0.5882352941176471,
+          "line": {
+            "rush_yds": 1400,
+            "rush_td": 12,
+            "rec": 35,
+            "rec_yds": 250,
+            "rec_td": 2
+          },
+          "mvp_score": 2070.904
+        }
+      }
+    },
+    "exceptional_receiver": {
+      "winner": "Challenger",
+      "players": {
+        "Passer": {
+          "position": "QB",
+          "team_win_pct": 0.7058823529411765,
+          "line": {
+            "pass_att": 550,
+            "pass_cmp": 350,
+            "pass_yds": 4000,
+            "pass_td": 32,
+            "ints": 10
+          },
+          "mvp_score": 2705.676
+        },
+        "Challenger": {
+          "position": "WR",
+          "team_win_pct": 0.5882352941176471,
+          "line": {
+            "rec": 150,
+            "rec_yds": 2200,
+            "rec_td": 20
+          },
+          "mvp_score": 3053.75
+        }
+      }
+    },
+    "losing_team_exceptional_receiver": {
+      "winner": "Challenger",
+      "players": {
+        "Passer": {
+          "position": "QB",
+          "team_win_pct": 0.7058823529411765,
+          "line": {
+            "pass_att": 550,
+            "pass_cmp": 350,
+            "pass_yds": 4000,
+            "pass_td": 32,
+            "ints": 10
+          },
+          "mvp_score": 2705.676
+        },
+        "Challenger": {
+          "position": "WR",
+          "team_win_pct": 0.23529411764705882,
+          "line": {
+            "rec": 150,
+            "rec_yds": 2200,
+            "rec_td": 20
+          },
+          "mvp_score": 2738.75
+        }
+      }
+    }
+  },
+  "historical": {
+    "2012": {
+      "mvp_selected": "Manning",
+      "opoy_selected": "Peterson",
+      "actual_mvp": "Peterson",
+      "actual_opoy": "Peterson",
+      "players": {
+        "Peterson": {
+          "position": "HB",
+          "team_win_pct": 0.625,
+          "headline_line": {
+            "rush_yds": 2097,
+            "rush_td": 12,
+            "rec": 40,
+            "rec_yds": 217,
+            "rec_td": 1
+          },
+          "mvp_score": 2774.275,
+          "opoy_score": 2674.0
+        },
+        "Manning": {
+          "position": "QB",
+          "team_win_pct": 0.8125,
+          "headline_line": {
+            "pass_att": 583,
+            "pass_cmp": 400,
+            "pass_yds": 4659,
+            "pass_td": 37,
+            "ints": 11,
+            "rush_yds": 6
+          },
+          "mvp_score": 3384.345,
+          "opoy_score": 1967.6
+        }
+      }
+    },
+    "2024": {
+      "mvp_selected": "Jackson",
+      "opoy_selected": "Jackson",
+      "actual_mvp": "Allen",
+      "actual_opoy": "Barkley",
+      "players": {
+        "Allen": {
+          "position": "QB",
+          "team_win_pct": 0.7647058823529411,
+          "headline_line": {
+            "pass_att": 483,
+            "pass_cmp": 307,
+            "pass_yds": 3731,
+            "pass_td": 28,
+            "ints": 6,
+            "rush_yds": 531,
+            "rush_td": 12,
+            "rec_yds": 7,
+            "rec_td": 1
+          },
+          "mvp_score": 3559.914,
+          "opoy_score": 2406.4
+        },
+        "Jackson": {
+          "position": "QB",
+          "team_win_pct": 0.7058823529411765,
+          "headline_line": {
+            "pass_att": 474,
+            "pass_cmp": 316,
+            "pass_yds": 4172,
+            "pass_td": 41,
+            "ints": 4,
+            "rush_yds": 915,
+            "rush_td": 4
+          },
+          "mvp_score": 4398.139,
+          "opoy_score": 2919.8
+        },
+        "Barkley": {
+          "position": "HB",
+          "team_win_pct": 0.8235294117647058,
+          "headline_line": {
+            "rush_yds": 2005,
+            "rush_td": 13,
+            "rec": 33,
+            "rec_yds": 278,
+            "rec_td": 2
+          },
+          "mvp_score": 2924.21,
+          "opoy_score": 2665.5
+        }
+      }
+    }
+  }
+}

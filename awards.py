@@ -1,7 +1,7 @@
 """Regular-season honors from recorded production and award-specific context.
 
 These are transparent game-design scores, not a fitted model of AP ballots.
-MVP emphasizes quarterback efficiency and team record. OPOY and OROY compare
+MVP emphasizes passing responsibility, efficiency and team record. OPOY and OROY compare
 combined offensive production on one scale; they do not target a position mix.
 Rookie eligibility limits the OROY/DROY field without changing how production
 is scored. Defensive and blocking honors use their respective recorded roles.
@@ -31,11 +31,6 @@ def _g(line, key):
     return float(line.get(key, 0) or 0)
 
 
-def _rank(value, pool, key):
-    """1 = league leader."""
-    return 1 + sum(1 for l in pool if _g(l, key) > value)
-
-
 class Ballot:
     """
     One season's voting. Built once, then every award reads off it, so a
@@ -48,7 +43,7 @@ class Ballot:
         self.year = season or league.year
         self.lines = league.stats.get(self.year, {})
         self.teams = league.teams
-        # record rank: MVP and Coach of the Year both gate on it
+        # Coach of the Year retains its record-rank context.
         order = sorted(self.teams, key=lambda t: -self.teams[t].win_pct)
         self.rec_rank = {t: i + 1 for i, t in enumerate(order)}
 
@@ -112,6 +107,11 @@ class Ballot:
                 + 20.0 * (_g(line, 'rush_td') + _g(line, 'rec_td'))
                 + 2.5 * _g(line, 'rec') - 25.0 * self.lost_fumbles(line))
 
+    @staticmethod
+    def adjusted_passing_yards(line):
+        return (_g(line, 'pass_yds') + 20.0 * _g(line, 'pass_td')
+                - 45.0 * _g(line, 'ints'))
+
     def offensive_score(self, line):
         """One OPOY/OROY scale, combining every recorded offensive role.
 
@@ -122,9 +122,33 @@ class Ballot:
         have identical value for a QB, back or receiver. A lost fumble is
         charged once in skill_score, including a quarterback's strip-sack.
         """
-        passing = (_g(line, 'pass_yds') + 20.0 * _g(line, 'pass_td')
-                   - 45.0 * _g(line, 'ints'))
-        return self.skill_score(line) + 0.4 * passing
+        return self.skill_score(line) + 0.4 * self.adjusted_passing_yards(line)
+
+    def mvp_score(self, p, line):
+        """Comparable offensive value with bounded efficiency/record context.
+
+        MVP gives more credit to directing the passing game than OPOY does:
+        60% of adjusted passing yards versus 40%. Efficient passing adds up
+        to 15%; inefficient passing can subtract up to 15%. This affects the
+        passing component only, so a trick-pass rate cannot multiply a back's
+        entire season. No passing-attempt or rushing-yard eligibility cliff.
+
+        Team success scales the complete case by 0.85 to 1.15, a preference
+        that cannot rule out an exceptional player on a weaker team. An
+        unattached player's unavailable team record uses neutral context.
+        These are explicit design weights, not estimates of real AP voting.
+        """
+        att = _g(line, 'pass_att')
+        efficiency = (max(0.85, min(1.15,
+                      1.0 + 0.05 * (_g(line, 'pass_yds') / att - 7.0)))
+                      if att > 0 else 1.0)
+        passing = 0.6 * self.adjusted_passing_yards(line)
+        # A poor efficiency rate must not soften negative passing production.
+        passing *= efficiency if passing >= 0 else max(1.0, efficiency)
+        production = self.skill_score(line) + passing
+        club = self.teams.get(p.team)
+        win_pct = max(0.0, min(1.0, club.win_pct)) if club is not None else 0.5
+        return production * (0.85 + 0.30 * win_pct)
 
     def rush_score(self, line):
         """Front-seven production, including their recorded plays in coverage."""
@@ -159,30 +183,10 @@ class Ballot:
 
     # ================================================== the awards
     def mvp(self):
-        """
-        Top-10 record or nothing. That gate is not a preference: every MVP in
-        fifteen years played for a top-10 team and none came off a losing one.
-        """
-        best, who = -1e9, None
+        """Offensive value with team context, without positional/record gates."""
+        best, who = 0.0, None
         for p, line in self.players():
-            if self.rec_rank.get(p.team, 99) > 10:
-                continue
-            s = self.passer_score(line)
-            if s <= 0:
-                # THE ADRIAN PETERSON EXCEPTION, and it has to be a genuine
-                # exception. He won in 2012 with 2,097 rushing yards, nine
-                # short of the all-time record - the only non-quarterback to
-                # take it in fifteen years. A loose threshold here handed the
-                # award to a receiver with 2,000 combined yards, which is a
-                # good season and not an MVP one. So it requires leading the
-                # league AND clearing 2,000 rushing yards, and it is scored
-                # below any credible quarterback rather than against him.
-                if _g(line, 'rush_yds') < 2000:
-                    continue
-                if _rank(_g(line, 'rush_yds'), self.lines.values(),
-                         'rush_yds') > 1:
-                    continue
-                s = 1.0 + (_g(line, 'rush_yds') - 2000) * 0.02
+            s = self.mvp_score(p, line)
             if s > best:
                 best, who = s, p
         return who

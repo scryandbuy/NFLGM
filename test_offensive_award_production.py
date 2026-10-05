@@ -110,6 +110,112 @@ class OffensiveAwardComparisons(unittest.TestCase):
         self.assertEqual(before, b.L.stats[2028])
 
 
+class MVPComparisons(unittest.TestCase):
+    def field(self, skill_line=None, skill_pos='HB', skill_wins=10, qb_wins=12):
+        passer = player('Passer', 'QB', 'A')
+        challenger = player('Challenger', skill_pos, 'B')
+        lines = dict(Passer=dict(pass_att=550, pass_cmp=350, pass_yds=4000,
+                                pass_td=32, ints=10),
+                     Challenger=skill_line or dict(rush_yds=1650, rush_td=16,
+                         rec=70, rec_yds=600, rec_td=4))
+        return AW.Ballot(league([passer, challenger], lines,
+                               {'A': team(qb_wins), 'B': team(skill_wins)}))
+
+    def test_all_purpose_back_below_2000_rushing_can_beat_credible_qb(self):
+        b = self.field()
+        self.assertGreater(b.passer_score(b.lines['Passer']), 0)
+        self.assertEqual(b.mvp().pid, 'Challenger')
+        b.lines['Challenger'] = back()
+        self.assertEqual(b.mvp().pid, 'Passer')
+
+    def test_exceptional_receiver_can_win_without_rushing_yards(self):
+        b = self.field(dict(rec=150, rec_yds=2200, rec_td=20), 'WR')
+        self.assertEqual(b.mvp().pid, 'Challenger')
+        # The same receiver does not receive a guaranteed position slot.
+        b.lines['Passer'] = pocket()
+        self.assertEqual(b.mvp().pid, 'Passer')
+
+    def test_nonleading_rusher_is_not_excluded(self):
+        b = self.field()
+        other = player('RushingLeader', 'HB', 'A')
+        previous_lookup = b.L.player
+        b.L.player = lambda pid: other if pid == other.pid else previous_lookup(pid)
+        b.lines[other.pid] = dict(rush_yds=1700, rush_td=9)
+        self.assertEqual(b.mvp().pid, 'Challenger')
+
+    def test_record_affects_close_case_without_blocking_losing_team(self):
+        b = self.field(dict(rec=150, rec_yds=2200, rec_td=20), 'WR', skill_wins=4)
+        self.assertEqual(b.mvp().pid, 'Challenger')
+        # Identical production reasonably favors the stronger team.
+        b.lines['Challenger'] = dict(b.lines['Passer'])
+        self.assertEqual(b.mvp().pid, 'Passer')
+        b.L.teams['B'].win_pct = 14 / 17
+        self.assertEqual(b.mvp().pid, 'Challenger')
+
+    def test_rank_ten_eleven_has_no_eligibility_or_scoring_cliff(self):
+        b = self.field()
+        challenger = b.L.player('Challenger')
+        before = b.mvp_score(challenger, b.lines['Challenger'])
+        # Other teams can move him outside the top ten without changing
+        # anything about his own performance or club's record.
+        for i in range(11):
+            b.L.teams[f'Other{i}'] = team(14)
+        reranked = AW.Ballot(b.L)
+        self.assertGreater(reranked.rec_rank['B'], 10)
+        self.assertEqual(reranked.mvp_score(challenger, b.lines['Challenger']), before)
+        self.assertEqual(reranked.mvp().pid, 'Challenger')
+
+    def test_1999_to_2000_rushing_yards_has_no_step_change(self):
+        b = self.field()
+        p = b.L.player('Challenger')
+        low = b.mvp_score(p, dict(rush_yds=1999, rush_td=12))
+        high = b.mvp_score(p, dict(rush_yds=2000, rush_td=12))
+        self.assertAlmostEqual(high - low, 0.85 + 0.3 * 10 / 17)
+
+    def test_efficiency_matters_but_small_trick_pass_cannot_multiply_season(self):
+        b = self.field()
+        p = b.L.player('Passer')
+        line = b.lines['Passer']
+        self.assertGreater(b.mvp_score(p, dict(line, pass_att=500)),
+                           b.mvp_score(p, dict(line, pass_att=650)))
+        receiver = dict(rec=130, rec_yds=1900, rec_td=18)
+        diff = (b.mvp_score(p, dict(receiver, pass_att=1, pass_yds=80, pass_td=1))
+                - b.mvp_score(p, receiver))
+        self.assertLess(diff, 80)
+        # A weak-efficiency adjustment must not make turnovers beneficial.
+        negative = dict(pass_att=500, pass_yds=100, ints=10)
+        self.assertLess(b.mvp_score(p, negative), 0)
+
+    def test_offensive_position_label_does_not_change_identical_production(self):
+        b = self.field()
+        p = b.L.player('Challenger')
+        expected = b.mvp_score(p, b.lines[p.pid])
+        for pos in ('QB', 'HB', 'FB', 'WR', 'TE'):
+            p.pos = pos
+            self.assertEqual(b.mvp_score(p, b.lines[p.pid]), expected)
+            self.assertIs(b.mvp(), p)
+
+    def test_mvp_costs_actual_possession_losses_once(self):
+        b = self.field()
+        p = b.L.player('Passer')
+        line = b.lines[p.pid]
+        clean = b.mvp_score(p, line)
+        self.assertLess(b.mvp_score(p, dict(line, ints=11)), clean)
+        lost = b.mvp_score(p, dict(line, fumbles_lost=2))
+        self.assertLess(lost, clean)
+        self.assertEqual(lost, b.mvp_score(p, dict(line, fum_lost=2)))
+        self.assertEqual(lost, b.mvp_score(p, dict(line, fum_lost=2, fumbles_lost=2)))
+        self.assertEqual(clean, b.mvp_score(p, dict(line, fumbles=2)))
+
+    def test_no_empty_mvp_and_unattached_production_has_neutral_record(self):
+        p = player('FreeAgent', 'WR', club=None)
+        b = AW.Ballot(league([p], {p.pid: {}}))
+        self.assertIsNone(b.mvp())
+        b.lines[p.pid] = dict(rec=130, rec_yds=1900, rec_td=18)
+        self.assertIs(b.mvp(), p)
+        self.assertEqual(b.mvp_score(p, b.lines[p.pid]), b.skill_score(b.lines[p.pid]))
+
+
 class QuarterbackHonors(unittest.TestCase):
     def test_rushing_can_change_mvp_and_all_pro_but_does_not_guarantee_them(self):
         pocket_qb, runner = player('Pocket', 'QB'), player('Runner', 'QB')
