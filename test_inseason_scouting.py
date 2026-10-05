@@ -43,6 +43,23 @@ class InseasonScoutingTests(unittest.TestCase):
         with patch('inseason_scouting._choices', return_value=[]):
             self.assertNotIn('Specialists', [x['group'] for x in IS.priorities(L, 'MIN')['suggestions']])
 
+    def test_saved_automatic_specialist_refreshes_but_manual_choice_survives(self):
+        L, _ = setup()
+        specialist = copy.deepcopy(L.next_class[0])
+        specialist.pid = 'test-punter'
+        specialist.pos = 'P'
+        L.next_class.append(specialist)
+        L.scouting['MIN'][specialist.pid] = copy.deepcopy(next(iter(L.scouting['MIN'].values())))
+        row = IS._state(L, IS._pool(L))['clubs'].setdefault('MIN', {})
+        row.update(group1='Specialists', group2='Receivers', prospect_pid=specialist.pid)
+        self.assertNotEqual(IS.priorities(L, 'MIN')['prospect_pid'], specialist.pid)
+        chosen = IS.set_priorities(L, 'MIN', prospect_pid=specialist.pid)
+        self.assertEqual(chosen['prospect_pid'], specialist.pid)
+        self.assertEqual(IS.priorities(L, 'MIN')['prospect_pid'], specialist.pid)
+        chosen = IS.set_priorities(L, 'MIN', use_scout=True)
+        self.assertNotEqual(chosen['prospect_pid'], specialist.pid)
+        self.assertNotIn('Specialists', (chosen['group1'], chosen['group2']))
+
     def test_selection_and_reading_are_read_only_except_saved_priorities(self):
         L, _ = setup()
         before = copy.deepcopy(L.to_dict())

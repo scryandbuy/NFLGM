@@ -123,12 +123,15 @@ def priorities(league, abbr):
     default = _defaults(league, abbr, pool)
     prior = (getattr(league, 'scouting_season', None) or {}).get('clubs', {}).get(abbr, {})
     group1 = saved.get('group1', prior.get('group1'))
-    if group1 not in GROUPS: group1 = default['group1']
+    if group1 not in GROUPS or (group1 == 'Specialists' and not saved.get('groups_manual', False)):
+        group1 = default['group1']
     group2 = saved.get('group2', prior.get('group2'))
-    if group2 not in GROUPS or group2 == group1:
+    if group2 not in GROUPS or group2 == group1 or (group2 == 'Specialists' and not saved.get('groups_manual', False)):
         group2 = next(g for g in (default['group1'], default['group2']) if g != group1)
     pid = saved.get('prospect_pid')
-    if pid not in valid:
+    # Old automatic selections were saved without their source. Refresh them;
+    # only an explicit player choice should override roster-based defaults.
+    if not saved.get('prospect_manual', False) or pid not in valid:
         pid = default['prospect_pid']
     next_week = max((int(saved.get('last_week', 0)) // 2 + 1) * 2,
                     ((max(1, int(getattr(league, 'week', 1) or 1)) + 1) // 2) * 2)
@@ -155,8 +158,11 @@ def set_priorities(league, abbr, *, group1=None, group2=None, prospect_pid=None,
     if abbr not in league.teams:
         raise ValueError('Unknown team.')
     current = priorities(league, abbr)
+    manual_groups = (group1 is not None or group2 is not None) and not use_scout
+    manual_prospect = prospect_pid is not None and not use_scout
     if use_scout:
         group1, group2 = [s['group'] for s in current['suggestions']]
+        prospect_pid = _defaults(league, abbr, _pool(league))['prospect_pid']
     group1 = current['group1'] if group1 is None else group1
     group2 = current['group2'] if group2 is None else group2
     prospect_pid = current['prospect_pid'] if prospect_pid is None else prospect_pid
@@ -166,6 +172,10 @@ def set_priorities(league, abbr, *, group1=None, group2=None, prospect_pid=None,
     if prospect_pid not in {p.pid for p in _choices(league, abbr, pool)}:
         raise ValueError('Choose a prospect in the current scouted class.')
     row = _state(league, pool)['clubs'].setdefault(abbr, {})
+    if use_scout or manual_groups:
+        row['groups_manual'] = manual_groups
+    if use_scout or manual_prospect:
+        row['prospect_manual'] = manual_prospect
     row.update(group1=group1, group2=group2, prospect_pid=prospect_pid)
     return priorities(league, abbr)
 
