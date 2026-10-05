@@ -1302,8 +1302,9 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         for k in range(1, MAX_PACKAGE + 1):
             upper[i][k] = max(upper[i+1][k], bank[i][2] + upper[i+1][k-1])
     valid_players = {}
-    # Search only reads the current league; run executes the returned offer
-    # afterward. Never share this snapshot with the next negotiation/trade.
+    # Valuation inputs stay fixed until run executes the returned offer.
+    # Rejection memory is recorded and checked live, outside this cache.
+    # Never share this snapshot with the next negotiation/trade.
     import trade_portfolio as TP
     financial_cache = TP.readonly_cache()
     portfolio_costs = {}

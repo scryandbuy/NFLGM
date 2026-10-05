@@ -21,7 +21,7 @@ REFERENCE_AV = sum(TE.PICK_AV[s] for s in REFERENCE_SLOTS)
 
 
 class _ReadOnlyCache(dict):
-    """One synchronous request whose league state cannot change."""
+    """One synchronous request whose valuation inputs cannot change."""
 
 
 def readonly_cache():
@@ -29,6 +29,8 @@ def readonly_cache():
 
     Pick/player combinations may vary, but the underlying league, players,
     scouting, contracts and GMs must remain unchanged for its lifetime.
+    Rejection memory may change only when checked live outside this cache;
+    it is not a valuation input and no rejection decision is cached here.
     Mutating callers must use the ordinary validating cache instead.
     """
     return _ReadOnlyCache()

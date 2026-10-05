@@ -50,15 +50,36 @@ class AskSnapshotTests(unittest.TestCase):
                     target['package_gain']=TP.RN.move_gain(a,p)
                     args=(L,a,b,target,TR.persona(a.gm),TR.persona(b.gm),
                           TR.context(a),TR.context(b),a.cap_space,b.cap_space,[])
-                    seed=np.random.default_rng(71)
-                    saved=L.save();old_counts=dict(counts)
-                    actual=TR._negotiate(*args,seed)
-                    reference_rng=np.random.default_rng(71)
-                    with patch.object(TP,'readonly_cache',side_effect=dict):
-                        reference=TR._negotiate(*args,reference_rng)
-                    self.assertEqual(actual,reference)
-                    self.assertEqual(seed.bit_generator.state,reference_rng.bit_generator.state)
-                    self.assertEqual(L.save(),saved)
+                    old_counts=dict(counts)
+                    with patch.object(TR,'remember_trade_rejection',
+                                      wraps=TR.remember_trade_rejection) as remember:
+                        # Both searches start with the same rejection memory.
+                        # Repeat with the resulting memory to exercise live
+                        # rejection checks as well as its first initialization.
+                        for attempt in range(2):
+                            notes=copy.deepcopy(getattr(L,'league_notes_sent',{}))
+                            saved=L.save()
+                            seed=np.random.default_rng(71)
+                            actual=TR._negotiate(*args,seed)
+                            actual_saved=L.save()
+                            actual_notes=copy.deepcopy(L.league_notes_sent)
+                            self.assertEqual(
+                                {k:v for k,v in actual_notes.items() if k!='_rejected_trade_packages'},
+                                {k:v for k,v in notes.items() if k!='_rejected_trade_packages'})
+                            # Only the genuine rejection ledger may change;
+                            # roster, contracts, cap and every other field stay fixed.
+                            L.league_notes_sent=copy.deepcopy(notes)
+                            self.assertEqual(L.save(),saved)
+                            reference_rng=np.random.default_rng(71)
+                            with patch.object(TP,'readonly_cache',side_effect=dict):
+                                reference=TR._negotiate(*args,reference_rng)
+                            self.assertEqual(actual,reference)
+                            self.assertEqual(seed.bit_generator.state,reference_rng.bit_generator.state)
+                            self.assertEqual(L.save(),actual_saved)
+                        self.assertGreater(remember.call_count,0)
+                        for call in remember.call_args_list:
+                            _,buyer,seller,sends,gets=call.args
+                            self.assertTrue(TR.trade_was_rejected(L,buyer,seller,sends,gets))
                     self.assertTrue(all(counts[k]>n+1 for k,n in old_counts.items()))
 
     def test_readonly_portfolio_cache_matches_validating_reads_and_is_discarded(self):
