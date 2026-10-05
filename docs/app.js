@@ -1058,6 +1058,17 @@ function renderRoster(v) {
     if (!mine) { foot.append(el('span', { class: 'count' }, `${v.count} on the 53 · ${v.practice.length} on the practice squad`)); return; }
     const all = [...v.groups.flatMap(g => g.rows), ...v.practice, ...v.injured]; const r = all.find(x => x.pid === rosterSel);
     if (!r) { foot.append(el('span', { class: 'count' }, clubTab === 'ps' ? `Elevations this week: ${v.elevations_used} of ${v.elevations_max} · ` + (v.playoff_elevations ? 'unlimited playoff elevations per player' : `a player's ${v.per_man_max + 1}${ord(v.per_man_max + 1)} elevation signs him to the 53`) : 'Click a row to select a player, then act on him here.')); return; }
+    if (clubTab === 'injured') {
+      foot.append(el('span', {class:'count'}, el('b', {}, r.name), ` · ${r.pos}`),
+        el('button', {class:'btn go', style:'margin-left:auto;border-radius:999px', onclick:()=> {
+          const returning = confirm(`Place ${r.name} on IR?\n\nOK = designated to return.\nCancel = choose season-ending IR.`);
+          if (!returning && !confirm(`Place ${r.name} on season-ending IR?`)) return;
+          const result = pyJSON(`SESSION.club_act('ir', pid=${JSON.stringify(r.pid)}, season_ending=${returning ? 'False' : 'True'})`);
+          notify(result);
+          if (result.ok) { rosterSel=null; renderRoster(pyJSON('SESSION.club_roster()')); }
+        }}, 'Place on IR'));
+      return;
+    }
     foot.append(el('span', { class: 'count' }, el('b', {}, r.name), ` · ${r.pos} · ${r.ovr} · ${r.yrs} yr${r.yrs === 1 ? '' : 's'} · $${r.hit.toFixed(1)}m`),
       el('button', { class: 'btn', style: 'margin-left:auto', onclick: () => { location.hash = '#club/player/' + r.pid; } }, 'Card'),
       el('button', { class: 'btn go', onclick: () => { const res = pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(r.pid)}, kind='extension')`); notify(res); if (res.ok) location.hash = '#personnel/extensions'; } }, 'Extend'),
