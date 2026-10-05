@@ -195,8 +195,20 @@ def report(view):
 def flags(view):
     labels = {'work_ethic': ('Work ethic concern', 'Strong preparation'),
               'discipline': ('Discipline concern', 'Plays under control')}
-    return [labels[r['key']][0 if r['status'] == 'concern' else 1]
-            for r in report(view) if r['status'] in ('concern', 'strength')]
+    data = assessments(view)
+    out = []
+    for r in report(view):
+        if r['confidence'] != 'Strong' or r['status'] not in ('concern', 'strength'):
+            continue
+        record = data[r['key']]
+        value, error = float(record['value']), float(record['error'])
+        low, high = (42, 58) if r['key'] == 'work_ethic' else (35, 70)
+        # A precise but borderline read is still not a confident conclusion.
+        if r['status'] == 'concern' and value + 2 * error < low:
+            out.append(labels[r['key']][0])
+        elif r['status'] == 'strength' and value - 2 * error >= high:
+            out.append(labels[r['key']][1])
+    return out
 
 
 def draft_risk(view, gm):

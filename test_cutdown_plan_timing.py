@@ -79,6 +79,7 @@ class CutdownPlanTimingTests(unittest.TestCase):
         with patch.object(SS.CD, 'finalize', side_effect=repair), \
              patch.object(SS.CD, 'violations', return_value=[]), \
              patch.object(WV, 'process', side_effect=process), \
+             patch('veteran_market.review'), \
              patch.object(WV, 'notify_user') as notice, \
              patch.object(SS.PSQ, 'fill_squads'), patch('franchise.clear_undrafted'), \
              patch.object(SS.MO, 'review_captains'), patch.object(GW, 'post_report') as post:
