@@ -142,6 +142,23 @@ def wants(league, abbr, p, week, market=None, *, _assessments=None):
     return GS.claim_value(row, v, team.gm, team.ctx()) > 0.0
 
 
+def _survives_ir_returns(league, team, player, outgoing=None):
+    """Do not claim a player the already-known next-week return plan cuts."""
+    import injury_status as IS
+    week = int(getattr(league, 'week', 0) or 0)
+    # roll_week processes this wire immediately before the next injury listing.
+    # Other waiver windows must not speculate about later medical clearances.
+    if (team.abbr == getattr(league, 'user_team', None)
+            or league.phase != 'regular' or not 0 < week < 18
+            or not any(team.ir_return_status(q, week + 1).get('ok')
+                       for q in (getattr(team, 'ir', None) or []))):
+        return True
+    plan = IS.project_ir_returns(league, team, week + 1,
+        additions=[(player, claim_contract(league, player, team.abbr))],
+        removals=[outgoing.pid] if outgoing else [])
+    return player.pid in plan['active']
+
+
 def make_room(league, abbr, p, entry):
     """Afford a claim; evaluate an optional replacement when needed."""
     import practice_squad as PSQ
@@ -160,11 +177,14 @@ def make_room(league, abbr, p, entry):
                     or PSQ.protected(team, q, league, incoming=p)):
                 continue
             if (claim_fits(league, entry, abbr, release_pid=q.pid)
-                    and _claim_budget(league, team, p, q)):
+                    and _claim_budget(league, team, p, q)
+                    and _survives_ir_returns(league, team, p, q)):
                 league.release(q.pid)
                 return True
         return False
     if claim_fits(league, entry, abbr) and _claim_budget(league, team, p):
+        if not _survives_ir_returns(league, team, p):
+            return False
         if (abbr != getattr(league, 'user_team', None) and len(team.active()) >= 53
                 and team.gm is not None):
             import cutdown as CD
@@ -209,7 +229,8 @@ def make_room(league, abbr, p, entry):
         if gain < 0.0:
             break
         if (claim_fits(league, entry, abbr, release_pid=outgoing.pid)
-                and _claim_budget(league, team, p, outgoing)):
+                and _claim_budget(league, team, p, outgoing)
+                and _survives_ir_returns(league, team, p, outgoing)):
             league.release(outgoing.pid)
             return True
     return False
