@@ -3056,7 +3056,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         scoring_safety = after_play.result == 'Safety'
         _secs_after = secs_in_half - live_seconds
         after_play.clock = dr.clock - live_seconds
-        _plan_to = end_of_half_plan(after_play, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None)) if _secs_after > 4 and after_play.result is None and after_play.down <= 4 else None
+        _plan_to = end_of_half_plan(after_play, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None)) if _secs_after > 0 and after_play.result is None and after_play.down <= 4 else None
         added_penalty = live_pen is not None and taken == 'added'
         late_penalty = added_penalty and secs_in_half - live_seconds <= (120.0 if dr.quarter <= 2 else 300.0)
         _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
@@ -3081,7 +3081,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 and t in ('run', 'complete', 'scramble', 'sack')
                 and after_play.result is None and _plan_to is not None
                 and _plan_to['choice'] != 'kneel'
-                and secs_in_half - elapsed < 4.0 and _secs_after > 4.0
+                and secs_in_half - elapsed < 4.0 and _secs_after > 0.0
                 and timeouts is not None and timeouts.left.get(pos, 0) > 0):
             used = timeouts.use(pos); used_by = pos
             elapsed = live_seconds
