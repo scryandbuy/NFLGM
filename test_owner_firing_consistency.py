@@ -49,13 +49,15 @@ class OwnerFiringEvidence(unittest.TestCase):
                 self.assertFalse(FM.team_evidence(self.t)['qb_continuity'])
 
     def test_rollover_capture_survives_json_and_does_not_borrow_new_starter(self):
+        self.t.owner_patience = .9
         with patch.object(self.t, 'starter', return_value=NS(age=24, ovr=80)):
             context = json.loads(json.dumps(OC.team_context(self.L)))
-        self.L.year = 2030; self.t.record = [0,0,0]
+        self.L.year = 2030; self.t.record = [0,0,0]; self.t.owner_patience = .1
         with patch.object(self.t, 'starter', return_value=NS(age=30, ovr=80)):
             captured = FM.team_evidence(self.t, record=context['records']['GB'],
                 history=context['histories']['GB'], season_year=2029)
         self.assertEqual(captured, context['histories']['GB'])
+        self.assertEqual(captured['owner_patience'], .9)
         legacy = dict(context['histories']['GB']); legacy.pop('qb_continuity')
         with patch.object(self.t, 'starter', return_value=NS(age=22, ovr=99)):
             old = FM.team_evidence(self.t, record=context['records']['GB'], history=legacy, season_year=2029)
@@ -94,6 +96,21 @@ class OwnerFiringEvidence(unittest.TestCase):
         with patch('coaching_pool.fire_and_hire') as hire:
             self.assertEqual(PS.run_firings(self.L, NS(random=lambda:.5), clubs=['MIN']), [])
         hire.assert_not_called()
+
+    def test_patient_and_impatient_owners_can_disagree_without_a_veto(self):
+        other = self.L.teams['MIN']
+        self.t.owner_patience = .95; other.owner_patience = .05
+        with patch.object(self.t, 'starter', return_value=None), patch.object(other, 'starter', return_value=None):
+            patient = FM.fire_chance_offseason(FM.team_evidence(self.t))
+            impatient = FM.fire_chance_offseason(FM.team_evidence(other))
+            self.assertLess(patient, impatient)
+            self.assertGreater(patient, 0)
+            self.assertLess(impatient, 1)
+            roll = (patient + impatient) / 2
+            with patch('coaching_pool.fire_and_hire', return_value=(None, [])) as hire:
+                fired = PS.run_firings(self.L, NS(random=lambda: roll), clubs=['GB', 'MIN'])
+            self.assertEqual(fired, [('MIN', 'pending a search')])
+            hire.assert_called_once()
 
     def test_new_coach_security_survives_no_results_without_inherited_pressure(self):
         self.t.record = [0,0,0]; self.t.tenure = 0; self.t.gm = GM(job_security=.82)
