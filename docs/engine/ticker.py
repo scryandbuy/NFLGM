@@ -81,9 +81,9 @@ def play_line(league, p, off_abbr, def_abbr):
     elif p.get('clock') is not None and t in ('kickoff', 'penalty', 'timeout'):
         head = _clock(p['clock'])[1]
     carrier = _nm(league, p.get('carrier')); passer = _nm(league, p.get('passer')); target = _nm(league, p.get('target')); tackler = _nm(league, p.get('tackler'))
-    td = bool(p.get('touchdown') and not p.get('defensive_td'))
+    td = bool(p.get('touchdown') and not p.get('defensive_td') and not p.get('fumble'))
     spot = float(p.get('yardline') or 0)
-    gain = float(p.get('yards') or 0)
+    gain = float(p.get('carrier_yards', p.get('yards')) or 0)
     shown_gain = (_display_gain(spot, gain, off_abbr, def_abbr) if p.get('yardline') is not None
                   and not td and not p.get('nullified') else gain)
     near_goal_short = (t in ('run', 'complete', 'scramble') and not td and not p.get('nullified')
@@ -220,6 +220,8 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"Extra point is {'good.' if p.get('made', True) else 'NO GOOD.'}"; kind = 'special'
     elif t == 'two_point':
         text = f"Two-point try is {'GOOD.' if p.get('made') else 'no good.'}"; kind = 'score' if p.get('made') else 'loss'
+        if p.get('defensive_try_return'):
+            text = 'Defense returns the fumble for two points.'; kind = 'score'
     elif t == 'penalty':
         side = 'defense' if not p.get('on_offense') else 'offense'
         import events as E
@@ -279,9 +281,14 @@ def play_line(league, p, off_abbr, def_abbr):
         kicking = off_abbr if t == 'punt' else def_abbr
         text = text.rstrip('.') + '. FUMBLE, recovered by ' + (kicking if p.get('fumble_lost') else receiving) + '.'
         kind = 'turnover' if p.get('fumble_lost') else 'special'
-    elif p.get('fumble'):
+    elif p.get('fumble') and t != 'two_point':
         recoverer = _nm(league, p.get('fumble_recovered_by'))
-        if p.get('fumble_lost'):
+        if p.get('fumble_out_of_bounds'):
+            text = text.rstrip('.') + '. FUMBLE out of bounds.'
+            if p.get('touchback'):
+                text += f' Touchback, {def_abbr} ball.'
+                kind = 'turnover'
+        elif p.get('fumble_lost'):
             recovery = f'{recoverer} ({def_abbr})' if recoverer else def_abbr
             text = (text.rstrip('.') + f'. FUMBLE, recovered by {recovery}.') if text else f'FUMBLE, recovered by {recovery}.'
             if p.get('ret'):
@@ -292,7 +299,13 @@ def play_line(league, p, off_abbr, def_abbr):
             else:
                 kind = 'turnover'
         else:
-            text = (text.rstrip('.') + '. Fumbles, and the offense recovers.') if text else 'Fumble, recovered.'
+            recovery = recoverer or 'the offense'
+            text = text.rstrip('.') + f'. FUMBLE, recovered by {recovery}.'
+            if p.get('touchdown'):
+                text += f' TOUCHDOWN, {off_abbr}.'
+                kind = 'score'
+            elif p.get('fumble_advancement_restricted'):
+                text += ' Teammate recovery; no forward advancement.'
     if p.get('safety'):
         text = (text.rstrip('.') + '. SAFETY.') if text else 'SAFETY.'; kind = 'turnover'
     if p.get('nullified'):

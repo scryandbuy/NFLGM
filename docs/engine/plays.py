@@ -425,6 +425,7 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
     vis = rate(carrier, YAC['carrier']['vision'])
     broken = 0
     stopped_by = None
+    last_contact = None
 
     # Each successive defender is HARDER to beat, because the further he runs
     # the better the angles behind him get. Without this ramp a good back beats
@@ -433,6 +434,7 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
     for i, t in enumerate(tacklers):
         if gained >= yards_to_endzone:
             break
+        last_contact = (float(gained), t.get('pid'))
         wrap = rate(t, YAC['tackler']['wrap'])
         atk = max(elus, powr) + 0.30 * (vis - AVG)
         if not in_space:
@@ -491,6 +493,8 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
     gained = min(gained, yards_to_endzone)
     out = dict(yards=round(float(gained), 1), broken_tackles=broken,
                touchdown=gained >= yards_to_endzone)
+    if last_contact is not None:
+        out['pre_goal_contact_yards'], out['pre_goal_contact_by'] = last_contact
     if track_tackler:
         out['tackler'] = stopped_by.get('pid') if stopped_by and not out['touchdown'] else None
     return out
@@ -646,6 +650,8 @@ def _sneak(off, deff, off_call, def_call, ytg, rng):
         yds = float(rng.choice([0.0, 0.0, 0.0, -1.0]))
     td = yds >= ytg
     return dict(type='run', yards=round(yds, 1), touchdown=bool(td), sneak=True, push=push,
+                **({'pre_goal_contact_yards': 0., 'pre_goal_contact_by': inside[0].get('pid')}
+                   if inside else {}),
                 carrier_pid=qb.get('pid'), scheme='sneak', by=None)
 
 # Red-zone compression is an OUTCOME, not an input. An earlier build multiplied
@@ -1443,6 +1449,9 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
                 yac=yac['yards'], touchdown=total >= ytg, concept=concept,
+                **({'pre_goal_contact_yards': air + yac['pre_goal_contact_yards'],
+                    'pre_goal_contact_by': yac.get('pre_goal_contact_by')}
+                   if 'pre_goal_contact_yards' in yac else {}),
                 tackler=yac.get('tackler'), pursuit=[DRUSH.player_key(t) for t in tacklers],
                 in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing),
                 coverage=def_call.get('coverage') or def_call['shell'],

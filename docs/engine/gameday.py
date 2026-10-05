@@ -59,6 +59,9 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
     ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
               td=bool(q.get('touchdown') or q.get('td') or q.get('defensive_td')), defensive_td=bool(q.get('defensive_td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')), nullified=bool(q.get('nullified')))
     ln['scoring_side'] = q.get('scoring_side') or ('defense' if q.get('defensive_td') or (q.get('blocked') and q.get('recovery') == 'receiving') else 'offense')
+    ln['offensive_fumble_td'] = bool(q.get('offensive_fumble_td'))
+    ln['stat_yards'] = round(float(q.get('carrier_yards', q.get('yards', 0)) or 0))
+    if q.get('type') == 'two_point': ln['try_points'] = q.get('points', 2 if q.get('made') else 0)
     if q.get('type') == 'sack':
         import rush_matchup as RM
         ln.update(sacker=q.get('by'), sack_credits=RM.credited_sackers(q))
@@ -147,7 +150,7 @@ def capture(league, played, user):
             red_zone_trip = False
             for pl in dr.log:
                 if not isinstance(pl, dict): continue
-                ty = pl.get('type'); y = float(pl.get('yards', 0) or 0)
+                ty = pl.get('type'); y = float(pl.get('carrier_yards', pl.get('yards', 0)) or 0)
                 # A trip requires an actual snap in the red zone. Crossing it
                 # on a long score, a nullified play, or a victory kneel is not
                 # an opportunity to finish a red-zone possession.
