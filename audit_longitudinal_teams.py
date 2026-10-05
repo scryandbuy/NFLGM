@@ -35,6 +35,9 @@ class AuditSession(S.Session):
     def blocking(self): return []
     def next_label(self): return {'title':str(self.stop)}
     def _ensure_scout_focus(self): pass  # No human club to receive a focus email.
+    def step_staff_contracts(self):
+        # The carousel handled all CPU clubs; there is no user renewal desk.
+        self.step_waivers_1()
     def _post_review(self,*a,**k): pass
     def _snapshot_season(self,*a,**k): pass
     def _ir_ready_notes(self,*a,**k): pass
