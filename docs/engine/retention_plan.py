@@ -136,7 +136,6 @@ def candidates(league, team, scale=None):
 def assess(league, team, player, pool=None, baseline=None, scale=None, *, _context=None):
     import extensions as EXT
     import contract_offer as CO
-    from development_value import player_credit
     from trade_calendar import trading_open
     context=_review_context(league,team,baseline,scale) if _context is None else _context
     if player.pid not in context['inputs']:
@@ -193,11 +192,14 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
     if refusal: probability = .15 if 'during the season' in refusal else .05
     if not row['affordable']: probability = .05
     row['extension_probability']=round(probability,3)
-    value = VAL.value_player(league,player,side='team',pool=pool,rng=None)
-    if value and c and c.years>0:
-        asset=dict(age=player.age,apy=player.apy,ovr=player.ovr,madden_position=player.pos,
-                   contract_years_left=c.years,development_credit=player_credit(player))
-        row['trade_floor']=round(max(0.,TE.trade_value(asset,value))*(.5 if c.years==1 else .75),2)
+    # The reservation price buys the same remaining service and cash as the
+    # trade quote. Completed seasons and calendar stubs are not extra control.
+    # Use neutral pricing here; seller attachment and lost roles remain separate.
+    from trades import player_asset
+    asset = player_asset(league,team,player,pool,None)
+    if asset:
+        fraction = .5 if asset['valued_contract_years'] <= 1 else .75
+        row['trade_floor']=round(max(0.,asset['trade_value'])*fraction,2)
     retain = (row['important'] and row['affordable'] and ratio>=.90
               and probability>=.35 and row.get('veteran_viable',True))
     if retain:
