@@ -136,6 +136,13 @@ def sign_to_squad(league, abbr, pid):
             or p in squad(team) or p in (getattr(team, 'ir', None) or [])
             or not can_add(team, p, by_ai=abbr != getattr(league, 'user_team', None))):
         return False
+    import waivers as WV
+    # A squad contract cannot beat an active-roster claim. Direct demotions
+    # must use the waive/intent route too, including vested men after deadline.
+    if any(e.get('pid') == pid for e in WV.pending(league)):
+        return False
+    if p in team.roster and WV.subject(league, p, league.week):
+        return False
     if not squad_acceptance(league, p)['accepts']:
         return False
     # A roster demotion can still accelerate contract bonuses into dead cap.
@@ -145,13 +152,6 @@ def sign_to_squad(league, abbr, pid):
     if p.team and p.team in league.teams and p in league.teams[p.team].roster:
         league.release(pid, log=False)
     if pid in league.free_agents: league.free_agents.remove(pid)
-    # off the wire: a man signed to a squad is not there to be claimed (cutdown-day squads fill from the waiver pool)
-    wire = getattr(league, 'waivers', None) or []
-    for e in [e for e in wire if e.get('pid') == pid]:
-        if getattr(league, 'user_team', None) in e.get('claims', []):
-            import inbox as IB
-            IB.post(league, 'waiver_notice', f"Claim void: {inbox_player(p)} signed to {abbr}'s squad", f"{inbox_player(p)} ({p.pos}) was signed to {abbr}'s practice squad before the wire cleared. Your claim did not go through.", sender='league')
-        wire.remove(e)
     p.team, p.contract = abbr, None          # paid weekly, no contract object
     p.xp_spent['_ps'] = True
     squad(team).append(p)

@@ -426,6 +426,8 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
                                score_diff=score_diff, secs_left=secs_left)
     call = dict(personnel=pers, shotgun=bool(shotgun), is_pass=bool(is_pass),
                 formation=form, down=down, ydstogo=ydstogo,
+                seconds=secs_left, score_diff=score_diff,
+                qb_run_aggression=(float(gm.aggression) if gm is not None else .5),
                 protection_pref=lean.get('protection'))
     # SHORT YARDAGE IS ITS OWN PACKAGE. On third and fourth and one, and on
     # second and one some of the time, the quarterback sneak is the call on

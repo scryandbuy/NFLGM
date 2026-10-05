@@ -684,6 +684,17 @@ class SeasonRunner(StandingsView):
         # predictor of whether a career continues.
         for side in (home, away):
             st = self.states[side]
+            # Preserve the actual unit opportunities and historical affiliation.
+            # Official play totals omit two-point tries and erased live snaps.
+            counts = getattr(st, 'last_snap_counts', None)
+            if counts:
+                team_book = self.L.team_game_stats[key][side]
+                team_book['snap_counts'] = copy.deepcopy(counts)
+                team_book['snap_roster'] = {p.pid: p.pos for p in self.L.teams[side].active()}
+                for row in counts.values():
+                    for pid in row.get('players', {}):
+                        p = self.L.player(pid)
+                        if p is not None: team_book['snap_roster'][pid] = p.pos
             import position_change as PC
             for pid, n in (st.last_snaps or st.snaps).items():
                 _pp = self.L.player(pid)

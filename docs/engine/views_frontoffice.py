@@ -35,6 +35,39 @@ def _owner(league, t):
     return o
 
 
+def _owner_review_history(league, team):
+    """Use the retained season ledger, without inventing an old owner's verdict."""
+    rows = {}
+    for record in getattr(team, 'history', ()) or ():
+        if record.get('year') is None: continue
+        year = int(record['year'])
+        score = record.get('record')
+        rows[year] = dict(year=year, record=_review_record(score),
+                          line='Owner assessment was not recorded.')
+    # A few external/older saves may have kept explicit owner reviews.
+    for review in getattr(team, 'owner_reviews', ()) or ():
+        if review.get('year') is None: continue
+        year = int(review['year'])
+        rows[year] = dict(year=year, record=_review_record(review.get('record')),
+                          line=review.get('line') or 'Owner assessment was not recorded.')
+    for key, season in (getattr(league, 'history', {}) or {}).items():
+        review = season.get('review') or {}
+        who = (review.get('club') or {}).get('abbr', getattr(league, 'user_team', None))
+        if not review or who != team.abbr: continue
+        year = int(key)
+        rows[year] = dict(year=year, record=_review_record(review.get('record')),
+                          line=(review.get('owner') or {}).get('line') or
+                          'Owner assessment was not recorded.')
+    return [rows[y] for y in sorted(rows, reverse=True)]
+
+
+def _review_record(record):
+    if isinstance(record, (list, tuple)) and len(record) >= 2:
+        w, l = record[:2]; ties = record[2] if len(record) > 2 else 0
+        return f'{w}–{l}' + (f'–{ties}' if ties else '')
+    return record if isinstance(record, str) else None
+
+
 def owner(session, league, abbr):
     import firing_model as FM
     from views import _owner_mood
@@ -46,7 +79,7 @@ def owner(session, league, abbr):
     pat = float(getattr(t, 'owner_patience', 0.5))
     weights = dict(wins=round(0.5 + 0.3 * (1 - pat), 2), young=round(pat, 2), stars=round(getattr(t, 'owner_star_pull', 0.5), 2), spend=round(getattr(t, 'owner_spend', 0.5), 2))
     draft_word = 'Patient' if pat >= 0.6 else 'Wants results now' if pat <= 0.35 else 'Measured'
-    reviews = [dict(year=r.get('year'), record=r.get('record'), line=r.get('line')) for r in (getattr(t, 'owner_reviews', None) or [])]
+    reviews = _owner_review_history(league, t)
     import staff as ST
     return dict(rail=rail(session, league, abbr), owner=own, draft_word=draft_word, mood=_owner_mood(t), job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat'), security=round(sec, 2),
                 expects=exp_words, expected_pct=round(exp, 2), record=f"{w}–{l}" + (f"–{d}" if d else ''), tenure=int(h.get('tenure') or 0), drought=int(h.get('playoff_drought') or 0),
@@ -715,6 +748,41 @@ def _season_review_now(session, league, abbr):
 # The days after the season: a few men want a word. Each meeting is a question in his voice and two or three
 # answers; a promise goes on the ledger the negotiation system already keeps, a plain answer moves his morale,
 # and what you said comes back later in his own words.
+def _exit_context(league, abbr, p):
+    """Capture facts when a meeting is created, before contracts/roles/age change."""
+    from views import user_player_grade
+    grade = user_player_grade(league, p)['ovr'] if hasattr(p, 'ratings') else round(p.ovr)
+    return dict(name=getattr(p, 'name', p.pid), pos=p.pos,
+                no=getattr(p, 'number', None), ovr=grade, age=int(p.age),
+                years=p.contract.years if p.contract else 0,
+                apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1),
+                year=int(league.year), date=getattr(league, 'game_date', None), team=abbr)
+
+
+def _exit_row(league, abbr, mt, year, past):
+    p = league.player(mt['pid'])
+    context = mt.get('context')
+    if context:
+        details = {key: context.get(key) for key in ('name', 'pos', 'no', 'ovr', 'age', 'years', 'apy')}
+        note = f'At the {year} meeting'
+    elif past:
+        career = (getattr(p, 'career', {}) or {}) if p else {}
+        season = career.get(year) or career.get(str(year)) or {}
+        details = dict(name=getattr(p, 'name', mt['pid']), pos=season.get('pos'),
+                       no=None, ovr=None, age=None, years=None, apy=None)
+        note = 'Player details were not recorded for this meeting.'
+    elif p is not None:
+        details = _exit_context(league, abbr, p)
+        note = 'Current player details; meeting-time details were not recorded.'
+    else:
+        details = dict(name=mt['pid'], pos=None, no=None, ovr=None, age=None, years=None, apy=None)
+        note = 'Player details were not recorded for this meeting.'
+    # Exclude by the recorded position, not a later position change.
+    if details.get('pos') in ('K', 'P'): return None
+    return dict(pid=mt['pid'], **details, context_note=note, kind=mt['kind'],
+                quote=mt['quote'], options=mt['options'], answer=mt.get('answer'), said=mt.get('said'))
+
+
 def build_exit_meetings(session, league, abbr):
     import morale as MO, negotiations as NG
     from views import surname
@@ -729,7 +797,8 @@ def build_exit_meetings(session, league, abbr):
     seen = set()
     def add(kind, p, quote, options):
         if p.pid in seen or len(meetings) >= 5: return
-        seen.add(p.pid); meetings.append(dict(pid=p.pid, kind=kind, quote=quote, options=options, answer=None, said=None))
+        seen.add(p.pid); meetings.append(dict(pid=p.pid, kind=kind, quote=quote, options=options,
+                                             context=_exit_context(league, abbr, p), answer=None, said=None))
     starters = {pos: (ps[0] if ps else None) for pos, ps in t.depth.items()}
     # 1. the man who wants out
     for p in sorted(eligible, key=lambda q: -q.ovr):
@@ -798,23 +867,21 @@ def exit_interviews(session, league, abbr, year=None):
     if yr == cur and not over:
         return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=_years(league), past=False, not_yet=True, meetings=[], open=0)
     if yr != cur:
-        ms = store.get(str(yr)) or []
+        slot = str(yr) if abbr == getattr(league, 'user_team', None) else f'{abbr}-{yr}'
+        ms = store.get(slot) or []
         if not ms:
             return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=_years(league), past=True, missing=True, meetings=[], open=0)
         rows = []
         for mt in ms:
-            p = league.player(mt['pid'])
-            if p is None or p.pos in ('K', 'P'): continue
-            rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), years=(p.contract.years if p.contract else 0), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1),
-                             kind=mt['kind'], quote=mt['quote'], options=mt['options'], answer=mt.get('answer') or 'unanswered', said=mt.get('said') or "The meeting came and went without an answer."))
+            row = _exit_row(league, abbr, mt, yr, past=True)
+            if row is not None: rows.append(row)
         return dict(rail=rail(session, league, abbr), club=club(abbr), year=yr, years=_years(league), past=True, meetings=rows, open=0)
-    ms = store.get(str(yr)) or []                 # built when the season ends, never on a page view
+    slot = str(yr) if abbr == getattr(league, 'user_team', None) else f'{abbr}-{yr}'
+    ms = store.get(slot) or []                 # built when the season ends, never on a page view
     rows = []
     for mt in ms:
-        p = league.player(mt['pid'])
-        if p is None or p.pos in ('K', 'P'): continue
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, no=getattr(p, 'number', None), ovr=round(p.ovr), age=int(p.age), years=(p.contract.years if p.contract else 0), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1),
-                         kind=mt['kind'], quote=mt['quote'], options=mt['options'], answer=mt.get('answer'), said=mt.get('said')))
+        row = _exit_row(league, abbr, mt, yr, past=False)
+        if row is not None: rows.append(row)
     return dict(rail=rail(session, league, abbr), club=club(abbr), year=league.year, years=_years(league), past=False, pending=(not ms), meetings=rows, open=sum(1 for r in rows if not r['answer']))
 
 

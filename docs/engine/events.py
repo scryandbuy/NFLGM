@@ -1,8 +1,9 @@
 """
 Scrambles, fumbles and penalties.
 
-Every rate, distribution and yardage figure here is computed from six seasons of
-real play-by-play (2020-2025, 281,339 plays, 1,615 games). Nothing is assumed.
+The baseline outcome distributions below were measured from six seasons of
+play-by-play (2020-2025, 281,339 plays, 1,615 games). Quarterback decision
+weights are separate football judgments, not measured per-dropback rates.
 
 SCRAMBLES  5.12% of dropbacks (3.87/gm). Mean 7.00 yds, sd 6.07, median 6,
            p10 1, p90 14, max 61. ZERO negative - a scramble is by definition
@@ -21,7 +22,9 @@ PENALTIES  7.03% of plays, 11.88 per game across both teams. Mean 8.30 yards.
 import numpy as np
 
 # ============================================================ SCRAMBLES
-SCRAMBLE_RATE_BASE = 0.0512      # of dropbacks, league-wide
+# Conditional on an imminent sack. Leaving the pocket before the throw is
+# a separate decision; do not treat this as a per-dropback scramble rate.
+SACK_ESCAPE_BASE = 0.0512
 SCRAMBLE = dict(mean=7.00, sd=6.07, median=6, p10=1, p90=14, max=61,
                 pct_10plus=0.248, pct_20plus=0.043, first_down_rate=0.483)
 
@@ -29,13 +32,49 @@ def scramble_chance(qb, pressure, time_available, rate_fn, AVG=0.70):
     """
     A scramble is what a mobile QB does INSTEAD of taking the sack. Without it
     every collapsed pocket becomes a sack regardless of who is playing.
-    League base is 5.12% of dropbacks; mobility and pressure both move it.
+    Conditional escape chance; mobility and pressure both move it.
     """
     mob = rate_fn(qb, {'speed_rating': .40, 'agility_rating': .30,
                        'accel_rating': .15, 'break_sack_rating': .15})
-    p = SCRAMBLE_RATE_BASE * (1.0 + 3.2 * (mob - AVG))
+    p = SACK_ESCAPE_BASE * (1.0 + 3.2 * (mob - AVG))
     p *= 0.55 + 1.30 * pressure          # he scrambles because he has to
     return float(np.clip(p, 0.0, 0.42))
+
+def pocket_run_chance(qb, defenders, rate_fn, *, separation, pressure,
+                      read='first', screen=False, hot=False, swing=False,
+                      time_available=2.5, down=1, distance=10, seconds=None,
+                      margin=0, aggression=.5, man=False):
+    """Choose a run after reading coverage, before resolving any throw.
+
+    Public movement ratings describe whether running is a useful alternative.
+    The read and actual pursuit make that alternative more or less attractive.
+    These are conditional decision weights, not a target league scramble rate.
+    """
+    if screen or hot or swing or time_available < 1.6:
+        return 0.
+    if separation >= .8 and pressure < .35 and read == 'first':
+        return 0.  # Take the clearly open scheduled throw.
+    mobility = rate_fn(qb, {'speed_rating': .40, 'agility_rating': .30,
+                            'accel_rating': .15, 'break_sack_rating': .15})
+    athlete = float(np.clip((mobility - .55) / .4, 0., 1.))
+    willingness = .012 + .16 * athlete * athlete
+    window = float(np.clip(1. - .85 * separation, .12, 1.))
+    if read != 'first': window = min(1., window + .15)
+    pressure_pull = 1. + min(.7, max(0., pressure))
+    # Zone defenders looking into the backfield can close a lane. Man
+    # defenders following receivers are less ready, but still have pursuit.
+    support = [d for d in defenders if d.get('pos') in ('MIKE', 'WILL', 'SAM', 'CB', 'SS', 'FS')]
+    pursuit = float(np.mean([rate_fn(d, {'pursuit_rating': .4, 'speed_rating': .3,
+                                       'awareness_rating': .3}) for d in support])) if support else .70
+    lane = float(np.clip(1. - 1.8 * (pursuit - mobility) - .035 * max(0, len(support) - 4), .35, 1.35))
+    if man: lane = min(1.4, lane * 1.15)
+    choice = willingness * window * pressure_pull * lane * (.8 + .4 * float(np.clip(aggression, 0., 1.)))
+    if down == 4 and distance > 5:
+        choice *= max(.12, 5. / distance)  # Running short also loses the ball.
+    if seconds is not None and seconds <= 20 and margin <= 0:
+        choice *= .12  # Preserve time for a scoring throw or a kick.
+    return float(np.clip(choice, 0., .32))
+
 
 def resolve_scramble(qb, tacklers, yards_to_endzone, rng, rate_fn, AVG=0.70):
     """

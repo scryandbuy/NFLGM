@@ -451,6 +451,7 @@ def assess_choice(changes, own, against, before=None, league=None):
                 line += ' Much of the second half was spent protecting a two-score lead.'
         if label == 'Passing depth': line += ' ' + depth_distribution(rows)
         if label == 'Pressure calls' and metric == 'blitz':
+            findings.append(dict(label=label, verdict=verdict, text=line))
             selected = [p for p in rows if p.get('blitz')]
             earlier = [p for p in before[1] if p.get('blitz')] if before is not None else None
             findings.append(pressure_finding(selected, earlier))

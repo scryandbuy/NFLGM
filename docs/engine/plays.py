@@ -551,7 +551,9 @@ def resolve_play(off, deff, off_call, def_call, yards_to_endzone, rng):
         out = _pass_play(off, deff, off_call, def_call, yards_to_endzone, rng)
         if isinstance(out, dict):
             out['travelled'] = LAST_TRAVEL
-            out['xcomp'] = None if LAST_XCOMP is None else LAST_XCOMP * 0.965    # a clean catch is made about 96.5% of the time
+            out['xcomp'] = (LAST_XCOMP * 0.965 if LAST_XCOMP is not None
+                            and out.get('type') in ('complete', 'incomplete', 'drop', 'interception')
+                            else None)  # Non-throws have no completion expectation.
             out['bracketed'] = bool(def_call.get('bracket')) and out.get('target') == def_call.get('bracket')
             # THE NAMES for the ticker: who threw it, and who is likeliest to have made the stop
             if not out.get('passer'): out['passer'] = (off.get('qb') or {}).get('pid')
@@ -1150,6 +1152,27 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
         elif zone_owner is not None:
             cov = zone_owner
     coverage_evidence = _coverage_evidence(in_coverage, pairs, cov, zone_second, in_man, zone_hole)
+    # Decide before accuracy, interception and catch rolls. A quarterback
+    # sees his read and the pursuit, never a future failed or completed pass.
+    import events as E
+    pursuit = in_coverage['db'] + in_coverage['lb'] + in_coverage['dl']
+    run_chance = E.pocket_run_chance(off['qb'], pursuit, rate,
+        separation=sep_raw, pressure=p['pressure'], read=read_kind,
+        screen=screen, hot=hot, swing=swing, time_available=p['time'],
+        down=off_call.get('down', 1), distance=need,
+        seconds=off_call.get('seconds'), margin=off_call.get('score_diff', 0),
+        aggression=off_call.get('qb_run_aggression', .5), man=bool(in_man))
+    if run_chance and rng.random() < run_chance:
+        out = E.resolve_scramble(off['qb'], deff['dl'] + deff['lb'] + deff['db'], ytg, rng, rate)
+        out.update(scramble_kind='decision', scramble_chance=run_chance,
+                   scramble_read=read_kind, separation=sep_raw,
+                   depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence,
+                   screen=False, swing=False, concept=concept, protection=prot_name,
+                   pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []),
+                   pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []),
+                   rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])],
+                   ttt=round(float(p['time']), 3))
+        return out
     if depth == 'short' and not screen and not swing:
         cmult *= SHORT_PASS_COMPLETION
     escape_chance = throwaway_probability(off['qb'], off_call.get('down', 1),

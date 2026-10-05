@@ -1,5 +1,35 @@
 # Game log watchlist
 
+## October 5 implementation follow-up
+
+The confirmed gameplay defects from the full-season audit are corrected in the
+combined source: settled third/fourth-down conversions, red-zone opportunities,
+measured man-coverage denominators, blitz yardage alongside pressure evidence,
+and a quarterback's decision to leave the pocket before attempting a throw.
+Historic cached Game Day boxes are not silently recomputed from incomplete logs.
+
+Paired fresh-roster comparison: 32 games per version, seeds 71941/71942, each
+club twice. Baseline versus final candidate: 24 -> 183 scrambles, 166 -> 136
+sacks, 38 -> 47 interceptions, and 26.16 -> 27.45 points per team. Dropbacks
+were 2,497 -> 2,533. These are experimental outcomes, not full-season targets.
+The final candidate includes the existing coach aggression input. No sack,
+scoring, completion or interception constants were adjusted to compensate.
+
+An isolated 400-read paired experiment for each of six quarterbacks preserved
+the same sack outcomes while allowing more proactive runs for mobile players.
+That rules out a direct sack bypass in those cases; it does not establish that
+the full-game sack-rate decrease is harmless or entirely random. Scramble
+resolution still handles behind-line failures through the sack path rather
+than negative recorded scrambles, and designed quarterback runs remain limited.
+
+**Open balance checks:** scoring is already elevated and increased in this
+sample; sack rate fell from 6.65% to 5.37%. Monitor both across additional seeds
+and developed rosters before calling the change calibrated. Preserve the
+existing rushing-loss, field-goal accuracy, pass-rush distribution, award and
+annual-development watches below. No blanket tuning is authorized by these
+observations alone. Evidence: outputs/full-season-audit-2029/gameplay-fix-evidence.md
+and gameplay-candidate-final.json, with paired baseline and fixed-read outputs.
+
 ## Completed 2029 season: audited October 5, 2026
 
 Source: `C:/Users/HP/Downloads/nflgm-2029-offseason-1.json`, frozen audit

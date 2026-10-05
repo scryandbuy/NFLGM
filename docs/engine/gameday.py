@@ -90,6 +90,7 @@ def scoring_quarter(dr):
 
 def capture(league, played, user):
     """played: list of (home, away, res, book) from the week. Returns the Game Day record."""
+    from game_recap import converted
     out = dict(week=league.week, scores=[], game=None)
     for home, away, res, book in played:
         out['scores'].append(dict(home=home, away=away, hs=res['home'], as_=res['away'], ot=bool(res.get('overtime'))))
@@ -139,12 +140,19 @@ def capture(league, played, user):
         T[away] = dict(T[home])
         for pos, dr in res['drives']:
             off = home if pos == 'home' else away; t_ = T[off]; d_ = T[away if pos == 'home' else home]
-            first_clock = last_clock = None; deepest = float(getattr(dr, 'start', getattr(dr, 'yardline', 99)) or 99)
+            first_clock = last_clock = None
+            red_zone_trip = False
             for pl in dr.log:
                 if not isinstance(pl, dict): continue
                 ty = pl.get('type'); y = float(pl.get('yards', 0) or 0)
-                if pl.get('yardline') is not None and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception', 'kneel'):
-                    deepest = min(deepest, float(pl['yardline']))
+                # A trip requires an actual snap in the red zone. Crossing it
+                # on a long score, a nullified play, or a victory kneel is not
+                # an opportunity to finish a red-zone possession.
+                if (not pl.get('nullified') and pl.get('yardline') is not None
+                        and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble',
+                                   'drop', 'interception', 'field_goal')
+                        and 0 < float(pl['yardline']) <= 20):
+                    red_zone_trip = True
                 if ty == 'penalty':
                     side_ = t_ if pl.get('on_offense', True) else d_
                     side_['penalties'] += 1; side_['pen_yds'] += abs(int(round(y))); continue
@@ -162,15 +170,16 @@ def capture(league, played, user):
                 if pl.get('fumble_lost'):
                     (d_ if ty == 'punt' else t_)['turnovers'] += 1
                 if pl.get('down') == 3 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
-                    t_['third_att'] += 1; t_['third_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble') and not pl.get('fumble_lost'))
+                    t_['third_att'] += 1; t_['third_conv'] += int(converted(pl))
                 if pl.get('down') == 4 and ty in ('run', 'complete', 'incomplete', 'sack', 'scramble', 'drop', 'interception'):
-                    t_['fourth_att'] += 1; t_['fourth_conv'] += int(y >= float(pl.get('ydstogo', 10) or 10) and ty in ('run', 'complete', 'scramble') and not pl.get('fumble_lost'))
+                    t_['fourth_att'] += 1; t_['fourth_conv'] += int(converted(pl))
             t_['first_downs'] += int(getattr(dr, 'first_downs', 0) or 0)
             # possession: from the drive's first entry (the kick that opened it, or the first snap) to the clock when it ended
             _clocks = [float(pl['clock']) for pl in getattr(dr, 'log', []) if isinstance(pl, dict) and pl.get('clock') is not None]
             if _clocks: t_['top'] += max(0.0, _clocks[0] - float(getattr(dr, 'clock', _clocks[-1]) or _clocks[-1]))
-            deepest = min(deepest, ticker.offensive_drive_end(dr))
-            if deepest <= 20 or (dr.result == 'Touchdown'): t_['red_zone'] += 1; t_['red_zone_td'] += int(dr.result == 'Touchdown')
+            if red_zone_trip:
+                t_['red_zone'] += 1
+                t_['red_zone_td'] += int(dr.result == 'Touchdown')
         team_stats = {}
         for abbr_, t_ in T.items():
             team_stats[abbr_] = dict(plays=t_['plays'], yards=int(round(t_['yards'])), pass_yds=int(round(t_['pass_yds'])), rush_yds=int(round(t_['rush_yds'])), ypp=(round(t_['yards'] / t_['plays'], 1) if t_['plays'] else 0.0), first_downs=t_['first_downs'],

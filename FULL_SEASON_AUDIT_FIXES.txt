@@ -1,0 +1,112 @@
+2029 FULL-SEASON AUDIT — IMPLEMENTATION
+October 5, 2026
+
+USER DECISIONS
+Ratings displayed as 100 remain allowed. XP purchase bounds were not changed.
+The prior Bought This Year fix existed in another branch. Its source helper and
+tests are now part of this combined build; the dated purchase ledger drives it.
+
+CORRECTED
+Personnel
+- Pending waiver claims cannot be bypassed by a practice-squad signing.
+- Direct demotions follow the same waiver eligibility rules as other releases.
+- Reopening negotiations respects the agent's refusal window and team identity.
+- Ordinary contract countdown does not fulfill an extension promise.
+- Open legacy no-tag promises use the current promise type, without replaying
+  old morale consequences.
+
+Coaching and Front Office
+- Previous-season comparisons select a genuinely earlier year.
+- Coordinator evidence follows the games coached, with minimum evidence and
+  proportional consequences for partial seasons. A replacement does not inherit
+  the departed coach's full-season performance.
+- Owner history reads saved season reviews.
+- Future exit meetings save their context; old unavailable details remain
+  unavailable instead of borrowing today's age, grade and contract.
+- Team profiles use the current planning cap year and retain future commitment
+  information where it represents a different year.
+
+Team and development
+- Bought This Year counts dated purchases for the displayed season.
+- Career shows every retained season.
+- Snap shares use exact recorded unit opportunities and historical team/role
+  attribution. Team-stint and full-team-season percentages are distinguished.
+- Injury records are no longer mislabeled as games missed.
+- New games retain exact snap/roster evidence for both teams. Old ambiguous
+  records show unavailable information instead of guessed denominators.
+- Participation is laid out in compact rows on player cards.
+
+League and Draft
+- Statistical tables expose all retained players with sorting, searching and
+  pagination. Transactions search/filter the full retained ledger before paging.
+- Coaching history reads the actual saved date and record fields.
+- Award summaries include relevant production and properly attributed club
+  evidence. Historical byes derive from retained schedules.
+- Prospect cards use the board's ranks and round estimates.
+- Senior Bowl labels require attendance evidence; rank displacement alone is
+  insufficient. Upcoming draft years and visit-stage wording are corrected.
+- Auto Pick explains saved priorities followed by GM scouting/roster judgment.
+  The board selector controls browsing/manual selection. Decision policy and
+  the deliberate developer class export remain unchanged.
+- Results describes the draft-day evidence actually shown.
+
+Gameplay
+- Game Day uses settled conversion evidence for third and fourth downs.
+- Red-zone opportunities require a live opportunity inside the 20; long TDs
+  and endgame kneels do not manufacture red-zone possessions.
+- Man coverage uses measured pass coverage, excluding unknown observations.
+  Recommendation confidence uses that same sample; old unknowns remain unknown.
+- Blitz reviews retain yardage cost alongside pressure production.
+- Quarterbacks can choose to leave a broken-down pocket before throwing.
+  Mobility, coverage, quick answers, pursuit, clock, distance and existing coach
+  aggression influence the choice. The separate sack-escape branch remains.
+
+FOOTBALL INTENT
+These changes restore consequences and reliable evidence, without prescribing
+identical roster or coaching decisions. Public results, role, contract control,
+financial flexibility and owner/GM preferences still matter. Waiver priority
+and agent refusal are enforced; appropriate cleared signings and later talks
+remain possible. Poor short-tenure evidence does not automatically force a
+firing. Open receivers and quick answers favor throwing; covered reads and
+pressure invite mobile quarterbacks to run; game situation can favor restraint.
+
+OBSERVED IN THE SUPPLIED SAVE
+- All 53 Green Bay annual purchase rows agree with the dated ledger: Love 3,
+  Biles 17, Golden 7. Love's career contains 2026 through 2029.
+- McKinney: 1,105 / 1,174 defensive opportunities, 94%.
+- Turner: Green Bay stint 644 / 683, 94%; Green Bay full-season share 55%.
+  His 1,160 all-team snaps are not divided by Green Bay's team opportunities.
+- Golden's older reports omit IR roster membership; the roster sample and full
+  team-season share are separately identified rather than inventing history.
+- Owner reviews, previously hidden stat leaders, and retained transactions are
+  accessible. The 2030 cap period agrees across corrected displays.
+- Original save remains unchanged. Repeated save/load after migration is stable.
+
+CONTROLLED AND INTEGRATION VERIFICATION
+- Initial combined suite: 150 passed; two stale snap-mail fixtures failed.
+  Both were repaired using a real legal cutdown and the correct phase.
+- Final integrated gameplay/recap/Game Plan/snap-mail/League suite: 104 passed,
+  including the formerly failing fixtures and live halftime save/resume.
+- Additional integrated transaction, staff and realism suite: 74 passed.
+  Counts overlap with specialist suites and must not be summed as unique tests.
+- Source-browser module/hash consistency and JavaScript syntax verified.
+- Actual saved-data page rendering checked in the browser. This caught and
+  corrected narrow-card wrapping and a real disabled-pager bug. The paging
+  regression now models the production element helper and browser semantics.
+- This is not certification of every browser action or a full franchise register.
+
+REMAINING UNCERTAINTY / WATCHLIST
+The 32-game paired fresh-roster sample produced 24 -> 183 scrambles,
+166 -> 136 sacks, 38 -> 47 interceptions, and 26.16 -> 27.45 points per team.
+The paired points/game change was +2.59 with an approximate 95% margin of 5.64;
+the sack/game change was -0.94 with a margin of 1.00. This small sample cannot
+settle indirect game-flow or balance effects. Isolated equal-opportunity tests
+preserved sack outcomes and differentiated mobile/pocket quarterbacks.
+
+Scoring, sack distribution/rate, rushing losses, field-goal accuracy, awards and
+annual development balance remain on GAME_LOG_WATCHLIST.md. No blanket tuning
+was made to force aggregate targets. Legacy cached boxes and missing historical
+injury/tenure data are not silently reconstructed from incomplete evidence.
+
+Detailed probes and specialist handoffs are retained in the workspace's
+outputs/full-season-audit-2029 and outputs/full-season-fixes-2029 directories.

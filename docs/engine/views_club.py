@@ -229,6 +229,113 @@ def attr_cols(p, shift=None, shift_name=None, delta=None):
     return [phys, skill, dict(title='Mental', rows=col(ATTR['mental']), extra=None)]
 
 
+def _participation_games(league, year):
+    """Exact regular-season workload, with the team at the time of the game.
+
+    New game books retain both clubs. Older user snap reports can be recovered
+    only when their player IDs identify one explicitly recorded game team.
+    Current roster membership is never historical attribution.
+    """
+    games = {}
+    for key, teams in (getattr(league, 'team_game_stats', None) or {}).items():
+        parts = str(key).split('-')
+        if len(parts) != 4 or parts[0] != str(year): continue
+        week = int(parts[1])
+        if not 1 <= week <= 18: continue
+        for team, row in teams.items():
+            if team not in parts[2:]: continue
+            counts = row.get('snap_counts')
+            if counts:
+                games[(week, parts[2], parts[3], team)] = dict(
+                    counts=counts, roster=row.get('snap_roster') or {})
+    for message in getattr(league, 'inbox', ()):
+        payload = message.get('payload') or {}
+        report = payload.get('snap_counts')
+        key = str(payload.get('game_key') or '')
+        if not report or not key.startswith(('snap-counts-', 'game-recap-')): continue
+        parts = key.split('-')[-5:]
+        if len(parts) != 5 or parts[0] != str(year) or parts[4] != '0': continue
+        week = int(parts[1])
+        if not 1 <= week <= 18: continue
+        book = (getattr(league, 'game_stats', None) or {}).get('-'.join(parts[:4]), {})
+        roster = {r['pid']: r.get('pos') for unit in ('offense', 'defense')
+                  for r in report.get(unit, {}).get('rows', ())}
+        teams = {book[pid]['team'] for pid in roster if book.get(pid, {}).get('team')}
+        if len(teams) != 1: continue
+        team = next(iter(teams))
+        if team not in parts[2:4]: continue
+        counts = {unit: dict(total=report[unit]['total'],
+                            players={r['pid']: r['snaps'] for r in report[unit]['rows']})
+                  for unit in ('offense', 'defense') if unit in report}
+        games.setdefault((week, parts[2], parts[3], team), dict(counts=counts, roster=roster))
+    return games
+
+
+def _participation_read(league, p):
+    """Do not equate absence of a snap with injury, or an injury week with a game."""
+    year = league.year
+    season = (getattr(league, 'stats', None) or {}).get(year, {}).get(p.pid, {})
+    season = season or (getattr(p, 'career', None) or {}).get(year, {})
+    season_snaps = int(season.get('snaps', 0) or 0)
+    season_games = int(season.get('games', 0) or 0)
+    clubs = {}
+    games = _participation_games(league, year)
+    for (_, _, _, team), game in sorted(games.items()):
+        counts = game['counts']
+        if p.pid not in game['roster'] and not any(p.pid in row.get('players', {}) for row in counts.values()):
+            continue
+        club_ = clubs.setdefault(team, dict(team=team, games=0, appearances=0, units={}))
+        club_['games'] += 1
+        club_['appearances'] += any(row.get('players', {}).get(p.pid, 0) > 0 for row in counts.values())
+        for unit in ('offense', 'defense'):
+            row = counts.get(unit)
+            pos = game['roster'].get(p.pid)
+            belongs = pos in OFFENSE if unit == 'offense' else bool(pos and pos not in OFFENSE | {'K', 'P', 'LS'})
+            if not row or not (belongs or p.pid in row.get('players', {})): continue
+            snaps, total = int(row['players'].get(p.pid, 0)), int(row['total'])
+            if not 0 <= snaps <= total: continue  # Corrupt/incomplete evidence is not a share.
+            target = club_['units'].setdefault(unit, dict(snaps=0, total=0, games=0))
+            target['snaps'] += snaps; target['total'] += total; target['games'] += 1
+    details = []
+    for club_ in clubs.values():
+        club_['team_games'] = 0
+        club_['team_appearances'] = 0
+        club_['team_units'] = {unit: dict(snaps=0, total=0, games=0) for unit in club_['units']}
+        for (_, _, _, team), game in games.items():
+            if team != club_['team']: continue
+            club_['team_games'] += 1
+            club_['team_appearances'] += any(row.get('players', {}).get(p.pid, 0) > 0
+                                            for row in game['counts'].values())
+            for unit, target in club_['team_units'].items():
+                row = game['counts'].get(unit)
+                if not row: continue
+                snaps, total = int(row.get('players', {}).get(p.pid, 0)), int(row['total'])
+                if not 0 <= snaps <= total: continue
+                target['snaps'] += snaps; target['total'] += total; target['games'] += 1
+        for unit, row in club_['units'].items():
+            if not row['total']: continue
+            details.append(f"{club_['team']} {unit} roster share: {round(row['snaps']/row['total']*100)}% "
+                           f"({row['snaps']:,} of {row['total']:,}; {row['games']} recorded roster games)")
+            whole = club_['team_units'][unit]
+            if whole['total'] and whole['total'] != row['total']:
+                details.append(f"{club_['team']} {unit} season share: {round(whole['snaps']/whole['total']*100)}% "
+                               f"({whole['snaps']:,} of {whole['total']:,}; {whole['games']} recorded team games)")
+    snap_line = f"{season_snaps:,} season snaps" if season else 'No snaps recorded this season'
+    snap_line += ' · ' + (' · '.join(details) if details else 'team share unavailable')
+    appearance_line = f"{year}: {season_games} games played"
+    for club_ in clubs.values():
+        # Team games without an appearance can include IR, bench and other clubs.
+        if p.pos in ('K', 'P', 'LS'): continue
+        absent = club_['team_games'] - club_['team_appearances']
+        appearance_line += (f" · {club_['team']}: {absent} without snaps in "
+                            f"{club_['team_games']} recorded team games (all reasons, including time off roster)")
+    injuries = [h for h in (getattr(p, 'injury_history', None) or []) if h.get('year') == year]
+    injury_note = (f"{year}: {len(injuries)} recorded injur{'y' if len(injuries)==1 else 'ies'}; "
+                   'games missed specifically through injury are not recorded') if injuries else None
+    return dict(snaps=snap_line, appearances=appearance_line, injury_note=injury_note,
+                season_snaps=season_snaps, season_games=season_games, clubs=list(clubs.values()))
+
+
 def card(session, league, pid):
     p = league.player(pid)
     if p is None: return dict(error='no such player')
@@ -286,16 +393,11 @@ def card(session, league, pid):
     character_report = CA.player_report(p, session.user_team,
         (getattr(league, 'stats', {}) or {}).get(league.year, {}).get(p.pid, {}))
     # role and snaps: where he sits on his club's depth chart, and his share of the club's snaps this season
-    role = None; snap_share = None; snaps = None
+    role = None
     if t is not None:
         d = t.depth.get(p.pos, []); idx = next((i for i, q in enumerate(d) if q.pid == p.pid), None)
         if idx is not None: role = f"{p.pos}{idx + 1}"
-        S_all = league.stats.get(league.year, {}); mine_snaps = int((S_all.get(p.pid, {}) or {}).get('snaps', 0) or 0)
-        side_pos = {'QB', 'HB', 'FB', 'WR', 'TE', 'LT', 'LG', 'C', 'RG', 'RT'}
-        unit = [q for q in t.roster if (q.pos in side_pos) == (p.pos in side_pos)]
-        team_snaps = max((int((S_all.get(q.pid, {}) or {}).get('snaps', 0) or 0) for q in unit if q.pos == ('QB' if p.pos in side_pos else 'MIKE')), default=0)
-        if team_snaps: snap_share = round(mine_snaps / team_snaps * 100); snaps = f"{snap_share}% · {mine_snaps} of {team_snaps}"
-    missed = sum(1 for h in (getattr(p, 'injury_history', None) or []) for _ in range(int(h.get('weeks', 1) or 1))) if isinstance(getattr(p, 'injury_history', None), list) else 0
+    participation = _participation_read(league, p)
     tr = getattr(p, 'transition', None)
     pending = f"Learning {tr.get('to')} · {tr.get('games_left')} games left" if tr and tr.get('games_left', 0) > 0 else 'None pending'
     # the market and the extension ask
@@ -325,7 +427,7 @@ def card(session, league, pid):
     xp_bank = round(float(getattr(p, 'xp', 0) or 0)); bought = sum(vv for k, vv in (p.xp_spent or {}).items() if not k.startswith('_') and isinstance(vv, (int, float)))
     dev_line = f"{xp_bank:,} XP banked · {int(bought)} points bought in his career"
     seasons = []
-    for yr in sorted(career)[-3:]:
+    for yr in sorted(career):
         ln = _season_line(league, p, yr); seasons.append(dict(year=yr, team=career[yr].get('team') or '', games=int((career[yr] or {}).get('games', 0) or 0), row=ln['row'], cols=ln['cols']))
     cur = _season_line(league, p)
     h = getattr(p, 'height', None); size = (f"{int(h) // 12}'{int(h) % 12}\" {getattr(p, 'weight', '') or ''}".strip() if h else '')
@@ -339,7 +441,8 @@ def card(session, league, pid):
     return dict(rail=rail(session, league, session.user_team), pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, age=int(p.age), size=size,
                 birth_date=getattr(p, 'birth_date', None), game_date=getattr(league, 'game_date', None),
                 team=club(p.team) if p.team else None, home_state=home_state(p), draft=drafted,
-                role=role, snaps=snaps, missed=missed, pending=pending, market_apy=market_apy, ext_ask=ext_ask, ext_eligible=_ext_ok(league, p),
+                role=role, snaps=participation['snaps'], missed=None, participation=participation,
+                pending=pending, market_apy=market_apy, ext_ask=ext_ask, ext_eligible=_ext_ok(league, p),
                 rookie_option=(__import__('extensions').rookie_option_price(league, p) if p.team == session.user_team else None),
                 contract_caption=('On the wire; a claiming club inherits his deal' if (p.team is None and p.contract) else 'Free agent; no contract' if p.team is None else (f"Contract signed {getattr(p.contract, 'signed', league.year)} · {p.contract.years + (len(getattr(p.contract, 'base', [])) - p.contract.years if hasattr(p.contract, 'base') else 0)} yrs · ${round(sum(getattr(p.contract, 'base', [])) + getattr(p.contract, 'sb', 0), 1)}m" if p.contract else 'No contract')),
                 season_no=max(1, league.year - (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) + 1) if (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) else None,
@@ -802,7 +905,7 @@ def progression(session, league, abbr):
     for p in sorted(t.active(), key=lambda p: -float(p.xp or 0)):
         cheapest = min((XP.cost_per_point(p, k) for k in p.ratings if k.endswith('_rating') and k not in XP.PHYSICAL and k not in XP.TOOLS), default=None)
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), no=getattr(p, 'number', None), bank=int(round(float(p.xp or 0))), **ceiling_read(p, league),
-                         bought=int(p.xp_spent.get('_bought_season', 0) or 0), career=int(XP.points_bought(p)), auto=bool(p.xp_spent.get('_auto', False)),
+                         bought=XP.points_bought_in_year(p, league.year), career=int(XP.points_bought(p)), auto=bool(p.xp_spent.get('_auto', False)),
                          cheapest=(int(round(cheapest)) if cheapest else None), can_buy=(cheapest is not None and p.xp >= cheapest and not XP.at_ceiling(p)), dev=modifier_word(p)))
     return dict(rail=rail(session, league, abbr), rows=rows, auto_all=bool(getattr(t, 'xp_auto_all', False)), bank_total=sum(r['bank'] for r in rows), idle=sum(1 for r in rows if r['can_buy'] and not r['auto']))
 
@@ -856,7 +959,8 @@ def act_to_squad(league, abbr, pid):
     if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most)'))
     penalty = _cut_penalty(league, p)
     penalty_line = _cut_penalty_line(penalty)
-    if int(p.accrued or 0) >= 4:
+    import waivers as WV
+    if not WV.subject(league, p, league.week):
         if not PSQ.sign_to_squad(league, abbr, pid):
             return dict(ok=False, why='Cannot move him to the practice squad: releasing his contract would exceed the cap.')
         return dict(ok=True, line=f"{p.name} to the practice squad. {penalty_line}", now=True, **penalty)

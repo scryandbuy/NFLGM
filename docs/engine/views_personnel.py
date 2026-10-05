@@ -450,12 +450,14 @@ def free_agency(session, league, abbr):
     me = league.teams[abbr]
     depth = me.depth
     rows = []
+    import waivers as WV
+    on_wire = {e['pid'] for e in WV.pending(league)}
     # Send the full market so position filters and name search can find every
     # available player. The browser limits only the currently drawn rows.
     ordered = sorted(list(league.free_agents), key=lambda x: -(league.player(x).ovr if league.player(x) else 0))
     for pid in ordered:
         p = league.player(pid)
-        if p is None or p.retired: continue
+        if p is None or p.retired or pid in on_wire: continue
         display_pos = PR.fa_position(p, me)
         filter_positions = list(PR.fa_positions(p, me))
         t = NG.open_for(league, pid)
@@ -628,6 +630,9 @@ def act_sign_ps(league, abbr, pid):
     import practice_squad as PSQ
     t = league.teams[abbr]; p = league.player(pid)
     if p is None or pid not in league.free_agents: return dict(ok=False, why='he is not on the market')
+    import waivers as WV
+    if any(e.get('pid') == pid for e in WV.pending(league)):
+        return dict(ok=False, why='He must clear waivers before signing to a practice squad.')
     if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most)'))
     amb = float((getattr(p, 'traits', None) or {}).get('ambition', 50))
     if p.ovr >= 76: return dict(ok=False, why=f"{p.name} wants a roster spot, not the practice squad.")
@@ -757,7 +762,7 @@ def extensions(session, league, abbr):
                          rookie_option=EXT.rookie_option_price(league, p),
                          eligible=bool(EXT.eligible(p, league)), talks=(t['state'] if t else None), thread=(t['id'] if t else None), ask=(t.get('ask') if t else None), years=(t.get('years') if t else None), mood=(t.get('mood') if t else None)))
     threads = [_thread(league, t) for t in NG._threads(league) if t['kind'] == 'extension' and t.get('team') == abbr and t['state'] not in ('expired', 'void', 'accepted', 'signed')]
-    promises = [dict(pid=pr['pid'], name=(league.player(pr['pid']).name if league.player(pr['pid']) else pr['pid']), kind=pr['kind'], made=pr['made'], status=pr['status']) for pr in (getattr(league, 'promises', None) or []) if pr.get('team') == abbr]
+    promises = [dict(pid=pr['pid'], name=(league.player(pr['pid']).name if league.player(pr['pid']) else pr['pid']), kind=pr['kind'], made=pr['made'], status=pr['status']) for pr in NG.normalize_promises(league) if pr.get('team') == abbr]
     import tags as TG_, contracts as CT
     from cap_engine import CAP
     cap = CAP.get(league.year, 301.2)
