@@ -77,16 +77,19 @@ def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
     their_surplus, their_needs = TR.surplus_and_needs(league, them, pool, rng)
     from trade_calendar import trading_open
     can_trade = trading_open(league)
+    def record(team):
+        w, l, ties = team.record
+        return f'{w}–{l}' + (f'–{ties}' if ties else '')
     pkg = _evaluate(league, abbr, other, list(a_sends), list(b_sends)) if (a_sends or b_sends) else None
     draft_live = None
     D = getattr(session, 'draft', None)
     if D is not None and not D.done and D.current() is not None:
         q = D.current(); draft_live = dict(slot=f"{q.round}.{q.selection - 32 * (q.round - 1):02d}", sel=q.selection, team=q.owner)
     return dict(rail=rail(session, league, abbr), draft_live=draft_live, clubs=[club(c) for c in CLUBS if c != abbr], other=club(other),
-                me=dict(club=club(abbr), cap=round(me.cap_space, 1), roster=[_plate(league, p) for p in sorted(me.active(), key=lambda p: -p.ovr)],
+                me=dict(club=club(abbr), record=record(me), cap=round(me.cap_space, 1), roster=[_plate(league, p) for p in sorted(me.active(), key=lambda p: -p.ovr)],
                         picks=[_pick_row(league, pk) for pk in sorted(me.picks, key=lambda k: (k.year, k.round)) if not pk.used_on],
                         surplus=[dict(pid=x['pid'], why=_surplus_why(league, me, x)) for x in my_surplus], needs=sorted(my_needs)),
-                them=dict(club=club(other), cap=round(them.cap_space, 1), roster=[_plate(league, p) for p in sorted(them.active(), key=lambda p: -p.ovr)],
+                them=dict(club=club(other), record=record(them), cap=round(them.cap_space, 1), roster=[_plate(league, p) for p in sorted(them.active(), key=lambda p: -p.ovr)],
                           picks=[_pick_row(league, pk) for pk in sorted(them.picks, key=lambda k: (k.year, k.round)) if not pk.used_on],
                           surplus=[dict(pid=x['pid'], why=_surplus_why(league, them, x)) for x in their_surplus], needs=sorted(their_needs),
                           coach=them.gm.name if them.gm else '', prestige=round(getattr(them.gm, 'prestige', 50)) if them.gm else None),

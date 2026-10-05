@@ -2492,6 +2492,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .trade-side {min-width:0;border:1px solid color-mix(in srgb,var(--team-accent) 35%,#203039);border-radius:10px;padding:18px;background:linear-gradient(140deg,color-mix(in srgb,var(--team-base) 76%,#071014),color-mix(in srgb,var(--team-base) 36%,#071014));}
 .trade-side-head {display:flex;gap:12px;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--trade-rule);}
 .trade-side-head h2 {padding:0;border:0;background:none;color:var(--team-readable);font-size:22px;text-transform:uppercase;}
+.trade-team-record {display:inline-block;margin-left:10px;font-size:16px;font-weight:500;white-space:nowrap;vertical-align:middle;color:var(--team-readable);opacity:.8;}
 .trade-side select {max-width:160px;min-width:80px;background:#101c28;color:#fff;padding:8px;border:1px solid var(--trade-rule);border-radius:6px;}
 .trade-cap {margin-left:auto;text-align:right;white-space:nowrap;}
 .trade-cap-values {display:flex;align-items:baseline;justify-content:flex-end;gap:7px;font-size:14px;}

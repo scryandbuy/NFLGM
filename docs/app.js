@@ -1674,7 +1674,8 @@ function renderTradePicker(own, selected, ui, onChange, side) {
 function renderTradeSide(v, key, reload) {
   const own = key === 'a' ? v.me : v.them, selected = tradeState[key];
   const box = el('section',{class:'trade-side','data-team':own.club.abbr}); applyTeamTheme(box,own.club);
-  const head = el('div',{class:'trade-side-head'},el('h2',{},own.club.name));
+  const head = el('div',{class:'trade-side-head'},el('h2',{},own.club.name,
+    own.record ? el('span',{class:'trade-team-record'},own.record) : null));
   const after = v.package?.cap_after?.[key === 'a' ? 'me' : 'them'] ?? own.cap;
   const change = Math.round((after - own.cap) * 10) / 10;
   head.append(el('div',{class:'trade-cap'},
