@@ -5,7 +5,7 @@ from types import SimpleNamespace as NS
 from unittest.mock import patch
 
 from cap_engine import Contract
-from league import DraftPick, League
+from league import DraftPick, League, Team
 from test_draft_planning import fixture, set_grade
 import trade_portfolio as TP
 
@@ -122,6 +122,59 @@ class PortfolioTests(unittest.TestCase):
         self.assertLess(first['cost'],second['cost'])
         self.assertLess(second['cost'],third['cost'])
 
+    def test_executed_multi_position_sequence_preserves_last_option_when_exposed(self):
+        import trades as TR
+        # Controlled offered players/comps, not a claim about offers in a
+        # saved league. Keep real pick prices, public grades, contract costs,
+        # both clubs' GM valuations, shared portfolio guard and accounting.
+        seller=Team('DEN','Continental West','Continental')
+        seller.league=self.L;seller.gm=copy.deepcopy(self.t.gm)
+        seller.record=[2,14,0];self.L.teams['DEN']=seller
+        self.L.set_phase('free_agency')
+        picks=[self.pick(23,origin=str(i)) for i in range(3)]
+        arrivals=[]
+        for pos in ('WR','CB','HB'):
+            p=self.incoming(pos,93,3,28)
+            del self.L.players[p.pid]
+            p.pid='arrival-'+pos;self.L.players[p.pid]=p
+            seller.roster.append(p);arrivals.append(p)
+        quote=lambda league,p,**kwargs: {'apy':{'WR':12.5,'CB':12.,'HB':14.}[p.pos]}
+        original_hb=list(self.t.by_pos('HB'))
+        with patch.object(TR.VAL,'value_player',side_effect=quote):
+            intact=TR._portfolio_trade_check(self.L,self.t,seller,[picks[-1]],[arrivals[-1].pid])
+            self.assertTrue(intact['approved'])
+            for pick,p in zip(picks[:2],arrivals[:2]):
+                # Both are material upgrades over retained 82-grade starters;
+                # an affordable contract alone cannot establish that fact.
+                self.assertGreater(TP.RN.move_gain(self.t,p),TR.UPGRADE_GAP)
+                read=TR._portfolio_trade_check(self.L,self.t,seller,[pick],[p.pid])
+                self.assertTrue(read['approved'])
+                self.assertGreater(read['margins'][self.t.abbr],.5)
+                self.assertGreater(read['margins'][seller.abbr],.9)
+                self.L.trade(self.t.abbr,seller.abbr,[pick],[p.pid])
+                self.assertIn(p,self.t.roster)
+            saved=self.L.save()
+            late=TR._portfolio_trade_check(self.L,self.t,seller,[picks[-1]],[arrivals[-1].pid])
+            self.assertFalse(late['approved'])
+            self.assertLess(late['margins'][self.t.abbr],-TR.ACCEPT_WINDOW)
+            self.assertGreater(late['margins'][seller.abbr],.9)
+            self.assertGreater(TP.RN.move_gain(self.t,arrivals[-1]),TR.UPGRADE_GAP)
+            self.assertEqual(self.L.save(),saved)
+            self.assertEqual(self.t.picks,[picks[-1]])
+            self.assertTrue(all(p in self.t.roster for p in original_hb))
+            self.assertFalse(any(e['kind']=='release' for e in self.L.transactions))
+            # With the same depleted stock and offer, actual young long-term
+            # control removes the concern; there is no last-pick prohibition.
+            healthy=copy.deepcopy(self.L);buyer=healthy.teams[self.t.abbr]
+            for p in buyer.roster:
+                p.age=23.;p.contract=Contract(5,[1.]*5)
+            read=TR._portfolio_trade_check(healthy,buyer,healthy.teams['DEN'],
+                                          [buyer.picks[0]],[arrivals[-1].pid])
+            self.assertTrue(read['approved'])
+            healthy.trade(buyer.abbr,'DEN',[buyer.picks[0]],[arrivals[-1].pid])
+            self.assertEqual(buyer.picks,[])
+            self.assertEqual(healthy.player(arrivals[-1].pid).team,buyer.abbr)
+
     def test_zero_pick_stock_and_no_pick_spending_do_not_ban_acquisition(self):
         p=self.incoming()
         read=TP.assess(self.L,self.t,(),[p.pid])
@@ -219,6 +272,16 @@ class PortfolioTests(unittest.TestCase):
         baseline=TP.assess(self.L,self.t,[sent])
         hidden=TP.assess(self.L,self.t,[sent],prospect=p)
         self.assertEqual(hidden,baseline)
+
+    def test_already_observed_prospect_does_not_receive_scouting_error_twice(self):
+        p=self.L.draft_pool[0]
+        self.L.scouting[self.t.abbr][p.pid].update(e_phys=4.,e_skill=-6.)
+        observed=TP.DP.observed_prospect(self.L,self.t.abbr,p)
+        raw=TP._prospect(self.L,self.t,p,0)
+        supplied=TP._prospect(self.L,self.t,observed,0)
+        self.assertEqual(raw.ratings,supplied.ratings)
+        self.assertEqual(raw.ovr,supplied.ovr)
+        self.assertEqual(supplied.ratings,observed.ratings)
 
 
 if __name__=='__main__':unittest.main()

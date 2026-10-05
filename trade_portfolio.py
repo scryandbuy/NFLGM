@@ -47,12 +47,14 @@ def _prospect(league, team, prospect, start):
     if prospect is None:
         return None
     scouting = (getattr(league, 'scouting', {}) or {}).get(team.abbr, {})
-    if prospect.pid in scouting:
-        view = DP.observed_prospect(league, team.abbr, prospect)
-    elif hasattr(prospect, 'potential') or hasattr(prospect, 'potential_range'):
-        return None  # a raw unscouted college object is not public evidence
-    else:
+    if not hasattr(prospect, 'potential') and not hasattr(prospect, 'potential_range'):
+        # Draft callers can already supply DP.observed_prospect. Reapplying
+        # the scouting errors would turn one public read into a second one.
         view = copy.copy(prospect)
+    elif prospect.pid in scouting:
+        view = DP.observed_prospect(league, team.abbr, prospect)
+    else:
+        return None  # a raw unscouted college object is not public evidence
     view.age = float(getattr(view, 'age', 22.))
     view.dev = 'normal'
     view.contract = Contract(4+start, [0.]*(4+start), start_offset=start)
