@@ -1,5 +1,45 @@
 # Game log watchlist
 
+## Completed 2029 season: audited October 5, 2026
+
+Source: `C:/Users/HP/Downloads/nflgm-2029-offseason-1.json`, frozen audit
+baseline `b7667b9`. The original save was not advanced or edited. Historical
+games span engine revisions, so current-code probes and saved outcomes must
+remain separate. Detailed evidence is in `outputs/full-season-audit-2029` in
+the shared workspace.
+
+- **QB rushing requires a wiring correction.** The saved regular season has
+  187 inferred scrambles in 20,848 QB dropbacks. The per-dropback probability
+  is currently drawn only after a sack result. Lamar has seven scrambles,
+  Hurts five, Allen four. Correct when the decision occurs before assessing
+  balance; preserve open-read throws, containment, clock and coach differences.
+  Do not add a broad designed-QB-run system or compensating sack/scoring changes
+  merely to match an aggregate target.
+- **Conversion and red-zone summaries require definition fixes.** GB's
+  divisional game against TB says 7/16 on Game Day versus 10/16 in the recap;
+  settled first downs and goal-to-go touchdowns explain the difference. Long
+  touchdowns from outside the 20 are incorrectly counted as red-zone trips.
+  These are reporting defects, not missing scoreboard points.
+- **Pass rush watch remains.** Parsons finishes with 593 rush reps, 82
+  recorded pressures and nine sacks; Barela seven sacks, Biles six. League
+  sacks: edges 451, DTs 425, off-ball linebackers 308, DBs 57. Review assignment
+  opportunities and protection costs before changing position-wide rates.
+  Pressure definitions differ historically: 114 player-games have more sacks
+  than pressures, all in weeks 1–8 and none after week 8. Do not use one pooled
+  pressure rate as if this whole playthrough used identical accounting.
+- **Kicking watch strengthened.** Across 20 GB games, under-40 FGs are 33/33,
+  40–49 are 18/18, 50–59 are 21/29 and 60+ are 3/6. Expand distance/kicker/weather
+  evidence before changing accuracy; no blanket reduction is authorized here.
+- **Losses and explosives still need distribution evidence.** GB logs contain
+  31 displayed losses in 576 designed runs, opponents 15 in 421. There are ten
+  GB and seven opponent designed runs of 20+, plus 73 and 67 pass gains of 20+.
+  Keep failed plays, rounding effects, matchup quality and game situation in
+  the analysis rather than lowering all rushing or passing production.
+- **Accounting checks held up.** All checked additive player-season fields
+  reconcile with 272 regular-season and 13 postseason books. All 20 GB score
+  and scoring-quarter totals reconcile. These checks do not establish that
+  football opportunity distributions are calibrated.
+
 ## Week 13 SEA at GB, 31-15: reviewed October 2, 2026
 
 Source: C:/Users/HP/.codex/attachments/9e113d3c-d428-4ba3-92c1-e3b30ca4388d/Pasted text.txt.
