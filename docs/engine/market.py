@@ -561,6 +561,7 @@ def offer_contract(league, player, offer):
 
 
 def sign(league, player, offer, cap, bonus=None, market_apy=None):
+    __import__("fa_window").require_open(league)
     team = league.teams[offer.team]
     import practice_squad as PSQ
     squad_source = player.team if (player.team in league.teams and player.team != offer.team
@@ -942,6 +943,7 @@ if __name__ == '__main__':
 # the register and the offline tools.
 
 def _pool(league):
+    if __import__("fa_window").closed(league): return []
     # unsigned players, and the tendered restricted free agents (still the holder's, but biddable)
     pool = [league.player(pid) for pid in list(league.free_agents)]
     return [p for p in pool if p and not p.retired and (p.team is None or getattr(p, 'fa_class', None) == 'tendered')]

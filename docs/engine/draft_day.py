@@ -482,3 +482,4 @@ class Draft:
                 if p.pid not in self.L.free_agents:
                     self.L.free_agents.append(p.pid)
         self.L.draft_pool = []
+        __import__("fa_window").set_closed(self.L, False)

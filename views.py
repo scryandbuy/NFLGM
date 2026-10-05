@@ -128,7 +128,7 @@ def rail(session, league, abbr):
     div = _division_place(league, abbr)
     nxt = session.next_label(); blocking = session.blocking()
     focus = cap_focus(league, t)
-    return dict(club=club(abbr), coach=t.gm.name if t.gm else '', year=league.year, week=league.week,
+    return dict(fa_closed=__import__("fa_window").closed(league), club=club(abbr), coach=t.gm.name if t.gm else '', year=league.year, week=league.week,
                 phase=league.phase, record=f"{w}–{l}" + (f"–{d}" if d else ''), place=div, cap=money(focus['space']), cap_year=focus['year'], cap_next=focus['next'], prestige=round(getattr(t.gm, 'prestige', 0)) if t.gm else None,
                 advance=nxt, blocking=blocking, inbox_unread=sum(1 for m in getattr(league, 'inbox', []) if m.get('status') == 'unread'),
                 clock=_clock(league, session))

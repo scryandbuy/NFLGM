@@ -70,6 +70,7 @@ class Session:
         s.stop = ('cutdown',)
         for t in L.teams.values(): t.phase = 'season'
         PA.sync_session(s)
+        __import__("fa_window").sync(s)
         return s
 
     @classmethod
@@ -253,6 +254,7 @@ class Session:
         if s.stop[0] == 'week' and not s.played:
             GW.refresh_open_report(L, int(s.stop[1]))
         PA.sync_session(s)
+        __import__("fa_window").sync(s)
         if s.stop[0] == 'offseason':
             s._offseason_condition_reset()
         return s
@@ -1204,6 +1206,7 @@ class Session:
         n_left = len([x for x in L.free_agents if L.player(x)])
         rows = [[inbox_player(p), p.pos, str(round(p.ovr)), t_, f'${o.apy:.1f}m'] for t_, p, o in sorted(signed, key=lambda x: -x[1].ovr)[:8]]
         IB.post(L, 'league', "The market closes", f"{len(signed)} veterans signed one-year deals as the market closed; {n_left} players remain unsigned into camp.", sender='league', payload=dict(link='personnel:free_agency', mail_sections=[IB.mail_section('Notable signings', rows, ['Player', 'Position', 'OVR', 'Team', 'Annual salary'])] if rows else []))
+        __import__("fa_window").set_closed(L, True)
 
     def _resign_card(self):
         """The calendar sits on Re-sign: one card with your expiring players by class, the tag price on each UFA, tender

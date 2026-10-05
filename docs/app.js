@@ -275,6 +275,7 @@ async function loadSave() {
 
 // ---------------------------------------------------------------- the rail
 function renderRail(r) {
+  renderRail.faClosed = !!r.fa_closed;
   NameLinks.sync();
   syncGameplanState();
   queueCeilingNoticeCheck();
@@ -1569,7 +1570,7 @@ function renderDepth(v) {
 // ---------------------------------------------------------------- Personnel
 const PERS = { trades: 'Trades', fa: 'Free Agency', wire: 'Waivers', retain: 'Retain Players', extensions: 'Extensions' };
 let tradeState = { other: null, a: [], b: [] };
-function persSecond(cur) { secondRow(Object.entries(PERS).map(([k, l]) => [l, '#personnel/' + k]), '#personnel/' + cur); $('#crumb').textContent = 'Personnel'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'personnel')); }
+function persSecond(cur) { secondRow(Object.entries(PERS).map(([k, l]) => [l, '#personnel/' + k]), '#personnel/' + cur); if(renderRail.faClosed){const fa=$('#second').querySelector('a[href="#personnel/fa"]');if(fa){fa.removeAttribute('href');fa.setAttribute('aria-disabled','true');fa.style.opacity='.4';fa.style.pointerEvents='none';}} $('#crumb').textContent = 'Personnel'; $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'personnel')); }
 function persPage() { const page = $('#page'); page.innerHTML = ''; page.className = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)'; return page; }
 function crest(c, size) { return el('div', { class: 'cr', style: `background:${c.color}${size ? `;height:${size}px;font-size:${Math.max(10, Math.round(size * 0.4))}px` : ''}` }, showAbbr(c.abbr)); }
 // Successful actions are reflected by their page. Only failures need feedback,
@@ -2104,7 +2105,7 @@ function faMatchesPosition(row,group,position) {
   return keys.some(key=>(row.filter_positions||[row.pos]).includes(key));
 }
 function renderFA(v) {
-  renderRail(v.rail); const page = persPage(); persSecond('fa');
+  renderRail(v.rail); const page = persPage(); persSecond('fa'); if(v.rail.fa_closed){page.append(el('section',{class:'sheet c12'},el('h2',{},'Free Agency'),el('p',{},'Free Agency reopens after the draft, once undrafted rookies join the pool.')));return;}
   const reload = () => renderFA(pyJSON(`SESSION.personnel('free_agency')`));
   const groups=faFilterGroups(v);
   if(faPosition&&!groups.find(g=>g.group===faPos)?.positions.some(p=>p.key===faPosition))faPosition='';

@@ -99,6 +99,8 @@ def extension_defers(league, p, situation=None):
 
 
 def open_talks(league, pid, kind='extension'):
+    if kind != 'extension' and __import__('fa_window').closed(league):
+        return dict(ok=False, why=__import__('fa_window').MESSAGE)
     """The agent's ballpark and mood. Costs nothing."""
     import extensions as EXT, valuation as VAL
     p = league.player(pid)
@@ -159,6 +161,8 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     import extensions as EXT
     t = find(league, tid)
     if t is None: return dict(ok=False, why='no such negotiation')
+    if t.get('kind') != 'extension' and __import__('fa_window').closed(league):
+        return dict(ok=False, why=__import__('fa_window').MESSAGE)
     if t['state'] in ('accepted', 'declined', 'broken_off', 'expired'):
         return dict(ok=False, why=f"this negotiation is {t['state']}")
     if t['state'] == 'match_requested':
