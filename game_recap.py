@@ -68,6 +68,7 @@ def stats(rows):
                 runs=len(runs), run_yards=yards(runs), sacks=sum(p['type']=='sack' for p in passes),
                 pressure=sum(bool(p.get('pressured')) or p['type']=='sack' for p in passes),
                 turnovers=sum(p['type']=='interception' or bool(p.get('fumble_lost')) for p in rows),
+                defensive_tds=sum(bool(p.get('defensive_td')) for p in rows),
                 third=len(thirds), converted=sum(converted(p) for p in thirds))
 
 
@@ -156,6 +157,12 @@ def strengths(me, them):
             (good if (pct<=.25 if defense else pct>=.5) else bad if (pct>=.5 if defense else pct<=.25) else []).append(line)
         if s['turnovers']:
             (good if defense else bad).append(f"{'We took the ball away' if defense else 'We gave the ball away'} {s['turnovers']} time{'s' if s['turnovers'] != 1 else ''}.")
+    if them['turnovers']:
+        takeaway = f"We took the ball away {them['turnovers']} time{'s' if them['turnovers'] != 1 else ''}."
+        if them.get('defensive_tds'):
+            n = them['defensive_tds']
+            takeaway += f" We scored {n} defensive touchdown{'s' if n != 1 else ''}."
+        good = [takeaway] + [line for line in good if not line.startswith('We took the ball away')]
     return good[:3],bad[:3]
 
 
@@ -167,7 +174,7 @@ def receiver_line(rows, target, name='The targeted receiver'):
     touchdowns = sum(bool(p.get('touchdown') or p.get('td')) and not p.get('defensive_td') for p in catches)
     explosive = sum(float(p.get('yards', 0) or 0) >= 20 for p in catches)
     detail = (f"{name}: {len(catches)} catches on {len(aimed)} targets for {yards:.0f} yards, "
-              f"{touchdowns} receiving touchdowns; {explosive} {'catch' if explosive == 1 else 'catches'} of 20+ yards")
+              f"{touchdowns} receiving touchdown{'s' if touchdowns != 1 else ''}; {explosive} {'catch' if explosive == 1 else 'catches'} of 20+ yards")
     return dict(n=len(aimed), yards=yards, td=touchdowns, explosive=explosive, detail=detail)
 
 
@@ -180,6 +187,8 @@ def receiver_assessment(rows, target, name):
     ypt = s['yards'] / s['n']
     if s['td'] >= 2 or s['yards'] >= 100 or ypt >= 10:
         return 'negative', 'The receiver still hurt us: ' + s['detail'] + '.'
+    if ypt <= 6 and s['td'] == 1 and s['explosive'] == 0 and s['n'] >= 8:
+        return 'positive', 'Mostly contained, with a touchdown conceded: ' + s['detail'] + '.'
     if ypt <= 6 and not s['td'] and s['explosive'] <= 1:
         return 'positive', ('Mostly contained, with one explosive allowed: ' if s['explosive'] else 'The matchup held up: ') + s['detail'] + '.'
     return 'mixed', 'Mixed matchup results: ' + s['detail'] + '.'
@@ -223,7 +232,11 @@ def assessment(rows, kind, defense=False):
     # A productive average must not hide giveaways on the selected calls.
     if not defense and kind != 'protection' and s['turnovers']:
         detail += f"; {s['turnovers']} turnover" + ('s' if s['turnovers'] != 1 else '')
-        if good: return 'mixed', f"Mixed results: productive yardage came with lost possessions ({detail})."
+        if good and s['turnovers'] / n > .04: return 'mixed', f"Mixed results: productive yardage came with lost possessions ({detail})."
+    if defense and s['turnovers']:
+        detail += f"; {s['turnovers']} takeaway{'s' if s['turnovers'] != 1 else ''}"
+        if not bad and s['turnovers'] >= 2:
+            return 'positive', f'Effective results with takeaways: {detail}.'
     if good:
         return 'positive', (f"Held up well: the opponent was limited to {detail}." if defense else f"Productive results: {detail}.")
     if bad:
@@ -329,8 +342,8 @@ def clock_control_finding(rows, previous, final_margin):
     elif n >= 4 and final_margin is not None:
         if now['turnovers']:
             grade = 'mixed'; text += ' Giveaways undermined clock control.'
-        elif share >= .6 and ypc >= 3.5 and seconds >= 28:
-            grade = 'positive'; text += ' The offense sustained a productive ground game, used the clock, and protected the win.'
+        elif share >= .5 and seconds >= 32:
+            grade = 'positive'; text += ' The offense used the clock and protected the win.'
         else:
             grade = 'mixed'; text += ' The results do not establish all parts of the clock-control objective.'
     return dict(label='Clock control', verdict=grade, text=text)
@@ -432,14 +445,16 @@ def assess_choice(changes, own, against, before=None, league=None):
         if before is not None:
             previous = before[0 if side == 'off' else 1]
             verdict, line = relative_assessment(previous, rows, metric, side == 'def', verdict, line)
+        if before is not None and side == 'off' and metric == 'run':
+            if rows and sum((p.get('score_diff') or 0) >= 9 for p in rows) >= len(rows) / 2:
+                line += ' Much of the second half was spent protecting a two-score lead.'
         if label == 'Passing depth': line += ' ' + depth_distribution(rows)
-        if label == 'Pressure calls':
-            selected = [p for p in rows if p.get('blitz')] if metric == 'blitz' else rows
-            line += ' Pass-rush evidence: ' + evidence(selected, 'protection') + '.'
-        findings.append(dict(label=label, verdict=verdict, text=line))
         if label == 'Pressure calls' and metric == 'blitz':
+            selected = [p for p in rows if p.get('blitz')]
             earlier = [p for p in before[1] if p.get('blitz')] if before is not None else None
             findings.append(pressure_finding(selected, earlier))
+            continue
+        findings.append(dict(label=label, verdict=verdict, text=line))
     return findings
 
 
@@ -474,6 +489,14 @@ def review_choices(pre, own, against, before=None, league=None, final_margin=Non
         if rec.get('overridden'):
             summary = (summary + ' ' if items else '') + 'Your manual settings replaced ' + ', '.join(k.replace('_', ' ') for k in rec['overridden']) + '; those choices are reviewed under Your saved plan.'
         findings.append(dict(title=rec['text'], conclusion=summary, findings=items))
+    seen = {}
+    for rec in findings:
+        for item in rec['findings']:
+            key = (item['label'], item['text'])
+            if key in seen:
+                item['text'] = 'Same evidence as "' + seen[key] + '".'
+            else:
+                seen[key] = rec['title']
     return findings
 
 
@@ -713,6 +736,27 @@ def post_snap_counts(league, home, away, week, states, playoffs=False):
     return msg
 
 
+def concise_finding(item):
+    """Short email wording; underlying findings retain their measured evidence."""
+    import re
+    out = dict(item)
+    text = out['text']
+    if out['verdict'] == 'limited':
+        text = 'Too few relevant plays to judge.'
+    elif out['label'] == 'Clock control' and out['verdict'] == 'positive':
+        text = 'You used the clock, avoided turnovers, and protected the win.'
+    else:
+        for marker in (' Recorded passing calls', ' Before the adjustment:', ' Too little before/after', ' Pass-rush evidence:'):
+            text = text.split(marker)[0]
+        text = re.sub(r' \(\d+ (?:runs|plays|dropbacks) before, \d+ after\)', '', text)
+        text = text.replace('net yards per dropback', 'yards per passing play')
+        text = text.replace('yards per designed run', 'yards per run')
+        text = text.replace('without a clear statistical edge', 'with no clear advantage')
+        text = text.replace('Struggled on the field:', 'Struggled:')
+    out['text'] = text
+    return out
+
+
 def post(league, home, away, week, res, playoffs=False):
     user = getattr(league, 'user_team', None)
     if user not in (home, away): return None
@@ -732,7 +776,14 @@ def post(league, home, away, week, res, playoffs=False):
              f"turnovers {me['turnovers'] + own_returns['lost']} committed, {them['turnovers'] + their_returns['lost']} forced.")
     sections = []
     def add(title, lines=None, reviews=None):
-        sections.append(dict(title=title, lines=lines or [], reviews=reviews or []))
+        compact = []
+        for review in reviews or []:
+            row = dict(review)
+            row['findings'] = [concise_finding(x) for x in review.get('findings', [])]
+            # Each finding carries its verdict; avoid repeating it above the same text.
+            row['conclusion'] = ''
+            compact.append(row)
+        sections.append(dict(title=title, lines=lines or [], reviews=compact))
     add('What went well', good or ['No clear statistical strength stood out in the recorded scrimmage plays.'])
     add('What needs work', bad or ['No clear statistical weakness stood out in the recorded scrimmage plays.'])
     kicks = [p for pos, d in res.get('drives', []) if pos == side for p in getattr(d, 'log', [])
@@ -782,7 +833,7 @@ def post(league, home, away, week, res, playoffs=False):
     for section in sections:
         lines = [section['title'].upper()] + section['lines']
         for review in section['reviews']:
-            lines.extend([review['title'] + ' — ' + review['conclusion']])
+            lines.extend([review['title'] + (' - ' + review['conclusion'] if review['conclusion'] else '')])
             lines.extend(x['label'] + ': ' + x['text'] for x in review['findings'])
         body.append('\n'.join(lines))
     coach = (getattr(league.teams[user], 'staff', None) or {}).get('oc'); name = getattr(coach, 'name', None)
