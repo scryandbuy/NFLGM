@@ -149,7 +149,8 @@ def play_line(league, p, off_abbr, def_abbr):
         if touchback is None and p.get('yardline') is not None and p.get('air') is not None:
             caught = float(p['yardline']) - float(p['air'])
             touchback = caught <= 0 and caught + float(p.get('ret', 0) or 0) <= 0
-        text = f"{passer or 'The quarterback'} throws to {target or 'his receiver'}, INTERCEPTED by {by or 'the defense'}" + (", touchback." if touchback else f", returned {int(round(p.get('ret', 0)))} yards." if p.get('ret') else '.')
+        return_yards = int(round(p.get('ret', 0)))
+        text = f"{passer or 'The quarterback'} throws to {target or 'his receiver'}, INTERCEPTED by {by or 'the defense'}" + (", touchback." if touchback else f", returned {return_yards} yard{'s' if return_yards != 1 else ''}." if p.get('ret') else '.')
         kind = 'turnover'
         if p.get('defensive_td'):
             text += f' TOUCHDOWN, {def_abbr}.'

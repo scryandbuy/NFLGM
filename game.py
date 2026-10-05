@@ -3139,6 +3139,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # consume that kick while holding a timeout. Live action still costs
         # its own live time; no time is restored when the play ends the half.
         if (not used and not late_injury and not added_penalty and not _fourth_fail
+                and getattr(dr, '_half_stall_intent', None) != 'protect'
                 and t in ('run', 'complete', 'scramble', 'sack')
                 and after_play.result is None and _plan_to is not None
                 and _plan_to['choice'] != 'kneel'
