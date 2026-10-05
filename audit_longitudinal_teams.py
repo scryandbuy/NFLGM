@@ -10,6 +10,8 @@ import collections
 import functools
 import json
 import math
+import os
+import subprocess
 import time
 import numpy as np
 from pathlib import Path
@@ -20,6 +22,7 @@ import roster_needs as RN
 import offense_roles as OR
 import defense_roles as DR
 import session as S
+from calibrate import Collector, TARGETS
 
 
 def json_default(value):
@@ -91,16 +94,21 @@ class Audit:
         self.start = time.monotonic()
         self.samples = collections.Counter()
         self.snapshots = []
+        self.register = Collector()
+        self.register_by_year = {}
         mode='r+' if resume else 'w'
         self.moves = self.folder.joinpath('moves.jsonl').open(mode, encoding='utf8')
         self.events = self.folder.joinpath('events.jsonl').open(mode, encoding='utf8')
         self.kickoffs = self.folder.joinpath('kickoffs.jsonl').open(mode, encoding='utf8')
+        self.games = self.folder.joinpath('games.jsonl').open(mode, encoding='utf8')
 
     def checkpoint(self, session, history):
         state=session.save()
         data=dict(session=state,history=history,snapshots=len(self.snapshots),
-                  offsets={k:getattr(self,k).tell() for k in ('events','moves','kickoffs')},
-                  samples=list(self.samples.items()),elapsed=time.monotonic()-self.start)
+                  offsets={k:getattr(self,k).tell() for k in ('events','moves','kickoffs','games')},
+                  samples=list(self.samples.items()),elapsed=time.monotonic()-self.start,
+                  register=self.register.to_json(),
+                  register_by_year={year:c.to_json() for year,c in self.register_by_year.items()})
         temporary=self.folder/'checkpoint.pending.json'
         temporary.write_text(json.dumps(data,default=json_default),encoding='utf8')
         temporary.replace(self.folder/'checkpoint.json')
@@ -226,7 +234,19 @@ class Audit:
             audit.write(audit.kickoffs,dict(year=runner.L.year,week=week,home=home,away=away,
                 active={a:len(runner.L.teams[a].active()) for a in (home,away)},
                 ir={a:len(runner.L.teams[a].ir) for a in (home,away)}))
-            return original_play(runner,home,away,week,playoffs)
+            result=original_play(runner,home,away,week,playoffs)
+            year=str(runner.L.year)
+            if not playoffs:
+                audit.register.add(result)
+                audit.register_by_year.setdefault(year,Collector()).add(result)
+            audit.write(audit.games,dict(year=runner.L.year,week=week,home=home,away=away,
+                playoffs=playoffs,score=[result['home'],result['away']],
+                injuries=len(result.get('injuries',[])),overtime=result.get('overtime'),
+                env=result.get('env'),drives=[dict(side=side,start=d.start,
+                    start_quarter=d.start_quarter,clock=d.clock,plays=d.plays,
+                    first_downs=d.first_downs,result=d.result,points=d.points,
+                    log=d.log) for side,d in result['drives']]))
+            return result
         F.SN.SeasonRunner.play=play
 
 
@@ -252,15 +272,19 @@ def main():
         for k,offset in data['offsets'].items():
             stream=getattr(audit,k); stream.seek(offset); stream.truncate()
         audit.samples=collections.Counter({tuple(k):v for k,v in data['samples']})
+        audit.register=Collector.from_json(data['register'])
+        audit.register_by_year={year:Collector.from_json(text)
+                                for year,text in data['register_by_year'].items()}
         audit.start=time.monotonic()-data['elapsed']
         print('RESUMED',f.L.year,f.stop,flush=True)
     else:
         f=AuditSession.new(team=None,seed=args.seed)
         history=[]
         audit.snapshot(f.L,'initial')
+    base=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
     audit.folder.joinpath('methodology.json').write_text(json.dumps(dict(seed=args.seed,years=args.years,
-        base='ef4620a',driver='Session.advance / all-CPU (human UI methods omitted)',all_32_cpu=True,
-        python_hash_seed='0',networkx=nx.__version__,
+        base=base,driver='Session.advance / all-CPU (human UI methods omitted)',all_32_cpu=True,
+        python_hash_seed=os.getenv('PYTHONHASHSEED'),networkx=nx.__version__,
         limitations=__doc__),indent=2),encoding='utf8')
     try:
         if not args.resume:
@@ -290,10 +314,19 @@ def main():
             audit.folder.joinpath(f'checkpoint_{f.L.year}.json').write_text(f.save(),encoding='utf8')
             audit.folder.joinpath('history.json').write_text(json.dumps(history,default=str,indent=2),encoding='utf8')
             audit.checkpoint(f,history)
+        if audit.register.ngames:
+            audit.folder.joinpath('register.json').write_text(json.dumps(dict(
+                base=base,games=audit.register.ngames,all=audit.register.got(),
+                by_year={year:dict(games=c.ngames,metrics=c.got())
+                         for year,c in audit.register_by_year.items()},
+                targets=[dict(metric=name,target=real,tolerance=tol,control=ctrl)
+                         for name,real,tol,ctrl in TARGETS]),
+                default=json_default,indent=2),encoding='utf8')
     finally:
         audit.moves.close()
         audit.events.close()
         audit.kickoffs.close()
+        audit.games.close()
 
 
 if __name__=='__main__':
