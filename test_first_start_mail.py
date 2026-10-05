@@ -24,6 +24,9 @@ class FirstStartMailTests(unittest.TestCase):
         self.assertIn('27/30 wins; 3 pressures and 0.5 sacks allowed', body)
         self.assertIn('18/24 wins', body)
         self.assertNotIn('99', body)
+        self.assertIn('made his first start', body)
+        self.assertIn('He had 27/30 wins', body)
+        self.assertNotIn('Pass blocking:', body)
 
     def test_missing_game_never_uses_season_or_scratch_stats(self):
         self.L.game_stats = {}

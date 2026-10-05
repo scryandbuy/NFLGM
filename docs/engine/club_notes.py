@@ -197,9 +197,21 @@ def _milestones(league, t, week):
     for p in t.active():
         gs = int(p.xp_spent.get('_starts', 0) or 0)
         if gs == 1 and (p.accrued or 0) <= 1 and float(p.age) <= 24.0 and _once(league, f"first-start-{p.pid}"):
-            body = f"{inbox_player(p)} ({p.pos}) started his first game for you in {_period(week)}."
+            body = f"{inbox_player(p)} made his first start in {_period(week)}."
             stats = _first_start_line(league, t, p, week)
-            if stats: body += '\n\n' + stats
+            if stats:
+                clauses = []
+                labels = {'Pass blocking: ': ' in pass blocking', 'Run blocking: ': ' in run blocking',
+                          'Passing: ': ' passing', 'Rushing: ': ' rushing',
+                          'Receiving: ': ' receiving', 'Kicking: ': '', 'Punting: ': '',
+                          'Special teams: ': ''}
+                for line in stats.splitlines():
+                    for prefix, suffix in labels.items():
+                        if line.startswith(prefix):
+                            line = line[len(prefix):].rstrip('.') + suffix + '.'
+                            break
+                    clauses.append('He had ' + line)
+                body += '\n\n' + ' '.join(clauses)
             IB.post(league, 'result', f"{inbox_player(p)} makes his first start", body, sender='assistants')
         if gs in (50, 100, 150, 200) and _once(league, f"starts-{gs}-{p.pid}"):
             IB.post(league, 'result', f"{inbox_player(p)}'s {gs}th start", f"{inbox_player(p)} ({p.pos}) made his {gs}th career start in {_period(week)}.", sender='assistants')
