@@ -1001,7 +1001,9 @@ def _market_floor(target):
     over the cap does not turn every player into a forced-sale exception.
     """
     player = target.get('obj')
-    years = getattr(player, 'contract_years_left', 2)
+    # Calendar stubs do not add controlled playing time. Use the same service
+    # count as the quote so rollover cannot silently change the asking floor.
+    years = target.get('valued_contract_years', getattr(player, 'contract_years_left', 2))
     fraction = .5 if years <= 1 or target.get('wants_out') else .75
     return max(max(0.0, float(target.get('trade_value', 0) or 0)) * fraction,
                float(target.get('retention_floor', 0.) or 0.))

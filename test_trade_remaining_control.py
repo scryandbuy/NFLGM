@@ -98,6 +98,29 @@ class RemainingControlTests(unittest.TestCase):
         self.assertEqual(self.player.contract.base, before['base'])
         self.assertEqual(self.player.contract.bonus_schedule, before['bonus_schedule'])
 
+    def test_seller_floor_counts_playing_seasons_not_calendar_stubs(self):
+        self.L.phase = 'offseason'
+        self.L.season_closed_year = self.L.year
+        for stub in (False, True):
+            for future_years in (1, 2):
+                self.player.contract = Contract(future_years + 1,
+                    [0 if stub else 6] + [6] * future_years,
+                    earned_base=0 if stub else 6, start_offset=int(stub))
+                before = TR.player_asset(self.L, self.seller, self.player, None, None)
+                before_floor = TR._market_floor(before)
+                self.player.contract.advance()
+                self.L.year += 1
+                after = TR.player_asset(self.L, self.seller, self.player, None, None)
+                self.assertEqual(before['trade_value'], after['trade_value'])
+                self.assertEqual(before_floor, TR._market_floor(after))
+                fraction = .5 if future_years == 1 else .75
+                self.assertEqual(before_floor, before['trade_value'] * fraction)
+                # A concrete retention ask still binds independently of the
+                # minimum concession permitted by remaining service.
+                retained = dict(after, retention_floor=after['trade_value'])
+                self.assertEqual(TR._market_floor(retained), after['trade_value'])
+                self.L.year -= 1
+
     def test_lower_rental_price_allows_cheap_help_but_rejects_full_season_price(self):
         row = dict(age=31, ovr=88, madden_position='WR', apy=6,
                    contract_years_left=1, contract_costs=[3], first_year_fraction=.5)
