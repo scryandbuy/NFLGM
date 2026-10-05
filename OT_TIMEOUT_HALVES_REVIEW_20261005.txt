@@ -1,0 +1,23 @@
+Playoff overtime timeout halves: bounded follow-up
+
+Concrete reproduced outcomes through overtime_steps, both live and instant:
+after spending the first half's timeouts, a legal timeout request in OT3/OT5
+failed because no fresh inventory was granted. A first excess injury timeout
+in OT4 incorrectly moved the offense from the 50 to the 55, using the prior
+half's count. Four finite tests used five stubbed possessions, real timeout
+spending and real injury administration; no stochastic games were simulated.
+
+Football basis: 2026 NFL Rule 16-1-4(g) grants three timeouts per overtime half.
+Rule 4-5-4 Note 2 limits prior excess-injury timeouts to the same half.
+https://static.www.nfl.com/image/upload/fl_attachment/league/tqivdkzt9mu6wdgsh1ku.pdf
+
+Correction: period advancement refreshes the Timeouts object at OT3, OT5, etc.,
+resetting both the three-timeout inventory and prior-half injury-excess count.
+OT1-to-2 and OT3-to-4 preserve spent timeouts. Downs, possession, score, player
+state and the game book retain the existing continuation behavior.
+
+All four tests pass after the correction; combined OT warning, injury, penalty,
+winning-kick and timeout-half gate passes 38 tests. First excess in each half
+has no yardage penalty; the second excess in that same half still costs five.
+This does not estimate the rate of multiple overtimes or certify every other
+postseason OT rule, such as later coin-toss administration.

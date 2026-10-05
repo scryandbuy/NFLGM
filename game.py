@@ -3602,10 +3602,19 @@ def overtime_steps(home, away, score, rng, resolve_fn, call_off, call_def,
 
     resume_state = None
     ot_period = 1
+
+    def next_period():
+        nonlocal clock, ot_period, timeouts
+        clock = OT_PLAYOFF_LENGTH
+        ot_period += 1
+        if ot_period % 2 == 1:
+            # Rule 16 grants three timeouts per playoff OT half. A fresh
+            # inventory also ends the prior half's excess-injury count.
+            timeouts = Timeouts()
+
     while clock > 0 or pending_kick_outcome() or playoffs:
         if clock <= 0 and not pending_kick_outcome():
-            clock = OT_PLAYOFF_LENGTH
-            ot_period += 1
+            next_period()
         off = home if pos == 'home' else away
         deff = away if pos == 'home' else home
         o_st = home_state if pos == 'home' else away_state
@@ -3665,8 +3674,7 @@ def overtime_steps(home, away, score, rng, resolve_fn, call_off, call_def,
         if clock <= 0:
             # Continue the same overtime. Preserve the book, possession
             # opportunities and downs instead of recursively starting a new game.
-            clock = OT_PLAYOFF_LENGTH
-            ot_period += 1
+            next_period()
         if dr.result == 'End of half':
             start = dr.yardline
             resume_state = (dr.down, dr.togo)
