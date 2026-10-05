@@ -24,6 +24,25 @@ def setup():
 
 
 class InseasonScoutingTests(unittest.TestCase):
+    def test_specialists_manual_only_and_roster_reasons(self):
+        L, _ = setup()
+        needs = {pos: dict(need=0) for ps in IS.GROUPS.values() for pos in ps}
+        needs['LS'] = dict(need=100, starter=100)
+        needs['WR'] = dict(need=12, starter=10)
+        needs['LT'] = dict(need=11, future=10, expiring=1)
+        with patch('draft_plan.assess', return_value={'positions': needs}):
+            view = IS.priorities(L, 'MIN')
+            self.assertEqual({x['group'] for x in view['suggestions']}, {'Receivers', 'Offensive Line'})
+            self.assertTrue(any('expiring contracts' in x['why'] for x in view['suggestions']))
+            self.assertTrue(any('stronger starter' in x['why'] for x in view['suggestions']))
+            self.assertIn('Specialists', view['groups'])
+            chosen = IS.set_priorities(L, 'MIN', group1='Specialists', group2='Receivers', prospect_pid='rookie-QB1')
+            self.assertEqual(chosen['group1'], 'Specialists')
+            chosen = IS.set_priorities(L, 'MIN', use_scout=True)
+            self.assertNotIn('Specialists', (chosen['group1'], chosen['group2']))
+        with patch('inseason_scouting._choices', return_value=[]):
+            self.assertNotIn('Specialists', [x['group'] for x in IS.priorities(L, 'MIN')['suggestions']])
+
     def test_selection_and_reading_are_read_only_except_saved_priorities(self):
         L, _ = setup()
         before = copy.deepcopy(L.to_dict())

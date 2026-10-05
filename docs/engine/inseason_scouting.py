@@ -55,10 +55,11 @@ def _pick_windows(league, abbr):
 def _defaults(league, abbr, pool):
     """Roster succession and saved football reads, never prospect hidden truth."""
     import draft_plan as DP
-    positions = DP.assess(league, abbr)['positions']
+    assessment = DP.assess(league, abbr)
+    positions = assessment['positions']
     choices = _choices(league, abbr, pool)
     available = {p.pos for p in choices}
-    groups = [g for g, ps in GROUPS.items() if available.intersection(ps)]
+    groups = [g for g, ps in GROUPS.items() if g != 'Specialists' and available.intersection(ps)]
     cons = getattr(league, 'consensus', None) or {}
     mine = (getattr(league, 'scouting', None) or {}).get(abbr, {})
     windows = _pick_windows(league, abbr)
@@ -81,17 +82,23 @@ def _defaults(league, abbr, pool):
                     strengths.append((1 - distance / 21.) * min(1., max(0., (mine[p.pid]['ovr'] - 55) / 25.)))
             opportunity += max(strengths, default=0.) / rd ** .5
         score = (need + min(2., opportunity)) / (1. + .4 * focused)
-        concern = ('Starting need' if detail.get('starter', 0) >= 4 else
-                   'Succession or expiring contracts' if detail.get('future', 0) >= 4 else
-                   'Backup depth' if detail.get('depth', 0) >= 3 else 'Depth and future flexibility')
-        why = f'{concern} at {pos}. '
-        why += (f'{len(near)} prospects near your {len(windows)} owned picks. ' if windows
-                else 'No upcoming picks owned; maintain a trade-in and undrafted watchlist. ')
-        why += f'Focused {focused} earlier cycle' + ('.' if focused == 1 else 's.')
+        if detail.get('starter', 0) >= 4:
+            why = f'Look for a stronger starter at {pos}.'
+        elif detail.get('future', 0) >= 4:
+            why = (f'Prepare for expiring contracts at {pos}.' if detail.get('expiring', 0)
+                   else f'Plan for aging veterans at {pos}.' if any(
+                       p.pos in detail.get('family', (pos,)) and p.age + 2 >= (34 if pos == 'QB' else 31)
+                       for p in assessment.get('players', []))
+                   else f'Find a long-term replacement at {pos}.')
+        elif detail.get('depth', 0) >= 3:
+            why = f'Improve the depth at {pos}.'
+        else:
+            why = f'Build future depth at {pos}.'
         scored.append((score, g != 'Specialists', -list(GROUPS).index(g), g, why))
     scored.sort(reverse=True)
     suggestions = [dict(group=g, why=why) for _, _, _, g, why in scored[:2]]
     for g in GROUPS:
+        if g == 'Specialists': continue
         if len(suggestions) >= 2: break
         if not any(s['group'] == g for s in suggestions):
             suggestions.append(dict(group=g, why='No scouted prospects available in this group yet.'))

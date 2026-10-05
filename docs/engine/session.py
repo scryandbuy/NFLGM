@@ -458,8 +458,7 @@ class Session:
                           if movers else 'No large grade changes this cycle. '))
         else:
             summary = ''
-        body = ('Your scouting staff has two suggested priorities for the next two games. '
-                'Choose two position groups, or let your scout decide. Every position still gets a small background review.\n\n'
+        body = ('We recommend these two scouting priorities. Keep them or choose different groups.\n\n'
                 + summary + ('\n\n' if summary else '')
                 + '\n'.join(lines))
         message = IB.post(self.L, 'scouting_focus', f'Choose scouting priorities for Weeks {week}-{week + 1}', body,
