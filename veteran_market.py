@@ -183,6 +183,9 @@ look. Injuries and minimum/squad emergency routes remain available each week.
         if outgoing:
             league.release(outgoing.pid)
         MK.sign(league, player, winner, CAP.get(league.year, 301.2), market_apy=quote['apy'])
+        # Other acquisition routes use this saved marker as well. Camp's old
+        # offseason week-22 log must not lose its protection at cutdown week 0.
+        player.xp_spent['_cpu_added'] = [league.year, week]
         if stage != 'camp':
             team._moved_week = week
         # Enrich the ordinary signing record; don't create a second league

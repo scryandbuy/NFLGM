@@ -69,9 +69,11 @@ class VeteranMarketTests(unittest.TestCase):
         self.assertNotIn('WR0', VM.recent_commitments(self.L, self.t, 4))
 
     def test_camp_signing_does_not_disable_later_cutdown_claims(self):
-        self.candidate()
+        p = self.candidate(); self.L.week = 22
         self.assertTrue(VM.review(self.L, self.rng, 'camp'))
         self.assertNotEqual(getattr(self.t, '_moved_week', None), 0)
+        self.L.week = 0
+        self.assertIn(p.pid, VM.PS._recent_additions(self.L, self.t))
         self.L.transactions.append(dict(year=self.L.year, week=0, phase='free_agency',
             kind='waiver_claim', pid='WR1', team='MIN'))
         self.assertIn('WR1', VM.recent_commitments(self.L, self.t, 0))
