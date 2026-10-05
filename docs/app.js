@@ -623,7 +623,7 @@ function renderPortal(v) {
           el('button', { class: 'btn', onclick: () => openTradeOffer(c.id, refresh) }, 'Open'),
           el('button', { class: 'btn', onclick: () => { tradeState = { other: c.buyer.abbr, a: (c.payload.gets || []).map(String), b: (c.payload.sends || []).map(x => (x && x.pick) ? `${x.year}-${x.round}-${x.original}` : String(x)), keep: true }; location.hash = '#personnel/trades'; } }, 'Counter'),
           el('button', { class: 'btn quiet', onclick: () => { pyJSON(`__import__('inbox').decline(SESSION.L, ${c.id})`); refresh(); } }, 'Decline')));
-    } else if (c.ask != null || c.raw_kind === 'contract_year') {
+    } else if (c.pid && (c.ask != null || c.raw_kind === 'contract_year')) {
       card.append(el('div', { class: 'h' }, el('div', { class: 'k' }, 'Contracts · Final Year'), el('div', { class: 's' }, c.subject)),
         el('div', { class: 'facts2', style: 'grid-template-columns:1fr 1fr;padding:6px 0' }, el('div', {}, el('span', {}, 'Agent Asks'), el('b', {}, c.ask != null ? `$${c.ask.toFixed(1)}m` : 'Ask him')), el('div', {}, el('span', {}, 'Years Left'), el('b', {}, c.years_left ?? '—'))),
         el('div', { class: 'b' }, c.line || c.body),

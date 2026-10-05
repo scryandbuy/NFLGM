@@ -4,7 +4,7 @@ import league_notes as notes
 import advanced_stats
 
 class ContractDigests(unittest.TestCase):
-    def test_accumulates_all_players_once_and_keeps_tags_separate(self):
+    def test_new_batch_gets_new_email_and_keeps_tags_separate(self):
         players = {str(i): NS(pid=str(i), name=f'Player {i}', pos='K' if i==1 else 'WR', ovr=70) for i in range(3)}
         league = NS(year=2030, week=0, phase='offseason', user_team='GB',
                     players=players, player=lambda pid: players.get(pid), inbox=[], teams={}, transactions=[])
@@ -17,9 +17,9 @@ class ContractDigests(unittest.TestCase):
         league.transactions.append(dict(kind='extension',team='PIT',pid='1',years=2,apy=2))
         notes.transactions(league,0,pre_fa=True)
         notes.transactions(league,0,pre_fa=True)
-        self.assertEqual(len(league.inbox),2)
+        self.assertEqual(len(league.inbox),3)
         self.assertEqual(extension['id'],identity)
-        self.assertEqual(len(extension['payload']['mail_sections'][0]['rows']),2)
+        self.assertEqual(len(extension['payload']['mail_sections'][0]['rows']),1)
         self.assertEqual(advanced_stats.DEF_EPA_NOTE,'')
 
 if __name__ == '__main__': unittest.main()

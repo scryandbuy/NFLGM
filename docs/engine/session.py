@@ -538,6 +538,14 @@ class Session:
         except Exception: pass
 
     def advance(self):
+        from inbox_digest import consolidate
+        before = {m['id'] for m in getattr(self.L, 'inbox', [])}
+        try:
+            return self._advance_once()
+        finally:
+            consolidate(self.L, before)
+
+    def _advance_once(self):
         self._sync_week_health()
         PA.sync_session(self)
         # References follow a successful calendar action, not football week numbers.

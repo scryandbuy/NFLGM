@@ -434,8 +434,9 @@ def reconcile(league):
             else:
                 m['needs_decision'] = False
         elif kind == 'contract_year':
-            p = league.player(pl.get('pid')) if pl.get('pid') else None
-            done = (p is None or p.team != user or not p.contract or p.contract.years != 1
+            pids = pl.get('digest_pids') or [pl.get('pid')]
+            players = [league.player(pid) for pid in pids if pid]
+            done = (not any(p is not None and p.team == user and p.contract and p.contract.years == 1 for p in players)
                     or (year is not None and m.get('year', year) < year))
         elif kind == 'exit':
             meetings = (getattr(league, 'exit_meetings', {}) or {}).get(str(m.get('year', year)))

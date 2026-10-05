@@ -266,19 +266,10 @@ def transactions(league, week, skip_signings=False, pre_fa=False):
     for kind, rows in summaries.items():
         if not rows: continue
         key = f'pre-fa-{kind}-{league.year}'
-        old = next((m for m in getattr(league, 'inbox', []) if (m.get('payload') or {}).get('digest_key') == key), None)
-        prior = (old.get('payload') or {}).get('digest_rows', []) if old else led.get(key, [])
-        rows = prior + rows
-        led[key] = rows
         title = 'Extensions' if kind == 'extension' else 'Franchise tags'
         msg = IB.news(league, f'{title} · {league.year}', '', payload=dict(
             digest_key=key, digest_rows=rows, link='league:transactions',
             mail_sections=[IB.mail_section(title, rows)]))
-        if old is not None:
-            league.inbox.remove(msg)
-            identity = old['id']
-            old.update(msg)
-            old['id'] = identity
 
 
 def coaching_summary(league):
