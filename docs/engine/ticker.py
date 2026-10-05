@@ -61,6 +61,17 @@ def _yards(y):
     return ('loss', f"a loss of {-y} yard{'s' if -y != 1 else ''}")
 
 
+def _display_gain(spot, gain):
+    """Narrate movement between rounded field labels; leave stored stats alone."""
+    def coordinate(y):
+        return 100 - _spot_yards(100 - y) if y > 50 else _spot_yards(y)
+    applied = float(round(float(gain)))
+    finish = float(spot) - applied
+    if not 1 <= finish <= 99:
+        return gain
+    return coordinate(float(spot)) - coordinate(finish)
+
+
 def play_line(league, p, off_abbr, def_abbr):
     """Returns dict(head, text, kind) for one play dict. kind: gain|loss|score|turnover|special|neutral."""
     t = p.get('type')
@@ -74,11 +85,13 @@ def play_line(league, p, off_abbr, def_abbr):
     td = bool(p.get('touchdown') and not p.get('defensive_td'))
     spot = float(p.get('yardline') or 0)
     gain = float(p.get('yards') or 0)
+    shown_gain = (_display_gain(spot, gain) if p.get('yardline') is not None
+                  and not td and not p.get('nullified') else gain)
     near_goal_short = (t in ('run', 'complete', 'scramble') and not td and not p.get('nullified')
                        and 0 < gain < spot and 0 < spot - round(gain) < 1)
     kind = 'neutral'; text = ''
     if t == 'run':
-        cls, yd = _yards(p.get('yards', 0))
+        cls, yd = _yards(shown_gain)
         who = carrier or 'The back'
         how = {'inside_zone': 'up the middle', 'duo': 'between the tackles', 'power': 'behind the pulling guard', 'counter': 'on a counter', 'trap': 'on a trap',
                'outside_zone': 'off the edge', 'stretch': 'wide on the stretch', 'draw': 'on a draw', 'toss': 'on a toss', 'sweep': 'on a sweep'}.get(p.get('scheme'), 'inside' if p.get('sneak') else '')
@@ -92,7 +105,7 @@ def play_line(league, p, off_abbr, def_abbr):
             if p.get('broken_tackles'): text += f", breaking {int(p['broken_tackles'])} tackle{'s' if p['broken_tackles'] > 1 else ''}"
             text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
     elif t == 'complete':
-        cls, yd = _yards(_field_round(spot) if td and spot >= 1 else p.get('yards', 0))
+        cls, yd = _yards(_field_round(spot) if td and spot >= 1 else shown_gain)
         if td and 0 < gain < .5: yd = 'less than a yard'
         pre = 'Play action. ' if p.get('play_action') else ''
         press_name = passer or 'the quarterback'
@@ -122,11 +135,11 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"{passer or 'The quarterback'} to {target or 'his receiver'}, dropped."; kind = 'loss'
     elif t == 'sack':
         by = _nm(league, p.get('by')); beaten = _nm(league, p.get('beaten'))
-        loss = int(round(-gain))
+        loss = int(round(-shown_gain))
         text = f"{by or 'The rush'} sacks {passer or 'the quarterback'}" + (f" for a loss of {loss}" if loss else ' at the line of scrimmage') + (f", beating {beaten}{'' if beaten.endswith('.') else '.'}" if beaten else '.')
         kind = 'loss'
     elif t == 'scramble':
-        cls, yd = _yards(p.get('yards', 0))
+        cls, yd = _yards(shown_gain)
         text = f"{passer or 'The quarterback'} scrambles {'to inside the 1' if near_goal_short else 'for ' + yd}" + ((f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.')
         if td: text = f"{passer or 'The quarterback'} scrambles in. TOUCHDOWN."; kind = 'score'
         else: kind = cls
