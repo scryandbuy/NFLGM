@@ -26,6 +26,24 @@ class ChampionshipTimeout(unittest.TestCase):
             dict(type='interception', ret=1), 'PIT', 'GB')['text']
         self.assertIn('returned 1 yard.', text)
 
+    def test_penalty_rounding_explains_exact_spots_without_changing_save(self):
+        import copy
+        log = [dict(type='run', yardline=52.5, yards=0),
+               dict(type='penalty', penalty='Unnecessary Roughness',
+                    yards=15, on_offense=False, auto_first=True)]
+        original = copy.deepcopy(log)
+        dr = SimpleNamespace(log=log, start=52.5, yardline=37.5,
+                             result='End of half', points=0, quarter=4)
+        rows = ticker.write_game(SimpleNamespace(player=lambda pid: None),
+                                 {'drives': [('home', dr)]}, 'GB', 'PIT')
+        text = rows[0]['lines'][1]['text']
+        self.assertIn('15 yards', text)
+        self.assertIn('GB 47.5 to PIT 37.5', text)
+        self.assertEqual(log, original)
+        direct = dict(log[1], enforcement_start=60, enforcement_end=45)
+        self.assertNotIn('Enforced from', ticker.play_line(
+            SimpleNamespace(player=lambda pid: None), direct, 'GB', 'PIT')['text'])
+
 
 if __name__ == '__main__':
     unittest.main()

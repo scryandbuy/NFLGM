@@ -230,6 +230,11 @@ def play_line(league, p, off_abbr, def_abbr):
         offender = _nm(league, p.get('offender_pid'))
         owner = f'{offender} ({side})' if offender else f'the {side}'
         text = f"Penalty, {p.get('penalty', 'flag')} on {owner}, {ydtxt}" + ending
+        start, end = p.get('enforcement_start'), p.get('enforcement_end')
+        if start is not None and end is not None and abs(abs(display_field_position(start) - display_field_position(end)) - yds) > .01:
+            def precise_spot(y):
+                return f"{off_abbr} {100-y:g}" if y > 50 else 'midfield' if y == 50 else f"{def_abbr} {y:g}"
+            text += f" Enforced from {precise_spot(start)} to {precise_spot(end)} (field labels rounded)."
         kind = 'neutral'
     elif t == 'kickoff':
         who = carrier if p.get('carrier') and not p.get('touchback') else None
@@ -342,10 +347,28 @@ def write_game(league, res, home, away):
     out = []
     for i, (pos, dr) in enumerate(res['drives']):
         off = home if pos == 'home' else away; deff = away if pos == 'home' else home
+        display_log = []
+        for p in dr.log:
+            if not isinstance(p, dict):
+                continue
+            # Older saves lack enforcement coordinates. Infer only an explicit
+            # post-play foul following a retained scrimmage play.
+            if p.get('type') == 'penalty' and p.get('enforcement_start') is None and display_log:
+                import events as E
+                previous = display_log[-1]
+                if (E.PEN_INFO.get(p.get('penalty'), {}).get('phase') == 'post'
+                        and previous.get('type') in ('run', 'complete', 'scramble', 'sack')
+                        and previous.get('yardline') is not None
+                        and not any(previous.get(k) for k in ('nullified', 'touchdown', 'fumble_lost'))
+                        and not p.get('on_try')):
+                    start = float(previous['yardline']) - round(float(previous.get('yards', 0) or 0))
+                    end = start + float(p.get('yards', 0)) * (1 if p.get('on_offense') else -1)
+                    p = dict(p, enforcement_start=start, enforcement_end=end)
+            display_log.append(p)
         lines = [x for x in (play_line(league, p,
                  home if p.get('possession', pos) == 'home' else away,
                  away if p.get('possession', pos) == 'home' else home)
-                 for p in dr.log if isinstance(p, dict)) if x]
+                 for p in display_log) if x]
         real = [p for p in dr.log if isinstance(p, dict) and not p.get('nullified') and p.get('type') in ('run', 'complete', 'incomplete', 'drop', 'interception', 'sack', 'scramble', 'kneel', 'spike', 'punt', 'field_goal')]
         yards = sum(float(p.get('yards', 0) or 0) for p in real if p.get('type') in ('run', 'complete', 'sack', 'scramble', 'kneel'))
         q = int(getattr(dr, 'quarter', 1) or 1)

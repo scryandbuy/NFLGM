@@ -3079,6 +3079,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 continue
             if taken == 'added':
                 penalty_entry = dict(type='penalty', **live_pen)
+                penalty_entry['enforcement_start'] = dr.yardline - float(round(float(out.get('yards', 0) or 0)))
+                penalty_entry['enforcement_end'] = penalty_entry['enforcement_start'] - dr.log_pen_after
                 dr.log.append(penalty_entry)
 
         # THE BOOK IS WRITTEN HERE, after the flags and the scramble are settled: a play wiped by a penalty or
