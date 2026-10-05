@@ -3367,6 +3367,24 @@ function transactionWhen(r) {
   if (r.week) return ({19:'Wild Card',20:'Divisional Round',21:'Conference Championship',22:'Championship Game'})[r.week] || `Week ${r.week}`;
   return r.phase ? r.phase.charAt(0).toUpperCase() + r.phase.slice(1).replaceAll('_', ' ') : '';
 }
+function showTransactionTrade(row) {
+  const dialog = el('dialog', {class:'retain-dialog trade-dialog', 'aria-label':'Trade details'});
+  const body = el('div', {class:'retain-dialog-body'}, el('h2', {}, 'Trade'), el('small', {}, row.period || ''));
+  for (const side of row.trade?.sides || []) {
+    body.append(el('h3', {}, `${side.team.name} receives`));
+    const list = el('ul', {});
+    for (const asset of side.assets) {
+      const name = asset.pid ? playerMention(asset.pid, asset.label) : asset.label;
+      if (asset.pid) name.addEventListener('click', () => dialog.close());
+      list.append(el('li', {}, name));
+    }
+    body.append(side.assets.length ? list : el('p', {}, 'No assets recorded'));
+  }
+  const close = el('button', {class:'btn go', onclick:() => dialog.close()}, 'Close');
+  dialog.append(body, el('div', {class:'retain-dialog-actions'}, close));
+  dialog.addEventListener('close', () => dialog.remove(), {once:true});
+  document.body.append(dialog); dialog.showModal(); close.focus();
+}
 function renderTransactions(v) {
   renderRail(v.rail); const page = persPage(); lgSecond('transactions');
   const copyTx = el('button', { class: 'btn quiet transaction-copy', 'data-tip': 'Copy the list as filtered, every entry, as text', onclick: () => {
@@ -3385,7 +3403,7 @@ function renderTransactions(v) {
     if (txGroup !== 'Coaching' && rows.length) list.append(el('div',{class:'transaction-columns','aria-hidden':'true'},...['WHEN','TEAM','MOVE','PLAYER / COACH','DETAILS',''].map(label=>el('span',{},label))));
     for (const r of rows.slice(0, txShown)) {
       if (r.coaching) { list.append(coachingMoveRow(r)); continue; }
-      const link = r.link === 'trade' ? el('a', { class: 'transaction-open', href: '#personnel/trades', 'aria-label':'Open trades', 'data-tip':'Open trades' }, '›') : r.link === 'carousel' ? el('button', { class:'transaction-open', 'aria-label':'View coaching transactions', 'data-tip':'View coaching transactions', onclick:()=>{txGroup='Coaching';txShown=60;renderTransactions(v);} }, '›') : el('span', {});
+      const link = r.link === 'trade' ? el('button', { class: 'transaction-open', onclick:()=>showTransactionTrade(r), 'aria-label':'View trade', 'data-tip':'View trade' }, '›') : r.link === 'carousel' ? el('button', { class:'transaction-open', 'aria-label':'View coaching transactions', 'data-tip':'View coaching transactions', onclick:()=>{txGroup='Coaching';txShown=60;renderTransactions(v);} }, '›') : el('span', {});
       const theme = teamTheme(r.team || {});
       list.append(el('div', { class: 'transaction-row', style:`--transaction-base:${theme.base};--transaction-accent:${theme.accent};--transaction-readable:${theme.readable}` },
         el('time', {}, String(r.year ?? ''), el('small',{},transactionWhen(r))),

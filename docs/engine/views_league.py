@@ -385,10 +385,37 @@ def _transaction_subject(league, x):
     return dict(person=name or 'League update', role=role, detail=detail, detail_secondary='')
 
 
+def _transaction_trade(league, x, index):
+    """Describe the completed deal using its saved assets, not current ownership."""
+    if x.get('kind') == 'inbox_trade':
+        # The inbox audit entry follows the full trade. Older inbox summaries
+        # may contain only selection numbers, so use the preceding trade log.
+        for previous in range(index - 1, -1, -1):
+            event = league.transactions[previous]
+            if (event.get('year'), event.get('week')) != (x.get('year'), x.get('week')):
+                break
+            if (event.get('kind') == 'trade' and event.get('a') == x.get('buyer')
+                    and event.get('b_sends') == x.get('gets')):
+                x = event
+                break
+    a = x.get('a') or x.get('buyer')
+    b = x.get('b') or x.get('seller') or getattr(league, 'user_team', None)
+
+    def asset(value):
+        p = league.player(value) if isinstance(value, str) else None
+        if p: return dict(pid=p.pid, label=p.name)
+        return dict(label=_asset(league, value))
+
+    return dict(sides=[dict(team=club(a), assets=[asset(v) for v in x.get('b_sends', x.get('gets', []))]),
+                       dict(team=club(b), assets=[asset(v) for v in x.get('a_sends', x.get('sent', []))])])
+
+
 def transactions(session, league, abbr, n=150):
     """The most recent n of each group, so a cut-down day's hundreds of squad signings do not push the cuts and claims off the page."""
     rows = []; per = {}
-    for x in reversed(league.transactions[-6000:]):
+    history = league.transactions
+    for index in range(len(history) - 1, max(-1, len(history) - 6001), -1):
+        x = history[index]
         k = x.get('kind')
         if k not in TAGS: continue
         g = GROUP_TAG.get(k, 'Other')
@@ -401,7 +428,7 @@ def transactions(session, league, abbr, n=150):
         link = ('trade' if k in ('trade', 'inbox_trade') else 'contract' if k in ('extension', 'sign', 'tag', 'restructure') else 'carousel' if grp == 'Coaching' else 'card' if x.get('pid') else None)
         tag = _staff_departure_action(x.get('why')) if k == 'staff_out' else TAGS.get(k, k)
         rows.append(dict(year=x.get('year'), week=x.get('week'), phase=x.get('phase'), period=transaction_period(x), kind=k, tag=tag, group=grp, line=_tx_line(league, x), mine=(abbr in involved),
-                        pid=x.get('pid'), team=(club(team) if team in league.teams else None), division=(league.teams[team].division if team in league.teams else None), divisions=divisions, link=link, i=len(rows), **_transaction_subject(league, x)))
+                        trade=(_transaction_trade(league, x, index) if link == 'trade' else None), pid=x.get('pid'), team=(club(team) if team in league.teams else None), division=(league.teams[team].division if team in league.teams else None), divisions=divisions, link=link, i=len(rows), **_transaction_subject(league, x)))
     return dict(rail=rail(session, league, abbr), rows=rows, coaching_moves=_coaching_moves(league, recent=False), groups=['Trades', 'Signings', 'Cuts', 'Claims', 'Practice Squad', 'Extensions', 'Tags', 'Coaching'], my_division=league.teams[abbr].division)
 
 

@@ -127,6 +127,21 @@ class LeagueViews(unittest.TestCase):
         self.L.transactions=[dict(kind='trade',year=2027,a='KC',b='GB',a_sends=[],b_sends=[])]
         row=V.transactions(None,self.L,'GB')['rows'][0]
         self.assertTrue(row['mine']);self.assertIn('United North',row['divisions'])
+
+    def test_historical_trade_opens_its_saved_assets(self):
+        self.player('Receiver', 'WR', {})
+        pick='DraftPick(year=2028, round=2, original=GB)'
+        trade=dict(kind='trade',year=2027,week=8,a='KC',b='GB',
+                   a_sends=['Receiver'],b_sends=[pick])
+        inbox=dict(kind='inbox_trade',year=2027,week=8,buyer='KC',seller='GB',
+                   sent=['Receiver'],gets=[pick])
+        self.L.transactions=[trade,inbox]
+        rows=V.transactions(None,self.L,'GB')['rows']
+        for row in rows:
+            sides=row['trade']['sides']
+            self.assertEqual([side['team']['abbr'] for side in sides],['KC','GB'])
+            self.assertIn('R2',sides[0]['assets'][0]['label'])
+            self.assertEqual(sides[1]['assets'],[dict(pid='Receiver',label='Receiver')])
     def test_transactions_keep_coaching_ledger_and_legacy_departure(self):
         self.L.transactions=[dict(kind='gm_change',year=2027,team='GB',hired='New Coach'),
                              dict(kind='staff_out',year=2027,team='MIN',role='dc',name='Old DC',why='unit bottom-eight two years running')]
