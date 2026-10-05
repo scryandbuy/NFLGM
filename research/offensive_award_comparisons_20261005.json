@@ -1,0 +1,209 @@
+{
+  "exceptional_pocket": {
+    "before_winner": "Quarterback",
+    "after_winner": "Quarterback",
+    "players": {
+      "Quarterback": {
+        "position": "QB",
+        "production": {
+          "pass_att": 650,
+          "pass_cmp": 450,
+          "pass_yds": 5200,
+          "pass_td": 52,
+          "ints": 5,
+          "rush_yds": 80
+        },
+        "before_opoy": 2586.523,
+        "after_opoy": 2486.0
+      },
+      "Back": {
+        "position": "HB",
+        "production": {
+          "rush_yds": 1400,
+          "rush_td": 12,
+          "rec": 35,
+          "rec_yds": 250,
+          "rec_td": 2
+        },
+        "before_opoy": 2017.5,
+        "after_opoy": 2017.5
+      },
+      "Receiver": {
+        "position": "WR",
+        "production": {
+          "rec": 100,
+          "rec_yds": 1500,
+          "rec_td": 12
+        },
+        "before_opoy": 1990.0,
+        "after_opoy": 1990.0
+      }
+    }
+  },
+  "exceptional_receiver": {
+    "before_winner": "Quarterback",
+    "after_winner": "Receiver",
+    "players": {
+      "Quarterback": {
+        "position": "QB",
+        "production": {
+          "pass_att": 650,
+          "pass_cmp": 450,
+          "pass_yds": 5200,
+          "pass_td": 52,
+          "ints": 5,
+          "rush_yds": 80
+        },
+        "before_opoy": 2586.523,
+        "after_opoy": 2486.0
+      },
+      "Back": {
+        "position": "HB",
+        "production": {
+          "rush_yds": 1400,
+          "rush_td": 12,
+          "rec": 35,
+          "rec_yds": 250,
+          "rec_td": 2
+        },
+        "before_opoy": 2017.5,
+        "after_opoy": 2017.5
+      },
+      "Receiver": {
+        "position": "WR",
+        "production": {
+          "rec": 130,
+          "rec_yds": 1900,
+          "rec_td": 18
+        },
+        "before_opoy": 2585.0,
+        "after_opoy": 2585.0
+      }
+    }
+  },
+  "exceptional_back": {
+    "before_winner": "Back",
+    "after_winner": "Back",
+    "players": {
+      "Quarterback": {
+        "position": "QB",
+        "production": {
+          "pass_att": 650,
+          "pass_cmp": 450,
+          "pass_yds": 5200,
+          "pass_td": 52,
+          "ints": 5,
+          "rush_yds": 80
+        },
+        "before_opoy": 2586.523,
+        "after_opoy": 2486.0
+      },
+      "Back": {
+        "position": "HB",
+        "production": {
+          "rush_yds": 2200,
+          "rush_td": 18,
+          "rec": 40,
+          "rec_yds": 300,
+          "rec_td": 2
+        },
+        "before_opoy": 3000.0,
+        "after_opoy": 3000.0
+      },
+      "Receiver": {
+        "position": "WR",
+        "production": {
+          "rec": 130,
+          "rec_yds": 1900,
+          "rec_td": 18
+        },
+        "before_opoy": 2585.0,
+        "after_opoy": 2585.0
+      }
+    }
+  },
+  "dual_threat": {
+    "before_winner": "Receiver",
+    "after_winner": "Quarterback",
+    "players": {
+      "Quarterback": {
+        "position": "QB",
+        "production": {
+          "pass_att": 520,
+          "pass_cmp": 340,
+          "pass_yds": 3700,
+          "pass_td": 28,
+          "ints": 9,
+          "rush_yds": 1000,
+          "rush_td": 10
+        },
+        "before_opoy": 1260.262,
+        "after_opoy": 2742.0
+      },
+      "Back": {
+        "position": "HB",
+        "production": {
+          "rush_yds": 1400,
+          "rush_td": 12,
+          "rec": 35,
+          "rec_yds": 250,
+          "rec_td": 2
+        },
+        "before_opoy": 2017.5,
+        "after_opoy": 2017.5
+      },
+      "Receiver": {
+        "position": "WR",
+        "production": {
+          "rec": 130,
+          "rec_yds": 1900,
+          "rec_td": 18
+        },
+        "before_opoy": 2585.0,
+        "after_opoy": 2585.0
+      }
+    }
+  },
+  "modest_rushing": {
+    "before_winner": "Receiver",
+    "after_winner": "Receiver",
+    "players": {
+      "Quarterback": {
+        "position": "QB",
+        "production": {
+          "pass_att": 520,
+          "pass_cmp": 340,
+          "pass_yds": 3700,
+          "pass_td": 28,
+          "ints": 9,
+          "rush_yds": 180,
+          "rush_td": 2
+        },
+        "before_opoy": 1101.862,
+        "after_opoy": 1762.0
+      },
+      "Back": {
+        "position": "HB",
+        "production": {
+          "rush_yds": 1400,
+          "rush_td": 12,
+          "rec": 35,
+          "rec_yds": 250,
+          "rec_td": 2
+        },
+        "before_opoy": 2017.5,
+        "after_opoy": 2017.5
+      },
+      "Receiver": {
+        "position": "WR",
+        "production": {
+          "rec": 130,
+          "rec_yds": 1900,
+          "rec_td": 18
+        },
+        "before_opoy": 2585.0,
+        "after_opoy": 2585.0
+      }
+    }
+  }
+}

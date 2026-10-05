@@ -1,43 +1,14 @@
-"""
-THE AWARDS.
+"""Regular-season honors from recorded production and award-specific context.
 
-Every rule here was fitted against the last fifteen real winners and their
-actual season stat lines, not reasoned from what an award sounds like. What
-the data said, in short:
+These are transparent game-design scores, not a fitted model of AP ballots.
+MVP emphasizes quarterback efficiency and team record. OPOY and OROY compare
+combined offensive production on one scale; they do not target a position mix.
+Rookie eligibility limits the OROY/DROY field without changing how production
+is scored. Defensive and blocking honors use their respective recorded roles.
 
-  MVP is a TEAM award wearing a player's name. Fourteen of fifteen winners
-  were quarterbacks, and every single one played for a top-10 team - median
-  rank 2, and not one MVP in fifteen years came off a sub-.500 club. Passing
-  YARDS is a bad predictor: median rank 5 and Lamar Jackson won in 2019
-  ranked 22nd. Efficiency and touchdowns are what track.
-
-  OPOY is the opposite shape. Six running backs, five quarterbacks, four
-  receivers - it rotates - and thirteen of fifteen LED THE LEAGUE outright in
-  a headline counting stat for their position. Team record barely features.
-
-  DPOY is a pass-rush award. Thirteen of fifteen winners rush the passer, and
-  the marker is sacks with tackles for loss and quarterback hits alongside.
-  The two corners who won did it on a different axis entirely: Gilmore in
-  2019 led the league in both interceptions and passes defended.
-
-  THE ROOKIE AWARDS ARE NOT LEAGUE-WIDE. Five of fifteen offensive winners
-  and six of fifteen defensive winners ranked nothing in the league top ten.
-  It is a within-class competition, so it is scored against the rookie class
-  and nothing else.
-
-  COACH OF THE YEAR IS IMPROVEMENT. Median +0.412 win percentage over the
-  previous season, roughly seven wins, and not one winner in fifteen years
-  had a worse record than the year before. But you cannot win it from 6-11
-  either: record rank median 4, worst 10.
-
-  PROTECTOR OF THE YEAR has one season of history, so there is nothing to
-  fit. It is built from the line stats plus the team context Omar asked for -
-  sacks allowed, rushing, scoring, record - which is the same shape as MVP,
-  where the team constraint did most of the work.
-
-Ballots are cast at the end of the regular season and BEFORE the playoffs,
-which is why this reads league.stats and never league.post_stats. Championship Game
-MVP is the exception and reads a single game.
+Ballots use league.stats, never playoff totals. Championship Game MVP is the
+exception and reads one game's book. EPA exists in newer books, but these
+scores use counting statistics available in historical saves as well.
 """
 import numpy as np
 
@@ -111,9 +82,10 @@ class Ballot:
     # ---- scoring ------------------------------------------------------
     def passer_score(self, line):
         """
-        A stand-in for EPA, which the sim does not compute. Fitted to the
-        shape the real winners have: touchdowns carry, interceptions cost,
-        efficiency per attempt matters and raw volume barely does.
+        Quarterback award score: passing efficiency plus ground production.
+        The rushing/receiving terms credit yards and scores actually gained;
+        a touchdown has the same weight whether passed, run or caught. This
+        is an award heuristic, not EPA or a reconstruction of real voting.
         """
         att = _g(line, 'pass_att')
         if att < 200:
@@ -122,15 +94,37 @@ class Ballot:
         td, ints = _g(line, 'pass_td'), _g(line, 'ints')
         comp = _g(line, 'pass_cmp') / att
         return (4.2 * td - 4.0 * ints + 22.0 * (ypa - 6.5)
-                + 60.0 * (comp - 0.63) + 1.8 * _g(line, 'rush_td'))
+                + 60.0 * (comp - 0.63)
+                + 0.04 * (_g(line, 'rush_yds') + _g(line, 'rec_yds'))
+                + 4.2 * (_g(line, 'rush_td') + _g(line, 'rec_td'))
+                - 4.0 * self.lost_fumbles(line))
+
+    @staticmethod
+    def lost_fumbles(line):
+        """Canonical and legacy keys describe the same losses; never add them."""
+        return max(_g(line, 'fumbles_lost'), _g(line, 'fum_lost'))
 
     def skill_score(self, line):
-        """Total offensive production for a non-quarterback."""
+        """Scrimmage production, including the cost of losing possession."""
         # yards and touchdowns carry it; receptions count a little. At 4 a
         # catch a 115-catch receiver out-scored a 1,400-yard back every year
         return (_g(line, 'rush_yds') + _g(line, 'rec_yds')
                 + 20.0 * (_g(line, 'rush_td') + _g(line, 'rec_td'))
-                + 2.5 * _g(line, 'rec'))
+                + 2.5 * _g(line, 'rec') - 25.0 * self.lost_fumbles(line))
+
+    def offensive_score(self, line):
+        """One OPOY/OROY scale, combining every recorded offensive role.
+
+        The passing component uses adjusted passing yards (20 per TD, -45
+        per INT), discounted to 40% because passing production is shared
+        with receivers. That conversion is a game-design judgment, not a
+        measured responsibility share or positional quota. Scrimmage yards
+        have identical value for a QB, back or receiver. A lost fumble is
+        charged once in skill_score, including a quarterback's strip-sack.
+        """
+        passing = (_g(line, 'pass_yds') + 20.0 * _g(line, 'pass_td')
+                   - 45.0 * _g(line, 'ints'))
+        return self.skill_score(line) + 0.4 * passing
 
     def rush_score(self, line):
         """Front-seven production, including their recorded plays in coverage."""
@@ -195,14 +189,12 @@ class Ballot:
 
     def opoy(self):
         """
-        Position-agnostic and largely record-agnostic: the most dominant
-        counting-stat season on offence. Thirteen of fifteen winners led the
-        league outright in a headline stat.
+        Combined offensive production, independent of team record.
+        No position is scheduled or guaranteed a share of winners.
         """
         best, who = -1e9, None
         for p, line in self.players():
-            # a quarterback wins this about one year in eight, not most years
-            s = max(self.skill_score(line), self.passer_score(line) * 11.0)
+            s = self.offensive_score(line)
             if s > 0 and s > best:
                 best, who = s, p
         return who
@@ -221,7 +213,7 @@ class Ballot:
         """Scored against the ROOKIE CLASS, not the league."""
         best, who = -1e9, None
         for p, line in self.players(lambda p, l: self.is_rookie(p)):
-            s = max(self.skill_score(line), self.passer_score(line) * 9.0)
+            s = self.offensive_score(line)
             if s > 0 and s > best:
                 best, who = s, p
         return who
