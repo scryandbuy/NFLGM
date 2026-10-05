@@ -141,6 +141,30 @@ class HalftimeChoices(CoherenceChecks, unittest.TestCase):
         self.assertIn('pass_defense', [r['review_key'] for r in passing])
         self.assertNotIn('run_defense', [r['review_key'] for r in passing])
 
+    def test_pressure_run_explanation_connects_observations_to_tradeoff(self):
+        rows = self.recs(opp=dict(runs=11, run_yds=55, passes=18, pass_yds=100))
+        chosen = next(r for r in rows if r['review_key'] == 'pressure_defense')
+        self.assertIn('5.0 yards a carry on 11 runs', chosen['why'])
+        self.assertIn("haven't sacked or pressured their quarterback in 18 dropbacks", chosen['why'])
+        self.assertIn('get the ball out sooner', chosen['why'])
+        self.assertIn('fewer defenders', chosen['why'])
+        self.assertNotIn('We also weighed', chosen['why'])
+        self.assertNotIn('On balance', chosen['why'])
+        self.assertEqual(chosen['changes'], {'blitz_lean': .06})
+        other = self.recs(opp=dict(runs=11, run_yds=55, passes=18, pass_yds=100, pressures=1))
+        why = next(r['why'] for r in other if r['review_key'] == 'pressure_defense')
+        self.assertIn('only 1 of 18 dropbacks', why)
+        self.assertNotIn("haven't", why)
+
+    def test_explanation_does_not_change_selected_advice(self):
+        rows = [suggestion('Box', {'box_bias': .12}, 3),
+                suggestion('Deep', {'shell_lean': .15}, 4)]
+        result = CC.resolve(rows)
+        self.assertEqual([r['text'] for r in result], ['Deep'])
+        self.assertEqual(result[0]['changes'], {'shell_lean': .15})
+        self.assertIn('pulling them toward the line', result[0]['why'])
+        self.assertNotIn('We also weighed', result[0]['why'])
+
     def test_protection_does_not_resurrect_failed_screens(self):
         rows = self.recs(own=dict(passes=24, pressures=9, screens=9, screen_yds=-18))
         keys = {r['review_key'] for r in rows}

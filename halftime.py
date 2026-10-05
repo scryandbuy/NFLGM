@@ -137,4 +137,4 @@ def recommendations(league, me_abbr, opp_abbr, drives, me_side, score, plan, bas
         # Old live saves replay choices by index. Preserve their historical
         # list and changes until that game ends, including the six-row cutoff.
         return [{k: v for k, v in s.items() if k != '_priority'} for s in out[:6]]
-    return resolve(out, limit=6)
+    return resolve(out, limit=6, context=dict(me=me, them=them))
