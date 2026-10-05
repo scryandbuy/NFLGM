@@ -318,7 +318,7 @@ def scouting_suggestions(league, me, opp, all_grades=None):
 
     def add(side, text, why, changes):
         suggestions.append(dict(side=side, text=text,
-                                why=f'Pregame projection: {why}; current-season tape is not available yet',
+                                why=f'Pregame projection: {why}',
                                 changes=changes, basis='projection'))
 
     receiver_edge = edge('receivers', 'corners')
