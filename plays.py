@@ -565,7 +565,9 @@ def resolve_play(off, deff, off_call, def_call, yards_to_endzone, rng):
     else:
         out = _run_play(off, deff, off_call, def_call, yards_to_endzone, rng)
     if isinstance(out, dict):
-        if not out.get('carrier'): out['carrier'] = (off.get('rb') or off.get('qb') or {}).get('pid') if not off_call.get('sneak') else (off.get('qb') or {}).get('pid')
+        if not out.get('carrier'):
+            runner = off.get('qb') if off_call.get('sneak') else (off.get('rb') or off.get('qb'))
+            out['carrier'] = out.get('carrier_pid') or (runner or {}).get('pid')
         if 'tackler' not in out and not out.get('touchdown'):
             out['tackler'] = _likely_tackler(deff, out, rng, pass_play=False)
     return out
@@ -666,6 +668,11 @@ def available_depths(ytg):
     return ['short', 'medium', 'deep']
 
 def _run_play(off, deff, off_call, def_call, ytg, rng):
+    qb_run = bool(off_call.get('qb_run'))
+    carrier = off['qb'] if qb_run else (off.get('rb') or off['qb'])
+    carrier_meta = dict(carrier_pid=carrier.get('pid'))
+    if qb_run:
+        carrier_meta.update(qb_run=True, qb_run_chance=off_call.get('qb_run_chance'))
     execution = float(np.clip(off_call.get('execution_mod', 1.0), 0.94, 1.06))
     scheme = off_call.get('scheme', 'inside_zone')
     fam = S.RUN_SCHEMES[scheme]['family']
@@ -691,7 +698,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     from run_blocking import support_blocks
     support_yards, support = support_blocks(off, roles,
         {DRUSH.player_key(b) for b, _ in contests},
-        {DRUSH.player_key(d) for _, d in contests}, scheme, rate)
+        {DRUSH.player_key(d) for _, d in contests}, scheme, rate, carrier=carrier)
     # Same as protection: the per-blocker result already exists and was only
     # ever averaged away. A run block win is beating the man across from you,
     # which is a positive edge.
@@ -731,12 +738,12 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
         ybc /= execution
         return dict(type='run', yards=round(float(ybc), 1), scheme=scheme,
                     broken_tackles=0, touchdown=False, ybc=round(float(ybc), 1),
-                    rb_reps=rb_reps, rb_award=rb_award, run_support=support)
+                    rb_reps=rb_reps, rb_award=rb_award, run_support=support, **carrier_meta)
 
     chasers = defenders[len(front):] + defenders[:len(front)]
     # The same wall applies to a run: yards after contact collapse near the
     # goal because there is nowhere to break to.
-    out = resolve_yards_after(off.get('rb') or off['qb'], chasers, ytg, rng,
+    out = resolve_yards_after(carrier, chasers, ytg, rng,
                               contact_at=ybc, gain_scale=execution)
     ybc *= execution
     if not out['touchdown']:
@@ -745,7 +752,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
         after = max(0.0, out['yards'] - ybc)
         out['yards'] = round(ybc + after * _compression(ytg), 1)
     out.update(type='run', scheme=scheme, ybc=round(float(ybc), 1),
-               rb_reps=rb_reps, rb_award=rb_award, run_support=support)
+               rb_reps=rb_reps, rb_award=rb_award, run_support=support, **carrier_meta)
     return out
 
 # Fitted on nflverse 2021-24 regular-season turnover returns; 2025 held out.

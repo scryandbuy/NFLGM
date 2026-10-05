@@ -7,7 +7,7 @@ OL = frozenset(('LT', 'LG', 'C', 'RG', 'RT'))
 
 
 def support_blocks(offense, defense_roles, engaged_blockers, engaged_defenders,
-                   scheme, rate):
+                   scheme, rate, carrier=None):
     """Match free linemen/lead/attached/perimeter blockers with unique defenders.
 
     Equal blocking and shedding grades add zero yards. Extra personnel alone
@@ -15,7 +15,8 @@ def support_blocks(offense, defense_roles, engaged_blockers, engaged_defenders,
     Role metadata matters when a TE or HB fills the fullback assignment.
     """
     role_by_id = {player_key(p): role for role, p in offense.get('offensive_assignments', ())}
-    carrier = offense.get('rb') or offense.get('qb') or {}
+    carrier = carrier or offense.get('rb') or offense.get('qb') or {}
+    qb_carry = player_key(carrier) == player_key(offense.get('qb') or {})
     excluded = set(engaged_blockers) | {player_key(carrier)}
     if offense.get('qb'): excluded.add(player_key(offense['qb']))
     pool = {}
@@ -24,14 +25,14 @@ def support_blocks(offense, defense_roles, engaged_blockers, engaged_defenders,
             if p and player_key(p) not in excluded:
                 pool[player_key(p)] = p
     role = lambda p: role_by_id.get(player_key(p), p.get('pos', ''))
-    priority = lambda p: (0 if role(p) in OL else 1 if role(p) == 'FB' else 2 if role(p) == 'TE' else 3, player_key(p))
+    priority = lambda p: (0 if role(p) in OL else 1 if role(p) in ('FB', 'HB') else 2 if role(p) == 'TE' else 3, player_key(p))
     defenders = {player_key(a['player']): a for a in defense_roles
                  if player_key(a['player']) not in engaged_defenders}
     wide = scheme in ('outside_zone', 'stretch')
     blocks = []
     for blocker in sorted(pool.values(), key=priority):
         job = role(blocker)
-        if job not in OL | {'FB', 'TE', 'WR'} or not defenders:
+        if job not in OL | {'FB', 'TE', 'WR'} | ({'HB'} if qb_carry else set()) or not defenders:
             continue
         def proximity(a):
             alignment = a.get('alignment', '')
@@ -47,7 +48,7 @@ def support_blocks(offense, defense_roles, engaged_blockers, engaged_defenders,
         base = rate(blocker, {'run_block_rating': 1.0})
         if job in OL:
             attack, weight = second, 1.0
-        elif job == 'FB':
+        elif job in ('FB', 'HB'):
             attack = rate(blocker, {'lead_block_rating': .50, 'impact_block_rating': .20,
                                    'run_block_rating': .20, 'strength_rating': .10})
             weight = 1.0

@@ -372,6 +372,62 @@ BLITZ_NEUTRAL = 0.384         # the catalog's mean blitz lean
 BLITZ_BASE = 0.048            # was 0.085 centred at 0.35; the coverage call's fire zones and cover 0 add about six points on their own
 
 
+def designed_qb_run_chance(offense, defense, call, def_call, rate_fn, *,
+                           condition=100., healthy_backups=1):
+    """Share of already-called runs entrusted to the selected quarterback.
+
+    A keep uses the same installed run scheme and gives the back a lead-block
+    job. These are coaching judgments, not a measured league carry target.
+    The handoff remains the alternative, including for an athletic passer.
+    """
+    qb = offense.get('qb')
+    if (not qb or qb.get('pos') != 'QB' or call.get('is_pass')
+            or call.get('sneak') or call.get('protect_ball') or condition <= 60):
+        return 0.
+    mobility = rate_fn(qb, {'speed_rating': .5, 'agility_rating': .3, 'accel_rating': .2})
+    athlete = float(np.clip((mobility - .75) / .20, 0., 1.))
+    if not athlete:
+        return 0.  # A pocket passer's sneak is a different short-yardage job.
+    down, distance = call.get('down', 1), call.get('ydstogo', 10)
+    seconds, margin = call.get('seconds'), call.get('score_diff', 0)
+    if seconds is not None and seconds <= 30:
+        return 0.  # Preserve a scoring throw/kick, or let the back burn clock.
+    if down >= 3 and distance > 6:
+        return 0.  # Do not turn a long-yardage handoff into extra QB exposure.
+    risk = float(np.clip(call.get('qb_run_aggression', .5), 0., 1.))
+    choice = .24 * athlete * athlete * (.6 + .8 * risk)
+    # Coach identity already determines the run's frequency and scheme. The
+    # ballcarrier choice also values the handoff and its opportunity cost.
+    rb = offense.get('rb')
+    if rb:
+        back_run = rate_fn(rb, {'speed_rating': .3, 'agility_rating': .3,
+                               'bcv_rating': .2, 'break_tackle_rating': .2})
+        choice *= float(np.clip(1. + 1.5 * (mobility - back_run), .7, 1.15))
+    security = rate_fn(qb, {'carry_rating': .7, 'awareness_rating': .3})
+    choice *= float(np.clip(1. + 1.5 * (security - .70), .55, 1.15))
+    import defensive_rush as DR
+    roles = DR.assignments(defense, def_call)
+    contain = [a['player'] for a in roles if a['alignment'] in DR.EDGES
+               or a['alignment'].startswith('offball_')]
+    if contain:
+        pursuit = float(np.mean([rate_fn(p, {'pursuit_rating': .4,
+                    'play_rec_rating': .3, 'speed_rating': .3}) for p in contain]))
+        choice *= float(np.clip(1. + 2. * (mobility - pursuit), .55, 1.2))
+    choice *= float(np.clip(1. - .12 * (def_call.get('box', 7) - 6), .5, 1.15))
+    if distance <= 3:
+        choice *= 1.2
+    if seconds is not None and seconds <= 120:
+        choice *= .3 if margin <= 0 else .4
+    elif seconds is not None and seconds <= 240 and margin > 0:
+        choice *= .55
+    if abs(margin) >= 17:
+        choice *= .4
+    choice *= float(np.clip((condition - 60.) / 35., 0., 1.))
+    if healthy_backups < 1:
+        choice *= .35
+    return float(np.clip(choice, 0., .32))
+
+
 def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
                  secs_left=None, offense=None, rate_fn=None, lean=None):
     """Full offensive call: personnel, formation, pass or run, and the concept.
