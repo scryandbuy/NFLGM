@@ -97,14 +97,14 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"{who} {'sneaks' if p.get('sneak') else 'keeps' if p.get('qb_run') else 'runs'}{(' ' + how) if how else ''} {'to inside the 1' if near_goal_short else 'for ' + yd}"
         if td:
             yl = float(p.get('yardline', 1) or 1)
-            origin = 'inside the 1' if 0 < yl < 1 else f'the {_field_round(yl)}'
+            origin = 'inside the 1' if 0 < yl < 1 else f'the {display_field_position(yl, off_abbr, def_abbr)}'
             text = f"{who} runs it in from {origin}. TOUCHDOWN."; kind = 'score'
         else:
             kind = cls
             if p.get('broken_tackles'): text += f", breaking {int(p['broken_tackles'])} tackle{'s' if p['broken_tackles'] > 1 else ''}"
             text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
     elif t == 'complete':
-        cls, yd = _yards(_field_round(spot) if td and spot >= 1 else shown_gain)
+        cls, yd = _yards(display_field_position(spot, off_abbr, def_abbr) if td and spot >= 1 else shown_gain)
         if td and 0 < gain < .5: yd = 'less than a yard'
         pre = 'Play action. ' if p.get('play_action') else ''
         press_name = passer or 'the quarterback'
