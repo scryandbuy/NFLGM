@@ -38,7 +38,9 @@ _field_round = _spot_yards
 
 def _spot(yardline_100, off_abbr, def_abbr):
     """yardline is yards to the end zone. 60 means own 40."""
-    y = _spot_yards(yardline_100)
+    # Round distance from the nearest goal, independent of possession.
+    y = (100 - _spot_yards(100 - yardline_100) if yardline_100 > 50
+         else _spot_yards(yardline_100))
     if 0 < yardline_100 < 1.0: return f"inside the {def_abbr} 1"
     if y > 50: return f"{off_abbr} {max(1, 100 - y)}"
     if y == 50: return "50"
@@ -233,6 +235,10 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"{who} ({p.get('pos', '')}) is hurt on the play" + (' and will not return.' if wk >= 2 else '; he is done for the day.' if wk == 1 else '.'); kind = 'neutral'
     elif t == 'timeout':
         text = f"Timeout, {'the offense' if p.get('side') == 'off' else p.get('side_abbr') or p.get('side', '').upper()} ({p.get('left', 0)} left)."; kind = 'neutral'
+        if p.get('reason') == 'injury':
+            text = ('Excess injury timeout, ' if p.get('excess') else 'Injury timeout, ') + (p.get('side_abbr') or p.get('side', '').upper()) + f" ({p.get('left', 0)} left)."
+    elif t == 'injury_runoff':
+        text = 'Ten-second runoff for the injury timeout.'; kind = 'neutral'
     elif t == 'two_minute':
         text = 'Two-minute warning.'; kind = 'neutral'
     elif t == 'period':
@@ -287,6 +293,12 @@ def drive_result(dr, overtime=False):
         return 'End of regulation' if dr.quarter == 4 and overtime else 'End of game'
     return dr.result
 
+
+def display_field_position(yardline):
+    return (100 - _spot_yards(100 - yardline) if yardline > 50 else _spot_yards(yardline))
+
+def display_drive_yards(start, end):
+    return display_field_position(start) - display_field_position(end)
 
 def offensive_drive_end(dr):
     """Exclude defensive return yards from offensive drive progress."""

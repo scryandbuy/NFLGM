@@ -1141,6 +1141,63 @@ def _can_kneel_out(dr, seconds, opponent_timeouts):
     return False
 
 
+def _injury_timeout(dr, injuries, out, timeouts, pos, half_end, live_end,
+                    off_state=None, def_state=None, foul=False):
+    """Administer post-warning injury timeouts after down/spot enforcement."""
+    wall = half_end if half_end is not None else 0.
+    if (not injuries or timeouts is None or dr.quarter not in (2, 4)
+            or not getattr(dr, '_two_min', False) or live_end <= wall
+            or dr.result in ('Touchdown', 'Safety', 'Turnover on downs')
+            or out.get('fumble_lost') or out.get('type') == 'interception'):
+        return False
+    sides = sorted({pos if i['side'] == 'off' else
+                    ('away' if pos == 'home' else 'home') for i in injuries})
+    dr.clock = live_end
+    dr.clock_running = False
+    dr.runoff_charged = 0.
+    dr.play_clock = 25.
+    excess = []
+    for side in sides:
+        charged = timeouts.use(side)
+        state = off_state if side == pos else def_state
+        dr.log.append(dict(type='timeout', reason='injury', side=side,
+            side_abbr=getattr(state, 'abbr', None) or side.upper(),
+            left=timeouts.left.get(side, 0), excess=not charged, clock=live_end))
+        if not charged:
+            key = (dr.quarter, side)
+            counts = getattr(timeouts, 'injury_excess', {})
+            counts[key] = counts.get(key, 0) + 1
+            timeouts.injury_excess = counts
+            excess.append((side, counts[key]))
+    if len(sides) == 1 and excess:
+        side, count = excess[0]
+        if count > 1:
+            offense = side == pos
+            yards = min(5., (100 - dr.yardline if offense else dr.yardline) / 2.)
+            dr.yardline += yards if offense else -yards
+            dr.togo += yards if offense else -yards
+            if dr.togo <= 0:
+                dr.down, dr.togo = 1, min(10., dr.yardline)
+                dr.first_downs += 1
+            dr.log.append(dict(type='penalty', penalty='Delay of Game',
+                side='off' if offense else 'def', yards=yards, clock=live_end,
+                accepted=True, before_snap=True))
+        running = out.get('type') in ('run', 'complete', 'sack', 'scramble') and not out.get('out_of_bounds') and not foul
+        # The opponent chooses a restart that serves its clock objective.
+        restart = running and ((side == pos and dr.score_diff <= 0)
+                               or (side != pos and dr.score_diff > 0))
+        if restart:
+            runoff = 10. if side == pos else 0.
+            if runoff:
+                dr.log.append(dict(type='injury_runoff', seconds=10, clock=live_end))
+            dr.play_clock = 30. if runoff else 40.
+            ready = min(dr.play_clock, max(0., play_seconds(out['type']) - 6.))
+            dr.clock = max(wall, live_end - runoff - ready)
+            dr.clock_running = dr.clock > wall
+            dr.runoff_charged = ready if dr.clock_running else 0.
+    return True
+
+
 def _delay_clock_expired(dr, half_end=None):
     """Wait for the remaining play clock before a delay flag; boundaries win."""
     if not dr.clock_running:
@@ -2270,6 +2327,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
     are the scheme-layer callers.
     """
     dr = Drive(offense, defense, start_yardline, clock, quarter, score_diff, rng)
+    if quarter in (2, 4) and clock - (1800 if quarter == 2 else 0) <= 120:
+        dr._two_min = True
     if start_state is not None:
         dr.down, dr.togo = start_state
     import events as E
@@ -2823,6 +2882,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         for st, unit in ((off_state, 'offense'), (def_state, 'defense')):
             if st is not None: st.observe(oc, dc, out, unit=unit)
 
+        injury_log_start = len(dr.log)
         # INJURIES: EVERY MAN ON THE FIELD ROLLS ONCE A SNAP, at his position's real share of the
         # league's injuries, with the man who took the hit rolling harder. The old roll touched only
         # the ball carrier and one random defender, so backs and the top wideout took half the league's
@@ -2844,6 +2904,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                     inj_ = def_state.hurt(d, def_pos.get(d.get('pid'), 'CB'), 1.3 if out['type'] in ('run', 'complete') else 1.0, rng, rate_fn, week)
                     if inj_: dr.log.append(dict(type='injury', pid=d.get('pid'), pos=def_pos.get(d.get('pid'), 'CB'), kind=inj_.get('kind'), weeks=inj_.get('weeks_out'), side='def', clock=dr.clock))
 
+        snap_injuries = [i for i in dr.log[injury_log_start:] if i.get('type') == 'injury']
+        late_injury = bool(snap_injuries and dr.quarter in (2, 4) and getattr(dr, '_two_min', False))
         t = out['type']
         # a collapsed pocket is not automatically a sack - a mobile QB runs
         if out.get('pb_award'):
@@ -2906,7 +2968,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # No timeout is needed when the enforced foul already starts on
                 # the snap. Keep timeout inventory for subsequent live downs.
                 late_penalty = secs_in_half_p - live_seconds <= (120.0 if dr.quarter <= 2 else 300.0)
-                used_p, used_by_p = (False, None) if late_penalty else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
+                used_p, used_by_p = (False, None) if late_penalty or late_injury else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
                 hurry_p = hurry_for_snap(secs_in_half_p, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing)
                 live_start = dr.clock
                 _tick(dr, live_seconds)
@@ -2916,6 +2978,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.clock = float(np.ceil(dr.clock - 1e-9))
                 if used_p and used_by_p:
                     dr.log.append(dict(type='timeout', side=used_by_p, side_abbr=(getattr(off_state if used_by_p == pos else def_state, 'abbr', None) or used_by_p.upper()), left=timeouts.left.get(used_by_p, 0), clock=dr.clock))
+                if late_injury:
+                    _injury_timeout(dr, snap_injuries, out, timeouts, pos, half_end,
+                        max(wall, live_start - live_seconds), off_state, def_state, foul=True)
                 after_p = (dr.clock - half_end) if half_end is not None else dr.clock
                 if secs_in_half_p > 120 >= after_p and not getattr(dr, '_two_min', False):
                     dr._two_min = True
@@ -2960,7 +3025,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
         # The change of possession stops the clock at the whistle. Spending a
         # timeout for the former offense here buys no time.
-        used, used_by = (False, None) if late_penalty or _fourth_fail or scoring_safety else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
+        used, used_by = (False, None) if late_penalty or late_injury or _fourth_fail or scoring_safety else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
         hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing)
         if half_end is not None and getattr(dr, '_half_stall_intent', None) is not None:
             hurry = dr._half_stall_intent == 'attack'
@@ -2975,7 +3040,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # A deliberate bleed may wait for a later kick, but it cannot silently
         # consume that kick while holding a timeout. Live action still costs
         # its own live time; no time is restored when the play ends the half.
-        if (not used and not added_penalty and not _fourth_fail
+        if (not used and not late_injury and not added_penalty and not _fourth_fail
                 and t in ('run', 'complete', 'scramble', 'sack')
                 and after_play.result is None and _plan_to is not None
                 and _plan_to['choice'] != 'kneel'
@@ -2983,7 +3048,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 and timeouts is not None and timeouts.left.get(pos, 0) > 0):
             used = timeouts.use(pos); used_by = pos
             elapsed = live_seconds
-        if scoring_safety or (t in ('run', 'complete', 'scramble') and ((out.get('touchdown') and SCORE_STOPS_CLOCK) or float(np.round(float(out.get('yards', 0.0) or 0.0)) if SCORE_STOPS_CLOCK else float(out.get('yards', 0.0) or 0.0)) >= dr.yardline - 0.01)) or _fourth_fail:
+        if late_injury or scoring_safety or (t in ('run', 'complete', 'scramble') and ((out.get('touchdown') and SCORE_STOPS_CLOCK) or float(np.round(float(out.get('yards', 0.0) or 0.0)) if SCORE_STOPS_CLOCK else float(out.get('yards', 0.0) or 0.0)) >= dr.yardline - 0.01)) or _fourth_fail:
             dr.clock -= live_seconds  # scoring/change of possession stops at the whistle
         elif added_penalty:
             _tick(dr, live_seconds)
@@ -3033,6 +3098,9 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             break
         if dr.down > 4:
             dr.result = 'Turnover on downs'; break
+        if late_injury:
+            _injury_timeout(dr, snap_injuries, out, timeouts, pos, half_end,
+                max(wall, clock_before - live_seconds), off_state, def_state, foul=live_pen is not None)
 
     if dr.result is None: dr.result = 'End of half'
 
