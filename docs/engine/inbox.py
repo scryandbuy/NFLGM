@@ -326,6 +326,8 @@ def reconcile(league):
     """
     from game_recap import combine_saved_reports
     combine_saved_reports(league)
+    from league_notes import combine_saved_eliminations
+    combine_saved_eliminations(league)
     from free_agency import fa_class
     for player in league.players.values():
         if (not player.retired and not player.contract

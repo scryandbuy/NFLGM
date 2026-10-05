@@ -96,16 +96,19 @@ def standings(league, week):
     user = getattr(league, 'user_team', None)
     teams = list(league.teams.values())
     statuses = clinch_status(league, week)
+    eliminated = []
     for conf in sorted({_conf(league, t) for t in teams}):
         for t in (t for t in teams if _conf(league, t) == conf):
             flags = statuses[t.abbr]
             div_in, in_field, out_field, bye = (flags[k] for k in
                                                ('division', 'playoffs', 'eliminated', 'bye'))
+            if out_field and not in_field and _once(league, f'out-{league.year}-{t.abbr}'):
+                record = '–'.join(str(n) for n in t.record[:(3 if len(t.record) > 2 and t.record[2] else 2)])
+                eliminated.append(dict(team=t.abbr, record=record, division=t.division))
             notices = []
             for flag, prefix, wording in (
                 (div_in, 'div', f'clinch the {t.division}'),
                 (in_field, 'po', 'clinch a playoff spot'),
-                (out_field and not in_field, 'out', 'are eliminated from playoff contention'),
                 (bye, 'bye', f"clinch the {conf}'s 1 seed and a bye")):
                 if flag and _once(league, f'{prefix}-{league.year}-{t.abbr}'):
                     notices.append(wording)
@@ -114,6 +117,8 @@ def standings(league, week):
                 body = f"{t.abbr}: " + '; '.join(notices) + f". Record: {t.record[0]}–{t.record[1]}."
                 _post(league, user, t, f'{t.abbr} {subject}', body,
                       mine_subject=f'You {subject}')
+    if eliminated:
+        _elimination_digest(league, league.year, week, eliminated)
     # the picture, one week out, for the user if nothing is settled
     if week == GAMES and user:
         me = league.teams[user]
@@ -123,6 +128,61 @@ def standings(league, week):
             near = sorted([t for t in ct if t is not me and abs(_wins(t) - _wins(me)) <= 1.0 and f"po-{league.year}-{t.abbr}" not in led and f"out-{league.year}-{t.abbr}" not in led], key=lambda t: -_wins(t))
             rivals = ', '.join(t.abbr for t in near[:4]) or 'nobody in particular'
             IB.news(league, 'The playoff picture, one week out', f"At {me.record[0]}–{me.record[1]} you are alive with one to play. The last spots come down to you and {rivals}. Win and you are in the conversation; a loss and you need help.", payload=dict(link='league:standings'))
+
+
+def _elimination_digest(league, year, week, entries, sources=()):
+    """Update one weekly notice, preserving its identity and historic records."""
+    from copy import copy
+    from stadium_names import TEAM_NAMES
+    key = f'playoff-eliminations-{year}-{week}'
+    if getattr(league, 'inbox', None) is None: league.inbox = []
+    current = next((m for m in league.inbox if (m.get('payload') or {}).get('key') == key), None)
+    target = current or (sources[0] if sources else None)
+    rows = {r['team']: r for r in (current or {}).get('payload', {}).get('eliminated', [])}
+    added = any(r['team'] not in rows for r in entries)
+    rows.update((r['team'], r) for r in entries)
+    ordered = sorted(rows.values(), key=lambda r: (r['division'], r['team']))
+    mine = getattr(league, 'user_team', None) in rows
+    section = IB.mail_section('Eliminated from playoff contention',
+        [[TEAM_NAMES.get(r['team'], r['team']) + (' (your team)' if r['team'] == getattr(league, 'user_team', None) else ''),
+          r['record'], r['division']] for r in ordered], ('Team', 'Record', 'Division'))
+    context = copy(league); context.inbox = []
+    context.year = year; context.week = week
+    context.phase = (target or {}).get('phase', getattr(league, 'phase', 'regular'))
+    message = IB.post(context, 'result' if mine else 'league',
+        f'Week {week}: playoff eliminations',
+        f'{len(ordered)} team' + (' was' if len(ordered) == 1 else 's were') + ' eliminated from playoff contention this week.',
+        sender='league', payload=dict(key=key, link='league:standings', eliminated=ordered, mail_sections=[section]))
+    message.update(year=year, week=week, phase=(target or {}).get('phase', getattr(league, 'phase', 'regular')))
+    if target:
+        message['id'] = target['id']
+        message['status'] = ('unread' if (added and not sources) or any(m.get('status') == 'unread' for m in [target, *sources])
+                             else target.get('status', 'open'))
+        target.clear(); target.update(message)
+    else:
+        target = message; league.inbox.append(target)
+    remove = {id(m) for m in sources if m is not target}
+    league.inbox[:] = [m for m in league.inbox if id(m) not in remove]
+    for r in ordered:
+        _ledger(league).setdefault(f"out-{year}-{r['team']}", week)
+    return target
+
+
+def combine_saved_eliminations(league):
+    """Fold legacy per-team notices into weekly digests without replaying events."""
+    import re
+    groups = {}
+    for m in getattr(league, 'inbox', []) or []:
+        if m.get('kind') not in ('league', 'result') or (m.get('payload') or {}).get('link') != 'league:standings':
+            continue
+        match = re.fullmatch(r'([A-Z0-9]+): are eliminated from playoff contention\. Record: ([0-9–-]+)\.', m.get('body', ''))
+        if not match or match[1] not in league.teams: continue
+        team, record = match.groups()
+        entries, sources = groups.setdefault((m['year'], m['week']), ([], []))
+        entries.append(dict(team=team, record=record, division=league.teams[team].division))
+        sources.append(m)
+    for (year, week), (entries, sources) in groups.items():
+        _elimination_digest(league, year, week, entries, sources)
 
 
 def _post(league, user, t, subject, body, mine_subject=None):
