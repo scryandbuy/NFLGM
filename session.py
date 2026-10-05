@@ -413,8 +413,9 @@ class Session:
             return dict(title=('Play the Wild Card' if inn else 'Sim the Wild Card'), sub=('Your playoff run starts' if inn else 'Your season is over'))
         i = self.stop[1]
         if self.draft_live():
-            pk = self.draft.current()
-            return dict(title='Finish the Draft on Auto', sub=f"or make your pick at {pk.round}.{((pk.selection - 1) % 32) + 1} on Draft Day" if pk else '')
+            pk = next((p for p in self.draft.picks[self.draft.i:]
+                       if p.owner == self.user_team), None)
+            return dict(title='Finish the Draft on Auto', sub=f"Your next pick: {pk.round}.{((pk.selection - 1) % 32) + 1} · Draft Day" if pk else 'No picks remaining · Draft Day')
         title, _ = self.OFFSEASON[i]
         name = self.OFFSEASON[i][1]
         if name == 'step_coaching':
