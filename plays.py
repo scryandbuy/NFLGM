@@ -163,7 +163,13 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
         move, atk = moves[i], attacks[i]
         if b is None:                      # unblocked - a free runner
             model['free'].append(i)
-            wins.append((0.6, move, r, None)); continue
+            # A free runner closes his actual assignment's approach. Stable
+            # draw order preserves replay; continuous times remove the old
+            # .6-second tie that always credited the earlier alignment.
+            mean = RM.free_arrival_mean(r, assignments[i]['alignment'])
+            model['means'][i] = mean
+            t = mean * rng.lognormal(0.0, BE.RUSH_SIGMA)
+            wins.append((max(0.35, t), move, r, None)); continue
         pickup = OFFBALL_PICKUP if assignments[i]['alignment'].startswith('offball_') else 0.
         dfn = rate(b, PASS_RUSH['blocker'][move]) + pickup
         chip_bonus = 0.
@@ -212,7 +218,9 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
                     move=None, pb_reps=[], pr_reps=[], pb_helpers=[], pb_award=[], pb_model=model,
                     pb_opportunities=[(b.get('pid'), 'unengaged')
                                       for b in sorted(blockers, key=DRUSH.player_key)])
-    t_arrive, move, winner, loser = min(wins, key=lambda x: x[0])
+    first = min(t for t, _m, _r, _b in wins)
+    tied = [w for w in wins if w[0] == first]
+    t_arrive, move, winner, loser = tied[0] if len(tied) == 1 else tied[int(rng.integers(len(tied)))]
 
     # EVERY rep, not just the one that ended the play. The resolver already
     # races each rusher against his own blocker and then discards all but the
@@ -862,7 +870,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     release = timing.get('release', BASE_TTT + HOLD_BY_DEPTH.get('screen' if out.get('screen') else out.get('depth', 'medium'), 0.))
     pressures = {pid for pid, arrival in arrivals if pid and arrival <= release}
     if out.get('type') == 'sack' and out.get('by'):
-        pressures.add(out['by'])
+        pressures.update(pid for pid, _credit in RM.credited_sackers(out))
     out['pressure_severity'] = timing.get('severity', 0.)
     out['pressure_release'] = release
     out['rush_pressures'] = sorted(pressures)
@@ -1037,6 +1045,7 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
     if p['sack']:
         return dict(type='sack', yards=-sack_loss(rng, depth, p['time'], screen, hot), depth=depth, screen=bool(screen), swing=bool(swing),
                     touchdown=False, by=p['beaten_by'], concept=concept,
+                    sack_credits=RM.sack_credits(p['beaten_by'], [(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])]),
                     protection=prot_name, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3),
                     beaten=p.get('beaten'), pressured=True,
                     coverage_evidence=_coverage_evidence(rush_plan['coverage']))

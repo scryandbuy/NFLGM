@@ -3832,8 +3832,10 @@ class StatBook:
                 d['int_def'] += 1
         elif t == 'sack':
             s = self._get(qb); s['sacked'] += 1
-            d = self._get(out.get('by', (deff.get('dl') or [{}])[0].get('pid', 'DL1')))
-            d['sacks'] += 1.0; d['tackles'] += 1
+            import rush_matchup as RM
+            for pid, credit in RM.credited_sackers(out, (deff.get('dl') or [{}])[0].get('pid', 'DL1')):
+                d = self._get(pid)
+                d['sacks'] += credit; d['tackles'] += 1
         elif t in ('scramble', 'kneel'):
             s = self._get(qb); s['rush_att'] += 1; s['rush_yds'] += out['yards']
             if out.get('touchdown') and not out.get('defensive_td'): s['rush_td'] += 1

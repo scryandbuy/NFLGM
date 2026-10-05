@@ -43,7 +43,8 @@ def protection_evidence(model, threshold, time_scale=1., hold=0.,
     place. His reference replacement changes only his contribution to help.
     This prevents a weak helper borrowing his primary's individual excellence.
     Sack/pressure expectation includes the entire rush, since the fastest
-    arrival determines those events. Unblocked rushers remain fixed at .6s.
+    arrival determines those events. Current free rushers use their live
+    approach-time distribution, just as the actual protection race does.
     """
     if not model or not model['evaluations']:
         return []
@@ -64,7 +65,10 @@ def _protection_evidence(means, free, evaluations, qb_scale, threshold,
                 for f in finish_scales]
     # A fixed integration bound keeps an evaluated blocker's own rating from
     # shifting quadrature nodes in his reference replacement calculation.
-    upper = .6 if free else 32.
+    # Old standalone models used a zero mean plus a fixed .6s free atom.
+    # Current resolve_protection always supplies a positive approach mean.
+    fixed_free = tuple(j for j in free if means[j] <= 0.)
+    upper = .6 if fixed_free else 32.
     cuts = sorted({.35, upper, *[x for x in (threshold, pressure_cut, *cap_cuts) if .35 < x < upper]})
     t = np.concatenate([lo + (_NODES+1.)*(hi-lo)/2. for lo,hi in zip(cuts,cuts[1:])])
     weights = np.concatenate([_WEIGHTS*(hi-lo)/2. for lo,hi in zip(cuts,cuts[1:])])
@@ -75,8 +79,8 @@ def _protection_evidence(means, free, evaluations, qb_scale, threshold,
         if hot: sacks *= .35
         return sacks, np.where(time <= pressure_window if pressure_window is not None else pressure >= .35, 1., sacks)
     outcomes = {j: probabilities(t, j) for j in range(len(means))}
-    distributions = {j: _distribution(t, mean) for j, mean in enumerate(means) if j not in free}
-    atoms = {j: float(_distribution(np.asarray(.6), means[j])[1]) for j in distributions} if free else {}
+    distributions = {j: _distribution(t, mean) for j, mean in enumerate(means) if j not in fixed_free}
+    atoms = {j: float(_distribution(np.asarray(.6), means[j])[1]) for j in distributions} if fixed_free else {}
     rows = []
     for pid, index, reference_mean, primary in evaluations:
         own_pdf, own_survival = _distribution(t, reference_mean)
@@ -89,7 +93,7 @@ def _protection_evidence(means, free, evaluations, qb_scale, threshold,
             other_survival *= survival
             hazard += pdf / np.maximum(survival, 1e-300)
             pressure_hazard += pdf / np.maximum(survival, 1e-300) * outcomes[j][1]
-            if free: atom_survival *= atoms[j]
+            if fixed_free: atom_survival *= atoms[j]
         other_pdf = other_survival * hazard
         win = .5 * math.erfc(math.log(threshold / reference_mean) / (RUSH_SIGMA * math.sqrt(2.)))
         # Either our contest arrives first, or another arrives while our
@@ -98,9 +102,9 @@ def _protection_evidence(means, free, evaluations, qb_scale, threshold,
         joint_pressure = own_pdf*other_survival*pressured + other_survival*pressure_hazard*np.maximum(0., own_survival-win)
         expected_pressure = float(np.sum(weights*(t < threshold)*joint_pressure))
         expected_sack = float(np.sum(weights*own_pdf*other_survival*sacks)) if primary else 0.
-        if free:
+        if fixed_free:
             own_at_free = float(_distribution(np.asarray(.6), reference_mean)[1])
-            expected_pressure += atom_survival*max(0., own_at_free-win)*float(probabilities(np.asarray(.6), free[0])[1])
+            expected_pressure += atom_survival*max(0., own_at_free-win)*float(probabilities(np.asarray(.6), fixed_free[0])[1])
         rows.append((pid, win, expected_pressure, expected_sack))
     return tuple(rows)
 

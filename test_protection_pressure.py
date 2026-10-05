@@ -119,7 +119,8 @@ class ProtectionPressureTests(unittest.TestCase):
     def test_free_rusher_and_zero_rushers_remain_valid(self):
         blitz = R.select_rush(self.defense, dict(call('4-3','nickel',7), coverage='cover_0'))
         result = self.resolve(plan=blitz)
-        self.assertEqual(result['time'], .6)
+        self.assertGreater(result['time'], .6)
+        self.assertTrue(all(result['pb_model']['means'][i] > 0 for i in result['pb_model']['free']))
         self.assertIsNone(result['beaten'])
         self.assertFalse(result['pb_helpers'])
         empty = self.resolve(plan=dict(rushers=[], assignments=[]))

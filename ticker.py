@@ -135,8 +135,12 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"{passer or 'The quarterback'} to {target or 'his receiver'}, dropped."; kind = 'loss'
     elif t == 'sack':
         by = _nm(league, p.get('by')); beaten = _nm(league, p.get('beaten'))
+        import rush_matchup as RM
+        finishers = [_nm(league, pid) for pid, _credit in RM.credited_sackers(p)]
+        shared = len(finishers) == 2 and all(finishers)
+        if shared: by = ' and '.join(finishers)
         loss = int(round(-shown_gain))
-        text = f"{by or 'The rush'} sacks {passer or 'the quarterback'}" + (f" for a loss of {loss}" if loss else ' at the line of scrimmage') + (f", beating {beaten}{'' if beaten.endswith('.') else '.'}" if beaten else '.')
+        text = f"{by or 'The rush'} {'share a sack of' if shared else 'sacks'} {passer or 'the quarterback'}" + (f" for a loss of {loss}" if loss else ' at the line of scrimmage') + (f", beating {beaten}{'' if beaten.endswith('.') else '.'}" if beaten else '.')
         kind = 'loss'
     elif t == 'scramble':
         cls, yd = _yards(shown_gain)
