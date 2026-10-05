@@ -49,10 +49,19 @@ def select(coverage, call, pair, pairs, primary, helper, depth, separation,
     elif name != 'cover_0':
         safeties = [a for a in rows if a['alignment'].startswith('deep_')]
         single = name in ('cover_1', 'cover_1_robber')
-        # Man defenders occupied by other receivers are not free safety help.
+        # Use the post/halves explicitly retained by the assignment layer.
+        # Legacy direct callers without that metadata retain their shell's
+        # aligned helper; an arbitrary unpaired robber is not a new post.
+        if 'man_deep' in unit:
+            help_ids = {player_key(p) for p in unit['man_deep']}
+            safeties = [a for a in safeties if player_key(a['player']) in help_ids]
+        elif single:
+            safeties = safeties[:1]
+        # A man defender, including the target's own defender, cannot also
+        # supply a free deep-help assignment. Live identity is checked by add.
         occupied = {player_key(p['defender']) for p in pairs
-                    if p.get('man') and p.get('defender') and p is not pair}
-        for a in safeties[:1] if single else safeties:
+                    if p.get('man') and p.get('defender')}
+        for a in safeties:
             p = a['player']
             same_side = a['alignment'] == ('deep_right' if side == 'L' else 'deep_left')
             if player_key(p) not in occupied and (single or side == 'C' or same_side):

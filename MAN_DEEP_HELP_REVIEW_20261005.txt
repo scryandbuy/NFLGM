@@ -1,0 +1,91 @@
+MAN DEEP HELP: CALLED SAFETY RESPONSIBILITIES
+Base: dd9a9f2 (interception end-line fix, itself based on gameplay 0b4c49c).
+
+Football motivation and restraint
+Cover 1 needs its designated post safety; two-man needs both deep halves.
+Assigning an extra slot receiver or tight end must use an available underneath
+defender rather than silently consume that help. That can create an unfavorable
+LB/receiver matchup: it is the real cost of retaining the called deep coverage.
+Cover 0 still permits no help. Coaches retain their existing coverage choices;
+this change enforces their selected responsibilities, not optimal play calls.
+No generic extra tackler, receiver downgrade, or YAC/TD coefficient change.
+
+Observed retained games
+In each completed 2026 study (seeds 93031 and 93032), 50 passing touchdowns had
+20+ YAC and exactly one selected pursuer. Of those, 27/21 were Cover 1/robber
+with a dropped, unpaired safety absent from pursuit. This observation alone
+does not prove the unpaired safety was the intended post.
+
+Example: seed 93031, W1 DET-NO, drive 20/play 5, clock 588. Mauricio Blood
+P0883 scores 54.7 yards, 21.5 air and 33.5 YAC. Kevin Gyllenborg P1784 is sole
+pursuer. Public FS Phillip O'Rourke P1802 is recorded slot/man; Melvin Sample
+P1844 is unpaired. Initial attributes make Blood beating Gyllenborg plausible.
+The problem is the internally inconsistent safety assignment, not forbidding
+that player or any particular touchdown.
+
+Controlled reproduction
+Explicit canonical NO defensive alignments reproduce the responsibility bug:
+with three WRs, designated post P1802 supplies help. A fourth slot WR consumes
+P1802 in assign_coverage, despite select_rush having protected him as the post.
+The pursuit selector then excludes him because he is man-matched. Simply
+selecting the other unpaired safety would mask the conflict by promoting the
+low-hole/robber. The fixture uses named public defender attributes and labelled
+control receivers; it is not a replay of a saved snap's discarded alignment.
+
+Correction
+- One shared helper identifies the man coverage's designated post/halves.
+- Receiver assignment reserves these players and carries their identities in
+  transient _unit.man_deep metadata.
+- Exhausted preferred underneath pools use another unoccupied underneath man
+  before assigning the same defender to two receivers. This fallback is scoped
+  to calls that reserved deep help; pure-zone and Cover 0 behavior is retained.
+- Pursuit honors the designated identities, actual live copies and occupied
+  man responsibilities; no automatic promotion of a missing post.
+- Named coverage supplies its canonical underneath principle for direct
+  callers missing both under/man; explicit overrides still take precedence.
+- No save schema or build artifacts changed. Main owns combined rebuilding.
+
+Controlled effect, not a season forecast
+5,000 paired direct YAC resolutions per variant, initial public Blood/NO
+attributes, completed deep catch, initial contact 9.38 yards after catch:
+
+Cover 1, 33.5 yards remaining: sole P1784 -> P1802 then P1784.
+TD 2,721/5,000 -> 491/5,000; mean YAC 23.53 -> 13.81.
+Cover 1, 60 yards remaining: TD 2,468 -> 409; mean YAC 37.21 -> 16.17.
+Robber shares this fixture's result. Genuine breakaways remain possible.
+Cover 0, Cover 2 and the unaffected two-man half are identical paired controls.
+These deliberately conditioned catches are not league probabilities, full
+game replays, or counterfactual point reductions. Completion/target decisions
+may also change when actual underneath matchups change.
+
+Verification
+69 focused tests passed across test_man_deep_help, test_pass_pursuit,
+test_coverage_recording, test_defensive_rush, test_coverage_development,
+test_weekly_coverage_protection and test_interception_endline.
+The new man-help file has 11 passing methods, including distinct five-man
+assignments for 4WR+TE; target-TE, two-man sides/seams, zero-high, live/absent/
+occupied helper, reordered inputs, named-call defaults and explicit overrides.
+Independent review found and bounded the legacy-default and split-zone risks.
+
+Unresolved, deliberately separate
+The terminal HOUSE chase still ignores remaining distance and averages the
+selected pursuers' chase ability. A controlled slow-TE/fast-DB case has the
+same 62.52% conditional final escape chance with 20, 50 or 80 yards remaining.
+That is a model weakness, not a justified replacement coefficient. A proper
+follow-up needs individual recovery distance/angle/head-start evidence.
+Opposite-half safety recovery on a long Cover 2 completion is also unmeasured;
+do not automatically add another defender. Overall YAC/scoring calibration,
+receiver opportunity distribution and injury frequency remain unresolved.
+The frozen multi-season studies were not altered or restarted.
+
+Reproducible analysis (workspace outputs/coordinated-gameplay-review-20261005):
+yac-single-pursuer-review.md and yac_single_selector_controls.py: baseline.
+man_help_effect.py / man-help-effect.json: paired corrected controls.
+qb-house-probe.py / qb-house-review.md: terminal-chase characterization.
+scoring-year1-review.md: complete 272-game-per-seed denominator/context.
+
+Football reference: USA Football, "How to instill the fly to the football
+mentality in your defense" (backside secondary pursuit and recovery angles):
+https://blogs.usafootball.com/blog/6002/how-to-instill-the-fly-to-the-football-mentality-in-your-defense
+This supports preserving actual pursuit responsibilities, not any numerical
+YAC coefficient or a claim that every available safety can reach every catch.
