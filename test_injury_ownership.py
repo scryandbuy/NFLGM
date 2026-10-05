@@ -8,7 +8,7 @@ class InjuryOwnershipTests(unittest.TestCase):
     def test_report_filters_former_player_in_body_and_subject(self):
         L=fixture(); L.user_team='GB'
         former=player(L,'former','MIN'); current=player(L,'current')
-        L.transactions=[dict(kind='injury',pid=p.pid,team='GB',weeks=2) for p in (former,current)]
+        L.transactions=[dict(year=L.year,week=1,kind='injury',pid=p.pid,team='GB',weeks=2) for p in (former,current)]
         with patch.object(CN.IB,'post') as post:
             CN._injury_report(L,L.teams['GB'],1,[])
         post.assert_called_once()
@@ -17,11 +17,20 @@ class InjuryOwnershipTests(unittest.TestCase):
 
     def test_no_report_for_former_player_only(self):
         L=fixture(); p=player(L,team=None)
-        L.transactions=[dict(kind='injury',pid=p.pid,team='GB',weeks=2)]
+        L.transactions=[dict(year=L.year,week=1,kind='injury',pid=p.pid,team='GB',weeks=2)]
         with patch.object(CN.IB,'post') as post:
             CN._injury_report(L,L.teams['GB'],1,[])
         post.assert_not_called()
         self.assertEqual(L.notes_sent['_inj_idx'],1)
+
+    def test_old_playoff_injuries_do_not_become_new_season_report(self):
+        L=fixture(); p=player(L)
+        L.transactions=[dict(year=L.year-1,week=21,kind='injury',pid=p.pid,team='GB',weeks=4),
+                        dict(year=L.year,week=1,kind='injury',pid=p.pid,team='GB',weeks=1)]
+        with patch.object(CN.IB,'post') as post:
+            CN._injury_report(L,L.teams['GB'],2,[])
+        post.assert_not_called()
+        self.assertEqual(L.notes_sent['_inj_idx'],2)
 
     def test_current_player_still_receives_medical_processing(self):
         L=fixture(); p=player(L); p.out_until=4

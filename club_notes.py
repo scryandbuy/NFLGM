@@ -48,7 +48,8 @@ def after_games(league, week, results):
 def _injury_report(league, t, week, results):
     # everything logged since the last report (the log's week is stamped before the calendar moves)
     led = _ledger(league); start = int(led.get('_inj_idx', 0) or 0)
-    hurt = [x for x in league.transactions[start:] if x.get('kind') == 'injury' and x.get('team') == t.abbr]
+    hurt = [x for x in league.transactions[start:] if x.get('kind') == 'injury' and x.get('team') == t.abbr
+            and x.get('year') == league.year and x.get('week') == week]
     led['_inj_idx'] = len(league.transactions)
     hurt = [x for x in hurt if (p := league.player(x.get('pid'))) is not None
             and p.team == t.abbr and not p.retired]
