@@ -161,6 +161,29 @@ class CalendarAwardResumeTests(unittest.TestCase):
         self.assertEqual(again.L.awards, session.L.awards)
         self.assertEqual(len([m for m in again.L.inbox if m.get('subject') == "The season's honors"]), 1)
 
+    def test_old_final_after_rollover_does_not_create_new_season_honors_or_metadata(self):
+        for announced in (False, True):
+            with self.subTest(announced=announced):
+                saved=json.loads(self.baseline);year=saved['year']
+                pid=next(pid for pid,p in saved['players'].items() if p['pos']=='QB' and p['team']=='GB')
+                saved.update(year=year+1,phase='offseason',_stop=['offseason',2],
+                    _offseason_progress=dict(year=year,development_done=True,roll_done=True,coaching_done=True),
+                    _post=dict(year=year,champion='GB',finalists={},seeds={},
+                               games=[['SB','', 'GB','KC',28,21]]))
+                saved['history']={str(year):dict(championship_announced=announced)}
+                saved['awards']={str(year):dict(sb_mvp=pid)}
+                with patch.object(SS.XP,'pay_awards') as pay,patch.object(SS.IB,'post') as announce:
+                    loaded=SS.Session.load(json.dumps(saved))
+                    again=SS.Session.load(loaded.save())
+                pay.assert_not_called()
+                self.assertFalse(any('Championship' in call.args[2]
+                                     for call in announce.call_args_list))
+                self.assertEqual(again.post.year,year)
+                self.assertNotIn(str(year+1),again.L.history)
+                self.assertNotIn(year+1,again.L.awards)
+                self.assertEqual(again.L.history[str(year)],saved['history'][str(year)])
+                self.assertEqual(again.L.awards[year]['sb_mvp'],pid)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -472,6 +472,7 @@ def carousel(league, rng, new_head_coaches=(), verbose=False, *, season_records=
     """
     log = []
     pool = league.staff_pool
+    departed = {}
     user = getattr(league, 'user_team', None)
     finalize_poaches(league)
     import coaching_pool as CP
@@ -481,6 +482,7 @@ def carousel(league, rng, new_head_coaches=(), verbose=False, *, season_records=
         c = team.staff.get(role)
         if c is None: return
         c.team = None; c.years = 0
+        departed.setdefault(team.abbr, set()).add(c.name)
         pool.append(c); team.staff[role] = None
         log.append(dict(team=team.abbr, role=role, out=c.name, why=why))
         league.log('staff_out', team=team.abbr, role=role, name=c.name, why=why)
@@ -524,9 +526,10 @@ def carousel(league, rng, new_head_coaches=(), verbose=False, *, season_records=
             stay = 0.74 + 0.02 * (wins - 8) + 0.25 * (c.traits.get('loyalty', 50) / 100.0 - 0.5) - (0.35 if c.hc_candidate else 0.0)
             if c.disgruntled: stay = 0.0                      # a man you blocked walks when he can
             new_ask = ask(c)
-            if rng.random() < stay and new_ask <= room(team, without=role) + 1e-9:
+            willing = rng.random() < stay
+            if willing and new_ask <= room(team, without=role) + 1e-9:
                 c.years = int(rng.choice(CONTRACT_YEARS)); c.salary = new_ask; league.log('staff_extend', team=abbr, role=role, name=c.name, salary=new_ask)
-            elif rng.random() < stay:
+            elif willing:
                 to_pool(team, role, 'contract up, priced out')       # the club could not fit his new ask
             else:
                 to_pool(team, role, 'contract up, walked')
@@ -535,9 +538,13 @@ def carousel(league, rng, new_head_coaches=(), verbose=False, *, season_records=
     for abbr, team in league.teams.items():
         for role in ROLES:
             if team.staff.get(role) is not None: continue
-            cands = [c for c in pool if c.role == role]
+            # A dismissal or failed renewal is a decision about this opening.
+            # Other clubs can hire him; this club cannot immediately undo it.
+            cands = [c for c in pool if c.role == role
+                     and c.name not in departed.get(abbr, set())]
             if not cands:
-                pool.append(make(rng, role, league=league, young=True)); cands = [c for c in pool if c.role == role]
+                entrant = make(rng, role, league=league, young=True)
+                pool.append(entrant); cands = [entrant]
             if abbr == user:
                 _post_user(league, team, role, None, 'vacant', cands); continue
             hc_q = float(getattr(team.gm, 'prestige', 60)) / 100.0

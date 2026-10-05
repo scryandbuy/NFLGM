@@ -116,6 +116,30 @@ class DefensiveEvidenceTests(unittest.TestCase):
 
 
 class RookieEligibilityTests(unittest.TestCase):
+    def test_empty_production_does_not_award_an_arbitrary_player(self):
+        defender = player('defender', 'MIKE')
+        receiver = player('receiver')
+        l = league([defender, receiver], {'defender': {'snaps': 40},
+                                         'receiver': {'games': 2}})
+        ballot = AW.Ballot(l)
+        for award in ('opoy', 'oroy', 'dpoy', 'droy'):
+            self.assertIsNone(getattr(ballot, award)(), award)
+        l.awards = {}
+        votes = AW.vote(l)
+        self.assertFalse(set(AW.DEV_TIER_AWARDS) & set(l.awards[2028]))
+        self.assertFalse(any(votes[a] for a in ('opoy','oroy','dpoy','droy')))
+
+    def test_actual_rookie_production_wins_over_empty_entries(self):
+        defender = player('defender', 'MIKE')
+        receiver = player('receiver')
+        l = league([defender, receiver], {'defender': {'tackles': 90, 'sacks': 5},
+                                         'receiver': {'rec': 50, 'rec_yds': 800, 'rec_td': 6}})
+        ballot = AW.Ballot(l)
+        self.assertIs(ballot.oroy(), receiver)
+        self.assertIs(ballot.opoy(), receiver)
+        self.assertIs(ballot.droy(), defender)
+        self.assertIs(ballot.dpoy(), defender)
+
     def test_entry_year_is_independent_of_contract_service(self):
         ballot = AW.Ballot(league())
         self.assertTrue(ballot.is_rookie(player('new', entry=2028, accrued=1)))
