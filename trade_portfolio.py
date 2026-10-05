@@ -76,7 +76,11 @@ IR returnees remain in the planning roster; no squad promotion is presumed.
     report = RN.assess(proxy, strict_roles=True)
     rows = list(report['package_assignments']) + [dict(r, weight=1.)
         for r in report['assignments'] if r['role'] in ('K','P','LS')]
-    used = {r['player'].pid for r in report['assignments'] if r['player'] is not None}
+    occupied = {}
+    for row in rows:
+        if row['player'] is not None:
+            pid = row['player'].pid
+            occupied[pid] = occupied.get(pid, 0.) + float(row['weight'])
     total = sum(float(r['weight']) for r in rows)
     belief = _clip(getattr(gm, 'dev_belief', .5))
     result = []
@@ -108,7 +112,8 @@ IR returnees remain in the planning roster; no squad promotion is presumed.
                 exposed += float(row['weight']) * risk
             successors = []
             for p in players:
-                if p.pos not in family or p.pid in used:
+                spare = max(0., 1.-occupied.get(p.pid, 0.))
+                if p.pos not in family or not spare:
                     continue
                 c = getattr(p,'contract',None)
                 if int(getattr(c,'years',0))-start <= offset:
@@ -119,9 +124,13 @@ IR returnees remain in the planning roster; no squad promotion is presumed.
                 public.contract = copy.copy(c)
                 public.contract.years = max(0,c.years-start)
                 grade = DP._family_reserve_grade(public,proxy,belief,family)
-                cover = _clip((grade-(bar-8.))/8.)
+                # Alternate-package incumbents already cover part of the
+                # demand above. Only their unused role capacity can also
+                # replace a teammate; a small package role is not a ban.
+                cover = _clip((grade-(bar-8.))/8.) * spare
                 if cover:
-                    successors.append(dict(pid=p.pid, cover=cover))
+                    successors.append(dict(pid=p.pid, cover=cover,
+                        occupied_share=occupied.get(p.pid, 0.), spare_capacity=spare))
             credit = min(exposed, sum(p['cover'] for p in successors))
             families.append(dict(family=list(family), demand=demand,
                 gross_exposure=exposed, successor_credit=credit,

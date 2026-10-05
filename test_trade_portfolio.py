@@ -88,6 +88,21 @@ class PortfolioTests(unittest.TestCase):
         self.assertGreater(kept_hb['successor_credit'],lost_hb['successor_credit'])
         self.assertLess(kept_hb['exposure'],lost_hb['exposure'])
 
+    def test_alternate_package_tight_end_cannot_cover_two_simultaneous_jobs(self):
+        sent=self.pick();first,backup,*others=self.t.by_pos('TE')
+        self.t.roster=[p for p in self.t.roster if p not in others]
+        set_grade(first,99);first.age=27;first.contract=Contract(1,[1.])
+        set_grade(backup,82);backup.age=23;backup.contract=Contract(4,[1.]*4)
+        report=TP.RN.assess(self.t)
+        share=sum(r['weight'] for r in report['package_assignments'] if r['player'] is backup)
+        self.assertGreater(share,0);self.assertLess(share,1)
+        read=TP.assess(self.L,self.t,[sent])
+        family=next(f for f in read['after'][1]['families'] if f['family']==['TE'])
+        reserve=next(p for p in family['successors'] if p['pid']==backup.pid)
+        self.assertLessEqual(reserve['cover']+share,1.000001)
+        self.assertGreater(reserve['cover'],0.)
+        self.assertGreater(family['exposure'],0.)
+
     def test_patient_cautious_gm_prices_future_options_more(self):
         sent=self.pick()
         self.t.gm.patience=1.;self.t.gm.risk=0.;self.t.gm.aggression=0.;self.t.gm.job_security=1.
