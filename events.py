@@ -161,13 +161,15 @@ def fumble_check(carrier, event, rng, rate_fn, hit_power=0.70, AVG=0.70, env_mul
     Ball security against the hit. A sack fumbles at 12.5% - eight times the
     rate of a run - which is what makes a strip sack its own event.
     rate_mult scales the chance of the ball coming out at all (a Disciplinarian's unit: 0.9).
+    env_mult describes wet-ball handling risk, not a recovery advantage for
+    either team. Apply it once, when the ball comes loose.
     """
     base = FUMBLE_RATE.get(event, 0.0140)
     sec = rate_fn(carrier, {'carry_rating': .70, 'awareness_rating': .30})
-    p = base * (1.0 + 2.4 * (AVG - sec)) * (1.0 + 1.3 * (hit_power - AVG)) * rate_mult
+    p = base * (1.0 + 2.4 * (AVG - sec)) * (1.0 + 1.3 * (hit_power - AVG)) * rate_mult * env_mult
     if rng.random() >= max(0.0, p):
         return None
-    lost = rng.random() * (1.0 / env_mult) < FUMBLE_LOST.get(event, 0.45)
+    lost = rng.random() < FUMBLE_LOST.get(event, 0.45)
     return dict(fumble=True, lost=bool(lost),
                 forced=rng.random() < FORCED_SHARE, by=carrier.get('pid'))
 
