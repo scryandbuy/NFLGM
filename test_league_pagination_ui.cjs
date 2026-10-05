@@ -15,6 +15,13 @@ const ctx={console, el:(...args)=>new Element(...args), renderRail(){}, lgSecond
   teamTheme:()=>({}), coachingMoveRow:r=>new Element('div',{class:'coach'},r.person),
   showTransactionTrade(){}, copyText:s=>{copied=s;}, location:{}};
 vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('function teamCapPlanning('),src.indexOf('function renderTeam(')),ctx);
+const cap={year:2029,space:7.8,committed:390,limit:401.6,next:false,next_year:2030,committed_next:374.5,limit_next:437.8};
+assert.equal(ctx.teamCapPlanning(cap).year,2030);
+assert.equal(ctx.teamCapPlanning(cap).committed,374.5);
+const upcoming={...cap,year:2030,space:63.3,committed:374.5,limit:437.8,next:true,pending_offers:2};
+assert.equal(ctx.teamCapPlanning(upcoming),upcoming,'before rollover, headline and planning detail share the upcoming ledger');
+assert.equal(cap.year,2029,'in season, current-cap metric still uses its current year');
 vm.runInContext(src.slice(src.indexOf("let statsTab = 'Leaders';"),src.indexOf('let allProTab=')),ctx);
 const rows=Array.from({length:145},(_,i)=>({pid:String(i),name:i===144?'Nic Scourton':'Player '+String(i).padStart(3,'0'),pos:'LEDG',team:'GB',row:[145-i,i===144?13:1]}));
 const view={rail:{club:{}},year:2029,week:22,years:[2029],tables:{defense:{cols:['Tkl','Sacks'],rows}},boxes:[],advanced:[]};

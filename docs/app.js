@@ -2953,6 +2953,9 @@ function renderDraftResults(v) {
 }
 
 // ---------------------------------------------------------------- Team page (another club at a glance)
+function teamCapPlanning(cap) {
+  return cap.next ? cap : {year:cap.next_year, committed:cap.committed_next, limit:cap.limit_next, pending_offers:0};
+}
 function renderTeam(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
@@ -2963,7 +2966,8 @@ function renderTeam(v) {
   page.append(el('header', { class: 'team-profile-hero c12' }, el('div', { class: 'team-profile-intro' }, crest(v.club, 72), el('div', {}, el('div', { class: 'feature-kicker' }, `LEAGUE / ${v.place}`), el('h1', {}, v.club.name), el('p', {}, `${v.coach?.name || 'Head coach open'} · ${v.identity.offense} offense · ${v.identity.defense} defense`))), el('div', { class: 'team-profile-select' }, select)));
   page.append(el('div', { class: 'team-profile-metrics c12' }, ...[[v.record, `${v.season_year} record`], [v.ranks.offense ? `${v.ranks.offense}${ord(v.ranks.offense)}` : '—', 'Offense'], [v.ranks.defense ? `${v.ranks.defense}${ord(v.ranks.defense)}` : '—', 'Defense'], [`$${v.cap.space}m`, `${v.cap.year} cap space`]].map(([value, label]) => el('div', {}, el('strong', {}, value), el('span', {}, label)))));
   const left = el('section', { class: 'sheet c8 team-profile-main' });
-  left.append(el('div', { class: 'team-profile-detail' }, el('span', {}, `${v.cap.year} CAP PLANNING`, el('b', {}, `$${v.cap.committed}m of $${v.cap.limit}m committed${v.cap.pending_offers ? ` · $${v.cap.pending_offers}m reserved for offers` : ''}`)), el('span', {}, 'ROSTER', el('b', {}, `${v.roster_n} active · ${v.ps_n} practice squad${v.ir_n ? ` · ${v.ir_n} IR` : ''}`))));
+  const planning = teamCapPlanning(v.cap);
+  left.append(el('div', { class: 'team-profile-detail' }, el('span', {}, `${planning.year} CAP PLANNING`, el('b', {}, `$${planning.committed}m of $${planning.limit}m committed${planning.pending_offers ? ` · $${planning.pending_offers}m reserved for offers` : ''}`)), el('span', {}, 'ROSTER', el('b', {}, `${v.roster_n} active · ${v.ps_n} practice squad${v.ir_n ? ` · ${v.ir_n} IR` : ''}`))));
   // the coaches
   const h5 = (t, sub) => el('div', { class: 'h5' }, t, sub ? el('span', {}, sub) : '');
   const st = el('div', { class: 'pad' }, h5('Coaching', `${v.identity.offense} · ${v.identity.defense}`));
