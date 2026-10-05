@@ -1691,6 +1691,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
                 cap_space[a], cap_space[b] = ta.cap_space, tb.cap_space
                 break
 
+    from views import draft_year
     if verbose:
         print(f'  {len(made)} trades')
         import collections as _c
@@ -1698,7 +1699,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             _c.Counter(len(x[2]) for x in made).items())))
         for a, b, outs, inn, res in made[:6]:
             lbl = ' + '.join(
-                (f"{o['obj'].year} rd{o['obj'].round}" if o['kind'] == 'pick'
+                (f"{draft_year(o['obj'].year)} rd{o['obj'].round}" if o['kind'] == 'pick'
                  else f"{o['obj'].name}") for o in outs)
             print(f'    {a} sends {lbl} '
                   f'for {b} {inn.name} ({inn.pos} {inn.ovr:.0f})  '
@@ -1747,7 +1748,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             sends = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
             why = (('They want him as their starter at ' if target.get('star') else 'They see him as an upgrade at ') + str(target.get('grp')) +
                    ' and are offering ' + ', '.join(
-                       (f"their {x['obj'].year} round {x['obj'].round} pick" if x['kind'] == 'pick'
+                       (f"their {draft_year(x['obj'].year)} round {x['obj'].round} pick" if x['kind'] == 'pick'
                         else x['obj'].name) for x in offer['a_sends']) + '.')
             IB.post_trade_offer(league, a, u, sends, [target['pid']], why,
                                 expires_week=(league.week or 0) + 1)
