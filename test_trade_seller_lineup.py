@@ -24,6 +24,7 @@ class SellerLineupTests(unittest.TestCase):
         L,a,b,target=self.case()
         pick=NS(year=2029,round_=1)
         with patch.object(TR.VAL,'pool_from_league',return_value={}), \
+             patch('cap_accounting.require_trade_room', return_value=None) as legal_room, \
              patch.object(TR,'player_asset',return_value=dict(kind='player')), \
              patch.object(TR,'pick_asset',return_value=dict(kind='pick')), \
              patch.object(TR,'_financial_trade',return_value=True) as funding:
@@ -33,6 +34,7 @@ class SellerLineupTests(unittest.TestCase):
                 high=TR.cpu_trade_check(L,a,b,[pick],[target.pid])
         self.assertFalse(low['approved']);self.assertTrue(low['needs_more'])
         self.assertTrue(high['approved']);funding.assert_called_once()
+        self.assertEqual(legal_room.call_count, 2)
 
     def test_genuine_seller_can_take_future_value(self):
         L,a,b,target=self.case('seller')
