@@ -303,6 +303,102 @@ def fill_short(league, rng, verbose=False):
     return signed
 
 
+def _cross_train_line(league, team, report):
+    """Fill a missing native OL role from the club's own qualified surplus."""
+    import copy
+    from types import SimpleNamespace
+    import offense_roles as OR
+    import roster_needs as RN
+    import position_change as PC
+    if team.abbr == getattr(league, 'user_team', None): return False
+    active = team.active()
+    coverage = RN.essential_coverage(team, report=report)
+    native_starters = {r['player'].pid for r in report['assignments']
+                       if r['role'] in OR.OL and r['player'] is not None and r['player'].pos == r['role']}
+    missing = {r['role'] for r in report['package_assignments']
+               if r['role'] in OR.OL and (r['player'] is None or r['player'].pos != r['role'])}
+    best = None
+    for pos in sorted(missing):
+        for p in active:
+            if (p.pos not in OR.OL or p.pos == pos or p.out_until is not None
+                    or p.pid in native_starters): continue
+            trial = copy.copy(p)
+            PC.change_position(SimpleNamespace(player=lambda _: trial, teams=league.teams), p.pid, pos, log=False)
+            if trial.ovr < 55: continue
+            after = RN.assess(team, [trial if q is p else q for q in active])
+            next_coverage = RN.essential_coverage(team, report=after)
+            if not RN.coverage_not_worse(coverage, next_coverage): continue
+            improvement = sum(coverage['shortages'].values()) - sum(next_coverage['shortages'].values())
+            if improvement <= 0: continue
+            key = (improvement, after['score'])
+            if best is None or key > best[0]: best = (key, p, pos)
+    if best is None: return False
+    _, p, pos = best
+    PC.change_position(league, p.pid, pos)
+    return True
+
+
+def _market_kicker_recovery(league, team, report):
+    """An empty kicker job can pay a willing street specialist above minimum.
+
+    Try native kickers before qualified punters. Every offer funds its actual
+    price and departure, preserves the punter and healthy depth, and applies
+    the normal learning penalty when changing positions.
+    """
+    import copy
+    from types import SimpleNamespace
+    import practice_squad as PS
+    import roster_needs as RN
+    import position_change as PC
+    from cap_accounting import require_room
+    from replacement_contracts import minimum_acceptance
+    if team.abbr == getattr(league, 'user_team', None) or 'K' not in report['uncovered']: return False
+    active = team.active()
+    coverage = RN.essential_coverage(team, report=report)
+    depth = PS.essential_depth(team, active, league.week)['shortages']
+    comps = VAL.pool_from_league(league)
+    best = None
+    for p in PS.available_free_agents(league):
+        if p.pos not in ('K', 'P'): continue
+        consent = minimum_acceptance(league, team, p, pool=comps)
+        if consent['reason'] == 'recent_release': continue
+        # At his own one-year reservation ask, the equal-cash comparison used
+        # by minimum_acceptance is acceptable. Do not force a minimum deal.
+        salary = max(float(consent.get('annual_offer', 0)), float(consent.get('annual_ask', 0)))
+        if salary <= 0: continue
+        contract = PS.minimum_contract(league, team, p)
+        contract.base[0] = salary * max(0, 18-team.cap.paid_week)/18
+        trial = copy.copy(p)
+        if p.pos == 'P':
+            PC.change_position(SimpleNamespace(player=lambda _: trial, teams=league.teams), p.pid, 'K', log=False)
+            ratings = PC.effective_ratings(trial)
+            if (ratings.get('kick_acc_rating', 0) < 65 or ratings.get('kick_power_rating', 0) < 70
+                    or trial.ovr < 70): continue
+        for q in active:
+            if q.out_until is not None or PS.locked(q, league.week) or PS.protected(team, q, league, incoming=trial): continue
+            proposed = [r for r in active if r is not q] + [trial]
+            next_depth = PS.essential_depth(team, proposed, league.week)['shortages']
+            if any(n > depth.get(g, 0) for g, n in next_depth.items()): continue
+            try: require_room(league, team, p.pid, contract, release_pid=q.pid)
+            except ValueError: continue
+            after = RN.assess(team, proposed)
+            next_coverage = RN.essential_coverage(team, report=after)
+            if not RN.coverage_not_worse(coverage, next_coverage): continue
+            if 'K' in after['uncovered']: continue
+            if not PS._cpu_move_budget(league, team, trial, contract, q, essential=True): continue
+            _, dead, _ = CT.savings_if_cut(q, league.post_june1())
+            key = (p.pos == 'K', after['score']-dead-RN.retention_value(team, q), -contract.cap_hit(0))
+            if best is None or key > best[0]: best = (key, p, q, contract)
+    if best is None: return False
+    _, p, q, contract = best
+    league.release(q.pid)
+    if not _sign_replacement(league, team, p, contract, consent=True):
+        raise RuntimeError('Validated specialist recovery became unavailable')
+    if p.pos != 'K': PC.change_position(league, p.pid, 'K')
+    team.sync_cap()
+    return True
+
+
 def repair_shape(league):
     """Swap genuine surplus for a missing job without creating another hole."""
     import roster_needs as RN
@@ -342,7 +438,9 @@ def repair_shape(league):
                     key = (improvement, gain)
                     if best is None or key > best[0]: best = (key, p, q, contract)
             if best is None:
-                if _cross_train_kicker(league, team, report):
+                if (_cross_train_line(league, team, report)
+                        or _cross_train_kicker(league, team, report)
+                        or _market_kicker_recovery(league, team, report)):
                     fixed += 1
                     continue
                 break

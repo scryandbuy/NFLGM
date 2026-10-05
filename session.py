@@ -576,7 +576,7 @@ class Session:
             if self.step_clear_wire() is False:
                 if getattr(self, '_cpu_roster_block', None):
                     return dict(done='Blocked', next=self.next_label(), why=self._cpu_roster_block)
-                return dict(done='Cap compliance cuts are on waivers', next=self.next_label())
+                return dict(done='New roster cuts are on waivers — review claims before advancing again', next=self.next_label())
             self.stop = ('week', 1); self.played = False
             self._sync_week_health()
             self._ensure_scout_focus()
