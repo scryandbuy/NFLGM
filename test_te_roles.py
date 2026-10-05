@@ -19,6 +19,21 @@ class TightEndRoles(unittest.TestCase):
         self.assertAlmostEqual(T.te_role_score(p.ratings,'blocking'),75)
         self.assertAlmostEqual(O.role_grade(p,'TE','12',0),87)
         self.assertAlmostEqual(O.role_grade(p,'TE','12',1),75)
+    def test_run_block_visible_and_affects_fb_and_te_overall(self):
+        import views_club as VC
+        for pos in ('FB', 'TE'):
+            p = Player('blocker', 'Blocker', pos, 24,
+                       {key: 70. for key in T.DEPTH_WEIGHTS[pos]}, potential=99, team='GB')
+            rows = [row for column in VC.attr_cols(p) for row in column['rows']]
+            run_block = [row for row in rows if row['key'] == 'run_block_rating']
+            self.assertEqual(len(run_block), 1)
+            self.assertEqual(run_block[0]['label'], 'Run Block')
+            before = p.ovr
+            p.ratings['run_block_rating'] += 10
+            expected = 10 * T.DEPTH_WEIGHTS[pos]['run_block_rating'] / sum(T.DEPTH_WEIGHTS[pos].values())
+            self.assertAlmostEqual(p.ovr - before, expected)
+            self.assertGreater(p.ovr, before)
+
     def test_migration_once_preserves_room_and_range(self):
         p=self.player();d=p.to_dict();d.pop('te_rating_version');d['potential']=88;d['potential_range']=[86,92]
         q=Player.from_dict(d)

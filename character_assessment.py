@@ -192,6 +192,14 @@ def report(view):
     return rows
 
 
+def board_flags(view):
+    """Display earned strengths and concerns at their saved confidence level."""
+    labels = {'work_ethic': {'concern': 'Work ethic concern', 'strength': 'Strong preparation'},
+              'discipline': {'concern': 'Discipline concern', 'strength': 'Plays under control'}}
+    return {labels[r['key']][r['status']]: r['confidence'] + ' Confidence'
+            for r in report(view) if r['status'] in ('concern', 'strength') and r['confidence']}
+
+
 def flags(view):
     labels = {'work_ethic': ('Work ethic concern', 'Strong preparation'),
               'discipline': ('Discipline concern', 'Plays under control')}

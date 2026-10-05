@@ -120,6 +120,7 @@ class DraftRuntimeTests(unittest.TestCase):
             L, L.teams[buyer], L.teams[pk.owner], [player.pid], [pk], prospect=observed)
         self.assertIn(buyer, actual_assessment['gains'])
         with patch('trade_engine.market_price', return_value=50.0), \
+             patch('trade_engine.evaluate', return_value={'accepted': True}), \
              patch('trades.package_football', return_value={
                  'approved': True, 'gains': {buyer: 2.0}, 'reserves': {}}) as football, \
              patch('roster_needs.move_gain', return_value=2.0) as gross, \
@@ -144,7 +145,7 @@ class DraftRuntimeTests(unittest.TestCase):
                 return 50.0 if owns else 100.0
             return 60.0 if item['kind'] == 'player' else 80.0
         def board(*args, players=None, **kwargs):
-            return [(100, target if incumbent.pid in {p.pid for p in players} else alternative)]
+            return [(100, target if incumbent.pid in {p.pid for p in (players if players is not None else draft_plan.projected_players(L.teams['DEN']))} else alternative)]
         with patch.object(D, '_bank', return_value=[player_asset, pick_asset]), \
              patch.object(DFT, 'board', side_effect=board), \
              patch('trade_engine.pick_price_dollars', return_value=50), \
@@ -169,6 +170,7 @@ class DraftRuntimeTests(unittest.TestCase):
         # future contracts; market and funding have dedicated regression tests.
         with patch.object(DFT, 'board', return_value=[(100, target)]), \
              patch('trade_engine.market_price', return_value=50), \
+             patch('trade_engine.evaluate', return_value={'accepted': True}), \
              patch('trades._financial_trade', return_value=True):
             ev = D._execute('DEN', seller, offer, pk, target)
         self.assertIsNotNone(ev)
@@ -212,6 +214,7 @@ class DraftRuntimeTests(unittest.TestCase):
         self.assertEqual(pk.owner, D.user)
         with patch('trade_engine.evaluate', return_value={'accepted':True}), \
              patch('trade_engine.market_price', return_value=50), \
+             patch('trade_engine.evaluate', return_value={'accepted': True}), \
              patch('trades._financial_trade', return_value=True), \
              patch.object(DFT, 'board', return_value=[(100, target)]):
             self.assertIsNotNone(D.accept_offer(offer))

@@ -131,6 +131,8 @@ def squad_acceptance(league, player):
 
 # ------------------------------------------------------------ moves
 def sign_to_squad(league, abbr, pid):
+    if __import__("fa_window").closed(league):
+        return dict(ok=False, why=__import__("fa_window").MESSAGE)
     team = league.teams[abbr]; p = league.player(pid)
     if (p is None or p.retired or (p.team is not None and p.team != abbr)
             or p in squad(team) or p in (getattr(team, 'ir', None) or [])
@@ -195,6 +197,7 @@ def minimum_contract(league, team, player):
 
 
 def available_free_agents(league):
+    if __import__("fa_window").closed(league): return []
     """The FA list also contains waived players whose claim period is open."""
     import waivers
     pending = {e['pid'] for e in waivers.pending(league)}

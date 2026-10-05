@@ -712,6 +712,9 @@ class League:
                 p.number = n; return
 
     def sign(self, pid, abbr, contract, log=True):
+        candidate = self.player(pid)
+        if pid in self.free_agents or (candidate is not None and candidate.team is None and candidate not in getattr(self, "draft_pool", [])):
+            __import__("fa_window").require_open(self)
         p = self.player(pid)
         if p.team and p.team in self.teams:
             import practice_squad as PSQ

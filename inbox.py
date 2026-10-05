@@ -82,6 +82,27 @@ def mail_layout(message):
     import copy
     import re
     payload = dict(message.get('payload') or {})
+    if str(message.get('subject', '')).startswith('Coaching carousel summary') and not payload.get('mail_sections'):
+        lines = payload.get('body_rows') or str(message.get('body') or '').splitlines()
+        sections = []
+        section = None
+        for line in lines:
+            line = str(line).strip()
+            if re.fullmatch(r'(Hired|Fired / released / replaced|Other departures|Jobs still open) \(\d+\)', line):
+                title = line.replace('Fired / released / replaced', 'Departures').replace('Other departures', 'Other Changes')
+                section = dict(title=title, columns=['Team', 'Role', 'Coach', 'Details'], rows=[])
+                sections.append(section)
+            elif section is not None and line and line != 'None':
+                cells = line.split(' — ', 3)
+                cells += [''] * (4-len(cells))
+                if section['title'].startswith('Hired'):
+                    cells[3] = re.sub(r'^Hired(?: \((.*)\))?$', lambda m: m.group(1) or '', cells[3])
+                    if cells[3] == 'from the pool': cells[3] = ''
+                section['rows'].append([dict(text=value, mentions=reference_spans(value, message.get('entities') or [], [])) for value in cells])
+        if sections:
+            payload.update(mail_sections=[s for s in sections if s['rows']],
+                           mail_intro=dict(text='Coaching changes this offseason.' if any(s['rows'] for s in sections) else 'No coaching changes this offseason.', mentions=[]))
+            return payload
     if payload.get('link') == 'league:bracket' and not payload.get('mail_sections'):
         # Older playoff letters used single newlines, which the prose renderer
         # correctly treats as wrapping. Recover only that exact saved format.
@@ -230,6 +251,8 @@ def post_trade_offer(league, buyer, user_team, sends, gets, why, expires_week):
     sends: assets the buyer gives (pids or DraftPick objects); gets: pids the
     buyer wants from the user. Stored as ids so the inbox survives a save.
     """
+    import trades as TR
+    if TR.trade_was_rejected(league, buyer, user_team, sends, gets): return None
     def key(x):
         return x if isinstance(x, str) else dict(pick=True, year=x.year, round=x.round,
                                                   original=x.original, selection=x.selection)
@@ -290,6 +313,11 @@ def accept(league, msg_id, user_team):
 def decline(league, msg_id):
     m = next((m for m in _box(league) if m['id'] == msg_id), None)
     if m is not None and m['status'] in ('unread', 'open'):
+        if m.get('kind') == 'trade_offer':
+            import trades as TR
+            p = m.get('payload') or {}
+            if all(k in p for k in ('buyer', 'user_team', 'sends', 'gets')):
+                TR.remember_trade_rejection(league, p['buyer'], p['user_team'], p['sends'], p['gets'])
         m['status'] = 'declined'
     return m
 
@@ -412,8 +440,9 @@ def reconcile(league):
             else:
                 m['needs_decision'] = False
         elif kind == 'contract_year':
-            p = league.player(pl.get('pid')) if pl.get('pid') else None
-            done = (p is None or p.team != user or not p.contract or p.contract.years != 1
+            pids = pl.get('digest_pids') or [pl.get('pid')]
+            players = [league.player(pid) for pid in pids if pid]
+            done = (not any(p is not None and p.team == user and p.contract and p.contract.years == 1 for p in players)
                     or (year is not None and m.get('year', year) < year))
         elif kind == 'exit':
             meetings = (getattr(league, 'exit_meetings', {}) or {}).get(str(m.get('year', year)))

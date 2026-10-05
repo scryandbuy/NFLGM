@@ -133,7 +133,7 @@ def capture(league, played, user):
             # Derive it from the log so previously saved games render correctly.
             start = float(getattr(dr, 'start', 75)); end = ticker.offensive_drive_end(dr)
             res_word = ticker.drive_result(dr, res.get('overtime', False))
-            drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), start_label=ticker._spot(start, off_abbr, def_abbr), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=ticker.display_drive_yards(start, end), first_downs=int(getattr(dr, 'first_downs', 0) or 0),
+            drives.append(dict(n=i + 1, off=off_abbr, start=round(100 - start, 1), start_label=ticker._spot(start, off_abbr, def_abbr), end=round(100 - end, 1), plays_n=int(getattr(dr, 'plays', len(plays))), yards=ticker.display_drive_yards(start, end, off_abbr, def_abbr), first_downs=int(getattr(dr, 'first_downs', 0) or 0),
                                result=res_word, points=pts, return_only=bool(getattr(dr, 'return_only', False)), quarter=start_quarter, scoring_quarter=scoring_quarter(dr), clock=_clock(getattr(dr, 'clock', 0)),
                                score=f"{hs}–{as_}", plays=plays))
             diff = (hs - as_) if me_home else (as_ - hs)

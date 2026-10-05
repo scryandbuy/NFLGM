@@ -126,8 +126,7 @@ def line_metrics(line):
 
 
 DEF_EPA_LABEL = 'Shared Defensive EPA/Play'
-DEF_EPA_NOTE = ('Higher is better. Each play\'s defensive EPA is shared equally among all 11 defenders, '
-                'then averaged over each player\'s defensive snaps. This reflects on-field results, not an individual grade.')
+DEF_EPA_NOTE = ''
 
 
 def leaders(league, year, metric, min_n=1, top=10, pos=None):

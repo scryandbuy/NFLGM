@@ -127,7 +127,9 @@ class DraftPlanningTests(unittest.TestCase):
         aged_board = dict((p.pid, score) for score, p in D.board(L, 'MIN', 10, {}, set()))
         self.assertGreater(aged_board['rookie-QB0'], controlled_board['rookie-QB0'])
         starter.age = 31; starter.contract = Contract(1, [20])
-        self.assertGreater(DP.assess(L, 'MIN')['positions']['QB']['succession'], 6)
+        expiring = DP.assess(L, 'MIN')['positions']['QB']['succession']
+        self.assertGreater(expiring, scores[0])
+        self.assertLess(expiring, 6)  # a retainable young star is not assumed gone
 
     def test_one_successor_cannot_cover_multiple_expiring_receivers(self):
         L, t = fixture()

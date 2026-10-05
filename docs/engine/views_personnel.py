@@ -261,7 +261,9 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     b_sends = _trade_ids(league, other, b_sends)
     import trades as TR
     ev = _evaluate(league, abbr, other, list(a_sends), list(b_sends))
-    if ev['verdict'] == 'blocked': return dict(ok=False, done=False, why=ev['read'])
+    if ev['verdict'] == 'blocked':
+        TR.remember_trade_rejection(league, abbr, other, a_sends, b_sends)
+        return dict(ok=False, done=False, why=ev['read'])
     them = league.teams[other]
     rng = _rng(league, 11)
     # their GM answers: the engine's acceptance roll on their gain
@@ -271,11 +273,13 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     a_items = [(x if _trade_player(league, x) else _find_pick(league, abbr, x)) for x in a_sends]; b_items = [(x if _trade_player(league, x) else _find_pick(league, other, x)) for x in b_sends]
     decision = TR.cpu_trade_check(league, me, them, a_items, b_items)
     if not decision['approved']:
+        TR.remember_trade_rejection(league, abbr, other, a_items, b_items)
         if counter is not None: counter['state'] = 'declined'
         return dict(ok=False, done=False, why=decision['why'])
     yes = TR.will_accept(r['b_gain'] - _cpu_portfolio_cost(decision, other), rng,
                          TR.persona(them.gm)['aggression'], selling=True)
     if not yes:
+        TR.remember_trade_rejection(league, abbr, other, a_items, b_items)
         if counter is not None: counter['state'] = 'declined'
         return dict(ok=True, done=False, why=(ev['read'] if ev['verdict'] in ('short', 'far') else "We are not ready to accept this offer."))
     try: league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
@@ -444,6 +448,7 @@ def act_gather(league, abbr, pid):
             return asset_cache[k]
         scored = []
         for original_index, pkg in enumerate(cands[:24]):
+            if TR.trade_was_rejected(league, abbr, other, [pid], [it for kind, it in pkg]): continue
             gets = [asset_of(kind, it) for kind, it in pkg]
             r = TE.evaluate(dict(a_sends=sends_them, a_gets=gets), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
             if r.get('blocked') or r['b_gain'] < 0.5: continue

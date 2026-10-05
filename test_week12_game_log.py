@@ -86,7 +86,7 @@ class Week12Log(unittest.TestCase):
             returned = re.search(r'returned (\d+) yard', text)
             ret = int(returned[1]) if returned else 0
             self.assertEqual(origin - gross + ret,
-                             100 - ticker._spot_yards(punt['new_yardline']))
+                             100 - ticker.display_field_position(punt['new_yardline'], 'LA', 'GB'))
             if punt['how'] == 'fair_catch':
                 self.assertEqual(ret, 0)
             if punt['how'] == 'return':

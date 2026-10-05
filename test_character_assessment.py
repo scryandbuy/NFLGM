@@ -23,6 +23,32 @@ class CharacterAssessmentTests(unittest.TestCase):
         league.teams['GB'].staff = {'scout': N(staff_traits=[])}
         return league, p, view
 
+    def test_board_flags_match_saved_card_reads_at_each_confidence(self):
+        import views_draft as VD
+        for error, confidence in ((18, 'Limited'), (10, 'Moderate'), (5, 'Strong')):
+            league, p, view = self.setup_player()
+            view['character_assessments'] = {
+                'work_ethic': dict(value=40, error=error, source='References'),
+                'discipline': dict(value=71, error=error, source='Film')}
+            before = copy.deepcopy(view)
+            row = VD._prospect(league, 'GB', p)
+            expected = {'Work ethic concern': confidence + ' Confidence',
+                        'Plays under control': confidence + ' Confidence'}
+            self.assertEqual(row['flag_tips'], expected)
+            self.assertTrue(set(expected).issubset(row['words']))
+            self.assertEqual(view, before)
+            self.assertEqual([r['confidence'] for r in row['character_report']], [confidence] * 2)
+
+    def test_board_flags_omit_neutral_and_unknown_assessments(self):
+        self.assertEqual(CA.board_flags({}), {})
+        view = {'character_assessments': {
+            'work_ethic': dict(value=50, error=5),
+            'discipline': dict(value=50, error=18)}}
+        self.assertEqual(CA.board_flags(view), {})
+        del view['character_assessments']['discipline']
+        view['character_assessments']['work_ethic']['value'] = 80
+        self.assertEqual(CA.board_flags(view), {'Strong preparation': 'Strong Confidence'})
+
     def test_old_prospect_gets_stable_display_read_without_trait_or_risk_change(self):
         league, p, view = self.setup_player()
         league.draft_pool = [p]
@@ -213,7 +239,7 @@ class CharacterAssessmentTests(unittest.TestCase):
         self.assertNotIn('follows the money', str(card))
         self.assertNotIn('wants the ball', str(card))
 
-    def test_prospect_card_hides_tentative_and_legacy_badges(self):
+    def test_prospect_card_shows_saved_tentative_and_legacy_reads_with_confidence(self):
         import views_draft as VD
         league, p, view = self.setup_player()
         league.draft_pool = [p]; league.consensus = {p.pid: dict(ovr=75, rank=30)}
@@ -223,8 +249,10 @@ class CharacterAssessmentTests(unittest.TestCase):
         session = N(user_team='GB', draft=None, stop=('week', 1))
         with patch.object(VD, 'rail', return_value={}):
             card = VD.prospect_card(session, league, 'GB', p.pid)
-        self.assertNotIn('Work ethic concern', card['words'])
-        self.assertNotIn('Discipline concern', card['words'])
+        self.assertIn('Work ethic concern', card['words'])
+        self.assertIn('Discipline concern', card['words'])
+        self.assertEqual(card['flag_tips'], {'Work ethic concern': 'Limited Confidence',
+                                             'Discipline concern': 'Limited Confidence'})
         self.assertEqual(len(card['character_report']), 2)
 
     def test_practice_work_ethic_and_dev_have_independent_bounded_effects(self):
