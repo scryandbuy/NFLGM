@@ -403,6 +403,7 @@ def repair_shape(league):
     """Swap genuine surplus for a missing job without creating another hole."""
     import roster_needs as RN
     import practice_squad as PS
+    import veteran_market as VM
     from cap_accounting import require_room
     fixed = 0
     for abbr, team in league.teams.items():
@@ -412,16 +413,19 @@ def repair_shape(league):
             coverage = RN.essential_coverage(team, report=report)
             if not coverage['shortages'] or len(team.active()) != ROSTER_LIMIT: break
             sources = _sources(team, report, league.week) | {pos for eligible in coverage['sources'].values() for pos in eligible}
-            pool = _replacement_pool(league, team, sources, only_sources=True)
+            comps = VAL.pool_from_league(league)
+            pool = _replacement_pool(league, team, sources, only_sources=True, comps=comps)
             if not any(p.pos == 'LS' for p in pool) and _convert_long_snapper(league, team, report):
                 fixed += 1
                 continue
             candidates = [p for pos in sorted(sources) for p in sorted(
                 (q for q in pool if q.pos == pos), key=lambda q: -q.ovr)[:4]]
             prepared = RN.assessment_inputs(team, list(team.active()) + candidates)
+            replacement_cache = {'quote_pool': comps}
             best = None
             for p in candidates:
                 contract = PS.minimum_contract(league, team, p)
+                quote = VAL.value_player(league, p, side='team', rng=None, pool=comps) or {'apy': p.apy or contract.cap_hit(0)}
                 for q in team.active():
                     if PS.locked(q, league.week) or PS.protected(team, q, league, incoming=p): continue
                     saved, dead, _ = CT.savings_if_cut(q, league.post_june1())
@@ -435,7 +439,16 @@ def repair_shape(league):
                     if improvement <= 1e-9: continue
                     gain = after['score'] - report['score'] - dead - RN.retention_value(team, q)
                     if gain <= 0: continue
-                    key = (improvement, gain)
+                    # Filling the same role need does not make every unused
+                    # reserve equally expendable. Reuse the market's complete
+                    # keep/release comparison, without double-charging youth.
+                    # Coverage repair keeps its existing necessity/financial
+                    # gates; the optional market's approval threshold must not
+                    # prevent filling a required job.
+                    replacement = VM.replacement_read(league, team, p, q, contract,
+                        after['score'] - report['score'] - dead, report, quote,
+                        cache=replacement_cache)
+                    key = (improvement, replacement['net_gain'])
                     if best is None or key > best[0]: best = (key, p, q, contract)
             if best is None:
                 if (_cross_train_line(league, team, report)

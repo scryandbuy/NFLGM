@@ -35,9 +35,12 @@ class EssentialRosterTests(unittest.TestCase):
         CD.repair_shape(L);self.assertEqual(t.roster,before)
     def test_cap_and_protection(self):
         L,t,p=self.roster();before=list(t.roster)
-        with patch('practice_squad.protected',return_value=True):self.assertEqual(CD.repair_shape(L),0)
+        # These assertions isolate release/signing guards. An internal OL
+        # conversion can legally fill the job without releasing a protected
+        # player or spending any cap, and is covered separately below.
+        with patch('cutdown._cross_train_line',return_value=False), patch('practice_squad.protected',return_value=True):self.assertEqual(CD.repair_shape(L),0)
         self.assertEqual(t.roster,before)
-        with patch('cap_accounting.require_room',side_effect=ValueError('no room')):self.assertEqual(CD.repair_shape(L),0)
+        with patch('cutdown._cross_train_line',return_value=False), patch('cap_accounting.require_room',side_effect=ValueError('no room')):self.assertEqual(CD.repair_shape(L),0)
         self.assertEqual(t.roster,before)
     def test_atl_linebacker_summary_matches_package(self):
         L,t=fixture();t.gm.def_front='3-4'
@@ -56,12 +59,22 @@ class EssentialRosterTests(unittest.TestCase):
     def test_real_protected_picks_and_negative_cap(self):
         L,t,p=self.roster();before=list(t.roster)
         for q in t.roster:q.draft_round=1;q.draft_year=L.year
-        self.assertEqual(CD.repair_shape(L),0)
+        with patch('cutdown._cross_train_line',return_value=False):self.assertEqual(CD.repair_shape(L),0)
         self.assertEqual(t.roster,before)
         for q in t.roster:q.draft_round=None
         t.cap.cap=.1
-        self.assertEqual(CD.repair_shape(L),0)
+        with patch('cutdown._cross_train_line',return_value=False):self.assertEqual(CD.repair_shape(L),0)
         self.assertEqual(t.roster,before)
+
+    def test_protected_roster_can_fill_center_internally_without_spending(self):
+        L,t,p=self.roster();before={q.pid for q in t.active()};cap=t.cap_space
+        for q in t.roster:q.draft_round=1;q.draft_year=L.year
+        self.assertEqual(CD.repair_shape(L),1)
+        self.assertEqual({q.pid for q in t.active()},before)
+        self.assertEqual(t.cap_space,cap)
+        self.assertIsNone(p.team)
+        self.assertNotIn('offense:C:0',RN.essential_coverage(t)['shortages'])
+        self.assertTrue(all(x['kind']=='position_change' for x in L.transactions))
 
     def test_te_fullback_is_acceptable_and_reserve_floors_soft(self):
         L,t=fixture();t.gm.off_personnel='21'
