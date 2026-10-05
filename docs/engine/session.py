@@ -912,8 +912,9 @@ class Session:
         try: GW.post_report(self.L, wk_)
         except Exception as e:
             import sys; print('playoff report failed:', e, file=sys.stderr)
-        subject, body = self._round_letter(post, rnd, ms, user, mine)
-        IB.post(self.L, 'league', subject, body, sender='league', payload=dict(link='league:bracket'))
+        subject, body, sections = self._round_letter(post, rnd, ms, user, mine)
+        IB.post(self.L, 'league', subject, body, sender='league',
+                payload=dict(link='league:bracket', mail_sections=sections))
 
     def _round_letter(self, post, rnd, ms, user, mine):
         """The league's letter for a playoff round: who plays whom, as what seed with what record, and where. The
@@ -927,11 +928,11 @@ class Session:
         seed_of = {}
         for c, sd in (getattr(post, 'seeds', {}) or {}).items():
             for i, x in enumerate(sd): seed_of[x] = i + 1
-        def tag(x): return f"The {seed_of[x]} seed {nm(x)} ({rec(x)})" if x in seed_of else f"{nm(x)} ({rec(x)})"
+        def tag(x): return f"No. {seed_of[x]} {nm(x)} ({rec(x)})" if x in seed_of else f"{nm(x)} ({rec(x)})"
         wk_ = 19 + PS.Postseason.ROUNDS.index(rnd)
         name = PS.Postseason.ROUND_NAMES[rnd]
         if rnd == 'SB':
-            if not ms: return f"Championship Game", "The conference championships are not yet decided."
+            if not ms: return "Championship Game", "The conference championships are not yet decided.", []
             c, h, a = ms[0]
             site = PS.sb_venue(L)
             def road(x):
@@ -947,16 +948,17 @@ class Session:
                      f"{nm(a)}, the {seed_of.get(a, '?')} seed out of the {conf_of.get(a, '')}, finished {rec(a)}. Road to the final: {road(a)}",
                      f"{nm(h)}, the {seed_of.get(h, '?')} seed out of the {conf_of.get(h, '')}, finished {rec(h)}. Road to the final: {road(h)}"]
             if user in (h, a): lines.append("You are in it. The game plan is on your desk.")
-            return f"Championship Game {site['numeral']}: {nm(a)} vs {nm(h)} at {site['stadium']}", '\n\n'.join(lines)
-        games = [f"{tag(a)} at {tag(h)}, {STADIUM.get(h, nm(h))}" for c, h, a in ms]
+            return f"Championship Game {site['numeral']}: {nm(a)} vs {nm(h)} at {site['stadium']}", '\n\n'.join(lines), []
+        games = [[tag(a), tag(h), STADIUM.get(h, nm(h) + ' Stadium')] for c, h, a in ms]
         if mine is not None:
             c, h, a = mine
-            opener = f"Your {name} game: {'at ' + nm(h) + ', ' + STADIUM.get(h, '') if a == user else 'vs ' + nm(a) + ' at home'}. They finished {rec(h if a == user else a)}."
+            opener = f"You {'visit ' + tag(h) if a == user else 'host ' + tag(a)} in the {name}."
         else:
             alive = {t for al in post.alive.values() for t in al.values()}
-            opener = f"You have the bye this round; the winner of the worst surviving seed's game comes to you." if user in alive else ""
+            opener = "You have a first-round bye. You will host the lowest remaining seed in the Divisional Round." if rnd == 'WC' and user in alive else ""
         subject = {'WC': f"Wild Card Weekend: {len(ms)} games", 'DIV': f"Divisional Round: {len(ms)} games", 'CONF': "Conference Championships"}[rnd]
-        return subject, '\n\n'.join(part for part in (opener, 'The round\n' + '\n'.join(games) if games else '') if part)
+        sections = [IB.mail_section('Round Matchups', games, ('Away Team', 'Home Team', 'Venue'))] if games else []
+        return subject, opener, sections
 
     def _close_playoffs(self):
         """After the Championship Game: the champion, the draft order, the firings, and into the offseason."""

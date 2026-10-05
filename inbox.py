@@ -82,6 +82,27 @@ def mail_layout(message):
     import copy
     import re
     payload = dict(message.get('payload') or {})
+    if payload.get('link') == 'league:bracket' and not payload.get('mail_sections'):
+        # Older playoff letters used single newlines, which the prose renderer
+        # correctly treats as wrapping. Recover only that exact saved format.
+        intro, marker, fixtures = (message.get('body') or '').partition('The round\n')
+        rows = []
+        for line in fixtures.splitlines() if marker else []:
+            match = re.fullmatch(r'(The \d+ seed .+? \([\d-]+\)|.+? \([\d-]+\)) at '
+                                 r'(The \d+ seed .+? \([\d-]+\)|.+? \([\d-]+\)), (.+)', line)
+            if not match: break
+            rows.append([re.sub(r'^The (\d+) seed ', r'No. \1 ', cell) for cell in match.groups()])
+        else:
+            if rows:
+                intro = intro.strip()
+                intro = re.sub(r'^Your (.+) game: vs (.+) at home\. They finished ([\d-]+)\.$',
+                               r'You host \2 (\3) in the \1.', intro)
+                intro = re.sub(r'^Your (.+) game: at (.+?), .+\. They finished ([\d-]+)\.$',
+                               r'You visit \2 (\3) in the \1.', intro)
+                section = mail_section('Round Matchups', rows, ('Away Team', 'Home Team', 'Venue'))
+                section['rows'] = [[dict(text=value, mentions=[]) for value in row] for row in rows]
+                payload.update(mail_sections=[section], mail_intro=dict(text=intro, mentions=[]))
+                return payload
     regression = payload.get('link') == 'club:regression' and payload.get('mail_sections')
     if regression: payload['mail_sections'] = copy.deepcopy(payload['mail_sections'])
     for section in (payload.get('mail_sections') or []) if regression else []:
