@@ -53,7 +53,7 @@ def waive(league, p, from_team, week):
                                 claims=[], user_notified=False))
 
 
-def reaches_user(league, e, week, market=None):
+def reaches_user(league, e, week, market=None, *, _assessments=None):
     """Does this man reach the user's priority? False when a club ahead of him wants the man
     (the wants() read is the same one the award uses, so this is the award foretold)."""
     user = getattr(league, 'user_team', None)
@@ -69,7 +69,7 @@ def reaches_user(league, e, week, market=None):
     e['ahead'] = None
     for abbr in order:
         if abbr == user: break
-        if abbr != e['from_team'] and wants(league, abbr, p, week, market=market):
+        if abbr != e['from_team'] and wants(league, abbr, p, week, market=market, _assessments=_assessments):
             e['ahead'] = abbr; break
     return e['ahead'] is None
 
@@ -93,7 +93,7 @@ def priority(league, week, standings=None):
 
 
 # ------------------------------------------------------------ the AI's claim
-def wants(league, abbr, p, week, market=None):
+def wants(league, abbr, p, week, market=None, *, _assessments=None):
     """Does this club claim him? Need at the spot, value over the inherited
     cost, and room or a man it would drop for him. `market` is his valuation,
     computed once per man on the wire and shared by every club: the price
@@ -111,8 +111,16 @@ def wants(league, abbr, p, week, market=None):
     # A REAL UPGRADE, or nothing: claims at +1.5 over the k-th man, with the
     # released man going back on the wire, fed a loop that ran 689 claims a
     # season against a real ~150 in season
-    if p.ovr < incumbent + 3.0 and RN.move_gain(team, p) < 3.0:
-        return False
+    if p.ovr < incumbent + 3.0:
+        baseline = None
+        if _assessments is not None:
+            # Only the read-only notification sweep shares these snapshots.
+            # Awarding claims changes rosters and must use fresh assessments.
+            if abbr not in _assessments:
+                _assessments[abbr] = RN.assess(team)
+            baseline = _assessments[abbr]
+        if RN.move_gain(team, p, baseline=baseline) < 3.0:
+            return False
     if not week:
         # the cut-down wave: a club makes one or two claims, not a dozen
         if sum(1 for x in league.transactions[-3000:] if x.get('kind') == 'waiver_claim' and x.get('team') == abbr
@@ -259,12 +267,14 @@ def notify_user(league, entries, week, digest=False):
     import valuation as VAL
     pool = VAL.pool_from_league(league)
     reach = []
-    for e in ents:
-        p = league.player(e['pid'])
-        if p is None: continue
-        try: market = VAL.value_player(league, p, side='team', rng=None, pool=pool)
-        except Exception: market = None
-        if reaches_user(league, e, week, market=market): reach.append(e)
+    assessments = {}  # Discard before any later roster, rating or coach change.
+    with VAL.comparison_batch():
+        for e in ents:
+            p = league.player(e['pid'])
+            if p is None: continue
+            try: market = VAL.value_player(league, p, side='team', rng=None, pool=pool)
+            except Exception: market = None
+            if reaches_user(league, e, week, market=market, _assessments=assessments): reach.append(e)
     if not reach: return
     if digest or len(reach) > 12:
         IB.post(league, 'waiver_digest', f'The wire: {len(reach)} players reach your priority', f"{len(ents)} players were waived and {len(reach)} of them clear every club ahead of you (you are {mine} of 32). They are on the wire page; claim any you want before the Advance, or leave them and nothing happens.", sender='league', payload=dict(link='personnel:waivers', n=len(reach), priority=mine), expires_week=(week or 0) + 1)

@@ -33,6 +33,7 @@ exactly when real teams discover the same thing.
 import numpy as np
 
 import contracts as CT
+import valuation as VAL
 
 ROSTER_LIMIT = 53
 
@@ -417,6 +418,7 @@ def emergency_fill(league, rng, verbose=False):
     return fill_short(league, rng, verbose)
 
 
+@VAL.comparison_batch()
 def finalize(league, rng, verbose=False, passes=3):
     """Resolve roster size, replacement funding and starting roles together.
 
