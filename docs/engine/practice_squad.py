@@ -341,14 +341,14 @@ def elevate_for_coverage(league, team, week, playoffs=False, desk=None):
 
 
 def _recent_additions(league, team):
+    # All acquisition routes deserve the same trial, including inherited
+    # trade contracts and offseason commitments whose calendar week reset.
+    from veteran_market import recent_commitments
     week = int(getattr(league, 'week', 0) or 0)
     recent = {p.pid for p in team.active()
               if (mark := p.xp_spent.get('_cpu_added')) and mark[0] == league.year
               and 0 <= week - int(mark[1]) <= 3}
-    recent.update(e.get('pid') for e in getattr(league, 'transactions', ())
-        if e.get('team') == getattr(team, 'abbr', None) and e.get('year') == league.year
-        and e.get('kind') in ('sign', 'ps_callup', 'ps_poach', 'emergency_sign')
-        and 0 <= week - int(e.get('week') or 0) <= 3)
+    recent.update(recent_commitments(league, team, week))
     return recent
 
 

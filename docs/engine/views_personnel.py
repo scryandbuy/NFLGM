@@ -123,8 +123,13 @@ def _cap_block_read(reason, other):
     return messages.get(reason, 'This trade cannot proceed under the current cap constraints.')
 
 
+def _cpu_portfolio_cost(decision, abbr):
+    """Cost of the CPU's remaining draft options, in its trade-value units."""
+    return max(0., float((decision.get('portfolio_costs') or {}).get(abbr, 0.)))
+
+
 def _evaluate(league, abbr, other, a_sends, b_sends, *, pool=None,
-              football_cache=None, financial_cache=None):
+              football_cache=None, financial_cache=None, decision_out=None):
     """Both clubs price the package. Returns the read in words, never the dollars."""
     a_sends = _trade_ids(league, abbr, a_sends)
     b_sends = _trade_ids(league, other, b_sends)
@@ -135,6 +140,7 @@ def _evaluate(league, abbr, other, a_sends, b_sends, *, pool=None,
     offer_a = dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me))
     r = TE.evaluate(offer_a, me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
     plan_read = None
+    portfolio_cost = 0.
     required_gain = 0.9
     if not r.get('blocked'):
         items_a = [x if _trade_player(league, x) else _find_pick(league, abbr, x) for x in a_sends]
@@ -142,7 +148,10 @@ def _evaluate(league, abbr, other, a_sends, b_sends, *, pool=None,
         decision = TR.cpu_trade_check(league, me, them, items_a, items_b,
                                       pool=pool, football_cache=football_cache,
                                       financial_cache=financial_cache)
+        if decision_out is not None:
+            decision_out.update(decision)
         required_gain = max(required_gain, float(decision.get('required_gain', 0.)))
+        portfolio_cost = _cpu_portfolio_cost(decision, other)
         if not decision['approved']:
             r = dict(r, blocked='cpu_plan', accepted=False)
             plan_read = decision['why']
@@ -157,12 +166,12 @@ def _evaluate(league, abbr, other, a_sends, b_sends, *, pool=None,
     if b_in is None:
         b_in = sum(TE.team_price(x, them.ctx(), them.cap_space, gb, owns=False)
                    for x in offer_a['a_sends'])
-    target = max(1., float(b_out) + required_gain)
+    target = max(1., float(b_out) + required_gain + portfolio_cost)
     ratio = max(0., float(b_in)) / target
     interest = int(min(95, max(0, round(70 * ratio))))
     interest_band = 'low' if interest < 45 else 'medium' if interest < 63 else 'high'
     # words for their side
-    g = r['b_gain']
+    g = r['b_gain'] - portfolio_cost
     if r.get('blocked'):
         read = ("We need more value in return." if r['blocked'] == 'cpu_plan' and decision.get('needs_more') and r['b_gain'] < -3 else plan_read) or _cap_block_read(r['blocked'], other); verdict = 'blocked'
     elif g >= 4: read = "Strong offer; we're interested."; verdict = 'overpay'
@@ -189,7 +198,7 @@ def _evaluate(league, abbr, other, a_sends, b_sends, *, pool=None,
                 cap_after=dict(
                     me=round(__import__('cap_accounting').trade_projection(league, me.abbr, a_sends, b_sends).space(me.phase), 1),
                     them=round(__import__('cap_accounting').trade_projection(league, them.abbr, b_sends, a_sends).space(them.phase), 1)),
-                would_accept=not r.get('blocked') and (bool(r.get('accepted', False)) or g >= 0.5))
+                would_accept=not r.get('blocked') and g >= 0.5)
 
 
 def _words(league, items):
@@ -264,7 +273,8 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     if not decision['approved']:
         if counter is not None: counter['state'] = 'declined'
         return dict(ok=False, done=False, why=decision['why'])
-    yes = TR.will_accept(r['b_gain'], rng, TR.persona(them.gm)['aggression'], selling=True)
+    yes = TR.will_accept(r['b_gain'] - _cpu_portfolio_cost(decision, other), rng,
+                         TR.persona(them.gm)['aggression'], selling=True)
     if not yes:
         if counter is not None: counter['state'] = 'declined'
         return dict(ok=True, done=False, why=(ev['read'] if ev['verdict'] in ('short', 'far') else "We are not ready to accept this offer."))
@@ -295,10 +305,12 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     initial = evaluate([])
     if initial.get('blocked'):
         return dict(ok=False, adds=[], why=_cap_block_read(initial['blocked'], other))
+    football_cache, financial_cache = {}, {}
     def plan_check(ids):
         sent = [_find_pick(league, abbr, x) or x for x in ids]
         received = [_find_pick(league, other, x) or x for x in b_sends]
-        return TR.cpu_trade_check(league, me, them, sent, received)
+        return TR.cpu_trade_check(league, me, them, sent, received,
+                                  football_cache=football_cache, financial_cache=financial_cache)
     # Use the same roster and funding checks as Propose before promising that
     # a larger pick package fixes the deal. The seller may choose future value
     # if its remaining roster still covers the essential jobs.
@@ -306,6 +318,11 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     if not decision['approved'] and not decision.get('needs_more'):
         return dict(ok=False, adds=[], why=decision['why'])
     required_gain = max(0.9, float(decision.get('required_gain', 0.9)))
+    initial_gain = initial['b_gain'] - _cpu_portfolio_cost(decision, other)
+    # A pick recipient can change the CPU's remaining options with each
+    # proposed counter. Keep these checks local to this unchanged roster.
+    portfolio_active = bool(_cpu_portfolio_cost(decision, other)) or any(
+        _find_pick(league, other, x) is not None for x in b_sends)
     candidates = []
     for pk in me.picks:
         pid = f"{pk.year}-{pk.round}-{pk.original}"
@@ -324,8 +341,12 @@ def act_ask(league, abbr, other, a_sends, b_sends):
             return f"{pk.year}-{pk.round}-{pk.original}"
         alt_ids = [asset_id(a) for a in alternative]
         check = TE.evaluate(dict(a_sends=alternative, a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
-        if not check.get('blocked') and check['b_gain'] > required_gain and plan_check(alt_ids)['approved']:
-            return alt_ids
+        if not check.get('blocked') and check['b_gain'] > required_gain:
+            alternative_plan = plan_check(alt_ids)
+            if (alternative_plan['approved'] and
+                    check['b_gain'] - _cpu_portfolio_cost(alternative_plan, other) >
+                    max(required_gain, float(alternative_plan.get('required_gain', 0.)))):
+                return alt_ids
         return ids
     def response(ids):
         adds = [x for x in ids if x not in a_sends]
@@ -337,7 +358,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
         line = f"{other} proposes adding " + ', '.join(add_labels)
         if removes: line += ' in place of ' + ', '.join(remove_labels)
         return dict(ok=True, adds=adds, removes=removes, line=line + '.')
-    if decision['approved'] and initial['b_gain'] > required_gain:
+    if decision['approved'] and initial_gain > required_gain:
         return response(alternative_ids(outgoing, a_sends))
     # Bounded beam search explores combinations instead of repeatedly taking the first late pick.
     frontier = [()]; best = None
@@ -348,12 +369,22 @@ def act_ask(league, abbr, other, a_sends, b_sends):
                 package = prefix + (i,)
                 result = evaluate([candidates[j][2] for j in package])
                 if result.get('blocked'): continue
-                cost = result['b_gain'] - initial['b_gain']  # Seller values compensation; never read the buyer's private gain.
-                if result['b_gain'] > required_gain:
+                gain = result['b_gain']
+                threshold = required_gain
+                candidate_approved = True
+                if portfolio_active:
+                    candidate_plan = plan_check(a_sends + [candidates[j][1] for j in package])
+                    if not candidate_plan['approved'] and not candidate_plan.get('needs_more'):
+                        continue
+                    gain -= _cpu_portfolio_cost(candidate_plan, other)
+                    candidate_approved = candidate_plan['approved']
+                    threshold = max(threshold, float(candidate_plan.get('required_gain', 0.)))
+                cost = gain - initial_gain  # Seller values compensation; never read the buyer's private gain.
+                if candidate_approved and gain > threshold:
                     key = (cost, size, package)
                     if best is None or key < best[0]: best = (key, package)
                 else:
-                    pending.append((max(0, required_gain + .01 - result['b_gain']), cost, package))
+                    pending.append((max(0, threshold + .01 - gain), cost, package))
         pending.sort()
         frontier = [row[2] for row in pending[:64]]
         if not frontier: break
@@ -368,6 +399,9 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     decision = plan_check(a_sends + [x[1] for x in chosen])
     if not decision['approved']:
         return dict(ok=False, adds=[], why=decision['why'])
+    if final['b_gain'] - _cpu_portfolio_cost(decision, other) <= max(
+            required_gain, float(decision.get('required_gain', 0.))):
+        return dict(ok=False, adds=[], why='No acceptable counteroffer was found. Your offer has not changed.')
     final_ids = a_sends + [x[1] for x in chosen]
     return response(alternative_ids(outgoing + [x[2] for x in chosen], final_ids))
 
@@ -421,15 +455,19 @@ def act_gather(league, abbr, pid):
             ids = [f'{it.year}-{it.round}-{it.original}' if kind == 'pick' else it for kind, it in pkg]
             # Match Propose's checks and deterministic GM decision, including
             # the same valuation RNG sequence. Never advertise a rejected deal.
-            if _evaluate(league, abbr, other, [pid], ids, pool=pool,
-                         football_cache=football_cache,
-                         financial_cache=financial_cache)['verdict'] == 'blocked': continue
+            decision = {}
+            preview = _evaluate(league, abbr, other, [pid], ids, pool=pool,
+                                football_cache=football_cache,
+                                financial_cache=financial_cache, decision_out=decision)
+            if preview['verdict'] == 'blocked': continue
             answer_rng = _rng(league, 11)
             answer = TE.evaluate(dict(
                 a_sends=_assets(league, abbr, [pid], pool, answer_rng, viewer=them),
                 a_gets=_assets(league, other, ids, pool, answer_rng, viewer=me)),
                 me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
-            if answer.get('blocked') or not TR.will_accept(answer['b_gain'], answer_rng, gb['aggression'], selling=True): continue
+            if answer.get('blocked') or not TR.will_accept(
+                    answer['b_gain'] - _cpu_portfolio_cost(decision, other), answer_rng,
+                    gb['aggression'], selling=True): continue
             best = (pkg, r)
             break
         if best:

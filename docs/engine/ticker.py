@@ -95,7 +95,7 @@ def play_line(league, p, off_abbr, def_abbr):
         who = carrier or 'The back'
         how = {'inside_zone': 'up the middle', 'duo': 'between the tackles', 'power': 'behind the pulling guard', 'counter': 'on a counter', 'trap': 'on a trap',
                'outside_zone': 'off the edge', 'stretch': 'wide on the stretch', 'draw': 'on a draw', 'toss': 'on a toss', 'sweep': 'on a sweep'}.get(p.get('scheme'), 'inside' if p.get('sneak') else '')
-        text = f"{who} {'sneaks' if p.get('sneak') else 'runs'}{(' ' + how) if how else ''} {'to inside the 1' if near_goal_short else 'for ' + yd}"
+        text = f"{who} {'sneaks' if p.get('sneak') else 'keeps' if p.get('qb_run') else 'runs'}{(' ' + how) if how else ''} {'to inside the 1' if near_goal_short else 'for ' + yd}"
         if td:
             yl = float(p.get('yardline', 1) or 1)
             origin = 'inside the 1' if 0 < yl < 1 else f'the {_field_round(yl)}'
@@ -135,8 +135,12 @@ def play_line(league, p, off_abbr, def_abbr):
         text = f"{passer or 'The quarterback'} to {target or 'his receiver'}, dropped."; kind = 'loss'
     elif t == 'sack':
         by = _nm(league, p.get('by')); beaten = _nm(league, p.get('beaten'))
+        import rush_matchup as RM
+        finishers = [_nm(league, pid) for pid, _credit in RM.credited_sackers(p)]
+        shared = len(finishers) == 2 and all(finishers)
+        if shared: by = ' and '.join(finishers)
         loss = int(round(-shown_gain))
-        text = f"{by or 'The rush'} sacks {passer or 'the quarterback'}" + (f" for a loss of {loss}" if loss else ' at the line of scrimmage') + (f", beating {beaten}{'' if beaten.endswith('.') else '.'}" if beaten else '.')
+        text = f"{by or 'The rush'} {'share a sack of' if shared else 'sacks'} {passer or 'the quarterback'}" + (f" for a loss of {loss}" if loss else ' at the line of scrimmage') + (f", beating {beaten}{'' if beaten.endswith('.') else '.'}" if beaten else '.')
         kind = 'loss'
     elif t == 'scramble':
         cls, yd = _yards(shown_gain)

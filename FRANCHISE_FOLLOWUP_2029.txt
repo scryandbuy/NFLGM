@@ -1,0 +1,200 @@
+FRANCHISE FOLLOW-UP — OCTOBER 5, 2026
+Status: fixes integrated, independently reviewed and browser build verified
+
+SCOPE AND EVIDENCE
+
+Read-only sources: nflgm-2029-offseason-1.json (four retained seasons), and
+nflgm-2030-offseason-10.json (the actual later SF continuation). Controlled
+simulations use copies or fresh rosters. Historical outcomes span different
+engine revisions and cannot isolate one causal change.
+
+1. SCORING AND LEAGUE TALENT
+
+The earlier paired 26.16-to-27.45 points/team comparison used identical fresh
+rosters. Player improvement cannot explain that experimental difference.
+In the actual save, points/team were 20.19, 23.34, 24.23 and 24.04. Passing YPA
+fell from 7.14 to 7.00, rushing YPC from 4.54 to 4.41, while volume, passing TD
+rate and sack rate changed. Broad offensive talent inflation is not established.
+
+A current-code, 16-game comparison of fresh versus 2029 roster/coaching
+contexts returned 26.22 versus 24.44 points/team, with wide uncertainty. It
+changes both rosters and coaching and is not an isolated aging experiment.
+Complete historic league attribute snapshots are absent; retained individual
+snapshots, purchases, regression, career statistics and award history remain
+usable evidence. See talent-trend-report.md and talent-context-games.json.
+
+2. DESIGNED QB RUNS — IMPLEMENTED
+
+The real healthy QB's mobility, security, condition, coach aggression, supporting
+players, defensive pursuit/box and clock/score determine whether an already
+called rushing play uses the QB. Normal blocking, fatigue, fumbles, injuries and
+statistics apply. This does not replace the separate scramble decision.
+
+The 32-game paired probe produced 87 designed QB runs for 425.7 yards, three
+losses and one lost fumble. Running QBs received more opportunities, pocket QBs
+showed restraint, and an injured mobile starter did not lend his attributes to
+a replacement. Low realized counts for one mobile QB were traced to actual
+opportunities and random outcomes rather than silently patched by name.
+See qb-runs-report.md and qb-opportunity-summary.json.
+
+3. SACK DISTRIBUTION AND HALF SACKS — CONFIRMED BUG FIXED
+
+Unblocked rushers previously received the same 0.6-second arrival time; list
+order decided ties. Actual path length, acceleration, speed and fatigue now
+matter. A genuinely shorter rush path retains its advantage. Blocked contests
+retain their prior calculations. The timing geometry remains a model assumption.
+
+Two distinct finishers arriving within 0.12 seconds split credit 0.5/0.5. Team
+sacks and QB sacks taken increase by one; escapes and nullified plays retain
+no sack credit. Player history, narration and awards preserve the fractions.
+The chosen shared-finish window needs continued observation, not an assertion
+that every positional sack share is calibrated. See sacks-kicking-report.md
+and half-sack-independent-review.md.
+
+4. KICKING — SMALL COACHING BUG FIXED; NO GLOBAL ACCURACY CUT
+
+The 51/51 under-50 sample included both teams over 20 GB games. The full 2029
+league made 1,138/1,311 (86.8%). A favorable coach could reduce an elite short
+kick from 99.5% to 99.0% because intermediate and final caps differed; those
+caps now agree. Distance, ratings and weather remain active. No general
+distance-curve or accuracy nerf was justified by the streak alone.
+
+5. DEVELOPMENT, XP AND AGING
+
+Four years of actual retained data were used. Checked XP purchases reconcile;
+2026 missing dated-purchase history is not treated as zero development. Current
+annual DEV logic allows a first credible poor season to lower DEV. A copied
+2029 annual review produced 37 upgrades and 24 downgrades; it had not yet run
+in the supplied offseason-step-1 save. Historical ratios reflect older builds.
+
+Specialist ratings grew more than other groups, partly from replacing low-rated
+long snappers and partly from kicker/punter accuracy development. The earlier
+kicker XP reduction is retained. Saved FG accuracy did not rise consistently.
+Longer controlled franchise talent distribution remains an open balance check.
+
+6. AWARDS
+
+Major offensive/defensive awards now require positive recorded production.
+This fixes empty-evidence winners; it does not impose a positional quota.
+The four historical OPOY backs had 2,179–2,404 scrimmage yards. The 2029 LB
+DPOY remains first in a diagnostic removing tackle credit, so simply reducing
+linebacker tackle weight is not a demonstrated solution. Rush opportunity,
+forced-fumble production and award scoring remain separate watches. Historical
+winners were not changed. See policy-report.txt and policy-diagnostics.json.
+
+7. OWNER MOOD — IMPROVED
+
+Current mood now compares W/L/T to seasonal expectations with owner patience
+and a small-sample adjustment. Current champions are recognized. In the save,
+CHI's 7–10 exceeds roughly 5.2 expected wins, while DET's 10–7 misses roughly
+12.4. Their mood labels now reflect those different expectations. Read-only
+display does not change RNG/history. Firing probability itself is not changed.
+
+8. TRADES, ROSTER ALTERNATIVES AND SF
+
+Confirmed fixes value only remaining first-season service, preserve later
+contract control, and exclude a zero-service bookkeeping year from annual
+acquisition cost, seller floors and public development credit. Independent
+before/after rollover quotes now agree. Recent acquisitions retain their
+normal evaluation period across calendar boundaries, without becoming immune
+to meaningful upgrades or necessary roster cuts. Campbell–Darrisaw controls
+retain both action and restraint without a player-name exception.
+
+The actual newer SF save has zero unused picks in displayed drafts 2030–2032
+and six each in 2033/2034. All 35 original picks for those five drafts reconcile
+through logged ownership transfers. No pick-generation/disappearance defect
+was found. Gibbs is a real immediate upgrade; the main problem is cumulative
+spending. His transaction consumed two current firsts and the 2032 first.
+Cash forecasts can improve when future rookies disappear, while losing their
+cheap replacement opportunities was insufficiently reflected in willingness.
+
+The new portfolio policy adds the cost of lost replacement options to CPU
+willingness. It weighs remaining picks by quality and usable year, actual
+expiring/aging/underfilled roles, public controlled successors and GM traits.
+Retained displaced incumbents remain available; cash does not invent future FA
+replacements. CPU trades, interactive offers/counters, pending inbox offers and
+draft trades use the same assessment, with current-state checks before execution.
+
+The corrected SF control adds 6.78 value units of opportunity cost to the Gibbs
+package, versus 0.32 with three additional near-term classes. Extra capital only
+in later drafts still leaves 6.37 of cost. A patient secure GM weighs it at
+10.26; an urgent aggressive GM at 3.72. Gibbs still passes in this reconstruction:
+the policy was not fitted to reverse a particular historical transaction.
+
+An executed controlled sequence buys substantial WR and CB upgrades using real
+owned picks, then rejects another substantial HB upgrade as stock is depleted.
+The same last offer clears with intact draft stock. If the depleted club instead
+has young players under five-year control, it can still spend its last pick.
+These controls use disclosed synthetic offers and fixed comparable salaries to
+isolate the shared guard; they are not a replay of SF's historical seller offers.
+
+Review also corrected partial-package players being double-counted as full extra
+successors, and prevented applying scouting error twice to an already observed
+draft prospect. The new GM weights are policy assumptions, not empirically
+calibrated probabilities. Several more franchise seasons are needed to assess
+league-wide pick concentration and spending. See market-portfolio-followup.txt
+and the independent portfolio review for limits and individual outcomes.
+
+9. CONTRACT MODEL
+
+Salary guarantees remain intentionally outside the model, as requested.
+
+OTHER CONFIRMED FIXES
+
+Departed coaches are not immediately rehired by the same club during the same
+carousel; rivals and later reunions remain possible. Renewal reasons use the
+actual decision. Reloading a historical championship bracket after rollover
+does not create phantom new-year history or replay honors.
+
+VERIFICATION SO FAR
+
+Combined gameplay suite: 260 tests passed. All 44 saved-game page payload
+queries completed without errors or changes to RNG, mail or transactions at
+source 80d3f8e (before the portfolio policy). Independent rental service/floor
+checks: 10 passed, including exact rollover parity. Owner, market and policy
+test suites are documented in changes2-handoff.md; overlapping counts should
+not be added together as distinct tests. A copied seven-stage offseason run
+reached market close, with no duplicated roster ownership or over-cap team at
+checkpoints and stable reload history/RNG. That run predates the portfolio
+policy and the final narrow rental follow-ups. Browser interactions and a
+complete additional franchise season were not exercised by that advance probe.
+
+After portfolio integration, a separate 73-test combined gate passed for
+portfolio decisions, interactive routes, package searches, remaining control
+and owner expectations. The rebuilt browser engine is 9ddc1a1cef: all 133
+modules and 10 data files match source, and JavaScript syntax checks pass.
+This verifies the packaged source, not a complete live-browser franchise run.
+
+The broader combined trade/draft gate ran 164 tests: 163 passed; one funding-only
+test reached the new willingness check before its intended funding assertion.
+The fixture now isolates that separate policy boundary while preserving its
+negative future-funding and actual rookie-cost assertions; its focused rerun
+passed. A final 41-test helper/UI gate and a separate 79-test focused trade gate
+also passed. These are overlapping suites, not additive distinct-test totals.
+Independent final review found no integration blocker.
+
+Two actual saved-game requests for CPU counteroffers completed in 2.17 seconds
+(Rivers) and 13.43 seconds (SF future first). Both returned checked proposals
+without changing serialized state or RNG. These are native Python timings,
+not a browser responsiveness guarantee. The second request remains noticeably
+slower. The original new-save SHA-256 is unchanged:
+c4de6428a0a14669d7d12e0297e3f865bcbb78fdbe8b14e4d1ce6cf5978c1911.
+
+TWO FINAL GAMEPLAY REGISTERS — 272 GAMES EACH
+
+                          Seed 105031      Seed 105032
+Points/team                   26.49             26.41
+Drives/game                   22.85             22.60
+Offensive plays/game         131.87            130.77
+Punt-ending drives            30.75%            30.55%
+Sacks/dropbacks                7.26%             6.89%
+FG accuracy                   84.59%            85.35%
+Designed-run losses            8.76%             8.73%
+Rushing explosives             2.23%             2.22%
+
+These registers are NOT all green. Scoring, volume and FG-ending drives remain
+above targets; margin/overtime/tie measures also miss in at least one seed.
+No blanket scoring, sack or rushing constants were adjusted to conceal those
+results. Repeated full-season scoring excess deserves a targeted pace and
+drive-opportunity investigation. League edge/DT/LB distribution and long-term
+development remain open, despite fixing the confirmed calculation defects.

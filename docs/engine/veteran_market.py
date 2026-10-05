@@ -19,19 +19,22 @@ from cap_accounting import require_room
 def recent_commitments(league, team, week):
     """Keep offseason recruits through camp/early games and new in-season men.
 
-Old offseason logs carry week 22. Treat that as preseason, not as a future
-regular-season acquisition. A trade is a commitment too.
+    The current offseason can straddle a league-year rollover. Its old logs
+    carry week 22; the last played season separates them from older recruits.
+    A trade or waiver claim is a commitment too.
 """
     ids = set()
-    for tx in league.transactions:
-        if tx.get('year') != league.year:
-            continue
+    offseason = league.phase not in ('regular', 'playoffs')
+    for tx in reversed(getattr(league, 'transactions', ())):
+        year = int(tx.get('year', league.year))
         during_season = tx.get('phase') in ('regular', 'playoffs')
         if during_season:
+            if offseason or year != league.year:
+                break
             if not 0 <= week - int(tx.get('week') or 0) <= 3:
                 continue
-        elif week > 3:
-            continue
+        elif year < league.year - 1 or (not offseason and week > 3):
+            break
         if tx.get('kind') in ('sign', 'udfa_sign', 'waiver_claim', 'ps_callup', 'ps_poach', 'emergency_sign') and tx.get('team') == team.abbr:
             ids.add(tx.get('pid'))
         if tx.get('kind') == 'trade':

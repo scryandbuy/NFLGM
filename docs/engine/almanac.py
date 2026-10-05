@@ -159,7 +159,7 @@ def _why(league, p, sc):
     if tot['pass_yds'] > 20000: bits.append(f"{tot['pass_yds']:,.0f} passing yards and {tot['pass_td']:.0f} touchdowns")
     if tot['rush_yds'] > 6000: bits.append(f"{tot['rush_yds']:,.0f} rushing yards")
     if tot['rec_yds'] > 7000: bits.append(f"{tot['rec']:.0f} catches for {tot['rec_yds']:,.0f} yards")
-    if tot['sacks'] > 60: bits.append(f"{tot['sacks']:.0f} sacks")
+    if tot['sacks'] > 60: bits.append(f"{tot['sacks']:g} sacks")
     if tot['int_def'] > 25: bits.append(f"{tot['int_def']:.0f} interceptions")
     if sc['honours'] >= 30: bits.append('the honours to match')
     if sc['titles']: bits.append(f"{sc['titles']} title{'s' if sc['titles'] > 1 else ''}")

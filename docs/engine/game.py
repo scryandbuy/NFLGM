@@ -443,7 +443,9 @@ def kick_probability(dist, kicker, rate_fn, snapper=None):
     # the special teams coordinator: a good one keeps the kicker near his number, a poor one adds variance either way
     kn = float(kicker.get('st_noise', 1.0)) if isinstance(kicker, dict) else 1.0
     if kn != 1.0:
-        p_make = float(np.clip(0.5 + (p_make - 0.5) / kn, 0.02, 0.99))
+        # Use the same ceiling as the neutral-coach and final probability.
+        # A better coordinator must not reduce an already reliable short kick.
+        p_make = float(np.clip(0.5 + (p_make - 0.5) / kn, 0.02, 0.995))
     p_make = float(np.clip(p_make + 0.02 * snap_quality(snapper, rate_fn), 0.005, 0.995))
     return float(p_make)
 
@@ -1456,11 +1458,11 @@ class TeamState:
                 return p, rank
         return men[-1], len(men) - 1
 
-    def snap(self, player, position, on_field=True):
+    def snap(self, player, position, on_field=True, *, workload_position=None):
         import health as H
         pid = player.get('pid', position)
         if on_field:
-            self.cond.play(pid, position, player.get('stamina_rating', 70.0), effort=getattr(self, 'road_stamina', 1.0))
+            self.cond.play(pid, workload_position or position, player.get('stamina_rating', 70.0), effort=getattr(self, 'road_stamina', 1.0))
             self.snaps[pid] = self.snaps.get(pid, 0) + 1
         else:
             self.cond.rest(pid, position)
@@ -2243,9 +2245,13 @@ class _PendingSnap:
     def state(self, player, position):
         return player
 
-    def commit(self, unit):
+    def commit(self, unit, qb_carry=False):
         for player, position, on_field in self.calls:
-            self.original.snap(player, position, on_field)
+            if qb_carry and on_field and position == 'QB':
+                # One snap, but a carrier's workload rather than a handoff's.
+                self.original.snap(player, position, on_field, workload_position='HB')
+            else:
+                self.original.snap(player, position, on_field)
         if not hasattr(self.original, 'snap_counts'): self.original.snap_counts = {}
         for side, counts in self.snap_counts.items():
             row = self.original.snap_counts.setdefault(side, dict(total=0, players={}))
@@ -2871,6 +2877,25 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             oc.update(is_pass=False, scheme='inside_zone', play_action=False, rpo=False)
         if _pl is not None and _pl.get('quick_play'):
             oc.update(is_pass=True, depth='short', concept='slant_flat', play_action=False, rpo=False, no_huddle=True)
+        # The final run call uses the healthy eleven actually selected. It
+        # cannot assign an injured starter's running ability to his backup.
+        # Both CPU games and live Game Day consume this same drive generator.
+        import schemes as SC
+        import offense_roles as OR
+        if off_state is not None:
+            # The season coach snapshot stores the inverse of GM aggression.
+            oc['qb_run_aggression'] = 1. - float((off_state.coach or {}).get('starter_protection', .5))
+        oc['protect_ball'] = bool(protect_half)
+        qb_pid = off_f['qb'].get('pid')
+        backups = [p for p in OR.roster_depth(offense).get('QB', [])
+                   if p.get('pid') != qb_pid and (off_state is None or p.get('pid') not in off_state.out)]
+        run_chance = SC.designed_qb_run_chance(off_f, def_f, dict(oc, seconds=secs_in_half), dc, rate_fn,
+            condition=(off_state.cond.get(qb_pid) if off_state is not None else 100.),
+            healthy_backups=len(backups))
+        oc['qb_run'] = bool(run_chance and rng.random() < run_chance)
+        if oc['qb_run']:
+            oc['qb_run_chance'] = run_chance
+            oc['play_action'] = False; oc['rpo'] = False
         _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
         penalty_context = dict(is_pass=oc['is_pass'],
                               offense_discipline=float(np.clip(0.70 + 0.8 * (o_awr - 0.787), 0.5, 0.9)),
@@ -2912,18 +2937,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.log.append(dict(type='two_minute', clock=dr.clock))
             continue
 
-        if pending_off is not None: off_f = pending_off.commit(off_f)
+        if pending_off is not None: off_f = pending_off.commit(off_f, qb_carry=oc.get('qb_run', False))
         if pending_def is not None: def_f = pending_def.commit(def_f)
 
-        # the back who actually carries it
-        # the back who carries it is the back on the field: the rotation in
-        # field_units decides who that is
+        # The called carrier and blockers are the selected, state-adjusted men.
         oc['execution_mod'] = script_mod
-        # Season callers carry a coach snapshot rather than the GM object.
-        # Its public starter-protection preference is the inverse aggression
-        # already used for resting players; a cautious coach discourages hits.
-        if off_state is not None:
-            oc['qb_run_aggression'] = 1. - float((off_state.coach or {}).get('starter_protection', .5))
         out = resolve_fn(off_f, def_f, oc, dc, ytg_i, rng)
         # the situation rides with the play, for the ticker and the probes
         if isinstance(out, dict):
@@ -2981,7 +2999,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if out['type'] in ('run', 'complete', 'sack', 'scramble', 'incomplete'):
             hit_pid = None
             if out['type'] in ('sack', 'scramble'): hit_pid = off_f['qb'].get('pid')
-            elif out['type'] == 'run': hit_pid = (off_f['qb'] if out.get('sneak') else (off_f.get('rb') or off_f['qb'])).get('pid')
+            elif out['type'] == 'run': hit_pid = out.get('carrier_pid') or out.get('carrier') or (off_f['qb'] if out.get('sneak') else (off_f.get('rb') or off_f['qb'])).get('pid')
             elif out['type'] == 'complete': hit_pid = out.get('target') or off_f['wr'][0].get('pid')
             if off_state is not None:
                 men = [(off_f['qb'], 'QB'), (off_f['rb'], 'HB')] + [(m, m.get('pos', 'LT')) for m in (off_f.get('ol') or [])] + [(m, m.get('pos', 'WR')) for m in off_f['wr']] + [(m, m.get('pos', 'TE')) for m in (off_f.get('te') or [])]
@@ -3814,8 +3832,10 @@ class StatBook:
                 d['int_def'] += 1
         elif t == 'sack':
             s = self._get(qb); s['sacked'] += 1
-            d = self._get(out.get('by', (deff.get('dl') or [{}])[0].get('pid', 'DL1')))
-            d['sacks'] += 1.0; d['tackles'] += 1
+            import rush_matchup as RM
+            for pid, credit in RM.credited_sackers(out, (deff.get('dl') or [{}])[0].get('pid', 'DL1')):
+                d = self._get(pid)
+                d['sacks'] += credit; d['tackles'] += 1
         elif t in ('scramble', 'kneel'):
             s = self._get(qb); s['rush_att'] += 1; s['rush_yds'] += out['yards']
             if out.get('touchdown') and not out.get('defensive_td'): s['rush_td'] += 1

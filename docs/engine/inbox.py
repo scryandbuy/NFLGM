@@ -274,6 +274,12 @@ def accept(league, msg_id, user_team):
                                    sends, p['gets'], buyer=p['buyer'])
     if not decision['approved']:
         raise ValueError(decision['why'])
+    # An old offer is not permission to spend a now-depleted pick portfolio.
+    # Reuse the fresh effective margin; accepting mail never rerolls GM taste.
+    margin = (decision.get('portfolio_gains') or {}).get(p['buyer'])
+    cost = (decision.get('portfolio_costs') or {}).get(p['buyer'], 0.)
+    if cost > 1e-9 and margin is not None and margin < -TR.ACCEPT_WINDOW - 1e-9:
+        raise ValueError('This offer no longer justifies giving up those future roster options.')
     league.trade(p['buyer'], user_team, sends, p['gets'])
     m['status'] = 'accepted'
     league.log('inbox_trade', buyer=p['buyer'], gets=p['gets'],

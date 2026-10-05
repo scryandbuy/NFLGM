@@ -70,7 +70,7 @@ def _review_record(record):
 
 def owner(session, league, abbr):
     import firing_model as FM
-    from views import _owner_mood
+    from views import _owner_assessment
     t = league.teams[abbr]; h = t.hist(); own = _owner(league, t)
     sec = FM.job_security(h)
     w, l, d = t.record
@@ -80,8 +80,9 @@ def owner(session, league, abbr):
     weights = dict(wins=round(0.5 + 0.3 * (1 - pat), 2), young=round(pat, 2), stars=round(getattr(t, 'owner_star_pull', 0.5), 2), spend=round(getattr(t, 'owner_spend', 0.5), 2))
     draft_word = 'Patient' if pat >= 0.6 else 'Wants results now' if pat <= 0.35 else 'Measured'
     reviews = _owner_review_history(league, t)
+    assessment = _owner_assessment(t)
     import staff as ST
-    return dict(rail=rail(session, league, abbr), owner=own, draft_word=draft_word, mood=_owner_mood(t), job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat'), security=round(sec, 2),
+    return dict(rail=rail(session, league, abbr), owner=own, draft_word=draft_word, mood=assessment['mood'], mood_reason=assessment['reason'], job=('Secure' if sec >= 0.7 else 'Safe' if sec >= 0.45 else 'Warming' if sec >= 0.25 else 'Hot Seat'), security=round(sec, 2),
                 expects=exp_words, expected_pct=round(exp, 2), record=f"{w}–{l}" + (f"–{d}" if d else ''), tenure=int(h.get('tenure') or 0), drought=int(h.get('playoff_drought') or 0),
                 prev_pct=round(float(h.get('prev_win_pct') or 0), 3), weights=weights,
                 staff_budget=dict(total=round(ST.budget(t), 1), payroll=round(ST.payroll(t), 1), available=round(ST.room(t), 1)),
@@ -685,7 +686,7 @@ def _season_review_now(session, league, abbr):
     units against the league, the men who exceeded and fell short, next year's money and the men whose deals are
     up. Composed once the club is out; readable all offseason."""
     import firing_model as FM
-    from views import _owner_mood, CLUB_NAME, club, surname, next_year_cap
+    from views import _owner_assessment, CLUB_NAME, club, surname, next_year_cap
     t = league.teams[abbr]; h = t.hist(); w, l, d = t.record; n = max(1, w + l + d); pct = (w + 0.5 * d) / n
     exp = float(h.get('expected_pct') or 0.5)
     exp_words = 'a title run' if exp >= 0.72 else 'the playoffs' if exp >= 0.56 else 'a winning season' if exp >= 0.5 else 'progress' if exp >= 0.4 else 'patience while you rebuild'
@@ -705,14 +706,13 @@ def _season_review_now(session, league, abbr):
             exit_ = {'WC': 'Lost in the Wild Card round', 'DIV': 'Lost in the Divisional round', 'CONF': 'Lost the Conference Championship', 'SB': 'Lost the Championship Game'}.get(er)
             if exit_ is None and abbr in {x for sd in (getattr(post, 'seeds', {}) or {}).values() for x in sd}: exit_ = 'In the playoffs'
     if exit_ is None: exit_ = 'Missed the playoffs'
-    gap = pct - exp
-    verdict = ('He got more than he asked for.' if gap >= 0.12 else 'He got what he asked for.' if gap >= -0.05 else 'He got less than he asked for.' if gap >= -0.18 else 'He got a lot less than he asked for.')
-    own = _owner(league, t); mood = _owner_mood(t); sec = FM.job_security(h)
+    assessment = _owner_assessment(t)
+    own = _owner(league, t); mood = assessment['mood']; sec = FM.job_security(h)
     owner_line = {
-        'Pleased': f"{own['name']} is pleased. {exp_words.capitalize()} was the ask and you delivered on it; he wants to know what the next step is.",
-        'Settled': f"{own['name']} can live with the year, but only just. He asked for {exp_words} and {verdict.lower()} He wants to hear what changes.",
-        'Restless': f"{own['name']} is restless. He asked for {exp_words} and {verdict.lower()} He wants a plan on his desk before the new year.",
-        'Angry': f"{own['name']} is angry. He asked for {exp_words}; {verdict.lower()} Your seat is warm.",
+        'Pleased': f"{own['name']} is pleased. {assessment['reason']} He wants to know what the next step is.",
+        'Settled': f"{own['name']} is measured about the year. {assessment['reason']} He wants to hear the plan for next season.",
+        'Restless': f"{own['name']} is restless. {assessment['reason']} He wants a plan on his desk before the new year.",
+        'Angry': f"{own['name']} is angry. {assessment['reason']} He wants an explanation and a plan to improve.",
     }[mood]
     # the seventeen results
     timeline = []

@@ -286,15 +286,28 @@ class Draft:
         import roster_needs as RN
         ta, tb = self.L.teams[buyer], self.L.teams[seller]
         sent = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in offer['a_sends']]
+        import draft_plan as DP
+        observed = DP.observed_prospect(self.L, buyer, target_player) if target_player is not None else None
+        portfolio = TR._portfolio_trade_check(self.L, ta, tb, sent, [pk], financial_cache,
+                                               prospect=observed, consumed_pick=pk if observed else None,
+                                               offer=offer)
+        if not portfolio['approved']: return False
+        # Preserve the draft room's existing clear-gain rule on the adjusted
+        # package, including pure pick exchanges and fresh execution checks.
+        if any(cost > 1e-9 for cost in portfolio['costs'].values()):
+            result = TE.evaluate(offer, ta.ctx(), tb.ctx(), ta.cap_space, tb.cap_space,
+                                 TR.persona(ta.gm), TR.persona(tb.gm))
+            if result.get('blocked'): return False
+            for abbr, margin in ((buyer, result['a_gain']), (seller, result['b_gain'])):
+                if abbr != self.user and margin - portfolio['costs'].get(abbr, 0.) <= .5:
+                    return False
         neutral = sum(TE.market_price(x) for x in offer['a_sends'])
         market = TE.market_price(self._pick_asset(pk))
         if not .85 * market - 1e-9 <= neutral <= 1.35 * market + 1e-9:
             return False
         if any(isinstance(x, str) for x in sent):
-            import draft_plan as DP
             # The buyer prices the rookie it has scouted, not the hidden
             # player object it will receive after making the pick.
-            observed = DP.observed_prospect(self.L, buyer, target_player) if target_player is not None else None
             football = TR.package_football(self.L, ta, tb, sent, [pk],
                                            prospect=observed, cache=football_cache)
             if not football['approved']: return False
@@ -314,7 +327,8 @@ class Draft:
                 if net <= .5 or neutral > ceiling + 1e-9: return False
         # Financial planning includes the acquired pick's actual rookie deal,
         # plus every future pick and contract on both sides of the exchange.
-        return TR._financial_trade(self.L, ta, tb, sent, [pk], financial_cache)
+        return TR._financial_trade(self.L, ta, tb, sent, [pk], financial_cache,
+                                   prospect=observed, consumed_pick=pk if observed else None, offer=offer)
 
     def _trade_target_valid(self, buyer, offer, pk, target_player):
         """The target must remain the buyer's first choice after paying the roster collateral."""

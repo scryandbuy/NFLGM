@@ -199,7 +199,7 @@ class Ballot:
         for p, line in self.players():
             # a quarterback wins this about one year in eight, not most years
             s = max(self.skill_score(line), self.passer_score(line) * 11.0)
-            if s > best:
+            if s > 0 and s > best:
                 best, who = s, p
         return who
 
@@ -209,7 +209,7 @@ class Ballot:
             if p.pos not in PASS_RUSH_POS + COVERAGE_POS:
                 continue
             s = self.def_score(p, line)
-            if s > best:
+            if s > 0 and s > best:
                 best, who = s, p
         return who
 
@@ -218,7 +218,7 @@ class Ballot:
         best, who = -1e9, None
         for p, line in self.players(lambda p, l: self.is_rookie(p)):
             s = max(self.skill_score(line), self.passer_score(line) * 9.0)
-            if s > best:
+            if s > 0 and s > best:
                 best, who = s, p
         return who
 
@@ -228,7 +228,7 @@ class Ballot:
             if p.pos not in PASS_RUSH_POS + COVERAGE_POS:
                 continue
             s = self.def_score(p, line)
-            if s > best:
+            if s > 0 and s > best:
                 best, who = s, p
         return who
 
@@ -418,7 +418,11 @@ def announce_championship(league, post):
     """Publish the final and its MVP once, after the game book is recorded."""
     if post is None or not post.champion:
         return None
-    year = int(league.year)
+    year = int(getattr(post, 'year', None) or league.year)
+    if year != int(league.year):
+        # A retained bracket is historical after rollover. Loading it must not
+        # create current-year metadata, repay honors or announce an old final.
+        return league.player((league.awards.get(year) or {}).get('sb_mvp'))
     history = league.__dict__.setdefault('history', {}).setdefault(str(year), {})
     if history.get('championship_announced'):
         return league.player((league.awards.get(year) or {}).get('sb_mvp'))

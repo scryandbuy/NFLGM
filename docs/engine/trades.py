@@ -128,6 +128,21 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     """
     if not p.contract or p.contract_years_left <= 0 or p.fa_class == 'tendered':
         return None  # Unsigned rights are not a transferable playing contract.
+    c = p.contract
+    # Before rollover, contracts still include the completed season. New
+    # next-season signings can also carry a zero-service calendar stub.
+    closed = getattr(league, 'season_closed_year', None) == league.year
+    start = max(int(getattr(c, 'start_offset', 0) or 0), int(closed))
+    years = max(0, int(p.contract_years_left) - start)
+    if not years:
+        return None
+    fraction = 1.0
+    if not start and league.phase in ('regular', 'playoffs', 'playoffs_closed'):
+        # Earned/base is not a clock: trading a player resets earned pay and
+        # reduces his base. The settled week survives that transfer.
+        paid = getattr(getattr(team, 'cap', None), 'paid_week',
+                       max(0, int(getattr(league, 'week', 0) or 0) - 1))
+        fraction = max(0., min(1., (18 - max(paid, c.pay_start)) / 18.))
     v = VAL.value_player(league, p, side='team', pool=pool, rng=rng)
     if not v:
         return None
@@ -169,15 +184,15 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
     # FUTURE PAY FOR BOTH CLUBS. The old bonus has already been paid. Keeping
     # him or acquiring him commits only the remaining base and roster pay;
     # the cap projection separately retains the seller's bonus charge.
-    yrs = max(1, int(p.contract_years_left or 1))
-    inherited_apy = (round(sum(max(0.0, c.cap_hit(i) - c.bonus_at(i)
-                                   - (c.earned_base + c.earned_roster if i == 0 else 0.0))
-                                for i in range(yrs)) / yrs, 2)
-                     if c else p.apy)
+    costs = [max(0.0, c.cap_hit(i) - c.bonus_at(i)
+                 - (c.earned_base + c.earned_roster if i == 0 else 0.0))
+             for i in range(start, start + years)]
+    inherited_apy = round(sum(costs) / years, 2)
     from development_value import player_credit
     row = dict(age=p.age, apy=inherited_apy, ovr=float(seen),
-               contract_years_left=p.contract_years_left, madden_position=p.pos,
-               development_credit=player_credit(p))
+               contract_years_left=years, contract_costs=costs,
+               first_year_fraction=fraction, madden_position=p.pos,
+               development_credit=player_credit(p, years=years))
     tv_buyer = TE.trade_value(row, v)
     # THE STREET AND THE SQUAD ARE THE ALTERNATIVE. Why give a pick for a man when a comparable one is a free
     # agent for salary alone, or already on your practice squad? The buyer grades the best man available to
@@ -195,7 +210,9 @@ def player_asset(league, team, p, pool, rng, need=False, viewer=None):
                 need=need, trade_value=TE.trade_value(row, v),
                 trade_value_buyer=round(max(0.0, tv_buyer), 2),
                 seen_ovr=round(float(seen), 1), obj=p, dead=dead, out_hit=(c.cap_hit(0)-c.earned_base-c.earned_roster if c else 0.0), dead_now=dead_now,
-                inherit=inherit, inherited_apy=inherited_apy, **seller_willingness(team, p))
+                inherit=inherit, inherited_apy=inherited_apy,
+                first_year_fraction=fraction, valued_contract_years=years,
+                **seller_willingness(team, p))
 
 
 def _street_alternative(league, viewer, p):
@@ -829,7 +846,63 @@ def _pick_to_offer(league, team, target, gm, ctx, space):
 MAX_PACKAGE = 5
 
 
-def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_gains=None):
+def _portfolio_trade_check(league, ta, tb, outgoing, incoming, cache=None, *,
+                           prospect=None, consumed_pick=None, offer=None):
+    """Private marginal option cost, separate from pick prices and cap legality.
+
+    All transaction entry paths use this deterministic recheck. A fresh call
+    uses current ownership, contracts and GM state; caches belong only to one
+    unchanged negotiation. The human controls their own remaining capital.
+    """
+    import trade_portfolio as TP
+    cache = {} if cache is None else cache
+    reports = {}
+    for team, sent, received in ((ta, outgoing, incoming), (tb, incoming, outgoing)):
+        if team.abbr == getattr(league, 'user_team', None):
+            continue
+        # A club selling a player for picks is replenishing its options. This
+        # policy prices spending those options, not the seller's roster loss
+        # (already priced by package_football, including cap-casualty sales).
+        owned = {(pk.year, pk.round, pk.original) for pk in getattr(team, 'picks', ())
+                 if not pk.used_on and pk.owner == team.abbr}
+        if not any(not isinstance(x, str) and (x.year, x.round, x.original) in owned for x in sent):
+            continue
+        reports[team.abbr] = TP.assess(league, team, sent, received, cache=cache,
+            prospect=prospect if team is ta else None,
+            consumed_pick=consumed_pick if team is ta else None)
+    costs = {abbr: report['cost'] for abbr, report in reports.items()}
+    if not any(value > 1e-9 for value in costs.values()):
+        return dict(approved=True, costs=costs, reports=reports)
+    if offer is None and 'portfolio_market' not in cache:
+        cache['portfolio_market'] = VAL.pool_from_league(league)
+    pool = cache.get('portfolio_market')
+    def assets(team, other, items):
+        result = []
+        for item in items:
+            if not isinstance(item, str):
+                result.append(pick_asset(league, item))
+                continue
+            key = ('portfolio_quote', team.abbr, other.abbr, item)
+            if key not in cache:
+                p = league.player(item)
+                cache[key] = (player_asset(league, team, p, pool, None, need=True, viewer=other)
+                              if p is not None else None)
+            result.append(cache[key])
+        return result
+    sent, received = ((offer['a_sends'], offer['a_gets']) if offer is not None else
+                      (assets(ta, tb, outgoing), assets(tb, ta, incoming)))
+    if any(x is None for x in sent + received):
+        return dict(approved=False, costs=costs, reports=reports)
+    value = TE.evaluate(dict(a_sends=sent, a_gets=received),
+        context(ta), context(tb), ta.cap_space, tb.cap_space, persona(ta.gm), persona(tb.gm))
+    margins = {ta.abbr: value['a_gain'] - costs.get(ta.abbr, 0.),
+               tb.abbr: value['b_gain'] - costs.get(tb.abbr, 0.)}
+    approved = all(margins[abbr] >= -ACCEPT_WINDOW for abbr, cost in costs.items() if cost > 1e-9)
+    return dict(approved=approved, costs=costs, reports=reports, margins=margins)
+
+
+def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_gains=None,
+                     prospect=None, consumed_pick=None, offer=None):
     """Price both complete rosters, including any cuts needed for this trade."""
     import cap_accounting as CA
     import financial_plan as FP
@@ -837,6 +910,10 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_g
     # One negotiation can compare many pick combinations for the same player
     # exchange. Reuse its roster math, never cache beyond that negotiation.
     cache = {} if cache is None else cache
+    portfolio = _portfolio_trade_check(league, ta, tb, outgoing, incoming, cache,
+                                      prospect=prospect, consumed_pick=consumed_pick, offer=offer)
+    if not portfolio['approved']:
+        return False
     key = (ta.abbr, tb.abbr, tuple(sorted(x for x in outgoing if isinstance(x, str))),
            tuple(sorted(x for x in incoming if isinstance(x, str))))
     if key not in cache:
@@ -909,6 +986,11 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None,
     football = package_football(league, ta, tb, outgoing, incoming, cache=football_cache)
     if not football['approved']:
         return dict(approved=False, why='The current package cannot be completed.')
+    portfolio = _portfolio_trade_check(league, ta, tb, outgoing, incoming, financial_cache)
+    if not portfolio['approved']:
+        return dict(approved=False, needs_more=True, portfolio_costs=portfolio['costs'],
+                    portfolio_gains=portfolio.get('margins', {}),
+                    why='We need more value to give up those future roster options.')
     if getattr(league, 'user_team', None) in (ta.abbr, tb.abbr):
         seller = tb if tb.abbr != league.user_team else ta
         reserve = football.get('reserves', {}).get(seller.abbr, 0.)
@@ -931,9 +1013,10 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None,
                                     user_a=ta.abbr == league.user_team,
                                     user_b=tb.abbr == league.user_team)
             if not valuation.get('blocked'):
-                gain = valuation['a_gain'] if seller is ta else valuation['b_gain']
+                gain = (valuation['a_gain'] if seller is ta else valuation['b_gain']) - portfolio['costs'].get(seller.abbr, 0.)
                 if gain + 1e-9 < reserve:
                     return dict(approved=False, needs_more=True, required_gain=reserve,
+                                portfolio_costs=portfolio['costs'], portfolio_gains=portfolio.get('margins', {}),
                                 why="We need more value to replace this starter.")
     if buyer is not None and buyer != getattr(league, 'user_team', None):
         club, sent, received = (ta, outgoing, incoming) if ta.abbr == buyer else (tb, incoming, outgoing)
@@ -958,7 +1041,9 @@ def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None,
             return dict(approved=False, why="We no longer value this package enough to pay that price.")
     if not _financial_trade(league, ta, tb, outgoing, incoming, cache=financial_cache):
         return dict(approved=False, why="The roster benefit doesn't justify the financial risk for us.")
-    return dict(approved=True, required_gain=football.get('reserves', {}).get(tb.abbr if ta.abbr == getattr(league, 'user_team', None) else ta.abbr, 0.))
+    return dict(approved=True, portfolio_costs=portfolio['costs'],
+                portfolio_gains=portfolio.get('margins', {}),
+                required_gain=football.get('reserves', {}).get(tb.abbr if ta.abbr == getattr(league, 'user_team', None) else ta.abbr, 0.))
 
 
 MAX_PACKAGE_SEARCH = 50000  # fail closed on pathological pick-hoarding banks
@@ -984,7 +1069,9 @@ def _market_floor(target):
     over the cap does not turn every player into a forced-sale exception.
     """
     player = target.get('obj')
-    years = getattr(player, 'contract_years_left', 2)
+    # Calendar stubs do not add controlled playing time. Use the same service
+    # count as the quote so rollover cannot silently change the asking floor.
+    years = target.get('valued_contract_years', getattr(player, 'contract_years_left', 2))
     fraction = .5 if years <= 1 or target.get('wants_out') else .75
     return max(max(0.0, float(target.get('trade_value', 0) or 0)) * fraction,
                float(target.get('retention_floor', 0.) or 0.))
@@ -1166,6 +1253,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             upper[i][k] = max(upper[i+1][k], bank[i][2] + upper[i+1][k-1])
     valid_players = {}
     financial_cache = {}
+    portfolio_costs = {}
     best, nodes = None, 0
     football_cache = {}
     net_gains = {}
@@ -1199,7 +1287,18 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             gains = football['gains']
         if league is not None:
             sent = [x['obj'] if x['kind'] == 'pick' else x['pid'] for x in items]
-            return _financial_trade(league, ta, tb, sent, [target['pid']], financial_cache, roster_gains=gains)
+            exact_offer = dict(a_sends=items, a_gets=[target])
+            portfolio = _portfolio_trade_check(league, ta, tb, sent, [target['pid']], financial_cache,
+                                                offer=exact_offer)
+            key = tuple(sorted((('player', x['pid']) if x['kind'] == 'player' else
+                                ('pick', x['obj'].year, x['obj'].round, x['obj'].original)) for x in items))
+            option_cost = portfolio['costs'].get(ta.abbr, 0.)
+            portfolio_costs[key] = option_cost
+            if not portfolio['approved'] or not accepts_a(
+                    sum(TE.team_price(x, ctx_a, sa, ga, owns=True) for x in items) + option_cost):
+                return False
+            return _financial_trade(league, ta, tb, sent, [target['pid']], financial_cache,
+                                    roster_gains=gains, offer=exact_offer)
         return True  # Standalone valuation/search probes have no league ledger.
 
     def visit(start, chosen, paid, cost, value):
@@ -1210,10 +1309,16 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             return
         if not accepts_a(cost):
             return  # every remaining asset has a nonnegative buyer cost
+        if best is not None and paid > best[0][0]:
+            return  # public compensation is a lower bound with option cost
         if chosen and paid + 1e-9 >= max(floor, market):
             items = [bank[i][4] for i in chosen]
             if legal(items):
-                rank = (paid, len(chosen), cost, tuple(bank[i][3] for i in chosen))
+                package_key = tuple(sorted(bank[i][3] for i in chosen))
+                # Preserve cheapest-compensation ordering when no portfolio
+                # cost applies, while pricing lost options in the same units.
+                rank = (paid + portfolio_costs.get(package_key, 0.), len(chosen),
+                        cost, tuple(bank[i][3] for i in chosen))
                 if best is None or rank < best[0]:
                     best = (rank, items)
                 return  # any superset costs more
@@ -1253,26 +1358,34 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
         cost = sum(TE.team_price(a, ctx_a, sa, ga, owns=True) for a in counter)
         value = sum(TE.team_price(a, ctx_b, sb, gb, owns=False) for a in counter)
         if floor <= paid + 1e-9 and paid <= ceiling + 1e-9 and accepts_a(cost) and accepts_b(value) and legal(counter, seller_review=True):
-            best = ((paid, len(counter), cost, ()), counter)
+            counter_key = tuple(sorted((('player', x['pid']) if x['kind'] == 'player' else
+                                       ('pick', x['obj'].year, x['obj'].round, x['obj'].original)) for x in counter))
+            best = ((paid + portfolio_costs.get(counter_key, 0.), len(counter), cost, ()), counter)
             counter_accepted = True
     if not initial_accepted and not counter_accepted:
         return None, None
     offer = dict(a_sends=best[1], a_gets=[target])
     result = TE.evaluate(offer, ctx_a, ctx_b, sa, sb, ga, gb, user_b=user_seller)
+    chosen_key = tuple(sorted((('player', x['pid']) if x['kind'] == 'player' else
+                              ('pick', x['obj'].year, x['obj'].round, x['obj'].original)) for x in best[1]))
+    option_cost = portfolio_costs.get(chosen_key, 0.)
+    result['a_gain'] = round(result['a_gain'] - option_cost, 2)
     selected = tuple(sorted(x['pid'] for x in best[1] if x['kind'] == 'player'))
     net_gain, net_ceiling = net_gains.get(selected, (gain, ceiling))
     result['search'] = dict(
         target_gain=round(float(gain), 3), target_market=round(market, 3),
         net_gain=round(float(net_gain), 3), acceptance='bounded_gm_willingness',
         market_floor=round(floor, 3), market_ceiling=round(min(ceiling, net_ceiling), 3),
-        package_market=round(best[0][0], 3), cheapest_market=round(baseline[0][0], 3),
-        initial_offer_market=round(baseline[0][0], 3),
+        package_market=round(sum(TE.market_price(x) for x in best[1]), 3),
+        cheapest_market=round(sum(TE.market_price(x) for x in baseline[1]), 3),
+        initial_offer_market=round(sum(TE.market_price(x) for x in baseline[1]), 3),
         initial_offer_assets=[a['pid'] if a['kind'] == 'player' else
             (a['obj'].year, a['obj'].round, a['obj'].original) for a in baseline[1]],
         initial_offer_accepted=initial_accepted,
         seller_counter_proposed=counter is not None, seller_counter_accepted=counter_accepted,
         candidates=n, nodes=nodes,
         buyer_target_price=round(value_in, 3), seller_ask=round(ask, 3))
+    result['search']['buyer_portfolio_cost'] = round(option_cost, 3)
     return offer, result
 
 
@@ -1366,6 +1479,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
             if 0 < cost <= budget and 0 < market <= ceiling:
                 bank.append((pk, cost, market, value))
         best = None
+        portfolio_cache = {}
         # Compare every affordable picks-only package (same five-asset limit
         # as ordinary negotiations), then compare buyers. No first low bid.
         for count in range(1, min(MAX_PACKAGE, len(bank)) + 1):
@@ -1374,6 +1488,10 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
                 market = sum(x[2] for x in package)
                 value = sum(x[3] for x in package)
                 if cost > budget or market > ceiling or (not forced and value <= ask + .9):
+                    continue
+                portfolio = _portfolio_trade_check(league, buyer, seller,
+                    [x[0] for x in package], [player.pid], portfolio_cache)
+                if not portfolio['approved'] or cost + portfolio['costs'].get(abbr, 0.) > budget:
                     continue
                 rank = (value, market, -count)
                 if best is None or rank > best[0]:
