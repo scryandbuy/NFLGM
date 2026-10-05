@@ -1,0 +1,135 @@
+Protection, QB risk and scoring follow-up - 2026-10-05
+
+Disposition
+Integrate the narrow protection/contact fixes. No global scoring, sack,
+fumble or injury rate tuning is justified by the completed evidence.
+This is not a claim that all long-term balance questions are settled.
+Source commits: 66cc8a5 and 22d6541. Browser build: 9ffb3c2e62.
+Held fatigue candidate dcf3ae6 is explicitly excluded.
+
+Football motivation and restraint
+The former greedy matcher always allocated edges/interiors before off-ball
+rushers. A reachable inside linebacker could go unblocked while an opposite
+tackle was assigned across the formation. Protection now assigns reachable
+jobs together, with distinctions between BOB, half slide and full slide.
+Slide direction comes from the visible front before actual rush selection.
+Keeping a sixth blocker can solve a six-man pressure but costs a receiving
+route. A real overload can leave an edge or linebacker hot; neither family
+is guaranteed to solve every pressure. Player ratings still execute the job.
+Normal four-man front assignments and run-block matching are preserved.
+Spare blockers must address reachable free rushers before helping, while
+unreachable wide rushers no longer prohibit all interior help.
+
+Confirmed corrections
+- Actual unblocked defenders activate the quick-answer logic even when
+  blocker/rusher counts are equal.
+- Wet conditions affect fumble occurrence once, rather than the defense's
+  chance of recovering an already loose ball. Dry behavior is unchanged.
+- Late sack escapes acquire a real contact defender for tackling, hit power
+  and forced-fumble credit, without retaining provisional sack credit.
+- Drops and interceptions remain eligible for live-play injury exposure.
+  They previously skipped that branch despite blocking and contact.
+
+Controlled evidence
+125-test combined gate passed. The subsequently added forced-fumble credit
+regression and the complete 18-test QB workload module also passed.
+Independent reviewer ran 74 overlapping tests; counts must not be summed.
+Tests cover protection action/restraint, BOB/slide disagreement, visible-front
+selection, equal-count overloads, spare-center help, permutation invariance,
+unchanged run blocking, dry RNG equivalence, injury eligibility, half sacks,
+scramble accounting, penalties, game clocks and save/resume.
+A stale return fixture was corrected to exclude the existing breakaway
+branch; its failure was reproduced on the earlier fumble implementation.
+No return gameplay was changed to satisfy that fixture.
+
+7,200 raw protection races show that slide can leave an edge hot while BOB
+retains front assignments; a sixth blocker covers the controlled six-rusher
+front. Raw races precede quick throws and final escapes: they are NOT game
+sack rates. No positional bonus or player-name exception was added.
+
+Observed fixed-sample outcomes
+Exact baseline 7f44b12 versus source 22d6541: all 64 isolated games per side
+completed, all 32 teams from the same 2029 save, 16 fixed matchups across four
+prescribed seed sets. No season advancement, no early stopping.
+                         Before          After
+Points per team          24.672          23.469
+Drives per game          22.531          22.094
+Yards per play            5.527           5.539
+20-plus-yard plays          448             460
+Field goals made/att    286/331         283/328
+Interceptions               99             116
+Fumbles/lost             112/56          110/56
+Injuries/QB injuries       77/2            89/4
+Sacks                      291             270
+EDGE sack credit          120.5           142.5
+DT sack credit             90              83
+LB sack credit             69              35
+DB sack credit             11.5             9.5
+Shared-sack plays           17              14
+Designed QB runs           194             208
+Scrambles                  379             310
+
+All sack credits sum exactly to team sacks; no final scramble retains sack
+credit. EDGE free rushes 0->120, LB free rushes 181->97. The arbitrary priority
+is repaired without requiring equal positional sack rates. Parsons' four-game
+credit rises 4.5->9 on 139->119 rush reps; only one final sack credit is on a
+free path. Barela 1.5->1 and Brownlow-Dindy 2.5->1 illustrate mixed individual
+outcomes. These are not predictions of any player's season production.
+Running QBs retain designed opportunities (Hurts 18, Jackson 23 across four
+games each); Goff has zero designed runs and five scrambles. Minimum condition,
+injuries and player-level opportunities are retained in the detailed report.
+
+The paired total-game scoring change is -2.406 points, standard error 1.979;
+27 games rise, 33 fall and four tie. Repeated matchups/fixed seeds limit any
+league-wide inference. Same-roster comparisons cannot be explained by talent
+growth between seasons. No score-accounting or extra-possession defect found.
+Earlier 16-game provenance was corrected: 24.625 was the older 17b92d6 sample,
+not immediate baseline 0e24115 (23.78125). Its rise to 25.46875 on 7f44b12 was
+primarily more made field goals, not extra drives or explosive plays.
+
+Live versus fast GB30-20CHI replay matches the complete player book, condition,
+injury and snap state; only unordered out-player set serialization is normalized.
+All 135 generated modules match source after newline normalization. Changed
+modules compile. Original saves untouched; no push or shared-tree integration.
+
+Real-world evidence and limits
+Primary 2024 nflverse play-by-play: 1,060 scrambles/7 QB fumbles (0.66%);
+778 direction-filtered non-scramble QB rushes/11 fumbles (1.41%); 1,308 sacks/
+161 QB fumbles (12.31%). The non-scramble category still includes sneaks and
+is not a pure film-charted designed-run category. One season is insufficient
+to assign exact player-level targets to future generated rosters.
+https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_2024.csv.gz
+The SIS-authored designed-run injury study reports roughly one injury per246
+such runs in its older sample, excluding sneaks/kneels/scrambles. Its injury
+definition is not interchangeable with our at-least-one-week missed endpoint.
+https://www.sharpfootballanalysis.com/analysis/designed-quarterback-runs-lamar-jackson/
+Protection responsibility reference: coach Brandon Behnfeldt, six-man slide.
+https://gridironrandd.blogspot.com/2015/07/tools-of-trade-six-man-slide-pass.html
+
+Remaining implementation and validation
+1. Fatigue/recovery and rotation must be resolved together before dcf3ae6 can
+   ship: that candidate produced near-total starter usage and fewer injuries.
+2. QB slides/out-of-bounds contact avoidance need consistent yards, clock,
+   tackle, fumble and injury treatment; containment is still an arrival proxy.
+3. Pre-goal-line fumbles need ball/recovery location and end-zone rules. The
+   current touchdown guard cannot simply be removed without incorrect scores.
+4. Changes (2) found seller retention trade_floor still omits remaining-season
+   cash/proration. Its rental valuation fix is ready separately; this floor
+   inconsistency and broader future-pick spending judgment remain open.
+5. Award formulas: QB rushing yards and cross-position offense valuation need
+   review. No positional quotas or replacement winners are warranted.
+6. Explicit owner firing/expectation policy and cross-process deterministic
+   schedule generation remain distinct follow-ups; neither changed here.
+7. Merge other threads' ready source, rebuild, run the combined full-season
+   register and remaining browser intersections. Do not claim this branch is
+   the latest combined or deployed bundle.
+8. One combined multi-season validation covers talent/development, aging,
+   contracts/cap, positional supply, scoring, QB workloads, rare risk rates,
+   awards and competitive balance. This turn deliberately did not run it.
+
+Evidence location (relative to workspace root)
+outputs/protection-risk-followup-20261005/final-protection-scoring-review.md
+outputs/protection-risk-followup-20261005/fixed64-{before,after,summary}.json
+outputs/protection-risk-followup-20261005/controlled-protection-races.json
+outputs/protection-risk-followup-20261005/qb-fumble-injury-assessment.md
+outputs/protection-risk-followup-20261005/protection-live.json

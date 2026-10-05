@@ -100,7 +100,7 @@ class EscapeLanes(unittest.TestCase):
 
 
 class ScrambleWorkload(unittest.TestCase):
-    def drive(self, result='scramble', live=False, backup=False, stamina=70, escape=1., nullified=False, short=False):
+    def drive(self, result='scramble', live=False, backup=False, stamina=70, escape=1., nullified=False, short=False, forced=False):
         off, defense = offense(), unit('4-3', 'nickel')
         for p in off['depth']['QB']: p['stamina_rating'] = stamina
         state, dst = G.TeamState(off), G.TeamState(defense)
@@ -129,7 +129,7 @@ class ScrambleWorkload(unittest.TestCase):
                     return dict(penalty='Offensive Holding', yards=10., rule_yards=10.,
                                 on_offense=True, auto_first=False, nullifies=True)
             stack.enter_context(patch.object(E, 'penalty_check', side_effect=penalty))
-            stack.enter_context(patch.object(E, 'fumble_check', return_value=None))
+            stack.enter_context(patch.object(E, 'fumble_check', return_value=dict(lost=False, forced=True) if forced else None))
             check = stack.enter_context(patch.object(E, 'scramble_chance', return_value=escape))
             stack.enter_context(patch.object(E, 'resolve_scramble', return_value=dict(type='scramble', yards=1. if short else 45., touchdown=not short, by='backup' if backup else 'QB')))
             stack.enter_context(patch.object(state, 'hurt', side_effect=hurt))
@@ -179,6 +179,13 @@ class ScrambleWorkload(unittest.TestCase):
         play = next(p for p in dr.log if p.get('scramble_kind') == 'escape')
         self.assertIsNotNone(play.get('tackler'))
         self.assertEqual(book.p[play['tackler']]['tackles'],1)
+
+    def test_escape_forced_fumble_is_credited_to_its_contact_defender(self):
+        _, dr, book, _ = self.drive('escape', short=True, forced=True)
+        play = next(p for p in dr.log if p.get('scramble_kind') == 'escape')
+        self.assertTrue(play['fumble_forced'])
+        self.assertEqual(book.p[play['tackler']]['ff'],1)
+        self.assertEqual(book.p['QB']['fumbles'],1)
 
     def test_drop_and_interception_still_expose_live_players_to_injury_checks(self):
         for outcome in ('drop','interception'):
