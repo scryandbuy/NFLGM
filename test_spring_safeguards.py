@@ -10,15 +10,16 @@ from session import Session
 from test_cap_accounting import fixture, player
 
 class SpringSafeguards(unittest.TestCase):
-    def test_senior_bowl_flag_combines_attendance_and_legacy_news(self):
+    def test_senior_bowl_flag_requires_attendance_not_a_stock_story(self):
         L=fixture(); p=player(L,'prospect'); p.age=23
         L.scouting={'GB':{p.pid:dict(ovr=75,pot_lo=80,pot_hi=90)}}
         L.consensus={p.pid:dict(ovr=76,rank=20)}
-        for marker,news,expected in [(True,True,1),(True,False,1),(False,True,1),(False,False,0)]:
+        for marker,news,expected in [(True,True,1),(True,False,1),(False,True,0),(False,False,0)]:
             with self.subTest(marker=marker,news=news):
                 p.xp_spent.pop('_senior_bowl',None)
                 if marker: p.xp_spent['_senior_bowl']=L.year-1
-                L.spring_news=[dict(pid=p.pid,event='Senior Bowl')] if news else []
+                # Other invitees can move ahead of a nonparticipant on consensus.
+                L.spring_news=[dict(pid=p.pid,event='Senior Bowl',kind='stock',frm=148,to=164)] if news else []
                 with patch.object(SC,'scheme_fit_view',return_value=0):
                     words=VD._prospect(L,'GB',p)['words']
                 self.assertEqual(words.count('Senior Bowl'),expected)

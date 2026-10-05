@@ -1,14 +1,17 @@
 import ast, unittest
 from pathlib import Path
-from types import SimpleNamespace
 import inbox, views
+from league import League
 source=ast.parse(Path('session.py').read_text(encoding='utf-8'))
 cls=next(n for n in source.body if isinstance(n,ast.ClassDef) and any(isinstance(f,ast.FunctionDef) and f.name=='inbox_read' for f in n.body))
 methods=[n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name.startswith('inbox_')]
 ns={}; exec(compile(ast.fix_missing_locations(ast.Module(body=[ast.ClassDef(name='InboxSession',bases=[],keywords=[],body=methods,decorator_list=[])],type_ignores=[])),'session.py','exec'),ns)
 class InboxTests(unittest.TestCase):
  def setUp(self):
-  self.s=ns['InboxSession'](); self.s.L=SimpleNamespace(inbox=[])
+  self.s=ns['InboxSession'](); self.s.L=League(2026); self.s.user_team='GB'
+  self.s.L.inbox=[]
+  self.s.L.user_team='GB';self.s.L.week=1;self.s.L.phase='regular'
+  self.s.L.schedule=[(1,'GB','MIN',None,None)]
  def msg(self, kind='trade_offer', status='unread'):
   m=dict(id=len(self.s.L.inbox)+1,kind=kind,status=status,subject='Test',payload={}); self.s.L.inbox.append(m); return m
  def test_read_preserves_offer(self):

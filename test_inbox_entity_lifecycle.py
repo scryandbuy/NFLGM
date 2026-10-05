@@ -17,7 +17,7 @@ from league import League, Team, Player
 
 
 def league(**kw):
-    fields = dict(year=2026, week=1, inbox=[], teams={}, players={}, user_team='GB',
+    fields = dict(year=2026, week=1, phase='regular', inbox=[], teams={}, players={}, user_team='GB',
                   transactions=[], log=lambda *a, **k: None)
     fields.update(kw)
     L = N(**fields)
@@ -70,7 +70,7 @@ class DecisionLifecycleTests(unittest.TestCase):
         self.assertEqual(m['status'], 'done')
 
     def test_final_year_extended_and_exit_batch_answered(self):
-        p = N(pid='p', team='GB', contract=N(years=1))
+        p = N(pid='p', team='GB', retired=False, contract=N(years=1))
         L = league(players={'p': p}, exit_meetings={'2026': [dict(pid='p', answer=None)]})
         contract = IB.post(L, 'contract_year', 'Final year', '', payload={'pid': 'p'})
         invite = IB.post(L, 'exit', 'Meetings', '')
@@ -107,7 +107,8 @@ class DecisionLifecycleTests(unittest.TestCase):
 
     def test_trainer_automatic_decision_closes_original_week(self):
         L = league()
-        p = N(pid='hurt', name='Hurt Player', out_until=5, xp_spent={}, ratings={'tough_rating': 70})
+        p = N(pid='hurt', name='Hurt Player', out_until=5, retired=False, contract=None,
+              team='GB', fa_class='under_contract', accrued=1, xp_spent={}, ratings={'tough_rating': 70})
         team = N(abbr='GB', roster=[p], ir=[])
         L.players[p.pid] = p; desk = IS.InjuryDesk()
         with patch.object(IS, 'designation', return_value='questionable'), patch.object(IS, 'hurt_words', return_value='Play?'), patch.object(IS, 'will_play', return_value=False):
@@ -177,7 +178,7 @@ class WaiverLifecycleTests(unittest.TestCase):
         IB.post(L, 'waiver_notice', 'Available', '', payload={'pid': p.pid})
         IB.post(L, 'waiver_digest', 'Wire', '')
         def award(L, e, a): L.player(e['pid']).team = a
-        with patch.object(WV, 'priority', return_value=['GB', 'MIN']), patch.object(VAL, 'pool_from_league', return_value=[]), patch.object(VAL, 'value_player', return_value={'apy': 1}), patch.object(WV, 'claim_fits', side_effect=lambda L,e,a: fits if a == 'GB' else True), patch.object(WV, 'wants', return_value=True), patch.object(WV, 'make_room', side_effect=lambda L,a,p: room if a == 'GB' else True), patch.object(WV, 'award', side_effect=award), patch.object(PSQ, 'shunned', return_value=False):
+        with patch.object(WV, 'priority', return_value=['GB', 'MIN']), patch.object(VAL, 'pool_from_league', return_value=[]), patch.object(VAL, 'value_player', return_value={'apy': 1}), patch.object(WV, 'claim_fits', side_effect=lambda L,e,a: fits if a == 'GB' else True), patch.object(WV, 'wants', return_value=True), patch.object(WV, 'make_room', side_effect=lambda L,a,p,e: room if a == 'GB' else True), patch.object(WV, 'award', side_effect=award), patch.object(PSQ, 'shunned', return_value=False):
             WV.process(L, np.random.default_rng(1), 1)
         return L
 

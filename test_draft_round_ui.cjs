@@ -20,12 +20,13 @@ function view(round) {
     order:[1,2,3].map(r=>({round:r,sel:(r-1)*32+12,slot:`${r}.12`,team:club,now:r===round,mine:true}))};
 }
 let page, latest=view(1), ok=true;
+const commands=[];
 const ctx={el,boardRound:null,offersCache:null,location:{hash:'#draft/day'},
   renderRail(){},drSecond(){},featureHero(){},notify(){},ord:()=> 'th',showAbbr:x=>x,
   teamTheme:()=>({base:club.color,accent:club.accent}),
   persPage:()=>page=el('main'),draftAvailableSources:new Map(),
   draftAvailableView:()=>({key:'GB',source:'consensus',rows:[],top:null,label:'Consensus',note:'',read:''}),
-  pyJSON:code=>code.includes('draft_act') ? {ok} : latest};
+  pyJSON:code=>{if(code.includes('draft_act')) {commands.push(code);return {ok};} return latest;}};
 vm.createContext(ctx);
 vm.runInContext(src.slice(src.indexOf('function renderDraftDay('),src.indexOf('\nlet offersCache')),ctx);
 ctx.renderDraftDay(latest);
@@ -37,9 +38,13 @@ assert.ok(find(page,n=>n.children?.includes('Round 2 of 3')));
 find(page,n=>n['aria-label']==='Previous round').onclick();
 assert.equal(ctx.boardRound,1,'manual previous-round browsing remains available');
 ok=false;
-find(page,n=>n.tag==='button'&&n.children.includes('Next Pick')).onclick();
+const auto=find(page,n=>n.tag==='button'&&n.children.includes('Auto Pick'));
+assert.ok(auto['data-tip'].includes('roster needs'));
+assert.ok(auto['data-tip'].includes('Do Not Draft'));
+auto.onclick();
+assert.ok(commands.at(-1).includes('sim_pick_one'),'Auto Pick still delegates one needs-aware pick');
 assert.equal(ctx.boardRound,1,'failed actions do not move the board');
 ok=true;latest=view(3);
-find(page,n=>n.tag==='button'&&n.children.includes('Next Pick')).onclick();
+find(page,n=>n.tag==='button'&&n.children.includes('Auto Pick')).onclick();
 assert.equal(ctx.boardRound,3,'one-pick advancement also follows a round boundary');
 console.log('Passed: cross-round simulation, manual browsing, failed action, one-pick round advance');

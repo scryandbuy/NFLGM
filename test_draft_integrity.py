@@ -47,6 +47,34 @@ class DraftIntegrityTests(unittest.TestCase):
         finally:
             p.medical, v['flags'] = old_medical, old_flags
 
+    def test_prospect_card_retains_full_class_scouting_rank(self):
+        s = session.Session.load(self.initial)
+        rows = views_draft.board(s, s.L, 'KC')['rows']
+        for row in (rows[0], rows[40], rows[-1]):
+            card = views_draft.prospect_card(s, s.L, 'KC', row['pid'])
+            self.assertEqual(card['my_rank'], row['my_rank'])
+            self.assertEqual(card['my_round'], row['my_round'])
+        # Custom priorities are independent of the room's scouting grade.
+        s.L.user_board = dict(order=[rows[40]['pid']], dnd=[])
+        card = views_draft.prospect_card(s, s.L, 'KC', rows[40]['pid'])
+        self.assertEqual(card['on_board'], 1)
+        self.assertEqual(card['my_rank'], 41)
+
+    def test_draft_pages_name_upcoming_class_before_and_after_year_roll(self):
+        s = session.Session.load(self.initial)
+        L = s.L; L.phase = 'offseason'; L.season_closed_year = L.year
+        s.stop = ('offseason', 1)
+        upcoming = L.year + 1
+        for post_roll in (False, True):
+            if post_roll: L.year += 1
+            for page in ('board', 'spring', 'picks'):
+                self.assertEqual(s.draft_view(page)['year'], upcoming)
+            spring = s.draft_view('spring')
+            self.assertFalse(spring['visit_window'])
+            self.assertFalse(spring['spring_done'])
+        s.stop = ('offseason', next(i for i, step in enumerate(s.OFFSEASON) if step[1] == 'step_visits'))
+        self.assertTrue(s.draft_view('spring')['visit_window'])
+
     def test_new_class_and_rejected_clock_trade(self):
         s = session.Session.load(self.initial)
         L = s.L

@@ -2772,14 +2772,14 @@ function yourBoard(v, reload) {
   t.addEventListener('drop', e => { const tr = e.target.closest('tr[data-pid]'); if (!tr || !dragPid || tr.dataset.pid === dragPid) return; e.preventDefault(); const o = order.filter(p => p !== dragPid); o.splice(o.indexOf(tr.dataset.pid), 0, dragPid); pyJSON(`SESSION.draft_act('board', order=${JSON.stringify(o)})`); reload(); });
   list.append(t); box.append(list);
   box.append(el('div', { class: 'read', style: 'margin:0 14px 12px' }, el('b', {}, 'Assistants: '), v.read || ''));
-  box.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => notify({ ok: true, line: 'Your board is saved as you change it.' }) }, 'Save Board'), el('button', { class: 'btn', 'data-tip': "Your scouts' order, top to bottom", onclick: () => { notify(pyJSON(`SESSION.draft_act('board_autofill')`)); reload(); } }, 'Auto-Fill by Read'), el('button', { class: 'btn quiet', onclick: () => { if (confirm('Clear your board?')) { pyJSON(`SESSION.draft_act('board', reset=True)`); reload(); } } }, 'Reset'), el('span', { class: 'count', style: 'margin-left:auto' }, 'Drag to Order · Draft Day picks from the top of this board')));
+  box.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => notify({ ok: true, line: 'Your board is saved as you change it.' }) }, 'Save Board'), el('button', { class: 'btn', 'data-tip': "Your scouts' order, top to bottom", onclick: () => { notify(pyJSON(`SESSION.draft_act('board_autofill')`)); reload(); } }, 'Auto-Fill by Read'), el('button', { class: 'btn quiet', onclick: () => { if (confirm('Clear your board?')) { pyJSON(`SESSION.draft_act('board', reset=True)`); reload(); } } }, 'Reset'), el('span', { class: 'count', style: 'margin-left:auto' }, 'Drag to Order · Automatic picks use your saved priorities first, then scouting and roster needs')));
   return box;
 }
 
 function renderSpring(v) {
   renderRail(v.rail); const page = persPage(); drSecond('spring');
   page.className = 'draft-page';
-  featureHero(page, v.rail.club, `Draft / ${v.rail.year}`, 'SPRING REPORT', 'What the workouts, pro days, and visits changed.', [[v.visited?.length ?? 0, 'Visits'], [v.done ? v.risers.length + v.fallers.length : '—', 'Stock moves']]);
+  featureHero(page, v.rail.club, `Draft / ${v.year}`, 'SPRING REPORT', 'What the workouts, pro days, and visits changed.', [[v.visited?.length ?? 0, 'Visits'], [v.done ? v.risers.length + v.fallers.length : '—', 'Stock moves']]);
   const s = el('section', { class: 'sheet c12 draft-surface draft-spring' }, el('h2', {}, 'The Spring', el('small', {}, v.done ? v.events.map(e => `${e.event} ${e.n} moves`).join(' · ') : 'stock moves and flags')));
   if (v.note) s.append(el('div', { class: 'empty' }, v.note));
   if (!v.done) { page.append(s); return; }
@@ -2794,7 +2794,7 @@ function renderSpring(v) {
   const vt = el('table', { class: 'tbl' }); vt.append(el('tr', {}, el('th', {}, 'Prospect'), el('th', {}, 'Pos'), el('th', { class: 'n', 'data-tip': "Your scouts' read. Carries error; a visit tightens it" }, 'Your Read'), el('th', { class: 'n', 'data-tip': 'Where he can grow to. Wide means your scouts are unsure' }, 'Ceiling'), el('th', { class: 'n', 'data-tip': "The league's grade, same scale as yours" }, 'Consensus'), el('th', { class: 'n', 'data-tip': "Yours minus the league's. Positive means the league undervalues him" }, 'Gap'), el('th', {}, 'Flags')));
   const was = (before, now) => (before != null && String(before) !== String(now)) ? el('small', { class: 'count', style: 'display:block;font-size:11.5px' }, `was ${before}`) : '';
   for (const r of v.visited) { const b = r.before || {}; vt.append(el('tr', {}, el('td', {}, el('button', { class: 'who', onclick: () => { location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, r.name, el('small', {}, r.home_state)))), el('td', {}, r.pos), el('td', { class: 'n' }, ovrCell(r.mine), was(b.mine, r.mine)), el('td', { class: 'n' }, r.ceiling, was(b.ceiling, r.ceiling)), el('td', { class: 'n' }, r.cons_rank != null ? `#${r.cons_rank}` : '—', was(b.cons_rank != null ? `#${b.cons_rank}` : null, r.cons_rank != null ? `#${r.cons_rank}` : '—')), el('td', { class: 'n' }, gapCell(r.gap)), el('td', {class:'prospect-flags'}, el('div', {class:'prospect-flag-list'}, ...(r.words || []).filter(w => w !== 'Visited').map(wordTag))))); }
-  if (!v.visited.length) vt.append(el('tr', {}, el('td', { colspan: '7' }, el('div', { class: 'empty' }, 'You named no visits this year.'))));
+  if (!v.visited.length) vt.append(el('tr', {}, el('td', { colspan: '7' }, el('div', { class: 'empty' }, v.spring_done ? 'No private visit reports are available for this class.' : v.visit_window ? 'Schedule visits on Your Board; reports arrive after you advance.' : 'Private visits open after the Combine and Pro Days.'))));
   s.append(vt); page.append(s);
 }
 
@@ -2811,7 +2811,7 @@ function draftAvailableView(v) {
   const read = source === 'mine'
     ? (v.has_custom_board ? v.read : (top ? `${top.name} is your scouts’ highest-ranked available player.` : 'No eligible players remain on your board.'))
     : (top ? `${top.name} is the highest-ranked available player on the consensus board${top.cons_rank ? ` (#${top.cons_rank})` : ''}.` : 'No prospects remain.');
-  return {key, source, rows, top, label, note, read};
+  return {key, source, rows, top, label, note: note + ' This selector changes the list and manual Draft button; automatic picks use your saved priorities, then the GM’s scouting and roster assessment.', read};
 }
 
 function renderDraftDay(v) {
@@ -2831,10 +2831,10 @@ function renderDraftDay(v) {
   left.append(el('div', { class: 'clockhead' }, el('div', { class: 'draft-clock-emblem', role: 'img', 'aria-label': cur.team.name, style: `--clock-team:${teamTheme(cur.team).base};--clock-accent:${teamTheme(cur.team).accent}` }, showAbbr(cur.team.abbr)), el('div', {}, el('div', { class: 'big' }, v.on_user ? 'You Are On the Clock' : `${cur.team.name} Is On the Clock`), el('div', { class: 'sub' }, `Round ${cur.round} · Pick ${cur.sel}` + (cur.needs && cur.needs.length ? ` · Needs ${cur.needs.join(', ')}` : ''))),
     el('div', { class: 'yours' }, v.mine_next.length ? el('div', {}, el('div', { class: 'big', style: 'font-size:20.5px' }, `You Pick ${v.mine_next[0].sel}${ord(v.mine_next[0].sel)}`), el('div', { class: 'sub' }, v.on_user ? 'Now' : v.picks_away === 1 ? 'One Pick Away' : v.picks_away != null ? `${['Two', 'Three', 'Four', 'Five', 'Six', 'Seven'][v.picks_away - 2] || v.picks_away} Picks Away` : '')) : el('div', { class: 'sub' }, 'No picks left'))));
   left.append(el('div', { class: 'ctrl2', style: 'padding:0 14px 10px' },
-    el('button', { class: 'btn tip-left', 'data-tip': v.on_user ? 'Draft one player from your saved board, or your scouts’ rankings if no order is set. Respects Do Not Draft.' : 'Simulate exactly one pick', onclick: () => { offersCache = null; act('sim_pick_one'); } }, 'Next Pick'),
+    el('button', { class: 'btn tip-left', 'data-tip': v.on_user ? 'Use your saved priorities, then let the GM weigh scouting and roster needs. Respects Do Not Draft.' : 'Simulate exactly one pick', onclick: () => { offersCache = null; act('sim_pick_one'); } }, v.on_user ? 'Auto Pick' : 'Next Pick'),
     el('button', { class: 'btn go', disabled: v.on_user ? '' : null, onclick: () => act('sim_to_me') }, 'Sim to Your Pick'),
     el('button', { class: 'btn', disabled: v.on_user ? '' : null, 'data-tip': 'Sim to the end of this round, or to your pick if it comes first', onclick: () => act('sim_round') }, 'Sim Round'),
-    el('button', { class: 'btn quiet', onclick: () => { if (confirm('Run the rest of the draft? Your picks go to the top of your board.')) act('sim_draft'); } }, 'Sim Draft'),
+    el('button', { class: 'btn quiet', onclick: () => { if (confirm('Run the rest of the draft? Automatic picks follow your saved priorities, then the GM weighs scouting and roster needs. Do Not Draft players are excluded.')) act('sim_draft'); } }, 'Sim Draft'),
     el('span', { class: 'sep' }),
     el('button', { class: 'btn', disabled: v.on_user ? null : '', 'data-tip': 'Gather offers for this pick', onclick: () => { const r = pyJSON(`SESSION.draft_act('offers')`); notify(r); if (r.ok) { offersCache = r.offers; reload(); } } }, 'Trade Down')));
   // the picks around the clock
@@ -2896,7 +2896,7 @@ let picksClub = 'mine', picksYear = null, picksYearFor = null, picksQuery = '';
 function renderPicks(v) {
   renderRail(v.rail); const page = persPage(); drSecond('picks');
   page.className = 'draft-page';
-  featureHero(page, v.rail.club, `Draft / ${v.rail.year}`, 'YOUR PICKS', 'What you own and where you pick next.', [[v.years.reduce((a, y) => a + y.picks.length, 0), 'Picks held'], [v.years.length, 'Drafts']]);
+  featureHero(page, v.rail.club, `Draft / ${v.year}`, 'YOUR PICKS', 'What you own and where you pick next.', [[v.years.reduce((a, y) => a + y.picks.length, 0), 'Picks held'], [v.years.length, 'Drafts']]);
   const s = el('section', { class: 'sheet c12 draft-surface draft-picks' }, el('h2', {}, 'Your Picks', el('small', {}, `${v.years.reduce((a, y) => a + y.picks.length, 0)} picks over ${v.years.length} drafts`), el('button', { class: 'btn', style: 'margin-left:auto;width:auto', 'data-tip': 'Copy the last draft, every pick and trade, as text', onclick: function () { const r = pyJSON(`SESSION.draft_view('draft_text')`); if (!r.ok) { notify(r); return; } copyText(r.text, this); } }, 'Copy Draft'),
     el('button', { class: 'btn', style: 'width:auto', 'data-tip': 'Download the last draft as a spreadsheet: every pick with every attribute of every player', onclick: () => { const r = pyJSON(`SESSION.draft_view('draft_csv')`); if (!r.ok) { notify(r); return; } const blob = new Blob([r.text], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = r.name; document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); } }, 'Download Draft'),
     el('button', { class: 'btn', style: 'width:auto', 'data-tip': "Download the coming class as a spreadsheet: every prospect's true numbers beside your room's read", onclick: () => { const r = pyJSON(`SESSION.draft_view('class_csv')`); if (!r.ok) { notify(r); return; } const blob = new Blob([r.text], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = r.name; document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); } }, 'Download Class')));
@@ -2914,7 +2914,7 @@ function renderPicks(v) {
 function renderDraftResults(v) {
   renderRail(v.rail); const page = persPage(); drSecond('results');
   page.className = 'draft-page';
-  featureHero(page, v.rail.club, `Draft / ${v.default_year}`, 'DRAFT RESULTS', 'Every selection on record, with your original read beside it.', [[v.results.length, 'Players drafted'], [v.result_years.length, 'Classes']]);
+  featureHero(page, v.rail.club, `Draft / ${v.default_year}`, 'DRAFT RESULTS', 'Every selection on record, with its draft-day grade and consensus rank.', [[v.results.length, 'Players drafted'], [v.result_years.length, 'Classes']]);
   const s = el('section', { class: 'sheet c12 draft-surface draft-results' });
   // the tab opens on the draft the server names (this offseason's if held, else the coming one); the chosen year sticks
   // only within the same default, so a new season resets it instead of carrying last year's draft forward

@@ -8,6 +8,8 @@ const v = {rail:{club:{abbr:'GB'},year:2027},best:[consensus],board:[custom],has
 let r = ctx.draftAvailableView(v);
 assert.equal(r.source,'consensus'); assert.equal(r.top.pid,'c');
 assert.ok(r.read.includes('Consensus Leader')); assert.ok(r.note.includes('scouts'));
+assert.ok(r.note.includes('manual Draft button'));
+assert.ok(r.note.includes('automatic picks use your saved priorities'));
 r = ctx.draftAvailableView({...v,has_custom_board:true});
 assert.equal(r.source,'mine'); assert.equal(r.top.pid,'m');
 vm.runInContext("draftAvailableSources.set('GB:2027','mine')",ctx);

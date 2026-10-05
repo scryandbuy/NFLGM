@@ -84,13 +84,10 @@ def _prospect(league, abbr, p, taken=()):
     visit_move = None
     if pre and 'visited' in flags:
         visit_move = dict(mine_from=round(float(pre.get('ovr', 0) or 0)), ceiling_from=f"{round(float(pre.get('lo', 0) or 0))}–{round(float(pre.get('hi', 0) or 0))}", rank_from=pre.get('rank'))
-    # Old saves recorded attendance only through spring news. Either source
-    # establishes the same event; never emit a second abbreviated flag.
+    # Rank changes include nonparticipants displaced by other players' reads.
+    # A stock story alone does not establish attendance, even in an old save.
     senior_bowl = p.xp_spent.get('_senior_bowl') in (league.year, league.year - 1)
-    legacy_senior_bowl = getattr(p, 'age', 22) >= 22 and any(
-        x.get('pid') == p.pid and x.get('event') == 'Senior Bowl'
-        for x in (getattr(league, 'spring_news', None) or []))
-    if senior_bowl or legacy_senior_bowl: words.append('Senior Bowl')
+    if senior_bowl: words.append('Senior Bowl')
     visit_locked = visited
     import character_assessment as CA
     words.extend(CA.flags(v))
@@ -129,19 +126,23 @@ def _my_rank(rows):
     for i, r in enumerate(sorted(rows, key=lambda r: slot[r['pid']]), 1): r['my_rank'] = i
 
 
-def board(session, league, abbr):
-    pool = _pool(league)
-    taken = set(session.draft.taken) if getattr(session, 'draft', None) else set()
-    rows = [r for r in (_prospect(league, abbr, p, taken) for p in pool) if r]
+def _ranked_prospects(league, abbr, taken=()):
+    """The same full-class scouting ranks on the board and individual cards."""
+    rows = [r for r in (_prospect(league, abbr, p, taken) for p in _pool(league)) if r]
     _my_rank(rows)
     rows.sort(key=lambda r: r['my_rank'])
+    for r in rows:
+        r['my_round'] = f"R{min(7, (r['my_rank'] - 1) // 32 + 1)}"
+    return rows
+
+
+def board(session, league, abbr):
+    taken = set(session.draft.taken) if getattr(session, 'draft', None) else set()
+    rows = _ranked_prospects(league, abbr, taken)
     import staff as ST
     t = league.teams[abbr]
     scout = (getattr(t, 'staff', None) or {}).get('scout')
     import spring as SP
-    # my grade as a round, from where my read ranks him against the class
-    for r in rows:
-        r['my_round'] = f"R{min(7, (r['my_rank'] - 1) // 32 + 1)}" if r.get('my_rank') else None
     needs = _needs(league, league.teams[abbr])
     ub = _user_board(league, rows)
     visits = list(getattr(league, 'user_visits', None) or [])
@@ -248,7 +249,9 @@ def prospect_card(session, league, abbr, pid):
     import views_club as VC, scouting as SC
     p = next((q for q in _pool(league) if q.pid == pid), None) or league.player(pid)
     if p is None: return dict(error='no such prospect')
-    row = _prospect(league, abbr, p, (getattr(session, 'draft', None).taken if getattr(session, 'draft', None) else ()))
+    taken = getattr(session, 'draft', None).taken if getattr(session, 'draft', None) else ()
+    row = next((r for r in _ranked_prospects(league, abbr, taken) if r['pid'] == pid), None)
+    if row is None: row = _prospect(league, abbr, p, taken)
     taken_now = bool(getattr(session, 'draft', None) is not None and p.pid in getattr(session.draft, 'taken', set())) or bool(p.team)
     if row is None: return dict(error='your scouts have no read on him')
     view = league.scouting[abbr][p.pid]
@@ -389,7 +392,9 @@ def spring(session, league, abbr):
             import character_assessment as CA
             r['uncovered'] += [f for f in CA.flags(v) if f not in (pre.get('character_flags') or [])]
     done = bool(news)
-    return dict(rail=rail(session, league, abbr), done=done, events=events, risers=risers, fallers=fallers, visited=visited, flagged=flagged[:40],
+    visit_window = session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'
+    return dict(rail=rail(session, league, abbr), year=spring_year(league), done=done, spring_done=_spring_done(league), visit_window=visit_window,
+                events=events, risers=risers, fallers=fallers, visited=visited, flagged=flagged[:40],
                 note=None if _spring_done(league) else 'The Senior Bowl takes place after the conference championships. Combine and pro day results arrive first; schedule private visits on the board before advancing to the Draft.')
 
 
@@ -487,7 +492,7 @@ def draft_day(session, league, abbr):
         else:
             read = sentence(f"{surname(top['name'])} is your board's top player and a {top['pos']}" + (f", which is a need" if any(top['pos'] in NEED_GROUPS[g] for g in _needs(league, league.teams[abbr])) else '') + f". The consensus has him {top['cons_rank']}{_ordd(top['cons_rank'])}." if top.get('cons_rank') else f"{surname(top['name'])} is your board's top man.")
     picks_away = next((j for j, z in enumerate(D.picks[D.i:]) if z.owner == abbr), None)
-    return dict(rail=r, live=True, on_user=D.on_user(), current=(dict(sel=pk.selection, slot=SLOT(pk), round=pk.round, team=club(pk.owner), original=pk.original, needs=sorted(_needs(league, league.teams[pk.owner]))[:3]) if pk else None),
+    return dict(rail=r, year_next=draft_year_of(D.year), live=True, on_user=D.on_user(), current=(dict(sel=pk.selection, slot=SLOT(pk), round=pk.round, team=club(pk.owner), original=pk.original, needs=sorted(_needs(league, league.teams[pk.owner]))[:3]) if pk else None),
                 clock=clock, order=pick_board, results=results, mine_next=mine_next, best=best, board=my_board, has_custom_board=bool(order or dnd), picks_left=len(D.picks) - D.i, total=len(D.picks), trades=len(D.trades), picks_away=picks_away, read=read,
                 default_pick=(dict(pid=my_board[0]['pid'], name=my_board[0]['name'], pos=my_board[0]['pos'], home_state=my_board[0]['home_state']) if my_board else None), my_needs=sorted(_needs(league, league.teams[abbr])))
 
@@ -540,7 +545,7 @@ def act_sim_to_me(session, league, abbr):
 
 
 def act_auto_pick(session, league, abbr):
-    """Take the top eligible player on your board at this pick only."""
+    """Use saved priorities, then the GM's scouting and roster assessment, for one pick."""
     D = session.draft
     if D is None or not D.on_user(): return dict(ok=False, why='not your pick')
     p = D.user_pick()
@@ -617,7 +622,7 @@ def picks(session, league, abbr):
     # opened on last year's draft all through the new season as if it were this year's.
     held_this_offseason = _held_this_offseason(league)
     default_year = draft_year_of(ld['year']) if held_this_offseason else draft_year_of(coming_season(league))
-    return dict(rail=rail(session, league, abbr), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], last=(_results(league, ld) if (ld and held_this_offseason) else None), results=results, result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division,
+    return dict(rail=rail(session, league, abbr), year=draft_year_of(coming_season(league)), years=[dict(year=draft_year(y), this_draft=(y == coming_season(league)), picks=v) for y, v in sorted(years.items())], last=(_results(league, ld) if (ld and held_this_offseason) else None), results=results, result_years=sorted({r['year'] for r in results}, reverse=True), my_division=t.division,
                 default_year=default_year, default_held=held_this_offseason)
 
 

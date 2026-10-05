@@ -97,7 +97,8 @@ class SeniorBowlReportTests(unittest.TestCase):
              patch.object(SP, 'visits', return_value=(0, [])):
             SP.run_spring(L, s.rng)
         fallback.assert_called_once()
-        self.assertEqual(L.spring_news, [dict(kind='complete', year=L.year, event='spring')])
+        self.assertEqual(L.spring_news, [dict(kind='stage', year=L.year, event='pre_visits'),
+                                        dict(kind='complete', year=L.year, event='spring')])
         self.assertTrue(VD._spring_done(L))
 
 
