@@ -2,6 +2,7 @@
 
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from gm_engine import GM
 from test_cap_accounting import fixture, player
@@ -21,7 +22,7 @@ class FreeAgencyPositionViewTests(unittest.TestCase):
         tight_end.pos = 'TE'
         league.free_agents.append(tight_end.pid)
         with patch.object(VP, 'rail', return_value={}):
-            board = VP.free_agency(None, league, 'GB')
+            board = VP.free_agency(SimpleNamespace(user_team='GB'), league, 'GB')
         self.assertEqual(board['count'], 306)
         self.assertEqual(len(board['rows']), 306)
         self.assertEqual([r['pid'] for r in board['rows'] if r['pos'] == 'TE'],
@@ -37,13 +38,13 @@ class FreeAgencyPositionViewTests(unittest.TestCase):
         edge.pos = 'LEDG'
         league.free_agents.append(edge.pid)
         with patch.object(VP, 'rail', return_value={}):
-            odd = VP.free_agency(None, league, 'GB')
+            odd = VP.free_agency(SimpleNamespace(user_team='GB'), league, 'GB')
             self.assertEqual(odd['rows'][0]['display_pos'], 'LOLB')
             self.assertEqual(odd['rows'][0]['filter_positions'], ['LOLB', 'ROLB'])
             self.assertIn('LOLB', [p['key'] for group in odd['position_filters']
                                    for p in group['positions']])
             team.gm.def_front = '4-3'
-            even = VP.free_agency(None, league, 'GB')
+            even = VP.free_agency(SimpleNamespace(user_team='GB'), league, 'GB')
         self.assertEqual(even['rows'][0]['display_pos'], 'LEDG')
         self.assertIn('LEDG', even['rows'][0]['filter_positions'])
         self.assertNotIn('LOLB', even['rows'][0]['filter_positions'])

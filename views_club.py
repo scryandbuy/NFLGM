@@ -856,7 +856,8 @@ def act_to_squad(league, abbr, pid):
     if not PSQ.can_add(t, p): return dict(ok=False, why=('the squad is full' if len(PSQ.squad(t)) >= PSQ.SIZE else 'the squad has no room for him under its rules (six veterans at most)'))
     penalty = _cut_penalty(league, p)
     penalty_line = _cut_penalty_line(penalty)
-    if int(p.accrued or 0) >= 4:
+    import waivers as WV
+    if not WV.subject(league, p, league.week):
         if not PSQ.sign_to_squad(league, abbr, pid):
             return dict(ok=False, why='Cannot move him to the practice squad: releasing his contract would exceed the cap.')
         return dict(ok=True, line=f"{p.name} to the practice squad. {penalty_line}", now=True, **penalty)

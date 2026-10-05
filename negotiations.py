@@ -75,6 +75,25 @@ def open_for(league, pid, kind=None):
                  and (kind is None or t['kind'] == kind)), None)
 
 
+def _refusal_active(league, thread):
+    """Respect this club's refusal window across calendar transitions."""
+    if thread.get('state') not in ('broken_off', 'declined'): return False
+    if thread['state'] == 'declined' and not thread.get('firm_refusal'):
+        last = (thread.get('log') or [{}])[-1].get('text', '')
+        if not (last.startswith('That is an insult.') or 'He is done here and will see what the market says.' in last):
+            return False  # A failed cap/eligibility check is not an agent refusal.
+    if int(thread.get('refusal_year', thread.get('opened_year', league.year))) < league.year:
+        return False
+    now = _clock(league)
+    opened = int(thread.get('refusal_clock', thread.get('opened', 0)) or 0)
+    # The offseason clock resets when camp/the regular season starts.
+    if opened >= 100 and now < 100: return False
+    if thread['state'] == 'broken_off':
+        return now < int(thread.get('broken_until', 0) or 0)
+    # A firm extension refusal lasts through this negotiating window.
+    return (opened >= 100) == (now >= 100)
+
+
 # ------------------------------------------------------------ the agent's read
 def _situation(league, p):
     import personality as PT
@@ -104,9 +123,14 @@ def open_talks(league, pid, kind='extension'):
     p = league.player(pid)
     if p is None:
         return dict(ok=False, why='no such player')
-    t = open_for(league, pid, kind)
-    if t and t['state'] == 'broken_off' and t.get('broken_until', 0) > _clock(league):
-        return dict(ok=False, why=f"his agent is not taking your calls until week {t['broken_until']}")
+    user = getattr(league, 'user_team', None)
+    if kind == 'extension' and p.team != user:
+        return dict(ok=False, why='not on your team')
+    matching = [t for t in _threads(league) if t['pid'] == pid and t['kind'] == kind and t.get('team') == user]
+    refusal = next((t for t in reversed(matching) if _refusal_active(league, t)), None)
+    if refusal is not None:
+        return dict(ok=False, why='His agent has ended these talks. Wait until the refusal window ends before asking again.')
+    t = next((t for t in reversed(matching) if t['state'] in ('open', 'waiting', 'countered', 'match_requested')), None)
     s = _situation(league, p)
     if kind == 'extension':
         if not EXT.eligible(p, league):
@@ -135,7 +159,7 @@ def open_talks(league, pid, kind='extension'):
     if s['morale'] < 30: line += " He is unhappy here, and it will show in the number."
     if not t:
         t = dict(id=next(_ids), pid=pid, team=p.team if kind == 'extension' else getattr(league, 'user_team', None), kind=kind,
-                 state='open', offers=[], patience=PATIENCE, opened=_clock(league), ask=round(ask, 2), years=years,
+                 state='open', offers=[], patience=PATIENCE, opened=_clock(league), opened_year=league.year, ask=round(ask, 2), years=years,
                  mood=mood, due=None, counter=None, rival=None, match_rounds=0, broken_until=0)
         _threads(league).append(t)
         if kind == 'extension': t['discount'] = tm['discount']
@@ -205,6 +229,8 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     room = (t['kind'] == 'extension' and not s['in_season'])      # the offseason room: he answers here, and a walk is a walk
     # an insult ends it
     if assessment['ratio'] < INSULT:
+        t['refusal_year'] = league.year
+        t['refusal_clock'] = _clock(league); t['firm_refusal'] = room
         if room:
             t['state'] = 'declined'; _say(t, 'agent', f"That is an insult. ${apy:.1f}m against ${ask:.1f}m is not a negotiation. He will test the market.")
             return dict(ok=True, state='declined', line=t['log'][-1]['text'])
@@ -215,6 +241,8 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
     if assessment['ratio'] < LOWBALL:
         t['patience'] -= 1
         if t['patience'] <= 0:
+            t['refusal_year'] = league.year
+            t['refusal_clock'] = _clock(league); t['firm_refusal'] = room
             if room:
                 t['state'] = 'declined'; _say(t, 'agent', 'You keep coming in low. He is done here and will see what the market says.')
                 return dict(ok=True, state='declined', line=t['log'][-1]['text'])
@@ -331,7 +359,7 @@ def resolve(league, week=None, fa_step=None):
     now = _clock(league)
     out = []
     for t in _threads(league):
-        if t['state'] == 'broken_off' and t.get('broken_until', 0) <= now:
+        if t['state'] == 'broken_off' and not _refusal_active(league, t):
             t['state'] = 'expired'
             pp = league.player(t['pid'])
             if pp is not None: _post(league, t, f"{pp.name}'s agent will talk again", 'The break he took after your last offer is over. Ask again if you still want him.')
@@ -476,13 +504,31 @@ def _post(league, t, subject, body, payload=None):
 
 
 # ------------------------------------------------------------ the promise ledger
+def normalize_promises(league):
+    """Normalize open legacy aliases without replaying past morale events."""
+    promises = getattr(league, 'promises', None) or []
+    for pr in promises:
+        if pr.get('status') == 'open' and pr.get('kind') == 'no_tag':
+            pr['kind'] = 'no_franchise'
+            p = league.player(pr['pid'])
+            # An old save does not establish when a prior tag violated this
+            # promise. Preserve that history; enforce tags from here forward.
+            pr['tagged_before_normalization'] = getattr(p, 'tagged_year', None)
+    return promises
+
+
 def record_promise(league, pid, team, kind, year=None, source=None):
+    kind = 'no_franchise' if kind == 'no_tag' else kind
     league.promises = getattr(league, 'promises', None) or []
+    normalize_promises(league)
     existing = next((pr for pr in league.promises if pr.get('status') == 'open' and pr.get('pid') == pid and pr.get('team') == team and pr.get('kind') == kind), None)
     if existing is not None: return existing
     p = league.player(pid)
     orig = (int(getattr(p.contract, 'signed', 0) or 0), int(p.contract.years)) if p is not None and p.contract is not None else None
     pr = dict(pid=pid, team=team, kind=kind, made=league.year, year=year or (league.year + 1 if kind == 'extension_by' else None), status='open', source=source, orig=orig)
+    if kind == 'extension_by':
+        pr['orig_end'] = int(league.year) + (orig[1] if orig else 0)
+        pr['extension_after'] = len(getattr(league, 'transactions', []) or [])
     if kind in ('starting_role', 'captaincy'):
         week = int(getattr(league, 'week', 0) or 0)
         regular = getattr(league, 'phase', None) == 'regular'
@@ -517,9 +563,10 @@ def check_promises(league, week):
     """Weekly. A promise not kept is broken, with the hit the morale module defines."""
     import morale_system as MS
     broken = []
-    promises = getattr(league, 'promises', None) or []
+    promises = normalize_promises(league)
     def identity(pr):
-        return (pr.get('pid'), pr.get('team'), pr.get('kind'), pr.get('made'), pr.get('year'))
+        kind = 'no_franchise' if pr.get('kind') == 'no_tag' else pr.get('kind')
+        return (pr.get('pid'), pr.get('team'), kind, pr.get('made'), pr.get('year'))
     seen = {identity(pr) for pr in promises if pr.get('status') in ('kept', 'broken')}
     for pr in promises:
         if pr['status'] != 'open': continue
@@ -547,11 +594,22 @@ def check_promises(league, week):
                 if p.out_until is not None: ok = None                     # hurt players are not judged
             elif pr['kind'] == 'extension_by':
                 cur = (int(getattr(p.contract, 'signed', 0) or 0), int(p.contract.years)) if p.contract is not None else None
-                if cur is not None and cur != tuple(pr.get('orig') or ()) and cur[0] >= int(pr['made']) and cur[1] >= 2:
+                orig = pr.get('orig') or (0, 0)
+                original_end = pr.get('orig_end', int(pr['made']) + int(orig[1]))
+                # Calendar rollover reduces years remaining without adding
+                # control. A real extension pushes the expiry past that anchor.
+                extended = (cur is not None and cur[0] >= int(pr['made']) and cur[1] >= 2
+                            and int(league.year) + cur[1] > original_end)
+                if extended and 'extension_after' in pr:
+                    extended = any(x.get('kind') == 'extension' and x.get('pid') == p.pid
+                                   and x.get('team') == pr['team']
+                                   for x in league.transactions[pr['extension_after']:])
+                if extended:
                     ok = True                                          # a new deal since the promise: kept
                 elif league.year > (pr['year'] or 9999) or (league.year == (pr['year'] or 9999) and league.phase == 'regular'):
                     ok = False                                         # the new year came and went with no deal
-            elif pr['kind'] == 'no_franchise' and getattr(p, 'tagged_year', None) == league.year:
+            elif (pr['kind'] == 'no_franchise' and getattr(p, 'tagged_year', None) == league.year
+                  and pr.get('tagged_before_normalization') != league.year):
                 ok = False
             elif pr['kind'] == 'captaincy':
                 import morale as MO
