@@ -162,8 +162,16 @@ class BlowoutRest(unittest.TestCase):
         def runner():
             r = SeasonRunner.__new__(SeasonRunner)
             r.rng = np.random.default_rng(3)
-            h, a = copy.deepcopy(self.base), rosters.load_league()['DEN']
+            h, a = copy.deepcopy(self.base), copy.deepcopy(rosters.load_league()['DEN'])
+            # Keep the replay scenario decisive even if unrelated game tuning
+            # changes the result of an evenly matched GB-DEN fixture.
+            for player in {p['pid']: p for men in a['depth'].values() for p in men}.values():
+                for key in player:
+                    if key.endswith('_rating') and key not in ('injury_rating', 'stamina_rating'):
+                        player[key] = min(player[key], 40.)
             hs, ast = G.TeamState(h, coach={'starter_protection':.7}), G.TeamState(a, coach={'starter_protection':.7})
+            for roster, state in ((h, hs), (a, ast)):
+                state.rest_draws = {p['pid']: 0. for men in roster['depth'].values() for p in men}
             r.states = {'GB': hs, 'DEN': ast}; co, cd = _deps(); book = G.StatBook()
             r.live = dict(gen=G.game_steps(h, a, r.rng, P.resolve_play, co, cd, P.rate,
                            home_state=hs, away_state=ast, book=book), book=book,
@@ -178,7 +186,7 @@ class BlowoutRest(unittest.TestCase):
             r.live_step('resume' if r.live['halftime_open'] else 'play')
             if any(st.resting_starters for st in r.states.values()): break
             if r.live['done']: break
-        self.assertFalse(r.live['done'])
+        self.assertFalse(r.live['done'], f"final score {r.live['score']}; rest {[bool(st.resting_starters) for st in r.states.values()]}")
         self.assertTrue(any(st.resting_starters for st in r.states.values()))
         replay = runner()
         replay.replay_live(copy.deepcopy(r.live['actions']), copy.deepcopy(r.rng.bit_generator.state))
