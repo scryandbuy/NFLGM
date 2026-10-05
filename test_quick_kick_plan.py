@@ -33,3 +33,17 @@ class QuickKickTests(unittest.TestCase):
     def test_sack_risk_can_make_kicking_better(self):
         with patch.object(G,'PLAY_BAD',.4):
             self.assertEqual(self.plan(9,1)['choice'],'kick')
+
+    def test_halftime_kneel_intent_survives_opponent_timeouts(self):
+        for live in (False,True):
+            h=clocks.ClockDecisions();h.setUp();calls=[]
+            dr,_,tos=h.drive([dict(type='run',yards=1)]*4,start=62,clock=1809,
+                diff=17,own=3,other=3,live=live,calls=calls)
+            self.assertTrue(calls)
+            self.assertTrue(all(not c['is_pass'] and c['scheme']=='inside_zone' for c in calls))
+            self.assertEqual(dr.result,'End of half')
+
+    def test_no_timeouts_still_allows_safe_halftime_knee(self):
+        h=clocks.ClockDecisions();h.setUp()
+        dr,_,_=h.drive(start=62,clock=1809,diff=17,own=3,other=0)
+        self.assertEqual(dr.log[0]['type'],'kneel')

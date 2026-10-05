@@ -2558,12 +2558,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # real backed-up rates and nothing is decided for him after the call.
         if dr.yardline >= 91 and oc.get('is_pass'):
             oc = dict(oc, backed_up=True)
-        # A knee from the own one would be a safety. When the halftime plan
-        # is to end the period, use a live inside run instead of falling back
-        # to an ordinary pass. Normal blocking, fumbles and injuries still apply.
-        if (half_end is not None and secs_in_half <= PLAY_SECS
-                and dr.yardline >= 99 and dr.down < 4
-                and _pl is not None and _pl['choice'] == 'kneel'):
+        # If timeouts or field position prevent safely kneeling out the half,
+        # preserve the planner's protect-the-ball intent with a live run.
+        protect_half = (half_end is not None and dr.down < 4
+                        and _pl is not None and _pl['choice'] == 'kneel')
+        if protect_half:
             oc = dict(oc, is_pass=False, scheme='inside_zone',
                       play_action=False, rpo=False)
 
@@ -2687,6 +2686,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         d_awr = float(np.mean([rate_fn(d, {'awareness_rating': 1.0}) for d in _dmen])) if _dmen else 0.70
         _omen = [p for _, p in off_rows]
         o_awr = float(np.mean([rate_fn(p, {'awareness_rating': 1.0}) for p in _omen])) if _omen else 0.70
+        if protect_half:
+            oc.update(is_pass=False, scheme='inside_zone', play_action=False, rpo=False)
         if _pl is not None and _pl.get('quick_play'):
             oc.update(is_pass=True, depth='short', concept='slant_flat', play_action=False, rpo=False, no_huddle=True)
         _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
