@@ -47,6 +47,16 @@ class FirstStartMailTests(unittest.TestCase):
                 self.L.game_stats['2029-1-GB-MIN']['rookie'] = line
                 self.assertIn(expected, CN._first_start_line(self.L, self.team, self.p, 1))
 
+    def test_defensive_line_omits_secondary_stats_and_defense_prefix(self):
+        for pos in ('DT', 'LEDG', 'REDG'):
+            self.p.pos = pos
+            self.L.game_stats['2029-1-GB-MIN']['rookie'] = dict(tackles=4, sacks=1, pressures=3, int_def=1, pass_def=2)
+            text = CN._first_start_line(self.L, self.team, self.p, 1)
+            self.assertTrue(text.startswith('4 tackles'))
+            self.assertNotIn('Defense:', text)
+            self.assertNotIn('interceptions', text)
+            self.assertNotIn('passes defended', text)
+
 
 if __name__ == '__main__':
     unittest.main()

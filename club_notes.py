@@ -181,8 +181,11 @@ def _first_start_line(league, team, player, week):
                 f"{n('punt_net_yds') / n('punts'):.1f} net; {n('punt_in20'):g} inside the 20.")
     if pos == 'LS':
         return f"Special teams: {n('snaps'):g} long snaps."
-    text = (f"Defense: {n('tackles'):g} tackles, {n('sacks'):g} sacks, "
-            f"{n('pressures'):g} pressures; {n('int_def'):g} interceptions, {n('pass_def'):g} passes defended.")
+    text = (f"{n('tackles'):g} tackles, {n('sacks'):g} sacks, "
+            f"{n('pressures'):g} pressures")
+    if pos not in ('DT', 'LEDG', 'REDG'):
+        text += f"; {n('int_def'):g} interceptions, {n('pass_def'):g} passes defended"
+    text += '.'
     if n('ff') or n('fum_rec'):
         text += f"\n{n('ff'):g} forced fumbles, {n('fum_rec'):g} fumble recoveries."
     return text
