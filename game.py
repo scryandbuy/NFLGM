@@ -925,13 +925,14 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     own_tos = timeouts.left.get(pos, 0) if timeouts is not None else 0
     kicker = offense.get('k') or {}
     game_end = half_end is None
+    winning_score = game_end and bool(getattr(dr, 'field_goal_wins', False))
     need = max(0, -int(round(dr.score_diff))) if game_end else 0
     two_scores = game_end and need > 8                          # a touchdown alone does not tie it; it is still the only thing to play for
     # WHAT A SCORE IS WORTH. Points before the half; at the end of the game, the share of a win: a kick wins a tie
     # and only ties a deficit of three or less, a touchdown wins outright down six or less, needs the kick down
     # seven and the two-point try down eight
     if game_end:
-        v_kick = 1.0 if need == 0 else (0.5 if need <= 3 else 0.0)
+        v_kick = 1.0 if winning_score or need == 0 else (0.5 if need <= 3 else 0.0)
         v_td = 1.0 if need <= 6 else (0.94 if need == 7 else 0.48 if need == 8 else 0.02)
         v_kneel = 0.5 if need == 0 else 0.0                        # the clock runs out: overtime tied, a loss behind
         floor_line = 0.0                                           # behind, any chance beats none; tied, the kneel's coin flip is the bar
@@ -1011,7 +1012,9 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     def cost(opt):
         if dr.score_diff < 0: return 0.0                           # behind, the clock is ours to spend
         if game_end and need > 0 and opt != 'kick': return 0.0
-        c = fear * _possession_value(max(0.0, residual.get(opt, 0.0)), other_tos, game_end, lead_after.get(opt, 0))
+        # A successful sudden-death score leaves no answering possession.
+        # Failed advancement can still give the opponent a scoring chance.
+        c = 0.0 if winning_score else fear * _possession_value(max(0.0, residual.get(opt, 0.0)), other_tos, game_end, lead_after.get(opt, 0))
         if opt == 'play' and STALL_ON: c += fear * p_stall * _possession_value(stall_left, other_tos, game_end, int(round(dr.score_diff)))
         return c
     net = {k: v - cost(k) for k, v in evs.items()}
@@ -1033,7 +1036,7 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     # possession has chosen, the other way has to beat it by a clear margin: a quarter of its value and a fifth
     # of a point. A big gain or a turnover moves the prices far more than that, so real changes still register.
     prev = getattr(dr, '_plan_mode', None)
-    bleed_wins = bleed_ev is not None and bleed_ev >= floor_line and (
+    bleed_wins = not winning_score and bleed_ev is not None and bleed_ev >= floor_line and (
         (bleed_ev >= hurry_ev * 1.25 + 0.2) if prev == 'hurry' else
         (hurry_ev < bleed_ev * 1.25 + 0.2) if prev == 'bleed' else
         (bleed_ev >= hurry_ev))
@@ -2740,13 +2743,14 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         clock_kick_time = secs_in_half <= 8 or (secs_in_half <= 22 and no_tos)
         _plan = end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None))
         dr._plan = _plan
-        if dr.clock_running and _plan is not None and not _plan.get('hurry', True) and _plan['choice'] in ('kick', 'shot') and secs_in_half > 14 and dr.down < 4:
+        _winning_kick = dr.field_goal_wins and _plan is not None and _plan['choice'] == 'kick'
+        if not _winning_kick and dr.clock_running and _plan is not None and not _plan.get('hurry', True) and _plan['choice'] in ('kick', 'shot') and secs_in_half > 14 and dr.down < 4:
             # THE BLEED'S WAIT: the play clock runs down before the last snap, so the shot or the kick comes with a
             # few seconds left and the other side gets nothing back
             burn = float(min(max(0.0, min(PLAY_SECS_RUN - 5.0, dr.play_clock) - dr.runoff_charged), secs_in_half - 10.0))
             _tick(dr, burn); secs_in_half -= burn; clock_kick_time = secs_in_half <= 8 or (secs_in_half <= 22 and timeouts is not None and timeouts.left.get(pos, 0) == 0)
             dr.runoff_charged += burn
-        _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4 and (_plan.get('hurry', True) or clock_kick_time or secs_in_half <= 14)
+        _kick_by_plan = _plan is not None and _plan['choice'] == 'kick' and dr.down < 4 and (_winning_kick or _plan.get('hurry', True) or clock_kick_time or secs_in_half <= 14)
         _kick_old = ((quarter >= 4 and -3 <= dr.score_diff <= 0) or (half_end is not None and quarter <= 2)) and dr.yardline <= 37 and dr.down < 4 and clock_kick_time and _plan is None
         if _kick_by_plan or _kick_old:
             flag = kick_flag(rng, 'field_goal', offense, defense, off_state, def_state, rate_fn, book)
@@ -3355,6 +3359,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # timeout for the former offense here buys no time.
         used, used_by = (False, None) if late_penalty or late_injury or _fourth_fail or scoring_safety else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
         hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing)
+        if dr.field_goal_wins and _plan_to is not None and _plan_to['choice'] == 'kick':
+            # The completed play can put the kick in range. Use the existing
+            # hurry interval to get the unit on, not a stale full huddle.
+            hurry = True
         if half_end is not None and getattr(dr, '_half_stall_intent', None) is not None:
             hurry = dr._half_stall_intent == 'attack'
         before_clock = secs_in_half
