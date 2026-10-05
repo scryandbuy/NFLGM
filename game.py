@@ -1141,6 +1141,32 @@ def _can_kneel_out(dr, seconds, opponent_timeouts):
     return False
 
 
+def _delay_clock_expired(dr, half_end=None):
+    """Wait for the remaining play clock before a delay flag; boundaries win."""
+    if not dr.clock_running:
+        return True
+    remaining = max(0., dr.play_clock - dr.runoff_charged)
+    start = dr.clock
+    wall = half_end if half_end is not None else 0.
+    boundaries = [edge for edge in (2700., 1800., 900., 0.) if wall <= edge < start]
+    warning = wall + 120.
+    if dr.quarter in (2, 4) and not getattr(dr, '_two_min', False) and warning < start:
+        boundaries.append(warning)
+    boundary = max(boundaries, default=wall)
+    if start - remaining <= boundary:
+        dr.clock = boundary
+        dr.clock_running = False
+        dr.runoff_charged = 0.
+        dr.play_clock = 25. if boundary == warning else 40.
+        if boundary == warning:
+            dr._two_min = True
+            dr.log.append(dict(type='two_minute', clock=dr.clock))
+        return False
+    dr.clock -= remaining
+    dr.runoff_charged += remaining
+    return True
+
+
 def _penalty_ready_clock(dr, pen, half_end=None, *, before_snap=False,
                          was_running=False, result=None, hurry=False, tempo=0.5,
                          timeout=False, live_start=None):
@@ -1880,6 +1906,8 @@ def kick_flag(rng, kind, offense, defense, off_state, def_state, rate_fn, book):
 def _kick_presnap_flag(dr, pen, half_end=None, book=None):
     """A pre-snap kick foul keeps the same down and lets the coach decide again."""
     if not pen or pen.get('phase') != 'pre': return False
+    if pen.get('penalty') == 'Delay of Game' and not _delay_clock_expired(dr, half_end):
+        return True
     clock_before = dr.clock
     _penalty_ready_clock(dr, pen, half_end, before_snap=True, was_running=dr.clock_running)
     if pen['on_offense']:
@@ -2709,6 +2737,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         pen = E.penalty_check(rng, timing='pre', **penalty_context)
         live_pen = pen if (pen and not pen['nullifies']) else None
         if pen and pen['nullifies']:
+            if pen.get('penalty') == 'Delay of Game' and not _delay_clock_expired(dr, half_end):
+                continue
             penalty_clock = dr.clock
             _penalty_ready_clock(dr, pen, half_end, before_snap=True,
                 was_running=dr.clock_running, hurry=_in_drill,
