@@ -97,7 +97,7 @@ class CheckdownRoutes(unittest.TestCase):
         self.assertGreater(weights[1][0], weights[0][0])
 
     def resolve(self, seed, *, fielded=True, depth='deep', concept='four_verts',
-                down=1, need=10, protection=None, forced_read=None, unavailable=()):
+                down=1, need=10, protection=None, forced_read=None, forced_target=None, unavailable=()):
         rng = np.random.default_rng(seed)
         off, defense = self.teams['GB'], self.teams['DEN']
         if fielded:
@@ -115,7 +115,12 @@ class CheckdownRoutes(unittest.TestCase):
 
         def record(pairs, qb, concept, draw, rate_fn, **kwargs):
             captured.extend(dict(p) for p in pairs)
-            return select(pairs, qb, concept, ReadDraw(forced_read) if forced_read else draw,
+            order = None
+            if forced_target is not None:
+                target = next(i for i, row in enumerate(pairs)
+                              if row['receiver']['pid'] == forced_target)
+                order = [target] + [i for i in range(len(pairs)) if i != target]
+            return select(pairs, qb, concept, ReadDraw(forced_read, order) if forced_read else draw,
                           rate_fn, **kwargs)
 
         def separation(receiver, defender, route_depth, *args, **kwargs):
@@ -203,6 +208,51 @@ class CheckdownRoutes(unittest.TestCase):
             self.assertEqual(row['route_air'], 2.6)
             self.assertEqual(row['route_depth'], 'short')
             self.assertEqual(separated[row['receiver']['pid']], 'short')
+
+    def test_chip_release_underneath_tight_end_is_a_real_short_outlet(self):
+        for concept, role in (('flood', 'flat'), ('dagger', 'check')):
+            with self.subTest(concept=concept):
+                out, rows, separated, trace, _ = self.resolve(0, concept=concept,
+                    protection='five', forced_read='checkdown')
+                delayed = [row for row in rows if row.get('late')
+                           and row['receiver']['pos'] == 'TE']
+                self.assertEqual(len(delayed), 1, 'Seed must exercise an actual TE chip and release')
+                row = delayed[0]
+                pid = row['receiver']['pid']
+                self.assertEqual(row['concept_role'], role)
+                self.assertEqual((row['route_air'], row['route_depth'], separated[pid]),
+                                 (2.6, 'short', 'short'))
+                self.assertTrue(T.is_checkdown_option(row))
+                self.assertEqual((out.get('target'), out.get('read'), out.get('depth')),
+                                 (pid, 'checkdown', 'short'))
+                self.assertTrue(any(t.get('depth') == 'short' and t.get('rmod') == 1.29
+                                    for t in trace))
+
+    def test_chip_release_deeper_tight_end_keeps_normal_downfield_throw(self):
+        out, rows, separated, _, _ = self.resolve(0, concept='scissors',
+            protection='five', forced_read='checkdown')
+        delayed = [row for row in rows if row.get('late') and row['receiver']['pos'] == 'TE']
+        self.assertEqual(len(delayed), 1, 'Seed must exercise an actual TE chip and release')
+        row = delayed[0]
+        pid = row['receiver']['pid']
+        self.assertEqual(row['concept_role'], 'support')
+        self.assertEqual((row['route_depth'], separated[pid]), ('deep', 'deep'))
+        self.assertNotIn('route_air', row)
+        self.assertFalse(T.is_checkdown_option(row))
+        self.assertNotEqual(out.get('target'), pid, 'A checkdown cannot select the delayed vertical')
+
+        # The same released TE remains a legitimate downfield read. Control
+        # only the sampled first read; keep real protection, chip, route and throw.
+        deep, rows, separated, trace, _ = self.resolve(0, concept='scissors',
+            protection='five', forced_read='first', forced_target=pid)
+        chosen = next(p for p in rows if p['receiver']['pid'] == pid)
+        self.assertTrue(chosen.get('late'))
+        self.assertEqual((deep.get('target'), deep.get('read'), deep.get('depth')),
+                         (pid, 'first', 'deep'))
+        self.assertEqual(separated[pid], 'deep')
+        throws = [t for t in trace if 'rmod' in t]
+        self.assertTrue(throws, 'The controlled first read must reach the actual throw resolver')
+        self.assertTrue(all(t['depth'] == 'deep' and t['rmod'] == 1.0 for t in throws))
 
     def test_screen_and_swing_keep_their_behind_line_identity(self):
         seen = set()
