@@ -26,6 +26,7 @@ import numpy as np
 import penalty_players as PP
 import punt_strategy as PST
 import weather as W
+import qb_contact as QC
 from decisions import field_goal_distance, missed_field_goal_start
 ENV = W.CLEAR
 
@@ -575,6 +576,7 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
     """
     import gameplan as GP
     import events as E
+    recovery_before = _recovery_start(off_state, def_state)
     try_yards = max(1, int(np.ceil(start_yardline)))
     oc = call_off(1, try_yards, 0, try_yards, rng, offense=offense, rate_fn=rate_fn,
                   lean=offensive_leans(off_state))
@@ -604,9 +606,12 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
         return retry
     if pending_off is not None: off_f = pending_off.commit(off_f)
     if pending_def is not None: def_f = pending_def.commit(def_f)
+    _recovery_finish(recovery_before)
     # The package has already selected and recorded the carrier's snap.
     out = resolve_fn(off_f, def_f, oc, dc, try_yards, rng)
-    if off_state is not None and out.get('type') == 'scramble':
+    if off_state is not None and (out.get('type') == 'scramble' or
+            (out.get('type') == 'run' and
+             (out.get('carrier_pid') or out.get('carrier')) == off_f['qb'].get('pid'))):
         qb = off_f['qb']
         off_state.cond.add_running_work(qb.get('pid'), qb.get('stamina_rating', 70.),
                                        effort=getattr(off_state, 'road_stamina', 1.))
@@ -1058,6 +1063,9 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
     conservative coach to 100 for the most aggressive (his fourth-down and adjustment dials), and 60 with one left
     whoever he is. Tied stays at 40: a tie is not worth the last timeout until the very end."""
     dr._half_stall_intent = None
+    if QC.oob_stops_until_snap(out, getattr(dr, 'clock_period', getattr(dr, 'quarter', 4)),
+                              secs_in_half - live_play_seconds(out)):
+        return False, None
     if secs_in_half <= live_play_seconds(out):
         return False, None  # the play itself ends the period; nothing left to stop
     if (half_end is None and getattr(dr, 'quarter', 4) == 4 and dr.score_diff != 0
@@ -1401,6 +1409,7 @@ def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False, kicking=(), receivi
 
 def kickoff_for(kicking, receiving, kick_state, receive_state, rng, rate, book, penalty_yards=0):
     import kick_returns as KR
+    recovery_before = _recovery_start(kick_state, receive_state)
     returner = returner_for(receiving, receive_state, rate)
     coverage = KR.unit(kicking, kick_state, rate)
     blockers = KR.unit(receiving, receive_state, rate, True, returner.get('pid'))
@@ -1413,6 +1422,12 @@ def kickoff_for(kicking, receiving, kick_state, receive_state, rng, rate, book, 
     if not result.get('touchback'):
         special_injuries(kick_state, coverage + [kicker], rng, rate, ENV.week, contact=.8)
         special_injuries(receive_state, blockers + [returner], rng, rate, ENV.week, contact=.8)
+    else:
+        _account_special_recovery(kick_state, coverage + [kicker])
+        _account_special_recovery(receive_state, blockers + [returner])
+    # Kickoffs occur between drive snapshots, so settle their own physical
+    # bench interval here without charging a second injury/fatigue exposure.
+    _recovery_finish(recovery_before)
     return result
 
 
@@ -1446,12 +1461,18 @@ class TeamState:
         self.last_adjustment = None      # our latest defensive counter, for their counter-punch
         self.chart = None
         self.cond = H.Condition(policy)
+        self.refresh_rotation_policy()
         self.jaded = {}          # pid -> 0-1, carries across a season
         self.injuries = []       # this game's injuries
         self.cov_memory = {}     # what his coverage calls have produced
         self.out = set()         # unavailable right now
         self.snaps = {}
         self.snap_counts = {}
+        self.recovery_accounted = {}  # per-player workload or bench-rest events
+        self.recovery_events = 0     # physical snaps, including nullified/ST plays
+
+    def refresh_rotation_policy(self):
+        self.cond.breather_policy = float((self.coach or {}).get('starter_protection', self.cond.policy))
 
     def available(self, group, position):
         """Men at this position who are not hurt, deepest-first order kept."""
@@ -1475,6 +1496,7 @@ class TeamState:
     def snap(self, player, position, on_field=True, *, workload_position=None):
         import health as H
         pid = player.get('pid', position)
+        self.account_recovery(pid)
         if on_field:
             self.cond.play(pid, workload_position or position, player.get('stamina_rating', 70.0), effort=getattr(self, 'road_stamina', 1.0))
             self.snaps[pid] = self.snaps.get(pid, 0) + 1
@@ -1515,18 +1537,33 @@ class TeamState:
         self.chart = groups
         return groups
 
-    def sideline_recovery(self, snaps=30):
+    def account_recovery(self, pid):
+        """This player already received workload/rest for this participation."""
+        # A newly tracked player was fresh before entry. Do not retroactively
+        # grant earlier idle time after his first workload has been charged.
+        self.recovery_accounted[pid] = self.recovery_accounted.get(
+            pid, max(0, self.recovery_events - 1)) + 1
+
+    def account_recovery_event(self):
+        self.recovery_events += 1
+
+    def sideline_recovery(self, snaps=30, *, accounted=None):
         """
-        This unit is OFF THE FIELD while the other side plays. Real players
-        recover on the bench between series; without this, condition collapsed
-        to a mean of 53 by the end of a game - with some men at zero - which
-        drove the injury multiplier to 16.7x and produced 4-5 men ruled out per
-        team per game against a real 2.51.
+        Settle actual bench opportunities not already handled by selection.
+        Condition.rest is one snap's recovery whether a player sits out his
+        own unit's snap or watches the opposite unit. Timing is settled at
+        each physical snap; no additional rest is invented at a turnover.
         """
         for pid in list(self.cond.cond):
-            self.cond.rest(pid)
-            for _ in range(max(0, int(snaps * 0.55)) // 6):
+            # Active-unit reserves already rested in snap(); active players
+            # already worked. Only genuinely unaccounted sideline time remains.
+            idle = max(0, snaps - (accounted or {}).get(pid, 0))
+            if idle <= 0:
+                continue
+            for _ in range(int(idle)):
                 self.cond.rest(pid)
+            self.recovery_accounted[pid] = self.recovery_accounted.get(
+                pid, self.recovery_events - int(idle)) + int(idle)
 
     def new_series(self, *, unit):
         self.memories[unit].new_series()
@@ -1620,6 +1657,8 @@ class TeamState:
                                                               jadedness=self.jaded.get(pid, 0.0))
         self.snaps = {}
         self.injuries = []
+        self.recovery_accounted.clear()
+        self.recovery_events = 0
         self.cov_memory = {}
         # A GAME PLAN IS FOR A GAME. Adjustments made in one game (a max
         # protect with an 80/16/4 depth mix after a pressure read, a man
@@ -1913,9 +1952,14 @@ def _prepare_fumble(dr, out, off, deff, rng, rate_fn, off_state=None):
     contact = next((p for p in defenders if p.get('pid') == contact_id), None) if contact_id else None
     impact = rate_fn(contact, YAC['tackler']['impact']) if contact is not None else 0.70
     fum = E.fumble_check(carrier, ev, rng, rate_fn, hit_power=impact, env_mult=ENV.fumble_mult,
+                        contact=not out.get('contact_avoided', False),
                         rate_mult=(getattr(off_state, 'staff_fx', None) or {}).get('fum_off', 1.0))
     if not fum:
         return
+    if out.get('contact_avoided'):
+        # A loose ball precedes the proposed voluntary end. It is not a
+        # fumble after the runner was already down or safely out of bounds.
+        out.update(run_end='loose_ball', out_of_bounds=False)
     out.update(fumble=True, fumble_lost=bool(fum['lost']), fumble_by=carrier.get('pid'),
                fumble_forced=bool(fum.get('forced', True)))
     if not fum['lost']:
@@ -1973,6 +2017,15 @@ def specialist_for(roster, state, position, rate_fn):
     return max(candidates, key=lambda p: rate_fn(p, {'kick_power_rating': .5, 'kick_acc_rating': .5}), default={})
 
 
+def _account_special_recovery(state, players):
+    participants = {p['pid']: p for p in players if p and p.get('pid')}
+    if state is not None and hasattr(state, 'account_recovery_event') and participants:
+        state.account_recovery_event()
+        for pid in participants:
+            state.account_recovery(pid)
+    return participants
+
+
 def special_injuries(state, players, rng, rate_fn, week, contact=.35):
     """Small contact exposure, funded by reduced scrimmage injury risk.
 
@@ -1983,7 +2036,8 @@ def special_injuries(state, players, rng, rate_fn, week, contact=.35):
     if state is None:
         return []
     injuries = []
-    for p in {p['pid']: p for p in players if p and p.get('pid')}.values():
+    participants = _account_special_recovery(state, players)
+    for p in participants.values():
         injury = state.hurt(p, p.get('pos', 'ST'), contact, rng, rate_fn, week, risk_scale=.1)
         if injury:
             injury['source'] = 'special_teams'
@@ -1999,8 +2053,11 @@ def kick_injuries(offense, defense, off_state, def_state, kind, rng, rate_fn, we
         off = [('ST', p) for p in KR.unit(offense, off_state, rate_fn)] + [
             ('P', specialist_for(offense, off_state, 'P', rate_fn))]
         deff = [('ST', p) for p in KR.unit(defense, def_state, rate_fn, True, returner.get('pid'))] + [('RET', returner)]
-    return (special_injuries(off_state, [p for _, p in off], rng, rate_fn, week, .8 if returned else .35)
-            + special_injuries(def_state, [p for _, p in deff], rng, rate_fn, week, .8 if returned else .35))
+    recovery_before = _recovery_start(off_state, def_state)
+    injuries = (special_injuries(off_state, [p for _, p in off], rng, rate_fn, week, .8 if returned else .35)
+                + special_injuries(def_state, [p for _, p in deff], rng, rate_fn, week, .8 if returned else .35))
+    _recovery_finish(recovery_before)
+    return injuries
 
 
 def kick_penalty_units(offense, defense, off_state, def_state, kind, rate_fn):
@@ -2224,6 +2281,8 @@ POS_KEY = {'WR': 'wr', 'TE': 'wr', 'HB': 'wr', 'CB': 'db', 'FS': 'db',
 
 def package_units(roster, state, rng, is_offense, package, front_family=None):
     """Select the called personnel and preserve each defender's on-field job."""
+    if state is not None and hasattr(state, 'refresh_rotation_policy'):
+        state.refresh_rotation_policy()
     if is_offense:
         import offense_roles as OR
         return OR.field(roster, package, rng=rng, state=state) if str(package) in OR.PACKAGES else None
@@ -2233,6 +2292,10 @@ def package_units(roster, state, rng, is_offense, package, front_family=None):
 
 def field_units(roster, state, rng, is_offense, package=None, front_family=None):
     """Record the actual selected unit without changing selection or random draws."""
+    # Direct fielding represents an actual knee. Ordinary selection uses a
+    # PendingSnap, whose event is committed only after pre-snap fouls clear.
+    if isinstance(state, TeamState):
+        state.account_recovery_event()
     result, positions = _field_units(roster, state, rng, is_offense, package, front_family)
     if state is not None:
         if not hasattr(state, 'snap_counts'): state.snap_counts = {}
@@ -2260,6 +2323,7 @@ class _PendingSnap:
         return player
 
     def commit(self, unit, qb_carry=False):
+        self.original.account_recovery_event()
         for player, position, on_field in self.calls:
             if qb_carry and on_field and position == 'QB':
                 # One snap, but a carrier's workload rather than a handoff's.
@@ -2292,6 +2356,8 @@ def _field_units(roster, state, rng, is_offense, package=None, front_family=None
     injuries. Anyone not selected recovers. This is where rotation actually
     happens - the depth chart is walked until someone is fresh enough.
     """
+    if state is not None and hasattr(state, 'refresh_rotation_policy'):
+        state.refresh_rotation_policy()
     if not is_offense:
         import defense_roles as DR
         selected = DR.field(roster, package or 'nickel', front_family, rng=rng, state=state)
@@ -2424,12 +2490,14 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
               rng, resolve_fn, call_off, call_def, rate_fn, aggression=0.5,
               book=None, off_state=None, def_state=None, week=1,
               timeouts=None, pos='home', half_end=None, must_score=False, try_allowed=True,
-              start_state=None, field_goal_wins=False):
+              start_state=None, field_goal_wins=False, clock_period=None):
     """
     Play a full possession. resolve_fn is plays.resolve_play; call_off/call_def
     are the scheme-layer callers.
     """
     dr = Drive(offense, defense, start_yardline, clock, quarter, score_diff, rng)
+    dr.clock_period = clock_period if clock_period is not None else quarter
+    recovery_before = _recovery_start(off_state, def_state)
     dr.field_goal_wins = field_goal_wins
     if quarter in (2, 4) and clock - (1800 if quarter == 2 else 0) <= 120:
         dr._two_min = True
@@ -2503,6 +2571,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 dr.clock_running = False
                 dr.runoff_charged = 0.0
             quarter = dr.quarter = current_quarter
+            dr.clock_period = current_quarter
         # 10. THE KNEEL. With the ball and no time to use it, out of range, a club takes a knee: the first half at
         # any score, the second half when it is not behind. Real clubs do not throw from their own 35 at 0:04.
         secs_left_half = dr.clock - wall
@@ -2532,6 +2601,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             ds = def_state if hasattr(def_state, 'available') else None
             off_f, _ = field_units(knee_off, os, rng, True, package='11')
             def_f, _ = field_units(defense, ds, rng, False)
+            _recovery_finish(recovery_before)
             out = dict(type='kneel', passer=off_f['qb'].get('pid'), yards=-1.0,
                        down=dr.down, ydstogo=dr.togo, yardline=dr.yardline, clock=dr.clock)
             dr.log.append(out)
@@ -2953,6 +3023,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
 
         if pending_off is not None: off_f = pending_off.commit(off_f, qb_carry=oc.get('qb_run', False))
         if pending_def is not None: def_f = pending_def.commit(def_f)
+        _recovery_finish(recovery_before)
 
         # The called carrier and blockers are the selected, state-adjusted men.
         oc['execution_mod'] = script_mod
@@ -2982,10 +3053,20 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # and the final book, just as on a voluntary scramble.
                 from plays import _likely_tackler
                 out['tackler'] = _likely_tackler(def_f, out, rng, pass_play=True)
-        if off_state is not None and out.get('type') == 'scramble' and not oc.get('qb_run'):
+        actual_qb_run = (out.get('type') == 'run' and
+                         (out.get('carrier_pid') or out.get('carrier')) == qb_pid)
+        if actual_qb_run and not out.get('sneak') and not out.get('qb_run'):
+            # An empty-backfield run uses the QB even when no optional keep
+            # was drawn. Record the actual designed carrier and his workload.
+            out.update(qb_run=True, qb_run_reason='called_run')
+        if off_state is not None and (out.get('type') == 'scramble' or actual_qb_run) and not oc.get('qb_run'):
             qb = off_f['qb']
             off_state.cond.add_running_work(qb.get('pid'), qb.get('stamina_rating', 70.),
                                            effort=getattr(off_state, 'road_stamina', 1.))
+        QC.apply(out, off_f['qb'], dict(oc, down=dr.down, ydstogo=dr.togo,
+                 seconds=secs_in_half, quarter=dr.clock_period, score_diff=dr.score_diff),
+                 rng, rate_fn, coach=(off_state.coach if off_state is not None else None),
+                 condition=(off_state.cond.get(qb_pid) if off_state is not None else 100.))
         dr.plays += 1
         if off_state is not None:
             seq = getattr(off_state, 'seq', None)
@@ -3043,7 +3124,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 men = [(off_f['qb'], 'QB'), (off_f['rb'], 'HB')] + [(m, m.get('pos', 'LT')) for m in (off_f.get('ol') or [])] + [(m, m.get('pos', 'WR')) for m in off_f['wr']] + [(m, m.get('pos', 'TE')) for m in (off_f.get('te') or [])]
                 for m, mp in men:
                     if m:
-                        inj_ = off_state.hurt(m, mp, 1.6 if m.get('pid') == hit_pid else 1.0, rng, rate_fn, week)
+                        inj_ = off_state.hurt(m, mp, 1.6 if m.get('pid') == hit_pid and not out.get('contact_avoided') else 1.0, rng, rate_fn, week)
                         if inj_: dr.log.append(dict(type='injury', pid=m.get('pid'), pos=mp, kind=inj_.get('kind'), weeks=inj_.get('weeks_out'), side='off', clock=dr.clock))
             if def_state is not None:
                 for d in def_f['db'] + def_f['lb'] + def_f['dl']:
@@ -3161,6 +3242,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _plan_to = end_of_half_plan(after_play, offense, defense, rate_fn, timeouts, pos, half_end, _secs_after, coach=(off_state.coach if off_state is not None else None)) if _secs_after > 0 and after_play.result is None and after_play.down <= 4 else None
         added_penalty = live_pen is not None and taken == 'added'
         late_penalty = added_penalty and secs_in_half - live_seconds <= (120.0 if dr.quarter <= 2 else 300.0)
+        oob_snap = QC.oob_stops_until_snap(out, dr.clock_period, _secs_after)
         _fourth_fail = dr.down >= 4 and t in ('run', 'complete', 'scramble', 'sack') and float(np.round(float(out.get('yards', 0.0) or 0.0))) < dr.togo - 0.01 and not (float(np.round(float(out.get('yards', 0.0) or 0.0))) >= dr.yardline - 0.01)
         # The change of possession stops the clock at the whistle. Spending a
         # timeout for the former offense here buys no time.
@@ -3176,6 +3258,11 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                catchup=comeback_pace(secs_in_half, dr.score_diff, dr.quarter,
                                    yardline=after_play.yardline, timeouts=dr._own_timeouts,
                                    tempo=tempo)) + live_seconds - 6.0
+        if out.get('out_of_bounds'):
+            # Outside late-half exceptions the clock restarts when the ball
+            # is spotted. Exclude a short spotting interval, not the entire
+            # huddle; inside the exceptions charge only the live action.
+            elapsed = live_seconds if oob_snap else live_seconds + max(0., elapsed - live_seconds - 5.)
         if (t == 'sack' and dr.quarter == 4 and -8 <= dr.score_diff < 0
                 and 0 < secs_in_half <= 20 and elapsed >= secs_in_half
                 and hurry and not used and not late_injury and not added_penalty
@@ -3186,7 +3273,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # A deliberate bleed may wait for a later kick, but it cannot silently
         # consume that kick while holding a timeout. Live action still costs
         # its own live time; no time is restored when the play ends the half.
-        if (not used and not late_injury and not added_penalty and not _fourth_fail
+        if (not used and not late_injury and not added_penalty and not _fourth_fail and not oob_snap
                 and getattr(dr, '_half_stall_intent', None) != 'protect'
                 and t in ('run', 'complete', 'scramble', 'sack')
                 and after_play.result is None and _plan_to is not None
@@ -3209,7 +3296,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         dr.clock = float(np.ceil(dr.clock - 1e-9))                          # the clock is whole seconds; a fraction left is a second
         dr.clock = max(wall, dr.clock)
         if not added_penalty:
-            dr.clock_running = t in ('run', 'complete', 'scramble', 'sack') and not used and not out.get('touchdown') and not scoring_safety
+            dr.clock_running = t in ('run', 'complete', 'scramble', 'sack') and not used and not out.get('touchdown') and not scoring_safety and not oob_snap
             dr.play_clock = 40.0
             dr.runoff_charged = max(0.0, clock_before - dr.clock - live_seconds) if dr.clock_running else 0.0
         after_clock = dr.clock - half_end if half_end is not None else dr.clock
@@ -3292,6 +3379,28 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
 OT_LENGTH = 600          # one 10-minute period in the regular season
 OT_PLAYOFF_LENGTH = 900  # 15-minute periods, repeated until someone wins
 
+def _recovery_start(*states):
+    for state in states:
+        if isinstance(state, TeamState):
+            for pid in state.cond.cond:
+                state.recovery_accounted.setdefault(pid, state.recovery_events)
+    return [(state, dict(getattr(state, 'recovery_accounted', {})),
+             getattr(state, 'recovery_events', 0))
+            for state in states if state is not None]
+
+
+def _recovery_finish(before):
+    """Settle both inactive units once, using physical participation events."""
+    snaps = max((getattr(state, 'recovery_events', 0) - events
+                 for state, old, events in before), default=0)
+    if snaps <= 0:
+        return
+    for state, old, events in before:
+        now = getattr(state, 'recovery_accounted', {})
+        accounted = {pid: count - old.get(pid, events) for pid, count in now.items()}
+        state.sideline_recovery(snaps, accounted=accounted)
+
+
 def _terminal_kickoff(dr, kick, before, after, possession, quarter):
     """Keep a return that ends a half even when no offensive drive follows it."""
     boundary = 1800 if quarter == 2 else 0
@@ -3356,9 +3465,11 @@ def overtime_steps(home, away, score, rng, resolve_fn, call_off, call_def,
     clock = kickoff_clock(clock, kick)
 
     resume_state = None
+    ot_period = 1
     while clock > 0 or pending_kick_outcome() or playoffs:
         if clock <= 0 and not pending_kick_outcome():
             clock = OT_PLAYOFF_LENGTH
+            ot_period += 1
         off = home if pos == 'home' else away
         deff = away if pos == 'home' else home
         o_st = home_state if pos == 'home' else away_state
@@ -3373,15 +3484,18 @@ def overtime_steps(home, away, score, rng, resolve_fn, call_off, call_def,
                        call_off, call_def, rate_fn, 0.98, book, o_st, d_st, week,
                        )
         drive_kwargs = dict(timeouts=timeouts, pos=pos,
+                       clock_period=((ot_period - 1) % 4 + 1) if playoffs else 4,
                        must_score=had['away' if pos == 'home' else 'home'] and sd < 0,
                        try_allowed=not (had['away' if pos == 'home' else 'home'] and sd + 6 > 0),
                        start_state=resume_state,
                        field_goal_wins=had['away' if pos == 'home' else 'home'] and sd + 3 > 0)
+        recovery_before = _recovery_start(o_st, d_st)
         if live:
             yield ('pos', pos)
             dr = yield from drive_steps(*drive_args, **drive_kwargs)
         else:
             dr = run_drive(*drive_args, **drive_kwargs)
+        _recovery_finish(recovery_before)
         resume_state = None
         drives.append((pos, dr))
         PST.record_defense(d_st, dr)
@@ -3416,6 +3530,7 @@ def overtime_steps(home, away, score, rng, resolve_fn, call_off, call_def,
             # Continue the same overtime. Preserve the book, possession
             # opportunities and downs instead of recursively starting a new game.
             clock = OT_PLAYOFF_LENGTH
+            ot_period += 1
         if dr.result == 'End of half':
             start = dr.yardline
             resume_state = (dr.down, dr.togo)
@@ -3553,14 +3668,12 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
         import game_substitutions as SUB
         off = SUB.for_possession(off, o_st, clock, sd, rng, playoffs)
         deff = SUB.for_possession(deff, d_st, clock, -sd, rng, playoffs)
-        # the unit that just came off recovers while the other side plays
-        if d_st is not None: d_st.sideline_recovery(dr_snaps if 'dr_snaps' in dir() else 30)
+        recovery_before = _recovery_start(o_st, d_st)
         dr = yield from drive_steps(off, deff, start, clock, quarter, sd, rng,
                        resolve_fn, call_off, call_def, rate_fn, aggr, book,
                        o_st, d_st, week, timeouts=tos, pos=pos,
                        half_end=(GAME / 2 if not half_done else None))
-        dr_snaps = dr.plays
-        if o_st is not None: o_st.sideline_recovery(dr.plays)
+        _recovery_finish(recovery_before)
         drives.append((pos, dr))
         PST.record_defense(d_st, dr)
         clock = max(0.0, dr.clock)
@@ -3869,7 +3982,7 @@ class StatBook:
             s = self._get(rb); s['rush_att'] += 1; s['rush_yds'] += out['yards']
             if out.get('touchdown') and not out.get('defensive_td'): s['rush_td'] += 1
         # a tackle is credited on any play that ends in the field of play, to the player the play-by-play names
-        if t in ('run', 'complete', 'scramble') and (not out.get('touchdown') or out.get('defensive_td')):
+        if t in ('run', 'complete', 'scramble') and not out.get('ended_without_contact') and (not out.get('touchdown') or out.get('defensive_td')):
             tk_pid = out.get('tackler')
             if not tk_pid:
                 pool = deff['db'] + deff['lb'] + deff['dl']

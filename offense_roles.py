@@ -193,6 +193,12 @@ def assign(depth, package, excluded=(), rng=None, state=None):
                 key = pid(p)
                 if key not in used and key not in seen:
                     candidates.append(p); seen.add(key)
+        if role == 'HB':
+            # Healthy backs own ordinary backfield rotation. Receivers needed
+            # later in this package are emergency alternatives, not fresh HB
+            # reserves whose unrelated grades erase the actual backup gap.
+            own_backs = [p for p in candidates if position(p) == 'HB']
+            if own_backs: candidates = own_backs
         if not candidates:
             candidates = [p for men in pools.values() for p in men if pid(p) not in used]
         if not candidates:
@@ -233,6 +239,11 @@ def assign(depth, package, excluded=(), rng=None, state=None):
                     needs_rest = rng.random() >= 0.65
                 if not needs_rest:
                     chosen = p; break
+            else:
+                if role == 'HB':
+                    # If every eligible back wants rest, use the freshest
+                    # available one rather than reverting to the spent starter.
+                    chosen = max(candidates, key=lambda p: state.cond.get(pid(p)))
         used.add(pid(chosen)); result.append((role, chosen))
 
     # Keep the quarterback and offensive line out of emergency skill pools.

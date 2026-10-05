@@ -29,13 +29,15 @@ class DefensiveRotationTests(unittest.TestCase):
     def test_real_quality_gap_changes_rest_tolerance(self):
         backup=player('reserve',75)
         elite,peer=player('elite',95),player('peer',77)
-        elite_snaps=sum(self.choose(elite,backup,70,seed=i) is elite for i in range(200))
-        peer_snaps=sum(self.choose(peer,backup,70,seed=i) is peer for i in range(200))
+        # Quality matters near the breather decision, not at deep fatigue
+        # where both players should rest regardless of reputation.
+        elite_snaps=sum(self.choose(elite,backup,88,seed=i) is elite for i in range(200))
+        peer_snaps=sum(self.choose(peer,backup,88,seed=i) is peer for i in range(200))
         self.assertGreater(elite_snaps,peer_snaps+40)
 
     def test_passing_down_priority_is_conditional(self):
         a,b=player('starter',95),player('reserve',75)
-        count=lambda ctx: sum(self.choose(a,b,68,ctx,i) is a for i in range(200))
+        count=lambda ctx: sum(self.choose(a,b,88,ctx,i) is a for i in range(200))
         neutral=count({'down':1,'to_go':10,'score_diff':0})
         important=count({'down':3,'to_go':8,'score_diff':0})
         blowout=count({'down':3,'to_go':8,'score_diff':24})

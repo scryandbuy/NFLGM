@@ -1,0 +1,138 @@
+Rotation and QB contact follow-up - October 5, 2026
+
+Disposition
+Targeted fixes are ready for combined integration and register validation.
+They are NOT certified balanced for release. Scoring rose in the fixed paired
+sample below; the combined register remains a required gate. No global scoring,
+sack, injury or fumble base-rate adjustment was made to improve that sample.
+This source incorporates the physical-accounting portion of held dcf3ae6 WITH
+the rotation changes below; do not independently cherry-pick dcf3ae6 again.
+Browser build: 03e10451ee (136 modules / 10 data files).
+
+Football reasoning and alternatives
+Explosive repeated work can justify a breather before deep fatigue. A useful
+reserve, a rest-conscious coach or a long series makes that more attractive;
+a weak reserve, brief series or important passing down can justify another
+starter snap. No hard snap-share quota or player-name exception is used.
+Healthy QB/OL continuity keeps its existing policy.
+
+Physical recovery was previously coarse and duplicated at drive boundaries.
+Correcting it alone gave many edge starters nearly all healthy snaps because
+their between-series recovery exceeded their work, and substitutions waited
+until severe fatigue. The final combination records each physical work/rest
+event once and uses earlier EDGE/DT/HB breather decisions based on real reserve
+quality, current condition, coach preference and the existing down context.
+Stamina still changes work; no extra random substitution follows this choice.
+Coach preference refreshes at actual selection and restore, including staff
+changes. Recovery event counters are saved/restored. False starts do not create
+work/rest opportunities; nullified live snaps, kicks and tries are accounted.
+
+Healthy HB rotation now compares actual healthy backs. WRs needed elsewhere
+in the formation no longer distort the starter/backup quality gap; emergency
+cross-position replacements remain possible when no healthy HB is available.
+If every eligible back needs rest, choose the freshest rather than reverting
+to an exhausted starter.
+
+QB safe endings and consequences
+A QB with space can give up yards to slide or step out. Continuing through
+contact remains an option, influenced by running strength, awareness, fatigue,
+coach preference, first-down value and clock situation. A safe ending never
+adds yards to obtain a conversion. Designed runs stop before their modeled
+first contact; after-contact yards cannot be retained while deleting the hit.
+Existing touchdowns and sneaks are excluded from voluntary-ending decisions.
+
+The final outcome reaches clock runoff, timeout spending, tackle credit,
+injury exposure, fumble occurrence, narration and the book. A safe ending
+removes the carrier-hit premium but retains ordinary non-contact injury risk,
+running workload and the unforced fumble component. If a loose ball occurs,
+it supersedes the proposed slide/boundary finish; no post-dead-ball fumble is
+narrated. No invented tackler or forced fumble is credited on a safe ending.
+Late OOB stops until the snap, ordinary OOB restarts on spotting; effective
+period metadata covers regular/playoff OT. It follows regulation quarter
+transitions within a drive. The five-second ordinary spotting allowance is
+an approximation, not an NFL-measured constant.
+
+An additional actual-carrier gap emerged in game review: a called run from an
+empty backfield used the QB without the optional qb_run flag, so it missed
+the running exertion increment. Actual QB run outcomes now receive that work
+exactly once and are labeled as QB runs (sneaks retain their separate label).
+This also covers actual QB carries on tries without inventing another snap.
+
+Evidence
+Final combined targeted gate: 144 tests passed. Earlier independent contact
+review: 79 overlapping tests, with its identified quarter-transition defect
+fixed and covered. Save/resume and additional clock integration gates passed;
+these counts overlap and should not be added as distinct tests.
+Tests cover action/restraint, stamina, actual reserve grade, coach preference,
+long/short series, important downs, exhaustion, healthy line continuity,
+once-only rest, physical fouls/tries/kicks, QB yards surrendered, third/fourth
+down choices, OOB/slide timeouts, clock periods, non-contact fumbles, injuries,
+stat/narration agreement and save/restore.
+Old quality-gap fixtures now compare moderate fatigue (88 condition), where
+choices differ. Exhausted-star fixtures still require rest. Their former
+68/70-condition comparisons tested the superseded delayed-breather policy.
+
+Final source snapshot: outputs/fatigue-rotation-followup-20261005/
+fixed16-reviewed.json. The same 16 games/seeds/2029 rosters are compared with
+the first batch of protection-risk-followup-20261005/fixed64-after.json,
+whose gameplay source is 22d6541 (equivalent gameplay at ff33f07).
+No season advancement, original-save mutation or early stopping occurred.
+All recorded source hashes match the final implementation. Full live/fast
+GB23-17CHI replay matches books, drive logs, minimum conditions, injuries and
+snap states after normalizing unordered out-player sets.
+
+Healthy paired first-ranked players, excluding anyone injured in either game:
+                     Before        After         Number of pairs
+HB snap share         62.5%         68.4%          29
+Left edge             81.5%         82.6%          31
+Right edge            82.1%         83.2%          31
+DT1                   66.0%         70.3%          32
+No reviewed healthy starter in these groups reached 99% after the change.
+Mean minimum condition moves from roughly56-63 to82-86 in these roles.
+GB Parsons plays49/56 defensive snaps and records one sack in the final game;
+the goal is a plausible role, not guaranteed star sack production.
+
+Points/team20.5625->26.125; drives360->386; sacks80->100; injuries25->17.
+Recorded fumbles28->34 and lost15->19 reconcile with the player books.
+All eleven-player participation and sack-credit conservation checks pass.
+Final play logs contain54 designated QB runs and90 scrambles, with15slides
+and5voluntary OOB endings. None of those safe endings has a credited tackle
+or forced fumble. The older observer's call-time qb_run trace misses six
+actual-carrier classifications; final play logs are authoritative here.
+
+The prior64-game baseline's four seed batches scored20.56,26.00,21.00,26.31
+points/team. That variation does not dismiss the paired increase; it means
+this low first batch cannot certify a league-wide rate. TD outcomes, field
+position, condition-adjusted ability and clock usage must be assessed in the
+combined register before release. No standalone multi-season run was started.
+
+Primary evidence and explicit modeling limits
+Eagles/Fangio: a near-full DL workload can be reasonable during repeated short
+series, with longer series requiring a different response:
+https://www.philadelphiaeagles.com/news/role-call-how-jalen-carter-was-shown-the-ultimate-sign-of-respect
+The 2026 NFL rulebook grounds dead-ball slide spots and regulation/OT boundary
+clock treatment (Rules7-2-1,4-3-2,16):
+https://static.www.nfl.com/image/upload/fl_attachment/league/tqivdkzt9mu6wdgsh1ku.pdf
+The numeric breather thresholds, voluntary-ending opportunities and yardage
+costs are bounded game-design assumptions, not tracked NFL physiology or
+measured slide frequencies. There is no sideline geometry simulation.
+Earlier primary2024 QB run/scramble/fumble evidence remains in the protection
+and QB-risk reports; its definitions do not justify a universal injury target.
+
+Coordination and remaining work
+Changes(2) completed seller remaining-service retention valuation d97aeca over
+1827a50; main reports integrated. Owner patience and deterministic schedules
+are also integrated by main. Changes(4) still owns goal-line fumbles/awards.
+It has the contact contract and a separate observed sack-at-own2 discrepancy
+(book-time -4.7 vs final-log safety cap -2), without attributing its origin to
+these changes. Goal-line accounting review remains pending there.
+Main owns combined rebuild/browser intersections/register, followed by one
+coordinated multi-season study. The old fatigue-only candidate must not ship
+separately. No push or modification of the shared integration tree was made.
+
+Detailed evidence
+outputs/fatigue-rotation-followup-20261005/fatigue-rotation-design.md
+outputs/fatigue-rotation-followup-20261005/fixed16-reviewed-summary.json
+outputs/fatigue-rotation-followup-20261005/fixed-live-reviewed.json
+outputs/protection-risk-followup-20261005/qb-contact-design-review.md
+outputs/protection-risk-followup-20261005/qb-contact-wiring-independent-review.md

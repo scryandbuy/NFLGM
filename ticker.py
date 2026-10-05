@@ -102,7 +102,9 @@ def play_line(league, p, off_abbr, def_abbr):
         else:
             kind = cls
             if p.get('broken_tackles'): text += f", breaking {int(p['broken_tackles'])} tackle{'s' if p['broken_tackles'] > 1 else ''}"
-            text += (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.'
+            text += ('. Slides to give himself up.' if p.get('run_end') == 'slide' else
+                     '. Steps out of bounds.' if p.get('run_end') == 'out_of_bounds' else
+                     (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.')
     elif t == 'complete':
         cls, yd = _yards(display_field_position(spot, off_abbr, def_abbr) if td and spot >= 1 else shown_gain)
         if td and 0 < gain < .5: yd = 'less than a yard'
@@ -143,7 +145,10 @@ def play_line(league, p, off_abbr, def_abbr):
         kind = 'loss'
     elif t == 'scramble':
         cls, yd = _yards(shown_gain)
-        text = f"{passer or 'The quarterback'} scrambles {'to inside the 1' if near_goal_short else 'for ' + yd}" + ((f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.')
+        text = f"{passer or 'The quarterback'} scrambles {'to inside the 1' if near_goal_short else 'for ' + yd}" + (
+            '. Slides to give himself up.' if p.get('run_end') == 'slide' else
+            '. Steps out of bounds.' if p.get('run_end') == 'out_of_bounds' else
+            (f". Tackled by {tackler}" + ('' if tackler.endswith('.') else '.')) if tackler else '.')
         if td: text = f"{passer or 'The quarterback'} scrambles in. TOUCHDOWN."; kind = 'score'
         else: kind = cls
     elif t == 'interception':

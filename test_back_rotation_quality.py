@@ -25,8 +25,8 @@ class BackRotationQualityTests(unittest.TestCase):
         return OR.field(team, '11', np.random.default_rng(seed), state)['rb']['pid']
 
     def test_live_field_rest_decision_uses_real_quality_gap(self):
-        star = sum(self.choose(95, 70, seed) == 'HB0' for seed in range(200))
-        peer = sum(self.choose(77, 70, seed) == 'HB0' for seed in range(200))
+        star = sum(self.choose(95, 88, seed) == 'HB0' for seed in range(200))
+        peer = sum(self.choose(77, 88, seed) == 'HB0' for seed in range(200))
         self.assertGreater(star, peer + 40)
 
     def test_remaining_alternatives_and_emergencies_use_same_back_grade(self):
@@ -42,6 +42,13 @@ class BackRotationQualityTests(unittest.TestCase):
 
     def test_exhausted_star_can_rest(self):
         self.assertGreater(sum(self.choose(99, 20, seed) != 'HB0' for seed in range(100)), 90)
+
+    def test_every_back_needing_rest_uses_freshest_healthy_back(self):
+        team = roster(); state = game.TeamState(team)
+        state.cond.cond.update(HB0=20., HB1=60., HB2=40.)
+        with patch.object(state.cond, 'needs_rest', return_value=True):
+            selected = OR.field(team, '11', np.random.default_rng(1), state)
+        self.assertEqual(selected['rb']['pid'], 'HB1')
 
     def test_legacy_field_path_uses_same_gap_without_reordering_pinned_back(self):
         team = roster()
