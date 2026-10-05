@@ -151,6 +151,16 @@ def multi_score_urgency(seconds, score_diff, quarter, chasing=False):
 
 def comeback_pace(seconds, score_diff, quarter, *, yardline=75, timeouts=3, tempo=.5):
     """Gradual second-half acceleration; seconds is remaining game time."""
+    if quarter == 4 and -3 <= score_diff < 0 and seconds > 0:
+        # Outside comfortable scoring range, budget the drive before the
+        # two-minute threshold. In range, leave clock management to the coach.
+        distance = max(0.0, float(yardline) - 30.0)
+        if distance <= 0:
+            return 0.0
+        reserve = 30.0 + 15.0 * (3.0 - float(np.clip(timeouts, 0, 3)))
+        budget = (distance / 6.0 + 2.0) * 30.0 + reserve
+        start = min(360.0, budget * (1.0 + .15 * (tempo - .5)))
+        return float(np.clip((start - seconds) / max(1.0, start - 75.0), 0, 1))
     if quarter == 4 and -8 <= score_diff < -3 and seconds > 0:
         # A touchdown is needed, and a stalled drive may leave another
         # possession necessary. Budget for the remaining field AND a reply,

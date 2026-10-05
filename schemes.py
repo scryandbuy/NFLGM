@@ -336,6 +336,9 @@ def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers,
     out up 9-16. decisions.pass_rate carries that table.
     """
     base = PASS_RATE.get(int(down), PASS_RATE[1])[dist_band(ydstogo)]
+    conversion_pass = int(down) == 4 and ydstogo >= 5
+    if conversion_pass:
+        base = .975 if ydstogo < 6 else .985 if ydstogo < 7 else .99
     L = _logit(base)
     neutral = _logit(NEUTRAL_SCRIPT)
     # score
@@ -365,7 +368,11 @@ def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers,
         w = 0.0 if secs_left > 1800 else (0.25 if secs_left > 900 else
                                           (0.55 if secs_left > 240 else 0.85))
         L += w * (_logit(target) - neutral)
-    return float(np.clip(_sigmoid(L), 0.03, 0.98))
+    if conversion_pass:
+        # Once committed to fourth-and-long, conversion distance dominates
+        # normal clock/identity preferences. Keep a rare surprise run.
+        L = _logit(base) + .4 * float(np.clip(L - _logit(base), -1.5, 1.5))
+    return float(np.clip(_sigmoid(L), 0.03, .995 if conversion_pass else .98))
 
 MOTION_NEUTRAL = 0.581        # the identity catalog's mean motion lean
 BLITZ_NEUTRAL = 0.384         # the catalog's mean blitz lean
@@ -472,8 +479,14 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     w = np.array([base[k] for k in keys], float)
     pers = keys[int(rng.choice(len(keys), p=w / w.sum()))]
     import plays as _P
-    is_pass = rng.random() < pass_rate(down, ydstogo, score_diff,
-                                       yards_to_endzone, pers, bias, secs_left) - _P.ENV.run_lean
+    pass_probability = pass_rate(down, ydstogo, score_diff,
+                                 yards_to_endzone, pers, bias, secs_left)
+    weather_run = _P.ENV.run_lean
+    if down == 4 and ydstogo >= 5:
+        # Weather can favor the surprise run without adding a flat run share
+        # that overwhelms the conversion requirement.
+        weather_run *= 4.0 * (1.0 - pass_probability)
+    is_pass = rng.random() < pass_probability - weather_run
     shotgun = rng.random() < (0.82 if is_pass else 0.52)
     # The formation is a separate decision from the package: the same eleven
     # men produce a dozen looks, and that is where the variety comes from.
