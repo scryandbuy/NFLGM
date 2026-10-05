@@ -882,10 +882,15 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     # nothing, a sack or a turnover ends the attempt. Each snap takes PLAY_SECS with the clock stopped after it; a
     # completion in bounds keeps the clock running and, with no timeout left and no time to spare, ends the half
     best_play = None; k_best = 0
-    n_max = min(max(0, 4 - int(dr.down)), int((secs_in_half - 4.0) // PLAY_SECS))
+    # A final quick throw uses the same live duration as execution. Three
+    # stopped-clock seconds suffice to snap the kick; it may finish after zero.
+    quick_seconds = live_play_seconds(dict(type='complete', yards=PLAY_GAIN))
+    quick_window = secs_in_half < PLAY_SECS + 4.0
+    play_seconds = quick_seconds if quick_window else PLAY_SECS
+    n_max = min(max(0, 4 - int(dr.down)), int((secs_in_half - 3.0) // play_seconds))
     surv = 1.0; yk = y; sk = secs_in_half; tos_k = own_tos
     for k in range(1, max(0, min(n_max, own_tos + 3)) + 1):
-        sk -= PLAY_SECS
+        sk -= play_seconds
         if sk < 3: break
         p_comp = 1.0 - PLAY_BAD - PLAY_INC
         if tos_k > 0: tos_k -= 1; surv *= (1.0 - PLAY_BAD)                                  # the timeout stops it after a catch
@@ -948,7 +953,7 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         hurry = False; choice = 'play' if k_bleed > 0 else bleed_final; evs = dict(evs, bleed=bleed_ev)
     dr._plan_mode = 'hurry' if hurry else 'bleed'
     if evs.get(choice, 0.0) < floor_line: choice = 'kneel'
-    return dict(choice=choice, hurry=hurry, evs={k: round(v, 3) for k, v in evs.items()}, cost_hurry=round(cost_hurry, 3), p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
+    return dict(choice=choice, hurry=hurry, quick_play=bool(quick_window and choice == 'play'), evs={k: round(v, 3) for k, v in evs.items()}, cost_hurry=round(cost_hurry, 3), p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
 
 
 
@@ -2530,6 +2535,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                       offense=offense, rate_fn=rate_fn, lean=(lean_now if (last_shot or late_lean) else olean))
         if last_shot and _pl is not None and _pl['choice'] == 'shot':
             oc['is_pass'] = True; oc['depth'] = 'deep'; oc['concept'] = 'four_verts'; oc['play_action'] = False; oc['plan_depth'] = True   # the plan's shot: everyone to the end zone
+        elif _pl is not None and _pl.get('quick_play'):
+            oc.update(is_pass=True, depth='short', concept='slant_flat', play_action=False, rpo=False, plan_depth=True)
         elif _pl is not None and _pl['choice'] == 'play' and half_end is None and dr.score_diff < 0:
             # NEEDING A SCORE WITH THE CLOCK DYING, the throws go down the field or to the sideline: no play action
             # (the fake costs a second the drive does not have), nothing short and in bounds; under fifteen seconds
@@ -2680,6 +2687,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         d_awr = float(np.mean([rate_fn(d, {'awareness_rating': 1.0}) for d in _dmen])) if _dmen else 0.70
         _omen = [p for _, p in off_rows]
         o_awr = float(np.mean([rate_fn(p, {'awareness_rating': 1.0}) for p in _omen])) if _omen else 0.70
+        if _pl is not None and _pl.get('quick_play'):
+            oc.update(is_pass=True, depth='short', concept='slant_flat', play_action=False, rpo=False, no_huddle=True)
         _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
         penalty_context = dict(is_pass=oc['is_pass'],
                               offense_discipline=float(np.clip(0.70 + 0.8 * (o_awr - 0.787), 0.5, 0.9)),
