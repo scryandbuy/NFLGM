@@ -210,7 +210,7 @@ def _milestones(league, t, week):
                         if line.startswith(prefix):
                             line = line[len(prefix):].rstrip('.') + suffix + '.'
                             break
-                    clauses.append('He had ' + line)
+                    clauses.append('He finished with ' + line)
                 body += '\n\n' + ' '.join(clauses)
             IB.post(league, 'result', f"{inbox_player(p)} makes his first start", body, sender='assistants')
         if gs in (50, 100, 150, 200) and _once(league, f"starts-{gs}-{p.pid}"):
