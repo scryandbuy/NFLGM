@@ -315,26 +315,29 @@ def done_ids(awarded): return {pid for pid, _ in awarded}
 
 
 @VAL.comparison_batch()
-def process(league, rng, week, verbose=False):
+def process(league, rng, week, verbose=False, *, entries=None):
     """
     Award every man on the wire: AI clubs decide, the user's claim (if any)
     was lodged from the inbox, highest priority wins. Unclaimed men become
-    free agents. Returns [(pid, team)].
+    free agents. An explicit entries snapshot limits this cycle to the claims
+    that were open before an advance; newer cuts remain for the next cycle.
+    Returns [(pid, team)].
     """
     import inbox as IB
     ents = pending(league)
-    if not ents: return []
+    batch = list(ents) if entries is None else [e for e in entries if e in ents]
+    if not batch: return []
     order = priority(league, week)
     user = getattr(league, 'user_team', None)
     awarded = []
     # Snapshot only availability messages. New result mail stays unread.
     notices = [m for m in IB.pending(league) if m.get('kind') == 'waiver_digest'
                or (m.get('kind') == 'waiver_notice' and (m.get('payload') or {}).get('pid'))]
-    processed = {e['pid'] for e in ents}
+    processed = {e['pid'] for e in batch}
     import valuation as VAL
     pool = VAL.pool_from_league(league) if ents else None
     assessments = {}
-    for e in list(ents):
+    for e in batch:
         user_failed = False
         p = league.player(e['pid'])
         if p is None or p.retired or p.team is not None:

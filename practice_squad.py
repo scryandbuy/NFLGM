@@ -518,7 +518,8 @@ def fill_squads(league, rng, verbose=False):
             p = league.player(x['pid'])
             if p and p.team is None and not p.retired and p.pid in league.free_agents:
                 cuts[x['team']].append(p)
-    pool_ids = set(league.free_agents)
+    import waivers as WV
+    pool_ids = set(league.free_agents) - {e['pid'] for e in WV.pending(league)}
     total = 0
     order = list(league.teams); rng.shuffle(order)
     for abbr in order:

@@ -576,7 +576,7 @@ class Session:
             if self.step_clear_wire() is False:
                 if getattr(self, '_cpu_roster_block', None):
                     return dict(done='Blocked', next=self.next_label(), why=self._cpu_roster_block)
-                return dict(done='New roster cuts are on waivers — review claims before advancing again', next=self.next_label())
+                return dict(done='Blocked', next=self.next_label(), why='CPU rosters are not ready for Week 1')
             self.stop = ('week', 1); self.played = False
             self._sync_week_health()
             self._ensure_scout_focus()
@@ -1354,19 +1354,12 @@ class Session:
         L, rng = self.L, self.rng
         self._cpu_roster_block = None
         for t in L.teams.values(): t.phase = 'season'
-        # Legacy saves may have cut down using only top-51 charges. Repair
-        # their cap now, preserving a claim opportunity for any new cuts.
-        before = {e['pid'] for e in WV.pending(L)}
+        # Clear exactly the window the user just reviewed. Repair/claim cuts
+        # made during this advance belong to the next weekly waiver cycle.
+        opening = list(WV.pending(L))
         CD.finalize(L, rng)
-        if any(e['pid'] not in before for e in WV.pending(L)):
-            WV.notify_user(L, WV.pending(L), 0, digest=True)
-            return False
-        WV.process(L, rng, 0)
-        before = {e['pid'] for e in WV.pending(L)}
+        WV.process(L, rng, 0, entries=opening)
         CD.finalize(L, rng)
-        if any(e['pid'] not in before for e in WV.pending(L)):
-            WV.notify_user(L, WV.pending(L), 0, digest=True)
-            return False
         problems = CD.violations(L)
         if problems:
             self._cpu_roster_block = 'CPU roster repair needed before Week 1: ' + '; '.join(
@@ -1381,6 +1374,7 @@ class Session:
         clear_undrafted(L, rng)
         L.set_phase('regular')
         MO.review_captains(L, week=0)
+        WV.notify_user(L, WV.pending(L), 1, digest=True)
 
     # ------------------------------------------------------------ helpers
     def _sync_week_health(self):

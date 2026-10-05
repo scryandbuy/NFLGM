@@ -93,7 +93,9 @@ def clear_undrafted(league, rng, keep=0.25):
     for the in-season depth signings. Without this the unsigned pile grew by
     about 180 a year and the active league by 250."""
     gone = 0
+    pending_ids = {e['pid'] for e in WV.pending(league)}
     for pid in list(league.free_agents):
+        if pid in pending_ids: continue
         p = league.player(pid)
         if p is None or p.retired or p.team is not None: continue
         if getattr(p, 'entry_year', None) != league.year or getattr(p, 'draft_round', None): continue
@@ -107,23 +109,22 @@ def clear_undrafted(league, rng, keep=0.25):
 
 
 def settle_final_rosters(league, rng, max_passes=8):
-    """Clear cutdown claims and repair their roster effects before Week 1."""
+    """One cutdown claim cycle; later releases carry into regular-season waivers.
+
+    max_passes is retained for older callers but no longer adds waiver cycles.
+    """
     cuts, filled = CD.finalize(league, rng)
-    claims = 0
-    for _ in range(max_passes):
-        pending = WV.pending(league)
-        if pending:
-            WV.notify_user(league, pending, 0, digest=True)
-            claims += len(WV.process(league, rng, 0))
-        more_cuts, more_filled = CD.finalize(league, rng)
-        cuts.extend(more_cuts)
-        filled += more_filled
-        if not WV.pending(league):
-            problems = CD.violations(league)
-            if problems:
-                raise RuntimeError(f'Unresolved CPU rosters before Week 1: {problems}')
-            return cuts, filled, claims
-    raise RuntimeError('Cutdown waivers did not settle before Week 1')
+    opening = list(WV.pending(league))
+    WV.notify_user(league, opening, 0, digest=True)
+    claims = len(WV.process(league, rng, 0, entries=opening))
+    more_cuts, more_filled = CD.finalize(league, rng)
+    cuts.extend(more_cuts)
+    filled += more_filled
+    problems = CD.violations(league)
+    if problems:
+        raise RuntimeError(f'Unresolved CPU rosters before Week 1: {problems}')
+    WV.notify_user(league, WV.pending(league), 1, digest=True)
+    return cuts, filled, claims
 
 
 class Franchise:
