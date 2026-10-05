@@ -304,12 +304,18 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     rng = _rng(league, 11)
     outgoing = _assets(league, abbr, a_sends, pool, rng, viewer=them)
     incoming = _assets(league, other, b_sends, pool, rng, viewer=me)
+    # Asking is read-only: thousands of pick combinations share these same
+    # rosters and cap ledgers. Keep snapshots local to this one request so
+    # the next click sees any intervening signing, injury or contract change.
+    me_ctx, them_ctx = me.ctx(), them.ctx()
+    me_space, them_space = me.cap_space, them.cap_space
     def evaluate(extra):
-        return TE.evaluate(dict(a_sends=outgoing + extra, a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
+        return TE.evaluate(dict(a_sends=outgoing + extra, a_gets=incoming), me_ctx, them_ctx, me_space, them_space, ga, gb, user_a=True)
     initial = evaluate([])
     if initial.get('blocked'):
         return dict(ok=False, adds=[], why=_cap_block_read(initial['blocked'], other))
-    football_cache, financial_cache = {}, {}
+    import trade_portfolio as TP
+    football_cache, financial_cache = {}, TP.readonly_cache()
     def plan_check(ids):
         sent = [_find_pick(league, abbr, x) or x for x in ids]
         received = [_find_pick(league, other, x) or x for x in b_sends]
@@ -335,8 +341,8 @@ def act_ask(league, abbr, other, a_sends, b_sends):
             if asset is not None: candidates.append((pk, pid, asset))
     candidates.sort(key=lambda x: (x[0].year, x[0].round, x[1]))
     def alternative_ids(original, ids):
-        seller_ask = max(0.0, -TE.evaluate(dict(a_sends=[], a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)['b_gain'])
-        alternative = TR.seller_pick_counter(original, [x[2] for x in candidates], them.ctx(), gb, them.cap_space,
+        seller_ask = max(0.0, -TE.evaluate(dict(a_sends=[], a_gets=incoming), me_ctx, them_ctx, me_space, them_space, ga, gb, user_a=True)['b_gain'])
+        alternative = TR.seller_pick_counter(original, [x[2] for x in candidates], them_ctx, gb, them_space,
                                              seller_ask=seller_ask)
         if not alternative: return ids
         def asset_id(a):
@@ -344,7 +350,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
             pk = a['obj']
             return f"{pk.year}-{pk.round}-{pk.original}"
         alt_ids = [asset_id(a) for a in alternative]
-        check = TE.evaluate(dict(a_sends=alternative, a_gets=incoming), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
+        check = TE.evaluate(dict(a_sends=alternative, a_gets=incoming), me_ctx, them_ctx, me_space, them_space, ga, gb, user_a=True)
         if not check.get('blocked') and check['b_gain'] > required_gain:
             alternative_plan = plan_check(alt_ids)
             if (alternative_plan['approved'] and
@@ -397,7 +403,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     chosen = [candidates[i] for i in best[1]]
     # Reprice the complete offer exactly as Propose will, then verify the final package.
     rng = _rng(league, 11)
-    final = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends + [x[1] for x in chosen], pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
+    final = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends + [x[1] for x in chosen], pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me_ctx, them_ctx, me_space, them_space, ga, gb, user_a=True)
     if final.get('blocked') or final['b_gain'] <= required_gain:
         return dict(ok=False, adds=[], why='No acceptable counteroffer was found. Your offer has not changed.')
     decision = plan_check(a_sends + [x[1] for x in chosen])

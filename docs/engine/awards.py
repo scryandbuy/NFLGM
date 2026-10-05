@@ -142,8 +142,12 @@ class Ballot:
 
     def cover_score(self, line):
         """The other axis. Gilmore 2019 led the league in INT and PD."""
+        # A slot/safety blitz can create the same recorded rush production
+        # as a front-seven rush. Preserve that contribution, including half
+        # sacks, without awarding anything for an unproductive assignment.
         return (8.0 * _g(line, 'int_def') + 0.5 * _g(line, 'tackles')
-                + 3.0 * _g(line, 'ff') + 3.0 * _g(line, 'pass_def'))
+                + 3.0 * _g(line, 'ff') + 3.0 * _g(line, 'pass_def')
+                + 3.0 * _g(line, 'sacks') + _g(line, 'pressures'))
 
     def def_score(self, p, line):
         if p.pos in COVERAGE_POS:

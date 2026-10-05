@@ -296,9 +296,9 @@ def run_firings(league, rng, pool=None, verbose=False, clubs=None, *, season_yea
         rolled.append(abbr)
         # roster quality 0-1: a bad record with a bad roster is survivable
         rp = (strengths[abbr] - lo) / (hi - lo) if hi > lo else 0.5
-        qb = t.starter('QB')
-        qb_dev = bool(qb and qb.age <= 25 and qb.ovr >= 78)
-        chance = FM.fire_chance_offseason(histories.get(abbr) or t.hist(), rp, qb_dev)
+        evidence = FM.team_evidence(t, record=records.get(abbr),
+                                    history=histories.get(abbr), season_year=int(yr))
+        chance = FM.fire_chance_offseason(evidence, rp)
         if rng.random() < chance:
             if abbr == getattr(league, 'user_team', None):
                 continue                      # the user is the man; his seat is his own story
@@ -310,7 +310,7 @@ def run_firings(league, rng, pool=None, verbose=False, clubs=None, *, season_yea
         else:
             t.tenure += 1
             t.gm.tenure = t.tenure
-            t.gm.job_security = float(np.clip(1.0 - chance, .05, .95))
+            t.gm.job_security = FM.job_security(evidence, rp)
     if verbose:
         print(f'  {len(fired)} of 32 made a change: '
               + ', '.join(f'{a}({s})' for a, s in fired))

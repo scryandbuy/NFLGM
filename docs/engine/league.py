@@ -845,10 +845,11 @@ class League:
         # THE LEAGUE HEARS ABOUT THE BIG ONES: a first-round pick or a player 85 or better changing hands
         try:
             import inbox as IB
+            from views import draft_year
             def words(items):
                 out = []
                 for x in items:
-                    if isinstance(x, DraftPick): out.append(f"a {x.year} {['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'][x.round - 1] if 1 <= x.round <= 7 else str(x.round)}-round pick")
+                    if isinstance(x, DraftPick): out.append(f"a {draft_year(x.year)} {['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'][x.round - 1] if 1 <= x.round <= 7 else str(x.round)}-round pick")
                     else:
                         p = self.player(x)
                         if p is not None: out.append(f"{IB.player_name(p)} ({p.pos}, {round(p.ovr)})")

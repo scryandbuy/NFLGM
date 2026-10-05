@@ -485,7 +485,7 @@ def _front_office(league, t):
     import staff as ST
     gm = t.gm
     import firing_model as FM
-    sec = FM.job_security(t.hist())
+    sec = FM.team_job_security(t)
     exp = float(t.hist().get('expected_pct') or 0.5); pat = float(getattr(t, 'owner_patience', 0.5))
     wants = 'a title run' if exp >= 0.72 else 'a playoff berth' if exp >= 0.56 else 'a winning season' if exp >= 0.5 else 'progress' if exp >= 0.4 else 'patience while you rebuild'
     draft = 'Patient with the draft.' if pat >= 0.6 else 'Wants the draft to pay off now.' if pat <= 0.35 else 'Measured on the draft.'

@@ -26,7 +26,48 @@ import numpy as np
 
 GAMES = 17
 
-def pressure(hist, roster_pct=0.5, qb_dev=False):
+
+def team_evidence(team, *, record=None, history=None, season_year=None):
+    """Employment evidence, without changing the other engines' Team.hist prior.
+
+    A full season is an observed record, not a sample needing last year's eight
+    extra games. Captured histories retain expectations and QB continuity when
+    the calendar resets records or the roster changes. Legacy historical
+    contexts without that QB evidence do not borrow a newly acquired starter.
+    """
+    hist = dict(team.hist() if history is None else history)
+    current_year = getattr(getattr(team, 'league', None), 'year', None)
+    historical = season_year is not None and current_year is not None and int(season_year) < int(current_year)
+    if historical and history is None:
+        previous = [h for h in team.history if h.get('year') is not None and int(h['year']) < int(season_year)]
+        hist['prev_win_pct'] = max(previous, key=lambda h: int(h['year']))['win_pct'] if previous else None
+    if record is None and historical:
+        row = next((h for h in reversed(team.history) if h.get('year') == int(season_year)), {})
+        record = row.get('record')
+    elif record is None:
+        record = team.record
+    if record is not None:
+        w, losses, ties = record
+        games = w + losses + ties
+        if games and (season_year is not None or games >= GAMES):
+            hist['win_pct'] = (w + .5 * ties) / games
+    if 'qb_continuity' not in hist:
+        qb = team.starter('QB') if not historical else None
+        # Existing public age/current-ability rule. It supports continuity;
+        # it does not assert statistical improvement or read hidden potential.
+        hist['qb_continuity'] = bool(qb and qb.age <= 25 and qb.ovr >= 78)
+    return hist
+
+
+def team_job_security(team):
+    """Keep the last hiring/retention assessment until new games supply evidence."""
+    gm = getattr(team, 'gm', None)
+    if not sum(team.record) and gm is not None:
+        return float(np.clip(gm.job_security, .02, .98))
+    return job_security(team_evidence(team))
+
+
+def pressure(hist, roster_pct=0.5, qb_dev=None):
     """
     Accumulated heat on this GM. 0 = untouchable, 1 = gone.
     hist: dict with
@@ -36,7 +77,8 @@ def pressure(hist, roster_pct=0.5, qb_dev=False):
         playoff_drought years since the team last made the playoffs
         expected_pct   what this roster should win (from roster strength)
     roster_pct: talent level 0-1. A bad record with a bad roster is survivable.
-    qb_dev: a young QB visibly developing buys patience.
+    qb_dev: legacy override for young established starter continuity. When
+        omitted, use the same captured public evidence as the owner view.
     """
     w = hist['win_pct']
     prev = hist.get('prev_win_pct')
@@ -65,7 +107,9 @@ def pressure(hist, roster_pct=0.5, qb_dev=False):
     elif ten <= 3: p *= 1.25          # years three and four are judged hardest on results
     elif ten >= 6: p *= 0.70 if (prev is None or prev - w < 0.18) else 1.05
 
-    # 6. a developing young QB is the single biggest source of patience
+    # 6. continuity around a young established starter buys patience. This
+    # existing rule does not establish that his play improved this season.
+    if qb_dev is None: qb_dev = hist.get('qb_continuity', False)
     if qb_dev: p *= 0.55
 
     # Soft saturation, not a hard clip. Clipping at 1.0 meant every severe case
@@ -73,14 +117,14 @@ def pressure(hist, roster_pct=0.5, qb_dev=False):
     # a 12-year coach and a rookie coach both read 97%.
     return float(1.0 - np.exp(-1.25 * max(0.0, p)))
 
-def fire_chance_offseason(hist, roster_pct=0.5, qb_dev=False):
+def fire_chance_offseason(hist, roster_pct=0.5, qb_dev=None):
     """Probability this team makes a change after the season."""
     p = pressure(hist, roster_pct, qb_dev)
     # Hysteresis: one bad year rarely ends a tenure on its own. The exponent is
     # what holds the league near its real ~20% turnover without any quota.
     return float(np.clip(p ** 1.95 * 1.25, 0.0, 0.95))
 
-def fire_chance_inseason(hist, week, roster_pct=0.5, qb_dev=False):
+def fire_chance_inseason(hist, week, roster_pct=0.5, qb_dev=None):
     """
     In-season firing is a separate, rarer path that clusters around week 10.
     It needs the season to be visibly gone, not merely disappointing.
@@ -91,6 +135,6 @@ def fire_chance_inseason(hist, week, roster_pct=0.5, qb_dev=False):
     window = np.exp(-0.5 * ((week - 10.5) / 3.2) ** 2)      # peaks at wk 10-11
     return float(np.clip((p - 0.56) * 0.40 * window, 0.0, 0.12))
 
-def job_security(hist, roster_pct=0.5, qb_dev=False):
+def job_security(hist, roster_pct=0.5, qb_dev=None):
     """The GM-engine input. 1 = safe, 0 = gone tomorrow."""
     return float(np.clip(1.0 - pressure(hist, roster_pct, qb_dev), 0.02, 0.98))

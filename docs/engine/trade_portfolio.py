@@ -20,6 +20,22 @@ REFERENCE_SLOTS = tuple((r - 1) * 32 + 16 for r in range(1, 8))
 REFERENCE_AV = sum(TE.PICK_AV[s] for s in REFERENCE_SLOTS)
 
 
+class _ReadOnlyCache(dict):
+    """One synchronous request whose valuation inputs cannot change."""
+
+
+def readonly_cache():
+    """Create a disposable cache for a read-only search, never execution.
+
+    Pick/player combinations may vary, but the underlying league, players,
+    scouting, contracts and GMs must remain unchanged for its lifetime.
+    Rejection memory may change only when checked live outside this cache;
+    it is not a valuation input and no rejection decision is cached here.
+    Mutating callers must use the ordinary validating cache instead.
+    """
+    return _ReadOnlyCache()
+
+
 def _clip(value):
     return max(0., min(1., float(value)))
 
@@ -69,9 +85,14 @@ cover only one role unit per player, across one deduplicated planning family.
 IR returnees remain in the planning roster; no squad promotion is presumed.
 """
     gm = getattr(team, 'gm', None)
-    identity = tuple((k, repr(v)) for k,v in sorted(vars(gm).items())) if gm else ()
-    key = ('portfolio_roles', team.abbr, start, identity,
-           repr(getattr(team, 'scheme', None)), tuple(_public_signature(p) for p in players))
+    if isinstance(cache, _ReadOnlyCache):
+        # The caller owns an immutable request snapshot. Repeating expensive
+        # public ceiling reads for every pick combination adds no evidence.
+        key = ('portfolio_roles', team.abbr, start, tuple(p.pid for p in players))
+    else:
+        identity = tuple((k, repr(v)) for k,v in sorted(vars(gm).items())) if gm else ()
+        key = ('portfolio_roles', team.abbr, start, identity,
+               repr(getattr(team, 'scheme', None)), tuple(_public_signature(p) for p in players))
     if key in cache:
         return cache[key]
     proxy = DP._Roster(team, players)
@@ -158,8 +179,13 @@ No outgoing owned pick means no spending surcharge. This never vetoes a deal.
     start = int(pre_roll(league))
     first_year = int(league.year)+start
     gm = getattr(team,'gm',None)
-    if gm is not None and hasattr(gm,'shift') and hasattr(team,'ctx'):
+    gm_key = ('portfolio_gm', team.abbr, first_year)
+    if isinstance(cache, _ReadOnlyCache) and gm_key in cache:
+        gm = cache[gm_key]
+    elif gm is not None and hasattr(gm,'shift') and hasattr(team,'ctx'):
         gm = gm.shift(team.ctx())
+        if isinstance(cache, _ReadOnlyCache):
+            cache[gm_key] = gm
     trait = lambda name, default=.5: _clip(getattr(gm,name,default))
     # Policy weights, not empirical likelihoods: patient/secure GMs look
     # farther ahead; urgent or risk-seeking GMs tolerate more lost options.

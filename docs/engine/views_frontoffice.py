@@ -72,7 +72,7 @@ def owner(session, league, abbr):
     import firing_model as FM
     from views import _owner_assessment
     t = league.teams[abbr]; h = t.hist(); own = _owner(league, t)
-    sec = FM.job_security(h)
+    sec = FM.team_job_security(t)
     w, l, d = t.record
     exp = float(h.get('expected_pct') or 0.5)
     exp_words = 'a title run' if exp >= 0.72 else 'the playoffs' if exp >= 0.56 else 'a winning season' if exp >= 0.5 else 'progress' if exp >= 0.4 else 'patience while you rebuild'
@@ -707,7 +707,7 @@ def _season_review_now(session, league, abbr):
             if exit_ is None and abbr in {x for sd in (getattr(post, 'seeds', {}) or {}).values() for x in sd}: exit_ = 'In the playoffs'
     if exit_ is None: exit_ = 'Missed the playoffs'
     assessment = _owner_assessment(t)
-    own = _owner(league, t); mood = assessment['mood']; sec = FM.job_security(h)
+    own = _owner(league, t); mood = assessment['mood']; sec = FM.team_job_security(t)
     owner_line = {
         'Pleased': f"{own['name']} is pleased. {assessment['reason']} He wants to know what the next step is.",
         'Settled': f"{own['name']} is measured about the year. {assessment['reason']} He wants to hear the plan for next season.",

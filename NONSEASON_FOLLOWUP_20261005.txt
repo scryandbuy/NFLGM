@@ -1,0 +1,184 @@
+NON-MULTI-SEASON FOLLOW-UP — 5 OCTOBER 2026
+
+Scope
+Current-code integration, saved-game decision evidence, isolated gameplay,
+targeted performance checks and actual browser workflows. No new multi-season
+simulation. Original user save files were read only.
+
+Integrated corrections
+
+1. Changes (4): draft investment/competition, target-versus-waiting trade-up
+   assessment, persistent declined-package memory, grouped Advance news,
+   pre-FA contract digest, closed FA window until draft completion, scouting
+   confidence hovers, FB run-block display, field labels and halftime clock
+   safeguard. Merge retains the separate portfolio/funding checks.
+   Root additionally makes every final trade-up gate use the same refreshed
+   target quote, rather than mixing current willingness with a stale premium.
+
+2. Looking up declined trade packages no longer initializes or rolls a saved
+   ledger. Recording an actual rejection still persists memory independently
+   of deleted mail. Legacy declined mail remains recognized. Two actual saved
+   counteroffer requests preserved serialized state and RNG.
+
+3. Owner employment reviews use the actual completed record rather than an
+   eight-game prior after all 17 games have been played. Captured expectations
+   and public young-starter continuity survive rollover. Retained job security
+   now uses the same pressure definition as its display. Early-season priors
+   elsewhere remain intact; old firings are not rerolled.
+
+4. Read-only counteroffers reuse unchanged team contexts and public roster
+   projections within one request. Actual SF future-first requests fell from
+   12.48/12.63 seconds to 1.66/1.64 seconds in native Python, with identical
+   terms, checks, saved bytes and RNG. Browser speed is not established by
+   those native timings. Subsequent requests see changed players/contracts.
+
+5. Veteran replacement decisions retain the last completed public production
+   book when rollover creates an empty current book. They remove calendar
+   stubs from retained service and use the same actual remaining-service/cash
+   asset quote as trades. Campbell–Darrisaw, meaningful upgrade, restraint,
+   role, contract and differing-GM controls pass. No age ban, recent-signing
+   ban, invented resale offer or hidden-potential justification was added.
+
+6. Defensive-back awards now credit their recorded sacks and pressures at the
+   existing defensive weights, including half sacks. Zero rush production
+   earns zero credit. Historical awards are not rewritten. Read-only scoring
+   of the four saved books changes neither DPOY leader nor checked top-four
+   CB/FS/SS lists; this does not prove future cross-position award balance.
+
+7. Draft ordinals now correctly show 21st/22nd/23rd/32nd while retaining
+   11th/12th/13th. Newly generated trade news and offer descriptions now use
+   the same displayed draft year as asset rows. Existing historical email
+   text can retain older inconsistent labels; source records are not shifted.
+
+Scoring and rush investigation
+
+Both previously completed 272-game registers remain elevated at 26.49/26.41
+points per team and 22.85/22.60 drives per game. Possession volume explains
+only part: holding observed points/drive at the project's 21.6-drive benchmark
+still gives 25.05/25.24 points per team. This arithmetic is not a forecast of
+a tempo change. Accuracy is near the target; field-goal opportunities and
+sustained drives are the stronger concern. No global scoring/kicking nerf.
+
+Eight exact replays reproduce register scores and account for all regulation
+time after period boundaries. Three very long kicks in the final nine seconds
+of a half remain a situational watch; a raw terminal-drive clock overshoot
+does not create extra game time. Protective and explicit attacking timeout
+plans now have separate tests rather than a contradictory fixture.
+
+Four isolated current-roster games recorded every actual rush assignment:
+EDGE 601 rushes/6 sacks, DT 688/9, LB 139/3, DB 7/1. Edges won more contested
+matchups and first arrivals; four games do not establish sack balance. The
+19 defensive sack credits equal 19 sack plays. Earlier controlled race tests
+cover half sacks; none occurred in these four games.
+
+Mobile quarterbacks receive designed carries, with actual condition, workload,
+contact, fumble and injury paths. Hurts had six designed carries; Allen and
+Williams two each; Allar and Burrow zero in this small snapshot. This proves
+opportunities and restraint, not season usage. No player-specific bonus.
+
+Open design/balance findings
+
+- QB award scoring credits rushing touchdowns but not rushing yards in the
+  passer score. Existing OPOY/OROY scaling differs, so adding an arbitrary
+  yards coefficient was deferred. A consistent combined offensive scale and
+  mobile-versus-pocket season controls remain necessary.
+- SF's draft picks reconcile: depletion came from purchases, not missing
+  inventory. Current portfolio costs recognize reduced future options, but
+  the reconstructed Gibbs offer still passes. Aggressive target premiums,
+  sequential purchase choice and future-pick pricing remain policy questions.
+  Do not claim the exact historical spending trajectory is prevented.
+- Owner patience is not newly added to firing probabilities; public young-QB
+  continuity is not evidence of measured development. Corrected security can
+  activate existing GM urgency behavior. Keep downstream strategy balance
+  distinct from data-consistency tests.
+- Current snapshots cannot reconstruct every old extension, acquisition or
+  camp-cut decision. Thomas was kept at the actual 42/46-player acquisition
+  checkpoints; claiming he was necessarily bought to be cut was disproven.
+
+Detailed evidence
+The parent outputs/nonseason-followup-20261005 directory contains the scoring
+and rush/award reports, trace files and independent integration review.
+outputs/franchise-followup2-2029 contains owner, acquisition, performance and
+independent SF evidence. Test counts in these reports overlap; do not add them
+as distinct tests. Final build/browser and fatigue status are recorded below.
+
+Fatigue candidate: HOLD, not integrated
+
+The duplicate sideline-rest defect is confirmed. Candidate dcf3ae6 replaces
+duplicate/coarse recovery with per-physical-snap accounting, including tries,
+kickoffs and nullified live snaps. Its 88 focused checks, independent 55-check
+review and exact live/instant comparison pass. Nevertheless, the final 16
+paired games materially alter roles: GB Parsons/Barela reach 100% of healthy
+defensive snaps and Brown reaches 98.3% of HB snaps; backups lose nearly all
+opportunities. Injuries fall 26 to 9, sacks 93 to 79, designed QB keeps 58 to
+39. Points per team barely move (24.625 to 24.6875). Stable scoring does not
+make these workload changes acceptable. Hold this separate candidate until
+recovery and rotation are evaluated together. No fatigue tuning is shipped.
+Final evidence: rush-game-reviewed16.json, rush-fatigue-comparison.json and
+fatigue-independent-review.md in the follow-up evidence directory.
+
+Actual browser workflow and draft responsiveness
+
+An isolated localhost origin imported the user's 99 MB 2030 draft save. The
+old synchronous Sim to Your Pick run crashed the renderer. The exact crash
+cause was not proven. The new runner yields between individual draft picks,
+shows progress, allows stopping after a pick, blocks conflicting navigation
+and saves the completed batch once. Native replay preserved the complete
+serialized state, selections/trades and RNG across 31 picks (12.759 versus
+12.389 seconds); this is responsiveness work, not a claimed browser speedup.
+
+Real-browser checks passed: a 30-pick run stops at GB's pick 1.32; Auto Pick
+takes exactly that pick and switches the board to round 2; full auto can be
+stopped (observed checkpoint 3.31, selection 95); reload and Resume retain
+that same checkpoint and cap figure. Stop input was delayed during active
+Python work, and two automation calls timed out before the stop completed.
+Do not describe every individual pick or save as nonblocking. The browser
+also confirms consensus/custom-board switching, the empty-custom-order
+explanation and the closed pre-draft FA window. Original saves are untouched.
+Browser inspection additionally found and corrected the advance label using
+the CPU's current pick as 'your pick'; it now uses the user's next owned pick.
+
+Verification before final packaging
+
+The initial merged intersection passed 107 checks. The subsequent 91-check
+gate had 90 passes and one missing-networkx environment error; that exact
+rollover/carousel test passed with the project's dependency path configured.
+The acquisition intersection passed 20 checks. Draft parity covers completion,
+user stops, round boundaries, all-Do-Not-Draft and recovery after an exception.
+UI checks cover completion, stop, save failure, navigation and header full-auto.
+These counts overlap; they are not a unique-test total. No new full-season
+register or multi-season study was run, and full-register certification remains
+open. The existing scoring, positional sack/award balance, future-pick spending
+and workload questions remain visible rather than being tuned to thresholds.
+
+Final advance performance result
+
+Changes (2)'s final local CPU negotiation cache is integrated as 68827a0.
+It is discarded after every negotiation, before any returned trade is executed.
+All 237 recorded negotiations preserved participating team/player state. A
+same-process copied advance produced identical serialized save bytes, every
+field, RNG and response: 101.727 seconds with validating reads versus 81.174
+with immutable local snapshots (about 20% faster). One ordered warm run is not
+a general speed guarantee. Separate-process comparisons were confounded by
+unchanged schedule generation iterating an unordered matching set; scheduler
+determinism remains a separate follow-up, not a shipped policy change.
+
+Final merged validation
+
+The combined rejection-memory code required correcting the cache test's
+assumption that the whole negotiation is read-only. Actual rejected packages
+must be recorded. The revised test starts both versions from identical memory,
+compares complete resulting saves/offers/RNG, permits only intentional rejection
+ledger changes and repeats with persisted memory. All 8 ask/rejection checks
+pass; individual valuation callbacks still prove full state purity. Runtime
+decision behavior was not changed to satisfy this test.
+
+Final draft/rejection run passed its 9 actual tests; a mistyped additional test
+module produced a loader error. The intended test_draft_trade_integration
+module was subsequently run correctly and both tests passed. Node syntax,
+cooperative-runner and round-crossover checks pass. Final build 78e99ea013
+contains 135 modules/10 data files; every generated Python module matches its
+source after line-ending normalization. Browser checkpoint checks used identical
+runtime code (08ad330 before comment-only cache documentation changes).
+Both original user save SHA-256 values still match the initial values.
+No push was performed.
