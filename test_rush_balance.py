@@ -68,9 +68,13 @@ class RushBalanceTests(unittest.TestCase):
 
     def test_chip_attempt_can_miss_contact(self):
         class Fixed:
-            def __init__(self,u):self.u=u
+            def __init__(self,u):
+                self.u=u
+                self.ties=np.random.default_rng(44)
             def random(self):return self.u
             def lognormal(self,*args):return 1.
+            # Fix chip contact, while allowing the production race to break ties.
+            def integers(self,*args,**kwargs):return self.ties.integers(*args,**kwargs)
         rush=self.front['rushers'];aa=self.front['assignments']
         idx=next(i for i,a in enumerate(aa) if a['alignment']=='right_edge')
         base=P.resolve_protection(self.line,rush,Fixed(.999),assignments=aa,_defer_award=True)
