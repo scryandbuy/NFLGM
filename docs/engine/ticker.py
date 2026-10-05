@@ -191,6 +191,8 @@ def play_line(league, p, off_abbr, def_abbr):
         d = (_spot_yards(p['yardline']) + 17 if p.get('yardline') is not None
              else _spot_yards(p.get('distance', 0)))
         text = f"{d}-yard field goal is {'GOOD.' if p.get('made') else 'NO GOOD.'}"
+        if p.get('kickoff_penalty'):
+            text += ' Roughing the kicker; 15 yards enforced on the kickoff.'
         kind = 'score' if p.get('made') else 'loss'
     elif t == 'extra_point':
         text = f"Extra point is {'good.' if p.get('made', True) else 'NO GOOD.'}"; kind = 'special'
