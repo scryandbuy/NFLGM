@@ -53,6 +53,28 @@ class OvertimeWinningKick(unittest.TestCase):
             p = self.plan(yardline=85, coach=coach)
             self.assertNotEqual(p['choice'], 'kick')
 
+    def test_makeable_winning_kick_beats_lower_value_risky_advancement(self):
+        normal = self.plan(seconds=50, down=1)
+        with patch.object(G, 'PLAY_BAD', .20):
+            risky = self.plan(seconds=50, down=1)
+        for p in (normal, risky):
+            self.assertEqual(p['choice'], 'kick')
+            self.assertLess(p['evs']['play'], p['evs']['kick'])
+        self.assertLess(risky['evs']['play'], normal['evs']['play'])
+        self.assertEqual(risky['evs']['kick'], normal['evs']['kick'])
+
+    def test_winning_score_still_prices_possession_after_failed_advancement(self):
+        # A marginal current kick can justify advancing, but the possibility
+        # of stalling still costs value even though a successful score ends OT.
+        normal = self.plan(yardline=35, seconds=50, down=1)
+        with patch.object(G, 'STALL_ON', False):
+            no_stall_cost = self.plan(yardline=35, seconds=50, down=1)
+        self.assertEqual(normal['choice'], 'play')
+        self.assertEqual(no_stall_cost['choice'], 'play')
+        self.assertGreater(normal['cost_hurry'], 0)
+        self.assertEqual(no_stall_cost['cost_hurry'], 0)
+        self.assertEqual(normal['evs'], no_stall_cost['evs'])
+
     def drive(self, *, running=False, made=True, live=False, late_conversion=False):
         tos = G.Timeouts(); tos.left = dict(home=0, away=0)
         original = G.Drive
