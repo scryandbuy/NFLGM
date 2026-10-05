@@ -61,6 +61,7 @@ class Gameplan:
     protection_locked: bool = False
     protection: str = 'half_slide'
     tempo: float = 0.5                # 0 = grind clock, 1 = no huddle
+    feature_receivers: float = .5  # preference for building reads around talent advantages
     target_priority: dict = field(default_factory=dict)   # pid -> weight
     play_action_rate: float = 0.5           # the caller's lean, 0.5 neutral
     screen_boost: float = 0.0          # weekly screen recommendation; survives copies and saves
@@ -121,6 +122,7 @@ def base_plan(coach=None, opponent=None, rng=None):
     g.man_rate = float(coach.get('man_rate', g.man_rate))
     g.blitz_rate = float(coach.get('blitz_rate', g.blitz_rate))
     g.box_bias = float(coach.get('box_bias', g.box_bias))
+    g.feature_receivers = float(np.clip(coach.get('feature_receivers', .5), 0., 1.))
     g.tempo = float(coach.get('tempo', g.tempo))
     g.pass_bias = float(coach.get('pass_bias', 0.0))
     g.play_action_rate = float(coach.get('play_action_rate', g.play_action_rate))

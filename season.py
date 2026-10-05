@@ -82,6 +82,7 @@ def make_coach(gm):
     return dict(
         adjust_skill=float(np.clip(0.35 + 0.5 * gm.board_trust, .1, .95)),
         adjust_willingness=float(np.clip(gm.aggression, .1, .95)),
+        feature_receivers=float(np.clip(1. - getattr(gm, 'scheme_rigidity', .5), 0., 1.)),
         man_rate=float(np.clip(getattr(gm, 'coverage', 0.25), 0.0, 1.0)),
         shell_lean=float(getattr(gm, 'shell', 0.5)),
         zone_aggression=float(getattr(gm, 'zone_aggression', 0.5)),

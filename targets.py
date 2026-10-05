@@ -69,6 +69,78 @@ CONCEPT_READS = {
     'go':         ['go', 'check'],
 }
 
+# Concept roles bias the designed progression without assigning a new pass depth.
+# A dagger's seam clears space for the dig; it is not automatically the primary.
+_CONCEPT_ROLES = dict(CONCEPT_READS, dagger=['dig', 'seam', 'check'])
+_DEEP_ROLES = {'deep', 'corner', 'seam', 'seam1', 'seam2', 'outside', 'post', 'go'}
+_MIDDLE_ROLES = {'medium', 'dig', 'deep_in', 'curl'}
+_OUTLET_ROLES = {'flat', 'back', 'check'}
+
+
+def assign_concept_roles(pairs, concept, depth='medium'):
+    """Assign eligible receivers to concept jobs; do not alter route geometry.
+
+    These are modest design preferences. Coverage, talent, protection and the
+    quarterback may still take the throw elsewhere. Only the actual pattern is
+    considered, so retained blockers cannot acquire an assignment here.
+    """
+    for pair in pairs:
+        pair.pop('concept_order', None)
+        pair.pop('concept_role', None)
+        pair.pop('concept_read_weight', None)
+    roles = _CONCEPT_ROLES.get(concept)
+    if not roles or not pairs:
+        return pairs
+
+    def suitability(pair, role):
+        r = pair['receiver']
+        if role in _DEEP_ROLES:
+            weights = {'route_run_deep_rating': .4, 'speed_rating': .25,
+                       'release_rating': .2, 'catch_rating': .15}
+        elif role in _MIDDLE_ROLES:
+            weights = {'route_run_med_rating': .45, 'catch_rating': .25,
+                       'release_rating': .15, 'cit_rating': .15}
+        elif role == 'screen':
+            weights = {'catch_rating': .3, 'accel_rating': .25,
+                       'agility_rating': .25, 'speed_rating': .2}
+        else:
+            weights = {'route_run_short_rating': .4, 'catch_rating': .3,
+                       'release_rating': .15, 'agility_rating': .15}
+        score = sum(float(r.get(k, 70.0)) * v for k, v in weights.items())
+        back = r.get('pos') in ('HB', 'FB')
+        if role in _OUTLET_ROLES:
+            score += 10 if back else 0
+        elif role in _DEEP_ROLES or role in _MIDDLE_ROLES:
+            score -= 18 if back else 0
+        if pair.get('late') and role not in _OUTLET_ROLES:
+            score -= 20
+        return score
+
+    remaining = list(range(len(pairs)))
+    assigned = []
+    for role in roles:
+        if not remaining:
+            break
+        # Deep concepts keep a back as an outlet whenever another eligible
+        # receiver is available; an exceptional receiving back can feature on
+        # screens or underneath concepts without being a default vertical read.
+        candidates = remaining
+        if role in _DEEP_ROLES or role in _MIDDLE_ROLES:
+            candidates = [i for i in remaining if
+                          pairs[i]['receiver'].get('pos') not in ('HB', 'FB')
+                          and not pairs[i].get('late')] or remaining
+        i = max(candidates, key=lambda j: suitability(pairs[j], role))
+        remaining.remove(i)
+        assigned.append((i, role))
+    assigned += [(i, 'support') for i in remaining]
+    for order, (i, role) in enumerate(assigned):
+        pairs[i]['concept_order'] = order
+        pairs[i]['concept_role'] = role
+        pairs[i]['concept_read_weight'] = (1.15 if order == 0 else
+                                          1.05 if order == 1 else .95)
+    return pairs
+
+
 # Real read distribution on dropbacks.
 READ_MIX = dict(first=.530, second=.103, checkdown=.152,
                 designed=.112, scramble=.103)
@@ -175,6 +247,15 @@ def select_target(pairs, qb, concept, rng, rate_fn, plan=None, AVG=0.70, red_zon
     rank = {i: k for k, i in enumerate(sorted(range(n), key=lambda i: -rgrade(pairs[i])))}
     # half the design is the formation (the X and the Z are built to be first), half is who the best players are
     w *= np.array([READ_BY_PLAYERS * 0.76 ** rank[i] + (1.0 - READ_BY_PLAYERS) * 0.76 ** i for i in range(n)], float)
+    if kind in ('first', 'second', 'designed'):
+        # Talent separation changes how often a coordinator designs a read,
+        # without requiring any receiver to reach a target-share quota.
+        grades = np.array([rgrade(pair) for pair in pairs])
+        relative = grades - float(np.median(grades))
+        relative = np.sign(relative) * np.maximum(0., np.abs(relative) - 3.)
+        feature = float(np.clip(getattr(plan, 'feature_receivers', .5), 0., 1.))
+        w *= np.exp(np.clip(relative / 35., -.45, .55) * (.65 + .7 * feature))
+        w *= np.array([float(np.clip(pair.get('concept_read_weight', 1.), .85, 1.15)) for pair in pairs])
     if red_zone:
         # INSIDE THE TEN THE TIGHT END IS THE TARGET. The field is short, the windows are bodies, and the big target
         # in the middle draws the ball: real tight ends take about a quarter of red-zone targets and the position's

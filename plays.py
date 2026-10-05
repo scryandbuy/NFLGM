@@ -1074,6 +1074,8 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng):
         if def_call.get('bracket') == pr['receiver'].get('pid'):
             pr['separation'] *= 0.72; pr['bracket'] = True        # and the read goes elsewhere more often (targets.select_target)
 
+    TG.assign_concept_roles(pairs, concept, depth)
+
     tgt, cov, read_kind, sep_raw = TG.select_target(
         pairs, off['qb'], concept, rng, rate, plan=off_call.get('plan'), red_zone=(ytg <= 10),
         down=off_call.get('down', 1), ydstogo=need, pressure=p['pressure'])

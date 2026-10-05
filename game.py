@@ -61,6 +61,15 @@ def play_seconds(result, clock_stopped=False, hurry=False, timeout=False, tempo=
     return float(s)
 
 
+def receiver_won_read(out):
+    """Reward explosive gains or useful catches with clearly open separation."""
+    gain = float(out.get('yards') or 0)
+    needed = max(1., float(out.get('ydstogo') or 10))
+    useful = gain >= (needed if int(out.get('down') or 1) >= 3 else min(4., needed))
+    return out.get('type') == 'complete' and (
+        gain >= 12 or (useful and float(out.get('separation') or 0) >= .65))
+
+
 def live_play_seconds(out):
     """Live action only, without a huddle, using the resolved play's distance.
 
@@ -2878,7 +2887,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if tgt and off_state.plan is not None:
                 tp = off_state.plan.target_priority
                 if tp is None: tp = off_state.plan.target_priority = {}
-                won = out.get('type') == 'complete' and (float(out.get('yards') or 0) >= 12 or float(out.get('separation') or 0) > 1.5)
+                won = receiver_won_read(out)
                 lost = out.get('type') in ('drop', 'interception')
                 tp[tgt] = float(np.clip(tp.get(tgt, 0.0) * 0.9 + (0.35 if won else -0.25 if lost else 0.0), -0.6, 1.0))
         # WHAT HAS BEEN WORKING. The coordinator's own record of his calls,
