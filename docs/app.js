@@ -1169,7 +1169,22 @@ function renderCard(v) {
     left.append(h5('Positions'));
     const pm = el('div', { class: 'posmap', style: `grid-template-columns:repeat(${Math.min(5, v.grades.length)},1fr)` }); v.grades.forEach(g => pm.append(el('div', { class: g.mine ? 'nat' : 'fam' }, g.pos))); left.append(pm);
     left.append(h5('Status'));
-    left.append(el('div', { class: 'kv' }, el('span', {}, 'Role'), el('span', {}, v.role || '—'), el('span', {}, 'Snaps'), el('span', {}, v.snaps || 'None yet this season'), el('span', {}, 'Health'), el('span', {}, v.out ? (v.out >= 99 ? 'Out for the season' : `Out; returns week ${v.out}`) : 'Healthy'), el('span', {}, 'Participation'), el('span', {}, v.participation?.appearances || 'Appearance history unavailable'), ...(v.participation?.injury_note ? [el('span', {}, 'Injury Record'), el('span', {}, v.participation.injury_note)] : []), el('span', {}, 'Condition'), el('span', {}, `${v.cond}%`), el('span', {}, 'Position Change'), el('span', {}, v.pending)));
+    left.append(el('div', { class: 'kv' }, el('span', {}, 'Role'), el('span', {}, v.role || '—'), el('span', {}, 'Health'), el('span', {}, v.out ? (v.out >= 99 ? 'Out for the season' : `Out; returns week ${v.out}`) : 'Healthy'), el('span', {}, 'Condition'), el('span', {}, `${v.cond}%`), el('span', {}, 'Position Change'), el('span', {}, v.pending)));
+    left.append(h5('Playing Time'));
+    const participation = v.participation;
+    const playingTime = el('div', {class:'card-participation', style:'display:grid;gap:12px;line-height:1.45;overflow-wrap:anywhere'});
+    if (participation) {
+      playingTime.append(el('div', {}, el('b', {}, `${Number(participation.season_snaps || 0).toLocaleString()} season snaps`), el('small', {class:'count',style:'display:block'}, `${participation.season_games ?? '—'} games played · ${v.rail.year}`)));
+      for (const c of participation.clubs || []) for (const [unit, n] of Object.entries(c.units || {})) {
+        const block = el('div', {}, el('b', {}, `${showAbbr(c.team)} · ${unit[0].toUpperCase()+unit.slice(1)}`), el('div', {}, `${n.total ? Math.round(100*n.snaps/n.total)+'%' : '—'} while on roster`), el('small', {class:'count',style:'display:block'}, `${n.snaps.toLocaleString()} / ${n.total.toLocaleString()} snaps · ${n.games} recorded games`));
+        const season = c.team_units?.[unit];
+        if (season && (season.total !== n.total || season.games !== n.games)) block.append(el('div', {style:'margin-top:4px'}, `${season.total ? Math.round(100*season.snaps/season.total)+'%' : '—'} of team season`), el('small', {class:'count',style:'display:block'}, `${season.snaps.toLocaleString()} / ${season.total.toLocaleString()} snaps · ${season.games} team games`));
+        playingTime.append(block);
+      }
+      if (!(participation.clubs || []).length) playingTime.append(el('small', {class:'count'}, 'Team snap share unavailable'));
+      if (participation.injury_note) playingTime.append(el('small', {class:'count'}, participation.injury_note));
+    } else playingTime.append(el('span', {}, v.snaps || 'None yet this season'));
+    left.append(playingTime);
     const mid = el('div', {});
     mid.append(h5('Attributes'));
     const attrs = el('div', { class: 'attrs' });
@@ -1736,7 +1751,7 @@ function renderTradeSummary(v,reload) {
   const args=()=>`other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)}`;
   const can=v.can_trade&&(tradeState.a.length||tradeState.b.length);
   const actions=el('div',{class:'trade-actions'},el('span',{},`${tradeState.a.length} assets sent · ${tradeState.b.length} received`),
-    el('div',{class:'trade-interest','data-band':v.package?.interest_band||'low',title:'Estimated interest � acceptance varies by team','aria-label':'Estimated trade interest'},el('small',{},'Interest'),el('div',{class:'trade-interest-track'},el('span',{style:`width:${Number(v.package?.interest||0)}%` }))),
+    el('div',{class:'trade-interest','data-band':v.package?.interest_band||'low',title:'Estimated interest · acceptance varies by team','aria-label':'Estimated trade interest'},el('small',{},'Interest'),el('div',{class:'trade-interest-track'},el('span',{style:`width:${Number(v.package?.interest||0)}%` }))),
     el('button',{class:'btn go',disabled:can?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('propose', ${args()}${tradeState.counter_id != null ? ', counter_id='+Number(tradeState.counter_id) : ''})`);const sent=[...tradeState.a],received=[...tradeState.b];if(r.done){tradeState.a=[];tradeState.b=[];tradeState.counter_id=null;}tradeState.feedback=null;tradeState.offers=null;reload();showTradeResult(r,v,sent,received);}},'Propose'),
     el('button',{class:'btn',disabled:v.can_trade&&tradeState.b.length?null:'',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('ask', ${args()})`);if(!r.ok){notify(r);return;}showTradeCounter(r,v,reload);}},'Ask What They Want'),
     el('button',{class:'btn',disabled:v.can_trade&&tradeState.a.length===1&&tradeState.a[0].kind==='player'?null:'',onclick:()=>{const pid=tradeState.a[0].id;const r=pyJSON(`SESSION.personnel_act('gather', pid=${JSON.stringify(pid)})`);notify(r);tradeState.offers={...r,pid};renderTrades(v);}},'Gather Offers'),
