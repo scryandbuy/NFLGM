@@ -99,6 +99,18 @@ def morale_word(p):
     return 'Happy' if v >= 65 else 'Content' if v >= 40 else 'Unsettled' if v >= 25 else 'Unhappy'
 
 
+def user_player_grade(league, p, user_team=None):
+    """Display evaluation in the user's scheme, regardless of player ownership.
+
+    Keep this in views: CPU decisions and actual lineups use their own schemes.
+    Prospects instead use the scouting estimate, never their hidden ratings.
+    """
+    import gm_engine as GE
+    team = league.teams.get(user_team or getattr(league, 'user_team', None))
+    fit = float(GE.scheme_fit(p.ratings, p.pos, team)) if team else 0.0
+    return dict(ovr=round(p.ovr + fit), fit=round(fit, 1))
+
+
 def player_plate(p, note=''):
     return dict(pid=p.pid, no=jersey(p), name=p.name, short=_short(p.name), pos=p.pos, ovr=round(p.ovr), note=note,
                 morale=morale_word(p), out=p.out_until is not None)

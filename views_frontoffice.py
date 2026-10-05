@@ -126,6 +126,8 @@ def _fit_table(league, t, gm_like):
     import gm_engine as GE, targets as TG
     import offense_roles as OR, defense_roles as DR
     keys = GE.scheme_of(gm_like) or []
+    from types import SimpleNamespace
+    evaluated_team = t if gm_like is t.gm else SimpleNamespace(scheme=keys, gm=gm_like)
     offense = OR.PACKAGES[OR.base_package(gm_like)]
     defense = DR.shape(DR.coach_front(gm_like), 'base')
     starters_by_group = dict(FIT_N, WR=offense['WR'], TE=offense['TE'],
@@ -137,7 +139,7 @@ def _fit_table(league, t, gm_like):
         starters = sorted((p for p in t.active() if p.pos in poss), key=lambda p: -p.ovr)[:starters_by_group[g]]
         fits = []
         for p in starters:
-            try: base = float(TG.position_score(p.ratings, p.pos, None)); here = float(TG.position_score(p.ratings, p.pos, keys)); f = here - base
+            try: f = float(GE.scheme_fit(p.ratings, p.pos, evaluated_team))
             except Exception: f = 0.0
             fits.append(f); men.append((p, f, g))
         avg = float(np.mean(fits)) if fits else 0.0
@@ -242,7 +244,7 @@ def _misfit_rows(league, t, men):
         side = 'offence' if g in ('QB', 'HB', 'WR', 'TE', 'OL') else 'defence'
         alt = _best_scheme_for(p, side)
         cur_name = IC.ARCHETYPES[club_identity(league, t)[side]]['name']
-        out.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), fit=round(f, 1), reason=f"{IC.ARCHETYPES[alt]['name']} {'offense' if side == 'offence' else 'defense'} player in {'an' if cur_name[0] in 'AEIOU' else 'a'} {cur_name}" if alt else ''))
+        out.append(dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr + f), fit=round(f, 1), reason=f"{IC.ARCHETYPES[alt]['name']} {'offense' if side == 'offence' else 'defense'} player in {'an' if cur_name[0] in 'AEIOU' else 'a'} {cur_name}" if alt else ''))
     return out
 
 

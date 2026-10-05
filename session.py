@@ -1559,7 +1559,8 @@ class Session:
                 return dict(kind='pick', id=f"{x['year']}-{x['round']}-{x['original']}", label=f"{__import__('views').draft_year(x['year'])} round {x['round']} pick" + (f" (from {x['original']})" if x.get('original') and x['original'] != owner else ''), sel=x.get('selection'))
             p = self.L.player(x)
             if p is None: return dict(kind='player', id=str(x), label=str(x))
-            return dict(kind='player', id=p.pid, label=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), gone=(p.team != owner))
+            from views import user_player_grade
+            return dict(kind='player', id=p.pid, label=p.name, pos=p.pos, **user_player_grade(self.L, p, self.user_team), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), gone=(p.team != owner))
         they = [item(x, buyer) for x in pl.get('sends', [])]; you = [item(x, self.user_team) for x in pl.get('gets', [])]
         gap = None; read = ''
         try:

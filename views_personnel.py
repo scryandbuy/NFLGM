@@ -6,7 +6,7 @@ and what their buttons do. Every action goes through the engine's own
 functions; nothing here decides a deal.
 """
 import numpy as np
-from views import club, money, morale_word, player_plate, rail
+from views import club, money, morale_word, player_plate, rail, user_player_grade
 
 CLUBS = ['ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN', 'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC', 'LV', 'LAC', 'LA', 'MIA', 'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SF', 'SEA', 'TB', 'TEN', 'WAS']
 
@@ -44,6 +44,7 @@ def _find_pick(league, abbr, pid_str):
 
 def _plate(league, p, note=''):
     pl = player_plate(p, note); pl['age'] = int(p.age); pl['yrs'] = p.contract.years if p.contract else 0; pl['hit'] = round(p.cap_hit(0), 1); pl['penalty'] = round(p.dead_if_cut(0), 1)
+    pl.update(user_player_grade(league, p))
     return pl
 
 
@@ -215,9 +216,8 @@ def _surplus_why(league, t, x):
     if idx is not None and idx >= 1: words.append(['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth'][min(idx, 5)] + ' on the chart')
     elif idx == 0: words.append('Starter at a deep spot')
     try:
-        import gm_engine as GE
-        f = float(GE.scheme_fit(p.ratings, p.pos, t))
-        if f <= -0.5: words.append(f"Fit {f:+.1f}")
+        f = user_player_grade(league, p)['fit']
+        words.append(f"Your fit {f:+.1f}")
     except Exception: pass
     if p.contract: words.append(f"{p.contract.years} Yr{'s' if p.contract.years != 1 else ''}")
     return ' · '.join(words) or 'Depth behind a starter'
@@ -462,8 +462,7 @@ def free_agency(session, league, abbr):
         mine = [o for o in (t.get('offers') or [])] if t else []
         my_offer = (f"${mine[-1]['apy']:.1f}m × {mine[-1]['years']}" if mine else None)
         interest = (None if not t else 'Match Asked' if t.get('rival') and t['state'] not in ('accepted', 'declined') else 'Agreed' if t['state'] in ('accepted', 'signed') else 'Countered' if t['state'] == 'countered' else 'Mulling' if t['state'] == 'waiting' else 'Walked' if t['state'] in ('broken_off', 'declined') else 'Talking' if mine else 'Not Yet')
-        try: fit = round(float(__import__('gm_engine').scheme_fit(p.ratings, p.pos, me)), 1)
-        except Exception: fit = 0.0
+        grade = user_player_grade(league, p, session.user_team)
         wk = int(league.week or 0); prorate = ((19 - wk) / 18.0) if (league.phase == 'regular' and 1 <= wk <= 18) else 1.0
         ask_now = (round(float(t['ask']) * prorate, 2) if t and t.get('ask') else None)
         hole = None
@@ -473,7 +472,7 @@ def free_agency(session, league, abbr):
         elif len(d) <= 1: hole = f"Only {len(d)} healthy {display_pos} on the roster"
         import practice_squad as PSQ
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, display_pos=display_pos, filter_positions=filter_positions,
-                         age=int(p.age), ovr=round(p.ovr), fit=fit, starter=(p.ovr >= 76), rookie=bool(p.college and p.draft_round is None and p.draft_year == league.year), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0), ps_ok=PSQ.can_add(me, p),
+                         age=int(p.age), **grade, starter=(p.ovr >= 76), rookie=bool(p.college and p.draft_round is None and p.draft_year == league.year), last=getattr(p, 'last_team', None) or '', accrued=int(p.accrued or 0), ps_ok=PSQ.can_add(me, p),
                          talks=(t['state'] if t else None), ask=(t['ask'] if t else None), ask_now=ask_now, years=(t['years'] if t else None), thread=(t['id'] if t else None), interest=interest, my_offer=my_offer, hole=hole))
     rows.sort(key=lambda r: -r['ovr'])
     phase = league.phase
@@ -673,10 +672,9 @@ def waivers(session, league, abbr):
         d = e if isinstance(e, dict) else e.__dict__
         if d.get('from_team') == abbr: continue              # your own waived men are not yours to claim
         if not WV.reaches_user(league, d, week): continue    # a club ahead of you will take him; you never see him
-        try: fit = round(float(__import__('gm_engine').scheme_fit(p.ratings, p.pos, me)), 1)
-        except Exception: fit = 0.0
+        grade = user_player_grade(league, p, session.user_team)
         frm = d.get('from_team') or d.get('team') or ''
-        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), fit=fit, home_state=home_state(p), frm=frm, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1),
+        rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), **grade, home_state=home_state(p), frm=frm, hit=round(p.cap_hit(0), 1), penalty=round(p.dead_if_cut(0), 1),
                          yrs=p.contract.years if p.contract else 0, inherited=(f"${p.cap_hit(0):.1f}m · {p.contract.years} Yr{'s' if p.contract.years != 1 else ''}" if p.contract else 'Min'), accrued=int(p.accrued or 0), claimed=(abbr in (d.get('claims') or [])),
                          read=_claim_read(league, me, p, frm, order, abbr)))
     rows.sort(key=lambda r: -r['ovr'])

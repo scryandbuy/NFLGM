@@ -8,7 +8,7 @@ show, as plain dicts, and the actions their buttons call.
 """
 from views import jersey
 import numpy as np
-from views import club, money, morale_word, player_plate, rail, transaction_when
+from views import club, money, morale_word, player_plate, rail, transaction_when, user_player_grade
 import morale as MO
 
 GROUPS = [('QB', ['QB']), ('HB', ['HB']), ('FB', ['FB']), ('WR', ['WR']), ('TE', ['TE']), ('LT', ['LT']), ('LG', ['LG']), ('C', ['C']), ('RG', ['RG']), ('RT', ['RT']),
@@ -44,12 +44,6 @@ ATTR = {
 FAM = {'HB': 'HB', 'FB': 'HB', 'WR': 'WR', 'TE': 'WR', 'LT': 'OL', 'LG': 'OL', 'C': 'OL', 'RG': 'OL', 'RT': 'OL', 'LEDG': 'DL', 'DT': 'DL', 'REDG': 'DL',
        'MIKE': 'LB', 'WILL': 'LB', 'SAM': 'LB', 'CB': 'DB', 'FS': 'DB', 'SS': 'DB', 'K': 'K', 'P': 'K', 'LS': 'OL', 'QB': 'QB'}
 SKILL_TITLE = {'QB': 'Passing', 'HB': 'Running', 'WR': 'Receiving', 'OL': 'Blocking', 'DL': 'Front', 'LB': 'Defense', 'DB': 'Coverage', 'K': 'Kicking'}
-
-
-def _fit(league, t, p):
-    import gm_engine as GE
-    try: return float(GE.scheme_fit(p.ratings, p.pos, t))
-    except Exception: return 0.0
 
 
 def _cond(session, p):
@@ -88,7 +82,7 @@ def _cut_penalty_line(penalty):
 def _row(session, league, t, p):
     yrs = p.contract.years if p.contract else 0
     ceiling = ceiling_read(p, league)
-    return dict(pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, side=('offense' if p.pos in OFFENSE else 'special' if p.pos in ('K', 'P', 'LS') else 'defense'), age=int(p.age), ovr=round(p.ovr), fit=round(_fit(league, t, p), 1),
+    return dict(pid=p.pid, no=jersey(p), name=p.name, pos=p.pos, side=('offense' if p.pos in OFFENSE else 'special' if p.pos in ('K', 'P', 'LS') else 'defense'), age=int(p.age), **user_player_grade(league, p, session.user_team),
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), cond=_cond(session, p), morale=morale_word(p), yrs=yrs,
                 hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), status=_status(league, p, t), injury_status=_status(league, p, t, injury_only=True),
                 home_state=home_state(p), season_no=max(1, league.year - (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) + 1) if (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) else None,
@@ -240,9 +234,10 @@ def card(session, league, pid):
     if p is None: return dict(error='no such player')
     t = league.teams.get(p.team) if p.team else None
     user = league.teams[session.user_team]
-    # Free agents are evaluated for the viewing club, just like the FA list.
-    fit_team = user if t is None or p.pid in league.free_agents else t
-    fit = _fit(league, fit_team, p)
+    # The card is a recruitment view: ownership never changes whose scheme
+    # evaluates the player. Keep the same read before and after acquisition.
+    grade = user_player_grade(league, p, session.user_team)
+    fit, overall = grade['fit'], grade['ovr']
     fam = FAM.get(p.pos, 'DB')
     import targets as TG, position_change as PC
     # the shift the user's scheme puts on each attribute, from the scheme's weights at his spot
@@ -264,9 +259,11 @@ def card(session, league, pid):
     cols = attr_cols(p, shift, shift_name)
     # positions: his spot and the family he could move to, with his grade at each
     family = PC.FAMILY.get(p.pos, [])
-    grades = [dict(pos=p.pos, ovr=round(p.ovr), mine=True)]
+    grades = [dict(pos=p.pos, ovr=overall, mine=True)]
     for alt in family:
-        try: g = float(TG.position_score(p.ratings, alt, getattr(user, 'scheme', None)))
+        try:
+            import gm_engine as GE
+            g = float(TG.position_score(p.ratings, alt) + GE.scheme_fit(p.ratings, alt, user))
         except Exception: g = None
         if g is not None: grades.append(dict(pos=alt, ovr=round(g), mine=False, tax=PC.distance(p.pos, alt)))
     # contract by year
@@ -346,12 +343,12 @@ def card(session, league, pid):
                 rookie_option=(__import__('extensions').rookie_option_price(league, p) if p.team == session.user_team else None),
                 contract_caption=('On the wire; a claiming club inherits his deal' if (p.team is None and p.contract) else 'Free agent; no contract' if p.team is None else (f"Contract signed {getattr(p.contract, 'signed', league.year)} · {p.contract.years + (len(getattr(p.contract, 'base', [])) - p.contract.years if hasattr(p.contract, 'base') else 0)} yrs · ${round(sum(getattr(p.contract, 'base', [])) + getattr(p.contract, 'sb', 0), 1)}m" if p.contract else 'No contract')),
                 season_no=max(1, league.year - (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) + 1) if (getattr(p, 'entry_year', None) or getattr(p, 'draft_year', None)) else None,
-                ovr=round(p.ovr), fit=round(fit, 1), ceiling=ceiling_read(p, league)['ceiling'] if ceiling_read(p, league)['ceiling'] is not None else '—',
+                ovr=overall, fit=round(fit, 1), ceiling=ceiling_read(p, league)['ceiling'] if ceiling_read(p, league)['ceiling'] is not None else '—',
                 dev=DEV_WORD.get(str(getattr(p, 'dev', 'normal')).lower(), 'Normal'), morale=morale_word(p), morale_v=round(m.value) if m is not None else None,
                 contract=(dict(per_year=0.0, years=0, hit=0.0, penalty=0.0, penalty_next=0.0, by_year=[]) if p.team is None else dict(per_year=round(p.apy, 1) if p.contract else 0.0, years=p.contract.years if p.contract else 0, hit=round(p.cap_hit(0), 1), **_cut_penalty(league, p), by_year=years)),
                 free_agent=(p.team is None), on_wire=bool(p.team is None and p.contract is not None),
                 interest=interest, cols=cols, grades=grades, personality=words, character_report=character_report, status=_status(league, p, t) if t else '',
-                schemes=scheme_rows(p.ratings, p.pos, _club_arch(league, getattr(session, 'user_team', None), p.pos)),
+                schemes=scheme_rows(p.ratings, p.pos, _club_arch(league, session.user_team, p.pos), user),
                 cond=_cond(session, p), out=p.out_until, season=cur, games=int(S.get('games', 0) or 0), seasons=seasons,
                 market=market, interest_line=interest_line, dev_line=dev_line, morale_line=_morale_line(p),
                 history=_player_history(league, p), captain=MO.is_captain(p),
@@ -646,7 +643,7 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
                     except Exception: pl['hurt_words'] = None
                 if pl['flag'] in ('questionable', 'doubtful') and not pending and hurt_now is None: pl['flag_word'] = pl['flag'].capitalize() + ' · sits'
                 if hurt_now: pl['flag_word'] = ''
-                pl['fit'] = round(_fit(league, t, p), 1)
+                pl.update(user_player_grade(league, p, session.user_team))
                 if pos in ('KR', 'PR'): pl['sub'] = f"{p.pos} · return {round(RO.return_score(p))}"
                 slots.append(pl)
             cols.append(dict(pos=pos, title=(DR.role_label(pos, front) if side == 'defense' else label), group=group, slots=slots, on_field=n_start))
@@ -971,21 +968,24 @@ def archetype_keys(entry):
     return [k for k in (GE.scheme_of(g) or []) if not side or TG.SCHEME_SIDE.get(k) == side]
 
 
-def scheme_rows(ratings, pos, team_key=None):
+def scheme_rows(ratings, pos, team_key=None, user=None):
     """WHERE HE PLAYS BEST. His fit to every archetype on his side, in overall points, banded against his own seven:
     the schemes that suit him most are green, the ones that suit him least red, the rest yellow, and gray where the
     scheme has no effect on his position. The question the section answers is which schemes this player fits, not
     how he ranks against other players in a scheme, so the bands are his and every player has a best fit."""
-    import identity_catalog as IC, targets as TG
+    import identity_catalog as IC, targets as TG, gm_engine as GE
+    from types import SimpleNamespace
     side = 'offence' if pos in OFF_POS else 'defence'
     rows = []
     raw = TG.position_score(ratings, pos)
     for key, entry in IC.ARCHETYPES.items():
         if entry.get('side') != side: continue
         tags = [t for t in archetype_keys(entry) if pos in TG.SCHEME_DOMAIN.get(t, ())]
-        if not tags:
+        if not tags and not (user is not None and key == team_key):
             rows.append(dict(key=key, name=entry['name'], fit=None, band='none', mine=(key == team_key), words=entry.get('words', ''))); continue
-        fit = float(TG.position_score(ratings, pos, tags) - raw)
+        fit = (float(GE.scheme_fit(ratings, pos, user if key == team_key else
+                     SimpleNamespace(scheme=tags, gm=user.gm))) if user is not None else
+               float(TG.position_score(ratings, pos, tags) - raw))
         rows.append(dict(key=key, name=entry['name'], fit=round(fit, 1), band='avg', mine=(key == team_key), words=entry.get('words', '')))
     live = [r for r in rows if r['fit'] is not None]
     if live:
