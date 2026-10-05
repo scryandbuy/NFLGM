@@ -97,10 +97,11 @@ class WeeklyPlanIntegration(unittest.TestCase):
             GW.user_plan(self.s.L, state, 1)
             self.assertEqual(state.plan.protection, 'full_slide')
             self.assertTrue(state.plan.protection_locked)
-            # CPU default applies even when the coordinator accepts no cards.
+            # Advice stays available, but CPU coaches may decline to follow it.
             cpu = N(plan=GP.Gameplan(), base_plan=GP.Gameplan(), coach={})
             GW.ai_plan(self.s.L, cpu, 'GB', self.s._opponent(1)[0], 1, N(random=lambda: 1.0))
-            self.assertEqual(cpu.plan.protection, 'full_slide')
+            self.assertEqual(cpu.plan.protection, 'half_slide')
+            self.assertFalse(cpu.plan.protection_locked)
             self.s.plan_act('save')
             with patch.object(GW, 'protection_choice', return_value=dict(value='six', why='Changed matchup')):
                 self.assertEqual(self.s.plan_view('this_week')['protection']['value'], 'full_slide')

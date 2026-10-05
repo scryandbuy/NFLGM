@@ -1,0 +1,535 @@
+{
+  "base_commit": "ca7fb69a34ea8f232cf582a61a8da9b4b1070ee5",
+  "build": "c03bdebae6",
+  "focused_tests": 128,
+  "saved_roster_comparison": {
+    "before": {
+      "games": 192,
+      "points_per_team": 24.036458333333332,
+      "groups": {
+        "MIKE": {
+          "reps": 2933,
+          "wins": 267,
+          "sacks": 89.0
+        },
+        "MIKE/<80": {
+          "reps": 2843,
+          "wins": 263,
+          "sacks": 88.0
+        },
+        "DT": {
+          "reps": 30868,
+          "wins": 1689,
+          "sacks": 288.0
+        },
+        "DT/80-88": {
+          "reps": 19781,
+          "wins": 1102,
+          "sacks": 193.0
+        },
+        "EDGE": {
+          "reps": 26579,
+          "wins": 1928,
+          "sacks": 314.0
+        },
+        "EDGE/88+": {
+          "reps": 5205,
+          "wins": 393,
+          "sacks": 58.0
+        },
+        "WILL": {
+          "reps": 1860,
+          "wins": 195,
+          "sacks": 66.0
+        },
+        "WILL/<80": {
+          "reps": 1849,
+          "wins": 194,
+          "sacks": 66.0
+        },
+        "CB": {
+          "reps": 283,
+          "wins": 25,
+          "sacks": 29.0
+        },
+        "CB/<80": {
+          "reps": 283,
+          "wins": 25,
+          "sacks": 29.0
+        },
+        "EDGE/80-88": {
+          "reps": 17043,
+          "wins": 1248,
+          "sacks": 202.0
+        },
+        "DT/<80": {
+          "reps": 8772,
+          "wins": 462,
+          "sacks": 76.0
+        },
+        "DT/88+": {
+          "reps": 2315,
+          "wins": 125,
+          "sacks": 19.0
+        },
+        "EDGE/<80": {
+          "reps": 4331,
+          "wins": 287,
+          "sacks": 54.0
+        },
+        "SAM": {
+          "reps": 765,
+          "wins": 101,
+          "sacks": 26.0
+        },
+        "SAM/<80": {
+          "reps": 450,
+          "wins": 58,
+          "sacks": 14.0
+        },
+        "SAM/80-88": {
+          "reps": 315,
+          "wins": 43,
+          "sacks": 12.0
+        },
+        "WILL/80-88": {
+          "reps": 11,
+          "wins": 1,
+          "sacks": 0.0
+        },
+        "MIKE/80-88": {
+          "reps": 90,
+          "wins": 4,
+          "sacks": 1.0
+        },
+        "SS": {
+          "reps": 8,
+          "wins": 1,
+          "sacks": 1.0
+        },
+        "SS/<80": {
+          "reps": 8,
+          "wins": 1,
+          "sacks": 1.0
+        },
+        "FS": {
+          "reps": 5,
+          "wins": 0,
+          "sacks": 0.0
+        },
+        "FS/<80": {
+          "reps": 5,
+          "wins": 0,
+          "sacks": 0.0
+        }
+      },
+      "calls": 15463,
+      "individual_examples": {
+        "Micah Parsons": {
+          "reps": 326,
+          "wins": 20,
+          "sacks": 6.0
+        },
+        "Myles Garrett": {
+          "reps": 356,
+          "wins": 31,
+          "sacks": 4.0
+        },
+        "Will Anderson Jr.": {
+          "reps": 332,
+          "wins": 30,
+          "sacks": 2.0
+        },
+        "Nick Bosa": {
+          "reps": 339,
+          "wins": 39,
+          "sacks": 4.0
+        },
+        "Colin Simmons": {
+          "reps": 352,
+          "wins": 25,
+          "sacks": 2.0
+        },
+        "Jalen Carter": {
+          "reps": 333,
+          "wins": 11,
+          "sacks": 4.0
+        },
+        "Derrick Brown": {
+          "reps": 312,
+          "wins": 21,
+          "sacks": 5.0
+        },
+        "Chris Jones": {
+          "reps": 268,
+          "wins": 10,
+          "sacks": 3.0
+        },
+        "Quinnen Williams": {
+          "reps": 279,
+          "wins": 10,
+          "sacks": 2.0
+        },
+        "Chris McClellan": {
+          "reps": 314,
+          "wins": 9,
+          "sacks": 0.0
+        },
+        "Jabari Woodaz": {
+          "reps": 268,
+          "wins": 14,
+          "sacks": 2.0
+        }
+      }
+    },
+    "after": {
+      "games": 192,
+      "points_per_team": 24.2421875,
+      "groups": {
+        "MIKE": {
+          "reps": 2822,
+          "wins": 241,
+          "sacks": 102.0
+        },
+        "MIKE/<80": {
+          "reps": 2732,
+          "wins": 233,
+          "sacks": 96.0
+        },
+        "DT": {
+          "reps": 31031,
+          "wins": 1274,
+          "sacks": 240.0
+        },
+        "DT/80-88": {
+          "reps": 19946,
+          "wins": 847,
+          "sacks": 149.0
+        },
+        "EDGE": {
+          "reps": 26788,
+          "wins": 1880,
+          "sacks": 344.0
+        },
+        "EDGE/88+": {
+          "reps": 5257,
+          "wins": 504,
+          "sacks": 83.0
+        },
+        "WILL": {
+          "reps": 1823,
+          "wins": 183,
+          "sacks": 70.0
+        },
+        "WILL/<80": {
+          "reps": 1811,
+          "wins": 182,
+          "sacks": 70.0
+        },
+        "EDGE/80-88": {
+          "reps": 17084,
+          "wins": 1205,
+          "sacks": 232.0
+        },
+        "DT/88+": {
+          "reps": 2415,
+          "wins": 163,
+          "sacks": 42.0
+        },
+        "DT/<80": {
+          "reps": 8670,
+          "wins": 264,
+          "sacks": 49.0
+        },
+        "EDGE/<80": {
+          "reps": 4447,
+          "wins": 171,
+          "sacks": 29.0
+        },
+        "CB": {
+          "reps": 228,
+          "wins": 11,
+          "sacks": 46.0
+        },
+        "CB/<80": {
+          "reps": 228,
+          "wins": 11,
+          "sacks": 46.0
+        },
+        "SAM": {
+          "reps": 761,
+          "wins": 104,
+          "sacks": 51.0
+        },
+        "SAM/<80": {
+          "reps": 448,
+          "wins": 43,
+          "sacks": 26.0
+        },
+        "SAM/80-88": {
+          "reps": 313,
+          "wins": 61,
+          "sacks": 25.0
+        },
+        "MIKE/80-88": {
+          "reps": 90,
+          "wins": 8,
+          "sacks": 6.0
+        },
+        "SS": {
+          "reps": 9,
+          "wins": 1,
+          "sacks": 1.0
+        },
+        "SS/<80": {
+          "reps": 9,
+          "wins": 1,
+          "sacks": 1.0
+        },
+        "WILL/80-88": {
+          "reps": 12,
+          "wins": 1,
+          "sacks": 0.0
+        },
+        "FS": {
+          "reps": 1,
+          "wins": 1,
+          "sacks": 0.0
+        },
+        "FS/<80": {
+          "reps": 1,
+          "wins": 1,
+          "sacks": 0.0
+        }
+      },
+      "calls": 15553,
+      "individual_examples": {
+        "Micah Parsons": {
+          "reps": 342,
+          "wins": 26,
+          "sacks": 7.0
+        },
+        "Myles Garrett": {
+          "reps": 363,
+          "wins": 41,
+          "sacks": 5.0
+        },
+        "Will Anderson Jr.": {
+          "reps": 317,
+          "wins": 30,
+          "sacks": 5.0
+        },
+        "Nick Bosa": {
+          "reps": 338,
+          "wins": 29,
+          "sacks": 3.0
+        },
+        "Colin Simmons": {
+          "reps": 322,
+          "wins": 37,
+          "sacks": 7.0
+        },
+        "Jalen Carter": {
+          "reps": 294,
+          "wins": 15,
+          "sacks": 5.0
+        },
+        "Derrick Brown": {
+          "reps": 339,
+          "wins": 34,
+          "sacks": 11.0
+        },
+        "Chris Jones": {
+          "reps": 249,
+          "wins": 9,
+          "sacks": 0.0
+        },
+        "Quinnen Williams": {
+          "reps": 301,
+          "wins": 17,
+          "sacks": 6.0
+        },
+        "Chris McClellan": {
+          "reps": 298,
+          "wins": 6,
+          "sacks": 0.0
+        },
+        "Jabari Woodaz": {
+          "reps": 286,
+          "wins": 6,
+          "sacks": 0.0
+        }
+      }
+    }
+  },
+  "register": {
+    "before": {
+      "games": 96,
+      "metrics": {
+        "points_per_team": 27.583333333333332,
+        "total_points": 55.166666666666664,
+        "drives_per_game": 22.229166666666668,
+        "plays_per_drive": 5.91049671977507,
+        "first_downs_per_drive": 1.9671977507029053,
+        "offensive_plays_per_gm": 129.5,
+        "drive_touchdown_pct": 27.366447985004687,
+        "drive_fieldgoal_pct": 17.432052483598877,
+        "drive_punt_pct": 28.631677600749768,
+        "drive_turnover_pct": 10.965323336457358,
+        "drive_downs_pct": 5.763823805060919,
+        "completion_pct": 64.28262436914204,
+        "sack_pct": 5.761652398423698,
+        "int_pct": 2.1485219899062726,
+        "air_yards": 6.198564378645132,
+        "yac": 5.406303275011216,
+        "yards_per_dropback": 6.66422463987989,
+        "time_to_throw": 2.7774671953857246,
+        "run_ypc": 4.706314455389265,
+        "run_explosive_pct": 2.314445331205108,
+        "run_negative_pct": 8.399840383080607,
+        "pass_play_share": 59.19401544401545,
+        "play_action_pct": 9.90990990990991,
+        "motion_pct": 36.928893178893176,
+        "blitz_pct": 13.4366576819407,
+        "injuries_per_team_game": 0.6979166666666666,
+        "mean_margin": 9.979166666666666,
+        "margin_10plus_pct": 38.54166666666667,
+        "margin_17plus_pct": 17.708333333333336,
+        "overtime_pct": 1.0416666666666665,
+        "tie_pct": 0.0,
+        "fg_pct": 85.91224018475751,
+        "punt_gross": 46.67208538587849,
+        "kickoff_touchback_pct": 16.034482758620687
+      },
+      "misses": [
+        {
+          "metric": "points_per_team",
+          "value": 27.583333333333332,
+          "target": 22.9,
+          "tolerance": 1.5
+        },
+        {
+          "metric": "total_points",
+          "value": 55.166666666666664,
+          "target": 45.8,
+          "tolerance": 3.0
+        },
+        {
+          "metric": "drive_touchdown_pct",
+          "value": 27.366447985004687,
+          "target": 22.6,
+          "tolerance": 2.0
+        },
+        {
+          "metric": "drive_punt_pct",
+          "value": 28.631677600749768,
+          "target": 32.4,
+          "tolerance": 2.5
+        },
+        {
+          "metric": "margin_10plus_pct",
+          "value": 38.54166666666667,
+          "target": 44.7,
+          "tolerance": 4.0
+        },
+        {
+          "metric": "margin_17plus_pct",
+          "value": 17.708333333333336,
+          "target": 26.1,
+          "tolerance": 4.0
+        },
+        {
+          "metric": "overtime_pct",
+          "value": 1.0416666666666665,
+          "target": 6.2,
+          "tolerance": 2.0
+        }
+      ]
+    },
+    "after": {
+      "games": 96,
+      "metrics": {
+        "points_per_team": 25.494791666666668,
+        "total_points": 50.989583333333336,
+        "drives_per_game": 22.28125,
+        "plays_per_drive": 5.891538101916783,
+        "first_downs_per_drive": 1.8877980364656382,
+        "offensive_plays_per_gm": 129.53125,
+        "drive_touchdown_pct": 23.88966806919121,
+        "drive_fieldgoal_pct": 19.35483870967742,
+        "drive_punt_pct": 30.762038335670873,
+        "drive_turnover_pct": 9.817671809256662,
+        "drive_downs_pct": 6.4048620850864895,
+        "completion_pct": 65.11524822695036,
+        "sack_pct": 7.032967032967033,
+        "int_pct": 1.9355791962174942,
+        "air_yards": 5.912684365781711,
+        "yac": 5.328137054685727,
+        "yards_per_dropback": 6.374286284008223,
+        "time_to_throw": 2.7719703014184396,
+        "run_ypc": 4.549910091870073,
+        "run_explosive_pct": 1.8281895026538235,
+        "run_negative_pct": 8.413603302535876,
+        "pass_play_share": 58.54443104141536,
+        "play_action_pct": 9.971853638922397,
+        "motion_pct": 36.493767591475674,
+        "blitz_pct": 14.262384322264563,
+        "injuries_per_team_game": 0.6927083333333334,
+        "mean_margin": 9.885416666666666,
+        "margin_10plus_pct": 40.625,
+        "margin_17plus_pct": 17.708333333333336,
+        "overtime_pct": 5.208333333333334,
+        "tie_pct": 1.0416666666666665,
+        "fg_pct": 86.25,
+        "punt_gross": 47.25659509202454,
+        "kickoff_touchback_pct": 16.444444444444446
+      },
+      "misses": [
+        {
+          "metric": "points_per_team",
+          "value": 25.494791666666668,
+          "target": 22.9,
+          "tolerance": 1.5
+        },
+        {
+          "metric": "total_points",
+          "value": 50.989583333333336,
+          "target": 45.8,
+          "tolerance": 3.0
+        },
+        {
+          "metric": "drive_fieldgoal_pct",
+          "value": 19.35483870967742,
+          "target": 16.5,
+          "tolerance": 2.0
+        },
+        {
+          "metric": "margin_10plus_pct",
+          "value": 40.625,
+          "target": 44.7,
+          "tolerance": 4.0
+        },
+        {
+          "metric": "margin_17plus_pct",
+          "value": 17.708333333333336,
+          "target": 26.1,
+          "tolerance": 4.0
+        },
+        {
+          "metric": "tie_pct",
+          "value": 1.0416666666666665,
+          "target": 0.29,
+          "tolerance": 0.6
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "192 independent fresh-start 2029 games per version, not 12 consecutive weeks or a full season",
+    "96 fresh 2026 games per version for register; narrow-range outliers are not all fixed",
+    "Finishing/helper execution coefficients are game calibration choices, not claimed empirical NFL estimates",
+    "Pressure uses the engine concept release window; it does not reconstruct real player-tracking time to throw",
+    "Historical pressure aggregates are preserved; old and new conventions coexist in an existing season",
+    "No name-specific rules; stronger interior rushers also improve; individual stars can still have poor games"
+  ]
+}

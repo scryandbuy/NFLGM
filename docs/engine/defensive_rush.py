@@ -196,6 +196,10 @@ def protection_helpers(blockers, rush_assignments, matched, threats, protection=
     engaged = {player_key(b) for b in matched if b is not None}
     spare = {player_key(b): b for b in blockers if b and player_key(b) not in engaged}
     help_by = [[] for _ in rush_assignments]
+    # A spare man must account for an uncovered rush before doubling anybody.
+    # Usually protection_pairs has already used him; keep direct callers safe.
+    if any(b is None for b in matched):
+        return help_by
     reach = {'C': INTERIOR, 'LG': ('right_interior', 'nose', 'right_edge'),
              'RG': ('left_interior', 'nose', 'left_edge'),
              'LT': ('right_edge', 'right_interior'), 'RT': ('left_edge', 'left_interior'),
@@ -214,7 +218,11 @@ def protection_helpers(blockers, rush_assignments, matched, threats, protection=
             if pos in ('HB', 'FB'):
                 slide = protection in ('six_slide', 'half_slide')
                 preference = .06 if alignment in (INTERIOR if slide else EDGES) else 0.0
-            return (float(threats[i]) + preference - .25 * len(help_by[i]),
+            # Inside penetration has a shorter path. Treat each helper as
+            # reducing that matchup's remaining urgency, not as permission
+            # to keep stacking bodies on the highest-rated player.
+            inside = .045 if alignment in INTERIOR else 0.
+            return (float(threats[i]) + inside + preference - .16 * len(help_by[i]),
                     rush_assignments[i]['alignment'], player_key(rush_assignments[i]['player']))
         chosen = max(candidates, key=priority)
         help_by[chosen].append(b)

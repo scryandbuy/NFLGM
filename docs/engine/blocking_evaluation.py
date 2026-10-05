@@ -36,7 +36,7 @@ def run_expectation(resistance, threshold):
 
 
 def protection_evidence(model, threshold, time_scale=1., hold=0.,
-                        sack_k=25., sack_scale=1., hot=False):
+                        sack_k=25., sack_scale=1., hot=False, pressure_window=None):
     """Expected wins and actual-bookkeeping losses for each contested blocker.
 
     A retained helper is evaluated with the real primary blocker still in
@@ -49,28 +49,32 @@ def protection_evidence(model, threshold, time_scale=1., hold=0.,
         return []
     return list(_protection_evidence(tuple(model['means']), tuple(model['free']),
         tuple(model['evaluations']), model['qb_scale'], threshold, time_scale,
-        hold, sack_k, sack_scale, hot))
+        hold, sack_k, sack_scale, hot, tuple(model.get('finish_scales', [1.] * len(model['means']))), pressure_window))
 
 
 @lru_cache(maxsize=512)
 def _protection_evidence(means, free, evaluations, qb_scale, threshold,
-                         time_scale, hold, sack_k, sack_scale, hot):
+                         time_scale, hold, sack_k, sack_scale, hot, finish_scales, pressure_window):
     # Integrate the distribution of the fastest arrival analytically across
     # the other rushers. One-dimensional quadrature avoids sampling noise
     # and large per-play arrays. Split at the pressure and win boundaries.
     pressure_cut = (2.72 * (.65 + (.20 if hot else 0.)) / time_scale) / qb_scale
-    cap_cut = (math.log(max(1e-12, sack_k*sack_scale)/.85)/2.4 + hold) / (time_scale*qb_scale)
-    upper = .6 if free else max(16., max(means, default=4.)*4.)
-    cuts = sorted({.35, upper, *[x for x in (threshold, pressure_cut, cap_cut) if .35 < x < upper]})
+    if pressure_window is not None: pressure_cut = pressure_window / (time_scale * qb_scale)
+    cap_cuts = [(math.log(max(1e-12, sack_k*sack_scale*f)/.85)/2.4 + hold) / (time_scale*qb_scale)
+                for f in finish_scales]
+    # A fixed integration bound keeps an evaluated blocker's own rating from
+    # shifting quadrature nodes in his reference replacement calculation.
+    upper = .6 if free else 32.
+    cuts = sorted({.35, upper, *[x for x in (threshold, pressure_cut, *cap_cuts) if .35 < x < upper]})
     t = np.concatenate([lo + (_NODES+1.)*(hi-lo)/2. for lo,hi in zip(cuts,cuts[1:])])
     weights = np.concatenate([_WEIGHTS*(hi-lo)/2. for lo,hi in zip(cuts,cuts[1:])])
-    def probabilities(arrival):
+    def probabilities(arrival, index):
         time = np.round(arrival*qb_scale, 2)*time_scale
         pressure = np.clip((2.72-time)/2.72 + (.20 if hot else 0.), 0., 1.)
-        sacks = np.clip(sack_k*np.exp(-2.4*(time-hold))*sack_scale, 0., .85)
+        sacks = np.clip(sack_k*np.exp(-2.4*(time-hold))*sack_scale*finish_scales[index], 0., .85)
         if hot: sacks *= .35
-        return sacks, np.where(pressure >= .35, 1., sacks)
-    sacks, pressured = probabilities(t)
+        return sacks, np.where(time <= pressure_window if pressure_window is not None else pressure >= .35, 1., sacks)
+    outcomes = {j: probabilities(t, j) for j in range(len(means))}
     distributions = {j: _distribution(t, mean) for j, mean in enumerate(means) if j not in free}
     atoms = {j: float(_distribution(np.asarray(.6), means[j])[1]) for j in distributions} if free else {}
     rows = []
@@ -78,22 +82,25 @@ def _protection_evidence(means, free, evaluations, qb_scale, threshold,
         own_pdf, own_survival = _distribution(t, reference_mean)
         other_survival = np.ones_like(t)
         hazard = np.zeros_like(t)
+        pressure_hazard = np.zeros_like(t)
         atom_survival = 1.
         for j, (pdf, survival) in distributions.items():
             if j == index: continue
             other_survival *= survival
             hazard += pdf / np.maximum(survival, 1e-300)
+            pressure_hazard += pdf / np.maximum(survival, 1e-300) * outcomes[j][1]
             if free: atom_survival *= atoms[j]
         other_pdf = other_survival * hazard
         win = .5 * math.erfc(math.log(threshold / reference_mean) / (RUSH_SIGMA * math.sqrt(2.)))
         # Either our contest arrives first, or another arrives while our
         # own block also loses before the win threshold.
-        joint_loss = own_pdf*other_survival + other_pdf*np.maximum(0., own_survival-win)
-        expected_pressure = float(np.sum(weights*(t < threshold)*joint_loss*pressured))
+        sacks, pressured = outcomes[index]
+        joint_pressure = own_pdf*other_survival*pressured + other_survival*pressure_hazard*np.maximum(0., own_survival-win)
+        expected_pressure = float(np.sum(weights*(t < threshold)*joint_pressure))
         expected_sack = float(np.sum(weights*own_pdf*other_survival*sacks)) if primary else 0.
         if free:
             own_at_free = float(_distribution(np.asarray(.6), reference_mean)[1])
-            expected_pressure += atom_survival*max(0., own_at_free-win)*float(probabilities(np.asarray(.6))[1])
+            expected_pressure += atom_survival*max(0., own_at_free-win)*float(probabilities(np.asarray(.6), free[0])[1])
         rows.append((pid, win, expected_pressure, expected_sack))
     return tuple(rows)
 

@@ -2937,7 +2937,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if t == 'sack':
             if rng.random() < E.scramble_chance(off_f['qb'], 1.0, 1.4, rate_fn):
                 _old = out
-                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'pb_reps', 'pb_opportunities', 'pb_award', 'pb_sack_survival', 'pressured', 'coverage_evidence', 'ttt') if k in _old}
+                _head = {k: _old.get(k) for k in ('down', 'ydstogo', 'yardline', 'clock', 'passer', 'personnel', 'is_pass', 'pr_reps', 'rush_pressures', 'pb_reps', 'pb_opportunities', 'pb_award', 'pb_sack_survival', 'pressured', 'coverage_evidence', 'ttt') if k in _old}
                 out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], ytg_i, rng, rate_fn); out.update({k: v for k, v in _head.items() if k not in out})
                 t = 'scramble'
                 for _i in range(len(dr.log) - 1, -1, -1):
@@ -3660,14 +3660,17 @@ class StatBook:
             line = self._get(pid)
             line['rb_eval_snaps'] += 1
             line['rb_expected_wins'] += wins
-        # THE RUSH. Every rusher's rep is booked; a rusher who won his rep on a play the quarterback was pressured on
-        # is credited the pressure (the blocker who lost it already carries the pressure allowed)
+        # Rush wins and pressure are separate evidence. Old recorded plays
+        # without arrival evidence retain their original pressure convention.
         for pid, won in out.get('pr_reps') or ():
             if not pid: continue
             l = self._get(pid)
             l['pr_reps'] += 1
             if won:
-                l['pr_wins'] += 1; l['pressures'] += 1          # a won rep is a pressure, the way the charting services count it (about 12 a team a game)
+                l['pr_wins'] += 1
+                if 'rush_pressures' not in out: l['pressures'] += 1  # legacy recorded plays
+        for pid in set(out.get('rush_pressures', ())):
+            if pid: self._get(pid)['pressures'] += 1
         # A sack is charged to the man who was actually beaten, which the
         # protection resolver already names.
         if out.get('pass_def'):

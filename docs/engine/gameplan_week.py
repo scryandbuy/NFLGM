@@ -493,12 +493,28 @@ def apply_changes(plan, base, changes):
     return plan
 
 
+def cpu_protection_choice(coach, recommendation, read, rng, aggression=.5):
+    """Advice is evidence, not an order. Trust and adaptability can be costly."""
+    will = float(coach.get('adjust_willingness', .5))
+    skill = float(coach.get('adjust_skill', .5))
+    reps = float(read.get('dropbacks', 0))
+    trouble = min(1., max(0., (read.get('sacks', 0) / max(1., reps) - .04) / .08)) if reps >= 40 else 0.
+    gaps = [float(row.get('gap', 0)) for row in read.get('matchups', [])]
+    concern = min(1., max(0., max(gaps, default=0) / 20.))
+    belief = float(np.clip(.10 + .45 * will + .20 * skill + .20 * trouble
+                           + .15 * concern - .15 * aggression, .08, .94))
+    if rng.random() < belief:
+        return recommendation['value'], True
+    # Stubborn, aggressive coaches may commit to releasing everyone despite
+    # the report. Others retain their concept-by-concept protection choices.
+    if rng.random() < (1. - will) * aggression:
+        return 'empty', True
+    return 'half_slide', False
+
+
 def ai_plan(league, state, me_abbr, opp_abbr, week, rng):
     """An AI coordinator takes the report's suggestions by his skill and willingness."""
     rep = opponent_report(league, me_abbr, opp_abbr, week)
-    if rep.get('protection_choice'):
-        state.plan.protection = rep['protection_choice']['value']
-        state.plan.protection_locked = True
     will = float(state.coach.get('adjust_willingness', 0.5))
     team = league.teams[me_abbr]
     import staff as ST
@@ -508,6 +524,14 @@ def ai_plan(league, state, me_abbr, opp_abbr, week, rng):
         skill = ST.plan_skill(team, s.get('side', 'offence')) if getattr(team, 'staff', None) else float(state.coach.get('adjust_skill', 0.5))
         if rng.random() < 0.35 + 0.5 * skill * (0.6 + 0.8 * will):
             apply_changes(state.plan, state.base_plan, s['changes']); taken.append(s['text'])
+    if rep.get('protection_choice'):
+        # A coach who accepted explicit protection advice has already chosen.
+        protected = any(s['text'] in taken and 'protection' in s['changes'] for s in rep['suggestions'])
+        if not protected:
+            read = protection_read(league, team, league.teams[opp_abbr], week)
+            state.plan.protection, state.plan.protection_locked = cpu_protection_choice(
+                state.coach, rep['protection_choice'], read, rng,
+                float(getattr(team.gm, 'aggression', .5)))
     state.week_plan_taken = taken
     return rep, taken
 

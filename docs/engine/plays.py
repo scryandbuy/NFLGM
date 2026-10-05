@@ -18,6 +18,7 @@ from matchups import (PASS_RUSH, ROUTE, THROW, CATCH, YAC, RUN_BLOCK,
                       BALL_SECURITY, ZONE_DEFENDERS_NEAR, zone_window,
                       throw_ability_multiplier)
 import blocking_evaluation as BE
+import rush_matchup as RM
 
 AVG = 0.70
 
@@ -117,7 +118,7 @@ SCREEN_FREE_BASE = 5.0      # free yards behind the convoy before first contact,
 SCREEN_FREE_BLK = 8.0       # ...more behind good linemen, fewer behind bad
 # A retained helper buys time in his assigned matchup, scaled by blocking
 # ability. Extra helpers on that same matchup have diminishing value.
-PROTECTION_HELP = 0.16
+PROTECTION_HELP = RM.HELP
 
 def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=None,
                        protection='five', _defer_award=False):
@@ -145,7 +146,12 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
     helpers = DRUSH.protection_helpers(blockers, assignments, matched, threats, protection)
     helper_reps = []
     wins = []
-    model = dict(means=[0.] * len(rushers), free=[], evaluations=[], qb_scale=1.)
+    model = dict(means=[0.] * len(rushers), free=[], evaluations=[], qb_scale=1.,
+                 finish_scales=[RM.finish_scale(r) for r in rushers])
+    # Fixed draws per rush assignment keep the underlying rush races paired
+    # when protection changes. Helper attempts share that contest's execution.
+    help_rolls = {DRUSH.player_key(r): float(rng.random())
+                  for r in sorted(rushers, key=lambda r: DRUSH.player_key(r))}
     for i in sorted(range(len(rushers)), key=lambda i: (assignments[i]['alignment'], DRUSH.player_key(rushers[i]))):
         r = rushers[i]
         b = matched[i]
@@ -154,29 +160,34 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
             model['free'].append(i)
             wins.append((0.6, move, r, None)); continue
         dfn = rate(b, PASS_RUSH['blocker'][move])
+        chip_bonus = 0.
         if chip is not None and chip[1] == i:
-            # THE CHIP: a second man gets a piece of him on the way out
-            dfn = dfn + 0.35 * (rate(chip[0], PASS_RUSH['blocker'][move]) - 0.55)
-        e = edge(atk, dfn)
-        # time for THIS rusher to arrive: average matchup ~ BASE_TTT
-        # Sensitivity is 0.35, solved. At 1.15 the rating gap swung the clock
-        # so hard that an average line against an elite front sacked on 42% of
-        # dropbacks; the real spread is roughly 4% to 11%.
-        t = RUSHER_BASE * (1.0 - 0.35 * e) * rng.lognormal(0.0, BE.RUSH_SIGMA)
+            # The releasing helper can miss the contact. A failed chip still
+            # costs route timing, but cannot magically slow the rusher.
+            chip_grade = rate(chip[0], PASS_RUSH['blocker'][move])
+            if RM.help_effect(chip[0], chip_grade, atk, assignments[i]['alignment'],
+                              help_rolls[DRUSH.player_key(r)]) > 0:
+                chip_bonus = .35 * max(0., chip_grade - .55)
+            dfn += chip_bonus
+        # Relative rush/block ability sets the clock's distribution. A
+        # centered exponential preserves meaningful differences at the top.
+        t = RM.arrival_mean(atk, dfn, RUSHER_BASE) * rng.lognormal(0.0, BE.RUSH_SIGMA)
         # Help was assigned before the random outcomes, using alignment and
         # known threats. Never let a helper chase the fastest rolled winner.
-        assistance = sum(PROTECTION_HELP * float(np.clip(rate(h, PASS_RUSH['blocker'][move]), 0, 1)) / (j + 1)
+        def contribution(h, grade, layer):
+            return RM.help_effect(h, grade, atk, assignments[i]['alignment'],
+                                  help_rolls[DRUSH.player_key(r)], layer, PROTECTION_HELP)
+        assistance = sum(contribution(h, rate(h, PASS_RUSH['blocker'][move]), j)
                          for j, h in enumerate(helpers[i]))
-        mean = RUSHER_BASE * (1.0 - .35 * e)
+        mean = RM.arrival_mean(atk, dfn, RUSHER_BASE)
         model['means'][i] = mean * (1. + assistance)
         reference_defense = BE.REFERENCE
-        if chip is not None and chip[1] == i:
-            reference_defense += .35 * (rate(chip[0], PASS_RUSH['blocker'][move]) - .55)
-        primary_mean = RUSHER_BASE * (1. - .35 * (atk - reference_defense)) * (1. + assistance)
+        reference_defense += chip_bonus
+        primary_mean = RM.arrival_mean(atk, reference_defense, RUSHER_BASE) * (1. + assistance)
         model['evaluations'].append((b.get('pid'), i, primary_mean, True))
         for j, h in enumerate(helpers[i]):
             actual_help = float(np.clip(rate(h, PASS_RUSH['blocker'][move]), 0, 1))
-            reference_help = assistance + PROTECTION_HELP * (BE.REFERENCE - actual_help) / (j + 1)
+            reference_help = assistance - contribution(h, actual_help, j) + contribution(dict(h, awareness_rating=80.), BE.REFERENCE, j)
             model['evaluations'].append((h.get('pid'), i, mean * (1. + reference_help), False))
         t *= 1.0 + assistance
         wins.append((max(0.35, t), move, r, b))
@@ -187,6 +198,7 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
     order = sorted(range(len(rushers)), key=lambda i: (assignments[i]['alignment'], DRUSH.player_key(rushers[i])))
     remap = {old: new for new, old in enumerate(order)}
     model['means'] = [model['means'][i] for i in order]
+    model['finish_scales'] = [model['finish_scales'][i] for i in order]
     model['free'] = sorted(remap[i] for i in model['free'])
     model['evaluations'] = [(pid, remap[i], mean, primary) for pid, i, mean, primary in model['evaluations']]
     if not wins:
@@ -237,7 +249,8 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
     # synthetic clones whose linemen were worse than the league's, so the same
     # constant produced 3.85% sacks against a real 6.6% once real protection
     # was in front of the quarterback.
-    p_sack = 25.0 * np.exp(-2.40 * t_arrive)
+    finish = RM.finish_scale(winner)
+    p_sack = 25.0 * np.exp(-2.40 * t_arrive) * finish
     if qb is not None:
         p_sack *= 1.0 - 0.25 * (rate(qb, {'break_sack_rating': 1.0}) - QB_ESC_PIVOT)
     sack = rng.random() < float(np.clip(p_sack, 0.0, 0.85))
@@ -247,6 +260,8 @@ def resolve_protection(blockers, rushers, rng, qb=None, chip=None, assignments=N
                 sack=bool(sack), beaten_by=winner.get('pid'),
                 beaten=loser.get('pid') if loser else None, move=move,
                 pb_reps=reps, pb_opportunities=opportunities, pb_award=award, pb_model=model, pr_reps=rush_reps,
+                finish_scale=finish,
+                rush_arrivals=[(r.get('pid'), float(t) * model['qb_scale']) for t, _m, r, _b in wins],
                 pb_helpers=[(h.get('pid'), r.get('pid')) for h, r, _held in helper_reps])
 
 # ============================================================ MAN COVERAGE
@@ -824,6 +839,20 @@ def moving_throw(call, *, screen=False, swing=False, hot=False):
 
 
 def _pass_play(off, deff, off_call, def_call, ytg, rng):
+    out = _resolve_pass_play(off, deff, off_call, def_call, ytg, rng)
+    arrivals = out.pop('rush_arrivals', [])
+    # Count arrival before the concept's release window, not every quick
+    # block win. Screens/quick throws can escape a win; late sacks still count.
+    release = BASE_TTT + HOLD_BY_DEPTH.get('screen' if out.get('screen') else out.get('depth', 'medium'), 0.)
+    pressures = {pid for pid, arrival in arrivals if pid and arrival <= release}
+    if out.get('type') == 'sack' and out.get('by'):
+        pressures.add(out['by'])
+    out['rush_pressures'] = sorted(pressures)
+    out['pressured'] = bool(pressures)
+    return out
+
+
+def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng):
     depth = off_call.get('depth', 'short')
     ok = available_depths(ytg)
     if depth not in ok: depth = ok[-1]
@@ -908,9 +937,17 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
         if cands:
             edge_i = [i for i, a in enumerate(rush_plan['assignments']) if a['alignment'] in DRUSH.EDGES and matched[i] is not None]
             if edge_i:
-                worst = max(edge_i, key=lambda i: rate(rushers[i], PASS_RUSH['rusher']['finesse']) - rate(matched[i], PASS_RUSH['blocker']['finesse']))
-                threat = rate(rushers[worst], PASS_RUSH['rusher']['finesse']) - rate(matched[worst], PASS_RUSH['blocker']['finesse'])
-                if rng.random() < float(np.clip(0.30 + 2.5 * threat, 0.08, 0.7)):
+                def mismatch(i):
+                    move = max(('power', 'finesse'), key=lambda m: rate(rushers[i], PASS_RUSH['rusher'][m]))
+                    return rate(rushers[i], PASS_RUSH['rusher'][move]) - rate(matched[i], PASS_RUSH['blocker'][move]) if matched[i] else 1.
+                worst = max(edge_i, key=mismatch)
+                threat = mismatch(worst)
+                inside = max((mismatch(i) for i, a in enumerate(rush_plan['assignments'])
+                              if a['alignment'] not in DRUSH.EDGES), default=-1.)
+                # Keep the outlet available when an inside leak/free rusher
+                # is more urgent than delaying an edge's release.
+                chip_rate = float(np.clip(.30 + 2.5 * threat - 2. * max(0., inside + .05 - threat), .0, .7))
+                if all(matched) and rng.random() < chip_rate:
                     chip = (max(cands, key=lambda x: x.get('pass_block_rating', 60)), worst)
 
     p = resolve_protection(blockers, rushers, rng, qb=off['qb'], chip=chip,
@@ -947,18 +984,19 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
 
     # The quick answer changes the required hold time before the sack roll.
     hold = HOLD_BY_DEPTH.get('screen' if screen else depth, 0.0)
-    p['sack'] = rng.random() < float(np.clip(SACK_K * np.exp(-2.40 * (p['time'] - hold)), 0, .85))
+    p['sack'] = rng.random() < float(np.clip(SACK_K * np.exp(-2.40 * (p['time'] - hold)) * p.get('finish_scale', 1.), 0, .85))
     if hot:
         p['sack'] = p['sack'] and rng.random() < 0.35
     p['pb_award'] = BE.protection_evidence(p.get('pb_model'), PBW_THRESHOLD,
-        time_scale=award_time_scale, hold=hold, sack_k=SACK_K, hot=hot)
+        time_scale=award_time_scale, hold=hold, sack_k=SACK_K, hot=hot,
+        pressure_window=BASE_TTT + hold)
     if PASS_TRACE is not None:
         PASS_TRACE.append(dict(path='clock', time=p['time'], hot=bool(hot),
                                sack=bool(p['sack']), rushers=def_call['rushers']))
     if p['sack']:
         return dict(type='sack', yards=-sack_loss(rng, depth, p['time'], screen, hot), depth=depth, screen=bool(screen), swing=bool(swing),
                     touchdown=False, by=p['beaten_by'], concept=concept,
-                    protection=prot_name, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
+                    protection=prot_name, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3),
                     beaten=p.get('beaten'), pressured=True,
                     coverage_evidence=_coverage_evidence(rush_plan['coverage']))
 
@@ -1178,7 +1216,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     air=round(air, 1),
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
+                    by=cb.get('pid'), read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35)) | returning
     if not complete:
         throwaway = bool(not dropped_int and p['pressure'] >= 0.35 and not screen and rng.random() < 0.18)
         # A PASS DEFENDED is a defender breaking the ball up, not simply an
@@ -1196,7 +1234,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     throwback=round(float(max(0.0, rng.normal(6.0, 3.0))), 1) if throwaway else 0.0,
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=None if throwaway else tgt.get('pid'),
-                    read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3),
+                    read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3),
                     pass_def=(cb.get('pid') if broken and cb else None),
                     pressured=bool(p['pressure'] >= 0.35))
     # A contested ball that already survived the throw should not face the full
@@ -1206,7 +1244,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     intended_air=float(route_air if route_air is not None else {'short': 5, 'medium': 13, 'deep': 27}.get(depth, 6)),
                     depth=depth, in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing), coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, target=tgt.get('pid'),
-                    read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
+                    read=read_kind, pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
 
     # Real air yards average 7.8 with 5.2 after the catch. Short throws were
     # landing at 4.0 and dragging yards per dropback to 4.2 against a real 6.18.
@@ -1251,7 +1289,7 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                     coverage=def_call.get('coverage') or def_call['shell'],
                     concept=concept, protection=prot_name, depth=depth,
                     target=tgt.get('pid'), read=read_kind,
-                    separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
+                    separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
     # Real YAC by throw depth: behind the line 8.63, short 3.97, medium 3.48,
     # deep 5.31 - a U-shape, because a screen has blockers in front and a deep
     # ball is caught past everyone, while an intermediate throw is caught in
@@ -1313,4 +1351,4 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
                 in_man=bool(in_man), coverage_evidence=coverage_evidence, screen=bool(screen), swing=bool(swing),
                 coverage=def_call.get('coverage') or def_call['shell'],
                 protection=prot_name, depth=depth, target=tgt.get('pid'),
-                read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
+                read=read_kind, separation=round(float(sep_raw), 3), pb_reps=p['pb_reps'], pb_opportunities=p.get('pb_opportunities', []), pb_award=p.get('pb_award', []), pr_reps=p.get('pr_reps', []), rush_arrivals=[(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])], ttt=round(float(p['time']), 3), pressured=bool(p['pressure'] >= 0.35))
