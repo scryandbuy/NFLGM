@@ -100,8 +100,11 @@ class DefensiveReturns(unittest.TestCase):
         self.assertLess(b.p['qb']['pass_epa'],-6.95)
 
     def test_sack_fumble_recovery_in_end_zone_is_defensive_td(self):
-        dr,b,_=self.drive([dict(type='sack',yards=-5,by='edge')],start=98,
-                         fumble=dict(lost=True,forced=True),return_end=100)
+        # Fix the loose-ball location: a recovery in the end zone has no
+        # return yards; a bounce back into the field would have a return.
+        with patch('fumble_resolution.near_goal_recovery', return_value=(102., False)):
+            dr,b,_=self.drive([dict(type='sack',yards=-5,by='edge')],start=98,
+                             fumble=dict(lost=True,forced=True),return_end=100)
         self.assertEqual((dr.result,dr.points),('Defensive touchdown',-7))
         self.assertEqual(dr.log[0]['ret'],0)
         self.assertEqual((b.p['qb']['sacked'],b.p['qb']['fumbles_lost']),(1,1))

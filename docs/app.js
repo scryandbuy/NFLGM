@@ -866,16 +866,16 @@ function renderGameDay(v) {
     const pass = {}, rush = {}, recv = {}, returns = {};
     const revealed = []; g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; revealed.push(...((last && shownPlays != null) ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays)); });
     for (const p of revealed) {
-      if (!p.type) continue; const y = p.yards || 0;
+      if (!p.type || p.nullified) continue; const y = p.stat_yards ?? p.yards ?? 0;
       if (!p.nullified && p.returner && ['punt','kickoff'].includes(p.type)) {
         const k = p.return_team + '|' + p.returner;
         const r = returns[k] = returns[k] || {team:p.return_team, name:p.returner, kr:0, kr_yds:0, pr:0, pr_yds:0, td:0};
         const stat = p.type === 'punt' ? 'pr' : 'kr'; r[stat]++; r[stat + '_yds'] += p.return_yards || 0; if (p.return_td) r.td++;
       }
 
-      if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.passer) { const k = p.off + '|' + p.passer; const r = pass[k] = pass[k] || { team: p.off, name: p.passer, cmp: 0, att: 0, yds: 0, td: 0, int_: 0 }; r.att++; if (p.type === 'complete') { r.cmp++; r.yds += y; if (p.td) r.td++; } if (p.type === 'interception') r.int_++; }
-      if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.target) { const k = p.off + '|' + p.target; const r = recv[k] = recv[k] || { team: p.off, name: p.target, tgt: 0, rec: 0, yds: 0, td: 0 }; r.tgt++; if (p.type === 'complete') { r.rec++; r.yds += y; if (p.td) r.td++; } }
-      if (['run', 'scramble'].includes(p.type) && (p.carrier || p.passer)) { const who = p.carrier || p.passer; const k = p.off + '|' + who; const r = rush[k] = rush[k] || { team: p.off, name: who, att: 0, yds: 0, td: 0, lng: 0 }; r.att++; r.yds += y; if (p.td) r.td++; r.lng = Math.max(r.lng, y); }
+      if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.passer) { const k = p.off + '|' + p.passer; const r = pass[k] = pass[k] || { team: p.off, name: p.passer, cmp: 0, att: 0, yds: 0, td: 0, int_: 0 }; r.att++; if (p.type === 'complete') { r.cmp++; r.yds += y; if (p.td && !p.defensive_td && !p.offensive_fumble_td) r.td++; } if (p.type === 'interception') r.int_++; }
+      if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.target) { const k = p.off + '|' + p.target; const r = recv[k] = recv[k] || { team: p.off, name: p.target, tgt: 0, rec: 0, yds: 0, td: 0 }; r.tgt++; if (p.type === 'complete') { r.rec++; r.yds += y; if (p.td && !p.defensive_td && !p.offensive_fumble_td) r.td++; } }
+      if (['run', 'scramble'].includes(p.type) && (p.carrier || p.passer)) { const who = p.carrier || p.passer; const k = p.off + '|' + who; const r = rush[k] = rush[k] || { team: p.off, name: who, att: 0, yds: 0, td: 0, lng: 0 }; r.att++; r.yds += y; if (p.td && !p.defensive_td && !p.offensive_fumble_td) r.td++; r.lng = Math.max(r.lng, y); }
     }
     const top = (o, key, n) => awayFirst(Object.values(o).sort((a, b) => b[key] - a[key])).slice(0, n);
     box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT')); top(pass, 'att', 4).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, `${r.cmp}/${r.att}`), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_))));
@@ -4219,6 +4219,7 @@ function replayPlayPoints(play) {
   if (play.nullified) return 0;
   if (play.safety) return -2;
   const sign = play.scoring_side === 'defense' ? -1 : 1;
+  if (play.type === 'two_point' && play.try_points != null) return play.try_points * sign;
   if (play.td) return 6 * sign;
   if (play.type === 'field_goal' && play.made) return 3 * sign;
   if (play.type === 'extra_point' && play.made !== false) return sign;

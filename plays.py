@@ -650,6 +650,8 @@ def _sneak(off, deff, off_call, def_call, ytg, rng):
         yds = float(rng.choice([0.0, 0.0, 0.0, -1.0]))
     td = yds >= ytg
     return dict(type='run', yards=round(yds, 1), touchdown=bool(td), sneak=True, push=push,
+                **({'pre_goal_contact_yards': 0., 'pre_goal_contact_by': inside[0].get('pid')}
+                   if inside else {}),
                 carrier_pid=qb.get('pid'), scheme='sneak', by=None)
 
 # Red-zone compression is an OUTCOME, not an input. An earlier build multiplied

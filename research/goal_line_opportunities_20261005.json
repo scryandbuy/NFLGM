@@ -1,0 +1,34 @@
+{
+  "contact_score": {
+    "opportunities": 10000,
+    "fumbles": 159,
+    "lost": 56,
+    "touchbacks": 14,
+    "offensive_recovery_td": 12,
+    "resulting_td": 9875
+  },
+  "untouched_score": {
+    "opportunities": 10000,
+    "fumbles": 0,
+    "lost": 0,
+    "touchbacks": 0,
+    "offensive_recovery_td": 0,
+    "resulting_td": 10000
+  },
+  "end_zone_catch": {
+    "opportunities": 10000,
+    "fumbles": 0,
+    "lost": 0,
+    "touchbacks": 0,
+    "offensive_recovery_td": 0,
+    "resulting_td": 10000
+  },
+  "stopped_at_one": {
+    "opportunities": 10000,
+    "fumbles": 159,
+    "lost": 56,
+    "touchbacks": 14,
+    "offensive_recovery_td": 12,
+    "resulting_td": 34
+  }
+}
