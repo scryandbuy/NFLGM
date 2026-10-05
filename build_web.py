@@ -10,6 +10,7 @@ MODULES = ['halftime', 'staff_traits', 'club_notes', 'league_notes', 'adjust', '
            'targets', 'field_fit', 'stable', 'ticker', 'gameday', 'gm_surfaces', 'draft_day', 'views_club', 'views_personnel', 'views_frontoffice', 'views_draft', 'views_league', 'views_gameplan', 'trade_calendar', 'trade_engine', 'trades', 'valuation', 'views', 'waivers', 'weather', 'xp', 'xp_spend', 'zones']
 MODULES.extend(['development_value', 'game_recap', 'practice', 'practice_integration', 'game_availability', 'dev_evaluation', 'specialist_reserve', 'competition_names', 'stadium_names', 'rush_stats_migration', 'kick_returns', 'player_age', 'run_blocking', 'punt_strategy', 'contract_offer', 'contract_offer_model'])
 MODULES.append('financial_plan')
+MODULES.append('trade_portfolio')
 MODULES.append('retention_plan')
 MODULES.append('pass_pursuit')
 MODULES.append('character_assessment')

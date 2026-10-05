@@ -34,7 +34,7 @@ def player(pid, value, contribution=1, pos='LB', inherit=0):
 class PackageSearchTests(unittest.TestCase):
     def negotiate(self, bank, surplus=(), gain=6, incoming=30, ask=12,
                   market=12, recipient=None, max_nodes=None, roll=None,
-                  years=2, wants_out=False, user=False, seller_gm=None):
+                  years=2, wants_out=False, user=False, seller_gm=None, portfolio=None):
         target = player('target', market)
         target['obj'].contract_years_left = years
         target.update(package_gain=gain, buy=ask, sell=incoming, wants_out=wants_out)
@@ -61,6 +61,11 @@ class PackageSearchTests(unittest.TestCase):
             # This exhaustive search fixture has no contracts or league ledger;
             # cap/future-funding behavior is covered by the integration tests.
             stack.enter_context(patch.object(TR, '_financial_trade', return_value=True))
+            if portfolio is not None:
+                def option_check(league, ta, tb, outgoing, incoming, *args, **kwargs):
+                    cost = portfolio(tuple(sorted(x.round for x in outgoing if not isinstance(x, str))))
+                    return dict(approved=True, costs={ta.abbr:cost})
+                stack.enter_context(patch.object(TR, '_portfolio_trade_check', side_effect=option_check))
             if max_nodes is not None:
                 stack.enter_context(patch.object(TR, 'MAX_PACKAGE_SEARCH', max_nodes))
             team.abbr = 'B'
@@ -75,6 +80,21 @@ class PackageSearchTests(unittest.TestCase):
         self.assertIsNotNone(offer)
         self.assertGreaterEqual(result['search']['package_market'], result['search']['market_floor'])
         self.assertLessEqual(result['search']['package_market'], result['search']['market_ceiling'])
+
+    def test_buyer_prices_remaining_options_when_choosing_between_valid_packages(self):
+        offer, result = self.negotiate([pick(1,10),pick(2,11)], market=10,
+            incoming=20, user=True, portfolio=lambda ids: 5 if ids==(1,) else 0)
+        self.assertEqual([x['pick'] for x in offer['a_sends']], [2])
+        self.assertEqual(result['search']['package_market'],11)
+
+    def test_existing_willingness_uses_adjusted_margin_once(self):
+        args=dict(market=10,incoming=12,user=True)
+        self.assertIsNotNone(self.negotiate([pick(1,10)],portfolio=lambda ids:0,**args)[0])
+        self.assertIsNone(self.negotiate([pick(1,10)],portfolio=lambda ids:3,**args)[0])
+        offer,result=self.negotiate([pick(1,10)],portfolio=lambda ids:1,**args)
+        self.assertIsNotNone(offer)
+        self.assertEqual(result['a_gain'],1)
+        self.assertEqual(result['search']['buyer_portfolio_cost'],1)
 
     def test_two_later_picks_before_first_and_no_forced_player(self):
         offer, result = self.negotiate([pick(1, 16), pick(2, 5, 7), pick(3, 5, 7)],
