@@ -39,5 +39,6 @@ def saved_progress(saved):
 
 def team_context(league):
     """Completed-season decision evidence, retained after records reset to 0-0."""
+    import firing_model as FM
     return dict(records={a: list(t.record) for a, t in league.teams.items()},
-                histories={a: t.hist() for a, t in league.teams.items()})
+                histories={a: FM.team_evidence(t, season_year=league.year) for a, t in league.teams.items()})
