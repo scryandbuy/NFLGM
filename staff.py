@@ -100,7 +100,7 @@ DISGRUNTLED_HIT = 12.0             # rating points lost for the year after being
 
 
 class Coach:
-    __slots__ = ('name', 'role', 'rating', 'prestige', 'specialty', 'age', 'years', 'team', 'traits', 'history', 'unit_ranks', 'hc_candidate', 'disgruntled', 'salary', 'staff_traits', 'known')
+    __slots__ = ('name', 'role', 'rating', 'prestige', 'specialty', 'age', 'years', 'team', 'traits', 'history', 'unit_ranks', 'unit_reviews', 'hc_candidate', 'disgruntled', 'salary', 'staff_traits', 'known')
 
     def __init__(self, name, role, rating, prestige, specialty, age, years=3, team=None, traits=None):
         self.name, self.role = name, role
@@ -111,6 +111,7 @@ class Coach:
         self.known = []                 # which of them the GM has learned, while he is in the pool
         self.history = []              # (year, team, role)
         self.unit_ranks = []           # last seasons' unit rank on his side
+        self.unit_reviews = []         # dated exposure; legacy ranks stay as recorded
         self.hc_candidate = False
         self.disgruntled = 0            # the year he was kept against his will, 0 if not
         self.salary = 0.0               # $m a year on his current deal
@@ -123,13 +124,14 @@ class Coach:
     def to_dict(self):
         return dict(name=self.name, role=self.role, rating=self.rating, prestige=self.prestige, specialty=self.specialty, age=self.age,
                     years=self.years, team=self.team, traits=self.traits, history=self.history, unit_ranks=self.unit_ranks, hc_candidate=self.hc_candidate, disgruntled=self.disgruntled, salary=self.salary,
-                    staff_traits=self.staff_traits, known=self.known)
+                    staff_traits=self.staff_traits, known=self.known, unit_reviews=self.unit_reviews)
 
     @classmethod
     def from_dict(cls, d):
         c = cls(d['name'], d['role'], d['rating'], d['prestige'], d['specialty'], d['age'], d.get('years', 1), d.get('team'), d.get('traits'))
         c.history = d.get('history', []); c.unit_ranks = d.get('unit_ranks', []); c.hc_candidate = d.get('hc_candidate', False); c.disgruntled = d.get('disgruntled', 0); c.salary = d.get('salary', 0.0)
         c.staff_traits = d.get('staff_traits'); c.known = d.get('known') or []
+        c.unit_reviews = d.get('unit_reviews') or []
         return c
 
 
@@ -277,18 +279,99 @@ def scout_quality(team):
 
 
 # ------------------------------------------------------------ the season
+def _completed_staff_week(league, abbr):
+    """Transactions occur between games; record which games already happened."""
+    return max((int(w) for w, a, h, ap, hp in getattr(league, 'schedule', ())
+                if 1 <= w <= 18 and abbr in (a, h) and ap is not None and hp is not None), default=0)
+
+
+def coach_season_evidence(league, year):
+    """Annual evidence follows each coach's actual regular-season assignments.
+
+    Six games and usable play counts are needed for a performance consequence.
+    A short stint still appears in his history, without becoming a firing rank.
+    Legacy regular-season moves lack precise boundaries: their logged week is
+    treated as completed, matching the CPU's after-game review convention.
+    """
+    import collections
+    roles = ('oc', 'dc', 'st')
+    games = sorted((g for g in getattr(league, 'schedule', ())
+                    if 1 <= g[0] <= 18 and g[3] is not None and g[4] is not None), key=lambda g: g[0])
+    moves = [x for x in getattr(league, 'transactions', ())
+             if x.get('year') == year and x.get('phase') == 'regular'
+             and x.get('kind') in ('staff_in', 'staff_out') and x.get('role') in roles]
+    rows = {}
+    for abbr, team in league.teams.items():
+        for role in roles:
+            coach = (getattr(team, 'staff', None) or {}).get(role)
+            name = coach.name if coach else None
+            events = [x for x in moves if x.get('team') == abbr and x['role'] == role]
+            # Walk back from the current room to its opening-day occupant.
+            for event in reversed(events):
+                name = event.get('name') if event['kind'] == 'staff_out' else None
+            events = sorted(enumerate(events), key=lambda pair: (pair[1].get('after_week', pair[1].get('week', 0)), pair[0]))
+            cursor = 0
+            for week, away, home, _ap, _hp in games:
+                if abbr not in (away, home): continue
+                while cursor < len(events):
+                    event = events[cursor][1]
+                    if event.get('after_week', event.get('week', 0)) >= week: break
+                    name = event.get('name') if event['kind'] == 'staff_in' else None
+                    cursor += 1
+                if not name: continue
+                key = (name, role)
+                row = rows.setdefault(key, dict(year=year, name=name, role=role, games=[],
+                                                recorded=0, totals=collections.Counter(), rank=None))
+                row['games'].append(dict(team=abbr, week=week))
+                book = (getattr(league, 'game_stats', None) or {}).get(f'{year}-{week}-{home}-{away}') or {}
+                if any(line.get('team') == abbr for line in book.values()):
+                    row['recorded'] += 1
+                    row['totals'].update(_unit_book_totals(book, abbr))
+    values = {role: {} for role in roles}
+    for key, row in rows.items():
+        totals = row['totals']; role = row['role']
+        complete = row['recorded'] == len(row['games'])
+        row['credible'] = complete and len(row['games']) >= 6
+        score = None
+        if role == 'oc':
+            n = totals['pass_plays'] + totals['rush_plays']
+            if n >= 240: score = (totals['pass_epa'] + totals['rush_epa']) / n
+        elif role == 'dc':
+            if totals['def_plays'] >= 240: score = totals['def_epa'] / totals['def_plays']
+        elif totals['fg_att'] >= 10 and totals['punts'] >= 20:
+            score = totals['fg_made']/totals['fg_att'] + .001*totals['punt_net_yds']/totals['punts']
+        row['credible'] = row['credible'] and score is not None
+        if row['credible']: values[role][key] = score
+        row['value'] = score
+        row.pop('totals')
+    for role, peers in values.items():
+        # Keep the established 32-club interpretation when turnover creates
+        # extra coaches. Ties share a rank; missing peers do not mean last place.
+        if len(peers) < 20: continue
+        for key, value in peers.items():
+            better = sum(other > value for other in peers.values())
+            rows[key]['rank'] = 1 + round(31 * better / max(1, len(peers)-1))
+    return rows
+
+
 def season_end(league, unit_ranks_by_team):
     """Record each coordinator's unit rank; move prestige; age everyone; contracts run down."""
+    evidence = coach_season_evidence(league, league.year)
     for abbr, team in league.teams.items():
         st = getattr(team, 'staff', None) or {}
-        ranks = unit_ranks_by_team.get(abbr, {})
         hc_prestige = float(getattr(team.gm, 'prestige', 50)) if team.gm is not None else 50.0
         for role, c in st.items():
             if c is None: continue                  # a hole a head-coaching hire just left; the carousel fills it
-            r = ranks.get(role)
+            review = evidence.get((c.name, role))
+            # Never substitute whole-team production for missing tenure evidence.
+            r = review.get('rank') if review else None
+            exposure = min(1., len(review['games']) / 17.) if review else 0.
+            if role in ('oc', 'dc', 'st'):
+                c.unit_reviews.append(review or dict(year=league.year, name=c.name, role=role,
+                    games=[], recorded=0, credible=False, value=None, rank=None))
             if r is not None:
                 c.unit_ranks.append(int(r))
-                c.prestige = float(np.clip(c.prestige + (8 if r <= 4 else 4 if r <= 8 else -3 if r >= 25 else 0) + (0.25 * (16.5 - r)), 5, 95))
+                c.prestige = float(np.clip(c.prestige + exposure * ((8 if r <= 4 else 4 if r <= 8 else -3 if r >= 25 else 0) + .25 * (16.5 - r)), 5, 95))
             # THE RATING MOVES. A career arc: a young coordinator grows when his
             # unit is above average, more under a head coach with a name; a man
             # in his late forties holds; from the mid-fifties he loses a point a
@@ -298,15 +381,15 @@ def season_end(league, unit_ranks_by_team):
             if c.disgruntled:
                 d = 0.0
             elif c.age < 45:
-                d = (1.5 if good else 0.5) + 0.6 * max(0.0, (hc_prestige - 70) / 30.0) - (1.5 if bad else 0.0)
+                d = .5 + (exposure if good else 0.) + 0.6 * max(0.0, (hc_prestige - 70) / 30.0) - (1.5 * exposure if bad else 0.0)
             elif c.age < 55:
-                d = (0.4 if good else 0.0) - (1.0 if bad else 0.0)
+                d = ((0.4 if good else 0.0) - (1.0 if bad else 0.0)) * exposure
             else:
-                d = -0.6 - (0.7 if bad else 0.0)
+                d = -0.6 - (0.7 * exposure if bad else 0.0)
             import staff_traits as STR
             if STR.has(c, 'riser') and d > 0: d *= 1.5
             c.rating = float(np.clip(c.rating + d, 30, 95))
-            if STR.has(c, 'riser') and r is not None and r <= 16: c.prestige = float(np.clip(c.prestige + 2.0, 5, 95))
+            if STR.has(c, 'riser') and r is not None and r <= 16: c.prestige = float(np.clip(c.prestige + 2.0 * exposure, 5, 95))
             c.age += 1; c.years -= 1
             if c.disgruntled and c.disgruntled < league.year: c.disgruntled = 0
             if c.role in ('oc', 'dc') and c.prestige >= 72 and c.rating >= 70:
@@ -324,6 +407,14 @@ def season_end(league, unit_ranks_by_team):
     league.staff_pool = [c for c in getattr(league, 'staff_pool', []) if c.age < 66]
     for c in league.staff_pool:
         c.age += 1; c.prestige = float(np.clip(c.prestige * 0.96 + 2.0, 5, 95))
+        # Departed coordinators retain their own stint as career evidence, too.
+        review = evidence.get((c.name, c.role))
+        if review:
+            c.unit_reviews.append(review)
+            if review['rank'] is not None:
+                r = int(review['rank']); c.unit_ranks.append(r)
+                exposure = min(1., len(review['games']) / 17.)
+                c.prestige = float(np.clip(c.prestige + exposure * ((8 if r <= 4 else 4 if r <= 8 else -3 if r >= 25 else 0) + .25 * (16.5-r)), 5, 95))
 
 
 def unit_ranks(league, year):
@@ -410,7 +501,11 @@ def carousel(league, rng, new_head_coaches=(), verbose=False, *, season_records=
         if abbr == user or abbr in new_head_coaches: continue
         for role in ('oc', 'dc', 'st'):
             c = team.staff.get(role)
-            if c is not None and len(c.unit_ranks) >= 2 and all(r >= 25 for r in c.unit_ranks[-2:]) and rng.random() < 0.7:
+            reviews = c.unit_reviews if c is not None else []
+            enough = (not reviews or (reviews[-1].get('rank') is not None
+                      and (len(reviews) < 2 or (reviews[-2].get('rank') is not None
+                           and reviews[-2].get('year') == reviews[-1].get('year') - 1))))
+            if c is not None and enough and len(c.unit_ranks) >= 2 and all(r >= 25 for r in c.unit_ranks[-2:]) and rng.random() < 0.7:
                 to_pool(team, role, 'unit bottom-eight two years running')
 
     # 3. contracts
@@ -715,7 +810,8 @@ def release(league, abbr, role, *, reason='released by the user'):
     if c is None: return dict(ok=False, why='no one in the job')
     c.team = None; c.years = 0; league.staff_pool.append(c); team.staff[role] = None
     clear_expiry_choice(league, abbr, role)
-    league.log('staff_out', team=abbr, role=role, name=c.name, why=reason)
+    league.log('staff_out', team=abbr, role=role, name=c.name, why=reason,
+               after_week=_completed_staff_week(league, abbr))
     __import__('inbox').reconcile(league)
     return dict(ok=True)
 
@@ -733,7 +829,8 @@ def hire(league, abbr, coach_name, years=3, *, reason='hired by the user'):
     clear_expiry_choice(league, abbr, c.role)
     if league.phase == 'regular':
         _reviews(league)['hired'][f'{abbr}:{c.role}'] = int(league.week or 0)
-    league.log('staff_in', team=abbr, role=c.role, name=c.name, why=reason)
+    league.log('staff_in', team=abbr, role=c.role, name=c.name, why=reason,
+               after_week=_completed_staff_week(league, abbr))
     __import__('inbox').reconcile(league)
     return dict(ok=True, name=c.name, role=c.role)
 

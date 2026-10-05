@@ -307,7 +307,15 @@ class Team:
 
     @property
     def prev_win_pct(self):
-        return self.history[-1]['win_pct'] if self.history else 0.5
+        # Closing a season appends its record before the offseason decisions.
+        # That record is still this year's evidence until the league rolls.
+        year = getattr(getattr(self, 'league', None), 'year', self.cap.year)
+        dated = [h for h in self.history if h.get('year') is not None
+                 and int(h['year']) < int(year)]
+        if dated:
+            return max(dated, key=lambda h: int(h['year']))['win_pct']
+        legacy = [h for h in self.history if h.get('year') is None]
+        return legacy[-1]['win_pct'] if legacy else 0.5
 
     @property
     def playoff_drought(self):
