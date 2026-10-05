@@ -281,7 +281,8 @@ def main():
         f=AuditSession.new(team=None,seed=args.seed)
         history=[]
         audit.snapshot(f.L,'initial')
-    base=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+    base=subprocess.check_output(['git','rev-parse','HEAD'],text=True,
+                                 cwd=Path(__file__).resolve().parent).strip()
     audit.folder.joinpath('methodology.json').write_text(json.dumps(dict(seed=args.seed,years=args.years,
         base=base,driver='Session.advance / all-CPU (human UI methods omitted)',all_32_cpu=True,
         python_hash_seed=os.getenv('PYTHONHASHSEED'),networkx=nx.__version__,
