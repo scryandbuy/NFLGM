@@ -104,12 +104,22 @@ class RealOvertimeTests(unittest.TestCase):
                          json.loads(json.dumps(loaded.runner.states['GB'].plan.__dict__)))
         observed = []
         import game
-        original_ot = game.play_overtime
+        original_ot = game.overtime_steps
         def overtime(*args, **kwargs):
             observed.append(copy.deepcopy(r.states['GB'].plan.__dict__))
             return original_ot(*args, **kwargs)
         expected = copy.deepcopy(r.states['GB'].plan.__dict__)
-        with patch('game.play_overtime', side_effect=overtime): s._finish_live()
+        with patch('game.overtime_steps', side_effect=overtime):
+            r.live_step('resume')
+            self.assertFalse(r.live['done'])
+            self.assertEqual(r.live['at'], 'snap')
+            self.assertEqual(r.live['current'].quarter, 5)
+            r.live_step('play')
+            self.assertFalse(r.live['done'])
+            r.live_step('drive')
+            self.assertEqual(r.live['at'], 'drive')
+            self.assertFalse(r.live['done'])
+            s._finish_live()
         self.assertEqual(observed[0], expected)
         loaded._finish_live()
         self.assertEqual(r.live['score'], loaded.runner.live['score'])

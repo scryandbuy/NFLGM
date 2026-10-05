@@ -538,7 +538,9 @@ class SeasonRunner(StandingsView):
             while True:
                 ev = next(gen)
                 kind = ev[0]
-                if kind == 'snap':
+                if kind == 'pos':
+                    lv['pos'] = ev[1]
+                elif kind == 'snap':
                     lv['current'] = ev[1]; lv['at'] = 'snap'
                     if mode == 'play': break
                 elif kind == 'drive':
@@ -637,7 +639,7 @@ class SeasonRunner(StandingsView):
             pts = int(getattr(lv['current'], 'points', 0) or 0)
             if pts > 0: score[lv['pos']] += pts
             elif pts < 0: score['away' if lv['pos'] == 'home' else 'home'] += abs(pts)
-        return dict(home=score['home'], away=score['away'], drives=drives, overtime=(lv['at'] == 'overtime' or (lv['res'] or {}).get('overtime')), env=(lv['res'] or {}).get('env'), live=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], half_recs=lv.get('ot_recs' if lv.get('adjustment_period') == 'overtime' else 'half_recs') or [], adjustment_period=lv.get('adjustment_period'))
+        return dict(home=score['home'], away=score['away'], drives=drives, overtime=(lv.get('adjustment_period') == 'overtime' or (lv['res'] or {}).get('overtime')), env=(lv['res'] or {}).get('env'), live=not lv['done'], at=lv['at'], halftime_open=lv['halftime_open'], half_recs=lv.get('ot_recs' if lv.get('adjustment_period') == 'overtime' else 'half_recs') or [], adjustment_period=lv.get('adjustment_period'))
 
     def _record(self, home, away, week, res, book, playoffs=False):
         import gameplan_week as GW

@@ -3200,9 +3200,18 @@ def _terminal_kickoff(dr, kick, before, after, possession, quarter):
     LAST_KICKOFF.pop('r', None)
 
 
-def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
+def play_overtime(*args, **kwargs):
+    """Run overtime to completion using the same possession logic as live play."""
+    gen = overtime_steps(*args, **kwargs, live=False)
+    try:
+        while True: next(gen)
+    except StopIteration as done:
+        return done.value
+
+
+def overtime_steps(home, away, score, rng, resolve_fn, call_off, call_def,
                   rate_fn, home_state=None, away_state=None, week=1,
-                  playoffs=False, first='away', book=None):
+                  playoffs=False, first='away', book=None, live=True):
     """
     2026 NFL overtime (Rule 16).
 
@@ -3248,12 +3257,18 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
         # Overtime is played with maximum aggression - nobody protects a
         # lead, everyone goes for it on fourth down. Ties are real but rare:
         # 0.29% of all games, roughly 1 in 20 overtimes.
-        dr = run_drive(off, deff, start, clock, 5, sd, rng, resolve_fn,
+        drive_args = (off, deff, start, clock, 5, sd, rng, resolve_fn,
                        call_off, call_def, rate_fn, 0.98, book, o_st, d_st, week,
-                       timeouts=timeouts, pos=pos,
+                       )
+        drive_kwargs = dict(timeouts=timeouts, pos=pos,
                        must_score=had['away' if pos == 'home' else 'home'] and sd < 0,
                        try_allowed=not (had['away' if pos == 'home' else 'home'] and sd + 6 > 0),
                        start_state=resume_state)
+        if live:
+            yield ('pos', pos)
+            dr = yield from drive_steps(*drive_args, **drive_kwargs)
+        else:
+            dr = run_drive(*drive_args, **drive_kwargs)
         resume_state = None
         drives.append((pos, dr))
         PST.record_defense(d_st, dr)
@@ -3269,6 +3284,8 @@ def play_overtime(home, away, score, rng, resolve_fn, call_off, call_def,
             # possession ends it immediately - the one exception to both
             # teams getting the ball
             score[other] += abs(dr.points)
+        yield ('drive', pos, dr, dict(score))
+        if dr.points < 0:
             if dr.result == 'Defensive touchdown':
                 return score, drives, 'defensive_touchdown_walkoff'
             if not had[other]:
@@ -3495,7 +3512,7 @@ def game_steps(home, away, rng, resolve_fn, call_off, call_def, rate_fn,
     if score['home'] == score['away']:
         yield ('overtime', dict(score))
         first = 'away' if rng.random() < 0.5 else 'home'
-        score, ot_drives, ot = play_overtime(
+        score, ot_drives, ot = yield from overtime_steps(
             home, away, score, rng, resolve_fn, call_off, call_def, rate_fn,
             home_state, away_state, week, playoffs, first, book=book)
         drives += ot_drives

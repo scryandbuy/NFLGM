@@ -752,7 +752,7 @@ function renderGameDay(v) {
       el('div', { class: 'side home-side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, showAbbr(g.home.abbr)), gameDayTeamStatus(g.home, rec(g.home_rec), indicators), el('div', { class: 'score', style: 'margin-right:auto' }, hs)));
     lineScore.innerHTML = '';
     if (g.quarters && g.quarters[g.home.abbr]) {
-      const Q = g.quarters; const upto = final ? 5 : currentQuarter; const hasOT = Q[g.home.abbr][4] || Q[g.away.abbr][4];
+      const Q = g.quarters; const upto = final ? 5 : currentQuarter; const hasOT = currentQuarter >= 5 || Q[g.home.abbr][4] || Q[g.away.abbr][4];
       lineScore.append(el('tr', {}, el('th', {}, ''), ...['Q1', 'Q2', 'Q3', 'Q4'].concat(hasOT ? ['OT'] : []).map(q => el('th', {}, q)), el('th', {}, 'T')));
       for (const ab of [g.away.abbr, g.home.abbr]) lineScore.append(el('tr', {}, el('td', {}, showAbbr(ab)), ...Q[ab].slice(0, hasOT ? 5 : 4).map((x, qi) => el('td', {}, final || qi < upto - 1 ? x : qi === upto - 1 ? (ab === g.home.abbr ? hs : as_) - Q[ab].slice(0, qi).reduce((a, b) => a + b, 0) : '')), el('td', { style: 'font-weight:700' }, ab === g.home.abbr ? hs : as_)));
     }
@@ -782,7 +782,7 @@ function renderGameDay(v) {
     body.innerHTML = '';
     g.drives.slice(0, shown).forEach((d, di) => {
       const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
-      body.append(el('div', { class: 'drive' }, (last && shownPlays != null) ? `Drive ${d.n} · ${d.off} · Q${d.quarter}` : `Q${d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`));
+      body.append(el('div', { class: 'drive' }, (last && shownPlays != null) ? `Drive ${d.n} · ${d.off} · ${d.quarter >= 5 ? 'OT' : 'Q' + d.quarter}` : `${d.quarter >= 5 ? 'OT' : 'Q' + d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`));
       for (const p of plays) {
         if (!p.text) continue;
         if (p.nullified && ['key', 'score'].includes(filt.mode)) continue;
