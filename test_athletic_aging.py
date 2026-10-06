@@ -2,6 +2,12 @@ import copy,unittest
 import numpy as np
 import regression as R
 from test_regression_aging import player
+
+def prior_bounded_loss(pos, age, longevity, roll, attr, old_loss):
+ years=max(0,int(age)-R.plateau_end(pos))
+ if not years:return 0.
+ loss=min(1.8,.35+.22*(years-1))*float(np.clip(1/max(.35,longevity),.8,1.2))*float(np.clip(roll,.65,1.35))*(1.1 if attr=='accel_rating' else 1.)
+ return min(max(0.,old_loss),loss,2.25 if attr=='accel_rating' else 2.)
 def previous_decline(p,rng):
  f=R.curve_factor(p.pos,p.age)
  if f>=1:return
@@ -38,4 +44,25 @@ class AthleticAgingTests(unittest.TestCase):
   R.decline(reference,reference_rng)
   self.assertEqual(current.ratings,reference.ratings)
   self.assertEqual(current_rng.bit_generator.state,reference_rng.bit_generator.state)
+ def test_targeted_curve_preserves_other_positions_and_never_exceeds_prior_bound(self):
+  for pos in ('WR','CB','HB','FS','SS','QB','TE','LT'):
+   for age in (24,27,29,31,34,38):
+    for roll in (.15,.65,.7,.85,1.,1.35,2.2):
+     for attr in ('speed_rating','accel_rating'):
+      before=prior_bounded_loss(pos,age,.8,roll,attr,4.)
+      after=R.athletic_loss(pos,age,.8,roll,attr,4.)
+      self.assertGreaterEqual(after,0)
+      self.assertLessEqual(after,before+1e-12)
+      if pos not in ('WR','CB'):self.assertEqual(after,before)
+ def test_flat_years_and_different_aging_paths(self):
+  for pos in ('WR','CB'):
+   for age in (28,31,34,36):
+    self.assertEqual(R.athletic_loss(pos,age,.8,.6,'speed_rating',5.),0)
+    ordinary=R.athletic_loss(pos,age,1.,1.,'speed_rating',5.)
+    early=R.athletic_loss(pos,age,.7,1.3,'speed_rating',5.)
+    durable=R.athletic_loss(pos,age,1.5,.9,'speed_rating',5.)
+    self.assertLess(durable,ordinary)
+    self.assertGreater(early,ordinary)
+   self.assertLess(R.athletic_loss(pos,31,1.,1.,'speed_rating',5.),
+                   R.athletic_loss(pos,36,1.,1.,'speed_rating',5.))
 if __name__=='__main__':unittest.main()

@@ -226,7 +226,7 @@ class Birthdays(unittest.TestCase):
         PA.offseason(L, 2)
         self.assertEqual(before, RT.chance(p, ovr=80))
 
-    def test_regression_uses_next_season_reference_once_and_preserves_prospects(self):
+    def test_regression_uses_calendar_age_once_and_preserves_prospects(self):
         L, p = self.make('1995-11-05')
         prospect = player('next', 'HB', 22)
         L.players['next'] = prospect; L.next_class = [prospect]
@@ -244,13 +244,14 @@ class Birthdays(unittest.TestCase):
         RG.run(restored, rng, tick_age=False)
         self.assertEqual(restored.player(p.pid).ratings, ratings)
 
-    def test_annual_review_reference_does_not_depend_on_birthday_passage(self):
+    def test_annual_review_uses_current_age_not_upcoming_season_age(self):
         L, p = self.make('2001-11-05')
         PA.offseason(L, 2)
-        expected = PA.age_on(p.birth_date, date(2029, 9, 1))
+        expected = PA.age_on(p.birth_date, date.fromisoformat(L.game_date))
         with patch.object(RG, 'decline', return_value=0) as decline:
             RG.run(L, np.random.default_rng(1), tick_age=False)
         self.assertEqual(decline.call_args.kwargs['age'], expected)
+        self.assertNotEqual(expected, PA.age_on(p.birth_date, date(2029, 9, 1)))
 
     def test_session_advance_updates_to_next_stop_without_award_age_tick(self):
         import session as SS

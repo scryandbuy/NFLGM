@@ -75,9 +75,9 @@ POS_GROUP = {
 DAMPING = 0.17
 # The same men tracked over three franchise seasons lost speed at -0.9 a year
 # at 25-27 and -2.3 a year at 28-30, and the league's starter-level speed fell
-# four points in three years. Real men lose roughly half that. Physical
-# attributes now take the decline at PHYS_DAMP of the fitted rate; the skill
-# and mental attributes keep the fitted damping, since their movement matched.
+# four points in three years. PHYS_DAMP is a gameplay calibration, not a
+# measured conversion from age to sprint speed. Speed and acceleration also
+# have their own rating-point bounds in athletic_loss below.
 PHYS_DAMP = 0.55
 PHYS_GROUP = {'speed_rating', 'accel_rating', 'agility_rating', 'change_of_direction_rating', 'jump_rating', 'stamina_rating', 'strength_rating'}
 
@@ -181,7 +181,19 @@ def athletic_loss(pos, age, longevity, annual_roll, attribute, old_loss):
     variation = float(np.clip(annual_roll, .65, 1.35))
     acceleration = attribute == 'accel_rating'
     loss = baseline * persistence * variation * (1.1 if acceleration else 1.0)
-    return min(max(0., old_loss), loss, 2.25 if acceleration else 2.0)
+    prior_bound = min(max(0., old_loss), loss, 2.25 if acceleration else 2.0)
+    if pos not in ('WR', 'CB'):
+        return prior_bound
+    # Rating-point design targets, not measured sprint-speed percentages.
+    # Receivers/corners can retain their burst into their early thirties.
+    # Later decline still accelerates, with the previous annual limit intact.
+    baselines = (.18, .28, .42, .58, .78, 1.0, 1.22, 1.44, 1.65, 1.8)
+    baseline = baselines[min(years - 1, len(baselines) - 1)]
+    # Reuse the same annual draw: roughly one year in five has no speed/burst
+    # loss. Do not introduce extra draws or guarantee every veteran loses pace.
+    variation = float(np.clip((annual_roll - .70) / .30, 0., 1.65))
+    loss = baseline * persistence * variation * (1.1 if acceleration else 1.0)
+    return min(prior_bound, loss)
 
 
 def decline(player, rng, age=None):
@@ -239,7 +251,7 @@ def tick_ages(league):
 
 def run(league, rng, verbose=False, record_for=None, tick_age=True):
     """
-    Apply annual physical decline at the next season's reference age.
+    Apply annual physical decline at the player's current calendar age.
     Birthday ages follow the calendar; standalone legacy models still support
     an annual age tick. Managed leagues record each completed review once.
 
@@ -262,15 +274,13 @@ def run(league, rng, verbose=False, record_for=None, tick_age=True):
             continue
         mine = record_for is not None and p.team == record_for
         before_r = dict(p.ratings); before_o = p.ovr
-        # Annual decline uses the coming season's September 1 age, not the
-        # arbitrary date his club reviews him or his birthday month.
+        # Review the player who exists today, without aging him forward to
+        # September. Development cost age remains a separate seasonal value.
         if managed:
-            from datetime import date
             import player_age as PA
             PA.initialize_player(p, league)
-            lost = decline(p, rng, age=PA.age_on(p.birth_date, date(league.year + 1, 9, 1)))
-        else:
-            lost = decline(p, rng)
+        review_age = float(p.age)
+        lost = decline(p, rng, age=review_age)
         changed = {k: (round(float(before_r[k]), 1), round(float(p.ratings[k]), 1)) for k in p.ratings if round(float(before_r[k]), 1) != round(float(p.ratings[k]), 1)}
         if mine:
             rec[p.pid] = dict(before=round(float(before_o), 1), after=round(float(p.ovr), 1), lost=round(float(before_o - p.ovr), 1), attrs=changed, age=int(p.age),
@@ -280,7 +290,8 @@ def run(league, rng, verbose=False, record_for=None, tick_age=True):
             moved.append((p, lost))
             league.log('regress', pid=p.pid, pos=p.pos,
                        age=round(p.age, 1), lost=round(lost, 2),
-                       before=round(float(before_o), 1), after=round(float(p.ovr), 1), attrs=changed)
+                       before=round(float(before_o), 1), after=round(float(p.ovr), 1), attrs=changed,
+                       review_age=review_age, regression_model='athletic-aging-v2')
     if record_for is not None:
         league.__dict__.setdefault('regression', {})[str(league.year)] = rec
     if managed:
