@@ -140,6 +140,16 @@ def mail_layout(message):
     import copy
     import re
     payload = dict(message.get('payload') or {})
+    if message.get('kind') == 'contract_year':
+        # Render saved announcements from their original contract snapshot.
+        # Never substitute today's player ratings or salary into old mail.
+        pattern = r"([^\n|]+?) \(([^,]+), (\d+), age (\d+)\) is in the last year of his deal at (\$[\d.]+m)\. He can be extended now; his agent will price him at the market\."
+        records = re.findall(pattern, str(message.get('body') or ''))
+        if records:
+            rows = [[dict(text=value.strip(), mentions=reference_spans(value.strip(), message.get('entities') or [], []))
+                     for value in record] for record in records]
+            payload.update(mail_sections=[dict(title='', columns=['Player', 'Pos', 'OVR', 'Age', 'Annual Salary'], rows=rows)],
+                           mail_intro=dict(text='These players are entering the final year of their contracts and can negotiate extensions.', mentions=[]))
     coaching = (str(message.get('subject', '')).startswith('Coaching carousel summary')
                 or message.get('subject') == 'Coaching Changes')
     if coaching and payload.get('mail_sections'):

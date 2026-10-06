@@ -57,4 +57,20 @@ class AdvanceDigests(unittest.TestCase):
         IB.reconcile(self.L)
         self.assertFalse(IB.is_decision(message))
 
+    def test_saved_final_year_notices_keep_contract_snapshots_in_one_table(self):
+        for name, ovr, salary in (('Avery Stone', 84, 14.5), ('Riley Cole', 78, 8.2)):
+            IB.post(self.L, 'contract_year', f'{name} enters his final year',
+                    f'{name} (WR, {ovr}, age 27) is in the last year of his deal at ${salary:.1f}m. '
+                    'He can be extended now; his agent will price him at the market.',
+                    sender='GB', payload={'link': 'player:old-save'})
+        D.consolidate(self.L, set())
+        self.assertEqual(len(self.L.inbox), 1)
+        layout = IB.mail_layout(self.L.inbox[0])
+        self.assertEqual(len(layout['mail_sections']), 1)
+        section = layout['mail_sections'][0]
+        self.assertEqual(section['columns'], ['Player', 'Pos', 'OVR', 'Age', 'Annual Salary'])
+        self.assertEqual([[cell['text'] for cell in row] for row in section['rows']],
+                         [['Avery Stone', 'WR', '84', '27', '$14.5m'],
+                          ['Riley Cole', 'WR', '78', '27', '$8.2m']])
+
 if __name__=='__main__': unittest.main()

@@ -58,7 +58,7 @@ def consolidate(league, before):
             if pid: pids.append(pid)
             if layout.get('mail_sections'):
                 intro = layout.get('mail_intro')
-                if intro and intro.get('text'):
+                if intro and intro.get('text') and topic != 'Expiring Contracts':
                     sections.append(dict(title='', columns=[], rows=[[copy.deepcopy(intro)]]))
                 for section in layout['mail_sections']:
                     section = copy.deepcopy(section)
@@ -77,6 +77,8 @@ def consolidate(league, before):
             if not section['title'] and not section['columns'] and merged and not merged[-1]['title'] and not merged[-1]['columns']:
                 merged[-1]['rows'].extend(section['rows'])
             else: merged.append(section)
+        if topic == 'Expiring Contracts' and merged and all(s['columns'] == merged[0]['columns'] and s['columns'] for s in merged):
+            merged = [dict(title='', columns=merged[0]['columns'], rows=[row for s in merged for row in s['rows']])]
         link = {'League Transactions':'league:transactions', 'Your Roster Moves':'club',
                 'Waiver Results':'personnel:waivers', 'Injury Update':'club:depth',
                 'Coaching Changes':'league:coaching', 'Rookie Evaluation':'draft:results',
@@ -84,7 +86,7 @@ def consolidate(league, before):
         msg = IB.post(league, 'contract_year' if topic == 'Expiring Contracts' else 'league' if topic in ('League Transactions','Coaching Changes') else 'club',
                       topic, '', sender=messages[0].get('sender'),
                       payload=dict(link=link, digest_pids=pids))
-        msg['payload'].update(mail_sections=merged, mail_intro=dict(text='', mentions=[]))
+        msg['payload'].update(mail_sections=merged, mail_intro=dict(text='These players are entering the final year of their contracts and can negotiate extensions.' if topic == 'Expiring Contracts' else '', mentions=[]))
         msg['entities'] = entities
         msg['body'] = '\n\n'.join('\n'.join([s['title']] + [' | '.join(c['text'] for c in row) for row in s['rows']]).strip() for s in merged)
         msg['mentions']['body'] = IB.reference_spans(msg['body'], entities, [])

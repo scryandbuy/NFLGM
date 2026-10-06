@@ -647,8 +647,8 @@ function renderInbox(v) {
     else if (cur.decide && m.kind === 'offer_sheet') pane.append(offerSheetActions(cur.id, reload));
     else if (cur.decide && m.kind === 'roster' && m.link) pane.append(el('div',{class:'acts'},el('a',{class:'btn go',href:linkHash(m.link)},'Manage Roster →'),el('a',{class:'btn quiet',href:'#club/ps'},'View Practice Squad')));
     else if (cur.decide) {
-      const destination = m.link ? linkHash(m.link) : ({ staff:'#frontoffice/staff', gameplan:'#gameplan/week', game_plan:'#gameplan/week', exit:'#frontoffice/exit', contract_year:'#personnel/extensions', offer_sheet:'#personnel/extensions', match_request:'#personnel/fa' })[m.kind];
-      if (destination) pane.append(el('div', { class: 'acts' }, el('a', { class: 'btn go', href: destination }, m.kind === 'match_request' || m.kind === 'offer_sheet' ? 'View Player' : 'Handle Decision')));
+      const destination = m.kind === 'contract_year' ? '#personnel/extensions' : m.link ? linkHash(m.link) : ({ staff:'#frontoffice/staff', gameplan:'#gameplan/week', game_plan:'#gameplan/week', exit:'#frontoffice/exit', contract_year:'#personnel/extensions', offer_sheet:'#personnel/extensions', match_request:'#personnel/fa' })[m.kind];
+      if (destination) pane.append(el('div', { class: 'acts' }, el('a', { class: 'btn go', href: destination }, m.kind === 'match_request' || m.kind === 'offer_sheet' ? 'View Player' : m.kind === 'contract_year' ? 'Review Extensions' : 'Handle Decision')));
     }
     else if (m.link && !(m.link.startsWith('player:') && hasPlayerReference(m,m.link.slice(7))) && !(m.kind === 'negotiation' && /signs|signed|agreed|declined|walked away|ended|fell through/i.test(m.subject + ' ' + (m.body || '').slice(0, 60)))) pane.append(el('div', { class: 'acts', style: 'margin-top:16px' }, el('a', { class: 'btn' + (m.kind === 'negotiation' ? ' go' : ''), href: linkHash(m.link) }, m.kind === 'negotiation' ? 'Continue the Negotiation' : 'Go There')));
   } else pane.append(el('div', { class: 'empty' }, 'Select a message.'));
