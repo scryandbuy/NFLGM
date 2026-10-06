@@ -32,6 +32,7 @@ MODULES.append('qb_contact')
 MODULES.append('fumble_resolution')
 MODULES.append('incremental_save')
 MODULES.append('late_game')
+MODULES.append('deception_execution')
 DATA = ['newgen_shape.json', 'league_seed_2026.csv', 'schedule_2026.csv', 'cfb27_ratings.csv', 'aging_curves.json', 'pick_values.json', 'wp_model.json', 'production_scores.json', 'free_agent_pool.csv', 'original_player_name_hashes.json']
 os.makedirs(OUT, exist_ok=True)
 def _check_imports():

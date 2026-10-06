@@ -311,8 +311,23 @@ reused only while roster/contracts/phase/pending commitments are unchanged.
             weight = 300. if i == 0 else 100.
             risk += (weight * concrete + 40. * cushion) / max(1., a['limit']) / (i + 1)
         tolerance = 2. + 4. * _trait(team, 'aggression') + max(0., float(gain)) * .5
-        result.update(approved=risk <= tolerance, forecast_risk=risk,
+        result.update(approved=bool(risk <= tolerance), forecast_risk=risk,
                       reason='approved_trade_risk' if risk <= tolerance else 'trade_financial_preference')
+        return result
+    if action == 'veteran_market':
+        risk = 0.
+        for i, (b, a) in enumerate(zip(before['years'], after['years'])):
+            if i == 0 and a['raw_room'] < -EPS and a['raw_room'] < b['raw_room'] - EPS:
+                result.update(approved=False, reason='legal_cap_failure')
+                return result
+            concrete = max(0., max(0., -a['funded_room']) - max(0., -b['funded_room']))
+            cushion = max(0., max(0., a['soft_reserve'] - max(0., a['funded_room']))
+                              - max(0., b['soft_reserve'] - max(0., b['funded_room'])))
+            risk += (300. * concrete + 60. * cushion) / max(1., a['limit']) / (i + 1)
+        tolerance = max(0., float(gain)) * (.35 + .45 * _trait(team, 'aggression'))
+        tolerance /= 1. + .5 * _trait(team, 'patience')
+        result.update(approved=bool(risk <= tolerance), forecast_risk=risk,
+                      reason='approved_upgrade_risk' if risk <= tolerance else 'veteran_financial_preference')
         return result
     benefit = max(0.,float(gain))
     # Package-score units, already used by roster_needs candidate valuation.

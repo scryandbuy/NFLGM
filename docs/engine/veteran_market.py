@@ -5,6 +5,7 @@ Reviews are calendar actions, never page reads. The saved checkpoint prevents a
 reload/repeated advance from becoming another shopping opportunity.
 """
 import copy
+import fa_demand as FD
 
 import market as MK
 import roster_needs as RN
@@ -179,8 +180,7 @@ def replacement_read(league, team, incoming, outgoing, contract, gain, report,
 
 def _proposal(league, team, player, quote, report, recent, budget, comparisons, *, cache=None):
     """Prepare an entire funded move before accepting or releasing anybody."""
-    price = round(max(.70 * quote['apy'], MS.minimum_salary(player.accrued or 0,
-                                                          CAP.get(league.year, 301.2))), 3)
+    price = FD.asking(league, player, .70 * quote['apy'])
     # A full roster considers coverage-safe replacements at the relevant job.
     departures = (q for q in PS._room_candidates(league, team, player) if q.pid not in recent) \
         if len(team.active()) >= 53 else iter((None,))
@@ -229,8 +229,7 @@ def _proposal(league, team, player, quote, report, recent, budget, comparisons, 
                                            gain, report, quote, cache=cache)
             if not replacement['approved']:
                 continue
-            ask = max(.55 * quote['apy'], MS.minimum_salary(player.accrued or 0,
-                                                           CAP.get(league.year, 301.2)))
+            ask = FD.asking(league, player, .55 * quote['apy'])
             # Consent is a preview: don't initialize hidden preferences merely
             # because a team considered the player.
             preview = copy.copy(player)
@@ -250,8 +249,7 @@ def review(league, rng, stage, week=0, user_team=None):
     """One considered acquisition per club per review, not a signing quota.
 
 Camp and cleared cutdown waivers review every CPU club. In season the existing
-monthly review cadence is staggered by club; real coverage holes get an earlier
-look. Injuries and minimum/squad emergency routes remain available each week.
+weekly review includes every club. Injuries and minimum/squad emergency routes remain available each week.
 """
     if stage not in ('camp', 'wire', 'weekly'):
         raise ValueError('Unknown veteran-market checkpoint')
@@ -278,9 +276,6 @@ look. Injuries and minimum/squad emergency routes remain available each week.
             continue
         if stage == 'weekly':
             if getattr(team, '_moved_week', None) == week:
-                continue
-            short = PS.essential_depth(team, week=week + 1)['shortages']
-            if (week + sum(map(ord, abbr))) % 4 != 0 and not any(short.values()):
                 continue
         report = RN.assess(team)
         teams[abbr] = (report, RN.candidate_gains(team, pool, baseline=report),

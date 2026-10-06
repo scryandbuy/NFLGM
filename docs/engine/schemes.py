@@ -643,7 +643,9 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
                                          'inside_zone', 'draw'])
     # the lean is centred on the identity catalog's average (0.58), so a league of real
     # coaches averages the real 36.5%; a club with no lean plays at the average
-    mo_scale = float(np.exp(1.0 * (float(lean.get('motion', MOTION_NEUTRAL) or MOTION_NEUTRAL) - MOTION_NEUTRAL)))
+    motion_lean = lean.get('motion', MOTION_NEUTRAL)
+    motion_lean = MOTION_NEUTRAL if motion_lean is None else float(motion_lean)
+    mo_scale = float(np.exp(motion_lean - MOTION_NEUTRAL))
     call['motion'] = rng.random() < min(0.75, 0.365 * mo_scale)
     # The neutral coach keeps the calibrated 8.5% rate. Faster and slower
     # coordinators move it, and the drive clock reads this choice.

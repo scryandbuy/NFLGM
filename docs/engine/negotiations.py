@@ -62,6 +62,16 @@ def _threads(league):
             c.setdefault('promises', list(previous.get('promises', [])))
         if t.get('kind') == 'fa_inseason' and t.get('state') not in ('accepted', 'declined', 'expired', 'void'):
             t['years'] = 1
+            import fa_demand as FD
+            p = league.player(t['pid'])
+            if p is not None and not p.team:
+                f = FD.factor(league, p)
+                old = t.get('unsigned_factor', 1.)
+                if f < old:
+                    t['ask'] = FD.asking(league, p, t['ask'] / old)
+                    if t.get('counter'):
+                        t['counter']['apy'] = FD.asking(league, p, t['counter']['apy'] / old)
+                t['unsigned_factor'] = f
             if t.get('counter'): t['counter']['years'] = 1
     return league.negotiations
 
@@ -153,7 +163,8 @@ def open_talks(league, pid, kind='extension'):
         # a Recruiter over his position: he wants to play for that coach, and the ask comes down a little
         import staff as ST
         _pull, ask_mult = ST.recruit_pull(league.teams[league.user_team], p.pos)
-        ask = round(ask * ask_mult, 2)
+        import fa_demand as FD
+        ask = round(FD.asking(league, p, ask * ask_mult), 2)
     mood = ('eager' if s['loyalty'] > 0.62 and s['morale'] >= 45 else 'firm' if s['money'] > 0.62 or s['star'] else 'open')
     line = {'eager': f"{p.name} wants to stay. His agent will move quickly on a fair deal.",
             'firm': f"{p.name}'s agent knows the market for his position and will not go under it.",
@@ -163,6 +174,9 @@ def open_talks(league, pid, kind='extension'):
         t = dict(id=next(_ids), pid=pid, team=p.team if kind == 'extension' else getattr(league, 'user_team', None), kind=kind,
                  state='open', offers=[], patience=PATIENCE, opened=_clock(league), opened_year=league.year, ask=round(ask, 2), years=years,
                  mood=mood, due=None, counter=None, rival=None, match_rounds=0, broken_until=0)
+        if kind == 'fa_inseason':
+            import fa_demand as FD
+            t['unsigned_factor'] = FD.factor(league, p)
         _threads(league).append(t)
         if kind == 'extension': t['discount'] = tm['discount']
     if kind == 'fa_offseason':

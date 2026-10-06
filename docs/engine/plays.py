@@ -753,7 +753,9 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     ybc = S.box_run_contact(ybc, def_call['box'], RUN_BASE, RUN_NOISE)
     advantage = S.run_scheme_multiplier(scheme, def_call['front'], ytg, def_call['box'])
     advantage /= S.FRONTS[def_call['front']]['run_fit']
-    if off_call.get('motion'): advantage *= 1.04
+    if off_call.get('motion'):
+        from deception_execution import motion_run_bonus
+        advantage *= 1.0 + motion_run_bonus(off, deff, rate)
     # A favorable fit helps gains and limits losses; a strong defensive fit
     # cannot soften a loss by multiplying a negative number toward zero.
     ybc = ybc * advantage if ybc >= 0 else ybc / advantage
@@ -1046,6 +1048,14 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
 
     # The quick answer changes the required hold time before the sack roll.
     hold = HOLD_BY_DEPTH.get('screen' if screen else depth, 0.0)
+    pa_benefit = 0.0
+    if off_call.get('play_action'):
+        if hot or screen:
+            off_call = dict(off_call, play_action=False)  # abandon the fake for the immediate answer
+        else:
+            from deception_execution import play_action_effect
+            pa_delay, pa_benefit = play_action_effect(off['qb'], deff, rate, off_call.get('shotgun', False))
+            hold += pa_delay
     import events as E
     adjusted_arrivals = [(pid, t * award_time_scale) for pid, t in p.get('rush_arrivals', [])]
     escape_lanes = E.escape_lane_evidence(deff, rush_plan, adjusted_arrivals,
@@ -1082,13 +1092,7 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
     cmult = S.concept_multiplier(
         concept, def_call.get('coverage') or def_call['shell'])
     if off_call.get('play_action'):
-        # THE FAKE WORKS ON WHOEVER HAS TO HONOR IT. The linebackers and safeties bite by their awareness:
-        # a green second level makes play action worth more, a veteran one takes half of it away
-        second = [d for d in (deff.get('lb') or []) + (deff.get('db') or []) if d.get('pos') in ('MIKE', 'WILL', 'SAM', 'FS', 'SS')] or (deff.get('lb') or [])
-        awr = float(np.mean([rate(d, {'awareness_rating': 1.0}) for d in second])) if second else AVG
-        bite = 1.0 - 1.6 * (awr - DEF_AWR_MEAN)            # 0.88 awareness: bite 0.85; 0.68: 1.17
-        pa_gain = (0.18 if not off_call.get('shotgun') else 0.10) * float(np.clip(bite, 0.4, 1.5))
-        cmult *= 1.0 + pa_gain                             # real: 6.91 ypp vs 3.63 without, league average
+        cmult *= 1.0 + pa_benefit
     dis = S.disguise_penalty(off['qb'], def_call.get('fooled', False), rate)
 
     # The pattern is the concept's receivers, but the BACK is always an outlet
