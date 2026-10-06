@@ -143,15 +143,21 @@ def comeback_clock_budget(deficit):
     return 150.0 * scores_needed + 90.0
 
 
-def multi_score_urgency(seconds, score_diff, quarter, chasing=False):
+def multi_score_urgency(seconds, score_diff, quarter, chasing=False, coach=None):
+    from late_game import pursuing_comeback
+    if quarter == 4 and score_diff < -16 and not pursuing_comeback(seconds, -score_diff, coach):
+        return False
     if quarter not in (3, 4) or score_diff >= -8 or seconds <= 0:
         return False
     return ((chasing or comeback_viable(seconds, -score_diff))
             and seconds <= comeback_clock_budget(-score_diff))
 
 
-def comeback_pace(seconds, score_diff, quarter, *, yardline=75, timeouts=3, tempo=.5):
+def comeback_pace(seconds, score_diff, quarter, *, yardline=75, timeouts=3, tempo=.5, coach=None):
     """Gradual second-half acceleration; seconds is remaining game time."""
+    from late_game import pursuing_comeback
+    if quarter == 4 and score_diff < -16 and not pursuing_comeback(seconds, -score_diff, coach):
+        return 0.0
     if quarter == 4 and -3 <= score_diff < 0 and seconds > 0:
         # Outside comfortable scoring range, budget the drive before the
         # two-minute threshold. In range, leave clock management to the coach.
@@ -179,13 +185,16 @@ def comeback_pace(seconds, score_diff, quarter, *, yardline=75, timeouts=3, temp
     return float(np.clip((start - seconds) / max(1.0, start - full), 0.0, 1.0))
 
 
-def hurry_for_snap(seconds, score_diff, plan=None, call=None, quarter=None, chasing=False):
+def hurry_for_snap(seconds, score_diff, plan=None, call=None, quarter=None, chasing=False, coach=None):
     """Use the coach's clock plan for normal plays and penalty restarts alike."""
+    from late_game import pursuing_comeback
+    if quarter == 4 and score_diff < -16 and not pursuing_comeback(seconds, -score_diff, coach):
+        return False
     if quarter == 4 and score_diff < 0 and chasing:
         return seconds > 0
     if quarter == 4 and score_diff < 0 and not comeback_viable(seconds, -score_diff):
         return False
-    if multi_score_urgency(seconds, score_diff, quarter):
+    if multi_score_urgency(seconds, score_diff, quarter, coach=coach):
         return True
     if plan is not None:
         return plan.get('choice') != 'kneel' and bool(plan.get('hurry', True))
@@ -314,7 +323,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # does a field goal matter? Down 14 it leaves two scores either way; down 10 it makes it one
     need_after_fg = int(np.ceil(-(score_diff + 3) / 8.0)) if score_diff + 3 < 0 else 0
     fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now and -score_diff not in (7, 8) and -(score_diff + 3) not in (7, 8))
-    tying_or_winning_kick = -3 <= score_diff < 0 and secs_left <= 120 and in_range
+    tying_or_winning_kick = -3 <= score_diff < 0 and in_range
     # Keep possession for a still-viable late comeback. Useful tying/winning
     # or score-reducing kicks remain available; decided games returned above.
     if (chasing and secs_left <= 90.0 * need_now + 60.0
@@ -334,12 +343,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
         p_model = 1.0 / (1.0 + np.exp(-(edge - thresh) / 0.015))
         # the model's possession bias is worst deep in its own end; there the league's behavior carries more weight
-        # The general go-rate table mixes every score state. In the last two
-        # minutes, a reachable kick that ties the game is a different choice:
-        # let the score/clock model carry most of the weight while retaining
-        # a smaller coach and matchup vote from the table.
-        w_model = (0.75 if tying_or_winning_kick else
-                   0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.0)
+        w_model = 0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.0
         p_go = w_model * p_model + (1.0 - w_model) * p_table
     else:
         p_go = p_table
@@ -362,6 +366,12 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         p_go = float(min(0.85, p_go * min(1.4, np.exp(0.2 * (-lead_scores) * (1.0 + played)))))   # a deficit pushes a little; the table already carries the trailing club's fourth downs, and the chase rule takes over late
     if chasing and not tying_or_winning_kick:
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
+    if tying_or_winning_kick and secs_left <= 120 and r is not None:
+        # A useful kick does not require a desperation conversion. When the
+        # comparison favors kicking, its advantage should suppress the table's
+        # ordinary fourth-down appetite, while preserving coach differences.
+        if r.get('optimal') == 'field_goal':
+            p_go *= float(np.exp(min(0., float(r.get('go_boost', 0.))) / .06))
     # Near midfield, a defense earning repeated stops can support either
     # calculated aggression or a field-position game. Keep score/clock rules
     # dominant late, and require an actual pin chance for conservative trust.
@@ -866,6 +876,7 @@ SHOT_INT = 0.08             # a throw to the end zone is picked off this often
 SHOT_SHORT = 0.15           # ...or caught short of the goal, in bounds
 HAIL_MARY_LINE = 0.21       # expected points below which the offense kneels instead (before the half)
 PLAY_OOB = 0.30             # the share of completions that get out of bounds when the sideline is the point
+FG_CHANGE_SECONDS = 10.0    # hurried personnel exchange, formation and snap setup
 
 
 def _possession_odds(secs, tos):
@@ -903,7 +914,11 @@ def _shot_td_prob(yardline, offense, defense, rate_fn):
         d = float(np.mean([rate_fn(x, {'zone_cover_rating': .4, 'man_cover_rating': .3, 'speed_rating': .3}) for x in dbs])) if dbs else 0.7
         base *= float(np.clip(1.0 + 1.5 * (o - d), 0.7, 1.3))
     except Exception: pass
-    return float(np.clip(base, 0.02, 0.5))
+    # Beyond ordinary end-zone throwing range, a score needs exceptional
+    # after-catch travel. Do not give an 85-yard attempt the midfield floor.
+    throw_range = 48. + 20. * float(np.clip(rate_fn(offense.get('qb') or {}, {'throw_power_rating': 1.}), 0., 1.))
+    distance_tail = float(np.exp(-max(0., float(yardline) - throw_range) / 12.))
+    return float(np.clip(base, 0.02, 0.5)) * distance_tail
 
 
 def _shot_sack_prob(offense, defense, rate_fn):
@@ -965,12 +980,12 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         # A stopped-clock miss costs 6-8 seconds; reserve 3 seconds to line up.
         # A sack/catch in bounds needs a timeout or time for a field-goal change.
         kick_after_miss = float(np.clip((secs - 9.0) / 2.0, 0.0, 1.0))
-        kick_after_sack = tos > 0 and secs >= 9 or secs >= 24
-        if kick_after_sack:
+        kick_after_sack = tos > 0 and secs >= 9 or secs >= 6 + FG_CHANGE_SECONDS + 1
+        if kick_after_sack and dr.down < 4:
             ev += sack * kick_ev(min(99.0, yy + 8.0))
-        if secs >= 6:
+        if secs >= 6 and dr.down < 4:
             ev += live * ((1.0 - SHOT_SHORT) * kick_ev(yy) * kick_after_miss + SHOT_SHORT * (kick_ev(max(1.0, yy - 15.0)) if kick_after_sack else 0.0))
-        elif game_end and need == 0:
+        elif secs < 6 and game_end and need == 0:
             # A final-play interception usually ends regulation tied too;
             # it is not an automatic loss. Return touchdowns are possible,
             # but this coarse look-ahead does not resolve the return itself.
@@ -1008,6 +1023,25 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     # (about PLAY_SECS_RUN each). A coach's aggression sets how much he fears the other side's possession.
     fear = 1.25 - 0.5 * aggr                                     # the conservative coach counts their chance at 1.25x, the gambler at 0.75x
     other_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 3
+    def turnover_cost(yy, secs, probability, travel=0.):
+        if game_end or secs <= 0:
+            return 0.0
+        # A turnover near our own goal gives the opponent a short field,
+        # unlike the kickoff possession already priced below. Reserve live
+        # time and a plausible return; this is a planning estimate only.
+        remaining = max(0., secs - PLAY_SECS - 4.)
+        opponent_spot = float(np.clip(100. - yy + travel - 8., 1., 99.))
+        kick_value = 3. * fg_probability(field_goal_distance(opponent_spot), defense.get('k') or {}, rate_fn)
+        chance_to_snap = float(np.clip(remaining / 3., 0., 1.))
+        field_value = max(kick_value * chance_to_snap,
+                          _possession_value(remaining, other_tos))
+        return fear * probability * field_value
+    turnover_costs = {'kneel': 0., 'kick': 0.,
+                     'shot': turnover_cost(y, secs_in_half, SHOT_INT, min(y, 45.)),
+                     'play': sum(turnover_cost(max(1., y - i * PLAY_GAIN * .6),
+                                  secs_in_half - i * play_seconds,
+                                  min(PLAY_BAD, .025) * (1. - PLAY_BAD) ** i, PLAY_GAIN)
+                                 for i in range(k_best))}
     # each option leaves the other side a different amount of clock: a kick now leaves nearly all of it, a shot
     # then a kick a little less, k quick snaps then a kick less again; the bleed leaves next to nothing
     residual = {'kick': secs_in_half - 4.0, 'shot': secs_in_half - PLAY_SECS - 4.0, 'play': 4.0, 'kneel': 0.0}   # the drill that gets there runs to the gun; only a kick or a shot taken now hands time back
@@ -1025,7 +1059,7 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         c = 0.0 if winning_score else fear * _possession_value(max(0.0, residual.get(opt, 0.0)), other_tos, game_end, lead_after.get(opt, 0))
         if opt == 'play' and STALL_ON: c += fear * p_stall * _possession_value(stall_left, other_tos, game_end, int(round(dr.score_diff)))
         return c
-    net = {k: v - cost(k) for k, v in evs.items()}
+    net = {k: v - cost(k) - turnover_costs.get(k, 0.) for k, v in evs.items()}
     hurry_choice = max(net, key=lambda k: net[k]); hurry_ev = net[hurry_choice]; cost_hurry = cost(hurry_choice)
     # THE BLEED: k slow snaps with the clock running, then the play clock run down and one shot at the end zone
     # with a few seconds left, then the kick if it misses; the other side gets nothing back. The best k is taken.
@@ -1035,7 +1069,13 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         if rest < 6: break
         yk = max(1.0, y - PLAY_GAIN * (1.0 - PLAY_BAD - PLAY_INC) * k)
         kv, sv = (kick_ev(yk), shot_ev(yk, min(rest, 12.0), own_tos)) if 'kick' in evs else (0.0, 0.0)
-        evk = ((1.0 - PLAY_BAD) ** k) * max(kv, sv)
+        bleed_risk = sum(turnover_cost(max(1., y - i * PLAY_GAIN * .6),
+                            secs_in_half - i * PLAY_SECS_RUN,
+                            min(PLAY_BAD, .025) * (1. - PLAY_BAD) ** i, PLAY_GAIN)
+                         for i in range(k))
+        if sv > kv:
+            bleed_risk += turnover_cost(yk, min(rest, 12.), SHOT_INT, min(yk, 45.))
+        evk = ((1.0 - PLAY_BAD) ** k) * max(kv, sv) - bleed_risk
         if bleed_ev is None or evk > bleed_ev: bleed_ev, k_bleed, bleed_final = evk, k, ('shot' if sv > kv else 'kick')
     hurry = True; choice = hurry_choice
     behind = dr.score_diff < 0
@@ -1053,8 +1093,11 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         # waits (a team down two scores once ran the play clock down because every option priced near nothing)
         hurry = False; choice = 'play' if k_bleed > 0 else bleed_final; evs = dict(evs, bleed=bleed_ev)
     dr._plan_mode = 'hurry' if hurry else 'bleed'
-    if evs.get(choice, 0.0) < floor_line: choice = 'kneel'
-    return dict(choice=choice, hurry=hurry, quick_play=bool(quick_window and choice == 'play'), evs={k: round(v, 3) for k, v in evs.items()}, cost_hurry=round(cost_hurry, 3), p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
+    selected_value = net.get(choice, 0.) if hurry else bleed_ev
+    if selected_value is None or selected_value < floor_line:
+        choice = 'kneel'; hurry = False
+        dr._plan_mode = 'bleed'
+    return dict(choice=choice, hurry=hurry, quick_play=bool(quick_window and choice == 'play'), evs={k: round(v, 3) for k, v in evs.items()}, net_evs={k: round(v, 3) for k,v in net.items()}, turnover_costs={k: round(v, 3) for k,v in turnover_costs.items()}, cost_hurry=round(cost_hurry, 3), p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
 
 
 
@@ -1121,6 +1164,12 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
         return False, None  # the play itself ends the period; nothing left to stop
     if (half_end is None and getattr(dr, 'quarter', 4) == 4 and dr.score_diff != 0
             and not comeback_viable(secs_in_half, abs(dr.score_diff))):
+        return False, None
+    from late_game import pursuing_comeback
+    trailing_coach = dcoach if dr.score_diff > 0 else coach
+    if (half_end is None and getattr(dr, 'quarter', 4) == 4
+            and abs(dr.score_diff) > 16
+            and not pursuing_comeback(secs_in_half - live_play_seconds(out), abs(dr.score_diff), trailing_coach)):
         return False, None
     used = False; used_by = None
     c = coach or {}
@@ -2790,13 +2839,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             fg['injuries'] = kick_injuries(offense, defense, off_state, def_state, 'field_goal', rng, rate_fn, week)
             fg.update(clock=dr.clock, down=dr.down, ydstogo=dr.togo, yardline=dr.yardline)
             if _kick_roughing(dr, flag, fg, book, aggression, half_end, must_score):
-                dr.clock -= play_seconds('field_goal')
+                dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
                 continue
             if _kick_offside(dr, flag, fg, book):
-                dr.clock -= play_seconds('field_goal')
+                dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
                 continue
             if book is not None: book.special('fg', fg['kicker_pid'], **fg)
-            dr.clock -= min(dr.clock, play_seconds('field_goal'))
+            dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
             dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
             dr.points = fg['points']; dr.log.append(fg); break
         # ---- fourth down is a decision, not a play ----
@@ -2823,13 +2872,13 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 fg['injuries'] = kick_injuries(offense, defense, off_state, def_state, 'field_goal', rng, rate_fn, week)
                 fg.update(clock=dr.clock, down=dr.down, ydstogo=dr.togo, yardline=dr.yardline)
                 if _kick_roughing(dr, flag, fg, book, aggr4, half_end, must_score):
-                    dr.clock -= play_seconds('field_goal')
+                    dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
                     continue
                 if _kick_offside(dr, flag, fg, book):
-                    dr.clock -= play_seconds('field_goal')
+                    dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
                     continue
                 if book is not None: book.special('fg', fg['kicker_pid'], **fg)
-                dr.clock -= play_seconds('field_goal')
+                dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
                 dr.result = 'Field goal' if fg['made'] else 'Missed field goal'
                 dr.points = fg['points']; dr.log.append(fg); break
             if dec == 'punt':
@@ -3119,7 +3168,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             oc['qb_run_chance'] = run_chance
             oc['play_action'] = False; oc['rpo'] = False
         SC.answer_empty_run(off_f, oc, ytg_i, rng, rate_fn)
-        _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
+        _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, coach=(off_state.coach if off_state is not None else None))
         penalty_context = dict(is_pass=oc['is_pass'],
                               offense_discipline=float(np.clip(0.70 + 0.8 * (o_awr - 0.787), 0.5, 0.9)),
                               defense_discipline=float(np.clip(0.70 + 0.8 * (d_awr - 0.787), 0.5, 0.9)),
@@ -3327,7 +3376,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # the snap. Keep timeout inventory for subsequent live downs.
                 late_penalty = _late_penalty_restart(dr, secs_in_half_p - live_seconds)
                 used_p, used_by_p = (False, None) if late_penalty or late_injury else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
-                hurry_p = hurry_for_snap(secs_in_half_p, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing)
+                hurry_p = hurry_for_snap(secs_in_half_p, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing, coach=(off_state.coach if off_state is not None else None))
                 live_start = dr.clock
                 _tick(dr, live_seconds)
                 _penalty_ready_clock(dr, penalty_entry, half_end, result=t,
@@ -3392,7 +3441,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # The change of possession stops the clock at the whistle. Spending a
         # timeout for the former offense here buys no time.
         used, used_by = (False, None) if late_penalty or late_injury or _fourth_fail or scoring_safety else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
-        hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing)
+        hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing,
+                               coach=(off_state.coach if off_state is not None else None))
         if dr.field_goal_wins and _plan_to is not None and _plan_to['choice'] == 'kick':
             # The completed play can put the kick in range. Use the existing
             # hurry interval to get the unit on, not a stale full huddle.
@@ -3403,10 +3453,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         clock_before = dr.clock
         tempo = off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5
         elapsed = play_seconds(t, hurry=hurry, timeout=used, tempo=tempo,
-                               urgent=multi_score_urgency(secs_in_half, dr.score_diff, dr.quarter, chasing),
+                               urgent=multi_score_urgency(secs_in_half, dr.score_diff, dr.quarter, chasing, coach=(off_state.coach if off_state is not None else None)),
                                catchup=comeback_pace(secs_in_half, dr.score_diff, dr.quarter,
                                    yardline=after_play.yardline, timeouts=dr._own_timeouts,
-                                   tempo=tempo)) + live_seconds - 6.0
+                                   tempo=tempo, coach=(off_state.coach if off_state is not None else None))) + live_seconds - 6.0
         if out.get('out_of_bounds'):
             # Outside late-half exceptions the clock restarts when the ball
             # is spotted. Exclude a short spotting interval, not the entire
@@ -3431,6 +3481,16 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 and timeouts is not None and timeouts.left.get(pos, 0) > 0):
             used = timeouts.use(pos); used_by = pos
             elapsed = live_seconds
+        # On fourth down there is no spike available. Price and execute the
+        # hurried kicking-unit exchange instead of charging an ordinary huddle.
+        # No seconds are restored; a late live play can still exhaust the half.
+        if (half_end is not None and after_play.down == 4 and after_play.result is None
+                and not used and not late_injury and not added_penalty and not oob_snap
+                and t in ('run', 'complete', 'scramble', 'sack')
+                and _plan_to is not None and _plan_to['choice'] == 'kick'
+                and _secs_after >= FG_CHANGE_SECONDS + 1
+                and secs_in_half <= 30):
+            elapsed = min(elapsed, live_seconds + FG_CHANGE_SECONDS)
         if late_injury or scoring_safety or after_play.result == 'Touchdown' or _fourth_fail:
             dr.clock -= live_seconds  # scoring/change of possession stops at the whistle
         elif added_penalty:

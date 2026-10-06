@@ -343,12 +343,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
         p_model = 1.0 / (1.0 + np.exp(-(edge - thresh) / 0.015))
         # the model's possession bias is worst deep in its own end; there the league's behavior carries more weight
-        # The general go-rate table mixes every score state. In the last two
-        # minutes, a reachable kick that ties the game is a different choice:
-        # let the score/clock model carry most of the weight while retaining
-        # a smaller coach and matchup vote from the table.
-        w_model = (0.75 if tying_or_winning_kick and secs_left <= 120 else
-                   0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.0)
+        w_model = 0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.0
         p_go = w_model * p_model + (1.0 - w_model) * p_table
     else:
         p_go = p_table

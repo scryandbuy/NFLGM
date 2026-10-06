@@ -403,17 +403,18 @@ def card(session, league, pid):
     tr = getattr(p, 'transition', None)
     pending = f"Learning {tr.get('to')} · {tr.get('games_left')} games left" if tr and tr.get('games_left', 0) > 0 else 'None pending'
     # the market and the extension ask
-    market_apy = None; market_quote = None; ext_ask = None
+    market_apy = None; market_quote = None; ext_ask = None; market_pool = None
     try:
         import valuation as VAL
         # Pin the comp window so revisiting a card does not redraw its market.
-        market_quote = VAL.value_player(league, p, side='team')
+        market_pool = VAL.pool_from_league(league)
+        market_quote = VAL.value_player(league, p, side='team', pool=market_pool)
         market_apy = round(float(market_quote['apy']), 1) if market_quote and market_quote.get('apy') else None
     except Exception: pass
     try:
         import extensions as EXT
         if _ext_ok(league, p):
-            tm = EXT.terms(league, p, np.random.default_rng(stable_seed(p.pid))); ext_ask = round(float(tm['ask']), 1) if tm else None
+            tm = EXT.terms(league, p, np.random.default_rng(stable_seed(p.pid)), pool=market_pool); ext_ask = round(float(tm['ask']), 1) if tm else None
     except Exception: pass
     # The card's pick range must use the same player/pick prices as Trades.
     interest, market = _market_words(league, p, market_quote)

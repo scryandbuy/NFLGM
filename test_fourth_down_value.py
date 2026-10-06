@@ -59,7 +59,7 @@ class FourthDownValueTests(unittest.TestCase):
     def test_tying_kick_can_be_rejected_when_kicker_is_unreliable(self):
         with patch.object(game,'fg_probability',return_value=.35):
             self.assertEqual(game.fourth_down_decision(18,7,-3,60,
-                SimpleNamespace(random=lambda:.5),kicker=self.kicker,
+                SimpleNamespace(random=lambda:.2),kicker=self.kicker,
                 rate_fn=plays.rate,timeout_edge=1),'go')
 
     def test_short_yardage_and_touchdown_need_retain_aggressive_choices(self):

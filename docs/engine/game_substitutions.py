@@ -7,15 +7,8 @@ STARTERS = {'QB': 1, 'HB': 1, 'WR': 2, 'TE': 1, 'LEDG': 1, 'REDG': 1,
 
 
 def opportunity(seconds, margin, playoffs=False):
-    # Leave two-score games, overtime, and early leads to normal rotation.
-    lead = abs(margin)
-    if seconds <= 0 or seconds > 900 or lead <= 16:
-        return 0.
-    needed = math.ceil(lead / 8)
-    cushion = needed - seconds / 240.
-    value = max(0., min(1., (cushion - 1.) / 2.))
-    if playoffs: value *= .65
-    return value
+    from late_game import rest_opportunity
+    return rest_opportunity(seconds, margin, playoffs)
 
 
 def rest_probability(starter, reserve, pos, state, chance):
