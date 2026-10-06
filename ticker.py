@@ -46,11 +46,21 @@ def _spot(yardline_100, off_abbr, def_abbr):
     return f"{def_abbr} {y}"
 
 
-def _down(d, togo, yardline):
+def display_distance(yardline, togo, off_abbr="", def_abbr=""):
+    """Distance between the same displayed coordinates as the ball and sticks."""
+    if togo is None: return None
+    if yardline is None: return max(0, _field_round(togo))
+    return max(0, display_field_position(yardline, off_abbr, def_abbr)
+                  - display_field_position(float(yardline) - float(togo), off_abbr, def_abbr))
+
+
+def _down(d, togo, yardline, off_abbr="", def_abbr=""):
+
     if d is None: return ''
     word = {1: '1st', 2: '2nd', 3: '3rd', 4: '4th'}.get(int(d), str(d))
     if yardline is not None and togo is not None and togo >= yardline - 0.01: return f"{word} & Goal"
-    return f"{word} & {_field_round(togo)}" if togo is not None else word
+    distance = display_distance(yardline, togo, off_abbr, def_abbr)
+    return f"{word} & {distance if distance else 'Inches'}" if distance is not None else word
 
 
 def _yards(y):
@@ -78,7 +88,7 @@ def play_line(league, p, off_abbr, def_abbr):
     head = ''
     if p.get('down') is not None:
         q, ck = _clock(p.get('clock', 0))
-        head = f"{_down(p.get('down'), p.get('ydstogo'), p.get('yardline'))} · {_spot(p.get('yardline', 50), off_abbr, def_abbr)} · {ck}"
+        head = f"{_down(p.get('down'), p.get('ydstogo'), p.get('yardline'), off_abbr, def_abbr)} · {_spot(p.get('yardline', 50), off_abbr, def_abbr)} · {ck}"
     elif p.get('clock') is not None and t in ('kickoff', 'penalty', 'timeout'):
         head = _clock(p['clock'])[1]
     carrier = _nm(league, p.get('carrier')); passer = _nm(league, p.get('passer')); target = _nm(league, p.get('target')); tackler = _nm(league, p.get('tackler'))
