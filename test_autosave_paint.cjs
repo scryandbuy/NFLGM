@@ -15,7 +15,7 @@ value=4;ctx.queueAutosave();ctx.document.visibilityState='hidden';events.visibil
 value=5;ctx.queueAutosave();assert.equal(frames.size,0);microtasks.shift()();assert.equal(snapshots.at(-1),5,'hidden actions do not depend on frames');
 ctx.document.visibilityState='visible';value=6;ctx.queueAutosave();timer(200);assert.equal(snapshots.at(-1),6,'throttled frame fallback persists');assert.equal(frames.size,0);
 // Explicit save captures all pending mutations and cancels a redundant autosave.
-ctx.py={runPython:()=>String(value)};ctx.busy=()=>{};ctx.queueSave=(kind,text)=>{snapshots.push(Number(text));return Promise.resolve();};
+ctx.saveConflict=false;ctx.py={runPython:()=>String(value)};ctx.busy=()=>{};ctx.queueSave=(kind,text)=>{snapshots.push(Number(text));return Promise.resolve();};
 vm.runInContext(src.slice(src.indexOf('function saveGame('),src.indexOf('async function saveGameNotified(')),ctx);
 value=7;ctx.queueAutosave();ctx.saveGame();assert.equal(snapshots.at(-1),7);assert.equal(frames.size,0);assert.equal(timers.size,0);events.pagehide();assert.equal(snapshots.filter(x=>x===7).length,1);
 console.log('Autosave paints first, coalesces rapid actions, captures on pagehide/hidden, and preserves explicit save');

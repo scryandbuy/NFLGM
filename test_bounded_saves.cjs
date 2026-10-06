@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const source=fs.readFileSync('docs/app.js','utf8');
 const writes=[],transactions=[],stored=new Map();let closes=0;
-const context={idb:async()=>({close(){closes++;},transaction(){
+const context={py:{runPython(){}},idb:async()=>({close(){closes++;},transaction(){
   const ops=[];
   const tx={objectStore:()=>({put(value,key){ops.push(()=>stored.set(key,value));writes.push([key,value]);},delete(key){ops.push(()=>stored.delete(key));}}),
     complete(){ops.forEach(fn=>fn());this.oncomplete();},fail(){this.error=Error('disk full');this.onabort();}};

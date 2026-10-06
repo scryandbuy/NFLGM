@@ -288,7 +288,7 @@ class Session:
                 votes[key] = self.L.player(winner) if winner is not None else None
         return votes
 
-    def save(self):
+    def _save_data(self):
         # Build the snapshot once; the final encoder handles the league's
         # numpy values and sets without an intermediate JSON round trip.
         d = self.L.to_dict()
@@ -333,7 +333,27 @@ class Session:
                                  last_dealt=self.draft.last_dealt, auto=self.draft.auto,
                                  level=self.draft.level, scale=self.draft.scale, trade_targets=self.draft.trade_targets)
                             if self.draft_live() else None)
-        return json.dumps(d, default=LG._session_json_default, separators=(',', ':'))
+        return d
+
+    def save(self):
+        """Portable full JSON export; browser autosaves use changed records."""
+        return json.dumps(self._save_data(), default=LG._session_json_default, separators=(',', ':'))
+
+    def save_incremental(self):
+        from incremental_save import Snapshot
+        writer = getattr(self, '_browser_snapshot', None)
+        if writer is None:
+            writer = self._browser_snapshot = Snapshot()
+        return writer.prepare(self._save_data(), LG._session_json_default)
+
+    def resume_incremental(self, metadata):
+        from incremental_save import Snapshot
+        self._browser_snapshot = Snapshot(metadata)
+
+    def reset_incremental(self):
+        # A failed disk transaction invalidates every dependent delta. The next
+        # capture is a complete checkpoint of the current in-memory franchise.
+        self._browser_snapshot = None
 
     def live_journal(self):
         """Small autosave between full saves while the user's game is open."""

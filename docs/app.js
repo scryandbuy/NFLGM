@@ -168,7 +168,7 @@ function flushAutosave() {
   return saveGameNotified(true);
 }
 function queueAutosave() {
-  if (autosaveQueued) return;
+  if (autosaveQueued && (autosaveFrame !== null || autosaveTimer !== null)) return;
   autosaveQueued = true;
   if (document.visibilityState === 'hidden') { queueMicrotask(flushAutosave); return; }
   // One frame plus a task lets the changed UI paint before Python serializes.
@@ -197,6 +197,7 @@ async function newGame(abbr) {
   say(`building the league for ${abbr}… (about a minute the first time)`, 88);
   await new Promise(r => setTimeout(r, 30));
   py.runPython(`SESSION = S.Session.new(${JSON.stringify(abbr)})`);
+  saveConflict = false;
   say('ready.', 100);
 }
 
@@ -204,16 +205,53 @@ async function newGame(abbr) {
 function idb() { return new Promise((res, rej) => { const r = indexedDB.open('nflgm', 1); r.onupgradeneeded = () => r.result.createObjectStore('saves'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
 let saveWriting = false;
 let pendingSaves = [];
+let saveConflict = false;
+let saveNeedsCheckpoint = false;
+function mergeSnapshots(older, newer) {
+  if (newer.reset) return older.epoch === newer.epoch && older.revision === newer.base
+    ? {...newer, base:older.base} : newer;
+  if (older.epoch !== newer.epoch || older.revision !== newer.base) throw Error('Save sequence mismatch');
+  const puts = {...older.puts}, deletes = new Set(older.deletes);
+  for (const key of newer.deletes) { delete puts[key]; deletes.add(key); }
+  for (const [key, value] of Object.entries(newer.puts)) { puts[key] = value; deletes.delete(key); }
+  return {...newer, base:older.base, reset:older.reset, puts, deletes:[...deletes]};
+}
 function queueSave(kind, value) {
-  // One active write, latest full snapshot, and at most its following journal.
-  // Superseded callers wait until their replacement is safely written.
+  // One active transaction, one combined pending snapshot, and its live journal.
+  // Merge deltas in order, including reversions; never discard an earlier change.
   return new Promise((resolve, reject) => {
-    const replaced = kind === 'full' ? pendingSaves.splice(0) :
+    const previous = kind === 'snapshot' && pendingSaves.find(item => item.kind === 'snapshot');
+    if (previous) value = mergeSnapshots(previous.value, value);
+    const replaced = kind === 'full' || kind === 'snapshot' ? pendingSaves.splice(0) :
       pendingSaves.at(-1)?.kind === 'journal' ? pendingSaves.splice(-1) : [];
     const waiters = replaced.flatMap(item => item.waiters);
     waiters.push({resolve, reject});
     pendingSaves.push({kind, value, waiters});
     void drainSaves();
+  });
+}
+function writeSnapshot(db, snapshot) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('saves', 'readwrite'), saves = tx.objectStore('saves');
+    let error = null;
+    tx.oncomplete = resolve;
+    tx.onerror = tx.onabort = () => reject(error || tx.error || new Error('Save transaction aborted'));
+    const request = saves.get('snapshot');
+    request.onsuccess = () => {
+      try {
+        const previous = request.result;
+        if (snapshot.base && (!previous || previous.epoch !== snapshot.epoch || previous.revision !== snapshot.base)) {
+          const error = new Error('The saved franchise changed in another tab. Export this franchise before reloading.');
+          error.name = 'SaveConflictError'; throw error;
+        }
+        if (snapshot.reset) saves.clear(); // Migration/checkpoint is atomic with all records.
+        for (const key of snapshot.deletes) saves.delete('chunk:' + key);
+        for (const [key, value] of Object.entries(snapshot.puts)) saves.put(value, 'chunk:' + key);
+        const {format, epoch, revision, marker} = snapshot;
+        saves.put({format, epoch, revision, marker}, 'snapshot');
+        saves.delete('live_journal');
+      } catch (e) { error = e; try { tx.abort(); } catch (_) { /* Already aborted by storage. */ } }
+    };
   });
 }
 async function drainSaves() {
@@ -224,7 +262,8 @@ async function drainSaves() {
     try {
       const db = await idb();
       try {
-        await new Promise((res, rej) => {
+        if (item.kind === 'snapshot') await writeSnapshot(db, item.value);
+        else await new Promise((res, rej) => {
           const tx = db.transaction('saves', 'readwrite');
           const saves = tx.objectStore('saves');
           if (item.kind === 'full') { saves.put(item.value, 'main'); saves.delete('live_journal'); }
@@ -234,28 +273,38 @@ async function drainSaves() {
           tx.onerror = tx.onabort = () => rej(tx.error || new Error('Save transaction aborted'));
         });
       } finally { db.close(); }
+      if (item.kind === 'snapshot' || item.kind === 'full') saveNeedsCheckpoint = false;
       item.waiters.forEach(w => w.resolve());
     } catch (error) {
       item.waiters.forEach(w => w.reject(error));
-      // Never attach a journal to the wrong full save after a failed write.
-      if (item.kind === 'full' && pendingSaves[0]?.kind === 'journal') {
-        pendingSaves.shift().waiters.forEach(w => w.reject(error));
-      }
+      // Later deltas/journals depend on this write. Keep the previous durable
+      // snapshot intact and make the next attempt a complete checkpoint.
+      pendingSaves.splice(0).forEach(p => p.waiters.forEach(w => w.reject(error)));
+      if (error.name === 'SaveConflictError') saveConflict = true;
+      else py.runPython('SESSION.reset_incremental()');
+      saveNeedsCheckpoint = true;
+      autosaveQueued = true;
     } finally { item.value = null; }
   }
   saveWriting = false;
 }
 function saveGame(silent = false) {
+  if (saveConflict) throw Error('The browser save changed in another tab. Export this franchise before reloading.');
   autosaveQueued = false;
   cancelAutosaveSchedule();
-  const text = py.runPython(`SESSION.save()`);
-  return queueSave('full', text);
+  try {
+    const snapshot = JSON.parse(py.runPython('SESSION.save_incremental()'));
+    return queueSave('snapshot', snapshot);
+  } catch (e) {
+    py.runPython('SESSION.reset_incremental()'); saveNeedsCheckpoint = true; autosaveQueued = true; throw e;
+  }
 }
 async function saveGameNotified(silent = false) {
   try { await saveGame(silent); }
   catch (e) { notify({ ok: false, why: 'The save failed: ' + String(e) }); }
 }
 function saveLiveJournal() {
+  if (saveConflict || saveNeedsCheckpoint) return saveGame();
   const journal = pyJSON('SESSION.live_journal()');
   return journal ? queueSave('journal', journal) : Promise.resolve();
 }
@@ -265,12 +314,38 @@ async function saveLiveJournalNotified() {
 }
 async function loadSave() {
   const db = await idb();
-  return new Promise(res => {
+  return new Promise((res, rej) => {
     const tx = db.transaction('saves', 'readonly'); const saves = tx.objectStore('saves');
-    const main = saves.get('main'), journal = saves.get('live_journal');
-    tx.oncomplete = () => { db.close(); res({ text: main.result || null, journal: journal.result || null }); };
-    tx.onerror = () => { db.close(); res({ text: null, journal: null }); };
+    const keys = saves.getAllKeys(), values = saves.getAll();
+    tx.oncomplete = () => {
+      db.close();
+      try { res(restoreSnapshot(new Map(keys.result.map((key, i) => [key, values.result[i]])))); }
+      catch (e) { rej(e); }
+    };
+    tx.onerror = tx.onabort = () => { db.close(); rej(tx.error || new Error('Could not read browser save')); };
   });
+}
+function restoreSnapshot(records) {
+  const meta = records.get('snapshot'), journal = records.get('live_journal') || null;
+  if (!meta) return {text:records.get('main') || null, journal};
+  if (meta.format !== 1) throw Error('Unsupported browser save format');
+  const hashes = {};
+  const read = key => {
+    const record = records.get('chunk:' + key);
+    if (!record || typeof record.text !== 'string' || typeof record.hash !== 'string') throw Error('Incomplete browser save');
+    hashes[key] = record.hash;
+    return record.text;
+  };
+  const roots = JSON.parse(read('@roots')), parts = [];
+  for (const [name, kind, keys] of roots) {
+    let text;
+    if (kind === 'dict') text = '{' + keys.map(key => JSON.stringify(key) + ':' + read(JSON.stringify([name,key]))).join(',') + '}';
+    else if (kind === 'list') text = '[' + Array.from({length:keys}, (_,i) => read(JSON.stringify([name,i])).slice(1,-1)).join(',') + ']';
+    else if (kind === 'value') text = read(JSON.stringify([name]));
+    else throw Error('Invalid browser save record');
+    parts.push(JSON.stringify(name) + ':' + text);
+  }
+  return {text:'{' + parts.join(',') + '}', journal, snapshot:{...meta, hashes}};
 }
 
 // ---------------------------------------------------------------- the rail
@@ -4182,6 +4257,14 @@ async function advanceInner() {
         py.runPython(`SESSION = S.Session.load(_SAVE)`);
       }
     }
+    if (saved.snapshot) {
+      py.globals.set('_SNAPSHOT_META', JSON.stringify(saved.snapshot));
+      py.runPython('SESSION.resume_incremental(json.loads(_SNAPSHOT_META))');
+      py.globals.delete('_SNAPSHOT_META');
+    } else {
+      say('Preparing faster autosaves…', 96);
+      await saveGame();
+    }
     saved = {text: null};
     $('#boot').remove(); bootHash(); refresh();
     if (journalError) notify({ ok: false, why: 'The latest live plays could not be restored. Your last full save was loaded.' });
@@ -4189,7 +4272,7 @@ async function advanceInner() {
       if (!$('#boot')) throw e;
       entering = false; updateBootActions(); say('Could not load this save. You can retry or choose a team to start a new franchise. ' + e);
     } finally {
-      py.globals.delete('_SAVE'); py.globals.delete('_LIVE_JOURNAL');
+      py.globals.delete('_SAVE'); py.globals.delete('_LIVE_JOURNAL'); py.globals.delete('_SNAPSHOT_META');
     }
   };
   $('#advance').onclick = advance;
@@ -4205,7 +4288,7 @@ async function advanceInner() {
   $('#importfile').onchange = async e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
     let text = await f.text();
-    try { py.globals.set('_import_text', text); py.runPython(`import session as S\nSESSION = S.Session.load(_import_text)`); saved = {text: null}; py.globals.delete('_import_text'); text = null; await saveGame(); bootHash(); refresh(); notify({ ok: true, line: 'Save loaded.' }); }
+    try { py.globals.set('_import_text', text); py.runPython(`import session as S\nSESSION = S.Session.load(_import_text)`); saveConflict = false; saved = {text: null}; py.globals.delete('_import_text'); text = null; await saveGame(); bootHash(); refresh(); notify({ ok: true, line: 'Save loaded.' }); }
     catch (err) { notify({ ok: false, why: 'That file could not be loaded as a save.' }); }
     finally { py.globals.delete('_import_text'); text = null; e.target.value = ''; }
   };

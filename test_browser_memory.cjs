@@ -13,7 +13,24 @@ const teamTheme=()=>({base:'#203731',accent:'#ffb612'});
 const renderRail=()=>railDraws++,secondRow=()=>{},clubNav=()=>[],ovrCell=x=>x;
 const openPlayer=()=>{},queueCeilingNoticeCheck=()=>notices++;
 const notify=r=>{throw Error(r.why||JSON.stringify(r));};
-const py={runPython:code=>{if(code==='SESSION.save()')return JSON.stringify(data);throw Error(code);}};
+let revision=0;
+const py={runPython:code=>{
+ if(code==='SESSION.reset_incremental()'){revision=0;return;}
+ if(code!=='SESSION.save_incremental()')throw Error(code);
+ const puts={},base=revision++;
+ const put=(key,value)=>puts[key]={hash:'fixture',text:JSON.stringify(value)};
+ if(!base){
+  const roots=[];
+  for(const [name,value] of Object.entries(data)){
+   if(name==='players'){
+    roots.push([name,'dict',Object.keys(value)]);
+    for(const [pid,p] of Object.entries(value))put(JSON.stringify([name,pid]),p);
+   }else{roots.push([name,'value',null]);put(JSON.stringify([name]),value);}
+  }
+  put('@roots',roots);
+ }else put(JSON.stringify(['players',target]),data.players[target]);
+ return JSON.stringify({format:1,epoch:'stress',revision,base,marker:'week4',reset:!base,puts,deletes:[]});
+}};
 function pyJSON(code){
  if(code==='SESSION.progression()')return structuredClone(view);
  if(code.startsWith("SESSION.club_act('spend_by_read'")){
@@ -25,7 +42,7 @@ function pyJSON(code){
  throw Error(code);
 }
 ${chunk('let autosaveQueued','function pyJSON')}
-${chunk('function idb()','async function loadSave()')}
+${chunk('function idb()','// ---------------------------------------------------------------- the rail')}
 ${chunk('function reportBoard(','function renderProspectCard(')}
 async function init(){
  data=await (await fetch('/save')).json();view=await (await fetch('/view')).json();
@@ -71,19 +88,15 @@ const server=http.createServer((req,res)=>{
    heaps.push(metrics.metrics.find(m=>m.name==='JSHeapUsedSize').value);
   }
   const durable=await page.evaluate(async()=>{
-   const db=await idb();
-   return new Promise((resolve,reject)=>{
-    const tx=db.transaction('saves','readonly'),req=tx.objectStore('saves').get('main');
-    tx.oncomplete=()=>{db.close();resolve(JSON.parse(req.result).players[target].xp===view.rows.find(r=>r.pid===target).bank);};
-    tx.onerror=()=>reject(tx.error);
-   });
+   const saved=await loadSave();
+   return JSON.parse(saved.text).players[target].xp===view.rows.find(r=>r.pid===target).bank;
   });
   assert.ok(durable);assert.deepEqual(errors,[]);
   assert.ok(heaps.at(-1)-heaps[2]<40e6,'retained heap must settle instead of growing per click');
-  const report={xp_clicks:100,large_save_writes:20,dom_nodes:firstNodes,
+  const report={xp_clicks:100,checkpoint_writes:1,incremental_writes:19,dom_nodes:firstNodes,
     first_heap_mb:+(heaps[0]/1e6).toFixed(1),last_heap_mb:+(heaps.at(-1)/1e6).toFixed(1),
     max_sampled_retained_heap_mb:+(Math.max(...heaps)/1e6).toFixed(1),durable,errors};
-  fs.writeFileSync(require('path').join(root,'browser-report.json'),JSON.stringify(report,null,2));
+  fs.writeFileSync(process.argv[3] || require('path').join(root,'browser-report.json'),JSON.stringify(report,null,2));
   console.log(report);
  }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1;});
