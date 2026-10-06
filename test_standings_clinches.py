@@ -70,11 +70,11 @@ class ClinchTests(unittest.TestCase):
     def test_notifications_share_flags_and_remain_once_only(self):
         league=self.completed(); league.user_team=next(iter(league.teams))
         flags=LN.clinch_status(league,18)
-        with patch.object(LN,'_post') as post:
-            LN.standings(league,18)
-            count=post.call_count
-            LN.standings(league,18)
-            self.assertEqual(post.call_count,count)
+        LN.standings(league,18)
+        before = copy.deepcopy(league.inbox)
+        LN.standings(league,18)
+        self.assertEqual(league.inbox,before)
+        self.assertEqual(len([m for m in league.inbox if (m.get('payload') or {}).get('clinched')]),1)
         for a, status in flags.items():
             for field,prefix in [('division','div'),('playoffs','po'),('bye','bye'),('eliminated','out')]:
                 self.assertEqual(f'{prefix}-2026-{a}' in league.league_notes_sent,status[field])

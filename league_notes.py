@@ -96,7 +96,7 @@ def standings(league, week):
     user = getattr(league, 'user_team', None)
     teams = list(league.teams.values())
     statuses = clinch_status(league, week)
-    eliminated = []
+    eliminated, clinched = [], []
     for conf in sorted({_conf(league, t) for t in teams}):
         for t in (t for t in teams if _conf(league, t) == conf):
             flags = statuses[t.abbr]
@@ -106,17 +106,14 @@ def standings(league, week):
                 record = '–'.join(str(n) for n in t.record[:(3 if len(t.record) > 2 and t.record[2] else 2)])
                 eliminated.append(dict(team=t.abbr, record=record, division=t.division))
             notices = []
-            for flag, prefix, wording in (
-                (div_in, 'div', f'clinch the {t.division}'),
-                (in_field, 'po', 'clinch a playoff spot'),
-                (bye, 'bye', f"clinch the {conf}'s 1 seed and a bye")):
+            for flag, prefix in ((div_in, 'div'), (in_field, 'po'), (bye, 'bye')):
                 if flag and _once(league, f'{prefix}-{league.year}-{t.abbr}'):
-                    notices.append(wording)
+                    notices.append(prefix)
             if notices:
-                subject = (notices[-1] if bye else notices[0])
-                body = f"{t.abbr}: " + '; '.join(notices) + f". Record: {t.record[0]}–{t.record[1]}."
-                _post(league, user, t, f'{t.abbr} {subject}', body,
-                      mine_subject=f'You {subject}')
+                record = '–'.join(str(n) for n in t.record[:(3 if len(t.record) > 2 and t.record[2] else 2)])
+                clinched.append(dict(team=t.abbr, record=record, division=t.division, clinches=notices))
+    if clinched:
+        _clinch_digest(league, league.year, week, clinched)
     if eliminated:
         _elimination_digest(league, league.year, week, eliminated)
     # the picture, one week out, for the user if nothing is settled
@@ -128,6 +125,74 @@ def standings(league, week):
             near = sorted([t for t in ct if t is not me and abs(_wins(t) - _wins(me)) <= 1.0 and f"po-{league.year}-{t.abbr}" not in led and f"out-{league.year}-{t.abbr}" not in led], key=lambda t: -_wins(t))
             rivals = ', '.join(t.abbr for t in near[:4]) or 'nobody in particular'
             IB.news(league, 'The playoff picture, one week out', f"At {me.record[0]}–{me.record[1]} you are alive with one to play. The last spots come down to you and {rivals}. Win and you are in the conversation; a loss and you need help.", payload=dict(link='league:standings'))
+
+
+def _clinch_digest(league, year, week, entries, sources=()):
+    """One row per club and one notice per week, including later clinches."""
+    from copy import copy, deepcopy
+    from stadium_names import TEAM_NAMES
+    key = f'playoff-clinches-{year}-{week}'
+    if getattr(league, 'inbox', None) is None: league.inbox = []
+    current = next((m for m in league.inbox if (m.get('payload') or {}).get('key') == key), None)
+    target = current or (sources[0] if sources else None)
+    rows = {r['team']: deepcopy(r) for r in (current or {}).get('payload', {}).get('clinched', [])}
+    added = False
+    for entry in entries:
+        old = rows.get(entry['team'], {})
+        flags = set(old.get('clinches', [])) | set(entry['clinches'])
+        added |= flags != set(old.get('clinches', []))
+        rows[entry['team']] = dict(entry, clinches=[k for k in ('po', 'div', 'bye') if k in flags])
+    ordered = sorted(rows.values(), key=lambda r: (r['division'], r['team']))
+    user = getattr(league, 'user_team', None)
+    table = []
+    for row in ordered:
+        labels = dict(po='Playoff spot', div=f"{row['division']} title", bye='No. 1 seed and first-round bye')
+        table.append([TEAM_NAMES.get(row['team'], row['team']) + (' (your team)' if row['team'] == user else ''),
+                      row['record'], ' · '.join(labels[k] for k in row['clinches'])])
+    context = copy(league); context.inbox = []; context.year = year; context.week = week
+    context.phase = (target or {}).get('phase', getattr(league, 'phase', 'regular'))
+    message = IB.post(context, 'result' if user in rows else 'league',
+        f'Week {week}: playoff clinches', '', sender='league',
+        payload=dict(key=key, link='league:standings', clinched=ordered,
+                     mail_sections=[IB.mail_section('', table, ('Team', 'Record', 'Clinched'))]))
+    if target:
+        message['id'] = target['id']
+        message['status'] = ('unread' if (added and not sources) or any(m.get('status') == 'unread' for m in [target, *sources])
+                             else target.get('status', 'open'))
+        target.clear(); target.update(message)
+    else:
+        target = message; league.inbox.append(target)
+    remove = {id(m) for m in sources if m is not target}
+    league.inbox[:] = [m for m in league.inbox if id(m) not in remove]
+    for row in ordered:
+        for flag in row['clinches']:
+            _ledger(league).setdefault(f"{flag}-{year}-{row['team']}", week)
+    return target
+
+
+def combine_saved_clinches(league):
+    """Group recognized historic notices without recomputing past standings."""
+    import re
+    groups = {}
+    for message in getattr(league, 'inbox', []) or []:
+        if message.get('kind') not in ('league', 'result') or (message.get('payload') or {}).get('link') != 'league:standings':
+            continue
+        match = re.fullmatch(r'([A-Z0-9]+): (clinch .+)\. Record: ([0-9–-]+)\.', message.get('body', ''))
+        if not match or match[1] not in league.teams: continue
+        team, text, record = match.groups()
+        flags = []; division = league.teams[team].division
+        for notice in text.split('; '):
+            if notice == 'clinch a playoff spot': flags.append('po')
+            elif re.fullmatch(r"clinch the .+'s 1 seed and a bye", notice): flags.append('bye')
+            elif notice.startswith('clinch the '):
+                flags.append('div'); division = notice[len('clinch the '):]
+            else: break
+        else:
+            entries, sources = groups.setdefault((message['year'], message['week']), ([], []))
+            entries.append(dict(team=team, record=record, division=division, clinches=flags))
+            sources.append(message)
+    for (year, week), (entries, sources) in groups.items():
+        _clinch_digest(league, year, week, entries, sources)
 
 
 def _elimination_digest(league, year, week, entries, sources=()):
