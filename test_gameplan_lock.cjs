@@ -61,11 +61,14 @@ function reset(next={}) {state={key:'2026:1:GB',locked:false,dirty:false,started
   assert.equal(run("gameplanScale('play_action_rate', .5)"), 50);
   assert.equal(run("gameplanScale('blitz_rate', .133)"), 50);
   assert.equal(run("gameplanLeanWord('play_action_rate', .38)"), 'Less');
-  assert.ok(button('Use Coach Defaults'));assert.ok(button('Save Preview Plan'));
+  assert.ok(button('Use Coach Defaults'));assert.ok(button('Save Game Plan'));
   const slider = page.querySelectorAll('input').find(x => x.attrs.id === 'gameplan-tempo');
+  const marker = page.querySelectorAll('i').find(x => x.attrs.class === 'plan-suggestion');
+  const markerPosition = marker.attrs.style;
   assert.ok(slider);
   slider.value = '800'; slider.oninput();
   assert.equal(slider.attrs['aria-valuetext'], 'Faster');
+  assert.equal(marker.attrs.style, markerPosition);
   calls.length = 0; slider.onchange();
   assert.ok(calls.some(x => x.includes("plan_act('set_lean', key=\"tempo\", value=0.7)")));
   calls.length = 0; button('Apply suggestion').attrs.onclick();
@@ -73,7 +76,7 @@ function reset(next={}) {state={key:'2026:1:GB',locked:false,dirty:false,started
   calls.length = 0; button('Use Coach Defaults').attrs.onclick();
   assert.ok(calls.some(x => x.includes("plan_act('reset')")));
   await context.saveSundayPlan(()=>context.renderThisWeek(fixture()));
-  assert.ok(!button('Accept All'));assert.ok(!button('Save Preview Plan'));
+  assert.ok(!button('Accept All'));assert.ok(!button('Save Game Plan'));
   assert.ok(button('Re-Open Game Plan'));assert.ok(!button('Undo'));assert.ok(!button('Restore'));
   assert.ok(page.querySelectorAll('input').every(x=>x.disabled));
   button('Re-Open Game Plan').attrs.onclick();
@@ -88,7 +91,7 @@ function reset(next={}) {state={key:'2026:1:GB',locked:false,dirty:false,started
   await context.saveSundayPlan(()=>context.renderThisWeek(fixture()));
   assert.equal(state.locked,false);assert.equal(state.dirty,true);
   assert.match(context.notice.why,/could not be saved/);
-  assert.ok(button('Save Preview Plan'));
+  assert.ok(button('Save Game Plan'));
   failure=false;
   run('gameplanPendingDepth = [45, 35, 20]');
   calls.length=0;

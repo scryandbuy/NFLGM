@@ -139,25 +139,27 @@ def this_week(session, league, abbr):
     changes = _saved(league, wk)
     plan = _preview(base, changes)
     leans = []
-    # where the assistants would put each lean, from the suggestions not yet taken (the gold ghost)
+    # Advice is a target relative to the coach's baseline, independent of the
+    # user's edits and whether advice has been accepted or skipped.
     ghost = {}
     for s in rep['suggestions']:
-        if s['text'] in _taken(league, wk) or s['text'] in _skipped(league, wk): continue
         for ck, cv in (s.get('changes') or {}).items():
             if ck in GW.RANGE and isinstance(cv, (int, float)) and not isinstance(cv, bool): ghost[ck] = ghost.get(ck, 0.0) + float(cv)
+    recommended = _preview(base, ghost)
     for side, k, label, lo, hi, desc in LEANS:
         b = float(getattr(base, k)); rng_ = GW.RANGE[k]; val = float(getattr(plan, k))
         lower, upper = b-rng_, b+rng_
         if k not in ('pass_bias', 'box_bias'): lower, upper = max(0.0, lower), min(1.0, upper)
-        g = (max(b - rng_, min(b + rng_, val + ghost[k])) if k in ghost else None)
+        g = float(getattr(recommended, k)) if k in ghost else None
         leans.append(dict(side=side, key=k, label=label, lo=lo, hi=hi, desc=desc, base=round(b, 3), value=round(val, 3), word=_lean_word(k, val), min=round(lower, 3), max=round(upper, 3), range=rng_,
                           delta=round(float(changes.get(k, 0.0)), 3) if isinstance(changes.get(k, 0.0), (int, float)) else 0.0, ghost=(round(g, 3) if g is not None else None), ghost_word=(_lean_word(k, g) if g is not None else None)))
     from views import _change_words
     def target_words(s):
         out = []
+        target = _preview(base, s.get('changes') or {})
         for ck, cv in (s.get('changes') or {}).items():
             if ck in GW.RANGE and isinstance(cv, (int, float)) and not isinstance(cv, bool):
-                cur = float(getattr(plan, ck)); b = float(getattr(base, ck)); tgt = max(b - GW.RANGE[ck], min(b + GW.RANGE[ck], cur + float(cv)))
+                tgt = float(getattr(target, ck))
                 out.append(f"{dict((x[1], x[2]) for x in LEANS).get(ck, ck)} to {_lean_word(ck, tgt)}")
             elif ck == 'depth_mix': d = list(cv); out.append('Depth toward ' + ['short', 'medium', 'deep'][max(range(3), key=lambda j: d[j])])
             elif ck == 'protection': out.append(f"Protection {str(cv).replace('_', ' ')}")
