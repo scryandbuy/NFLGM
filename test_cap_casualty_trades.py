@@ -281,9 +281,23 @@ class RealMarketIntegrationTests(unittest.TestCase):
         self.assertNotIn(p.team, (None, 'MIN', 'GB'))
         self.assertEqual([pid for pid, q in L.players.items() if q.team != owners[pid]], [p.pid])
         self.assertEqual(seller.cap_space, baseline.teams['MIN'].cap_space)
-        self.assertGreaterEqual(L.teams[p.team].cap_space, CT.TARGET_ROOM)
+        self.assertGreaterEqual(L.teams[p.team].cap_space, 0)
         self.assertTrue(any(pk.original == p.team for pk in seller.picks))
         self.assertEqual(keep.team, 'MIN')
+        # A different funded bid can win when a premium bidder cannot afford
+        # a renewal. The buyer need not retain a generic $12m cushion. Check
+        # the real role and that ordinary funding recovery keeps every player,
+        # rather than solving this purchase by cutting it or another incumbent.
+        import financial_plan as FP
+        import roster_needs as RN
+        self.assertGreater(RN.departure_loss(L.teams[p.team],p),.5)
+        recovered=copy.deepcopy(L);buyer=recovered.teams[p.team]
+        posttrade_owners={pid:q.team for pid,q in recovered.players.items()}
+        CT._fix_one(recovered,buyer,np.random.default_rng(71),
+                    FP.roster_funding_target(recovered,buyer))
+        self.assertEqual({pid:q.team for pid,q in recovered.players.items()},posttrade_owners)
+        self.assertTrue(all(row['funded_room']>=-.0005
+                            for row in FP.snapshot(recovered,buyer)['years']))
 
 
 if __name__ == '__main__':

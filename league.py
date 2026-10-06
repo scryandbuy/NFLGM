@@ -797,6 +797,10 @@ class League:
         if pre_roll(self): settle_week(self,18)
         roster_releases = self._trade_roster_releases(a, b, a_sends, b_sends)
         require_trade_room(self,a,b,a_sends,b_sends,roster_releases)
+        import trade_retention as TRE
+        renewal = TRE.purchase_plans(self,self.teams[a],self.teams[b],a_sends,b_sends)
+        if not renewal['approved']:
+            raise ValueError('The acquiring club cannot fund a credible extension plan for this trade.')
         for item, src, dst in [(x, a, b) for x in a_sends] + \
                               [(x, b, a) for x in b_sends]:
             if isinstance(item, DraftPick):
@@ -842,6 +846,7 @@ class League:
         self.log('trade', a=a, b=b,
                  a_sends=[str(x) for x in a_sends],
                  b_sends=[str(x) for x in b_sends])
+        TRE.remember(self,renewal['plans'])
         # THE LEAGUE HEARS ABOUT THE BIG ONES: a first-round pick or a player 85 or better changing hands
         try:
             import inbox as IB

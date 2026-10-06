@@ -12,6 +12,7 @@ MODULES.extend(['development_value', 'game_recap', 'practice', 'practice_integra
 MODULES.append('financial_plan')
 MODULES.append('trade_portfolio')
 MODULES.append('retention_plan')
+MODULES.append('trade_retention')
 MODULES.append('pass_pursuit')
 MODULES.append('character_assessment')
 MODULES.append('inseason_scouting')
