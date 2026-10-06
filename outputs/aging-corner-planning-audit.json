@@ -1,0 +1,501 @@
+{
+  "year": 2031,
+  "phase": "free_agency",
+  "candidates": [
+    {
+      "team": "SF",
+      "player": {
+        "pid": "P2277",
+        "name": "Deommodore Lenoir",
+        "age": 31.5,
+        "ovr": 82.4,
+        "years": 1
+      },
+      "to": "FS",
+      "immediate_gain": 3.59,
+      "settled_gain": 6.07,
+      "remaining_corners": [
+        {
+          "pid": "P2279",
+          "name": "Nate Hobbs",
+          "age": 31.7,
+          "ovr": 80.0,
+          "years": 1
+        },
+        {
+          "pid": "N2028CB002",
+          "name": "Amare Dillon",
+          "age": 26.5,
+          "ovr": 83.7,
+          "years": 1
+        },
+        {
+          "pid": "P0888",
+          "name": "Carrington Valentine",
+          "age": 29.5,
+          "ovr": 83.5,
+          "years": 1
+        },
+        {
+          "pid": "P0004",
+          "name": "Will Johnson",
+          "age": 28.0,
+          "ovr": 84.1,
+          "years": 1
+        }
+      ],
+      "displaced": [
+        {
+          "pid": "P2295",
+          "name": "Malik Mustapha",
+          "age": 28.7,
+          "ovr": 78.4,
+          "years": 2
+        }
+      ]
+    }
+  ],
+  "markets": [
+    {
+      "team": "SF",
+      "candidates": 60,
+      "current_seconds": 0.06940369994845241,
+      "planned_seconds": 1.2962114000692964,
+      "alternatives": [
+        {
+          "name": "Xavier McKinney",
+          "pos": "SS",
+          "ovr": 86.5,
+          "gain": 11.17,
+          "current_gain": 14.76,
+          "moves": []
+        },
+        {
+          "name": "Jessie Bates",
+          "pos": "FS",
+          "ovr": 85.7,
+          "gain": 11.02,
+          "current_gain": 14.61,
+          "moves": []
+        },
+        {
+          "name": "A.J. Terrell",
+          "pos": "CB",
+          "ovr": 87.4,
+          "gain": 10.36,
+          "current_gain": 5.91,
+          "moves": [
+            {
+              "pid": "P0085",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Leonard Moore",
+          "pos": "CB",
+          "ovr": 89.5,
+          "gain": 9.94,
+          "current_gain": 9.09,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Jalen Pitre",
+          "pos": "CB",
+          "ovr": 85.2,
+          "gain": 9.24,
+          "current_gain": 4.93,
+          "moves": [
+            {
+              "pid": "P0974",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Kamren Kinchens",
+          "pos": "FS",
+          "ovr": 85.2,
+          "gain": 8.8,
+          "current_gain": 12.39,
+          "moves": []
+        },
+        {
+          "name": "Charvarius Ward",
+          "pos": "CB",
+          "ovr": 82.6,
+          "gain": 8.53,
+          "current_gain": 4.0,
+          "moves": [
+            {
+              "pid": "P1058",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Zabien Brown",
+          "pos": "CB",
+          "ovr": 85.7,
+          "gain": 8.01,
+          "current_gain": 7.86,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Nate Wiggins",
+          "pos": "CB",
+          "ovr": 85.0,
+          "gain": 7.36,
+          "current_gain": 7.49,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Budda Baker",
+          "pos": "SS",
+          "ovr": 82.4,
+          "gain": 6.54,
+          "current_gain": 10.12,
+          "moves": []
+        },
+        {
+          "name": "Jamel Dean",
+          "pos": "CB",
+          "ovr": 83.3,
+          "gain": 6.19,
+          "current_gain": 3.65,
+          "moves": [
+            {
+              "pid": "P2116",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Grant Delpit",
+          "pos": "SS",
+          "ovr": 80.9,
+          "gain": 5.77,
+          "current_gain": 9.36,
+          "moves": []
+        },
+        {
+          "name": "Jamari Sharpe",
+          "pos": "CB",
+          "ovr": 83.3,
+          "gain": 4.88,
+          "current_gain": 4.62,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Marcus Jones",
+          "pos": "CB",
+          "ovr": 83.4,
+          "gain": 4.66,
+          "current_gain": 3.83,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Taron Johnson",
+          "pos": "CB",
+          "ovr": 80.4,
+          "gain": 4.55,
+          "current_gain": 3.41,
+          "moves": [
+            {
+              "pid": "P1449",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Byron Murphy",
+          "pos": "CB",
+          "ovr": 81.6,
+          "gain": 4.43,
+          "current_gain": 3.5,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "D.J. Reed",
+          "pos": "CB",
+          "ovr": 80.6,
+          "gain": 4.3,
+          "current_gain": 3.35,
+          "moves": [
+            {
+              "pid": "P0807",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Elijah Molden",
+          "pos": "FS",
+          "ovr": 80.7,
+          "gain": 3.96,
+          "current_gain": 7.55,
+          "moves": []
+        },
+        {
+          "name": "Mike Jackson",
+          "pos": "CB",
+          "ovr": 80.1,
+          "gain": 3.86,
+          "current_gain": 3.0,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Riq Woolen",
+          "pos": "CB",
+          "ovr": 83.0,
+          "gain": 3.85,
+          "current_gain": 3.0,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Davison Igbinosun",
+          "pos": "CB",
+          "ovr": 81.4,
+          "gain": 3.75,
+          "current_gain": 3.54,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Jaylen Watson",
+          "pos": "CB",
+          "ovr": 81.3,
+          "gain": 3.61,
+          "current_gain": 3.0,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Simeon Harris",
+          "pos": "CB",
+          "ovr": 81.9,
+          "gain": 3.56,
+          "current_gain": 3.35,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Bo Mascoe",
+          "pos": "CB",
+          "ovr": 80.7,
+          "gain": 3.42,
+          "current_gain": 3.22,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Riley Moss",
+          "pos": "CB",
+          "ovr": 80.7,
+          "gain": 3.38,
+          "current_gain": 3.17,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "AJ Harris",
+          "pos": "CB",
+          "ovr": 80.0,
+          "gain": 3.38,
+          "current_gain": 3.17,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Will James",
+          "pos": "CB",
+          "ovr": 80.0,
+          "gain": 3.38,
+          "current_gain": 3.18,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Kelley Jones",
+          "pos": "CB",
+          "ovr": 81.0,
+          "gain": 3.35,
+          "current_gain": 3.15,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Chris Peal",
+          "pos": "CB",
+          "ovr": 80.4,
+          "gain": 3.26,
+          "current_gain": 3.07,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Daylen Everette",
+          "pos": "CB",
+          "ovr": 80.4,
+          "gain": 3.21,
+          "current_gain": 3.02,
+          "moves": [
+            {
+              "pid": "P2277",
+              "to": "FS",
+              "displaced": [
+                "P2295"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "scope": "Copied save; potential acquisitions only. No signed deals or season outcomes simulated."
+}

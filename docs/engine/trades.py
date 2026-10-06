@@ -441,7 +441,7 @@ def street_alternative(league, team, target, baseline, cache, comps):
             continue
         report_key = ('report', candidate.pid)
         if report_key not in cache:
-            cache[report_key] = RN.assess(team, list(baseline['players']) + [candidate])
+            cache[report_key] = RN.planning_assess(league, team, list(baseline['players']) + [candidate])
         if RN.move_gain(team, player, baseline=cache[report_key]) <= UPGRADE_GAP:
             return True
     return False
@@ -569,6 +569,8 @@ def recent_acquisitions(league, team):
 def _coverage(team, players, week=None, report=None):
     import roster_needs as RN
     import practice_squad as PS
+    if report is not None and 'planned_players' in report:
+        players = report['planned_players']
     depth = PS.essential_depth(team, players, week)
     gaps = {'depth:' + key: value for key, value in depth['shortages'].items()}
     available = [p for p in players if week is None or getattr(p, 'out_until', None) is None
@@ -610,10 +612,10 @@ def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache
         projected = [p for p in old if p.pid not in removed] + [p for p in arrivals if p is not None]
         baseline_key = ('baseline', team.abbr, week)
         if baseline_key not in cache:
-            baseline = RN.assess(team, old)
+            baseline = RN.planning_assess(league, team, old)
             cache[baseline_key] = (baseline, _coverage(team, old, week, baseline), recent_acquisitions(league, team))
         baseline, before, recent = cache[baseline_key]
-        after_report = RN.assess(team, projected)
+        after_report = RN.planning_assess(league, team, projected)
         result['gains'][team.abbr] = after_report['score'] - baseline['score']
         if team.abbr == getattr(league, 'user_team', None):
             result['reserves'][team.abbr] = 0.0
@@ -641,7 +643,7 @@ def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache
         continuity = RP.extension_continuity(league, team, removed, baseline, cache=cache)
         if continuity['players'] and any(p is not None for p in arrivals):
             intent_players = projected + [p for p in old if p.pid in removed]
-            intent_report = RN.assess(team, intent_players)
+            intent_report = RN.planning_assess(league, team, intent_players)
             continuity = RP.extension_continuity(league, team, removed, intent_report, cache=cache)
         result.setdefault('extension_continuity', {})[team.abbr] = continuity
         recent_cost = max(recent_cost, continuity['reserve'])
@@ -676,7 +678,7 @@ def package_football(league, ta, tb, outgoing, incoming, *, prospect=None, cache
                         if solo_key not in cache:
                             solo_roster = [p for p in old if p.pid != pid]
                             cache[solo_key] = max(0., baseline['score'] -
-                                                  RN.assess(team, solo_roster, score_only=True))
+                                                  RN.planning_assess(league, team, solo_roster, score_only=True))
                         if cache[solo_key] <= 8.:
                             continue
                     impact_cost += 1.2
@@ -1041,7 +1043,7 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_g
             # Ordinary negotiation has just assessed these exact rosters.
             # Draft prospects and automatic releases need their own projection.
             gain = (roster_gains[team.abbr] if roster_gains is not None and not any(releases.values())
-                    else RN.assess(team, projected)['score'] - RN.assess(team)['score'])
+                    else RN.planning_assess(league, team, projected)['score'] - RN.planning_assess(league, team)['score'])
             roster = dict(additions=[(p, contracts[p.pid]) for p in arrivals],
                           removals=removed, trial_cap=trial, market=market)
             states[team.abbr] = dict(**roster, gain=gain,
@@ -1280,7 +1282,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
     prem = (1.40 if target.get('star') else 1.25) if wdw in ('contending', 'win_now') else (1.25 if target.get('star') else 1.10)
     gain = target.get('package_gain')
     if gain is None:
-        gain = RN.move_gain(ta, target['obj'])
+        gain = RN.move_gain(ta, target['obj'], baseline=RN.planning_assess(league, ta))
     ceiling = (market * prem + .35) * _upgrade_budget(gain)
     floor = _market_floor(target)
     if ceiling <= 0 or ceiling + 1e-9 < floor:
@@ -1301,7 +1303,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
             if len(roster_scores) >= MAX_PACKAGE_ROSTER_CHECKS:
                 exhausted = True
                 return float('-inf')
-            roster_scores[ids] = RN.assess(tb, recipient + [candidates[i]['obj'] for i in ids])['score']
+            roster_scores[ids] = RN.planning_assess(league, tb, recipient + [candidates[i]['obj'] for i in ids])['score']
         return roster_scores[ids]
 
     if candidates:
@@ -1564,7 +1566,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
         # Accounting phase becomes 'season' at cutdown, even while the
         # calendar still says offseason. Never force a buyer to cut a man.
         limit = 90 if offseason and buyer.phase != 'season' else 53
-        if len(buyer.active()) >= limit or RN.move_gain(buyer, player) <= .5:
+        if len(buyer.active()) >= limit or RN.move_gain(buyer, player, baseline=RN.planning_assess(league, buyer)) <= .5:
             continue
         target = player_asset(league, seller, player, pool, rng, viewer=buyer)
         if target is None:
@@ -1667,7 +1669,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             sa, _ = sn[a]
             ga = persona(ta.gm)
             ctx_a = context(ta)
-            if a not in target_reports: target_reports[a] = RN.assess(ta)
+            if a not in target_reports: target_reports[a] = RN.planning_assess(league, ta)
             gain_cache = target_gains.setdefault(a, {})
             for b in teams:
                 if b == a:
@@ -1790,7 +1792,7 @@ def run(league, rng, rounds=2, verbose=False, activity=1.0, exclude=(), offers_t
             ga, ctx_a = persona(ta.gm), context(ta)
             su_seen = [through_buyer_eyes(x, ta, tu) for x in su]
             import roster_needs as RN
-            report = RN.assess(ta)
+            report = RN.planning_assess(league, ta)
             candidates = list(su_seen)
             wdw_a = TE.window(ctx_a)
             selling = ctx_a.get('phase') == 'regular' and wdw_a in ('rebuilding', 'retooling')

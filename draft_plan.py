@@ -26,6 +26,7 @@ def projected_players(team, players=None):
 
 class _Roster:
     def __init__(self, team, players):
+        self.abbr = getattr(team, 'abbr', None)
         self.gm = getattr(team, 'gm', None)
         self.scheme = getattr(team, 'scheme', None)
         self.roster = players
@@ -135,7 +136,9 @@ def assess(league, abbr, level=None, players=None):
     team = league.teams[abbr]
     men = projected_players(team, players)
     proxy = _Roster(team, men)
-    report = RN.assess(proxy, strict_roles=True)
+    report = RN.planning_assess(league, proxy, strict_roles=True)
+    men = list(report.get('planned_players', men))
+    proxy = _Roster(team, men)
     floors, group_floors = RN.roster_floors(proxy)
     level = level or {}
     by_pos = proxy.depth

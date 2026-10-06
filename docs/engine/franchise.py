@@ -255,6 +255,7 @@ class Franchise:
         # known, matching the interactive offseason calendar.
         log['depth_signings'] = MK.fill_out_rosters(
             L, [p for p in MK._pool(L) if p.team is None], rng)
+        log['corner_to_safety'] = len(PC.review_aging_corners(L))
         # and the class for NEXT year's draft is born now
         PA.offseason(L, 12)
         NG.build(L, rng, draft_year=L.year + 1)

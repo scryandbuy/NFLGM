@@ -145,3 +145,154 @@ def convert_misfits(league, team, rng, min_gain=1.5, verbose=False):
     if verbose and moves:
         print(f'  {team.abbr} converts: ' + ', '.join(f'{n} {a}->{b} ({g:+.1f})' for n, a, b, g in moves))
     return moves
+
+
+def observed_speed_losses(league):
+    losses = {}
+    for row in league.transactions:
+        if row.get('kind') != 'regress' or row.get('year', 0) < league.year - 2:
+            continue
+        pair = row.get('attrs', {}).get('speed_rating')
+        if pair:
+            pid = row.get('pid')
+            losses[pid] = losses.get(pid, 0.) + max(0., float(pair[0]) - float(pair[1]))
+    return losses
+
+
+def aging_corner_options(league, team, players=None, *, profile=None, speed_losses=None):
+    """Read-only CB/FS/SS comparisons using the complete current secondary.
+
+    Age invites a review, not a conversion. Contract, ratings and roster spots
+    stay intact; the alternative is retaining the corner in his current job.
+    """
+    import copy
+    from types import SimpleNamespace
+    import roster_needs as RN
+    import targets as TG
+    active = team.active() if players is None else players
+    healthy = [p for p in active if getattr(p, 'out_until', None) is None]
+    corners = [p for p in healthy if p.pos == 'CB']
+    if len(corners) < 5:
+        return []  # retain four available corners for the existing packages
+    candidates = [p for p in corners if getattr(p, 'age', 0) >= 28 and not penalty(p)
+                  and getattr(p, 'xp_spent', {}).get('_cb_safety_review') != league.year]
+    if not candidates: return []
+    if profile is None:
+        import defense_roles as DR
+        profile = DR.planning_profile(getattr(team, 'gm', None))
+    if speed_losses is None: speed_losses = observed_speed_losses(league)
+    def assess(roster):
+        projected = []
+        for q in roster:
+            if penalty(q):
+                q = copy.copy(q)
+                q.ratings = effective_ratings(q)
+                q.transition = None
+            projected.append(q)
+        prepared = dict(team=team, grades={q.pid: RN._grade(q, team) for q in projected},
+                        profile=profile, role_grades={})
+        return RN.assess(team, projected, prepared=prepared)
+    baseline = assess(healthy)
+    coverage = RN.essential_coverage(team, report=baseline)
+    gm = getattr(team, 'gm', None)
+    rigidity = float(getattr(gm, 'scheme_rigidity', .5))
+    patience = float(getattr(gm, 'patience', .5))
+    youth = float(getattr(gm, 'youth', .5))
+    options = []
+    for p in candidates:
+        # Only observed attribute history, never hidden longevity or potential.
+        speed_lost = speed_losses.get(p.pid, 0.)
+        for pos in ('FS', 'SS'):
+            r = p.ratings
+            # A slower corner still needs range, recognition and sound tackling.
+            if (r.get('speed_rating', 0) < (72 if pos == 'FS' else 68)
+                    or r.get('tackle_rating', 0) < (60 if pos == 'FS' else 68)
+                    or r.get('zone_cover_rating', 0) < 65
+                    or min(r.get('awareness_rating', 0), r.get('play_rec_rating', 0)) < 65):
+                continue
+            fit_gain = TG.position_score(r, pos, team.scheme) - TG.position_score(r, 'CB', team.scheme)
+            if p.age < 30 and speed_lost < 1.0 and fit_gain < 2.0:
+                continue
+            trial = copy.copy(p); trial.team = team.abbr
+            change_position(SimpleNamespace(player=lambda _: trial, teams=league.teams), p.pid, pos, log=False)
+            roster = [trial if q.pid == p.pid else q for q in healthy]
+            after = assess(roster)
+            if not RN.coverage_not_worse(coverage, RN.essential_coverage(team, report=after)):
+                continue
+            immediate = after['_package_scores']['defense'] - baseline['_package_scores']['defense']
+            if immediate <= 0 or after['score'] <= baseline['score']:
+                continue
+            # Compare the settled role too, but never borrow future gains to
+            # excuse an immediately worse secondary during the learning period.
+            learned = copy.copy(trial); learned.transition = None
+            settled = assess([learned if q.pid == p.pid else q for q in healthy])
+            gain = settled['_package_scores']['defense'] - baseline['_package_scores']['defense']
+            threshold = max(.75, 1.5 + 2.0 * rigidity - .5 * patience
+                            - .15 * min(5., max(0., p.age - 28)) - .15 * min(3., speed_lost))
+            if gain < threshold:
+                continue
+            before_safeties = {row['player'].pid: row['player'] for row in baseline['assignments']
+                               if row['role'] in ('FS', 'SS') and row['player']}
+            after_safeties = {row['player'].pid for row in after['assignments']
+                              if row['role'] in ('FS', 'SS') and row['player']}
+            if p.pid not in after_safeties:
+                continue  # no new regular safety job, so retain the corner
+            displaced = [q for pid, q in before_safeties.items() if pid not in after_safeties]
+            if any(getattr(q, 'age', 22) < 27 and learned.ovr - q.ovr < 3.0 + 2.0 * youth for q in displaced):
+                continue
+            options.append(dict(player=p, to=pos, immediate_gain=immediate, settled_gain=gain,
+                                speed_lost=speed_lost, displaced=[q.pid for q in displaced],
+                                threshold=threshold, fit_gain=fit_gain, games=trial.transition['games_total']))
+    return sorted(options, key=lambda x: (-x['immediate_gain'], -x['settled_gain'], -x['fit_gain'], x['player'].pid, x['to']))
+
+
+def projected_secondary(league, team, players, *, profile=None, speed_losses=None):
+    """Consider conversions on the explicit roster, never promised acquisitions.
+
+    Used for keeping today's roster and each actual signing/draft/trade option.
+    The preview includes the learning tax, while saved positions stay unchanged.
+    """
+    import copy
+    from types import SimpleNamespace
+    roster = list(players); moves = []
+    while True:
+        options = aging_corner_options(league, team, roster, profile=profile, speed_losses=speed_losses)
+        if not options: return roster, moves
+        chosen = options[0]; trial = copy.copy(chosen['player']); trial.team = team.abbr
+        change_position(SimpleNamespace(player=lambda _: trial, teams=league.teams), trial.pid, chosen['to'], log=False)
+        # RN's role assignment consumes raw ratings, so preview the same tax
+        # that the actual game will apply. Preserve transition for eligibility.
+        trial.ratings = effective_ratings(trial)
+        trial.transition = dict(trial.transition, penalty=0.)
+        trial.xp_spent = dict(trial.xp_spent, _cb_safety_review=league.year)
+        roster = [trial if p.pid == trial.pid else p for p in roster]
+        moves.append(dict(pid=trial.pid, to=chosen['to'], displaced=chosen['displaced']))
+
+
+def review_aging_corners(league):
+    """Finalize the offseason secondary plan after acquisitions, before cutdown.
+
+    Reassess after each move so two conversions cannot spend the same depth.
+    Only labels and the existing learning penalty change: no cut, signing,
+    salary reduction, free attribute points, or move of the user's players.
+    """
+    moves = []
+    for abbr, team in sorted(league.teams.items()):
+        if abbr == getattr(league, 'user_team', None): continue
+        while True:
+            options = aging_corner_options(league, team)
+            if not options: break
+            chosen = options[0]; p = chosen['player']
+            change_position(league, p.pid, chosen['to'], log=False)
+            p.xp_spent['_cb_safety_review'] = league.year
+            league.log('position_change', pid=p.pid, team=abbr, frm='CB', to=chosen['to'],
+                       penalty=p.transition['penalty'], games=p.transition['games_total'],
+                       reason='Aging corner safety review', age=round(p.age, 1),
+                       immediate_gain=round(chosen['immediate_gain'], 2),
+                       settled_gain=round(chosen['settled_gain'], 2),
+                       displaced=chosen['displaced'], speed_lost=round(chosen['speed_lost'], 1))
+            moves.append((p.pid, chosen['to']))
+        for p in team.active():
+            if p.pos == 'CB' and p.age >= 28:
+                p.xp_spent['_cb_safety_review'] = league.year
+    return moves

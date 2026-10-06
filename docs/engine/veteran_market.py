@@ -189,7 +189,7 @@ def _proposal(league, team, player, quote, report, recent, budget, comparisons, 
     cache = {} if cache is None else cache
     for outgoing in departures:
         players = [p for p in report['players'] if p is not outgoing] + [player]
-        after = RN.assess(team, players)
+        after = RN.planning_assess(league, team, players)
         gain = after['score'] - report['score']
         if gain <= 1.:
             continue
@@ -280,7 +280,7 @@ weekly review includes every club. Injuries and minimum/squad emergency routes r
         if stage == 'weekly':
             if getattr(team, '_moved_week', None) == week:
                 continue
-        report = RN.assess(team)
+        report = RN.planning_assess(league, team)
         teams[abbr] = (report, RN.candidate_gains(team, pool, baseline=report),
                        recent_commitments(league, team, week), FP.snapshot(league, team, market=comparisons))
     comps = MK.VAL.pool_from_league(league)

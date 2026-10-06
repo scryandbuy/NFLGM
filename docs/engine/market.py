@@ -225,10 +225,10 @@ def acquisition_read(league, team, player, offer, gain, reference_apy=None, base
     except ValueError as exc:
         return dict(approved=False, reason=str(exc))
     cash=sum(preview.base)+sum(preview.rb)+preview.sb
-    before=RN.assess(team) if baseline is None else baseline
+    before=RN.planning_assess(league, team) if baseline is None else baseline
     projected_players=[p for p in before['players'] if p.pid!=player.pid]+[player]
     if after_package_rows is None:
-        after=RN.assess(team,projected_players)
+        after=RN.planning_assess(league, team,projected_players)
     else:
         changed_sides={r['side'] for r in after_package_rows}
         after=dict(players=projected_players,
@@ -299,7 +299,7 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
     for abbr, team in league.teams.items():
         if abbr in skip_teams:
             continue
-        report = RN.assess(team)
+        report = RN.planning_assess(league, team)
         gains = RN.candidate_gains(team, pool, baseline=report)
         cand = []
         from gm_engine import scheme_fit
@@ -342,7 +342,7 @@ def ai_bids(league, pool, phase, rng, skip_teams=()):
                 break
             # the club shapes the deal to its own books: tight now and open
             # later means back-load it, and the reverse means pay it now
-            planned=RN.assess(team,list(report['players'])+[q for q,_ in pending]) if pending else report
+            planned=RN.planning_assess(league, team,list(report['players'])+[q for q,_ in pending]) if pending else report
             gain=RN.move_gain(team,p,baseline=planned) if pending else gains[p.pid]
             if gain<=1.: continue
             bid=round(bid*min(1.,(.45+.55*min(1.,gain/8.))/
@@ -375,7 +375,7 @@ def reconsider_bid(league, player, offer, user_team=None):
         return offer
     import roster_needs as RN
     team = league.teams[offer.team]
-    gain = RN.move_gain(team, player)
+    gain = RN.move_gain(team, player, baseline=RN.planning_assess(league, team))
     if gain <= 1.0:
         return None
     original = offer.planning_gain
@@ -703,8 +703,8 @@ def _settle_offer_sheet(league, msg, rng, action=None):
             import financial_plan as FP
             import roster_needs as RN
             team = league.teams[destination]
-            gain = (RN.assess(team)['score']-RN.assess(team,[q for q in team.active() if q.pid!=p.pid])['score']
-                    if p.team==destination else RN.move_gain(team,p))
+            gain = (RN.planning_assess(league, team)['score']-RN.planning_assess(league, team,[q for q in team.active() if q.pid!=p.pid])['score']
+                    if p.team==destination else RN.move_gain(team,p,baseline=RN.planning_assess(league, team)))
             if not FP.evaluate(league,team,additions=[(p,offer_contract(league,p,proposal))],
                                gain=gain,action='offer_sheet')['approved']:
                 raise ValueError('CPU financial plan cannot fund this offer sheet')
@@ -810,7 +810,7 @@ def fill_out_rosters(league, pool, rng, verbose=False, user_team=None):
         # best available who will play for the minimum, his own position; never a player who should be paid
         # scarcity first
         avail = [q for q in pool if q.ovr < REPLACEMENT_GRADE or q.pos in ('K', 'P', 'LS')]
-        roster_needs = RN.assess(team)['needs']
+        roster_needs = RN.planning_assess(league, team)['needs']
         avail.sort(key=lambda p: -(p.ovr + 20.0 * roster_needs.get(p.pos, 0.0)))
         for p in list(avail):
             if need <= 0:
@@ -1074,7 +1074,7 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
     # A club's allocation only changes when it signs someone. Reuse that
     # snapshot across the remaining market instead of rebuilding every
     # package twice for every player/team pairing.
-    reports = {abbr: RN.assess(team) for abbr, team in league.teams.items()}
+    reports = {abbr: RN.planning_assess(league, team) for abbr, team in league.teams.items()}
     retention_market = None
     budget_before = {}
     out = []
@@ -1109,7 +1109,7 @@ def sign_the_leftovers(league, pool, rng, user_team=None):
         try: sign(league, p, o, cap)
         except ValueError: continue
         best.sync_cap(); out.append((best.abbr, p, o))
-        reports[best.abbr] = RN.assess(best)
+        reports[best.abbr] = RN.planning_assess(league, best)
         # A new contract changes league pay comparisons and the winner's cap.
         # Discard every preview before considering the next player.
         retention_market = None

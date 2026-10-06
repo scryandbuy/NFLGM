@@ -406,6 +406,32 @@ def assess(team, players=None, strict_roles=False, *, prepared=None, score_only=
 
 
 
+def planning_assess(league, team, players=None, *, _corner_profile=None, _corner_losses=None, **kwargs):
+    """Offseason acquisition alternatives including feasible CB-to-safety moves.
+
+    Every alternative starts from the actual retained roster. A corner signing
+    can unlock a conversion; a safety signing can make it unnecessary. Financial
+    and trade approvals still price the actual acquisition through their normal
+    gates. Current lineup/UI assessments continue to use assess().
+    """
+    men = tuple(team.active() if players is None else players)
+    if (getattr(league, 'phase', None) not in ('offseason', 'free_agency', 'draft', 'camp')
+            or getattr(team, 'abbr', None) == getattr(league, 'user_team', None)
+            or not any(p.pos == 'CB' and getattr(p, 'age', 0) >= 28
+                       and getattr(p, 'xp_spent', {}).get('_cb_safety_review') != league.year for p in men)):
+        return assess(team, men, **kwargs)
+    import position_change as PC
+    profile = DR.planning_profile(getattr(team, 'gm', None)) if _corner_profile is None else _corner_profile
+    losses = PC.observed_speed_losses(league) if _corner_losses is None else _corner_losses
+    projected, moves = PC.projected_secondary(league, team, men, profile=profile, speed_losses=losses)
+    prepared = dict(team=team, grades={p.pid: _grade(p, team) for p in projected}, profile=profile, role_grades={})
+    report = assess(team, projected, prepared=prepared, **kwargs)
+    if kwargs.get('score_only'): return report
+    report.update(players=men, planned_players=tuple(projected), corner_moves=moves,
+                  _corner_context=league, _corner_losses=losses)
+    return report
+
+
 def essential_coverage(team, players=None, report=None):
     """Normal starter coverage, independent of preferred reserve depth.
 
@@ -478,6 +504,19 @@ def move_gain(team, arrival, departure=None, baseline=None, *,
     before = assess(team) if baseline is None else baseline
     players = [p for p in before['players'] if p.pid != arrival.pid
                and (departure is None or p.pid != departure.pid)] + [arrival]
+    if '_corner_context' in before:
+        if not ({arrival.pos} | ({departure.pos} if departure is not None else set())) & {'CB', 'FS', 'SS'}:
+            # Unrelated acquisitions cannot alter the secondary decision. Keep
+            # the existing fast package calculation for the rest of the pool.
+            projected_before = dict(before, players=before['planned_players'])
+            projected_before.pop('_corner_context')
+            return move_gain(team, arrival, departure, projected_before,
+                             _floors_snapshot=_floors_snapshot, _weight_cache=_weight_cache,
+                             return_package_rows=return_package_rows)
+        after = planning_assess(before['_corner_context'], team, players,
+                                _corner_profile=before['_profile'], _corner_losses=before['_corner_losses'])
+        gain = after['score'] - before['score']
+        return (gain, after['package_assignments']) if return_package_rows else gain
     grades = dict(before['_grades']); grades[arrival.pid] = _grade(arrival, team)
     role_grades = {key: value for key, value in before['_role_grades'].items() if key[0] != arrival.pid}
     affected = {arrival.pos} | ({departure.pos} if departure is not None else set())
@@ -505,6 +544,13 @@ def departure_loss(team, departure, baseline=None):
     """
     before = assess(team) if baseline is None else baseline
     players = [p for p in before['players'] if p.pid != departure.pid]
+    if '_corner_context' in before:
+        if departure.pos not in ('CB', 'FS', 'SS'):
+            projected_before = dict(before, players=before['planned_players'])
+            projected_before.pop('_corner_context')
+            return departure_loss(team, departure, projected_before)
+        return before['score'] - planning_assess(before['_corner_context'], team, players,
+                    _corner_profile=before['_profile'], _corner_losses=before['_corner_losses'])['score']
     grades = before['_grades']
     role_grades = dict(before['_role_grades'])
     depth = _changed_depth(before, grades, departure=departure)

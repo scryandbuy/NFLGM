@@ -1380,6 +1380,7 @@ class Session:
         VM.review(L, rng, 'camp', user_team=self.user_team)
         PSQ.udfa_camp(L, rng)
         MK.fill_out_rosters(L, [p for p in MK._pool(L) if p.team is None], rng)
+        PC.review_aging_corners(L)
         NG.build(L, rng, draft_year=L.year + 1); SC.scout(L, rng)
 
     def step_cutdown(self):
