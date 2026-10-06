@@ -44,7 +44,14 @@ def consolidate(league, before):
         sections = []
         entities = []
         pids = []
-        for message in messages:
+        sources = messages
+        if topic == 'Coaching Changes':
+            summaries = [m for m in messages if m.get('subject', '').startswith('Coaching carousel summary')]
+            if summaries:
+                # The completed ledger includes hires and exits. Earlier market
+                # previews and club announcements repeat it and may be stale.
+                sources = summaries[-1:]
+        for message in sources:
             layout = IB.mail_layout(message)
             entities.extend(message.get('entities') or [])
             pid = (message.get('payload') or {}).get('pid')

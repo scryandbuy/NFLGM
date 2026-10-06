@@ -77,11 +77,73 @@ def trade_sections(a, b, a_sends, b_sends):
     return sections
 
 
+def _coaching_mail_layout(payload):
+    """Join recorded departures to hires; never guess an unrecorded former club."""
+    import copy
+    sections = payload.get('mail_sections') or []
+    old = [s for s in sections if s.get('columns') == ['Team', 'Role', 'Coach', 'Details']]
+    if not old: return payload
+    def text(cell):
+        return str(cell.get('text', '') if isinstance(cell, dict) else cell)
+    def cell(value):
+        return dict(text=value, mentions=[])
+    hires, departures, vacancies = [], [], []
+    seen = set()
+    for section in old:
+        for row in section.get('rows', []):
+            values = tuple(text(c) for c in row)
+            if values in seen: continue
+            seen.add(values)
+            team, role, name, detail = (list(values) + [''] * 4)[:4]
+            if section['title'].startswith('Jobs still open'):
+                vacancies.append([team, role])
+            elif section['title'].startswith('Hired'):
+                hires.append((team, role, name))
+            else:
+                departures.append((team, name, detail))
+    rows, used = [], set()
+    for team, role, name in hires:
+        matches = [i for i, d in enumerate(departures) if d[1] == name]
+        # Names alone cannot disambiguate multiple hires/departures.
+        match = matches[0] if len(matches) == 1 and sum(h[2] == name for h in hires) == 1 else None
+        origin = departures[match][0] if match is not None else 'Not recorded'
+        if match is not None: used.add(match)
+        rows.append([name, origin, team, role])
+    out = []
+    if rows:
+        out.append(mail_section(f'Hired ({len(rows)})', sorted(rows, key=lambda r: (r[2], r[3], r[0])),
+                                ['Coach', 'From', 'To', 'New Role']))
+    left = [[name, team, detail.split(' (', 1)[0] or 'Departed']
+            for i, (team, name, detail) in enumerate(departures) if i not in used]
+    if left:
+        out.append(mail_section(f'Departures ({len(left)})', sorted(left, key=lambda r: (r[1], r[0])),
+                                ['Coach', 'Left', 'Outcome']))
+    if vacancies:
+        out.append(mail_section(f'Jobs still open ({len(vacancies)})', vacancies, ['Team', 'Role']))
+    for section in out:
+        section['rows'] = [[cell(value) for value in row] for row in section['rows']]
+    # Preserve unrelated notes; drop only the obsolete market preview and
+    # duplicated carousel announcements from older consolidated messages.
+    for section in sections:
+        if section in old or section.get('title') == 'Notable coaching candidates': continue
+        preserved = copy.deepcopy(section)
+        preserved['rows'] = [row for row in preserved.get('rows', []) if not (
+            len(row) == 1 and (re.fullmatch(r'.+ moved on from its head coach\..*', text(row[0]))
+            or re.fullmatch(r'\d+ clubs? making coaching changes\.', text(row[0]))
+            or text(row[0]) == 'Coaching changes this offseason.'))]
+        if preserved['rows']: out.append(preserved)
+    return dict(payload, mail_sections=out, mail_intro=dict(text='', mentions=[]))
+
+
 def mail_layout(message):
     """Display old structured regression mail and legacy CPU trades consistently."""
     import copy
     import re
     payload = dict(message.get('payload') or {})
+    coaching = (str(message.get('subject', '')).startswith('Coaching carousel summary')
+                or message.get('subject') == 'Coaching Changes')
+    if coaching and payload.get('mail_sections'):
+        return _coaching_mail_layout(payload)
     if str(message.get('subject', '')).startswith('Coaching carousel summary') and not payload.get('mail_sections'):
         lines = payload.get('body_rows') or str(message.get('body') or '').splitlines()
         sections = []
@@ -102,7 +164,7 @@ def mail_layout(message):
         if sections:
             payload.update(mail_sections=[s for s in sections if s['rows']],
                            mail_intro=dict(text='Coaching changes this offseason.' if any(s['rows'] for s in sections) else 'No coaching changes this offseason.', mentions=[]))
-            return payload
+            return _coaching_mail_layout(payload)
     if payload.get('link') == 'league:bracket' and not payload.get('mail_sections'):
         # Older playoff letters used single newlines, which the prose renderer
         # correctly treats as wrapping. Recover only that exact saved format.

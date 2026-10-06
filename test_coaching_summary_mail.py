@@ -15,10 +15,54 @@ class CoachingSummaryMail(unittest.TestCase):
         layout = IB.mail_layout(message)
         self.assertEqual(len(layout['mail_sections']), 2)
         hired = layout['mail_sections'][0]
-        self.assertEqual(hired['columns'], ['Team', 'Role', 'Coach', 'Details'])
+        self.assertEqual(hired['columns'], ['Coach', 'From', 'To', 'New Role'])
         self.assertEqual([c['text'] for c in hired['rows'][0]],
-                         ['Arizona', 'Defensive Coordinator', 'Test Coach', ''])
+                         ['Test Coach', 'Not recorded', 'Arizona', 'Defensive Coordinator'])
         self.assertEqual(message, before)
+
+    def test_existing_combined_email_pairs_moves_and_removes_repeated_preview(self):
+        def section(title, rows):
+            result = IB.mail_section(title, rows, ['Team', 'Role', 'Coach', 'Details'])
+            result['rows'] = [[dict(text=c, mentions=[]) for c in r] for r in result['rows']]
+            return result
+        msg = dict(subject='Coaching Changes', payload=dict(mail_sections=[
+            dict(title='', columns=[], rows=[[dict(text='New Orleans moved on from its head coach. Josh Delgado takes over.', mentions=[])],
+                                            [dict(text='4 clubs making coaching changes.', mentions=[])]]),
+            dict(title='Notable coaching candidates', columns=[], rows=[[dict(text='Stale candidate', mentions=[])]]),
+            section('Hired (3)', [['New Orleans', 'Head Coach', 'Josh Delgado', 'offensive coordinator'],
+                                 ['Carolina', 'Offensive Coordinator', 'Lou Lindgren', ''],
+                                 ['Kansas City', 'Head Scout', 'Unknown Origin', 'from the pool']]),
+            section('Departures (2)', [['Los Angeles', 'Offensive Coordinator', 'Lou Lindgren', 'Fired (unit bottom-eight two years running)'],
+                                      ['New Orleans', 'Head Coach', 'Sean Jankowski', 'Fired']]),
+            section('Other Changes (1)', [['Dallas', 'Offensive Coordinator', 'Josh Delgado', 'Promoted (hired as head coach by NO)']])]))
+        original = copy.deepcopy(msg)
+        layout = IB.mail_layout(msg)
+        hires = [[c['text'] for c in row] for row in layout['mail_sections'][0]['rows']]
+        self.assertIn(['Josh Delgado', 'Dallas', 'New Orleans', 'Head Coach'], hires)
+        self.assertIn(['Lou Lindgren', 'Los Angeles', 'Carolina', 'Offensive Coordinator'], hires)
+        self.assertIn(['Unknown Origin', 'Not recorded', 'Kansas City', 'Head Scout'], hires)
+        self.assertEqual([[c['text'] for c in row] for row in layout['mail_sections'][1]['rows']],
+                         [['Sean Jankowski', 'New Orleans', 'Fired']])
+        self.assertEqual(len(layout['mail_sections']), 2)
+        self.assertEqual(msg, original)
+        self.assertEqual(IB.mail_layout(dict(msg, payload=layout)), layout)
+
+    def test_completed_summary_replaces_early_announcements_in_digest(self):
+        import inbox_digest as ID
+        league = self.league()
+        self.tx(league, 'fire', coach='Old Coach')
+        self.tx(league, 'gm_change', hired='New Coach', background='offensive coordinator')
+        IB.post(league, 'league', 'MIN makes a change', 'Repeated announcement')
+        IB.post(league, 'league', 'The coaching market', 'Stale candidates')
+        LN.coaching_summary(league)
+        ID.consolidate(league, set())
+        self.assertEqual(len(league.inbox), 1)
+        msg = league.inbox[0]
+        self.assertEqual(msg['subject'], 'Coaching Changes')
+        self.assertNotIn('Repeated announcement', msg['body'])
+        self.assertNotIn('Stale candidates', msg['body'])
+        self.assertEqual(msg['body'].count('New Coach'), 1)
+        self.assertEqual(msg['body'].count('Old Coach'), 1)
 
     def league(self):
         return NS(year=2027, week=0, phase='offseason', user_team='GB', players={},
