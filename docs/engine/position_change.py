@@ -181,6 +181,19 @@ def aging_corner_options(league, team, players=None, *, profile=None, speed_loss
         import defense_roles as DR
         profile = DR.planning_profile(getattr(team, 'gm', None))
     if speed_losses is None: speed_losses = observed_speed_losses(league)
+    def suitable(p, pos):
+        r = p.ratings
+        if (r.get('speed_rating', 0) < (72 if pos == 'FS' else 68)
+                or r.get('tackle_rating', 0) < (60 if pos == 'FS' else 68)
+                or r.get('zone_cover_rating', 0) < 65
+                or min(r.get('awareness_rating', 0), r.get('play_rec_rating', 0)) < 65):
+            return False
+        fit_gain = TG.position_score(r, pos, team.scheme) - TG.position_score(r, 'CB', team.scheme)
+        return not (p.age < 30 and speed_losses.get(p.pid, 0.) < 1.0 and fit_gain < 2.0)
+    # Most aging corners cannot fill a safety role. Skip the expensive whole
+    # secondary comparison when no player passes the same suitability checks.
+    if not any(suitable(p, pos) for p in candidates for pos in ('FS', 'SS')):
+        return []
     def assess(roster):
         projected = []
         for q in roster:
@@ -204,15 +217,8 @@ def aging_corner_options(league, team, players=None, *, profile=None, speed_loss
         speed_lost = speed_losses.get(p.pid, 0.)
         for pos in ('FS', 'SS'):
             r = p.ratings
-            # A slower corner still needs range, recognition and sound tackling.
-            if (r.get('speed_rating', 0) < (72 if pos == 'FS' else 68)
-                    or r.get('tackle_rating', 0) < (60 if pos == 'FS' else 68)
-                    or r.get('zone_cover_rating', 0) < 65
-                    or min(r.get('awareness_rating', 0), r.get('play_rec_rating', 0)) < 65):
-                continue
+            if not suitable(p, pos): continue
             fit_gain = TG.position_score(r, pos, team.scheme) - TG.position_score(r, 'CB', team.scheme)
-            if p.age < 30 and speed_lost < 1.0 and fit_gain < 2.0:
-                continue
             trial = copy.copy(p); trial.team = team.abbr
             change_position(SimpleNamespace(player=lambda _: trial, teams=league.teams), p.pid, pos, log=False)
             roster = [trial if q.pid == p.pid else q for q in healthy]
