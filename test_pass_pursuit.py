@@ -89,6 +89,24 @@ class PursuitTests(unittest.TestCase):
                              in_space=True,track_tackler=True)['yards'] for seed in range(500)))
         self.assertLess(totals[1],totals[0])
 
+    def test_short_catch_convergence_reduces_one_miss_long_tail(self):
+        # A receiver may still outrun the defense, but the next assigned
+        # pursuer should reach a catch in front of him before one missed
+        # tackle alone routinely becomes a 20-yard run.
+        pursuers=self.choose(self.setup_play('cover_3'),depth='short')
+        carrier=dict(pid='WR',pos='WR',speed_rating=85,accel_rating=85,
+                     agility_rating=85,juke_move_rating=85,
+                     break_tackle_rating=80,bcv_rating=80)
+        totals=[]
+        for convergence in (False,True):
+            gains=[P.resolve_yards_after(carrier,pursuers,70,np.random.default_rng(seed),
+                   in_space=True,track_tackler=True,
+                   converging_pursuit=convergence)['yards'] for seed in range(5000)]
+            totals.append((sum(gains)/len(gains),sum(y>=20 for y in gains)))
+        self.assertLess(totals[1][1],totals[0][1]*0.6)
+        self.assertGreater(totals[1][1],0)
+        self.assertGreater(totals[1][0],totals[0][0]*0.85)
+
     def test_each_pursuit_attribute_has_an_effect(self):
         for attribute in ('tackle_rating','pursuit_rating','speed_rating'):
             sums=[]
