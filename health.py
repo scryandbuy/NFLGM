@@ -220,12 +220,14 @@ INJURIES_PER_TEAM_WEEK = 2.51
 # both sides): the register counts injury EVENTS (about 2.65 a team a game, many of them a week
 # or less and played through as Questionable); the men actually missing a game land at 1.2 a
 # team a game, which is the number the GM decided on.
-# Gameplay adjustment: 30% fewer new injuries than the prior calibrated
-# setting. This scales occurrence only; type, recovery duration, durability,
-# condition, workload and playing-hurt consequences retain their distributions.
-# The targeted register at the previous setting measured 1.20 events/team/game;
-# the new aim is roughly 0.85, allowing healthy depth to last longer.
-_RULED_OUT_SHARE = 0.01022
+# The first lower-injury setting (.01022) was 30% below the old .0146 rate and
+# yielded .85 game events per team-game in a short trial. Later recovery and
+# physical rotation kept players fresher: six retained seasons produced .47
+# events and roughly .75 unavailable players per club at sampled checkpoints.
+# Restore a modest portion of the occurrence risk so depth still matters,
+# while staying below the old injury load. This does not change duration,
+# durability, contact, recovery or playing-hurt consequences.
+_RULED_OUT_SHARE = 0.012264
 
 def condition_injury_multiplier(condition):
     """
@@ -240,7 +242,7 @@ def condition_injury_multiplier(condition):
     return float(np.exp(0.030 * (100.0 - condition)))
 
 # The base rate has to be set AFTER the condition multiplier, not before it.
-# At a realistic in-game condition around 88 that multiplier is already ~2.0,
+# At a realistic in-game condition around 88 that multiplier is about 1.43,
 # so calibrating the base against 100% condition produced 8.5 players out per
 # team per week against a real 2.51.
 _COND_REFERENCE = 88.0

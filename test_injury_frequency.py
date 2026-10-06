@@ -7,7 +7,7 @@ import plays
 
 
 class InjuryFrequencyTests(unittest.TestCase):
-    def test_occurrence_is_thirty_percent_lower_across_positions_and_workloads(self):
+    def test_occurrence_remains_below_old_load_with_modest_restore(self):
         for pos in H.INJURY_SHARE:
             for cond in (100, 85, 65, 40):
                 for durable in (60, 90):
@@ -16,7 +16,10 @@ class InjuryFrequencyTests(unittest.TestCase):
                     current = H.injury_chance(*args)
                     with patch.object(H, '_RULED_OUT_SHARE', .0146):
                         previous = H.injury_chance(*args)
-                    self.assertAlmostEqual(current, previous * .7)
+                    self.assertAlmostEqual(current, previous * .84)
+                    with patch.object(H, '_RULED_OUT_SHARE', .01022):
+                        lower_setting = H.injury_chance(*args)
+                    self.assertAlmostEqual(current, lower_setting * 1.2)
 
     def test_type_and_duration_are_identical_when_an_injury_occurs(self):
         for seed in range(500):
