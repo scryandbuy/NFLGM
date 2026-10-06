@@ -45,6 +45,31 @@ class FourthDownValueTests(unittest.TestCase):
         self.assertEqual(game.fourth_down_decision(43,8,-3,60,self.decline_go,
             kicker=self.kicker,rate_fn=plays.rate),'field_goal')
 
+    def test_late_tying_kick_outweighs_generic_comeback_go_floor(self):
+        # GB at CHI: down three, fourth-and-seven at the 18 with one minute.
+        # A good kicker should get the tying attempt almost every time, while
+        # preserving a small chance for a coach to prefer the conversion.
+        calls = [game.fourth_down_decision(18,7,-3,60,
+                 SimpleNamespace(random=lambda draw=draw: draw),
+                 kicker=self.kicker,rate_fn=plays.rate,timeout_edge=1)
+                 for draw in (i / 1000 for i in range(1000))]
+        self.assertGreater(calls.count('field_goal'), 940)
+        self.assertGreater(calls.count('go'), 0)
+
+    def test_tying_kick_can_be_rejected_when_kicker_is_unreliable(self):
+        with patch.object(game,'fg_probability',return_value=.35):
+            self.assertEqual(game.fourth_down_decision(18,7,-3,60,
+                SimpleNamespace(random=lambda:.5),kicker=self.kicker,
+                rate_fn=plays.rate,timeout_edge=1),'go')
+
+    def test_short_yardage_and_touchdown_need_retain_aggressive_choices(self):
+        self.assertEqual(game.fourth_down_decision(18,1,-3,60,
+            SimpleNamespace(random=lambda:.15),aggression=.9,
+            kicker=self.kicker,rate_fn=plays.rate,timeout_edge=1),'go')
+        self.assertEqual(game.fourth_down_decision(18,7,-4,60,
+            SimpleNamespace(random=lambda:.5),kicker=self.kicker,
+            rate_fn=plays.rate,timeout_edge=1),'go')
+
     def test_meaningless_or_unreachable_late_kick_does_not_replace_needed_score(self):
         for yardline,score in ((43,-7),(75,-3)):
             self.assertEqual(game.fourth_down_decision(yardline,8,score,1,self.decline_go,

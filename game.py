@@ -314,6 +314,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # does a field goal matter? Down 14 it leaves two scores either way; down 10 it makes it one
     need_after_fg = int(np.ceil(-(score_diff + 3) / 8.0)) if score_diff + 3 < 0 else 0
     fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now and -score_diff not in (7, 8) and -(score_diff + 3) not in (7, 8))
+    tying_or_winning_kick = -3 <= score_diff < 0 and secs_left <= 120 and in_range
     # Keep possession for a still-viable late comeback. Useful tying/winning
     # or score-reducing kicks remain available; decided games returned above.
     if (chasing and secs_left <= 90.0 * need_now + 60.0
@@ -333,7 +334,12 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         edge = float(r.get('go_boost', 0.0)); thresh = 0.020 - 0.024 * (aggression - 0.5)
         p_model = 1.0 / (1.0 + np.exp(-(edge - thresh) / 0.015))
         # the model's possession bias is worst deep in its own end; there the league's behavior carries more weight
-        w_model = 0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.0     # inside your own 25 the model's possession bias has no vote
+        # The general go-rate table mixes every score state. In the last two
+        # minutes, a reachable kick that ties the game is a different choice:
+        # let the score/clock model carry most of the weight while retaining
+        # a smaller coach and matchup vote from the table.
+        w_model = (0.75 if tying_or_winning_kick else
+                   0.30 if yardline_100 <= 60 else 0.18 if yardline_100 <= 75 else 0.0)
         p_go = w_model * p_model + (1.0 - w_model) * p_table
     else:
         p_go = p_table
@@ -354,7 +360,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         p_go *= float(np.exp(-LEAD_FOURTH * lead_scores * (1.0 + played)))
     elif lead_scores < 0:
         p_go = float(min(0.85, p_go * min(1.4, np.exp(0.2 * (-lead_scores) * (1.0 + played)))))   # a deficit pushes a little; the table already carries the trailing club's fourth downs, and the chase rule takes over late
-    if chasing:
+    if chasing and not tying_or_winning_kick:
         p_go = max(p_go, 0.55 if score_diff < -8 else 0.35)
     # Near midfield, a defense earning repeated stops can support either
     # calculated aggression or a field-position game. Keep score/clock rules
