@@ -3742,7 +3742,7 @@ function gameplanSaveControl(v, reload, label = 'Save Plan for Sunday') {
 }
 function warnUnsavedGameplan() {
   if ($('#gameplan-warning')) return;
-  const dialog = el('dialog', { id: 'gameplan-warning', 'aria-labelledby': 'gameplan-warning-title', style: 'max-width:480px;background:var(--board);color:var(--ink);border:1px solid var(--rule-2);border-radius:12px;padding:24px' });
+  const dialog = el('dialog', { id: 'gameplan-warning', 'aria-labelledby': 'gameplan-warning-title', style: 'position:fixed;inset:0;margin:auto;width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;background:var(--board);color:var(--ink);border:1px solid var(--rule-2);border-radius:12px;padding:24px' });
   const back = el('button', { class: 'btn go', onclick: () => { dialog.close(); location.hash = '#gameplan/week'; } }, 'Return to Game Plan');
   dialog.append(el('h2', { id: 'gameplan-warning-title' }, gameplanSaving ? 'Saving game plan' : 'Game plan not saved'),
     el('p', {}, gameplanSaving ? 'Please wait for your game plan to finish saving.' : 'You have not saved your game plan. Save Plan for Sunday before leaving so your choices are locked in.'), back);
