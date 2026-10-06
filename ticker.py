@@ -60,11 +60,11 @@ def _yards(y):
     return ('loss', f"a loss of {-y} yard{'s' if -y != 1 else ''}")
 
 
-def _display_gain(spot, gain, off_abbr="", def_abbr=""):
+def _display_gain(spot, gain, off_abbr="", def_abbr="", *, exact=False):
     """Narrate movement between rounded field labels; leave stored stats alone."""
     def coordinate(y):
         return display_field_position(y, off_abbr, def_abbr)
-    applied = float(round(float(gain)))
+    applied = float(gain) if exact else float(round(float(gain)))
     finish = float(spot) - applied
     if not 1 <= finish <= 99:
         return gain
@@ -84,7 +84,7 @@ def play_line(league, p, off_abbr, def_abbr):
     td = bool(p.get('touchdown') and not p.get('defensive_td') and not p.get('fumble'))
     spot = float(p.get('yardline') or 0)
     gain = float(p.get('carrier_yards', p.get('yards')) or 0)
-    shown_gain = (_display_gain(spot, gain, off_abbr, def_abbr) if p.get('yardline') is not None
+    shown_gain = (_display_gain(spot, gain, off_abbr, def_abbr, exact=bool(p.get("fumble"))) if p.get('yardline') is not None
                   and not td and not p.get('nullified') else gain)
     near_goal_short = (t in ('run', 'complete', 'scramble') and not td and not p.get('nullified')
                        and 0 < gain < spot and 0 < spot - round(gain) < 1)
@@ -308,6 +308,10 @@ def play_line(league, p, off_abbr, def_abbr):
                 kind = 'score'
             elif p.get('fumble_advancement_restricted'):
                 text += ' Teammate recovery; no forward advancement.'
+            dead = p.get('fumble_dead_spot')
+            if (dead is not None and not p.get('touchdown') and not p.get('safety')
+                    and _spot(spot - gain, off_abbr, def_abbr) != _spot(dead, off_abbr, def_abbr)):
+                text += f' Ball at {_spot(dead, off_abbr, def_abbr)}.'
     if p.get('safety'):
         text = (text.rstrip('.') + '. SAFETY.') if text else 'SAFETY.'; kind = 'turnover'
     if p.get('nullified'):
