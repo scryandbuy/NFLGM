@@ -49,7 +49,7 @@ FORMATIONS = {
         ('X', 'R', OUTSIDE), ('Z', 'L', OUTSIDE), ('slot', 'L', SLOT),
         ('slot', 'L', SLOT), ('back', 'C', BACKFIELD)]),
     # a back split out is still 11 personnel - the DEFENCE has to notice
-    'empty':      dict(packages=('11', '10', '00'), weight=0.28, spots=[
+    'empty':      dict(packages=('11', '10', '00', '01'), weight=0.28, spots=[
         ('X', 'L', OUTSIDE), ('Z', 'R', OUTSIDE), ('slot', 'L', SLOT),
         ('slot', 'R', SLOT), ('slot', 'R', SLOT)]),
 
@@ -88,7 +88,7 @@ def _fit(player, wants, rate_fn):
     return rate_fn(player, wants)
 
 
-def choose_formation(personnel, rng, down=1, ydstogo=10, score_diff=0,
+def formation_weights(personnel, down=1, ydstogo=10, score_diff=0,
                      secs_left=None, spread_bias=0.0):
     """
     Which look, out of the ones this package can even produce.
@@ -114,7 +114,14 @@ def choose_formation(personnel, rng, down=1, ydstogo=10, score_diff=0,
             w[i] *= 1.0 - 0.18 * (wide - 3)      # tighten it up to run
         w[i] *= 1.0 + spread_bias * 0.30 * (wide - 3)
     w = np.clip(w, 1e-6, None)
-    return names[int(rng.choice(len(names), p=w / w.sum()))]
+    return dict(zip(names, w / w.sum()))
+
+
+def choose_formation(personnel, rng, down=1, ydstogo=10, score_diff=0,
+                     secs_left=None, spread_bias=0.0):
+    weights = formation_weights(personnel, down, ydstogo, score_diff, secs_left, spread_bias)
+    names = list(weights)
+    return names[int(rng.choice(len(names), p=list(weights.values())))]
 
 
 def align(receivers, personnel, rng, rate_fn, formation=None, **kw):

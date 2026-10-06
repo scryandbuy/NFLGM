@@ -1494,7 +1494,11 @@ class Session:
         from views import club
         team = self.L.teams.get(self.user_team)
         pending = []
-        for p in (team.roster if team else []):
+        seen = set()
+        men = list(team.roster) + list(team.practice_squad) if team else []
+        for p in men:
+            if p.pid in seen: continue
+            seen.add(p.pid)
             if p.team != self.user_team or p.retired or not XP.at_ceiling(p): continue
             unlocks = int(p.xp_spent.get('_unlocks', 0))
             if p.xp_spent.get('_ceiling_notice_ack', -1) >= unlocks: continue

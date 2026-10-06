@@ -819,7 +819,7 @@ def act_fill_by_fit(league, abbr):
 def development(session, league, abbr, pid):
     """One man's development sheet: his bank, his ceiling and the room under it, every attribute his
     position weighs with the price of the next point, and the ceiling unlock."""
-    import xp as XP, targets as TG
+    import xp as XP, targets as TG, xp_spend as XS
     p = league.player(pid); t = league.teams[abbr]
     if p is None or p.team != abbr: return dict(error='not on your roster')
     pot = XP.ceiling(p)
@@ -838,8 +838,10 @@ def development(session, league, abbr, pid):
                          gain=round(float(TG.position_score(dict(p.ratings, **{k: p.ratings[k] + 1.0}), p.pos) - raw_overall), 2)))
     rows.sort(key=lambda r: (-r['weight'], r['cost']))
     uc = XP.unlock_cost(p)
+    spend_cost = XS.next_spend_cost(p,t)
     return dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), bank=int(round(float(p.xp or 0))), **ceiling_read(p, league),
                 development_ovr=round(raw_overall), learning_penalty=round(max(0, raw_overall - p.ovr), 1), at_ceiling=XP.at_ceiling(p),
+                can_spend=(spend_cost is not None and p.xp>=spend_cost),
                 development_age=int(XP.development_age(p)), development_year=getattr(p, 'development_year', None),
                 unlock_cost=(int(round(uc)) if uc else None), unlock_ok=(uc is not None and p.xp >= uc and (pot or 0) < 99),
                 practice_earned=round(float((p.xp_spent.get('_earned') or {}).get('practice',0))),
@@ -891,21 +893,26 @@ def act_spend_by_read(league, abbr, pid=None):
     import xp_spend as XS, numpy as np
     t = league.teams[abbr]; rng = np.random.default_rng(stable_seed(abbr + str(league.week)))
     men = [league.player(pid)] if pid else list(t.active())
-    n = 0; pts = 0
+    n = 0; pts = 0; unlocks = 0
     for p in men:
         if p is None: continue
-        acts = XS.spend_player(p, t.gm, t, league.week or 0, rng, year=league.year, source='Assistant')
-        if acts: n += 1; pts += len(acts)
-    return dict(ok=True, line=f"{pts} point{'s' if pts != 1 else ''} bought for {n} player{'s' if n != 1 else ''}.")
+        acts = XS.spend_player(p, t.gm, t, league.week or 0, rng, year=league.year, source='Assistant', spend_now=True)
+        buys=sum(kind=='buy' for kind,_,_ in acts)
+        raised=sum(kind=='unlock' for kind,_,_ in acts)
+        if buys or raised: n += 1
+        pts += buys; unlocks += raised
+    line=f"{pts} attribute point{'s' if pts != 1 else ''} bought for {n} player{'s' if n != 1 else ''}."
+    if unlocks: line += f" {unlocks} ceiling unlock{'s' if unlocks != 1 else ''}."
+    return dict(ok=True, line=line, spent=pts+unlocks)
 
 
 def progression(session, league, abbr):
     """The roster's development at a glance: bank, points bought this year, ceiling room, auto."""
-    import xp as XP
+    import xp as XP, xp_spend as XS
     t = league.teams[abbr]
     rows = []
     for p in sorted(t.active(), key=lambda p: -float(p.xp or 0)):
-        cheapest = min((XP.cost_per_point(p, k) for k in p.ratings if k.endswith('_rating') and k not in XP.PHYSICAL and k not in XP.TOOLS), default=None)
+        cheapest = XS.next_spend_cost(p,t)
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), no=getattr(p, 'number', None), bank=int(round(float(p.xp or 0))), **ceiling_read(p, league),
                          bought=XP.points_bought_in_year(p, league.year), career=int(XP.points_bought(p)), auto=bool(p.xp_spent.get('_auto', False)),
                          cheapest=(int(round(cheapest)) if cheapest else None), can_buy=(cheapest is not None and p.xp >= cheapest and not XP.at_ceiling(p)), dev=modifier_word(p)))

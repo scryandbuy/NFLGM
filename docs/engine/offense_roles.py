@@ -8,6 +8,7 @@ PACKAGES = {
     '22': dict(HB=1, FB=1, TE=2, WR=1),
     '10': dict(HB=1, FB=0, TE=0, WR=4),
     '00': dict(HB=0, FB=0, TE=0, WR=5),
+    '01': dict(HB=0, FB=0, TE=1, WR=4),
 }
 OL = ('LT', 'LG', 'C', 'RG', 'RT')
 OFFENSE = frozenset(('QB', 'HB', 'FB', 'TE', 'WR') + OL)
@@ -43,7 +44,39 @@ def package_weights(gm=None):
         '10': (.29, .10, .015, .025, .01, .52, .04),
         '00': (.18, .04, .005, .01, .005, .25, .51),
     }
-    return dict(zip(keys, mixes[base_package(gm)]))
+    return dict(zip(keys, mixes['00' if base_package(gm) == '01' else base_package(gm)]))
+
+
+def empty_receiver_grade(player):
+    """Compare WR and TE on the same receiving job, without hidden potential."""
+    ratings = player.get('ratings', player) if isinstance(player, dict) else player.ratings
+    overall = player.get('ovr', 70) if isinstance(player, dict) else getattr(player, 'ovr', 70)
+    weights = {'catch_rating': .25, 'route_run_short_rating': .20,
+               'route_run_med_rating': .20, 'route_run_deep_rating': .10,
+               'cit_rating': .10, 'speed_rating': .10,
+               'release_rating': .05}
+    return sum(float(ratings.get(k, overall)) * w for k,w in weights.items())
+
+
+def empty_package(depth, gm=None, excluded=()):
+    """Four WR plus the best receiving TE unless WR5 is substantially better."""
+    excluded = set(excluded or ())
+    def healthy(pos):
+        return [p for p in depth.get(pos, ()) if pid(p) not in excluded and
+                (isinstance(p, dict) or p.out_until is None)]
+    wr, te = healthy('WR'), healthy('TE')
+    if not te: return '00' if len(wr) >= 5 else '01'
+    if len(wr) < 5: return '01'
+    aggression = gm.get('aggression', .5) if isinstance(gm, dict) else getattr(gm, 'aggression', .5)
+    threshold = 12. - 4. * (max(0., min(1., float(aggression))) - .5)
+    return '00' if empty_receiver_grade(wr[4]) - max(map(empty_receiver_grade, te)) >= threshold else '01'
+
+
+def refresh_empty_call(call, roster, state=None):
+    if call.get('formation') == 'empty' or call.get('personnel') in ('00', '01'):
+        call['personnel'] = empty_package(roster_depth(roster),
+            {'aggression': call.get('qb_run_aggression', .5)}, getattr(state, 'out', ()))
+        call['formation'] = 'empty'
 
 
 # A fixed set of ordinary situations for roster planning. The play caller
@@ -83,7 +116,8 @@ def expected_package_weights(gm, depth, _cache=None):
     # A recruiting pass evaluates many arrivals against the same playing
     # identity. Key the short-lived cache by the actual inputs to the weight
     # integration, so changes to read_identity cannot silently stale it.
-    cache_key = (tuple(base.items()), tuple(sorted(identity.items())))
+    empty = empty_package(depth, gm)
+    cache_key = (tuple(base.items()), tuple(sorted(identity.items())), empty)
     if _cache is not None and cache_key in _cache:
         return _cache[cache_key]
     adjusted = ID.personnel_weights(identity, base)
@@ -94,7 +128,12 @@ def expected_package_weights(gm, depth, _cache=None):
                                                  yards_to_endzone, score_diff, seconds_left)
             total = sum(situational.values())
             for package, weight in situational.items():
-                estimate[package] += .5 * share * weight / total
+                import formations as FM
+                empty_share = FM.formation_weights(package, down=down, ydstogo=distance,
+                    score_diff=score_diff, secs_left=seconds_left).get('empty', 0.)
+                amount = .5 * share * weight / total
+                estimate[package] += amount * (1. - empty_share)
+                estimate[empty] = estimate.get(empty, 0.) + amount * empty_share
     if _cache is not None:
         _cache[cache_key] = estimate
     return estimate
@@ -206,6 +245,11 @@ def assign(depth, package, excluded=(), rng=None, state=None):
         rested = getattr(state, 'resting_starters', set()) if state is not None else set()
         candidates.sort(key=lambda p: pid(p) in rested)
         chosen = candidates[0]
+        if role == 'TE' and str(package) == '01':
+            own = [p for p in candidates if position(p) == 'TE']
+            if own:
+                chosen = max(own, key=lambda p: (pid(p) not in rested, empty_receiver_grade(p)))
+                candidates = [chosen] + [p for p in candidates if pid(p) != pid(chosen)]
         if role == 'TE' and slot > 0 and str(package) in ('12', '13', '22'):
             own = [p for p in candidates if position(p) == 'TE']
             if own:
