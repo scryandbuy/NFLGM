@@ -1524,9 +1524,11 @@ function renderDepth(v) {
   tabs.append(el('span', { style: 'margin-left:auto' }), clubSelect(abbr, a => { const m = pyJSON('SESSION.club_list()').find(c => c.abbr === a); location.hash = m && m.mine ? '#club/depth' : `#club/team/${a}/depth`; }));
   s.append(tabs);
   if (depthSide === 'offense') {
-    const labels = {'11':'Three WR','12':'Two TE','13':'Three TE','21':'Two backs','22':'Two backs / Two TE','10':'Four WR','00':'Empty','01':'Empty'};
+    const labels = {'11':'Three WR','12':'Two TE','13':'Three TE','21':'Two backs','22':'Two backs / Two TE','10':'Four WR','00':'Empty'};
+    const selected = v.offense_package === '01' ? '00' : v.offense_package;
+    const base = v.offense_base === '01' ? '00' : v.offense_base;
     const pk = el('div', {class:'pkg'}, el('span', {}, 'Personnel'));
-    for (const p of v.offense_packages || []) pk.append(el('button', {'aria-pressed':String(p === v.offense_package), onclick:()=>{depthOffense=p; reload();}}, `${p} · ${labels[p]}${p === v.offense_base ? ' · Base' : ''}`));
+    for (const p of v.offense_packages || []) pk.append(el('button', {'aria-pressed':String(p === selected), onclick:()=>{depthOffense=p; reload();}}, `${p === '00' ? 'Empty' : `${p} · ${labels[p]}`}${p === base ? ' · Base' : ''}`));
     s.append(pk);
   }
   if (depthSide === 'defense') {

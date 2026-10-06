@@ -130,15 +130,52 @@ class OffensivePersonnelTests(unittest.TestCase):
                 t.gm.off_personnel = package
                 view = VC.depth(session,league,'TST')
                 chart = {p['pid'] for col in view['sides']['offense'] for p in col['slots'] if p['start']}
-                engine = {p['pid'] for role,p in OR.field(assembled,package)['offensive_assignments']}
+                actual = OR.empty_package(assembled['depth'], t.gm) if package in ('00', '01') else package
+                engine = {p['pid'] for role,p in OR.field(assembled,actual)['offensive_assignments']}
                 self.assertEqual(chart,engine,package)
                 self.assertEqual(len(chart),11)
                 t.gm.off_personnel = '11'
                 selected = VC.depth(session,league,'TST',offense_package=package)
-                self.assertEqual(selected['offense_package'],package)
+                self.assertEqual(selected['offense_package'],actual)
+                self.assertEqual([p for p in selected['offense_packages'] if p in ('00', '01')], ['00'])
                 selected_starters = {p['pid'] for col in selected['sides']['offense'] for p in col['slots'] if p['start']}
                 self.assertEqual(selected_starters,engine)
                 self.assertEqual(t.gm.off_personnel,'11')
+
+    def test_single_empty_preview_adapts_for_gap_and_available_players(self):
+        import views_club as VC
+        for te_grade, wr_grade, injured_receivers, expected in (
+                (80, 70, False, '01'), (75, 82, False, '01'),
+                (60, 85, False, '00'), (60, 85, True, '01')):
+            with self.subTest(te=te_grade, wr=wr_grade, injured=injured_receivers):
+                objects = {pos: [SimpleNamespace(pid=p['pid'], pos=pos,
+                    ovr=te_grade if pos == 'TE' else wr_grade,
+                    ratings=dict(p, ovr=te_grade if pos == 'TE' else wr_grade),
+                    out_until=99 if injured_receivers and pos == 'WR' and i >= 4 else None,
+                    team='TST') for i, p in enumerate(men)]
+                    for pos, men in roster()['depth'].items()}
+                t = SimpleNamespace(depth=objects, scheme=None, depth_pins={},
+                    roster=[p for men in objects.values() for p in men],
+                    gm=SimpleNamespace(def_front='4-3', off_personnel='11', aggression=.5))
+                t.active = lambda: t.roster
+                session = SimpleNamespace(runner=None, user_team='TST')
+                league = SimpleNamespace(teams={'TST':t}, week=1)
+                with patch.object(VC,'rail',return_value={}), \
+                     patch.object(VC,'user_player_grade',return_value=dict(ovr=70,fit=0)), \
+                     patch.object(VC,'player_plate',side_effect=lambda p:{'pid':p.pid}):
+                    # Either previously selected variant migrates to the same
+                    # adaptive preview, including after player availability changes.
+                    for old_selection in ('00', '01'):
+                        view = VC.depth(session, league, 'TST', offense_package=old_selection)
+                        self.assertEqual(view['offense_package'], expected)
+                        self.assertEqual([p for p in view['offense_packages'] if p in ('00','01')], ['00'])
+                        starters = [(c['pos'], p['pid']) for c in view['sides']['offense']
+                                    for p in c['slots'] if p['start']]
+                        count = Counter(pos for pos, pid in starters)
+                        self.assertEqual((count['WR'], count['TE']), (5, 0) if expected == '00' else (4, 1))
+                        self.assertEqual(len({pid for pos, pid in starters}), 11)
+                        self.assertFalse({p.pid for p in t.roster if p.out_until is not None}
+                                         .intersection(pid for pos, pid in starters))
 
 
 if __name__ == '__main__':

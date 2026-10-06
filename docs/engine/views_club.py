@@ -693,7 +693,12 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
             ranked.sort(key=lambda p: order.get(p.pid, 10**6))
         off_depth[canonical] = ranked
     off_package = offense_package if offense_package in OR.PACKAGES else OR.base_package(t.gm)
-    off_rows = OR.assign(off_depth, off_package)
+    # Empty is one adaptive choice. Both legacy preview values resolve the
+    # same healthy 4-WR/receiving-TE default and substantial WR5-gap exception.
+    empty_preview = off_package in ('00', '01')
+    if empty_preview:
+        off_package = OR.empty_package(off_depth, t.gm, unavailable)
+    off_rows = OR.assign(off_depth, off_package, excluded=unavailable if empty_preview else ())
     off_starters = {p.pid for role, p in off_rows}
     sides = {}
     for side, cols_ in SIDES.items():
@@ -754,7 +759,7 @@ def depth(session, league, abbr, package='Base', front_override=None, offense_pa
             cols.append(dict(pos=pos, title=(DR.role_label(pos, front) if side == 'defense' else label), group=group, slots=slots, on_field=n_start))
         sides[side] = cols
     return dict(rail=rail(session, league, abbr), package=package, packages=list(PACKAGES), sides=sides, pins=getattr(t, 'depth_pins', None) or {},
-                offense_package=off_package, offense_base=OR.base_package(t.gm), offense_packages=list(OR.PACKAGES),
+                offense_package=off_package, offense_base=OR.base_package(t.gm), offense_packages=[p for p in OR.PACKAGES if p != '01'],
                 front=front, coach_front=getattr(t.gm, 'def_front', '4-3'),
                 available_fronts=(['4-3', '3-4'] if getattr(t.gm, 'def_front', '4-3') == 'multiple' else []),
                 defense_shape=DR.shape_label(front, package),
