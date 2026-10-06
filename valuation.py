@@ -347,7 +347,7 @@ if __name__ == '__main__':
 OL_POS = ('LT', 'LG', 'C', 'RG', 'RT')
 
 
-def live_production(league, player, season=None):
+def live_production(league, player, season=None, *, peers_by_position=None):
     """
     Production on 0-1 for a man in THIS league, as a percentile inside his own
     position group. Returns None when he has no meaningful playing time, which
@@ -388,13 +388,19 @@ def live_production(league, player, season=None):
     mine = score(player.pid)
     if mine is None:
         return None
-    peers = []
-    for p in league.players.values():
-        if p.retired or p.pos != player.pos:
-            continue
-        v = score(p.pid)
-        if v is not None:
-            peers.append(v)
+    # A market snapshot values hundreds of players against the same season.
+    # Reuse its peer scores only within that call, never across actions/games.
+    peers = None if peers_by_position is None else peers_by_position.get(player.pos)
+    if peers is None:
+        peers = []
+        for p in league.players.values():
+            if p.retired or p.pos != player.pos:
+                continue
+            v = score(p.pid)
+            if v is not None:
+                peers.append(v)
+        if peers_by_position is not None:
+            peers_by_position[player.pos] = peers
     if len(peers) < 5:
         return 0.5
     return float(np.clip(np.mean([mine > v for v in peers]), 0.0, 1.0))
@@ -426,13 +432,14 @@ def pool_from_league(league, season=None):
     """
     cap = _league_cap(league, season or league.year)
     rows = []
+    peers_by_position = {}
     for p in league.players.values():
         if p.retired or not p.contract or not p.team:
             continue
         apy = p.apy
         if apy <= 0:
             continue
-        prod = live_production(league, p, season)
+        prod = live_production(league, p, season, peers_by_position=peers_by_position)
         rows.append(dict(
             full_name=p.name, grp=GRP.get(p.pos, 'LB'), madden_position=p.pos,
             ovr=p.ovr, age=p.age, apy=apy, cappct=apy / _signed_cap(league, p),
