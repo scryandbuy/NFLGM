@@ -391,7 +391,10 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         p_go *= DEC.fourth_conversion(ydstogo) / DEC.FOURTH_CONV[8]
         if ydstogo >= 15 and (r is None or r.get('go_boost', 0.0) <= 0):
             p_go = 0.0
-    if score_diff <= -9 and yardline_100 <= 5 and ydstogo <= 5:
+    if (score_diff <= -9 and yardline_100 <= 5 and ydstogo <= 5
+            and not (in_range and need_after_fg < need_now)):
+        # A reachable kick that removes a required score remains a genuine
+        # alternative. Let the normal matchup/value and coach judgment choose.
         p_go = max(p_go, 0.85)                           # down two scores at the goal line, the touchdown is the point
     if secs_left < 120 and score_diff < 0 and yardline_100 > 40 and not (in_range and fg_matters):
         p_go = 1.0                                       # a punt down late is the game
