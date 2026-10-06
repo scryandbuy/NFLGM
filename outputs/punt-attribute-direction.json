@@ -1,0 +1,47 @@
+{
+  "limitations": "Controlled 18-yard initial return and 80 yards to goal, not overall return frequency.",
+  "cases": [
+    {
+      "case": "ordinary",
+      "returns": 10000,
+      "lanes": 387,
+      "tds": 258,
+      "average": 19.696110000000008
+    },
+    {
+      "case": "elite returner",
+      "returns": 10000,
+      "lanes": 646,
+      "tds": 590,
+      "average": 21.514740000000007
+    },
+    {
+      "case": "weak coverage",
+      "returns": 10000,
+      "lanes": 745,
+      "tds": 625,
+      "average": 22.989220000003503
+    },
+    {
+      "case": "strong coverage",
+      "returns": 10000,
+      "lanes": 280,
+      "tds": 236,
+      "average": 18.151189999996852
+    },
+    {
+      "case": "weak blocks",
+      "returns": 10000,
+      "lanes": 284,
+      "tds": 238,
+      "average": 18.227099999996828
+    },
+    {
+      "case": "strong blocks",
+      "returns": 10000,
+      "lanes": 736,
+      "tds": 616,
+      "average": 22.882100000003447
+    }
+  ]
+}

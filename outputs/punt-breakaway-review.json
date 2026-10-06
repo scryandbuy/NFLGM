@@ -1,0 +1,70 @@
+{
+  "baseline_commit": "642a999",
+  "saved_observation": "2026-2030: zero punt-return touchdowns in 3,576 recorded returns.",
+  "baseline": {
+    "punts": 40000,
+    "returns": 15657,
+    "touchdowns": 6,
+    "average": 10.197649613591363,
+    "fumbles": 496
+  },
+  "revised_same_seeds": {
+    "punts": 40000,
+    "returns": 15577,
+    "touchdowns": 137,
+    "average": 10.638595364961162,
+    "fumbles": 478
+  },
+  "revised_all_seeds": {
+    "punts": 80000,
+    "returns": 31034,
+    "touchdowns": 264,
+    "average": 10.633953083714635,
+    "fumbles": 956
+  },
+  "controlled_tests": "80 passed; new breakaway -> drive touchdown/extra point; return holding erases TD; PR statistics persist through save/reload. Faster trailing defenders and stronger punter tackling can stop breaks; attributes and blockers affect opportunity/outcome.",
+  "kickoff_parity": {
+    "baseline": "642a999",
+    "equal_outcomes_and_random_state": true,
+    "kickoffs": 10000,
+    "returns": 8741,
+    "breakaways": 370,
+    "touchdowns": 7
+  },
+  "player_examples": [
+    {
+      "name": "Anthony Hebert",
+      "outcome": "70.3-yard touchdown after missed punter at 46.8 yards"
+    },
+    {
+      "name": "Marcus Jones",
+      "outcome": "Stopped by punter after 39.1 yards on a 61.9-yard field"
+    }
+  ],
+  "limitations": [
+    "Controlled punt origins (48-95 yards to goal); not a full season, penalties and injuries omitted from frequency audit.",
+    "First-wave clearance and trailing lead are coarse modeled assumptions, not measured tracking geometry.",
+    "Saved-roster breakaway stops were all made by punters (51); coverage affects clearing the lane, but no trailing coverage run-down occurred in this sample. Controlled speed/pursuit tests verify that path.",
+    "No change to ordinary punt distances or lane probability, kickoff returns, or generic scrambles/YAC. No forced touchdown quota."
+  ],
+  "benchmarks": [
+    {
+      "season": 2023,
+      "returns": 975,
+      "tds": 8,
+      "url": "https://www.nfl.com/stats/team-stats/special-teams/punt-returns/2023/reg/all"
+    },
+    {
+      "season": 2024,
+      "returns": 873,
+      "tds": 6,
+      "url": "https://www.nfl.com/stats/team-stats/special-teams/punt-returns/2024/reg/all"
+    },
+    {
+      "season": 2025,
+      "returns": 827,
+      "tds": 15,
+      "url": "https://www.nfl.com/stats/team-stats/special-teams/punt-returns/2025/reg/all"
+    }
+  ]
+}

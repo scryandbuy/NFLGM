@@ -1,0 +1,8 @@
+{
+  "baseline": "642a999",
+  "equal_outcomes_and_random_state": true,
+  "kickoffs": 10000,
+  "returns": 8741,
+  "breakaways": 370,
+  "touchdowns": 7
+}

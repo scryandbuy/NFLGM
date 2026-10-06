@@ -806,8 +806,8 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70, snapper=None,
             how = 'return'
             skill = rate_fn(returner, {'kick_ret_rating': .45, 'speed_rating': .30,
                                        'juke_move_rating': .25})
-            # shape/scale solved against mean 10.4 and p90 19, with a long
-            # right tail so 0.36% reach the end zone
+            # Ordinary returns: mean about 10.4 and p90 about 19. Breakaway
+            # lanes are resolved separately; this gamma tail is not a TD rate.
             ret = max(0.0, rng.gamma(1.9, 5.5) * (1.0 + 0.9 * (skill - RET_AVG)))
         else:
             how = 'fair_catch'
@@ -824,7 +824,8 @@ def punt(yardline_100, punter, returner, rng, rate_fn, AVG=0.70, snapper=None,
     outcome = KR.resolve(100 - land, ret, returner or {}, rng, rate_fn,
                          kicking if return_coverage is None else return_coverage,
                          receiving if return_blockers is None else return_blockers,
-                         event='punt_return', weather=ENV.fumble_mult) if how == 'return' else {}
+                         event='punt_return', weather=ENV.fumble_mult,
+                         punt_safety=punter, punt_safety_spot=max(0., 100 - yardline_100)) if how == 'return' else {}
     ret = outcome.get('ret', ret)
     new = outcome.get('new_yardline', float(np.clip(100 - land, 1, 99)))
     result = dict(type='punt', blocked=False, touchback=False, pooch=pooch, how=how,
