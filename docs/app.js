@@ -2924,11 +2924,24 @@ function yourBoard(v, reload) {
 function renderSpring(v) {
   renderRail(v.rail); const page = persPage(); drSecond('spring');
   page.className = 'draft-page';
-  featureHero(page, v.rail.club, `Draft / ${v.year}`, 'SPRING REPORT', 'What the workouts, pro days, and visits changed.', [[v.visited?.length ?? 0, 'Visits'], [v.done ? v.risers.length + v.fallers.length : '—', 'Stock moves']]);
-  const s = el('section', { class: 'sheet c12 draft-surface draft-spring' }, el('h2', {}, 'The Spring', el('small', {}, v.done ? v.events.map(e => `${e.event} ${e.n} moves`).join(' · ') : 'stock moves and flags')));
+  featureHero(page, v.rail.club, `Draft / ${v.year}`, 'SPRING REPORT', 'Senior Bowl participants, workouts, pro days, and private visits.', [[v.senior_bowl?.length ?? 0, 'Senior Bowl players'], [v.visited?.length ?? 0, 'Visits']]);
+  const s = el('section', { class: 'sheet c12 draft-surface draft-spring' });
+  s.append(el('h2', {}, 'Senior Bowl', el('small', {}, `${v.senior_bowl?.length ?? 0} participants`)));
+  const bowl = el('div', { class: 'spring-scroll spring-bowl-scroll', tabindex: '0', role: 'region', 'aria-label': 'All Senior Bowl participants' });
+  const bt = el('table', { class: 'tbl spring-bowl-table' });
+  bt.append(el('thead', {}, el('tr', {}, el('th', {}, 'Player'), el('th', {}, 'Pos'), el('th', { class: 'n' }, 'Current read'), el('th', { class: 'n' }, 'Consensus rank'), el('th', {}, 'Senior Bowl stock'))));
+  const bb = el('tbody');
+  for (const r of v.senior_bowl || []) {
+    const m = r.move;
+    bb.append(el('tr', {}, el('td', {}, el('button', { class: 'spring-player-link', onclick: () => { location.hash = '#club/player/' + r.pid; } }, r.name)), el('td', {}, r.pos), el('td', { class: 'n' }, r.mine ?? '—'), el('td', { class: 'n' }, r.cons_rank != null ? `#${r.cons_rank}` : '—'), el('td', {}, m ? `${m.delta > 0 ? 'Rose' : 'Fell'}: #${m.frm} → #${m.to}` : 'No major move recorded')));
+  }
+  bt.append(bb); bowl.append(bt);
+  if (!(v.senior_bowl || []).length) bowl.append(el('div', { class: 'empty' }, 'No Senior Bowl participants recorded for this class yet.'));
+  s.append(bowl);
+  s.append(el('h2', {}, 'Stock Moves', el('small', {}, v.done ? v.events.map(e => `${e.event} ${e.n} moves`).join(' · ') : 'stock moves and flags')));
   if (v.note) s.append(el('div', { class: 'empty' }, v.note));
   if (!v.done) { page.append(s); return; }
-  const list = el('div', { class: 'pad' });
+  const list = el('div', { class: 'pad spring-scroll', tabindex: '0', role: 'region', 'aria-label': 'All spring stock moves and flags' });
   const line = (kind, m) => el('div', { class: 'sprow' }, el('span', { class: 'flag ' + ({ Rises: 'up', Falls: 'dn', Flag: 'med' }[kind] || '') }, kind), el('span', {}, el('b', { style: 'cursor:pointer', onclick: () => { location.hash = '#club/player/' + m.pid; } }, m.name), ` (${m.pos}, ${m.home_state}): ${m.line || `${m.frm} to ${m.to} after the ${m.event}`}`));
   for (const m of v.risers) list.append(line('Rises', m));
   for (const m of v.fallers) list.append(line('Falls', m));

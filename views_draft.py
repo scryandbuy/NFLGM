@@ -370,8 +370,21 @@ def spring(session, league, abbr):
         p = pool.get(pid) or league.player(pid)
         if p is None: continue
         flag_lines.append(dict(event='visits', pid=pid, name=p.name, pos=p.pos, home_state=home_state(p), frm=None, to=None, delta=0, kind='flag', line=f"Uncovered a {' and a '.join(fl)} flag at the visit."))
-    risers = sorted([m for m in moves if m['delta'] > 0], key=lambda m: -m['delta'])[:12]
-    fallers = sorted([m for m in moves if m['delta'] < 0], key=lambda m: m['delta'])[:12]
+    risers = sorted([m for m in moves if m['delta'] > 0], key=lambda m: -m['delta'])
+    fallers = sorted([m for m in moves if m['delta'] < 0], key=lambda m: m['delta'])
+    # Attendance is independent of stock movement: most participants will not
+    # generate a 15-place consensus story. Use the same marker as the board.
+    senior_bowl = []
+    bowl_moves = {m['pid']: m for m in moves if m['event'] == 'Senior Bowl'}
+    for p in pool.values():
+        if p.xp_spent.get('_senior_bowl') not in (league.year, league.year - 1):
+            continue
+        scout = (getattr(league, 'scouting', {}) or {}).get(abbr, {}).get(p.pid, {})
+        consensus = (getattr(league, 'consensus', {}) or {}).get(p.pid, {})
+        senior_bowl.append(dict(pid=p.pid, name=p.name, pos=p.pos, home_state=home_state(p),
+                                mine=round(float(scout['ovr'])) if scout.get('ovr') is not None else None,
+                                cons_rank=consensus.get('rank'), move=bowl_moves.get(p.pid)))
+    senior_bowl.sort(key=lambda r: (r['cons_rank'] or 99999, r['name']))
     events = []
     for ev in ('Senior Bowl', 'combine', 'pro days', 'visits'):
         ms = [m for m in moves if m['event'] == ev]
@@ -392,10 +405,10 @@ def spring(session, league, abbr):
             r['uncovered'] = [f for f in v.get('flags', []) if f == 'medical' and f not in (pre.get('flags') or [])]
             import character_assessment as CA
             r['uncovered'] += [f for f in CA.flags(v) if f not in (pre.get('character_flags') or [])]
-    done = bool(news)
+    done = bool(news or senior_bowl)
     visit_window = session.stop[0] == 'offseason' and session.OFFSEASON[session.stop[1]][1] == 'step_visits'
     return dict(rail=rail(session, league, abbr), year=spring_year(league), done=done, spring_done=_spring_done(league), visit_window=visit_window,
-                events=events, risers=risers, fallers=fallers, visited=visited, flagged=flagged[:40],
+                events=events, risers=risers, fallers=fallers, senior_bowl=senior_bowl, visited=visited, flagged=flagged[:40],
                 note=None if _spring_done(league) else 'The Senior Bowl takes place after the conference championships. Combine and pro day results arrive first; schedule private visits on the board before advancing to the Draft.')
 
 

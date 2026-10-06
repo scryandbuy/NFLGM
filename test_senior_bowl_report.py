@@ -42,12 +42,15 @@ class SeniorBowlReportTests(unittest.TestCase):
         news = copy.deepcopy(L.spring_news)
         self.assertTrue(all(x['year'] == L.year + 1 for x in news))
         view = self.report(s)
+        invited = {p.pid for p in L.next_class if p.xp_spent.get('_senior_bowl') == L.year}
+        self.assertEqual({r['pid'] for r in view['senior_bowl']}, invited)
         self.assertIn(up.pid, [r['pid'] for r in view['risers']])
         self.assertIn(down.pid, [r['pid'] for r in view['fallers']])
         self.assertFalse(VD._spring_done(L))
         self.assertIn('after the conference championships', view['note'])
         self.assertEqual(view['events'][0]['event'], 'Senior Bowl')
         resumed = session.Session.load(s.save())
+        self.assertEqual({r['pid'] for r in self.report(resumed)['senior_bowl']}, invited)
         self.assertEqual(resumed.L.spring_news, news)
         rng_before = copy.deepcopy(resumed.rng.bit_generator.state)
         resumed._senior_bowl()
@@ -57,6 +60,7 @@ class SeniorBowlReportTests(unittest.TestCase):
         resumed.L.phase = 'offseason'
         resumed.L.season_closed_year = resumed.L.year - 1
         resumed.L.draft_pool, resumed.L.next_class = resumed.L.next_class, []
+        self.assertEqual({r['pid'] for r in self.report(resumed)['senior_bowl']}, invited)
         with patch.object(SP, 'senior_bowl', side_effect=AssertionError('must not replay')):
             SP.run_spring(resumed.L, resumed.rng)
         self.assertEqual([x for x in resumed.L.spring_news if x.get('event') == 'Senior Bowl'], news)
@@ -82,7 +86,24 @@ class SeniorBowlReportTests(unittest.TestCase):
         self.assertEqual(v['risers'], [])
         self.assertEqual(v['fallers'], [])
         self.assertEqual(v['events'][0]['n'], 0)
+        self.assertEqual(len(v['senior_bowl']), 110)
+        self.assertTrue(all(r['move'] is None for r in v['senior_bowl']))
         self.assertFalse(VD._spring_done(s.L))
+
+    def test_full_movement_list_and_attendance_are_independent(self):
+        s = self.fresh()
+        players = s.L.next_class[:30]
+        for p in players:
+            p.xp_spent.pop('_senior_bowl', None)
+        players[0].xp_spent['_senior_bowl'] = s.L.year
+        players[1].xp_spent['_senior_bowl'] = s.L.year - 2
+        s.L.spring_news = [dict(kind='stock', year=s.L.year + 1, event='Senior Bowl',
+                               pid=p.pid, name=p.name, pos=p.pos, frm=100, to=50)
+                           for p in players]
+        v = self.report(s)
+        self.assertEqual(len(v['risers']), 30)
+        self.assertEqual([r['pid'] for r in v['senior_bowl']], [players[0].pid])
+        self.assertEqual(v['senior_bowl'][0]['move']['delta'], 50)
 
     def test_spring_discards_previous_class_and_marks_zero_movement_complete(self):
         s = self.fresh()
