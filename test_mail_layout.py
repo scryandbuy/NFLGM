@@ -10,6 +10,25 @@ from test_cap_accounting import fixture, player
 
 
 class MailLayoutTests(unittest.TestCase):
+    def test_digest_preserves_trade_pairs_and_other_transactions(self):
+        import inbox_digest
+        league = fixture()
+        for a, b in [('GB', 'MIN'), ('KC', 'BUF')]:
+            IB.post(league, 'league', f'{a} and {b} make a trade', '', payload=dict(
+                mail_layout='trade', mail_sections=IB.trade_sections(a, b,
+                    ['a 2032 second-round pick', 'a 2032 second-round pick'], ['Player (TE, 90)'])))
+        IB.post(league, 'league', 'GB sign Player', 'A signing remains visible.')
+        inbox_digest.consolidate(league, set())
+        self.assertEqual(len(league.inbox), 1)
+        saved = League.load(league.save()).inbox[-1]
+        sections = IB.mail_layout(saved)['mail_sections']
+        self.assertEqual([s.get('team') for s in sections[:4]], ['GB', 'MIN', 'KC', 'BUF'])
+        self.assertEqual(sections[0]['trade_group'], sections[1]['trade_group'])
+        self.assertNotEqual(sections[0]['trade_group'], sections[2]['trade_group'])
+        self.assertEqual(len(sections[1]['rows']), 2)
+        self.assertNotIn('make a trade', saved['body'])
+        self.assertIn('A signing remains visible.', saved['body'])
+
     def test_one_for_one_offer_has_both_teams_and_player_links(self):
         league=fixture(); league.user_team='GB'
         player(league,'a'); player(league,'b')
@@ -45,7 +64,8 @@ class MailLayoutTests(unittest.TestCase):
         self.assertEqual(gb['rows'][0][0]['mentions'][0]['id'],'b')
         self.assertEqual(mn['rows'][0][0]['mentions'][0]['id'],'a')
         self.assertEqual(len(mn['rows']),2)
-        self.assertIn('2027 first-round pick',mn['rows'][1][0]['text'])
+        from views import draft_year
+        self.assertIn(f'{draft_year(pick.year)} first-round pick',mn['rows'][1][0]['text'])
         self.assertFalse(IB.is_decision(msg))
 
     def test_old_cpu_trade_renders_sections_without_rewriting_mail(self):

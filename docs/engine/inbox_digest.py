@@ -54,7 +54,9 @@ def consolidate(league, before):
                 for section in layout['mail_sections']:
                     section = copy.deepcopy(section)
                     if layout.get('mail_layout') == 'trade':
-                        section['title'] = message['subject'] + ' · ' + section.get('title', '')
+                        # Keep the two received-asset lists together without
+                        # repeating the announcement over each team's list.
+                        section['trade_group'] = str(message['id'])
                     sections.append(section)
             else:
                 sections.append(dict(title='', columns=[], rows=[[dict(

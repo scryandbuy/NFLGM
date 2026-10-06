@@ -420,12 +420,67 @@ function messageText(message, field) {
   return node;
 }
 
+function mailTradePair(message, index) {
+  const sides = (message.mail_sections || []).slice(index, index + 2);
+  if (sides.length !== 2 || sides.some(s => s.columns?.length || !s.rows?.every(r => r.length === 1))) return null;
+  const legacy = sides.map(s => (s.title || '').match(/^([A-Z]+ and [A-Z]+ make a trade) · (.+)$/));
+  const grouped = sides[0].trade_group != null && sides[0].trade_group === sides[1].trade_group;
+  const oldDigest = legacy[0] && legacy[1] && legacy[0][1] === legacy[1][1];
+  const single = index === 0 && message.mail_sections.length === 2 && message.kind === 'league' && message.mail_layout === 'trade';
+  if (!grouped && !oldDigest && !single) return null;
+  return sides.map((s, i) => ({...s, title:(oldDigest ? legacy[i][2] : s.title || '').replace(/ Receives?$/, '')}));
+}
+
+function renderTradeExchange(sides) {
+  const exchange = el('section', {class:'mail-exchange', 'aria-label':sides.map(s => s.title).join(' and ') + ' trade'});
+  exchange.append(el('div', {class:'mail-exchange-label'}, 'Trade'));
+  const grid = el('div', {class:'mail-exchange-sides'});
+  const ordinals = ['first','second','third','fourth','fifth','sixth','seventh'];
+  for (const side of sides) {
+    const block = el('section', {class:'mail-exchange-team'});
+    if (side.team) applyTeamTheme(block, {abbr:side.team});
+    block.append(el('header', {}, el('h4', {}, side.title), el('span', {}, 'Receives')));
+    const picks = new Map();
+    for (const [cell] of side.rows) {
+      // Only combine unambiguous pick descriptions; preserve provenance or
+      // unfamiliar text verbatim, including every duplicate pick.
+      const pick = !(cell.mentions?.length) && cell.text.match(/^(?:a (\d{4}) (first|second|third|fourth|fifth|sixth|seventh)-round pick|(\d{4}) R([1-7]))$/);
+      if (pick) {
+        const year = pick[1] || pick[3], round = pick[2] ? ordinals.indexOf(pick[2]) + 1 : Number(pick[4]);
+        if (!picks.has(year)) picks.set(year, []);
+        picks.get(year).push(round);
+        continue;
+      }
+      const player = cell.text.match(/^(.+) \(([A-Z][A-Z0-9/]*), (\d+(?:\.\d+)?)\)$/);
+      if (player && (cell.mentions || []).every(r => r.end <= player[1].length)) {
+        block.append(el('div', {class:'mail-exchange-player'},
+          el('div', {}, messageText({body:player[1], mentions:{body:cell.mentions || []}}, 'body'), el('small', {}, player[2])),
+          el('div', {class:'mail-exchange-rating'}, player[3], el('small', {}, 'OVR'))));
+      } else block.append(el('div', {class:'mail-exchange-asset'}, messageText({body:cell.text, mentions:{body:cell.mentions || []}}, 'body')));
+    }
+    if (picks.size) {
+      const list = el('div', {class:'mail-exchange-picks'});
+      for (const [year, rounds] of [...picks].sort((a,b) => Number(a[0])-Number(b[0]))) {
+        list.append(el('div', {}, el('span', {}, `${year} ${rounds.length === 1 ? 'pick' : 'picks'}`),
+          el('strong', {}, rounds.sort((a,b) => a-b).map(r => `Round ${r}`).join(', '))));
+      }
+      block.append(list);
+    }
+    grid.append(block);
+  }
+  exchange.append(grid);
+  return exchange;
+}
+
 function renderMailBody(message) {
   const cellText = cell => messageText({body:cell.text, mentions:{body:cell.mentions || []}}, 'body');
   const body = el('div', {class:'mbody mail-content' + (message.mail_layout === 'trade' ? ' mail-trade' : '')});
   if (message.mail_sections?.length) {
     if (message.mail_intro?.text) body.append(el('p', {class:'mail-intro'}, cellText(message.mail_intro)));
-    for (const section of message.mail_sections) {
+    for (let index = 0; index < message.mail_sections.length; index++) {
+      const pair = mailTradePair(message, index);
+      if (pair) { body.append(renderTradeExchange(pair)); index++; continue; }
+      const section = message.mail_sections[index];
       const block = el('section', {class:'mail-section' + (message.mail_layout === 'trade' ? ' trade-offer-side' : '')});
       if (message.mail_layout === 'trade' && section.team) applyTeamTheme(block, {abbr:section.team});
       if (section.title) block.append(el('h4', {}, section.title));
@@ -571,7 +626,8 @@ function renderInbox(v) {
     pane.append(el('div',{class:'inbox-reading-top'},el('div',{class:'inbox-eyebrow'},playoffMail ? '' : m.from || m.tag),cur.decide ? el('span',{class:'inbox-status'},cur.block ? 'Action Required' : 'Needs a decision') : el('span',{class:'inbox-status'},m.status === 'open' || m.status === 'read' ? 'Read' : m.status),messageTools));
     const structuredRecap = m.recap || m.snap_counts || (m.kind === 'result' && (m.body || '').includes('PREGAME PLAN\n'));
     const messageBody = structuredRecap ? renderRecapBody(m) : renderMailBody(m);
-    pane.append(el('h3', {}, messageText(m,'subject')), el('div', { class: 'from' }, playoffMail ? (m.when || '') : inboxByline(m.tag || cur.tag, m.from, m.when)), messageBody);
+    const transactionDigest = m.subject === 'League Transactions';
+    pane.append(el('h3', {}, transactionDigest ? 'Transactions' : messageText(m,'subject')), el('div', { class: 'from' }, playoffMail || transactionDigest ? (m.when || '') : inboxByline(m.tag || cur.tag, m.from, m.when)), messageBody);
     if (m.kind === 'roster_report') pane.append(rosterReportCards(m, reload));
     if (m.kind === 'trade_offer') pane.append(el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => openTradeOffer(cur.id, reload) }, cur.decide ? 'Open Trade Offer' : 'View Trade Offer')));
     else if (m.actions && m.actions.length) { const a = el('div', { class: 'acts', style: 'margin-top:16px' }); for (const act of m.actions) a.append(el('button', { class: 'btn' + (act.primary ? ' go' : ''), onclick: () => { location.hash = act.go || `#portal/inbox/${cur.id}`; } }, act.label)); pane.append(a); }
