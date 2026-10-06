@@ -1,0 +1,7 @@
+Deception mechanics implementation on baseline 985a20a.
+
+Zero motion preserves zero in the existing minimum-tendency mapping; it does not mean a hard prohibition on every motion call. None retains neutral.
+Motion rushing benefit now ranges 0-6%, depending on available receivers' awareness/agility/acceleration versus defensive awareness/play recognition. No random mishap or mandatory downside. This is an aggregate execution model; it does not yet assign an individual motion player and track defensive movement geometrically.
+Play action adds a bounded 0.10-0.42 second fake cost to the same release window used for sacks, pressure and reads. Gun fakes cost less. Recognition versus QB fake execution determines a bounded window benefit. Hot answers and screens abandon the fake locally.
+
+14 tests passed including live pressure-window and existing pressure/blowout regressions. Repeated 19,800 paired component plays on saved 2029 roster ratings. Motion differences now 0-.019 yards/carry versus prior .047-.081. PA produced positive and negative differences across nine pair/depth cases: gains about .08-.63, losses about .19-.41 yards/dropback. Sack rates increased under PA, including GB-MIA medium 7% to9.7% and DET-SEA deep20% to25%. These tests establish costs and conditional outcomes, not league-wide calibration. Delay bounds and execution slopes remain model choices. No full-season run or browser build; main owns integration. Whole-scheme constants unchanged.

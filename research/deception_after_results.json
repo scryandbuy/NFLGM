@@ -1,0 +1,300 @@
+{
+  "runs": [
+    {
+      "pair": "GB-MIA",
+      "front": "4-3 over",
+      "scheme": "inside_zone",
+      "no_motion": 4.310333333333333,
+      "motion": 4.319333333333333
+    },
+    {
+      "pair": "GB-MIA",
+      "front": "4-3 over",
+      "scheme": "power",
+      "no_motion": 4.455333333333333,
+      "motion": 4.466333333333334
+    },
+    {
+      "pair": "GB-MIA",
+      "front": "wide 9",
+      "scheme": "inside_zone",
+      "no_motion": 4.643000000000001,
+      "motion": 4.653
+    },
+    {
+      "pair": "GB-MIA",
+      "front": "wide 9",
+      "scheme": "power",
+      "no_motion": 4.575333333333334,
+      "motion": 4.582666666666666
+    },
+    {
+      "pair": "GB-MIA",
+      "front": "tite",
+      "scheme": "inside_zone",
+      "no_motion": 3.2683333333333335,
+      "motion": 3.276
+    },
+    {
+      "pair": "GB-MIA",
+      "front": "tite",
+      "scheme": "power",
+      "no_motion": 3.8036666666666665,
+      "motion": 3.812
+    },
+    {
+      "pair": "GB-MIA",
+      "front": "bear",
+      "scheme": "inside_zone",
+      "no_motion": 3.9126666666666665,
+      "motion": 3.9266666666666667
+    },
+    {
+      "pair": "GB-MIA",
+      "front": "bear",
+      "scheme": "power",
+      "no_motion": 4.047666666666667,
+      "motion": 4.064
+    },
+    {
+      "pair": "ARI-TB",
+      "front": "4-3 over",
+      "scheme": "inside_zone",
+      "no_motion": 4.1883333333333335,
+      "motion": 4.1883333333333335
+    },
+    {
+      "pair": "ARI-TB",
+      "front": "4-3 over",
+      "scheme": "power",
+      "no_motion": 4.571,
+      "motion": 4.571
+    },
+    {
+      "pair": "ARI-TB",
+      "front": "wide 9",
+      "scheme": "inside_zone",
+      "no_motion": 4.4816666666666665,
+      "motion": 4.4816666666666665
+    },
+    {
+      "pair": "ARI-TB",
+      "front": "wide 9",
+      "scheme": "power",
+      "no_motion": 4.684666666666667,
+      "motion": 4.684666666666667
+    },
+    {
+      "pair": "ARI-TB",
+      "front": "tite",
+      "scheme": "inside_zone",
+      "no_motion": 2.7823333333333333,
+      "motion": 2.7823333333333333
+    },
+    {
+      "pair": "ARI-TB",
+      "front": "tite",
+      "scheme": "power",
+      "no_motion": 3.3933333333333335,
+      "motion": 3.3933333333333335
+    },
+    {
+      "pair": "ARI-TB",
+      "front": "bear",
+      "scheme": "inside_zone",
+      "no_motion": 3.9630000000000005,
+      "motion": 3.9630000000000005
+    },
+    {
+      "pair": "ARI-TB",
+      "front": "bear",
+      "scheme": "power",
+      "no_motion": 4.232666666666668,
+      "motion": 4.232666666666668
+    },
+    {
+      "pair": "DET-SEA",
+      "front": "4-3 over",
+      "scheme": "inside_zone",
+      "no_motion": 4.707666666666666,
+      "motion": 4.718666666666667
+    },
+    {
+      "pair": "DET-SEA",
+      "front": "4-3 over",
+      "scheme": "power",
+      "no_motion": 5.138999999999999,
+      "motion": 5.154666666666667
+    },
+    {
+      "pair": "DET-SEA",
+      "front": "wide 9",
+      "scheme": "inside_zone",
+      "no_motion": 5.012,
+      "motion": 5.0313333333333325
+    },
+    {
+      "pair": "DET-SEA",
+      "front": "wide 9",
+      "scheme": "power",
+      "no_motion": 5.258,
+      "motion": 5.277
+    },
+    {
+      "pair": "DET-SEA",
+      "front": "tite",
+      "scheme": "inside_zone",
+      "no_motion": 3.990666666666667,
+      "motion": 4.004666666666666
+    },
+    {
+      "pair": "DET-SEA",
+      "front": "tite",
+      "scheme": "power",
+      "no_motion": 4.7443333333333335,
+      "motion": 4.7573333333333325
+    },
+    {
+      "pair": "DET-SEA",
+      "front": "bear",
+      "scheme": "inside_zone",
+      "no_motion": 4.392666666666667,
+      "motion": 4.406666666666666
+    },
+    {
+      "pair": "DET-SEA",
+      "front": "bear",
+      "scheme": "power",
+      "no_motion": 4.769666666666667,
+      "motion": 4.786
+    }
+  ],
+  "passing": [
+    {
+      "pair": "GB-MIA",
+      "depth": "short",
+      "pa": false,
+      "yards": 5.895666666666666,
+      "sack": 0.04
+    },
+    {
+      "pair": "GB-MIA",
+      "depth": "short",
+      "pa": true,
+      "yards": 6.105333333333333,
+      "sack": 0.056666666666666664
+    },
+    {
+      "pair": "GB-MIA",
+      "depth": "medium",
+      "pa": false,
+      "yards": 6.241,
+      "sack": 0.07
+    },
+    {
+      "pair": "GB-MIA",
+      "depth": "medium",
+      "pa": true,
+      "yards": 6.332333333333334,
+      "sack": 0.09666666666666666
+    },
+    {
+      "pair": "GB-MIA",
+      "depth": "deep",
+      "pa": false,
+      "yards": 10.353666666666667,
+      "sack": 0.13333333333333333
+    },
+    {
+      "pair": "GB-MIA",
+      "depth": "deep",
+      "pa": true,
+      "yards": 9.947333333333333,
+      "sack": 0.15333333333333332
+    },
+    {
+      "pair": "ARI-TB",
+      "depth": "short",
+      "pa": false,
+      "yards": 5.0329999999999995,
+      "sack": 0.04666666666666667
+    },
+    {
+      "pair": "ARI-TB",
+      "depth": "short",
+      "pa": true,
+      "yards": 5.662666666666667,
+      "sack": 0.08333333333333333
+    },
+    {
+      "pair": "ARI-TB",
+      "depth": "medium",
+      "pa": false,
+      "yards": 5.857666666666668,
+      "sack": 0.08
+    },
+    {
+      "pair": "ARI-TB",
+      "depth": "medium",
+      "pa": true,
+      "yards": 5.675,
+      "sack": 0.10333333333333333
+    },
+    {
+      "pair": "ARI-TB",
+      "depth": "deep",
+      "pa": false,
+      "yards": 7.583,
+      "sack": 0.15
+    },
+    {
+      "pair": "ARI-TB",
+      "depth": "deep",
+      "pa": true,
+      "yards": 7.757999999999999,
+      "sack": 0.19
+    },
+    {
+      "pair": "DET-SEA",
+      "depth": "short",
+      "pa": false,
+      "yards": 5.747333333333333,
+      "sack": 0.056666666666666664
+    },
+    {
+      "pair": "DET-SEA",
+      "depth": "short",
+      "pa": true,
+      "yards": 5.447,
+      "sack": 0.09
+    },
+    {
+      "pair": "DET-SEA",
+      "depth": "medium",
+      "pa": false,
+      "yards": 6.739666666666667,
+      "sack": 0.11
+    },
+    {
+      "pair": "DET-SEA",
+      "depth": "medium",
+      "pa": true,
+      "yards": 6.480333333333332,
+      "sack": 0.14666666666666667
+    },
+    {
+      "pair": "DET-SEA",
+      "depth": "deep",
+      "pa": false,
+      "yards": 8.381,
+      "sack": 0.2
+    },
+    {
+      "pair": "DET-SEA",
+      "depth": "deep",
+      "pa": true,
+      "yards": 9.012333333333332,
+      "sack": 0.25
+    }
+  ]
+}
