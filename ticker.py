@@ -401,7 +401,12 @@ def write_game(league, res, home, away):
             c0 = real[0].get('clock'); c1 = real[-1].get('clock')
             if c0 is not None and c1 is not None: secs = max(0.0, float(c0) - float(c1))
         result = drive_result(dr, res.get('overtime', False))
-        header = f"Drive {i + 1} · {off} · Q{q} · Started at the {_spot(start, off, deff)} · {len(real)} play{'s' if len(real) != 1 else ''}, {int(round(yards))} yard{'s' if int(round(yards)) != 1 else ''}" + (f", {int(secs // 60)}:{int(secs % 60):02d}" if secs else '') + (f" · {_result_word(result)}" if result else '')
+        header = f"Drive {i + 1} · {off} · Q{q} · {drive_start_text(_spot(start, off, deff), bool(getattr(dr, 'return_only', False)))} · {len(real)} play{'s' if len(real) != 1 else ''}, {int(round(yards))} yard{'s' if int(round(yards)) != 1 else ''}" + (f", {int(secs // 60)}:{int(secs % 60):02d}" if secs else '') + (f" · {_result_word(result)}" if result else '')
         out.append(dict(index=i + 1, team=off, quarter=q, start=round(100 - start, 1), end=round(100 - end, 1), result=result, points=int(getattr(dr, 'points', 0) or 0),
                         header=header, lines=lines))
     return out
+
+
+def drive_start_text(label, return_only=False):
+    """A terminal kickoff return never begins a scrimmage drive."""
+    return f"Kickoff return from the {label}" if return_only else f"Started at the {label}"

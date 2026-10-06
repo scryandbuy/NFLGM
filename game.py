@@ -1201,8 +1201,9 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
         failed_third = getattr(dr, 'down', 1) >= 3 and float(out.get('yards', 0) or 0) < getattr(dr, 'togo', 10)
         # A last-half possession outside scoring range is over after a failed
         # third down. Do not buy the opponent another snap by stopping the clock
-        # just to punt, including when trailing before halftime.
-        if (half_end is not None and failed_third and secs_in_half <= 20
+        # just to punt, including when trailing before halftime or tied at
+        # the end of regulation with overtime available.
+        if ((half_end is not None or dr.score_diff == 0) and failed_third and secs_in_half <= 20
                 and dr.yardline - float(out.get('yards', 0) or 0) >= 50):
             dr._half_stall_intent = 'protect'
             return False, None
@@ -1298,7 +1299,7 @@ def _kneel_interval(seconds, down, opponent_timeouts, *, warning_pending=True):
     warning = warning_pending and seconds > 120 >= live_end
     if live_end == 0 or down >= 4 or warning:
         return live_end, False, warning
-    if opponent_timeouts > 0:
+    if opponent_timeouts > 0 and live_end > 2.0 * (4 - down):
         return live_end, True, False
     end = max(0.0, live_end - 40.0)
     if warning_pending and live_end > 120 >= end:
