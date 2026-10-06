@@ -1,0 +1,314 @@
+{
+  "source_hashes": {
+    "game.py": "149253e9a154e336c9dea13c55cfa31f44a2783749cacf6827f231ceed341a6a",
+    "plays.py": "3316e749470a2232f8fd549b121fc303d3c32b271f2e887d4eb10be7cfc045e9",
+    "events.py": "5e0b2cc2e9792a61b42244b93d514a3ba2378e360f86616e8a20dbc7fba966cb",
+    "schemes.py": "d0311510e60cbe9cead45a20db3e59b75759cdcdf8c682caf0b4f02f14b2306a"
+  },
+  "existing_sample": {
+    "games": 1632,
+    "groups": {
+      "all_designed": {
+        "attempts": 83763,
+        "yards": 373783.8160940762,
+        "raw_losses": 7832,
+        "displayed_losses": 3797,
+        "fractional_losses_shown_zero": 4035,
+        "zero_or_loss": 10138
+      },
+      "non_qb": {
+        "attempts": 78586,
+        "yards": 354021.09842495667,
+        "raw_losses": 7271,
+        "displayed_losses": 3507,
+        "fractional_losses_shown_zero": 3764,
+        "zero_or_loss": 9444
+      },
+      "box_7": {
+        "attempts": 12720,
+        "yards": 45262.68716989445,
+        "raw_losses": 1426,
+        "displayed_losses": 743,
+        "fractional_losses_shown_zero": 683,
+        "zero_or_loss": 1797
+      },
+      "qb": {
+        "attempts": 5177,
+        "yards": 19762.71766911894,
+        "raw_losses": 561,
+        "displayed_losses": 290,
+        "fractional_losses_shown_zero": 271,
+        "zero_or_loss": 694
+      },
+      "box_8": {
+        "attempts": 6210,
+        "yards": 17574.990509508953,
+        "raw_losses": 823,
+        "displayed_losses": 454,
+        "fractional_losses_shown_zero": 369,
+        "zero_or_loss": 1107
+      },
+      "box_5": {
+        "attempts": 27797,
+        "yards": 148104.88143621708,
+        "raw_losses": 2028,
+        "displayed_losses": 899,
+        "fractional_losses_shown_zero": 1129,
+        "zero_or_loss": 2395
+      },
+      "box_6": {
+        "attempts": 22420,
+        "yards": 93007.08780320993,
+        "raw_losses": 2252,
+        "displayed_losses": 1077,
+        "fractional_losses_shown_zero": 1175,
+        "zero_or_loss": 2734
+      },
+      "box_4": {
+        "attempts": 10234,
+        "yards": 64123.03695192367,
+        "raw_losses": 596,
+        "displayed_losses": 248,
+        "fractional_losses_shown_zero": 348,
+        "zero_or_loss": 694
+      },
+      "box_9": {
+        "attempts": 2537,
+        "yards": 4098.3576542069895,
+        "raw_losses": 393,
+        "displayed_losses": 215,
+        "fractional_losses_shown_zero": 178,
+        "zero_or_loss": 707
+      },
+      "box_10": {
+        "attempts": 1845,
+        "yards": 1612.7745691224122,
+        "raw_losses": 314,
+        "displayed_losses": 161,
+        "fractional_losses_shown_zero": 153,
+        "zero_or_loss": 704
+      }
+    },
+    "caveat": "Frozen 0b4c49c gameplay, not the supplied game or a rerun of the latest build."
+  },
+  "controls": {
+    "samples_per_cell": 1000,
+    "runs": [
+      {
+        "matchup": "neutral",
+        "box": 4,
+        "attempts": 1000,
+        "yards": 7314.499999999998,
+        "raw_losses": 30,
+        "displayed_losses": 14,
+        "fractional_losses_shown_zero": 16,
+        "zero_or_loss": 34
+      },
+      {
+        "matchup": "neutral",
+        "box": 6,
+        "attempts": 1000,
+        "yards": 5254.300000000001,
+        "raw_losses": 56,
+        "displayed_losses": 26,
+        "fractional_losses_shown_zero": 30,
+        "zero_or_loss": 65
+      },
+      {
+        "matchup": "neutral",
+        "box": 8,
+        "attempts": 1000,
+        "yards": 4309.700000000001,
+        "raw_losses": 76,
+        "displayed_losses": 39,
+        "fractional_losses_shown_zero": 37,
+        "zero_or_loss": 109
+      },
+      {
+        "matchup": "better_blocking",
+        "box": 4,
+        "attempts": 1000,
+        "yards": 9427.29999999999,
+        "raw_losses": 3,
+        "displayed_losses": 0,
+        "fractional_losses_shown_zero": 3,
+        "zero_or_loss": 3
+      },
+      {
+        "matchup": "better_blocking",
+        "box": 6,
+        "attempts": 1000,
+        "yards": 6650.700000000009,
+        "raw_losses": 8,
+        "displayed_losses": 1,
+        "fractional_losses_shown_zero": 7,
+        "zero_or_loss": 11
+      },
+      {
+        "matchup": "better_blocking",
+        "box": 8,
+        "attempts": 1000,
+        "yards": 5348.500000000002,
+        "raw_losses": 11,
+        "displayed_losses": 4,
+        "fractional_losses_shown_zero": 7,
+        "zero_or_loss": 15
+      },
+      {
+        "matchup": "better_front",
+        "box": 4,
+        "attempts": 1000,
+        "yards": 3512.700000000002,
+        "raw_losses": 243,
+        "displayed_losses": 143,
+        "fractional_losses_shown_zero": 100,
+        "zero_or_loss": 268
+      },
+      {
+        "matchup": "better_front",
+        "box": 6,
+        "attempts": 1000,
+        "yards": 2204.9999999999977,
+        "raw_losses": 345,
+        "displayed_losses": 221,
+        "fractional_losses_shown_zero": 124,
+        "zero_or_loss": 391
+      },
+      {
+        "matchup": "better_front",
+        "box": 8,
+        "attempts": 1000,
+        "yards": 1547.499999999999,
+        "raw_losses": 414,
+        "displayed_losses": 287,
+        "fractional_losses_shown_zero": 127,
+        "zero_or_loss": 462
+      }
+    ],
+    "scrambles": [
+      {
+        "mobility": 70,
+        "pursuit": 70,
+        "goal": 6,
+        "opportunities": 1000,
+        "touchdowns": 489,
+        "yards": 4450.200000000003,
+        "td_without_individual_contact": 469
+      },
+      {
+        "mobility": 70,
+        "pursuit": 70,
+        "goal": 16,
+        "opportunities": 1000,
+        "touchdowns": 94,
+        "yards": 6833.3999999999905,
+        "td_without_individual_contact": 86
+      },
+      {
+        "mobility": 70,
+        "pursuit": 70,
+        "goal": 40,
+        "opportunities": 1000,
+        "touchdowns": 1,
+        "yards": 7330.6999999999925,
+        "td_without_individual_contact": 1
+      },
+      {
+        "mobility": 70,
+        "pursuit": 90,
+        "goal": 6,
+        "opportunities": 1000,
+        "touchdowns": 438,
+        "yards": 4237.799999999997,
+        "td_without_individual_contact": 435
+      },
+      {
+        "mobility": 70,
+        "pursuit": 90,
+        "goal": 16,
+        "opportunities": 1000,
+        "touchdowns": 64,
+        "yards": 6210.900000000001,
+        "td_without_individual_contact": 64
+      },
+      {
+        "mobility": 70,
+        "pursuit": 90,
+        "goal": 40,
+        "opportunities": 1000,
+        "touchdowns": 0,
+        "yards": 6539.9000000000015,
+        "td_without_individual_contact": 0
+      },
+      {
+        "mobility": 90,
+        "pursuit": 70,
+        "goal": 6,
+        "opportunities": 1000,
+        "touchdowns": 568,
+        "yards": 4730.899999999999,
+        "td_without_individual_contact": 535
+      },
+      {
+        "mobility": 90,
+        "pursuit": 70,
+        "goal": 16,
+        "opportunities": 1000,
+        "touchdowns": 136,
+        "yards": 7783.599999999989,
+        "td_without_individual_contact": 128
+      },
+      {
+        "mobility": 90,
+        "pursuit": 70,
+        "goal": 40,
+        "opportunities": 1000,
+        "touchdowns": 5,
+        "yards": 8661.199999999992,
+        "td_without_individual_contact": 5
+      },
+      {
+        "mobility": 90,
+        "pursuit": 90,
+        "goal": 6,
+        "opportunities": 1000,
+        "touchdowns": 507,
+        "yards": 4478.4000000000015,
+        "td_without_individual_contact": 504
+      },
+      {
+        "mobility": 90,
+        "pursuit": 90,
+        "goal": 16,
+        "opportunities": 1000,
+        "touchdowns": 106,
+        "yards": 7042.099999999996,
+        "td_without_individual_contact": 105
+      },
+      {
+        "mobility": 90,
+        "pursuit": 90,
+        "goal": 40,
+        "opportunities": 1000,
+        "touchdowns": 3,
+        "yards": 7647.699999999993,
+        "td_without_individual_contact": 3
+      }
+    ],
+    "block_rep_controls": [
+      {
+        "recorded_wins": 0,
+        "blockers": 9,
+        "yards": 16.4,
+        "ybc": 4.6
+      },
+      {
+        "recorded_wins": 9,
+        "blockers": 9,
+        "yards": 16.4,
+        "ybc": 4.6
+      }
+    ],
+    "caveat": "Synthetic conditional opportunities. No frequency calibration, QB-contact avoidance, or full-game claim."
+  }
+}

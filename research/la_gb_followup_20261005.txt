@@ -1,0 +1,72 @@
+LA at GB Week 8 follow-up - October 5, 2026
+
+Implemented: late fourth-down field goals
+The seven/eight-point deficit exception now requires enough time to kick,
+force an ordinary three-and-out, regain possession and attempt a short scoring
+drive. The live caller passes actual offensive timeouts, separately from the
+timeout edge. The allowance is 4s FG + 5.8s kickoff + 18s three snaps + 9.4s
+punt + 30s scoring drive + 40s per unprotected defensive down. This is an
+explicit clock-feasibility assumption, not a calibrated win-probability model.
+The extraordinary onside-recovery route no longer keeps the generic FG option
+alive for this one-score ending. Needed first scores when down 10/11, tying
+kicks, earlier bridge kicks and coach discretion among feasible choices remain.
+
+Controlled evidence
+The reported fourth-and-20 at opponent31, down8 with28s and no timeouts chose
+FG73/100 times before the fix. The new controls exercise both7/8 deficits,
+strong kicker, conservative/aggressive coaches and both extremes of the random
+choice. All go. A live-drive control attempts fourth down and can fail; it
+does not guarantee a conversion or score. At120s, three offensive timeouts
+retain a kick-and-stop choice; zero do not. At270s the option remains.
+41 focused fourth-down, pace, box-contact and scramble-contact tests passed.
+
+Investigation: designed rushing losses
+Read existing frozen0b4c49c records, not new games: 1,632 regular-season games,
+83,763 designed runs excluding sneaks. Raw losses7,832 (9.35%); rounded losses
+3,797 (4.53%); 4,035 small losses round to zero. Thus the log's1/58 visible
+losses does not establish a league-wide shortage of all negative outcomes.
+The box correction is present: heavier boxes worsen contact and preserve losses.
+Current paired synthetic controls at a six-man box: neutral blocking56/1,000
+raw losses, better blocking8/1,000, better front345/1,000. Those deliberately
+wide matchup controls are sensitivity tests, not realistic league averages.
+Recorded individual block-win draws are separate from penetration: forcing
+0/9 versus9/9 recorded wins with other draws fixed yields the same4.6YBC and
+16.4yards. Ratings do affect the run, but individual sampled block failures
+do not cause penetration. This is a model/accounting disconnect to review,
+not evidence that all blocking attributes are disconnected.
+
+Investigation: scramble finishing
+Current resolver adjusts a gamma distance draw for QB mobility and mean
+on-field pursuit. If it reaches the goal, the play scores before individual
+contact selection. At6yards, neutral synthetic QB/defenders score489/1,000
+conditional scramble opportunities;469 of those scores precede an individual
+contact contest. At16yards,94 touchdowns,86 preceding contact. These are NOT
+per-dropback rates, actual Love outcomes or a calibrated real-world comparison.
+Better pursuit reduces scores, but this shortcut remains. The separate
+terminal chase in plays.resolve_yards_after is NOT the scramble resolver;
+fixing that chase alone will not change these scramble touchdowns.
+
+Investigation: GB third-and-six, up8 at opponent17,2:00
+Leading offenses bypass end_of_half_plan. The ordinary caller incorporates
+score/time/down/personnel and field position; third-and-six deliberately
+removes the extra late run bias to preserve attempts to seal the game.
+It does not explicitly value a following made FG creating an11-point lead
+or use the opponent's exact remaining timeouts in its run/pass choice.
+Passing here is not automatically wrong, but this is a concrete situational
+decision gap. No change to that choice in this patch.
+
+Running watch list / next actions
+1. Review individual penetration and recorded run-block outcomes together;
+   inspect actual saved ratings/box contexts before any overall rush tuning.
+2. Design actual scramble pursuit/goal-line arrival opportunities, preserving
+   legitimately untouched scores and pre-goal fumble/injury contacts. Validate
+   mobile/pocket QBs, coverage and defenders rather than imposing TD quotas.
+3. Add the next-kick/clock-security tradeoff to leading late-down decisions;
+   retain reasonable aggressive conversion attempts.
+4. Combined integration and later scoring/pace validation remain necessary.
+   This patch changes only the late fourth-down kick choice; rushing,
+   scrambling and passing probabilities have not been tuned.
+
+Reproducer and data: audit_la_gb_followup.py and
+research/la_gb_followup_20261005.json. No reproduction of the user's exact save
+is claimed. Raw text alone cannot identify Love's escape lane or defenders.

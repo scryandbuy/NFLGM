@@ -267,7 +267,7 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
                          aggression=0.5, timeout_edge=0, use_wp=True,
                          kicker=None, rate_fn=None, must_score=False, half_seconds_left=None, is_home=1,
                          half_intent=None, punter=None, returner=None, snapper=None,
-                         defensive_confidence=0.):
+                         defensive_confidence=0., offense_timeouts=0):
     """
     go, field_goal or punt.
 
@@ -322,7 +322,16 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     chasing = score_diff < 0 and secs_left < comeback_clock_budget(-score_diff)
     # does a field goal matter? Down 14 it leaves two scores either way; down 10 it makes it one
     need_after_fg = int(np.ceil(-(score_diff + 3) / 8.0)) if score_diff + 3 < 0 else 0
-    fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now and -score_diff not in (7, 8) and -(score_diff + 3) not in (7, 8))
+    # Down seven/eight, three points still leave a touchdown to find. Keep
+    # that option only with a plausible ordinary route back to possession:
+    # kick, kickoff, three stopped runs, punt, then a short scoring drive.
+    # Otherwise the kick adds an onside-recovery dependency to a one-score
+    # comeback. This is a clock feasibility allowance, not a fitted WP rate.
+    stops = float(np.clip(offense_timeouts, 0, 3))
+    regain_and_score = SEC['field_goal'] + SEC['kickoff'] + 18 + SEC['punt'] + 30 + 40 * (3 - stops)
+    bridge_kick = -score_diff in (7, 8) and secs_left > regain_and_score
+    fg_matters = not (score_diff < -3 and secs_left < 480 and need_after_fg >= need_now
+                      and not bridge_kick and -(score_diff + 3) not in (7, 8))
     tying_or_winning_kick = -3 <= score_diff < 0 and in_range
     # Keep possession for a still-viable late comeback. Useful tying/winning
     # or score-reducing kicks remain available; decided games returned above.
@@ -2856,6 +2865,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                                        dr.clock, rng, aggr4,
                                        kicker=specialist_for(offense, off_state, 'K', rate_fn), rate_fn=rate_fn,
                                        must_score=must_score, is_home=int(pos == 'home'),
+                                       offense_timeouts=timeouts.left.get(pos, 0) if timeouts is not None else 0,
                                        timeout_edge=(timeouts.left.get(pos, 0) - timeouts.left.get('away' if pos == 'home' else 'home', 0)) if timeouts is not None else 0,
                                        half_seconds_left=(dr.clock - half_end if half_end is not None else None),
                                        half_intent=getattr(dr, '_half_stall_intent', None),

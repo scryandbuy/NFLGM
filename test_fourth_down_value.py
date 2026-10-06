@@ -5,6 +5,7 @@ from unittest.mock import patch
 import game
 import decisions
 import plays
+import numpy as np
 
 
 class FourthDownValueTests(unittest.TestCase):
@@ -74,6 +75,63 @@ class FourthDownValueTests(unittest.TestCase):
         for yardline,score in ((43,-7),(75,-3)):
             self.assertEqual(game.fourth_down_decision(yardline,8,score,1,self.decline_go,
                 kicker=self.kicker,rate_fn=plays.rate),'go')
+
+    def test_one_score_touchdown_need_does_not_become_onside_dependency(self):
+        # LA at GB: 17-9, fourth-and-20 at GB31, 28 seconds, no timeouts.
+        # Even a great kicker cannot remove the touchdown still required.
+        for deficit in (-7, -8):
+            for stops in (0, 3):
+                for aggression in (.1, .9):
+                    for draw in (0., .999999):
+                        self.assertEqual(game.fourth_down_decision(31,20,deficit,28,
+                            SimpleNamespace(random=lambda:draw), aggression=aggression,
+                            kicker=self.kicker,rate_fn=plays.rate,offense_timeouts=stops), 'go')
+
+    def test_timeouts_can_preserve_a_kick_and_defensive_stop_route(self):
+        # Same timeout edge, different absolute counts. Three clock stops
+        # leave a second possession possible; zero cannot buy that time.
+        for stops, expected in ((0, 'go'), (3, 'field_goal')):
+            self.assertEqual(game.fourth_down_decision(31,20,-8,120,self.decline_go,
+                kicker=self.kicker,rate_fn=plays.rate,timeout_edge=0,
+                offense_timeouts=stops), expected)
+        self.assertEqual(game.fourth_down_decision(31,20,-8,270,self.decline_go,
+            kicker=self.kicker,rate_fn=plays.rate,offense_timeouts=0), 'field_goal')
+
+    def test_required_first_score_and_tying_kicks_remain_available(self):
+        # Down ten/eleven, either route already requires two possessions.
+        for deficit in (-3, -10, -11):
+            self.assertEqual(game.fourth_down_decision(31,20,deficit,28,self.decline_go,
+                kicker=self.kicker,rate_fn=plays.rate,offense_timeouts=0), 'field_goal')
+
+    def test_clock_feasible_bridge_kick_retains_coaching_discretion(self):
+        # No mandatory kick just because another possession is feasible.
+        self.assertEqual(game.fourth_down_decision(31,2,-8,270,
+            SimpleNamespace(random=lambda:0),aggression=.9,
+            kicker=self.kicker,rate_fn=plays.rate,offense_timeouts=3), 'go')
+
+    def test_live_drive_supplies_own_timeouts_and_runs_the_needed_play(self):
+        import events
+        import rosters
+        import schemes
+        teams = rosters.load_league()
+        for own, other, seconds in ((0, 2, 28), (3, 3, 120)):
+            timeouts = game.Timeouts()
+            timeouts.left.update(away=own, home=other)
+            with patch.object(events, 'penalty_check', return_value=None), \
+                 patch.object(events, 'contextual_penalty', return_value=None), \
+                 patch.object(game, 'end_of_half_plan', return_value=None), \
+                 patch.object(game, 'fourth_down_decision', wraps=game.fourth_down_decision) as choice:
+                dr = game.run_drive(teams['LA'],teams['GB'],31,seconds,4,-8,
+                    np.random.default_rng(14),
+                    lambda *a:dict(type='incomplete',yards=0),
+                    lambda d,di,sd,ytg,r,**kw:schemes.call_offense(d,di,sd,ytg,r,**kw),
+                    lambda oc,d,di,r,ytg=50,**kw:schemes.call_defense(oc,d,di,r,yards_to_endzone=ytg,**kw),
+                    plays.rate,timeouts=timeouts,pos='away',start_state=(4,20))
+            self.assertEqual(choice.call_args.kwargs['offense_timeouts'], own)
+            self.assertEqual(choice.call_args.kwargs['timeout_edge'], own-other)
+            if seconds == 28:
+                self.assertEqual(dr.result, 'Turnover on downs')
+                self.assertFalse(any(p.get('type')=='field_goal' for p in dr.log))
 
 
 if __name__=='__main__':unittest.main()
