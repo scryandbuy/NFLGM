@@ -274,10 +274,10 @@ weekly review includes every club. Injuries and minimum/squad emergency routes r
     for abbr, team in league.teams.items():
         if abbr in protected or team.gm is None:
             continue
-        report = RN.assess(team)
         if stage == 'weekly':
             if getattr(team, '_moved_week', None) == week:
                 continue
+        report = RN.assess(team)
         teams[abbr] = (report, RN.candidate_gains(team, pool, baseline=report),
                        recent_commitments(league, team, week), FP.snapshot(league, team, market=comparisons))
     comps = MK.VAL.pool_from_league(league)

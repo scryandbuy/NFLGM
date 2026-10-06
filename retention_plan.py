@@ -176,7 +176,7 @@ def veteran_plan(team, player, inputs, scale, window):
                                -1. if window in ('contending','win_now') else 0.)
     grade = DFT.common_scale(grades[0], player.pos, scale)
     edge = grades[0] - replacements[0]
-    viable = inputs['important'] and grade >= 70.+4.*youth and edge >= threshold
+    viable = bool(inputs['important'] and grade >= 70.+4.*youth and edge >= threshold)
     two_years = (viable and youth <= .5 and grade >= 78.
                  and grades[1] >= replacements[1] + threshold
                  and player.ovr - grades[1] <= 5.)
@@ -211,6 +211,14 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
     import contract_offer as CO
     from trade_calendar import trading_open
     context=_review_context(league,team,baseline,scale) if _context is None else _context
+    fixed = context.get('fixed')
+    def unchanged(name, read):
+        # Only immutable purchase searches supply this mapping. Picks cannot
+        # change an agent's ask, public aging read, refusal or current role.
+        if fixed is None: return read()
+        key = (player.pid, name)
+        if key not in fixed: fixed[key] = read()
+        return fixed[key]
     if player.pid not in context['inputs']:
         context['inputs'][player.pid]=_role_read(league,team,player,context['report'],context['scale'])
     inputs,benefit=context['inputs'][player.pid]
@@ -222,45 +230,57 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
         contract_years=c.years if c else 0,contract_signed=c.signed if c else None)
     if player.team != team.abbr or player.retired or not EXT.ai_eligible(player,league):
         row['reasons']=['not_eligible']; return row
-    tm = EXT.terms(league,player,None,pool=pool)
+    tm = unchanged('terms', lambda: EXT.terms(league,player,None,pool=pool))
     if not tm:
         row['reasons']=['no_market_read']; return row
-    race = team.ctx()
+    race = unchanged('race', team.ctx)
     if 'games_played' not in race: race=dict(race,**TE.race_context(team))
     window = TE.window(race)
     years = tm['years']
     renewal_age = player.age + (max(0, c.years) if acquisition and c else 0)
     if renewal_age > EXT.AGE_LIMIT.get(player.pos,31):
-        row.update(veteran_plan(team,player,inputs,context['scale'],window))
+        row.update(unchanged('veteran', lambda: veteran_plan(team,player,inputs,context['scale'],window)))
         years = min(years,row['max_new_years'])
     want = .75 + .25*row['role_share'] - .10*max(0.,team.gm.youth-.5)*(player.age>=28)
     ceiling = tm['offer']*(1.+.12*want)
     apy = round(min(ceiling,tm['ask']),2)
     floor = tm['ask']*(1.-tm['discount'])
     row.update(expected_apy=round(tm['ask'],2),offer_apy=apy,years=years)
-    refusal = EXT._ai_refusal(league,player)
+    refusal = unchanged('refusal', lambda: EXT._ai_refusal(league,player))
     # Evaluate the same bounded payment alternatives as the negotiator; never
     # declare someone unaffordable solely because the first schedule misses.
     original = CO.canonical(league,player,team,dict(apy=apy,years=years),'extension')
     total = apy*years; bonus = min(total*.78,original['bonus']+total*.10)
     packages = [original,dict(original,front_load=.5),dict(original,front_load=.85),
                 dict(original,front_load=.5,bonus=min(bonus,total*.445))]
+    legal_extension_possible = False
     for package in packages:
-        if not EXT.can_afford_extension(league,team,player,apy,years,
-                                       package['front_load'],package['bonus']):
+        shape = (apy,years,package['front_load'],package['bonus'])
+        if not unchanged(('legal_cap',shape), lambda: EXT.can_afford_extension(
+                league,team,player,apy,years,package['front_load'],package['bonus'])):
             row['financial_reason']='legal_cap_failure'; continue
+        legal_extension_possible = True
         preview = EXT.build(player,years,apy,CAP.get(league.year,301.2),team.gm,league,
                             front_load=package['front_load'],bonus=package['bonus'])
-        if context['financial'] is None:
-            import financial_plan as FP
-            market=FP.retention_market(league)
-            context['financial']=(FP.snapshot(league,team,market=market),market)
-        before,market=context['financial']
-        budget = EXT._retention_budget(league,team,player,preview,
-                                      benefit=benefit,before=before,market=market)
+        budget_cache = context.get('budget_cache')
+        if budget_cache is not None:
+            budget = EXT._retention_budget(league,team,player,preview,
+                                          benefit=benefit,_cache=budget_cache)
+        else:
+            if context['financial'] is None:
+                import financial_plan as FP
+                market=FP.retention_market(league)
+                context['financial']=(FP.snapshot(league,team,market=market),market)
+            before,market=context['financial']
+            budget = EXT._retention_budget(league,team,player,preview,
+                                          benefit=benefit,before=before,market=market)
         row['financial_reason']=budget['reason']
         if budget['approved']:
             row['affordable']=True; break
+    # Legal cap accounting reads signed contracts and pending offer holds,
+    # not a hypothetical draft-pick inventory. Keep this proof in the local
+    # context only; funded-roster/flexibility refusals remain pick-dependent.
+    context['legal_extension_possible'] = legal_extension_possible
     ratio = apy/max(.01,floor)
     probability = max(.05,min(.9,.55+(ratio-1.)*2.+.12*row['role_share']))
     # A player can defer talks until the offseason without destroying a
@@ -273,10 +293,12 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
     # trade quote. Completed seasons and calendar stubs are not extra control.
     # Use neutral pricing here; seller attachment and lost roles remain separate.
     from trades import player_asset
-    asset = player_asset(league,team,player,pool,None)
-    if asset:
+    def trade_floor():
+        asset = player_asset(league,team,player,pool,None)
+        if not asset: return 0.
         fraction = .5 if asset['valued_contract_years'] <= 1 else .75
-        row['trade_floor']=round(max(0.,asset['trade_value'])*fraction,2)
+        return round(max(0.,asset['trade_value'])*fraction,2)
+    row['trade_floor'] = unchanged('trade_floor', trade_floor)
     retain = (row['important'] and row['affordable'] and ratio>=(1. if acquisition else .90)
               and probability>=.35 and row.get('veteran_viable',True))
     if retain:

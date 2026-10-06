@@ -2,7 +2,8 @@
 HOW A CLUB SPENDS ITS PLAYERS' XP.
 
 Runs every third league week for AI clubs, and weekly for any of the user's
-players with auto-spend on. XP accumulates between spending rounds.
+players with auto-spend on. The trade-deadline pass moves to the following
+week for both. XP accumulates between spending rounds.
 XP belongs to the man who earned it, so the
 club's choices are about HIM: what to buy, whether to buy a physical,
 whether to hold the money for a ceiling unlock.
@@ -31,6 +32,13 @@ import targets as TG
 YOUNG = 26            # physicals are bought for men this age and under
 SAVE_WEEKS = 4        # an unlock within this many weeks of earning is worth saving for
 CPU_SPEND_INTERVAL = 3
+
+
+def cpu_spending_due(week):
+    from trade_calendar import TRADE_DEADLINE_WEEK
+    # Give the deadline its own advance; bank XP and do this pass next week.
+    return (week > 0 and week != TRADE_DEADLINE_WEEK
+            and (week % CPU_SPEND_INTERVAL == 0 or week == TRADE_DEADLINE_WEEK + 1))
 
 
 def situation(team, week):
@@ -181,13 +189,16 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
 def spend_week(league, week, rng, user_team=None, verbose=False):
     """CPU spending every three weeks; user auto-spend weekly, including squads.
 
+    Both skip the deadline advance and resume in the following week.
+
     Returns {pid: actions}.
 
     Use the league week so saves, byes, and season changes need no separate
     spending counter. Earnings-rate bookkeeping still advances every week.
     """
     log = {}
-    cpu_spend_due = week > 0 and week % CPU_SPEND_INTERVAL == 0
+    from trade_calendar import TRADE_DEADLINE_WEEK
+    cpu_spend_due = cpu_spending_due(week)
     for abbr, team in league.teams.items():
         gm = team.gm
         seen = set()
@@ -196,6 +207,8 @@ def spend_week(league, week, rng, user_team=None, verbose=False):
                 continue
             seen.add(p.pid)
             p.xp_spent['_weeks'] = p.xp_spent.get('_weeks', 0) + 1
+            if week == TRADE_DEADLINE_WEEK:
+                continue
             if abbr == user_team and not p.xp_spent.get('_auto'):
                 continue
             if abbr != user_team and not cpu_spend_due:

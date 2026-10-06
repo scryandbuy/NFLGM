@@ -305,13 +305,28 @@ def _ai_refusal(league, p):
 
 
 def _retention_budget(league, team, player, contract, action='extension', *,
-                      benefit=None, before=None, market=None):
+                      benefit=None, before=None, market=None, _cache=None):
     import financial_plan as FP
     import roster_needs as RN
     if benefit is None:
         benefit = max(0.0, RN.departure_loss(team, player), RN.retention_value(team, player))
+    prepared = None
+    if _cache is not None:
+        # Disposable purchase-review snapshot: roster, contracts, pending
+        # offers and prior renewal intents stay fixed; only picks can vary.
+        # Reprice those rookie obligations on every call.
+        if 'market' not in _cache: _cache['market'] = FP.retention_market(league)
+        market = _cache['market']
+        if 'before' not in _cache:
+            _cache['before'] = FP.prepare_snapshot(league, team, market=market)
+        before = FP.snapshot(league, team, market=market, prepared=_cache['before'])
+        key = (player.pid, repr(vars(contract)))
+        after = _cache.setdefault('after', {})
+        if key not in after:
+            after[key] = FP.prepare_snapshot(league, team, additions=[(player,contract)], market=market)
+        prepared = after[key]
     return FP.evaluate(league, team, additions=[(player, contract)],
-                       gain=benefit, action=action, before=before, market=market)
+                       gain=benefit, action=action, before=before, market=market, prepared_after=prepared)
 
 
 def negotiate_ai(league, p, apy, years, rng=None, pool=None):

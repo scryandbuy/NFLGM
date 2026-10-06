@@ -12,6 +12,7 @@ import trade_retention as TRE
 import trades as TR
 import financial_plan as FP
 import retention_plan as RP
+import trade_portfolio as TP
 from test_draft_planning import fixture, set_grade
 
 
@@ -154,6 +155,11 @@ class TradeExtensionPlanTests(unittest.TestCase):
             two=TRE.purchase_plans(self.L,self.b,self.s,[self.b.picks[0]],[other.pid])
             together=TRE.purchase_plans(self.L,self.b,self.s,[self.b.picks[0]],[self.p.pid,other.pid])
             if one['approved'] and two['approved'] and not together['approved']:
+                cache=TP.readonly_cache()
+                for arrivals,expected in (([self.p.pid],one),([other.pid],two),([self.p.pid,other.pid],together)):
+                    actual=TRE.purchase_plans(self.L,self.b,self.s,[self.b.picks[0]],arrivals,
+                                              cache=cache,_approval_only=True)
+                    self.assertEqual(actual,expected)
                 found=True;break
         self.assertTrue(found,'Expected a funding boundary between one and two serious renewals')
 
@@ -232,6 +238,69 @@ class TradeExtensionPlanTests(unittest.TestCase):
         self.assertFalse(result['approved'])
         self.assertFalse(result['assessment']['veteran_viable'])
         self.assertEqual(self.p.age,30.9)
+
+    def test_immutable_search_reuses_economic_refusal_but_still_allows_cheap_purchase(self):
+        packages = [[self.b.picks[0]], [self.b.picks[0],self.b.picks[1]], [self.b.picks[-1]]]
+        self.terms['offer'] = 5.
+        before = self.L.save()
+        expected = [TRE.purchase_plans(self.L,self.b,self.s,items,[self.p.pid])['approved']
+                    for items in packages]
+        self.assertEqual(expected, [False,False,True])
+        cache = TP.readonly_cache()
+        with patch.object(RP,'assess',wraps=RP.assess) as assess:
+            actual = [TRE.purchase_plans(self.L,self.b,self.s,items,[self.p.pid],
+                      cache=cache,_approval_only=True)['approved'] for items in packages]
+        self.assertEqual(actual,expected)
+        self.assertEqual(assess.call_count,1)
+        # Normal callers still receive the full exact assessment, not the
+        # abbreviated approval-only rejection.
+        full = TRE.purchase_plans(self.L,self.b,self.s,packages[1],[self.p.pid],cache=cache)
+        self.assertIn('assessment',full)
+        self.assertEqual(self.L.save(),before)
+        # A new negotiation must see the player's changed price.
+        self.terms['offer'] = 20.
+        self.assertTrue(TRE.purchase_plans(self.L,self.b,self.s,packages[0],[self.p.pid],
+                        cache=TP.readonly_cache(),_approval_only=True)['approved'])
+
+    def test_financial_rejections_are_rechecked_for_each_pick_inventory(self):
+        cache=TP.readonly_cache()
+        packages=[[self.b.picks[0]],[self.b.picks[0],self.b.picks[1]]]
+        with patch.object(RP,'assess',wraps=RP.assess) as assess, \
+             patch.object(EXT,'_retention_budget',return_value=dict(approved=False,reason='preserve_flexibility')):
+            for items in packages:
+                actual=TRE.purchase_plans(self.L,self.b,self.s,items,[self.p.pid],
+                                         cache=cache,_approval_only=True)
+                self.assertFalse(actual['approved'])
+            self.assertEqual(assess.call_count,2)
+        self.assertFalse(any(isinstance(k,tuple) and k[0]=='purchase_impossible' for k in cache))
+
+    def test_signed_cap_failure_cannot_be_fixed_by_changing_only_picks(self):
+        self.b.by_pos('QB')[0].contract=Contract(4,[1.,295.,295.,295.])
+        self.b.sync_cap()
+        self.L.cap_history.update({2028:350.,2029:350.,2030:350.})
+        packages=[[self.b.picks[0]],[self.b.picks[0],self.b.picks[1]],[self.b.picks[-1]]]
+        expected=[TRE.purchase_plans(self.L,self.b,self.s,items,[self.p.pid])['approved']
+                  for items in packages]
+        self.assertEqual(expected,[False,False,True])
+        cache=TP.readonly_cache()
+        with patch.object(RP,'assess',wraps=RP.assess) as assess:
+            actual=[TRE.purchase_plans(self.L,self.b,self.s,items,[self.p.pid],
+                    cache=cache,_approval_only=True)['approved'] for items in packages]
+        self.assertEqual(actual,expected)
+        self.assertEqual(assess.call_count,1)
+
+    def test_fast_success_matches_full_plans_and_does_not_mutate_player_histories(self):
+        for p in self.b.roster+[self.p]:
+            p.xp_spent['_purchases']=[dict(year=2025,kind='buy',attr='awareness_rating',cost=1000)]
+        before=self.L.save()
+        cache=TP.readonly_cache()
+        for items in ([self.b.picks[0]],[self.b.picks[0],self.b.picks[1]]):
+            expected=TRE.purchase_plans(self.L,self.b,self.s,items,[self.p.pid])
+            actual=TRE.purchase_plans(self.L,self.b,self.s,items,[self.p.pid],
+                                     cache=cache,_approval_only=True)
+            self.assertTrue(actual['approved'],actual)
+            self.assertEqual(actual,expected)
+            self.assertEqual(self.L.save(),before)
 
 
 if __name__=='__main__': unittest.main()

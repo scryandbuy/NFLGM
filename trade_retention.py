@@ -49,7 +49,9 @@ def _projection(league, team, removed, received, picks):
     club.cap = copy.copy(team.cap)
     club.cap.contracts = list(team.cap.contracts)
     for p in club.roster + club.practice_squad:
-        p.xp_spent = copy.deepcopy(p.xp_spent)
+        # Reviews only read historical entries and replace top-level intent
+        # keys. Copy that writable mapping, not years of immutable history.
+        p.xp_spent = dict(p.xp_spent)
         p._team_ref = club
         shadow.players[p.pid] = p
     club.cap = trade_projection(shadow, team.abbr, removed, received)
@@ -58,7 +60,7 @@ def _projection(league, team, removed, received, picks):
     for pid in received:
         if not isinstance(pid, str): continue
         p = copy.copy(league.player(pid))
-        p.xp_spent = copy.deepcopy(p.xp_spent)
+        p.xp_spent = dict(p.xp_spent)
         p.team, p.contract, p._team_ref = team.abbr, contracts[pid], club
         club.roster.append(p)
         shadow.players[pid] = p
@@ -69,14 +71,23 @@ def _projection(league, team, removed, received, picks):
     return shadow, club
 
 
-def purchase_plans(league, ta, tb, outgoing, incoming, *, cache=None):
+def purchase_plans(league, ta, tb, outgoing, incoming, *, cache=None, _approval_only=False):
+    """Review a purchase, with optional boolean-only immutable-search reuse.
+
+    Ordinary callers receive the complete current assessment. The private
+    approval-only path may return an abbreviated rejection when a previous
+    review proved a pick-independent obstacle for this exact player exchange.
+    Financial refusals are never reused across different pick inventories.
+    """
     import trades as TR
     import trade_engine as TE
     import valuation as VAL
     import retention_plan as RP
     import extensions as EXT
     import contract_offer as CO
+    import trade_portfolio as TP
     cache = {} if cache is None else cache
+    fast = _approval_only and isinstance(cache, TP._ReadOnlyCache)
     # All callers discard this cache after any roster/contract/market change.
     key = ('purchase_extension', ta.abbr, tb.abbr,
            tuple(str(x) for x in outgoing), tuple(str(x) for x in incoming))
@@ -120,19 +131,54 @@ def purchase_plans(league, ta, tb, outgoing, incoming, *, cache=None):
         threshold = TE.pick_price_dollars(64, cap=team.cap.cap)
         if net < threshold: continue
         removed = [x for x in sent if isinstance(x,str)]
+        exchange = (team.abbr, tuple(removed), tuple(x for x in received if isinstance(x,str)))
+        impossible = ('purchase_impossible', exchange)
+        if fast and impossible in cache:
+            return dict(approved=False, plans=[], reason='no_funded_extension_plan')
         sent_ids = {id(x) for x in sent if not isinstance(x,str)}
         picks = [pk for pk in team.picks if id(pk) not in sent_ids]+[x for x in received if not isinstance(x,str)]
         shadow, club = _projection(league,team,removed,received,picks)
+        role_key = ('purchase_roles', exchange)
+        if fast and role_key not in cache:
+            context = RP._review_context(shadow, club)
+            context['fixed'] = {}
+            for asset in expiring:
+                p = shadow.player(asset['pid'])
+                context['inputs'][p.pid] = RP._role_read(
+                    shadow, club, p, context['report'], context['scale'])
+            cache[role_key] = context
         # Evaluate all expiring members together: each successful plan reserves
         # its contract before the next player can claim the same future space.
         for asset in sorted(expiring, key=lambda q: -TE.market_price(q)):
             p = shadow.player(asset['pid'])
-            plan = RP.assess(shadow,club,p,pool=pool,acquisition=True)
+            # Football roles and public grades do not change with the picks.
+            # Finances DO: rebuild them for every inventory and every arrival,
+            # including plans reserved by earlier members of this package.
+            context = dict(cache[role_key], financial=None) if fast else None
+            if fast:
+                # Earlier arrivals can consume the same future space. Include
+                # their exact proposed terms, but not the pick-price label:
+                # investment is explanatory and never a contract charge.
+                prior = tuple((r['pid'],r['years'],r['apy'],r['front_load'],r['bonus'])
+                              for r in result['plans'] if r['team']==team.abbr)
+                context['budget_cache'] = cache.setdefault(('purchase_budget',exchange,prior),{})
+            plan = RP.assess(shadow,club,p,pool=pool,acquisition=True,_context=context)
             if (plan['decision']!='retain' or not plan['affordable']
                     or plan.get('veteran_viable') is False or plan['extension_probability']<.35
                     or 'price_gap' in plan['reasons']):
                 result.update(approved=False, reason='no_funded_extension_plan', team=team.abbr,
                               pid=p.pid, assessment=plan)
+                if fast and ('price_gap' in plan['reasons']
+                             or 'agent_declines' in plan['reasons']
+                             or 'not_eligible' in plan['reasons']
+                             or context.get('legal_extension_possible') is False
+                             or plan.get('veteran_viable') is False):
+                    # Different picks cannot close the same ask/offer gap,
+                    # reverse a firm refusal, or improve the same veteran's
+                    # public aging/replacement comparison, extension
+                    # eligibility, or signed-contract cap charges. Cheap purchases
+                    # still bypass this premium-only review above.
+                    cache[impossible] = True
                 break
             package = CO.canonical(shadow,p,club,dict(apy=plan['offer_apy'],years=plan['years']),'extension')
             # Select a shape the existing actual negotiator can fund too.
@@ -141,15 +187,25 @@ def purchase_plans(league, ta, tb, outgoing, incoming, *, cache=None):
                 dict(package,front_load=.5,bonus=min(total*.445,package['bonus']+total*.10))]
             chosen=None
             for terms in alternatives:
-                if not EXT.can_afford_extension(shadow,club,p,terms['apy'],terms['years'],terms['front_load'],terms['bonus']): continue
+                shape=(terms['apy'],terms['years'],terms['front_load'],terms['bonus'])
+                legal_key=(p.pid,('legal_cap',shape))
+                fixed=context['fixed'] if fast else {}
+                if legal_key not in fixed:
+                    fixed[legal_key]=EXT.can_afford_extension(shadow,club,p,*shape)
+                if not fixed[legal_key]: continue
                 contract=EXT.build(p,terms['years'],terms['apy'],club.cap.cap,club.gm,shadow,
                                    front_load=terms['front_load'],bonus=terms['bonus'])
-                if EXT._retention_budget(shadow,club,p,contract)['approved']:
+                budget_args = (dict(benefit=context['inputs'][p.pid][1],_cache=context['budget_cache'])
+                               if fast else {})
+                if EXT._retention_budget(shadow,club,p,contract,**budget_args)['approved']:
                     chosen=terms; break
             if chosen is None:
                 result.update(approved=False,reason='no_funded_extension_plan',team=team.abbr,pid=p.pid); break
+            role_key_=(p.pid,'committed_role')
+            fixed=context['fixed'] if fast else {}
+            if role_key_ not in fixed: fixed[role_key_]=RP.committed_role(club,p)
             intent=dict(chosen,team=team.abbr,pid=p.pid,year=league.year,week=league.week,
-                expiry=league.year+p.contract.years,state='pending',role_intent=RP.committed_role(club,p),
+                expiry=league.year+p.contract.years,state='pending',role_intent=fixed[role_key_],
                 investment=round(net,3),expected_apy=plan['expected_apy'])
             p.xp_spent[KEY]=intent
             result['plans'].append(intent)

@@ -987,8 +987,15 @@ def _portfolio_trade_check(league, ta, tb, outgoing, incoming, cache=None, *,
                       (assets(ta, tb, outgoing), assets(tb, ta, incoming)))
     if any(x is None for x in sent + received):
         return dict(approved=False, costs=costs, reports=reports)
-    value = TE.evaluate(dict(a_sends=sent, a_gets=received),
-        context(ta), context(tb), ta.cap_space, tb.cap_space, persona(ta.gm), persona(tb.gm))
+    context_key = ('portfolio_context', ta.abbr, tb.abbr)
+    if isinstance(cache, TP._ReadOnlyCache):
+        if context_key not in cache:
+            cache[context_key] = (context(ta), context(tb), ta.cap_space, tb.cap_space,
+                                  persona(ta.gm), persona(tb.gm))
+        pricing = cache[context_key]
+    else:
+        pricing = (context(ta), context(tb), ta.cap_space, tb.cap_space, persona(ta.gm), persona(tb.gm))
+    value = TE.evaluate(dict(a_sends=sent, a_gets=received), *pricing)
     margins = {ta.abbr: value['a_gain'] - costs.get(ta.abbr, 0.),
                tb.abbr: value['b_gain'] - costs.get(tb.abbr, 0.)}
     approved = all(margins[abbr] >= -ACCEPT_WINDOW for abbr, cost in costs.items() if cost > 1e-9)
@@ -996,7 +1003,7 @@ def _portfolio_trade_check(league, ta, tb, outgoing, incoming, cache=None, *,
 
 
 def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_gains=None,
-                     prospect=None, consumed_pick=None, offer=None):
+                     prospect=None, consumed_pick=None, offer=None, _portfolio=None):
     """Price both complete rosters, including any cuts needed for this trade."""
     import cap_accounting as CA
     import financial_plan as FP
@@ -1004,8 +1011,9 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_g
     # One negotiation can compare many pick combinations for the same player
     # exchange. Reuse its roster math, never cache beyond that negotiation.
     cache = {} if cache is None else cache
-    portfolio = _portfolio_trade_check(league, ta, tb, outgoing, incoming, cache,
-                                      prospect=prospect, consumed_pick=consumed_pick, offer=offer)
+    portfolio = (_portfolio if _portfolio is not None else
+                 _portfolio_trade_check(league, ta, tb, outgoing, incoming, cache,
+                                       prospect=prospect, consumed_pick=consumed_pick, offer=offer))
     if not portfolio['approved']:
         return False
     key = (ta.abbr, tb.abbr, tuple(sorted(x for x in outgoing if isinstance(x, str))),
@@ -1062,7 +1070,7 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_g
         if not funding[funding_key]:
             return False
     import trade_retention as TRE
-    return TRE.purchase_plans(league,ta,tb,outgoing,incoming,cache=cache)['approved']
+    return TRE.purchase_plans(league,ta,tb,outgoing,incoming,cache=cache,_approval_only=True)['approved']
 
 
 def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None,
@@ -1406,7 +1414,7 @@ def _negotiate(league, ta, tb, target, ga, gb, ctx_a, ctx_b, sa, sb, surplus,
                     sum(TE.team_price(x, ctx_a, sa, ga, owns=True) for x in items) + option_cost):
                 return False
             return _financial_trade(league, ta, tb, sent, [target['pid']], financial_cache,
-                                    roster_gains=gains, offer=exact_offer)
+                                    roster_gains=gains, offer=exact_offer, _portfolio=portfolio)
         return True  # Standalone valuation/search probes have no league ledger.
 
     def visit(start, chosen, paid, cost, value):

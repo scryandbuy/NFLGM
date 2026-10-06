@@ -33,7 +33,8 @@ class XPSpendingCadenceTests(unittest.TestCase):
             for week in range(1, 23):
                 spend.reset_mock()
                 XS.spend_week(league, week, rng, user_team='USER')
-                expected = ['cpu', 'auto'] if week % 3 == 0 else ['auto']
+                expected = ([] if week == 9 else ['cpu', 'auto']
+                            if week in (3, 6, 10, 12, 15, 18, 21) else ['auto'])
                 self.assertEqual([c.args[0].pid for c in spend.call_args_list], expected)
                 for call in spend.call_args_list:
                     self.assertEqual(call.kwargs['year'], 2027)
@@ -41,6 +42,25 @@ class XPSpendingCadenceTests(unittest.TestCase):
                                      'AI' if call.args[0] is cpu else 'Assistant')
         for p in (cpu, auto, manual):
             self.assertEqual(p.xp_spent['_weeks'], 22)
+
+    def test_deadline_banks_xp_and_following_week_spends_after_reload(self):
+        league, cpu, auto, manual = fixture()
+        rng = np.random.default_rng(41)
+        for p in (cpu, auto, manual): p.xp = 30000
+        state = copy.deepcopy(rng.bit_generator.state)
+        self.assertEqual(XS.spend_week(league, 9, rng, user_team='USER'), {})
+        self.assertEqual(rng.bit_generator.state, state)
+        for p in (cpu, auto, manual):
+            self.assertEqual(p.xp, 30000)
+            self.assertEqual(p.ovr, 70)
+            self.assertEqual(p.xp_spent['_weeks'], 1)
+        league = copy.deepcopy(league)
+        spent = XS.spend_week(league, 10, rng, user_team='USER')
+        self.assertIn('cpu', spent)
+        self.assertIn('auto', spent)
+        self.assertNotIn('manual', spent)
+        self.assertLess(league.teams['CPU'].roster[0].xp, 30000)
+        self.assertEqual(league.teams['USER'].roster[1].xp, 30000)
 
     def test_xp_accumulates_then_real_purchases_spend_the_bank(self):
         league, cpu, _, _ = fixture()
