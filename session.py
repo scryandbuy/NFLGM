@@ -1208,12 +1208,12 @@ class Session:
     def _fa_round(self, k):
         L, rng = self.L, self.rng
         signed, waiting, msgs = MK.resolve_round(L, rng, k, user_team=self.user_team)
-        # one note for the round: the AI's notable signings, not one message per deal
+        # All completed signings feed one advance transaction digest.
         from views import surname
-        big = sorted([(t_, p, o) for t_, p, o in signed if p.ovr >= 85 or o.apy >= 15.0], key=lambda x: -x[2].apy)
+        big = sorted(list(signed), key=lambda x: -x[2].apy)
         if big:
-            rows = [[inbox_player(p), p.pos, str(round(p.ovr)), t_, str(o.years), f'${o.apy:.1f}m'] for t_, p, o in big[:10]]
-            IB.post(L, 'league', f"Free agency, round {k}: the big signings", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market.", sender='league', payload=dict(link='personnel:free_agency', mail_sections=[IB.mail_section('Notable signings', rows, ['Player', 'Position', 'OVR', 'Team', 'Years', 'Annual salary'])]))
+            rows = [[inbox_player(p), p.pos, str(round(p.ovr)), t_, str(o.years), f'${o.apy:.1f}m'] for t_, p, o in big]
+            IB.post(L, 'league', f"Free agency, round {k}: signings", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market.", sender='league', payload=dict(link='personnel:free_agency', mail_sections=[IB.mail_section('Signings', rows, ['Player', 'Position', 'OVR', 'Team', 'Years', 'Annual salary'])]))
         else:
             IB.post(L, 'league', f"Free agency, round {k}", f"{len(signed)} players signed in the round; {len(waiting)} remain on the market.", sender='league', payload=dict(link='personnel:free_agency'))
 
@@ -1225,8 +1225,8 @@ class Session:
         L, rng = self.L, self.rng
         signed = MK.close_market(L, rng, user_team=self.user_team)
         n_left = len([x for x in L.free_agents if L.player(x)])
-        rows = [[inbox_player(p), p.pos, str(round(p.ovr)), t_, f'${o.apy:.1f}m'] for t_, p, o in sorted(signed, key=lambda x: -x[1].ovr)[:8]]
-        IB.post(L, 'league', "The market closes", f"{len(signed)} veterans signed one-year deals as the market closed; {n_left} players remain unsigned into camp.", sender='league', payload=dict(link='personnel:free_agency', mail_sections=[IB.mail_section('Notable signings', rows, ['Player', 'Position', 'OVR', 'Team', 'Annual salary'])] if rows else []))
+        rows = [[inbox_player(p), p.pos, str(round(p.ovr)), t_, f'${o.apy:.1f}m'] for t_, p, o in sorted(signed, key=lambda x: -x[1].ovr)]
+        IB.post(L, 'league', "The market closes", f"{len(signed)} veterans signed one-year deals as the market closed; {n_left} players remain unsigned into camp.", sender='league', payload=dict(link='personnel:free_agency', mail_sections=[IB.mail_section('Signings', rows, ['Player', 'Position', 'OVR', 'Team', 'Annual salary'])] if rows else []))
         __import__("fa_window").set_closed(L, True)
 
     def _resign_card(self):

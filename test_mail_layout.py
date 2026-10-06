@@ -86,6 +86,25 @@ class MailLayoutTests(unittest.TestCase):
         ids={m['id'] for s in sections for r in s['rows'] for cell in r for m in cell['mentions']}
         self.assertEqual(ids,{'a','b','c','d'})
 
+    def test_all_signings_extensions_and_tags_share_advance_digest(self):
+        import inbox_digest
+        from cap_engine import Contract
+        league=fixture(); league.user_team='KC'
+        for pid in ('a','b','c'):
+            p=player(league,pid,'GB',Contract(2,[2,2]))
+            self.assertLess(p.ovr,85)
+        league.transactions=[dict(kind=k,team='GB',pid=pid,years=2,apy=2.,price=2.)
+                             for k,pid in [('sign','a'),('extension','b'),('franchise_tag','c')]]
+        LN.transactions(league,1)
+        IB.news(league,'Free agency, round 1: signings','Round signings.')
+        inbox_digest.consolidate(league,set())
+        self.assertEqual(len(league.inbox),1)
+        self.assertEqual(league.inbox[0]['subject'],'League Transactions')
+        self.assertIn('extend',league.inbox[0]['body'])
+        self.assertIn('sign',league.inbox[0]['body'])
+        self.assertIn('franchise tag',league.inbox[0]['body'])
+        self.assertIn('Round signings.',league.inbox[0]['body'])
+
     def test_old_cpu_trade_renders_sections_without_rewriting_mail(self):
         league=fixture(); a=player(league,'a'); a.name='Mike Smith'
         msg=IB.news(league,'GB and MIN make a trade',

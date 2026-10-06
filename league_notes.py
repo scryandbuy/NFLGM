@@ -232,7 +232,7 @@ def big_result(league, week, results):
 
 # ------------------------------------------------------------ the log
 def transactions(league, week, skip_signings=False, pre_fa=False):
-    """Since the last roll: star extensions and signings elsewhere, tags, coaching changes. During a free-agency
+    """Since the last roll: extensions and signings elsewhere, tags, coaching changes. During a free-agency
     round the round's own note carries the signings (skip_signings), so the inbox is not one message a deal."""
     user = getattr(league, 'user_team', None)
     led = _ledger(league); start = int(led.get('_tx_idx', 0) or 0)
@@ -251,7 +251,7 @@ def transactions(league, week, skip_signings=False, pre_fa=False):
         if k in ('extension', 'sign'):
             if skip_signings and k == 'sign': continue
             p = league.player(x.get('pid'))
-            if p is not None and p.ovr >= 85 and x.get('apy') and p.pos not in ('K', 'P', 'LS'):      # a punter is not a star signing
+            if p is not None and x.get('apy'):
                 verb = 'extend' if k == 'extension' else 'sign'
                 IB.news(league, f"{team} {verb} {inbox_player(p)}", f"{team} {verb} {inbox_player(p)} ({p.pos}, {round(p.ovr)}) for {x.get('years')} years at ${float(x['apy']):.1f}m a year.", payload=dict(link=f'player:{p.pid}'))
         elif k == 'franchise_tag':
