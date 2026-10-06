@@ -226,7 +226,7 @@ CONCEPTS = {
     'mesh':        dict(depth='short',  man=1.28, cover_2=1.10, cover_3=1.08, cover_4=1.12, n=4),
     'flood':       dict(depth='medium', man=0.96, cover_2=1.06, cover_3=1.18, cover_4=1.10, n=3),
     'smash':       dict(depth='short',  man=1.02, cover_2=1.20, cover_3=1.02, cover_4=1.14, n=2),
-    'levels':      dict(depth='short',  man=0.98, cover_2=1.12, cover_3=1.16, cover_4=1.08, n=3),
+    'levels':      dict(depth='medium', man=0.98, cover_2=1.12, cover_3=1.16, cover_4=1.08, n=3),
     'dagger':      dict(depth='medium', man=1.04, cover_2=1.14, cover_3=1.12, cover_4=0.96, n=3),
     'four_verts':  dict(depth='deep',   man=1.10, cover_2=1.18, cover_3=1.14, cover_4=0.90, n=4),
     'scissors':    dict(depth='deep',   man=1.02, cover_2=0.98, cover_3=1.00, cover_4=1.22, n=2),
