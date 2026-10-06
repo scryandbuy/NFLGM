@@ -276,7 +276,16 @@ def two_point(score_diff_after_td, seconds_left, conv_prob=TWO_RATE,
         return _flip(lead, seconds_left, 100 - kickoff_yardline,
                      is_home=is_home, timeout_edge=-timeout_edge)
 
-    wp_kick = xp_prob * after(1) + (1 - xp_prob) * after(0)
+    # On a likely final opposing possession, +1 and +2 both lose to a
+    # field goal. The smooth regression otherwise invents a large benefit
+    # for the extra point and hides the value of reaching +3. Blend away
+    # that artificial distinction as the final possession approaches;
+    # leave earlier strategy and all other score states unchanged.
+    kick_success = after(1)
+    if score_diff_after_td == 1 and 0 < seconds_left < 300:
+        final_possession = float(np.clip((300. - seconds_left) / 180., 0., 1.))
+        kick_success = (1. - final_possession) * kick_success + final_possession * after(0)
+    wp_kick = xp_prob * kick_success + (1 - xp_prob) * after(0)
     wp_go = conv_prob * after(2) + (1 - conv_prob) * after(0)
     edge = wp_go - wp_kick
 
@@ -299,7 +308,8 @@ def two_point(score_diff_after_td, seconds_left, conv_prob=TWO_RATE,
     # roughly nine times in ten, so a kick is the default and going needs a
     # real reason rather than a rounding error.
     acted = edge * np.clip(aggression + 0.25, 0.1, 1.3)
-    return dict(call='two' if acted > TWO_POINT_BAR else 'kick',
+    # User's coaching rule: take the extra point when it breaks a tie.
+    return dict(call='two' if score_diff_after_td != 0 and acted > TWO_POINT_BAR else 'kick',
                 edge=round(edge, 4),
                 optimal='two' if edge > 0 else 'kick',
                 strong=abs(edge) >= STRONG_EDGE,

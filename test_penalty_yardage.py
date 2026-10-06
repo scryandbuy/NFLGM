@@ -217,7 +217,7 @@ class PenaltyYardageTests(unittest.TestCase):
         with patch.object(events, 'special_teams_penalty_check', return_value=p), \
              patch.object(game, 'field_units', return_value=({}, {})):
             result = game.attempt_two_point({}, {}, np.random.default_rng(1),
-                     lambda *_: next(plays), lambda *_a, **_k: {'personnel': '11'},
+                     lambda *_: next(plays), lambda *_a, **_k: {'personnel': '11', 'is_pass': True},
                      lambda *_a, **_k: {'personnel': 'nickel', 'front_family': '4-3'},
                      lambda *_: .7)
         self.assertEqual((result['points'], result['from_yardline'], result['penalty']['yards']), (2, 1, 1))
