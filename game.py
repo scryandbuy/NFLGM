@@ -581,6 +581,8 @@ def attempt_two_point(offense, defense, rng, resolve_fn, call_off, call_def,
     oc = call_off(1, try_yards, 0, try_yards, rng, offense=offense, rate_fn=rate_fn,
                   lean=offensive_leans(off_state))
     dp = getattr(def_state, 'plan', None)
+    import offense_roles as OR
+    OR.refresh_empty_call(oc, offense, off_state)
     dc = call_def(oc, 1, try_yards, rng, try_yards, defense=defense, rate_fn=rate_fn,
                   lean=GP.defensive_leans(dp) if dp is not None else None,
                   recent=getattr(def_state, 'cov_memory', None))
@@ -2977,6 +2979,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if def_state is not None and def_state.plan is not None:
             import gameplan as GP
             dlean = GP.defensive_leans(def_state.plan)
+        import offense_roles as OR
+        OR.refresh_empty_call(oc, offense, off_state)
         dc = call_def(oc, dr.down, max(1, int(np.ceil(dr.togo))), rng, ytg_i,
                       defense=defense, rate_fn=rate_fn, score_diff=dr.score_diff,
                       secs_left=dr.clock, lean=dlean,

@@ -23,6 +23,7 @@ PERSONNEL_OFF = {
     '10': dict(rb=1, te=0, wr=4, rate=.075, run_bias=-0.28, protect=5),
     '22': dict(rb=2, te=2, wr=1, rate=.025, run_bias=+0.48, protect=7),
     '00': dict(rb=0, te=0, wr=5, rate=.010, run_bias=-0.45, protect=5),
+    '01': dict(rb=0, te=1, wr=4, rate=0., run_bias=-0.45, protect=5),
 }
 # Defence answers personnel. The bodies in each package come from
 # defense_roles.shape(front, package), since odd and even fronts differ.
@@ -164,6 +165,8 @@ PROTECTIONS = {
 
 def choose_protection(off_pers, expected_rush, depth, rng, gm_aggr=0.5, preference=None):
     """Longer-developing concepts need more bodies; quick game needs fewer."""
+    if off_pers in ('00', '01'):
+        return 'five'
     avail = PERSONNEL_OFF.get(off_pers, PERSONNEL_OFF['11'])['protect']
     chosen = {'half_slide': 'half_slide', 'full_slide': 'six_slide', 'six': 'six_bob', 'empty': 'five'}.get(preference)
     if chosen:
@@ -477,7 +480,7 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     # blocking were rated and nothing read them.
     ident = None
     ident_run = ident_pass = None
-    base = {k: v['rate'] for k, v in PERSONNEL_OFF.items()}
+    base = {k: v['rate'] for k, v in PERSONNEL_OFF.items() if v['rate'] > 0}
     preferred = lean.get('personnel_mix')
     if isinstance(preferred, dict):
         mix = {k: max(0.0, float(preferred.get(k, 0.0))) for k in base}
@@ -505,6 +508,9 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     keys = list(base)
     w = np.array([base[k] for k in keys], float)
     pers = keys[int(rng.choice(len(keys), p=w / w.sum()))]
+    if pers == '00' and offense is not None:
+        import offense_roles as OR
+        pers = OR.empty_package(OR.roster_depth(offense), gm)
     import plays as _P
     pass_probability = pass_rate(down, ydstogo, score_diff,
                                  yards_to_endzone, pers, bias, secs_left)
@@ -520,6 +526,9 @@ def call_offense(down, ydstogo, score_diff, yards_to_endzone, rng, gm=None,
     import formations as FM
     form = FM.choose_formation(pers, rng, down=down, ydstogo=ydstogo,
                                score_diff=score_diff, secs_left=secs_left)
+    if form == 'empty' and offense is not None:
+        import offense_roles as OR
+        pers = OR.empty_package(OR.roster_depth(offense), gm)
     call = dict(personnel=pers, shotgun=bool(shotgun), is_pass=bool(is_pass),
                 formation=form, down=down, ydstogo=ydstogo,
                 seconds=secs_left, score_diff=score_diff,
