@@ -32,3 +32,25 @@ class CarolinaWeek16(unittest.TestCase):
     def test_return_start_label_is_explicit(self):
         self.assertEqual(ticker.drive_start_text('CAR 4',True),'Kickoff return from the CAR 4')
         self.assertEqual(ticker.drive_start_text('CAR 10'),'Started at the CAR 10')
+
+class TimeoutAttackIntent(unittest.TestCase):
+    def call(self, plan, seconds=19, half_end=None):
+        dr=NS(yardline=56,score_diff=0,down=3,togo=7,quarter=4)
+        tos=G.Timeouts()
+        return G._timeout_call(dr,'complete',dict(yards=6),tos,'home',half_end,seconds,plan=plan)
+
+    def test_midfield_conversion_plan_can_save_clock(self):
+        self.assertEqual(self.call(dict(choice='play',hurry=True)),(True,'home'))
+
+    def test_punt_kneel_and_no_plan_preserve_timeout(self):
+        for plan in (None,dict(choice='punt',hurry=True),dict(choice='kneel',hurry=False),dict(choice='play',hurry=False)):
+            self.assertEqual(self.call(plan),(False,None))
+
+    def test_insufficient_time_for_conversion_and_score(self):
+        self.assertEqual(self.call(dict(choice='play',hurry=True),seconds=14),(False,None))
+
+    def test_direct_shot_plan_can_save_clock(self):
+        self.assertEqual(self.call(dict(choice='shot',hurry=True),seconds=14),(True,'home'))
+
+    def test_first_half_guard_unchanged(self):
+        self.assertEqual(self.call(dict(choice='play',hurry=True),half_end=1800),(False,None))
