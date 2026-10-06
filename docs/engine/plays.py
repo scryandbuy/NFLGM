@@ -1152,6 +1152,14 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
             # whether it is filled by a back, tight end or wide receiver.
             pr['route_air'] = 2.6
             pr_depth = 'short'
+        elif concept == 'levels' and pr.get('concept_role') == 'shallow':
+            # Levels has a shallow crosser under an intermediate in-breaker.
+            # The concept's medium depth must not drag this outlet downfield.
+            pr['route_air'] = 4.0
+            pr_depth = 'short'
+        elif concept == 'levels' and pr.get('concept_role') == 'deep_in':
+            pr['route_air'] = 12.0
+            pr_depth = 'medium'
         pr['route_depth'] = pr_depth
         pr['separation'] = resolve_man(pr['receiver'], pr['defender'], pr_depth,
                                        p['time'], rng)
