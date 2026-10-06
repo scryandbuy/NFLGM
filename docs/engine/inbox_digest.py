@@ -21,6 +21,8 @@ def category(message):
         return 'Player Milestones'
     if kind == 'staff' and ('retiring' in subject): return 'Coaching Changes'
     if kind == 'league':
+        if subject.startswith('free agency, round ') or subject == 'the market closes':
+            return 'League Transactions'
         if any(s in subject for s in ('make a trade', ' sign ', ' extend ', ' tag ', 'extensions ·', 'franchise tags ·', 'big signings')):
             return 'League Transactions'
         if any(s in subject for s in (' hire ', 'makes a change', 'coaching carousel summary', 'coaching market')):

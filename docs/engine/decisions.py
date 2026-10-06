@@ -276,7 +276,18 @@ def two_point(score_diff_after_td, seconds_left, conv_prob=TWO_RATE,
         return _flip(lead, seconds_left, 100 - kickoff_yardline,
                      is_home=is_home, timeout_edge=-timeout_edge)
 
-    wp_kick = xp_prob * after(1) + (1 - xp_prob) * after(0)
+    # A field goal beats both +1 and +2, but only ties +3. The smooth
+    # score model misses that scoring boundary. As possessions become scarce,
+    # discount the extra point's artificial advantage over staying ahead by
+    # one. Retain some value for +2 while multiple scores remain plausible.
+    kick_success = after(1)
+    if score_diff_after_td == 1 and 0 < seconds_left < 1200:
+        fourth_quarter = float(np.clip((1200. - seconds_left) / 300., 0., 1.))
+        final_possession = float(np.clip((300. - seconds_left) / 180., 0., 1.))
+        field_goal_boundary = .75 * fourth_quarter + .25 * final_possession
+        kick_success = ((1. - field_goal_boundary) * kick_success
+                        + field_goal_boundary * after(0))
+    wp_kick = xp_prob * kick_success + (1 - xp_prob) * after(0)
     wp_go = conv_prob * after(2) + (1 - conv_prob) * after(0)
     edge = wp_go - wp_kick
 
@@ -299,7 +310,8 @@ def two_point(score_diff_after_td, seconds_left, conv_prob=TWO_RATE,
     # roughly nine times in ten, so a kick is the default and going needs a
     # real reason rather than a rounding error.
     acted = edge * np.clip(aggression + 0.25, 0.1, 1.3)
-    return dict(call='two' if acted > TWO_POINT_BAR else 'kick',
+    # User's coaching rule: take the extra point when it breaks a tie.
+    return dict(call='two' if score_diff_after_td != 0 and acted > TWO_POINT_BAR else 'kick',
                 edge=round(edge, 4),
                 optimal='two' if edge > 0 else 'kick',
                 strong=abs(edge) >= STRONG_EDGE,

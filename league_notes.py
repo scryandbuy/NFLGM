@@ -143,7 +143,7 @@ def _elimination_digest(league, year, week, entries, sources=()):
     rows.update((r['team'], r) for r in entries)
     ordered = sorted(rows.values(), key=lambda r: (r['division'], r['team']))
     mine = getattr(league, 'user_team', None) in rows
-    section = IB.mail_section('Eliminated from playoff contention',
+    section = IB.mail_section('',
         [[TEAM_NAMES.get(r['team'], r['team']) + (' (your team)' if r['team'] == getattr(league, 'user_team', None) else ''),
           r['record'], r['division']] for r in ordered], ('Team', 'Record', 'Division'))
     context = copy(league); context.inbox = []
@@ -173,6 +173,11 @@ def combine_saved_eliminations(league):
     import re
     groups = {}
     for m in getattr(league, 'inbox', []) or []:
+        payload = m.get('payload') or {}
+        if str(payload.get('key', '')).startswith('playoff-eliminations-'):
+            for section in payload.get('mail_sections') or []:
+                if section.get('title') == 'Eliminated from playoff contention':
+                    section['title'] = ''
         if m.get('kind') not in ('league', 'result') or (m.get('payload') or {}).get('link') != 'league:standings':
             continue
         match = re.fullmatch(r'([A-Z0-9]+): are eliminated from playoff contention\. Record: ([0-9–-]+)\.', m.get('body', ''))

@@ -58,6 +58,7 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
         parts = pp.name.split(); return parts[-2] + ' ' + parts[-1] if parts[-1] in ('Jr.', 'Sr.', 'II', 'III', 'IV') and len(parts) > 1 else parts[-1]
     ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
               td=bool(q.get('touchdown') or q.get('td') or q.get('defensive_td')), defensive_td=bool(q.get('defensive_td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')), nullified=bool(q.get('nullified')))
+    ln['display_togo'] = TK.display_distance(q.get('yardline'), q.get('ydstogo'), off_abbr, def_abbr)
     ln['scoring_side'] = q.get('scoring_side') or ('defense' if q.get('defensive_td') or (q.get('blocked') and q.get('recovery') == 'receiving') else 'offense')
     ln['offensive_fumble_td'] = bool(q.get('offensive_fumble_td'))
     ln['stat_yards'] = round(float(q.get('carrier_yards', q.get('yards', 0)) or 0))

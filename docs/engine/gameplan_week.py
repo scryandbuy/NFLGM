@@ -20,7 +20,7 @@ week's changes, and the state's plan resets when the game ends.
 import numpy as np, collections, re
 from coaching_choices import evidence, resolve
 
-TEND_KEYS = ('plays', 'passes', 'pa', 'motion', 'deep', 'fourth_go', 'fourth_opp', 'def_snaps', 'def_pass_snaps', 'measured_man', 'blitz', 'man', 'two_high', 'box8', 'shadow', 'bracket')
+TEND_KEYS = ('plays', 'passes', 'pa', 'motion', 'deep', 'fourth_go', 'fourth_opp', 'def_snaps', 'def_pass_snaps', 'measured_man', 'blitz', 'man', 'two_high', 'box8', 'shadow', 'bracket', 'pressure_dropbacks', 'pressured_dropbacks', 'blitz_dropbacks', 'blitz_disruptions')
 TWO_HIGH = {'cover_2', 'cover_4', 'cover_6', 'two_man', 'tampa_2', 'quarters'}
 
 
@@ -42,6 +42,12 @@ def record_game(league, home, away, res):
                 to['passes'] += 1; to['pa'] += bool(l.get('play_action')); to['deep'] += l.get('depth') == 'deep'
             to['motion'] += bool(l.get('motion'))
             if l.get('down') == 4: to['fourth_opp'] += 1; to['fourth_go'] += 1
+            if not l.get('nullified') and (l.get('is_pass') or l.get('type') in ('complete','incomplete','sack','scramble','interception','drop')) and ('pressured' in l or l.get('type') == 'sack'):
+                disrupted = bool(l.get('pressured') or l.get('type') == 'sack')
+                td['pressure_dropbacks'] += 1
+                td['pressured_dropbacks'] += disrupted
+                td['blitz_dropbacks'] += bool(l.get('blitz'))
+                td['blitz_disruptions'] += bool(l.get('blitz')) and disrupted
             td['blitz'] += bool(l.get('blitz')); td['man'] += bool(l.get('in_man')) if l.get('is_pass') else 0
             # Keep paired evidence from the same observed calls. Old saves
             # have a man numerator but no defensive pass denominator; never
@@ -354,6 +360,27 @@ def scouting_suggestions(league, me, opp, all_grades=None):
     return suggestions
 
 
+def pressure_advice(counts, read, plan, screen_fit=False):
+    """Require measured disruption plus vulnerability, not blitz frequency alone."""
+    sample = counts.get('pressure_dropbacks', 0)
+    rate = counts.get('pressured_dropbacks', 0) / max(1, sample)
+    gap = max((r['gap'] for r in read['matchups']), default=0)
+    if sample < 60 or rate < .28 or (gap < 3 and not read['recommend']):
+        return None
+    changes = {}
+    if plan.depth_mix[0] < .68:
+        changes['depth_mix'] = (+.06, -.04, -.02)
+    if plan.play_action_rate > .12:
+        changes['play_action_rate'] = -.06
+    blitz_n = counts.get('blitz_dropbacks', 0)
+    if screen_fit and blitz_n >= 25 and counts.get('blitz_disruptions', 0) / blitz_n >= .32 and plan.screen_boost < .03:
+        changes['screen_boost'] = +.03
+    if not changes: return None
+    return dict(side='offence', text='Give the quarterback quicker answers against their rush',
+        why=f"They disrupted {rate:.0%} of observed dropbacks; our protection has a vulnerable matchup.",
+        changes=changes, _priority=evidence(rate/.15, sample, 60))
+
+
 # ------------------------------------------------------------ the report
 def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
     import weather as W
@@ -404,8 +431,23 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
     protection = protection_suggestion(league, me, opp, week, read=protection_matchups, opponent_tendencies=tr)
     if protection:
         suggestions.append(protection)
-    if tr and tr['blitz'] >= 0.20:
-        sug('offence', 'They bring pressure: screens and quick throws, less play action', f"blitz on {tr['blitz']*100:.0f}% of snaps", {'depth_mix': (+0.06, -0.04, -0.02), 'play_action_rate': -0.06, 'screen_boost': +0.03}, priority=evidence(tr['blitz']/.10, def_sample, 60))
+    if counts.get('pressure_dropbacks', 0) >= 60:
+        import gameplan as GP
+        from season import make_coach
+        base = GP.base_plan(make_coach(me.gm))
+        current = base.copy()
+        saved = getattr(league, 'user_week_plan', None) or {}
+        if me_abbr == getattr(league, 'user_team', None) and saved.get('year') == league.year and saved.get('week') == week:
+            apply_changes(current, base, saved.get('changes') or {})
+        pressure = pressure_advice(counts, protection_matchups, current,
+                                   screen_fit=bool(my_rb and my_rb[0] <= 10 and rl and rl[0] >= 17))
+        if pressure:
+            if protection and protection_matchups['recommend']:
+                # One coherent protection recommendation, not two copies of quick game.
+                for key, value in pressure['changes'].items():
+                    protection['changes'].setdefault(key, value)
+            else:
+                suggestions.append(pressure)
     if tr and tr['two_high'] >= 0.55:
         sug('offence', 'They live in two-high: run it and work underneath', f"two-high on {tr['two_high']*100:.0f}% of snaps", {'pass_bias': -0.05, 'depth_mix': (+0.05, +0.02, -0.07)}, priority=evidence((tr['two_high']-.35)/.12, def_sample, 60))
     if tr and tr['two_high'] <= 0.30 and tr['box8'] >= 0.25:

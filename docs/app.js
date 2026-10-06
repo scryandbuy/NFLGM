@@ -485,7 +485,8 @@ function renderMailBody(message) {
       if (message.mail_layout === 'trade' && section.team) applyTeamTheme(block, {abbr:section.team});
       if (section.title) block.append(el('h4', {}, section.title));
       if (section.columns?.length) {
-        const table = el('table', {class:'mail-table'});
+        const playerTable = section.columns.length === 3 && section.columns.join('|') === 'Player|Position|OVR';
+        const table = el('table', {class:'mail-table' + (playerTable ? ' mail-player-table' : '')});
         table.append(el('thead', {}, el('tr', {}, ...section.columns.map(label => el('th', {scope:'col'}, label)))));
         table.append(el('tbody', {}, ...section.rows.map(row => el('tr', {}, ...row.map(cell => el('td', {}, cellText(cell)))))));
         block.append(el('div', {class:'mail-table-scroll', tabindex:'0', 'aria-label':section.title || 'Message details'}, table));

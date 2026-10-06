@@ -339,9 +339,9 @@ def pass_rate(down, ydstogo, score_diff, yards_to_endzone, off_pers,
     out up 9-16. decisions.pass_rate carries that table.
     """
     base = PASS_RATE.get(int(down), PASS_RATE[1])[dist_band(ydstogo)]
-    conversion_pass = int(down) == 4 and ydstogo >= 5
+    conversion_pass = int(down) == 4 and ydstogo >= 3
     if conversion_pass:
-        base = .975 if ydstogo < 6 else .985 if ydstogo < 7 else .99
+        base = .90 if ydstogo < 4 else .95 if ydstogo < 5 else .975 if ydstogo < 6 else .985 if ydstogo < 7 else .99
     L = _logit(base)
     neutral = _logit(NEUTRAL_SCRIPT)
     # score
