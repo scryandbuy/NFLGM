@@ -92,6 +92,20 @@ class CeilingVisibilityTests(unittest.TestCase):
         self.assertFalse(self.s.development_notices()['players'][0]['can_unlock'])
         self.assertFalse(self.s.dismiss_ceiling_notice('cpu', 0)['ok'])
 
+    def test_squad_notices_and_acknowledgments_use_same_ceiling_rules(self):
+        self.reach()
+        team=self.L.teams['GB']
+        team.roster.remove(self.p);team.practice_squad.append(self.p)
+        self.assertEqual([r['pid'] for r in self.s.development_notices()['players']],[self.p.pid])
+        self.s.dismiss_ceiling_notice(self.p.pid,0)
+        before=copy.deepcopy(self.p.xp_spent)
+        self.assertFalse(self.s.development_notices()['players'])
+        self.assertEqual(before,self.p.xp_spent)
+        XP.unlock(self.p)
+        self.assertFalse(self.s.development_notices()['players'])
+        self.reach()
+        self.assertEqual(self.s.development_notices()['players'][0]['unlocks'],1)
+
 
 if __name__ == '__main__':
     unittest.main()

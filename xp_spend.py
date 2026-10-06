@@ -52,23 +52,38 @@ def _weekly_rate(player):
     return sum(led.get(source, 0.0) for source in ('game', 'snaps', 'roster', 'long_snap')) / weeks
 
 
-def choose_attr(player, gm, rng, team=None):
-    """One attribute, drawn. None if nothing is buyable."""
+def spending_weights(player, team=None):
+    """The attributes considered by Spend by Read, without making a choice."""
     w = TG.DEPTH_WEIGHTS.get(player.pos)
     if player.pos == 'TE' and team is not None:
         import offense_roles as OR
         w = TG.TE_ROLE_WEIGHTS[OR.te_development_role(player, team)]
+    return {k:wt for k,wt in (w or {}).items() if player.ratings.get(k,70.) < 99.
+            and not ((k in XP.PHYSICAL or k in XP.TOOLS) and development_age(player)>YOUNG)}
+
+
+def next_spend_cost(player, team=None):
+    """Read-only readiness for the same assistant action as the Spend button."""
+    if XP.at_ceiling(player): return None
+    return min((XP.cost_per_point(player,k) for k in spending_weights(player,team)
+                if not XP.at_ceiling(player,k)),default=None)
+
+
+def choose_attr(player, gm, rng, team=None):
+    """One attribute, drawn. None if nothing is buyable."""
+    w = spending_weights(player,team)
     if not w:
         return None
     belief = getattr(gm, 'dev_belief', 0.5)
     keys, weights = [], []
-    vals = {k: player.ratings.get(k, 70.0) for k in w}
+    # Preserve the profile's full spread when weighting the available points.
+    profile = TG.DEPTH_WEIGHTS.get(player.pos,{})
+    if player.pos == 'TE' and team is not None:
+        import offense_roles as OR
+        profile = TG.TE_ROLE_WEIGHTS[OR.te_development_role(player,team)]
+    vals = {k: player.ratings.get(k, 70.0) for k in profile}
     lo, hi = min(vals.values()), max(vals.values())
     for k, wt in w.items():
-        if vals[k] >= 99.0:
-            continue
-        if (k in XP.PHYSICAL or k in XP.TOOLS) and development_age(player) > YOUNG:
-            continue
         v = wt / XP.cost_per_point(player, k)         # overall per XP
         # a hole in his own profile: up to +60% for his lowest attribute,
         # scaled by how much the GM believes in filling men out
@@ -91,7 +106,7 @@ def choose_attr(player, gm, rng, team=None):
     return keys[int(rng.choice(len(keys), p=p))]
 
 
-def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, source='AI'):
+def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, source='AI', spend_now=False):
     """Spend one man's XP this week. Returns a list of (kind, attr, cost)."""
     out = []
     if player.xp <= 0:
@@ -127,14 +142,14 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
                 out.append(('buy', target, paid))
                 player.xp_spent.pop('_saving_for', None)
                 continue
-            else:
+            elif not spend_now:
                 out.append(('save', target, max(0.0, XP.cost_per_point(player, target) - player.xp)))
                 break
         attr = choose_attr(player, gm, rng, team)
         if attr is None:
             break
         cost = XP.buy(player, attr, year=year, week=week, source=source)
-        if cost is None and attr in XP.PHYSICAL:
+        if cost is None and attr in XP.PHYSICAL and not spend_now:
             # He drew speed and cannot afford it this week. XP arrives at a
             # thousand or two a week and was spent down as it came, so a
             # 2.5x point was never affordable at the moment it was drawn:
@@ -147,8 +162,13 @@ def spend_player(player, gm, team, week, rng, verbose=False, *, year=None, sourc
                 break
         if cost is None:
             # could not afford the drawn attribute; try the cheapest skill
-            cheap = min((k for k in TG.DEPTH_WEIGHTS[player.pos] if player.ratings.get(k, 70) < 99
-                         and not (k in XP.PHYSICAL and development_age(player) > YOUNG)),
+            # An explicit Spend command buys an available point instead of
+            # silently saving for a randomly selected unaffordable attribute.
+            choices = (k for k in spending_weights(player,team)
+                       if not XP.at_ceiling(player,k) and XP.cost_per_point(player,k)<=player.xp) if spend_now else (
+                       k for k in TG.DEPTH_WEIGHTS[player.pos] if player.ratings.get(k,70)<99
+                       and not (k in XP.PHYSICAL and development_age(player)>YOUNG))
+            cheap = min(choices,
                         key=lambda k: XP.cost_per_point(player, k), default=None)
             cost = XP.buy(player, cheap, year=year, week=week, source=source) if cheap else None
             if cost is None:
