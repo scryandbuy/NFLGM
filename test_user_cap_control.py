@@ -66,6 +66,22 @@ class UserCapControlTests(unittest.TestCase):
         self.assertAlmostEqual(L.teams['GB'].cap.dead_next, 4)
         self.assertFalse(any(b['kind'] == 'cap' for b in s.blocking()))
 
+    def test_projected_overage_allows_coaching_but_blocks_opening_free_agency(self):
+        L = self.setup_league()
+        L.teams['GB'].staff = {}
+        s = SS.Session(L, np.random.default_rng(12), 'GB')
+        before = [(p.pid, contract_to_dict(p.contract)) for p in L.teams['GB'].roster]
+        s.stop = ('offseason', 2)  # Coaching Carousel, before the player market.
+        self.assertFalse(any(b['kind'] == 'cap' for b in s.blocking()))
+        with patch.object(s, '_advance', return_value=dict(done='Coaching Carousel')) as advance:
+            self.assertEqual(s.advance()['done'], 'Coaching Carousel')
+            advance.assert_called_once()
+        self.assertEqual(before, [(p.pid, contract_to_dict(p.contract)) for p in L.teams['GB'].roster])
+        s.stop = ('offseason', 3)  # Re-sign decisions close before free agency.
+        self.assertTrue(any(b['kind'] == 'cap' for b in s.blocking()))
+        with patch.object(s, '_advance', side_effect=AssertionError('must not open market')):
+            self.assertEqual(s.advance()['done'], 'Blocked')
+
     def test_cutdown_checks_full_roster_before_mutating_accounting_phase(self):
         L = fixture(); L.user_team = 'GB'; L.set_phase('free_agency')
         t = L.teams['GB']; t.cap.cap = 103; t.cap.rollover = 0

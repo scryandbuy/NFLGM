@@ -537,7 +537,12 @@ class Session:
             elif existing is not None:
                 existing['status'] = 'done'
         team = self.L.teams.get(self.user_team)
-        if team is not None and getattr(team, 'cap', None) is not None:
+        # The newly rolled player cap is still a projection during the coaching
+        # carousel. Staff decisions do not spend player cap room. Require
+        # compliance at the next stop, before opening free agency.
+        coaching_stop = (self.stop[0] == 'offseason'
+                         and self.OFFSEASON[self.stop[1]][1] == 'step_coaching')
+        if team is not None and getattr(team, 'cap', None) is not None and not coaching_stop:
             team.sync_cap()
             # Cutdown must fit all contracts before its full-roster ledger
             # takes effect; earlier offseason stops retain top-51 accounting.
