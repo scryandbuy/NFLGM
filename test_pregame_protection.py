@@ -144,12 +144,12 @@ class ProtectionAdviceTests(unittest.TestCase):
         for book in self.L.game_stats.values():
             for s in book.values():s.pop('team')
         self.assertFalse(self.read()['recommend'])
-    def test_blitz_only_retains_quick_game_alternative(self):
+    def test_blitz_only_does_not_establish_pressure_threat(self):
         tr=dict(blitz=.35,two_high=.4,box8=.1,man=.3,pa_rate=.1,deep=.1,pass_rate=.6)
         from unittest.mock import patch
         with patch.object(GW,'tendencies',return_value=tr):r=GW.opponent_report(self.L,'GB','KC',5)
         self.assertFalse(any('protection' in s['changes'] for s in r['suggestions']))
-        self.assertTrue(any('screen_boost' in s['changes'] for s in r['suggestions']))
+        self.assertFalse(any('screen_boost' in s['changes'] for s in r['suggestions']))
     def test_acceptance_reaches_protection_caller_without_mutating_report_inputs(self):
         self.grade(self.opp,'LEDG',90);before=copy.deepcopy(self.L)
         r=GW.opponent_report(self.L,'GB','KC',5)
