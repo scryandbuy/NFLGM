@@ -762,6 +762,7 @@ class League:
         import waivers as WV
         on_wire = WV.subject(self, p, self.week)
         p.team = None
+        p.xp_spent['_fa_demand_start'] = [self.year, max(1, int(self.week or 0)) if self.phase == 'regular' else 1]
         if on_wire:
             WV.waive(self, p, t.abbr, self.week)
         else:

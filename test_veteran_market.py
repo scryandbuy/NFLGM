@@ -130,10 +130,9 @@ class VeteranMarketTests(unittest.TestCase):
 
     def test_weekly_review_runs_in_its_calendar_window_only(self):
         p = self.candidate(); self.L.set_phase('regular')
-        # MIN's existing staggered review falls after week four.
+        self.L.week = 3
+        self.assertTrue(VM.review(self.L, self.rng, 'weekly', week=3))
         self.assertEqual(VM.review(self.L, self.rng, 'weekly', week=3), [])
-        self.L.week = 4
-        self.assertTrue(VM.review(self.L, self.rng, 'weekly', week=4))
         self.assertEqual(p.team, 'MIN')
         self.assertEqual(VM.review(self.L, self.rng, 'weekly', week=18), [])
 

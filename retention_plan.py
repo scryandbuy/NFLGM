@@ -128,7 +128,7 @@ def _role_read(league, team, player, baseline=None, scale=None):
     next_body = own[rank+1] if rank+1 < len(own) else min(reserves, key=lambda p: p.ovr, default=None)
     replacement = next_body.ovr if next_body is not None else 55.
     retention=RN.retention_value(team,player)
-    important = share >= .15 or loss >= 2. or retention >= 2.
+    important = bool(share >= .15 or loss >= 2. or retention >= 2.)
     row=dict(role_share=round(share,4), roles=sorted({r['role'] for r in rows}),
         departure_loss=round(loss,4), replacement_grade=round(replacement,3),
         replacement_pid=next_body.pid if next_body is not None else None,

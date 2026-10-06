@@ -1,0 +1,26 @@
+Weekly FA value implementation, 2030 Week 9 save
+
+Demand: 5% compound reduction per completed unsigned regular-season week,
+minimum salary floor. Latest release resets the clock. Rostered and restricted
+players excluded. Old saves use last release, or season start if none exists.
+Both recurring CPU offers and user in-season negotiation asks use this factor.
+Existing talks update once per elapsed week, without applying the discount twice.
+
+CPU: weekly review for every team, one acquisition per team per checkpoint.
+Optional reserve intrusion is weighed against roster gain and GM aggression/
+patience. Concrete funding deficits carry more weight; current cap remains hard.
+Existing role, public development, performance, incumbent asset value, continuity,
+recent commitments, and release eligibility assessments remain in force.
+
+Evidence: 84 existing/initial targeted checks passed; 3 additional budget checks
+also passed (87 distinct checks). Campbell-Darrisaw small upgrade rejected and
+material upgrade still allowed. JSON boolean normalization fixes saved assessments.
+
+Save experiment: 14 first-review signings, all nonnegative cap. Examples:
+NO adds Waddle in an open spot; NE Wilson replaces C.J. Williams; PHI Sutton
+replaces Hardman. Full individual signing/cut/contract data in accompanying JSON.
+No original save modified. Controlled calendar-only followup excludes new injuries,
+games, cap settlements, and other weekly routes; it is not a season-balance proof.
+Remaining uncertainty: 5% rate and sustained roster churn need longitudinal review;
+old-save pool-entry dates without release history cannot be recovered exactly.
+Followup Week 10: four acquisitions (DAL Spillane, PHI Overton for Wesley, JAX Fuaga for Bounds, NO Barber); saving succeeds after both reviews.

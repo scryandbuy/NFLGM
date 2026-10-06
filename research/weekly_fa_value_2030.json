@@ -1,0 +1,420 @@
+[
+  {
+    "team": "NO",
+    "incoming": "Jaylen Waddle",
+    "age": 31.93972602739726,
+    "ovr": 88.57352547281712,
+    "outgoing": null,
+    "out_age": null,
+    "out_ovr": null,
+    "cap": 26.16,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        2.526
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        9.232
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "NE",
+    "incoming": "Michael Wilson",
+    "age": 30.693150684931506,
+    "ovr": 85.12446599279241,
+    "outgoing": "C.J. Williams",
+    "out_age": 28.03013698630137,
+    "out_ovr": 76.8720604726978,
+    "cap": 0.66,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        2.989
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        3.936
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "DET",
+    "incoming": "Tank Bigsby",
+    "age": 28.17808219178082,
+    "ovr": 85.08104363201699,
+    "outgoing": "Tei Burns III",
+    "out_age": 26.312328767123287,
+    "out_ovr": 66.44773710449358,
+    "cap": 2.21,
+    "contract": {
+      "signed": 2030,
+      "years": 2,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        1.609,
+        2.3701499999999993
+      ],
+      "rb": [
+        0.0,
+        0.0
+      ],
+      "bonus_schedule": [
+        1.9265,
+        1.9265
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "PHI",
+    "incoming": "Courtland Sutton",
+    "age": 35.06575342465754,
+    "ovr": 84.80037671367452,
+    "outgoing": "Mecole Hardman",
+    "out_age": 32.64657534246575,
+    "out_ovr": 74.24410138748897,
+    "cap": 4.15,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        1.771
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        4.016
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "DAL",
+    "incoming": "Garett Bolles",
+    "age": 38.43835616438356,
+    "ovr": 83.32052943608859,
+    "outgoing": null,
+    "out_age": null,
+    "out_ovr": null,
+    "cap": 5.0,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        2.056
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        4.259
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "LV",
+    "incoming": "Emmanuel Pregnon",
+    "age": 28.71780821917808,
+    "ovr": 81.54850097256984,
+    "outgoing": "Devin Ross",
+    "out_age": 24.43013698630137,
+    "out_ovr": 69.65159709320146,
+    "cap": 4.78,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        2.138
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        3.085
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "ARI",
+    "incoming": "Robert Hunt",
+    "age": 34.19178082191781,
+    "ovr": 81.1695600070065,
+    "outgoing": "Micah Morris",
+    "out_age": 27.19178082191781,
+    "out_ovr": 74.66,
+    "cap": 2.52,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        2.288
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        3.252
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "TB",
+    "incoming": "Cody Mauch",
+    "age": 31.8,
+    "ovr": 80.85558719614363,
+    "outgoing": "Andrew Sprague",
+    "out_age": 25.36986301369863,
+    "out_ovr": 75.4543999999993,
+    "cap": 5.9,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        2.218
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        3.201
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "KC",
+    "incoming": "Kelvin Gilliam",
+    "age": 27.627397260273973,
+    "ovr": 80.85000000000001,
+    "outgoing": "Mateen Ibirogba",
+    "out_age": 25.882191780821916,
+    "out_ovr": 74.27349999999025,
+    "cap": 1.76,
+    "contract": {
+      "signed": 2030,
+      "years": 2,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        0.41,
+        4.1803
+      ],
+      "rb": [
+        0.0,
+        0.0
+      ],
+      "bonus_schedule": [
+        3.727,
+        3.727
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "LAC",
+    "incoming": "Treydan Stukes",
+    "age": 29.145205479452056,
+    "ovr": 80.14009392687944,
+    "outgoing": "Justin Hayward",
+    "out_age": 26.213698630136985,
+    "out_ovr": 65.03778841957258,
+    "cap": 5.81,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        1.741
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        1.725
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "BAL",
+    "incoming": "David Edwards",
+    "age": 33.62465753424657,
+    "ovr": 79.9298599116085,
+    "outgoing": "Boo Umeozulu",
+    "out_age": 26.446575342465753,
+    "out_ovr": 72.99369780796891,
+    "cap": 15.13,
+    "contract": {
+      "signed": 2030,
+      "years": 2,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        4.141,
+        2.139462
+      ],
+      "rb": [
+        0.0,
+        0.0
+      ],
+      "bonus_schedule": [
+        2.262,
+        2.262
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "CLE",
+    "incoming": "Tacario Davis",
+    "age": 26.213698630136985,
+    "ovr": 79.71,
+    "outgoing": "Hunter Murray Jr.",
+    "out_age": 26.008219178082193,
+    "out_ovr": 74.23157757569265,
+    "cap": 6.38,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        0.703
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        1.215
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "WAS",
+    "incoming": "Andre' Sam",
+    "age": 31.731506849315068,
+    "ovr": 79.03145375344516,
+    "outgoing": "Paki Mwamba",
+    "out_age": 26.235616438356164,
+    "out_ovr": 76.22263157897844,
+    "cap": 0.15,
+    "contract": {
+      "signed": 2030,
+      "years": 1,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        1.212
+      ],
+      "rb": [
+        0.0
+      ],
+      "bonus_schedule": [
+        2.096
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  },
+  {
+    "team": "BUF",
+    "incoming": "Gennings Dunker",
+    "age": 27.49041095890411,
+    "ovr": 78.95,
+    "outgoing": "Shep Coleman",
+    "out_age": 23.471232876712328,
+    "out_ovr": 60.835798471860684,
+    "cap": 0.6,
+    "contract": {
+      "signed": 2030,
+      "years": 2,
+      "void": 0,
+      "market_cap": 424.146,
+      "base": [
+        0.312,
+        3.182399999999999
+      ],
+      "rb": [
+        0.0,
+        0.0
+      ],
+      "bonus_schedule": [
+        2.837,
+        2.837
+      ],
+      "earned_base": 0.0,
+      "earned_roster": 0.0,
+      "pay_start": 8,
+      "start_offset": 0
+    }
+  }
+]
