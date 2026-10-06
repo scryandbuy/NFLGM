@@ -68,6 +68,24 @@ class MailLayoutTests(unittest.TestCase):
         self.assertIn(f'{draft_year(pick.year)} first-round pick',mn['rows'][1][0]['text'])
         self.assertFalse(IB.is_decision(msg))
 
+    def test_small_cpu_trades_join_one_advance_digest(self):
+        import inbox_digest
+        from cap_engine import Contract
+        league=fixture(); league.user_team='KC'
+        for pid,team in [('a','GB'),('b','MIN'),('c','GB'),('d','MIN')]:
+            p=player(league,pid,team,Contract(2,[2,2]))
+            self.assertLess(p.ovr,85)
+        league.trade('GB','MIN',['a'],['b'])
+        league.trade('GB','MIN',['c'],['d'])
+        inbox_digest.consolidate(league,set())
+        self.assertEqual(len(league.inbox),1)
+        saved=League.load(league.save()).inbox[0]
+        sections=IB.mail_layout(saved)['mail_sections']
+        self.assertEqual(len(sections),4)
+        self.assertEqual(len({s['trade_group'] for s in sections}),2)
+        ids={m['id'] for s in sections for r in s['rows'] for cell in r for m in cell['mentions']}
+        self.assertEqual(ids,{'a','b','c','d'})
+
     def test_old_cpu_trade_renders_sections_without_rewriting_mail(self):
         league=fixture(); a=player(league,'a'); a.name='Mike Smith'
         msg=IB.news(league,'GB and MIN make a trade',
