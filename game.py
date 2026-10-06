@@ -903,7 +903,11 @@ def _shot_td_prob(yardline, offense, defense, rate_fn):
         d = float(np.mean([rate_fn(x, {'zone_cover_rating': .4, 'man_cover_rating': .3, 'speed_rating': .3}) for x in dbs])) if dbs else 0.7
         base *= float(np.clip(1.0 + 1.5 * (o - d), 0.7, 1.3))
     except Exception: pass
-    return float(np.clip(base, 0.02, 0.5))
+    # Beyond ordinary end-zone throwing range, a score needs exceptional
+    # after-catch travel. Do not give an 85-yard attempt the midfield floor.
+    throw_range = 48. + 20. * float(np.clip(rate_fn(offense.get('qb') or {}, {'throw_power_rating': 1.}), 0., 1.))
+    distance_tail = float(np.exp(-max(0., float(yardline) - throw_range) / 12.))
+    return float(np.clip(base, 0.02, 0.5)) * distance_tail
 
 
 def _shot_sack_prob(offense, defense, rate_fn):
@@ -1008,6 +1012,25 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
     # (about PLAY_SECS_RUN each). A coach's aggression sets how much he fears the other side's possession.
     fear = 1.25 - 0.5 * aggr                                     # the conservative coach counts their chance at 1.25x, the gambler at 0.75x
     other_tos = timeouts.left.get('away' if pos == 'home' else 'home', 0) if timeouts is not None else 3
+    def turnover_cost(yy, secs, probability, travel=0.):
+        if game_end or secs <= 0:
+            return 0.0
+        # A turnover near our own goal gives the opponent a short field,
+        # unlike the kickoff possession already priced below. Reserve live
+        # time and a plausible return; this is a planning estimate only.
+        remaining = max(0., secs - PLAY_SECS - 4.)
+        opponent_spot = float(np.clip(100. - yy + travel - 8., 1., 99.))
+        kick_value = 3. * fg_probability(field_goal_distance(opponent_spot), defense.get('k') or {}, rate_fn)
+        chance_to_snap = float(np.clip(remaining / 3., 0., 1.))
+        field_value = max(kick_value * chance_to_snap,
+                          _possession_value(remaining, other_tos))
+        return fear * probability * field_value
+    turnover_costs = {'kneel': 0., 'kick': 0.,
+                     'shot': turnover_cost(y, secs_in_half, SHOT_INT, min(y, 45.)),
+                     'play': sum(turnover_cost(max(1., y - i * PLAY_GAIN * .6),
+                                  secs_in_half - i * play_seconds,
+                                  min(PLAY_BAD, .025) * (1. - PLAY_BAD) ** i, PLAY_GAIN)
+                                 for i in range(k_best))}
     # each option leaves the other side a different amount of clock: a kick now leaves nearly all of it, a shot
     # then a kick a little less, k quick snaps then a kick less again; the bleed leaves next to nothing
     residual = {'kick': secs_in_half - 4.0, 'shot': secs_in_half - PLAY_SECS - 4.0, 'play': 4.0, 'kneel': 0.0}   # the drill that gets there runs to the gun; only a kick or a shot taken now hands time back
@@ -1025,7 +1048,7 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         c = 0.0 if winning_score else fear * _possession_value(max(0.0, residual.get(opt, 0.0)), other_tos, game_end, lead_after.get(opt, 0))
         if opt == 'play' and STALL_ON: c += fear * p_stall * _possession_value(stall_left, other_tos, game_end, int(round(dr.score_diff)))
         return c
-    net = {k: v - cost(k) for k, v in evs.items()}
+    net = {k: v - cost(k) - turnover_costs.get(k, 0.) for k, v in evs.items()}
     hurry_choice = max(net, key=lambda k: net[k]); hurry_ev = net[hurry_choice]; cost_hurry = cost(hurry_choice)
     # THE BLEED: k slow snaps with the clock running, then the play clock run down and one shot at the end zone
     # with a few seconds left, then the kick if it misses; the other side gets nothing back. The best k is taken.
@@ -1035,7 +1058,13 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         if rest < 6: break
         yk = max(1.0, y - PLAY_GAIN * (1.0 - PLAY_BAD - PLAY_INC) * k)
         kv, sv = (kick_ev(yk), shot_ev(yk, min(rest, 12.0), own_tos)) if 'kick' in evs else (0.0, 0.0)
-        evk = ((1.0 - PLAY_BAD) ** k) * max(kv, sv)
+        bleed_risk = sum(turnover_cost(max(1., y - i * PLAY_GAIN * .6),
+                            secs_in_half - i * PLAY_SECS_RUN,
+                            min(PLAY_BAD, .025) * (1. - PLAY_BAD) ** i, PLAY_GAIN)
+                         for i in range(k))
+        if sv > kv:
+            bleed_risk += turnover_cost(yk, min(rest, 12.), SHOT_INT, min(yk, 45.))
+        evk = ((1.0 - PLAY_BAD) ** k) * max(kv, sv) - bleed_risk
         if bleed_ev is None or evk > bleed_ev: bleed_ev, k_bleed, bleed_final = evk, k, ('shot' if sv > kv else 'kick')
     hurry = True; choice = hurry_choice
     behind = dr.score_diff < 0
@@ -1053,8 +1082,11 @@ def end_of_half_plan(dr, offense, defense, rate_fn, timeouts, pos, half_end, sec
         # waits (a team down two scores once ran the play clock down because every option priced near nothing)
         hurry = False; choice = 'play' if k_bleed > 0 else bleed_final; evs = dict(evs, bleed=bleed_ev)
     dr._plan_mode = 'hurry' if hurry else 'bleed'
-    if evs.get(choice, 0.0) < floor_line: choice = 'kneel'
-    return dict(choice=choice, hurry=hurry, quick_play=bool(quick_window and choice == 'play'), evs={k: round(v, 3) for k, v in evs.items()}, cost_hurry=round(cost_hurry, 3), p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
+    selected_value = net.get(choice, 0.) if hurry else bleed_ev
+    if selected_value is None or selected_value < floor_line:
+        choice = 'kneel'; hurry = False
+        dr._plan_mode = 'bleed'
+    return dict(choice=choice, hurry=hurry, quick_play=bool(quick_window and choice == 'play'), evs={k: round(v, 3) for k, v in evs.items()}, net_evs={k: round(v, 3) for k,v in net.items()}, turnover_costs={k: round(v, 3) for k,v in turnover_costs.items()}, cost_hurry=round(cost_hurry, 3), p_fg=round(p_fg, 3), p_td=round(p_td, 3), aggr=round(aggr, 2), need=need)
 
 
 
