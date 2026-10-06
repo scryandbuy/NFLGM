@@ -1061,7 +1061,8 @@ def _financial_trade(league, ta, tb, outgoing, incoming, cache=None, *, roster_g
             funding[funding_key] = approved
         if not funding[funding_key]:
             return False
-    return True
+    import trade_retention as TRE
+    return TRE.purchase_plans(league,ta,tb,outgoing,incoming,cache=cache)['approved']
 
 
 def cpu_trade_check(league, ta, tb, outgoing, incoming, *, buyer=None,

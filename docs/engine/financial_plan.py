@@ -139,6 +139,9 @@ Only the hypothetical pick inventory may vary while reusing this projection.
 """
     from cap_accounting import pre_roll
     additions = list(additions)
+    from trade_retention import reserved_contracts
+    additions += list(reserved_contracts(league, team,
+                        set(removals) | {p.pid for p, _ in additions}))
     added_ids = {p.pid for p, _ in additions}
     roster_ids = {p.pid for p in team.roster}
     held = {p.pid: (p, c) for p, c in pending
@@ -282,6 +285,16 @@ reused only while roster/contracts/phase/pending commitments are unchanged.
         result['reason']='user_control'
         return result
     if action == 'trade':
+        from trade_retention import active_plan
+        if any(p.pid not in removals and active_plan(league,team,p) for p in team.roster):
+            # A discretionary follow-up purchase cannot spend the concrete
+            # renewal room that justified a previous premium acquisition.
+            # Selling that player removes the reservation in the projection.
+            for b,a in zip(before['years'],after['years']):
+                if ((a['raw_room'] < -EPS and a['raw_room'] < b['raw_room']-EPS)
+                        or (a['funded_room'] < -EPS and a['funded_room'] < b['funded_room']-EPS)):
+                    result.update(approved=False,reason='fund_trade_extension_plan')
+                    return result
         # Concrete roster/rookie costs matter more than optional cushions.
         # Forecast uncertainty discounts distant years, but risk never saturates.
         # Only cap_accounting decides current-year transaction legality.

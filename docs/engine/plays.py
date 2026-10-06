@@ -407,7 +407,7 @@ TE_FREE_BASE, TE_FREE_SEP = 1.0, 2.2      # a tight end's step at the catch: fir
 
 def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
                         already=0.0, contact_at=0.0, in_space=False, gain_scale=1.0,
-                        track_tackler=False):
+                        track_tackler=False, converging_pursuit=False):
     """
     Walks the carrier through pursuers one at a time. Each is a contest he can
     win; clearing them all is a touchdown from wherever he is.
@@ -471,8 +471,15 @@ def resolve_yards_after(carrier, tacklers, yards_to_endzone, rng,
             break
         broken += 1
         chase = logistic(edge(brk, rate(t, YAC['tackler']['angle'])), k=5.5)
-        gained += max(0.3, rng.gamma(1.7, (1.50 if not in_space else 1.95)
-                                      + (4.6 if not in_space else 5.4) * chase)) * gain_scale
+        step = max(0.3, rng.gamma(1.7, (1.50 if not in_space else 1.95)
+                                      + (4.6 if not in_space else 5.4) * chase))
+        if converging_pursuit and i + 1 < len(tacklers):
+            # On a catch in front of the defense, the next assigned pursuer
+            # closes before one missed tackle can yield an unopposed 20-yard
+            # sprint. His pursuit angle and the receiver's speed set the gap.
+            next_angle = rate(tacklers[i + 1], YAC['tackler']['angle'])
+            step = min(step, float(np.clip(15.0 + 12.0 * (brk - next_angle), 9.0, 22.0)))
+        gained += step * gain_scale
     else:
         # Every pursuer beaten. Rare by construction now, and even then the
         # secondary still has to be outrun.
@@ -1467,7 +1474,8 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
     gain_scale *= float(np.clip(off_call.get('execution_mod', 1.0), 0.94, 1.06))
     yac = resolve_yards_after(tgt, tacklers, room, rng, in_space=in_space,
                               contact_at=min(max(te_free, scr_free), room), gain_scale=gain_scale,
-                              track_tackler=True)
+                              track_tackler=True,
+                              converging_pursuit=0 <= air < 10 and not (screen or swing))
     total = min(air + yac['yards'], ytg)
     return dict(type='complete', yards=round(float(total), 1), air=round(float(air), 1),
                 yac=yac['yards'], touchdown=total >= ytg, concept=concept,

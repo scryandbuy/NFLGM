@@ -205,7 +205,8 @@ def candidates(league, team, scale=None):
                   -pr[1]['importance'],str(pr[0].pid)))
 
 
-def assess(league, team, player, pool=None, baseline=None, scale=None, *, _context=None):
+def assess(league, team, player, pool=None, baseline=None, scale=None, *, _context=None,
+           acquisition=False):
     import extensions as EXT
     import contract_offer as CO
     from trade_calendar import trading_open
@@ -228,7 +229,8 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
     if 'games_played' not in race: race=dict(race,**TE.race_context(team))
     window = TE.window(race)
     years = tm['years']
-    if player.age > EXT.AGE_LIMIT.get(player.pos,31):
+    renewal_age = player.age + (max(0, c.years) if acquisition and c else 0)
+    if renewal_age > EXT.AGE_LIMIT.get(player.pos,31):
         row.update(veteran_plan(team,player,inputs,context['scale'],window))
         years = min(years,row['max_new_years'])
     want = .75 + .25*row['role_share'] - .10*max(0.,team.gm.youth-.5)*(player.age>=28)
@@ -261,7 +263,10 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
             row['affordable']=True; break
     ratio = apy/max(.01,floor)
     probability = max(.05,min(.9,.55+(ratio-1.)*2.+.12*row['role_share']))
-    if refusal: probability = .15 if 'during the season' in refusal else .05
+    # A player can defer talks until the offseason without destroying a
+    # buyer's intention to negotiate then. A closed negotiation is different.
+    deferred = bool(refusal and 'during the season' in refusal)
+    if refusal and not (acquisition and deferred): probability = .15 if deferred else .05
     if not row['affordable']: probability = .05
     row['extension_probability']=round(probability,3)
     # The reservation price buys the same remaining service and cash as the
@@ -272,7 +277,7 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
     if asset:
         fraction = .5 if asset['valued_contract_years'] <= 1 else .75
         row['trade_floor']=round(max(0.,asset['trade_value'])*fraction,2)
-    retain = (row['important'] and row['affordable'] and ratio>=.90
+    retain = (row['important'] and row['affordable'] and ratio>=(1. if acquisition else .90)
               and probability>=.35 and row.get('veteran_viable',True))
     if retain:
         row['decision']='retain'; row['reasons']=['valuable_role','viable_extension']
@@ -287,7 +292,7 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
         row['reasons']=['replacement_or_future_flexibility']
     if refusal: row['reasons'].append('agent_defers' if 'during the season' in refusal else 'agent_declines')
     if not row['affordable']: row['reasons'].append(row['financial_reason'])
-    if ratio<.90: row['reasons'].append('price_gap')
+    if ratio<(1. if acquisition else .90): row['reasons'].append('price_gap')
     if row.get('veteran_viable') is False: row['reasons'].append('prefer_veteran_replacement')
     return row
 

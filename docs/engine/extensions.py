@@ -380,9 +380,15 @@ def ai_round(league, rng, verbose=False):
         if abbr == getattr(league, 'user_team', None) or team.gm is None:
             continue
         if pool is None: pool = VAL.pool_from_league(league)
+        import trade_retention as TRE
+        planned = TRE.pursue(league,team,rng,pool)
+        done.extend(planned)
+        if planned: pool = VAL.pool_from_league(league)
         RP.refresh(league,team,pool=pool)
         n = 0
         for p, inputs in RP.candidates(league,team,scale):
+            intent=p.xp_spent.get(TRE.KEY,{})
+            if intent.get('team')==abbr and intent.get('last_attempt')==[league.year,league.phase,league.week]: continue
             # Cap/financial/agent checks determine how many expiring men can
             # stay. An arbitrary renewal count must not send a seventh useful,
             # affordable incumbent to free agency without a negotiation.
@@ -441,6 +447,12 @@ def in_season_round(league, rng, week):
     for abbr, team in league.teams.items():
         if abbr == getattr(league, 'user_team', None) or team.gm is None: continue
         if wk >= 18 and abbr in alive: continue
+        import trade_retention as TRE
+        if any(TRE.active_plan(league,team,p) for p in team.roster):
+            if pool is None: pool=VAL.pool_from_league(league)
+            planned=TRE.pursue(league,team,rng,pool)
+            done.extend((a,n,pos,apy,years) for a,n,pos,ovr,apy,years in planned)
+            if planned: pool=VAL.pool_from_league(league)
         if 6 <= wk <= 9:
             if pool is None: pool=VAL.pool_from_league(league)
             RP.refresh(league,team,pool=pool)
@@ -448,6 +460,8 @@ def in_season_round(league, rng, week):
         if rng.random() > (0.085 if wk <= 17 else 0.16): continue
         if pool is None: pool=VAL.pool_from_league(league)
         for p,inputs in RP.candidates(league,team,scale)[:4]:
+            intent=p.xp_spent.get(TRE.KEY,{})
+            if intent.get('team')==abbr and intent.get('last_attempt')==[league.year,league.phase,league.week]: continue
             res=_pursue_retention(league,team,p,rng,pool,scale)
             if res.get('result') == 'accepted':
                 done.append((abbr,p.name,p.pos,res['apy'],res['years']))
