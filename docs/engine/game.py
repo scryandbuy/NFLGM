@@ -1203,8 +1203,18 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
         # third down. Do not buy the opponent another snap by stopping the clock
         # just to punt, including when trailing before halftime or tied at
         # the end of regulation with overtime available.
+        # The supplied plan evaluates the POST-PLAY down, field position,
+        # clock and scoring value. Respect its attacking choice rather than
+        # assuming every tied fourth down outside midfield must be a punt.
+        live_remaining = secs_in_half - live_play_seconds(out)
+        attack_choice = (plan or {}).get('choice')
+        continue_attack = (half_end is None and dr.score_diff == 0
+                           and bool((plan or {}).get('hurry', False))
+                           and (attack_choice == 'shot' or
+                                (attack_choice == 'play' and live_remaining >= PLAY_SECS + 4.)))
         if ((half_end is not None or dr.score_diff == 0) and failed_third and secs_in_half <= 20
-                and dr.yardline - float(out.get('yards', 0) or 0) >= 50):
+                and dr.yardline - float(out.get('yards', 0) or 0) >= 50
+                and not continue_attack):
             dr._half_stall_intent = 'protect'
             return False, None
         if (half_end is not None and dr.score_diff >= 0 and failed_third
