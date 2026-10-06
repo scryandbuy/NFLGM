@@ -53,6 +53,34 @@ def minimum_salary(credited_seasons, cap):
     return round(MIN_PCT[tier(credited_seasons)] * cap, 3)
 
 
+def contract_minima(league, player, years=1):
+    """Full-season base floors, before any remaining-season proration."""
+    from cap_engine import forecast_cap
+    from cap_accounting import pre_roll
+    year = int(league.year) + int(pre_roll(league))
+    return [minimum_salary((player.accrued or 0) + i, forecast_cap(league, year + i))
+            for i in range(int(years))]
+
+
+def player_minimum(league, player, years=1):
+    """Smallest annual average that can fund every year's base minimum."""
+    floors = contract_minima(league, player, years)
+    return sum(floors) / len(floors)
+
+
+def minimum_quote(league, player, amount, years=1):
+    """Two-decimal offer amount, without rounding below the salary floor."""
+    import math
+    floor = player_minimum(league, player, years)
+    return max(round(float(amount), 2), math.ceil(floor * 100 - 1e-9) / 100)
+
+
+def validate_annual_pay(league, player, amount, years=1):
+    floor = player_minimum(league, player, years)
+    if float(amount) + 1e-9 < floor:
+        raise ValueError(f'Annual salary must be at least ${floor:.3f}m for this player. Remaining-season pay is prorated separately.')
+
+
 if __name__ == '__main__':
     print('2026 cap of 301.2:')
     for t, e in (('rookie', 0), ('1 yr', 1), ('2 yr', 2), ('3 yr', 3),

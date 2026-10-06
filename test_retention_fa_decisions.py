@@ -9,6 +9,7 @@ import numpy as np
 import extensions as EXT
 import financial_plan as FP
 import market as MK
+import min_salary as MS
 import retention_plan as RP
 import roster_needs as RN
 from cap_engine import Contract
@@ -289,7 +290,7 @@ class RetentionRecruitmentTests(unittest.TestCase):
     def test_premium_small_upgrade_fails_but_discounted_useful_player_passes(self):
         p=self.arrival('WR',83)
         premium=MK.Offer(self.t.abbr,p.pid,12.,3)
-        cheap=MK.Offer(self.t.abbr,p.pid,1.2,1)
+        cheap=MK.Offer(self.t.abbr,p.pid,MS.minimum_quote(self.L,p,1.2),1)
         a=MK.acquisition_read(self.L,self.t,p,premium,2.,reference_apy=12.)
         b=MK.acquisition_read(self.L,self.t,p,cheap,2.,reference_apy=12.)
         self.assertFalse(a['approved']);self.assertTrue(b['approved'])

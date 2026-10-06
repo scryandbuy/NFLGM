@@ -34,6 +34,9 @@ def canonical(league, player, team, offer, kind='fa_offseason'):
     if not math.isfinite(apy) or apy <= 0 or not math.isfinite(years) or int(years) != years or not 1 <= years <= 7:
         raise ValueError('Offer needs positive annual pay and one to seven whole years')
     out.update(apy=apy, years=int(years))
+    if kind != 'extension':
+        from min_salary import validate_annual_pay
+        validate_annual_pay(league, player, apy, out['years'])
     if out.get('front_load') is None:
         out['front_load'] = CS.choose_shape(team, out['years'])
         if out['front_load'] is None: out['front_load'] = .5
@@ -41,12 +44,21 @@ def canonical(league, player, team, offer, kind='fa_offseason'):
     if not math.isfinite(out['front_load']) or not 0 <= out['front_load'] <= 1:
         raise ValueError('Payment structure must be between zero and one')
     if out.get('bonus') is None:
-        out['bonus'] = CS.structure(apy, out['years'], player.pos, CAP.get(league.year, 301.2),
-                                    team.gm or SimpleNamespace(restructure_depth=.5),
-                                    front_load=out['front_load'])['signing_bonus']
+        if kind == 'extension':
+            out['bonus'] = CS.structure(apy, out['years'], player.pos, CAP.get(league.year, 301.2),
+                                        team.gm or SimpleNamespace(restructure_depth=.5),
+                                        front_load=out['front_load'])['signing_bonus']
+        else:
+            import market as MK
+            out['bonus'] = MK.signing_terms(league, player, team, apy, out['years'],
+                CAP.get(league.year, 301.2), out['front_load'])['signing_bonus']
     out['bonus'] = float(out['bonus'])
     if not math.isfinite(out['bonus']) or not 0 <= out['bonus'] <= apy * years:
         raise ValueError('Signing bonus must be between zero and total new compensation')
+    if kind != 'extension':
+        from min_salary import player_minimum
+        if out['bonus'] > (apy - player_minimum(league, player, out['years'])) * out['years'] + 1e-9:
+            raise ValueError('This signing bonus leaves too little money for the minimum base salaries. Reduce the bonus or raise annual pay.')
     out['promises'] = list(out.get('promises') or [])
     out['package_version'] = 1
     return out
@@ -74,8 +86,15 @@ def assess(league, player, team, offer, ask, years, kind='fa_offseason', profile
     """
     import contract_structure as CS
     offer = canonical(league, player, team, offer, kind)
+    if kind != 'extension':
+        from min_salary import player_minimum
+        ask = max(float(ask), player_minimum(league, player, years))
     ref_bonus = CS.structure(ask, years, player.pos, CAP.get(league.year, 301.2),
                             SimpleNamespace(restructure_depth=.5), front_load=.5)['signing_bonus']
+    if kind != 'extension':
+        import market as MK
+        ref_bonus = MK.signing_terms(league, player, team, ask, years,
+                                    CAP.get(league.year, 301.2), .5)['signing_bonus']
     reference = dict(apy=ask, years=years, bonus=ref_bonus, front_load=.5, promises=[])
     beliefs = MODEL.beliefs_from_profile(player, ask, profile or profile_for(player))
     proposed, baseline = cash(league, player, team, offer, kind), cash(league, player, team, reference, kind)

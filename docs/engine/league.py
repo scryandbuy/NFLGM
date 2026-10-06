@@ -711,7 +711,7 @@ class League:
             if n not in taken:
                 p.number = n; return
 
-    def sign(self, pid, abbr, contract, log=True):
+    def sign(self, pid, abbr, contract, log=True, annual_apy=None):
         candidate = self.player(pid)
         if pid in self.free_agents or (candidate is not None and candidate.team is None and candidate not in getattr(self, "draft_pool", [])):
             __import__("fa_window").require_open(self)
@@ -729,7 +729,17 @@ class League:
         self.assign_number(p, abbr)
         if pid in self.free_agents: self.free_agents.remove(pid)
         self.teams[abbr].sync_cap()
-        if log: self.log('sign', pid=pid, team=abbr, apy=p.apy, years=contract.years)
+        if log:
+            offset = int(contract.start_offset or 0)
+            years = max(1, contract.years - offset)
+            base = list(contract.base[offset:])
+            if annual_apy is None:
+                fraction = (18 - contract.pay_start) / 18 if not offset else 1.
+                if base and fraction > 0: base[0] /= fraction
+                annual_apy = (sum(base) + sum(contract.rb[offset:]) + contract.sb) / years
+            self.log('sign', pid=pid, team=abbr, apy=float(annual_apy), years=years,
+                     pay_start=contract.pay_start if not offset else 0,
+                     cash_this_season=(contract.base[0] + contract.rb[0] + contract.sb) if not offset else 0.)
 
     def post_june1(self):
         """The simple rule: once the season is over and the league is in its

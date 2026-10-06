@@ -20,6 +20,7 @@ class SecurityIntegration(unittest.TestCase):
         self.L = fixture(); self.L.user_team = 'GB'; self.L.set_phase('free_agency')
         for t in self.L.teams.values():
             t.gm = GM(); t.cap.cap = 500
+        self.L.cap_history[self.L.year] = 500  # Keep minimum forecasts identical after reload.
         self.p = player(self.L, 'security-player', team=None)
         self.p.pos = 'WR'; self.p.age = 27
         self.p.ratings = {k: 85 for k in ('catch_rating', 'cit_rating', 'route_run_short_rating', 'speed_rating')}

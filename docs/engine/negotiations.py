@@ -72,7 +72,23 @@ def _threads(league):
                     if t.get('counter'):
                         t['counter']['apy'] = FD.asking(league, p, t['counter']['apy'] / old)
                 t['unsigned_factor'] = f
+                from min_salary import minimum_quote
+                t['ask'] = minimum_quote(league, p, t['ask'])
+                if t.get('counter'):
+                    from min_salary import player_minimum
+                    required = player_minimum(league, p) + float(t['counter'].get('bonus') or 0)
+                    t['counter']['apy'] = math.ceil(max(required, t['counter']['apy']) * 100 - 1e-9) / 100
             if t.get('counter'): t['counter']['years'] = 1
+        if t.get('kind') != 'extension' and t.get('state') == 'waiting' and t.get('offers'):
+            p = league.player(t['pid'])
+            if p is not None:
+                from min_salary import player_minimum
+                offer = t['offers'][-1]
+                years = int(offer['years'])
+                required = player_minimum(league, p, years) + float(offer.get('bonus') or 0) / years
+                if float(offer['apy']) + 1e-9 < required:
+                    t.update(state='open', due=None, counter=None)
+                    _say(t, 'agent', 'The saved offer does not cover his minimum salary. Revise the terms before resubmitting.')
     return league.negotiations
 
 
@@ -164,7 +180,8 @@ def open_talks(league, pid, kind='extension'):
         import staff as ST
         _pull, ask_mult = ST.recruit_pull(league.teams[league.user_team], p.pos)
         import fa_demand as FD
-        ask = round(FD.asking(league, p, ask * ask_mult), 2)
+        from min_salary import minimum_quote
+        ask = minimum_quote(league, p, FD.asking(league, p, ask * ask_mult), years)
     mood = ('eager' if s['loyalty'] > 0.62 and s['morale'] >= 45 else 'firm' if s['money'] > 0.62 or s['star'] else 'open')
     line = {'eager': f"{p.name} wants to stay. His agent will move quickly on a fair deal.",
             'firm': f"{p.name}'s agent knows the market for his position and will not go under it.",
@@ -358,6 +375,10 @@ def _counter_package(league, p, t, offer):
     import contract_offer as CO
     candidate = dict(offer)
     low, high = max(.01, candidate['bonus'] / candidate['years']), max(t['ask'] * 2, candidate['apy'])
+    if t['kind'] != 'extension':
+        from min_salary import player_minimum
+        low = max(low, player_minimum(league, p, candidate['years']) + candidate['bonus'] / candidate['years'])
+        high = max(high, low)
     candidate['apy'] = high
     assessment = _assessment(league, p, t, candidate)
     if not assessment['acceptable']:

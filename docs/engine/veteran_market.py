@@ -211,7 +211,10 @@ def _proposal(league, team, player, quote, report, recent, budget, comparisons, 
         # prefer two years; both schedules must fit the club's future books.
         for years in range(1, min(2, max(1, int(quote.get('years', 1)))) + 1):
             offer = MK.Offer(team.abbr, player.pid, price, years, phase=MK.PHASES + 1)
-            contract = MK.offer_contract(league, player, offer)
+            try:
+                contract = MK.offer_contract(league, player, offer)
+            except ValueError:
+                continue  # This term cannot fund his minimums; consider the alternatives.
             if not MK.acquisition_read(league, team, player, offer, gain, quote['apy'],
                     report, after_package_rows=after['package_assignments'])['approved']:
                 continue

@@ -220,7 +220,10 @@ def acquisition_read(league, team, player, offer, gain, reference_apy=None, base
     """
     import roster_needs as RN
     import min_salary as MS
-    preview=offer_contract(league,player,offer)
+    try:
+        preview=offer_contract(league,player,offer)
+    except ValueError as exc:
+        return dict(approved=False, reason=str(exc))
     cash=sum(preview.base)+sum(preview.rb)+preview.sb
     before=RN.assess(team) if baseline is None else baseline
     projected_players=[p for p in before['players'] if p.pid!=player.pid]+[player]
@@ -525,19 +528,35 @@ def signing_terms(league, player, team, apy, years, cap, front_load=None, bonus=
     years = int(years)
     if not 1 <= years <= 7 or not np.isfinite(float(apy)) or float(apy) <= 0:
         raise ValueError('Offer must have a positive salary and one to seven years')
+    from min_salary import validate_annual_pay, contract_minima
+    validate_annual_pay(league, player, apy, years)
     if bonus is not None and (not np.isfinite(float(bonus)) or not 0 <= float(bonus) <= float(apy) * years):
         raise ValueError('Signing bonus must be between zero and the total contract value')
-    st = CS.structure(float(apy), years, player.pos, cap, team.gm, front_load=front_load)
+    from types import SimpleNamespace
+    st = CS.structure(float(apy), years, player.pos, cap,
+                      team.gm or SimpleNamespace(restructure_depth=.5), front_load=front_load)
     base = list(st['base']); sb = float(st['signing_bonus'])
     if bonus is not None:
         sb = max(0.0, float(bonus)); total_base = max(0.0, float(apy) * years - sb)
         sh = float(st.get('front_load', 0.5))
         weights = [1.0 + (sh - 0.5) * 2 * (1 - 2 * i / max(1, years - 1)) for i in range(years)] if years > 1 else [1.0]
         base = [total_base * w / sum(weights) for w in weights]
+    floors = contract_minima(league, player, years)
+    bonus_room = max(0., float(apy) * years - sum(floors))
+    if bonus is not None and sb > bonus_room + 1e-9:
+        raise ValueError('This signing bonus leaves too little money for the minimum base salaries. Reduce the bonus or raise annual pay.')
+    if bonus is None: sb = min(sb, bonus_room)
+    if any(value < floor - 1e-9 for value, floor in zip(base, floors)):
+        # Preserve total compensation and relative payment preference, funding
+        # each year's base floor before allocating the remaining salary.
+        excess = max(0., float(apy) * years - sb - sum(floors))
+        weights = [max(0., value - floor) for value, floor in zip(base, floors)]
+        if not sum(weights): weights = [1.] * years
+        base = [floor + excess * weight / sum(weights) for floor, weight in zip(floors, weights)]
     wk = int(league.week or 0)
     paid = getattr(getattr(team, 'cap', None), 'paid_week', max(0, min(18, wk - 1)))
     fraction = (18 - paid) / 18.0 if league.phase in ('regular', 'playoffs', 'playoffs_closed') else 1.0
-    if base: base[0] = round(base[0] * fraction, 3)
+    if base: base[0] = max(round(base[0] * fraction, 3), floors[0] * fraction)
     preview = Contract(years=years, base=base, signing_bonus=sb)
     from cap_accounting import pre_roll
     start_year = league.year + int(pre_roll(league))
@@ -598,7 +617,7 @@ def sign(league, player, offer, cap, bonus=None, market_apy=None):
                 MO.shock(league, q.pid, 'team_signed_over_him')
     except Exception:
         pass
-    league.sign(player.pid, offer.team, c, log=not bool(squad_source))
+    league.sign(player.pid, offer.team, c, log=not bool(squad_source), annual_apy=offer.apy)
     import contract_offer as CO
     CO.remember(league, player, c, offer.apy, market_apy)
     if squad_source:

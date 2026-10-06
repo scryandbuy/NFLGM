@@ -51,7 +51,7 @@ class MarketCloseBonusTests(unittest.TestCase):
 
     def test_no_bonus_preserves_one_year_cap_hit(self):
         self.team.gm = SimpleNamespace(restructure_depth=0.5)
-        self.team.cap = SimpleNamespace(paid_week=0)
+        self.team.cap = SimpleNamespace(paid_week=0, cap=300.)
         self.league.phase = 'free_agency'
         self.league.week = 22
         normal = market.signing_terms(self.league, self.player, self.team,

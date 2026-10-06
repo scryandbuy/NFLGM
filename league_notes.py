@@ -258,7 +258,11 @@ def transactions(league, week, skip_signings=False, pre_fa=False):
             p = league.player(x.get('pid'))
             if p is not None and x.get('apy'):
                 verb = 'extend' if k == 'extension' else 'sign'
-                IB.news(league, f"{team} {verb} {inbox_player(p)}", f"{team} {verb} {inbox_player(p)} ({p.pos}, {round(p.ovr)}) for {x.get('years')} years at ${float(x['apy']):.1f}m a year.", payload=dict(link=f'player:{p.pid}'))
+                years = x.get('years')
+                terms = f"{years} year" + ('' if years == 1 else 's') + f" at ${float(x['apy']):.2f}m a year"
+                if k == 'sign' and x.get('pay_start') and x.get('cash_this_season') is not None:
+                    terms += f" (${float(x['cash_this_season']):.2f}m for the rest of this season)"
+                IB.news(league, f"{team} {verb} {inbox_player(p)}", f"{team} {verb} {inbox_player(p)} ({p.pos}, {round(p.ovr)}) for {terms}.", payload=dict(link=f'player:{p.pid}'))
         elif k == 'franchise_tag':
             p = league.player(x.get('pid'))
             if p is not None: IB.news(league, f"{team} tag {inbox_player(p)}", f"{team} place the franchise tag on {inbox_player(p)} ({p.pos}, {round(p.ovr)})" + (f" at ${float(x['price']):.1f}m" if x.get('price') else '') + '.', payload=dict(link=f'player:{p.pid}'))

@@ -1,6 +1,5 @@
 """Unsigned weekly asking-price adjustment, independent of trade valuation."""
-from cap_engine import CAP
-from min_salary import minimum_salary
+from min_salary import player_minimum
 
 WEEKLY_REDUCTION = .05
 
@@ -21,5 +20,5 @@ def factor(league, player):
     return (1. - WEEKLY_REDUCTION) ** weeks
 
 def asking(league, player, baseline):
-    return round(max(minimum_salary(player.accrued or 0, CAP.get(league.year, 301.2)),
+    return round(max(player_minimum(league, player),
                      float(baseline) * factor(league, player)), 3)
