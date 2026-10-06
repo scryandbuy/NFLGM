@@ -3565,13 +3565,13 @@ function bracketTree(v) {
     return flip ? cols.reverse() : cols;
   };
   const continental = v.confs.find(c => c.conf === 'Continental') || v.confs[0]; const united = v.confs.find(c => c.conf === 'United') || v.confs[1];
-  if (continental) tree.append(...side(continental, false));
+  if (continental) tree.append(el('div', {class:'bk-side'}, ...side(continental, false)));
   // the middle: the Championship Game, its site, the champion beneath it
   const sb = el('div', { class: 'bk-col bk-final', 'data-name': `Championship Game ${v.site ? v.site.numeral : ''}` },
     el('div', { class: 'bk-slot s8' }, el('div', { class: 'bk-site' }, v.site ? (v.site.stadium || v.site.city) : ''), gameCard(v.final, 'sb'),
       v.champion ? el('div', { class: 'bk-champ', style: `--c1:${v.champion.color};--c2:${v.champion.accent}` }, el('span', {}, v.champion.name), el('small', {}, 'Champions')) : ''));
-  tree.append(el('div', { class: 'bk-join j8' }, el('i', {})), sb, el('div', { class: 'bk-join j8 r' }, el('i', {})));
-  if (united) tree.append(...side(united, true));
+  tree.append(el('div', { class: 'bk-join j8 bk-final-link' }, el('i', {})), sb, el('div', { class: 'bk-join j8 r bk-final-link' }, el('i', {})));
+  if (united) tree.append(el('div', {class:'bk-side'}, ...side(united, true)));
   return el('div', { class: 'bk-scroll' }, tree);
 }
 

@@ -1235,8 +1235,9 @@ select.btn option{background:var(--sheet-2);color:var(--ink)}
 /* the bracket: a tree, wild card on the outside working in to the Championship Game in the middle. Each side is three columns
    and two gap columns; every column is a grid of 8 half-rows, so a wild card slot spans 2, a divisional slot 4, the
    championship 8, and the joins in the gaps draw the lines from pair to pair */
-.bk-scroll{max-width:100%;overflow-x:auto;scrollbar-width:thin}
-.bk-tree{display:grid;grid-template-columns:repeat(3,minmax(0,1fr) 28px) minmax(0,1.25fr) repeat(3,28px minmax(0,1fr));gap:0;padding:34px 18px 20px;min-width:1520px;min-height:620px}
+.bk-scroll{max-width:100%;container-type:inline-size}
+.bk-side{display:contents}
+.bk-tree{display:grid;grid-template-columns:repeat(3,minmax(0,1fr) 28px) minmax(0,1.25fr) repeat(3,28px minmax(0,1fr));gap:0;padding:54px 18px 20px;min-width:0;min-height:620px}
 .bk-col{display:grid;grid-template-rows:repeat(8,minmax(96px,1fr));position:relative}
 .bk-col::before{content:attr(data-name);position:absolute;top:-20px;left:0;right:0;text-align:center;font-family:var(--display);font-weight:700;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
 .bk-slot{display:flex;flex-direction:column;justify-content:center;padding:6px 0;position:relative}
@@ -2475,7 +2476,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 @media(max-width:900px){.league-coach-move{grid-template-columns:56px minmax(120px,1fr) 90px minmax(140px,1fr)}.league-coach-move .detail{grid-column:2/-1}}
 @media(max-width:600px){.league-coach-move{grid-template-columns:48px 1fr 88px;gap:8px}.league-coach-move .person{grid-column:2/-1}.league-coach-move .detail{grid-column:2/-1}}
 .league-playoffs{margin:24px 0 12px;border:1px solid var(--league-rule);border-radius:10px;background:radial-gradient(ellipse at 50% 18%,color-mix(in srgb,var(--report-accent) 10%,#0b151d),#0b151d 72%);overflow:hidden}
-.league-playoffs .bk-tree{min-width:1520px;min-height:700px;padding:46px 26px 30px}
+.league-playoffs .bk-tree{min-width:0;min-height:700px;padding:66px 26px 30px}
 .league-playoffs .bk-col::before{top:-30px;font-size:14px;color:var(--ink-2)}
 .league-playoffs .bk-line{padding:10px}.league-playoffs .bk-line .ab,.league-playoffs .bk-line b{font-size:22px}
 .league-playoffs .bk-game .foot{padding:7px 12px}.league-playoffs .bk-site{font-size:14px}
@@ -2724,6 +2725,24 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .bk-final .bk-slot{display:grid;grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);gap:10px}
 .bk-final .bk-site{align-self:end;margin:0}.bk-final .bk-game.sb{grid-row:2}
 .bk-final .bk-champ{align-self:start;margin:0}
+/* Fit the whole bracket; narrower pages use two readable conference trees. */
+@container (max-width:1500px){
+  .bk-tree .bk-line{padding:7px 6px;gap:5px;grid-template-columns:12px 3px minmax(0,1fr) auto}
+  .bk-tree .bk-line .ab,.bk-tree .bk-line b{font-size:18px}
+  .bk-tree .bk-line .rec,.bk-tree .bk-line .score{grid-column:3 / 5;text-align:left}
+  .bk-tree .bk-col::before{font-size:11px;letter-spacing:.03em}
+  .bk-tree .bk-game .foot{padding:7px 6px;font-size:11px;overflow-wrap:anywhere}
+}
+@container (max-width:1100px){
+  .bk-scroll .bk-tree{display:flex;flex-direction:column;gap:64px;padding:60px 14px 24px;min-height:0}
+  .bk-side{display:grid;grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr) 28px minmax(0,1fr)}
+  .bk-side .bk-col{grid-template-rows:repeat(8,minmax(80px,1fr));min-width:0}
+  .bk-final-link{display:none}
+  .bk-tree>.bk-final{display:block;width:min(100%,320px);align-self:center;padding:0}
+  .bk-final .bk-slot{grid-template-rows:auto auto auto}
+  .bk-tree .bk-col::before{top:-40px}
+  .bk-tree .bk-line .ab,.bk-tree .bk-line b{font-size:20px}
+}
 /* Cap restructure preview: compact metrics fit the sidebar without nested tile padding. */
 .fo-board #pv .delta{grid-template-columns:repeat(2,minmax(0,1fr))}
 .fo-board #pv .delta>div{min-width:0;padding:12px 8px;border-radius:5px}
