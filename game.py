@@ -143,15 +143,21 @@ def comeback_clock_budget(deficit):
     return 150.0 * scores_needed + 90.0
 
 
-def multi_score_urgency(seconds, score_diff, quarter, chasing=False):
+def multi_score_urgency(seconds, score_diff, quarter, chasing=False, coach=None):
+    from late_game import pursuing_comeback
+    if quarter == 4 and score_diff < -16 and not pursuing_comeback(seconds, -score_diff, coach):
+        return False
     if quarter not in (3, 4) or score_diff >= -8 or seconds <= 0:
         return False
     return ((chasing or comeback_viable(seconds, -score_diff))
             and seconds <= comeback_clock_budget(-score_diff))
 
 
-def comeback_pace(seconds, score_diff, quarter, *, yardline=75, timeouts=3, tempo=.5):
+def comeback_pace(seconds, score_diff, quarter, *, yardline=75, timeouts=3, tempo=.5, coach=None):
     """Gradual second-half acceleration; seconds is remaining game time."""
+    from late_game import pursuing_comeback
+    if quarter == 4 and score_diff < -16 and not pursuing_comeback(seconds, -score_diff, coach):
+        return 0.0
     if quarter == 4 and -3 <= score_diff < 0 and seconds > 0:
         # Outside comfortable scoring range, budget the drive before the
         # two-minute threshold. In range, leave clock management to the coach.
@@ -179,13 +185,16 @@ def comeback_pace(seconds, score_diff, quarter, *, yardline=75, timeouts=3, temp
     return float(np.clip((start - seconds) / max(1.0, start - full), 0.0, 1.0))
 
 
-def hurry_for_snap(seconds, score_diff, plan=None, call=None, quarter=None, chasing=False):
+def hurry_for_snap(seconds, score_diff, plan=None, call=None, quarter=None, chasing=False, coach=None):
     """Use the coach's clock plan for normal plays and penalty restarts alike."""
+    from late_game import pursuing_comeback
+    if quarter == 4 and score_diff < -16 and not pursuing_comeback(seconds, -score_diff, coach):
+        return False
     if quarter == 4 and score_diff < 0 and chasing:
         return seconds > 0
     if quarter == 4 and score_diff < 0 and not comeback_viable(seconds, -score_diff):
         return False
-    if multi_score_urgency(seconds, score_diff, quarter):
+    if multi_score_urgency(seconds, score_diff, quarter, coach=coach):
         return True
     if plan is not None:
         return plan.get('choice') != 'kneel' and bool(plan.get('hurry', True))
@@ -1160,6 +1169,12 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
         return False, None  # the play itself ends the period; nothing left to stop
     if (half_end is None and getattr(dr, 'quarter', 4) == 4 and dr.score_diff != 0
             and not comeback_viable(secs_in_half, abs(dr.score_diff))):
+        return False, None
+    from late_game import pursuing_comeback
+    trailing_coach = dcoach if dr.score_diff > 0 else coach
+    if (half_end is None and getattr(dr, 'quarter', 4) == 4
+            and abs(dr.score_diff) > 16
+            and not pursuing_comeback(secs_in_half - live_play_seconds(out), abs(dr.score_diff), trailing_coach)):
         return False, None
     used = False; used_by = None
     c = coach or {}
@@ -3158,7 +3173,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             oc['qb_run_chance'] = run_chance
             oc['play_action'] = False; oc['rpo'] = False
         SC.answer_empty_run(off_f, oc, ytg_i, rng, rate_fn)
-        _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter)
+        _in_drill = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, coach=(off_state.coach if off_state is not None else None))
         penalty_context = dict(is_pass=oc['is_pass'],
                               offense_discipline=float(np.clip(0.70 + 0.8 * (o_awr - 0.787), 0.5, 0.9)),
                               defense_discipline=float(np.clip(0.70 + 0.8 * (d_awr - 0.787), 0.5, 0.9)),
@@ -3366,7 +3381,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 # the snap. Keep timeout inventory for subsequent live downs.
                 late_penalty = _late_penalty_restart(dr, secs_in_half_p - live_seconds)
                 used_p, used_by_p = (False, None) if late_penalty or late_injury else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half_p, coach=(off_state.coach if off_state is not None else None), plan=_plan_p, dcoach=(def_state.coach if def_state is not None else None))
-                hurry_p = hurry_for_snap(secs_in_half_p, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing)
+                hurry_p = hurry_for_snap(secs_in_half_p, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing, coach=(off_state.coach if off_state is not None else None))
                 live_start = dr.clock
                 _tick(dr, live_seconds)
                 _penalty_ready_clock(dr, penalty_entry, half_end, result=t,
@@ -3431,7 +3446,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         # The change of possession stops the clock at the whistle. Spending a
         # timeout for the former offense here buys no time.
         used, used_by = (False, None) if late_penalty or late_injury or _fourth_fail or scoring_safety else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
-        hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing)
+        hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing,
+                               coach=(off_state.coach if off_state is not None else None))
         if dr.field_goal_wins and _plan_to is not None and _plan_to['choice'] == 'kick':
             # The completed play can put the kick in range. Use the existing
             # hurry interval to get the unit on, not a stale full huddle.
@@ -3442,10 +3458,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         clock_before = dr.clock
         tempo = off_state.plan.tempo if off_state is not None and off_state.plan is not None else 0.5
         elapsed = play_seconds(t, hurry=hurry, timeout=used, tempo=tempo,
-                               urgent=multi_score_urgency(secs_in_half, dr.score_diff, dr.quarter, chasing),
+                               urgent=multi_score_urgency(secs_in_half, dr.score_diff, dr.quarter, chasing, coach=(off_state.coach if off_state is not None else None)),
                                catchup=comeback_pace(secs_in_half, dr.score_diff, dr.quarter,
                                    yardline=after_play.yardline, timeouts=dr._own_timeouts,
-                                   tempo=tempo)) + live_seconds - 6.0
+                                   tempo=tempo, coach=(off_state.coach if off_state is not None else None))) + live_seconds - 6.0
         if out.get('out_of_bounds'):
             # Outside late-half exceptions the clock restarts when the ball
             # is spotted. Exclude a short spotting interval, not the entire
