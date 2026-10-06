@@ -12,7 +12,7 @@ class LateTryTests(unittest.TestCase):
         for seconds in (1,41,120):
             self.assertEqual(D.two_point(0,seconds)['call'],'kick')
     def test_early_game_and_no_time_remain_kicks(self):
-        for seconds in (0,600,1800,3000):
+        for seconds in (0,1200,1800,3000):
             self.assertEqual(D.two_point(1,seconds)['call'],'kick')
     def test_conversion_quality_still_matters(self):
         self.assertEqual(D.two_point(1,41,conv_prob=.001)['call'],'kick')
@@ -23,3 +23,23 @@ class LateTryTests(unittest.TestCase):
         flag=f.flag(False,'Defensive Pass Interference',6)
         self.assertEqual(G._resolve_live_penalty(dr,flag,out,{}),'replaced')
         self.assertEqual((dr.down,dr.togo,dr.yardline),(1,10,29))
+
+class FourthQuarterCushionTests(unittest.TestCase):
+    def test_nj_and_remaining_fourth_quarter_seek_three(self):
+        for seconds in (900,824,600,300,120):
+            for aggression in (0.,.1,.5,.9,1.):
+                self.assertEqual(D.two_point(1,seconds,aggression=aggression)['call'],'two')
+        self.assertTrue(G.two_point_decision(1,4,824))
+
+    def test_poor_conversion_can_justify_kick(self):
+        self.assertEqual(D.two_point(1,824,conv_prob=.1)['call'],'kick')
+        self.assertEqual(D.two_point(1,824,conv_prob=.2,aggression=0.)['call'],'kick')
+        self.assertEqual(D.two_point(1,824,conv_prob=.2,aggression=1.)['call'],'two')
+
+    def test_tie_always_takes_lead_even_with_strong_conversion(self):
+        for seconds in (824,600,120):
+            self.assertEqual(D.two_point(0,seconds,conv_prob=.9,aggression=1.)['call'],'kick')
+
+    def test_cushion_adjustment_does_not_change_other_scores(self):
+        for margin in (3,6):
+            self.assertEqual(D.two_point(margin,824)['call'],'kick')

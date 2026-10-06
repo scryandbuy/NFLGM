@@ -276,15 +276,17 @@ def two_point(score_diff_after_td, seconds_left, conv_prob=TWO_RATE,
         return _flip(lead, seconds_left, 100 - kickoff_yardline,
                      is_home=is_home, timeout_edge=-timeout_edge)
 
-    # On a likely final opposing possession, +1 and +2 both lose to a
-    # field goal. The smooth regression otherwise invents a large benefit
-    # for the extra point and hides the value of reaching +3. Blend away
-    # that artificial distinction as the final possession approaches;
-    # leave earlier strategy and all other score states unchanged.
+    # A field goal beats both +1 and +2, but only ties +3. The smooth
+    # score model misses that scoring boundary. As possessions become scarce,
+    # discount the extra point's artificial advantage over staying ahead by
+    # one. Retain some value for +2 while multiple scores remain plausible.
     kick_success = after(1)
-    if score_diff_after_td == 1 and 0 < seconds_left < 300:
+    if score_diff_after_td == 1 and 0 < seconds_left < 1200:
+        fourth_quarter = float(np.clip((1200. - seconds_left) / 300., 0., 1.))
         final_possession = float(np.clip((300. - seconds_left) / 180., 0., 1.))
-        kick_success = (1. - final_possession) * kick_success + final_possession * after(0)
+        field_goal_boundary = .75 * fourth_quarter + .25 * final_possession
+        kick_success = ((1. - field_goal_boundary) * kick_success
+                        + field_goal_boundary * after(0))
     wp_kick = xp_prob * kick_success + (1 - xp_prob) * after(0)
     wp_go = conv_prob * after(2) + (1 - conv_prob) * after(0)
     edge = wp_go - wp_kick
