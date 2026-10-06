@@ -1,0 +1,47 @@
+{
+  "status": "Replaces the rejected all-trailing pursuit model from 910ec92; apply this correction together with its prerequisite.",
+  "baseline": "642a999",
+  "root_cause": "Treating every coverage player as already trailing erased all outside contain angles. Speed-only closing then left the punter as the only practical remaining defender.",
+  "changes": [
+    "Model a return lane and two outside contain positions separately from the cleared first wave.",
+    "Solve actual reachable interception distance using lateral separation, initial leverage, reaction, speed and pursuit.",
+    "Use each distinct defender once; a missed or already-passed defender is not recreated in front.",
+    "Allow the punter to approach with his own speed and tackling attributes.",
+    "Punt-only initial-lane chance base rises from .045 to .080 because it now exposes outside containment instead of treating the coverage unit as beaten. No touchdown quota or ordinary-distance boost."
+  ],
+  "observed_controlled_counts": {
+    "punts": 80000,
+    "return": 30990,
+    "lanes": 644,
+    "touchdowns": 309,
+    "coverage_stops": 284,
+    "punter_stops": 41,
+    "20_plus": 3590,
+    "40_plus": 519,
+    "fumbles": 1036
+  },
+  "td_fraction": 0.009970958373668926,
+  "average_return": 10.833365601807035,
+  "tests": "86 focused tests passed; interception geometry, slower contain vs faster runner, impossible angles, delayed reactions, coverage order/duplicates, stronger tackling, already-passed punter, drive scoring/try, penalties, save/reload.",
+  "parity": {
+    "baseline": "642a999",
+    "equal_outcomes_and_random_state": true,
+    "counts": {
+      "kickoffs": 10000,
+      "kickoff_returns": 8741,
+      "kickoff_breakaways": 370,
+      "kickoff_tds": 7,
+      "punts": 10000,
+      "punt_nonreturns": 6068,
+      "ordinary_punt_returns": 3822
+    }
+  },
+  "individual_review": "CB, MIKE and WILL containment stops inspected; 64 TDs beat a reachable coverage defender. Detailed names and paths: punt-containment-players.json.",
+  "coordination": "Changes (2) confirmed no shared pursuit helpers or source-function overlap. game.py changes are disjoint; merge hunks and regenerate web artifacts from combined sources.",
+  "limitations": [
+    "Conditional field geometry is a modeling assumption, not NFL tracking coordinates.",
+    "Controlled punt origins and saved rosters; the frequency sample omits return penalties and injuries. Those paths have focused tests.",
+    "No claim of completed full-season calibration."
+  ],
+  "reference": "https://blogs.usafootball.com/blog/8496/the-methods-and-importance-of-teaching-tracking-part-four"
+}

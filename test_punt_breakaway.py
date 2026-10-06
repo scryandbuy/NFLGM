@@ -25,18 +25,20 @@ class PuntBreakaways(unittest.TestCase):
         runner, slow, punter = man('return', 95), man('slow', 65), man('punter', 40)
         out = KR._punt_breakaway(80., 15., runner, [slow], punter, 25., self.rng(), P.rate)
         self.assertEqual([x['pid'] for x in out['contacts']], ['punter'])
-        self.assertAlmostEqual(out['yards'], 55.9)
+        self.assertGreater(out['yards'], 15.)
+        self.assertLess(out['yards'], 55.)  # punter runs toward the returner
 
     def test_faster_coverage_can_run_returner_down_before_punter(self):
         runner, fast, punter = man('return', 65), man('fast', 95), man('punter', 40)
-        out = KR._punt_breakaway(80., 15., runner, [fast], punter, 25., self.rng(), P.rate)
+        out = KR._punt_breakaway(95., 15., runner, [fast], punter, 0., self.rng(), P.rate)
         self.assertEqual(out['contacts'][0]['pid'], 'fast')
         self.assertLess(out['yards'], 55.)
 
     def test_actual_punter_is_unique_and_can_miss(self):
         runner, fast, punter = man('return', 65), man('fast', 95), man('punter', 40)
         out = KR._punt_breakaway(80., 15., runner, [fast, fast, punter], punter, 25., self.rng(True), P.rate)
-        self.assertEqual([x['pid'] for x in out['contacts']], ['fast', 'punter'])
+        self.assertCountEqual([x['pid'] for x in out['contacts']], ['fast', 'punter'])
+        self.assertEqual([x['at'] for x in out['contacts']], sorted(x['at'] for x in out['contacts']))
         self.assertEqual(out['yards'], 80.)
         self.assertIsNone(out['tackler'])
 
@@ -58,6 +60,49 @@ class PuntBreakaways(unittest.TestCase):
             distances.append(KR._punt_breakaway(95., 15., runner, [defender], punter,
                                                 5., self.rng(), P.rate)['yards'])
         self.assertLess(distances[1], distances[0])
+
+    def test_leverage_can_stop_faster_runner_but_not_from_behind(self):
+        self.assertIsNotNone(KR._punt_intercept(9., 7., ahead=10., lateral=5.))
+        self.assertIsNone(KR._punt_intercept(9., 7., ahead=-10., lateral=5.))
+        self.assertIsNone(KR._punt_intercept(9., 7., ahead=10., lateral=30.))
+        self.assertIsNone(KR._punt_intercept(9., 7., ahead=10., lateral=5., reaction=2.))
+
+    def test_punter_already_passed_cannot_reappear_beside_runner(self):
+        out = KR._punt_breakaway(80.,70.,man('r',95),[man('c',70)],man('p',40),25.,self.rng(),P.rate)
+        self.assertEqual(out['yards'],80.)
+        self.assertEqual(out['contacts'],[])
+
+    def test_intercept_respects_distance_and_elapsed_time(self):
+        from math import hypot
+        for runner, defender, ahead, lateral, reaction in ((8.,8.,10.,6.,0.), (8.,9.,-5.,0.,0.),
+                                                           (9.,7.,10.,5.,.1)):
+            traveled = KR._punt_intercept(runner, defender, ahead, lateral, reaction)
+            elapsed = traveled / runner
+            self.assertAlmostEqual(hypot(traveled-ahead, lateral), defender*(elapsed-reaction))
+
+    def test_outside_contain_player_can_make_breakaway_stop(self):
+        runner, punter = man('return', 95), man('punter', 40)
+        unit = [man('gunner1', 95), man('gunner2', 94), man('contain1', 85), man('contain2', 84)]
+        rng = self.rng()
+        rng.uniform = lambda a,b: -15. if (a,b)==(-18.,18.) else (a+b)/2
+        out = KR._punt_breakaway(80., 15., runner, unit, punter, 25., rng, P.rate)
+        self.assertEqual(out['tackler']['pid'], 'contain1')
+        self.assertEqual(out['contacts'][0]['leverage'], 'contain')
+        self.assertLess(out['yards'], 30.)
+
+    def test_coverage_order_and_duplicates_do_not_create_extra_chances(self):
+        unit = [man('gunner1',95), man('gunner2',94), man('contain1',85), man('contain2',84)]
+        a = KR._punt_breakaway(80.,15.,man('r',95),unit,man('p',40),25.,np.random.default_rng(52),P.rate)
+        b = KR._punt_breakaway(80.,15.,man('r',95),list(reversed(unit))+[unit[2]],man('p',40),25.,np.random.default_rng(52),P.rate)
+        self.assertEqual(a,b)
+
+    def test_stronger_contain_tackling_stops_more_open_lanes(self):
+        touchdowns = []
+        for tackle in (30,95):
+            unit = [man('g1',95),man('g2',94),man('c1',85,tackle_rating=tackle),man('c2',84,tackle_rating=tackle)]
+            touchdowns.append(sum(KR._punt_breakaway(80.,15.,man('r',95),unit,man('p',40),25.,
+                                  np.random.default_rng(seed),P.rate)['yards'] >= 80. for seed in range(1000)))
+        self.assertGreater(touchdowns[0],touchdowns[1])
 
     def test_ordinary_punt_and_kickoff_do_not_use_punt_chase(self):
         rng = NS(random=lambda: 1., integers=lambda n: 0)

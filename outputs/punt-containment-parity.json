@@ -1,0 +1,13 @@
+{
+  "baseline": "642a999",
+  "equal_outcomes_and_random_state": true,
+  "counts": {
+    "kickoffs": 10000,
+    "kickoff_returns": 8741,
+    "kickoff_breakaways": 370,
+    "kickoff_tds": 7,
+    "punts": 10000,
+    "punt_nonreturns": 6068,
+    "ordinary_punt_returns": 3822
+  }
+}

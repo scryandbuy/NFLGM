@@ -66,5 +66,6 @@
       "tds": 15,
       "url": "https://www.nfl.com/stats/team-stats/special-teams/punt-returns/2025/reg/all"
     }
-  ]
+  ],
+  "status": "SUPERSEDED: user rejected the all-punter stops. See punt-containment-review.json for replacement and current evidence."
 }

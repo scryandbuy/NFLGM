@@ -1,0 +1,378 @@
+{
+  "td_contests": {
+    "beat_coverage": 64,
+    "beat_punter": 285
+  },
+  "examples": [
+    {
+      "returner": "Anthony Hebert",
+      "yardage": 70.3,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Cole Bishop",
+          "position": "FS",
+          "pid": "P0264",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 2.0,
+          "lateral": 2.7,
+          "at": 23.1,
+          "missed": true
+        },
+        {
+          "name": "Devan Jimenez",
+          "position": "P",
+          "pid": "N2028P001",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 28.9,
+          "lateral": 12.6,
+          "at": 38.8,
+          "missed": true
+        }
+      ]
+    },
+    {
+      "returner": "Maraad Pons",
+      "yardage": 88.0,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Davison Igbinosun",
+          "position": "CB",
+          "pid": "P0249",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 1.8,
+          "lateral": 0.1,
+          "at": 14.5,
+          "missed": true
+        },
+        {
+          "name": "Braden Mann",
+          "position": "P",
+          "pid": "P2079",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 30.6,
+          "lateral": 17.1,
+          "at": 37.0,
+          "missed": true
+        }
+      ]
+    },
+    {
+      "returner": "Maraad Pons",
+      "yardage": 88.3,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Kris Abrams-Draine",
+          "position": "CB",
+          "pid": "P0732",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 15.2,
+          "lateral": 2.0,
+          "at": 22.8,
+          "missed": true
+        },
+        {
+          "name": "Austin McNamara",
+          "position": "P",
+          "pid": "P2000",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 42.7,
+          "lateral": 17.7,
+          "at": 43.1,
+          "missed": true
+        }
+      ]
+    },
+    {
+      "returner": "Austin Carter",
+      "yardage": 82.1,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Davison Igbinosun",
+          "position": "CB",
+          "pid": "P0249",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 14.5,
+          "lateral": 0.1,
+          "at": 21.0,
+          "missed": true
+        },
+        {
+          "name": "Braden Mann",
+          "position": "P",
+          "pid": "P2079",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 32.3,
+          "lateral": 17.4,
+          "at": 37.5,
+          "missed": true
+        }
+      ]
+    },
+    {
+      "returner": "Austin Carter",
+      "yardage": 87.1,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Tyree Morrow",
+          "position": "WILL",
+          "pid": "N2030WILL007",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 16.6,
+          "lateral": 1.9,
+          "at": 21.4,
+          "missed": true
+        },
+        {
+          "name": "Brett Thorson",
+          "position": "P",
+          "pid": "P1661",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 32.3,
+          "lateral": 11.8,
+          "at": 33.4,
+          "missed": true
+        }
+      ]
+    },
+    {
+      "returner": "Maraad Pons",
+      "yardage": 53.3,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Javery Simmons",
+          "position": "SAM",
+          "pid": "N2028SAM001",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 9.0,
+          "lateral": 12.2,
+          "at": 28.9,
+          "missed": true
+        },
+        {
+          "name": "Ryan Rehkow",
+          "position": "P",
+          "pid": "P0531",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 29.3,
+          "lateral": 3.0,
+          "at": 31.2,
+          "missed": true
+        }
+      ]
+    },
+    {
+      "returner": "RJ Berry",
+      "yardage": 84.4,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Evan Johnson",
+          "position": "CB",
+          "pid": "C4002",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 2.0,
+          "lateral": 0.4,
+          "at": 23.3,
+          "missed": true
+        },
+        {
+          "name": "J.K. Scott",
+          "position": "P",
+          "pid": "P1413",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 40.0,
+          "lateral": 14.4,
+          "at": 46.8,
+          "missed": true
+        }
+      ]
+    },
+    {
+      "returner": "Mario Craver",
+      "yardage": 84.3,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Rigoberto Sanchez",
+          "position": "P",
+          "pid": "P1097",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 23.3,
+          "lateral": 9.4,
+          "at": 31.7,
+          "missed": true
+        },
+        {
+          "name": "Geordan Jackson",
+          "position": "FS",
+          "pid": "N2031FS006",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 6.8,
+          "lateral": 25.7,
+          "at": 77.8,
+          "missed": true
+        }
+      ]
+    },
+    {
+      "returner": "Jett Williams",
+      "yardage": 48.8,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Lucky Baker IV",
+          "position": "P",
+          "pid": "N2030P000",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 27.1,
+          "lateral": 6.3,
+          "at": 31.4,
+          "missed": true
+        },
+        {
+          "name": "Jonathan Gilmore",
+          "position": "SS",
+          "pid": "N2028SS000",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 15.2,
+          "lateral": 20.1,
+          "at": 37.6,
+          "missed": true
+        }
+      ]
+    },
+    {
+      "returner": "Luther Burden III",
+      "yardage": 81.6,
+      "touchdown": true,
+      "coverage": [
+        {
+          "name": "Corey Bojorquez",
+          "position": "P",
+          "pid": "P0607",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 28.3,
+          "lateral": 12.1,
+          "at": 39.3,
+          "missed": true
+        },
+        {
+          "name": "Malik Mustapha",
+          "position": "FS",
+          "pid": "P2295",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 9.0,
+          "lateral": 26.5,
+          "at": 73.7,
+          "missed": true
+        }
+      ]
+    }
+  ],
+  "stop_examples": [
+    {
+      "returner": "Dre Kepler",
+      "yardage": 37.1,
+      "tackler": "Prince Henderson",
+      "position": "P",
+      "pid": "N2029P002",
+      "role": "punter",
+      "leverage": "last",
+      "ahead": 25.9,
+      "lateral": 15.8,
+      "at": 36.4,
+      "missed": false
+    },
+    {
+      "returner": "Ethan Barnes",
+      "yardage": 32.3,
+      "tackler": "Troy Maggio",
+      "position": "CB",
+      "pid": "N2030CB006",
+      "role": "coverage",
+      "leverage": "contain",
+      "ahead": 8.5,
+      "lateral": 7.8,
+      "at": 30.5,
+      "missed": false
+    },
+    {
+      "returner": "Danny Schmidt",
+      "yardage": 50.8,
+      "tackler": "Lautaimi Milliron",
+      "position": "MIKE",
+      "pid": "N2030MIKE009",
+      "role": "coverage",
+      "leverage": "contain",
+      "ahead": 12.1,
+      "lateral": 22.3,
+      "at": 50.4,
+      "missed": false
+    },
+    {
+      "returner": "Austin Carter",
+      "yardage": 35.2,
+      "tackler": "Jacob Rodriguez",
+      "position": "MIKE",
+      "pid": "P1574",
+      "role": "coverage",
+      "leverage": "contain",
+      "ahead": 13.1,
+      "lateral": 18.4,
+      "at": 35.2,
+      "missed": false
+    },
+    {
+      "returner": "Shay Green",
+      "yardage": 24.6,
+      "tackler": "Xavier Scott",
+      "position": "CB",
+      "pid": "C8662",
+      "role": "coverage",
+      "leverage": "contain",
+      "ahead": 7.2,
+      "lateral": 0.3,
+      "at": 23.0,
+      "missed": false
+    },
+    {
+      "returner": "Payton Tracy",
+      "yardage": 28.8,
+      "tackler": "Tyree Morrow",
+      "position": "WILL",
+      "pid": "N2030WILL007",
+      "role": "coverage",
+      "leverage": "contain",
+      "ahead": 10.6,
+      "lateral": 10.9,
+      "at": 27.6,
+      "missed": false
+    }
+  ]
+}
