@@ -4282,8 +4282,19 @@ async function advanceInner() {
   function updateBootActions() {
     $('#start').disabled = !engineReady || !team || entering;
     $('#resume').disabled = !engineReady || !saved.text || entering;
+    $('#recover').hidden = !saved.text;
+    $('#recover').disabled = !saved.text || entering;
     pick.querySelectorAll('button').forEach(b => { b.disabled = entering; });
   }
+  $('#recover').onclick = () => {
+    if (!saved.text || entering) return;
+    const blob = new Blob([saved.text], {type:'application/json'});
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `nflgm-browser-backup-${Date.now()}.json`;
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 30000);
+  };
   function selectBootTeam(abbr) {
     if (entering || !CLUBS.includes(abbr)) return;
     team = abbr;
@@ -4316,11 +4327,13 @@ async function advanceInner() {
   $('#resume').onclick = async () => {
     if (!engineReady || !saved.text || entering) return;
     entering = true; updateBootActions(); say('Loading your save…', 90);
+    let stage = 'rebuilding the franchise';
     try {
     await new Promise(r => setTimeout(r, 30));
     py.globals.set('_SAVE', saved.text); py.runPython(`SESSION = S.Session.load(_SAVE)`);
     let journalError = null;
     if (saved.journal) {
+      stage = 'restoring live plays';
       try {
         py.globals.set('_LIVE_JOURNAL', JSON.stringify(saved.journal));
         py.runPython(`SESSION.apply_live_journal(json.loads(_LIVE_JOURNAL))`);
@@ -4330,21 +4343,27 @@ async function advanceInner() {
       }
     }
     if (saved.snapshot) {
+      stage = 'restoring autosave history';
       py.globals.set('_SNAPSHOT_META', JSON.stringify(saved.snapshot));
       py.runPython('SESSION.resume_incremental(json.loads(_SNAPSHOT_META))');
       py.globals.delete('_SNAPSHOT_META');
     } else {
+      stage = 'preparing autosaves';
       say('Preparing faster autosaves…', 96);
       await saveGame();
     }
     saved = {text: null};
+    stage = 'opening the franchise';
     $('#boot').remove(); bootHash(); refresh();
     if (journalError) notify({ ok: false, why: 'The latest live plays could not be restored. Your last full save was loaded.' });
     } catch (e) {
       if (!$('#boot')) throw e;
-      entering = false; updateBootActions(); say('Could not load this save. You can retry or choose a team to start a new franchise. ' + e);
+      console.error(`Resume failed while ${stage}:`, e);
+      entering = false; updateBootActions(); say(`Could not load this save while ${stage}. Download a backup before retrying. ` + e);
     } finally {
-      py.globals.delete('_SAVE'); py.globals.delete('_LIVE_JOURNAL'); py.globals.delete('_SNAPSHOT_META');
+      for (const key of ['_SAVE', '_LIVE_JOURNAL', '_SNAPSHOT_META']) {
+        try { py.globals.delete(key); } catch (_) { /* The variable was never set. */ }
+      }
     }
   };
   $('#advance').onclick = advance;
