@@ -716,7 +716,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
                  rate(d, RUN_BLOCK['defender']['shed']))
             for b, d in contests]
     push = float(np.mean(wins)) if wins else 0.0
-    from run_blocking import support_blocks
+    from run_blocking import support_blocks, contact_execution
     support_yards, support = support_blocks(off, roles,
         {DRUSH.player_key(b) for b, _ in contests},
         {DRUSH.player_key(d) for _, d in contests}, scheme, rate, carrier=carrier)
@@ -726,11 +726,16 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # A win is beating your man, and the line wins about 71% of them (ESPN
     # RBWR): the deterministic edge is the mean, and the rep itself is a
     # draw around it, so a slightly out-rated blocker still wins his share
-    rb_reps = [(b.get('pid'), (w + rng.normal(0.0, BE.RUN_SIGMA)) > RBW_THRESHOLD) for (b, _), w in zip(contests, wins)]
+    alignment = {DRUSH.player_key(a['player']):a['alignment'] for a in front_roles}
+    blocks = [dict(blocker=b.get('pid'),defender=DRUSH.player_key(d),edge=w,
+                   execution=float(rng.normal(0.0, BE.RUN_SIGMA)),front=True,
+                   alignment=alignment[DRUSH.player_key(d)]) for (b,d),w in zip(contests,wins)]
     # Surplus linemen climb; skill players execute their actual support job.
     # Record one contest per blocker, including failed blocks on stuffed runs.
-    rb_reps += [(b['blocker'], b['edge'] + rng.normal(0.0, BE.RUN_SIGMA) > RBW_THRESHOLD)
-                for b in support]
+    blocks += [dict(b,execution=float(rng.normal(0.0, BE.RUN_SIGMA)),front=False) for b in support]
+    rb_reps = [(b['blocker'],b['edge']+b['execution'] > RBW_THRESHOLD) for b in blocks]
+    execution_yards = (contact_execution(blocks,scheme,BE.RUN_SIGMA,RUN_NOISE)
+                       if blocks else float(rng.normal(0,RUN_NOISE)))
     rb_award = [(b.get('pid'), BE.run_expectation(rate(d, RUN_BLOCK['defender']['shed']), RBW_THRESHOLD))
                 for b, d in contests]
     by_id = {DRUSH.player_key(a['player']): a['player'] for a in roles}
@@ -744,7 +749,7 @@ def _run_play(off, deff, off_call, def_call, ytg, rng):
     # so the league lands on 4.52.
     # slope 5.5 to 3.5: the best line in the league was worth two yards before contact on every carry, and with an
     # elite back behind it the club ran for four thousand; a yard is the real gap between the best line and an average one
-    ybc = RUN_BASE + 3.5 * push - 2.0 * (fill - AVG) + support_yards + rng.normal(0, RUN_NOISE)
+    ybc = RUN_BASE + 3.5 * push - 2.0 * (fill - AVG) + support_yards + execution_yards
     ybc = S.box_run_contact(ybc, def_call['box'], RUN_BASE, RUN_NOISE)
     advantage = S.run_scheme_multiplier(scheme, def_call['front'], ytg, def_call['box'])
     advantage /= S.FRONTS[def_call['front']]['run_fit']

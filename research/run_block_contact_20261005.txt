@@ -1,0 +1,58 @@
+Run-block execution and short-loss narration - October 5, 2026
+
+Implemented
+The existing individual Gaussian block execution draws now supply the
+contact-depth variation as well as each block's recorded win/loss. Rating
+matchups, support grades, box effects, front fits and after-contact tackling
+remain in place. No additional random draw or failure lottery is introduced.
+Inside runs weight interior execution twice as heavily as edge execution;
+outside runs reverse that relationship. Support roles use their existing
+relevance weights. This is coarse path relevance, not tracked coordinates or
+an empirical fit of exact block-to-contact geometry. Normalize by the square
+root of the sum of squared weights, preserving the original Gaussian contact
+variance rather than adding more overall rushing variance or reducing YPC.
+No new per-block arrays are stored in game logs or saves.
+
+Fractional negative gains that would round to zero now say "a short loss" for
+runs, catches, scrambles and sacks. Whole-yard losses keep their number.
+Exact zero remains "no gain". Stored yardage, field position, downs and stats
+are unchanged; both field labels can legitimately remain the same.
+
+Controlled checks
+101 focused tests passed: block execution/contact, box behavior, support
+attributes, actual personnel, blocking awards/opportunities, field positions,
+QB designed runs, game-log regressions, scramble contact and goal-line fumbles.
+All sampled blocks losing can yield a stuff; a severe individual failure can
+disrupt the run while a marginal failure need not erase a positive gain.
+Scheme weighting, support failures, unique blockers and original variance are
+checked. Narration tests verify short losses without mutating the play.
+
+Comparison
+audit_run_block_contact.py compares baseline de36cef with this source using
+16,000 conditional run opportunities, independent seed ranges per matchup,
+paired seeds before/after. Catalog GB/LA, LA/GB, BAL/PIT and KC/BUF; inside and
+outside zone, exactly eleven selected players each side. Fixed 11 offense,
+base 4-3 defense, sixty yards to goal. Not full games or the user's saved team.
+Pooled YPC: 5.029575 -> 5.002231.
+Raw losses: 1,713 -> 1,831; 20+ gains: 430 -> 450.
+Recorded block wins identical in every cell. These finite-sample differences
+do not establish population rate changes or a calibrated loss/explosive rate.
+Each cell and individual player IDs/outcomes are saved in the companion JSON.
+Example GB seed 100012: six of nine recorded blocks lost; the old independent
+contact draw produced 10.2 yards, the new shared executions produce -0.6.
+GB seed 100013: eight losses, 3.9 yards before versus -0.5 after.
+
+Watch-list update
+The recorded-block/contact disconnect from la_gb_followup_20261005.txt is
+addressed. The broader strength of blocking matchups and penetration-depth
+distribution still belongs in combined gameplay validation. No generic
+rushing reduction is supported or applied.
+Scramble scoring was explained to the user; its initial goal-crossing path
+was not changed by this task. Mean pursuit influences its initial distance,
+but scores from that draw skip the individual contact contest. Genuine
+untouched scores should remain possible in any future geometry improvement.
+Late leading-team next-kick/clock-security judgment remains separate work.
+
+Integration note
+Rebuild the combined browser bundle after cherry-picking. Controlled outcomes
+and build success do not certify long-run scoring, roster or award balance.

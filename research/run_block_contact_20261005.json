@@ -1,0 +1,823 @@
+{
+  "baseline": "de36cef",
+  "personnel": "11 offense versus base 4-3; exactly 11 selected players each",
+  "source_hashes": {
+    "plays.py": "1dc7739fb8830b49b30dfefdfe5f8a0a0b544565eaf6084e3dce3934868b38a2",
+    "run_blocking.py": "5df14290bd392ff93db1cc0dd1d101f56555a1ee5354818c335c66d679eb2094",
+    "ticker.py": "f999a9f56536816314a51e307ff952a2310ac4bf1e513e9a6c1d9eea157844d6"
+  },
+  "samples_per_matchup": 2000,
+  "rows": [
+    {
+      "offense": "GB",
+      "defense": "LA",
+      "scheme": "inside_zone",
+      "box": 6,
+      "before": {
+        "attempts": 2000,
+        "yards": 8558.2,
+        "losses": 299,
+        "rounded_losses": 155,
+        "explosive20": 47,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 7442,
+        "mean_ybc": 1.3030500000000003,
+        "sd_ybc": 1.3335837797078967,
+        "ypc": 4.279100000000001
+      },
+      "after": {
+        "attempts": 2000,
+        "yards": 8176.799999999997,
+        "losses": 353,
+        "rounded_losses": 191,
+        "explosive20": 48,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 7442,
+        "mean_ybc": 1.22615,
+        "sd_ybc": 1.3593054025861886,
+        "ypc": 4.088399999999999
+      }
+    },
+    {
+      "offense": "GB",
+      "defense": "LA",
+      "scheme": "outside_zone",
+      "box": 5,
+      "before": {
+        "attempts": 2000,
+        "yards": 10277.300000000008,
+        "losses": 234,
+        "rounded_losses": 130,
+        "explosive20": 53,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 7377,
+        "mean_ybc": 2.09215,
+        "sd_ybc": 1.7642600084738078,
+        "ypc": 5.138650000000005
+      },
+      "after": {
+        "attempts": 2000,
+        "yards": 9866.900000000005,
+        "losses": 286,
+        "rounded_losses": 156,
+        "explosive20": 58,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 7377,
+        "mean_ybc": 1.998,
+        "sd_ybc": 1.7960334072616801,
+        "ypc": 4.933450000000002
+      }
+    },
+    {
+      "offense": "LA",
+      "defense": "GB",
+      "scheme": "inside_zone",
+      "box": 6,
+      "before": {
+        "attempts": 2000,
+        "yards": 9412.899999999978,
+        "losses": 176,
+        "rounded_losses": 91,
+        "explosive20": 41,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 10707,
+        "mean_ybc": 1.73875,
+        "sd_ybc": 1.328334836364687,
+        "ypc": 4.706449999999989
+      },
+      "after": {
+        "attempts": 2000,
+        "yards": 9006.4,
+        "losses": 192,
+        "rounded_losses": 79,
+        "explosive20": 45,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 10707,
+        "mean_ybc": 1.6625,
+        "sd_ybc": 1.299847587219363,
+        "ypc": 4.5032
+      }
+    },
+    {
+      "offense": "LA",
+      "defense": "GB",
+      "scheme": "outside_zone",
+      "box": 5,
+      "before": {
+        "attempts": 2000,
+        "yards": 11600.999999999975,
+        "losses": 131,
+        "rounded_losses": 66,
+        "explosive20": 47,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 10847,
+        "mean_ybc": 2.7049499999999997,
+        "sd_ybc": 1.7886029457372588,
+        "ypc": 5.800499999999987
+      },
+      "after": {
+        "attempts": 2000,
+        "yards": 11722.300000000028,
+        "losses": 115,
+        "rounded_losses": 52,
+        "explosive20": 48,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 10847,
+        "mean_ybc": 2.75925,
+        "sd_ybc": 1.7725700091956877,
+        "ypc": 5.8611500000000145
+      }
+    },
+    {
+      "offense": "BAL",
+      "defense": "PIT",
+      "scheme": "inside_zone",
+      "box": 6,
+      "before": {
+        "attempts": 2000,
+        "yards": 8680.399999999985,
+        "losses": 280,
+        "rounded_losses": 154,
+        "explosive20": 48,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 6681,
+        "mean_ybc": 1.3606,
+        "sd_ybc": 1.3407899313464433,
+        "ypc": 4.340199999999992
+      },
+      "after": {
+        "attempts": 2000,
+        "yards": 9195.799999999997,
+        "losses": 308,
+        "rounded_losses": 154,
+        "explosive20": 54,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 6681,
+        "mean_ybc": 1.29685,
+        "sd_ybc": 1.305295015504158,
+        "ypc": 4.597899999999998
+      }
+    },
+    {
+      "offense": "BAL",
+      "defense": "PIT",
+      "scheme": "outside_zone",
+      "box": 5,
+      "before": {
+        "attempts": 2000,
+        "yards": 10571.400000000001,
+        "losses": 282,
+        "rounded_losses": 137,
+        "explosive20": 64,
+        "td": 1,
+        "recorded_blocks": 18000,
+        "recorded_wins": 6702,
+        "mean_ybc": 1.98595,
+        "sd_ybc": 1.792924314492946,
+        "ypc": 5.2857
+      },
+      "after": {
+        "attempts": 2000,
+        "yards": 10698.999999999984,
+        "losses": 270,
+        "rounded_losses": 135,
+        "explosive20": 76,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 6702,
+        "mean_ybc": 1.9765,
+        "sd_ybc": 1.7501422085076404,
+        "ypc": 5.349499999999992
+      }
+    },
+    {
+      "offense": "KC",
+      "defense": "BUF",
+      "scheme": "inside_zone",
+      "box": 6,
+      "before": {
+        "attempts": 2000,
+        "yards": 9654.80000000001,
+        "losses": 163,
+        "rounded_losses": 64,
+        "explosive20": 58,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 8746,
+        "mean_ybc": 1.8223,
+        "sd_ybc": 1.3196183955977576,
+        "ypc": 4.827400000000005
+      },
+      "after": {
+        "attempts": 2000,
+        "yards": 9828.19999999999,
+        "losses": 144,
+        "rounded_losses": 67,
+        "explosive20": 53,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 8746,
+        "mean_ybc": 1.8237,
+        "sd_ybc": 1.310308478946847,
+        "ypc": 4.914099999999995
+      }
+    },
+    {
+      "offense": "KC",
+      "defense": "BUF",
+      "scheme": "outside_zone",
+      "box": 5,
+      "before": {
+        "attempts": 2000,
+        "yards": 11717.19999999999,
+        "losses": 148,
+        "rounded_losses": 63,
+        "explosive20": 72,
+        "td": 0,
+        "recorded_blocks": 18000,
+        "recorded_wins": 8806,
+        "mean_ybc": 2.67455,
+        "sd_ybc": 1.8335477352662515,
+        "ypc": 5.858599999999995
+      },
+      "after": {
+        "attempts": 2000,
+        "yards": 11540.300000000027,
+        "losses": 163,
+        "rounded_losses": 72,
+        "explosive20": 68,
+        "td": 1,
+        "recorded_blocks": 18000,
+        "recorded_wins": 8806,
+        "mean_ybc": 2.6514499999999996,
+        "sd_ybc": 1.838634791768066,
+        "ypc": 5.770150000000013
+      }
+    }
+  ],
+  "individual_examples": [
+    {
+      "offense": "GB",
+      "defense": "LA",
+      "seed": 100012,
+      "runner": "P0905",
+      "blockers": [
+        {
+          "pid": "P0940",
+          "won": true
+        },
+        {
+          "pid": "P0937",
+          "won": false
+        },
+        {
+          "pid": "P0924",
+          "won": false
+        },
+        {
+          "pid": "P0918",
+          "won": false
+        },
+        {
+          "pid": "P0884",
+          "won": true
+        },
+        {
+          "pid": "P0948",
+          "won": false
+        },
+        {
+          "pid": "P0959",
+          "won": false
+        },
+        {
+          "pid": "P0960",
+          "won": false
+        },
+        {
+          "pid": "P0961",
+          "won": true
+        }
+      ],
+      "old_yards": 10.2,
+      "new_yards": -0.6
+    },
+    {
+      "offense": "GB",
+      "defense": "LA",
+      "seed": 100013,
+      "runner": "P0905",
+      "blockers": [
+        {
+          "pid": "P0940",
+          "won": false
+        },
+        {
+          "pid": "P0937",
+          "won": false
+        },
+        {
+          "pid": "P0924",
+          "won": false
+        },
+        {
+          "pid": "P0918",
+          "won": false
+        },
+        {
+          "pid": "P0884",
+          "won": true
+        },
+        {
+          "pid": "P0948",
+          "won": false
+        },
+        {
+          "pid": "P0959",
+          "won": false
+        },
+        {
+          "pid": "P0960",
+          "won": false
+        },
+        {
+          "pid": "P0961",
+          "won": false
+        }
+      ],
+      "old_yards": 3.9,
+      "new_yards": -0.5
+    },
+    {
+      "offense": "GB",
+      "defense": "LA",
+      "seed": 100015,
+      "runner": "P0905",
+      "blockers": [
+        {
+          "pid": "P0940",
+          "won": false
+        },
+        {
+          "pid": "P0937",
+          "won": false
+        },
+        {
+          "pid": "P0924",
+          "won": false
+        },
+        {
+          "pid": "P0918",
+          "won": false
+        },
+        {
+          "pid": "P0884",
+          "won": true
+        },
+        {
+          "pid": "P0948",
+          "won": false
+        },
+        {
+          "pid": "P0959",
+          "won": false
+        },
+        {
+          "pid": "P0960",
+          "won": false
+        },
+        {
+          "pid": "P0961",
+          "won": true
+        }
+      ],
+      "old_yards": 15.9,
+      "new_yards": -1.6
+    },
+    {
+      "offense": "LA",
+      "defense": "GB",
+      "seed": 300015,
+      "runner": "P1312",
+      "blockers": [
+        {
+          "pid": "P1344",
+          "won": false
+        },
+        {
+          "pid": "P1341",
+          "won": false
+        },
+        {
+          "pid": "P1327",
+          "won": false
+        },
+        {
+          "pid": "P1323",
+          "won": false
+        },
+        {
+          "pid": "P1290",
+          "won": true
+        },
+        {
+          "pid": "P1351",
+          "won": false
+        },
+        {
+          "pid": "P1360",
+          "won": true
+        },
+        {
+          "pid": "P1361",
+          "won": true
+        },
+        {
+          "pid": "P1362",
+          "won": false
+        }
+      ],
+      "old_yards": 12.8,
+      "new_yards": -2.0
+    },
+    {
+      "offense": "LA",
+      "defense": "GB",
+      "seed": 300027,
+      "runner": "P1312",
+      "blockers": [
+        {
+          "pid": "P1344",
+          "won": false
+        },
+        {
+          "pid": "P1341",
+          "won": false
+        },
+        {
+          "pid": "P1327",
+          "won": true
+        },
+        {
+          "pid": "P1323",
+          "won": false
+        },
+        {
+          "pid": "P1290",
+          "won": true
+        },
+        {
+          "pid": "P1351",
+          "won": true
+        },
+        {
+          "pid": "P1360",
+          "won": true
+        },
+        {
+          "pid": "P1361",
+          "won": true
+        },
+        {
+          "pid": "P1362",
+          "won": false
+        }
+      ],
+      "old_yards": 2.2,
+      "new_yards": -0.9
+    },
+    {
+      "offense": "LA",
+      "defense": "GB",
+      "seed": 300049,
+      "runner": "P1312",
+      "blockers": [
+        {
+          "pid": "P1344",
+          "won": false
+        },
+        {
+          "pid": "P1341",
+          "won": true
+        },
+        {
+          "pid": "P1327",
+          "won": true
+        },
+        {
+          "pid": "P1323",
+          "won": false
+        },
+        {
+          "pid": "P1290",
+          "won": true
+        },
+        {
+          "pid": "P1351",
+          "won": false
+        },
+        {
+          "pid": "P1360",
+          "won": true
+        },
+        {
+          "pid": "P1361",
+          "won": true
+        },
+        {
+          "pid": "P1362",
+          "won": false
+        }
+      ],
+      "old_yards": 1.3,
+      "new_yards": -0.1
+    },
+    {
+      "offense": "BAL",
+      "defense": "PIT",
+      "seed": 500000,
+      "runner": "P0189",
+      "blockers": [
+        {
+          "pid": "P0219",
+          "won": true
+        },
+        {
+          "pid": "P0218",
+          "won": false
+        },
+        {
+          "pid": "P0203",
+          "won": false
+        },
+        {
+          "pid": "P0199",
+          "won": false
+        },
+        {
+          "pid": "P0166",
+          "won": true
+        },
+        {
+          "pid": "P0226",
+          "won": true
+        },
+        {
+          "pid": "P0233",
+          "won": false
+        },
+        {
+          "pid": "P0234",
+          "won": false
+        },
+        {
+          "pid": "P0240",
+          "won": false
+        }
+      ],
+      "old_yards": 2.0,
+      "new_yards": -1.1
+    },
+    {
+      "offense": "BAL",
+      "defense": "PIT",
+      "seed": 500004,
+      "runner": "P0189",
+      "blockers": [
+        {
+          "pid": "P0219",
+          "won": false
+        },
+        {
+          "pid": "P0218",
+          "won": false
+        },
+        {
+          "pid": "P0203",
+          "won": false
+        },
+        {
+          "pid": "P0199",
+          "won": true
+        },
+        {
+          "pid": "P0166",
+          "won": false
+        },
+        {
+          "pid": "P0226",
+          "won": false
+        },
+        {
+          "pid": "P0233",
+          "won": true
+        },
+        {
+          "pid": "P0234",
+          "won": false
+        },
+        {
+          "pid": "P0240",
+          "won": false
+        }
+      ],
+      "old_yards": 1.7,
+      "new_yards": -0.6
+    },
+    {
+      "offense": "BAL",
+      "defense": "PIT",
+      "seed": 500030,
+      "runner": "P0189",
+      "blockers": [
+        {
+          "pid": "P0219",
+          "won": false
+        },
+        {
+          "pid": "P0218",
+          "won": false
+        },
+        {
+          "pid": "P0203",
+          "won": false
+        },
+        {
+          "pid": "P0199",
+          "won": false
+        },
+        {
+          "pid": "P0166",
+          "won": true
+        },
+        {
+          "pid": "P0226",
+          "won": false
+        },
+        {
+          "pid": "P0233",
+          "won": true
+        },
+        {
+          "pid": "P0234",
+          "won": true
+        },
+        {
+          "pid": "P0240",
+          "won": false
+        }
+      ],
+      "old_yards": 1.3,
+      "new_yards": -0.9
+    },
+    {
+      "offense": "KC",
+      "defense": "BUF",
+      "seed": 700000,
+      "runner": "P1234",
+      "blockers": [
+        {
+          "pid": "P1263",
+          "won": false
+        },
+        {
+          "pid": "P1261",
+          "won": true
+        },
+        {
+          "pid": "P1247",
+          "won": false
+        },
+        {
+          "pid": "P1245",
+          "won": false
+        },
+        {
+          "pid": "P1212",
+          "won": true
+        },
+        {
+          "pid": "P1270",
+          "won": false
+        },
+        {
+          "pid": "P1280",
+          "won": false
+        },
+        {
+          "pid": "P1281",
+          "won": false
+        },
+        {
+          "pid": "P1282",
+          "won": false
+        }
+      ],
+      "old_yards": 2.9,
+      "new_yards": -0.3
+    },
+    {
+      "offense": "KC",
+      "defense": "BUF",
+      "seed": 700011,
+      "runner": "P1234",
+      "blockers": [
+        {
+          "pid": "P1263",
+          "won": false
+        },
+        {
+          "pid": "P1261",
+          "won": true
+        },
+        {
+          "pid": "P1247",
+          "won": false
+        },
+        {
+          "pid": "P1245",
+          "won": false
+        },
+        {
+          "pid": "P1212",
+          "won": true
+        },
+        {
+          "pid": "P1270",
+          "won": true
+        },
+        {
+          "pid": "P1280",
+          "won": true
+        },
+        {
+          "pid": "P1281",
+          "won": false
+        },
+        {
+          "pid": "P1282",
+          "won": false
+        }
+      ],
+      "old_yards": 3.6,
+      "new_yards": -0.8
+    },
+    {
+      "offense": "KC",
+      "defense": "BUF",
+      "seed": 700032,
+      "runner": "P1234",
+      "blockers": [
+        {
+          "pid": "P1263",
+          "won": false
+        },
+        {
+          "pid": "P1261",
+          "won": true
+        },
+        {
+          "pid": "P1247",
+          "won": false
+        },
+        {
+          "pid": "P1245",
+          "won": false
+        },
+        {
+          "pid": "P1212",
+          "won": true
+        },
+        {
+          "pid": "P1270",
+          "won": false
+        },
+        {
+          "pid": "P1280",
+          "won": true
+        },
+        {
+          "pid": "P1281",
+          "won": false
+        },
+        {
+          "pid": "P1282",
+          "won": false
+        }
+      ],
+      "old_yards": 2.3,
+      "new_yards": -0.9
+    }
+  ],
+  "limitations": "Selected catalog players, conditional runs at 60 yards to goal. Not season calibration or the supplied saved roster. Coarse inside/outside weighting, not tracked coordinates."
+}

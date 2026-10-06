@@ -44,7 +44,8 @@ class BoxContactTests(unittest.TestCase):
                 return -1.85 if scale==P.RUN_NOISE else 0
         def no_yac(runner,chasers,ytg,rng,contact_at=0,gain_scale=1):
             return dict(yards=contact_at*gain_scale,touchdown=False)
-        with patch.object(P,'resolve_yards_after',side_effect=no_yac):
+        with patch.object(P,'resolve_yards_after',side_effect=no_yac), \
+             patch('run_blocking.contact_execution',return_value=-1.85):
             neutral=P._run_play(offense,defense,dict(scheme='inside_zone'),dict(call('4-3'),front='4-3 over',box=6),50,FixedNoise())
             dense=P._run_play(offense,defense,dict(scheme='inside_zone'),dict(call('4-3'),front='4-3 over',box=10),50,FixedNoise())
         self.assertGreater(neutral['yards'],0)
@@ -57,8 +58,9 @@ class BoxContactTests(unittest.TestCase):
         offense=dict(ol=[dict(pid=p,pos=p) for p in ('LT','LG','C','RG','RT')],qb=dict(pid='Q'),rb=dict(pid='H'))
         class FixedNoise:
             def normal(self,loc,scale):return -3 if scale==P.RUN_NOISE else 0
-        results=[P._run_play(offense,defense,dict(scheme='inside_zone',execution_mod=e),
-                            dict(call('4-3'),front='4-3 over',box=10),50,FixedNoise()) for e in (.94,1.06)]
+        with patch('run_blocking.contact_execution',return_value=-3.):
+            results=[P._run_play(offense,defense,dict(scheme='inside_zone',execution_mod=e),
+                                dict(call('4-3'),front='4-3 over',box=10),50,FixedNoise()) for e in (.94,1.06)]
         self.assertLess(results[0]['yards'],results[1]['yards'])
         self.assertLess(results[1]['yards'],0)
 

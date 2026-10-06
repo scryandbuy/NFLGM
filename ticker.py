@@ -54,6 +54,7 @@ def _down(d, togo, yardline):
 
 
 def _yards(y):
+    if y < 0 and round(y) == 0: return ('loss', 'a short loss')
     y = int(round(y))
     if y > 0: return ('gain', f"{y} yard{'s' if y != 1 else ''}")
     if y == 0: return ('none', "no gain")
@@ -86,6 +87,9 @@ def play_line(league, p, off_abbr, def_abbr):
     gain = float(p.get('carrier_yards', p.get('yards')) or 0)
     shown_gain = (_display_gain(spot, gain, off_abbr, def_abbr, exact=bool(p.get("fumble"))) if p.get('yardline') is not None
                   and not td and not p.get('nullified') else gain)
+    # Preserve a fractional loss in the wording even when both field labels
+    # round to the same yard line. This never changes spots or stored stats.
+    if gain < 0 and round(gain) == 0: shown_gain = gain
     near_goal_short = (t in ('run', 'complete', 'scramble') and not td and not p.get('nullified')
                        and 0 < gain < spot and 0 < spot - round(gain) < 1)
     kind = 'neutral'; text = ''
@@ -143,7 +147,7 @@ def play_line(league, p, off_abbr, def_abbr):
         shared = len(finishers) == 2 and all(finishers)
         if shared: by = ' and '.join(finishers)
         loss = int(round(-shown_gain))
-        text = f"{by or 'The rush'} {'share a sack of' if shared else 'sacks'} {passer or 'the quarterback'}" + (f" for a loss of {loss}" if loss else ' at the line of scrimmage') + (f", beating {beaten}{'' if beaten.endswith('.') else '.'}" if beaten else '.')
+        text = f"{by or 'The rush'} {'share a sack of' if shared else 'sacks'} {passer or 'the quarterback'}" + (f" for a loss of {loss}" if loss else ' for a short loss' if shown_gain < 0 else ' at the line of scrimmage') + (f", beating {beaten}{'' if beaten.endswith('.') else '.'}" if beaten else '.')
         kind = 'loss'
     elif t == 'scramble':
         cls, yd = _yards(shown_gain)

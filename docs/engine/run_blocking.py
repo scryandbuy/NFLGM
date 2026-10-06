@@ -1,9 +1,33 @@
 """Support blocks by the selected eleven, after the line engages the front."""
+import math
 from defensive_rush import player_key
 from matchups import RUN_BLOCK
 
 SUPPORT_YARDS = 1.25
 OL = frozenset(('LT', 'LG', 'C', 'RG', 'RT'))
+
+
+def contact_execution(blocks, scheme, sigma, spread):
+    """Use the same block executions for penetration and recorded wins.
+
+    Interior blocks matter most inside; edge blocks matter most outside.
+    Support jobs retain their existing relevance weights. Normalizing the
+    independent Gaussian rolls preserves the contact-noise variance as the
+    number of blockers changes, without granting heavy personnel free yards.
+    These are coarse path weights, not tracked left/right player coordinates.
+    """
+    wide = scheme in ('outside_zone', 'stretch', 'toss', 'sweep')
+    weighted = square = 0.
+    for block in blocks:
+        if block.get('front'):
+            edge = block['alignment'] in ('left_edge', 'right_edge')
+            weight = 2. if edge == wide else 1.
+        else:
+            weight = block['weight']
+        block['contact_weight'] = weight
+        weighted += weight * block['execution']
+        square += weight * weight
+    return spread * weighted / (sigma * math.sqrt(square)) if square else 0.
 
 
 def support_blocks(offense, defense_roles, engaged_blockers, engaged_defenders,
