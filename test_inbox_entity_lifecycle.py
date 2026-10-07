@@ -177,7 +177,12 @@ class WaiverLifecycleTests(unittest.TestCase):
                    waivers=[dict(pid=p.pid, from_team='DAL', claims=['GB'], user_notified=True)])
         IB.post(L, 'waiver_notice', 'Available', '', payload={'pid': p.pid})
         IB.post(L, 'waiver_digest', 'Wire', '')
-        def award(L, e, a): L.player(e['pid']).team = a
+        def award(L, e, a):
+            L.player(e['pid']).team = a
+            if a == 'GB':
+                active.append(L.player(e['pid']))
+                IB.post(L, 'waiver_notice', 'Claim awarded: Wire Player',
+                        'Wire Player is on your roster.', sender='league')
         with patch.object(WV, 'priority', return_value=['GB', 'MIN']), patch.object(VAL, 'pool_from_league', return_value=[]), patch.object(VAL, 'value_player', return_value={'apy': 1}), patch.object(WV, 'claim_fits', side_effect=lambda L,e,a: fits if a == 'GB' else True), patch.object(WV, 'wants', return_value=True), patch.object(WV, 'make_room', side_effect=lambda L,a,p,e: room if a == 'GB' else True), patch.object(WV, 'award', side_effect=award), patch.object(PSQ, 'shunned', return_value=False):
             WV.process(L, np.random.default_rng(1), 1)
         return L
@@ -189,12 +194,12 @@ class WaiverLifecycleTests(unittest.TestCase):
         self.assertEqual(L.player('wire').team, 'MIN')
         self.assertFalse(L.waivers)
 
-    def test_roster_failure_does_not_claim_player_stays_on_wire(self):
+    def test_full_roster_claim_is_awarded_pending_roster_cut(self):
         L = self.scenario(True, False)
         self.assertEqual(len(L.inbox), 3)
-        self.assertNotIn('stays on the wire', L.inbox[-1]['body'])
-        self.assertIn('Claim failed', L.inbox[-1]['subject'])
-        self.assertEqual(L.player('wire').team, 'MIN')
+        self.assertIn('Claim awarded', L.inbox[-1]['subject'])
+        self.assertEqual(L.player('wire').team, 'GB')
+        self.assertEqual(len(L.teams['GB'].active()), 54)
 
 
 class OfferSheetTests(unittest.TestCase):
