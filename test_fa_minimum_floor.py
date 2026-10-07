@@ -105,8 +105,8 @@ class VeteranMinimumTests(unittest.TestCase):
         with patch.object(type(self.p), 'ovr', new_callable=PropertyMock, return_value=90):
             LN.transactions(self.L, 17)
         body = self.L.inbox[-1]['body']
-        self.assertIn(f'${annual:.2f}m a year', body)
-        self.assertIn('for the rest of this season', body)
+        self.assertIn(f'a 1-year deal averaging ${annual:.2f}m per year', body)
+        self.assertNotIn('for the rest of this season', body)
         self.assertNotIn('1 years', body)
         loaded = League.load(self.L.save())
         self.assertEqual(loaded.transactions[-1]['apy'], annual)
