@@ -1357,14 +1357,15 @@ function renderCard(v) {
     const participation = v.participation;
     const playingTime = el('div', {class:'card-participation', style:'display:grid;gap:12px;line-height:1.45;overflow-wrap:anywhere'});
     if (participation) {
-      playingTime.append(el('div', {}, el('b', {}, `${Number(participation.season_snaps || 0).toLocaleString()} season snaps`), el('small', {class:'count',style:'display:block'}, `${participation.season_games ?? '—'} games played · ${v.rail.year}`)));
-      for (const c of participation.clubs || []) for (const [unit, n] of Object.entries(c.units || {})) {
-        const block = el('div', {}, el('b', {}, `${showAbbr(c.team)} · ${unit[0].toUpperCase()+unit.slice(1)}`), el('div', {}, `${n.total ? Math.round(100*n.snaps/n.total)+'%' : '—'} while on roster`), el('small', {class:'count',style:'display:block'}, `${n.snaps.toLocaleString()} / ${n.total.toLocaleString()} snaps · ${n.games} recorded games`));
-        const season = c.team_units?.[unit];
-        if (season && (season.total !== n.total || season.games !== n.games)) block.append(el('div', {style:'margin-top:4px'}, `${season.total ? Math.round(100*season.snaps/season.total)+'%' : '—'} of team season`), el('small', {class:'count',style:'display:block'}, `${season.snaps.toLocaleString()} / ${season.total.toLocaleString()} snaps · ${season.games} team games`));
-        playingTime.append(block);
-      }
-      if (!(participation.clubs || []).length) playingTime.append(el('small', {class:'count'}, 'Team snap share unavailable'));
+      const units = (participation.clubs || []).flatMap(c => Object.values(c.units || {}));
+      const recordedSnaps = units.reduce((sum, n) => sum + n.snaps, 0);
+      const total = units.reduce((sum, n) => sum + n.total, 0);
+      const snaps = Number(participation.season_snaps || 0);
+      const complete = total > 0 && recordedSnaps === snaps;
+      const snapLine = complete
+        ? `${snaps.toLocaleString()} / ${total.toLocaleString()} snaps · ${Math.round(100 * snaps / total)}%`
+        : `${snaps.toLocaleString()} season snaps`;
+      playingTime.append(el('div', {}, el('b', {}, snapLine), el('small', {class:'count',style:'display:block'}, `${participation.season_games ?? '—'} games played · ${v.rail.year}`)));
       if (participation.injury_note) playingTime.append(el('small', {class:'count'}, participation.injury_note));
     } else playingTime.append(el('span', {}, v.snaps || 'None yet this season'));
     left.append(playingTime);

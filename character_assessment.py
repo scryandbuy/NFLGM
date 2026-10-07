@@ -268,7 +268,7 @@ def owned_player_report(p):
         else:
             label = {'concern': 'Undisciplined', 'neutral': 'Average discipline',
                      'strength': 'Disciplined'}[row['status']]
-        row.update(value=round(value), summary=f'{round(value)} · {label}',
+        row.update(value=round(value), summary=label,
                    confidence=None, source=None, explanation='')
         rows.append(row)
     return rows
