@@ -1,0 +1,32 @@
+EXTENSIONS PAGE SAVED COUNTER REPAIR — 2026-10-07
+
+Observed in nflgm-2032-offseason-2.json (read-only)
+Session.load succeeds: GB, 2032, offseason step2. Opening Extensions failed when
+previewing thread64, Breylon Elijah (N2028WILL004). The 2031 counter was2.01M APY
+for one year with0.50M bonus. His2032 minimum base is2.382M. An uncaught preview
+ValueError prevented the entire page from opening. Testing acceptance in an
+in-memory copy also exposed that expired-contract extension negotiations skipped
+the annual-pay and available-base minimum checks used by free-agent signings.
+
+Fix
+Signing preview validation now returns an ordinary ok=false/why response. The
+negotiation panel displays that explanation. Shared package validation applies
+annual-pay and bonus/base floor checks to expired-contract renewals as well as
+free-agent signings. Existing under-contract extensions retain their current
+handling. Historical counters are neither repriced nor removed.
+
+Evidence
+Exact uploaded save now opens Extensions:53 roster rows,7 negotiation entries.
+Thread64 returns the2.382M minimum explanation. Its counter remains unchanged.
+Accept Counter is rejected with the same explanation, without creating a contract
+or changing the negotiation. Original uploaded file was not overwritten.
+32 tests pass: test_invalid_extension_preview, test_extension_cap_view,
+test_counter_contract_shape, test_fa_minimum_floor. Includes valid renewed deal
+acceptance, invalid deal rejection, page readability, cap schedules and prior
+counter/extension behavior. JavaScript syntax check passes. Python mirrors match.
+
+Limits
+No interactive browser session was run. A broader optional release-gate suite
+also exposed its existing expectation of a zero first-year base despite the FA
+minimum-floor adjustment; this occurred before the canonical-package fix and is
+outside this page repair. No broad redesign of old negotiation quotes is included.

@@ -596,7 +596,10 @@ def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None
     import practice_squad as PS
     if p.contract is None or (p.team in league.teams and p in PS.squad(league.teams[p.team])):
         import market as MK
-        d = MK.signing_terms(league, p, t, float(apy), int(years), CAP.get(league.year, 301.2), float(front_load) if front_load is not None else None, bonus)
+        try:
+            d = MK.signing_terms(league, p, t, float(apy), int(years), CAP.get(league.year, 301.2), float(front_load) if front_load is not None else None, bonus)
+        except (TypeError, ValueError, OverflowError) as exc:
+            return dict(ok=False, why=str(exc))
         hits = d['cap_hits']
         return dict(ok=True, interest=interest, bonus=bonus, front_load=front_load, hits=hits, years=[d['start_year'] + i for i in range(int(years))], total=round(d['total'], 2), year1=hits[0], cash_this_season=round(d['cash_this_season'], 2), prorated=d['fraction'] < 1, annual_apy=float(apy), dead_if_cut=[])
     import extensions as EXT

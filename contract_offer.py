@@ -34,7 +34,7 @@ def canonical(league, player, team, offer, kind='fa_offseason'):
     if not math.isfinite(apy) or apy <= 0 or not math.isfinite(years) or int(years) != years or not 1 <= years <= 7:
         raise ValueError('Offer needs positive annual pay and one to seven whole years')
     out.update(apy=apy, years=int(years))
-    if kind != 'extension':
+    if kind != 'extension' or player.contract is None or player.contract.years <= 0:
         from min_salary import validate_annual_pay
         validate_annual_pay(league, player, apy, out['years'])
     if out.get('front_load') is None:
@@ -55,7 +55,7 @@ def canonical(league, player, team, offer, kind='fa_offseason'):
     out['bonus'] = float(out['bonus'])
     if not math.isfinite(out['bonus']) or not 0 <= out['bonus'] <= apy * years:
         raise ValueError('Signing bonus must be between zero and total new compensation')
-    if kind != 'extension':
+    if kind != 'extension' or player.contract is None or player.contract.years <= 0:
         from min_salary import player_minimum
         if out['bonus'] > (apy - player_minimum(league, player, out['years'])) * out['years'] + 1e-9:
             raise ValueError('This signing bonus leaves too little money for the minimum base salaries. Reduce the bonus or raise annual pay.')

@@ -2192,6 +2192,8 @@ function threadBox(t, onDone) {
   const counterLoadingText = counterLoading == null ? 'Salary loading: standard structure' : Number(counterLoading) < 0.5 ? 'Salary loading: Backloaded' : Number(counterLoading) > 0.5 ? 'Salary loading: Frontloaded' : 'Salary loading: Even';
   if (t.kind === 'extension' && t.offer_cap_preview?.ok)
     box.append(extensionImpact(t.offer_cap_preview, countered ? 'Agent counter · cap impact' : 'Submitted offer · cap impact'));
+  else if (t.kind === 'extension' && t.offer_cap_preview?.ok === false)
+    box.append(el('div', { class: 'msg note', role: 'alert' }, t.offer_cap_preview.why || 'These terms cannot be used. Revise the offer.'));
   const feedback=el('div',{class:'msg note',role:'alert',hidden:true});
   const act=action=>{const r=pyJSON(`SESSION.personnel_act('${action}', tid=${t.id})`);notify(r);if(r.ok)onDone();else{feedback.hidden=false;feedback.textContent=r.why||'The decision could not be completed.';}};
   if (matching) box.append(el('div', { class: 'msg match rival-panel' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${showAbbr(t.rival.team)} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { act('match'); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { act('withdraw'); } }, 'Let Him Go'))));
