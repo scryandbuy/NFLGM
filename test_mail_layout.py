@@ -100,7 +100,7 @@ class MailLayoutTests(unittest.TestCase):
         inbox_digest.consolidate(league,set())
         self.assertEqual(len(league.inbox),1)
         self.assertEqual(league.inbox[0]['subject'],'League Transactions')
-        self.assertIn('extend',league.inbox[0]['body'])
+        self.assertIn('Extensions',league.inbox[0]['body'])
         self.assertIn('sign',league.inbox[0]['body'])
         self.assertIn('franchise tag',league.inbox[0]['body'])
         self.assertIn('Round signings.',league.inbox[0]['body'])

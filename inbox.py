@@ -135,11 +135,51 @@ def _coaching_mail_layout(payload):
     return dict(payload, mail_sections=out, mail_intro=dict(text='', mentions=[]))
 
 
+def _transaction_mail_layout(message, payload):
+    """Recover contract rows from saved wording without consulting current contracts."""
+    import copy
+    import re
+    pattern = re.compile(r"^([A-Z]{2,4}) (sign|extend) (.+?) \(([^,]+), (\d+)\) for (?:a (\d+)-year deal averaging |(\d+) years? at )(\$[\d.]+m)(?: per year| a year)(?: \(.*?\))?\.$")
+    sections = copy.deepcopy(payload.get('mail_sections') or [])
+    if not sections:
+        sections = [dict(title='', columns=[], rows=[[dict(text=line.strip(), mentions=[])]] )
+                    for line in str(message.get('body') or '').splitlines() if line.strip()]
+    result = []
+    changed = False
+    entities = message.get('entities') or []
+    for section in sections:
+        if section.get('columns'):
+            result.append(section)
+            continue
+        for row in section.get('rows', []):
+            cell = row[0] if len(row) == 1 else None
+            text = cell.get('text', '') if isinstance(cell, dict) else str(cell or '')
+            match = pattern.fullmatch(text)
+            if not match:
+                result.append(dict(section, rows=[row]))
+                continue
+            team, action, player, pos, ovr, years_new, years_old, annual = match.groups()
+            title = 'Signings' if action == 'sign' else 'Extensions'
+            columns = ['Team', 'Player', 'Pos', 'OVR', 'Years', 'Annual Average']
+            values = [team, player, pos, ovr, years_new or years_old, annual]
+            cells = [dict(text=v, mentions=reference_spans(v, entities, [])) for v in values]
+            if result and result[-1].get('title') == title and result[-1].get('columns') == columns:
+                result[-1]['rows'].append(cells)
+            else:
+                result.append(dict(title=title, columns=columns, rows=[cells]))
+            changed = True
+    if changed:
+        return dict(payload, mail_sections=result, mail_intro=payload.get('mail_intro') or dict(text='', mentions=[]))
+    return payload
+
+
 def mail_layout(message):
     """Display old structured regression mail and legacy CPU trades consistently."""
     import copy
     import re
     payload = dict(message.get('payload') or {})
+    if message.get('kind') == 'league':
+        payload = _transaction_mail_layout(message, payload)
     if message.get('kind') == 'contract_year':
         # Render saved announcements from their original contract snapshot.
         # Never substitute today's player ratings or salary into old mail.
