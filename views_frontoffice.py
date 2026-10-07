@@ -602,12 +602,28 @@ def _review_players(league, abbr, year):
         elif pos in ('WR', 'TE'): bits = f"{int(line.get('rec', 0))} rec, {int(line.get('rec_yds', 0))} yds, {int(line.get('rec_td', 0))} TD"
         elif pos in ('LT', 'LG', 'C', 'RG', 'RT'): bits = f"{int(line.get('pb_snaps', 0))} pass-block reps, {float(line.get('sacks_allowed', 0)):g} sacks allowed"
         elif pos == 'K': bits = f"{int(line.get('fg_made', 0))}/{int(line.get('fg_att', 0))} FG"
-        elif pos == 'P': bits = f"{int(line.get('punts', 0))} punts"
+        elif pos == 'P':
+            punts = max(1, int(line.get('punts', 0)))
+            bits = f"{float(line.get('punt_net_yds', 0))/punts:.1f} net avg · {int(line.get('punt_in20', 0))} inside 20 · {int(line.get('punt_tb', 0))} TB"
         else: bits = f"{int(line.get('tackles', 0))} tkl, {float(line.get('sacks', 0)):g} sk, {int(line.get('int_def', 0))} INT"
+        direction = 'above' if positive else 'below'
+        detail = f"Measured performance finished {direction} the expectation for his overall rating among comparable players."
+        if pos in ('HB', 'WR', 'TE'):
+            snaps = max(1, int(line.get('snaps', 0)))
+            yards = float(line.get('rush_yds', 0)) + float(line.get('rec_yds', 0))
+            touchdowns = int(line.get('rush_td', 0)) + int(line.get('rec_td', 0))
+            detail = (f"{yards:g} scrimmage yards and {touchdowns} touchdowns on {snaps:,} snaps. "
+                      f"Production per snap finished {direction} the expectation for his overall rating among {pos}s. "
+                      "The comparison includes catches and lost fumbles; it does not adjust for targets or depth-chart role.")
+        elif pos == 'P':
+            detail = (f"{int(line.get('punts', 0))} punts: {bits}. Net average and placement finished {direction} "
+                      "the expectation for his overall rating among punters. Starting field position is not adjusted for.")
+        else:
+            detail += ' ' + evidence['basis'] + '.'
         card = dict(pid=pid, name=p.name, pos=pos, no=getattr(p, 'number', None),
                     ovr=round(p.ovr) if current else None, age=int(p.age) if current else None,
-                    line=bits, up=positive, basis=evidence['basis'],
-                    evidence_note=evidence.get('reason', ''), comparison=round(delta * 100, 1))
+                    line=bits, up=positive, basis=detail,
+                    evidence_note='', comparison=round(delta * 100, 1))
         (above if positive else below).append(card)
     above.sort(key=lambda c: (-c['comparison'], c['pid']))
     below.sort(key=lambda c: (c['comparison'], c['pid']))
@@ -731,7 +747,7 @@ def _season_review_now(session, league, abbr):
     # next year's money and the players whose deals are up
     limit_next, committed_next, rollover, dead_next = next_year_cap(league, t)
     expiring = sorted([p for p in t.active() if p.contract and p.contract.years <= 1], key=lambda p: -p.ovr)
-    pending = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), starter=(p in (t.depth.get(p.pos) or [])[:1])) for p in expiring[:8]]
+    pending = [dict(pid=p.pid, name=p.name, pos=p.pos, ovr=round(p.ovr), age=int(p.age), apy=round(float(getattr(p, 'apy', 0.0) or 0.0), 1), starter=(p in (t.depth.get(p.pos) or [])[:1])) for p in expiring]
     room = limit_next - committed_next
     slot = None
     try:

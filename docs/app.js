@@ -3533,7 +3533,7 @@ function renderReview(v) {
     el('div', { class: 'rv-kicker' }, `${v.year} · ${v.club.name}`),
     el('div', { class: 'rv-record' }, v.record),
     el('div', { class: 'rv-finish' }, `${v.finish}${v.div_rank ? ` · ${ordn(v.div_rank)} in the ${v.division}` : ''}${v.slot ? ` · pick ${v.slot}` : ''}`),
-    v.expected ? el('div', { class: 'rv-ask' }, 'The owner asked for ', el('b', {}, v.expected), `. You finished at .${String(v.pct.toFixed(3)).slice(2)}.`) : el('div', { class: 'rv-ask' }, `You finished at .${String(v.pct.toFixed(3)).slice(2)}.${v.rebuilt ? ' Rebuilt from the record; the owner\'s word and the money were not kept.' : ''}`));
+    v.expected ? el('div', { class: 'rv-ask' }, 'The owner asked for ', el('b', {}, v.expected), '.') : el('div', { class: 'rv-ask' }, `You finished at .${String(v.pct.toFixed(3)).slice(2)}.${v.rebuilt ? ' Rebuilt from the record; the owner\'s word and the money were not kept.' : ''}`));
   const strip = el('div', { class: 'rv-strip' });
   for (const g of v.timeline) strip.append(g.bye ? el('div', { class: 'rv-g bye', 'data-tip': `${weekName(g.week)} · Bye` }, '') : el('div', { class: 'rv-g ' + g.result.toLowerCase(), 'data-tip': `${weekName(g.week)} · ${g.away ? 'at' : 'vs'} ${g.opp.name} · ${g.mine}–${g.theirs}` }, g.result));
   left.append(strip);
@@ -3545,10 +3545,10 @@ function renderReview(v) {
   const ub = el('div', { class: 'rv-units' });
   for (const u of v.units) { const r = u.rank || 32; const pct = 100 * (1 - (r - 1) / Math.max(1, u.of - 1)); ub.append(el('div', { class: 'rv-u', 'data-tip': `${u.metric || u.label}: ${u.value == null ? 'Not recorded' : u.value}` }, el('span', { class: 'lab' }, u.label), el('div', { class: 'bar' }, el('i', { style: `width:${pct}%;background:${r <= 8 ? 'var(--ok)' : r >= 24 ? 'var(--danger)' : 'var(--ink-3)'}` })), el('b', { class: r <= 8 ? 'good' : r >= 24 ? 'bad' : '' }, u.rank ? ordn(u.rank) : '—'))); }
   units.append(ub); content.append(units);
-  const men = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Players', el('small', {}, 'performance against role expectations')));
-  const cardOf = p => el('div', { class: 'rv-card' + (p.up ? ' up' : ' down'), onclick: () => { location.hash = '#club/player/' + p.pid; }, style: 'cursor:pointer', 'data-tip': [p.basis, p.evidence_note].filter(Boolean).join(' · ') }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, p.no != null ? p.no : p.pos), el('div', { class: 'rv-body' }, el('div', { class: 'nm' }, p.name, el('small', {}, ` ${p.pos}${p.age == null ? '' : ' · ' + p.age}`)), el('div', { class: 'ln' }, p.line)), el('div', { class: 'rv-ovr' }, p.ovr == null ? '—' : p.ovr));
+  const men = el('section', { class: 'sheet c4' }, el('h2', {}, 'The Players', el('small', {}, 'performance compared with rating expectations')));
+  const cardOf = p => el('div', { class: 'rv-card' + (p.up ? ' up' : ' down'), onclick: () => { location.hash = '#club/player/' + p.pid; }, style: 'cursor:pointer', 'data-tip': [p.basis, p.evidence_note].filter(Boolean).join(' · ') }, el('div', { class: 'plate', style: `background:${c1};color:${c2}` }, p.no != null ? p.no : p.pos), el('div', { class: 'rv-body' }, el('div', { class: 'nm' }, p.name, el('small', {}, ` ${p.pos}${p.age == null ? '' : ' · ' + p.age}`)), el('div', { class: 'ln' }, p.line)), el('div', { class: 'rv-ovr' }, el('small', {style:'display:block;font-size:11px;color:var(--ink-3)'}, 'OVR'), p.ovr == null ? '—' : p.ovr));
   men.append(el('div', { class: 'h5', style: 'padding:6px 14px 0' }, 'Above expectations')); for (const p of v.exceeded) men.append(cardOf(p));
-  if (!v.exceeded.length) men.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'No players have sufficient evidence of exceeding role expectations.'));
+  if (!v.exceeded.length) men.append(el('div', { class: 'count', style: 'padding:8px 14px' }, 'No clear above-expectation performances recorded.'));
   if (v.short.length) { men.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Below expectations')); for (const p of v.short) men.append(cardOf(p)); }
 
   content.append(men);
@@ -3557,7 +3557,8 @@ function renderReview(v) {
   const tot = Math.max(1, v.cap.limit); const w = x => `${Math.max(0, Math.min(100, 100 * x / tot)).toFixed(1)}%`;
   money.append(el('div', { class: 'rv-capbar' }, el('i', { class: 'com', style: `width:${w(v.cap.committed - v.cap.dead)}`, 'data-tip': `Committed $${(v.cap.committed - v.cap.dead).toFixed(1)}m` }), el('i', { class: 'dead', style: `width:${w(v.cap.dead)}`, 'data-tip': `Dead money $${v.cap.dead}m` }), el('i', { class: 'room', style: `width:${w(v.cap.room)}`, 'data-tip': `Room $${v.cap.room}m` })),
     el('div', { class: 'rv-caplegend' }, el('span', {}, el('i', { class: 'com' }), `Committed $${(v.cap.committed - v.cap.dead).toFixed(1)}m`), el('span', {}, el('i', { class: 'dead' }), `Dead $${v.cap.dead}m`), el('span', {}, el('i', { class: 'room' }), `Room $${v.cap.room}m`), v.cap.rollover ? el('span', { class: 'count' }, `incl. $${v.cap.rollover}m rollover`) : ''));
-  money.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Deals up'));
+  money.append(el('div', { class: 'h5', style: 'padding:10px 14px 0' }, 'Expiring Contracts'));
+  money.append(el('div', {class:'rv-pend count'}, el('span', {class:'pos'}, 'Pos'), el('span', {class:'nm'}, 'Player'), el('span', {}, 'OVR'), el('span', {class:'apy'}, 'Annual avg.')));
   for (const p of v.pending) money.append(el('div', { class: 'rv-pend' + (p.starter ? ' starter' : ''), onclick: () => { location.hash = '#personnel/extensions'; }, style: 'cursor:pointer' }, el('span', { class: 'pos' }, p.pos), el('span', { class: 'nm' }, p.name, p.starter ? el('small', {}, ' · starter') : ''), el('b', {}, p.ovr), el('span', { class: 'apy' }, `$${p.apy}m`)));
   if (!v.pending.length) money.append(el('div', { class: 'count', style: 'padding:6px 14px' }, 'Nobody comes off contract.'));
   content.append(money);
