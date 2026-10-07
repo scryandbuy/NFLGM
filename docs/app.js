@@ -3781,14 +3781,14 @@ function renderStats(v) {
       const all = sortedStatsRows(rows, state), size = 40;
       state.page = Math.min(state.page, Math.max(0, Math.ceil(all.length / size) - 1));
       const start = state.page * size, visible = all.slice(start, start + size);
-      const t = el('table', {class:'tbl'});
-      const heading = (label, sort) => el('th', {class:typeof sort === 'number' ? 'n' : '', 'aria-sort':state.sort === sort ? state.ascending ? 'ascending' : 'descending' : 'none'}, el('button', {class:'btn quiet', style:typeof sort === 'number' ? 'text-align:right;padding-right:0' : 'text-align:left;padding-left:0', 'aria-label':`Sort by ${label}`, onclick:() => {state.ascending = state.sort === sort ? !state.ascending : typeof sort === 'string'; state.sort = sort; state.page = 0; draw();}}, label));
+      const t = el('table', {class:'tbl stats-table'});
+      const heading = (label, sort) => el('th', {class:typeof sort === 'number' ? 'n' : '', 'aria-sort':state.sort === sort ? state.ascending ? 'ascending' : 'descending' : 'none'}, el('button', {class:'stats-sort', 'aria-label':`Sort by ${label}`, onclick:() => {state.ascending = state.sort === sort ? !state.ascending : typeof sort === 'string'; state.sort = sort; state.page = 0; draw();}}, label));
       t.append(el('tr', {}, el('th', {class:'n'}, '#'), heading(team ? 'Team' : 'Player', 'name'), ...(team ? [] : [heading('Team', 'team')]), ...columns.map((c, i) => heading(c, i))));
       visible.forEach((r, i) => t.append(statsTeamRow('tr', r, el('td', {class:'n'}, start + i + 1),
         el('td', {}, team ? clubLink(r.club.abbr, r.club.name) : el('button', {class:'who', onclick:() => {location.hash = '#club/player/' + r.pid;}}, el('div', {class:'no'}, r.pos), el('div', {class:'nm'}, r.name))),
         ...(team ? [] : [el('td', {}, r.team ? stripe(r.team) : '')]), ...r.row.map((x, j) => el('td', {class:'n'}, team && j === 5 ? `${x > 0 ? '+' : ''}${x.toFixed(2)}` : String(x))))));
       if (!visible.length) t.append(el('tr', {}, el('td', {colspan:String(columns.length + (team ? 2 : 3))}, el('div', {class:'empty'}, state.query ? 'Nothing matches.' : 'No statistics retained for this season.'))));
-      body.append(t);
+      body.append(el('div', {class:'stats-table-scroll'}, t));
       if (all.length) body.append(el('div', {class:'foot'},
         el('button', {class:'btn quiet', disabled:state.page === 0 ? '' : null, onclick:() => {state.page--; draw();}}, 'Previous'),
         el('button', {class:'btn quiet', disabled:start + size >= all.length ? '' : null, onclick:() => {state.page++; draw();}}, 'Next'),

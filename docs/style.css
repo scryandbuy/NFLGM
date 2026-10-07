@@ -3191,3 +3191,11 @@ dialog.retain-dialog .retain-dialog-actions{flex-wrap:wrap}
 .character-report-item:last-child{border-bottom:0}
 .character-report-item>b{display:block;margin-bottom:2px}
 .character-report-source,.character-report-explanation{display:block;margin:4px 0 0;padding:0;color:var(--muted);font-size:13px;line-height:1.4;text-align:left}
+
+/* Stats sort labels align with their values without cramped button outlines. */
+.stats-table-scroll{width:100%;overflow-x:auto}
+.stats-table th{white-space:nowrap}
+.stats-table .stats-sort{display:inline-flex;align-items:center;justify-content:flex-start;width:auto;min-width:max-content;max-width:none;margin:0;padding:6px 0;border:0;background:transparent;color:inherit;font:inherit;letter-spacing:inherit;white-space:nowrap}
+.stats-table th.n .stats-sort{justify-content:flex-end}
+.stats-table .stats-sort:hover,.stats-table th[aria-sort="ascending"] .stats-sort,.stats-table th[aria-sort="descending"] .stats-sort{color:var(--club-2)}
+.stats-table .stats-sort:focus-visible{outline:2px solid var(--club-2);outline-offset:3px}
