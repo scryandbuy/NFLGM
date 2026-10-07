@@ -1235,14 +1235,14 @@ class Session:
         __import__("fa_window").set_closed(L, True)
 
     def _resign_card(self):
-        """The calendar sits on Re-sign: one card with your expiring players by class, the tag price on each UFA, tender
-        or not on each RFA, the ERFAs kept at the minimum. Decide on the Extensions page; the advance locks it."""
+        """The calendar sits on Re-sign with UFA tag and RFA tender choices.
+        Decide on the Extensions page; the advance locks the choices."""
         L = self.L; key_ = f"resign-{L.year}"
         if IE.seen(L, key_): return
         sheet = TG.user_resign_sheet(L)
         from views import surname
         sections = []
-        for kind, title, price in [('ufa', 'Unrestricted free agents', 'tag_price'), ('rfa', 'Restricted free agents', 'tender_price'), ('erfa', 'Exclusive rights: kept at the minimum', None)]:
+        for kind, title, price in [('ufa', 'Unrestricted free agents', 'tag_price'), ('rfa', 'Restricted free agents', 'tender_price')]:
             rows = [[inbox_player(L.player(r['pid']), r['name']), r['pos'], str(r.get('ovr', '—'))] + ([f"${r[price]}m"] if price else []) for r in sheet[kind]]
             if rows: sections.append(IB.mail_section(title, rows, ['Player', 'Position', 'OVR'] + (['Tag price' if kind == 'ufa' else 'Tender price'] if price else [])))
         sections.append(IB.mail_section('Before advancing', [

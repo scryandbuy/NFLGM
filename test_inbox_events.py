@@ -51,7 +51,7 @@ class EventTests(unittest.TestCase):
   self.assertEqual(len(L.inbox),1)
  def test_resign_clear_does_not_repost(self):
   L=league();s=session(L)
-  with patch.dict(ns,TG=N(user_resign_sheet=lambda L:dict(ufa=[],rfa=[],erfa=[],room=10))):
+  with patch.dict(ns,TG=N(user_resign_sheet=lambda L:dict(ufa=[],rfa=[],room=10))):
    s._resign_card();s.inbox_read(L.inbox[0]['id']);s.inbox_clear_read();s._resign_card()
   self.assertFalse(L.inbox)
  def test_draft_user_has_one_mail_cpu_has_one(self):

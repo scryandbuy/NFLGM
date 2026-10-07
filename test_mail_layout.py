@@ -233,14 +233,14 @@ class MailLayoutTests(unittest.TestCase):
         league = fixture(); league.user_team = 'GB'
         p = player(league, 'a')
         row = dict(pid='a', name=p.name, pos=p.pos, ovr=80)
-        sheet = dict(ufa=[dict(row, tag_price=18.5)], rfa=[dict(row, tender_price=3.2)], erfa=[row], room=20)
+        sheet = dict(ufa=[dict(row, tag_price=18.5)], rfa=[dict(row, tender_price=3.2)], room=20)
         with patch('tags.user_resign_sheet', return_value=sheet):
             Session._resign_card(NS(L=league))
         sections = league.inbox[-1]['payload']['mail_sections']
-        self.assertEqual(len(sections), 4)
+        self.assertEqual(len(sections), 3)
         self.assertEqual(sections[0]['rows'][0][-1]['text'], '$18.5m')
         self.assertEqual(sections[1]['rows'][0][-1]['text'], '$3.2m')
-        self.assertIn('Exclusive rights', sections[2]['title'])
+        self.assertIn('Before advancing', sections[2]['title'])
 
     def test_injury_decision_has_readable_labels_and_player_links(self):
         import injury_status as IS

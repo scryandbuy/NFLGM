@@ -20,7 +20,7 @@ class RetentionTests(unittest.TestCase):
         self.rfa = player(self.L, 'rfa'); self.rfa.accrued = 3
         self.other = player(self.L, 'other'); self.other.accrued = 3
         self.ufa = player(self.L, 'ufa')
-        self.erfa = player(self.L, 'erfa'); self.erfa.accrued = 2
+        self.young_rfa = player(self.L, 'young_rfa'); self.young_rfa.accrued = 2
 
     def test_tenders_explicit_persistent_and_withdrawable(self):
         self.assertFalse(TG.user_resign_sheet(self.L)['rfa'][0]['tender'])
@@ -44,13 +44,14 @@ class RetentionTests(unittest.TestCase):
         self.assertIn('rfa', self.L.free_agents)
         self.assertIsNone(self.other.team)
         self.assertEqual(self.other.fa_class, 'UFA')
-        self.assertEqual(self.erfa.fa_class, 'exclusive_rights')
+        self.assertIsNone(self.young_rfa.team)
+        self.assertEqual(self.young_rfa.fa_class, 'UFA')
         self.assertTrue(EXT.eligible(self.rfa, self.L))
         self.assertEqual(TG.user_resign_sheet(self.L)['rfa'], [])
 
     def test_reject_wrong_class_team_and_closed_window(self):
         self.assertFalse(TG.user_tender(self.L, 'ufa')['ok'])
-        self.assertFalse(TG.user_tender(self.L, 'erfa')['ok'])
+        self.assertTrue(TG.user_tender(self.L, 'young_rfa')['ok'])
         rival = player(self.L, 'rival', team='MIN'); rival.accrued = 3
         self.assertFalse(TG.user_tender(self.L, 'rival')['ok'])
         self.assertFalse(TG.user_tag(self.L, 'rfa')['ok'])
@@ -68,6 +69,31 @@ class RetentionTests(unittest.TestCase):
         with patch.object(VP, 'rail', return_value={}):
             self.assertNotIn('ufa', [r['pid'] for r in VP.retain(None, self.L, 'GB')['ufa']])
         self.assertTrue(EXT.eligible(self.ufa, self.L))
+
+    def test_young_restricted_player_can_be_tendered_and_other_can_walk(self):
+        self.assertEqual(self.young_rfa.accrued, 2)
+        self.assertIn('young_rfa', [r['pid'] for r in TG.user_resign_sheet(self.L)['rfa']])
+        self.assertTrue(TG.user_tender(self.L, 'young_rfa')['ok'])
+        TG.run(self.L, np.random.default_rng(4))
+        self.assertEqual(self.young_rfa.fa_class, 'tendered')
+        self.assertEqual(self.young_rfa.tender_team, 'GB')
+        self.assertIn(self.young_rfa.pid, self.L.free_agents)
+        self.assertIsNone(self.other.team)
+        self.assertEqual(self.other.fa_class, 'UFA')
+
+    def test_old_exclusive_rights_labels_normalize_on_load(self):
+        self.young_rfa.fa_class = 'ERFA'
+        signed = player(self.L, 'old_signed'); signed.accrued = 2
+        signed.contract = Contract(years=1, base=[1.5], signing_bonus=0, signed=self.L.year)
+        signed.fa_class = 'exclusive_rights'
+        street = player(self.L, 'old_street', team=None); street.accrued = 2
+        street.fa_class = 'ERFA'; self.L.free_agents.append(street.pid)
+        loaded = League.load(self.L.save())
+        self.assertEqual(loaded.player('young_rfa').fa_class, 'RFA')
+        self.assertEqual(loaded.player('old_signed').fa_class, 'under_contract')
+        self.assertIsNotNone(loaded.player('old_signed').contract)
+        self.assertEqual(loaded.player('old_street').fa_class, 'UFA')
+        self.assertIn('old_street', [p.pid for p in TG.classify(loaded)['UFA']])
 
     def test_cap_reserves_pending_tenders(self):
         price = TG.tender_price(self.rfa, 301.2)

@@ -234,22 +234,20 @@ class FinancialConsumerTests(unittest.TestCase):
                 else:
                     self.assertIsNone(p.team); self.assertIn(p.pid,L.free_agents)
 
-    def test_marginal_tender_declines_while_user_choice_and_erfa_are_preserved(self):
-        for mode in ('cpu_rfa','user_rfa','erfa'):
+    def test_marginal_tender_declines_while_user_young_rfa_choice_is_preserved(self):
+        for mode in ('cpu_rfa','user_rfa','young_rfa'):
             with self.subTest(mode=mode):
                 L,t=self.roster(); L.set_phase('offseason'); t.cap.paid_week=0
                 p=t.by_pos('WR')[-1]; p.contract=None
-                p.accrued=2 if mode=='erfa' else 3
+                p.accrued=2 if mode=='young_rfa' else 3
                 t.sync_cap(); price=TAG.tender_price(p,t.cap.cap)
                 t.cap.cap=t.cap.charges(t.phase)+price+.1
-                if mode=='user_rfa': L.user_team=t.abbr; L.user_tenders=[p.pid]
+                if mode in ('user_rfa','young_rfa'): L.user_team=t.abbr; L.user_tenders=[p.pid]
                 result=TAG.run(L,np.random.default_rng(12))
                 if mode=='cpu_rfa':
                     self.assertEqual(result['tendered'],[]); self.assertIsNone(p.team)
-                elif mode=='user_rfa':
+                elif mode in ('user_rfa','young_rfa'):
                     self.assertEqual(result['tendered'][0][1],p)
-                else:
-                    self.assertEqual(result['reserved'][0][1],p)
 
 
 if __name__ == '__main__': unittest.main()

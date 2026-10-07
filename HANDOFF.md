@@ -36,7 +36,7 @@ cap, rosters at a mean of 50.
     7  REGRESSION          real delta-method aging curves
     8  ROLL THE YEAR       cap projects forward, contracts tick down
     9  CAP COMPLIANCE      cuts and simple restructures
-   10  RE-SIGN PHASE       one tag, tenders, exclusive rights
+   10  RE-SIGN PHASE       one tag and RFA tenders
    11  FREE AGENCY         three phases, bids, inbox, offer sheets
    12  CUT-DOWN TO 53      roster_construction wired
    13  THE DRAFT           **NOT BUILT** — the biggest gap

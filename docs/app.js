@@ -2447,7 +2447,6 @@ function renderRetain(v) {
   if(!rows.length) body.append(el('tr',{},el('td',{colspan:6},el('div',{class:'empty'},v.open?`No ${retainTab.toUpperCase()}s awaiting a retention decision.`:'Retain Players opens during the offseason before free agency.'))));
   table.append(body);board.append(el('div',{class:'retain-table-wrap'},table));
   board.append(el('div',{class:'retain-foot'},rfa?'Chosen tenders activate when Franchise Tag and Re-Sign is advanced. Matching rights remain active through the offer-sheet window.':'Franchise-tag costs appear before confirmation. Extension opens the existing contract negotiation.'));
-  if(rfa&&v.erfa.length)board.append(el('div',{class:'retain-foot'},`${v.erfa.length} exclusive-rights player${v.erfa.length===1?'':'s'} will be retained automatically at the minimum when affordable.`));
   page.append(board);
 }
 
