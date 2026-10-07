@@ -56,7 +56,7 @@ class RecapIntentTests(unittest.TestCase):
             result = R.review_choices([rec], after, [], (first, []), final_margin=margin)[0]
             self.assertEqual(len(result['findings']), 1)
             self.assertEqual(result['findings'][0]['verdict'], 'positive')
-            self.assertIn('protected the win', result['findings'][0]['text'])
+            self.assertIn('kept the clock moving', result['findings'][0]['text'])
 
     def test_clock_control_is_not_auto_success_for_a_win(self):
         rows = [play('run', 1, score_diff=14, snap_interval=20)] * 10

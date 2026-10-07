@@ -326,27 +326,28 @@ def clock_control_finding(rows, previous, final_margin):
                     text='Too few recorded snaps with a two-score lead to judge clock control.')
     share = now['runs'] / now['snaps']
     ypc = now['run_yards'] / max(1, now['runs'])
-    text = (f"While leading by at least two scores, we ran on {now['runs']}/{now['snaps']} snaps "
-            f"({share:.0%}), gaining {ypc:.1f} yards per designed run.")
-    if old['snaps']:
-        text += f" Before halftime: {old['runs']}/{old['snaps']} snaps were designed runs ({old['runs']/old['snaps']:.0%})."
+    text = 'We leaned on the run' if share >= .5 else 'We continued to mix runs and passes'
     if n >= 4:
-        text += f' In-bounds snap intervals averaged {seconds:.1f} seconds across {n} comparable intervals.'
+        text += ' and kept the clock moving.' if seconds >= 32 else ', but snapped quickly instead of using more clock.'
     else:
-        text += ' Too few comparable snap intervals to verify the pace.'
-    text += f" We committed {now['turnovers']} turnovers during these snaps."
-    if final_margin is not None:
-        text += f' Final margin: {final_margin:+d}.'
+        text += '. There is too little timing information to judge the pace.'
+    if now['runs']:
+        text += f' The ground game averaged {ypc:.1f} yards per carry'
+        text += (', though a turnover gave the opponent another opportunity.' if now['turnovers'] == 1
+                 else ', though turnovers gave the opponent more opportunities.' if now['turnovers']
+                 else '.')
+    elif now['turnovers']:
+        text += ' A turnover gave the opponent another opportunity.' if now['turnovers'] == 1 else ' Turnovers gave the opponent more opportunities.'
     grade = 'limited'
     if final_margin is not None and final_margin <= 0:
-        grade = 'negative'; text += ' The lead was not protected.'
+        grade = 'negative'; text += ' We did not hold the lead.'
     elif n >= 4 and final_margin is not None:
         if now['turnovers']:
-            grade = 'mixed'; text += ' Giveaways undermined clock control.'
+            grade = 'mixed'
         elif share >= .5 and seconds >= 32:
-            grade = 'positive'; text += ' The offense used the clock and protected the win.'
+            grade = 'positive'
         else:
-            grade = 'mixed'; text += ' The results do not establish all parts of the clock-control objective.'
+            grade = 'mixed'
     return dict(label='Clock control', verdict=grade, text=text)
 
 
@@ -490,7 +491,7 @@ def review_choices(pre, own, against, before=None, league=None, final_margin=Non
         summary = conclusion(items)
         if rec.get('overridden'):
             summary = (summary + ' ' if items else '') + 'Your manual settings replaced ' + ', '.join(k.replace('_', ' ') for k in rec['overridden']) + '; those choices are reviewed under Your saved plan.'
-        findings.append(dict(title=rec['text'], conclusion=summary, findings=items))
+        findings.append(dict(title=('Protect the lead: run out the clock' if rec.get('review_key') == 'clock_control' or rec['text'] == 'Up two scores: shorten the game, run it' else rec['text']), conclusion=summary, findings=items))
     seen = {}
     for rec in findings:
         for item in rec['findings']:
