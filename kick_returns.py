@@ -104,8 +104,56 @@ def _punt_breakaway(start, gained, returner, coverage, punter, safety_spot, rng,
     return dict(yards=float(start), tackler=None, contacts=trace)
 
 
+def _kickoff_breakaway(start, gained, returner, coverage, kicker, rng, rate):
+    """Coarse lane geometry, not tracked coordinates: trailing wave, two
+    outside contain players and the actual kicker. Contact requires an intercept.
+    Dynamic-kickoff coverage starts at the receiving 40; outside players can
+    retain leverage while the returner clears the inside wave.
+    """
+    import plays
+    weights = {'speed_rating': .8, 'accel_rating': .2}
+    runner_speed = 4. + 5. * rate(returner, weights)
+    lane = float(rng.uniform(-18., 18.))
+    lead = float(np.clip(gained * .35, 2., 10.))
+    unique = {p.get('pid') or id(p): p for p in coverage
+              if p.get('pid') != returner.get('pid') and
+              (not kicker or p.get('pid') != kicker.get('pid'))}
+    players = sorted(unique.values(), key=lambda p: (-rate(p, weights), str(p.get('pid', ''))))
+    contacts = []
+    for index, defender in enumerate(players):
+        contain = index in (2, 3)
+        ahead = float(rng.uniform(25., 40.)) - gained if contain else -lead
+        lateral = abs((-1. if index == 2 else 1.) * 18. - lane) if contain else 0.
+        contacts.append((defender, 'coverage', 'contain' if contain else 'trail', ahead, lateral))
+    if kicker:
+        contacts.append((kicker, 'kicker', 'last', start - 35. - gained, abs(lane)))
+    reachable = []
+    trace = []
+    for defender, role, leverage, ahead, lateral in contacts:
+        speed = 4. + 5. * rate(defender, weights)
+        reaction = max(0., .6 * (1. - rate(defender, {'pursuit_rating': .7, 'awareness_rating': .3})))
+        travel = _punt_intercept(runner_speed, speed, ahead, lateral, reaction)
+        record = dict(pid=defender.get('pid'), role=role, leverage=leverage,
+                      ahead=round(ahead, 1), lateral=round(lateral, 1), reachable=False)
+        if travel is None or gained + travel >= start:
+            trace.append(record)
+        else:
+            record.update(reachable=True, at=round(gained + travel, 1))
+            reachable.append((gained + travel, defender, record))
+    attack = max(rate(returner, YAC['carrier']['elusive']), rate(returner, YAC['carrier']['power']))
+    attack += .30 * (rate(returner, YAC['carrier']['vision']) - .70)
+    for contact, defender, record in sorted(reachable, key=lambda row: (row[0], str(row[1].get('pid', '')))):
+        missed = rng.random() <= plays.logistic(plays.edge(attack, rate(defender, YAC['tackler']['wrap'])) - .230, k=7.)
+        record['missed'] = bool(missed)
+        trace.append(record)
+        if not missed:
+            return dict(yards=min(float(start), contact + max(0., float(rng.normal(.9, .8)))),
+                        tackler=defender, contacts=trace)
+    return dict(yards=float(start), tackler=None, contacts=trace)
+
+
 def resolve(start, distance, returner, rng, rate, coverage=(), blockers=(), event='kick_return', weather=1.,
-            punt_safety=None, punt_safety_spot=None):
+            punt_safety=None, punt_safety_spot=None, kickoff_safety=None):
     """Resolve legal return yards, a potential fumble, and the end-zone boundary.
 
     start is the receiving team's yards to goal. Existing event-specific
@@ -120,6 +168,7 @@ def resolve(start, distance, returner, rng, rate, coverage=(), blockers=(), even
     # Kickoffs retain their existing complete-breakaway opportunity rate.
     breakout = False
     punt_chase = None
+    kickoff_chase = None
     if returner and coverage and 12 <= gain < start:
         skill = rate(returner, {'kick_ret_rating': .5, 'bcv_rating': .25, 'accel_rating': .25})
         base, upper = (.080, .140) if event == 'punt_return' else (.045, .090)
@@ -129,10 +178,8 @@ def resolve(start, distance, returner, rng, rate, coverage=(), blockers=(), even
                 chase = _punt_breakaway(start, gain, returner, coverage, punt_safety, punt_safety_spot, rng, rate)
                 punt_chase = chase
             else:
-                import plays
-                pursuers = sorted(coverage, key=lambda p: -rate(p, YAC['tackler']['angle']))[:2]
-                chase = plays.resolve_yards_after(returner, pursuers, start, rng,
-                                                 contact_at=gain, in_space=True, track_tackler=True)
+                chase = _kickoff_breakaway(start, gain, returner, coverage, kickoff_safety, rng, rate)
+                kickoff_chase = chase
             gain = chase['yards']
             breakout = True
     # Pick the coverage player making contact before testing his impact.
@@ -140,12 +187,16 @@ def resolve(start, distance, returner, rng, rate, coverage=(), blockers=(), even
     tackler = coverage[int(rng.integers(len(coverage)))] if coverage else None
     if punt_chase is not None and punt_chase['tackler'] is not None:
         tackler = punt_chase['tackler']
+    if kickoff_chase is not None and kickoff_chase['tackler'] is not None:
+        tackler = kickoff_chase['tackler']
     impact = rate(tackler, YAC['tackler']['impact']) if tackler is not None else .70
     fum = events.fumble_check(returner, event, rng, rate, hit_power=impact, env_mult=weather) if returner else None
     result = dict(returner=returner.get('pid'), return_start=float(start), fumble=False, fumble_lost=False,
                   breakaway_opportunity=breakout)
     if punt_chase is not None:
         result['punt_pursuit'] = punt_chase['contacts']
+    if kickoff_chase is not None:
+        result['kickoff_pursuit'] = kickoff_chase['contacts']
     if fum:
         # Unforced handling errors occur at the catch. A contact fumble must
         # happen before crossing the goal; no fumble after a touchdown.

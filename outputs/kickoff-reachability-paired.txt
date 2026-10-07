@@ -1,0 +1,285 @@
+production score computed for 1,436 of 2,608 players
+{
+  "baseline": {
+    "counts": {
+      "kicks": 12000,
+      "returns": 10115,
+      "td": 5,
+      "opportunity": 308,
+      "yards": 223935.4999999995
+    },
+    "examples": [
+      {
+        "pid": "P2603",
+        "yards": 96.4
+      },
+      {
+        "pid": "N2029WR019",
+        "yards": 96.4
+      },
+      {
+        "pid": "N2030WR004",
+        "yards": 96.3
+      },
+      {
+        "pid": "N2031WR006",
+        "yards": 96.3
+      }
+    ],
+    "contacts": {},
+    "scorers": [
+      {
+        "pid": "P2603",
+        "name": "Jaylin Lane",
+        "td": 1,
+        "speed": 92.32404328254107
+      },
+      {
+        "pid": "N2029WR019",
+        "name": "JK Barr",
+        "td": 1,
+        "speed": 94.22235830349634
+      },
+      {
+        "pid": "N2030WR004",
+        "name": "Austin Carter",
+        "td": 1,
+        "speed": 99.0
+      },
+      {
+        "pid": "N2031WR006",
+        "name": "Shay Green",
+        "td": 1,
+        "speed": 92.75747574254804
+      },
+      {
+        "pid": "P1138",
+        "name": "Travis Hunter",
+        "td": 1,
+        "speed": 92.23959811918006
+      }
+    ]
+  },
+  "candidate": {
+    "counts": {
+      "kicks": 12000,
+      "returns": 10115,
+      "td": 103,
+      "opportunity": 308,
+      "yards": 233632.4999999998
+    },
+    "examples": [
+      {
+        "pid": "N2030HB012",
+        "yards": 96.3
+      },
+      {
+        "pid": "N2028WR011",
+        "yards": 90.2
+      },
+      {
+        "pid": "N2030WR004",
+        "yards": 96.4
+      },
+      {
+        "pid": "N2031HB004",
+        "yards": 96.5
+      }
+    ],
+    "contacts": {
+      "trail unreachable": 2464,
+      "last reachable": 168,
+      "contain reachable": 266,
+      "contain unreachable": 240,
+      "last unreachable": 2
+    },
+    "scorers": [
+      {
+        "pid": "N2030WR004",
+        "name": "Austin Carter",
+        "td": 13,
+        "speed": 99.0
+      },
+      {
+        "pid": "N2028WR011",
+        "name": "Anthony Hebert",
+        "td": 6,
+        "speed": 93.51406669138144
+      },
+      {
+        "pid": "N2029HB008",
+        "name": "Dre Kepler",
+        "td": 6,
+        "speed": 91.60817150827812
+      },
+      {
+        "pid": "N2028WR013",
+        "name": "Maraad Pons",
+        "td": 5,
+        "speed": 92.98485216988139
+      },
+      {
+        "pid": "P1700",
+        "name": "Marcus Jones",
+        "td": 5,
+        "speed": 88.33639498024118
+      },
+      {
+        "pid": "N2029WR006",
+        "name": "Peyton Browder",
+        "td": 4,
+        "speed": 93.80587497540795
+      },
+      {
+        "pid": "N2031WR001",
+        "name": "Patrick Napier",
+        "td": 4,
+        "speed": 94.71123934455925
+      },
+      {
+        "pid": "N2029WR025",
+        "name": "Danny Schmidt",
+        "td": 4,
+        "speed": 99.0
+      },
+      {
+        "pid": "N2031HB004",
+        "name": "Peyton Martin",
+        "td": 3,
+        "speed": 90.65402681911598
+      },
+      {
+        "pid": "N2030WR007",
+        "name": "Carl Odinjor",
+        "td": 3,
+        "speed": 93.06457686827258
+      },
+      {
+        "pid": "P1138",
+        "name": "Travis Hunter",
+        "td": 3,
+        "speed": 92.23959811918006
+      },
+      {
+        "pid": "P0794",
+        "name": "Jaylen Waddle",
+        "td": 3,
+        "speed": 90.30890441028285
+      },
+      {
+        "pid": "P2107",
+        "name": "Makai Lemon",
+        "td": 3,
+        "speed": 88.46137085110888
+      },
+      {
+        "pid": "N2029WR011",
+        "name": "Brandon Wall III",
+        "td": 3,
+        "speed": 93.27478432031685
+      },
+      {
+        "pid": "N2030HB006",
+        "name": "DeAndre Lee Jr.",
+        "td": 3,
+        "speed": 89.19714275823698
+      },
+      {
+        "pid": "P2371",
+        "name": "Benjamin Morrison",
+        "td": 3,
+        "speed": 91.403914506269
+      },
+      {
+        "pid": "N2031WR015",
+        "name": "Ethan Barnes",
+        "td": 3,
+        "speed": 90.81404619667263
+      },
+      {
+        "pid": "P1810",
+        "name": "CJ Donaldson",
+        "td": 3,
+        "speed": 92.3123866738762
+      },
+      {
+        "pid": "N2029WR019",
+        "name": "JK Barr",
+        "td": 3,
+        "speed": 94.22235830349634
+      },
+      {
+        "pid": "P0482",
+        "name": "Luther Burden III",
+        "td": 3,
+        "speed": 91.2524
+      },
+      {
+        "pid": "N2031WR013",
+        "name": "Jailen Lono-Wong",
+        "td": 3,
+        "speed": 95.8621345220933
+      },
+      {
+        "pid": "N2030HB012",
+        "name": "Maruio Hall",
+        "td": 2,
+        "speed": 91.0586862147105
+      },
+      {
+        "pid": "N2031WR014",
+        "name": "RJ Berry",
+        "td": 2,
+        "speed": 90.68663275460452
+      },
+      {
+        "pid": "P2603",
+        "name": "Jaylin Lane",
+        "td": 2,
+        "speed": 92.32404328254107
+      },
+      {
+        "pid": "N2031WR006",
+        "name": "Shay Green",
+        "td": 2,
+        "speed": 92.75747574254804
+      },
+      {
+        "pid": "N2029WR014",
+        "name": "Payton Tracy",
+        "td": 2,
+        "speed": 97.63927918117143
+      },
+      {
+        "pid": "N2029WR009",
+        "name": "Gavin Fordham",
+        "td": 2,
+        "speed": 90.07222155895042
+      },
+      {
+        "pid": "N2031WR026",
+        "name": "Cameron Cogshell",
+        "td": 2,
+        "speed": 93.30772621462071
+      },
+      {
+        "pid": "N2029HB010",
+        "name": "Roger Shavers Jr.",
+        "td": 1,
+        "speed": 89.63230026081702
+      },
+      {
+        "pid": "N2031WR003",
+        "name": "TK Livingston",
+        "td": 1,
+        "speed": 92.29039157103904
+      },
+      {
+        "pid": "N2028WR007",
+        "name": "Ernest Seidl",
+        "td": 1,
+        "speed": 92.05990314562133
+      }
+    ]
+  }
+}

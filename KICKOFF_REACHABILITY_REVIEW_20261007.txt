@@ -1,0 +1,44 @@
+Kickoff reachability correction (2026-10-07)
+Base: 6c26f20. Kickoff-only; no changes to shared receiving/rushing YAC or punt behavior.
+
+Confirmed defect: every breakaway was forced through two tackle contacts selected
+by ratings, without checking whether defenders could reach the returner.
+
+Correction: coarse conditional lane geometry gives the cleared inside wave a
+trailing position, retains two outside contain players, and uses the actual kicker.
+The existing analytic interception solver requires physical reach before a tackle.
+It preserves tackle rating contests; beating a reachable tackler is not automatic.
+Coverage/return selection and opportunity probability are unchanged.
+
+NFL primary alignment source: 2025 Rule 6,
+https://operations.nfl.com/media/ntif5hxb/2025-nfl-rulebook-final.pdf
+Coverage begins at receiving 40; kicker at own 35. The candidate samples coarse
+post-lane positions, NOT actual tracked coordinates. Contain starts 25-40 yards
+from catch before gained yards; kicker safety reference is own 35. These are
+simplifications, not measured NFL tracking estimates.
+
+Controlled evidence: 43 tests passed. Faster trailing defenders can catch; slower
+trailing defenders cannot; slower ahead/contain defenders can stop; passed contain
+is not teleported forward; actual kicker can both stop and miss; short returns do
+not enter new geometry. Existing score/penalty/fumble/clock tests pass.
+
+Paired actual-save probe: audit_kickoff_reachability.py, 12000 individual fixed-seed
+kicks per variant, actual units and kicker, short-kick bias 0. Both variants had
+10115 returns and 308 breakaway opportunities. Baseline 5 TD, candidate 103 TD.
+Average 22.14 -> 23.10. Raw report includes all individual scorers.
+Candidate Austin Carter (99 speed) scored13 in roughly375 assigned kickoffs;
+Anthony Hebert and Dre Kepler6 each. Multiple other players1-5. This is repeated
+opportunity testing, NOT a forecast of individual season totals.
+Logged contacts:266 reachable contain,240 unreachable contain,168 reachable kicker,
+2 unreachable kicker,2464 unreachable trailing players. Trace stops once tackled,
+so these are evaluated/logged contacts, not every potential downstream defender.
+
+Full-game gate:16games,155kickreturns,1KR TD,23.199average;no score-conservation
+violations. Several existing broad register thresholds missed (see JSON); this
+small candidate-only gate does not establish league balance or comparative effects.
+
+Uncertainty: the rate moves substantially (~1.02% in direct probe). No coefficient
+was tuned to a touchdown target. Coarse containment sampling, no sideline-out event,
+and static pursuit after a broken tackle limit realism. Full-season balance is NOT
+verified. Review these explicit limits before integration; do not describe as fully
+validated NFL-rate calibration. Existing save/historical results are unchanged.

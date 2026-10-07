@@ -39,10 +39,10 @@ class FollowupTests(unittest.TestCase):
     def test_return_breakaway_uses_pursuit_and_bounds(self):
         r=dict(pid='r');cov=[dict(pid='a'),dict(pid='b')]
         rng=NS(random=lambda:0,integers=lambda n:0)
-        with patch('events.fumble_check',return_value=None),patch.object(P,'resolve_yards_after',return_value=dict(yards=95,touchdown=True)) as chase:
+        with patch('events.fumble_check',return_value=None),patch.object(K,'_kickoff_breakaway',return_value=dict(yards=95,tackler=None,contacts=[])) as chase:
             out=K.resolve(95,25,r,rng,P.rate,cov)
             self.assertTrue(out['touchdown']);self.assertEqual(out['new_yardline'],0)
-            self.assertEqual(len(chase.call_args.args[1]),2)
+            self.assertEqual(len(chase.call_args.args[3]),2)
     def test_ordinary_return_no_extra_yards(self):
         rng=NS(random=lambda:1,integers=lambda n:0)
         with patch('events.fumble_check',return_value=None),patch.object(P,'resolve_yards_after') as chase:

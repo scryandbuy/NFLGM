@@ -1553,7 +1553,7 @@ def kickoff(returner, rng, rate_fn, AVG=0.70, from_50=False, kicking=(), receivi
         landing = float(np.clip(95. + 6. * power, 90., 98.))
     landing = float(np.clip(landing + min(0, kick_offset), 1., 99.))
     outcome = KR.resolve(landing, ret, returner or {}, rng, rate_fn, kicking, receiving,
-                         event='kick_return', weather=ENV.fumble_mult)
+                         event='kick_return', weather=ENV.fumble_mult, kickoff_safety=kicker)
     return dict(type='kickoff', touchback=False, short_kick=short, **outcome)
 
 
