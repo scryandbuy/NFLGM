@@ -112,8 +112,7 @@ def capture(league, played, user):
             qb = (dr.off or {}).get('qb', {}).get('pid'); rb = ((dr.off or {}).get('rb') or {}).get('pid')
             plays = []
             start_quarter = int(getattr(dr, 'start_quarter', dr.quarter))
-            if start_quarter > previous_quarter:
-                plays.append(write_play(league, dict(type='period', quarter=start_quarter), qb, off_abbr, def_abbr))
+            pending_period = start_quarter > previous_quarter
             for p in dr.log:
                 if not isinstance(p, dict): continue
                 play_pos = p.get('possession', pos)
@@ -123,6 +122,14 @@ def capture(league, played, user):
                                    p.get('quarter') or (min(4, int((3600 - float(p['clock'])) // 900) + 1)
                                                        if p.get('clock') is not None else
                                                        (plays[-1].get('quarter', start_quarter) if plays else start_quarter)))
+                # A kickoff can start in the old quarter and finish in the new
+                # one. Announce the new period only after that return is shown.
+                if pending_period and line['quarter'] >= start_quarter:
+                    if p.get('type') != 'period':
+                        marker = write_play(league, dict(type='period', quarter=start_quarter), qb, off_abbr, def_abbr)
+                        marker['quarter'] = start_quarter
+                        plays.append(marker)
+                    pending_period = False
                 plays.append(line)
             previous_quarter = max(start_quarter, scoring_quarter(dr))
             pts = int(getattr(dr, 'points', 0) or 0)
