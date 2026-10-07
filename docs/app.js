@@ -130,6 +130,32 @@ async function loadEngineFiles(manifest, fs, fetchFile = fetch, progress = say) 
   }
 }
 
+async function loadSessionFromBlob(source, onStage = () => {}) {
+  // Passing a large save through py.globals.set makes Pyodide convert the
+  // entire JS string at once. Its bridge fails on long-running franchises.
+  const path = '/nflgm-import-save.json';
+  const file = py.FS.open(path, 'w+');
+  try {
+    onStage('copying the save into the engine');
+    try {
+      const reader = (typeof source === 'string' ? new Blob([source]) : source).stream().getReader();
+      let offset = 0;
+      for (;;) {
+        const {value, done} = await reader.read();
+        if (done) break;
+        py.FS.write(file, value, 0, value.byteLength, offset);
+        offset += value.byteLength;
+      }
+    } finally {
+      py.FS.close(file);
+    }
+    onStage('rebuilding the franchise');
+    py.runPython("with open('/nflgm-import-save.json', encoding='utf-8') as _save_file:\n    SESSION = S.Session.load(_save_file.read())");
+  } finally {
+    py.FS.unlink(path);
+  }
+}
+
 async function bootEngine() {
   say('booting Python…', 4);
   const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.29.5/full/pyodide.mjs');
@@ -4304,16 +4330,15 @@ async function advanceInner() {
     if (!file || !engineReady || entering) return;
     entering = true; updateBootActions(); say('Loading save file…', 90);
     let loaded = false;
+    let loadStage = 'copying the save into the engine';
     try {
-      const text = await file.text();
-      py.globals.set('_BOOT_IMPORT', text);
-      py.runPython('SESSION = S.Session.load(_BOOT_IMPORT)');
+      await loadSessionFromBlob(file, stage => { loadStage = stage; });
       loaded = true;
     } catch (error) {
+      console.error(`Import failed while ${loadStage}:`, error);
       entering = false; updateBootActions();
-      say('Could not load that file. Your browser save is unchanged. ' + error);
+      say(`Could not load that file while ${loadStage}. Your browser save is unchanged. ` + error);
     } finally {
-      try { py.globals.delete('_BOOT_IMPORT'); } catch (_) { /* No file reached Python. */ }
       e.target.value = '';
     }
     if (!loaded) return;
@@ -4354,10 +4379,10 @@ async function advanceInner() {
   $('#resume').onclick = async () => {
     if (!engineReady || !saved.text || entering) return;
     entering = true; updateBootActions(); say('Loading your save…', 90);
-    let stage = 'rebuilding the franchise';
+    let stage = 'copying the save into the engine';
     try {
     await new Promise(r => setTimeout(r, 30));
-    py.globals.set('_SAVE', saved.text); py.runPython(`SESSION = S.Session.load(_SAVE)`);
+    await loadSessionFromBlob(saved.text, next => { stage = next; });
     let journalError = null;
     if (saved.journal) {
       stage = 'restoring live plays';
@@ -4366,7 +4391,7 @@ async function advanceInner() {
         py.runPython(`SESSION.apply_live_journal(json.loads(_LIVE_JOURNAL))`);
       } catch (e) {
         journalError = e;
-        py.runPython(`SESSION = S.Session.load(_SAVE)`);
+        await loadSessionFromBlob(saved.text);
       }
     }
     if (saved.snapshot) {
@@ -4388,7 +4413,7 @@ async function advanceInner() {
       console.error(`Resume failed while ${stage}:`, e);
       entering = false; updateBootActions(); say(`Could not load this save while ${stage}. Download a backup before retrying. ` + e);
     } finally {
-      for (const key of ['_SAVE', '_LIVE_JOURNAL', '_SNAPSHOT_META']) {
+      for (const key of ['_LIVE_JOURNAL', '_SNAPSHOT_META']) {
         try { py.globals.delete(key); } catch (_) { /* The variable was never set. */ }
       }
     }
@@ -4405,10 +4430,9 @@ async function advanceInner() {
   $('#import').onclick = () => { if (gameplanUnsaved() || gameplanSaving) { warnUnsavedGameplan(); return; } $('#importfile').click(); };
   $('#importfile').onchange = async e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
-    let text = await f.text();
-    try { py.globals.set('_import_text', text); py.runPython(`import session as S\nSESSION = S.Session.load(_import_text)`); saveConflict = false; saved = {text: null}; py.globals.delete('_import_text'); text = null; await saveGame(); bootHash(); refresh(); notify({ ok: true, line: 'Save loaded.' }); }
+    try { await loadSessionFromBlob(f); saveConflict = false; saved = {text: null}; await saveGame(); bootHash(); refresh(); notify({ ok: true, line: 'Save loaded.' }); }
     catch (err) { notify({ ok: false, why: 'That file could not be loaded as a save.' }); }
-    finally { py.globals.delete('_import_text'); text = null; e.target.value = ''; }
+    finally { e.target.value = ''; }
   };
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
