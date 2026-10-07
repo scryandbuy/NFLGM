@@ -77,6 +77,40 @@ def _past_clinches(past):
     return out
 
 
+def _past_division_records(league, year, past):
+    """Repair displayed division records from the archived regular-season schedule."""
+    from collections import defaultdict
+    import copy
+    out = copy.deepcopy(past)
+    divisions = {r['club']['abbr']: d['name'] for d in out.get('divisions', [])
+                 for r in d.get('rows', [])}
+    games = ((getattr(league, 'history', {}) or {}).get(str(year), {})
+             .get('schedule', {}).get('all_games', []))
+    records = defaultdict(lambda: [0, 0, 0])
+    played = defaultdict(int)
+    for game in games:
+        if not 1 <= int(game.get('week', 0)) <= 18 or game.get('ap') is None or game.get('hp') is None:
+            continue
+        away, home = game['away']['abbr'], game['home']['abbr']
+        played[away] += 1; played[home] += 1
+        if away not in divisions or divisions.get(away) != divisions.get(home):
+            continue
+        ap, hp = game['ap'], game['hp']
+        records[away][0 if ap > hp else 1 if ap < hp else 2] += 1
+        records[home][0 if hp > ap else 1 if hp < ap else 2] += 1
+    groups = [out.get('league_rows', [])] + [d['rows'] for d in out.get('divisions', [])]
+    if isinstance(out.get('conferences'), dict):
+        groups += list(out['conferences'].values())
+    for group in groups:
+        for row in group:
+            abbr = row['club']['abbr']
+            # Do not replace saved evidence with a partial schedule.
+            if played[abbr] == sum(row.get(k, 0) for k in ('w', 'l', 't')) and played[abbr] > 0 and abbr in records:
+                w, l, t = records[abbr]
+                row['div_rec'] = f'{w}–{l}' + (f'–{t}' if t else '')
+    return out
+
+
 def standings(session, league, abbr, year=None):
     yr = int(year) if year else int(league.year)
     if yr != int(league.year):
@@ -84,7 +118,7 @@ def standings(session, league, abbr, year=None):
         if past is not None:
             if past.get('thin') and not past.get('divisions') and past.get('league_rows'):
                 past['divisions'] = _thin_divisions(league, past['league_rows'])      # a snapshot kept before the division cut
-            return _past_clinches(past)
+            return _past_division_records(league, yr, _past_clinches(past))
         # no snapshot (a season closed before snapshots existed): the records the league kept
         hist = (getattr(league, 'standings_history', {}) or {}).get(yr) or {}
         rows = []
@@ -177,7 +211,7 @@ def standings(session, league, abbr, year=None):
 def _div_record(league, t):
     w = l = d = 0
     for (wk, a, h, ap, hp) in league.schedule:
-        if ap is None or t.abbr not in (a, h): continue
+        if not 1 <= wk <= 18 or ap is None or hp is None or t.abbr not in (a, h): continue
         opp = h if a == t.abbr else a
         if league.teams[opp].division != t.division: continue
         mine, theirs = (ap, hp) if a == t.abbr else (hp, ap)
