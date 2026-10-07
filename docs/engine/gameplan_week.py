@@ -435,11 +435,9 @@ def opponent_report(league, me_abbr, opp_abbr, week, rng=None):
         import gameplan as GP
         from season import make_coach
         base = GP.base_plan(make_coach(me.gm))
-        current = base.copy()
-        saved = getattr(league, 'user_week_plan', None) or {}
-        if me_abbr == getattr(league, 'user_team', None) and saved.get('year') == league.year and saved.get('week') == week:
-            apply_changes(current, base, saved.get('changes') or {})
-        pressure = pressure_advice(counts, protection_matchups, current,
+        # Suggestions describe departures from the coach's starting plan.
+        # Reading accepted changes here reshuffles the indexed list on each click.
+        pressure = pressure_advice(counts, protection_matchups, base,
                                    screen_fit=bool(my_rb and my_rb[0] <= 10 and rl and rl[0] >= 17))
         if pressure:
             if protection and protection_matchups['recommend']:

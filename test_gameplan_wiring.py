@@ -12,6 +12,19 @@ class GameplanWiringTests(unittest.TestCase):
  def setUp(self):
   self.s=self.session; self.s.stop=('week',1); self.s.played=False; self.s.runner=None
   self.s.L.user_week_plan=None
+ def test_pressure_suggestions_stay_stable_after_plan_selection(self):
+  L=self.s.L; opp=self.s._opponent(1)[0]
+  old=copy.deepcopy(getattr(L,'tendencies',{}))
+  try:
+   L.tendencies={L.year:{opp:dict(pressure_dropbacks=100,pressured_dropbacks=40)}}
+   read=dict(recommend=False,matchups=[dict(gap=4)],why='test')
+   with patch.object(GW,'protection_read',return_value=read), patch.object(GW,'protection_suggestion',return_value=None), patch.object(GW,'protection_choice',return_value=None):
+    first=GW.opponent_report(L,'GB',opp,1)['suggestions']
+    L.user_week_plan=dict(year=L.year,week=1,changes=dict(depth_mix=(.4,-.2,-.2),play_action_rate=-.3,screen_boost=.3))
+    second=GW.opponent_report(L,'GB',opp,1)['suggestions']
+    self.assertEqual(first,second)
+  finally:
+   L.tendencies=old
  def test_save_reload(self):
   self.s.plan_act('set_lean',key='pass_bias',value=.08)
   self.s.plan_take_all()
