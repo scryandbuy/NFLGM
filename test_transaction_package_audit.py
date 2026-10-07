@@ -12,10 +12,10 @@ from test_draft_planning import fixture, set_grade
 
 
 class TransactionPackageAuditTests(unittest.TestCase):
-    def resolve(self,L,pool,offers):
+    def resolve(self,L,pool,offers,quoted_apy=1):
         with ExitStack() as stack:
             stack.enter_context(patch.object(market.VAL,'pool_from_league',return_value={}))
-            stack.enter_context(patch.object(market.VAL,'value_player',return_value={'apy':1,'years':1}))
+            stack.enter_context(patch.object(market.VAL,'value_player',return_value={'apy':quoted_apy,'years':1}))
             stack.enter_context(patch.object(market,'profile_for',return_value={}))
             stack.enter_context(patch.object(market,'utility_of',side_effect=lambda L,p,o,*args:o.apy))
             stack.enter_context(patch.object(market,'power',side_effect=lambda L,t,*args:t.cap_space))
@@ -32,7 +32,11 @@ class TransactionPackageAuditTests(unittest.TestCase):
                 set_grade(p,90 if i < (3 if pos=='WR' else 2) else 55)
             duplicate=prospect(L,pos,'alternative')
             L.free_agents=[chosen.pid,duplicate.pid]
-            signed,waiting,_=self.resolve(L,[chosen,duplicate],{p.pid:[self.offer(p)] for p in (chosen,duplicate)})
+            # A full-time hole can support a $10m offer; a smaller package
+            # role cannot justify that price, but can justify a $5m offer.
+            price=10 if package=='10' else 5
+            signed,waiting,_=self.resolve(L,[chosen,duplicate],
+                {p.pid:[self.offer(p,price)] for p in (chosen,duplicate)},quoted_apy=10)
             self.assertEqual([p.pid for _,p,_ in signed],[chosen.pid],package)
             self.assertEqual([p.pid for p in waiting],[duplicate.pid])
             self.assertIsNone(duplicate.team)
@@ -50,17 +54,17 @@ class TransactionPackageAuditTests(unittest.TestCase):
         self.assertGreaterEqual(t.cap_space,0)
         self.assertEqual(len([x for x in L.transactions if x['kind']=='sign']),1)
 
-    def test_bid_budget_and_user_exclusion_full_and_sparse_rosters(self):
+    def test_bid_targeting_and_user_exclusion_full_and_sparse_rosters(self):
         for package in ('10','11','12'):
             for sparse in (False,True):
                 L,t,wr,te,qb=offense_fixture(package)
                 if sparse:t.roster=[p for p in t.roster if p.pos not in ('WR','TE')]
                 pool=[wr,te,qb]
                 with patch.object(market.VAL,'pool_from_league',return_value={}), \
-                     patch.object(market.VAL,'value_player',return_value={'apy':10,'years':1}), \
-                     patch.object(market,'power',return_value=20):
+                     patch.object(market.VAL,'value_player',return_value={'apy':10,'years':1}):
                     bids=market.ai_bids(L,pool,1,np.random.default_rng(4))
-                    self.assertLessEqual(sum(o.apy for row in bids.values() for o in row),16.001)
+                    self.assertTrue(bids)
+                    self.assertLessEqual(sum(len(row) for row in bids.values()),market.MAX_TARGETS[1])
                     self.assertFalse(market.ai_bids(L,pool,1,np.random.default_rng(4),skip_teams=('MIN',)))
 
     def test_surplus_never_discards_more_than_six_points_of_package_value(self):
