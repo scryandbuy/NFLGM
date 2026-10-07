@@ -739,6 +739,7 @@ class League:
                 annual_apy = (sum(base) + sum(contract.rb[offset:]) + contract.sb) / years
             self.log('sign', pid=pid, team=abbr, apy=float(annual_apy), years=years,
                      pay_start=contract.pay_start if not offset else 0,
+                     cap_hit_this_season=contract.cap_hit(0),
                      cash_this_season=(contract.base[0] + contract.rb[0] + contract.sb) if not offset else 0.)
 
     def post_june1(self):

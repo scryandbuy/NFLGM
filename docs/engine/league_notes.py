@@ -327,7 +327,15 @@ def transactions(league, week, skip_signings=False, pre_fa=False):
                 terms = f"{years} year" + ('' if years == 1 else 's') + f" at ${float(x['apy']):.2f}m a year"
                 if k == 'sign':
                     terms = f"a {years}-year deal averaging ${float(x['apy']):.2f}m per year"
-                IB.news(league, f"{team} {verb} {inbox_player(p)}", f"{team} {verb} {inbox_player(p)} ({p.pos}, {round(p.ovr)}) for {terms}.", payload=dict(link=f'player:{p.pid}'))
+                payload = dict(link=f'player:{p.pid}')
+                if k == 'sign':
+                    cap = x.get('cap_hit_this_season')
+                    # Use the signing snapshot, never a subsequently changed contract.
+                    payload['mail_sections'] = [IB.mail_section('Signings',
+                        [[team, inbox_player(p), p.pos, str(round(p.ovr)), str(years),
+                          f"${float(cap):.2f}m" if cap is not None else '—']],
+                        ['Team', 'Player', 'Pos', 'OVR', 'Years', f"{x.get('year', league.year)} Cap Hit"])]
+                IB.news(league, f"{team} {verb} {inbox_player(p)}", f"{team} {verb} {inbox_player(p)} ({p.pos}, {round(p.ovr)}) for {terms}.", payload=payload)
         elif k == 'franchise_tag':
             p = league.player(x.get('pid'))
             if p is not None: IB.news(league, f"{team} tag {inbox_player(p)}", f"{team} place the franchise tag on {inbox_player(p)} ({p.pos}, {round(p.ovr)})" + (f" at ${float(x['price']):.1f}m" if x.get('price') else '') + '.', payload=dict(link=f'player:{p.pid}'))

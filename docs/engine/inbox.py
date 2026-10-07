@@ -149,6 +149,11 @@ def _transaction_mail_layout(message, payload):
     entities = message.get('entities') or []
     for section in sections:
         if section.get('columns'):
+            if section.get('title') == 'Signings' and section['columns'][-1:] == ['Annual Average']:
+                section['columns'][-1] = f"{message.get('year', '')} Cap Hit".strip()
+                for saved_row in section['rows']:
+                    saved_row[-1] = dict(text='—', mentions=[])
+                changed = True
             result.append(section)
             continue
         for row in section.get('rows', []):
@@ -161,6 +166,9 @@ def _transaction_mail_layout(message, payload):
             team, action, player, pos, ovr, years_new, years_old, annual = match.groups()
             title = 'Signings' if action == 'sign' else 'Extensions'
             columns = ['Team', 'Player', 'Pos', 'OVR', 'Years', 'Annual Average']
+            if action == 'sign':
+                columns[-1] = f"{message.get('year', '')} Cap Hit".strip()
+                annual = '—'  # Old prose records average pay, not the year's cap charge.
             values = [team, player, pos, ovr, years_new or years_old, annual]
             cells = [dict(text=v, mentions=reference_spans(v, entities, [])) for v in values]
             if result and result[-1].get('title') == title and result[-1].get('columns') == columns:
