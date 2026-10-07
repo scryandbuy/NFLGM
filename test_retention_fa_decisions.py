@@ -114,6 +114,22 @@ class RetentionRecruitmentTests(unittest.TestCase):
         self.assertEqual(row['trade_floor'],0)
         self.assertIn('preserve_flexibility',row['reasons'])
 
+    def test_expired_player_low_planning_quote_uses_legal_minimum(self):
+        from min_salary import demand_quote
+        self.L.set_phase('offseason'); p=self.L.player('WR2'); p.contract=None
+        p.accrued=2
+        minimum=demand_quote(self.L,p,0,3,'extension')
+        quote=dict(ask=minimum+1.,offer=.5,years=3,discount=.07)
+        with patch.object(EXT,'terms',return_value=quote):
+            row=RP.assess(self.L,self.t,p)
+        self.assertGreaterEqual(row['offer_apy'],minimum)
+        self.assertEqual(row['expected_apy'],round(quote['ask'],2))
+        with patch.object(EXT,'terms',return_value=quote), \
+             patch.object(FP,'evaluate',return_value=dict(approved=False,reason='preserve_flexibility')):
+            declined=RP.assess(self.L,self.t,p)
+        self.assertFalse(declined['affordable'])
+        self.assertEqual(declined['decision'],'let_walk')
+
     def test_weekly_route_tries_another_candidate_after_refusal(self):
         first=self.expiring('QB0');second=self.expiring('WR2')
         self.L.set_phase('regular');self.L.week=5
@@ -155,12 +171,17 @@ class RetentionRecruitmentTests(unittest.TestCase):
         def budget(L,t,p,c,*a,**kw):
             if p.pid=='WR2':return dict(approved=False,reason='preserve_flexibility')
             return original(L,t,p,c,*a,**kw)
-        with patch.object(EXT,'terms',return_value=dict(ask=2.,offer=2.,years=2,discount=.07)), \
+        def legal_quote(L,p,rng,pool=None):
+            minimum=MS.demand_quote(L,p,0,2,'extension')
+            price=max(2.,minimum+.5)
+            return dict(ask=price,offer=price,years=2,discount=.07)
+        with patch.object(EXT,'terms',side_effect=legal_quote), \
              patch.object(EXT,'_retention_budget',side_effect=budget):
             signed=EXT.ai_round(self.L,self.rng)
         self.assertEqual(len(signed),6)
         self.assertIsNone(self.L.player('WR2').contract)
-        self.assertIn('preserve_flexibility',next(r for r in RP.choices(self.L,self.t) if r['pid']=='WR2')['reasons'])
+        reasons=next(r for r in RP.choices(self.L,self.t) if r['pid']=='WR2')['reasons']
+        self.assertTrue({'preserve_flexibility','legal_cap_failure'} & set(reasons), reasons)
 
     def test_user_contracts_and_decisions_remain_user_controlled(self):
         p=self.expiring('WR2');self.L.user_team=self.t.abbr

@@ -241,11 +241,16 @@ def assess(league, team, player, pool=None, baseline=None, scale=None, *, _conte
     if renewal_age > EXT.AGE_LIMIT.get(player.pos,31):
         row.update(unchanged('veteran', lambda: veteran_plan(team,player,inputs,context['scale'],window)))
         years = min(years,row['max_new_years'])
+    from min_salary import demand_quote
+    minimum_offer = demand_quote(league, player, 0, years, 'extension')
+    ask = max(tm['ask'], minimum_offer)
     want = .75 + .25*row['role_share'] - .10*max(0.,team.gm.youth-.5)*(player.age>=28)
     ceiling = tm['offer']*(1.+.12*want)
-    apy = round(min(ceiling,tm['ask']),2)
-    floor = tm['ask']*(1.-tm['discount'])
-    row.update(expected_apy=round(tm['ask'],2),offer_apy=apy,years=years)
+    # A GM can refuse the legal minimum, but must never plan an impossible
+    # subminimum offer. Cap and roster review below decide whether to pay it.
+    apy = max(minimum_offer, round(min(ceiling,ask),2))
+    floor = max(minimum_offer, ask*(1.-tm['discount']))
+    row.update(expected_apy=round(ask,2),offer_apy=apy,years=years)
     refusal = unchanged('refusal', lambda: EXT._ai_refusal(league,player))
     # Evaluate the same bounded payment alternatives as the negotiator; never
     # declare someone unaffordable solely because the first schedule misses.

@@ -136,7 +136,7 @@ class Player:
         self.retired = False
         self.tag_count = 0            # a club may tag the same man three times
         self.tagged_year = None
-        self.fa_class = None          # UFA / RFA / ERFA, set each offseason
+        self.fa_class = None          # UFA / RFA, set each offseason
         self.tender_team = None       # who holds the right to match him
         self.college = None
         self.home_state = PB.state_for(self.pid)
@@ -1226,6 +1226,17 @@ class League:
         PA.migrate(L, d)
         import ceiling_knowledge as CK
         CK.sync(L)
+        # Older saves may still carry the removed exclusive-rights class.
+        # Keep signed contracts intact; only normalize their class labels.
+        for p in L.players.values():
+            if p.fa_class not in ('ERFA', 'exclusive_rights'):
+                continue
+            if p.contract and p.contract_years_left > 0:
+                p.fa_class = 'under_contract'
+            elif p.team in L.teams and p.pid not in L.free_agents:
+                p.fa_class = 'RFA'
+            else:
+                p.fa_class = 'UFA'
         return L
 
     def __repr__(self):

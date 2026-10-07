@@ -1,10 +1,9 @@
 """
 Free agency.
 
-Real CBA structure, with values derived from real contracts:
+Two-class free agency, with values derived from real contracts:
   UFA   4+ accrued seasons, contract expired, signs anywhere
-  RFA   exactly 3 accrued seasons, old club may tender and match
-  ERFA  under 3 accrued seasons, club tenders at the minimum and he must take it
+  RFA   fewer than 4 accrued seasons, old club may tender and match
   Tag   franchise only (top-5 cap hits at his position)
   Tender  RFA tenders remain; they are a right of refusal, not a tag
 
@@ -47,8 +46,7 @@ def tag_value(pos, cap=CAP):
 def fa_class(accrued, contract_years_left):
     if contract_years_left and contract_years_left > 0: return 'under_contract'
     if accrued >= 4: return 'UFA'
-    if accrued == 3: return 'RFA'
-    return 'ERFA'
+    return 'RFA'
 
 # ---------------------------------------------------------------- team decisions
 def should_tag(player, val, cap_space, cap=CAP):

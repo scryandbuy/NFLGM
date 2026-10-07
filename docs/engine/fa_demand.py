@@ -4,7 +4,7 @@ from min_salary import player_minimum
 WEEKLY_REDUCTION = .05
 
 def factor(league, player):
-    if league.phase != 'regular' or player.team or getattr(player, 'fa_class', None) in ('RFA', 'ERFA', 'tendered'):
+    if league.phase != 'regular' or player.team or getattr(player, 'fa_class', None) in ('RFA', 'tendered'):
         return 1.
     start = 1
     # Latest departure resets the clock, including on imported older saves.

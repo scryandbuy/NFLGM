@@ -837,7 +837,7 @@ def extensions(session, league, abbr):
         p = league.player(r['pid']); r['tag_price'] = round(TG_.tag_price(p, cap), 1) if r['yrs'] <= 1 else None
         r['restructurable'] = round(CT.restructure_room(p, cap), 1) if hasattr(CT, 'restructure_room') else 0.0
     tag_open = TG_.user_tag_window(league); choice = getattr(league, 'user_tag_choice', None)
-    # before the New Year a man's last season shows as one year left; after it his deal is up (0) and he is a UFA, RFA or ERFA until tagged, tendered or re-signed
+    # Before the New Year his last season shows as one year left; after it an expired deal is UFA or RFA until tagged, tendered or re-signed.
     from views import cap_focus
     from cap_accounting import next_year_ledger
     limit_next, committed_next, _ro, _dn = next_year_ledger(league, me)

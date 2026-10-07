@@ -29,7 +29,11 @@ class EconomicReleaseGates(unittest.TestCase):
         team = L.teams['GB']; team.gm = N(restructure_depth=.5)
         terms = market.signing_terms(L, p, team, 14, 5, 301.2, front_load=0, bonus=0)
         offer = M.OfferCash(tuple(terms['base']), terms['signing_bonus'])
-        self.assertEqual(offer.base, (0, 7, 14, 21, 28))
+        from min_salary import demand_minima
+        for base, floor in zip(offer.base, demand_minima(L, p, 5)):
+            self.assertGreaterEqual(base+1e-9, floor)
+        self.assertGreater(offer.base[-1], offer.base[0]*10)
+        self.assertAlmostEqual(sum(offer.base), 70)
         b = M.PlayerBeliefs(24, 'WR', 10, security=1, money=0)
         reference = M.OfferCash((8, 8), 4)
         self.assertFalse(M.compare(offer, reference, b)['acceptable'],

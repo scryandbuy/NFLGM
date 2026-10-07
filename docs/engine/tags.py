@@ -6,7 +6,6 @@ about its OWN pending free agents.
 
   Tag one man, if he is worth it.
   Tender the restricted ones you want to keep.
-  Offer the minimum to your exclusive-rights men.
   Everyone you pass on becomes an unrestricted free agent.
 
 A TENDER IS NOT A SIGNING. This used to take a tendered player off the market
@@ -47,9 +46,8 @@ WHAT IS MODELLED, AND WHAT IS NOT:
   compensation tiers are gone, every tender is a right to match, and acquiring
   a restricted player is a trade.
 
-  EXCLUSIVE RIGHTS PLAYERS, fewer than three accrued seasons, cannot negotiate
-  at all if their club offers the minimum. They are not really free agents and
-  are handled here so they do not leak into the market.
+  Under this game's two-class rule, every expiring player with fewer than four
+  accrued seasons can be tendered or released to unrestricted free agency.
 
   THE JULY 15 DEADLINE is a window rather than an event: between the tag and
   the deadline a club may convert it into a long-term deal. After it, he plays
@@ -73,15 +71,16 @@ TENDER_KIND = 'right_of_first'
 
 def classify(league):
     """
-    Sort every man into UFA, RFA, ERFA or under contract. Accrued seasons
-    decide it: four or more and he is free, three and he is restricted, fewer
-    and his club holds exclusive rights.
+    Sort every man into UFA, RFA or under contract. Four or more accrued
+    seasons make him unrestricted; younger expiring players can be tendered.
     """
-    out = {'UFA': [], 'RFA': [], 'ERFA': [], 'under_contract': []}
+    out = {'UFA': [], 'RFA': [], 'under_contract': []}
     for p in league.players.values():
         if p.retired:
             continue
         c = FA.fa_class(p.accrued, p.contract_years_left)
+        if c != 'under_contract' and p.team not in league.teams:
+            c = 'UFA'  # no former club holds matching rights
         p.fa_class = c
         out[c].append(p)
     return out
@@ -169,7 +168,7 @@ def run(league, rng, verbose=False):
     """
     cap = CAP.get(league.year, 301.2)
     groups = classify(league)
-    tagged, tendered, reserved, to_market = [], [], [], []
+    tagged, tendered, to_market = [], [], []
     league.tags_done_year = league.year
 
     for abbr, team in league.teams.items():
@@ -210,6 +209,7 @@ def run(league, rng, verbose=False):
                 p.fa_class = 'UFA'; to_market.append((abbr, p)); continue        # the user chose not to tender him: unrestricted
             if (price > power(league, team, cap) if is_user else
                     not _cpu_retention_fits(league, team, p, price, 'rfa_tender')):
+                p.fa_class = 'UFA'
                 to_market.append((abbr, p))     # cannot afford to keep him
                 continue
             p.contract = _one_year(price, league.year)
@@ -223,17 +223,6 @@ def run(league, rng, verbose=False):
             # gets the right to match whatever he agrees to.
             if p.pid not in league.free_agents:
                 league.free_agents.append(p.pid)
-
-        # ---- exclusive rights: not really free agents --------------------
-        for p in [x for x in groups['ERFA'] if x.pid in roster]:
-            price = MS.minimum_salary(p_accrued(p), cap)
-            if price > team.cap_space:          # a minimum body needs no reserve
-                to_market.append((abbr, p))
-                continue
-            p.contract = _one_year(price, league.year)
-            p.fa_class = 'exclusive_rights'
-            reserved.append((abbr, p, price))
-            team.sync_cap()
 
         # ---- everyone else walks ----------------------------------------
         for p in ([q for q in groups['UFA'] if q.pid in roster] if is_user else mine):
@@ -249,7 +238,8 @@ def run(league, rng, verbose=False):
             t.roster.remove(p)
         p.last_team = p.team                    # loyalty reads it in the market
         p.team, p.contract = None, None
-        p.fa_class = p.fa_class if p.fa_class in ('RFA', 'ERFA') else 'UFA'
+        p.fa_class = 'UFA'
+        p.tender_team = None
         if p.pid not in league.free_agents:
             league.free_agents.append(p.pid)
     for t in league.teams.values():
@@ -257,10 +247,8 @@ def run(league, rng, verbose=False):
 
     if verbose:
         print(f'  {len(tagged)} tagged, {len(tendered)} tendered (biddable), '
-              f'{len(reserved)} on exclusive rights, '
               f'{len(to_market)} reached the market')
-    return dict(tagged=tagged, tendered=tendered, reserved=reserved,
-                market=to_market)
+    return dict(tagged=tagged, tendered=tendered, market=to_market)
 
 
 if __name__ == '__main__':
@@ -275,9 +263,8 @@ if __name__ == '__main__':
     CT.run(L, rng)
 
     g = classify(L)
-    print('expiring classes: UFA %d, RFA %d, ERFA %d, under contract %d'
-          % (len(g['UFA']), len(g['RFA']), len(g['ERFA']),
-             len(g['under_contract'])))
+    print('expiring classes: UFA %d, RFA %d, under contract %d'
+          % (len(g['UFA']), len(g['RFA']), len(g['under_contract'])))
     res = run(L, rng, verbose=True)
 
     print('\nfranchise tags:')
@@ -327,12 +314,11 @@ def user_tag_window(league):
 
 # ============================================================ THE USER'S RE-SIGN CARD
 def user_resign_sheet(league):
-    """What the user decides before the step runs: his expiring players by class, the tag price on each UFA, tender or
-    not on each RFA (right of first refusal, one price, by decision), the ERFAs he keeps at the minimum."""
+    """The user's expiring UFAs and RFAs, with tag and tender decisions."""
     from cap_engine import CAP
-    import free_agency as FA, min_salary as MS
+    import free_agency as FA
     user = getattr(league, 'user_team', None); team = league.teams[user]; cap = CAP.get(league.year, 301.2)
-    ufa, rfa, erfa = [], [], []
+    ufa, rfa = [], []
     chosen = set(getattr(league, 'user_tenders', None) or [])
     choice = getattr(league, 'user_tag_choice', None)
     for p in team.active():
@@ -346,10 +332,8 @@ def user_resign_sheet(league):
             ufa.append(row)
         elif cls == 'RFA':
             row.update(tender_price=round(tender_price(p, cap), 3), tender=(p.pid in chosen)); rfa.append(row)
-        else:
-            row.update(min_price=round(MS.minimum_salary(int(p.accrued or 0), cap), 2)); erfa.append(row)
-    ufa.sort(key=lambda r: -r['ovr']); rfa.sort(key=lambda r: -r['ovr']); erfa.sort(key=lambda r: -r['ovr'])
-    return dict(ufa=ufa, rfa=rfa, erfa=erfa, tag_choice=choice, tag_used=(choice not in (None, 'none')), room=round(power(league, team, cap)-pending_tender_cost(league), 3), pending_tenders=round(pending_tender_cost(league), 3), cap_space=round(team.cap_space, 1),
+    ufa.sort(key=lambda r: -r['ovr']); rfa.sort(key=lambda r: -r['ovr'])
+    return dict(ufa=ufa, rfa=rfa, tag_choice=choice, tag_used=(choice not in (None, 'none')), room=round(power(league, team, cap)-pending_tender_cost(league), 3), pending_tenders=round(pending_tender_cost(league), 3), cap_space=round(team.cap_space, 1),
                 open=user_tag_window(league), tags_done=(getattr(league, 'tags_done_year', None) == league.year))
 
 

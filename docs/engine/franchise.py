@@ -15,7 +15,7 @@ THE CALENDAR, and what actually exists behind each step:
     7  REGRESSION          real delta-method aging curves
     8  ROLL THE YEAR       cap projects forward, contracts tick down
     9  CAP COMPLIANCE      cuts and simple restructures
-   10  RE-SIGN PHASE       one tag, tenders, exclusive rights
+   10  RE-SIGN PHASE       one tag and RFA tenders
    11  FREE AGENCY         three phases, bids, inbox, offer sheets
    12  DRAFT               NOT BUILT
    13  CAMP AND CUT-DOWN   NOT BUILT

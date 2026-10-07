@@ -78,8 +78,9 @@ def classify(league):
     for p in league.players.values():
         if p.retired:
             continue
-        c = (FA.fa_class(p.accrued, p.contract_years_left)
-             if p.team in league.teams else 'UFA')
+        c = FA.fa_class(p.accrued, p.contract_years_left)
+        if c != 'under_contract' and p.team not in league.teams:
+            c = 'UFA'  # no former club holds matching rights
         p.fa_class = c
         out[c].append(p)
     return out
@@ -315,7 +316,7 @@ def user_tag_window(league):
 def user_resign_sheet(league):
     """The user's expiring UFAs and RFAs, with tag and tender decisions."""
     from cap_engine import CAP
-    import free_agency as FA, min_salary as MS
+    import free_agency as FA
     user = getattr(league, 'user_team', None); team = league.teams[user]; cap = CAP.get(league.year, 301.2)
     ufa, rfa = [], []
     chosen = set(getattr(league, 'user_tenders', None) or [])

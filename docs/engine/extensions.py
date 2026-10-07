@@ -355,7 +355,10 @@ def negotiate_ai(league, p, apy, years, rng=None, pool=None):
     why = _ai_refusal(league, p)
     if why: return dict(result='refused', why=why)
     team = league.teams[p.team]
-    original = CO.canonical(league, p, team, dict(apy=apy, years=years), 'extension')
+    try:
+        original = CO.canonical(league, p, team, dict(apy=apy, years=years), 'extension')
+    except ValueError as exc:
+        return dict(result='refused', why=str(exc), attempts=0)
     # Assess the original even if its shape misses a budget: a different
     # payment schedule can fit. No signing happens outside both cap guards.
     budget, total = float(apy), float(apy) * years
@@ -448,6 +451,8 @@ def _pursue_retention(league, team, p, rng, pool=None, scale=None):
     # Actual player asks/terms retain negotiation uncertainty; the plan is a
     # forecast, never authority to force acceptance or bypass current finances.
     years = min(tm['years'],plan.get('max_new_years',tm['years']))
+    from min_salary import demand_quote
+    offer = max(offer, demand_quote(league, p, 0, years, 'extension'))
     res = negotiate_ai(league,p,offer,years,rng,pool=pool)
     c=p.contract
     outcome=dict(plan,contract_years=c.years if c else 0,contract_signed=c.signed if c else None,
