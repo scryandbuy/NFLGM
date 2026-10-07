@@ -254,6 +254,10 @@ def play_line(league, p, off_abbr, def_abbr):
         ending = (', loss of down.' if p.get('penalty') == 'Intentional Grounding' and not p.get('safety') else
                   ', automatic first down.' if (p.get('auto_first') and not p.get('on_offense') and not p.get('on_try')) else '.')
         offender = _nm(league, p.get('offender_pid'))
+        if p.get('after_turnover'):
+            side = off_abbr if p.get('on_offense') else def_abbr
+            ydtxt += ', after the turnover'
+            ending = f'. {def_abbr} keeps possession.'
         owner = f'{offender} ({side})' if offender else f'the {side}'
         text = f"Penalty, {p.get('penalty', 'flag')} on {owner}, {ydtxt}" + ending
         kind = 'neutral'

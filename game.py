@@ -2187,6 +2187,8 @@ def _enforce_turnover_penalty(dr, pen):
         walk = min(nominal, dr.yardline / 2.0)
         dr.yardline -= walk                 # new offense is walked back
     pen['yards'] = walk
+    pen['after_turnover'] = True
+    pen['auto_first'] = False  # new possession already starts a fresh series
     dr.log_pen_after = 0.0
     dr.log_pen_first = False
 
