@@ -138,12 +138,12 @@ class ClockDecisions(unittest.TestCase):
         self.assertEqual(saved['team_stats']['GB']['rush_yds'], -3)
         self.assertIn('3 plays, -3 yards', ticker.write_game(league, result, 'GB', 'DAL')[0]['header'])
 
-    def test_defensive_timeout_is_spent_between_knees(self):
+    def test_futile_defensive_timeout_is_saved_between_knees(self):
         dr, _, tos = self.drive(start=18, clock=80, quarter=4, wall=None, other=1)
-        self.assertEqual([p['clock'] for p in dr.log if p['type'] == 'kneel'], [80, 78, 36])
-        self.assertEqual(tos.left['away'], 0)
+        self.assertEqual([p['clock'] for p in dr.log if p['type'] == 'kneel'], [80, 38])
+        self.assertEqual(tos.left['away'], 1)
         self.assertEqual(dr.clock, 0)
-        self.assertEqual(next(p for p in dr.log if p['type'] == 'timeout')['clock'], 78)
+        self.assertFalse(any(p['type'] == 'timeout' for p in dr.log))
 
     def test_cannot_kneel_when_timeouts_downs_or_own_goal_prevent_it(self):
         for clock, down, tos, spot in ((120, 1, 1, 18), (32, 4, 0, 18),

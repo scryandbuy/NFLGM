@@ -13,6 +13,16 @@ class CarolinaWeek16(unittest.TestCase):
         self.assertEqual(G._kneel_interval(3,3,3,warning_pending=False), (0.,False,False))
         self.assertEqual(G._kneel_interval(5,3,3,warning_pending=False), (3.,True,False))
 
+    def test_week18_last_timeout_cannot_force_possession(self):
+        self.assertEqual(G._kneel_interval(80, 1, 1, warning_pending=False), (38., False, False))
+        self.assertEqual(G._kneel_interval(38, 2, 1, warning_pending=False), (0., False, False))
+
+    def test_remaining_downs_and_timeouts_change_the_answer(self):
+        self.assertEqual(G._kneel_interval(80, 1, 2, warning_pending=False), (78., True, False))
+        self.assertEqual(G._kneel_interval(80, 2, 1, warning_pending=False), (78., True, False))
+        self.assertEqual(G._kneel_interval(88, 1, 1, warning_pending=False), (46., False, False))
+        self.assertEqual(G._kneel_interval(89, 1, 1, warning_pending=False), (87., True, False))
+
     def test_warning_still_stops_clock(self):
         self.assertEqual(G._kneel_interval(121,1,3), (119.,False,True))
 

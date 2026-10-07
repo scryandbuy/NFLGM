@@ -1300,6 +1300,30 @@ def _tick(dr, secs):
     dr.clock = float(np.ceil(dr.clock - 1e-9))                          # whole seconds
 
 
+def _kneel_timeout_can_force_possession(seconds, next_down, timeouts, warning_pending):
+    """After spending this timeout, can all remaining stops force the ball back?"""
+    for down in range(next_down, 5):
+        live_end = max(0.0, seconds - 2.0)
+        if live_end <= 0:
+            return False
+        if down == 4:
+            return True
+        if warning_pending and seconds > 120 >= live_end:
+            seconds = live_end
+            warning_pending = False
+        elif timeouts > 0:
+            seconds = live_end
+            timeouts -= 1
+        else:
+            seconds = max(0.0, live_end - 40.0)
+            if warning_pending and live_end > 120 >= seconds:
+                seconds = 120.0
+                warning_pending = False
+        if seconds <= 0:
+            return False
+    return True
+
+
 def _kneel_interval(seconds, down, opponent_timeouts, *, warning_pending=True):
     """Live knee takes two seconds; only a retained possession can run clock.
 
@@ -1310,7 +1334,8 @@ def _kneel_interval(seconds, down, opponent_timeouts, *, warning_pending=True):
     warning = warning_pending and seconds > 120 >= live_end
     if live_end == 0 or down >= 4 or warning:
         return live_end, False, warning
-    if opponent_timeouts > 0 and live_end > 2.0 * (4 - down):
+    if opponent_timeouts > 0 and _kneel_timeout_can_force_possession(
+            live_end, down + 1, opponent_timeouts - 1, warning_pending):
         return live_end, True, False
     end = max(0.0, live_end - 40.0)
     if warning_pending and live_end > 120 >= end:
