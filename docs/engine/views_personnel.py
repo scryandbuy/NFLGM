@@ -791,6 +791,16 @@ def retain(session, league, abbr):
     return dict(rail=rail(session, league, abbr), **sheet)
 
 
+def _extension_years_left(session, league, player):
+    """The offseason page counts seasons still to play, before financial rollover."""
+    years = player.contract.years if player.contract else 0
+    progress = getattr(session, 'offseason_progress', None) or {}
+    before_roll = (tuple(getattr(session, 'stop', ())) == ('offseason', 1)
+                   and not progress.get('contracts_advanced')
+                   and not progress.get('roll_done'))
+    return max(0, years - int(before_roll))
+
+
 def extensions(session, league, abbr):
     import extensions as EXT, negotiations as NG
     me = league.teams[abbr]
@@ -804,9 +814,9 @@ def extensions(session, league, abbr):
     rows = []
     import free_agency as FA_
     for p in sorted(me.active(), key=lambda p: (p.contract.years if p.contract else 0, -p.ovr)):
-        yrs = p.contract.years if p.contract else 0
+        yrs = _extension_years_left(session, league, p)
         t = NG.open_for(league, p.pid, 'extension')
-        cls = FA_.fa_class(p.accrued, p.contract_years_left) if yrs == 0 else None
+        cls = FA_.fa_class(p.accrued + int(bool(p.contract and p.contract.years > yrs)), 0) if yrs == 0 else None
         rows.append(dict(pid=p.pid, name=p.name, pos=p.pos, age=int(p.age), ovr=round(p.ovr), yrs=yrs, fa_class=cls, hit=round(p.cap_hit(0), 1) if p.contract else 0.0, morale=morale_word(p),
                          rookie_option=EXT.rookie_option_price(league, p),
                          eligible=bool(EXT.eligible(p, league)), talks=(t['state'] if t else None), thread=(t['id'] if t else None), ask=(t.get('ask') if t else None), years=(t.get('years') if t else None), mood=(t.get('mood') if t else None)))
