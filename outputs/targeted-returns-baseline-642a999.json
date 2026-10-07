@@ -1,0 +1,102 @@
+{
+  "scope": "One independent game per club per seed; full game engine, no offseason",
+  "seeds": [
+    100641,
+    100642,
+    100643,
+    100644
+  ],
+  "games": 64,
+  "counts": {
+    "kickoffs": 718,
+    "kickoff_touchbacks": 110,
+    "kickoff_returns": 586,
+    "sacks": 338,
+    "punts": 484,
+    "punt_returns": 167,
+    "scrambles": 324,
+    "kickoff_return_td": 1
+  },
+  "punt_return_average": 10.384,
+  "kickoff_return_average": 21.841,
+  "scramble_average": 6.578,
+  "scramble_short_pct": 33.642,
+  "register": {
+    "points_per_team": 23.352,
+    "total_points": 46.703,
+    "drives_per_game": 22.281,
+    "plays_per_drive": 5.857,
+    "first_downs_per_drive": 1.807,
+    "offensive_plays_per_gm": 129.141,
+    "drive_touchdown_pct": 20.477,
+    "drive_fieldgoal_pct": 19.916,
+    "drive_punt_pct": 33.941,
+    "drive_turnover_pct": 10.309,
+    "drive_downs_pct": 5.049,
+    "completion_pct": 65.345,
+    "sack_pct": 7.23,
+    "int_pct": 2.398,
+    "air_yards": 4.91,
+    "yac": 5.379,
+    "yards_per_dropback": 5.777,
+    "time_to_throw": 2.774,
+    "run_ypc": 4.489,
+    "run_explosive_pct": 1.715,
+    "run_negative_pct": 8.941,
+    "pass_play_share": 56.564,
+    "play_action_pct": 9.704,
+    "motion_pct": 37.919,
+    "blitz_pct": 13.223,
+    "injuries_per_team_game": 0.539,
+    "mean_margin": 9.672,
+    "margin_10plus_pct": 32.812,
+    "margin_17plus_pct": 17.188,
+    "overtime_pct": 9.375,
+    "tie_pct": 0.0,
+    "fg_pct": 86.322,
+    "punt_gross": 47.038,
+    "kickoff_touchback_pct": 15.32
+  },
+  "misses": {
+    "drive_touchdown_pct": {
+      "value": 20.477,
+      "target": 22.6,
+      "tolerance": 2.0
+    },
+    "drive_fieldgoal_pct": {
+      "value": 19.916,
+      "target": 16.5,
+      "tolerance": 2.0
+    },
+    "injuries_per_team_game": {
+      "value": 0.539,
+      "target": 0.85,
+      "tolerance": 0.25
+    },
+    "margin_10plus_pct": {
+      "value": 32.812,
+      "target": 44.7,
+      "tolerance": 4.0
+    },
+    "margin_17plus_pct": {
+      "value": 17.188,
+      "target": 26.1,
+      "tolerance": 4.0
+    },
+    "overtime_pct": {
+      "value": 9.375,
+      "target": 6.2,
+      "tolerance": 2.0
+    }
+  },
+  "score_violations": [],
+  "return_examples": [
+    {
+      "seed": 100644,
+      "home": "NE",
+      "away": "NYJ",
+      "kind": "kickoff",
+      "yards": 89.7
+    }
+  ]
+}

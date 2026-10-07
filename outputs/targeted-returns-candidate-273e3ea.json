@@ -1,0 +1,131 @@
+{
+  "scope": "One independent game per club per seed; full game engine, no offseason",
+  "seeds": [
+    100641,
+    100642,
+    100643,
+    100644
+  ],
+  "games": 64,
+  "counts": {
+    "kickoffs": 728,
+    "kickoff_touchbacks": 96,
+    "kickoff_returns": 609,
+    "sacks": 342,
+    "punts": 487,
+    "punt_returns": 175,
+    "punt_return_td": 1,
+    "scrambles": 343
+  },
+  "punt_return_average": 11.407,
+  "kickoff_return_average": 21.615,
+  "scramble_average": 7.083,
+  "scramble_short_pct": 30.029,
+  "register": {
+    "points_per_team": 24.016,
+    "total_points": 48.031,
+    "drives_per_game": 22.547,
+    "plays_per_drive": 5.819,
+    "first_downs_per_drive": 1.805,
+    "offensive_plays_per_gm": 129.734,
+    "drive_touchdown_pct": 21.275,
+    "drive_fieldgoal_pct": 19.265,
+    "drive_punt_pct": 33.749,
+    "drive_turnover_pct": 10.395,
+    "drive_downs_pct": 5.267,
+    "completion_pct": 65.061,
+    "sack_pct": 7.337,
+    "int_pct": 2.339,
+    "air_yards": 4.872,
+    "yac": 5.356,
+    "yards_per_dropback": 5.709,
+    "time_to_throw": 2.768,
+    "run_ypc": 4.587,
+    "run_explosive_pct": 2.243,
+    "run_negative_pct": 8.639,
+    "pass_play_share": 56.136,
+    "play_action_pct": 9.659,
+    "motion_pct": 37.119,
+    "blitz_pct": 13.629,
+    "injuries_per_team_game": 0.5,
+    "mean_margin": 9.469,
+    "margin_10plus_pct": 29.688,
+    "margin_17plus_pct": 15.625,
+    "overtime_pct": 10.938,
+    "tie_pct": 0.0,
+    "fg_pct": 87.697,
+    "punt_gross": 47.032,
+    "kickoff_touchback_pct": 13.187
+  },
+  "misses": {
+    "drive_fieldgoal_pct": {
+      "value": 19.265,
+      "target": 16.5,
+      "tolerance": 2.0
+    },
+    "injuries_per_team_game": {
+      "value": 0.5,
+      "target": 0.85,
+      "tolerance": 0.25
+    },
+    "mean_margin": {
+      "value": 9.469,
+      "target": 11.1,
+      "tolerance": 1.5
+    },
+    "margin_10plus_pct": {
+      "value": 29.688,
+      "target": 44.7,
+      "tolerance": 4.0
+    },
+    "margin_17plus_pct": {
+      "value": 15.625,
+      "target": 26.1,
+      "tolerance": 4.0
+    },
+    "overtime_pct": {
+      "value": 10.938,
+      "target": 6.2,
+      "tolerance": 2.0
+    }
+  },
+  "score_violations": [],
+  "return_examples": [
+    {
+      "seed": 100641,
+      "home": "BAL",
+      "away": "MIA",
+      "kind": "punt",
+      "yards": 89.0,
+      "pursuit": [
+        {
+          "pid": "P1577",
+          "role": "punter",
+          "leverage": "last",
+          "ahead": 15.8,
+          "lateral": 1.6,
+          "at": 27.1,
+          "missed": true
+        },
+        {
+          "pid": "P1604",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 10.8,
+          "lateral": 10.9,
+          "at": 29.3,
+          "missed": true
+        },
+        {
+          "pid": "P1595",
+          "role": "coverage",
+          "leverage": "contain",
+          "ahead": 7.8,
+          "lateral": 13.6,
+          "at": 35.8,
+          "missed": true
+        }
+      ]
+    }
+  ]
+}
