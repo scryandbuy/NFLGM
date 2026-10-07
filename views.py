@@ -433,7 +433,8 @@ BLOCK_KINDS = {'roster', 'trade_offer', 'match_request', 'staff', 'offer_sheet',
 def _inbox(league, limit=14):
     box = getattr(league, 'inbox', []) or []
     rows = []
-    for m in (sorted(box, key=lambda m: -m['id'])[:limit] if limit else sorted(box, key=lambda m: -m['id'])):
+    ordered = sorted(box, key=lambda m: -m.get('sort_id', m['id']))
+    for m in ordered[:limit] if limit else ordered:
         rows.append(dict(id=m['id'], subject=m['subject'], body=(m.get('body') or '')[:140], tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), decide=(is_decision(m)),
                          block=(is_decision(m) and (m.get('kind') in ('roster', 'trade_offer', 'offer_sheet', 'scouting_focus') or bool((m.get('payload') or {}).get('poach')))),
                          kind=m.get('kind'), unread=m.get('status') == 'unread', week=m.get('week'), year=m.get('year'), sender=m.get('sender'), **{'from': m.get('sender')}, when=__import__('inbox').date_label(m)))

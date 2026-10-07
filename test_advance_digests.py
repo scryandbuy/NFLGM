@@ -15,7 +15,30 @@ class AdvanceDigests(unittest.TestCase):
             self.post('MIN and CAR make a trade')
             D.consolidate(self.L,before)
             self.assertEqual(len(self.L.inbox),n+1)
-        self.assertTrue(all(m['subject']=='League Transactions' for m in self.L.inbox))
+        self.assertTrue(all(m['subject']=='Trades' for m in self.L.inbox))
+
+    def test_transaction_types_get_separate_grouped_emails(self):
+        for opponent in ('PIT', 'MIN'):
+            IB.post(self.L, 'league', f'GB and {opponent} make a trade', '', sender='league', payload={
+                'mail_layout':'trade', 'mail_sections':IB.trade_sections('GB', opponent,
+                    ['Player A'], ['2031 R1'])})
+        for team in ('DAL', 'CAR'):
+            self.post(f'{team} sign Player', payload={'mail_sections':[
+                IB.mail_section('Signings', [[team, 'Player', 'WR', '80', '2', '$4.0m']],
+                                ['Team', 'Player', 'Pos', 'OVR', 'Years', '2030 Cap Hit'])]})
+            self.post(f'{team} extend Player', payload={'mail_sections':[
+                IB.mail_section('Extensions', [[team, 'Player', '3 years', '$12.0m']],
+                                ['Team', 'Player', 'Term', 'Annual Average'])]})
+            self.post(f'{team} tag Player')
+        D.consolidate(self.L, set())
+        self.assertEqual({m['subject'] for m in self.L.inbox},
+                         {'Trades', 'Signings', 'Extensions', 'Franchise Tags'})
+        self.assertEqual(len(self.L.inbox), 4)
+        by_subject = {m['subject']:m for m in self.L.inbox}
+        self.assertEqual(len(by_subject['Trades']['payload']['mail_sections']), 4)
+        for subject in ('Signings', 'Extensions'):
+            table = next(s for s in by_subject[subject]['payload']['mail_sections'] if s['columns'])
+            self.assertEqual(len(table['rows']), 2)
     def test_decisions_and_existing_mail_untouched(self):
         old=self.post('Old')
         offer=self.post('Trade offer',kind='trade_offer')
@@ -31,6 +54,37 @@ class AdvanceDigests(unittest.TestCase):
         sections=self.L.inbox[0]['payload']['mail_sections']
         self.assertEqual(len(sections),6) # each original intro and both sides
         self.assertIn('2031 R1',self.L.inbox[0]['body'])
+
+    def test_saved_mixed_digest_splits_without_losing_history(self):
+        sections = (IB.trade_sections('GB', 'MIN', ['Player A (WR, 80)'], ['2031 R1']) +
+                    [IB.mail_section('Signings', [['DAL', 'Player B', 'WR', '82', '3', '$8m']],
+                                     ['Team', 'Player', 'Pos', 'OVR', 'Years', '2030 Cap Hit']),
+                     IB.mail_section('Extensions', [['CAR extend Player C']]),
+                     IB.mail_section('Franchise Tags', [['PIT tag Player D']])])
+        old = IB.post(self.L, 'league', 'League Transactions', '', sender='league',
+                      payload={'mail_sections':sections})
+        old['status'] = 'read'
+        D.split_saved_transactions(self.L)
+        self.assertEqual({m['subject'] for m in self.L.inbox},
+                         {'Trades', 'Signings', 'Extensions', 'Franchise Tags'})
+        self.assertEqual(len(self.L.inbox), 4)
+        self.assertIn(old['id'], [m['id'] for m in self.L.inbox])
+        self.assertTrue(all(m['status'] == 'read' and m['year'] == 2030 and m['week'] == 4
+                            for m in self.L.inbox))
+        self.assertIn('2031 R1', next(m for m in self.L.inbox if m['subject'] == 'Trades')['body'])
+        from views import _inbox
+        newer = IB.post(self.L, 'league', 'More recent news', '')
+        self.assertEqual(_inbox(self.L)['rows'][0]['id'], newer['id'])
+        self.assertEqual({r['subject'] for r in _inbox(self.L)['rows'][1:]},
+                         {'Trades', 'Signings', 'Extensions', 'Franchise Tags'})
+        D.split_saved_transactions(self.L)
+        self.assertEqual(len(self.L.inbox), 5)
+
+    def test_unknown_saved_transaction_section_remains_intact(self):
+        old = IB.post(self.L, 'league', 'League Transactions', '', sender='league',
+                      payload={'mail_sections':[IB.mail_section('Other News', [['Keep this text']])]})
+        D.split_saved_transactions(self.L)
+        self.assertEqual(self.L.inbox, [old])
     def test_advance_boundary_calls_consolidation(self):
         from session import Session
         def advance():

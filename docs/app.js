@@ -459,13 +459,13 @@ function mailTradePair(message, index) {
 
 function renderTradeExchange(sides) {
   const exchange = el('section', {class:'mail-exchange', 'aria-label':sides.map(s => s.title).join(' and ') + ' trade'});
-  exchange.append(el('div', {class:'mail-exchange-label'}, 'Trade'));
   const grid = el('div', {class:'mail-exchange-sides'});
   const ordinals = ['first','second','third','fourth','fifth','sixth','seventh'];
   for (const side of sides) {
     const block = el('section', {class:'mail-exchange-team'});
     if (side.team) applyTeamTheme(block, {abbr:side.team});
     block.append(el('header', {}, el('h4', {}, side.title), el('span', {}, 'Receives')));
+    const assets = el('div', {class:'mail-exchange-assets'});
     const picks = new Map();
     for (const [cell] of side.rows) {
       // Only combine unambiguous pick descriptions; preserve provenance or
@@ -479,19 +479,16 @@ function renderTradeExchange(sides) {
       }
       const player = cell.text.match(/^(.+) \(([A-Z][A-Z0-9/]*), (\d+(?:\.\d+)?)\)$/);
       if (player && (cell.mentions || []).every(r => r.end <= player[1].length)) {
-        block.append(el('div', {class:'mail-exchange-player'},
-          el('div', {}, messageText({body:player[1], mentions:{body:cell.mentions || []}}, 'body'), el('small', {}, player[2])),
-          el('div', {class:'mail-exchange-rating'}, player[3], el('small', {}, 'OVR'))));
-      } else block.append(el('div', {class:'mail-exchange-asset'}, messageText({body:cell.text, mentions:{body:cell.mentions || []}}, 'body')));
+        assets.append(el('span', {class:'mail-exchange-asset'},
+          messageText({body:player[1], mentions:{body:cell.mentions || []}}, 'body'),
+          el('small', {}, ` ${player[2]} · ${player[3]} OVR`)));
+      } else assets.append(el('span', {class:'mail-exchange-asset'},
+        messageText({body:cell.text, mentions:{body:cell.mentions || []}}, 'body')));
     }
-    if (picks.size) {
-      const list = el('div', {class:'mail-exchange-picks'});
-      for (const [year, rounds] of [...picks].sort((a,b) => Number(a[0])-Number(b[0]))) {
-        list.append(el('div', {}, el('span', {}, `${year} ${rounds.length === 1 ? 'pick' : 'picks'}`),
-          el('strong', {}, rounds.sort((a,b) => a-b).map(r => `Round ${r}`).join(', '))));
-      }
-      block.append(list);
+    for (const [year, rounds] of [...picks].sort((a,b) => Number(a[0])-Number(b[0]))) {
+      assets.append(el('span', {class:'mail-exchange-asset'}, `${year} R${rounds.sort((a,b) => a-b).join('/R')}`));
     }
+    block.append(assets);
     grid.append(block);
   }
   exchange.append(grid);
@@ -716,7 +713,7 @@ function hasPlayerReference(message, pid) { return (message.entities || []).some
 function linkHash(link) {
   if (!link) return '#portal';
   const [a, b] = String(link).split(':');
-  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:regression': '#club/regression', 'club:ps': '#club/ps', 'league:bracket': '#league/bracket', 'front_office:review': '#frontoffice/review', 'front_office:exit': '#frontoffice/exit', 'personnel:fa': '#personnel/fa', 'personnel:waivers': '#personnel/wire', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'personnel:retain': '#personnel/retain', 'draft:board': '#draft/board' };
+  const MAP = { 'club': '#club', 'club:depth': '#club/depth', 'club:regression': '#club/regression', 'club:ps': '#club/ps', 'league:bracket': '#league/bracket', 'league:transactions': '#league/transactions', 'front_office:review': '#frontoffice/review', 'front_office:exit': '#frontoffice/exit', 'personnel:fa': '#personnel/fa', 'personnel:trades': '#personnel/trades', 'personnel:waivers': '#personnel/wire', 'player': '#club/player/', 'league:standings': '#league', 'league:schedule': '#league/schedule', 'league:coaching': '#league/coaching', 'league:awards': '#league/awards', 'league:almanac': '#league/almanac', 'front_office:owner': '#frontoffice', 'front_office:staff': '#frontoffice/staff', 'personnel:extensions': '#personnel/extensions', 'personnel:retain': '#personnel/retain', 'draft:board': '#draft/board' };
   if (a === 'player') return '#club/player/' + b;
   if (String(link).startsWith('club:player:')) return '#club/player/' + String(link).split(':')[2];
   if (a === 'gameplan') return b === 'practice' ? '#gameplan/practice' : '#gameplan';

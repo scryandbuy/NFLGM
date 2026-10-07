@@ -3137,27 +3137,18 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .mail-trade .mail-section{margin:0;min-width:0}
 .mail-trade .mail-body-row{padding:10px 0;overflow-wrap:anywhere}
 .mail-content{container-type:inline-size}
-.mail-exchange{margin:0 0 28px;min-width:0;grid-column:1/-1}
-.mail-exchange:last-child{margin-bottom:0}
-.mail-exchange-label{display:flex;align-items:center;gap:14px;color:var(--team-accent,var(--club-2));font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;margin-bottom:17px}
-.mail-exchange-label:after{content:'';height:1px;flex:1;background:#ffffff16}
-.mail-exchange-sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:26px}
-.mail-exchange-team{min-width:0}
-.mail-exchange-team header{border-left:3px solid var(--team-readable,var(--club-2));padding-left:10px;margin-bottom:14px}
-.mail-content .mail-exchange-team h4{font-family:var(--text);font-size:17px;font-weight:700;letter-spacing:-.02em;color:var(--ink);margin:0;padding:0;background:none;border:0}
-.mail-exchange-team header>span{display:block;font-size:10px;letter-spacing:.1em;color:var(--ink-2);margin-top:4px;text-transform:uppercase}
-.mail-exchange-player{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:12px;font-size:14px;font-weight:600;overflow-wrap:anywhere}
-.mail-exchange-player>div:first-child{min-width:0}
-.mail-exchange-player small{display:block;font-size:11px;font-weight:400;color:var(--ink-2);margin-top:3px}
-.mail-exchange-rating{font-size:21px;font-weight:700;flex-shrink:0;text-align:right;font-variant-numeric:tabular-nums}
-.mail-exchange-rating small{font-size:10px}
-.mail-exchange-asset{margin:0 0 10px;overflow-wrap:anywhere}
-.mail-exchange-picks{display:grid;gap:9px}
-.mail-exchange-player~.mail-exchange-picks,.mail-exchange-asset~.mail-exchange-picks{padding-top:12px;border-top:1px solid #ffffff12}
-.mail-exchange-picks>div{display:flex;justify-content:space-between;flex-wrap:wrap;gap:3px 12px;font-size:12px}
-.mail-exchange-picks span{color:var(--ink-2)}
-.mail-exchange-picks strong{font-weight:500}
-@container(max-width:480px){.mail-exchange-sides{grid-template-columns:minmax(0,1fr);gap:18px}.mail-exchange-team+.mail-exchange-team{border-top:1px solid #ffffff12;padding-top:15px}}
+.mail-exchange{margin:0;min-width:0;grid-column:1/-1;padding:12px 0;border-top:1px solid #ffffff16}
+.mail-exchange:first-child{border-top:0;padding-top:0}
+.mail-exchange-sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.mail-exchange-team{min-width:0;border-left:2px solid var(--team-readable,var(--club-2));padding-left:10px}
+.mail-exchange-team header{display:flex;align-items:baseline;gap:7px;margin-bottom:4px}
+.mail-content .mail-exchange-team h4{font-family:var(--text);font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ink);margin:0;padding:0;background:none;border:0}
+.mail-exchange-team header>span{font-size:10px;letter-spacing:.06em;color:var(--ink-2);text-transform:uppercase}
+.mail-exchange-assets{display:flex;flex-wrap:wrap;gap:2px 0;line-height:1.4}
+.mail-exchange-asset{font-size:12px;overflow-wrap:anywhere}
+.mail-exchange-asset+.mail-exchange-asset:before{content:' · ';color:var(--ink-2);margin:0 7px}
+.mail-exchange-asset small{font-size:11px;font-weight:400;color:var(--ink-2)}
+@container(max-width:480px){.mail-exchange-sides{grid-template-columns:minmax(0,1fr);gap:10px}}
 @media(max-width:700px){.mail-content.mail-trade{grid-template-columns:minmax(0,1fr)}}
 .trade-interest {width:112px;flex:0 0 112px;}
 .trade-interest small {display:block;font-size:11px;color:var(--ink-3);margin-bottom:5px;}

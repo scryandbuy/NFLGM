@@ -22,12 +22,13 @@ const sides = [
       await page.setViewportSize({width,height:1000});
       const result = await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,
         groups:document.querySelectorAll('.mail-exchange').length,cols:getComputedStyle(document.querySelector('.mail-exchange-sides')).gridTemplateColumns,
+        exchangeHeight:document.querySelector('.mail-exchange').getBoundingClientRect().height,
         text:document.querySelector('.mail-content').textContent}));
       assert.ok(result.scroll<=result.width,JSON.stringify(result));
       assert.equal(result.groups,2);
       assert.ok(!result.text.includes('make a trade'));
-      assert.ok(result.text.includes('Round 2, Round 3'));
-      if(width===800) assert.equal(result.cols.split(' ').length,2);
+      assert.ok(result.text.includes('2032 R2/R3'));
+      if(width===800) { assert.equal(result.cols.split(' ').length,2); assert.ok(result.exchangeHeight<120,JSON.stringify(result)); }
       if(width===320) assert.equal(result.cols.split(' ').length,1);
       console.log(width,result.cols,'no overflow');
       if(width===800 && process.env.MAIL_SCREENSHOT) await page.locator('.pane').screenshot({path:process.env.MAIL_SCREENSHOT});

@@ -19,15 +19,16 @@ class MailLayoutTests(unittest.TestCase):
                     ['a 2032 second-round pick', 'a 2032 second-round pick'], ['Player (TE, 90)'])))
         IB.post(league, 'league', 'GB sign Player', 'A signing remains visible.')
         inbox_digest.consolidate(league, set())
-        self.assertEqual(len(league.inbox), 1)
-        saved = League.load(league.save()).inbox[-1]
+        self.assertEqual({m['subject'] for m in league.inbox}, {'Trades', 'GB sign Player'})
+        reloaded = League.load(league.save()).inbox
+        saved = next(m for m in reloaded if m['subject'] == 'Trades')
         sections = IB.mail_layout(saved)['mail_sections']
         self.assertEqual([s.get('team') for s in sections[:4]], ['GB', 'MIN', 'KC', 'BUF'])
         self.assertEqual(sections[0]['trade_group'], sections[1]['trade_group'])
         self.assertNotEqual(sections[0]['trade_group'], sections[2]['trade_group'])
         self.assertEqual(len(sections[1]['rows']), 2)
         self.assertNotIn('make a trade', saved['body'])
-        self.assertIn('A signing remains visible.', saved['body'])
+        self.assertIn('A signing remains visible.', next(m for m in reloaded if m['subject'] == 'GB sign Player')['body'])
 
     def test_one_for_one_offer_has_both_teams_and_player_links(self):
         league=fixture(); league.user_team='GB'
@@ -46,6 +47,21 @@ class MailLayoutTests(unittest.TestCase):
         self.assertEqual(layout['mail_layout'],'trade')
         self.assertEqual([x['rows'][0][0]['text'] for x in layout['mail_sections']],['Alex Smith (WR)','Ben Jones (CB)'])
         self.assertEqual(msg,original)
+
+    def test_saved_mixed_transaction_email_splits_on_reconcile(self):
+        league = fixture()
+        sections = IB.trade_sections('GB', 'MIN', ['Player A (WR, 80)'], ['2031 R1'])
+        sections.append(IB.mail_section('Extensions', [['DAL extend Player B']]))
+        old = IB.post(league, 'league', 'League Transactions', '',
+                      payload={'mail_sections':sections})
+        old['status'] = 'read'
+        loaded = League.load(league.save())
+        IB.reconcile(loaded)
+        self.assertEqual({m['subject'] for m in loaded.inbox}, {'Trades', 'Extensions'})
+        self.assertTrue(all(m['status'] == 'read' for m in loaded.inbox))
+        reloaded = League.load(loaded.save())
+        IB.reconcile(reloaded)
+        self.assertEqual(len(reloaded.inbox), 2)
 
     def test_completed_cpu_trade_keeps_received_sides_and_links_after_reload(self):
         from league import DraftPick
@@ -86,7 +102,7 @@ class MailLayoutTests(unittest.TestCase):
         ids={m['id'] for s in sections for r in s['rows'] for cell in r for m in cell['mentions']}
         self.assertEqual(ids,{'a','b','c','d'})
 
-    def test_all_signings_extensions_and_tags_share_advance_digest(self):
+    def test_signings_extensions_and_tags_get_separate_advance_emails(self):
         import inbox_digest
         from cap_engine import Contract
         league=fixture(); league.user_team='KC'
@@ -98,12 +114,11 @@ class MailLayoutTests(unittest.TestCase):
         LN.transactions(league,1)
         IB.news(league,'Free agency, round 1: signings','Round signings.')
         inbox_digest.consolidate(league,set())
-        self.assertEqual(len(league.inbox),1)
-        self.assertEqual(league.inbox[0]['subject'],'League Transactions')
-        self.assertIn('Extensions',league.inbox[0]['body'])
-        self.assertIn('sign',league.inbox[0]['body'])
-        self.assertIn('Franchise Tags',league.inbox[0]['body'])
-        self.assertIn('Round signings.',league.inbox[0]['body'])
+        self.assertEqual({m['subject'] for m in league.inbox},
+                         {'Signings', 'GB extend b', 'GB tag c'})
+        self.assertIn('Round signings.', next(m for m in league.inbox if m['subject'] == 'Signings')['body'])
+        self.assertIn('extend', next(m for m in league.inbox if m['subject'] == 'GB extend b')['body'])
+        self.assertIn('tag', next(m for m in league.inbox if m['subject'] == 'GB tag c')['body'])
 
     def test_old_cpu_trade_renders_sections_without_rewriting_mail(self):
         league=fixture(); a=player(league,'a'); a.name='Mike Smith'
