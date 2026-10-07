@@ -74,7 +74,7 @@ def consolidate(league, before):
         # Coalesce ordinary one-line records into one compact section.
         merged = []
         for section in sections:
-            if (topic == 'League Transactions' and merged and section['columns']
+            if (topic in ('League Transactions', 'Injury Update', 'Waiver Results') and merged and section['columns']
                     and section['title'] == merged[-1]['title'] and section['columns'] == merged[-1]['columns']):
                 merged[-1]['rows'].extend(section['rows'])
             elif not section['title'] and not section['columns'] and merged and not merged[-1]['title'] and not merged[-1]['columns']:

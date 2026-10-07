@@ -173,6 +173,82 @@ def _transaction_mail_layout(message, payload):
     return payload
 
 
+def _roster_update_mail_layout(message, payload):
+    """Tabulate saved announcements using only their original text and links."""
+    import copy
+    import re
+    kind, subject = message.get('kind'), message.get('subject', '')
+    injury = kind in ('injury', 'ir_ready') or subject == 'Injury Update'
+    waiver = (kind == 'waiver_notice' and not subject.startswith('Available on waivers:')) or subject == 'Waiver Results'
+    tags = kind == 'league'
+    if not (injury or waiver or tags): return payload
+    if injury and subject.startswith(('Short at ', 'Emergency at ')): return payload
+    sections = copy.deepcopy(payload.get('mail_sections') or [])
+    if not sections:
+        lines = str(message.get('body') or '').splitlines()
+        # A failed cap claim's player is recorded in its subject, not its body.
+        if waiver and subject.startswith('Claim failed:'):
+            lines = [subject + ' — ' + str(message.get('body') or '')]
+        sections = [dict(title='', columns=[], rows=[[dict(text=line, mentions=[])] for line in lines if line.strip()])]
+    result, changed = [], False
+    entities = message.get('entities') or []
+    for section in sections:
+        if section.get('columns'):
+            result.append(section); continue
+        rows = section.get('rows', [])
+        if injury and all(len(row) == 1 and isinstance(row[0], dict) for row in rows):
+            rows = [[dict(text=line, mentions=[])] for row in rows
+                    for line in row[0].get('text', '').splitlines() if line.strip()]
+        for row in rows:
+            cell = row[0] if len(row) == 1 else None
+            text = cell.get('text', '') if isinstance(cell, dict) else str(cell or '')
+            values = None
+            if injury:
+                match = re.fullmatch(r'(.+?) \(([^,)]+)(?:, \d+ overall)?\) (.+)', text)
+                if match:
+                    player, pos, detail = match.groups()
+                    out = re.fullmatch(r'is out (.+?) \(([^)]+)\)(.*)', detail)
+                    if out:
+                        duration, condition, note = out.groups()
+                        detail = condition + (note.rstrip('.') if note.startswith(';') else '')
+                        values = [player, pos, detail, duration.removeprefix('for ')]
+                    elif detail.startswith('is back from his injury'):
+                        values = [player, pos, 'Cleared to play', 'Available']
+                    else:
+                        # Keep activation restrictions and medical details intact.
+                        values = [player, pos, detail, '—']
+                    title, columns = 'Injury Updates', ['Player', 'Pos', 'Status', 'Expected Return']
+            elif waiver:
+                patterns = [
+                    (r'You were awarded (.+?) \(([^,]+), \d+\) off waivers from ([A-Z]+)\. (.+)', lambda m:[m[1],m[3],'Awarded',m[4]]),
+                    (r'You claimed (.+?) \(([^)]+)\) and ([A-Z]+) held the higher priority\. He is theirs\.', lambda m:[m[1],m[3],'Claim lost','Higher waiver priority']),
+                    (r'(.+?) \(([^)]+)\) was signed by ([A-Z]+) before the wire cleared\. Your claim did not go through\.', lambda m:[m[1],m[3],'Claim void','Signed before waivers cleared']),
+                    (r'You waived (.+?) for the practice squad and ([A-Z]+) claimed him off the wire\. He is theirs\.', lambda m:[m[1],m[2],'Claimed','Claimed by another team']),
+                    (r'(.+?) cleared waivers and is on your practice squad\.', lambda m:[m[1],'Your team','Cleared','Joined practice squad']),
+                    (r'(.+?) cleared waivers but the squad had no room for him under its rules; he is a free agent\.', lambda m:[m[1],'—','Cleared','Free agent; practice squad full']),
+                    (r'Claim failed: (.+?) — (.+)', lambda m:[m[1],'Your team','Claim failed',m[2]])]
+                for pattern, convert in patterns:
+                    match = re.fullmatch(pattern, text)
+                    if match:
+                        values = convert(match); break
+                title, columns = 'Waiver Results', ['Player', 'Team', 'Outcome', 'Details']
+            else:
+                match = re.fullmatch(r'([A-Z]+) place the franchise tag on (.+?) \(([^,]+), \d+\)(?: at (\$[\d.]+m))?\.', text)
+                if match: values = [match[1],match[2],match[3],match[4] or '—']
+                if not values and section.get('title', '').lower() == 'franchise tags':
+                    match = re.fullmatch(r'([A-Z]+) · (.+?) · ([^·]+) · (\$[\d.]+m)', text)
+                    if match: values = list(match.groups())
+                title, columns = 'Franchise Tags', ['Team', 'Player', 'Pos', 'Tag Amount']
+            if values is None:
+                result.append(dict(section, rows=[row])); continue
+            cells = [dict(text=v, mentions=reference_spans(v, entities, [])) for v in values]
+            if result and result[-1].get('title') == title and result[-1].get('columns') == columns:
+                result[-1]['rows'].append(cells)
+            else: result.append(dict(title=title, columns=columns, rows=[cells]))
+            changed = True
+    return dict(payload, mail_sections=result, mail_intro=payload.get('mail_intro') or dict(text='', mentions=[])) if changed else payload
+
+
 def mail_layout(message):
     """Display old structured regression mail and legacy CPU trades consistently."""
     import copy
@@ -180,6 +256,7 @@ def mail_layout(message):
     payload = dict(message.get('payload') or {})
     if message.get('kind') == 'league':
         payload = _transaction_mail_layout(message, payload)
+    payload = _roster_update_mail_layout(message, payload)
     if message.get('kind') == 'contract_year':
         # Render saved announcements from their original contract snapshot.
         # Never substitute today's player ratings or salary into old mail.

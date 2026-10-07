@@ -102,7 +102,7 @@ class MailLayoutTests(unittest.TestCase):
         self.assertEqual(league.inbox[0]['subject'],'League Transactions')
         self.assertIn('Extensions',league.inbox[0]['body'])
         self.assertIn('sign',league.inbox[0]['body'])
-        self.assertIn('franchise tag',league.inbox[0]['body'])
+        self.assertIn('Franchise Tags',league.inbox[0]['body'])
         self.assertIn('Round signings.',league.inbox[0]['body'])
 
     def test_old_cpu_trade_renders_sections_without_rewriting_mail(self):
