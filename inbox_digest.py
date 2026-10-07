@@ -178,3 +178,35 @@ def consolidate(league, before):
         msg['mentions']['body'] = IB.reference_spans(msg['body'], entities, [])
         remove = {m['id'] for m in messages}
         league.inbox[:] = [m for m in league.inbox if m['id'] not in remove]
+
+
+def append_draft_trade(league, message):
+    """One growing draft ledger, including user trades across separate clicks."""
+    year = (getattr(league, 'league_notes_sent', None) or {}).get('_draft_trade_mail_active')
+    if year is None or category(message) not in ('Trades', 'Your Trades'):
+        return message
+    layout = IB.mail_layout(message)
+    if not layout.get('mail_sections'):
+        return message
+    sections = copy.deepcopy(layout['mail_sections'])
+    for section in sections:
+        section['trade_group'] = str(message['id'])
+    box = league.inbox
+    existing = next((m for m in box if m is not message and
+        (m.get('payload') or {}).get('draft_trade_digest') == year), None)
+    if existing is None:
+        existing = message
+        existing.update(subject='Draft Day Trades', kind='league', sender='league')
+        existing['payload'] = dict(draft_trade_digest=year, link='league:transactions',
+            mail_sections=sections, mail_intro=dict(text='', mentions=[]))
+    else:
+        existing['payload']['mail_sections'].extend(sections)
+        existing.setdefault('entities', []).extend(message.get('entities') or [])
+        existing['status'] = 'unread'
+        box.remove(message)
+    existing['body'] = '\n\n'.join('\n'.join([s['title']] +
+        [' | '.join(c.get('text', '') for c in row) for row in s['rows']]).strip()
+        for s in existing['payload']['mail_sections'])
+    existing['mentions'] = dict(subject=[], body=IB.reference_spans(
+        existing['body'], existing.get('entities') or [], []))
+    return existing

@@ -51,6 +51,8 @@ def _decision_batch(method):
 class Draft:
     def __init__(self, league, rng, year, user_team=None, auto_pick=False, level=None, scale=None):
         self.L, self.rng, self.year = league, rng, year
+        if getattr(league, "league_notes_sent", None) is None: league.league_notes_sent = {}
+        league.league_notes_sent["_draft_trade_mail_active"] = year
         self.user, self.auto = user_team, auto_pick
         self.picks = sorted((pk for t in league.teams.values() for pk in t.picks
                              if pk.year == year and pk.selection and not pk.used_on),
@@ -527,4 +529,5 @@ class Draft:
                 if p.pid not in self.L.free_agents:
                     self.L.free_agents.append(p.pid)
         self.L.draft_pool = []
+        self.L.league_notes_sent.pop("_draft_trade_mail_active", None)
         __import__("fa_window").set_closed(self.L, False)

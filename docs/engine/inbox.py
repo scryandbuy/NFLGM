@@ -416,7 +416,8 @@ def post(league, kind, subject, body, sender=None, payload=None, expires_week=No
         for c in cells:
             c['mentions'] = reference_spans(c['text'], m['entities'], c['mentions'])
     _box(league).append(m)
-    return m
+    import inbox_digest
+    return inbox_digest.append_draft_trade(league, m)
 
 
 def pending(league, kind=None):
