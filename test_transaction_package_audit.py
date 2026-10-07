@@ -117,6 +117,34 @@ class TransactionPackageAuditTests(unittest.TestCase):
         with patch.object(trades.VAL,'value_player',return_value={'apy':1,'years':1}):
             self.assertFalse(trades.street_alternative(L,t,target,report,{},{}))
 
+    def test_street_guard_prices_veteran_at_legal_minimum(self):
+        from cap_engine import Contract
+        from min_salary import player_minimum
+        L,t,wr,te,qb=offense_fixture('10')
+        street=prospect(L,'WR','veteran-on-street')
+        street.accrued=8
+        L.free_agents=[street.pid]
+        report=RN.assess(t)
+        floor=player_minimum(L,street)
+        self.assertGreater(floor,1)
+        quote={'apy':1,'years':1}
+
+        # A minimum-salary veteran is a credible alternative to an expensive
+        # traded receiver. The contract builder must receive the legal amount.
+        wr.contract=Contract(1,[5]);wr.team='DEN'
+        target=dict(obj=wr,package_gain=RN.move_gain(t,wr,baseline=report),inherit=5)
+        with patch.object(trades.VAL,'value_player',return_value=quote), \
+             patch.object(market,'signing_terms',wraps=market.signing_terms) as terms:
+            self.assertTrue(trades.street_alternative(L,t,target,report,{},{}))
+        self.assertGreaterEqual(terms.call_args.args[3],floor)
+
+        # If the trade player's current deal is cheaper than the veteran's
+        # legal minimum, the purported free-agent bargain cannot veto a trade.
+        wr.contract=Contract(1,[1])
+        target['inherit']=1
+        with patch.object(trades.VAL,'value_player',return_value=quote):
+            self.assertFalse(trades.street_alternative(L,t,target,report,{},{}))
+
     def test_expensive_leaders_cannot_hide_an_affordable_seventh_option(self):
         from cap_engine import Contract
         L,t,wr,te,qb=offense_fixture('10');wr.contract=Contract(1,[1]);wr.team='DEN'

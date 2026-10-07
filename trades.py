@@ -392,6 +392,7 @@ def street_alternative(league, team, target, baseline, cache, comps):
     """
     import roster_needs as RN
     import market as MK
+    from min_salary import minimum_quote
     from cap_engine import CAP
     from offer_reservations import held, raw_room
     player = target['obj']
@@ -428,14 +429,15 @@ def street_alternative(league, team, target, baseline, cache, comps):
         if not quote:
             continue
         years = 1 if league.phase in ('regular','playoffs','playoffs_closed') else int(quote['years'])
+        annual_pay = minimum_quote(league, candidate, quote['apy'], years)
         # Extra years or a much dearer FA are not equivalent contract terms.
-        if years != player.contract_years_left or quote['apy'] > player.apy * 1.05:
+        if years != player.contract_years_left or annual_pay > player.apy * 1.05:
             continue
         if funded_power is None:
             funded_power = MK.power(league, team, cap, years)
-        if funded_power < quote['apy'] * 1.05:
+        if funded_power < annual_pay * 1.05:
             continue
-        terms = MK.signing_terms(league, candidate, team, quote['apy'], years, cap)
+        terms = MK.signing_terms(league, candidate, team, annual_pay, years, cap)
         room = raw_room(league, team) - held(league, team.abbr, exclude_pid=candidate.pid)
         if terms['cap_hits'][0] > min(room, target.get('inherit', player.apy)) + .0005:
             continue
