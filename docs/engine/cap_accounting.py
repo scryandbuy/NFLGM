@@ -33,11 +33,11 @@ def settle_week(league, week):
         t.sync_cap()
 
 
-def depart(league, team, contract, june1=None):
+def depart(league, team, contract, june1=None, *, trade=False):
     """Keep paid salary on the old team; caller removes or transfers the deal."""
     if contract is None: return 0.0, 0.0, 0.0
     if pre_roll(league): settle_week(league,18)
-    now,nxt,saved = contract.release(0, league.post_june1() if june1 is None else june1)
+    now,nxt,saved = contract.release(0, league.post_june1() if june1 is None else june1, trade=trade)
     team.cap.dead += now
     team.cap.dead_next += nxt
     team.cap.earned += contract.earned_base + contract.earned_roster
@@ -47,6 +47,7 @@ def depart(league, team, contract, june1=None):
 def transfer_contract(contract, paid_week):
     """An acquiring team assumes only unearned salary, never old bonus."""
     c = copy.deepcopy(contract)
+    c.tag_guarantee = max(0.0, min(c.tag_guarantee, c.base[0])-c.earned_base)
     c.base[0] = max(0.0,c.base[0]-c.earned_base)
     c.rb[0] = max(0.0,c.rb[0]-c.earned_roster)
     c.earned_base=c.earned_roster=0.0
@@ -112,14 +113,14 @@ def next_year_ledger(league, team):
     return base+rollover,committed,rollover,dead
 
 
-def trade_projection(league, abbr, outgoing, incoming):
+def trade_projection(league, abbr, outgoing, incoming, *, releases=()):
     team=league.teams[abbr]; team.sync_cap()
     trial=copy.copy(team.cap); trial.contracts=list(team.cap.contracts)
-    for pid in outgoing:
+    for pid in list(outgoing) + list(releases):
         p=league.player(pid) if isinstance(pid,str) else None
         if not p or not p.contract: continue
         c=p.contract
-        now,nxt,_=c.release(0,league.post_june1())
+        now,nxt,_=c.release(0,league.post_june1(), trade=pid not in releases)
         trial.dead+=now; trial.dead_next+=nxt
         trial.earned+=c.earned_base+c.earned_roster
         trial.contracts=[row for row in trial.contracts if row[0]!=pid]
@@ -135,7 +136,7 @@ def require_trade_room(league, a, b, a_sends, b_sends, roster_releases=None):
     roster_releases = roster_releases or {}
     for abbr,outgoing,incoming in [(a,a_sends,b_sends),(b,b_sends,a_sends)]:
         team=league.teams[abbr]
-        trial=trade_projection(league,abbr,list(outgoing)+list(roster_releases.get(abbr,())),incoming)
+        trial=trade_projection(league,abbr,outgoing,incoming, releases=roster_releases.get(abbr,()))
         after=trial.charges(team.phase)
         pending = held(league, abbr)
         pending_now = 0.0 if pre_roll(league) else pending

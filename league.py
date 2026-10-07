@@ -228,6 +228,13 @@ class Player:
         for k in cls.__slots__:
             setattr(p, k, d.get(k))
         p.contract = contract_from_dict(d.get('contract'))
+        # Old saves identify an active tag through player and contract evidence.
+        # Do not infer protection for a later signing or an expired tag.
+        c = p.contract
+        if (c and 'tag_guarantee' not in (d.get('contract') or {})
+                and p.fa_class == 'tagged' and p.tagged_year == c.signed
+                and c.years == 1 and c.sb == 0 and not any(c.rb)):
+            c.tag_guarantee = c.base[0]
         p.morale = morale_from_dict(d.get('morale'))
         p.career = {int(k): v for k, v in (d.get('career') or {}).items()}
         if p.team and (p.xp_spent or {}).get('_captain') and '_captain_team' not in p.xp_spent:
@@ -775,7 +782,7 @@ class League:
         p.team = None
         p.xp_spent['_fa_demand_start'] = [self.year, max(1, int(self.week or 0)) if self.phase == 'regular' else 1]
         if on_wire:
-            WV.waive(self, p, t.abbr, self.week)
+            WV.waive(self, p, t.abbr, self.week, tag_dead=p.contract.tag_guarantee if p.contract else 0.0)
         else:
             p.contract = None
         # the ledger is rebuilt now, not at the next roll: the dead money was added above and his
@@ -838,7 +845,7 @@ class League:
                 c = p.contract
                 if c is not None:
                     from cap_accounting import depart, transfer_contract
-                    dead_now, dead_next, _s = depart(self, self.teams[src], c)
+                    dead_now, dead_next, _s = depart(self, self.teams[src], c, trade=True)
                     p.contract = transfer_contract(c,self.teams[src].cap.paid_week)
                     self.log('trade_dead', team=src, pid=p.pid, dead=dead_now, dead_next=dead_next)
                 self.teams[src].roster.remove(p)
@@ -1320,7 +1327,7 @@ def contract_to_dict(c):
                 roster_bonus=list(c.rb), orig_years=getattr(c, 'orig_years', c.years),
                 void_years=c.void, signed=c.signed, bonus_schedule=list(c.bonus_schedule),
                 earned_base=c.earned_base, earned_roster=c.earned_roster, pay_start=c.pay_start,
-                start_offset=c.start_offset, market_cap=getattr(c, 'market_cap', None))
+                start_offset=c.start_offset, market_cap=getattr(c, 'market_cap', None), tag_guarantee=c.tag_guarantee)
 
 
 def contract_from_dict(d):

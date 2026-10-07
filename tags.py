@@ -130,9 +130,10 @@ def p_accrued(player):
     return int(player.accrued or 0)
 
 
-def _one_year(value, year):
+def _one_year(value, year, *, tagged=False):
     """A tag or tender is a one-year deal with no proration."""
-    return Contract(years=1, base=[value], signing_bonus=0.0, signed=year)
+    return Contract(years=1, base=[value], signing_bonus=0.0, signed=year,
+                    tag_guarantee=value if tagged else 0.0)
 
 
 def power(league, team, cap):
@@ -192,7 +193,7 @@ def run(league, rng, verbose=False):
             price = tag_price(cand, cap)
             if (cand.tag_count < MAX_TAGS and worth(cand) >= 5.0
                     and _cpu_retention_fits(league, team, cand, price, 'franchise_tag')):
-                cand.contract = _one_year(price, league.year)
+                cand.contract = _one_year(price, league.year, tagged=True)
                 cand.tag_count += 1
                 cand.tagged_year = league.year
                 cand.fa_class = 'tagged'
@@ -313,7 +314,7 @@ def user_tag(league, pid):
     price = tag_price(p, cap)
     room = power(league, team, cap) - pending_tender_cost(league)
     if price > room: return dict(ok=False, why=f"the tag costs ${price:.1f}m and after the minimums for the bodies you still owe you can commit ${max(0.0, room):.1f}m; clear room first")
-    p.contract = _one_year(price, league.year); p.tag_count += 1; p.tagged_year = league.year; p.fa_class = 'tagged'
+    p.contract = _one_year(price, league.year, tagged=True); p.tag_count += 1; p.tagged_year = league.year; p.fa_class = 'tagged'
     league.user_tag_choice = p.pid; team.sync_cap()
     league.log('franchise_tag', pid=p.pid, team=user, price=price, times=p.tag_count, user=True)
     return dict(ok=True, line=f"{p.name} tagged at ${price:.1f}m for {league.year}.", price=round(price, 1))

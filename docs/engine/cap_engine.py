@@ -62,13 +62,14 @@ def forecast_cap(league, year):
 MAX_PRORATION_YEARS = 5
 
 class Contract:
-    """Remaining salary plus fixed bonus allocations; no salary guarantees."""
+    """Remaining salary plus fixed bonus allocations and signed tag protection."""
     def __init__(self, years, base, signing_bonus=0.0, roster_bonus=None,
                  void_years=0, signed=2026, bonus_schedule=None,
                  earned_base=0.0, earned_roster=0.0, pay_start=0, start_offset=0,
-                 market_cap=None, **_ignored):
+                 market_cap=None, tag_guarantee=0.0, **_ignored):
         self.signed, self.years, self.void = signed, years, void_years
         self.market_cap = market_cap
+        self.tag_guarantee = float(tag_guarantee or 0.0)
         self.base = list(base)
         self.rb = list(roster_bonus or [0.0]*years)
         # Legacy saves contain only the remaining balance. Preserve that balance
@@ -116,6 +117,7 @@ class Contract:
     def advance(self):
         if self.bonus_schedule: self.bonus_schedule.pop(0)
         self.years -= 1
+        self.tag_guarantee = 0.0
         self.start_offset = max(0,self.start_offset-1)
         if self.base: self.base.pop(0)
         if self.rb: self.rb.pop(0)
@@ -123,10 +125,14 @@ class Contract:
         self.pay_start=0
         return self.years <= 0
 
-    def release(self, i, june1=False):
+    def release(self, i, june1=False, *, trade=False):
         rest=self.remaining_proration(i)
         now=self.bonus_at(i) if june1 else rest
         nxt=max(0.0,rest-now)
+        # Signed tag salary stays payable after a cut; a trade transfers it.
+        # June 1 splits bonus acceleration only, never current guaranteed pay.
+        if i == 0 and self.years > 0 and not trade:
+            now += max(0.0, min(self.tag_guarantee, self.base[0])-self.earned_base)
         earned=(self.earned_base+self.earned_roster) if i==0 else 0.0
         return round(now,3),round(nxt,3),round(self.cap_hit(i)-now-earned,3)
 

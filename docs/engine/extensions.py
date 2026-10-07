@@ -170,7 +170,7 @@ def build(p, add_years, apy, cap, gm, league, front_load=None, bonus=None):
     rb = list(old.rb) + [0.0] * add_years
     c = Contract(years=new_years, base=base, bonus_schedule=old.bonus_schedule,
                  roster_bonus=rb, signed=league.year, void_years=max(0,len(old.bonus_schedule)-new_years),
-                 market_cap=cap,
+                 market_cap=cap, tag_guarantee=old.tag_guarantee,
                  earned_base=old.earned_base, earned_roster=old.earned_roster, pay_start=old.pay_start, start_offset=old.start_offset)
     from cap_accounting import pre_roll
     c.add_bonus(st['signing_bonus'], 1 if pre_roll(league) else 0)

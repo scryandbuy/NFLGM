@@ -1,0 +1,40 @@
+FRANCHISE TAG GUARANTEED SALARY — 2026-10-07
+
+Football motivation
+A signed tag commits its current salary. Cutting a tagged player can free a roster
+place but cannot create unpaid-salary cap relief. Keeping him retains his football
+services; trading can transfer the unpaid obligation only if an actual buyer exists.
+This is accounting, not a new GM ranking rule. Ordinary contracts retain the game's
+existing no-general-salary-guarantees simplification. The existing pre-step user tag
+withdrawal control is preserved.
+
+Observed audit evidence supplied to this task
+SF Cruz, 2031: tag 40.68M; three weeks earned 6.78M; old release reported zero dead
+and 33.90M saved. No historical saved-game ledger is retroactively rewritten here.
+
+Controlled evidence
+The regression recreates those amounts: release returns 33.90M dead this year,
+zero future dead, zero savings. Earned salary stays 6.78M, and cap space does not
+increase. June 1 changes bonus timing only. An attempted replacement cannot spend
+fictional tag savings, but can proceed with genuine available room.
+Trades retain earned salary with the seller and transfer remaining protected salary;
+the buyer cutting the player then owes it. Post-deadline waiver claims likewise
+credit only the protected salary the claimant assumes. Save/load retains current
+contract protection and pending-waiver credit. Extensions preserve the old tag-year
+salary protection, which clears on annual advance; new years stay unguaranteed.
+
+Validation
+50 tests pass across test_tag_guarantee, test_cap_accounting,
+test_trade_dead_money_realism, test_waiver_cap_claim, test_extension_entry_buckets.
+All seven changed engine modules are mirrored byte-for-byte to docs/engine.
+Additional test_contract_terms run: 2 failures and 1 error, reproduced unchanged on
+baseline c81fd0d (affordability expectation, tender conversion expectation, and a
+GM fixture missing job_security). They remain pre-existing issues.
+
+Limits
+Migration infers only identifiable legacy active one-year tags: matching tag/signed
+year, tagged class, no bonus, and no explicit saved protection field. It does not
+invent protection for ambiguous historical extensions or reconstruct already released
+players' charges. New saves carry an explicit zero on unrelated deals, preventing
+old tag history from re-guaranteeing them. No long simulated-season replay was run;
+GM roster realism and frequency changes remain for integration/audit review.

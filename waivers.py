@@ -48,10 +48,10 @@ def subject(league, p, week):
     return league.phase == 'regular' and (week or 0) > DEADLINE_WEEK
 
 
-def waive(league, p, from_team, week):
+def waive(league, p, from_team, week, *, tag_dead=0.0):
     """Put a released man on the wire. Called by league.release."""
     pending(league).append(dict(pid=p.pid, from_team=from_team, week=week, year=league.year,
-                                claims=[], user_notified=False))
+                                claims=[], user_notified=False, tag_dead=tag_dead))
 
 
 def reaches_user(league, e, week, market=None, *, _assessments=None):
@@ -250,6 +250,7 @@ def claim_contract(league, p, abbr):
     paid=league.teams[abbr].cap.paid_week
     if paid>c.pay_start:
         c.base[0]*=max(0,18-paid)/max(1,18-c.pay_start)
+    c.tag_guarantee = min(c.tag_guarantee, c.base[0])
     c.pay_start=paid
     return c
 
@@ -269,6 +270,12 @@ def award(league, entry, abbr):
     p = league.player(entry['pid'])
     if p.pid in league.free_agents: league.free_agents.remove(p.pid)
     c = claim_contract(league,p,abbr)
+    # A successful claim transfers guaranteed tag pay to the new club.
+    # Credit only the amount it assumes; intervening unpaid weeks stay here.
+    old = league.teams.get(entry.get('from_team'))
+    if old and entry.get('tag_dead', 0.0):
+        old.cap.dead = max(0.0, old.cap.dead - min(entry['tag_dead'], c.tag_guarantee))
+        old.sync_cap()
     p.team = abbr; p.contract = c
     league.teams[abbr].roster.append(p); league.teams[abbr].sync_cap()
     league.log('waiver_claim', pid=p.pid, team=abbr, from_team=entry['from_team'])

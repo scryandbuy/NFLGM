@@ -226,7 +226,7 @@ def player_asset(league, team, p, pool, rng, need=None, viewer=None):
     # projection decides whether the seller can fund the move.
     c = getattr(p, 'contract', None)
     if c:
-        dead_now, dead_next, _s = c.release(0, league.post_june1())
+        dead_now, dead_next, _s = c.release(0, league.post_june1(), trade=True)
         dead = round(dead_now + dead_next, 2)
     else:
         dead_now, dead = 0.0, 0.0
@@ -1550,7 +1550,7 @@ def shop_cap_casualty(league, seller, player, rng, june1=None):
     # Do not trade if it would free less room than the cut already selected.
     cut_now, _, _ = player.contract.release(
         0, league.post_june1() if june1 is None else june1)
-    trade_now, _, _ = player.contract.release(0, league.post_june1())
+    trade_now, _, _ = player.contract.release(0, league.post_june1(), trade=True)
     if relief <= .0005 or trade_now > cut_now + .0005:
         return False
     forced = before > seller.cap.limit + .0005
