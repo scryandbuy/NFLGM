@@ -4284,6 +4284,7 @@ async function advanceInner() {
     $('#resume').disabled = !engineReady || !saved.text || entering;
     $('#recover').hidden = !saved.text;
     $('#recover').disabled = !saved.text || entering;
+    $('#boot-import').disabled = !engineReady || entering;
     pick.querySelectorAll('button').forEach(b => { b.disabled = entering; });
   }
   $('#recover').onclick = () => {
@@ -4294,6 +4295,32 @@ async function advanceInner() {
     link.download = `nflgm-browser-backup-${Date.now()}.json`;
     document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 30000);
+  };
+  $('#boot-import').onclick = () => {
+    if (engineReady && !entering) $('#boot-importfile').click();
+  };
+  $('#boot-importfile').onchange = async e => {
+    const file = e.target.files?.[0];
+    if (!file || !engineReady || entering) return;
+    entering = true; updateBootActions(); say('Loading save file…', 90);
+    let loaded = false;
+    try {
+      const text = await file.text();
+      py.globals.set('_BOOT_IMPORT', text);
+      py.runPython('SESSION = S.Session.load(_BOOT_IMPORT)');
+      loaded = true;
+    } catch (error) {
+      entering = false; updateBootActions();
+      say('Could not load that file. Your browser save is unchanged. ' + error);
+    } finally {
+      try { py.globals.delete('_BOOT_IMPORT'); } catch (_) { /* No file reached Python. */ }
+      e.target.value = '';
+    }
+    if (!loaded) return;
+    // The browser save changes only after the imported franchise has loaded.
+    saved = {text: null};
+    $('#boot').remove(); bootHash(); refresh();
+    await saveGameNotified();
   };
   function selectBootTeam(abbr) {
     if (entering || !CLUBS.includes(abbr)) return;

@@ -6,7 +6,7 @@
 <title>Franchise Dynasty Football Sim</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=d06657e872">
+<link rel="stylesheet" href="style.css?v=19ffb33874">
 </head>
 <body>
 
@@ -20,7 +20,7 @@
       <div class="boot-picker-head">
         <h2 id="boot-picker-title">Choose your team</h2>
         <div class="boot-selected" hidden aria-live="polite"><span class="boot-selected-code" id="selectedcode"></span><b id="selectedname"></b></div>
-        <div class="boot-actions"><button class="boot-action primary" id="start" disabled>Start a Franchise</button><button class="boot-action" id="resume" disabled>Resume Saved Game</button><button class="boot-action" id="recover" hidden>Download Save Backup</button></div>
+        <div class="boot-actions"><button class="boot-action primary" id="start" disabled>Start a Franchise</button><button class="boot-action" id="resume" disabled>Resume Saved Game</button><button class="boot-action" id="recover" hidden>Download Save Backup</button><button class="boot-action" id="boot-import" disabled>Import Save File</button><input type="file" id="boot-importfile" accept=".json,application/json" hidden></div>
       </div>
       <div class="boot-pick" id="pick" role="group" aria-label="Choose your team"></div>
       <div class="boot-progress"><div class="boot-bar" role="progressbar" aria-label="Loading game" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bootbar"></i></div><div class="boot-line" id="bootline" role="status" aria-live="polite">Loading game…</div></div>
@@ -59,6 +59,6 @@
 </section>
 <main id="page" hidden></main>
 
-<script type="module" src="app.js?v=d06657e872"></script>
+<script type="module" src="app.js?v=19ffb33874"></script>
 </body>
 </html>
