@@ -17,22 +17,21 @@ class InvalidExtensionPreviewTests(unittest.TestCase):
                     opened=100,mood='open',due=None,log=[])
         self.L.negotiations=[self.t]
 
-    def test_expired_contract_counter_cannot_crash_page_or_change_terms(self):
-        before=copy.deepcopy(self.t)
+    def test_old_counter_is_raised_to_a_valid_minimum_without_signing(self):
+        from min_salary import demand_quote
+        before=copy.deepcopy(self.t['offers'])
         with patch.object(VP,'rail',return_value={}):
             view=VP.extensions(None,self.L,'GB')
-        preview=view['threads'][0]['offer_cap_preview']
-        self.assertFalse(preview['ok'])
-        self.assertIn('Annual salary must be at least',preview['why'])
-        self.assertEqual(self.t,before)
+        self.assertTrue(view['threads'][0]['offer_cap_preview']['ok'])
+        self.assertEqual(self.t['counter']['apy'], demand_quote(self.L,self.p,.5,1,'extension',.1))
+        self.assertEqual(self.t['offers'],before)
         self.assertIsNone(self.p.contract)
 
-    def test_below_minimum_counter_still_cannot_be_accepted(self):
-        before=copy.deepcopy(self.t)
-        result=VP.act_match_counter(self.L,'GB',1)
-        self.assertFalse(result['ok'])
+    def test_raw_below_minimum_offer_cannot_be_accepted(self):
+        import contract_offer as CO
+        with self.assertRaises(ValueError):
+            CO.canonical(self.L,self.p,self.L.teams['GB'],dict(self.t['counter']),'extension')
         self.assertIsNone(self.p.contract)
-        self.assertEqual(self.t,before)
 
     def test_valid_expired_counter_can_still_sign(self):
         self.t['counter'].update(apy=3,bonus=.1)

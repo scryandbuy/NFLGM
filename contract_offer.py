@@ -48,6 +48,9 @@ def canonical(league, player, team, offer, kind='fa_offseason'):
             out['bonus'] = CS.structure(apy, out['years'], player.pos, CAP.get(league.year, 301.2),
                                         team.gm or SimpleNamespace(restructure_depth=.5),
                                         front_load=out['front_load'])['signing_bonus']
+            from min_salary import demand_minima
+            room = max(0., apy * out['years'] - sum(demand_minima(league, player, out['years'], kind)))
+            out['bonus'] = min(out['bonus'], room)
         else:
             import market as MK
             out['bonus'] = MK.signing_terms(league, player, team, apy, out['years'],
@@ -59,6 +62,10 @@ def canonical(league, player, team, offer, kind='fa_offseason'):
         from min_salary import player_minimum
         if out['bonus'] > (apy - player_minimum(league, player, out['years'])) * out['years'] + 1e-9:
             raise ValueError('This signing bonus leaves too little money for the minimum base salaries. Reduce the bonus or raise annual pay.')
+    from min_salary import demand_minima
+    required = sum(demand_minima(league, player, out['years'], kind)) + out['bonus']
+    if apy * out['years'] + 1e-9 < required:
+        raise ValueError('Offer must cover minimum base salaries and the signing bonus')
     out['promises'] = list(out.get('promises') or [])
     out['package_version'] = 1
     return out
@@ -86,15 +93,15 @@ def assess(league, player, team, offer, ask, years, kind='fa_offseason', profile
     """
     import contract_structure as CS
     offer = canonical(league, player, team, offer, kind)
-    if kind != 'extension':
-        from min_salary import player_minimum
-        ask = max(float(ask), player_minimum(league, player, years))
+    from min_salary import demand_minima
+    ask = max(float(ask), sum(demand_minima(league, player, years, kind)) / years)
     ref_bonus = CS.structure(ask, years, player.pos, CAP.get(league.year, 301.2),
                             SimpleNamespace(restructure_depth=.5), front_load=.5)['signing_bonus']
     if kind != 'extension':
         import market as MK
         ref_bonus = MK.signing_terms(league, player, team, ask, years,
                                     CAP.get(league.year, 301.2), .5)['signing_bonus']
+    ref_bonus = min(ref_bonus, max(0., ask * years - sum(demand_minima(league, player, years, kind))))
     reference = dict(apy=ask, years=years, bonus=ref_bonus, front_load=.5, promises=[])
     beliefs = MODEL.beliefs_from_profile(player, ask, profile or profile_for(player))
     proposed, baseline = cash(league, player, team, offer, kind), cash(league, player, team, reference, kind)

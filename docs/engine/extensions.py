@@ -145,6 +145,8 @@ def terms(league, p, rng, pool=None):
     disc = float(np.clip(disc, -0.05, 0.25))
     ask = a['apy'] * PT.ask_mult(p) * honors_premium(league, p)
     years = int(np.clip(a['years'], 1, CT.MAX_OFFER_YEARS))
+    from min_salary import demand_quote
+    ask = demand_quote(league, p, ask, years, 'extension')
     return dict(ask=ask, offer=t['apy'], years=years, discount=disc)
 
 
@@ -163,6 +165,18 @@ def build(p, add_years, apy, cap, gm, league, front_load=None, bonus=None):
         shape = float(st.get('front_load', 0.5))
         weights = [1 + (shape - 0.5) * 2 * (1 - 2 * i / max(1, add_years - 1)) for i in range(add_years)]
         st['base'] = [base_total * w / sum(weights) for w in weights]
+    from min_salary import demand_minima
+    floors = demand_minima(league, p, add_years, 'extension')
+    room = apy * add_years - sum(floors)
+    if room < -1e-9:
+        raise ValueError('Annual salary is below the minimum for the new contract years')
+    if bonus is not None and float(bonus) > room + 1e-9:
+        raise ValueError('Signing bonus leaves too little for minimum base salaries')
+    st['signing_bonus'] = min(st['signing_bonus'], max(0., room))
+    excess = max(0., room - st['signing_bonus'])
+    weights = [max(0., b - f) for b, f in zip(st['base'], floors)]
+    if not sum(weights): weights = [1.] * add_years
+    st['base'] = [f + excess * w / sum(weights) for f, w in zip(floors, weights)]
     # the old bonus still owed keeps its proration; the new bonus spreads over
     # everything left, up to five years
     new_years = left + add_years

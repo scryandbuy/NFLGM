@@ -11,9 +11,9 @@ The derivation is still the source of truth and still lives in the original
 module. What is copied here is its OUTPUT, so the runtime never depends on a
 research artefact being present.
 
-Minimums are stored as a SHARE OF THE CAP rather than as dollars, which is how
-the league actually sets them - so they project forward on their own as the
-cap grows instead of needing a new table every year.
+The game stores minimums as a SHARE OF THE CAP to project future seasons.
+This is a simulation approximation; the NFL CBA publishes dollar schedules
+by league year and credited seasons, rather than this fixed cap percentage.
 
 Cross-checked against the published 2024 minimums:
     tier      derived    published
@@ -86,3 +86,21 @@ if __name__ == '__main__':
     for t, e in (('rookie', 0), ('1 yr', 1), ('2 yr', 2), ('3 yr', 3),
                  ('4-6', 5), ('7+', 9)):
         print(f'  {t:8s} ${minimum_salary(e, 301.2):.3f}M')
+
+
+def demand_minima(league, player, years=1, kind='fa_offseason'):
+    """Base floors for the years being negotiated, including appended years."""
+    from cap_engine import forecast_cap
+    from cap_accounting import pre_roll
+    remaining = max(0, int(getattr(getattr(player, 'contract', None), 'years', 0))) if kind == 'extension' else 0
+    offset = max(int(pre_roll(league)), remaining)
+    return [minimum_salary((player.accrued or 0) + offset - int(pre_roll(league)) + i,
+                           forecast_cap(league, int(league.year) + offset + i))
+            for i in range(int(years))]
+
+
+def demand_quote(league, player, amount, years=1, kind='fa_offseason', bonus=0):
+    """A player never quotes compensation that cannot fund base minimums."""
+    import math
+    floor = (sum(demand_minima(league, player, years, kind)) + float(bonus or 0)) / int(years)
+    return max(round(float(amount), 2), math.ceil(floor * 100 - 1e-9) / 100)

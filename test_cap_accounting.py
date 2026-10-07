@@ -63,7 +63,7 @@ class CapAccountingTests(unittest.TestCase):
     def test_extension_keeps_old_allocations_and_void_balance(self):
         L=fixture(); p=player(L,contract=Contract(2,[5,5],signing_bonus=20,void_years=2))
         with patch.object(extensions.CS,'structure',return_value={'base':[5]*3,'signing_bonus':10}):
-            c=extensions.build(p,3,5,301.2,N(),L)
+            c=extensions.build(p,3,25/3,301.2,N(),L)
         self.assertEqual(c.bonus_schedule,[7,7,7,7,2])
         self.assertAlmostEqual(c.sb,30)
 

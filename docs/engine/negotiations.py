@@ -79,6 +79,14 @@ def _threads(league):
                     required = player_minimum(league, p) + float(t['counter'].get('bonus') or 0)
                     t['counter']['apy'] = math.ceil(max(required, t['counter']['apy']) * 100 - 1e-9) / 100
             if t.get('counter'): t['counter']['years'] = 1
+        if t.get('state') in ('open', 'waiting', 'countered', 'match_requested'):
+            p = league.player(t['pid'])
+            if p is not None:
+                from min_salary import demand_quote
+                t['ask'] = demand_quote(league, p, t['ask'], t.get('years', 1), t['kind'])
+                if t.get('counter'):
+                    c = t['counter']
+                    c['apy'] = demand_quote(league, p, c['apy'], c['years'], t['kind'], c.get('bonus'))
         if t.get('kind') != 'extension' and t.get('state') == 'waiting' and t.get('offers'):
             p = league.player(t['pid'])
             if p is not None:
@@ -375,10 +383,9 @@ def _counter_package(league, p, t, offer):
     import contract_offer as CO
     candidate = dict(offer)
     low, high = max(.01, candidate['bonus'] / candidate['years']), max(t['ask'] * 2, candidate['apy'])
-    if t['kind'] != 'extension':
-        from min_salary import player_minimum
-        low = max(low, player_minimum(league, p, candidate['years']) + candidate['bonus'] / candidate['years'])
-        high = max(high, low)
+    from min_salary import demand_minima
+    low = max(low, (sum(demand_minima(league, p, candidate['years'], t['kind'])) + candidate['bonus']) / candidate['years'])
+    high = max(high, low)
     candidate['apy'] = high
     assessment = _assessment(league, p, t, candidate)
     if not assessment['acceptable']:
