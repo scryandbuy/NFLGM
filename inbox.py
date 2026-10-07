@@ -176,8 +176,46 @@ def _transaction_mail_layout(message, payload):
             else:
                 result.append(dict(title=title, columns=columns, rows=[cells]))
             changed = True
+    # Old digests converted the announcement prose into a second table while
+    # retaining the authoritative structured row. Prefer its recorded cap hit.
+    tables, normalized = {}, []
+    for section in result:
+        columns = section.get('columns') or []
+        if section.get('title') not in ('Signings', 'Extensions') or len(columns) != 6:
+            normalized.append(section)
+            continue
+        key = (section['title'], tuple(columns))
+        target = tables.get(key)
+        if target is None:
+            target = dict(section, rows=[])
+            tables[key] = target
+            normalized.append(target)
+        else:
+            changed = True
+        for row in section['rows']:
+            def text(cell):
+                return cell.get('text', '') if isinstance(cell, dict) else str(cell)
+            match = next((old for old in target['rows'] if len(old) == len(row) == 6
+                and [text(c) for c in old[:5]] == [text(c) for c in row[:5]]
+                and (text(old[-1]) == text(row[-1]) or text(old[-1]) == '—' or text(row[-1]) == '—')), None)
+            if match is None:
+                target['rows'].append(row)
+            else:
+                if text(match[-1]) == '—': match[-1] = row[-1]
+                changed = True
+    intro = payload.get('mail_intro') or dict(text='', mentions=[])
+    announcement = pattern.fullmatch(intro.get('text', '').strip())
+    if announcement:
+        team, action, player, pos, ovr, ny, oy, annual = announcement.groups()
+        values = [team, player, pos, ovr, ny or oy]
+        title = 'Signings' if action == 'sign' else 'Extensions'
+        if any(s.get('title') == title and any(
+                [c.get('text', '') if isinstance(c, dict) else str(c) for c in row[:5]] == values
+                for row in s.get('rows', [])) for s in normalized):
+            intro = dict(text='', mentions=[])
+            changed = True
     if changed:
-        return dict(payload, mail_sections=result, mail_intro=payload.get('mail_intro') or dict(text='', mentions=[]))
+        return dict(payload, mail_sections=normalized, mail_intro=intro)
     return payload
 
 
