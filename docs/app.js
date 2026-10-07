@@ -785,7 +785,7 @@ function renderPortal(v) {
         el('div', { class: 'b' }, c.line || c.body),
         el('div', { class: 'a' }, el('button', { class: 'btn go', onclick: () => { pyJSON(`SESSION.personnel_act('open_talks', pid=${JSON.stringify(c.pid)}, kind='extension')`); location.hash = '#personnel/extensions'; } }, 'Negotiate'), el('button', { class: 'btn quiet', onclick: () => { pyJSON(`SESSION.inbox_later(${c.id})`); notify({ok:true,line:'Kept in your inbox for later.'}); refresh(); } }, 'Later')));
     } else {
-      card.append(el('div', { class: 'h' }, el('div', { class: 'k' }, c.kind), el('div', { class: 's' }, c.subject)), el('div', { class: 'b' }, c.body),
+      card.append(el('div', { class: 'h' }, el('div', { class: 'k' }, c.kind), el('div', { class: 's' }, c.subject)), el('div', { class: 'b', style: c.raw_kind === 'game_plan' ? 'white-space:pre-line' : '' }, c.body),
         el('div', { class: 'a', style: 'display:flex;gap:6px' }, el('button', { class: 'btn', onclick: () => location.hash = `#portal/inbox/${c.id}` }, 'Open'), deskAction(c.kind)));
     }
     return card;

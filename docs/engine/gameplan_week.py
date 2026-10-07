@@ -627,6 +627,23 @@ def set_user_plan(league, week, changes, taken=None):
     return league.user_week_plan
 
 
+def report_summary(report):
+    labels = {'QB': 'Quarterback', 'pass block': 'Pass protection',
+              'run block': 'Run blocking', 'receivers': 'Receivers',
+              'tight end': 'Tight ends', 'backs': 'Running backs',
+              'pass rush': 'Pass rush', 'run front': 'Run defense',
+              'corners': 'Cornerbacks', 'safeties': 'Safeties', 'linebackers': 'Linebackers'}
+    def ordinal(n):
+        return str(n) + ('th' if 10 <= n % 100 <= 20 else {1:'st',2:'nd',3:'rd'}.get(n % 10,'th'))
+    lines = []
+    for key, title in (('strengths','Strengths'), ('weaknesses','Weaknesses')):
+        rows = sorted(report.get(key) or [], key=lambda row: row['rank'], reverse=key=='weaknesses')[:3]
+        if rows:
+            lines.append(title + ': ' + ', '.join(labels.get(r['unit'],r['unit'].capitalize()) +
+                ' (' + ordinal(int(r['rank'])) + ')' for r in rows) + '.')
+    return '\n'.join(lines) or 'No standout strengths or weaknesses identified.'
+
+
 def post_report(league, week):
     """The assistants' report into the user's inbox before the week."""
     import inbox as IB
@@ -637,12 +654,8 @@ def post_report(league, week):
         if wk == week and user in (home, away): opp = away if home == user else home
     if opp is None: return None
     rep = opponent_report(league, user, opp, week)
-    body = f"{__import__('club_notes')._period(week)} against {opp}. " + (f"Their coach: {rep['coach']['name']}, prestige {rep['coach']['prestige']}. " if rep['coach']['name'] else '')
-    if rep['strengths']: body += 'Strengths: ' + '; '.join(s['text'] for s in rep['strengths'][:3]) + '. '
-    if rep['weaknesses']: body += 'Weaknesses: ' + '; '.join(s['text'] for s in rep['weaknesses'][:3]) + '. '
-    count = len(rep['suggestions'])
-    body += f"Forecast: {rep['forecast']['text']}. {count} suggestion{'s' if count != 1 else ''} from the assistants."
-    IB.post(league, 'game_plan', f"Game plan: week {week} at {opp}" if not _is_home(league, user, opp, week) else f"Game plan: week {week} vs {opp}",
+    body = report_summary(rep)
+    IB.post(league, 'game_plan', f"Game Plan · Week {week} at {opp}" if not _is_home(league, user, opp, week) else f"Game Plan · Week {week} vs {opp}",
             body, sender='assistants', payload=dict(report=rep, link=f'gameplan:{week}'), expires_week=week)   # gone once the week is played
     league.game_plan_reports = getattr(league, 'game_plan_reports', {}); league.game_plan_reports[week] = rep
     return rep
@@ -668,10 +681,7 @@ def refresh_open_report(league, week):
         if not report['suggestions']:
             return False
         mail['payload']['report'] = report
-        count = len(report['suggestions'])
-        ending = f"{count} suggestion{'s' if count != 1 else ''} from the assistants."
-        body, n = re.subn(r'0 suggestions from the assistants\.$', ending, mail.get('body') or '')
-        mail['body'] = body if n else (mail.get('body') or '') + f' Scouting update: {ending}'
+        mail['body'] = report_summary(report)
         league.game_plan_reports = getattr(league, 'game_plan_reports', {})
         league.game_plan_reports[week] = report
         return True

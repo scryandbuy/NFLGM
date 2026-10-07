@@ -615,6 +615,14 @@ def reconcile(league):
     Session calls this after loading and before exposing or blocking on mail.
     Producers/actions also call it when their entity changes.
     """
+    for message in getattr(league, 'inbox', []) or []:
+        report = (message.get('payload') or {}).get('report')
+        if message.get('kind') == 'game_plan' and report:
+            from gameplan_week import report_summary
+            message['body'] = report_summary(report)
+            message['subject'] = message['subject'].replace('Game plan: week ', 'Game Plan · Week ')
+            message['mentions'] = dict(subject=reference_spans(message['subject'], message.get('entities') or [], []),
+                                       body=reference_spans(message['body'], message.get('entities') or [], []))
     from inbox_digest import split_saved_transactions
     split_saved_transactions(league)
     from game_recap import combine_saved_reports
