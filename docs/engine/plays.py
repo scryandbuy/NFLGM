@@ -691,7 +691,13 @@ def available_depths(ytg):
 def _run_play(off, deff, off_call, def_call, ytg, rng):
     qb_run = bool(off_call.get('qb_run'))
     carrier = off['qb'] if qb_run else (off.get('rb') or off['qb'])
+    from skill_runs import choose as choose_skill_run
+    alternate, run_action = choose_skill_run(off, off_call, ytg, rate, rng)
+    if alternate is not None:
+        carrier = alternate
     carrier_meta = dict(carrier_pid=carrier.get('pid'))
+    if run_action:
+        carrier_meta['run_action'] = run_action
     if qb_run:
         carrier_meta.update(qb_run=True, qb_run_chance=off_call.get('qb_run_chance'))
     execution = float(np.clip(off_call.get('execution_mod', 1.0), 0.94, 1.06))

@@ -40,7 +40,7 @@ def support_blocks(offense, defense_roles, engaged_blockers, engaged_defenders,
     """
     role_by_id = {player_key(p): role for role, p in offense.get('offensive_assignments', ())}
     carrier = carrier or offense.get('rb') or offense.get('qb') or {}
-    qb_carry = player_key(carrier) == player_key(offense.get('qb') or {})
+    back_can_block = player_key(carrier) != player_key(offense.get('rb') or {})
     excluded = set(engaged_blockers) | {player_key(carrier)}
     if offense.get('qb'): excluded.add(player_key(offense['qb']))
     pool = {}
@@ -56,7 +56,7 @@ def support_blocks(offense, defense_roles, engaged_blockers, engaged_defenders,
     blocks = []
     for blocker in sorted(pool.values(), key=priority):
         job = role(blocker)
-        if job not in OL | {'FB', 'TE', 'WR'} | ({'HB'} if qb_carry else set()) or not defenders:
+        if job not in OL | {'FB', 'TE', 'WR'} | ({'HB'} if back_can_block else set()) or not defenders:
             continue
         def proximity(a):
             alignment = a.get('alignment', '')

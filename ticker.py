@@ -108,6 +108,8 @@ def play_line(league, p, off_abbr, def_abbr):
         who = carrier or 'The back'
         how = {'inside_zone': 'up the middle', 'duo': 'between the tackles', 'power': 'behind the pulling guard', 'counter': 'on a counter', 'trap': 'on a trap',
                'outside_zone': 'off the edge', 'stretch': 'wide on the stretch', 'draw': 'on a draw', 'toss': 'on a toss', 'sweep': 'on a sweep'}.get(p.get('scheme'), 'inside' if p.get('sneak') else '')
+        how = {'jet_sweep': 'on a jet sweep', 'end_around': 'on an end-around',
+               'fb_handoff': 'on a fullback handoff'}.get(p.get('run_action'), how)
         text = f"{who} {'sneaks' if p.get('sneak') else 'keeps' if p.get('qb_run') else 'runs'}{(' ' + how) if how else ''} {'to inside the 1' if near_goal_short else 'for ' + yd}"
         if td:
             yl = float(p.get('yardline', 1) or 1)
