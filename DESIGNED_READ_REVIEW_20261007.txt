@@ -1,0 +1,11 @@
+Designed-read accuracy correction
+Observed code issue: randomly sampled designed reads received comp=1.37 even on medium/deep routes. The modifier documentation describes short designed throws (-3 average air yards). Natural seed 20 in CheckdownRoutes reproduces a deep designed throw.
+Change: medium/deep designed reads use normal first-read completion multiplier 1.0. Short, screen and swing behavior, read selection, route geometry and other modifiers are unchanged. Backend and browser mirror match.
+Football rationale: a planned downfield read remains valid but must win its downfield matchup; retain quick-throw benefit. No target quotas or scheme/coach homogenization.
+Controlled paired evidence, seed-roster GB/DEN actual field units, five-man protection, 1000 calls per band with designed read forced; figures are completions per ALL calls, not completion percentages:
+Screen: 851 -> 851 completions, 7 -> 7 interceptions, 4966.9 -> 4966.9 summed result yards.
+Medium dagger: 640 -> 505 completions, 17 -> 30 interceptions.
+Deep four verts: 457 -> 349 completions, 18 -> 29 interceptions.
+All 1000 targets identical in each band. Forced-read baseline restored old 1.37 multiplier; no other read kinds modified in these probes.
+Natural-read paired check: 1500 calls alternating curl_flat/dagger/four_verts, identical seeds; baseline resolver reconstructed by removing only new guard. Completions 790 -> 785, interceptions 41 -> 41, sacks 142 -> 142, scrambles 73 -> 73, summed result yards 9043.9 -> 8976.9. All individual target counts unchanged: P0959 306, P0948 263, P0905 257, P0960 235, P0961 183, P0964 29, P0953 10.
+Limitations: controlled isolated plays, seed rosters, not uploaded season replay or season-wide balance validation. Does not establish cause or solution of the historical receiving distribution.

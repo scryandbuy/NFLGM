@@ -1203,6 +1203,10 @@ def _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context
     route_air = route_pair.get('route_air')
     depth = route_pair.get('route_depth', depth)
     rmod = TG.READ_MODIFIER.get(read_kind, TG.READ_MODIFIER['first'])
+    # Designed quick throws carry a short-pass completion benefit. A planned
+    # downfield first read still has to win its ordinary downfield matchup.
+    if read_kind == 'designed' and depth != 'short' and not (screen or swing):
+        rmod = dict(rmod, comp=TG.READ_MODIFIER['first']['comp'])
 
     # PER-PAIRING, not per-defence. The man who ends up targeted may be in man
     # while the receiver on the other side is in zone - that is a split-field
