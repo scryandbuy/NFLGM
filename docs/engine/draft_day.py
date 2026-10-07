@@ -529,5 +529,6 @@ class Draft:
                 if p.pid not in self.L.free_agents:
                     self.L.free_agents.append(p.pid)
         self.L.draft_pool = []
+        __import__("inbox_digest").finish_draft_trades(self.L, self.year)
         self.L.league_notes_sent.pop("_draft_trade_mail_active", None)
         __import__("fa_window").set_closed(self.L, False)

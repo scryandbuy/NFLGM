@@ -181,7 +181,7 @@ def consolidate(league, before):
 
 
 def append_draft_trade(league, message):
-    """One growing draft ledger, including user trades across separate clicks."""
+    """Queue completed trades until the draft ends; persisted across saves."""
     year = (getattr(league, 'league_notes_sent', None) or {}).get('_draft_trade_mail_active')
     if year is None or category(message) not in ('Trades', 'Your Trades'):
         return message
@@ -192,10 +192,12 @@ def append_draft_trade(league, message):
     for section in sections:
         section['trade_group'] = str(message['id'])
     box = league.inbox
-    existing = next((m for m in box if m is not message and
-        (m.get('payload') or {}).get('draft_trade_digest') == year), None)
+    pending = league.league_notes_sent.setdefault('_draft_trade_mail_pending', {})
+    existing = pending.get(str(year))
+    box.remove(message)
     if existing is None:
         existing = message
+        pending[str(year)] = existing
         existing.update(subject='Draft Day Trades', kind='league', sender='league')
         existing['payload'] = dict(draft_trade_digest=year, link='league:transactions',
             mail_sections=sections, mail_intro=dict(text='', mentions=[]))
@@ -203,10 +205,21 @@ def append_draft_trade(league, message):
         existing['payload']['mail_sections'].extend(sections)
         existing.setdefault('entities', []).extend(message.get('entities') or [])
         existing['status'] = 'unread'
-        box.remove(message)
     existing['body'] = '\n\n'.join('\n'.join([s['title']] +
         [' | '.join(c.get('text', '') for c in row) for row in s['rows']]).strip()
         for s in existing['payload']['mail_sections'])
     existing['mentions'] = dict(subject=[], body=IB.reference_spans(
         existing['body'], existing.get('entities') or [], []))
     return existing
+
+
+def finish_draft_trades(league, year):
+    """Deliver once, after the final pick, using the existing trade layout."""
+    pending = (getattr(league, 'league_notes_sent', None) or {}).get('_draft_trade_mail_pending', {})
+    message = pending.pop(str(year), None)
+    if message is None:
+        return None
+    delivered = IB.post(league, 'league', 'Draft Day Trades', '', sender='league')
+    for field in ('payload', 'body', 'entities', 'mentions'):
+        delivered[field] = message[field]
+    return delivered
