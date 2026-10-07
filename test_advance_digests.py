@@ -42,7 +42,7 @@ class AdvanceDigests(unittest.TestCase):
         self.assertEqual(self.L.inbox[0]['subject'],'Injury Update')
 
     def test_contract_digest_stays_open_until_all_deals_resolve(self):
-        self.L.players = {pid:NS(pid=pid,team='GB',retired=False,contract=NS(years=1)) for pid in ('a','b')}
+        self.L.players = {pid:NS(pid=pid,name=pid,pos='WR',ovr=80,age=25,apy=5,team='GB',retired=False,contract=NS(years=1)) for pid in ('a','b')}
         self.L.player = lambda pid:self.L.players.get(pid)
         for pid in ('a','b'):
             self.post(pid + ' enters his final year', 'contract_year', {'pid':pid})

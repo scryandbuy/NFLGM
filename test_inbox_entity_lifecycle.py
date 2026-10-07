@@ -70,7 +70,7 @@ class DecisionLifecycleTests(unittest.TestCase):
         self.assertEqual(m['status'], 'done')
 
     def test_final_year_extended_and_exit_batch_answered(self):
-        p = N(pid='p', team='GB', retired=False, contract=N(years=1))
+        p = N(pid='p', name='Player', pos='WR', ovr=80, age=25, apy=5, team='GB', retired=False, contract=N(years=1))
         L = league(players={'p': p}, exit_meetings={'2026': [dict(pid='p', answer=None)]})
         contract = IB.post(L, 'contract_year', 'Final year', '', payload={'pid': 'p'})
         invite = IB.post(L, 'exit', 'Meetings', '')

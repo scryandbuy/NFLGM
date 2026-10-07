@@ -372,7 +372,7 @@ def _desk(league, abbr):
     for m in getattr(league, 'inbox', []):
         if m.get('status') not in ('unread', 'open') or m.get('overview_dismissed'): continue
         if is_decision(m):
-            card = dict(id=m['id'], kind=INBOX_TAG.get(m['kind'], m['kind']), raw_kind=m['kind'], subject=m['subject'], body=m['body'][:220], payload=_payload(m.get('payload') or {}), expires=m.get('expires_week'))
+            card = dict(id=m['id'], kind=INBOX_TAG.get(m['kind'], m['kind']), raw_kind=m['kind'], subject=m['subject'], body=(m['body'] if m['kind'] == 'contract_year' else m['body'][:220]), payload=_payload(m.get('payload') or {}), expires=m.get('expires_week'))
             card.update(_desk_detail(league, abbr, m))
             cards.append(card)
     cards.sort(key=lambda c: (c['raw_kind'] not in BLOCK_KINDS, c.get('expires') if c.get('expires') is not None else float('inf'), -c['id']))

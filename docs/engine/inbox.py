@@ -640,8 +640,27 @@ def reconcile(league):
         elif kind == 'contract_year':
             pids = pl.get('digest_pids') or [pl.get('pid')]
             players = [league.player(pid) for pid in pids if pid]
-            done = (not any(p is not None and p.team == user and p.contract and p.contract.years == 1 for p in players)
-                    or (year is not None and m.get('year', year) < year))
+            current = [p for p in players if p is not None and p.team == user
+                       and not getattr(p, 'retired', False) and p.contract and p.contract.years == 1]
+            done = (not current or (year is not None and m.get('year', year) < year))
+            if not done:
+                # This is an open roster reminder, not a historical transaction.
+                # Keep its membership current after trades, releases and extensions.
+                pl['digest_pids'] = [p.pid for p in current]
+                pl.pop('pid', None)
+                pl['link'] = 'personnel:extensions'
+                names = ', '.join(p.name for p in current[:3])
+                extra = f" and {len(current)-3} others" if len(current) > 3 else ''
+                m['body'] = f"{names}{extra}: expiring contracts to review."
+                m['subject'] = 'Expiring Contracts'
+                entities = [dict(kind='player', id=p.pid, name=p.name) for p in current]
+                m['entities'] = entities
+                pl['mail_sections'] = [dict(title='', columns=['Player', 'Pos', 'OVR', 'Age', 'Annual Average'],
+                    rows=[[dict(text=value, mentions=reference_spans(value, entities, [])) for value in
+                           [p.name, p.pos, str(round(p.ovr)), str(int(p.age)), f"${p.apy:.1f}m"]] for p in current])]
+                pl['mail_intro'] = dict(text='These players are entering the final year of their contracts and can negotiate extensions.', mentions=[])
+                m['payload'] = pl
+                m.setdefault('mentions', {})['body'] = reference_spans(m['body'], entities, [])
         elif kind == 'exit':
             meetings = (getattr(league, 'exit_meetings', {}) or {}).get(str(m.get('year', year)))
             if meetings is not None:
