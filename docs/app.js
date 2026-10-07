@@ -842,6 +842,30 @@ function offerSheetActions(id, reload) {
 
 
 // ---------------------------------------------------------------- Game Day
+let gameDayStepBusy = false;
+async function advanceGameDay(mode, event) {
+  // Keep the lock across the redraw; ignore the second click of a double-click.
+  if (gameDayStepBusy || (event && event.detail > 1)) return;
+  gameDayStepBusy = true;
+  const lockButtons = () => document.querySelectorAll('[data-live-step]').forEach(button => {
+    if (!button.disabled) { button.disabled = true; button.dataset.stepPending = 'true'; }
+  });
+  lockButtons();
+  try {
+    const y = window.scrollY;
+    const r = pyJSON(`SESSION.live_step(${JSON.stringify(mode)})`);
+    renderGameDay(r);
+    lockButtons();
+    window.scrollTo(0, y);
+    if (r.live && r.live.open) await saveLiveJournalNotified();
+    else { renderRail(pyJSON('SESSION.portal()').rail); await saveGameNotified(); }
+  } finally {
+    gameDayStepBusy = false;
+    document.querySelectorAll('[data-step-pending]').forEach(button => {
+      button.disabled = false; delete button.dataset.stepPending;
+    });
+  }
+}
 function renderGameDay(v) {
   renderRail(v.rail);
   const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = 'repeat(12,1fr)';
@@ -960,12 +984,12 @@ function renderGameDay(v) {
   const nextPlay = () => { const d = g.drives[shown - 1]; const n = vis(d).length; if (shownPlays == null || shownPlays >= n) { if (shownPlays != null && shownPlays >= n) shownPlays = null; if (shown >= g.drives.length) { shownPlays = null; draw(); return; } shown++; shownPlays = 1; } else shownPlays++; if (shownPlays >= vis(g.drives[shown - 1]).length) shownPlays = null; draw(); };
   const quarterEnd = q => { let i = g.drives.findIndex(d => d.quarter > q); return i < 0 ? g.drives.length : i; };   // how many drives are in through the end of quarter q
   const nextQuarter = () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; const end = quarterEnd(q); shown = (shown >= end) ? quarterEnd(q + 1) : end; draw(); };
-  const step = async mode => { const y = window.scrollY; const r = pyJSON(`SESSION.live_step(${JSON.stringify(mode)})`); renderGameDay(r); window.scrollTo(0, y); if (r.live && r.live.open) await saveLiveJournalNotified(); else { renderRail(pyJSON('SESSION.portal()').rail); await saveGameNotified(); } };
+  const step = (mode, event) => advanceGameDay(mode, event);
   const ctrl = live ? el('div', { class: 'ctrl2' },
-    el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, onclick: () => step('play') }, 'Next Play'),
-    el('button', { class: 'btn go', disabled: live.halftime_open ? '' : null, onclick: () => step('drive') }, 'Next Drive'),
-    el('button', { class: 'btn', disabled: live.halftime_open || live.at === 'overtime' || (g.drives.length && g.drives[g.drives.length - 1].quarter > 2) ? '' : null, onclick: () => step('half') }, 'To Halftime'),
-    el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, onclick: () => step('finish') }, 'Finish Game'),
+    el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, 'data-live-step': 'play', onclick: event => step('play', event) }, 'Next Play'),
+    el('button', { class: 'btn go', disabled: live.halftime_open ? '' : null, 'data-live-step': 'drive', onclick: event => step('drive', event) }, 'Next Drive'),
+    el('button', { class: 'btn', disabled: live.halftime_open || live.at === 'overtime' || (g.drives.length && g.drives[g.drives.length - 1].quarter > 2) ? '' : null, 'data-live-step': 'half', onclick: event => step('half', event) }, 'To Halftime'),
+    el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, 'data-live-step': 'finish', onclick: event => step('finish', event) }, 'Finish Game'),
     el('span', { class: 'sep' }),
     (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })())
   : el('div', { class: 'ctrl2' },
@@ -992,7 +1016,7 @@ function renderGameDay(v) {
     card.append(el('b', {}, `${breakLabel} · ${showAbbr(g.away.abbr)} ${live.score.away}, ${showAbbr(g.home.abbr)} ${live.score.home}`),
       el('button', { class: 'btn' + (confirmed ? '' : ' go'), onclick: () => openHalftime(g, live, breakKey, () => { const y = window.scrollY; renderGameDay(pyJSON('SESSION.gameday_view()')); window.scrollTo(0, y); }) }, `${breakLabel} Adjustments${confirmed ? ' · confirmed' : ''}`),
       el('span', { class: 'count' }, confirmed ? 'Adjustments confirmed.' : `Review the adjustments and confirm to unlock ${overtime ? 'overtime' : 'the second half'}.`),
-      el('button', { class: 'btn go', style: 'margin-left:auto', disabled: confirmed ? null : '', 'data-tip': confirmed ? null : `Confirm the ${breakLabel.toLowerCase()} adjustments first`, onclick: () => step('resume') }, overtime ? 'Start Overtime' : 'Start the Second Half'));
+      el('button', { class: 'btn go', style: 'margin-left:auto', disabled: confirmed ? null : '', 'data-tip': confirmed ? null : `Confirm the ${breakLabel.toLowerCase()} adjustments first`, 'data-live-step': 'resume', onclick: event => step('resume', event) }, overtime ? 'Start Overtime' : 'Start the Second Half'));
     tick.append(card);
   }
   tick.append(body);
