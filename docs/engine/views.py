@@ -372,7 +372,7 @@ def _desk(league, abbr):
     for m in getattr(league, 'inbox', []):
         if m.get('status') not in ('unread', 'open') or m.get('overview_dismissed'): continue
         if is_decision(m):
-            card = dict(id=m['id'], kind=INBOX_TAG.get(m['kind'], m['kind']), raw_kind=m['kind'], subject=m['subject'], body=(m['body'] if m['kind'] in ('contract_year', 'game_plan') else m['body'][:220]), payload=_payload(m.get('payload') or {}), expires=m.get('expires_week'))
+            card = dict(id=m['id'], kind=INBOX_TAG.get(m['kind'], m['kind']), raw_kind=m['kind'], subject=m['subject'], body=__import__('inbox').preview_text(m, None if m['kind'] in ('contract_year', 'game_plan') else 220), payload=_payload(m.get('payload') or {}), expires=m.get('expires_week'))
             card.update(_desk_detail(league, abbr, m))
             cards.append(card)
     cards.sort(key=lambda c: (c['raw_kind'] not in BLOCK_KINDS, c.get('expires') if c.get('expires') is not None else float('inf'), -c['id']))
@@ -435,7 +435,7 @@ def _inbox(league, limit=14):
     rows = []
     ordered = sorted(box, key=lambda m: -m.get('sort_id', m['id']))
     for m in ordered[:limit] if limit else ordered:
-        rows.append(dict(id=m['id'], subject=m['subject'], body=(m.get('body') or '')[:140], tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), decide=(is_decision(m)),
+        rows.append(dict(id=m['id'], subject=m['subject'], body=__import__('inbox').preview_text(m), tag=INBOX_TAG.get(m.get('kind'), (m.get('kind') or '').title()), decide=(is_decision(m)),
                          block=(is_decision(m) and (m.get('kind') in ('roster', 'trade_offer', 'offer_sheet', 'scouting_focus') or bool((m.get('payload') or {}).get('poach')))),
                          kind=m.get('kind'), unread=m.get('status') == 'unread', week=m.get('week'), year=m.get('year'), sender=m.get('sender'), **{'from': m.get('sender')}, when=__import__('inbox').date_label(m)))
     return dict(rows=rows, total=len(box), unread=sum(1 for m in box if m.get('status') == 'unread'), decide=sum(1 for m in box if is_decision(m)))

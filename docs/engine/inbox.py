@@ -416,6 +416,32 @@ def mail_layout(message):
     return payload
 
 
+def preview_text(message, limit=140):
+    """Summarize the same normalized content displayed in the message pane."""
+    layout = mail_layout(message)
+    def text(cell):
+        return str(cell.get('text') or '') if isinstance(cell, dict) else str(cell or '')
+    sections = layout.get('mail_sections')
+    if sections:
+        parts = [text(layout.get('mail_intro'))]
+        for section in sections:
+            columns = section.get('columns') or []
+            for row in section.get('rows') or []:
+                cells = []
+                for index, cell in enumerate(row):
+                    value = text(cell).strip()
+                    if not value: continue
+                    label = columns[index] if index < len(columns) else ''
+                    cells.append(f'{label}: {value}' if label else value)
+                if cells: parts.append(' · '.join(cells))
+        body = ' '.join(part for part in parts if part)
+    else:
+        body = message.get('body') or ''
+    body = ' '.join(body.split())
+    if limit is None or len(body) <= limit: return body
+    return body[:limit].rsplit(' ', 1)[0].rstrip(' ·,;') + '…'
+
+
 def post(league, kind, subject, body, sender=None, payload=None, expires_week=None):
     payload = dict(payload or {})
     sections = payload.get('mail_sections')
