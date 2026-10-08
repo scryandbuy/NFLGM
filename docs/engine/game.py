@@ -396,6 +396,16 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
         distance_risk = float(np.clip((ydstogo - 3.) / 5., 0., 1.))
         disadvantage = max(0., -float(r.get('go_boost', 0.)) - .02)
         p_go *= float(np.exp(-depth_risk * distance_risk * disadvantage / .008))
+    # A pooled long-yardage attempt rate includes teams needing touchdowns.
+    # In ordinary situations, a reliable kick that wins the comparison should
+    # reduce that residual gamble. Keep close edges, short yardage, poor kicks,
+    # and touchdown urgency free to reflect the coach's preferences.
+    if (not chasing and fg_matters and in_range and r is not None
+            and r.get('optimal') == 'field_goal'):
+        distance_risk = float(np.clip((ydstogo - 4.) / 6., 0., 1.))
+        kick_reliability = float(np.clip((kick_chance - .60) / .30, 0., 1.))
+        disadvantage = max(0., -float(r.get('go_boost', 0.)) - .02)
+        p_go *= float(np.exp(-distance_risk * kick_reliability * disadvantage / .006))
     if ydstogo > 8 and not chasing:
         p_go *= DEC.fourth_conversion(ydstogo) / DEC.FOURTH_CONV[8]
         if ydstogo >= 15 and (r is None or r.get('go_boost', 0.0) <= 0):
