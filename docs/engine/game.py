@@ -1215,7 +1215,7 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
                                 (attack_choice == 'play' and live_remaining >= PLAY_SECS + 4.)))
         if ((half_end is not None or dr.score_diff == 0) and failed_third and secs_in_half <= 20
                 and dr.yardline - float(out.get('yards', 0) or 0) >= 50
-                and not continue_attack):
+                and not continue_attack and not (plan or {}).get('fourth_attack')):
             dr._half_stall_intent = 'protect'
             return False, None
         if (half_end is not None and dr.score_diff >= 0 and failed_third
@@ -1275,7 +1275,7 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
                 used = timeouts.use(other); used_by = other
         elif (plan is None or (plan.get('choice') != 'kneel' and plan.get('hurry', True))) and ((-8 <= dr.score_diff < 0 and secs_in_half < trail_window) or (dr.score_diff == 0 and secs_in_half < 40)) and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
             used = timeouts.use(pos); used_by = pos                        # one score down inside a minute, or tied at the very end; down two the offense runs the hurry-up and keeps them for the defense
-        elif plan is not None and plan['choice'] != 'kneel' and plan.get('hurry', True) and in_bounds and secs_in_half > 4 and timeouts.left.get(pos, 0) > 0:
+        elif plan is not None and plan['choice'] not in ('kneel', 'punt') and plan.get('hurry', True) and in_bounds and secs_in_half > 4 and timeouts.left.get(pos, 0) > 0:
             used = timeouts.use(pos); used_by = pos                        # the clock is running on a spot worth a kick or a shot, and the plan needs the time
         elif plan is not None and not plan.get('hurry', True) and in_bounds and timeouts.left.get(other, 0) > 0 and dr.score_diff >= 0 and (half_end is None or (dr.score_diff == 0 and dr.down >= 3 and float(out.get('yards', 0) or 0) < dr.togo)):
             # THE DEFENSE BUYS ITSELF A POSSESSION. The offense is bleeding the clock toward a late kick; each
@@ -2905,18 +2905,23 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         if dr.down == 4:
             # the head coach's appetite, off his identity when he has one
             aggr4 = float(off_state.coach.get('fourth_down', aggression)) if off_state is not None and off_state.coach else aggression
-            dec = fourth_down_decision(dr.yardline, dr.togo, dr.score_diff,
-                                       dr.clock, rng, aggr4,
-                                       kicker=specialist_for(offense, off_state, 'K', rate_fn), rate_fn=rate_fn,
-                                       must_score=must_score, is_home=int(pos == 'home'),
-                                       offense_timeouts=timeouts.left.get(pos, 0) if timeouts is not None else 0,
-                                       timeout_edge=(timeouts.left.get(pos, 0) - timeouts.left.get('away' if pos == 'home' else 'home', 0)) if timeouts is not None else 0,
-                                       half_seconds_left=(dr.clock - half_end if half_end is not None else None),
-                                       half_intent=getattr(dr, '_half_stall_intent', None),
-                                       punter=offense.get('p'),
-                                       returner=returner_for(defense, def_state, rate_fn, kind='pr'),
-                                       snapper=snapper_for(offense, off_state),
-                                       defensive_confidence=PST.confidence(off_state))
+            planned_fourth = getattr(dr, '_timeout_fourth', None)
+            dr._timeout_fourth = None
+            if planned_fourth and planned_fourth[:3] == (dr.yardline, dr.togo, dr.clock):
+                dec = planned_fourth[3]
+            else:
+                dec = fourth_down_decision(dr.yardline, dr.togo, dr.score_diff,
+                                           dr.clock, rng, aggr4,
+                                           kicker=specialist_for(offense, off_state, 'K', rate_fn), rate_fn=rate_fn,
+                                           must_score=must_score, is_home=int(pos == 'home'),
+                                           offense_timeouts=timeouts.left.get(pos, 0) if timeouts is not None else 0,
+                                           timeout_edge=(timeouts.left.get(pos, 0) - timeouts.left.get('away' if pos == 'home' else 'home', 0)) if timeouts is not None else 0,
+                                           half_seconds_left=(dr.clock - half_end if half_end is not None else None),
+                                           half_intent=getattr(dr, '_half_stall_intent', None),
+                                           punter=offense.get('p'),
+                                           returner=returner_for(defense, def_state, rate_fn, kind='pr'),
+                                           snapper=snapper_for(offense, off_state),
+                                           defensive_confidence=PST.confidence(off_state))
             if dec == 'field_goal':
                 flag = kick_flag(rng, 'field_goal', offense, defense, off_state, def_state, rate_fn, book)
                 if _kick_presnap_flag(dr, flag, half_end, book): continue
@@ -3506,9 +3511,33 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
         _fourth_fail = after_play.down > 4 and after_play.result is None
         # The change of possession stops the clock at the whistle. Spending a
         # timeout for the former offense here buys no time.
+        timeout_fourth = None
+        if (half_end is not None and dr.down == 3 and after_play.down == 4
+                and 0 < _secs_after <= 30 and timeouts is not None
+                and timeouts.left.get(pos, 0) > 0 and not oob_snap
+                and not live_pen and not late_injury and after_play.result is None
+                and t in ('run', 'complete', 'scramble', 'sack')):
+            # Decide what the timeout buys using the actual fourth-down caller,
+            # including the timeout it would spend. Reuse that decision if taken.
+            aggr_to = float((off_state.coach if off_state is not None else {}).get('fourth_down', aggression))
+            timeout_fourth = fourth_down_decision(after_play.yardline, after_play.togo,
+                dr.score_diff, after_play.clock, rng, aggr_to,
+                kicker=specialist_for(offense, off_state, 'K', rate_fn), rate_fn=rate_fn,
+                must_score=must_score, is_home=int(pos == 'home'),
+                offense_timeouts=timeouts.left.get(pos, 0) - 1,
+                timeout_edge=timeouts.left.get(pos, 0) - 1 - timeouts.left.get('away' if pos == 'home' else 'home', 0),
+                half_seconds_left=_secs_after, half_intent=getattr(dr, '_half_stall_intent', None),
+                punter=offense.get('p'), returner=returner_for(defense, def_state, rate_fn, kind='pr'),
+                snapper=snapper_for(offense, off_state), defensive_confidence=PST.confidence(off_state))
+            _plan_to = dict(_plan_to or {}, choice={'go':'shot', 'field_goal':'kick', 'punt':'punt'}[timeout_fourth],
+                            hurry=timeout_fourth != 'punt', fourth_attack=timeout_fourth != 'punt')
         used, used_by = (False, None) if late_penalty or late_injury or _fourth_fail or scoring_safety else _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=(off_state.coach if off_state is not None else None), plan=_plan_to, dcoach=(def_state.coach if def_state is not None else None))
+        if used and used_by == pos and timeout_fourth is not None:
+            dr._timeout_fourth = (after_play.yardline, after_play.togo, float(np.ceil(after_play.clock)), timeout_fourth)
         hurry = hurry_for_snap(secs_in_half, dr.score_diff, getattr(dr, '_plan', None), oc, dr.quarter, chasing,
                                coach=(off_state.coach if off_state is not None else None))
+        if timeout_fourth == 'punt':
+            hurry = False
         if dr.field_goal_wins and _plan_to is not None and _plan_to['choice'] == 'kick':
             # The completed play can put the kick in range. Use the existing
             # hurry interval to get the unit on, not a stale full huddle.
@@ -3542,7 +3571,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 and getattr(dr, '_half_stall_intent', None) != 'protect'
                 and t in ('run', 'complete', 'scramble', 'sack')
                 and after_play.result is None and _plan_to is not None
-                and _plan_to['choice'] != 'kneel'
+                and _plan_to['choice'] not in ('kneel', 'punt')
                 and secs_in_half - elapsed < 4.0 and _secs_after > 0.0
                 and timeouts is not None and timeouts.left.get(pos, 0) > 0):
             used = timeouts.use(pos); used_by = pos
