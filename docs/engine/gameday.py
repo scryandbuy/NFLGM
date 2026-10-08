@@ -59,6 +59,14 @@ def write_play(league, p, qb_pid, off_abbr, def_abbr, rb_pid=None):
     ln.update(off=off_abbr, yards=(round(float(q.get('yards', 0) or 0)) if q.get('yards') is not None else 0), passer=nm(q.get('passer')), target=nm(q.get('target')), carrier=nm(q.get('carrier')),
               td=bool(q.get('touchdown') or q.get('td') or q.get('defensive_td')), defensive_td=bool(q.get('defensive_td')), clock=q.get('clock'), down=q.get('down'), togo=q.get('ydstogo'), made=q.get('made'), safety=bool(q.get('safety')), fumble=bool(q.get('fumble')), fumble_lost=bool(q.get('fumble_lost')), nullified=bool(q.get('nullified')))
     ln['display_togo'] = TK.display_distance(q.get('yardline'), q.get('ydstogo'), off_abbr, def_abbr)
+    ln['yardline'] = q.get('yardline')
+    for role in ('passer', 'target', 'carrier', 'returner'):
+        ln[role + '_pid'] = q.get(role)
+    if q.get('type') == 'injury':
+        injured = league.player(q.get('pid'))
+        ln['injury'] = dict(pid=q.get('pid'), name=injured.name if injured else None,
+                            pos=q.get('pos'), kind=q.get('kind'), weeks=q.get('weeks'),
+                            team=def_abbr if q.get('side') == 'def' else off_abbr)
     ln['scoring_side'] = q.get('scoring_side') or ('defense' if q.get('defensive_td') or (q.get('blocked') and q.get('recovery') == 'receiving') else 'offense')
     ln['offensive_fumble_td'] = bool(q.get('offensive_fumble_td'))
     ln['stat_yards'] = round(float(q.get('carrier_yards', q.get('yards', 0)) or 0))
@@ -95,10 +103,65 @@ def scoring_quarter(dr):
     return min(4, max(1, int((3600 - max(0, dr.clock) - 1e-6) // 900) + 1))
 
 
-def capture(league, played, user):
+def box_score(league, book, home, away, longest, states=None, live=False):
+    """All recorded participants. Read-only; never rerun simulation for a view."""
+    box = {k: [] for k in ('passing', 'rushing', 'receiving', 'defense', 'blocking',
+                           'kicking', 'punting', 'returns', 'snaps')}
+    snaps_known = bool(states and all(a in states for a in (home, away)))
+    for abbr in (away, home):
+        state = (states or {}).get(abbr)
+        counts = getattr(state, 'snap_counts' if live else 'last_snap_counts', {}) or {}
+        players = {p.pid: p for p in league.teams[abbr].roster}
+        players.update((p.pid, p) for p in (getattr(league.teams[abbr], '_elevated', None) or []))
+        for unit in counts.values():
+            for pid in unit.get('players', {}):
+                p = league.player(pid)
+                if p is not None: players[pid] = p
+        for pid, p in players.items():
+            l = book.p.get(pid, {})
+            base = dict(team=abbr, pid=pid, name=p.name, pos=p.pos)
+            def add(category, **stats):
+                box[category].append(dict(base, **stats))
+            def n(key): return l.get(key, 0)
+            def avg(yards, attempts): return round(n(yards) / n(attempts), 1) if n(attempts) else None
+            if n('pass_att') or n('sacked'):
+                add('passing', ca=f"{int(n('pass_cmp'))}/{int(n('pass_att'))}", att=n('pass_att'),
+                    yds=round(n('pass_yds')), td=n('pass_td'), int_=n('ints'), sk=n('sacked'), lng=longest.get(('pass', pid), 0))
+            if n('rush_att'):
+                add('rushing', att=n('rush_att'), yds=round(n('rush_yds')), avg=avg('rush_yds', 'rush_att'),
+                    td=n('rush_td'), lng=longest.get(('rush', pid), 0), fum=n('fumbles_lost'))
+            if n('tgt') or n('rec'):
+                add('receiving', tgt=n('tgt'), rec=n('rec'), yds=round(n('rec_yds')), avg=avg('rec_yds', 'rec'),
+                    td=n('rec_td'), lng=longest.get(('rec', pid), 0), drops=n('drops'))
+            if any(n(k) for k in ('tackles', 'sacks', 'int_def', 'pass_def', 'pressures', 'ff', 'fum_rec', 'def_td', 'pr_reps', 'cov_snaps')):
+                add('defense', tkl=n('tackles'), sk=n('sacks'), int_=n('int_def'), pd=n('pass_def'),
+                    pressures=n('pressures'), ff=n('ff'), fr=n('fum_rec'), td=n('def_td'))
+            if n('pb_snaps') or n('rb_snaps'):
+                add('blocking', pb=n('pb_snaps'), pb_pct=round(100*n('pb_wins')/n('pb_snaps'), 1) if n('pb_snaps') else None,
+                    pressures=n('pressures_allowed'), sk=n('sacks_allowed'), rb=n('rb_snaps'),
+                    rb_pct=round(100*n('rb_wins')/n('rb_snaps'), 1) if n('rb_snaps') else None)
+            if n('fg_att') or n('xp_att'):
+                add('kicking', fg=f"{int(n('fg_made'))}/{int(n('fg_att'))}", xp=f"{int(n('xp_made'))}/{int(n('xp_att'))}",
+                    pct=round(100*n('fg_made')/n('fg_att'), 1) if n('fg_att') else None, lng=n('fg_long'))
+            if n('punts'):
+                add('punting', att=n('punts'), yds=round(n('punt_yds')), avg=avg('punt_yds', 'punts'),
+                    net=avg('punt_net_yds', 'punts'), in20=n('punt_in20'), tb=n('punt_tb'))
+            if n('kr') or n('pr'):
+                add('returns', kr=n('kr'), kr_yds=round(n('kr_yds')), kr_avg=avg('kr_yds', 'kr'), kr_td=n('kr_td'),
+                    pr=n('pr'), pr_yds=round(n('pr_yds')), pr_avg=avg('pr_yds', 'pr'), pr_td=n('pr_td'), td=n('kr_td')+n('pr_td'))
+            for unit, row in counts.items():
+                snaps = row.get('players', {}).get(pid, 0)
+                if snaps:
+                    add('snaps', unit=unit.title(), snaps=snaps,
+                        pct=round(100*snaps/row['total'], 1) if row.get('total') else None)
+    if not snaps_known: box.pop('snaps')
+    return box
+
+
+def capture(league, played, user, states=None):
     """played: list of (home, away, res, book) from the week. Returns the Game Day record."""
     from game_recap import converted
-    out = dict(week=league.week, scores=[], game=None)
+    out = dict(week=league.week, year=getattr(league, 'year', None), scores=[], game=None)
     for home, away, res, book in played:
         out['scores'].append(dict(home=home, away=away, hs=res['home'], as_=res['away'], ot=bool(res.get('overtime'))))
         if user not in (home, away):
@@ -212,32 +275,16 @@ def capture(league, played, user):
             if d >= 8 and c / d >= 0.5: reads.append(f"We could not get off the field on third down: they went {op_s['third']}.")
         except Exception: pass
         if not reads: reads.append('An even game on the sheet; the score came down to the drives that finished.')
-        # box score: the top lines from the book
-        def line(pid):
-            l = book.p.get(pid, {}); p = league.player(pid); return p, l
-        def top(pids, key, n=3):
-            rows = [(pid, book.p[pid]) for pid in pids if pid in book.p and book.p[pid].get(key, 0) > 0]
-            return sorted(rows, key=lambda x: -x[1].get(key, 0))[:n]
-        box = dict(passing=[], rushing=[], receiving=[], defense=[], returns=[])
-        for abbr in (home, away):
-            pids = [p.pid for p in league.teams[abbr].roster]
-            for pid in pids:
-                l = book.p.get(pid, {})
-                if l.get('kr', 0) or l.get('pr', 0):
-                    box['returns'].append(dict(team=abbr, name=league.player(pid).name,
-                        kr=int(l.get('kr', 0)), kr_yds=round(l.get('kr_yds', 0), 1),
-                        pr=int(l.get('pr', 0)), pr_yds=round(l.get('pr_yds', 0), 1),
-                        td=int(l.get('kr_td', 0) + l.get('pr_td', 0))))
-            for pid, l in top(pids, 'pass_att', 2):
-                p = league.player(pid); box['passing'].append(dict(team=abbr, name=p.name, ca=f"{int(l.get('pass_cmp', 0))}/{int(l.get('pass_att', 0))}", yds=int(l.get('pass_yds', 0)), td=int(l.get('pass_td', 0)), int_=int(l.get('ints', 0)), lng=longest.get(('pass', pid), 0)))
-            for pid, l in top(pids, 'rush_att', 2):
-                p = league.player(pid); box['rushing'].append(dict(team=abbr, name=p.name, att=int(l.get('rush_att', 0)), yds=int(l.get('rush_yds', 0)), td=int(l.get('rush_td', 0)), lng=longest.get(('rush', pid), 0)))
-            for pid, l in top(pids, 'rec', 3):
-                p = league.player(pid); box['receiving'].append(dict(team=abbr, name=p.name, tgt=int(l.get('tgt', 0)), rec=int(l.get('rec', 0)), yds=int(l.get('rec_yds', 0)), td=int(l.get('rec_td', 0)), lng=longest.get(('rec', pid), 0)))
-            defensive_lines = [(pid, book.p[pid]) for pid in pids if pid in book.p]
-            defensive_lines.sort(key=lambda x: (-int(x[1].get('def_td', 0)), -int(x[1].get('tackles', 0)), -int(x[1].get('int_def', 0))))
-            for pid, l in defensive_lines[:3]:
-                p = league.player(pid); box['defense'].append(dict(team=abbr, name=p.name, tkl=int(l.get('tackles', 0)), sk=float(l.get('sacks', 0)), int_=int(l.get('int_def', 0)), pd=int(l.get('pass_def', 0)), td=int(l.get('def_td', 0))))
+        box = box_score(league, book, home, away, longest, states, bool(res.get('live')))
+        injuries = []
+        raw_injuries = res.get('injuries', [])
+        if res.get('live') and states:
+            raw_injuries = [i for a in (home, away) for i in getattr(states.get(a), 'injuries', [])]
+        for inj in raw_injuries:
+            p = league.player(inj.get('player') or inj.get('pid'))
+            if p is None: continue
+            team = next((a for a in (home, away) if any(x.pid == p.pid for x in league.teams[a].roster)), None)
+            injuries.append(dict(pid=p.pid, name=p.name, pos=p.pos, kind=inj.get('kind'), team=team, status='Out for this game'))
         # line score by quarter, from the score at each drive's end
         quarters = {home: [0, 0, 0, 0, 0], away: [0, 0, 0, 0, 0]}
         for d in drives:
@@ -254,5 +301,6 @@ def capture(league, played, user):
             d['head'] = f"Drive {d['n']} · {d['off']} · {ticker.drive_start_text(d['start_label'], d.get('return_only', False))} {how}".rstrip() + f" · {d['plays_n']} play{'s' if d['plays_n'] != 1 else ''}, {int(round(d['yards']))} net field yards (including penalties)" + (f", {str(d['result']).lower()}" if d.get('result') else '')
             prev_result = d.get('result')
         out['game'] = dict(home=home, away=away, hs=res['home'], as_=res['away'], ot=bool(res.get('overtime')), me=user, opp=opp, me_home=me_home,
-                           drives=drives, wp=wp, box=box, env=res.get('env', {}), team_stats=team_stats, reads=reads, quarters=quarters)
+                           drives=drives, wp=wp, box=box, box_version=2, injuries=injuries, env=res.get('env', {}), team_stats=team_stats, reads=reads, quarters=quarters,
+                           home_rec=list(getattr(league.teams[home], 'record', [])), away_rec=list(getattr(league.teams[away], 'record', [])))
     return out

@@ -1901,7 +1901,10 @@ class Session:
 
     def _capture_gameday(self, wk):
         import gameday as GD
-        self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team)
+        self.gameday = GD.capture(self.L, getattr(self.runner, 'last_games', []), self.user_team, states=getattr(self.runner, 'states', None))
+        lv = getattr(self.runner, 'live', None)
+        if self.gameday.get('game') and lv and int(lv.get('week', -1)) == int(wk):
+            self.gameday['game']['halftime_plan'] = [dict(text=r['text'], taken=bool(r.get('taken'))) for r in lv.get('half_recs', [])]
         if self.gameday and (self.gameday.get('game') or self.gameday.get('scores')):
             # your bye week is kept too: the league's scores that week are part of the season's record
             self.gamedays = getattr(self, 'gamedays', None) or {}
@@ -1951,15 +1954,29 @@ class Session:
             import gameday as GD
             partial = self.runner.live_partial()
             others = [(h, a, r, b) for (h, a, r, b) in getattr(self.runner, 'last_games', [])]
-            gd = GD.capture(self.L, others + [(lv['home'], lv['away'], partial, lv['book'])], self.user_team)
+            gd = GD.capture(self.L, others + [(lv['home'], lv['away'], partial, lv['book'])], self.user_team, states=self.runner.states)
+            gd['game']['halftime_plan'] = [dict(text=r['text'], taken=bool(r.get('taken'))) for r in lv.get('half_recs', [])]
             v = views.gameday(self, self.L, self.user_team, gd=gd)
             v['live'] = dict(open=True, at=lv['at'], halftime_open=lv['halftime_open'], adjustment_period=lv.get('adjustment_period'), score={'home': partial['home'], 'away': partial['away']}, recs=[dict(i=r['i'], side=r['side'], text=r['text'], why=r['why'], taken=r['taken']) for r in (lv.get('ot_recs' if lv.get('adjustment_period') == 'overtime' else 'half_recs') or [])])
             v['live']['playoffs'] = bool(lv.get('playoffs'))
             v['live']['possession'] = (lv[lv['pos']] if lv['at'] in ('kick', 'snap')
                                       and not lv['halftime_open']
                                       and getattr(lv.get('current'), 'result', None) is None else None)
+            dr = lv.get('current')
+            if dr is not None:
+                v['live']['clock'] = GD._clock(dr.clock)
+                v['live']['quarter'] = dr.quarter
+            # These are the engine's next-snap coordinates, not the previous play's spot.
+            if dr is not None and dr.result is None and lv['at'] == 'snap' and not lv['halftime_open']:
+                import ticker
+                off, defense = lv[lv['pos']], lv['away' if lv['pos'] == 'home' else 'home']
+                v['live']['field'] = dict(off=off, yardline=dr.yardline, down=dr.down, togo=dr.togo,
+                    spot=ticker._spot(dr.yardline, off, defense), distance=ticker.display_distance(dr.yardline, dr.togo, off, defense))
             return v
         if week is not None:
             gd = (getattr(self, 'gamedays', None) or {}).get(f"{year or self.L.year}-{int(week)}")
-            if gd is not None: return views.gameday(self, self.L, self.user_team, gd=gd)
+            if gd is not None:
+                v = views.gameday(self, self.L, self.user_team, gd=gd)
+                v['year'] = year or self.L.year
+                return v
         return views.gameday(self, self.L, self.user_team)

@@ -6,6 +6,63 @@ import inbox as IB
 TRANSACTION_TYPES = ('Trades', 'Signings', 'Extensions', 'Franchise Tags')
 
 
+def combine_saved_waiver_availability(league):
+    """Combine weekly availability using saved facts, never today's player ratings.
+
+    Claim results/decisions are excluded. Closed notices stay separate from
+    actionable availability so a later notification cannot revive expired rows.
+    """
+    import re
+    groups = {}
+    for message in getattr(league, 'inbox', []) or []:
+        payload = message.get('payload') or {}
+        current = message.get('kind') == 'waiver_digest' and payload.get('waiver_availability')
+        legacy = (message.get('kind') == 'waiver_notice'
+                  and message.get('subject', '').startswith('Available on waivers:')
+                  and message.get('phase') == 'regular')
+        if not (current or legacy): continue
+        if current:
+            rows = (payload.get('mail_sections') or [{}])[0].get('rows', [])
+            pairs = list(zip(payload.get('digest_pids', []), rows))
+            if len(pairs) != len(rows): continue
+        else:
+            match = re.match(r'^(.+), ([A-Z][A-Z0-9/]*), (\d+) overall, age (\d+), (\d+) accrued seasons, waived by ([A-Z]+)\.', message.get('body', ''))
+            pid = payload.get('pid')
+            if not match or not pid: continue
+            name, pos, ovr, age, accrued, origin = match.groups()
+            hit, years = payload.get('cap_hit'), payload.get('years', 0)
+            values = [name, pos, ovr, age, origin,
+                      f'{years} yr · ${hit:.2f}m this season' if hit is not None else '—']
+            row = [dict(text=v, mentions=[]) for v in values]
+            row[0]['mentions'] = [dict(kind='player', id=pid, name=name, start=0,
+                                       end=len(name.encode('utf-16-le'))//2)]
+            pairs = [(pid, row)]
+        closed = message.get('status') in ('closed', 'expired', 'done')
+        key = (message.get('year'), message.get('phase'), message.get('week'), closed)
+        groups.setdefault(key, []).append((message, pairs, bool(legacy)))
+    for group in groups.values():
+        if len(group) == 1 and not group[0][2]: continue
+        target = group[0][0]
+        rows = {}; entities = []
+        for message, pairs, _ in group:
+            for pid, row in pairs: rows[pid] = row
+        for row in rows.values(): entities.extend(row[0].get('mentions') or [])
+        payload = dict(target.get('payload') or {})
+        for key in ('pid','from_team','cap_hit','years'): payload.pop(key, None)
+        intro = 'Review these players on the waiver wire and submit any claims before advancing.'
+        payload.update(waiver_availability=True, link='personnel:waivers', n=len(rows),
+                       digest_pids=list(rows), mail_intro=dict(text=intro, mentions=[]),
+                       mail_sections=[dict(title='', columns=['Player','Pos','OVR','Age','Waived by','Contract'], rows=list(rows.values()))])
+        target.update(kind='waiver_digest', subject='Available on waivers', payload=payload,
+                      body=intro+'\n'+'\n'.join(' | '.join(c['text'] for c in row) for row in rows.values()),
+                      entities=entities)
+        target['mentions'] = dict(subject=[], body=IB.reference_spans(target['body'], entities))
+        if any(m.get('status') == 'unread' for m, _, _ in group): target['status'] = 'unread'
+        elif any(m.get('status') == 'open' for m, _, _ in group): target['status'] = 'open'
+        removed = {id(m) for m, _, _ in group[1:]}
+        league.inbox[:] = [m for m in league.inbox if id(m) not in removed]
+
+
 def split_saved_transactions(league):
     """Separate a saved mixed digest when every recorded section is identifiable."""
     box = getattr(league, 'inbox', None) or []
