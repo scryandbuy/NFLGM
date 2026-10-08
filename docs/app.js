@@ -2129,19 +2129,25 @@ function extensionCapMetrics(cap, current = false) {
     [`$${cap.committed.toFixed(1)}m`, `${cap.year} Committed`],
     [`$${cap.space.toFixed(1)}m`, current ? 'Current Cap Space' : 'Cap Space for Extensions']];
 }
-function extensionBudgets(current, next) {
+function extensionBudgets(current, next, focus) {
   const budgets = el('div', { class: 'extension-budgets' });
-  for (const [cap, now] of [[current, true], [next, false]]) {
+  const offseason = !!(current && focus && focus.year > current.year);
+  const panels = offseason
+    ? [[next, true, 'This year · offseason'], [current, false, 'Previous season']]
+    : [[current, true, 'This year'], [next, false, 'Next year · projected']];
+  for (const [cap, now, title] of panels) {
     if (!cap) continue;
-    const strip = el('section', { class: 'extension-cap-year' }, el('h3', {}, now ? 'This year' : 'Next year · projected'));
+    const strip = el('section', { class: 'extension-cap-year' }, el('h3', {}, title));
     const metrics = el('div', { class: 'extension-cap-metrics' });
-    for (const [value, label] of extensionCapMetrics(cap, now)) metrics.append(el('div', {}, el('b', {}, value), el('small', {}, label)));
+    for (const [value, label] of extensionCapMetrics(cap, now)) metrics.append(el('div', {}, el('b', {}, value), el('small', {}, offseason && !now && label === 'Cap Space for Extensions' ? 'Previous Cap Space' : label)));
     strip.append(metrics); budgets.append(strip);
   }
   return budgets;
 }
 function extensionImpact(preview, title = 'Proposed extension · cap impact') {
-  const rows = preview.cap_impact || [], current = rows[0];
+  const rows = preview.cap_impact || [];
+  const focusYear = preview.cap_focus_year ?? rows[0]?.year;
+  const current = rows.find(r => r.year === focusYear);
   const money = n => `${n < 0 ? '−' : ''}$${Math.abs(n).toFixed(3)}m`;
   const delta = n => `${n > 0 ? '+' : ''}${money(n)}`;
   const box = el('section', { class: 'extension-impact' }, el('h3', {}, title));
@@ -2151,8 +2157,8 @@ function extensionImpact(preview, title = 'Proposed extension · cap impact') {
   const table = el('table', { class: 'extension-impact-table' }, el('thead', {}, el('tr', {},
     ...['Year', 'Existing deal', 'Extension change', 'Total cap hit'].map(label => el('th', {}, label)))));
   const body = el('tbody');
-  for (const [i, r] of rows.entries()) body.append(el('tr', { class: i === 0 ? 'current' : '' },
-    el('td', {}, `${r.year}${i === 0 ? ' · This year' : r.year === preview.expiry_year ? ' · Void charge' : ''}`),
+  for (const r of rows) body.append(el('tr', { class: r.year === focusYear ? 'current' : '' },
+    el('td', {}, `${r.year}${r.year === focusYear ? ' · This year' : r.year < focusYear ? ' · Previous season' : r.year === preview.expiry_year ? ' · Void charge' : ''}`),
     el('td', {}, money(r.existing)), el('td', {}, delta(r.change)), el('td', {}, money(r.total))));
   table.append(body); box.append(el('div', { class: 'extension-impact-scroll' }, table),
     el('p', {}, 'Total cap hits include the existing contract plus this extension. Signing-bonus proration can add a charge this year.'));
@@ -2161,7 +2167,7 @@ function extensionImpact(preview, title = 'Proposed extension · cap impact') {
 function threadBox(t, onDone) {
   const box = el('div', { class: 'thread negotiation-thread' });
   if (t.kind === 'extension' && t.extension_cap) {
-    box.append(extensionBudgets(t.current_cap, t.extension_cap));
+    box.append(extensionBudgets(t.current_cap, t.extension_cap, t.cap));
   } else if (t.cap) box.append(el('div', { class: 'msg note cap-strip' }, el('b', {}, `${t.cap.year} cap · `), `$${t.cap.limit}m limit, $${t.cap.committed}m committed, `, el('b', {}, `$${t.cap.space}m of room`), t.cap.next ? ' (next year, the ledger this deal lands on)' : ''));
   // the conversation as logged: every line with who said it, then the agent's temperament, then the decision
   const log = t.log && t.log.length ? t.log : [];
@@ -2214,7 +2220,7 @@ function finishPersonnel(page, v, kind, left, right, extra = []) {
   const stats=el('div',{class:'personnel-metrics'});
   for(const [value,label] of metrics) stats.append(el('div',{},el('b',{},value),el('small',{},label)));
   hero.append(stats);board.append(hero);
-  if (kind === 'extensions') board.append(extensionBudgets(v.current_cap, v.extension_cap));
+  if (kind === 'extensions') board.append(extensionBudgets(v.current_cap, v.extension_cap, v.cap_focus));
   left.className='personnel-main'; right.className='personnel-aside';
   const grid=el('div',{class:'personnel-columns'},left,right);board.append(grid);
   // Preserve seasonal content (tags/tenders) and the FA transaction feed.

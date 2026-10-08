@@ -618,7 +618,10 @@ def act_offer_preview(league, abbr, pid, apy, years, bonus=None, front_load=None
     impact = [dict(year=league.year+i, existing=round(charge(p.contract, i), 3),
                    change=round(charge(c, i)-charge(p.contract, i), 3),
                    total=round(charge(c, i), 3)) for i in range(len(hits))]
+    from cap_accounting import pre_roll
+    cap_focus_year = int(league.year) + int(pre_roll(league))
     return dict(ok=True, interest=interest, bonus=bonus, front_load=front_load, extension=True, existing_years=p.contract.years,
+                cap_focus_year=cap_focus_year,
                 hits=hits, years=[league.year + i for i in range(len(hits))],
                 expiry_year=league.year + c.years if expiry else None,
                 total=round(float(apy) * int(years), 2), year1=hits[0], cap_impact=impact,

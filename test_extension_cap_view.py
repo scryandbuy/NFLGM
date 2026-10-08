@@ -100,6 +100,7 @@ class ExtensionCapViewTests(unittest.TestCase):
                 before = team.cap_space
                 preview = VP.act_offer_preview(league, 'GB', p.pid, 40, 4, bonus=75, front_load=.5)
                 self.assertTrue(preview['ok'])
+                self.assertEqual(preview['cap_focus_year'], league.year + int(phase == 'offseason'))
                 expected_change = 0 if phase == 'offseason' else 15
                 self.assertEqual(preview['cap_impact'][0]['change'], expected_change)
                 self.assertEqual(preview['cap_impact'][0]['existing'], 20)
