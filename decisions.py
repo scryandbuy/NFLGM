@@ -287,6 +287,14 @@ def two_point(score_diff_after_td, seconds_left, conv_prob=TWO_RATE,
         field_goal_boundary = .75 * fourth_quarter + .25 * final_possession
         kick_success = ((1. - field_goal_boundary) * kick_success
                         + field_goal_boundary * after(0))
+    # With one opposing possession left, +5 and +6 both lose to a
+    # touchdown and extra point; +7 can survive it. Remove the smooth
+    # model's fictitious value for the sixth point as time runs short.
+    # Earlier, keep its value against multiple scores and missed tries.
+    if score_diff_after_td == 5 and 0 < seconds_left < 300:
+        final_possession = float(np.clip((300. - seconds_left) / 180., 0., 1.))
+        kick_success = ((1. - final_possession) * kick_success
+                        + final_possession * after(0))
     wp_kick = xp_prob * kick_success + (1 - xp_prob) * after(0)
     wp_go = conv_prob * after(2) + (1 - conv_prob) * after(0)
     edge = wp_go - wp_kick
