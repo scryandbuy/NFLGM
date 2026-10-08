@@ -1,11 +1,11 @@
 """Pressure credit shared by statistics and coaching evidence.
 
-A rush must consume at least 15% of the planned throwing window. This is
+A rush must consume at least 12.5% of the planned throwing window. This is
 an explicit reporting threshold, not a change to pass resolution. Actual
 sacks and pressure-forced throwaways/escapes retain their causal credit.
 """
-VERSION = 2
-MIN_SEVERITY = .15
+VERSION = 3
+MIN_SEVERITY = .125
 
 
 def credited_rushers(out, release, arrivals, cutoff):

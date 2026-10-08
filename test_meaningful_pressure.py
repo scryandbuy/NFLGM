@@ -7,7 +7,7 @@ from gameplan_week import pressure_advice, record_game
 
 class MeaningfulPressure(unittest.TestCase):
     def play(self, arrival, **extra):
-        return dict(type='complete', is_pass=True, pressured=True, yards=7,
+        return dict(type='complete', is_pass=True, pressured=True, yards=3,
                     pressure_arrivals=[('edge',arrival)], pressure_release=3.,
                     pressure_credit_end=3., **extra)
 
@@ -28,6 +28,23 @@ class MeaningfulPressure(unittest.TestCase):
             self.assertEqual(me['pressures'],expected)
             recs=recommendations(None,'GB','DAL',drives,'home',{'home':0,'away':0},None,None,coherent=False)
             self.assertEqual(any(r.get('review_key')=='protection' for r in recs), bool(expected))
+
+    def test_productive_pressure_does_not_remove_receiving_option(self):
+        plays=[dict(self.play(2.4),yards=10) for _ in range(12)]
+        drives=[('home',N(log=plays,points=7,first_downs=6))]
+        recs=recommendations(None,'GB','DAL',drives,'home',{'home':7,'away':0},None,None,coherent=False)
+        self.assertFalse(any(r.get('review_key')=='protection' for r in recs))
+
+    def test_repeated_sacks_can_justify_help_below_pressure_rate_trigger(self):
+        plays=[dict(self.play(2.99),yards=8) for _ in range(18)]
+        plays += [dict(type='sack',yards=-7,is_pass=True) for _ in range(2)]
+        drives=[('home',N(log=plays,points=7,first_downs=6))]
+        recs=recommendations(None,'GB','DAL',drives,'home',{'home':7,'away':0},None,None,coherent=False)
+        self.assertTrue(any(r.get('review_key')=='protection' for r in recs))
+
+    def test_calibrated_boundary(self):
+        self.assertTrue(credited_rushers({},3.,[('edge',2.625)],3.))
+        self.assertFalse(credited_rushers({},3.,[('edge',2.626)],3.))
 
     def test_old_tendency_totals_do_not_contaminate_new_evidence(self):
         L=N(year=2032,tendencies={2032:{'DAL':Counter(pressure_dropbacks=100,pressured_dropbacks=95,plays=100,passes=60,def_snaps=100)}})

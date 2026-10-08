@@ -13,7 +13,7 @@ SCRIM = ('run', 'scramble', 'complete', 'incomplete', 'drop', 'interception', 's
 
 def first_half(drives, me_side, legacy=False):
     """Totals for one side from the drive logs so far. me_side is 'home' or 'away'."""
-    def fresh(): return dict(runs=0, run_yds=0.0, passes=0, pass_yds=0.0, cmp=0, sacks=0, pressures=0, screens=0, screen_yds=0.0,
+    def fresh(): return dict(runs=0, run_yds=0.0, passes=0, pass_yds=0.0, cmp=0, sacks=0, pressures=0, pressure_plays=0, pressure_yards=0.0, screens=0, screen_yds=0.0,
                              deep=0, deep_cmp=0, deep_yds=0.0, int=0, fum=0, third=0, third_conv=0, blitz_faced=0, blitz_yds=0.0,
                              box8=0, two_high=0, snaps=0, first_downs=0, points=0, drives=0)
     me, them = fresh(), fresh()
@@ -31,6 +31,9 @@ def first_half(drives, me_side, legacy=False):
                 if not legacy or ty in ('complete', 'sack'): t['pass_yds'] += y
                 if ty == 'complete': t['cmp'] += 1
                 if ty == 'sack': t['sacks'] += 1
+                if disrupted(p):
+                    t['pressure_plays'] += 1
+                    t['pressure_yards'] += y
                 if (p.get('pressured') if legacy else disrupted(p)) and (legacy or ty != 'sack'): t['pressures'] += 1
                 if p.get('screen'): t['screens'] += 1; t['screen_yds'] += y
                 if (p.get('depth') or '') == 'deep' or float(p.get('air', 0) or 0) >= 20:
@@ -87,7 +90,12 @@ def recommendations(league, me_abbr, opp_abbr, drives, me_side, score, plan, bas
         sug('offence', 'Stay on the ground: the run is working', f"{ypc:.1f} a carry on {me['runs']} runs; we have thrown {me['passes']} times", {'pass_bias': -0.06, 'heavy_lean': +0.4}, 'run_working')
     if ypc is not None and ypc <= 2.6 and me['runs'] >= 8:
         sug('offence', 'The run is not there: throw more, spread them out', f"{ypc:.1f} a carry on {me['runs']} runs", {'pass_bias': +0.06, 'heavy_lean': -0.4}, 'run_stalled')
-    if me['passes'] >= 10 and me['sacks'] + me['pressures'] >= 0.35 * me['passes']:
+    # Giving up an outlet needs evidence of a cost, not pressure frequency alone.
+    # Successful throws and productive escapes can justify staying aggressive.
+    sack_trouble = me['sacks'] >= 2 and me['sacks'] / max(1, me['passes']) >= .10
+    pressure_trouble = (pressure >= .35 and me['pressure_plays'] >= 5
+                        and me['pressure_yards'] / me['pressure_plays'] <= 4.5)
+    if me['passes'] >= 10 and (sack_trouble or pressure_trouble):
         screens_failed = coherent and me['screens'] >= 3 and rate(me, 'screen_yds', 'screens') <= 1.0
         changes = {'protection': 'six', 'depth_mix': (+0.08, -0.05, -0.03), 'heavy_lean': +0.3}
         title = 'Protect: keep a back in, quick game'
@@ -96,7 +104,7 @@ def recommendations(league, me_abbr, opp_abbr, drives, me_side, score, plan, bas
             changes['screen_boost'] = +0.03
         # Protecting the QB does not require retrying screens that this same
         # half has shown to be ineffective. Keep the useful protection option.
-        sug('offence', title, f"pressure or a sack on {me['sacks'] + me['pressures']} of {me['passes']} dropbacks", changes, 'protection')
+        sug('offence', title, ('Repeated sacks are costing us possessions.' if sack_trouble else 'Their rush is limiting our passing game.'), changes, 'protection')
     if me['deep'] >= 3 and me['deep_cmp'] == 0:
         sug('offence', 'Stop taking the shots: work the intermediate game', f"0 for {me['deep']} on throws twenty yards down the field", {'depth_mix': (+0.02, +0.06, -0.08)}, 'deep_stalled')
     if me['deep'] >= 2 and me['deep_cmp'] >= 2 and me['deep_yds'] >= 60:
