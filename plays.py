@@ -887,6 +887,26 @@ def moving_throw(call, *, screen=False, swing=False, hot=False):
     return boot
 
 
+def pressure_credit_end(out, planned_release, arrivals=()):
+    """End pressure credit when the modeled pocket phase has ended.
+
+    Normal passes retain the concept window, including late checkdowns.
+    ttt on these records is rush arrival, not a measured release timestamp.
+    A sack takes the same one-second finish used by live_play_seconds;
+    voluntary escapes and throwaways leave the pocket at the rush clock.
+    """
+    kind = out.get('type')
+    arrival = min((float(t) for pid, t in arrivals if pid), default=out.get('ttt'))
+    if arrival is None:
+        return float(planned_release)
+    arrival = max(0., float(arrival))
+    if kind == 'sack':
+        return min(float(planned_release), arrival + 1.)
+    if kind == 'scramble' or out.get('throwaway'):
+        return min(float(planned_release), arrival)
+    return float(planned_release)
+
+
 def _pass_play(off, deff, off_call, def_call, ytg, rng):
     timing = {}
     out = _resolve_pass_play(off, deff, off_call, def_call, ytg, rng, pressure_context=timing)
@@ -894,9 +914,12 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # Count arrival before the concept's release window, not every quick
     # block win. Screens/quick throws can escape a win; late sacks still count.
     release = timing.get('release', BASE_TTT + HOLD_BY_DEPTH.get('screen' if out.get('screen') else out.get('depth', 'medium'), 0.))
-    pressures = {pid for pid, arrival in arrivals if pid and arrival <= release}
+    cutoff = pressure_credit_end(out, release, arrivals)
+    pressures = {pid for pid, arrival in arrivals if pid and arrival <= cutoff}
     if out.get('type') == 'sack' and out.get('by'):
         pressures.update(pid for pid, _credit in RM.credited_sackers(out))
+    out['pressure_credit_end'] = cutoff
+    out['pressure_arrivals'] = arrivals
     out['pressure_severity'] = timing.get('severity', 0.)
     out['pressure_release'] = release
     out['escape_lanes'] = timing.get('escape_lanes')

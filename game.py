@@ -3289,6 +3289,17 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if out.get('type') == 'sack' and rng.random() < escape:
                 # Keep call/protection evidence, discard the provisional sack
                 # winner and credit. StatBook sees only the final outcome.
+                # Once the QB escapes, later pocket arrivals did not pressure
+                # him. Preserve the rusher whose sack attempt forced the escape.
+                if 'pressure_arrivals' in out:
+                    cutoff = min((float(t) for pid, t in out['pressure_arrivals'] if pid),
+                                 default=max(0., float(out.get('ttt', 0.))))
+                    credits = {pid for pid, arrival in out['pressure_arrivals']
+                               if pid and arrival <= cutoff}
+                    if out.get('by'): credits.add(out['by'])
+                    out['rush_pressures'] = sorted(credits)
+                    out['pressured'] = bool(credits)
+                    out['pressure_credit_end'] = cutoff
                 head = {k: v for k, v in out.items()
                         if k not in ('type', 'yards', 'touchdown', 'by', 'sack_credits', 'beaten')}
                 out = E.resolve_scramble(off_f['qb'], def_f['dl'] + def_f['lb'] + def_f['db'], float(dr.yardline), rng, rate_fn)
