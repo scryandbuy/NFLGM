@@ -2454,7 +2454,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .stats-board .stats-team-row .who .no{background:var(--team-base);color:var(--team-readable);border:1px solid color-mix(in srgb,var(--team-accent) 40%,transparent);border-radius:4px}
 .league-awards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:1160px;margin:28px 0 36px}
 .league-awards .aw{position:relative;background:linear-gradient(135deg,color-mix(in srgb,var(--award-base) 38%,#101c24),#101820 72%);border:1px solid var(--league-rule);border-left:4px solid var(--award-accent);border-radius:8px;padding:22px 24px;min-width:0;min-height:150px}
-.league-awards .aw:first-child,.league-awards .aw:last-child{grid-column:1/-1}.league-awards .aw:first-child{min-height:178px;background:linear-gradient(115deg,color-mix(in srgb,var(--award-base) 58%,#101b23),#101820 78%)}
+.league-awards .aw:first-child{grid-column:1/-1;min-height:178px;background:linear-gradient(115deg,color-mix(in srgb,var(--award-base) 58%,#101b23),#101820 78%)}
 .league-awards .aw.mine{box-shadow:0 0 0 1px var(--report-accent),0 14px 26px #0002}.league-awards .aw .code{display:inline-block;font:750 11px var(--display);letter-spacing:.08em;color:var(--award-accent);margin-bottom:10px}
 .league-awards .aw .a{font:650 11px var(--text);color:var(--ink-3);text-transform:uppercase;letter-spacing:.09em}
 .league-awards .aw .nm{font:750 24px var(--text);margin:10px 0 8px;line-height:1.1}.league-awards .aw:first-child .nm{font-size:34px}.league-awards .aw .tm,.league-awards .aw .ln{font:400 13px var(--text);margin-top:9px}.league-awards .aw .ln{color:var(--ink-3)}
