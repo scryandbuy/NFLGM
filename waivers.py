@@ -120,7 +120,8 @@ def wants(league, abbr, p, week, market=None, *, _assessments=None):
             if abbr not in _assessments:
                 _assessments[abbr] = RN.assess(team)
             baseline = _assessments[abbr]
-        if RN.move_gain(team, p, baseline=baseline) < 3.0:
+        if RN.move_gain(team, p, baseline=baseline,
+                _weight_cache=None if baseline is None else baseline.setdefault('_waiver_weights', {})) < 3.0:
             return False
     if not week:
         # the cut-down wave: a club makes one or two claims, not a dozen

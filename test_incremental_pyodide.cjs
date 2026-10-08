@@ -23,6 +23,10 @@ start=time.perf_counter();delta=writer.prepare(data,str);delta_seconds=time.perf
 change=json.loads(delta)
 assert list(change['puts'])==[record_id(['players','12'])]
 assert json.loads(change['puts'][record_id(['players','12'])]['text'])==data['players']['12']
+data['_stop']=['week',5]
+week_change=json.loads(writer.prepare(data,str))
+assert not week_change['reset']
+assert list(week_change['puts'])==[record_id(['_stop',0])]
 json.dumps({'runtime':'Pyodide 0.29.5','full_bytes':len(full),'delta_bytes':len(delta),'full_seconds':full_seconds,'delta_seconds':delta_seconds,'changed_records':len(change['puts'])})
 `));
   },source);

@@ -9,6 +9,7 @@ import roster_needs as RN
 import practice_squad as PS
 import waivers as WV
 import cap_accounting as CA
+import valuation as VAL
 from cap_engine import CAP, Contract
 from stable import stable_seed
 
@@ -104,7 +105,19 @@ def _terms(league, team, p, source, pool):
     return c, line
 
 
-def _trade_offer(league, team, p, pool, week):
+def _seller_read(seller, assessments):
+    if assessments is not None and seller.abbr in assessments:
+        return assessments[seller.abbr]
+    healthy = [q for q in seller.active() if _healthy(q)]
+    prepared = RN.assessment_inputs(seller, healthy)
+    before = RN.assess(seller, healthy, strict_roles=True, prepared=prepared)
+    result = (healthy, prepared, before)
+    if assessments is not None:
+        assessments[seller.abbr] = result
+    return result
+
+
+def _trade_offer(league, team, p, pool, week, *, assessments=None):
     """A plausible single-pick offer, through the existing two-sided evaluator."""
     import trades as TR, trade_engine as TE
     if week > TR.TRADE_DEADLINE_WEEK or p.team not in league.teams:
@@ -112,12 +125,11 @@ def _trade_offer(league, team, p, pool, week):
     seller = league.teams[p.team]
     if PS.protected(seller, p, league):
         return None
-    healthy = [q for q in seller.active() if _healthy(q)]
+    healthy, prepared, before = _seller_read(seller, assessments)
     # Never suggest stripping a seller of an actual starting assignment.
-    before = RN.assess(seller, healthy, strict_roles=True)
     if any(a['player'] is p for a in before['assignments']):
         return None
-    after = RN.assess(seller, [q for q in healthy if q.pid != p.pid], strict_roles=True)
+    after = RN.assess(seller, [q for q in healthy if q.pid != p.pid], strict_roles=True, prepared=prepared)
     if after['uncovered'] != before['uncovered'] or before['score']-after['score'] > 6:
         return None
     rng = np.random.default_rng(stable_seed(('roster-advisor', league.year, week, p.pid)))
@@ -202,6 +214,7 @@ def acquisition_case(league, team, p, report, after, healthy, injured, own_ps, f
     return None, comparator
 
 
+@VAL.comparison_batch()
 def candidates(league, week):
     """Rank actionable improvements; max one recommendation per position."""
     import valuation as VAL
@@ -209,8 +222,6 @@ def candidates(league, week):
     active = list(team.active())
     healthy = [p for p in active if _healthy(p)]
     full = list({p.pid: p for p in active + list(getattr(team, 'ir', []) or [])}.values())
-    report = RN.assess(team, healthy, strict_roles=True)
-    full_report = RN.assess(team, full, strict_roles=True)
     own_ps = [p for p in PS.squad(team) if _healthy(p)]
     wire = {e['pid']: e for e in WV.pending(league) if e.get('from_team') != team.abbr}
     pool = VAL.pool_from_league(league)
@@ -222,6 +233,13 @@ def candidates(league, week):
         options += [(p, 'ps') for p in PS.squad(other)]
         if week <= __import__('trades').TRADE_DEADLINE_WEEK:
             options += [(p, 'trade') for p in other.active()]
+    # This entire search only reads the league. Reuse fixed coach/player
+    # inputs, but assign every hypothetical lineup and price each acquisition.
+    prepared = RN.assessment_inputs(team, full + own_ps + [p for p, _ in options if p is not None])
+    report = RN.assess(team, healthy, strict_roles=True, prepared=prepared)
+    full_report = RN.assess(team, full, strict_roles=True, prepared=prepared)
+    room = PS.room_review(league, team) if len(active) >= 53 else None
+    sellers = {}
     ranked = []
     in_talks = {t['pid'] for t in (getattr(league, 'negotiations', None) or [])
                 if t.get('team') == team.abbr and t.get('state') in ('open', 'waiting', 'countered', 'accepted', 'broken_off')}
@@ -234,6 +252,15 @@ def candidates(league, week):
             continue
         if source == 'trade' and PS.locked(p, week):
             continue
+        if source == 'trade':
+            seller = league.teams[p.team]
+            # These same hard refusals already apply in _trade_offer. Check
+            # before pricing a hypothetical release on our own full roster.
+            if PS.protected(seller, p, league):
+                continue
+            _, _, seller_report = _seller_read(seller, sellers)
+            if any(a['player'] is p for a in seller_report['assignments']):
+                continue
         grade = _grade(league, team, p)
         internal = [q for q in own_ps if q.pos == p.pos]
         best_internal = max(internal, key=lambda q: _grade(league, team, q), default=None)
@@ -248,10 +275,10 @@ def candidates(league, week):
         # A rental for an imminent return must be cheap, and never costs a pick.
         if short and source == 'trade':
             continue
-        outgoing = PS.room_candidate(league, team, p) if len(active) >= 53 else None
+        outgoing = PS.room_candidate(league, team, p, review=room) if len(active) >= 53 else None
         if len(active) >= 53 and outgoing is None:
             continue
-        after = RN.assess(team, [q for q in healthy if q is not outgoing]+[p], strict_roles=True)
+        after = RN.assess(team, [q for q in healthy if q is not outgoing]+[p], strict_roles=True, prepared=prepared)
         gain = after['score']-report['score']
         future_case = development_case(league, team, p, full + own_ps)
         reason, comparator = acquisition_case(league, team, p, report, after, healthy, injured, own_ps, future_case)
@@ -278,10 +305,10 @@ def candidates(league, week):
         except ValueError:
             continue
         # Protect the healthy roster the club expects to have when injuries clear.
-        full_after = RN.assess(team, [q for q in full if q is not outgoing]+[p], strict_roles=True)
+        full_after = RN.assess(team, [q for q in full if q is not outgoing]+[p], strict_roles=True, prepared=prepared)
         if full_after['score'] < full_report['score']-2:
             continue
-        pick = _trade_offer(league, team, p, pool, week) if source == 'trade' else None
+        pick = _trade_offer(league, team, p, pool, week, assessments=sellers) if source == 'trade' else None
         if source == 'trade' and not pick:
             continue
         hurdle = investment_hurdle(source, c, pick, team.cap.limit)

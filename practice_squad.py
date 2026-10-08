@@ -355,16 +355,37 @@ def _recent_additions(league, team):
     return recent
 
 
-def _room_candidates(league, team, p):
-    """Preserve needed coverage before comparing possible releases."""
+def room_review(league, team):
+    """Fixed inputs for one read-only acquisition search.
+
+    The caller must discard this after any roster, health, contract, rating,
+    coaching or calendar change. Proposed arrivals/releases are still evaluated
+    individually, including their cap and playable-depth consequences.
+    """
     import roster_needs as RN
     active = team.active()
-    before = essential_depth(team, active, league.week)
+    report = RN.assess(team)
+    return dict(team=team, active=active,
+                before=essential_depth(team, active, league.week),
+                healthy=healthy_depth(team, active)['shortages'],
+                recent=_recent_additions(league, team), report=report,
+                starters={r['player'].pid for r in report['assignments'] if r['player']},
+                weights={})
+
+
+def _room_candidates(league, team, p, *, review=None):
+    """Preserve needed coverage before comparing possible releases."""
+    import roster_needs as RN
+    if review is not None and review['team'] is not team:
+        raise ValueError('Room review belongs to another team')
+    active = team.active() if review is None else review['active']
+    before = essential_depth(team, active, league.week) if review is None else review['before']
     group = GROUP_OF.get(p.pos, p.pos)
     repairing = before['shortages'].get(group, 0) > 0
-    recent = _recent_additions(league, team)
-    report = RN.assess(team)
-    starters = {r['player'].pid for r in report['assignments'] if r['player']}
+    recent = _recent_additions(league, team) if review is None else review['recent']
+    report = RN.assess(team) if review is None else review['report']
+    starters = ({r['player'].pid for r in report['assignments'] if r['player']}
+                if review is None else review['starters'])
     replace_specialist = p.pos in ('K', 'P', 'LS') and any(
         q.pos == p.pos and q.out_until is None for q in active)
     candidates = []
@@ -377,8 +398,10 @@ def _room_candidates(league, team, p):
         if not repairing and q.pid in recent: continue
         after = essential_depth(team, [x for x in active if x is not q] + [p], league.week)
         if any(n > before['shortages'].get(g, 0) for g,n in after['shortages'].items()): continue
-        if league.phase in ('regular', 'playoffs') and not preserves_healthy_depth(
-                team, active, [x for x in active if x is not q] + [p]): continue
+        if league.phase in ('regular', 'playoffs'):
+            proposed = [x for x in active if x is not q] + [p]
+            old = healthy_depth(team, active)['shortages'] if review is None else review['healthy']
+            if any(n > old.get(g, 0) for g,n in healthy_depth(team, proposed)['shortages'].items()): continue
         if repairing and after['shortages'].get(group, 0) >= before['shortages'][group]: continue
         candidates.append(q)
     def position_priority(q):
@@ -394,15 +417,16 @@ def _room_candidates(league, team, p):
     for q in candidates:
         # An upgrade still needs to improve the actual lineup. Depth repair
         # can legitimately add a weaker backup alongside a strong starter.
-        if not repairing and RN.move_gain(team,p,q,baseline=report) <= 0: continue
+        if not repairing and RN.move_gain(team,p,q,baseline=report,
+                _weight_cache=None if review is None else review['weights']) <= 0: continue
         yield q
 
 
-def room_candidate(league, team, p, contract=None):
+def room_candidate(league, team, p, contract=None, *, review=None):
     """First affordable, coverage-safe departure for the proposed arrival."""
     from cap_accounting import require_room
     contract = contract if contract is not None else minimum_contract(league, team, p)
-    for q in _room_candidates(league, team, p):
+    for q in _room_candidates(league, team, p, review=review):
         try: require_room(league, team, p.pid, contract, release_pid=q.pid)
         except ValueError: continue
         return q

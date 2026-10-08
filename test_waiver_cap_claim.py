@@ -41,7 +41,7 @@ def fixture(space, second_candidate=False):
 
 class WaiverCapClaimTests(unittest.TestCase):
     def run_wire(self, league):
-        def move_gain(team, incoming, outgoing=None, baseline=None):
+        def move_gain(team, incoming, outgoing=None, baseline=None, **kwargs):
             return 2.0 if outgoing is None or outgoing.pid == 'bad_cut' else 1.0
 
         with patch('targets.position_score', side_effect=lambda p, pos, scheme=None: p.get('test_ovr', 0)), \

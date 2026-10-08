@@ -181,15 +181,32 @@ def replacement_read(league, team, incoming, outgoing, contract, gain, report,
 def _proposal(league, team, player, quote, report, recent, budget, comparisons, *, cache=None):
     """Prepare an entire funded move before accepting or releasing anybody."""
     price = FD.asking(league, player, .70 * quote['apy'])
+    cache = {} if cache is None else cache
+    # Each club leaves review() immediately after its first accepted move.
+    # Until then its roster/coach inputs stay fixed; all offers still receive
+    # their own lineup, financial, retention and player-consent evaluation.
+    room = None
+    if len(team.active()) >= 53:
+        rooms = cache.setdefault('room_reviews', {})
+        if team.abbr not in rooms:
+            rooms[team.abbr] = PS.room_review(league, team)
+        room = rooms[team.abbr]
+    prepared = None
+    if league.phase == 'regular':
+        inputs = cache.setdefault('weekly_inputs', {})
+        if team.abbr not in inputs:
+            inputs[team.abbr] = RN.assessment_inputs(team, report['players'])
+        prepared = inputs[team.abbr]
+        prepared['grades'][player.pid] = RN._grade(player, team)
     # A full roster considers coverage-safe replacements at the relevant job.
-    departures = (q for q in PS._room_candidates(league, team, player) if q.pid not in recent) \
+    departures = (q for q in PS._room_candidates(league, team, player, review=room) if q.pid not in recent) \
         if len(team.active()) >= 53 else iter((None,))
     old_shares = _shares(report)
     best = None
-    cache = {} if cache is None else cache
     for outgoing in departures:
         players = [p for p in report['players'] if p is not outgoing] + [player]
-        after = RN.planning_assess(league, team, players)
+        after = RN.planning_assess(league, team, players,
+                                  **({'prepared': prepared} if prepared is not None else {}))
         gain = after['score'] - report['score']
         if gain <= 1.:
             continue

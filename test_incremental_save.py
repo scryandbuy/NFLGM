@@ -57,12 +57,23 @@ class IncrementalSaveTests(unittest.TestCase):
         self.data['players']=dict(reversed(list(self.data['players'].items())))
         self.capture()
 
-    def test_resume_and_calendar_checkpoint(self):
+    def test_resume_and_calendar_delta_preserve_history(self):
         meta=dict(epoch=self.writer.epoch,revision=self.writer.revision,
                   marker=self.writer.marker,hashes=dict(self.writer.hashes))
         self.writer=Snapshot(meta)
         self.assertEqual(self.capture()['puts'],{})
         self.data['_stop']=['week',5]
+        delta=self.capture();self.assertFalse(delta['reset'])
+        self.assertEqual(set(delta['puts']),{record_id(['_stop',0])})
+        self.data['year']+=1
+        self.data['_stop']=['offseason',1]
+        self.data['stats'][2030]={'one':{'yards':900}}
+        del self.data['players']['two']
+        delta=self.capture();self.assertFalse(delta['reset'])
+        self.assertIn(record_id(['players','two']),delta['deletes'])
+        self.assertNotIn(record_id(['stats','2029']),delta['puts'])
+        # Explicit recovery replaces the baseline even across a calendar change.
+        self.writer=Snapshot()
         checkpoint=self.capture();self.assertTrue(checkpoint['reset'])
         self.assertEqual(set(checkpoint['puts']),set(self.store))
 

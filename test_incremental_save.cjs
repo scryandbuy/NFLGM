@@ -69,9 +69,10 @@ async function run(){
  writeSnapshot=async(db,p)=>{if(first){first=false;await hold;}return originalWrite(db,p);};
  const advanceWrites=[queueSave('snapshot',snap(2,1,{xp:8},false,'new-franchise')),
   queueSave('snapshot',snap(3,2,{xp:7},false,'new-franchise')),
-  queueSave('snapshot',snap(4,3,{xp:6,trade:null,archive:'next week'},true,'new-franchise'))];
+  queueSave('snapshot',{...snap(4,3,{xp:6,trade:null},false,'new-franchise'),marker:'week5'})];
  release();await Promise.all(advanceWrites);writeSnapshot=originalWrite;
- assert((await read()).archive==='next week','checkpoint coalesced across pending delta');results.push('queued calendar checkpoint');
+ saved=await loadSave();state=JSON.parse(saved.text);
+ assert(state.xp===6&&state.trade===null&&state.archive==='new game'&&saved.snapshot.marker==='week5','calendar delta retains history and merges pending changes');results.push('queued calendar delta');
  const db=await idb();await new Promise((resolve,reject)=>{const tx=db.transaction('saves','readwrite');tx.objectStore('saves').delete('chunk:'+JSON.stringify(['xp']));tx.oncomplete=resolve;tx.onerror=reject;});db.close();
  let incomplete=false;try{await loadSave();}catch(e){incomplete=true;}assert(incomplete,'missing record fails visibly');results.push('new franchise + incomplete snapshot detection');
  return {checks:results,errors:[],captures,resets};
