@@ -623,8 +623,9 @@ def reconcile(league):
             message['subject'] = message['subject'].replace('Game plan: week ', 'Game Plan · Week ')
             message['mentions'] = dict(subject=reference_spans(message['subject'], message.get('entities') or [], []),
                                        body=reference_spans(message['body'], message.get('entities') or [], []))
-    from inbox_digest import split_saved_transactions
+    from inbox_digest import split_saved_transactions, combine_saved_waiver_availability
     split_saved_transactions(league)
+    combine_saved_waiver_availability(league)
     from game_recap import combine_saved_reports
     combine_saved_reports(league)
     from league_notes import combine_saved_eliminations, combine_saved_clinches

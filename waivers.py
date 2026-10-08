@@ -18,9 +18,9 @@ eaten his remaining bonus as dead money the moment it released him. A
 claiming club must afford the inherited contract. Temporary roster overflow
 is allowed; the roster must be settled before playing or advancing.
 
-THE USER. Every waived man the user might want is a notice in the inbox,
-with the player, his contract and the user's claim priority; claim from the
-message. At cut-down the notices are one digest. Claims are awarded at the
+THE USER. Eligible availability is grouped into a weekly inbox table with
+player and contract details and a link to the wire for claims. At cut-down
+the notices are one digest. Claims are awarded at the
 next advance, so a higher-priority club that also claimed him wins, which
 is how a real wire works.
 """
@@ -292,9 +292,10 @@ def award(league, entry, abbr):
 
 # ------------------------------------------------------------ the wire
 def notify_user(league, entries, week, digest=False):
-    """Inbox notices for the user's club. Cut-down: one note pointing at the wire page, which lists every
-    man who reaches his priority. In season: one note a man, and only for the men who reach him; a man a
-    club ahead will take is never offered."""
+    """Group eligible waiver availability into one table for each regular-season week.
+
+    Keep the existing priority screening and cutdown digest behavior.
+    """
     import inbox as IB
     user = getattr(league, 'user_team', None)
     if not user: return
@@ -316,17 +317,24 @@ def notify_user(league, entries, week, digest=False):
             except Exception: market = None
             if reaches_user(league, e, week, market=market, _assessments=assessments): reach.append(e)
     if not reach: return
-    if digest or len(reach) > 12:
+    if (digest or len(reach) > 12) and league.phase != 'regular':
         IB.post(league, 'waiver_digest', f'The wire: {len(reach)} players reach your priority', f"{len(ents)} players were waived and {len(reach)} of them clear every club ahead of you (you are {mine} of 32). They are on the wire page; claim any you want before the Advance, or leave them and nothing happens.", sender='league', payload=dict(link='personnel:waivers', n=len(reach), priority=mine), expires_week=(week or 0) + 1)
         return
+    rows = []
     for e in reach:
         p = league.player(e['pid'])
         hit = round(p.contract.cap_hit(0) - p.contract.annual_proration, 2) if p.contract else None
         yrs = p.contract.years if p.contract else 0
-        body = (f"{p.name}, {p.pos}, {round(p.ovr)} overall, age {p.age:.0f}, {p.accrued or 0} accrued seasons, waived by {e['from_team']}. "
-                f"No club ahead of you wants him; he is yours if you claim before the Advance." + (f" Inherited deal: {yrs} year(s) at ${hit}m this season." if hit is not None else ''))
-        IB.post(league, 'waiver_notice', f'Available on waivers: {inbox_player(p)} ({p.pos})', body, sender='league',
-                payload=dict(pid=p.pid, from_team=e['from_team'], link=f'player:{p.pid}', priority=mine, cap_hit=hit, years=yrs), expires_week=(week or 0) + 1)
+        rows.append([inbox_player(p), p.pos, str(round(p.ovr)), f'{p.age:.0f}',
+                     e['from_team'], f'{yrs} yr · ${hit:.2f}m this season' if hit is not None else '—'])
+    IB.post(league, 'waiver_digest', 'Available on waivers',
+            'Review these players on the waiver wire and submit any claims before advancing.', sender='league',
+            payload=dict(link='personnel:waivers', priority=mine, n=len(reach),
+                         waiver_availability=True, digest_pids=[e['pid'] for e in reach],
+                         mail_sections=[IB.mail_section('', rows, ['Player','Pos','OVR','Age','Waived by','Contract'])]),
+            expires_week=(week or 0) + 1)
+    from inbox_digest import combine_saved_waiver_availability
+    combine_saved_waiver_availability(league)
 
 
 def user_claim(league, pid, release_pid=None):
