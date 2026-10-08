@@ -871,7 +871,7 @@ function renderGameDay(v) {
   $('#crumb').textContent = 'Game Day';
   $('#nav').querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.page === 'gameday'));
   $('#second').innerHTML = ''; document.body.classList.add('no-second');
-  featureHero(page, v.rail.club, v.week ? `${weekName(v.week)} / ${v.rail.year}` : `Season / ${v.rail.year}`, 'GAME DAY', v.preview ? 'The matchup and the decisions before kickoff.' : 'The score, the play feed, and your sideline controls.', [[v.week ? weekName(v.week) : '—', 'Week'], [v.preview ? (v.no_game ? 'No game' : v.bye ? 'Bye' : 'Preview') : v.live?.open ? 'Live' : 'Final', 'Game state']]);
+  if (v.preview || v.empty) featureHero(page, v.rail.club, v.week ? `${weekName(v.week)} / ${v.rail.year}` : `Season / ${v.rail.year}`, 'GAME DAY', v.preview ? 'The matchup and the decisions before kickoff.' : 'The score, the play feed, and your sideline controls.', [[v.week ? weekName(v.week) : '—', 'Week'], [v.preview ? (v.no_game ? 'No game' : v.bye ? 'Bye' : 'Preview') : v.live?.open ? 'Live' : 'Final', 'Game state']]);
   if (v.empty) { page.append(el('section', { class: 'sheet c12' }, el('h2', {}, 'Game Day'), el('div', { class: 'empty' }, v.line))); return; }
   if (v.preview) {
     // the week has not been played: the preview of this week's game, and the button that plays it
@@ -890,225 +890,206 @@ function renderGameDay(v) {
     s.append(el('div', { class: 'foot' }, el('button', { class: 'btn go', onclick: () => { $('#advance').click(); } }, v.week >= 19 ? `${v.bye ? 'Sim' : 'Play'} the ${weekName(v.week)}` : `Sim ${weekName(v.week)}`), el('a', { class: 'btn', href: '#gameplan' }, 'Game Plan'), el('a', { class: 'btn', href: '#gameplan/report' }, 'Opponent Report'), el('a', { class: 'btn quiet', href: '#club/depth' }, 'Depth Chart')));
     page.append(s); return;
   }
-  const g = v.game;
-  const top = el('section', { class: 'sheet c12 gameday-surface game-scoreboard' });
-  // the Sunday scoreboard
-  const sb = el('div', { class: 'scoreboard' });
-  const strips = {};
-  for (const s of v.scores) {
-    const hw = s.hs > s.as_, aw = s.as_ > s.hs;
-    const card = el('div', { class: 'sb' + (s.mine ? ' mine' : '') },
-      el('div', { class: 'row' + (aw && !s.mine ? ' w' : '') }, stripe(s.away.abbr), el('b', { class: 'as' }, s.mine ? '' : s.as_)),
-      el('div', { class: 'row' + (hw && !s.mine ? ' w' : '') }, stripe(s.home.abbr), el('b', { class: 'hs' }, s.mine ? '' : s.hs)),
-      el('div', { class: 'st' }, el('span', {}, s.mine ? 'In progress' : 'Final' + (s.ot ? ' · OT' : ''))));
-    if (s.mine) strips.mine = { card, s };
-    sb.append(card);
+  renderBroadcastGameDay(page, v);
+}
+
+// UI choices survive live redraws; game data always comes from the latest snapshot.
+const broadcastChoices = new Map();
+function renderBroadcastGameDay(page, v) {
+  const g = v.game, live = v.live?.open ? v.live : null;
+  page.classList.add('broadcast-page');
+  if (!g) {
+    page.append(el('section', {class:'sheet c12'}, el('h2', {}, 'League Scores'),
+      ...v.scores.map(s => el('div', {class:'pad'}, `${showAbbr(s.away.abbr)} ${s.as_} — ${showAbbr(s.home.abbr)} ${s.hs}`))));
+    return;
   }
-  top.append(sb);
-  if (!g) { top.append(el('div', { class: 'empty' }, 'Your team was on its bye this week.')); page.append(top); return; }
-  // the big bug: it follows the reveal (score, quarter and clock, situation, win probability), Final once the game is played out
-  const me = g.me_home ? g.home : g.away, them = g.me_home ? g.away : g.home;
-  const rec = r => `${r[0]}–${r[1]}`;
-  const bug = el('div', { class: 'bigbug' }); top.insertBefore(bug, sb);
-  const lineScore = el('table', { class: 'linescore' }); top.insertBefore(lineScore, sb);
-  const drawBug = (shown, shownPlays) => {
-    const final = !live && shown >= g.drives.length && shownPlays == null;
-    const d = g.drives[Math.max(0, shown - 1)] || { plays: [], quarter: 1, score: '0–0', off: g.home.abbr, n: 0 }; const revealed = (shownPlays != null ? vis(d).slice(0, shownPlays) : vis(d));
-    const currentQuarter = shownPlays == null ? (d.scoring_quarter || d.quarter) : ([...revealed].reverse().find(p => p.quarter)?.quarter || d.quarter);
-    const atBreak = shownPlays == null && shown < g.drives.length && g.drives[shown].quarter > currentQuarter;
-    let hs = g.hs, as_ = g.as_;
-    if (live) { hs = live.score.home; as_ = live.score.away; }
-    else if (!final) { const prev = g.drives[shown - 2]; const src = (shownPlays != null ? prev : d); const sc = src ? String(src.score).split('–') : ['0', '0']; hs = +sc[0]; as_ = +sc[1]; if (shownPlays != null) { const add = (n, toOff) => { if ((d.off === g.home.abbr) === toOff) hs += n; else as_ += n; }; for (const p of revealed) { const points = replayPlayPoints(p); if (points) add(Math.abs(points), points > 0); } } }
-    const lastPlay = revealed.length ? revealed[revealed.length - 1] : null;
-    const headParts = lastPlay && lastPlay.head ? lastPlay.head.split(' · ') : [];
-    const clock = atBreak ? '0:00' : (headParts.length >= 3 ? headParts[headParts.length - 1] : '');
-    const wpNow = g.wp[Math.min(g.wp.length - 1, Math.max(0, shown - 1))];
-    const myScore = g.me_home ? hs : as_, theirScore = g.me_home ? as_ : hs;
-    const won = myScore > theirScore, tie = myScore === theirScore;
-    const indicators = gameDayIndicators(g, shown, shownPlays, live, v.week >= 19);
-    bug.innerHTML = '';
-    bug.append(
-      el('div', { class: 'side' }, el('div', { class: 'cr', style: `background:${g.away.color}` }, showAbbr(g.away.abbr)), gameDayTeamStatus(g.away, rec(g.away_rec), indicators), el('div', { class: 'score', style: 'margin-left:auto' }, as_)),
-      el('div', { class: 'mid' }, el('div', { class: 'q' }, final ? 'Final' + (g.ot ? ' · Overtime' : '') : atBreak ? (currentQuarter === 2 ? 'Halftime' : currentQuarter >= 4 ? 'End of Regulation' : `End of Q${currentQuarter}`) : `${currentQuarter >= 5 ? 'OT' : 'Q' + currentQuarter}${clock ? ' · ' + clock : ''}`), el('div', { class: 'dd' }, final ? (tie ? 'A tie' : won ? `${me.name} wins` : `${them.name} wins`) : atBreak ? `${showAbbr(d.off)} ${String(d.result || '').toLowerCase()}`.trim() : (lastPlay && lastPlay.head ? lastPlay.head.split(' · ').slice(0, 2).join(' · ') : `Drive ${d.n}`)), el('div', { class: 'q', style: 'font-size:12.5px;color:var(--ink-3);margin-top:4px' }, (wpNow == null ? '' : `Win Probability ${wpNow}%`) + (g.env && g.env.conditions ? `${wpNow == null ? '' : ' · '}${g.env.conditions}` : ''))),
-      el('div', { class: 'side home-side', style: 'flex-direction:row-reverse;text-align:right' }, el('div', { class: 'cr', style: `background:${g.home.color}` }, showAbbr(g.home.abbr)), gameDayTeamStatus(g.home, rec(g.home_rec), indicators), el('div', { class: 'score', style: 'margin-right:auto' }, hs)));
-    lineScore.innerHTML = '';
-    if (g.quarters && g.quarters[g.home.abbr]) {
-      const Q = g.quarters; const upto = final ? 5 : currentQuarter; const hasOT = currentQuarter >= 5 || Q[g.home.abbr][4] || Q[g.away.abbr][4];
-      lineScore.append(el('tr', {}, el('th', {}, ''), ...['Q1', 'Q2', 'Q3', 'Q4'].concat(hasOT ? ['OT'] : []).map(q => el('th', {}, q)), el('th', {}, 'T')));
-      for (const ab of [g.away.abbr, g.home.abbr]) lineScore.append(el('tr', {}, el('td', {}, showAbbr(ab)), ...Q[ab].slice(0, hasOT ? 5 : 4).map((x, qi) => el('td', {}, final || qi < upto - 1 ? x : qi === upto - 1 ? (ab === g.home.abbr ? hs : as_) - Q[ab].slice(0, qi).reduce((a, b) => a + b, 0) : '')), el('td', { style: 'font-weight:700' }, ab === g.home.abbr ? hs : as_)));
-    }
-  };
-  // win probability by drive
-  const W = 720, H = 70; const pts = g.wp.map((p, i) => [i / Math.max(1, g.wp.length - 1) * W, H - 4 - (p / 100) * (H - 8)]);
-  const svgNS = 'http://www.w3.org/2000/svg'; const svg = document.createElementNS(svgNS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio', 'none');
-  const mk = (tag, attrs) => { const e = document.createElementNS(svgNS, tag); for (const [k, val] of Object.entries(attrs)) e.setAttribute(k, val); return e; };
-  svg.append(mk('line', { x1: 0, y1: H / 2, x2: W, y2: H / 2, stroke: '#3a424c' }));
-  [0.25, 0.5, 0.75].forEach(f => svg.append(mk('line', { x1: f * W, y1: 0, x2: f * W, y2: H, stroke: '#2e353e' })));
-  svg.append(mk('polyline', { fill: 'none', stroke: me.color, 'stroke-width': 2, points: pts.map(p => p.join(',')).join(' ') }));
-  const t1 = mk('text', { x: 4, y: 12, fill: '#7b8593', 'font-size': 10, 'font-family': 'Big Shoulders Text' }); t1.textContent = showAbbr(me.abbr); const t2 = mk('text', { x: 4, y: H - 4, fill: '#7b8593', 'font-size': 10, 'font-family': 'Big Shoulders Text' }); t2.textContent = showAbbr(them.abbr); svg.append(t1, t2);
-  const wpc = el('div', { class: 'wpchart' }); wpc.append(svg); top.append(wpc);
-  const wpLine = svg.querySelector('polyline');
-  const drawWp = (shown, shownPlays) => { const n = Math.max(1, (shownPlays != null ? shown - 1 : shown)); wpLine.setAttribute('points', pts.slice(0, Math.min(pts.length, n + 1)).map(p => p.join(',')).join(' ')); };
-  page.append(top);
-
-  // the ticker, revealed by drive
-  const tick = el('section', { class: 'sheet c8 gameday-surface game-feed' });
-  const live = v.live && v.live.open ? v.live : null;
-  const gkey = `${g.home.abbr}-${g.away.abbr}-${v.week || ''}-${v.year || ''}`;
-  // Completed games open at their final result. Replay starts only when requested.
-  let shown = Math.max(1, g.drives.length), shownPlays = null; // null = all plays in the current drive
-  const body = el('div', { class: 'ticker' });
-  const filt = { mode: 'all' };
-  const draw = () => {
-    body.innerHTML = '';
-    g.drives.slice(0, shown).forEach((d, di) => {
-      const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
-      body.append(el('div', { class: 'drive' }, (last && shownPlays != null) ? `Drive ${d.n} · ${d.off} · ${d.quarter >= 5 ? 'OT' : 'Q' + d.quarter}` : `${d.quarter >= 5 ? 'OT' : 'Q' + d.quarter} · ${d.head || `Drive ${d.n} · ${d.off}`} · ${d.score}`));
-      for (const p of plays) {
-        if (!p.text) continue;
-        if (p.nullified && ['key', 'score'].includes(filt.mode)) continue;
-        if (filt.mode === 'key' && !['score', 'turnover', 'loss'].includes(p.kind) && !(p.type === 'complete' && /for (\d\d) yards/.test(p.text) && +p.text.match(/for (\d\d) yards/)[1] >= 15)) continue;
-        if (filt.mode === 'score' && p.kind !== 'score') continue;
-        const line = el('div', { class: 'pl ' + p.kind }); if (p.head) line.append(el('span', { class: 'dn' }, p.head), '  '); line.append(p.text); body.append(line);
-      }
-    });
-    tick.querySelector('h2 small').textContent = live ? (live.halftime_open ? (live.adjustment_period === 'overtime' ? 'Overtime adjustments' : 'Halftime') : `Live · drive ${g.drives.length}`) : (shown >= g.drives.length && shownPlays == null) ? 'Final' : `Drive ${shown} of ${g.drives.length}` + (shownPlays != null ? ` · play ${shownPlays} of ${vis(g.drives[shown - 1]).length}` : '');
-    body.scrollTop = body.scrollHeight;
-    drawBug(shown, shownPlays); drawLiveBox(shown, shownPlays); drawRead(shown >= g.drives.length && shownPlays == null); drawWp(shown, shownPlays);
-    if (strips.mine) { const fin = !live && shown >= g.drives.length && shownPlays == null; const { card, s } = strips.mine; card.querySelector('.as').textContent = fin ? s.as_ : ''; card.querySelector('.hs').textContent = fin ? s.hs : ''; card.querySelector('.st span').textContent = fin ? 'Final' + (s.ot ? ' · OT' : '') : 'In progress'; }
-  };
-  const vis = d => d.plays.filter(p => p.text);
-  // the first drive opens one play at a time too
-  const nextPlay = () => { const d = g.drives[shown - 1]; const n = vis(d).length; if (shownPlays == null || shownPlays >= n) { if (shownPlays != null && shownPlays >= n) shownPlays = null; if (shown >= g.drives.length) { shownPlays = null; draw(); return; } shown++; shownPlays = 1; } else shownPlays++; if (shownPlays >= vis(g.drives[shown - 1]).length) shownPlays = null; draw(); };
-  const quarterEnd = q => { let i = g.drives.findIndex(d => d.quarter > q); return i < 0 ? g.drives.length : i; };   // how many drives are in through the end of quarter q
-  const nextQuarter = () => { shownPlays = null; const q = g.drives[Math.min(shown, g.drives.length) - 1].quarter; const end = quarterEnd(q); shown = (shown >= end) ? quarterEnd(q + 1) : end; draw(); };
-  const step = (mode, event) => advanceGameDay(mode, event);
-  const ctrl = live ? el('div', { class: 'ctrl2' },
-    el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, 'data-live-step': 'play', onclick: event => step('play', event) }, 'Next Play'),
-    el('button', { class: 'btn go', disabled: live.halftime_open ? '' : null, 'data-live-step': 'drive', onclick: event => step('drive', event) }, 'Next Drive'),
-    el('button', { class: 'btn', disabled: live.halftime_open || live.at === 'overtime' || (g.drives.length && g.drives[g.drives.length - 1].quarter > 2) ? '' : null, 'data-live-step': 'half', onclick: event => step('half', event) }, 'To Halftime'),
-    el('button', { class: 'btn', disabled: live.halftime_open ? '' : null, 'data-live-step': 'finish', onclick: event => step('finish', event) }, 'Finish Game'),
-    el('span', { class: 'sep' }),
-    (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })())
-  : el('div', { class: 'ctrl2' },
-    el('button', { class: 'btn', 'data-tip': 'One snap at a time', onclick: nextPlay }, 'Next Play'),
-    el('button', { class: 'btn go', 'data-tip': 'Through the end of this drive, or the next one if this one is in', onclick: () => { if (shownPlays != null) { shownPlays = null; } else shown = Math.min(g.drives.length, shown + 1); draw(); } }, 'Next Drive'),
-    el('button', { class: 'btn', 'data-tip': 'Through the end of the quarter', onclick: nextQuarter }, 'Next Quarter'),
-    el('button', { class: 'btn', 'data-tip': 'Through the end of the second quarter', onclick: () => { shownPlays = null; shown = Math.max(shown, quarterEnd(2)); draw(); } }, 'To Halftime'),
-    el('button', { class: 'btn', onclick: () => { shownPlays = null; shown = g.drives.length; draw(); } }, 'Finish Game'),
-    el('span', { class: 'sep' }),
-    (() => { const t = el('div', { class: 'tabs' }); ['all', 'key', 'score'].forEach(m => t.append(el('button', { 'aria-pressed': String(m === 'all'), onclick: e => { filt.mode = m; t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); draw(); } }, { all: 'Every Play', key: 'Key Plays', score: 'Scoring' }[m]))); return t; })());
-  const copyPbp = el('button', { class: 'btn quiet', style: 'width:auto;padding:3px 10px;font-size:14px', 'data-tip': 'Copy the play-by-play shown so far as text' , onclick: () => {
-    const lines = [`${showAbbr(g.away.abbr)} at ${showAbbr(g.home.abbr)} · ${v.week ? weekName(v.week) : ''} ${v.year || ''}`];
-    g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const plays = (last && shownPlays != null) ? vis(d).slice(0, shownPlays) : d.plays;
-      lines.push(`${d.quarter >= 5 ? 'OT' : 'Q' + d.quarter} · ${d.head || `Drive ${d.n} · ${showAbbr(d.off)}`} · ${d.score}`); for (const p of plays) if (p.text) lines.push(`${p.head ? p.head + ' ' : ''}${p.text}`); });
-    if (!live && shown === g.drives.length && shownPlays == null) lines.push(`Final${g.ot ? ' (OT)' : ''}: ${showAbbr(g.home.abbr)} ${g.hs}, ${showAbbr(g.away.abbr)} ${g.as_}`);
-    copyText(showTeamText(lines.join('\n')), copyPbp); } }, 'Copy');
-  tick.append(el('h2', {}, 'Play by Play', el('small', {}, ''), copyPbp), ctrl);
-  if (live && live.halftime_open) {
-    const overtime = live.adjustment_period === 'overtime';
-    const breakKey = `${gkey}-${overtime ? 'overtime' : 'halftime'}`;
-    const confirmed = !!halfConfirmed[breakKey];
-    const breakLabel = overtime ? 'Overtime' : 'Halftime';
-    const card = el('div', { class: 'read', style: 'margin:0 14px 10px;padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap' });
-    card.append(el('b', {}, `${breakLabel} · ${showAbbr(g.away.abbr)} ${live.score.away}, ${showAbbr(g.home.abbr)} ${live.score.home}`),
-      el('button', { class: 'btn' + (confirmed ? '' : ' go'), onclick: () => openHalftime(g, live, breakKey, () => { const y = window.scrollY; renderGameDay(pyJSON('SESSION.gameday_view()')); window.scrollTo(0, y); }) }, `${breakLabel} Adjustments${confirmed ? ' · confirmed' : ''}`),
-      el('span', { class: 'count' }, confirmed ? 'Adjustments confirmed.' : `Review the adjustments and confirm to unlock ${overtime ? 'overtime' : 'the second half'}.`),
-      el('button', { class: 'btn go', style: 'margin-left:auto', disabled: confirmed ? null : '', 'data-tip': confirmed ? null : `Confirm the ${breakLabel.toLowerCase()} adjustments first`, 'data-live-step': 'resume', onclick: event => step('resume', event) }, overtime ? 'Start Overtime' : 'Start the Second Half'));
-    tick.append(card);
+  const key = `${v.year || v.rail.year}-${v.week}-${g.home.abbr}-${g.away.abbr}`;
+  if (!broadcastChoices.has(key)) {
+    if (broadcastChoices.size > 30) broadcastChoices.delete(broadcastChoices.keys().next().value);
+    broadcastChoices.set(key, {category:'passing', team:'all', stats:'overview', filter:'all', sort:null, direction:-1});
   }
-  tick.append(body);
-  page.append(tick);
-
-  // the right column: team stats and the assistants' read; the box score sits under the ticker at its width
-  const right = el('section', { class: 'sheet c4 gameday-surface game-side' });
-  const boxSheet = el('section', { class: 'sheet c8 gameday-surface game-box' });
-  const boxHead = el('h2', {}, 'Box Score', el('small', {}, 'Live')); boxSheet.append(boxHead);
-  const box = el('table', { class: 'box' }); boxSheet.append(box);
-  const th = (...c) => el('tr', {}, ...c.map((x, i) => el('th', {}, x)));
-  const awayFirst = arr => [...arr.filter(r => r.team === g.away.abbr), ...arr.filter(r => r.team !== g.away.abbr)];
-  const drawFullBox = () => {
-    box.innerHTML = ''; boxHead.querySelector('small').textContent = 'Final';
-    const P = awayFirst(g.box.passing), R = awayFirst(g.box.rushing), C = awayFirst(g.box.receiving), D = awayFirst(g.box.defense);
-    box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT', 'Lng')); P.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.ca), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_), el('td', {}, r.lng ?? ''))));
-    box.append(th('Rushing', 'Att', 'Yds', 'TD', '', 'Lng')); R.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, ''), el('td', {}, r.lng ?? ''))));
-    box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD', 'Lng')); C.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng ?? ''))));
-    box.append(th('Defense', 'Tkl', 'Sk', 'INT', 'PD', 'TD')); D.forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tkl), el('td', {}, r.sk), el('td', {}, r.int_), el('td', {}, r.pd), el('td', {}, r.td || 0))));
-    if ((g.box.returns || []).length) {
-      box.append(th('Returns', 'KR', 'KR Yds', 'PR', 'PR Yds', 'TD'));
-      awayFirst(g.box.returns).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), ...['kr','kr_yds','pr','pr_yds','td'].map(k => el('td', {}, r[k] || 0)))));
-    }
+  const state = broadcastChoices.get(key);
+  const rerender = () => { const y = window.scrollY; renderGameDay(v); window.scrollTo(0, y); };
+  const fmt = n => n == null ? '—' : String(n);
+  const teamName = a => a === g.home.abbr ? g.home.name : g.away.name;
+  const panels = (name, cls='') => el('section', {class:`gd-panel ${cls}`}, el('h2', {class:'gd-panel-head'}, name));
+  const small = text => el('span', {class:'gd-muted'}, text);
+  const button = (label, action, active=false) => el('button', {class:'btn', 'aria-pressed':String(active), onclick:action}, label);
+  const allPlays = g.drives.flatMap(d => (d.plays || []).map(p => ({...p, drive:d})));
+  const last = [...allPlays].reverse().find(p => p.text);
+  const drive = g.drives[g.drives.length - 1];
+  const quarter = live?.quarter || last?.quarter || drive?.scoring_quarter || drive?.quarter || 1;
+  const period = live?.halftime_open ? (live.adjustment_period === 'overtime' ? 'Overtime' : 'Halftime') : quarter >= 5 ? 'OT' : `Q${quarter}`;
+  const clock = live?.clock || last?.head?.split(' · ').at(-1)?.match(/^\d+:\d\d$/)?.[0] || drive?.clock || '15:00';
+  const hs = live?.score.home ?? g.hs, as = live?.score.away ?? g.as_;
+  const indicators = gameDayIndicators(g, g.drives.length, null, live, v.week >= 19);
+  const aTheme = teamTheme(g.away), hTheme = teamTheme(g.home);
+  page.style.setProperty('--gd-away', aTheme.readable); page.style.setProperty('--gd-home', hTheme.readable);
+  const heading = el('header', {class:'gd-heading c12'}, el('div', {}, small(`${weekName(v.week)} · ${v.year || v.rail.year}`), el('h1', {}, 'Game Day')),
+    small(g.env?.conditions || ''));
+  page.append(heading);
+  const scoreboard = el('section', {class:'gd-score game-scoreboard c12', 'aria-label':'Scoreboard'});
+  const side = (team, score, record, home) => {
+    const theme = teamTheme(team);
+    return el('div', {class:'gd-team' + (home ? ' home-side' : ''), style:`--club-base:${theme.base};--club-accent:${theme.accent}`},
+      el('div', {}, el('a', {class:'gd-abbr', href:`#league/team/${team.abbr}`}, showAbbr(team.abbr)),
+        gameDayTeamStatus({...team, nick:team.name}, record ? record.slice(0,record[2] ? 3 : 2).join('–') : '', indicators)), el('b', {class:'gd-points'}, score));
   };
-  const drawLiveBox = (shown, shownPlays) => {
-    drawTeamStats(shown, shownPlays);
-    if (shown >= g.drives.length && shownPlays == null) { drawFullBox(); return; }
-    boxHead.querySelector('small').textContent = 'Live'; box.innerHTML = '';
-    const pass = {}, rush = {}, recv = {}, returns = {};
-    const revealed = []; g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; revealed.push(...((last && shownPlays != null) ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays)); });
-    for (const p of revealed) {
-      if (!p.type || p.nullified) continue; const y = p.stat_yards ?? p.yards ?? 0;
-      if (!p.nullified && p.returner && ['punt','kickoff'].includes(p.type)) {
-        const k = p.return_team + '|' + p.returner;
-        const r = returns[k] = returns[k] || {team:p.return_team, name:p.returner, kr:0, kr_yds:0, pr:0, pr_yds:0, td:0};
-        const stat = p.type === 'punt' ? 'pr' : 'kr'; r[stat]++; r[stat + '_yds'] += p.return_yards || 0; if (p.return_td) r.td++;
-      }
+  scoreboard.append(side(g.away, as, g.away_rec, false), el('div', {class:'gd-time'}, small(live ? period : 'GAME COMPLETE'),
+    el('strong', {}, live ? live.halftime_open ? 'Paused' : clock : 'Final'),
+    small(live ? live.field ? `${live.field.down}${ord(live.field.down)} & ${live.field.distance}` : 'Between plays' : g.ot ? 'Overtime' : weekName(v.week))),
+    side(g.home, hs, g.home_rec, true));
+  page.append(scoreboard);
+  const quarters = el('table', {class:'gd-quarters', 'aria-label':'Quarter scoring'});
+  const hasOT = g.ot || quarter >= 5;
+  quarters.append(el('thead', {}, el('tr', {}, el('th', {scope:'col'}, 'Team'),
+    ...['Q1','Q2','Q3','Q4',...(hasOT ? ['OT'] : [])].map((q,i) => el('th', {scope:'col', class:live && i+1===quarter ? 'current' : ''}, q)), el('th', {scope:'col'}, 'Total'))));
+  const qbody = el('tbody');
+  for (const [team, total] of [[g.away, as],[g.home, hs]]) qbody.append(el('tr', {}, el('th', {scope:'row'}, showAbbr(team.abbr)),
+    ...Array.from({length:hasOT ? 5 : 4}, (_,i) => el('td', {class:live && i+1===quarter ? 'current' : ''}, live && i+1>quarter ? '—' : fmt(g.quarters?.[team.abbr]?.[i]))), el('td', {}, total)));
+  quarters.append(qbody); page.append(el('div', {class:'gd-quarter-strip c12'}, quarters));
 
-      if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.passer) { const k = p.off + '|' + p.passer; const r = pass[k] = pass[k] || { team: p.off, name: p.passer, cmp: 0, att: 0, yds: 0, td: 0, int_: 0 }; r.att++; if (p.type === 'complete') { r.cmp++; r.yds += y; if (p.td && !p.defensive_td && !p.offensive_fumble_td) r.td++; } if (p.type === 'interception') r.int_++; }
-      if (['complete', 'incomplete', 'drop', 'interception'].includes(p.type) && p.target) { const k = p.off + '|' + p.target; const r = recv[k] = recv[k] || { team: p.off, name: p.target, tgt: 0, rec: 0, yds: 0, td: 0 }; r.tgt++; if (p.type === 'complete') { r.rec++; r.yds += y; if (p.td && !p.defensive_td && !p.offensive_fumble_td) r.td++; } }
-      if (['run', 'scramble'].includes(p.type) && (p.carrier || p.passer)) { const who = p.carrier || p.passer; const k = p.off + '|' + who; const r = rush[k] = rush[k] || { team: p.off, name: who, att: 0, yds: 0, td: 0, lng: 0 }; r.att++; r.yds += y; if (p.td && !p.defensive_td && !p.offensive_fumble_td) r.td++; r.lng = Math.max(r.lng, y); }
-    }
-    const top = (o, key, n) => awayFirst(Object.values(o).sort((a, b) => b[key] - a[key])).slice(0, n);
-    box.append(th('Passing', 'C/A', 'Yds', 'TD', 'INT')); top(pass, 'att', 4).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, `${r.cmp}/${r.att}`), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.int_))));
-    box.append(th('Rushing', 'Att', 'Yds', 'TD', 'Lng')); top(rush, 'att', 6).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.att), el('td', {}, r.yds), el('td', {}, r.td), el('td', {}, r.lng))));
-    box.append(th('Receiving', 'Tgt', 'Rec', 'Yds', 'TD')); top(recv, 'tgt', 10).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), el('td', {}, r.tgt), el('td', {}, r.rec), el('td', {}, r.yds), el('td', {}, r.td))));
-    if (Object.keys(returns).length) {
-      box.append(th('Returns', 'KR', 'KR Yds', 'PR', 'PR Yds', 'TD'));
-      awayFirst(Object.values(returns)).forEach(r => box.append(el('tr', {}, el('td', {}, stripe(r.team, r.name)), ...['kr','kr_yds','pr','pr_yds','td'].map(k => el('td', {}, Math.round(r[k] * 10) / 10)))));
-    }
-    if (!Object.keys(pass).length && !Object.keys(rush).length && !Object.keys(returns).length) box.append(el('tr', {}, el('td', { colspan: '5' }, el('div', { class: 'empty' }, 'Step through the game; the box fills as plays are revealed.'))));
-  };
-
-  // team stats side by side: the full book at Final, and until then the totals of the plays revealed so far
-  let tsTable = null;
-  if (g.team_stats && g.team_stats[g.home.abbr]) {
-    right.append(el('h2', {}, 'Team Stats', el('small', { class: 'ts-note' }, 'Live')));
-    tsTable = el('table', { class: 'box' }); right.append(tsTable);
+  const controls = el('div', {class:'gd-global-controls c12'});
+  if (live) for (const [mode,label] of [['play','Next Play'],['drive','Next Drive'],['finish','To Final']]) controls.append(el('button', {
+    class:'btn' + (mode==='drive' ? ' go' : ''), disabled:live.halftime_open ? '' : null,
+    'data-live-step':mode, onclick:event=>advanceGameDay(mode,event)}, label));
+  else controls.append(el('strong', {}, hs === as ? 'Final · Tie game' : `Final · ${hs > as ? g.home.name : g.away.name} wins`));
+  const overtime = live?.adjustment_period === 'overtime';
+  const breakKey = `${g.home.abbr}-${g.away.abbr}-${v.week}-${v.year || v.rail.year}-${overtime ? 'overtime' : 'halftime'}`;
+  const confirmed = !!halfConfirmed[breakKey];
+  const openPlan = () => openHalftime(g, live, breakKey, () => renderGameDay(pyJSON('SESSION.gameday_view()')));
+  if (live?.halftime_open) {
+    controls.append(button(overtime ? 'Overtime Plan' : 'Halftime Plan', openPlan),
+      small(confirmed ? 'Plan confirmed.' : 'Review and confirm your plan to continue.'),
+      el('button', {class:'btn go', disabled:confirmed ? null : '', 'data-live-step':'resume', onclick:e=>advanceGameDay('resume',e)}, overtime ? 'Start Overtime' : 'Start the Second Half'));
+  } else {
+    const plan = el('details', {class:'gd-plan'}, el('summary', {}, 'Halftime Plan'));
+    const rows = g.halftime_plan;
+    plan.append(el('div', {class:'gd-plan-body'}, ...(rows?.length ? rows.map(r=>el('p', {}, el('b', {}, r.taken ? 'Accepted · ' : 'Not accepted · '), r.text)) : [small(live && quarter <= 2 ? 'Available at halftime.' : 'No saved halftime recommendations available.')] )));
+    controls.append(plan);
   }
-  const drawTeamStats = (shown, shownPlays) => {
-    if (!tsTable) return;
-    const final = !live && shown >= g.drives.length && shownPlays == null;
-    tsTable.innerHTML = ''; tsTable.append(el('tr', {}, el('th', {}, ''), el('th', {}, showAbbr(g.away.abbr)), el('th', {}, showAbbr(g.home.abbr))));
-    right.querySelector('.ts-note').textContent = final ? 'Final' : 'Live';
-    let A, H;
-    if (final) { A = g.team_stats[g.away.abbr]; H = g.team_stats[g.home.abbr]; }
-    else {
-      const mk = () => ({ plays: 0, yards: 0, pass_yds: 0, rush_yds: 0, first_downs: 0, turnovers: 0, sacks_allowed: 0, penalties: 0, ypp: 0, third: '—', fourth: '—', red_zone: '—', top: '—', _3a: 0, _3c: 0, _4a: 0, _4c: 0, _rz: 0, _rztd: 0, _secs: 0 });
-      const T = { [g.away.abbr]: mk(), [g.home.abbr]: mk() };
-      const SCRIM = ['run', 'scramble', 'complete', 'incomplete', 'drop', 'interception', 'sack'];
-      g.drives.slice(0, shown).forEach((d, di) => { const last = di === shown - 1; const partial = last && shownPlays != null; const plays = partial ? d.plays.filter(p => p.text).slice(0, shownPlays) : d.plays; const t = T[d.off]; if (!t) return;
-        const clocks = plays.map(p => p.clock).filter(c => c != null);
-        if (clocks.length >= 2) t._secs += Math.max(0, clocks[0] - clocks[clocks.length - 1]);
-        plays.forEach((p, k) => { if (!p.type || p.nullified) return; const y = p.yards || 0;
-          if (['run', 'scramble'].includes(p.type)) { t.plays++; t.yards += y; t.rush_yds += y; }
-          else if (['complete', 'incomplete', 'drop', 'interception', 'sack'].includes(p.type)) { t.plays++; if (p.type === 'complete') { t.yards += y; t.pass_yds += y; } if (p.type === 'sack') { t.yards += y; t.pass_yds += y; t.sacks_allowed++; } if (p.type === 'interception') t.turnovers++; }
-          else if (p.type === 'penalty') t.penalties++;
-          if (p.turnover_team && T[p.turnover_team]) T[p.turnover_team].turnovers++;
-          else if (p.kind === 'turnover' && !['interception', 'punt'].includes(p.type) && !p.safety) t.turnovers++;
-          // third and fourth down: converted when the next scrimmage snap is a first down, or the play scored
-          if (SCRIM.includes(p.type) && (p.down === 3 || p.down === 4)) { const next = plays.slice(k + 1).find(q => q.down != null && SCRIM.includes(q.type)); const conv = !p.defensive_td && (p.td || (next && next.down === 1) || (!next && !partial && d.result === 'Touchdown')); if (p.down === 3) { t._3a++; if (conv) t._3c++; } else { t._4a++; if (conv) t._4c++; } }
-        });
-        if (!partial) { t.first_downs += (d.first_downs || 0); if (!d.return_only && ((d.end != null && d.end >= 80) || /Touchdown/.test(d.result || ''))) { t._rz++; if (/Touchdown/.test(d.result || '')) t._rztd++; } }   // the drive's end is on a 0-100 line toward the goal; inside the 20 is 80 and up
-      });
-      for (const t of Object.values(T)) { t.ypp = t.plays ? (t.yards / t.plays).toFixed(1) : '0.0'; t.third = t._3a ? `${t._3c}/${t._3a}` : '—'; t.fourth = t._4a ? `${t._4c}/${t._4a}` : '—'; t.red_zone = t._rz ? `${t._rztd}/${t._rz}` : '—'; t.top = t._secs ? `${Math.floor(t._secs / 60)}:${String(Math.round(t._secs % 60)).padStart(2, '0')}` : '—'; }
-      A = T[g.away.abbr]; H = T[g.home.abbr];
+  page.append(controls);
+
+  const upper = el('div', {class:'gd-upper c12'}), left = el('div', {class:'gd-live-column'});
+  const fieldPanel = panels(live?.field ? `${teamName(live.field.off)} Possession` : live?.halftime_open ? period : live ? 'On the Field' : 'Final Whistle');
+  const field = live?.field;
+  const fieldWrap = el('div', {class:'gd-field-wrap'});
+  fieldWrap.append(gameDayField(g, field));
+  fieldWrap.append(el('div', {class:'gd-field-caption'}, el('b', {}, field ? `${field.down}${ord(field.down)} & ${field.distance} · ${showTeamText(field.spot)}` : live ? live.halftime_open ? `Paused for ${period.toLowerCase()} decisions` : 'Waiting for the next snap' : `${g.away.name} ${as} · ${g.home.name} ${hs}`),
+    small(field ? `${showAbbr(field.off)} attacking ${field.off === g.away.abbr ? '→' : '←'}` : '')));
+  fieldPanel.append(fieldWrap);
+  if (drive) fieldPanel.append(el('div', {class:'gd-current-drive'}, small(`Drive ${drive.n} · ${showAbbr(drive.off)}`),
+    el('b', {}, `${drive.plays_n} ${drive.plays_n===1?'play':'plays'} · ${drive.yards} yards`), small(drive.result || 'In progress')));
+  fieldPanel.append(el('div', {class:'gd-latest', 'aria-live':'polite'}, small('Latest Play'),
+    el('strong', {}, last ? showTeamText(last.text) : 'Ready for kickoff.'), small(last?.head ? showTeamText(last.head) : '')));
+  left.append(fieldPanel);
+  const injuries = g.injuries ? g.injuries.map(i=>({injury:i})) : allPlays.filter(p=>p.type==='injury' && p.text);
+  const injuryBox = el('details', {class:'gd-injuries'}, el('summary', {}, el('b', {}, 'Injury Update'), small(injuries.length ? `${injuries.length} reported` : 'No injuries reported')));
+  for (const p of injuries) {
+    const i = p.injury;
+    injuryBox.append(el('div', {class:'gd-injury'}, i?.pid ? el('a', {href:`#club/player/${encodeURIComponent(i.pid)}`}, i.name || p.text) : p.text,
+      i ? small([i.team ? showAbbr(i.team) : '', i.pos, i.kind || 'Injury', i.status || (i.weeks > 0 ? 'Out for this game' : '')].filter(Boolean).join(' · ')) : '',
+      small(p.head || '')));
+  }
+  left.append(injuryBox); upper.append(left);
+
+  const stats = panels('Team Stats', 'gd-team-stats');
+  stats.querySelector('h2').append(small(`${showAbbr(g.away.abbr)} / ${showAbbr(g.home.abbr)}`));
+  stats.append(el('div', {class:'gd-tabs'}, button('Overview',()=>{state.stats='overview';rerender()},state.stats==='overview'), button('All Stats',()=>{state.stats='all';rerender()},state.stats==='all')));
+  const tsBody = el('div', {class:'gd-team-scroll', tabindex:'0', 'aria-label':'Team statistics'});
+  const A = g.team_stats?.[g.away.abbr] || {}, H = g.team_stats?.[g.home.abbr] || {};
+  if (state.stats==='overview') {
+    for (const [k,label] of [['yards','Total Yards'],['pass_yds','Net Passing'],['rush_yds','Rushing'],['third','Third Down'],['turnovers','Turnovers'],['top','Possession']]) {
+      const a=Number(A[k]), h=Number(H[k]), ratio=Number.isFinite(a+h) && a+h>0 ? Math.max(0,Math.min(100,100*a/(a+h))) : 50;
+      const row=el('div',{class:'gd-comparison'},el('div',{},el('b',{},fmt(A[k])),small(label),el('b',{},fmt(H[k]))));
+      if (Number.isFinite(a+h)) row.append(el('div',{class:'gd-bars','aria-hidden':'true'},el('i',{style:`width:${ratio}%`}),el('i',{style:`width:${100-ratio}%`})));
+      tsBody.append(row);
     }
-    for (const [k, label] of [['yards', 'Total Yards'], ['plays', 'Plays'], ['ypp', 'Yards per Play'], ['pass_yds', 'Passing'], ['rush_yds', 'Rushing'], ['first_downs', 'First Downs'], ['third', 'Third Down'], ['fourth', 'Fourth Down'], ['red_zone', 'Red Zone TD'], ['turnovers', 'Turnovers'], ['sacks_allowed', 'Sacks Allowed'], ['penalties', 'Penalties'], ['top', 'Possession']])
-      tsTable.append(el('tr', {}, el('td', {}, label), el('td', {}, String(A[k] ?? '—')), el('td', {}, String(H[k] ?? '—'))));
+  } else {
+    const table=el('table',{class:'gd-team-table'},el('colgroup',{},el('col',{style:'width:48%'}),el('col',{style:'width:26%'}),el('col',{style:'width:26%'})),
+      el('thead',{},el('tr',{},el('th',{scope:'col'},'Statistic'),el('th',{scope:'col'},showAbbr(g.away.abbr)),el('th',{scope:'col'},showAbbr(g.home.abbr)))));
+    const tb=el('tbody');
+    for(const [k,label] of [['yards','Total Yards'],['plays','Plays'],['ypp','Yards per Play'],['pass_yds','Net Passing'],['rush_yds','Rushing'],['first_downs','First Downs'],['third','Third Down'],['fourth','Fourth Down'],['red_zone','Red Zone TD'],['turnovers','Turnovers'],['sacks_allowed','Sacks Allowed'],['penalties','Penalties'],['top','Possession']]) tb.append(el('tr',{},el('th',{scope:'row'},label),el('td',{},fmt(A[k])),el('td',{},fmt(H[k]))));
+    table.append(tb);tsBody.append(table);
+  }
+  stats.append(tsBody);upper.append(stats);page.append(upper);
+
+  const box=panels('Player Statistics','gd-player-stats c12');
+  const teamSelect=el('select',{'aria-label':'Player statistics team',class:'btn',onchange:e=>{state.team=e.target.value;rerender()}});
+  for(const [id,name] of [['all','Both Teams'],[g.away.abbr,g.away.name],[g.home.abbr,g.home.name]]) teamSelect.append(el('option',{value:id,selected:state.team===id?'':null},name));
+  box.querySelector('h2').append(teamSelect);
+  const columns={
+    passing:[['C/A','ca'],['Yds','yds'],['TD','td'],['INT','int_'],['Sacks','sk'],['Lng','lng']],
+    rushing:[['Att','att'],['Yds','yds'],['Avg','avg'],['TD','td'],['Lng','lng'],['Fum Lost*','fum']],
+    receiving:[['Tgt','tgt'],['Rec','rec'],['Yds','yds'],['Avg','avg'],['TD','td'],['Lng','lng'],['Drops','drops']],
+    defense:[['Tkl','tkl'],['Sacks','sk'],['Pressures','pressures'],['INT','int_'],['PD','pd'],['FF','ff'],['FR','fr'],['TD','td']],
+    blocking:[['Pass Snaps','pb'],['Pass Win %','pb_pct'],['Pressures','pressures'],['Sacks','sk'],['Run Snaps','rb'],['Run Win %','rb_pct']],
+    kicking:[['FG','fg'],['FG %','pct'],['Long','lng'],['XP','xp']],
+    punting:[['Punts','att'],['Yds','yds'],['Avg','avg'],['Net','net'],['In 20','in20'],['TB','tb']],
+    returns:[['KR','kr'],['KR Yds','kr_yds'],['KR Avg','kr_avg'],['KR TD','kr_td'],['PR','pr'],['PR Yds','pr_yds'],['PR Avg','pr_avg'],['PR TD','pr_td']],
+    snaps:[['Unit','unit'],['Snaps','snaps'],['Unit %','pct']]
   };
-  const readBox = el('div', { class: 'readbox' }); right.append(readBox);
-  const drawRead = (final) => { readBox.innerHTML = ''; if (!(g.reads && g.reads.length)) return; readBox.append(el('h2', { style: 'border-top:1px solid var(--rule-2)' }, "Assistants' Read", el('small', {}, final ? '' : 'at the final'))); if (final) for (const r of g.reads) readBox.append(el('div', { class: 'pad', style: 'font-size:15.5px;color:var(--ink-2);padding-top:4px' }, r)); else readBox.append(el('div', { class: 'pad', style: 'font-size:14px;color:var(--ink-3)' }, 'The assistants read the game when it is over.')); };
-  page.append(right, boxSheet);
-  draw();
+  const tabs=el('div',{class:'gd-tabs'});
+  for(const cat of Object.keys(columns)) tabs.append(button(cat[0].toUpperCase()+cat.slice(1),()=>{state.category=cat;state.sort=null;rerender()},state.category===cat));
+  box.append(tabs);
+  const scroll=el('div',{class:'gd-player-scroll',tabindex:'0','aria-label':'Player statistics'}), table=el('table',{class:'gd-player-table'});
+  const cols=[['Player','name'],...columns[state.category]];
+  const rows=(g.box?.[state.category] || []).filter(r=>state.team==='all'||r.team===state.team);
+  const num=x=> typeof x==='string'&&/^\d+\/\d+$/.test(x) ? Number(x.split('/')[1]) : x;
+  if(state.sort) rows.sort((a,b)=>{const x=num(a[state.sort]),y=num(b[state.sort]);if(x==null)return y==null?0:1;if(y==null)return -1;return (typeof x==='string'?x.localeCompare(y):x-y)*state.direction});
+  const head=el('tr');for(const [label,k]of cols) head.append(el('th',{scope:'col','aria-sort':state.sort===k?(state.direction===1?'ascending':'descending'):'none'},el('button',{onclick:()=>{state.direction=state.sort===k?-state.direction:k==='name'?1:-1;state.sort=k;rerender()}},label,state.sort===k?(state.direction===1?' ↑':' ↓'):'')));
+  table.append(el('thead',{},head)); const tb=el('tbody');
+  for(const r of rows) tb.append(el('tr',{},el('th',{scope:'row'},el('span',{class:'gd-player-name',style:`border-color:${r.team===g.away.abbr?aTheme.readable:hTheme.readable}`},r.pid?el('a',{href:`#club/player/${encodeURIComponent(r.pid)}`},r.name):r.name,small(`${showAbbr(r.team)}${r.pos?' · '+r.pos:''}`))),
+    ...columns[state.category].map(([label,k])=>el('td',{},fmt(r[k])))));
+  if(!rows.length)tb.append(el('tr',{},el('td',{colspan:String(cols.length),class:'gd-empty'},g.box?.[state.category]===undefined?'These statistics were not recorded in this save.':'No recorded participants in this category.')));
+  table.append(tb);scroll.append(table);box.append(scroll);
+  if(g.box_version !== 2)box.append(small('Older save: player lists may contain only the recorded leaders.'));
+  if(state.category==='snaps')box.append(small('Offense and defense participation, including erased live plays and two-point attempts. Special teams snaps are not recorded.'));
+  if(state.category==='rushing')box.append(small('*Fumbles lost includes all of this player’s recorded touches.'));
+  page.append(box);
+
+  const lower=el('div',{class:'gd-lower c12'}),feed=panels('Play By Play','game-feed');
+  const filter=el('div',{class:'gd-tabs'});
+  for(const [id,label]of [['all','Every Play'],['score','Scoring']])filter.append(button(label,()=>{state.filter=id;rerender()},state.filter===id));
+  const copy=el('button',{class:'btn',onclick:()=>copyText(showTeamText([`${g.away.name} at ${g.home.name} · ${weekName(v.week)}`,...g.drives.flatMap(d=>[d.head,...(d.plays||[]).filter(p=>p.text&&(state.filter==='all'||(!p.nullified&&p.kind==='score'))).map(p=>[p.head,p.text].filter(Boolean).join(' '))])].join('\n')),copy)},'Copy');filter.append(copy);feed.append(filter);
+  const log=el('div',{class:'gd-log',tabindex:'0','aria-label':'Play by play'});
+  for(const d of g.drives) {
+    const plays=(d.plays||[]).filter(p=>p.text&&(state.filter==='all'||(!p.nullified&&p.kind==='score')));if(!plays.length)continue;
+    log.append(el('h3',{class:'gd-drive-heading'},showTeamText(d.head||`Drive ${d.n} · ${d.off}`)));
+    for(const p of plays)log.append(el('div',{class:'gd-play '+p.kind},small(showTeamText(p.head||'')),el('div',{},showTeamText(p.text))));
+  }
+  if(!log.children.length)log.append(el('div',{class:'gd-empty'},state.filter==='score'?'No scoring plays yet.':'Ready for kickoff.'));
+  feed.append(log);lower.append(feed);
+  const me=g.me_home?g.home:g.away,drives=panels(`${me.name} Drives`,'gd-drives');
+  const drivesBody=el('div',{class:'gd-drive-scroll',tabindex:'0','aria-label':`${me.name} drives`});
+  for(const d of g.drives.filter(d=>d.off===me.abbr)) {
+    const start=Math.max(0,Math.min(100,Number(d.start)||0)),end=Math.max(0,Math.min(100,Number(d.end)||0));
+    const row=el('div',{class:'gd-drive-row'},el('div',{},small(`${d.quarter>=5?'OT':'Q'+d.quarter} · Drive ${d.n}`),el('b',{},d.result||'In progress')),
+      el('div',{class:'gd-drive-track','aria-label':`Started ${d.start_label || start}; ${d.yards} net field yards`},el('i',{style:`left:${Math.min(start,end)}%;width:${Math.max(1,Math.abs(end-start))}%` })),small(`${d.plays_n} ${d.plays_n===1?'play':'plays'} · ${d.yards} yards · ${d.start_label || 'Start unavailable'}`));drivesBody.append(row);
+  }
+  if(!drivesBody.children.length)drivesBody.append(el('div',{class:'gd-empty'},'No possessions yet.'));
+  drives.append(drivesBody);lower.append(drives);page.append(lower);
+  if(!live && g.reads?.length)page.append(el('details',{class:'gd-read c12'},el('summary',{},"Assistants’ Read"),...g.reads.map(r=>el('p',{},r))));
+  const leagueScores=el('details',{class:'gd-read c12'},el('summary',{},'Around the League'),el('div',{class:'gd-league-scores'},...(v.scores||[]).filter(s=>!s.mine).map(s=>el('div',{},small('Final'),el('b',{},`${showAbbr(s.away.abbr)} ${s.as_} · ${showAbbr(s.home.abbr)} ${s.hs}${s.ot?' OT':''}`)))));
+  if((v.scores||[]).some(s=>!s.mine))page.append(leagueScores);
+  log.scrollTop=log.scrollHeight;
+}
+
+function gameDayField(g, field) {
+  const pitch=el('div',{class:'gd-field',role:'img','aria-label':field?`${showAbbr(field.off)}: ${field.down}${ord(field.down)} and ${field.distance} at ${field.spot}`:'Football field'});
+  pitch.append(el('div',{class:'gd-endzone',style:`background:${teamTheme(g.away).base}`},showAbbr(g.away.abbr)),el('div',{class:'gd-endzone right',style:`background:${teamTheme(g.home).base}`},showAbbr(g.home.abbr)));
+  const x=yard=>(yard+10)/120*100;
+  for(let y=0;y<=100;y+=5)pitch.append(el('i',{class:'gd-yardline',style:`left:${x(y)}%`}));
+  for(let y=10;y<100;y+=10)for(const bottom of [false,true])pitch.append(el('span',{class:'gd-yardno'+(bottom?' bottom':''),style:`left:${x(y)}%`},Math.min(y,100-y)));
+  // Professional hashes: 70 ft 9 in from each sideline on a 160-foot-wide field.
+  for(let y=1;y<100;y++)if(y%5)for(const row of [44.21875,55.78125])pitch.append(el('i',{class:'gd-hash',style:`left:${x(y)}%;top:${row}%`}));
+  if(field && Number.isFinite(field.yardline)) {
+    const right=field.off===g.away.abbr, own=Math.max(0,Math.min(100,100-field.yardline));
+    const at=right?own:100-own, target=right?Math.min(100,own+field.togo):Math.max(0,100-own-field.togo);
+    if(field.togo<field.yardline)pitch.append(el('i',{class:'gd-first',style:`left:${x(target)}%`}));
+    pitch.append(el('i',{class:'gd-los',style:`left:${x(at)}%`}),el('i',{class:'gd-ball',style:`left:${x(at)}%`}));
+  }
+  return pitch;
 }
 
 // ---------------------------------------------------------------- Club: roster, card, depth chart
