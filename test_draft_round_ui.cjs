@@ -3,6 +3,7 @@ const src = fs.readFileSync('docs/app.js','utf8');
 function el(tag, attrs={}, ...children) {
   return {tag, ...attrs, children,
     append(...items) {this.children.push(...items);},
+    replaceChildren(...items) {this.children=items;},
     querySelector(selector) {return find(this, n => (n.class || '').split(' ').includes(selector.slice(1)));}
   };
 }
@@ -23,7 +24,8 @@ let page, latest=view(1), ok=true;
 const commands=[];
 const ctx={el,boardRound:null,offersCache:null,draftRunning:null,location:{hash:'#draft/day'},
   runDraftBatch(name,round){commands.push(name);assert.equal(round,1);ctx.boardRound=null;ctx.renderDraftDay(latest);},
-  renderRail(){},drSecond(){},featureHero(){},notify(){},ord:()=> 'th',showAbbr:x=>x,
+  renderRail(){},drSecond(){},featureHero(){},applyTeamTheme(){},notify(){},ord:()=> 'th',showAbbr:x=>x,
+  crest:()=>el('span'),draftDaySelections:new Map(),
   teamTheme:()=>({base:club.color,accent:club.accent}),
   persPage:()=>page=el('main'),draftAvailableSources:new Map(),
   draftAvailableView:()=>({key:'GB',source:'consensus',rows:[],top:null,label:'Consensus',note:'',read:''}),
@@ -35,8 +37,8 @@ assert.equal(ctx.boardRound,1);
 latest=view(2);
 find(page,n=>n.tag==='button'&&n.children.includes('Sim to Your Pick')).onclick();
 assert.equal(ctx.boardRound,2,'sim across rounds follows the pick');
-assert.ok(find(page,n=>n.children?.includes('Round 2 of 3')));
-find(page,n=>n['aria-label']==='Previous round').onclick();
+assert.ok(find(page,n=>n['aria-label']==='Round 2'&&n['aria-pressed']==='true'));
+find(page,n=>n['aria-label']==='Round 1').onclick();
 assert.equal(ctx.boardRound,1,'manual previous-round browsing remains available');
 ok=false;
 const auto=find(page,n=>n.tag==='button'&&n.children.includes('Auto Pick'));

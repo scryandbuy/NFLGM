@@ -3087,10 +3087,12 @@ if (typeof window !== 'undefined') window.addEventListener('beforeunload', event
   if (draftRunning) {event.preventDefault();event.returnValue='';}
 });
 
+const draftDaySelections = new Map();
 function renderDraftDay(v) {
   renderRail(v.rail); const page = persPage(); drSecond('day');
-  page.className = 'draft-page';
-  featureHero(page, v.rail.club, `Draft / ${v.year_next || v.rail.year}`, 'DRAFT DAY', 'The live board, available players, and trade decisions.', [[v.live ? (v.current?.sel ?? '—') : '—', 'On the clock'], [v.live ? (v.mine_next?.[0]?.sel ?? '—') : '—', 'Your next pick']]);
+  page.className = v.live ? 'draft-page draft-broadcast' : 'draft-page';
+  applyTeamTheme(page, v.rail.club);
+  if (!v.live) featureHero(page, v.rail.club, `Draft / ${v.year_next || v.rail.year}`, 'DRAFT DAY', 'The live board, available players, and trade decisions.', [[v.live ? (v.current?.sel ?? '—') : '—', 'On the clock'], [v.live ? (v.mine_next?.[0]?.sel ?? '—') : '—', 'Your next pick']]);
   const reload = () => renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`));
   if (!v.live) {
     const s = el('section', { class: 'sheet c12 draft-surface' }, el('h2', {}, v.year_next && !v.last ? `${v.year_next} Draft` : 'Draft Day'), el('div', { class: 'empty' }, v.note));
@@ -3098,70 +3100,85 @@ function renderDraftDay(v) {
     page.append(s); return;
   }
   const act = (name, extra) => { if (draftRunning) return; if (['sim_to_me','sim_round','sim_draft'].includes(name)) return runDraftBatch(name,v.current.round); const r = pyJSON(`SESSION.draft_act(${JSON.stringify(name)}${extra ? ', ' + extra : ''})`); notify(r); if (r.done) { location.hash = '#draft/picks'; return; } if (r.ok !== false && ['sim_to_me', 'sim_round', 'sim_pick_one', 'pick'].includes(name)) boardRound = null; reload(); };
-  const cur = v.current;
-  const left = el('section', { class: 'sheet c8 draft-surface draft-clock' });
-  // the clock
-  left.append(el('div', { class: 'clockhead' }, el('div', { class: 'draft-clock-emblem', role: 'img', 'aria-label': cur.team.name, style: `--clock-team:${teamTheme(cur.team).base};--clock-accent:${teamTheme(cur.team).accent}` }, showAbbr(cur.team.abbr)), el('div', {}, el('div', { class: 'big' }, v.on_user ? 'You Are On the Clock' : `${cur.team.name} Is On the Clock`), el('div', { class: 'sub' }, `Round ${cur.round} · Pick ${cur.sel}` + (cur.needs && cur.needs.length ? ` · Needs ${cur.needs.join(', ')}` : ''))),
-    el('div', { class: 'yours' }, v.mine_next.length ? el('div', {}, el('div', { class: 'big', style: 'font-size:20.5px' }, `You Pick ${v.mine_next[0].sel}${ord(v.mine_next[0].sel)}`), el('div', { class: 'sub' }, v.on_user ? 'Now' : v.picks_away === 1 ? 'One Pick Away' : v.picks_away != null ? `${['Two', 'Three', 'Four', 'Five', 'Six', 'Seven'][v.picks_away - 2] || v.picks_away} Picks Away` : '')) : el('div', { class: 'sub' }, 'No picks left'))));
-  left.append(el('div', { class: 'ctrl2', style: 'padding:0 14px 10px' },
-    el('button', { class: 'btn tip-left', 'data-tip': v.on_user ? 'Use your saved priorities, then let the GM weigh scouting and roster needs. Respects Do Not Draft.' : 'Simulate exactly one pick', onclick: () => { offersCache = null; act('sim_pick_one'); } }, v.on_user ? 'Auto Pick' : 'Next Pick'),
-    el('button', { class: 'btn go', disabled: v.on_user ? '' : null, onclick: () => act('sim_to_me') }, 'Sim to Your Pick'),
-    el('button', { class: 'btn', disabled: v.on_user ? '' : null, 'data-tip': 'Sim to the end of this round, or to your pick if it comes first', onclick: () => act('sim_round') }, 'Sim Round'),
-    el('button', { class: 'btn quiet', onclick: () => { if (confirm('Run the rest of the draft? Automatic picks follow your saved priorities, then the GM weighs scouting and roster needs. Do Not Draft players are excluded.')) act('sim_draft'); } }, 'Sim Draft'),
-    el('span', { class: 'sep' }),
-    el('button', { class: 'btn', disabled: v.on_user ? null : '', 'data-tip': 'Gather offers for this pick', onclick: () => { const r = pyJSON(`SESSION.draft_act('offers')`); notify(r); if (r.ok) { offersCache = r.offers; reload(); } } }, 'Trade Down')));
-  // the picks around the clock
-  const nx = el('div', { class: 'picksmade' });
-  const recent = v.results.slice(0, 3).reverse();
-  for (const r of recent) nx.append(el('div', { class: 'pk' }, el('span', { class: 'n' }, r.slot), crest(r.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, r.name), el('small', {}, `${r.pos}`)), el('span', {})));
-  for (const q of v.clock) {
-    const now = q.sel === cur.sel;
-    const tradeFor = q.mine ? null : () => { tradeState = { other: q.team.abbr, a: [], b: [q.id], keep: true, draft: true }; location.hash = '#personnel/trades'; };
-    nx.append(el('div', { class: 'pk' + (q.mine ? ' next' : '') + (now ? ' now' : '') + (q.mine ? '' : ' tradeable'), 'data-tip': q.mine ? null : `Trade for pick ${q.slot}: opens the Trades tab with ${q.team.name}'s pick loaded`, onclick: tradeFor, style: q.mine ? '' : 'cursor:pointer' }, el('span', { class: 'n' }, q.slot), crest(q.team, 30), el('div', { class: 'who' }, el('div', { class: 'nm' }, now ? 'On the Clock' : q.mine ? 'Your Pick' : 'Trade for it'), el('small', {}, `${q.team.name}${q.needs && q.needs.length && !q.mine ? ' · Needs ' + q.needs.join(', ') : ''}`)), el('span', {})));
-  }
-  // (the strip of pick rows is not shown; the board below is the order)
-  // THE PICK BOARD. Every slot of the draft, eight to a row, four rows a round. A made pick shows the player, his
-  // position and the club; one to come shows the club and the number. Click a club's slot to trade for it.
-  const rounds = [...new Set(v.order.map(q => q.round))];
-  const nowRound = (v.order.find(q => q.now) || v.order[0] || {}).round || 1;
-  if (boardRound == null || !rounds.includes(boardRound)) boardRound = nowRound;
-  const board = el('div', { class: 'pickboard' });
-  board.append(el('div', { class: 'pb-round' }, `Round ${boardRound}`, el('span', { class: 'count', style: 'margin-left:8px;text-transform:none;letter-spacing:0' }, boardRound === nowRound ? 'on the clock' : '')));
-  for (const q of v.order.filter(x => x.round === boardRound)) {
-    const tradeFor = (!q.done && !q.mine) ? () => { tradeState = { other: q.team.abbr, a: [], b: [q.id], keep: true, draft: true }; location.hash = '#personnel/trades'; } : null;
-    const sq = el('div', { class: 'pb-sq' + (q.done ? ' done' : '') + (q.now ? ' now' : '') + (q.mine ? ' mine' : ''), style: `--c1:${q.team.color};--c2:${q.team.accent || '#fff'}` + (tradeFor ? ';cursor:pointer' : ''), 'data-tip': tradeFor ? `Trade for pick ${q.slot}` : null, onclick: tradeFor });
-    sq.append(el('div', { class: 'pb-top' }, el('span', { class: 'ab' }, showAbbr(q.team.abbr)), el('span', { class: 'sl' }, q.slot)));
-    if (q.done) sq.append(el('div', { class: 'pb-nm' }, q.name), el('div', { class: 'pb-pos' }, `${q.pos}${q.original ? ` · from ${showAbbr(q.original)}` : ''}`));
-    else if (q.now && q.mine) sq.append(el('button', { class: 'btn go', style: 'width:auto;padding:3px 8px;font-size:12.5px;margin-top:2px', onclick: e => { e.stopPropagation(); location.hash = '#draft/board'; } }, 'Draft Player'));
-    else sq.append(el('div', { class: 'pb-nm dim' }, q.now ? 'On the clock' : (q.mine ? 'Your pick' : q.team.name)), el('div', { class: 'pb-pos' }, q.original ? `from ${showAbbr(q.original)}` : ''));
+  const cur = v.current, available = draftAvailableView(v);
+  const clockTheme = teamTheme(cur.team), userTheme = teamTheme(v.rail.club);
+  const next = v.mine_next?.[0];
+  page.append(el('header', {class:'dd-title c12'}, el('div', {}, el('small', {}, `${v.year_next || v.rail.year} PLAYER DRAFT`), el('h1', {}, 'Draft Day')),
+    el('div', {class:'dd-user'}, crest(v.rail.club, 38), el('div', {}, v.rail.club.name, el('small', {}, 'YOUR DRAFT ROOM')))));
+  page.append(el('section', {class:'dd-clock c12', 'aria-label':'On the clock', style:`--clock-team:${clockTheme.base};--clock-accent:${clockTheme.accent};--draft-user:${userTheme.base}`},
+    el('div', {class:'dd-clock-team'}, el('div', {class:'dd-emblem'}, showAbbr(cur.team.abbr)), el('div', {},
+      el('small', {class:'dd-live'}, v.on_user ? 'YOU ARE ON THE CLOCK' : 'ON THE CLOCK'), el('h2', {}, cur.team.name), el('p', {}, cur.needs?.length ? `Needs: ${cur.needs.join(' · ')}` : ''))),
+    el('div', {class:'dd-overall'}, el('small', {}, `ROUND ${cur.round}`), el('strong', {}, cur.sel), el('span', {}, 'OVERALL PICK')),
+    el('div', {class:'dd-next'}, el('small', {}, 'YOUR NEXT PICK'), el('strong', {}, next ? next.sel : '—', next ? el('sup', {}, ord(next.sel)) : ''),
+      el('p', {}, !next ? 'No picks remaining' : v.on_user ? 'Make your selection' : v.picks_away == null ? '' : `${v.picks_away} ${v.picks_away === 1 ? 'pick' : 'picks'} away`))));
+  const actions = el('div', {class:'dd-actions c12'}, el('div', {},
+    el('button', {class:'btn', 'data-tip':v.on_user ? 'Use your saved priorities, then let the GM weigh scouting and roster needs. Respects Do Not Draft.' : 'Simulate exactly one pick', onclick:()=>{offersCache=null;act('sim_pick_one');}}, v.on_user ? 'Auto Pick' : 'Next Pick'),
+    el('button', {class:'btn go', disabled:v.on_user ? '' : null, onclick:()=>act('sim_to_me')}, 'Sim to Your Pick'),
+    el('button', {class:'btn', disabled:v.on_user ? null : '', 'data-tip':'Gather offers for this pick', onclick:()=>{const r=pyJSON("SESSION.draft_act('offers')");notify(r);if(r.ok){offersCache=r.offers;reload();}}}, 'Trade Down')),
+    el('div', {}, el('button', {class:'btn quiet', disabled:v.on_user ? '' : null, 'data-tip':'Sim to the end of this round, or to your pick if it comes first', onclick:()=>act('sim_round')}, 'Sim Round'),
+      el('button', {class:'btn quiet', onclick:()=>{if(confirm('Run the rest of the draft? Automatic picks follow your saved priorities, then the GM weighs scouting and roster needs. Do Not Draft players are excluded.'))act('sim_draft');}}, 'Sim Draft')));
+  page.append(actions);
+  const layout=el('div',{class:'dd-layout c12'}), left=el('section',{class:'dd-board'}), right=el('section',{class:'dd-available'});
+  left.append(el('h2',{},'Draft Board'));
+  const rounds=[...new Set(v.order.map(q=>q.round))], nowRound=cur.round;
+  if(boardRound==null || !rounds.includes(boardRound))boardRound=nowRound;
+  const tabs=el('div',{class:'dd-rounds',role:'group','aria-label':'Draft round'});
+  for(const round of rounds)tabs.append(el('button',{class:'btn', 'aria-pressed':String(boardRound===round), 'aria-label':`Round ${round}`,onclick:()=>{boardRound=round;renderDraftDay(v);}},`Rd ${round}`));
+  left.append(tabs);
+  const board=el('div',{class:'dd-grid','aria-label':`Round ${boardRound} picks`});
+  const detail=el('section',{class:'dd-detail','aria-live':'polite'});
+  const pickPlayer=r=>{if(v.on_user && confirm(`Draft ${r.name}, ${r.pos}, ${r.home_state} at ${cur.slot}?`))act('pick',`pid=${JSON.stringify(r.pid)}`);};
+  const selectedKey=`${available.key}:${available.source}`;
+  let selected=available.rows.find(r=>r.pid===draftDaySelections.get(selectedKey)) || available.top;
+  const showProspect=r=>{
+    selected=r;draftDaySelections.set(selectedKey,r.pid);
+    for(const row of right.querySelectorAll('.dd-candidate'))row.setAttribute('aria-pressed',String(row.dataset.pid===r.pid));
+    const copy=el('div',{class:'dd-detail-copy'},el('small',{},'ON YOUR RADAR'),el('a',{class:'dd-detail-name',href:'#club/player/'+r.pid},r.name),el('p',{},[r.pos,r.home_state,r.proj_range ? `Projected ${r.proj_range}` : null].filter(Boolean).join(' · ')));
+    detail.replaceChildren(el('div',{class:'dd-position'},r.pos),copy,el('div',{class:'dd-estimate'},el('small',{},'EST. OVERALL'),ovrCell(r.mine)));
+    const controls=el('div',{class:'dd-detail-actions'},el('a',{class:'btn',href:'#club/player/'+r.pid},'Prospect Card'));
+    if(v.on_user)controls.append(el('button',{class:'btn go',onclick:()=>pickPlayer(r)},`Draft ${surname(r.name)}`));
+    detail.append(controls);
+  };
+  const showPick=q=>{
+    const copy=el('div',{class:'dd-detail-copy'},el('small',{},`PICK ${q.sel} · ${q.team.name}`));
+    if(q.done){copy.append(q.pid ? el('a',{class:'dd-detail-name',href:'#club/player/'+q.pid},q.name) : el('strong',{class:'dd-detail-name'},q.name),el('p',{},q.pos));}
+    else copy.append(el('strong',{class:'dd-detail-name'},q.now?'On the clock':q.mine?'Your pick':'Upcoming pick'),el('p',{},q.original?`Acquired from ${showAbbr(q.original)}`:''));
+    detail.replaceChildren(crest(q.team,45),copy);
+    if(!q.done&&!q.mine)detail.append(el('button',{class:'btn',onclick:()=>{tradeState={other:q.team.abbr,a:[],b:[q.id],keep:true,draft:true};location.hash='#personnel/trades';}},'Trade for This Pick'));
+    if(q.now&&q.mine&&selected)detail.append(el('button',{class:'btn go',onclick:()=>showProspect(selected)},'Choose a Player'));
+  };
+  for(const q of v.order.filter(q=>q.round===boardRound)){
+    const theme=teamTheme(q.team);
+    const sq=el('button',{type:'button',class:'dd-tile'+(q.done?' done':'')+(q.now?' now':'')+(q.mine?' mine':''),style:`--pick-team:${theme.base};--pick-accent:${theme.accent}`, 'aria-label':`Pick ${q.sel}, ${q.team.name}, ${q.done ? q.name+', '+q.pos : q.now ? 'on the clock' : q.mine ? 'your pick' : 'upcoming'}`,onclick:()=>showPick(q)},
+      el('span',{class:'dd-tile-head'},el('strong',{},showAbbr(q.team.abbr)),el('span',{},q.sel)),
+      el('span',{class:'dd-tile-name'},q.done?surname(q.name):q.now?'On the clock':q.mine?'Your pick':''),
+      el('span',{class:'dd-tile-sub'},[q.done?q.pos:null,q.original?`from ${showAbbr(q.original)}`:null].filter(Boolean).join(' · ')));
     board.append(sq);
   }
-  left.append(board);
-  // the round pagers sit in the tool row, right of Trade Down
-  const pagers = el('span', { class: 'pagers draft-round-pager' },
-    el('button', { class: 'btn draft-round-arrow previous', 'aria-label': 'Previous round', 'data-tip': 'Previous round', disabled: boardRound <= rounds[0] ? '' : null, onclick: () => { boardRound = Math.max(rounds[0], boardRound - 1); renderDraftDay(v); } }, el('span', { class: 'round-chevron', 'aria-hidden': 'true' })),
-    el('span', { class: 'count', 'aria-live': 'polite' }, `Round ${boardRound} of ${rounds[rounds.length - 1]}`),
-    el('button', { class: 'btn draft-round-arrow next tip-right', 'aria-label': 'Next round', 'data-tip': 'Next round', disabled: boardRound >= rounds[rounds.length - 1] ? '' : null, onclick: () => { boardRound = Math.min(rounds[rounds.length - 1], boardRound + 1); renderDraftDay(v); } }, el('span', { class: 'round-chevron', 'aria-hidden': 'true' })));
-  const toolRow = left.querySelector('.ctrl2'); if (toolRow) toolRow.append(pagers); else left.insertBefore(pagers, board);
-  // offers for your pick
-  if (v.on_user && offersCache && offersCache.length) {
-    for (const o of offersCache) left.append(el('div', { class: 'card', style: '--k:var(--live);margin:0 14px 10px' }, el('div', { class: 'h' }, el('div', { class: 'k' }, `Trade Offer · ${o.team.name}`), el('div', { class: 's' }, `${o.team.name} offers ${o.summary.join(' and ')} for ${cur.slot}`)),
-      el('div', { class: 'a' }, el('button', { class: 'btn go', onclick: () => { offersCache = null; act('accept_offer', `i=${o.i}`); } }, 'Accept'), el('button', { class: 'btn', onclick: () => { location.hash = '#personnel/trades'; } }, 'Counter'), el('button', { class: 'btn quiet', onclick: () => { offersCache = offersCache.filter(x => x.i !== o.i); reload(); } }, 'Decline'))));
-  }
-  page.append(left);
-  const available = draftAvailableView(v);
-  const sourcePicker = el('select', { class: 'draft-board-source', 'aria-label': 'Best available board', onchange: e => { draftAvailableSources.set(available.key, e.target.value); renderDraftDay(v); } },
-    el('option', { value: 'consensus' }, 'Consensus'), el('option', { value: 'mine' }, 'Your Board'));
-  sourcePicker.value = available.source;
-  const right = el('section', { class: 'sheet c4 draft-surface draft-available' }, el('h2', {}, 'Best Available', sourcePicker));
-  right.append(el('p', { class: 'draft-board-note' }, available.note));
-  const bt = el('table', { class: 'tbl' }); bt.append(el('tr', {}, el('th', { class: 'n', 'data-tip': available.source === 'consensus' ? 'Consensus rank in the full draft class' : 'Rank on your available board' }, '#'), el('th', {}, 'Player'), el('th', { class: 'n', 'data-tip': 'Where the league expects him to go' }, 'Proj.'), el('th', { class: 'n', 'data-tip': "Your scouts' read. Carries error; a visit tightens it" }, 'Est. Ovr')));
-  for (const r of available.rows.slice(0, 12)) bt.append(el('tr', { style: v.on_user ? 'cursor:pointer' : '', 'data-tip': v.on_user ? 'Click the row to draft him; the name opens his card' : null, onclick: e => { if (e.target.closest('.who')) return; if (v.on_user && confirm(`Draft ${r.name}, ${r.pos}, ${r.home_state} at ${cur.slot}?`)) act('pick', `pid=${JSON.stringify(r.pid)}`); } }, el('td', { class: 'n' }, available.source === 'consensus' ? (r.cons_rank ?? '—') : r.board_no), el('td', {}, el('button', { class: 'who', onclick: e => { e.stopPropagation(); location.hash = '#club/player/' + r.pid; } }, el('div', { class: 'no' }, r.pos), el('div', { class: 'nm' }, surname(r.name), el('small', {}, `${r.pos} · ${r.home_state}${r.my_round && r.my_rank > 32 ? ' · Your Grade ' + r.my_round : ''}`)))), el('td', { class: 'n' }, r.proj_range), el('td', { class: 'n' }, ovrCell(r.mine))));
-  right.append(bt);
-  right.append(el('div', { class: 'read', style: 'margin:10px 12px' }, el('b', {}, 'Assistants: '), available.read || ''));
-  if (v.on_user && available.top) right.append(el('div', { class: 'pad', style: 'padding-top:0' }, el('button', { class: 'btn go', style: 'width:100%;justify-content:center', onclick: () => act('pick', `pid=${JSON.stringify(available.top.pid)}`) }, `Draft ${available.top.name}`, el('small', { style: 'margin-left:8px;font-weight:500' }, `${available.top.pos} · ${available.top.home_state} · ${available.label} #${available.source === 'consensus' ? (available.top.cons_rank ?? '—') : 1}`))));
-  right.append(el('div', { class: 'foot' }, el('a', { class: 'btn', href: '#draft/board' }, 'Your Board'), el('span', { class: 'count', 'data-tip': v.my_needs.join(', ') }, `Needs · ${v.my_needs.slice(0, 3).join(', ') || 'none'}`), el('button', { class: 'btn quiet', disabled: available.top ? null : '', onclick: () => { location.hash = '#club/player/' + available.top.pid; } }, 'Prospect Card')));
-  page.append(right);
+  left.append(board,detail);
+  if(available.read)left.append(el('div',{class:'dd-read'},el('small',{},'DRAFT ROOM'),el('p',{},available.read)));
+  if(v.on_user && offersCache?.length){
+    const offers=el('section',{class:'dd-offers'},el('h2',{},'Trade Offers'));
+    for(const o of offersCache)offers.append(el('article',{class:'dd-offer'},el('h3',{},o.team.name),el('p',{},`${o.summary.join(' and ')} for pick ${cur.sel}`),el('div',{},
+      el('button',{class:'btn go',onclick:()=>{offersCache=null;act('accept_offer',`i=${o.i}`);}},'Accept'),
+      el('button',{class:'btn',onclick:()=>{location.hash='#personnel/trades';}},'Counter'),
+      el('button',{class:'btn quiet',onclick:()=>{offersCache=offersCache.filter(x=>x.i!==o.i);reload();}},'Decline'))));
+    left.append(offers);
+  }else if(v.on_user && offersCache && !offersCache.length)left.append(el('p',{class:'dd-no-offers'},'No trade offers for this pick.'));
+  right.append(el('h2',{},'Best Available'));
+  const sourceTabs=el('div',{class:'dd-sources',role:'group','aria-label':'Best available board'});
+  for(const [source,label]of [['mine','Your Board'],['consensus','Consensus']])sourceTabs.append(el('button',{class:'btn','aria-pressed':String(available.source===source),'data-tip':source==='mine'?'Your saved order, followed by your scouts’ rankings; Do Not Draft players excluded.':'League-wide ranking. Estimated overall is still your scouts’ read.',onclick:()=>{draftAvailableSources.set(available.key,source);renderDraftDay(v);}},label));
+  right.append(sourceTabs,el('div',{class:'dd-list-label'},el('span',{},'PROSPECT'),el('span',{},'EST. OVR')));
+  const list=el('div',{class:'dd-candidates'});
+  for(const r of available.rows.slice(0,12))list.append(el('button',{type:'button',class:'dd-candidate','data-pid':r.pid,'aria-pressed':String(selected?.pid===r.pid),'aria-label':`${r.name}, ${r.pos}, estimated overall ${r.mine}, projected ${r.proj_range}`,onclick:()=>showProspect(r)},
+    el('span',{class:'dd-rank'},available.source==='consensus'?(r.cons_rank??'—'):r.board_no),el('span',{class:'dd-position'},r.pos),
+    el('span',{class:'dd-candidate-copy'},el('strong',{},surname(r.name)),el('small',{},[r.home_state,r.proj_range].filter(Boolean).join(' · '))),el('span',{class:'dd-rating'},ovrCell(r.mine))));
+  if(!available.rows.length)list.append(el('p',{class:'empty'},'No eligible prospects remain on this board.'));
+  right.append(list,el('div',{class:'dd-needs'},el('span',{},'YOUR NEEDS'),...(v.my_needs||[]).slice(0,3).map(n=>el('strong',{},n))),el('div',{class:'dd-board-link'},el('a',{class:'btn',href:'#draft/board'},'Open Your Board')));
+  // The full explanation is available on demand; it does not crowd the list.
+  right.append(el('details',{class:'dd-source-help'},el('summary',{},'About this board'),el('p',{},available.note)));
+  if(selected)showProspect(selected);else detail.replaceChildren(el('p',{},'Select a pick to view its details.'));
+  layout.append(left,right);page.append(layout);
 }
 let offersCache = null;
 

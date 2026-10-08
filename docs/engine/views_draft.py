@@ -474,7 +474,7 @@ def draft_day(session, league, abbr):
     made = {s: (t, p) for s, t, p in D.results}
     squares = {}
     for s, (t_, p) in made.items():
-        squares[s] = dict(sel=s, slot=f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d}", round=(s - 1) // 32 + 1, team=club(t_), mine=(t_ == abbr), id=None, now=False, done=True, name=p.name, pos=p.pos, original=None)
+        squares[s] = dict(sel=s, slot=f"{(s - 1) // 32 + 1}.{(s - 1) % 32 + 1:02d}", round=(s - 1) // 32 + 1, team=club(t_), mine=(t_ == abbr), id=None, now=False, done=True, pid=p.pid, name=p.name, pos=p.pos, original=None)
     cur_sel = D.current().selection if D.current() is not None else None
     for q in D.picks:
         s = q.selection
