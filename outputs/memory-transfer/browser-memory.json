@@ -1,0 +1,18 @@
+[
+  {
+    "mode": "legacy",
+    "load_ms": 864,
+    "before_js_heap_mib": 1.18,
+    "peak_sampled_js_heap_mib": 528.87,
+    "retained_js_heap_mib": 177.46,
+    "byte_identical": true
+  },
+  {
+    "mode": "bounded",
+    "load_ms": 786,
+    "before_js_heap_mib": 1.18,
+    "peak_sampled_js_heap_mib": 75.01,
+    "retained_js_heap_mib": 3.91,
+    "byte_identical": true
+  }
+]

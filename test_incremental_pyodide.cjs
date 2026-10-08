@@ -18,6 +18,17 @@ data={'year':2030,'_stop':['week',4], 'players':{str(i):{'xp':i,'history':[{'wee
 writer=Snapshot()
 start=time.perf_counter();full=json.dumps(data,separators=(',',':'));full_seconds=time.perf_counter()-start
 first=json.loads(writer.prepare(data,str))
+batched=Snapshot({'epoch':writer.epoch})
+merged={'puts':{}}
+batch_count=0
+for payload in batched.prepare_batches(data,str):
+    piece=json.loads(payload)
+    merged['puts'].update(piece.pop('puts'))
+    merged.update(piece)
+    batch_count+=1
+assert merged==first
+assert batched.hashes==writer.hashes
+assert batch_count>1
 data['players']['12']['xp']+=1
 start=time.perf_counter();delta=writer.prepare(data,str);delta_seconds=time.perf_counter()-start
 change=json.loads(delta)
@@ -27,7 +38,7 @@ data['_stop']=['week',5]
 week_change=json.loads(writer.prepare(data,str))
 assert not week_change['reset']
 assert list(week_change['puts'])==[record_id(['_stop',0])]
-json.dumps({'runtime':'Pyodide 0.29.5','full_bytes':len(full),'delta_bytes':len(delta),'full_seconds':full_seconds,'delta_seconds':delta_seconds,'changed_records':len(change['puts'])})
+json.dumps({'runtime':'Pyodide 0.29.5','full_bytes':len(full),'delta_bytes':len(delta),'full_seconds':full_seconds,'delta_seconds':delta_seconds,'changed_records':len(change['puts']),'batches':batch_count,'batched_checkpoint_equal':True})
 `));
   },source);
   assert.equal(report.changed_records,1);console.log(report);

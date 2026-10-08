@@ -134,7 +134,7 @@ async function loadSessionFromBlob(source, onStage = () => {}) {
   // Passing a large save through py.globals.set makes Pyodide convert the
   // entire JS string at once. Its bridge fails on long-running franchises.
   const path = '/nflgm-import-save.json';
-  const file = py.FS.open(path, 'w+');
+  let file = py.FS.open(path, 'w+');
   try {
     onStage('copying the save into the engine');
     try {
@@ -148,11 +148,12 @@ async function loadSessionFromBlob(source, onStage = () => {}) {
       }
     } finally {
       py.FS.close(file);
+      file = null; // A closed FS stream can still reference its file contents.
     }
     onStage('rebuilding the franchise');
-    py.runPython("with open('/nflgm-import-save.json', encoding='utf-8') as _save_file:\n    SESSION = S.Session.load(_save_file.read())");
+    py.runPython("SESSION = S.Session.load_file('/nflgm-import-save.json', remove_source=True)");
   } finally {
-    py.FS.unlink(path);
+    if (py.FS.analyzePath(path).exists) py.FS.unlink(path);
   }
 }
 
@@ -319,7 +320,17 @@ function saveGame(silent = false) {
   autosaveQueued = false;
   cancelAutosaveSchedule();
   try {
-    const snapshot = JSON.parse(py.runPython('SESSION.save_incremental()'));
+    // Capture synchronously so no game action can interleave with these records.
+    // Only one batch crosses the Python bridge at a time, even for checkpoints.
+    py.runPython('SESSION.begin_incremental()');
+    const snapshot = {puts:{}};
+    for (;;) {
+      const text = py.runPython('SESSION.next_incremental_batch()');
+      if (text == null) break;
+      const {puts, ...metadata} = JSON.parse(text);
+      Object.assign(snapshot.puts, puts);
+      Object.assign(snapshot, metadata);
+    }
     return queueSave('snapshot', snapshot);
   } catch (e) {
     py.runPython('SESSION.reset_incremental()'); saveNeedsCheckpoint = true; autosaveQueued = true; throw e;
@@ -342,36 +353,95 @@ async function loadSave() {
   const db = await idb();
   return new Promise((res, rej) => {
     const tx = db.transaction('saves', 'readonly'); const saves = tx.objectStore('saves');
-    const keys = saves.getAllKeys(), values = saves.getAll();
+    const meta = saves.get('snapshot'), journal = saves.get('live_journal');
+    let result, error;
+    const fail = e => { error = e; tx.abort(); };
+    meta.onsuccess = () => {
+      try {
+        if (!meta.result) {
+          const legacy = saves.get('main');
+          legacy.onsuccess = () => { result = {text:legacy.result ? new Blob([legacy.result], {type:'application/json'}) : null}; };
+          return;
+        }
+        if (meta.result.format !== 1) throw Error('Unsupported browser save format');
+        const roots = saves.get('chunk:@roots');
+        roots.onsuccess = () => {
+          try {
+            const hashes = {};
+            const read = (key, record) => {
+              if (!record || typeof record.text !== 'string' || typeof record.hash !== 'string') throw Error('Incomplete browser save');
+              hashes[key] = record.hash;
+              return record.text;
+            };
+            const steps = snapshotParts(JSON.parse(read('@roots', roots.result)));
+            const blobs = []; let buffer = [], size = 0;
+            const flush = () => { if (buffer.length) blobs.push(new Blob(buffer)); buffer = []; size = 0; };
+            const append = text => { buffer.push(text); size += text.length; if (size >= 1024 * 1024) flush(); };
+            const batch = () => {
+              const pending = []; let requests = 0, done = false;
+              // Bounded reads in the same transaction: concurrent tabs cannot
+              // mix revisions, and old save strings never accumulate in JS.
+              while (requests < 128) {
+                const step = steps.next();
+                if (step.done) { done = true; break; }
+                const value = step.value;
+                if (typeof value === 'string') pending.push({text:value});
+                else { pending.push({...value, request:saves.get('chunk:' + value.key)}); requests++; }
+              }
+              const consume = () => {
+                try {
+                  for (const entry of pending) {
+                    let text = entry.request ? read(entry.key, entry.request.result) : entry.text;
+                    if (entry.trim) {
+                      if (!text.startsWith('[') || !text.endsWith(']')) throw Error('Invalid browser save list');
+                      text = text.slice(1, -1);
+                    }
+                    append(text);
+                  }
+                  if (done) { flush(); result = {text:new Blob(blobs, {type:'application/json'}), snapshot:{...meta.result, hashes}}; }
+                  else batch();
+                } catch (e) { fail(e); }
+              };
+              const last = pending.findLast(entry => entry.request);
+              if (last) last.request.onsuccess = consume;
+              else consume();
+            };
+            batch();
+          } catch (e) { fail(e); }
+        };
+      } catch (e) { fail(e); }
+    };
     tx.oncomplete = () => {
       db.close();
-      try { res(restoreSnapshot(new Map(keys.result.map((key, i) => [key, values.result[i]])))); }
-      catch (e) { rej(e); }
+      res({...result, journal:journal.result || null});
     };
-    tx.onerror = tx.onabort = () => { db.close(); rej(tx.error || new Error('Could not read browser save')); };
+    tx.onerror = tx.onabort = () => { db.close(); rej(error || tx.error || new Error('Could not read browser save')); };
   });
 }
-function restoreSnapshot(records) {
-  const meta = records.get('snapshot'), journal = records.get('live_journal') || null;
-  if (!meta) return {text:records.get('main') || null, journal};
-  if (meta.format !== 1) throw Error('Unsupported browser save format');
-  const hashes = {};
-  const read = key => {
-    const record = records.get('chunk:' + key);
-    if (!record || typeof record.text !== 'string' || typeof record.hash !== 'string') throw Error('Incomplete browser save');
-    hashes[key] = record.hash;
-    return record.text;
-  };
-  const roots = JSON.parse(read('@roots')), parts = [];
+function* snapshotParts(roots) {
+  yield '{'; let first = true;
   for (const [name, kind, keys] of roots) {
-    let text;
-    if (kind === 'dict') text = '{' + keys.map(key => JSON.stringify(key) + ':' + read(JSON.stringify([name,key]))).join(',') + '}';
-    else if (kind === 'list') text = '[' + Array.from({length:keys}, (_,i) => read(JSON.stringify([name,i])).slice(1,-1)).join(',') + ']';
-    else if (kind === 'value') text = read(JSON.stringify([name]));
+    yield (first ? '' : ',') + JSON.stringify(name) + ':'; first = false;
+    if (kind === 'dict') {
+      if (!Array.isArray(keys)) throw Error('Invalid browser save dictionary');
+      yield '{';
+      for (let i = 0; i < keys.length; i++) {
+        yield (i ? ',' : '') + JSON.stringify(keys[i]) + ':';
+        yield {key:JSON.stringify([name,keys[i]])};
+      }
+      yield '}';
+    } else if (kind === 'list') {
+      if (!Number.isSafeInteger(keys) || keys < 0) throw Error('Invalid browser save list');
+      yield '[';
+      for (let i = 0; i < keys; i++) {
+        if (i) yield ',';
+        yield {key:JSON.stringify([name,i]), trim:true};
+      }
+      yield ']';
+    } else if (kind === 'value') yield {key:JSON.stringify([name])};
     else throw Error('Invalid browser save record');
-    parts.push(JSON.stringify(name) + ':' + text);
   }
-  return {text:'{' + parts.join(',') + '}', journal, snapshot:{...meta, hashes}};
+  yield '}';
 }
 
 // ---------------------------------------------------------------- the rail

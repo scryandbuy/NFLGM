@@ -52,6 +52,34 @@ class Snapshot:
         self.hashes = dict(resume.get('hashes') or {})
         self.marker = resume.get('marker')
 
+    def prepare_batches(self, data, default, batch_chars=1024 * 1024):
+        """Same durable format, without one full-checkpoint bridge string.
+
+        Consume synchronously: records reference live state. Abandoning the
+        iterator (including an encoding failure) never advances the baseline.
+        A single oversized record is allowed; records are never truncated.
+        """
+        marker = json.dumps([data.get('year'), data.get('_stop')], separators=(',', ':'))
+        reset = not self.revision
+        hashes, puts, size = {}, {}, 0
+        for key, value in records(data):
+            digest = hashlib.sha256(pickle.dumps(value, protocol=4)).hexdigest()
+            hashes[key] = digest
+            if reset or self.hashes.get(key) != digest:
+                encoded = json.dumps(value, default=default, separators=(',', ':'))
+                puts[key] = dict(hash=digest, text=encoded)
+                size += len(encoded) + len(key) + 96
+                if size >= batch_chars:
+                    yield json.dumps(dict(puts=puts), separators=(',', ':'))
+                    puts, size = {}, 0
+        revision = self.revision + 1
+        final = json.dumps(dict(format=FORMAT, epoch=self.epoch, base=self.revision,
+            revision=revision, marker=marker, reset=reset, puts=puts,
+            deletes=[] if reset else sorted(self.hashes.keys() - hashes.keys())),
+            separators=(',', ':'))
+        yield final
+        self.hashes, self.revision, self.marker = hashes, revision, marker
+
     def prepare(self, data, default):
         marker = json.dumps([data.get('year'), data.get('_stop')], separators=(',', ':'))
         # A calendar change is ordinary saved data, not a new franchise.

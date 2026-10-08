@@ -1,0 +1,10 @@
+{
+  "mode": "batched",
+  "seconds": 15.94,
+  "checkpoint_chars": 209075719,
+  "batches": 161,
+  "largest_batch_chars": 3152589,
+  "encoder_peak_mib": 15.59,
+  "records": 20462,
+  "every_record_equal": true
+}

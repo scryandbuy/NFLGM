@@ -75,8 +75,25 @@ class Session:
 
     @classmethod
     def load(cls, text):
+        return cls._from_save_data(json.loads(text))
+
+    @classmethod
+    def load_file(cls, path, remove_source=False):
+        # Release the JSON decoder's input string before rebuilding the league.
+        # The browser owns this temporary in-memory file, not the user's export.
+        try:
+            with open(path, encoding='utf-8-sig') as stream:
+                data = json.load(stream)
+        finally:
+            if remove_source:
+                import os
+                os.unlink(path)
+        return cls._from_save_data(data)
+
+    @classmethod
+    def _from_save_data(cls, data):
         from competition_names import migrate_save
-        d = migrate_save(json.loads(text))
+        d = migrate_save(data)
         L = LG.League.load(d)
         rng_ = np.random.default_rng(d.get('_seed_state', None))
         if d.get('_rng_state') is not None:
@@ -350,9 +367,34 @@ class Session:
         from incremental_save import Snapshot
         self._browser_snapshot = Snapshot(metadata)
 
+    def begin_incremental(self):
+        from incremental_save import Snapshot
+        self._close_incremental_transfer()
+        writer = getattr(self, '_browser_snapshot', None)
+        if writer is None:
+            writer = self._browser_snapshot = Snapshot()
+        self._browser_transfer = writer.prepare_batches(self._save_data(), LG._session_json_default)
+
+    def next_incremental_batch(self):
+        try:
+            return next(self._browser_transfer)
+        except StopIteration:
+            self._close_incremental_transfer()
+            return None
+        except Exception:
+            self.reset_incremental()
+            raise
+
+    def _close_incremental_transfer(self):
+        transfer = getattr(self, '_browser_transfer', None)
+        if transfer is not None:
+            transfer.close()
+            self._browser_transfer = None
+
     def reset_incremental(self):
         # A failed disk transaction invalidates every dependent delta. The next
         # capture is a complete checkpoint of the current in-memory franchise.
+        self._close_incremental_transfer()
         self._browser_snapshot = None
 
     def live_journal(self):

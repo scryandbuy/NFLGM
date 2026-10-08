@@ -13,10 +13,12 @@ const teamTheme=()=>({base:'#203731',accent:'#ffb612'});
 const renderRail=()=>railDraws++,secondRow=()=>{},clubNav=()=>[],ovrCell=x=>x;
 const openPlayer=()=>{},queueCeilingNoticeCheck=()=>notices++;
 const notify=r=>{throw Error(r.why||JSON.stringify(r));};
-let revision=0;
+let revision=0,batchPending=false;
 const py={runPython:code=>{
  if(code==='SESSION.reset_incremental()'){revision=0;return;}
- if(code!=='SESSION.save_incremental()')throw Error(code);
+ if(code==='SESSION.begin_incremental()'){batchPending=true;return;}
+ if(code!=='SESSION.next_incremental_batch()')throw Error(code);
+ if(!batchPending)return null;batchPending=false;
  const puts={},base=revision++;
  const put=(key,value)=>puts[key]={hash:'fixture',text:JSON.stringify(value)};
  if(!base){
@@ -89,7 +91,7 @@ const server=http.createServer((req,res)=>{
   }
   const durable=await page.evaluate(async()=>{
    const saved=await loadSave();
-   return JSON.parse(saved.text).players[target].xp===view.rows.find(r=>r.pid===target).bank;
+   return JSON.parse(await saved.text.text()).players[target].xp===view.rows.find(r=>r.pid===target).bank;
   });
   assert.ok(durable);assert.deepEqual(errors,[]);
   assert.ok(heaps.at(-1)-heaps[2]<40e6,'retained heap must settle instead of growing per click');

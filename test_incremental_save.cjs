@@ -4,10 +4,11 @@ const {chromium}=require('playwright');
 const source=fs.readFileSync('docs/app.js','utf8');
 const chunk=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b));
 const script=`
-let resets=0,captures=0,nextSnapshot;
+let resets=0,captures=0,nextSnapshot,batchPending=false;
 const py={runPython:code=>{
  if(code==='SESSION.reset_incremental()'){resets++;return;}
- if(code==='SESSION.save_incremental()'){captures++;return JSON.stringify(nextSnapshot);}
+ if(code==='SESSION.begin_incremental()'){captures++;batchPending=true;return;}
+ if(code==='SESSION.next_incremental_batch()'){if(!batchPending)return null;batchPending=false;return JSON.stringify(nextSnapshot);}
  throw Error(code);
 }};
 const notify=()=>{};
@@ -19,15 +20,15 @@ function snap(revision,base,values,reset=false,epoch='franchise'){
  if(reset) puts['@roots']={hash:'roots',text:JSON.stringify(['xp','trade','archive'].map(k=>[k,'value',null]))};
  return {format:1,epoch,revision,base,marker:'week4',reset,puts,deletes:[]};
 }
-const read=async()=>JSON.parse((await loadSave()).text);
+const read=async()=>JSON.parse(await (await loadSave()).text.text());
 async function run(){
  const results=[];
  await queueSave('full',JSON.stringify({legacy:true}));
  await queueSave('journal',{actions:[1]});
- let saved=await loadSave();assert(JSON.parse(saved.text).legacy&&saved.journal.actions[0]===1,'legacy load');results.push('legacy save + journal');
+ let saved=await loadSave();assert(JSON.parse(await saved.text.text()).legacy&&saved.journal.actions[0]===1,'legacy load');results.push('legacy save + journal');
  const archive='historical-data-'.repeat(200000);
  await queueSave('snapshot',snap(1,0,{xp:100,trade:null,archive},true));
- saved=await loadSave();assert(JSON.parse(saved.text).archive===archive&&!saved.journal,'atomic migration');results.push('legacy migration');
+ saved=await loadSave();assert(JSON.parse(await saved.text.text()).archive===archive&&!saved.journal,'atomic migration');results.push('legacy migration');
  const originalWrite=writeSnapshot;
  let unblock;const gate=new Promise(r=>unblock=r);let entered=false;
  writeSnapshot=async(db,p)=>{if(!entered){entered=true;await gate;}return originalWrite(db,p);};
@@ -64,14 +65,14 @@ async function run(){
  let blocked=false;try{saveGame();}catch(e){blocked=true;}assert(blocked&&(await read()).xp===30,'conflict cannot overwrite another tab');results.push('stale revision protection');
  saveConflict=false;
  await queueSave('snapshot',snap(1,0,{xp:9,trade:null,archive:'new game'},true,'new-franchise'));
- saved=await loadSave();assert(JSON.parse(saved.text).archive==='new game'&&saved.snapshot.epoch==='new-franchise','new franchise replacement');
+ saved=await loadSave();assert(JSON.parse(await saved.text.text()).archive==='new game'&&saved.snapshot.epoch==='new-franchise','new franchise replacement');
  let release;const hold=new Promise(r=>release=r);let first=true;
  writeSnapshot=async(db,p)=>{if(first){first=false;await hold;}return originalWrite(db,p);};
  const advanceWrites=[queueSave('snapshot',snap(2,1,{xp:8},false,'new-franchise')),
   queueSave('snapshot',snap(3,2,{xp:7},false,'new-franchise')),
   queueSave('snapshot',{...snap(4,3,{xp:6,trade:null},false,'new-franchise'),marker:'week5'})];
  release();await Promise.all(advanceWrites);writeSnapshot=originalWrite;
- saved=await loadSave();state=JSON.parse(saved.text);
+ saved=await loadSave();state=JSON.parse(await saved.text.text());
  assert(state.xp===6&&state.trade===null&&state.archive==='new game'&&saved.snapshot.marker==='week5','calendar delta retains history and merges pending changes');results.push('queued calendar delta');
  const db=await idb();await new Promise((resolve,reject)=>{const tx=db.transaction('saves','readwrite');tx.objectStore('saves').delete('chunk:'+JSON.stringify(['xp']));tx.oncomplete=resolve;tx.onerror=reject;});db.close();
  let incomplete=false;try{await loadSave();}catch(e){incomplete=true;}assert(incomplete,'missing record fails visibly');results.push('new franchise + incomplete snapshot detection');

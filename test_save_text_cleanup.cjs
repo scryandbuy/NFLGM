@@ -9,7 +9,10 @@ function fixture(failLoad=false,failJournal=false){
     calls.push(code);
     if(failLoad&&code.includes('Session.load'))throw Error('invalid save');
     if(failJournal&&code.includes('apply_live_journal'))throw Error('invalid journal');
-  }}};
+  }},loadSessionFromBlob:async()=>{
+    calls.push('Session.load_file');
+    if(failLoad)throw Error('invalid save');
+  }};
  vm.createContext(ctx);
  return {ctx,nodes,globals,calls};
 }

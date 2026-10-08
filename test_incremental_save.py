@@ -93,6 +93,37 @@ class IncrementalSaveTests(unittest.TestCase):
         self.assertEqual(len(self.writer.hashes),len(self.store))
         self.assertTrue(all(isinstance(v,str) and len(v)==64 for v in self.writer.hashes.values()))
 
+    def test_batched_checkpoint_delta_and_removal_match_portable_save(self):
+        writer = Snapshot()
+        store = {}
+        for i in range(3):
+            merged = dict(puts={})
+            count = 0
+            for text in writer.prepare_batches(self.data, str, batch_chars=100):
+                batch = json.loads(text)
+                merged['puts'].update(batch.pop('puts'))
+                merged.update(batch)
+                count += 1
+            apply(store, merged)
+            self.assertEqual(assemble(store), json.loads(json.dumps(self.data)))
+            if i == 0: self.assertGreater(count, 2)
+            self.data['players']['one']['xp'] += 1
+            self.data['transactions'] = []
+            self.data.pop('unicode', None)
+
+    def test_abandoned_and_failed_batch_do_not_advance_baseline(self):
+        writer = Snapshot()
+        transfer = writer.prepare_batches(self.data, str, batch_chars=100)
+        next(transfer)
+        transfer.close()
+        self.assertEqual(writer.revision, 0)
+        self.assertEqual(writer.hashes, {})
+        self.data['bad'] = object()
+        def fail(value): raise ValueError('bad record')
+        with self.assertRaises(ValueError): list(writer.prepare_batches(self.data, fail, batch_chars=100))
+        self.assertEqual(writer.revision, 0)
+        self.assertEqual(writer.hashes, {})
+
 
 class SessionSnapshotTests(unittest.TestCase):
     def test_contract_action_and_extended_json_round_trip(self):
@@ -122,6 +153,40 @@ class SessionSnapshotTests(unittest.TestCase):
         b=League.load(json.dumps(expected))
         self.assertEqual(a.player(p.pid).contract.base,b.player(p.pid).contract.base)
         self.assertEqual(a.teams['GB'].cap_space,b.teams['GB'].cap_space)
+
+        # The browser's bounded transfer must produce the same records and RNG.
+        s.reset_incremental()
+        s.begin_incremental()
+        merged = dict(puts={})
+        while True:
+            text = s.next_incremental_batch()
+            if text is None: break
+            batch = json.loads(text)
+            merged['puts'].update(batch.pop('puts'))
+            merged.update(batch)
+        apply(store, merged)
+        self.assertEqual(assemble(store), json.loads(s.save()))
+        self.assertEqual(s.rng.bit_generator.state, before)
+        self.assertIsNone(s._browser_transfer)
+
+
+class FileLoadTests(unittest.TestCase):
+    def test_temporary_input_is_removed_before_rebuilding_and_on_bad_json(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from session import Session
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / 'save.json'
+            class Probe(Session):
+                @classmethod
+                def _from_save_data(cls, data):
+                    if path.exists(): raise AssertionError('input retained during rebuild')
+                    return data
+            path.write_text('\ufeff{"name":"José", "history":[1,2]}', encoding='utf-8')
+            self.assertEqual(Probe.load_file(path, remove_source=True), {'name':'José', 'history':[1,2]})
+            path.write_text('{bad json', encoding='utf-8')
+            with self.assertRaises(json.JSONDecodeError): Probe.load_file(path, remove_source=True)
+            self.assertFalse(path.exists())
 
 
 if __name__=='__main__':unittest.main()

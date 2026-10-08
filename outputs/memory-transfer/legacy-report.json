@@ -1,0 +1,10 @@
+{
+  "mode": "legacy",
+  "seconds": 16.87,
+  "checkpoint_chars": 209074119,
+  "batches": 1,
+  "largest_batch_chars": 209074119,
+  "encoder_peak_mib": 602.98,
+  "records": 20462,
+  "every_record_equal": true
+}

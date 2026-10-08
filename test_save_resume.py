@@ -32,7 +32,13 @@ class SaveResumeTest(unittest.TestCase):
         if runner.live['halftime_open'] and runner.live.get('half_recs'):
             original.half_take(0, True)
         before = original.gameday_view()
-        resumed = session.Session.load(original.save())
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / 'live.json'
+            path.write_text(original.save(), encoding='utf-8')
+            resumed = session.Session.load_file(path, remove_source=True)
+            self.assertFalse(path.exists())
         self.assertEqual(before, resumed.gameday_view())
         self.assertEqual(json.loads(json.dumps(runner.live['actions'])),
                          resumed.runner.live['actions'])

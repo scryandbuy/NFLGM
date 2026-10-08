@@ -13,7 +13,7 @@ async function runReal(){
  const deltas=await(await fetch('/deltas.json')).json();
  for(const delta of deltas)await queueSave('snapshot',delta);
  let saved=await loadSave();
- const bytes=new TextEncoder().encode(saved.text);
+ const bytes=new Uint8Array(await saved.text.arrayBuffer());
  const digest=await crypto.subtle.digest('SHA-256',bytes);
  const hash=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
  const expected=await(await fetch('/expected.json')).json();
