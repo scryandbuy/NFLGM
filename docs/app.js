@@ -4124,7 +4124,7 @@ function renderThisWeek(v) {
   const sug = el('div', { class: 'sugs' });
   sug.append(el('div', { class: 'h5' }, "Assistants' Suggestions"));
   const locked = !!(v.plan_state?.locked || v.plan_state?.started);
-  sug.append(el('p', { class: 'count' }, locked ? 'Saved for Sunday · Re-open to edit your choices' : gameplanUnsaved() ? 'Unsaved changes' : 'Open for editing'));
+  if (locked || gameplanUnsaved()) sug.append(el('p', { class: 'count' }, locked ? 'Saved for Sunday · Re-open to edit your choices' : 'Unsaved changes'));
   for (const x of v.suggestions) sug.append(gameplanSuggestion(x, reload, locked));
   if (!v.suggestions.length) sug.append(el('div', { class: 'empty' }, 'The report has nothing to add this week; the plan is the coordinators\' own.'));
   else if (!locked) sug.append(el('div', { style: 'display:flex;gap:6px;padding:8px 0 0' }, el('button', { class: 'btn go', onclick: () => { notify(pyJSON('SESSION.plan_take_all()')); reload(); } }, 'Accept All'), el('span', { class: 'count', style: 'align-self:center' }, '')));
