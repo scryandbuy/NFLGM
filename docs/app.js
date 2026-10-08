@@ -841,8 +841,9 @@ function offerSheetActions(id, reload) {
 // ---------------------------------------------------------------- Game Day
 let gameDayStepBusy = false;
 async function advanceGameDay(mode, event) {
-  // Keep the lock across the redraw; ignore the second click of a double-click.
-  if (gameDayStepBusy || (event && event.detail > 1)) return;
+  // Keep the lock across redraw/save. Once finished, accept the next click
+  // even if the browser still counts it as a double- or triple-click.
+  if (gameDayStepBusy) return;
   gameDayStepBusy = true;
   const lockButtons = () => document.querySelectorAll('[data-live-step]').forEach(button => {
     if (!button.disabled) { button.disabled = true; button.dataset.stepPending = 'true'; }
