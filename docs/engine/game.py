@@ -3547,16 +3547,25 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 and timeouts is not None and timeouts.left.get(pos, 0) > 0):
             used = timeouts.use(pos); used_by = pos
             elapsed = live_seconds
-        # On fourth down there is no spike available. Price and execute the
-        # hurried kicking-unit exchange instead of charging an ordinary huddle.
-        # No seconds are restored; a late live play can still exhaust the half.
-        if (half_end is not None and after_play.down == 4 and after_play.result is None
+        # A completed play can put a kick in reach on ANY down. Evaluate
+        # the kick at the time its unit can actually be ready, before the
+        # ordinary hurry-up interval consumes the half. Long gains require
+        # the line to travel downfield as well as exchange personnel.
+        if (half_end is not None and after_play.down <= 4 and after_play.result is None
                 and not used and not late_injury and not added_penalty and not oob_snap
                 and t in ('run', 'complete', 'scramble', 'sack')
-                and _plan_to is not None and _plan_to['choice'] == 'kick'
-                and _secs_after >= FG_CHANGE_SECONDS + 1
-                and secs_in_half <= 30):
-            elapsed = min(elapsed, live_seconds + FG_CHANGE_SECONDS)
+                and secs_in_half <= 30
+                and getattr(dr, '_half_stall_intent', None) != 'protect'):
+            kick_setup = max(FG_CHANGE_SECONDS, 3.0 + max(0., float(out.get('yards', 0))) / 6.0)
+            kick_seconds = _secs_after - kick_setup
+            if kick_seconds >= 1 and live_seconds + kick_setup < elapsed:
+                kick_ready = copy.copy(after_play)
+                kick_ready.clock -= kick_setup
+                kick_plan = end_of_half_plan(kick_ready, offense, defense, rate_fn,
+                    timeouts, pos, half_end, kick_seconds,
+                    coach=(off_state.coach if off_state is not None else None))
+                if kick_plan is not None and kick_plan['choice'] == 'kick':
+                    elapsed = live_seconds + kick_setup
         if late_injury or scoring_safety or after_play.result == 'Touchdown' or _fourth_fail:
             dr.clock -= live_seconds  # scoring/change of possession stops at the whistle
         elif added_penalty:
