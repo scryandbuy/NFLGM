@@ -1,0 +1,145 @@
+{
+  "steps": 165,
+  "visible_events": 181,
+  "lost": [],
+  "unwritten": {
+    "audible": 6
+  },
+  "replaced": [
+    {
+      "step": 26,
+      "events": [
+        "complete",
+        "extra_point"
+      ],
+      "actual": "Love to Carter for 29 yards. TOUCHDOWN.",
+      "latest": "Extra point is good."
+    },
+    {
+      "step": 35,
+      "events": [
+        "run",
+        "penalty"
+      ],
+      "actual": "Knight runs behind the pulling guard to inside the 1. Tackled by Ingram.",
+      "latest": "Penalty, Unnecessary Roughness on Coleman (defense), half the distance to the goal, automatic first down."
+    },
+    {
+      "step": 36,
+      "events": [
+        "run",
+        "extra_point"
+      ],
+      "actual": "Knight runs it in from inside the 1. TOUCHDOWN.",
+      "latest": "Extra point is good."
+    },
+    {
+      "step": 56,
+      "events": [
+        "complete",
+        "injury"
+      ],
+      "actual": "Simpson to Messer for 19 yards. Tackled by Perkins.",
+      "latest": "Perkins (SAM) is hurt on the play and will not return."
+    },
+    {
+      "step": 66,
+      "events": [
+        "complete",
+        "two_minute"
+      ],
+      "actual": "Love to Hamilton on a screen for 2 yards. Tackled by Blood.",
+      "latest": "Two-minute warning."
+    },
+    {
+      "step": 68,
+      "events": [
+        "run",
+        "penalty"
+      ],
+      "actual": "Tomescko runs up the middle for 5 yards. Tackled by Blood. Play nullified by penalty.",
+      "latest": "Penalty, Offensive Holding on Freeling (offense), 10 yards."
+    },
+    {
+      "step": 97,
+      "events": [
+        "complete",
+        "extra_point"
+      ],
+      "actual": "Love to Carter for 9 yards. TOUCHDOWN.",
+      "latest": "Extra point is good."
+    },
+    {
+      "step": 105,
+      "events": [
+        "complete",
+        "extra_point"
+      ],
+      "actual": "Love to Knight for 81 yards. TOUCHDOWN.",
+      "latest": "Extra point is good."
+    },
+    {
+      "step": 117,
+      "events": [
+        "run",
+        "two_point"
+      ],
+      "actual": "Buxton runs it in from inside the 1. TOUCHDOWN.",
+      "latest": "Two-point try is GOOD."
+    },
+    {
+      "step": 124,
+      "events": [
+        "run",
+        "extra_point"
+      ],
+      "actual": "Wisner runs it in from inside the 1. TOUCHDOWN.",
+      "latest": "Extra point is good."
+    },
+    {
+      "step": 146,
+      "events": [
+        "complete",
+        "penalty"
+      ],
+      "actual": "Simpson to Brown on a screen for 3 yards. Tackled by Black. Play nullified by penalty.",
+      "latest": "Penalty, Defensive Holding on Perkins (defense), 5 yards, automatic first down."
+    },
+    {
+      "step": 147,
+      "events": [
+        "complete",
+        "penalty"
+      ],
+      "actual": "Simpson to Delp for 4 yards. Tackled by Biles. Play nullified by penalty.",
+      "latest": "Penalty, Offensive Holding on Davenport (offense), 10 yards."
+    },
+    {
+      "step": 149,
+      "events": [
+        "complete",
+        "penalty"
+      ],
+      "actual": "Simpson to Messer for 9 yards. Tackled by McDuffie. Play nullified by penalty.",
+      "latest": "Penalty, Illegal Block Above the Waist on Odem III (offense), 10 yards."
+    },
+    {
+      "step": 154,
+      "events": [
+        "run",
+        "timeout"
+      ],
+      "actual": "Knight runs on a trap for 2 yards. Tackled by Williams.",
+      "latest": "Timeout, DET (2 left)."
+    },
+    {
+      "step": 156,
+      "events": [
+        "run",
+        "two_minute"
+      ],
+      "actual": "Tomescko runs up the middle for 2 yards. Tackled by Rolder.",
+      "latest": "Two-minute warning."
+    }
+  ]
+}
