@@ -1965,14 +1965,14 @@ function offerForm(t, kind, onDone, preset) {
       el('div', { class: 'offer-live' }, 'LIVE CONTRACT PREVIEW')
     )
   );
-  const start = preset || {};
-  const startYears = Math.max(1, +(start.years || t.years || 3)); const startBonus = start.bonus != null ? +start.bonus : Math.round((t.ask || 1) * (t.years || 3) * 0.3 * 2) / 2;
-  const startApy = start.apy != null ? +start.apy : (t.ask ? t.ask * 0.97 : 1.0);
-  const salary = el('input', { type: 'number', step: '0.1', min: '0.5', value: Math.max(0.5, startApy - startBonus / startYears).toFixed(1) });
+  const start = preset || t.ask_offer || {};
+  const startYears = Math.max(1, +(start.years || t.years || 3)); const startBonus = start.bonus != null ? +start.bonus : 0;
+  const startApy = start.apy != null ? +start.apy : (t.ask || 1.0);
+  const salary = el('input', { type: 'number', step: 'any', min: '0', value: String(Number(Math.max(0, startApy - startBonus / startYears).toFixed(6))) });
   const apyOf = () => { const n = Math.max(1, +yrs.value || 1); return Math.round(((+salary.value || 0) + (+bonus.value || 0) / n) * 100) / 100; };
   const apy = { get value() { return String(apyOf()); } };
   const yrs = el('input', { type: 'number', min: '1', max: '7', value: String(start.years || t.years || 3) });
-  const bonus = el('input', { type: 'number', step: '0.5', min: '0', value: start.bonus != null ? String(start.bonus) : String(Math.round((t.ask || 1) * (t.years || 3) * 0.3 * 2) / 2) });
+  const bonus = el('input', { type: 'number', step: 'any', min: '0', value: String(startBonus) });
   const shapeChips = el('div', { class: 'chips' }); let shape = start.front_load == null ? 0.5 : +start.front_load;
   for (const [val, label] of [[0.85, 'Pay It Now'], [0.5, 'League Shape'], [0.15, 'Back-Load']]) shapeChips.append(el('button', { class: 'chip', 'aria-pressed': String(val === shape), onclick: e => { shape = val; shapeChips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); preview(); } }, label));
   const y1 = el('b', {}, '—'), total = el('b', {}, '—'); const hitsRow = el('div', { class: 'hits' }); const yearHits = el('div', { class: 'offer year-hits' });
