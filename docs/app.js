@@ -1016,7 +1016,7 @@ function renderBroadcastGameDay(page, v) {
   box.querySelector('h2').append(teamSelect);
   const columns={
     passing:[['C/A','ca'],['Yds','yds'],['TD','td'],['INT','int_'],['Sacks','sk'],['Lng','lng']],
-    rushing:[['Att','att'],['Yds','yds'],['Avg','avg'],['TD','td'],['Lng','lng'],['Fum Lost*','fum']],
+    rushing:[['Att','att'],['Yds','yds'],['Avg','avg'],['TD','td'],['Lng','lng'],['Fum Lost','fum']],
     receiving:[['Tgt','tgt'],['Rec','rec'],['Yds','yds'],['Avg','avg'],['TD','td'],['Lng','lng'],['Drops','drops']],
     defense:[['Tkl','tkl'],['Sacks','sk'],['Pressures','pressures'],['INT','int_'],['PD','pd'],['FF','ff'],['FR','fr'],['TD','td']],
     blocking:[['Pass Snaps','pb'],['Pass Win %','pb_pct'],['Pressures','pressures'],['Sacks','sk'],['Run Snaps','rb'],['Run Win %','rb_pct']],
@@ -1030,10 +1030,13 @@ function renderBroadcastGameDay(page, v) {
   box.append(tabs);
   const scroll=el('div',{class:'gd-player-scroll',tabindex:'0','aria-label':'Player statistics'}), table=el('table',{class:'gd-player-table'});
   const cols=[['Player','name'],...columns[state.category]];
-  const rows=(g.box?.[state.category] || []).filter(r=>state.team==='all'||r.team===state.team);
+  const offensiveLine=new Set(['LT','LG','C','RG','RT','OL','OT','OG','T','G']);
+  const rows=(g.box?.[state.category] || []).filter(r=>(state.team==='all'||r.team===state.team) && (state.category!=='blocking'||offensiveLine.has(String(r.pos||'').toUpperCase())));
+  const sortKey=state.sort || ({rushing:'att',receiving:'tgt',defense:'tkl'}[state.category] ?? null);
+  const sortDirection=state.sort ? state.direction : -1;
   const num=x=> typeof x==='string'&&/^\d+\/\d+$/.test(x) ? Number(x.split('/')[1]) : x;
-  if(state.sort) rows.sort((a,b)=>{const x=num(a[state.sort]),y=num(b[state.sort]);if(x==null)return y==null?0:1;if(y==null)return -1;return (typeof x==='string'?x.localeCompare(y):x-y)*state.direction});
-  const head=el('tr');for(const [label,k]of cols) head.append(el('th',{scope:'col','aria-sort':state.sort===k?(state.direction===1?'ascending':'descending'):'none'},el('button',{onclick:()=>{state.direction=state.sort===k?-state.direction:k==='name'?1:-1;state.sort=k;rerender()}},label,state.sort===k?(state.direction===1?' ↑':' ↓'):'')));
+  if(sortKey) rows.sort((a,b)=>{const x=num(a[sortKey]),y=num(b[sortKey]);if(x==null)return y==null?0:1;if(y==null)return -1;return (typeof x==='string'?x.localeCompare(y):x-y)*sortDirection});
+  const head=el('tr');for(const [label,k]of cols) head.append(el('th',{scope:'col','aria-sort':sortKey===k?(sortDirection===1?'ascending':'descending'):'none'},el('button',{onclick:()=>{state.direction=sortKey===k?-sortDirection:k==='name'?1:-1;state.sort=k;rerender()}},label,sortKey===k?(sortDirection===1?' ↑':' ↓'):'')));
   table.append(el('thead',{},head)); const tb=el('tbody');
   for(const r of rows) tb.append(el('tr',{},el('th',{scope:'row'},el('span',{class:'gd-player-name',style:`border-color:${r.team===g.away.abbr?aTheme.readable:hTheme.readable}`},r.pid?el('a',{href:`#club/player/${encodeURIComponent(r.pid)}`},r.name):r.name,small(`${showAbbr(r.team)}${r.pos?' · '+r.pos:''}`))),
     ...columns[state.category].map(([label,k])=>el('td',{},fmt(r[k])))));
@@ -1041,7 +1044,6 @@ function renderBroadcastGameDay(page, v) {
   table.append(tb);scroll.append(table);box.append(scroll);
   if(g.box_version !== 2)box.append(small('Older save: player lists may contain only the recorded leaders.'));
   if(state.category==='snaps')box.append(small('Offense and defense participation, including erased live plays and two-point attempts. Special teams snaps are not recorded.'));
-  if(state.category==='rushing')box.append(small('*Fumbles lost includes all of this player’s recorded touches.'));
   page.append(box);
 
   const lower=el('div',{class:'gd-lower c12'}),feed=panels('Play By Play','game-feed');

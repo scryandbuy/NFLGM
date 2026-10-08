@@ -65,6 +65,20 @@ function load(v){currentView=v;renderGameDay(v)}
   await page.getByRole('button',{name:category,exact:true}).click();
   assert.equal(Math.round((await page.locator('.gd-player-stats').boundingBox()).height),420);
   assert(await page.locator('.gd-player-table tbody tr').count()>0);
+  if(['Rushing','Receiving','Defense'].includes(category)){
+   const values=await page.locator('.gd-player-table tbody tr').evaluateAll(rows=>rows.map(r=>Number(r.querySelector('td').textContent)));
+   assert.deepEqual(values,[...values].sort((a,b)=>b-a),category+' starts with highest attempts, targets or tackles');
+   assert.equal(await page.locator('.gd-player-table th[aria-sort="descending"]').count(),1);
+  }
+  if(category==='Rushing'){
+   assert(await page.getByRole('button',{name:'Fum Lost',exact:true}).count());
+   assert.doesNotMatch(await page.locator('.gd-player-stats').innerText(),/Fum Lost\*|Fumbles lost includes/);
+  }
+  if(category==='Blocking'){
+   const expected=fixture('final').game.box.blocking.filter(r=>['LT','LG','C','RG','RT'].includes(r.pos)).map(r=>r.pid).sort();
+   const shown=await page.locator('.gd-player-table tbody a').evaluateAll(links=>links.map(a=>decodeURIComponent(a.getAttribute('href').split('/').at(-1))).sort());
+   assert.deepEqual(shown,expected,'blocking shows every recorded offensive lineman and no skill players');
+  }
  }
  await page.getByRole('button',{name:'Defense',exact:true}).click();
  await page.getByRole('button',{name:'Sacks',exact:true}).click();
