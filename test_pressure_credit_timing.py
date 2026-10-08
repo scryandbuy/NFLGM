@@ -22,12 +22,12 @@ class PressureCreditTiming(unittest.TestCase):
         out=self.resolve('incomplete',[('first',1.5),('late',2.)],throwaway=True)
         self.assertEqual(out['rush_pressures'],['first'])
 
-    def test_mild_pressure_and_successful_pass_still_count(self):
+    def test_marginal_arrival_is_not_pressure(self):
         out=self.resolve('complete',[('mild',3.49),('too_late',3.6)])
-        self.assertEqual(out['rush_pressures'],['mild'])
+        self.assertEqual(out['rush_pressures'],[])
 
     def test_late_checkdown_does_not_rewind_window(self):
-        out=self.resolve('complete',[('rusher',3.2)],depth='short',read='checkdown')
+        out=self.resolve('complete',[('rusher',2.9)],depth='short',read='checkdown')
         self.assertEqual(out['rush_pressures'],['rusher'])
 
     def test_sacker_after_planned_window_still_counts(self):

@@ -4229,6 +4229,8 @@ class StatBook:
         for pid, won in out.get('pb_reps') or ():
             l = self._get(pid)
             l['pb_snaps'] += 1
+            if out.get('pressure_version') == 2:
+                l['pressure_version'] = 2
             l['pb_wins'] += 1 if won else 0
             if not won and out.get('pressured'):
                 l['pressures_allowed'] += 1

@@ -19,6 +19,7 @@ week's changes, and the state's plan resets when the game ends.
 """
 import numpy as np, collections, re
 from coaching_choices import evidence, resolve
+from pressure_evidence import disrupted, VERSION as PRESSURE_VERSION
 
 TEND_KEYS = ('plays', 'passes', 'pa', 'motion', 'deep', 'fourth_go', 'fourth_opp', 'def_snaps', 'def_pass_snaps', 'measured_man', 'blitz', 'man', 'two_high', 'box8', 'shadow', 'bracket', 'pressure_dropbacks', 'pressured_dropbacks', 'blitz_dropbacks', 'blitz_disruptions')
 TWO_HIGH = {'cover_2', 'cover_4', 'cover_6', 'two_man', 'tampa_2', 'quarters'}
@@ -32,6 +33,10 @@ def record_game(league, home, away, res):
         league.tendencies = {}; T = league.tendencies.setdefault(league.year, {})
     for abbr in (home, away):
         T.setdefault(abbr, collections.Counter())
+        if T[abbr].get('pressure_version') != PRESSURE_VERSION:
+            for key in ('pressure_dropbacks', 'pressured_dropbacks', 'blitz_dropbacks', 'blitz_disruptions'):
+                T[abbr][key] = 0
+            T[abbr]['pressure_version'] = PRESSURE_VERSION
     for pos, d in res['drives']:
         off = home if pos == 'home' else away; deff = away if pos == 'home' else home
         to, td = T[off], T[deff]
@@ -43,11 +48,11 @@ def record_game(league, home, away, res):
             to['motion'] += bool(l.get('motion'))
             if l.get('down') == 4: to['fourth_opp'] += 1; to['fourth_go'] += 1
             if not l.get('nullified') and (l.get('is_pass') or l.get('type') in ('complete','incomplete','sack','scramble','interception','drop')) and ('pressured' in l or l.get('type') == 'sack'):
-                disrupted = bool(l.get('pressured') or l.get('type') == 'sack')
+                pressure_hit = disrupted(l)
                 td['pressure_dropbacks'] += 1
-                td['pressured_dropbacks'] += disrupted
+                td['pressured_dropbacks'] += pressure_hit
                 td['blitz_dropbacks'] += bool(l.get('blitz'))
-                td['blitz_disruptions'] += bool(l.get('blitz')) and disrupted
+                td['blitz_disruptions'] += bool(l.get('blitz')) and pressure_hit
             td['blitz'] += bool(l.get('blitz')); td['man'] += bool(l.get('in_man')) if l.get('is_pass') else 0
             # Keep paired evidence from the same observed calls. Old saves
             # have a man numerator but no defensive pass denominator; never
@@ -185,6 +190,8 @@ def _recent_protection(league, abbr, week):
         sack_games += game_dropbacks >= 20 and game_sacks / max(1, game_dropbacks) >= .07
         for pid, s in lines.items():
             dropbacks += s.get('pass_plays', 0); sacks += s.get('sacked', 0)
+            if s.get('pressure_version') != PRESSURE_VERSION:
+                continue
             blocking[pid]['reps'] += s.get('pb_snaps', 0)
             blocking[pid]['pressures'] += s.get('pressures_allowed', 0)
             reps = s.get('pb_snaps', 0)
@@ -362,7 +369,7 @@ def scouting_suggestions(league, me, opp, all_grades=None):
 
 def pressure_advice(counts, read, plan, screen_fit=False):
     """Require measured disruption plus vulnerability, not blitz frequency alone."""
-    sample = counts.get('pressure_dropbacks', 0)
+    sample = counts.get('pressure_dropbacks', 0) if counts.get('pressure_version') == PRESSURE_VERSION else 0
     rate = counts.get('pressured_dropbacks', 0) / max(1, sample)
     gap = max((r['gap'] for r in read['matchups']), default=0)
     if sample < 60 or rate < .28 or (gap < 3 and not read['recommend']):

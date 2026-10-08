@@ -2,7 +2,7 @@ import re
 """Assemble docs/engine from the repo: the modules a session imports and the data they read."""
 import json, os, shutil, sys, importlib
 HERE = os.path.dirname(os.path.abspath(__file__)); OUT = os.path.join(HERE, 'docs', 'engine')
-MODULES = ['halftime', 'staff_traits', 'club_notes', 'league_notes', 'adjust', 'advanced_stats', 'almanac', 'awards', 'cap_engine', 'cap_accounting', 'coaching_pool', 'contract_structure', 'contracts', 'coverage', 'coverage_call', 'cutdown', 'decisions',
+MODULES = ['pressure_evidence', 'halftime', 'staff_traits', 'club_notes', 'league_notes', 'adjust', 'advanced_stats', 'almanac', 'awards', 'cap_engine', 'cap_accounting', 'coaching_pool', 'contract_structure', 'contracts', 'coverage', 'coverage_call', 'cutdown', 'decisions',
            'dev_roll', 'defense_roles', 'defensive_rush', 'offense_roles', 'draft', 'draft_plan', 'draft_class', 'draft_balance', 'events', 'extensions', 'firing_model', 'formations', 'franchise', 'free_agency', 'game', 'gameplan', 'gameplan_week', 'gm_engine', 'contract_terms',
            'health', 'identity', 'identity_catalog', 'inbox', 'inbox_events', 'injury_status', 'ir_and_hiring', 'league', 'market', 'matchups', 'min_salary', 'morale', 'morale_system',
            'negotiation_engine', 'negotiations', 'newgens', 'otc_2026', 'offer_reservations', 'personality', 'player_background', 'player_roles', 'playcall', 'plays', 'position_change', 'postseason', 'practice_squad', 'progression_engine',

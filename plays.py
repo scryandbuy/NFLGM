@@ -915,7 +915,9 @@ def _pass_play(off, deff, off_call, def_call, ytg, rng):
     # block win. Screens/quick throws can escape a win; late sacks still count.
     release = timing.get('release', BASE_TTT + HOLD_BY_DEPTH.get('screen' if out.get('screen') else out.get('depth', 'medium'), 0.))
     cutoff = pressure_credit_end(out, release, arrivals)
-    pressures = {pid for pid, arrival in arrivals if pid and arrival <= cutoff}
+    from pressure_evidence import credited_rushers, VERSION
+    pressures = credited_rushers(out, release, arrivals, cutoff)
+    out['pressure_version'] = VERSION
     if out.get('type') == 'sack' and out.get('by'):
         pressures.update(pid for pid, _credit in RM.credited_sackers(out))
     out['pressure_credit_end'] = cutoff

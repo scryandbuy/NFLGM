@@ -6,6 +6,7 @@ same way, and what he accepts is applied to the plan the second half reads.
 """
 import numpy as np
 from coaching_choices import evidence, resolve
+from pressure_evidence import disrupted
 
 SCRIM = ('run', 'scramble', 'complete', 'incomplete', 'drop', 'interception', 'sack')
 
@@ -30,7 +31,7 @@ def first_half(drives, me_side, legacy=False):
                 if not legacy or ty in ('complete', 'sack'): t['pass_yds'] += y
                 if ty == 'complete': t['cmp'] += 1
                 if ty == 'sack': t['sacks'] += 1
-                if p.get('pressured') and (legacy or ty != 'sack'): t['pressures'] += 1
+                if (p.get('pressured') if legacy else disrupted(p)) and (legacy or ty != 'sack'): t['pressures'] += 1
                 if p.get('screen'): t['screens'] += 1; t['screen_yds'] += y
                 if (p.get('depth') or '') == 'deep' or float(p.get('air', 0) or 0) >= 20:
                     t['deep'] += 1
