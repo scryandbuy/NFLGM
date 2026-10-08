@@ -56,6 +56,19 @@ IR_RETURNS_PER_TEAM = 8   # a club may bring back eight in a season
 IR_DESIGNATIONS_PER_PLAYER = 2
 
 
+def concussion_restricted(player, week=None):
+    """An active concussion cannot be played through, including legacy saves.
+
+    The existing injury return week represents clearance; a historical injury
+    label on an otherwise healthy player is not a new medical restriction.
+    """
+    if str(player.xp_spent.get('_inj_kind') or '').casefold() != 'concussion':
+        return False
+    dates = (player.out_until, player.xp_spent.get('_hurt_until'))
+    return any(until is not None and (week is None or int(until) >= 99
+                                     or int(until) > week) for until in dates)
+
+
 def clear_recovered(league, week, desks=None):
     """out_until is the first healthy week, including in existing saves.
 
@@ -63,7 +76,17 @@ def clear_recovered(league, week, desks=None):
     or repeat CPU transactions when opening a saved decision week.
     """
     recovered = set()
+    restricted = set()
     for p in league.players.values():
+        if concussion_restricted(p, week):
+            # Older unanswered prompts could clear out_until through the
+            # generic play-hurt fallback. Restore the original return date.
+            p.out_until = max(int(until) for until in
+                             (p.out_until, p.xp_spent.get('_hurt_until'))
+                             if until is not None)
+            p.xp_spent.pop('_hurt_until', None)
+            p.xp_spent.pop('_hurt_desig', None)
+            restricted.add(p.pid)
         if p.out_until is not None and int(p.out_until) < 99 and int(p.out_until) <= week:
             p.out_until = None
             recovered.add(p.pid)
@@ -73,12 +96,18 @@ def clear_recovered(league, week, desks=None):
             p.xp_spent.pop('_hurt_desig', None)
             recovered.add(p.pid)
     for desk in (desks or {}).values():
+        for pid in restricted:
+            # Only alter this team's existing listing, not every team's desk.
+            if any(pid in getattr(desk, field) for field in ('status', 'pending', 'playing_hurt')):
+                desk.status[pid] = 'ir' if desk.status.get(pid) == 'ir' else 'out'
+                desk.pending.pop(pid, None)
+                desk.playing_hurt.pop(pid, None)
         for pid in recovered:
             for field in ('status', 'pending', 'playing_hurt'):
                 getattr(desk, field).pop(pid, None)
     for message in getattr(league, 'inbox', []):
         if (message.get('kind') == 'injury_decision'
-                and (message.get('payload') or {}).get('pid') in recovered
+                and (message.get('payload') or {}).get('pid') in recovered | restricted
                 and message.get('status') in ('unread', 'open')):
             message['status'] = 'done'
     return recovered
@@ -154,13 +183,16 @@ def hurt_words(league, team, p, desig, mentions=False):
     from views import surname, sentence
     label = lambda q: inbox_player(q, surname(q.name)) if mentions else surname(q.name)
     kind = str(p.xp_spent.get('_inj_kind') or 'knock')
+    if kind.casefold() == 'concussion':
+        return (f"{label(p)} is out while in concussion protocol. He cannot play until medically cleared."
+                if concussion_restricted(p) else f"{label(p)} has cleared concussion protocol.")
     hits, risk = hurt_profile(p, desig)
     d = [q for q in team.depth.get(p.pos, []) if q.pid != p.pid and q.out_until is None]
     backup = d[0] if d else None
     cost = {'Hamstring': 'he will not have his top gear', 'Calf': 'he will not have his top gear', 'Groin': 'he will be a step slow', 'Quadricep': 'he will be a step slow',
             'Ankle': 'his cuts will not be sharp', 'Foot': 'his cuts will not be sharp', 'Toe': 'his cuts will not be sharp', 'Knee': 'he will play well short of himself',
             'Shoulder': 'his hands and his strength at the point will be off', 'Elbow': 'his hands will be off', 'Hand': 'his hands will be off', 'Back': 'his strength will be down', 'Hip': 'he will be stiff',
-            'Neck': 'he will not be at full strength', 'Pectoral': 'his strength will be down', 'Concussion': 'he is cleared and should be himself', 'Illness': 'he will tire early'}.get(kind, 'he will not be at full strength')
+            'Neck': 'he will not be at full strength', 'Pectoral': 'his strength will be down', 'Illness': 'he will tire early'}.get(kind, 'he will not be at full strength')
     if risk >= 0.15: risk_w = f"a {kind.lower()} that goes again costs him a couple more weeks, and this one is the kind that goes again"
     elif risk >= 0.07: risk_w = f"there is some risk the {kind.lower()} gets worse, a week or two if it does"
     elif risk > 0: risk_w = f"the risk of making the {kind.lower()} worse is small"
@@ -372,9 +404,7 @@ class InjuryDesk:
                 continue
 
             tough = float(p.ratings.get('tough_rating', 70)) / 100.0
-            d = designation(left, rng, tough)
-            # concussion protocol: never better than Doubtful the first week, and never played through
-            if str(p.xp_spent.get('_inj_kind') or '') == 'Concussion' and d == 'questionable' and left >= 1 and int(p.xp_spent.get('_inj_week', 0) or 0) >= week - 1: d = 'doubtful'
+            d = 'out' if concussion_restricted(p) else designation(left, rng, tough)
             self.status[p.pid] = d
             if has_game and d in ('questionable', 'doubtful'):
                 if team.abbr == getattr(league, 'user_team', None):
@@ -392,7 +422,7 @@ class InjuryDesk:
     def _ai_plays(self, team, p, d, rng):
         """Expected value, not a coin flip: he plays when his hit-adjusted grade still beats the backup
         and the flare is not likely; a concussion never plays."""
-        if str(p.xp_spent.get('_inj_kind') or '') == 'Concussion': return False
+        if concussion_restricted(p): return False
         hits, risk = hurt_profile(p, d)
         import targets as TG
         adj = TG.position_score(dict(p.ratings, **{a: p.ratings[a] + v for a, v in hits.items()}), p.pos)
@@ -405,11 +435,22 @@ class InjuryDesk:
 
     def play_through(self, league, team, p, d):
         """He is going. It costs him on the field and it can flare."""
+        if concussion_restricted(p):
+            self.status[p.pid] = 'out'
+            self.pending.pop(p.pid, None)
+            self.playing_hurt.pop(p.pid, None)
+            p.out_until = max(int(until) for until in
+                             (p.out_until, p.xp_spent.get('_hurt_until'))
+                             if until is not None)
+            p.xp_spent.pop('_hurt_until', None)
+            p.xp_spent.pop('_hurt_desig', None)
+            return False
         self.playing_hurt[p.pid] = d
         self.pending.pop(p.pid, None)
         p.xp_spent['_hurt_desig'] = d; p.xp_spent['_hurt_until'] = p.out_until
         p.out_until = None
         league.log('played_hurt', pid=p.pid, team=team.abbr, listed=d)
+        return True
 
     def sit(self, p):
         self.pending.pop(p.pid, None)
@@ -423,6 +464,9 @@ class InjuryDesk:
             p = league.player(pid)
             if p is None or p.retired or p.team != team.abbr:
                 self.pending.pop(pid, None)
+                continue
+            if concussion_restricted(p):
+                self.play_through(league, team, p, d)  # Reject stale prompts without a play-rate roll.
                 continue
             if will_play(d, rng): self.play_through(league, team, p, d)
             else: self.pending.pop(pid, None)
@@ -466,6 +510,8 @@ class InjuryDesk:
 
     def available(self, player, week):
         """Is he on the field this Sunday?"""
+        if concussion_restricted(player):
+            return False
         if player.pid in self.ir:
             return False
         if player.pid in self.playing_hurt:

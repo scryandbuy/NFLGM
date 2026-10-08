@@ -54,7 +54,11 @@ class Snapshot:
 
     def prepare(self, data, default):
         marker = json.dumps([data.get('year'), data.get('_stop')], separators=(',', ':'))
-        reset = not self.revision or marker != self.marker
+        # A calendar change is ordinary saved data, not a new franchise.
+        # Every record is fingerprinted below, including removals and archives.
+        # Initial saves and recovery after a failed transaction still checkpoint;
+        # the browser validates the epoch/base revision and commits atomically.
+        reset = not self.revision
         puts, hashes = {}, {}
         for key, value in records(data):
             # This is an internal fingerprint only; persisted data stays JSON.

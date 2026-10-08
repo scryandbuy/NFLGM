@@ -59,7 +59,7 @@ assert.equal(links(legacyRendered)[0].attrs.href,'#club/player/trey');
 assert.deepEqual(all(legacyRendered).filter(n=>n.theme).map(n=>n.theme),['NJ','DAL','BUF','NO']);
 const textOf = n => typeof n === 'string' ? n : n.text || (n.children || []).map(textOf).join(' ');
 const tradeText = textOf(legacyRendered);
-assert.ok(tradeText.includes('Round 2, Round 2'));
+assert.ok(tradeText.includes('2032 R2/R2'));
 assert.ok(tradeText.includes('2032 R4 (GB)'));
 assert.ok(tradeText.includes('A signing remains visible.'));
 assert.ok(!tradeText.includes('make a trade'));

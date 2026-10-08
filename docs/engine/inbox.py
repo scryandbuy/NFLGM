@@ -716,6 +716,8 @@ def reconcile(league):
                 done = all(mt.get('answer') or league.player(mt.get('pid')) is None for mt in meetings)
             done = done or (year is not None and m.get('year', year) < year)
         elif kind == 'injury_decision':
+            import injury_status as IS
+            injured = league.player(pl.get('pid'))
             # Legacy listings were posted before the league clock rolled, so
             # their message week may be one week behind the actual decision.
             # Their expiry was target + 1; new listings use target for both.
@@ -726,6 +728,8 @@ def reconcile(league):
                 m['expires_week'] = expiry - 1
             done = ((year is not None and m.get('year', year) != year)
                     or (week is not None and m.get('week', week) < week))
+            if injured is not None and IS.concussion_restricted(injured):
+                done = True  # Medical clearance is not a GM play-or-sit decision.
             schedule = getattr(league, 'schedule', None)
             target_week = m.get('week', week)
             if schedule is not None and target_week is not None:
