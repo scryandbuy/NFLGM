@@ -925,9 +925,6 @@ function renderBroadcastGameDay(page, v) {
   const indicators = gameDayIndicators(g, g.drives.length, null, live, v.week >= 19);
   const aTheme = teamTheme(g.away), hTheme = teamTheme(g.home);
   page.style.setProperty('--gd-away', aTheme.readable); page.style.setProperty('--gd-home', hTheme.readable);
-  const heading = el('header', {class:'gd-heading c12'}, el('div', {}, small(`${weekName(v.week)} · ${v.year || v.rail.year}`), el('h1', {}, 'Game Day')),
-    small(g.env?.conditions || ''));
-  page.append(heading);
   const scoreboard = el('section', {class:'gd-score game-scoreboard c12', 'aria-label':'Scoreboard'});
   const side = (team, score, record, home) => {
     const theme = teamTheme(team);
@@ -972,6 +969,7 @@ function renderBroadcastGameDay(page, v) {
 
   const upper = el('div', {class:'gd-upper c12'}), left = el('div', {class:'gd-live-column'});
   const fieldPanel = panels(live?.field ? `${teamName(live.field.off)} Possession` : live?.halftime_open ? period : live ? 'On the Field' : 'Final Whistle');
+  if(g.env?.conditions)fieldPanel.querySelector('h2').append(small(g.env.conditions));
   const field = live?.field;
   const fieldWrap = el('div', {class:'gd-field-wrap'});
   fieldWrap.append(gameDayField(g, field));
@@ -980,8 +978,6 @@ function renderBroadcastGameDay(page, v) {
   fieldPanel.append(fieldWrap);
   if (drive) fieldPanel.append(el('div', {class:'gd-current-drive'}, small(`Drive ${drive.n} · ${showAbbr(drive.off)}`),
     el('b', {}, `${drive.plays_n} ${drive.plays_n===1?'play':'plays'} · ${drive.yards} yards`), small(drive.result || 'In progress')));
-  fieldPanel.append(el('div', {class:'gd-latest', 'aria-live':'polite'}, small('Latest Play'),
-    el('strong', {}, last ? showTeamText(last.text) : 'Ready for kickoff.'), small(last?.head ? showTeamText(last.head) : '')));
   left.append(fieldPanel);
   const injuries = g.injuries ? g.injuries.map(i=>({injury:i})) : allPlays.filter(p=>p.type==='injury' && p.text);
   const injuryBox = el('details', {class:'gd-injuries'}, el('summary', {}, el('b', {}, 'Injury Update'), small(injuries.length ? `${injuries.length} reported` : 'No injuries reported')));
@@ -1050,7 +1046,7 @@ function renderBroadcastGameDay(page, v) {
 
   const lower=el('div',{class:'gd-lower c12'}),feed=panels('Play By Play','game-feed');
   const filter=el('div',{class:'gd-tabs'});
-  for(const [id,label]of [['all','Every Play'],['score','Scoring']])filter.append(button(label,()=>{state.filter=id;rerender()},state.filter===id));
+  for(const [id,label]of [['all','Every Play'],['score','Scoring']])filter.append(button(label,()=>{state.filter=id;state.followLatest=true;rerender()},state.filter===id));
   const copy=el('button',{class:'btn',onclick:()=>copyText(showTeamText([`${g.away.name} at ${g.home.name} · ${weekName(v.week)}`,...g.drives.flatMap(d=>[d.head,...(d.plays||[]).filter(p=>p.text&&(state.filter==='all'||(!p.nullified&&p.kind==='score'))).map(p=>[p.head,p.text].filter(Boolean).join(' '))])].join('\n')),copy)},'Copy');filter.append(copy);feed.append(filter);
   const log=el('div',{class:'gd-log',tabindex:'0','aria-label':'Play by play'});
   for(const d of g.drives) {
@@ -1059,7 +1055,7 @@ function renderBroadcastGameDay(page, v) {
     for(const p of plays)log.append(el('div',{class:'gd-play '+p.kind},small(showTeamText(p.head||'')),el('div',{},showTeamText(p.text))));
   }
   if(!log.children.length)log.append(el('div',{class:'gd-empty'},state.filter==='score'?'No scoring plays yet.':'Ready for kickoff.'));
-  feed.append(log);lower.append(feed);
+  feed.append(log);fieldPanel.append(feed);
   const me=g.me_home?g.home:g.away,drives=panels(`${me.name} Drives`,'gd-drives');
   const drivesBody=el('div',{class:'gd-drive-scroll',tabindex:'0','aria-label':`${me.name} drives`});
   for(const d of g.drives.filter(d=>d.off===me.abbr)) {
@@ -1072,7 +1068,12 @@ function renderBroadcastGameDay(page, v) {
   if(!live && g.reads?.length)page.append(el('details',{class:'gd-read c12'},el('summary',{},"Assistants’ Read"),...g.reads.map(r=>el('p',{},r))));
   const leagueScores=el('details',{class:'gd-read c12'},el('summary',{},'Around the League'),el('div',{class:'gd-league-scores'},...(v.scores||[]).filter(s=>!s.mine).map(s=>el('div',{},small('Final'),el('b',{},`${showAbbr(s.away.abbr)} ${s.as_} · ${showAbbr(s.home.abbr)} ${s.hs}${s.ot?' OT':''}`)))));
   if((v.scores||[]).some(s=>!s.mine))page.append(leagueScores);
-  log.scrollTop=log.scrollHeight;
+  log.scrollTop=state.followLatest===false ? (state.logScroll || 0) : log.scrollHeight;
+  log.addEventListener('scroll',()=>{
+    if(!log.isConnected)return;
+    state.logScroll=log.scrollTop;
+    state.followLatest=log.scrollHeight-log.clientHeight-log.scrollTop<8;
+  });
 }
 
 function gameDayField(g, field) {
