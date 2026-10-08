@@ -931,10 +931,12 @@ def act_hurt_decision(league, abbr, pid, play=True, session=None):
     desk = runner.desks.get(abbr) if runner is not None else None
     p = league.player(pid); t = league.teams[abbr]
     if desk is None or p is None: return dict(ok=False, why='no injury desk this week')
+    import injury_status as IS
+    if play and IS.concussion_restricted(p):
+        return dict(ok=False, why='Concussion protocol: he is out until medically cleared.')
     d = desk.pending.get(pid) or desk.status.get(pid)
     if d not in ('questionable', 'doubtful'): return dict(ok=False, why='he is not listed Questionable or Doubtful')
     if play:
-        if str(p.xp_spent.get('_inj_kind') or '') == 'Concussion': return dict(ok=False, why='concussion protocol: he cannot play through it')
         desk.play_through(league, t, p, d); runner.refresh(abbr)
         line = f"{p.name} plays Sunday, listed {d}."
     else:
