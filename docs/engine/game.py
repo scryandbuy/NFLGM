@@ -1876,7 +1876,7 @@ def _resolve_live_penalty(dr, pen, out, oc):
     """
     A foul during or after the play. Returns 'replaced' if the penalty is taken instead of the play, 'added' if
     it is tacked on after it, 'enforced' for a retained gain with live-foul
-    down enforcement already applied, None if declined.
+    down enforcement already applied, 'invalid' for an inapplicable flag, None if declined.
 
     THE RULE: the side that did not foul looks at both outcomes, the play standing and the penalty enforced, and
     takes whichever is better for it. Both are whole game states (down, distance, spot, possession) valued in
@@ -1894,11 +1894,13 @@ def _resolve_live_penalty(dr, pen, out, oc):
     # FOULS THAT DEPEND ON HOW THE PLAY ENDED. Grounding is a throw away to nobody: it needs an incompletion, and
     # on a completion, a pick or a sack there was no grounding. Ineligible downfield needs a ball thrown at all.
     if pen['penalty'] == 'Intentional Grounding' and not (out.get('type') == 'incomplete' and out.get('throwaway') and out.get('pressured')):
-        return None
+        return 'invalid'
     if pen['penalty'] == 'Ineligible Downfield Pass' and not thrown:
-        return None
-    if pen['penalty'] in ('Roughing the Passer', 'Illegal Contact') and not thrown:
-        return None
+        return 'invalid'
+    if pen['penalty'] == 'Roughing the Passer' and not thrown:
+        return 'invalid'
+    # Illegal contact can occur in the pocket before a scramble or sack.
+    # The final play type does not erase that earlier foul.
     if pen['penalty'] == 'Defensive Pass Interference' and not downfield:
         pen['penalty'] = 'Defensive Holding'; pen['yards'] = pen['rule_yards'] = 5.0; pen['auto_first'] = True
     elif pen['penalty'] == 'Offensive Pass Interference' and not downfield:
@@ -3397,9 +3399,10 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if live_pen['penalty'] != original_foul:
                 rows = off_rows if live_pen['on_offense'] else def_rows
                 live_pen = PP.attribute(live_pen, PP.profile(live_pen['penalty'], rows, out), rng)
-            PP.decision(live_pen, taken in ('replaced', 'enforced', 'added'))
-            PP.book_flag(book, live_pen)
-            if live_pen['declined']:
+            if taken != 'invalid':
+                PP.decision(live_pen, taken in ('replaced', 'enforced', 'added'))
+                PP.book_flag(book, live_pen)
+            if taken != 'invalid' and live_pen['declined']:
                 # Keep declined evidence on the play, without creating an
                 # enforced-penalty row in legacy team aggregate consumers.
                 out['declined_penalty'] = dict(live_pen)
