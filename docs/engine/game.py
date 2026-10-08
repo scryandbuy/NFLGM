@@ -387,6 +387,15 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     if 40 <= yardline_100 <= 60 and ydstogo <= 4 and secs_left > 300 and not chasing:
         p_go = float(np.clip(p_go + PST.flow_adjustment(aggression, defensive_confidence,
                              punt_value['inside20'] if punt_value else 0.), 0, 1))
+    # Ordinary long-yardage gambles deep in our own territory need more
+    # support than the table's pooled attempt rate. Smoothly suppress them
+    # when the actual comparison strongly favors punting; do not ban them,
+    # or constrain short yardage, favorable edges, or comeback urgency.
+    if not chasing and r is not None and r.get('optimal') == 'punt':
+        depth_risk = float(np.clip((yardline_100 - 60.) / 12., 0., 1.))
+        distance_risk = float(np.clip((ydstogo - 3.) / 5., 0., 1.))
+        disadvantage = max(0., -float(r.get('go_boost', 0.)) - .02)
+        p_go *= float(np.exp(-depth_risk * distance_risk * disadvantage / .008))
     if ydstogo > 8 and not chasing:
         p_go *= DEC.fourth_conversion(ydstogo) / DEC.FOURTH_CONV[8]
         if ydstogo >= 15 and (r is None or r.get('go_boost', 0.0) <= 0):
