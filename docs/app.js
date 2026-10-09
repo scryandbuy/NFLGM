@@ -946,11 +946,10 @@ function renderBroadcastGameDay(page, v) {
     ...Array.from({length:hasOT ? 5 : 4}, (_,i) => el('td', {class:live && i+1===quarter ? 'current' : ''}, live && i+1>quarter ? '—' : fmt(g.quarters?.[team.abbr]?.[i]))), el('td', {}, total)));
   quarters.append(qbody); page.append(el('div', {class:'gd-quarter-strip c12'}, quarters));
 
-  const controls = el('div', {class:'gd-global-controls c12'});
+  const controls = el('div', {class:'gd-global-controls'});
   if (live) for (const [mode,label] of [['play','Next Play'],['drive','Next Drive'],['finish','To Final']]) controls.append(el('button', {
     class:'btn' + (mode==='drive' ? ' go' : ''), disabled:live.halftime_open ? '' : null,
     'data-live-step':mode, onclick:event=>advanceGameDay(mode,event)}, label));
-  else controls.append(el('strong', {}, hs === as ? 'Final · Tie game' : `Final · ${hs > as ? g.home.name : g.away.name} wins`));
   const overtime = live?.adjustment_period === 'overtime';
   const breakKey = `${g.home.abbr}-${g.away.abbr}-${v.week}-${v.year || v.rail.year}-${overtime ? 'overtime' : 'halftime'}`;
   const confirmed = !!halfConfirmed[breakKey];
@@ -965,7 +964,6 @@ function renderBroadcastGameDay(page, v) {
     plan.append(el('div', {class:'gd-plan-body'}, ...(rows?.length ? rows.map(r=>el('p', {}, el('b', {}, r.taken ? 'Accepted · ' : 'Not accepted · '), r.text)) : [small(live && quarter <= 2 ? 'Available at halftime.' : 'No saved halftime recommendations available.')] )));
     controls.append(plan);
   }
-  page.append(controls);
 
   const upper = el('div', {class:'gd-upper c12'}), left = el('div', {class:'gd-live-column'});
   const fieldPanel = panels(live?.field ? `${teamName(live.field.off)} Possession` : live?.halftime_open ? period : live ? 'On the Field' : 'Final Whistle');
@@ -975,7 +973,7 @@ function renderBroadcastGameDay(page, v) {
   fieldWrap.append(gameDayField(g, field));
   fieldWrap.append(el('div', {class:'gd-field-caption'}, el('b', {}, field ? `${field.down}${ord(field.down)} & ${field.distance} · ${showTeamText(field.spot)}` : live ? live.halftime_open ? `Paused for ${period.toLowerCase()} decisions` : 'Waiting for the next snap' : `${g.away.name} ${as} · ${g.home.name} ${hs}`),
     small(field ? `${showAbbr(field.off)} attacking ${field.off === g.away.abbr ? '→' : '←'}` : '')));
-  fieldPanel.append(fieldWrap);
+  fieldPanel.append(fieldWrap, controls);
   if (drive) fieldPanel.append(el('div', {class:'gd-current-drive'}, small(`Drive ${drive.n} · ${showAbbr(drive.off)}`),
     el('b', {}, `${drive.plays_n} ${drive.plays_n===1?'play':'plays'} · ${drive.yards} yards`), small(drive.result || 'In progress')));
   left.append(fieldPanel);

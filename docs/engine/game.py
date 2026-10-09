@@ -1246,6 +1246,19 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
         # the defense stops the clock in the last three minutes of the GAME when it trails; in the first
         # half only a two-score deficit is worth a timeout to get the ball back before the break
         if dr.score_diff > 0 and in_bounds and timeouts.left.get(other, 0) > 0 and half_end is None and secs_in_half < 180:
+            # Evaluate the new series before spending a stop. The kneel path
+            # already does this, but a normal completion/run can also end the game.
+            after = copy.copy(dr)
+            gain = float(out.get('yards', 0) or 0)
+            if not out.get('fumble'):
+                gain = float(np.round(gain))
+            after.yardline = dr.yardline - gain
+            after.down = 1 if gain >= getattr(dr, 'togo', 10) - .01 else getattr(dr, 'down', 1) + 1
+            if (getattr(dr, 'quarter', 4) == 4 and
+                    not _kneel_timeout_can_force_possession(live_remaining, after.down,
+                        timeouts.left[other] - 1, not getattr(dr, '_two_min', False)) and
+                    _can_kneel_out(after, live_remaining, timeouts.left[other] - 1)):
+                return False, None
             used = timeouts.use(other); used_by = other                    # the end of the game: the trailing defense stops the clock
         elif dr.score_diff > 0 and in_bounds and timeouts.left.get(other, 0) > 0 and half_end is not None and (plan is None or not plan.get('hurry', True)):
             # BEFORE THE HALF the trailing defense buys time back only when it is worth a possession: the offense
