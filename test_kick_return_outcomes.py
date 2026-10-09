@@ -195,7 +195,7 @@ class ReturnTests(unittest.TestCase):
         import game_recap
         dr,b=self.punt_drive(self.punt(touchdown=False,fumble=True,fumble_lost=True,
                             fumble_by='pr',recoverer='cov',ret=10,new_yardline=60))
-        names={pid:NS(pid=pid,name=pid) for pid in b.p}
+        names={pid:NS(pid=pid,name=pid,pos='WR') for pid in b.p}
         league=NS(week=1,player=lambda pid:names.get(pid),teams={
             'GB':NS(roster=[p for pid,p in names.items() if pid!='pr']),
             'MIN':NS(roster=[names['pr']])})

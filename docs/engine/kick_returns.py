@@ -3,6 +3,11 @@ import numpy as np
 import events
 from matchups import YAC
 
+KICKOFF_CONTAIN_LEVERAGE = .15
+# Breaking the first wave is possible, but full-width lanes should be rare
+# with the dynamic kickoff's coverage already spread across the field.
+KICKOFF_BREAKAWAY_BASE = .025
+KICKOFF_BREAKAWAY_UPPER = .060
 
 def unit(roster, state, rate, blocking=False, exclude=None):
     """Healthy coverage/return personnel from existing depth, with unique players."""
@@ -143,7 +148,12 @@ def _kickoff_breakaway(start, gained, returner, coverage, kicker, rng, rate):
     attack = max(rate(returner, YAC['carrier']['elusive']), rate(returner, YAC['carrier']['power']))
     attack += .30 * (rate(returner, YAC['carrier']['vision']) - .70)
     for contact, defender, record in sorted(reachable, key=lambda row: (row[0], str(row[1].get('pid', '')))):
-        missed = rng.random() <= plays.logistic(plays.edge(attack, rate(defender, YAC['tackler']['wrap'])) - .230, k=7.)
+        wrap = rate(defender, YAC['tackler']['wrap'])
+        if record['leverage'] == 'contain':
+            # A defender holding the outside lane can force the runner toward
+            # help even when the returner has the better open-field skill.
+            wrap = min(1., wrap + KICKOFF_CONTAIN_LEVERAGE)
+        missed = rng.random() <= plays.logistic(plays.edge(attack, wrap) - .230, k=7.)
         record['missed'] = bool(missed)
         trace.append(record)
         if not missed:
@@ -164,14 +174,15 @@ def resolve(start, distance, returner, rng, rate, coverage=(), blockers=(), even
     cov = np.mean([rate(p, {'tackle_rating': .55, 'speed_rating': .45}) for p in coverage]) if coverage else .70
     block = np.mean([rate(p, {'run_block_rating': .55, 'speed_rating': .45}) for p in blockers]) if blockers else .70
     gain = min(float(start), max(0., float(distance) * float(np.clip(1 + .40 * (block - cov), .85, 1.15))))
-    # Punt lanes clear the first wave, with outside contain still to beat.
-    # Kickoffs retain their existing complete-breakaway opportunity rate.
+    # Clearing a punt lane leaves outside contain to beat. A kickoff lane
+    # also has to open before pursuit and containment decide the return.
     breakout = False
     punt_chase = None
     kickoff_chase = None
     if returner and coverage and 12 <= gain < start:
         skill = rate(returner, {'kick_ret_rating': .5, 'bcv_rating': .25, 'accel_rating': .25})
-        base, upper = (.080, .140) if event == 'punt_return' else (.045, .090)
+        base, upper = ((.080, .140) if event == 'punt_return' else
+                       (KICKOFF_BREAKAWAY_BASE, KICKOFF_BREAKAWAY_UPPER))
         chance = float(np.clip(base + .12 * (skill - .8) + .15 * (block - cov), .008, upper))
         if rng.random() < chance:
             if event == 'punt_return':

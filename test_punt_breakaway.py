@@ -112,12 +112,15 @@ class PuntBreakaways(unittest.TestCase):
             KR.resolve(95., 25., man('r'), rng, P.rate, [man('c')], [man('b')], event='kick_return')
             chase.assert_not_called()
 
-    def test_kickoff_breakaway_keeps_original_resolver(self):
-        rng = NS(random=lambda: 0., integers=lambda n: 0)
+    def test_kickoff_breakaway_uses_kickoff_pursuit(self):
+        rng = np.random.default_rng(4)
         with patch('events.fumble_check', return_value=None), patch.object(KR, '_punt_breakaway') as punt, \
-                patch.object(P, 'resolve_yards_after', return_value=dict(yards=95.)) as original:
+                patch.object(KR, 'KICKOFF_BREAKAWAY_BASE', .99), \
+                patch.object(KR, 'KICKOFF_BREAKAWAY_UPPER', .99):
             out = KR.resolve(95., 25., man('r'), rng, P.rate, [man('c')], [man('b')])
-        self.assertTrue(out['touchdown']); punt.assert_not_called(); original.assert_called_once()
+        self.assertTrue(out['breakaway_opportunity'])
+        self.assertIn('kickoff_pursuit', out)
+        punt.assert_not_called()
 
     def test_punt_supplies_actual_last_defender_and_original_line(self):
         punter = man('punter', 85)

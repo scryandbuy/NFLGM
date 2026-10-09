@@ -75,6 +75,46 @@ def compact_game_stats(games):
     return games
 
 
+def repair_special_teams_games(league):
+    """Recover historical appearances proved by a play but absent from snap counts.
+
+    Older games gave ``games`` only to offensive/defensive snap participants.
+    Require both saved unit counts before correcting a game: without them we
+    cannot know whether the box-score player already received that credit.
+    """
+    corrections = {}
+    for key, lines in league.game_stats.items():
+        parts = key.split('-', 3)
+        if len(parts) != 4 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        year, week = int(parts[0]), int(parts[1])
+        teams = league.team_game_stats.get(key, {})
+        if not all(isinstance(teams.get(side, {}).get('snap_counts'), dict) and
+                   teams[side]['snap_counts'] for side in (parts[2], parts[3])):
+            continue
+        snap_pids = {pid for side in (parts[2], parts[3])
+                     for unit in teams[side]['snap_counts'].values()
+                     for pid in unit.get('players', {})}
+        for pid, line in lines.items():
+            if pid in snap_pids or line.get('games'):
+                continue
+            if not any(isinstance(value, (int, float, np.number)) and value != 0
+                       for stat, value in line.items()
+                       if stat not in ('def_plays', 'games')):
+                continue
+            ident = (year, week > 18, pid)
+            corrections[ident] = corrections.get(ident, 0) + 1
+    for (year, postseason, pid), count in corrections.items():
+        row = (league.post_stats if postseason else league.stats).get(year, {}).get(pid)
+        if row is None:
+            continue
+        row['games'] = row.get('games', 0) + count
+        if not postseason:
+            player = league.player(pid)
+            if player is not None:
+                player.record_season(year, row)
+
+
 class Player:
     """
     One man, for his whole career.
@@ -1000,6 +1040,7 @@ class League:
         from newgens import name_history
         return dict(
             version=1, competition_names_version=2, rush_accounting_version=1,
+            special_team_game_credit_version=1,
             rush_accounting_repair=getattr(self, 'rush_accounting_repair', {}),
             year=self.year, phase=self.phase, week=self.week,
             game_date=self.game_date, age_calendar_version=self.age_calendar_version,
@@ -1216,6 +1257,8 @@ class League:
         L.post_stats = {int(k): v for k, v in (d.get('post_stats') or {}).items()}
         L.game_stats = compact_game_stats(d.get('game_stats') or {})
         L.team_game_stats = d.get('team_game_stats') or {}
+        if not d.get('special_team_game_credit_version'):
+            repair_special_teams_games(L)
         L.standings_history = {int(k): v for k, v
                                in d['standings_history'].items()}
         L.transactions = d['transactions']

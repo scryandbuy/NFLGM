@@ -666,10 +666,16 @@ class SeasonRunner(StandingsView):
         key = f'{self.L.year}-{week}-{home}-{away}'
         # this week's lines, league-wide, for the honors note
         wb = self.L.__dict__.setdefault('week_book', {})
+        snap_pids = {pid for side in (home, away)
+                     for pid in (self.states[side].last_snaps or self.states[side].snaps)}
         for pid, line in book.p.items():
             wb[pid] = dict(line)
         for pid, line in book.p.items():
-            self.L.record_stats(self.L.year, pid, line,
+            # A returner, kicker, punter or coverage player may appear only on
+            # special teams. His box line proves he played even if the normal
+            # offense/defense snap counter never selected him.
+            played_line = line if pid in snap_pids else dict(line, games=1)
+            self.L.record_stats(self.L.year, pid, played_line,
                                 postseason=playoffs, game=key)
             # XP EARNED, game by game: the events plus every weekly line he
             # crossed. The ledger existed and nothing paid into it. Postseason
@@ -731,7 +737,8 @@ class SeasonRunner(StandingsView):
                 if p is not None:
                     line = XP.long_snap_line(res['drives'], 'home' if side == home else 'away')
                     if line['snaps']:
-                        self.L.record_stats(self.L.year, p.pid, dict(line, games=1),
+                        self.L.record_stats(self.L.year, p.pid,
+                                            dict(line, games=int(p.pid not in book.p and p.pid not in snap_pids)),
                                             postseason=playoffs, game=key)
                         p.xp += XP.credit(p, XP.long_snap_xp(line) * XP.modifier(p), 'long_snap')
 
