@@ -2847,6 +2847,7 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .game-scoreboard .home-side .team-status-line{justify-content:flex-end}
 .game-scoreboard .possession-football{display:inline-flex;width:28px;height:18px;flex:none;visibility:hidden}
 .game-scoreboard .possession-football.has-ball{visibility:visible}
+.broadcast-page .game-scoreboard .home-side .possession-football{order:-1}
 .game-scoreboard .possession-football svg{width:100%;height:100%;overflow:visible}
 .game-scoreboard .timeout-dots{display:inline-flex;align-items:center;gap:6px;margin-top:8px;vertical-align:top}
 .game-scoreboard .timeout-dot{display:block;width:8px;height:8px;border:1px solid #90a3aa;border-radius:50%;background:transparent;box-sizing:border-box}
