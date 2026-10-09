@@ -295,7 +295,7 @@ def capture(league, played, user, states=None):
         # each drive: how it started and what came before it, in words
         prev_result = None
         for i, d in enumerate(drives):
-            how = {'Touchdown': 'after a touchdown', 'Defensive touchdown': 'after a defensive touchdown', 'Field goal': 'after a field goal', 'Punt': 'after a punt', 'Turnover': 'after a turnover', 'Turnover on downs': 'after a stop on fourth down', 'Missed field goal': 'after a missed field goal'}.get(prev_result, 'to open' if i == 0 else '')
+            how = {'Touchdown': 'after a touchdown', 'Defensive touchdown': 'after a defensive touchdown', 'Special-teams touchdown': 'after a special-teams touchdown', 'Field goal': 'after a field goal', 'Punt': 'after a punt', 'Turnover': 'after a turnover', 'Turnover on downs': 'after a stop on fourth down', 'Missed field goal': 'after a missed field goal'}.get(prev_result, 'to open' if i == 0 else '')
             if i and d['quarter'] >= 5 and drives[i - 1]['quarter'] < 5: how = 'to open overtime'
             elif i and d['quarter'] == 3 and drives[i - 1]['quarter'] <= 2: how = 'to open the second half'
             d['head'] = f"Drive {d['n']} · {d['off']} · {ticker.drive_start_text(d['start_label'], d.get('return_only', False))} {how}".rstrip() + f" · {d['plays_n']} play{'s' if d['plays_n'] != 1 else ''}, {int(round(d['yards']))} net field yards (including penalties)" + (f", {str(d['result']).lower()}" if d.get('result') else '')

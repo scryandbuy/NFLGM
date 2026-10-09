@@ -307,11 +307,25 @@ def fourth_down_decision(yardline_100, ydstogo, score_diff, secs_left, rng,
     # Keep this separate from the full-game clock and fourth-quarter urgency.
     if half_seconds_left is not None and half_seconds_left <= 20 and yardline_100 >= 60:
         return 'punt'
-    # A late-half conversion on fourth and long usually leaves no time for a
-    # follow-up score. The full-game win model cannot price the halftime break.
-    if (half_seconds_left is not None and 0 < half_seconds_left <= 12
-            and in_range and yardline_100 <= 35 and ydstogo >= 5):
-        return 'field_goal'
+    # Before the half, possession has no value beyond the available scoring
+    # window. Price a touchdown or a conversion followed by a kick, not a
+    # fresh series with thirty minutes of football still attached to it.
+    if half_seconds_left is not None and 0 < half_seconds_left <= 12 and in_range:
+        conversion = DEC.fourth_conversion(ydstogo)
+        touchdown = (conversion if yardline_100 <= ydstogo else
+                     min(conversion, float(np.clip(.40 - .008 * yardline_100, .03, .40))))
+        # Six seconds of action plus three stopped-clock seconds to set up.
+        # Without a timeout, only a sideline finish can preserve the kick.
+        followup = (1.0 if offense_timeouts > 0 else PLAY_OOB) if half_seconds_left >= 9 else 0.0
+        next_spot = max(1., yardline_100 - max(ydstogo, PLAY_GAIN))
+        next_kick = fg_probability(field_goal_distance(next_spot), kicker, rate_fn) * ENV.kick_mult
+        go_points = 6.95 * touchdown + 3.0 * max(0., conversion - touchdown) * followup * next_kick
+        kick_points = 3.0 * kick_chance
+        # Coaches can disagree on close scoring chances; a clearly inferior
+        # conversion does not inherit the ordinary fourth-and-short baseline.
+        edge = go_points * (.85 + .30 * aggression) - kick_points
+        chance = float(1.0 / (1.0 + np.exp(np.clip(-edge / .20, -60, 60))))
+        return 'go' if rng.random() < chance else 'field_goal'
     # With time for one play, a reachable kick ties or wins. The general
     # desperation rule must not force a conversion that leaves no clock.
     if secs_left <= 6 and -3 <= score_diff <= 0 and in_range:
@@ -1180,6 +1194,34 @@ def _late_penalty_restart(dr, seconds):
     return (period == 2 and seconds <= 120.0) or (period == 4 and seconds <= 300.0)
 
 
+def _offensive_timeout_worth_spending(dr, out, seconds, remaining, coach, plan, half_end):
+    """Hurry between snaps without automatically spending a scoring-drive stop."""
+    halftime = half_end is not None and getattr(dr, 'quarter', 2) == 2
+    if not halftime and (getattr(dr, 'quarter', 4) != 4 or dr.score_diff > 0):
+        return True
+    live_left = seconds - live_play_seconds(out)
+    if live_left <= 20:
+        return True  # a saved timeout cannot help if the current clock expires
+    if (plan or {}).get('choice') == 'kick':
+        return True  # protect the selected kick's personnel/setup window
+    spot = max(0., dr.yardline - float(out.get('yards', 0) or 0))
+    needs_td = not halftime and dr.score_diff < -3
+    # Estimate the snaps still needed, not an assumed uninterrupted huddle.
+    # A field-goal drive aims for a manageable kick, a TD drive for the goal.
+    target = 0. if needs_td else 30.
+    snaps = max(1., float(np.ceil(max(0., spot - target) / 12.)))
+    budget = snaps * 14. + (6. if needs_td else FG_CHANGE_SECONDS)
+    aggr = float(np.clip(.5 * float((coach or {}).get('fourth_down', .5)) +
+                         .5 * float((coach or {}).get('adjust_willingness', .5)), 0., 1.))
+    budget += 10. * aggr + 6. * max(0, remaining - 1)
+    # The last stop retains access to in-bounds gains and the kick unit.
+    if remaining == 1:
+        budget -= 8. if not needs_td else 4.
+    if out.get('type') == 'sack':
+        budget += 12.  # recovering from a disrupted play can take longer
+    return live_left <= budget
+
+
 def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None, plan=None, dcoach=None):
     """Who spends a timeout after this play, if anyone. The trailing side spends them to get the ball back; the
     driving side to keep the clock alive. Neither wastes one early. Returns (used, used_by).
@@ -1306,9 +1348,11 @@ def _timeout_call(dr, t, out, timeouts, pos, half_end, secs_in_half, coach=None,
             if gain * (0.75 + 0.5 * d_aggr) > 0.06:                  # first-half timeouts do not carry past the break; a modest gain is worth one
                 used = timeouts.use(other); used_by = other
         elif (plan is None or (plan.get('choice') != 'kneel' and plan.get('hurry', True))) and ((-8 <= dr.score_diff < 0 and secs_in_half < trail_window) or (dr.score_diff == 0 and secs_in_half < 40)) and in_bounds and secs_in_half > 6 and timeouts.left.get(pos, 0) > 0:
-            used = timeouts.use(pos); used_by = pos                        # one score down inside a minute, or tied at the very end; down two the offense runs the hurry-up and keeps them for the defense
+            if _offensive_timeout_worth_spending(dr, out, secs_in_half, own_left, coach, plan, half_end):
+                used = timeouts.use(pos); used_by = pos
         elif plan is not None and plan['choice'] not in ('kneel', 'punt') and plan.get('hurry', True) and in_bounds and secs_in_half > 4 and timeouts.left.get(pos, 0) > 0:
-            used = timeouts.use(pos); used_by = pos                        # the clock is running on a spot worth a kick or a shot, and the plan needs the time
+            if _offensive_timeout_worth_spending(dr, out, secs_in_half, own_left, coach, plan, half_end):
+                used = timeouts.use(pos); used_by = pos
         elif plan is not None and not plan.get('hurry', True) and in_bounds and timeouts.left.get(other, 0) > 0 and dr.score_diff >= 0 and (half_end is None or (dr.score_diff == 0 and dr.down >= 3 and float(out.get('yards', 0) or 0) < dr.togo)):
             # THE DEFENSE BUYS ITSELF A POSSESSION. The offense is bleeding the clock toward a late kick; each
             # timeout the defense spends now is time it gets back after the score. It spends one when that time

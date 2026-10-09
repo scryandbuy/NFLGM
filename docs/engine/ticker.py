@@ -352,6 +352,13 @@ def _result_word(r):
 
 def drive_result(dr, overtime=False):
     """Distinguish the regulation boundary from the actual end of a game."""
+    if dr.result in ('Defensive touchdown', 'Touchdown'):
+        kick_score = next((p for p in reversed(getattr(dr, 'log', []))
+                           if isinstance(p, dict) and not p.get('nullified')
+                           and p.get('type') in ('punt', 'kickoff')
+                           and (p.get('touchdown') or p.get('defensive_td'))), None)
+        if kick_score is not None:
+            return 'Special-teams touchdown'
     if dr.result == 'End of half' and getattr(dr, 'quarter', 0) >= 4:
         return 'End of regulation' if dr.quarter == 4 and overtime else 'End of game'
     return dr.result

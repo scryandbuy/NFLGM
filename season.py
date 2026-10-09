@@ -754,6 +754,13 @@ class SeasonRunner(StandingsView):
         import game_recap as GR
         GR.post(self.L, home, away, week, res, playoffs)
         GR.post_snap_counts(self.L, home, away, week, self.states, playoffs)
+        # Both live and batch playoff games reach this point. The regular
+        # weekly wrap-up is skipped in postseason; send the medical report
+        # before bracket advancement, including after an elimination loss.
+        user = getattr(self.L, 'user_team', None)
+        if playoffs and user in (home, away):
+            import club_notes as CN
+            CN._injury_report(self.L, self.L.teams[user], week, [res])
         return res
 
     # ---- one week -------------------------------------------------------
