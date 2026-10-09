@@ -1,0 +1,16 @@
+{
+  "year": 2033,
+  "players": 5962,
+  "transactions": 51671,
+  "archives": 154,
+  "rng_unchanged": true,
+  "portable_export_byte_identical": true,
+  "readback_bytes": 182003974,
+  "import_resume_equal": true,
+  "temporary_file_removed": true,
+  "repeated_save_js_heap_mib": [
+    14.54,
+    14.55,
+    14.55
+  ]
+}

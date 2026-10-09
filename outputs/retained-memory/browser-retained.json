@@ -1,0 +1,22 @@
+[
+  {
+    "mode": "baseline",
+    "build_id": "bef91bd",
+    "load_ms": 7167,
+    "wasm_capacity_mib": 709.38,
+    "renderer_working_set_mib": 950.4,
+    "renderer_private_bytes_mib": 995.39,
+    "retained_session_mib": 313.43,
+    "portable_export_sha256": "a42a1818ff6d12a8b2d1c43bbea522f3f6e4c6bcb76e07e1af6bbce3aae500be"
+  },
+  {
+    "mode": "shared",
+    "build_id": "bef91bd",
+    "load_ms": 10763,
+    "wasm_capacity_mib": 612.94,
+    "renderer_working_set_mib": 843.52,
+    "renderer_private_bytes_mib": 902.57,
+    "retained_session_mib": 224.63,
+    "portable_export_sha256": "a42a1818ff6d12a8b2d1c43bbea522f3f6e4c6bcb76e07e1af6bbce3aae500be"
+  }
+]

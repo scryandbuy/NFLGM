@@ -1,0 +1,10 @@
+{
+  "mode": "baseline",
+  "native_load_seconds": 4.518,
+  "native_retained_session_mib": 543.254,
+  "portable_export_sha256": "a42a1818ff6d12a8b2d1c43bbea522f3f6e4c6bcb76e07e1af6bbce3aae500be",
+  "players": 5962,
+  "transactions": 51671,
+  "archives": 154,
+  "rng_sha256": "4af5b8316233b98a1d697504081ce1458731fe451f6000668fbf17d738de2784"
+}

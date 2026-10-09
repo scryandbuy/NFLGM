@@ -75,15 +75,17 @@ class Session:
 
     @classmethod
     def load(cls, text):
-        return cls._from_save_data(json.loads(text))
+        import shared_json
+        return cls._from_save_data(shared_json.loads(text))
 
     @classmethod
     def load_file(cls, path, remove_source=False):
         # Release the JSON decoder's input string before rebuilding the league.
         # The browser owns this temporary in-memory file, not the user's export.
+        import shared_json
         try:
             with open(path, encoding='utf-8-sig') as stream:
-                data = json.load(stream)
+                data = shared_json.load(stream)
         finally:
             if remove_source:
                 import os
