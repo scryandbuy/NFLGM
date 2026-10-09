@@ -104,15 +104,17 @@ async function loadEngineFiles(manifest, fs, fetchFile = fetch, progress = say) 
   const request = i => {
     const file = files[i];
     pending[i] = (async () => {
-      try {
-        const response = await fetchFile(ENGINE + file + '?v=' + (manifest.build || '0'));
-        if (!response.ok) return { missing: true };
-        const data = file.endsWith('.py') || file.endsWith('.json')
-          ? await response.text() : new Uint8Array(await response.arrayBuffer());
-        return { data };
-      } catch (error) {
-        // Consume failures in manifest order, just like the serial loader.
-        return { error };
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const response = await fetchFile(ENGINE + file + '?v=' + (manifest.build || '0'),
+            attempt ? { cache: 'reload' } : undefined);
+          if (!response.ok) throw new Error(`HTTP ${response.status || 'error'}`);
+          const data = file.endsWith('.py') || file.endsWith('.json')
+            ? await response.text() : new Uint8Array(await response.arrayBuffer());
+          return { data };
+        } catch (error) {
+          if (attempt) return { error: new Error(`Could not load engine file ${file}: ${error.message}`) };
+        }
       }
     })();
   };
@@ -123,7 +125,6 @@ async function loadEngineFiles(manifest, fs, fetchFile = fetch, progress = say) 
     pending[i] = null;
     if (result.error) throw result.error;
     if (i + concurrency < files.length) request(i + concurrency);
-    if (result.missing) { progress('missing ' + files[i]); continue; }
     fs.writeFile('/' + files[i], result.data);
     loaded++;
     progress('loading engine… ' + files[i], 18 + 62 * loaded / files.length);
