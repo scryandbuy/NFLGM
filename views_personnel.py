@@ -493,6 +493,51 @@ def act_gather(league, abbr, pid):
 
 
 # ============================================================ FREE AGENCY
+def upcoming_free_agents(session, league, abbr):
+    """Read-only next market, including retained rights before free agency opens."""
+    import free_agency as FA
+    import player_roles as PR
+    from cap_accounting import next_year_ledger
+
+    me = league.teams[abbr]
+    pre_roll = (league.phase == 'offseason'
+                and getattr(league, 'season_closed_year', None) == league.year)
+    retention = league.phase == 'offseason' and not pre_roll
+    market_year = int(league.year) + int(not retention)
+    rows, seen = [], set()
+    for team in league.teams.values():
+        for p in team.roster:
+            if p.pid in seen or p.retired or p.team != team.abbr:
+                continue
+            seen.add(p.pid)
+            # Rollover removes expired contracts but keeps the player with his
+            # club until tags/tenders/extensions and the opening of the market.
+            if retention:
+                expires = p.contract is None or p.contract.years <= 0
+            else:
+                expires = bool(p.contract and p.contract.years == 1)
+            if not expires:
+                continue
+            accrued = int(p.accrued or 0) + int(not retention)
+            rows.append(dict(pid=p.pid, name=p.name, pos=p.pos,
+                             display_pos=PR.fa_position(p, me),
+                             filter_positions=list(PR.fa_positions(p, me)),
+                             team=team.abbr, age=int(p.age),
+                             **user_player_grade(league, p, abbr),
+                             fa_class=FA.fa_class(accrued, 0),
+                             hit=round(p.cap_hit(0), 1)))
+    rows.sort(key=lambda r: (-r['ovr'], r['name'], str(r['pid'])))
+    if retention:
+        limit, committed = me.cap.limit, me.cap.charges(me.phase)
+    else:
+        limit, committed, _rollover, _dead = next_year_ledger(league, me)
+    return dict(rail=rail(session, league, abbr), rows=rows, count=len(rows),
+                market_year=market_year, contract_year=market_year - 1,
+                cap_year=int(league.year), projected_space=round(limit - committed, 1),
+                teams=[club(a) for a in sorted(league.teams)],
+                position_filters=PR.fa_position_filters(me))
+
+
 def free_agency(session, league, abbr):
     import negotiations as NG, valuation as VAL
     import player_roles as PR

@@ -1,0 +1,134 @@
+{
+  "source": "nflgm-2033-week-4.json",
+  "year": 2033,
+  "phase": "regular",
+  "market_year": 2034,
+  "players": 618,
+  "teams": 32,
+  "seconds": 0.015,
+  "rng_unchanged": true,
+  "exact_contract_membership": true,
+  "all_current_ages_and_cap_hits_match": true,
+  "sample": [
+    {
+      "pid": "P2265",
+      "name": "Jaxon Smith-Njigba",
+      "pos": "WR",
+      "display_pos": "WR",
+      "filter_positions": [
+        "WR"
+      ],
+      "team": "SEA",
+      "age": 31,
+      "ovr": 98,
+      "fit": 0.9,
+      "fa_class": "UFA",
+      "hit": 50.4
+    },
+    {
+      "pid": "P0516",
+      "name": "Evan McPherson",
+      "pos": "K",
+      "display_pos": "K",
+      "filter_positions": [
+        "K"
+      ],
+      "team": "CIN",
+      "age": 34,
+      "ovr": 97,
+      "fit": 0.0,
+      "fa_class": "UFA",
+      "hit": 8.2
+    },
+    {
+      "pid": "P0532",
+      "name": "Joe Burrow",
+      "pos": "QB",
+      "display_pos": "QB",
+      "filter_positions": [
+        "QB"
+      ],
+      "team": "CIN",
+      "age": 36,
+      "ovr": 97,
+      "fit": 2.4,
+      "fa_class": "UFA",
+      "hit": 82.7
+    },
+    {
+      "pid": "P1646",
+      "name": "Will Reichard",
+      "pos": "K",
+      "display_pos": "K",
+      "filter_positions": [
+        "K"
+      ],
+      "team": "MIN",
+      "age": 32,
+      "ovr": 97,
+      "fit": 0.0,
+      "fa_class": "UFA",
+      "hit": 3.2
+    },
+    {
+      "pid": "N2028K000",
+      "name": "Benedict Chukwurah",
+      "pos": "K",
+      "display_pos": "K",
+      "filter_positions": [
+        "K"
+      ],
+      "team": "DEN",
+      "age": 28,
+      "ovr": 96,
+      "fit": 0.0,
+      "fa_class": "UFA",
+      "hit": 5.3
+    },
+    {
+      "pid": "P1397",
+      "name": "Cameron Dicker",
+      "pos": "K",
+      "display_pos": "K",
+      "filter_positions": [
+        "K"
+      ],
+      "team": "HOU",
+      "age": 33,
+      "ovr": 96,
+      "fit": 0.0,
+      "fa_class": "UFA",
+      "hit": 5.2
+    },
+    {
+      "pid": "P0554",
+      "name": "Ja'Marr Chase",
+      "pos": "WR",
+      "display_pos": "WR",
+      "filter_positions": [
+        "WR"
+      ],
+      "team": "CAR",
+      "age": 33,
+      "ovr": 96,
+      "fit": 0.7,
+      "fa_class": "UFA",
+      "hit": 57.2
+    },
+    {
+      "pid": "P0210",
+      "name": "Lamar Jackson",
+      "pos": "QB",
+      "display_pos": "QB",
+      "filter_positions": [
+        "QB"
+      ],
+      "team": "IND",
+      "age": 36,
+      "ovr": 96,
+      "fit": 1.5,
+      "fa_class": "UFA",
+      "hit": 37.5
+    }
+  ]
+}

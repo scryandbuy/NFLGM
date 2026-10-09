@@ -2895,6 +2895,24 @@ select.team-picker:focus-visible {outline:2px solid var(--club-2);outline-offset
 .retain-tag-dialog{position:fixed;inset:0;margin:auto;max-height:calc(100dvh - 28px);overflow:auto;color:var(--ink);background:var(--sheet);border:1px solid var(--rule);border-top:3px solid var(--team-accent);border-radius:8px;width:min(440px,calc(100vw - 28px));padding:0;font-family:var(--text)}
 .personnel-fa .personnel-detail-actions .btn,.personnel-fa .personnel-detail>a.btn{font:700 17px var(--display)!important;letter-spacing:.02em;line-height:normal;justify-content:center;text-align:center}
 .personnel-fa .fa-filter-tools{gap:10px;align-items:center}.fa-group-options{width:100%;flex-wrap:wrap}.fa-position-options{width:100%;flex-wrap:wrap;padding-top:2px}.fa-position-options[hidden]{display:none!important}.personnel-fa .personnel-metrics{flex-wrap:wrap;row-gap:14px}
+.personnel-upcoming .personnel-columns{grid-template-columns:minmax(0,1fr)}
+.personnel-upcoming .fa-filter-tools{align-items:center}
+.personnel-upcoming select{padding:8px 12px;max-width:100%;background:#0b171d;color:var(--ink);border:1px solid var(--pers-rule)}
+.personnel-upcoming .upcoming-fa-table th{position:static;white-space:normal}
+.personnel-upcoming .upcoming-fa-table th.n{text-align:right}
+.personnel-upcoming .upcoming-sort{font:inherit;letter-spacing:inherit;text-transform:inherit}
+.personnel-upcoming .upcoming-pagination{justify-content:center}
+.personnel-upcoming .upcoming-pagination .btn{margin:0}
+.personnel-upcoming [hidden]{display:none!important}
+@media(max-width:650px){
+  .personnel-upcoming .upcoming-fa-table thead{display:none}
+  .personnel-upcoming .upcoming-fa-table tbody{display:block}
+  .personnel-upcoming .upcoming-fa-table tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--pers-rule);padding:8px 0}
+  .personnel-upcoming .upcoming-fa-table td{border:0;text-align:left!important;min-width:0}
+  .personnel-upcoming .upcoming-fa-table td:first-child,.personnel-upcoming .upcoming-fa-table td[colspan]{grid-column:1/-1}
+  .personnel-upcoming .upcoming-fa-table td[data-label]::before{content:attr(data-label);display:block;color:var(--ink-3);font-size:11px;margin-bottom:5px}
+  .personnel-upcoming .personnel-main .find{width:100%;max-width:none;margin-left:0}
+}
 .retain-tag-dialog::backdrop{background:#05090dbb}
 .ceiling-dialog{width:min(560px,calc(100vw - 28px))}
 .ceiling-milestone+.ceiling-milestone{border-top:1px solid var(--rule);margin-top:18px;padding-top:12px}
