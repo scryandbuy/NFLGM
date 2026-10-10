@@ -25,6 +25,10 @@ class RecapTests(unittest.TestCase):
     def test_summary_halves_and_duplicate_after_reload_delete(self):
         m=GR.post(self.L,'GB','MIN',1,self.res)
         self.assertEqual(m['week'],1)
+        summary=m['payload']['recap']['summary']
+        self.assertTrue(summary['headline'])
+        self.assertTrue(summary['paragraphs'])
+        self.assertEqual(json.loads(json.dumps(m))['payload']['recap']['summary'],summary)
         self.assertIn('Test Coach',m['sender'])
         self.assertIn('Too few relevant plays to judge.',m['body'])
         self.assertIn('Results after halftime include overtime',m['body'])

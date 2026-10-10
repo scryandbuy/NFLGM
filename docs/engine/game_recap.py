@@ -843,6 +843,7 @@ def post(league, home, away, week, res, playoffs=False):
     msg = IE.post(league, key, 'result', f"Assistant review: {user} {ours}–{theirs} {opp}", '\n\n'.join(body),
                   sender=f'{name} · Offensive coordinator' if name else 'Assistant coaches',
                   payload=dict(link=f'gameday:{week}', game_key=key, coaching_review=context,
-                               recap=dict(intro=intro, sections=sections)))
+                               recap=dict(intro=intro, sections=sections,
+                                          summary=__import__('game_story').build(league, home, away, res))))
     if msg: msg['week'] = week
     return msg

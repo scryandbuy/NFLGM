@@ -3,6 +3,7 @@ const src=fs.readFileSync('docs/app.js','utf8');
 class Element {
  constructor(tag,attrs={},kids=[]){this.tag=tag;this.attrs=attrs;this.kids=kids;this.removed=false;}
  append(...kids){this.kids.push(...kids);}
+ setAttribute(name,value){this.attrs[name]=value;}
  set innerHTML(v){this.kids=[];}
  remove(){this.removed=true;}
 }
@@ -18,9 +19,15 @@ vm.runInContext(src.slice(src.indexOf('function playerMention('),src.indexOf('fu
 vm.runInContext(src.slice(src.indexOf('function renderRecapBody('),src.indexOf('function renderInbox(')),ctx);
 vm.runInContext(src.slice(src.indexOf('const halfConfirmed ='),src.indexOf('// Team reports share')),ctx);
 let body=ctx.renderRecapBody({kind:'result',recap:{intro:'A game',sections:[{title:'Pregame plan',reviews:[{title:'Run it',conclusion:'Positive',findings:[{label:'Running',verdict:'positive',text:'Eight yards per run'}]}]}]}});
+assert.deepEqual(all(body).filter(n=>n.tag==='button').map(text),['Summary','Analysis']);
+assert.ok(text(body).includes('A full narrative was not recorded for this older game.'));
 assert.equal(all(body).filter(n=>n.tag==='h4').length,1);
 assert.ok(text(body).includes('Eight yards per run'));
 assert.ok(all(body).some(n=>n.attrs?.class==='recap-finding positive'));
+const report=ctx.renderRecapBody({id:'week-1',recap:{summary:{headline:'Game report',paragraphs:['A late score decided it.']},intro:'A game',sections:[]},snap_counts:{offense:{total:1,rows:[]},defense:{total:1,rows:[]}}});
+assert.deepEqual(all(report).filter(n=>n.tag==='button').map(text),['Summary','Analysis','Snap Counts']);
+assert.ok(text(report).includes('A late score decided it.'));
+assert.equal(all(report).filter(n=>n.attrs?.role==='tabpanel').length,3);
 const old=ctx.renderRecapBody({kind:'result',body:'Win\n\nPREGAME PLAN\nRun more\n\nHALFTIME ADJUSTMENTS\nThese are observed results, not proof of cause; opponent adjustments and game situation also mattered.'});
 assert.equal(all(old).filter(n=>n.tag==='h4').length,2);
 assert.ok(!text(old).includes('not proof of cause'));
@@ -44,6 +51,6 @@ assert.ok(text(snaps).includes('Includes overtime.'));
  assert.equal(saved,1);assert.ok(taken);
  all(overlay).find(n=>n.tag==='button'&&text(n)==='Confirm').attrs.onclick();
  assert.ok(vm.runInContext("halfConfirmed['game-overtime']",ctx));assert.equal(closed,1);assert.ok(overlay.removed);
- assert.ok(src.includes('const breakKey = `${gkey}-${overtime'));
+ assert.ok(src.includes("const breakKey = `${g.home.abbr}-${g.away.abbr}-${v.week}-${v.year || v.rail.year}-${overtime"));
  console.log('Recap sections, legacy/plain mail, OT modal, independent confirmation and saved choices pass');
 })().catch(e=>{console.error(e);process.exitCode=1;});

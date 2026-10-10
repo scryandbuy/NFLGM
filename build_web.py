@@ -8,7 +8,7 @@ MODULES = ['pressure_evidence', 'halftime', 'staff_traits', 'club_notes', 'leagu
            'negotiation_engine', 'negotiations', 'newgens', 'otc_2026', 'offer_reservations', 'personality', 'player_background', 'player_roles', 'playcall', 'plays', 'position_change', 'postseason', 'practice_squad', 'progression_engine',
            'regression', 'retirement', 'rookie_baseline', 'roster_advisor', 'roster_construction', 'roster_needs', 'rosters', 'schedule', 'schemes', 'scouting', 'season', 'session', 'spring', 'staff', 'standings_and_seeding', 'tags',
            'targets', 'field_fit', 'stable', 'ticker', 'gameday', 'gm_surfaces', 'draft_day', 'views_club', 'views_personnel', 'views_frontoffice', 'views_draft', 'views_league', 'views_gameplan', 'trade_calendar', 'trade_engine', 'trades', 'valuation', 'views', 'waivers', 'weather', 'xp', 'xp_spend', 'zones']
-MODULES.extend(['development_value', 'game_recap', 'practice', 'practice_integration', 'game_availability', 'dev_evaluation', 'specialist_reserve', 'competition_names', 'stadium_names', 'rush_stats_migration', 'kick_returns', 'player_age', 'run_blocking', 'punt_strategy', 'contract_offer', 'contract_offer_model'])
+MODULES.extend(['development_value', 'game_story', 'game_recap', 'practice', 'practice_integration', 'game_availability', 'dev_evaluation', 'specialist_reserve', 'competition_names', 'stadium_names', 'rush_stats_migration', 'kick_returns', 'player_age', 'run_blocking', 'punt_strategy', 'contract_offer', 'contract_offer_model'])
 MODULES.append('financial_plan')
 MODULES.append('trade_portfolio')
 MODULES.append('retention_plan')

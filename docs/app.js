@@ -659,18 +659,33 @@ function renderMailBody(message) {
 }
 
 function renderRecapBody(message) {
-  if (message.recap && message.snap_counts) {
+  if (message.recap && !message._reportPanel) {
     const wrapper = el('div', {class:'combined-game-report'});
-    const analysis = renderRecapBody({...message, snap_counts:null});
-    const snaps = renderRecapBody({...message, recap:null});
-    snaps.hidden = true;
+    const story = message.recap.summary;
+    const summary = el('article', {class:'mbody game-story'});
+    if (story) {
+      summary.append(el('h3', {}, story.headline));
+      for (const paragraph of story.paragraphs || []) summary.append(el('p', {}, paragraph));
+    } else {
+      summary.append(el('p', {}, message.recap.intro || ''));
+      summary.append(el('p', {class:'muted'}, 'A full narrative was not recorded for this older game.'));
+    }
+    const panels = [summary, renderRecapBody({...message, snap_counts:null, _reportPanel:true})];
+    const labels = ['Summary', 'Analysis'];
+    if (message.snap_counts) {
+      panels.push(renderRecapBody({...message, recap:null, _reportPanel:true})); labels.push('Snap Counts');
+    }
     const tabs = el('div', {class:'tabs', role:'tablist', 'aria-label':'Postgame report'});
-    const buttons = ['Analysis', 'Snap Counts'].map((label,i) => el('button', {
-      role:'tab', 'aria-selected':String(i===0), 'aria-pressed':String(i===0),
-      onclick:()=>{ analysis.hidden=i!==0; snaps.hidden=i!==1;
+    const buttons = labels.map((label,i) => el('button', {
+      type:'button', id:`game-report-${message.id}-${i}`, role:'tab',
+      'aria-controls':`game-report-panel-${message.id}-${i}`,
+      'aria-selected':String(i===0), 'aria-pressed':String(i===0),
+      onclick:()=>{ panels.forEach((p,j)=>{p.hidden=i!==j;});
         buttons.forEach((b,j)=>{b.setAttribute('aria-selected',String(i===j));b.setAttribute('aria-pressed',String(i===j));}); }
     },label));
-    tabs.append(...buttons); wrapper.append(tabs,analysis,snaps); return wrapper;
+    panels.forEach((panel,i)=>{panel.hidden=i!==0;panel.id=`game-report-panel-${message.id}-${i}`;
+      panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',buttons[i].id);});
+    tabs.append(...buttons); wrapper.append(tabs,...panels); return wrapper;
   }
   if (message.snap_counts) {
     const report = message.snap_counts, columns = el('div', {class:'snap-count-columns'});
