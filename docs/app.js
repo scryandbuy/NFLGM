@@ -1111,7 +1111,8 @@ function renderBroadcastGameDay(page, v) {
   left.append(injuryBox); upper.append(left);
 
   const stats = panels('Team Stats', 'gd-team-stats');
-  stats.querySelector('h2').append(small(`${showAbbr(g.away.abbr)} / ${showAbbr(g.home.abbr)}`));
+  stats.style.setProperty('--gd-away', teamBarColor(g.away));
+  stats.style.setProperty('--gd-home', teamBarColor(g.home));
   stats.append(el('div', {class:'gd-tabs'}, button('Overview',()=>{state.stats='overview';rerender()},state.stats==='overview'), button('All Stats',()=>{state.stats='all';rerender()},state.stats==='all')));
   const tsBody = el('div', {class:'gd-team-scroll', tabindex:'0', 'aria-label':'Team statistics'});
   const A = g.team_stats?.[g.away.abbr] || {}, H = g.team_stats?.[g.home.abbr] || {};
@@ -1904,6 +1905,11 @@ function teamTheme(team = {}) {
   const n = parseInt(accent.replace('#', ''), 16);
   const bright = (((n >> 16) & 255) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000;
   return {base, accent, ink: bright > 145 ? '#111820' : '#fff', readable: bright > 145 ? accent : `color-mix(in srgb, ${accent} 65%, white)`};
+}
+function teamBarColor(team = {}) {
+  const theme = teamTheme(team);
+  // Match the draft board's primary colors, with silver for Las Vegas visibility.
+  return team.abbr === 'LV' ? theme.accent : (team.color || COLOR[team.abbr] || theme.base);
 }
 function applyTeamTheme(node, team) {
   const t = teamTheme(team);
@@ -3317,8 +3323,7 @@ function renderDraftDay(v) {
   };
   for(const q of v.order.filter(q=>q.round===boardRound)){
     const theme=teamTheme(q.team);
-    // Use the club's primary identity, not the often-shared gold secondary color.
-    const pickColor=q.team.abbr==='LV' ? theme.accent : (q.team.color || COLOR[q.team.abbr] || theme.base);
+    const pickColor=teamBarColor(q.team);
     const sq=el('button',{type:'button',class:'dd-tile'+(q.done?' done':'')+(q.now?' now':'')+(q.mine?' mine':''),style:`--pick-team:${theme.base};--pick-accent:${pickColor}`, 'aria-label':`Pick ${q.sel}, ${q.team.name}, ${q.done ? q.name+', '+q.pos : q.now ? 'on the clock' : q.mine ? 'your pick' : 'upcoming'}`,onclick:()=>showPick(q)},
       el('span',{class:'dd-tile-head'},el('strong',{},showAbbr(q.team.abbr)),el('span',{},q.sel)),
       el('span',{class:'dd-tile-name'},q.done?surname(q.name):q.now?'On the clock':q.mine?'Your pick':''),

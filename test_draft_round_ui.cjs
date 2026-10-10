@@ -31,6 +31,7 @@ const ctx={el,boardRound:null,offersCache:null,draftRunning:null,location:{hash:
   draftAvailableView:()=>({key:'GB',source:'consensus',rows:[],top:null,label:'Consensus',note:'',read:''}),
   pyJSON:code=>{if(code.includes('draft_act')) {commands.push(code);return {ok};} return latest;}};
 vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('function teamBarColor('),src.indexOf('function applyTeamTheme(')),ctx);
 vm.runInContext(src.slice(src.indexOf('function renderDraftDay('),src.indexOf('\nlet offersCache')),ctx);
 ctx.renderDraftDay(latest);
 assert.equal(ctx.boardRound,1);
