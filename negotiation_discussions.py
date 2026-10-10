@@ -235,5 +235,8 @@ def trade_persona(league, abbr, other, a_sends, b_sends):
     if d.get('commitment') == 'players':
         current = set(TR.roster_need_labels(league.teams[other], int(league.week or 0)))
         kept = bool(current.intersection(d.get('needs', []))) and any(league.player(x) and TR.receiving_need(league.teams[other], league.player(x), int(league.week or 0)) for x in outgoing)
-    if kept: gm['own_bias'] = max(1., gm['own_bias'] - d['concession'])
+    if kept:
+        gm['negotiated_base_own_bias'] = gm['own_bias']
+        gm['negotiated_concession'] = min(.035, max(0., d['concession']))
+        gm['own_bias'] = max(1., gm['own_bias'] - gm['negotiated_concession'])
     return gm

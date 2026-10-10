@@ -356,6 +356,11 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
         # interchangeable chart pick because his target will be gone later.
         if not owns:
             v *= float(asset.get('draft_target_premium', 1.0))
+        elif gm and gm.get('negotiated_concession'):
+            # A negotiated pick package must honor the same bounded give as
+            # player talks. The market anchor and portfolio reserve still bind.
+            give = min(.035, max(0., float(gm['negotiated_concession'])))
+            v *= 1.0 - give / max(1., float(gm.get('negotiated_base_own_bias', 1.)))
         return v
     # the owner values him on the full contract he is paying; a buyer on the
     # base and roster bonus he would inherit, the bonus having been paid
@@ -366,6 +371,10 @@ def team_price(asset, team, cap_space, gm=None, owns=False):
     if asset['need'] and not owns: v *= 1.18
     if owns:
         owner = g['own_bias']
+        if v <= 0 and gm and 'negotiated_base_own_bias' in gm:
+            # Removing positive attachment from a liability reverses the sign
+            # of a concession. Keep its original price instead of charging more.
+            owner = situational_shift(dict(gm, own_bias=gm['negotiated_base_own_bias']), team)['own_bias']
         willingness = float(asset.get('seller_ask', 1.0))
         # Both positive factors express attachment: do not charge twice.
         # A seller discount remains a discount, including rebuilding clubs.

@@ -11,6 +11,7 @@ import negotiations as NG
 import contract_offer as CO
 import views_personnel as VP
 import trades as TR
+import trade_engine as TE
 
 
 class DiscussionTests(unittest.TestCase):
@@ -175,6 +176,40 @@ class DiscussionTests(unittest.TestCase):
         self.trade_reply('pressure')
         self.assertEqual(ND.trade_state(self.L, 'GB', 'MIN')['stage'], 'closed')
         self.assertFalse(ND.start_trade(self.L, 'GB', 'MIN', '2027-2-MIN', 'acquire')['ok'])
+
+    def test_promised_pick_concession_changes_price_without_bypassing_return(self):
+        self.L.teams['MIN'].gm.patience = .9
+        self.start_trade('2027-2-MIN'); self.trade_reply('picks')
+        self.trade_reply('finish'); self.trade_reply('proposal')
+        team = self.L.teams['MIN']; asset = TR.pick_asset(self.L, team.picks[0])
+        base = TR.persona(team.gm)
+        good = ND.trade_persona(self.L, 'GB', 'MIN', ['2027-2-GB'], ['2027-2-MIN'])
+        missing = ND.trade_persona(self.L, 'GB', 'MIN', [], ['2027-2-MIN'])
+        price = lambda gm: TE.team_price(asset, team.ctx(), team.cap_space, gm, owns=True)
+        self.assertLess(price(good), price(base))
+        self.assertGreaterEqual(price(good), price(base) * .965)
+        self.assertEqual(price(missing), price(base))
+
+    def test_concession_never_increases_negative_value_asking_price(self):
+        self.L.teams['MIN'].gm.patience = .9
+        self.start_trade(); self.trade_reply('picks')
+        self.trade_reply('finish'); self.trade_reply('proposal')
+        team = self.L.teams['MIN']
+        base = TR.persona(team.gm)
+        good = ND.trade_persona(self.L, 'GB', 'MIN', ['2027-2-GB'], ['target'])
+        asset = dict(kind='player', age=29, apy=8, trade_value=-5, need=False)
+        self.assertLessEqual(TE.team_price(asset, team.ctx(), team.cap_space, good, owns=True),
+                             TE.team_price(asset, team.ctx(), team.cap_space, base, owns=True))
+
+    def test_trade_memory_survives_reload_but_expires_next_week(self):
+        self.L.set_phase('regular'); self.L.week = 6
+        self.L.teams['MIN'].gm.patience = .2
+        self.start_trade(); self.trade_reply('pressure')
+        loaded = League.load(self.L.save())
+        self.assertFalse(ND.start_trade(loaded, 'GB', 'MIN', 'target', 'acquire')['ok'])
+        loaded.week = 7
+        self.assertIsNone(ND.trade_state(loaded, 'GB', 'MIN'))
+        self.assertTrue(ND.start_trade(loaded, 'GB', 'MIN', 'target', 'acquire')['ok'])
 
     def test_no_trade_commitment_refuses_that_player_not_every_asset(self):
         NG.record_promise(self.L, 'target', 'MIN', 'no_trade')

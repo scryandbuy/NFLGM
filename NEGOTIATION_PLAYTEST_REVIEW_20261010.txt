@@ -1,0 +1,124 @@
+NEGOTIATION FOLLOW-UP PLAYTEST — CHANGES (3)
+2026-10-10
+
+Scope
+-----
+Follow-up to 3af51e6 on the same isolated personal-negotiations branch.
+Main integration was notified before work. No merge, distribution bundle,
+push or deployment. Original week-six user save was not changed; its SHA256
+still matches the untouched disposable import copy:
+BAAB37AA8E4D6B82C987F86AA5C1A15D6F57336DA4BD58405A70CF0993ACA979.
+
+Concrete defects reproduced and corrected
+-----------------------------------------
+1. A GM could promise a concession for a pick, but team_price ignored the
+   negotiated own_bias for all picks. Reproducer: requested pick price was
+   8.1308125 both before and after a valid discussion commitment.
+2. Lowering own_bias on a negative-value player increased the asking price:
+   -5.65 became -5.50375. The concession therefore worked against the user.
+
+negotiation_discussions.trade_persona still decides whether the actual package
+keeps the conversation commitment and includes the subject. It now carries the
+original attachment and bounded concession into the existing trade_engine
+pricing owner. Owned picks receive the corresponding proportional discount;
+negative-value players retain their original quote. Positive-player pricing,
+CPU personalities without a discussion, buyer prices and all legality/roster/
+financial/portfolio checks retain their existing paths. No global GM mutation.
+No new trade valuation weights or acceptance thresholds were introduced.
+
+Football motivation and restraint were explained before implementation. The
+existing primary-source research was rechecked: FM's recruitment article covers
+pre-offer expectations and negotiable demands; the Eagles' Peters account covers
+dialogue, relationships and considering the complete return. These support the
+interaction pattern, not a measured numerical concession percentage:
+https://www.footballmanager.com/features/recruitment-revamp
+https://www.philadelphiaeagles.com/news/inside-peters-deal-what-s-next-for-eagles-3569443
+The small cap is an existing game-design choice. Keeping a player, his role and
+replacement coverage, contract/cap costs, and remaining draft options must still
+justify a move. No helpful conversation makes an inadequate package obligatory.
+
+Browser walkthrough on disposable week-six copy
+------------------------------------------------
+Source: nflgm-2034-week-6.json.gz; GB, week 6 of 2034; 52/53 active, $13.263m room.
+Tuna Leveston (LT) was out until week 8. Brady Daniels was already on IR.
+Selected Bernhard Raimann, age 37, displayed 77 OVR, as a temporary LT option.
+The existing Wessell alternative was retained; no incumbent was cut or traded.
+This is a controlled user-choice walkthrough, not proof that paying this veteran
+is preferable to using Wessell (76 OVR, better scheme fit) for a short absence.
+
+Ask the Agent -> priorities -> price range $7.17m-$7.61m -> finish -> Open Proposal.
+No starting-role promise was made for a temporary injury replacement.
+Sign Today at $7.39m completed immediately. Active roster became 53/53, displayed
+cap room $7.5m, week remained 6. Raimann was highlighted as the healthy LT starter;
+manually dragged him first in the LT order. Save -> reload -> Resume preserved
+the signing, depth pin and week. Original export file untouched.
+Screenshot: injury-replacement-lineup.png in the Changes (3) task folder.
+
+Additional unresolved browser finding: after the successful save/reload check,
+clicking Export on this large save crashed the Codex in-app browser page. The
+download did not complete during the tool wait. Root cause is not established.
+No export/save implementation was changed here. Reported to Changes (2), which
+is actively working on retained-history size/memory, to avoid overlapping edits.
+This export attempt is NOT reported as successful or as a negotiation failure.
+
+Controlled comparisons using the save's actual assets
+----------------------------------------------------
+audit_negotiation_playtest.py reads a copy into memory and prices identical
+packages before/after persuasion. It does not write the source save. At the end,
+one separate controlled trade is executed in that disposable memory only.
+
+280 player-package comparisons: two actual targets each from BAL, BUF, MIN, SF,
+35 single/two-pick packages per target. Patient BAL/MIN granted concessions;
+BUF/SF declined that pitch. Core players still listened; cap-invalid star deals
+remained blocked. None of these 280 packages crossed the preview acceptance
+boundary. This sample used high/low roster endpoints, so it does not establish
+that player concessions are too weak or cannot matter in a close deal.
+
+96 deliberately selected close pick packages: four first/second-round targets
+each for BAL/MIN, 12 nearby owned-pick packages per target. 56 crossed the preview
+acceptance boundary after the correction, zero moved the wrong way. This sample
+is intentionally concentrated around the boundary; 56/96 is NOT a league-wide
+success rate. An owned BAL first's quote moved from 37.145 to 36.12249 trade-value
+units, about 2.75%. Its identical GB-first return went from short to fair. The
+actual Propose path then accepted and transferred the picks, still in week 6.
+CPU financial/portfolio checks were active, not stubbed. Preview comparisons
+left transaction count and session RNG unchanged before that separate execution.
+
+Player personality, counters and memory
+--------------------------------------
+Six fixed-profile contract scenarios, same player/ask/offer otherwise:
+repeating an offer 1% below the counter did not buy a discount. Max-money was
+final on counter two; the other five reached final on counter three. The first
+counter was never final. This is the current explicit game abstraction; the
+playtest does not establish that every personality should use this cadence.
+
+Changing the package with a no-trade commitment earned acceptance at 2% below
+the standing counter in each controlled profile. Its total value differed:
+homebody's acceptable price changed 21.69 -> 20.45; max-money 21.70 -> 21.05.
+Reducing trust to .4 weakened those concessions to 21.20 and 21.44 respectively.
+These are million-per-year figures for synthetic otherwise-identical extension
+fixtures; not quotes or deals observed in the user's career.
+
+Repeated choices/subject swapping cannot stack a concession. Closed GM calls
+survive save/reload; a new week opens a new window. Existing player promises and
+trust persist. Long-term GM-to-GM relationship memory is still not implemented;
+this pass did not silently add a new relationship model or treat each week's
+fresh conversation as evidence of a lifetime reputation system.
+
+Verification
+------------
+75 focused Python tests passed: discussions (18), trade assets/counters/ask
+performance, portfolio, feedback, and draft-investment regression/alternatives.
+Both price defects failed their new regressions before the fixes and passed
+afterward. A new save/reload/week-transition memory regression also passed.
+build_web.py and git diff --check passed. Generated browser engine is updated.
+No front-end implementation changed in this follow-up.
+
+Evidence in Changes (3) task folder:
+  negotiation-playtest.json (initial 280-package observations)
+  negotiation-playtest-corrected.json (376 comparisons + controlled execution)
+  injury-replacement-lineup.png (browser confirmation)
+
+Remaining work is broader gameplay calibration, optional persistent GM relations,
+and the separately reported large-save export failure. No multi-season balance
+or successful post-signing export is claimed.
