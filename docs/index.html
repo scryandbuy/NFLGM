@@ -7,10 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <<<<<<< HEAD
-<link rel="stylesheet" href="style.css?v=f40b1ecfe7">
+<<<<<<< HEAD
+<link rel="stylesheet" href="style.css?v=72a9dc5199">
 =======
-<link rel="stylesheet" href="style.css?v=f40b1ecfe7">
+<link rel="stylesheet" href="style.css?v=72a9dc5199">
 >>>>>>> b71ab3a (Carry postgame practice squad elevations into intended game)
+=======
+<link rel="stylesheet" href="style.css?v=72a9dc5199">
+>>>>>>> 7e7b86a (Stream compressed franchise exports and accept gzip imports)
 </head>
 <body>
 
@@ -24,7 +28,7 @@
       <div class="boot-picker-head">
         <h2 id="boot-picker-title">Choose your team</h2>
         <div class="boot-selected" hidden aria-live="polite"><span class="boot-selected-code" id="selectedcode"></span><b id="selectedname"></b></div>
-        <div class="boot-actions"><button class="boot-action primary" id="start" disabled>Start a Franchise</button><button class="boot-action" id="resume" disabled>Resume Saved Game</button><button class="boot-action" id="recover" hidden>Download Save Backup</button><button class="boot-action" id="boot-import" disabled>Import Save File</button><input type="file" id="boot-importfile" accept=".json,application/json" hidden></div>
+        <div class="boot-actions"><button class="boot-action primary" id="start" disabled>Start a Franchise</button><button class="boot-action" id="resume" disabled>Resume Saved Game</button><button class="boot-action" id="recover" hidden>Download Save Backup</button><button class="boot-action" id="boot-import" disabled>Import Save File</button><input type="file" id="boot-importfile" accept=".json,.gz,application/json,application/gzip" hidden></div>
       </div>
       <div class="boot-pick" id="pick" role="group" aria-label="Choose your team"></div>
       <div class="boot-progress"><div class="boot-bar" role="progressbar" aria-label="Loading game" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="bootbar"></i></div><div class="boot-line" id="bootline" role="status" aria-live="polite">Loading game…</div></div>
@@ -47,7 +51,7 @@
   </div>
   <div class="rail-navigation"><div class="in">    <nav id="nav">
       <a href="#portal" data-page="portal" aria-current="page">Portal <span class="badge" id="badge" hidden>0</span></a><a href="#club" data-page="club">Team</a><a href="#personnel" data-page="personnel">Personnel</a><a href="#draft" data-page="draft">Draft</a><a href="#league" data-page="league">League</a><a href="#gameplan" data-page="gameplan">Game Plan</a><a href="#gameday" data-page="gameday">Game Day</a><a href="#frontoffice" data-page="frontoffice">Front Office</a>
-    </nav><div class="rail-utilities"><button class="kbd" id="save" aria-label="Save" data-tip="Save to this browser">Save</button><button class="kbd" id="export" aria-label="Export" data-tip="Export the save as a file">Export</button><button class="kbd" id="import" aria-label="Import" data-tip="Import a save file">Import</button><input type="file" id="importfile" accept=".json,application/json" hidden>      <details class="quick-menu"><summary>Quick Links</summary><div class="quick-links"><a href="#club">Roster</a><a href="#club/depth">Depth Chart</a><a href="#frontoffice/cap">Cap</a><a href="#personnel/wire">Wire</a><a href="#league">Standings</a></div></details></div></div></div>
+    </nav><div class="rail-utilities"><button class="kbd" id="save" aria-label="Save" data-tip="Save to this browser">Save</button><button class="kbd" id="export" aria-label="Export" data-tip="Export the save as a file">Export</button><button class="kbd" id="import" aria-label="Import" data-tip="Import a save file">Import</button><input type="file" id="importfile" accept=".json,.gz,application/json,application/gzip" hidden>      <details class="quick-menu"><summary>Quick Links</summary><div class="quick-links"><a href="#club">Roster</a><a href="#club/depth">Depth Chart</a><a href="#frontoffice/cap">Cap</a><a href="#personnel/wire">Wire</a><a href="#league">Standings</a></div></details></div></div></div>
   <div class="sub">
     <div class="in">
       <div class="crumb" id="crumb">Portal</div>
@@ -64,9 +68,13 @@
 <main id="page" hidden></main>
 
 <<<<<<< HEAD
-<script type="module" src="app.js?v=f40b1ecfe7"></script>
+<<<<<<< HEAD
+<script type="module" src="app.js?v=72a9dc5199"></script>
 =======
-<script type="module" src="app.js?v=f40b1ecfe7"></script>
+<script type="module" src="app.js?v=72a9dc5199"></script>
 >>>>>>> b71ab3a (Carry postgame practice squad elevations into intended game)
+=======
+<script type="module" src="app.js?v=72a9dc5199"></script>
+>>>>>>> 7e7b86a (Stream compressed franchise exports and accept gzip imports)
 </body>
 </html>

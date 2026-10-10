@@ -131,6 +131,38 @@ async function loadEngineFiles(manifest, fs, fetchFile = fetch, progress = say) 
   }
 }
 
+async function saveImportStream(source) {
+  const blob = typeof source === 'string' ? new Blob([source]) : source;
+  const header = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  // Detect the contents, so renamed files and existing JSON backups both work.
+  if (header[0] === 0x1f && header[1] === 0x8b) {
+    if (typeof DecompressionStream === 'undefined') throw Error('This browser cannot open compressed saves. Update your browser or decompress the file first.');
+    return blob.stream().pipeThrough(new DecompressionStream('gzip'));
+  }
+  return blob.stream();
+}
+
+function exportSessionBlob() {
+  const path = '/nflgm-export-save.json.gz';
+  let file = null;
+  try {
+    // Capture synchronously: game actions cannot change the franchise mid-export.
+    py.runPython("SESSION.export_file('/nflgm-export-save.json.gz')");
+    file = py.FS.open(path, 'r');
+    const blocks = [], buffer = new Uint8Array(256 * 1024);
+    for (;;) {
+      const count = py.FS.read(file, buffer, 0, buffer.length);
+      if (!count) break;
+      // Blob copies the bytes before the reusable transfer buffer changes.
+      blocks.push(new Blob([buffer.subarray(0, count)]));
+    }
+    return new Blob(blocks, {type: 'application/gzip'});
+  } finally {
+    if (file) { py.FS.close(file); file = null; }
+    if (py.FS.analyzePath(path).exists) py.FS.unlink(path);
+  }
+}
+
 async function loadSessionFromBlob(source, onStage = () => {}) {
   // Passing a large save through py.globals.set makes Pyodide convert the
   // entire JS string at once. Its bridge fails on long-running franchises.
@@ -139,13 +171,18 @@ async function loadSessionFromBlob(source, onStage = () => {}) {
   try {
     onStage('copying the save into the engine');
     try {
-      const reader = (typeof source === 'string' ? new Blob([source]) : source).stream().getReader();
+      const reader = (await saveImportStream(source)).getReader();
       let offset = 0;
-      for (;;) {
-        const {value, done} = await reader.read();
-        if (done) break;
-        py.FS.write(file, value, 0, value.byteLength, offset);
-        offset += value.byteLength;
+      try {
+        for (;;) {
+          const {value, done} = await reader.read();
+          if (done) break;
+          py.FS.write(file, value, 0, value.byteLength, offset);
+          offset += value.byteLength;
+        }
+      } finally {
+        try { await reader.cancel(); } catch (_) { /* Preserve the original read error. */ }
+        reader.releaseLock();
       }
     } finally {
       py.FS.close(file);
@@ -4571,9 +4608,13 @@ async function advanceInner() {
   document.querySelector('.quick-menu').addEventListener('click', e => { if (e.target.closest('a')) e.currentTarget.open = false; });
   // EXPORT AND IMPORT: the save as a file, for a backup or for sending a state to be looked at
   $('#export').onclick = () => {
-    const text = py.runPython(`SESSION.save()`); const st = pyJSON(`SESSION.rail_state()`);
-    const blob = new Blob([text], { type: 'application/json' }); const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = `nflgm-${st.year}-${st.stop}.json`; document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    try {
+      const st = pyJSON('SESSION.rail_state()'), blob = exportSessionBlob();
+      const a = document.createElement('a'), url = URL.createObjectURL(blob);
+      a.href = url; a.download = `nflgm-${st.year}-${st.stop}.json.gz`;
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (error) { notify({ok: false, why: 'The export failed: ' + String(error)}); }
   };
   $('#import').onclick = () => { if (gameplanUnsaved() || gameplanSaving) { warnUnsavedGameplan(); return; } $('#importfile').click(); };
   $('#importfile').onchange = async e => {

@@ -358,6 +358,25 @@ class Session:
         """Portable full JSON export; browser autosaves use changed records."""
         return json.dumps(self._save_data(), default=LG._session_json_default, separators=(',', ':'))
 
+    def export_file(self, path):
+        """Lossless portable gzip JSON without constructing a full JSON string.
+
+        The browser reads this compressed temporary file in bounded blocks and
+        removes it. Snapshot fields and RNG are identical to save().
+        """
+        import gzip
+        encoder = json.JSONEncoder(default=LG._session_json_default, separators=(',', ':'))
+        with gzip.open(path, 'wb', compresslevel=6) as output:
+            parts, size = [], 0
+            for part in encoder.iterencode(self._save_data()):
+                parts.append(part)
+                size += len(part)
+                if size >= 256 * 1024:
+                    output.write(''.join(parts).encode('utf-8'))
+                    parts, size = [], 0
+            if parts:
+                output.write(''.join(parts).encode('utf-8'))
+
     def save_incremental(self):
         from incremental_save import Snapshot
         writer = getattr(self, '_browser_snapshot', None)
