@@ -38,6 +38,13 @@ latest=view(2);
 find(page,n=>n.tag==='button'&&n.children.includes('Sim to Your Pick')).onclick();
 assert.equal(ctx.boardRound,2,'sim across rounds follows the pick');
 assert.ok(find(page,n=>n['aria-label']==='Round 2'&&n['aria-pressed']==='true'));
+// Choosing manually must open the established full board even when this preview is empty.
+const beforeChoose=commands.length;
+find(page,n=>(n.class||'').split(' ').includes('dd-tile')&&(n.class||'').split(' ').includes('now')).onclick();
+const choose=find(page,n=>n.children?.includes('Choose a Player'));
+assert.equal(choose.tag,'a');
+assert.equal(choose.href,'#draft/board');
+assert.equal(commands.length,beforeChoose,'opening the board must not make a pick');
 find(page,n=>n['aria-label']==='Round 1').onclick();
 assert.equal(ctx.boardRound,1,'manual previous-round browsing remains available');
 ok=false;

@@ -3261,11 +3261,13 @@ function renderDraftDay(v) {
     else copy.append(el('strong',{class:'dd-detail-name'},q.now?'On the clock':q.mine?'Your pick':'Upcoming pick'),el('p',{},q.original?`Acquired from ${showAbbr(q.original)}`:''));
     detail.replaceChildren(crest(q.team,45),copy);
     if(!q.done&&!q.mine)detail.append(el('button',{class:'btn',onclick:()=>{tradeState={other:q.team.abbr,a:[],b:[q.id],keep:true,draft:true};location.hash='#personnel/trades';}},'Trade for This Pick'));
-    if(q.now&&q.mine&&selected)detail.append(el('button',{class:'btn go',onclick:()=>showProspect(selected)},'Choose a Player'));
+    if(q.now&&q.mine)detail.append(el('a',{class:'btn go',href:'#draft/board'},'Choose a Player'));
   };
   for(const q of v.order.filter(q=>q.round===boardRound)){
     const theme=teamTheme(q.team);
-    const sq=el('button',{type:'button',class:'dd-tile'+(q.done?' done':'')+(q.now?' now':'')+(q.mine?' mine':''),style:`--pick-team:${theme.base};--pick-accent:${theme.accent}`, 'aria-label':`Pick ${q.sel}, ${q.team.name}, ${q.done ? q.name+', '+q.pos : q.now ? 'on the clock' : q.mine ? 'your pick' : 'upcoming'}`,onclick:()=>showPick(q)},
+    // Use the club's primary identity, not the often-shared gold secondary color.
+    const pickColor=q.team.abbr==='LV' ? theme.accent : (q.team.color || COLOR[q.team.abbr] || theme.base);
+    const sq=el('button',{type:'button',class:'dd-tile'+(q.done?' done':'')+(q.now?' now':'')+(q.mine?' mine':''),style:`--pick-team:${theme.base};--pick-accent:${pickColor}`, 'aria-label':`Pick ${q.sel}, ${q.team.name}, ${q.done ? q.name+', '+q.pos : q.now ? 'on the clock' : q.mine ? 'your pick' : 'upcoming'}`,onclick:()=>showPick(q)},
       el('span',{class:'dd-tile-head'},el('strong',{},showAbbr(q.team.abbr)),el('span',{},q.sel)),
       el('span',{class:'dd-tile-name'},q.done?surname(q.name):q.now?'On the clock':q.mine?'Your pick':''),
       el('span',{class:'dd-tile-sub'},[q.done?q.pos:null,q.original?`from ${showAbbr(q.original)}`:null].filter(Boolean).join(' · ')));
@@ -3288,7 +3290,7 @@ function renderDraftDay(v) {
   const list=el('div',{class:'dd-candidates'});
   for(const r of available.rows.slice(0,12))list.append(el('button',{type:'button',class:'dd-candidate','data-pid':r.pid,'aria-pressed':String(selected?.pid===r.pid),'aria-label':`${r.name}, ${r.pos}, estimated overall ${r.mine}, projected ${r.proj_range}`,onclick:()=>showProspect(r)},
     el('span',{class:'dd-rank'},available.source==='consensus'?(r.cons_rank??'—'):r.board_no),el('span',{class:'dd-position'},r.pos),
-    el('span',{class:'dd-candidate-copy'},el('strong',{},surname(r.name)),el('small',{},[r.home_state,r.proj_range].filter(Boolean).join(' · '))),el('span',{class:'dd-rating'},ovrCell(r.mine))));
+    el('span',{class:'dd-candidate-copy'},el('strong',{},r.name),el('small',{},[r.home_state,r.proj_range].filter(Boolean).join(' · '))),el('span',{class:'dd-rating'},ovrCell(r.mine))));
   if(!available.rows.length)list.append(el('p',{class:'empty'},'No eligible prospects remain on this board.'));
   right.append(list,el('div',{class:'dd-needs'},el('span',{},'YOUR NEEDS'),...(v.my_needs||[]).slice(0,3).map(n=>el('strong',{},n))),el('div',{class:'dd-board-link'},el('a',{class:'btn',href:'#draft/board'},'Open Your Board')));
   // The full explanation is available on demand; it does not crowd the list.
