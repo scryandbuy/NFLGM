@@ -25,6 +25,9 @@ class PracticeSquadOfferTests(unittest.TestCase):
         with patch('valuation.value_player', return_value=dict(apy=2., years=1)):
             result = VP.act_poach_ps(self.l, 'GB', self.p.pid)
         self.assertTrue(result['ok'], result)
+        # The regular-season UI now routes the instant signing through talks.
+        for choice in ('finish', 'proposal'):
+            self.assertTrue(VP.act_player_discuss(self.l, 'GB', result['thread'], choice)['ok'])
         return NG.find(self.l, result['thread'])
 
     def test_sign_at_53_then_block_advance_until_cut(self):

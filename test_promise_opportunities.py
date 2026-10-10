@@ -249,7 +249,11 @@ class PromiseOpportunities(unittest.TestCase):
         for trust in (1, .65, 0):
             self.p.morale.trust = trust
             floors.append(NG._assessment(self.L, self.p, t, offer)['reference_package']['apy'])
-        for got, want in zip(floors, (9.7, 9.805, 10)): self.assertAlmostEqual(got, want)
+        # Size reflects this player's existing preferences; credibility still
+        # scales the concession linearly and zero trust buys no concession.
+        self.assertLess(floors[0], floors[1]); self.assertLess(floors[1], floors[2])
+        self.assertAlmostEqual(10 - floors[1], (10 - floors[0]) * .65)
+        self.assertAlmostEqual(floors[2], 10)
         self.assertAlmostEqual(NG._assessment(self.L, self.p, t, dict(offer, promises=[]))['reference_package']['apy'], 10)
 
     def test_market_promise_utility_uses_current_trust_even_with_stale_profile(self):

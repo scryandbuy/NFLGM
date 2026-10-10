@@ -135,7 +135,8 @@ def _situation(league, p):
     m = getattr(p, 'morale', None)
     return dict(loyalty=tr.get('loyalty', 50) / 100.0, money=tr.get('financial_priority', 50) / 100.0,
                 morale=(m.value if m else 50.0), star=p.ovr >= 88, final_year=(p.contract is not None and p.contract.years <= 1),
-                in_season=(league.phase in ('regular_season', 'season', 'regular', 'playoffs') or (1 <= int(league.week or 0) <= 18)))
+                in_season=(league.phase in ('regular_season', 'season', 'regular', 'playoffs') or
+                           (league.phase not in ('offseason', 'free_agency', 'camp', 'draft') and 1 <= int(league.week or 0) <= 18)))
 
 
 def _say(t, who, text):
@@ -230,6 +231,8 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
         return dict(ok=False, why=f"this negotiation is {t['state']}")
     if t['state'] == 'match_requested':
         return dict(ok=False, why='Match the competing offer or let him sign with the other team.')
+    if t.get('discussion', {}).get('stage', 'proposal') != 'proposal':
+        return dict(ok=False, why='Finish the conversation and open the proposal first.')
     c = t.get('counter') if t['state'] == 'countered' else None
     p = league.player(t['pid']); s = _situation(league, p)
     offer = dict(apy=float(apy), years=int(years), bonus=bonus, front_load=front_load, promises=list(promises), when=_clock(league), by='you')
@@ -239,6 +242,11 @@ def make_offer(league, tid, apy, years, bonus=None, front_load=None, promises=()
         assessment = _assessment(league, p, t, offer)
     except (ValueError, TypeError, OverflowError) as exc:
         return dict(ok=False, why=str(exc))
+    if c and t.get('final_offer'):
+        agreed = CO.canonical(league, p, league.teams[t['team']], c, t['kind'])
+        if not (offer['apy'] + 1e-9 >= agreed['apy'] and all(offer[k] == agreed[k] for k in ('years', 'bonus', 'front_load'))
+                and set(offer['promises']) == set(agreed['promises'])):
+            return dict(ok=False, why='This is his final offer. Accept the complete terms or walk away.')
     # Validate before consuming patience or replacing a standing counter.
     from offer_reservations import check_offer
     why = check_offer(league, t['team'], t, offer['apy'], offer['years'], offer['bonus'], offer['front_load'])
@@ -326,8 +334,11 @@ def sign_today_offer(league, t):
         return None
     p = league.player(t['pid'])
     if p is None: return None
-    probe = dict(apy=t['ask'], years=t['years'])
+    discussion = t.get('discussion') or {}
+    probe = dict(apy=t['ask'], years=t['years'], promises=list(discussion.get('promises', [])))
     quote = dict(_assessment(league, p, t, probe, immediate=True)['reference_package'])
+    quote['promises'] = probe['promises']
+    quote['front_load'] = discussion.get('front_load', quote['front_load'])
     quote['apy'] = math.ceil(float(quote['apy']) * 100 - 1e-9) / 100
     return quote
 
@@ -353,9 +364,11 @@ def _assessment(league, p, t, offer, immediate=False):
             floor = max(floor, ask * (1.0 + ne['demand_premium']) * .98)
     # promises are worth something to him
     import negotiation_engine as NE, contract_offer as CO
-    trust = CO.profile_for(p)['trust']
-    for k in offer.get('promises', []):
-        floor *= 1.0 - NE.PROMISES.get(k, {}).get('base', 0.0) * trust
+    profile = CO.profile_for(p)
+    ctx = dict(contested_at_position=league.teams[t['team']].contested_at_position(p.pos) > .5)
+    for k in dict.fromkeys(offer.get('promises', [])):
+        if k in NE.PROMISES:
+            floor *= 1.0 - NE.promise_value(k, dict(age=p.age), profile, ctx)
     return CO.assess(league, p, league.teams[t['team']], offer, max(.01, floor), t['years'], t['kind'])
 
 
@@ -446,9 +459,17 @@ def _answer(league, t, p, offer, floor, quiet=False):
         return 'declined'
     # a counter: toward the floor, not all the way
     t['counter'] = _counter_package(league, p, t, offer)
+    t['counter_rounds'] = t.get('counter_rounds', 0) + 1
+    # One genuine return round is always available. Patience and personality
+    # decide whether the following counter is final, not the first counter.
+    import contract_offer as CO
+    profile = CO.profile_for(p)
+    limit = 2 if profile['archetype'] == 'max_money' or t.get('patience', PATIENCE) <= 1 else 3
+    t['final_offer'] = t['counter_rounds'] >= limit
     counter, counter_years, counter_bonus = t['counter']['apy'], t['counter']['years'], t['counter']['bonus']
     t['state'] = 'countered'
-    _say(t, 'agent', f"Close. He would do it at ${counter:.1f}m a year.")
+    reason = 'The total needs to make up for the payment schedule and term.' if offer.get('front_load', .5) != .5 or offer['years'] != t['years'] else 'The annual pay needs to come closer to his market.'
+    _say(t, 'agent', f"{'This is his final offer' if t['final_offer'] else 'He can accept this package'}: ${counter:.2f}m a year. {reason}")
     post(f"{p.name}'s agent counters at ${counter:.1f}m", f"Over {counter_years} year(s), keeping the offered salary structure. " + (f"Signing bonus: ${counter_bonus:.2f}m. " if counter_bonus is not None else "Signing bonus uses the standard structure. ") + ("He is close." if counter <= offer['apy'] * 1.06 else "There is a gap."),
          payload=dict(counter=t['counter'], thread=t['id'], link=f'negotiation:{t["id"]}'))
     return 'countered'
@@ -505,6 +526,8 @@ def withdraw(league, tid):
         _say(t, 'you', 'Declined to match.'); _say(t, 'agent', line)
         _post(league, t, f"{p.name} signs with {r['team']}", line)
         return dict(ok=True, state='declined', line=line)
+    if t.get('final_offer'):
+        t.update(firm_refusal=True, refusal_year=league.year, refusal_clock=_clock(league))
     t['state'] = 'declined'; t['counter'] = None; t['due'] = None
     _say(t, 'you', 'Offer withdrawn.')
     return dict(ok=True, line='Offer withdrawn.')

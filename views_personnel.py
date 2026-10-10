@@ -6,6 +6,7 @@ and what their buttons do. Every action goes through the engine's own
 functions; nothing here decides a deal.
 """
 import numpy as np
+import negotiation_discussions as ND
 from views import club, money, morale_word, player_plate, rail, user_player_grade
 
 CLUBS = ['ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN', 'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC', 'LV', 'LAC', 'LA', 'MIA', 'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SF', 'SEA', 'TB', 'TEN', 'WAS']
@@ -86,7 +87,7 @@ def trades(session, league, abbr, other=None, a_sends=(), b_sends=()):
     D = getattr(session, 'draft', None)
     if D is not None and not D.done and D.current() is not None:
         q = D.current(); draft_live = dict(slot=f"{q.round}.{q.selection - 32 * (q.round - 1):02d}", sel=q.selection, team=q.owner)
-    return dict(rail=rail(session, league, abbr), draft_live=draft_live, clubs=[club(c) for c in CLUBS if c != abbr], other=club(other),
+    return dict(rail=rail(session, league, abbr), discussion=ND.trade_view(league, abbr, other), draft_live=draft_live, clubs=[club(c) for c in CLUBS if c != abbr], other=club(other),
                 me=dict(club=club(abbr), record=record(me), cap=round(me.cap_space, 1), roster=[_plate(league, p) for p in sorted(me.active(), key=lambda p: -p.ovr)],
                         picks=[_pick_row(league, pk) for pk in sorted(me.picks, key=lambda k: (k.year, k.round)) if not pk.used_on],
                         surplus=[dict(pid=x['pid'], why=_surplus_why(league, me, x)) for x in my_surplus], needs=sorted(my_needs)),
@@ -136,7 +137,7 @@ def _evaluate(league, abbr, other, a_sends, b_sends, *, pool=None,
     import trades as TR, trade_engine as TE, valuation as VAL
     me, them = league.teams[abbr], league.teams[other]
     rng = _rng(league, 5); pool = pool if pool is not None else VAL.pool_from_league(league)
-    ga, gb = TR.persona(me.gm), TR.persona(them.gm)
+    ga, gb = TR.persona(me.gm), ND.trade_persona(league, abbr, other, a_sends, b_sends)
     offer_a = dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me))
     r = TE.evaluate(offer_a, me.ctx(), them.ctx(), me.cap_space, them.cap_space, ga, gb, user_a=True)
     plan_read = None
@@ -155,6 +156,8 @@ def _evaluate(league, abbr, other, a_sends, b_sends, *, pool=None,
         if not decision['approved']:
             r = dict(r, blocked='cpu_plan', accepted=False)
             plan_read = decision['why']
+    refusal = ND.trade_refusal(league, abbr, other, b_sends)
+    if refusal: r = dict(r, blocked='gm_refusal', accepted=False); plan_read = refusal
     # Broad, deterministic interest estimate, not acceptance probability.
     # A cap veto omits valuation totals. Quote the package for the meter;
     # this does not override trade eligibility.
@@ -252,6 +255,9 @@ def act_save_trade_counter(league, abbr, msg_id, other, a_sends, b_sends):
 
 
 def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
+    discussion = ND.trade_state(league, abbr, other)
+    if discussion and discussion['stage'] != 'proposal' and counter_id is None:
+        return dict(ok=False, done=False, why='Finish the conversation and open the proposal first.')
     counter = None
     if counter_id is not None:
         saved = act_save_trade_counter(league, abbr, counter_id, other, a_sends, b_sends)
@@ -269,7 +275,7 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     # their GM answers: the engine's acceptance roll on their gain
     import trade_engine as TE, valuation as VAL
     pool = VAL.pool_from_league(league); me = league.teams[abbr]
-    r = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, TR.persona(me.gm), TR.persona(them.gm), user_a=True)
+    r = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends, pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me.ctx(), them.ctx(), me.cap_space, them.cap_space, TR.persona(me.gm), ND.trade_persona(league, abbr, other, a_sends, b_sends), user_a=True)
     a_items = [(x if _trade_player(league, x) else _find_pick(league, abbr, x)) for x in a_sends]; b_items = [(x if _trade_player(league, x) else _find_pick(league, other, x)) for x in b_sends]
     decision = TR.cpu_trade_check(league, me, them, a_items, b_items)
     if not decision['approved']:
@@ -285,6 +291,7 @@ def act_propose(league, abbr, other, a_sends, b_sends, counter_id=None):
     try: league.trade(abbr, other, [x for x in a_items if x is not None], [x for x in b_items if x is not None])
     except ValueError as e: return dict(ok=False, done=False, why=str(e))
     if counter is not None: counter['state'] = 'accepted'
+    if discussion: discussion.update(stage='topic', concession=0.)
     import inbox as IB
     IB.post(league, 'trade_done', f"Trade with {other} is done", '', sender=other,
             payload=dict(user_team=abbr, mail_layout='trade',
@@ -296,10 +303,12 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     """Find a verified seller-acceptable package, without mutating the offer."""
     a_sends = _trade_ids(league, abbr, a_sends)
     b_sends = _trade_ids(league, other, b_sends)
+    refusal = ND.trade_refusal(league, abbr, other, b_sends)
+    if refusal: return dict(ok=False, adds=[], why=refusal)
     import trades as TR, trade_engine as TE, valuation as VAL
     me, them = league.teams[abbr], league.teams[other]
     if not b_sends: return dict(ok=False, adds=[], why='Select something you want from them first.')
-    pool = VAL.pool_from_league(league); ga, gb = TR.persona(me.gm), TR.persona(them.gm)
+    pool = VAL.pool_from_league(league); ga, gb = TR.persona(me.gm), ND.trade_persona(league, abbr, other, a_sends, b_sends)
     # Match Propose's valuation seed and value existing players only once.
     rng = _rng(league, 11)
     outgoing = _assets(league, abbr, a_sends, pool, rng, viewer=them)
@@ -309,8 +318,15 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     # the next click sees any intervening signing, injury or contract change.
     me_ctx, them_ctx = me.ctx(), them.ctx()
     me_space, them_space = me.cap_space, them.cap_space
-    def evaluate(extra):
-        return TE.evaluate(dict(a_sends=outgoing + extra, a_gets=incoming), me_ctx, them_ctx, me_space, them_space, ga, gb, user_a=True)
+    discussion = ND.trade_state(league, abbr, other)
+    def persona_for(ids):
+        # Pick search never changes the player package. Reuse its needs check
+        # instead of rebuilding the whole depth chart for every combination.
+        if not discussion or discussion.get('commitment') != 'picks': return gb
+        return ND.trade_persona(league, abbr, other, ids, b_sends)
+    def evaluate(extra, extra_ids=()):
+        persona = persona_for(a_sends + list(extra_ids))
+        return TE.evaluate(dict(a_sends=outgoing + extra, a_gets=incoming), me_ctx, them_ctx, me_space, them_space, ga, persona, user_a=True)
     initial = evaluate([])
     if initial.get('blocked'):
         return dict(ok=False, adds=[], why=_cap_block_read(initial['blocked'], other))
@@ -350,7 +366,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
             pk = a['obj']
             return f"{pk.year}-{pk.round}-{pk.original}"
         alt_ids = [asset_id(a) for a in alternative]
-        check = TE.evaluate(dict(a_sends=alternative, a_gets=incoming), me_ctx, them_ctx, me_space, them_space, ga, gb, user_a=True)
+        check = TE.evaluate(dict(a_sends=alternative, a_gets=incoming), me_ctx, them_ctx, me_space, them_space, ga, persona_for(alt_ids), user_a=True)
         if not check.get('blocked') and check['b_gain'] > required_gain:
             alternative_plan = plan_check(alt_ids)
             if (alternative_plan['approved'] and
@@ -377,7 +393,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
         for prefix in frontier:
             for i in range(prefix[-1] + 1 if prefix else 0, len(candidates)):
                 package = prefix + (i,)
-                result = evaluate([candidates[j][2] for j in package])
+                result = evaluate([candidates[j][2] for j in package], [candidates[j][1] for j in package])
                 if result.get('blocked'): continue
                 gain = result['b_gain']
                 threshold = required_gain
@@ -403,7 +419,7 @@ def act_ask(league, abbr, other, a_sends, b_sends):
     chosen = [candidates[i] for i in best[1]]
     # Reprice the complete offer exactly as Propose will, then verify the final package.
     rng = _rng(league, 11)
-    final = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends + [x[1] for x in chosen], pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me_ctx, them_ctx, me_space, them_space, ga, gb, user_a=True)
+    final = TE.evaluate(dict(a_sends=_assets(league, abbr, a_sends + [x[1] for x in chosen], pool, rng, viewer=them), a_gets=_assets(league, other, b_sends, pool, rng, viewer=me)), me_ctx, them_ctx, me_space, them_space, ga, persona_for(a_sends + [x[1] for x in chosen]), user_a=True)
     if final.get('blocked') or final['b_gain'] <= required_gain:
         return dict(ok=False, adds=[], why='No acceptable counteroffer was found. Your offer has not changed.')
     decision = plan_check(a_sends + [x[1] for x in chosen])
@@ -432,6 +448,8 @@ def act_gather(league, abbr, pid):
     football_cache, financial_cache = {}, {}
     for other, them in league.teams.items():
         if other == abbr: continue
+        discussion = ND.trade_state(league, abbr, other)
+        if discussion and discussion['stage'] == 'closed': continue
         gb = TR.persona(them.gm)
         picks = [pk for pk in them.picks if not pk.used_on and pk.year - league.year <= 1]
         picks.sort(key=lambda k: (k.year, k.round))
@@ -488,6 +506,10 @@ def act_gather(league, abbr, pid):
             ids = [(f"{it.year}-{it.round}-{it.original}" if kind == 'pick' else it) for kind, it in pkg]
             first_round = min((it.round for kind, it in pkg if kind == 'pick'), default=8)
             offers.append(dict(club=club(other), words=words, ids=ids, assets=[dict(kind=kind, id=ident) for (kind, _), ident in zip(pkg, ids)], gain=r['a_gain'], first_round=first_round, n=len(pkg)))
+            if discussion:
+                # A verified incoming package is already an invitation to the
+                # proposal desk; do not strand it behind an earlier discussion.
+                discussion['stage'] = 'proposal'
     offers.sort(key=lambda o: -o['gain'])
     return dict(ok=True, name=p.name, offers=offers, line=(f"{len(offers)} club{'s' if len(offers) != 1 else ''} would deal for {p.name}." if offers else f"No club would give anything for {p.name} right now."))
 
@@ -607,6 +629,18 @@ def free_agency(session, league, abbr):
                 positions=sorted({r['pos'] for r in rows}), position_filters=PR.fa_position_filters(me))
 
 
+def act_trade_discuss(league, abbr, other, choice=None, asset=None, direction='acquire'):
+    if choice is None: return ND.start_trade(league, abbr, other, asset, direction)
+    return ND.trade_reply(league, abbr, other, choice)
+
+
+def act_player_discuss(league, abbr, tid, choice):
+    import negotiations as NG
+    t = NG.find(league, tid)
+    if t is None or t.get('team') != abbr: return dict(ok=False, why='These are not your talks.')
+    return ND.player_reply(league, t, choice)
+
+
 def _thread(league, t):
     import negotiations as NG
     p = league.player(t['pid'])
@@ -626,6 +660,9 @@ def _thread(league, t):
     ROUNDS_ = {19: 'Wild Card', 20: 'Divisional', 21: 'Conf. Finals', 22: 'Championship Game'}     # the playoffs run as weeks 19 to 22 inside
     opened = ((f"Week {op}" if op <= 18 else ROUNDS_.get(op, 'the playoffs')) if op is not None and op < 100 else ('the offseason' if op == 100 else f"FA step {op - 100}") if op is not None else '')
     return dict(id=t['id'], pid=t['pid'], name=p.name if p else t['pid'], pos=p.pos if p else '', kind=t['kind'], state=t['state'], ask=ask_offer['apy'] if ask_offer else t.get('ask'), ask_offer=ask_offer, years=t.get('years'), mood=mood, opened=opened,
+                discussion=ND.player_view(league, t) if p else None,
+                starting_offer=ND.starting_offer(league, t) if p and t['state'] == 'open' and not t.get('offers') and ND.player_state(league, t)['stage'] == 'proposal' else None,
+                final_offer=t.get('final_offer', False),
                 offers=t.get('offers', []), counter=t.get('counter'), rival=t.get('rival'), due=t.get('due'), patience=pat, log=t.get('log', []), sign_today_offer=NG.sign_today_offer(league, t),
                 agent_line=f"The agent is {temper} and {pat_word}. He answers {answers}.")
 

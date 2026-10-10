@@ -11,7 +11,7 @@ for(const compact of [false,true]) {
  assert.match(b.children[0],/2\.32/);
  assert.match(b.attrs['data-tip'],/0\.50m signing bonus/);
  b.attrs.onclick();
- assert.equal(calls.at(-1),"SESSION.personnel_act('offer', tid=9, apy=2.32, years=1, bonus=0.5, front_load=0.5, sign_today=True)");
+ assert.equal(calls.at(-1),"SESSION.personnel_act('offer', tid=9, apy=2.32, years=1, bonus=0.5, front_load=0.5, promises=[], sign_today=True)");
  assert.equal(feedback.at(-1).state,'accepted');
  result={ok:false,why:'Not enough available cap room.'};b.attrs.onclick();
  assert.equal(feedback.at(-1).why,result.why);
@@ -22,6 +22,11 @@ for(const compact of [false,true]) {
 }
 assert.equal(refreshes,6);
 assert.equal(context.signTodayButton({id:9},()=>{}).tag,'span');
+let opened=0;context.openTalks=()=>opened++;
+const pending=context.signTodayButton({...t,discussion:{stage:'talk'}},()=>{});
+assert.equal(pending.children[0],'Open Talks');pending.attrs.onclick();assert.equal(opened,1);
+const after=context.signTodayButton({...t,discussion:{stage:'proposal'}},()=>{});
+assert.match(after.children[0],/Sign Today/);after.attrs.onclick();assert.match(calls.at(-1),/sign_today=True/);
 assert.match(src,/acts\.append\(signTodayButton\(t, onDone\)\)/);
 assert.match(src,/signTodayButton\(v\.threads\.find/);
 console.log('Sign Today UI: displayed terms, submitted terms, both entry points, and visible failures pass.');

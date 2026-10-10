@@ -1937,7 +1937,7 @@ function tradeCounterSelection(existing, adds, own, removes = []) {
 }
 function tradePickerState(key) {
   tradeState.pickers ||= {};
-  return tradeState.pickers[key] ||= {mode:'players', query:'', scroll:0};
+  return tradeState.pickers[key] ||= {mode:'players', query:'', position:'', scroll:0};
 }
 function tradeAssetRow(own, asset, remove, onChange, side) {
   const p = asset.kind === 'player' ? own.roster.find(p => String(p.pid) === String(asset.id)) : own.picks.find(p => String(p.id) === String(asset.id));
@@ -1968,13 +1968,17 @@ function renderTradePicker(own, selected, ui, onChange, side) {
   const wrap = el('div', {class:'trade-picker'}), tabs = el('div', {class:'trade-picker-tools'}), rows = el('div', {class:'trade-rows'});
   const draw = () => {
     rows.replaceChildren();
-    const pool = ui.mode === 'players' ? own.roster.map(p => ({kind:'player', id:p.pid, text:`${p.short} ${p.name || ''} ${p.pos}`})) : own.picks.map(p => ({kind:'pick',id:p.id,text:`${p.words} ${p.own_words} ${p.proj || ''}`}));
+    const pool = ui.mode === 'players' ? own.roster.filter(p=>!ui.position || p.pos===ui.position).map(p => ({kind:'player', id:p.pid, text:`${p.short} ${p.name || ''} ${p.pos}`})) : own.picks.map(p => ({kind:'pick',id:p.id,text:`${p.words} ${p.own_words} ${p.proj || ''}`}));
+    positions.hidden = ui.mode !== 'players';
     for (const a of pool) if (!selected.some(x => x.kind === a.kind && String(x.id) === String(a.id)) && a.text.toLowerCase().includes(ui.query.toLowerCase())) rows.append(tradeAssetRow(own, {kind:a.kind,id:a.id}, false, onChange, side));
     if (!rows.children.length) rows.append(el('div', {class:'empty'}, 'No matching assets.'));
     rows.scrollTop = ui.scroll;
   };
   for (const [key,label] of [['players','Players'],['picks',side === 'a' ? 'Your Picks' : 'Their Picks']]) tabs.append(el('button',{class:'btn','aria-pressed':String(ui.mode === key),onclick:e => {ui.mode=key;ui.scroll=0;tabs.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===e.currentTarget)));draw();}},label));
   tabs.append(el('input',{type:'search',placeholder:'Find a player or pick…',value:ui.query,'aria-label':`Search ${own.club.name} assets`,oninput:e=>{ui.query=e.target.value;ui.scroll=0;draw();}}));
+  const positions=el('select',{'aria-label':`Filter ${own.club.name} by position`,onchange:e=>{ui.position=e.target.value;ui.scroll=0;draw();}},el('option',{value:''},'All Positions'));
+  for(const pos of [...new Set(own.roster.map(p=>p.pos))].sort())positions.append(el('option',{value:pos,selected:ui.position===pos?'':null},pos));
+  tabs.append(positions);
   rows.addEventListener('scroll',()=>{ui.scroll=rows.scrollTop;});
   wrap.append(tabs, rows); draw();
   requestAnimationFrame(()=>{if(rows.isConnected) rows.scrollTop=ui.scroll;});
@@ -2004,7 +2008,7 @@ function renderTradeSide(v, key, reload) {
     surplus.append(el('button',{class:'trade-surplus',disabled:selected.some(a=>a.kind==='player'&&a.id===p.pid)?'':null,'data-tip':x.why,onclick:()=>onChange({kind:'player',id:p.pid},false)},p.short));
   }
   if(!own.surplus.length) surplus.append(el('span',{},'Nothing spare.'));
-  notes.append(surplus); box.append(notes); return box;
+  notes.append(surplus); if(key==='a' || v.discussion?.needs_known)box.append(notes); return box;
 }
 function tradeFeedbackKey() {
   return JSON.stringify([tradeState.other, tradeState.a, tradeState.b]);
@@ -2052,6 +2056,45 @@ function renderTradeSummary(v,reload) {
     el('button',{class:'btn quiet',onclick:()=>{tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload(true);}},'Clear'));
   summary.append(actions);return summary;
 }
+function discussionCard(d, name, onChoice) {
+  const card=el('section',{class:'neg-conversation','aria-label':`Conversation with ${name}`});
+  card.append(el('div',{class:'neg-conversation-person'},el('span',{class:'neg-call-dot','aria-hidden':'true'}),el('small',{},'IN CONVERSATION'),el('h2',{},name)));
+  const latest=(d.log||[]).at(-1);
+  if(latest)card.append(el('p',{class:'neg-dialogue',role:'status'},latest.text));
+  if(d.log?.length>1){
+    const history=el('details',{class:'neg-conversation-history'},el('summary',{},'Conversation History'));
+    for(const line of d.log.slice(0,-1))history.append(el('p',{},el('b',{},line.who==='you'?'You: ':`${name}: `),line.text));
+    card.append(history);
+  }
+  const choices=el('div',{class:'neg-choices'});
+  for(const choice of d.choices||[])choices.append(el('button',{class:'btn'+(choice.key==='proposal'?' go':''),onclick:()=>onChoice(choice.key)},choice.label));
+  card.append(choices);return card;
+}
+function renderTradeDiscussion(v,reload) {
+  const d=v.discussion||{stage:'topic'}, wrap=el('div',{class:'trade-discussion'});
+  const send=(choice,asset,direction)=>{
+    const args=choice?`choice=${JSON.stringify(choice)}`:`asset=${JSON.stringify(asset)}, direction=${JSON.stringify(direction)}`;
+    const r=pyJSON(`SESSION.personnel_act('trade_discuss', other=${JSON.stringify(v.other.abbr)}, ${args})`);
+    if(!r.ok){notify(r);return;}
+    if(asset){const side=direction==='offer'?'a':'b';if(!tradeState[side].some(x=>x.kind===asset.kind&&x.id===asset.id))tradeState[side].push(asset);}
+    reload();
+  };
+  if(d.stage==='topic'){
+    wrap.append(el('div',{class:'neg-topic-heading'},el('small',{},v.them.coach||v.them.club.name),el('h2',{},'Start a Conversation'),el('p',{},'Who or what would you like to discuss?')));
+    let direction='acquire';
+    const select=el('select',{'aria-label':'Trade discussion direction',onchange:e=>{direction=e.target.value;draw();}},el('option',{value:'acquire'},'Someone or Something I Want'),el('option',{value:'offer'},'Someone or Something I Can Offer'));
+    const picker=el('div',{class:'neg-topic-picker'});
+    const draw=()=>{const own=direction==='acquire'?v.them:v.me;picker.replaceChildren(renderTradePicker(own,[],tradePickerState('topic:'+own.club.abbr),(asset)=>send(null,asset,direction),direction==='acquire'?'b':'a'));};
+    const target=tradeState.b[0]||tradeState.a[0];
+    if(target){const fromThem=!!tradeState.b.length,own=fromThem?v.them:v.me,p=target.kind==='player'?own.roster.find(p=>p.pid===target.id):own.picks.find(p=>p.id===target.id);if(p)wrap.append(el('button',{class:'btn go',onclick:()=>send(null,target,fromThem?'acquire':'offer')},`Discuss ${p.name||p.words||p.short}`));}
+    wrap.append(select,picker);draw();
+  }else{
+    wrap.append(discussionCard(d,v.them.coach||v.them.club.name,choice=>send(choice)));
+    if(d.stage==='closed')wrap.append(el('p',{class:'neg-closed'},'Talks Have Ended'));
+    else wrap.append(el('button',{class:'btn quiet',onclick:()=>renderTrades({...v,discussion:{...d,stage:'topic'}})},'Discuss Another Asset'));
+  }
+  return wrap;
+}
 function renderTrades(v) {
   renderRail(v.rail); const page=persPage();persSecond('trades');
   $('#action-feedback').hidden = true;
@@ -2060,27 +2103,33 @@ function renderTrades(v) {
   const reload=(persist=false)=>{if(persist && tradeState.counter_id != null){const r=pyJSON(`SESSION.personnel_act('save_trade_counter', msg_id=${Number(tradeState.counter_id)}, other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`);if(!r.ok)notify(r);}const y=window.scrollY;renderTrades(pyJSON(`SESSION.personnel('trades', other=${JSON.stringify(tradeState.other)}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`));window.scrollTo(0,y);};
   const s=el('section',{class:'sheet c12 trade-board'});applyTeamTheme(s,v.me.club);
   const partners=el('div',{class:'trade-team-emblems',role:'group','aria-label':'Choose trade partner'});
-  for(const c of v.clubs) partners.append(el('button',{class:'trade-team-emblem',style:`--team-color:${teamTheme(c).base}`,'aria-label':c.name,'aria-pressed':String(c.abbr===v.other.abbr),'data-tip':c.name,onclick:()=>{if(c.abbr===tradeState.other)return;tradeState.counter_id=null;tradeState.other=c.abbr;tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload();}},showAbbr(c.abbr)));
+  for(const c of v.clubs) partners.append(el('button',{class:'trade-team-emblem',style:`--team-color:${teamTheme(c).base}`,'aria-label':c.name,'aria-pressed':String(c.abbr===v.other.abbr),'data-tip':c.name,onclick:()=>{if(c.abbr===tradeState.other)return;tradeState.counter_id=null;tradeState.receivedOffer=false;tradeState.other=c.abbr;tradeState.a=[];tradeState.b=[];tradeState.offers=null;reload();}},showAbbr(c.abbr)));
   s.append(el('div',{class:'trade-hero trade-partners'},partners));
   if(!v.can_trade)s.append(el('div',{class:'banner'},'The trade deadline has passed. Trades reopen after the season.'));
   if(v.draft_live)s.append(el('div',{class:'banner'},`Draft day · pick ${v.draft_live.slot} · ${showAbbr(v.draft_live.team)} on the clock. `,el('a',{class:'btn',href:'#draft/day'},'Back to the Draft')));
+  // Incoming, already negotiated counters keep their existing proposal route.
+  if(v.discussion?.stage !== 'proposal' && tradeState.counter_id == null && !tradeState.receivedOffer){
+    s.append(renderTradeDiscussion(v,reload));page.append(s);return;
+  }
+  s.append(el('div',{class:'neg-proposal-heading'},el('h2',{},'Trade Proposal'),el('button',{class:'btn quiet',onclick:()=>{tradeState.receivedOffer=false;renderTrades({...v,discussion:{...v.discussion,stage:'topic'}});}},'Discuss Another Asset')));
   s.append(el('div',{class:'trade-columns'},renderTradeSide(v,'a',reload),renderTradeSide(v,'b',reload)));
   if(tradeState.offers){
     const r=tradeState.offers, list=el('div',{class:'trade-offers'},el('h3',{},r.line||r.why||'Offers'));
-    for(const o of r.offers||[])list.append(el('div',{class:'trade-offer'},crest(o.club,26),el('span',{},`${o.club.name}: ${o.words.join(' and ')}`),el('button',{class:'btn',onclick:()=>{tradeState.counter_id=null;tradeState.other=o.club.abbr;tradeState.a=[{kind:'player',id:r.pid}];tradeState.b=o.assets||o.ids;tradeState.offers=null;reload();}},'Open')));
+    for(const o of r.offers||[])list.append(el('div',{class:'trade-offer'},crest(o.club,26),el('span',{},`${o.club.name}: ${o.words.join(' and ')}`),el('button',{class:'btn',onclick:()=>{tradeState.counter_id=null;tradeState.receivedOffer=true;tradeState.other=o.club.abbr;tradeState.a=[{kind:'player',id:r.pid}];tradeState.b=o.assets||o.ids;tradeState.offers=null;reload();}},'Open Proposal')));
     s.append(list);
   }
   s.append(renderTradeSummary(v,reload));page.append(s);
 }
 
 function signTodayButton(t, onDone, compact = false) {
+  if(t?.discussion && t.discussion.stage!=='proposal')return el('button',{class:'btn',onclick:()=>openTalks(t,onDone)},'Open Talks');
   const quote = t?.sign_today_offer;
   if (!quote) return el('span', { class: 'count' }, 'Reopen talks for current signing terms');
   const label = compact ? `Sign $${quote.apy.toFixed(2)}m` : `Sign Today at $${quote.apy.toFixed(2)}m`;
   return el('button', { class: compact ? 'btn go' : 'btn',
-    'data-tip': `${quote.years} year(s), $${quote.apy.toFixed(2)}m annual rate, $${quote.bonus.toFixed(2)}m signing bonus`,
+    'data-tip': `${quote.years} year(s), $${quote.apy.toFixed(2)}m annual rate, $${quote.bonus.toFixed(2)}m signing bonus${quote.promises?.length?', '+quote.promises.map(x=>x.replaceAll('_',' ')).join(', '):''}`,
     onclick: () => {
-      const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${quote.apy}, years=${quote.years}, bonus=${quote.bonus}, front_load=${quote.front_load}, sign_today=True)`);
+      const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${quote.apy}, years=${quote.years}, bonus=${quote.bonus}, front_load=${quote.front_load}, promises=${JSON.stringify(quote.promises||[])}, sign_today=True)`);
       notify(r.ok && r.state !== 'accepted' ? {ok:false, why:r.line || 'The player has not signed. Reopen talks to review his response.'} : r);
       onDone();
     }
@@ -2094,21 +2143,21 @@ function offerForm(t, kind, onDone, preset) {
       el('div', { class: 'offer-live' }, 'LIVE CONTRACT PREVIEW')
     )
   );
-  const start = preset || t.ask_offer || {};
+  const start = preset || t.starting_offer || t.ask_offer || {};
   const startYears = Math.max(1, +(start.years || t.years || 3)); const startBonus = start.bonus != null ? +start.bonus : 0;
   const startApy = start.apy != null ? +start.apy : (t.ask || 1.0);
   const salary = el('input', { type: 'number', step: 'any', min: '0', value: String(Number(Math.max(0, startApy - startBonus / startYears).toFixed(6))) });
   const apyOf = () => { const n = Math.max(1, +yrs.value || 1); return Math.round(((+salary.value || 0) + (+bonus.value || 0) / n) * 100) / 100; };
   const apy = { get value() { return String(apyOf()); } };
   const yrs = el('input', { type: 'number', min: '1', max: '7', value: String(start.years || t.years || 3) });
-  const bonus = el('input', { type: 'number', step: 'any', min: '0', value: String(startBonus) });
+  const bonus = el('input', { type: 'number', step: 'any', min: '0', value: String(Number(startBonus.toFixed(6))) });
   const shapeChips = el('div', { class: 'chips' }); let shape = start.front_load == null ? 0.5 : +start.front_load;
   for (const [val, label] of [[0.85, 'Pay It Now'], [0.5, 'League Shape'], [0.15, 'Back-Load']]) shapeChips.append(el('button', { class: 'chip', 'aria-pressed': String(val === shape), onclick: e => { shape = val; shapeChips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); e.currentTarget.setAttribute('aria-pressed', 'true'); preview(); } }, label));
   const y1 = el('b', {}, '—'), total = el('b', {}, '—'); const hitsRow = el('div', { class: 'hits' }); const yearHits = el('div', { class: 'offer year-hits' });
   const capImpact = el('div', { class: 'extension-impact-slot', 'aria-live': 'polite', hidden: true });
   const preview = () => {
     const r = pyJSON(`SESSION.personnel_act('offer_preview', pid=${JSON.stringify(t.pid)}, apy=${+apy.value || 0}, years=${+yrs.value || 1}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`);
-    if (!r.ok) { interest.textContent = ''; capImpact.hidden = false; capImpact.replaceChildren(el('p', {}, r.why || 'Cap preview unavailable for these terms.')); yearHits.replaceChildren(); hitsRow.replaceChildren(); return; }
+    if (!r.ok) { interest.textContent = ''; y1.textContent = '—'; total.textContent = '—'; breakdown.textContent = ''; capImpact.hidden = false; capImpact.replaceChildren(el('p', {}, r.why || 'Cap preview unavailable for these terms.')); yearHits.replaceChildren(); hitsRow.replaceChildren(); return; }
     y1.textContent = r.year1 != null ? `$${r.year1.toFixed(1)}m` : '—';
     total.textContent = `$${r.total}m`;
     const sy = f.querySelector('.summary-years'), sa = f.querySelector('.summary-apy');
@@ -2138,7 +2187,7 @@ function offerForm(t, kind, onDone, preset) {
     el('div', { class: 'offer', style: 'grid-template-columns:repeat(4,1fr)' }, el('label', {}, kind === 'extension' ? 'Added years' : 'Years', yrs), el('label', {}, 'Salary ($m / yr)', salary), el('label', {}, 'Signing Bonus ($m)', bonus), el('label', {}, kind === 'extension' ? 'New money' : 'Total', total)), capImpact, yearHits, breakdown,
     el('div', { class: 'shape' }, el('span', {}, 'Shape'), shapeChips), hitsRow, promises);
   const acts = el('div', { class: 'acts' });
-  acts.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${+apy.value}, years=${+yrs.value}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`); notify(r); onDone(); } }, kind === 'fa_inseason' ? 'Offer (decides at Advance)' : preset ? 'Send Counter' : 'Send Offer'));
+  acts.append(el('button', { class: 'btn go', onclick: () => { const r = pyJSON(`SESSION.personnel_act('offer', tid=${t.id}, apy=${+apy.value}, years=${+yrs.value}, bonus=${+bonus.value || 0}, front_load=${shape}, promises=${JSON.stringify(chosen)})`); notify(r); if(r.ok)onDone(); } }, kind === 'fa_inseason' ? 'Offer (decides at Advance)' : preset ? 'Send Counter' : 'Send Offer'));
   if (kind === 'fa_inseason') acts.append(signTodayButton(t, onDone));
   acts.append(el('button', { class: 'btn quiet', 'data-tip': (t.offers && t.offers.length) ? 'Pull your offer and end the talks' : 'End the talks', onclick: () => { const r = pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`); notify(r); onDone(); } }, (t.offers && t.offers.length) ? 'Rescind and Walk' : 'Let Him Go'));
   f.append(acts); setTimeout(preview, 0); return f;
@@ -2148,7 +2197,7 @@ function offerForm(t, kind, onDone, preset) {
 function talkLine(t, reload) {
   const state = { open: 'awaiting your offer', waiting: 'agent deciding', countered: 'countered', match_requested: 'matching', accepted: 'agreed', declined: 'declined', expired: 'expired', broken_off: 'walked away' }[t.state] || t.state;
   const done = !['open', 'waiting', 'countered', 'match_requested'].includes(t.state);
-  const ask=t.ask&&!done?`$${(+t.ask).toFixed(1)}m × ${t.years}`:'';
+  const ask=t.ask&&!done&&(!t.discussion || t.discussion.quote || t.offers?.length)?`$${(+t.ask).toFixed(1)}m × ${t.years}`:'';
   return el('button', { class: 'talkline' + (done ? ' done' : ''), 'aria-label':`${done?'History':'Open'}: ${t.name}, ${state}`, 'data-tip':[t.opened?`Opened ${t.opened}`:'',state,ask].filter(Boolean).join(' · '), onclick: () => openTalks(t, reload) },
     el('span', { class: 'nm' }, t.name, el('small',{},t.pos)), el('span', { class: 'talk-state' }, state, ask?el('small',{},ask):''), el('span', { class: 'go' }, done ? 'History ›' : 'Open ›'));
 }
@@ -2295,32 +2344,53 @@ function extensionImpact(preview, title = 'Proposed extension · cap impact') {
 }
 function threadBox(t, onDone) {
   const box = el('div', { class: 'thread negotiation-thread' });
+  if(t.discussion && t.discussion.stage!=='proposal' && t.state==='open' && !t.offers?.length){
+    box.append(discussionCard(t.discussion,t.name,choice=>{
+      const r=pyJSON(`SESSION.personnel_act('player_discuss', tid=${t.id}, choice=${JSON.stringify(choice)})`);
+      if(r.ok)onDone();else notify(r);
+    }));
+    box.append(el('button',{class:'btn quiet',onclick:()=>{const r=pyJSON(`SESSION.personnel_act('withdraw', tid=${t.id})`);notify(r);if(r.ok)onDone();}},'Walk Away'));
+    return box;
+  }
+  box.append(el('h3',{class:'neg-proposal-heading'},'Contract Proposal'));
   if (t.kind === 'extension' && t.extension_cap) {
-    box.append(extensionBudgets(t.current_cap, t.extension_cap, t.cap));
+    const details=el('details',{class:'neg-cap-details'},el('summary',{},`Cap Room · $${t.cap?.space ?? t.current_cap?.space ?? 0}m · View Budgets`),extensionBudgets(t.current_cap,t.extension_cap,t.cap));
+    box.append(details);
   } else if (t.cap) box.append(el('div', { class: 'msg note cap-strip' }, el('b', {}, `${t.cap.year} cap · `), `$${t.cap.limit}m limit, $${t.cap.committed}m committed, `, el('b', {}, `$${t.cap.space}m of room`), t.cap.next ? ' (next year, the ledger this deal lands on)' : ''));
-  // the conversation as logged: every line with who said it, then the agent's temperament, then the decision
   const log = t.log && t.log.length ? t.log : [];
-  if (!log.length) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, `Agent · Before Any Offer`), el('div', { class: 'txt' }, t.ask ? el('span', {}, `He is asking `, el('b', {}, `$${t.ask}m × ${t.years}`), '.') : 'He would rather wait.')));
-  for (const ln of log) box.append(el('div', { class: 'msg' + (ln.who === 'you' ? ' you' : '') }, el('div', { class: 'from' }, ln.who === 'you' ? 'You' : 'Agent'), el('div', { class: 'txt' }, ln.text)));
-  if (t.ask && log.length) box.append(el('div', { class: 'msg note' }, el('b', {}, 'Ask · '), `$${t.ask}m × ${t.years}`));
-  box.append(el('div', { class: 'msg note' }, t.agent_line || ''));
+  const reply=[...log].reverse().find(line=>line.who==='agent');
+  if(reply)box.append(el('p',{class:'neg-proposal-reply',role:'status'},reply.text));
   const matching=t.state==='match_requested' && !!t.rival;
   const countered=t.state==='countered' && !!t.counter;
   const counterLoading = t.counter && Object.prototype.hasOwnProperty.call(t.counter, 'front_load') ? t.counter.front_load : t.offers?.[t.offers.length - 1]?.front_load;
   const counterLoadingText = counterLoading == null ? 'Salary loading: standard structure' : Number(counterLoading) < 0.5 ? 'Salary loading: Backloaded' : Number(counterLoading) > 0.5 ? 'Salary loading: Frontloaded' : 'Salary loading: Even';
-  if (t.kind === 'extension' && t.offer_cap_preview?.ok)
-    box.append(extensionImpact(t.offer_cap_preview, countered ? 'Agent counter · cap impact' : 'Submitted offer · cap impact'));
+  let standingImpact=null;
+  if (t.kind === 'extension' && t.offer_cap_preview?.ok) {
+    const preview=t.offer_cap_preview,current=preview.cap_impact?.find(r=>r.year===preview.cap_focus_year)||preview.cap_impact?.[0];
+    const change=current?` · ${current.change>=0?'+':''}$${current.change.toFixed(3)}m This Year`:'';
+    standingImpact=el('details',{class:'neg-cap-details'},el('summary',{},`View Cap Impact${change}`),extensionImpact(preview,countered?'Agent counter · cap impact':'Submitted offer · cap impact'));box.append(standingImpact);
+  }
   else if (t.kind === 'extension' && t.offer_cap_preview?.ok === false)
     box.append(el('div', { class: 'msg note', role: 'alert' }, t.offer_cap_preview.why || 'These terms cannot be used. Revise the offer.'));
   const feedback=el('div',{class:'msg note',role:'alert',hidden:true});
   const act=action=>{const r=pyJSON(`SESSION.personnel_act('${action}', tid=${t.id})`);notify(r);if(r.ok)onDone();else{feedback.hidden=false;feedback.textContent=r.why||'The decision could not be completed.';}};
   if (matching) box.append(el('div', { class: 'msg match rival-panel' }, el('div', { class: 'from' }, 'To Match'), el('div', { class: 'txt' }, `${showAbbr(t.rival.team)} has offered `, el('b', {}, `$${t.rival.apy}m × ${t.rival.years}`), '. Match it and he signs today.'), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { act('match'); } }, 'Match and Sign'), el('button', { class: 'btn quiet', onclick: () => { act('withdraw'); } }, 'Let Him Go'))));
-  if (countered) box.append(el('div', { class: 'msg' }, el('div', { class: 'from' }, 'Counter'), el('div', { class: 'txt' }, el('b', {}, `$${t.counter.apy}m × ${t.counter.years}`), el('div', {}, t.counter.bonus != null ? `Signing bonus: $${Number(t.counter.bonus).toFixed(2)}m` : 'Signing bonus: standard structure'), el('small', {}, counterLoadingText)), el('div', { class: 'acts' }, el('button', { class: 'btn go', onclick: () => { act('match_counter'); } }, 'Accept Counter'))));
+  if (countered) {
+    const panel=el('div',{class:'msg neg-counter'},el('div',{class:'from'},t.final_offer?'Final Offer':'Counteroffer'),
+      el('div',{class:'txt'},el('b',{},`$${t.counter.apy}m × ${t.counter.years}`),
+        el('div',{},t.counter.bonus!=null?`Signing bonus: $${Number(t.counter.bonus).toFixed(2)}m`:'Signing bonus: standard structure'),
+        el('small',{},counterLoadingText),
+        (t.counter.promises||[]).length?el('p',{},'Commitments: '+t.counter.promises.map(x=>x.replaceAll('_',' ')).join(', ')):null));
+    const actions=el('div',{class:'acts'},el('button',{class:'btn go',onclick:()=>act('match_counter')},'Accept Counter'));
+    if(!t.final_offer)actions.append(el('button',{class:'btn',onclick:()=>{standingImpact?.remove();panel.replaceChildren(offerForm(t,t.kind,onDone,t.counter));}},'Make Counteroffer'));
+    actions.append(el('button',{class:'btn quiet',onclick:()=>act('withdraw')},'Walk Away'));
+    panel.append(actions);box.append(panel);
+  }
   if (t.state === 'waiting') box.append(el('div', { class: 'msg note', style: 'display:flex;align-items:center;gap:12px' }, el('span', { style: 'flex:1' }, `Waiting on his answer${t.due ? ' · due ' + t.due : ''}.`), el('button', { class: 'btn quiet', 'data-tip': 'Pull the offer before he answers; the thread closes', onclick: () => { act('withdraw'); } }, 'Rescind Offer')));
   else if (['accepted', 'signed'].includes(t.state)) box.append(el('div', { class: 'msg note' }, 'Signed.'));
   else if (t.state === 'broken_off') box.append(el('div', { class: 'msg note' }, 'He has broken off talks.'));
   else if (t.state === 'declined') box.append(el('div', { class: 'msg note' }, 'He declined.'));
-  else if (!matching && ['open','countered'].includes(t.state)) box.append(offerForm(t, t.kind, onDone, countered ? { apy: t.counter.apy, years: t.counter.years } : null));
+  else if (!matching && t.state==='open') box.append(offerForm(t, t.kind, onDone, null));
   box.append(feedback);
   return box;
 }
@@ -2518,7 +2588,7 @@ function renderFA(v) {
   page.append(left);
   const right = el('section', { class: 'sheet c4' }, el('h2', {}, inSeason ? 'Talks' : 'Negotiation', el('small', {}, `${v.threads.length} open`)));
   { const live_ = ['open', 'waiting', 'countered', 'match_requested']; const ths = [...v.threads].sort((a, b) => (live_.includes(b.state) ? 1 : 0) - (live_.includes(a.state) ? 1 : 0) || b.id - a.id); for (const t of ths) right.append(talkLine(t, reload)); }
-  if (!v.threads.length) right.append(el('div', { class: 'empty' }, inSeason ? 'Ask an agent to hear his number. Sign at the ask today, or make a one-week offer that decides at the Advance.' : 'Ask an agent to open talks; he weighs offers through each round of the market.'));
+  if (!v.threads.length) right.append(el('div', { class: 'empty' }, inSeason ? 'Open talks, then choose Sign Today or submit an offer for the next Advance.' : 'Open talks before proposing a contract. He weighs offers through each round of the market.'));
   const feedSheet = el('section', { class: 'sheet c4', style: 'order:2' }, el('h2', {}, 'Around the League Today', el('small', {}, 'latest signings')));
   const fd = el('div', { class: 'feed' }); for (const f of v.feed) fd.append(el('div', {}, el('span', {}, stripe(f.team.abbr)), el('span', {}, `${f.team.name} ${f.kind === 'signs' ? 'signed' : 'extended'} `, el('b', {}, f.name), `, ${f.pos}${f.years ? `, ${f.years} year${f.years === 1 ? '' : 's'}` : ''}${f.apy ? ` at $${f.apy}m a year` : ''}`), el('time', {}, f.week ? `Wk ${f.week}` : ''))); if (!v.feed.length) fd.append(el('div', { class: 'empty' }, 'Quiet so far.')); feedSheet.append(fd);
   page.append(right, feedSheet);
@@ -2650,7 +2720,7 @@ function renderExtensions(v) {
   const right = el('section', { class: 'sheet c5' }, el('h2', {}, completed ? 'Completed Deal' : 'Negotiation', el('small', {}, completed ? 'This year' : `${v.threads.length} open`)));
   if(!completed){
   { const live_ = ['open', 'waiting', 'countered', 'match_requested']; const ths = [...v.threads].sort((a, b) => (live_.includes(b.state) ? 1 : 0) - (live_.includes(a.state) ? 1 : 0) || b.id - a.id); for (const t of ths) right.append(talkLine(t, reload)); }
-  if (!v.threads.length) right.append(el('div', { class: 'empty' }, 'Ask an agent to hear his number. Offers are answered in one to three weeks by situation.'));
+  if (!v.threads.length) right.append(el('div', { class: 'empty' }, 'Open talks before proposing a contract. Offseason offers are answered immediately; in-season offers can take one to three weeks.'));
   }
   page.append(right);
   finishPersonnel(page, v, 'extensions', left, right);

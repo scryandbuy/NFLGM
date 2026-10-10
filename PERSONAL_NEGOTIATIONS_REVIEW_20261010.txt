@@ -1,0 +1,148 @@
+PERSONAL NEGOTIATIONS — CHANGES (3)
+2026-10-10
+
+Scope and integration status
+----------------------------
+Implemented in codex/personal-negotiations-20261010, based on e6a32c6.
+Integration codex/full-integration-next-20261009 was still clean at e6a32c6
+on the final status check. Main integration acknowledged this chat's ownership.
+Other Changes chats were notified before edits. No merge, bundle, push or
+deployment was performed. Other worktrees and unfinished files were preserved.
+
+Decision and evidence
+---------------------
+Football Manager's official recruitment articles describe availability talks,
+discussing expectations before formal negotiations, and staff estimates when
+the manager has not obtained the player's expectations. The useful pattern is
+progressive discovery followed by a formal offer, with commitments carried over.
+This implementation does not import soccer transfer fees or release clauses.
+https://www.footballmanager.com/features/recruitment-revamp
+https://www.footballmanager.com/features/introducing-intermediaries-and-offloading-players
+
+The Eagles' first-party accounts of the Peters and Bradford trades describe
+initial calls, relationships, changing circumstances, and weighing the value of
+keeping a player against compensation and the remaining roster. Listening does
+not imply accepting, and a productive player need not be universally untouchable.
+https://www.philadelphiaeagles.com/news/inside-peters-deal-what-s-next-for-eagles-3569443
+https://www.philadelphiaeagles.com/news/quotes-howie-roseman-17620178
+
+Restraint: an incoming player must justify his job, costs, control and displaced
+players. Picks carry future roster opportunity costs. Conversation cannot waive
+coverage, cap, financial-plan or portfolio checks. An aggressive GM can entertain
+current help; a patient GM can entertain draft capital. Neither owes a concession.
+The size of concessions and number of final-offer rounds are game-design choices,
+not numerical findings from those sources.
+
+Existing owners retained
+------------------------
+Player paths: views_personnel -> negotiations.make_offer/_assessment/_answer ->
+contract_offer canonical cash/profile evaluation -> extensions.extend/market.sign.
+Morale trust and the existing promise ledger still record and audit signed promises.
+Manual promises now use negotiation_engine.promise_value, so their value reflects
+the existing individual preferences as well as current trust. Duplicate promises
+do not stack. No guarantees or unaudited new promise kinds were introduced.
+
+Trade paths: views_personnel _evaluate/act_ask/act_propose -> trade_engine plus
+trades.cpu_trade_check -> league.trade. Full player/pick selection, multi-asset
+packages, future picks, saved inbox counters, and draft trade bookkeeping remain.
+Gathered offers are still generated and checked by the existing package search.
+A verified incoming offer permits opening its proposal; a GM who ended the call
+does not generate a new offer through Gather Offers in the same window.
+
+New saved discussions
+---------------------
+negotiation_discussions owns dialogue state, allowed choices, disclosed quotes,
+and conditional commitments. It never signs or transfers an asset.
+Player discussions are nested in existing league.negotiations. Existing waiting,
+countered, offered and rival-match threads migrate straight to proposals.
+Trade discussions persist under league.trade_discussions. The existing incremental
+snapshot serializes this new root without a separate autosave implementation.
+Trade willingness/concessions expire with the negotiating clock/year; no permanent
+league-wide GM relationship simulation is claimed by this change.
+
+Trades start with a real owned player or pick, either direction. Availability is
+answered before the shortcut to an offer appears. Optional questions reveal needs
+and bargaining preferences. A credible pitch can reduce part of that GM's own-asset
+attachment premium, bounded at 0.035. It applies only when the discussed asset and
+the promised kind of return remain in the package. Changing the subject or repeating
+a choice cannot stack it. Insulting an impatient GM can close the call. Honoring an
+existing no-trade commitment can produce a contextual refusal; changing subjects
+does not smuggle that refused player back into this window's proposal.
+
+Contract opening figures use existing team-side valuation unless a player quote
+or disclosed range supersedes it. Discussion commitments and earlier-pay preference
+seed editable terms quietly. Normal counters allow Accept Counter, Make Counteroffer,
+or Walk Away. First counter is not final; the second or third can be final depending
+on personality/patience. Walking from a final offer respects the existing refusal
+window instead of immediately resetting the round count.
+
+Sign Today is preserved for regular-season free agents and practice-squad targets.
+The conversation now precedes it. Exact immediate terms include the conversation's
+commitments, are displayed/submitted consistently, and retain cap, minimum salary,
+competing-offer and roster protections. There is no calendar advance for an accepted
+immediate signing. Ordinary delayed offers retain their calendar behavior.
+An old week number no longer incorrectly makes offseason extensions wait.
+
+Presentation
+------------
+Conversation and proposal are separate views. No premature counter or narrator
+text is inserted. Title Case actions include Open Proposal. Both trade asset
+browsers have independent position filters; picks remain available independently.
+Changing discussion targets preserves the current package. Counter terms and actions
+take priority; full cap budgets/impact remain available in expandable sections.
+Subtle transitions honor reduced-motion preferences. Invalid offers preserve input.
+
+Observed in a copied user save (not a simulation of new transactions)
+-------------------------------------------------------------------
+nflgm-2034-week-6.json.gz: GB, regular season week 6, 7,041 players.
+Cameron Dicker: staff opening 4.95m, disclosed request/opening 5.04m; winning priority.
+Jordan Love: staff opening 57.99m, disclosed request/opening 64.15m; early cash/security.
+CJ Fuhrmann: staff opening 36.68m, disclosed request/opening 37.02m; role and low trust.
+Denver heard an inquiry about Jeremy Crawshaw as a core player, identified LG as a
+need, declined the draft-capital concession pitch, and invited an actual proposal.
+No offers/contracts/trades were executed: transaction count stayed 63,946 and the
+session RNG state was unchanged. The original save file was only read.
+Detailed local evidence: negotiation-save-audit.json in the Changes (3) task folder.
+
+Controlled outcomes and verification
+-----------------------------------
+New discussion tests cover initial/staged screens, price vs staff/range, saved
+profiles/commitments, replay prevention, old threads, normal/final counter acceptance,
+final walk refusal, differing promise values, availability before shortcuts,
+conditional GM concessions, personality restraint, core-player listening, targeted
+no-trade refusal, ownership, future picks, and immediate regular-season signing.
+
+Existing suites exercised: negotiation stages, contract security and shape, minimum
+demands, promise opportunities, CPU extension counters, release gates, incremental
+saves, practice-squad offers, typed trade assets, counters, seller willingness,
+seller lineup/coverage, receiving needs, remaining control, dead money, entry guards,
+portfolio costs, offer lifecycle, rejection memory, need labels and ask performance.
+The Campbell-Darrisaw regression and materially-better alternatives pass.
+
+220 distinct Python tests were exercised across the combined and focused runs.
+Initial legacy UI-path tests needed to finish the newly required conversation; the
+corrected focused runs passed (64 trade/related tests and 47 contract/related tests;
+these counts overlap and should not be added). Eight JavaScript UI suites passed.
+JavaScript syntax validation, build_web.py and git diff --check passed.
+
+A controlled actual-roster inquiry for Cade Singleton (WR, age 23.5, two controlled
+years, 1.09m current hit) illustrates restraint: a patient GM's concession reduced
+his owned-asset quote from 21.32 to 20.71 trade-value units, but the late-pick offer
+still failed the existing checks and was rejected. A conversational success did not
+turn an inadequate return into an accepted trade. These are trade-value units, not
+salary or a cash fee. This observation does not establish league-wide balance.
+
+Browser verification used a separate disposable local franchise and origin:
+target selection -> core-player response -> discovered needs -> invitation -> full
+proposal; independent QB/LT filtering; pick access; player conversation -> disclosed
+range -> proposal with seeded fields; illegal offer leaves input intact; legal offer
+produces a normal counter with another counter button; saved counter survives reload.
+
+Remaining calibration
+---------------------
+No multi-season balance study of the new dialogue/concession frequency was run.
+Concession size, openness and two/three-round finality should be judged in play.
+Existing roster/financial reserve checks deliberately retain their original pricing;
+a concession cannot buy past those conservative floors. The current dialogue is a
+bounded authored system using existing personalities, not unrestricted free text.
+No deployed-game result is claimed. Integration and publishing remain separate work.

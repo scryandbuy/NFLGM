@@ -1073,6 +1073,7 @@ class League:
             inbox_next_id=_inbox_next_id(),
             almanac=getattr(self, 'almanac', None),
             negotiations=getattr(self, 'negotiations', None) or [],
+            trade_discussions=getattr(self, 'trade_discussions', None) or {},
             staff=__import__('staff').to_dict(self),
             poaches=getattr(self, 'poaches', None) or [],
             pending_hires=getattr(self, 'pending_hires', None) or {},
@@ -1219,6 +1220,7 @@ class League:
         L.inbox = [_inbox_from_dict(L, m) for m in d.get('inbox', [])]
         L.almanac = d.get('almanac')
         L.negotiations = d.get('negotiations', []) or []; L.promises = d.get('promises', []) or []
+        L.trade_discussions = d.get('trade_discussions', {}) or {}
         L.exit_meetings = d.get('exit_meetings', {}) or {}
         L.pending_hires = d.get('pending_hires', {}) or {}
         L.awards_paid = d.get('awards_paid', {}) or {}
