@@ -36,6 +36,12 @@ MODULES.append('late_game')
 MODULES.append('deception_execution')
 MODULES.append('skill_runs')
 DATA = ['newgen_shape.json', 'league_seed_2026.csv', 'schedule_2026.csv', 'cfb27_ratings.csv', 'aging_curves.json', 'pick_values.json', 'wp_model.json', 'production_scores.json', 'free_agent_pool.csv', 'original_player_name_hashes.json']
+from build_validation import validate_web_sources
+try:
+    validate_web_sources(HERE, [m + '.py' for m in MODULES] + DATA +
+                         ['docs/index.html', 'docs/app.js', 'docs/style.css'])
+except ValueError as error:
+    raise SystemExit(f'build_web: {error}')
 os.makedirs(OUT, exist_ok=True)
 def _check_imports():
     """Every local module any shipped module imports must itself be shipped; a module left off the list fails
