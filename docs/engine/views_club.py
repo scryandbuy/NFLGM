@@ -613,7 +613,7 @@ def _player_history(league, p):
             winners = winners if isinstance(winners, list) else [winners]
             if p.pid in [str(w) for w in winners]:
                 add(year, 23, f"{year} · Awards", f"Award: {award_names.get(key, key.replace('_', ' ').title())}")
-    return [row for _, _, _, row in sorted(entries, key=lambda e: e[:3])]
+    return [row for _, _, _, row in sorted(entries, key=lambda e: e[:3], reverse=True)]
 
 
 def _ordn(n):

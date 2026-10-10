@@ -1520,7 +1520,7 @@ function renderCard(v) {
     s.append(developmentPanel(v.pid, () => renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(v.pid)})`))));
   } else {
     const box = el('div', { class: 'pad' }, h5('History', 'moves, deals and changes on record'));
-    const h = el('div', { class: 'histlist', style: 'max-width:720px' });
+    const h = el('div', { class: 'histlist', tabindex: '0', role: 'region', 'aria-label': 'Player history, newest first', style: 'max-width:720px' });
     for (const x of (v.history || [])) h.append(el('div', {}, el('time', {}, x.when), el('span', {}, x.line)));
     if (!(v.history || []).length) h.append(el('div', {}, el('time', {}, '—'), el('span', {}, 'Nothing on record yet.')));
     box.append(h); s.append(box);
