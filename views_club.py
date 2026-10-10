@@ -195,13 +195,20 @@ def roster(session, league, abbr):
         men.sort(key=lambda p: (poss.index(p.pos), -p.ovr))
         groups.append(dict(title=title, side=('offense' if poss[0] in OFFENSE else 'special' if poss[0] in ('K', 'P', 'LS') else 'defense'), rows=[_row(session, league, t, p) for p in men]))
     import practice_squad as PSQ
+    elevation = session._elevation_context(abbr)
+    elevation_label = (f"Week {elevation['week']}" if elevation['week'] <= 18 else
+                       {19: 'Wild Card', 20: 'Divisional Round', 21: 'Conference Championship',
+                        22: 'Championship Game'}.get(elevation['week'], 'next game'))
+    elevated = PSQ.elevations_for_week(t, elevation['week'])
+    if elevation.get('completed_week') is not None:
+        elevated = [p for p in elevated if p.xp_spent.get('_elevation_week', 0) > elevation['completed_week']]
     ps = []
     for p in PSQ.squad(t):
-        r = _row(session, league, t, p); r['elevations'] = int(p.xp_spent.get('_elevations', 0) or 0); r['elevated_now'] = p in (getattr(t, '_elevated', []) or [])
+        r = _row(session, league, t, p); r['elevations'] = int(p.xp_spent.get('_elevations', 0) or 0); r['elevated_now'] = p in elevated
         ps.append(r)
     injured = [_row(session, league, t, p) for p in t.active() if p.out_until is not None]
     return dict(rail=rail(session, league, abbr), groups=groups, count=len(t.active()), cap_total=__import__('views').cap_focus(league,t)['committed'],
-                practice=ps, injured=injured, ps_charge=round(PSQ.ps_charge(t), 1), elevations_used=len(getattr(t, '_elevated', []) or []), elevations_max=PSQ.ELEVATIONS_PER_GAME, per_man_max=PSQ.ELEVATIONS_PER_MAN, playoff_elevations=session.stop[0] == 'playoffs',
+                practice=ps, injured=injured, ps_charge=round(PSQ.ps_charge(t), 1), elevations_used=len(elevated), elevations_max=PSQ.ELEVATIONS_PER_GAME, per_man_max=PSQ.ELEVATIONS_PER_MAN, playoff_elevations=elevation['playoffs'], elevation_label=elevation_label,
                 ir=[dict(_row(session, league, t, p), ir_week=int(p.xp_spent.get('_ir_week', 0) or 0), returnable=bool(p.xp_spent.get('_ir_return', False)), can_activate=t.ir_return_status(p, league.week)['ok'], activate_reason=t.ir_return_status(p, league.week).get('why', '')) for p in (getattr(t, 'ir', None) or [])],
                 ir_returns_left=t.IR_RETURNS - int(getattr(t, 'ir_returns_used', 0) or 0), week=league.week)
 

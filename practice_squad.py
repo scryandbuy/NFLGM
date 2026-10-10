@@ -498,13 +498,28 @@ def elevate(league, abbr, pids, week, playoffs=False):
             if call_up(league, abbr, pid): out.append((pid, 'signed'))
             continue
         if not playoffs: p.xp_spent['_elevations'] = n + 1
+        p.xp_spent['_elevation_week'] = int(week)
         team._elevated = getattr(team, '_elevated', []) + [p]
         out.append((pid, 'elevated'))
     return out
 
 
-def clear_elevations(team):
-    team._elevated = []
+def elevations_for_week(team, week):
+    """Legacy saves have no game stamp; retain their current-game behavior."""
+    return [p for p in (getattr(team, '_elevated', None) or [])
+            if p.xp_spent.get('_elevation_week', int(week)) == int(week)]
+
+
+def clear_elevations(team, through_week=None):
+    """Revert completed-game elevations without discarding next-game choices."""
+    keep = []
+    for p in (getattr(team, '_elevated', None) or []):
+        if (through_week is not None
+                and p.xp_spent.get('_elevation_week', 0) > int(through_week)):
+            keep.append(p)
+        else:
+            p.xp_spent.pop('_elevation_week', None)
+    team._elevated = keep
 
 
 def reset_season(league):
@@ -517,6 +532,7 @@ def reset_season(league):
         t.ir = []; t.ir_returns_used = 0
     for p in league.players.values():
         p.xp_spent.pop('_elevations', None)
+        p.xp_spent.pop('_elevation_week', None)
 
 
 # ------------------------------------------------------------ the AI
@@ -906,7 +922,7 @@ def weekly(league, rng, week, user_team=None, playoffs=None):
     moves += VM.review(league, rng, 'weekly', week=week, user_team=user_team)
     moves += roster_review(league, rng, week, user_team=user_team)
     for abbr, team in league.teams.items():
-        clear_elevations(team)
+        clear_elevations(team, through_week=week)
         if abbr != user_team:
             moves += elevate_for_coverage(league, team, int(week or 0) + 1, playoffs=playoffs)
             continue
@@ -921,7 +937,7 @@ def weekly(league, rng, week, user_team=None, playoffs=None):
         want = sorted((p for p in squad(team) if p.out_until is None and not p.retired), key=lambda p: -p.ovr)
         picks = [p.pid for p in want if by_pos.get(p.pos, 0) < {'QB': 2, 'HB': 2, 'WR': 5, 'TE': 2, 'CB': 4, 'DT': 3}.get(p.pos, 2)][:short]
         if picks:
-            moves += [(abbr, 'elevate', x) for x in elevate(league, abbr, picks, week,
+            moves += [(abbr, 'elevate', x) for x in elevate(league, abbr, picks, int(week or 0) + 1,
                                                          playoffs=playoffs)]
     replenish_squads(league, rng, week)
     return moves

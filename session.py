@@ -1585,15 +1585,52 @@ class Session:
         p.xp_spent['_ceiling_notice_ack'] = int(unlocks)
         return dict(ok=True)
 
+    def _elevation_context(self, abbr=None):
+        """A postgame roster choice belongs to the next unplayed game."""
+        abbr = abbr or self.user_team
+        phase = self.stop[0]
+        week = (19 + int(self.stop[1]) if phase == 'playoffs' else
+                int(self.stop[1]) if phase == 'week' else 1)
+        live = getattr(self.runner, 'live', None) if self.runner else None
+        if live and not live.get('done', False):
+            return dict(week=week, playoffs=phase == 'playoffs',
+                        why='Finish the current game before choosing an elevation for the next game.')
+        completed = bool(getattr(self, 'played', False)) and phase in ('week', 'playoffs')
+        target = week + int(completed)
+        if phase == 'week':
+            games = [int(w) for w, a, h, ap, hp in self.L.schedule
+                     if int(w) >= target and abbr in (a, h) and hp is None]
+            if games:
+                target = min(games)
+        if target == 19:
+            seeds = getattr(getattr(self, 'post_live', None), 'seeds', None)
+            if seeds is None and self.runner and callable(getattr(self.runner, 'seeds', None)):
+                seeds = self.runner.seeds()
+            if seeds:
+                if not any(abbr in clubs for clubs in seeds.values()):
+                    return dict(week=target, playoffs=True, why='There is no upcoming game to elevate him for.')
+                if any(clubs and clubs[0] == abbr for clubs in seeds.values()):
+                    target = 20  # The top seed's next game is the divisional round.
+        if phase == 'playoffs' and (target > 22 or abbr in
+                (getattr(getattr(self, 'post_live', None), 'exit_round', {}) or {})):
+            return dict(week=target, playoffs=True, why='There is no upcoming game to elevate him for.')
+        return dict(week=target, playoffs=phase == 'playoffs' or target >= 19,
+                    completed_week=week if completed else None)
+
     def club_act(self, name, **kw):
         """Roster and depth actions from the page; the page re-reads the view after."""
         import views_club as VC
         fn = getattr(VC, 'act_' + name, None)
         if fn is None: return dict(ok=False, why='unknown action')
         if name == 'elevate':
-            kw['playoffs'] = self.stop[0] == 'playoffs'
-            kw['week'] = (19 + int(self.stop[1]) if kw['playoffs'] else
-                          self.stop[1] if self.stop[0] == 'week' else 1)
+            context = self._elevation_context()
+            if context.get('why'): return dict(ok=False, why=context['why'])
+            if context.get('completed_week') is not None:
+                import practice_squad as PSQ
+                PSQ.clear_elevations(self.L.teams[self.user_team],
+                                     through_week=context['completed_week'])
+            kw['playoffs'] = context['playoffs']
+            kw['week'] = context['week']
         if name == 'hurt_decision': kw['session'] = self
         return fn(self.L, self.user_team, **kw)
 

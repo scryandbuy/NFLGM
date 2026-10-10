@@ -14,7 +14,7 @@ class FieldabilityError(ValueError):
 
 def dressed(team, desk, week):
     players = {p.pid: p for p in team.active()}
-    players.update((p.pid, p) for p in (getattr(team, '_elevated', None) or [])
+    players.update((p.pid, p) for p in PS.elevations_for_week(team, week)
                    if p in PS.squad(team) and not p.retired)
     return [p for p in players.values()
             if (desk.available(p, week) if desk is not None else p.out_until is None)]

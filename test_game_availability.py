@@ -196,7 +196,7 @@ class AvailabilityTests(unittest.TestCase):
     def test_incomplete_week_never_settles_and_session_surfaces_reason(self):
         r = self.runner(); r._after_games(1, [])
         self.assertIsNone(getattr(r, '_after_done', None))
-        s = Session.__new__(Session); s.runner = r; s.stop = ('offseason', 0)
+        s = Session.__new__(Session); s.L = r.L; s.runner = r; s.stop = ('offseason', 0)
         s.blocking = lambda: []; s.next_label = lambda: 'Play Week 1'
         s._advance = lambda: GA.require_scores(r.L, 1)
         with patch('session.PA.sync_session'):

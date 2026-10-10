@@ -76,7 +76,11 @@ class WeeklyHealthTests(unittest.TestCase):
             PS.weekly(league, np.random.default_rng(1), 7, user_team='GB')
             self.assertIn(reserve, team._elevated)
             league.user_team = team.abbr
+            uses = reserve.xp_spent['_elevations']
             PS.weekly(league, np.random.default_rng(1), 7, user_team=team.abbr)
+            self.assertIn(reserve, team._elevated)  # Week 8 choice survives a repeated roll of week 7.
+            self.assertEqual(reserve.xp_spent['_elevations'], uses)
+            PS.weekly(league, np.random.default_rng(1), 8, user_team=team.abbr)
             self.assertNotIn(reserve, team._elevated)
 
     def test_temporary_limits_do_not_force_permanent_cover_but_playoffs_allow_reuse(self):

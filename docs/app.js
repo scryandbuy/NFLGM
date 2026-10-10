@@ -1277,7 +1277,7 @@ function renderRoster(v) {
           const act = (name, extra) => { const res = pyJSON(`SESSION.club_act(${JSON.stringify(name)}, ${extra})`); notify(res); renderRoster(pyJSON('SESSION.club_roster()')); };
           cells.push(el('td', {}, el('div', { class: 'row-act', style: 'opacity:1' },
             el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', 'data-tip': 'Sign him to the 53 at the minimum', onclick: () => act('call_up', `pid=${JSON.stringify(r.pid)}`) }, 'Call Up'),
-            el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: r.elevated_now ? '' : null, 'data-tip': v.playoff_elevations ? 'Dress him for this game · unlimited playoff elevations per player' : `Dress him Sunday and send him back after · ${r.elevations} of ${v.per_man_max} used`, onclick: () => act('elevate', `pids=[${JSON.stringify(r.pid)}]`) }, r.elevated_now ? 'Elevated' : v.playoff_elevations ? 'Elevate' : `Elevate · ${r.elevations}/${v.per_man_max}`),
+            el('button', { class: 'btn', style: 'width:auto;padding:3px 8px;font-size:14px', disabled: r.elevated_now ? '' : null, 'data-tip': v.playoff_elevations ? `Dress him for ${v.elevation_label || 'the next game'} · unlimited playoff elevations per player` : `Dress him for ${v.elevation_label || 'the next game'} and send him back after · ${r.elevations} of ${v.per_man_max} used`, onclick: () => act('elevate', `pids=[${JSON.stringify(r.pid)}]`) }, r.elevated_now ? 'Elevated' : v.playoff_elevations ? 'Elevate' : `Elevate · ${r.elevations}/${v.per_man_max}`),
             el('button', { class: 'btn warn', style: 'width:auto;padding:3px 8px;font-size:14px', onclick: () => { if (confirm(`Release ${r.name} from the practice squad?`)) act('release_ps', `pid=${JSON.stringify(r.pid)}`); } }, 'Release'))));
         }
         const tr = el('tr', { class: (/^Out/.test(r.status) ? 'out' : '') + (rosterSel === r.pid ? ' sel' : ''), onclick: e => { if (e.target.closest('.row-act') || e.target.closest('.who')) return; rosterSel = rosterSel === r.pid ? null : r.pid; drawRows(); drawFoot(); } }, ...cells);
@@ -1291,7 +1291,7 @@ function renderRoster(v) {
     foot.innerHTML = '';
     if (!mine) { foot.append(el('span', { class: 'count' }, `${v.count} on the 53 · ${v.practice.length} on the practice squad`)); return; }
     const all = [...v.groups.flatMap(g => g.rows), ...v.practice, ...v.injured]; const r = all.find(x => x.pid === rosterSel);
-    if (!r) { foot.append(el('span', { class: 'count' }, clubTab === 'ps' ? `Elevations this week: ${v.elevations_used} of ${v.elevations_max} · ` + (v.playoff_elevations ? 'unlimited playoff elevations per player' : `a player's ${v.per_man_max + 1}${ord(v.per_man_max + 1)} elevation signs him to the 53`) : 'Click a row to select a player, then act on him here.')); return; }
+    if (!r) { foot.append(el('span', { class: 'count' }, clubTab === 'ps' ? `Elevations for ${v.elevation_label || 'the next game'}: ${v.elevations_used} of ${v.elevations_max} · ` + (v.playoff_elevations ? 'unlimited playoff elevations per player' : `a player's ${v.per_man_max + 1}${ord(v.per_man_max + 1)} elevation signs him to the 53`) : 'Click a row to select a player, then act on him here.')); return; }
     if (clubTab === 'injured') {
       foot.append(el('span', {class:'count'}, el('b', {}, r.name), ` · ${r.pos}`),
         el('button', {class:'btn go', style:'margin-left:auto;border-radius:999px', onclick:()=> {
